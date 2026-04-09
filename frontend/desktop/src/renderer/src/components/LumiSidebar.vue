@@ -13,7 +13,10 @@ import {
   ChevronRight,
   Settings,
   Sparkles,
-  Bot
+  Bot,
+  Palette,
+  Brain,
+  Users
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -26,6 +29,9 @@ const navItems = [
   { id: '/workflow', label: '工作流', icon: GitBranch },
   { id: '/inspire', label: '灵感', icon: Lightbulb },
   { id: '/tasks', label: '任务', icon: CheckSquare },
+  { id: '/avatar', label: '皮套', icon: Palette },
+  { id: '/memory', label: '记忆', icon: Brain },
+  { id: '/social', label: '社交', icon: Users },
   { id: '/browser', label: '浏览器', icon: Globe }
 ]
 

@@ -273,19 +273,18 @@ async function executeDevAction() {
 
     <div class="browser-content" :class="{ 'with-panel': showDevPanel }">
       <div class="copilot-center">
-        <div class="brand-area animate-fade-in">
-          <h1 class="brand-title">
-            <span class="brand-lumi">lumi</span>
-            <span class="brand-sub">nest</span>
+        <div class="brand-area">
+          <h1 class="brand-title animate-brand-reveal">
+            <span class="brand-lumi">Luomi</span><span class="brand-sub">Nest</span>
           </h1>
-          <p class="brand-tagline">copilot · playwright powered</p>
+          <p class="brand-tagline animate-fade-in">copilot · playwright powered</p>
         </div>
 
         <div class="ai-input-section animate-slide-up">
           <div class="ai-input-box">
             <textarea
               v-model="browserInput"
-              placeholder="有问题尽管问lumi，或让AI帮你操作浏览器"
+              placeholder="有问题尽管问 Luomi，或让 AI 帮你操作浏览器"
               rows="2"
               class="ai-textarea"
             ></textarea>
@@ -679,6 +678,29 @@ async function executeDevAction() {
   user-select: none;
 }
 
+@keyframes brand-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+    filter: blur(8px);
+    letter-spacing: 8px;
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+    letter-spacing: -2px;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    letter-spacing: -3px;
+  }
+}
+
+.animate-brand-reveal {
+  animation: brand-reveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .brand-title {
   font-size: 56px;
   font-weight: 300;
@@ -699,7 +721,6 @@ async function executeDevAction() {
   font-weight: 300;
   color: var(--browser-text-dim);
   -webkit-text-fill-color: var(--browser-text-dim);
-  margin-left: 8px;
 }
 
 .brand-tagline {
