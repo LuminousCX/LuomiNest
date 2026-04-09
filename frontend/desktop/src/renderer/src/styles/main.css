@@ -1,0 +1,194 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --font-sans: 'Plus Jakarta Sans', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --lumi-primary: #0d9488;
+  --lumi-primary-hover: #0f766e;
+  --lumi-primary-light: rgba(13, 148, 136, 0.08);
+  --lumi-primary-glow: rgba(13, 148, 136, 0.15);
+
+  --lumi-accent: #f43f5e;
+  --lumi-accent-light: rgba(244, 63, 94, 0.08);
+  --lumi-accent-glow: rgba(244, 63, 94, 0.12);
+
+  --lumi-warning: #eab308;
+  --lumi-success: #22c55e;
+  --lumi-info: #3b82f6;
+
+  --workspace-bg: #fafaf9;
+  --workspace-sidebar: #ffffff;
+  --workspace-panel: #f5f5f4;
+  --workspace-card: #ffffff;
+  --workspace-border: #e7e5e4;
+  --workspace-hover: #f5f5f4;
+
+  --browser-bg: #0c0a09;
+  --browser-surface: #1c1917;
+  --browser-elevated: #292524;
+  --browser-border: #44403c;
+  --browser-text: #d6d3d1;
+  --browser-text-dim: #78716c;
+  --browser-input: #1c1917;
+  --browser-input-border: #44403c;
+
+  --text-primary: #1c1917;
+  --text-secondary: #57534e;
+  --text-muted: #a8a29e;
+  --text-inverse: #fafaf9;
+
+  --shadow-xs: 0 1px 2px rgba(28, 25, 23, 0.04);
+  --shadow-sm: 0 2px 8px rgba(28, 25, 23, 0.06);
+  --shadow-md: 0 4px 16px rgba(28, 25, 23, 0.08);
+  --shadow-lg: 0 8px 32px rgba(28, 25, 23, 0.12);
+  --shadow-xl: 0 16px 48px rgba(28, 25, 23, 0.16);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--workspace-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+  min-width: 960px;
+  min-height: 640px;
+}
+
+@media (max-width: 1024px) {
+  html { font-size: 13px; }
+}
+
+@media (max-width: 960px) {
+  html { font-size: 12px; }
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--workspace-border);
+  border-radius: 10px;
+  transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--browser-border);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--browser-text-dim);
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  outline: none;
+  color: inherit;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+  border: none;
+  color: inherit;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+.lumi-gradient-text {
+  background: linear-gradient(135deg, var(--lumi-primary) 0%, #14b8a6 50%, #2dd4bf 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.lumi-gradient-accent {
+  background: linear-gradient(135deg, var(--lumi-accent) 0%, #fb7185 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@keyframes lumi-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes lumi-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes lumi-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes lumi-pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes lumi-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.animate-fade-in {
+  animation: lumi-fade-in 0.4s ease-out both;
+}
+
+.animate-slide-up {
+  animation: lumi-slide-up 0.5s ease-out both;
+}
+
+.animate-scale-in {
+  animation: lumi-scale-in 0.3s ease-out both;
+}
