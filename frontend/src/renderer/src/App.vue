@@ -7,17 +7,19 @@ import LumiSidebar from './components/LumiSidebar.vue'
 const route = useRoute()
 
 const isBrowserMode = computed(() => route.path.startsWith('/browser'))
+const isWelcomePage = computed(() => route.path === '/welcome')
 </script>
 
 <template>
-  <div class="lumi-app" :class="{ 'dark-mode': isBrowserMode }">
-    <TitleBar title="LuomiNest" />
-    <div class="lumi-body">
+  <div class="lumi-app" :class="{ 'dark-mode': isBrowserMode, 'welcome-mode': isWelcomePage }">
+    <TitleBar v-if="!isWelcomePage" title="LuomiNest" />
+    <div class="lumi-body" v-if="!isWelcomePage">
       <LumiSidebar />
       <main class="lumi-main">
         <router-view />
       </main>
     </div>
+    <router-view v-else />
     <div class="resize-handle resize-n"></div>
     <div class="resize-handle resize-s"></div>
     <div class="resize-handle resize-e"></div>
@@ -42,6 +44,10 @@ const isBrowserMode = computed(() => route.path.startsWith('/browser'))
 
 .lumi-app.dark-mode {
   background: var(--browser-bg);
+}
+
+.lumi-app.welcome-mode .resize-handle {
+  display: none;
 }
 
 .lumi-body {

@@ -4,7 +4,13 @@ import type { RouteRecordRaw } from 'vue-router'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/workspace'
+    redirect: '/welcome'
+  },
+  {
+    path: '/welcome',
+    name: 'Welcome',
+    component: () => import('../views/WelcomeView.vue'),
+    meta: { title: 'Welcome - LuomiNest', icon: 'Sparkles' }
   },
   {
     path: '/workspace',

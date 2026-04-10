@@ -145,6 +145,11 @@ function removeNode(nodeId: string) {
 function toggleRun() {
   isRunning.value = !isRunning.value
 }
+
+function getNodePos(nodeId: string): { x: number; y: number } {
+  const node = nodes.value.find(n => n.id === nodeId)
+  return node ? { x: node.x, y: node.y } : { x: 0, y: 0 }
+}
 </script>
 
 <template>
@@ -334,13 +339,6 @@ function toggleRun() {
     </div>
   </div>
 </template>
-
-<script lang="ts">
-function getNodePos(this: any, nodeId: string): { x: number; y: number } {
-  const node = this.nodes.find((n: any) => n.id === nodeId)
-  return node ? { x: node.x, y: node.y } : { x: 0, y: 0 }
-}
-</script>
 
 <style scoped>
 .workflow-view {

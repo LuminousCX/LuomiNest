@@ -53,18 +53,6 @@ const devOutput = ref('')
 
 const activeTab = computed(() => tabs.value.find(t => t.active))
 
-function minimizeWindow() {
-  (globalThis as any).api?.window?.minimize()
-}
-
-function maximizeWindow() {
-  (globalThis as any).api?.window?.maximize()
-}
-
-function closeWindow() {
-  (globalThis as any).api?.window?.close()
-}
-
 function closeTab(id: string) {
   const idx = tabs.value.findIndex(t => t.id === id)
   if (idx > -1) {
@@ -205,17 +193,6 @@ async function executeDevAction() {
         </div>
         <button class="tab-add" @click="addTab" title="新建标签页">
           <Plus :size="14" />
-        </button>
-      </div>
-      <div class="window-controls-dark">
-        <button class="wc-btn minimize" @click="minimizeWindow()">
-          <svg width="10" height="1" viewBox="0 0 10 1"/>
-        </button>
-        <button class="wc-btn maximize" @click="maximizeWindow()">
-          <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>
-        </button>
-        <button class="wc-btn close" @click="closeWindow()">
-          <X :size="12" />
         </button>
       </div>
     </div>
@@ -486,33 +463,6 @@ async function executeDevAction() {
 .tab-add:hover {
   background: var(--browser-elevated);
   color: var(--browser-text);
-}
-
-.window-controls-dark {
-  display: flex;
-  gap: 2px;
-  padding-right: 8px;
-}
-
-.wc-btn {
-  width: 36px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--browser-text-dim);
-  transition: all var(--transition-fast);
-  border-radius: 0;
-}
-
-.wc-btn:hover {
-  background: var(--browser-elevated);
-  color: var(--browser-text);
-}
-
-.wc-btn.close:hover {
-  background: #e5484d;
-  color: white;
 }
 
 .browser-nav-bar {
