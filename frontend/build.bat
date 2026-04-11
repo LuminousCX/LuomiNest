@@ -1,33 +1,53 @@
 @echo off
 chcp 65001 >nul
 echo ========================================
-echo   LuomiNest 打包脚本
+echo   LuomiNest Inno Setup Build Script
 echo ========================================
 echo.
 
-echo [1/3] 设置镜像加速...
+echo [1/3] Setting up mirror acceleration...
 set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
 
-echo [2/3] 开始构建...
-call npm run build:win
-
-if %errorlevel% equ 0 (
-    echo.
-    echo ========================================
-    echo   打包成功！
-    echo ========================================
-    echo.
-    echo 安装包位置: release\dist\
-    echo   - NSIS安装包: LuomiNest Setup 1.0.0.exe
-    echo   - 便携版: LuomiNest 1.0.0.exe
-    echo.
-) else (
-    echo.
-    echo ========================================
-    echo   打包失败，请检查错误信息
-    echo ========================================
-    echo.
+echo [2/3] Building application...
+call pnpm run build
+if %errorlevel% neq 0 (
+    echo Build failed!
+    pause
+    exit /b 1
 )
+
+echo [3/3] Packing files...
+call pnpm exec electron-builder --win --dir
+if %errorlevel% neq 0 (
+    echo Pack failed!
+    pause
+    exit /b 1
+)
+
+echo.
+echo [4/4] Creating Inno Setup installer...
+iscc installer.iss
+if %errorlevel% neq 0 (
+    echo.
+    echo ========================================
+    echo   Inno Setup not found!
+    echo ========================================
+    echo.
+    echo Please install Inno Setup 6 from:
+    echo https://jrsoftware.org/isdl.php
+    echo.
+    pause
+    exit /b 1
+)
+
+echo.
+echo ========================================
+echo   Build Success!
+echo ========================================
+echo.
+echo Installer: release\installer\LuomiNest-Setup-1.0.0.exe
+echo Portable:  release\dist\LuomiNest 1.0.0.exe
+echo.
 
 pause

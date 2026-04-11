@@ -4,30 +4,31 @@
   "description": "LuomiNest 辰汐分布式AI伴侣平台 - Electron桌面客户端",
   "author": "辰汐项目研发组",
   "main": "./out/main/index.js",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
-    "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win",
-    "build:win:unsigned": "npm run build && electron-builder --win --config.win.certificateFile=null",
+    "build:portable": "pnpm run build && electron-builder --win portable",
+    "build:installer": "pnpm run build && electron-builder --win dir && iscc installer.iss",
+    "build:all": "pnpm run build && electron-builder --win && iscc installer.iss",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
     "playwright": "^1.59.1",
-    "vue-router": "^4.6.3"
+    "vue-router": "^5.0.4"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",
     "@vitejs/plugin-vue": "^6.0.5",
-    "electron": "^39.0.0",
+    "electron": "^41.0.0",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "lucide-vue-next": "^0.577.0",
     "png-to-ico": "^3.0.1",
     "sharp": "^0.34.5",
-    "typescript": "~5.9.3",
+    "typescript": "~6.0.2",
     "vite": "^6.2.0",
     "vue": "^3.5.32",
     "vue-tsc": "^3.2.6"
@@ -44,7 +45,7 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "dir",
           "arch": [
             "x64"
           ]
@@ -58,12 +59,6 @@
       ],
       "icon": "resources/icon.ico",
       "signAndEditExecutable": false
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
     }
   }
 }
