@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import {
   Bot,
   Plus,
@@ -7,21 +7,19 @@ import {
   Square,
   Trash2,
   GripVertical,
-  ArrowRight,
   Settings,
   Sparkles,
   Zap,
   FileText,
   Globe,
   Cpu,
-  ChevronDown,
   MousePointerClick
 } from 'lucide-vue-next'
 
 interface WorkflowNode {
   id: string
   name: string
-  type: 'agent' | 'tool' | 'condition' | 'output'
+  type: 'input' | 'agent' | 'tool' | 'condition' | 'output'
   icon: any
   color: string
   x: number

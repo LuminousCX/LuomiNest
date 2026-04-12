@@ -42,14 +42,14 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
       </div>
     </div>
     <div class="win-controls">
-      <button class="ctrl-btn minimize" @click="handleMinimize" title="最小化">
+      <button class="ctrl-btn minimize" aria-label="最小化" @click="handleMinimize">
         <Minus :size="13" />
       </button>
-      <button class="ctrl-btn maximize" @click="handleMaximize" :title="isMaximized ? '还原' : '最大化'">
+      <button class="ctrl-btn maximize" :aria-label="isMaximized ? '还原' : '最大化'" @click="handleMaximize">
         <Square v-if="!isMaximized" :size="11" />
         <Maximize2 v-else :size="12" />
       </button>
-      <button class="ctrl-btn close" @click="handleClose" title="关闭">
+      <button class="ctrl-btn close" aria-label="关闭" @click="handleClose">
         <X :size="13" />
       </button>
     </div>

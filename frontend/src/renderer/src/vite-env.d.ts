@@ -40,11 +40,23 @@ export interface ElectronApi {
     closeManaged: (tabId: string) => Promise<void>
     getAll: () => Promise<TabInfo[]>
     getActive: () => Promise<TabInfo | undefined>
+    hideAll: () => Promise<void>
+    cleanupAll: () => Promise<void>
+    getCookies: () => Promise<Electron.Cookie[]>
+    clearBrowserData: () => Promise<void>
+    setBoundsConfig: (config: { sidebarWidth?: number; devPanelHeight?: number }) => Promise<void>
   }
 }
 
 declare global {
   interface Window {
     api: ElectronApi
+    electron?: {
+      ipcRenderer: {
+        on: (channel: string, listener: (event: any, ...args: any[]) => void) => void
+        removeListener: (channel: string, listener: (...args: any[]) => void) => void
+        send: (channel: string, ...args: any[]) => void
+      }
+    }
   }
 }

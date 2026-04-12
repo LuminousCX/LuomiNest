@@ -29,6 +29,16 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html')
+        },
+        output: {
+          manualChunks(id) {
+            if (id.includes('lucide-vue-next')) {
+              return 'lucide-vendor'
+            }
+            if (id.includes('node_modules/vue/') || id.includes('node_modules/vue-router/')) {
+              return 'vue-vendor'
+            }
+          }
         }
       }
     },

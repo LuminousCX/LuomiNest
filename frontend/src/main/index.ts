@@ -37,6 +37,11 @@ const createWindow = (): void => {
     mainWindow?.show()
   })
 
+  // 监听窗口大小改变，更新浏览器视图边界
+  mainWindow.on('resize', () => {
+    tabManager.handleWindowResize()
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details: { url: string }) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
@@ -44,7 +49,8 @@ const createWindow = (): void => {
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    mainWindow.webContents.openDevTools()
+    // 使用 detach 模式打开 DevTools，避免与 BrowserView 冲突
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
@@ -203,6 +209,26 @@ function registerIpcHandlers(): void {
   ipcMain.handle('tab:getActive', async () => {
     return tabManager.getActiveTab()
   })
+
+  ipcMain.handle('tab:hideAll', async () => {
+    return tabManager.hideAllTabs()
+  })
+
+  ipcMain.handle('tab:setBoundsConfig', async (_e, config: { sidebarWidth?: number; devPanelHeight?: number }) => {
+    return tabManager.setBoundsConfig(config)
+  })
+
+  ipcMain.handle('tab:cleanupAll', async () => {
+    return tabManager.cleanupAllTabs()
+  })
+
+  ipcMain.handle('tab:getCookies', async () => {
+    return tabManager.getCookies()
+  })
+
+  ipcMain.handle('tab:clearBrowserData', async () => {
+    return tabManager.clearBrowserData()
+  })
 }
 
 app.whenReady().then(() => {
@@ -218,8 +244,15 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (platform() !== 'darwin') {
+    // 应用退出时清理所有浏览器标签页
+    tabManager.cleanupAllTabs()
     tray?.destroy()
     playwrightService.shutdown()
     app.quit()
   }
+})
+
+// 应用退出前清理
+app.on('before-quit', () => {
+  tabManager.cleanupAllTabs()
 })

@@ -73,12 +73,11 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach((to) => {
   const title = to.meta.title as string | undefined
   if (title) {
     document.title = title
   }
-  next()
 })
 
 export default router

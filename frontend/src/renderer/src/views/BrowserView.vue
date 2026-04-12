@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import {
   Send,
   Paperclip,
@@ -17,25 +17,54 @@ import {
   Globe,
   MousePointerClick,
   Code2,
-  Camera
+  Camera,
+  Bot,
+  Tv,
+  Video
 } from 'lucide-vue-next'
 
-const tabs = ref([
-  { id: 'tab-1', title: '新标签页', url: '', active: true },
-  { id: 'tab-2', title: 'GitHub', url: 'https://github.com', active: false }
-])
+interface TabData {
+  id: string
+  title: string
+  url: string
+  active: boolean
+  favicon?: string
+  loading?: boolean
+  error?: string
+}
 
+interface SearchEngine {
+  id: string
+  name: string
+  icon: any
+  url: string
+  color: string
+}
+
+const searchEngines: SearchEngine[] = [
+  { id: 'bing', name: 'Bing', icon: Search, url: 'https://www.bing.com/search?q=', color: '#00809d' },
+  { id: 'google', name: 'Google', icon: Globe, url: 'https://www.google.com/search?q=', color: '#4285f4' },
+  { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=', color: '#00a1d6' },
+  { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: '#ff0000' },
+  { id: 'ai', name: 'AI (本地)', icon: Bot, url: '', color: '#8b5cf6' }
+]
+
+const tabs = ref<TabData[]>([])
 const addressBar = ref('')
 const browserInput = ref('')
 const currentUrl = ref('')
+const selectedEngine = ref<SearchEngine>(searchEngines[0])
+const showEngineDropdown = ref(false)
+const isSearching = ref(false)
+const showHomePage = ref(true)
 
 const bookmarks = ref([
-  { name: 'GitHub', icon: null, url: 'https://github.com' },
-  { name: 'Google', icon: null, url: 'https://google.com' },
-  { name: 'MDN', icon: null, url: 'https://developer.mozilla.org' },
-  { name: 'Stack Overflow', icon: null, url: 'https://stackoverflow.com' },
-  { name: 'Playwright 文档', icon: null, url: 'https://playwright.dev' },
-  { name: 'Electron 文档', icon: null, url: 'https://electronjs.org' }
+  { name: 'GitHub', url: 'https://github.com' },
+  { name: 'Google', url: 'https://google.com' },
+  { name: 'MDN', url: 'https://developer.mozilla.org' },
+  { name: 'Stack Overflow', url: 'https://stackoverflow.com' },
+  { name: 'Playwright', url: 'https://playwright.dev' },
+  { name: 'Electron', url: 'https://electronjs.org' }
 ])
 
 const quickActions = ref([
@@ -53,31 +82,199 @@ const devOutput = ref('')
 
 const activeTab = computed(() => tabs.value.find(t => t.active))
 
-function closeTab(id: string) {
+const DEV_PANEL_HEIGHT = 220
+
+watch(showDevPanel, async (show) => {
+  try {
+    await window.api?.tab.setBoundsConfig({
+      devPanelHeight: show ? DEV_PANEL_HEIGHT : 0
+    })
+  } catch (e) {
+    console.error('[LuomiNest] 设置边界配置失败:', e)
+  }
+})
+
+onMounted(async () => {
+  await syncTabs()
+
+  // 监听来自主进程的创建新标签页请求
+  window.electron?.ipcRenderer?.on('browser:create-tab', handleCreateTabFromLink)
+
+  // 监听标签页更新（标题、URL）
+  window.electron?.ipcRenderer?.on('browser:tab-updated', handleTabUpdated)
+
+  // 监听 favicon 更新
+  window.electron?.ipcRenderer?.on('browser:tab-favicon', handleTabFavicon)
+})
+
+onUnmounted(() => {
+  // 移除监听器
+  window.electron?.ipcRenderer?.removeListener('browser:create-tab', handleCreateTabFromLink)
+  window.electron?.ipcRenderer?.removeListener('browser:tab-updated', handleTabUpdated)
+  window.electron?.ipcRenderer?.removeListener('browser:tab-favicon', handleTabFavicon)
+
+  // 切换页面时只隐藏视图，不关闭标签页
+  // 标签页只在应用退出时清空
+  window.api?.tab.hideAll().catch(() => {})
+  window.api?.tab.setBoundsConfig({ devPanelHeight: 0 }).catch(() => {})
+})
+
+function handleTabUpdated(_event: any, data: { id: string; title: string; url: string; loading?: boolean; error?: string }) {
+  const tab = tabs.value.find(t => t.id === data.id)
+  if (tab) {
+    tab.title = data.title
+    tab.url = data.url
+    tab.loading = data.loading
+    tab.error = data.error
+    if (tab.active) {
+      addressBar.value = data.url
+      currentUrl.value = data.url
+    }
+  }
+}
+
+function handleTabFavicon(_event: any, data: { id: string; favicon: string }) {
+  const tab = tabs.value.find(t => t.id === data.id)
+  if (tab) {
+    tab.favicon = data.favicon
+  }
+}
+
+async function syncTabs() {
+  try {
+    const managedTabs = await window.api?.tab.getAll() || []
+    if (managedTabs.length === 0) {
+      tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
+      showHomePage.value = true
+    } else {
+      tabs.value = managedTabs.map(t => ({
+        id: t.id,
+        title: t.title || '加载中...',
+        url: t.url,
+        active: t.active
+      }))
+      const active = tabs.value.find(t => t.active)
+      if (active?.url) {
+        showHomePage.value = false
+        addressBar.value = active.url
+        currentUrl.value = active.url
+      }
+    }
+  } catch (e) {
+    tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
+  }
+}
+
+function selectEngine(engine: SearchEngine) {
+  selectedEngine.value = engine
+  showEngineDropdown.value = false
+}
+
+async function closeTab(id: string) {
+  if (tabs.value.length <= 1) return
+  
   const idx = tabs.value.findIndex(t => t.id === id)
-  if (idx > -1) {
-    tabs.value.splice(idx, 1)
-    if (tabs.value.length > 0 && !tabs.value.find(t => t.active)) {
-      tabs.value[Math.max(0, idx - 1)].active = true
+  if (idx === -1) return
+  
+  try {
+    await window.api?.tab.closeManaged(id)
+  } catch (e) {
+    console.error('[LuomiNest] 关闭标签页失败:', e)
+  }
+  
+  tabs.value.splice(idx, 1)
+  
+  if (tabs.value.length > 0) {
+    const newActiveIdx = Math.min(idx, tabs.value.length - 1)
+    const newActiveTab = tabs.value[newActiveIdx]
+    newActiveTab.active = true
+    
+    if (newActiveTab.url) {
+      try {
+        await window.api?.tab.activate(newActiveTab.id)
+      } catch (e) {
+        console.error('[LuomiNest] 激活标签页失败:', e)
+      }
+      showHomePage.value = false
+      addressBar.value = newActiveTab.url
+      currentUrl.value = newActiveTab.url
+    } else {
+      showHomePage.value = true
+      addressBar.value = ''
+      currentUrl.value = ''
+      await window.api?.tab.hideAll()
     }
   }
 }
 
 async function addTab() {
-  const newId = `tab-${Date.now()}`
   tabs.value.forEach(t => t.active = false)
-  tabs.value.push({ id: newId, title: '新标签页', url: '', active: true })
+  tabs.value.push({ id: `home-${Date.now()}`, title: '新标签页', url: '', active: true })
+  showHomePage.value = true
+  addressBar.value = ''
+  currentUrl.value = ''
+  await window.api?.tab.hideAll()
 }
 
-function selectTab(tabId: string) {
-  tabs.value.forEach(t => t.active = t.id === tabId)
+async function handleCreateTabFromLink(_event: any, url: string) {
+  if (!url) return
+
+  tabs.value.forEach(t => t.active = false)
+  const newTabId = `tab-${Date.now()}`
+  const newTab: TabData = {
+    id: newTabId,
+    title: '加载中...',
+    url,
+    active: true,
+    loading: true
+  }
+  tabs.value.push(newTab)
+  showHomePage.value = false
+  addressBar.value = url
+  currentUrl.value = url
+
+  try {
+    const result = await window.api?.tab.createManaged(url)
+    if (result) {
+      const tab = tabs.value.find(t => t.id === newTabId)
+      if (tab) {
+        tab.id = result.id
+        tab.title = result.title
+        tab.loading = result.loading
+        tab.error = result.error
+      }
+    }
+  } catch (e: any) {
+    console.error('[LuomiNest] 创建链接标签页失败:', e.message)
+    const tab = tabs.value.find(t => t.id === newTabId)
+    if (tab) {
+      tab.title = '加载失败'
+      tab.loading = false
+      tab.error = e.message
+    }
+  }
+}
+
+async function selectTab(tabId: string) {
   const tab = tabs.value.find(t => t.id === tabId)
-  if (tab?.url) {
-    addressBar.value = tab.url
-    currentUrl.value = tab.url
+  if (!tab) return
+  
+  tabs.value.forEach(t => t.active = t.id === tabId)
+  
+  if (tab.url) {
+    try {
+      await window.api?.tab.activate(tabId)
+      showHomePage.value = false
+      addressBar.value = tab.url
+      currentUrl.value = tab.url
+    } catch (e) {
+      console.error('[LuomiNest] 切换标签页失败:', e)
+    }
   } else {
+    showHomePage.value = true
     addressBar.value = ''
     currentUrl.value = ''
+    await window.api?.tab.hideAll()
   }
 }
 
@@ -90,17 +287,48 @@ async function navigateToUrl() {
   }
 
   const tab = activeTab.value
-  if (tab && window.api?.playwright) {
-    try {
-      const updated = await window.api.playwright.navigate(tab.id, url)
-      tab.title = updated.title || url
-      tab.url = url
-      currentUrl.value = url
-      addressBar.value = url
-    } catch {
-      tab.url = url
-      tab.title = new URL(url).hostname
-      currentUrl.value = url
+  if (!tab) return
+
+  tabs.value.forEach(t => t.active = false)
+  
+  const newTabId = `tab-${Date.now()}`
+  const newTab: TabData = {
+    id: newTabId,
+    title: '加载中...',
+    url,
+    active: true,
+    loading: true
+  }
+  
+  const existingIdx = tabs.value.findIndex(t => t.id === tab.id && !t.url)
+  if (existingIdx !== -1) {
+    tabs.value[existingIdx] = newTab
+  } else {
+    tabs.value.push(newTab)
+  }
+  
+  showHomePage.value = false
+  addressBar.value = url
+  currentUrl.value = url
+
+  try {
+    const result = await window.api?.tab.createManaged(url)
+    if (result) {
+      const targetTab = tabs.value.find(t => t.id === newTabId)
+      if (targetTab) {
+        targetTab.id = result.id
+        targetTab.title = result.title
+        targetTab.loading = result.loading
+        targetTab.error = result.error
+      }
+    }
+  } catch (e: any) {
+    console.error('[LuomiNest] 导航失败:', e.message)
+    const targetTab = tabs.value.find(t => t.id === newTabId)
+    if (targetTab) {
+      targetTab.title = '加载失败'
+      targetTab.loading = false
+      targetTab.error = e.message
     }
   }
 }
@@ -113,7 +341,11 @@ async function handleBookmark(bm: typeof bookmarks.value[0]) {
 
 async function handleQuickAction(action: string) {
   const tab = activeTab.value
-  if (!tab?.id || !window.api?.playwright) return
+  if (!tab?.url) {
+    devOutput.value = '[提示] 请先打开一个网页'
+    showDevPanel.value = true
+    return
+  }
 
   switch (action) {
     case 'script':
@@ -122,10 +354,13 @@ async function handleQuickAction(action: string) {
       break
     case 'screenshot':
       try {
-        const dataUrl = await window.api.playwright.screenshot(tab.id)
-        devOutput.value = `[截图成功] 长度: ${Math.round(dataUrl.length / 1024)}KB`
-        showDevPanel.value = true
-        devPanelMode.value = 'dom'
+        const pwTab = await window.api?.playwright.createTab(tab.url)
+        if (pwTab) {
+          const dataUrl = await window.api?.playwright.screenshot(pwTab.id)
+          devOutput.value = `[截图成功] 长度: ${Math.round((dataUrl?.length || 0) / 1024)}KB`
+          showDevPanel.value = true
+          devPanelMode.value = 'dom'
+        }
       } catch (e: any) {
         devOutput.value = `[错误] ${e.message}`
         showDevPanel.value = true
@@ -133,10 +368,13 @@ async function handleQuickAction(action: string) {
       break
     case 'dom':
       try {
-        const dom = await window.api.playwright.getDom(tab.id)
-        devOutput.value = dom.substring(0, 2000) + (dom.length > 2000 ? '\n... (截断)' : '')
-        showDevPanel.value = true
-        devPanelMode.value = 'dom'
+        const pwTab = await window.api?.playwright.createTab(tab.url)
+        if (pwTab) {
+          const dom = await window.api?.playwright.getDom(pwTab.id)
+          devOutput.value = (dom || '').substring(0, 2000) + ((dom?.length || 0) > 2000 ? '\n... (截断)' : '')
+          showDevPanel.value = true
+          devPanelMode.value = 'dom'
+        }
       } catch (e: any) {
         devOutput.value = `[错误] ${e.message}`
         showDevPanel.value = true
@@ -159,18 +397,75 @@ async function handleQuickAction(action: string) {
 
 async function executeDevAction() {
   const tab = activeTab.value
-  if (!tab?.id || !window.api?.playwright) return
+  if (!tab?.url) return
 
   const input = devScriptInput.value.trim()
   if (!input) return
 
   try {
-    if (devPanelMode.value === 'script') {
-      const result = await window.api.playwright.executeScript(tab.id, input)
+    const pwTab = await window.api?.playwright.createTab(tab.url)
+    if (pwTab && devPanelMode.value === 'script') {
+      const result = await window.api?.playwright.executeScript(pwTab.id, input)
       devOutput.value = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
     }
   } catch (e: any) {
     devOutput.value = `[执行错误] ${e.message}`
+  }
+}
+
+async function handleSearch() {
+  const query = browserInput.value.trim()
+  if (!query) return
+
+  isSearching.value = true
+
+  if (selectedEngine.value.id === 'ai') {
+    console.log('[LuomiNest] AI本地搜索:', query)
+    await new Promise(resolve => setTimeout(resolve, 300))
+  } else {
+    const searchUrl = selectedEngine.value.url + encodeURIComponent(query)
+    
+    try {
+      const newTab = await window.api?.tab.createManaged(searchUrl)
+      if (newTab) {
+        tabs.value.forEach(t => t.active = false)
+        
+        const homeTabIdx = tabs.value.findIndex(t => !t.url && t.active === false)
+        if (homeTabIdx !== -1) {
+          tabs.value[homeTabIdx] = {
+            id: newTab.id,
+            title: `${selectedEngine.value.name} - ${query}`,
+            url: newTab.url,
+            active: true
+          }
+        } else {
+          tabs.value.push({
+            id: newTab.id,
+            title: `${selectedEngine.value.name} - ${query}`,
+            url: newTab.url,
+            active: true
+          })
+        }
+        
+        showHomePage.value = false
+        addressBar.value = searchUrl
+        currentUrl.value = searchUrl
+      }
+    } catch (e: any) {
+      console.error('[LuomiNest] 创建搜索标签页失败:', e.message)
+    }
+  }
+
+  setTimeout(() => {
+    isSearching.value = false
+    browserInput.value = ''
+  }, 300)
+}
+
+function handleSearchKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    handleSearch()
   }
 }
 </script>
@@ -182,16 +477,18 @@ async function executeDevAction() {
         <div
           v-for="tab in tabs"
           :key="tab.id"
-          :class="['tab-item', { active: tab.active }]"
+          :class="['tab-item', { active: tab.active, error: tab.error }]"
           @click="selectTab(tab.id)"
         >
-          <Globe v-if="!tab.url" :size="12" class="tab-icon" />
+          <div v-if="tab.loading" class="tab-loading-spinner" />
+          <img v-else-if="tab.favicon" :src="tab.favicon" class="tab-favicon" alt="" />
+          <Globe v-else-if="tab.url" :size="12" class="tab-icon" />
           <span class="tab-title">{{ tab.title }}</span>
-          <button class="tab-close" @click.stop="closeTab(tab.id)">
+          <button class="tab-close" aria-label="关闭标签页" @click.stop="closeTab(tab.id)">
             <X :size="12" />
           </button>
         </div>
-        <button class="tab-add" @click="addTab" title="新建标签页">
+        <button class="tab-add" aria-label="新建标签页" @click="addTab">
           <Plus :size="14" />
         </button>
       </div>
@@ -199,13 +496,13 @@ async function executeDevAction() {
 
     <div class="browser-nav-bar">
       <div class="nav-buttons">
-        <button class="nav-btn" title="后退">
+        <button class="nav-btn" aria-label="后退">
           <ArrowLeft :size="16" />
         </button>
-        <button class="nav-btn" title="前进">
+        <button class="nav-btn" aria-label="前进">
           <ArrowRight :size="16" />
         </button>
-        <button class="nav-btn" title="刷新" @click="navigateToUrl">
+        <button class="nav-btn" aria-label="刷新" @click="navigateToUrl">
           <RotateCw :size="14" />
         </button>
       </div>
@@ -220,12 +517,12 @@ async function executeDevAction() {
         />
       </div>
       <div class="nav-right">
-        <button class="nav-btn" title="收藏">
+        <button class="nav-btn" aria-label="收藏">
           <Star :size="15" />
         </button>
         <button
           :class="['nav-btn', 'dev-toggle', { active: showDevPanel }]"
-          title="开发者面板"
+          aria-label="开发者面板"
           @click="showDevPanel = !showDevPanel"
         >
           <Code2 :size="15" />
@@ -243,13 +540,13 @@ async function executeDevAction() {
         <Globe :size="13" class="bm-icon-svg" />
         <span class="bm-name">{{ bm.name }}</span>
       </button>
-      <button class="bookmark-more">
+      <button class="bookmark-more" aria-label="更多书签">
         <ChevronRight :size="14" />
       </button>
     </div>
 
     <div class="browser-content" :class="{ 'with-panel': showDevPanel }">
-      <div class="copilot-center">
+      <div v-if="showHomePage" class="copilot-center">
         <div class="brand-area">
           <h1 class="brand-title animate-brand-reveal">
             <span class="brand-lumi">Luomi</span><span class="brand-sub">Nest</span>
@@ -259,11 +556,33 @@ async function executeDevAction() {
 
         <div class="ai-input-section animate-slide-up">
           <div class="ai-input-box">
+            <div class="search-engine-bar">
+              <button class="engine-selector" @click="showEngineDropdown = !showEngineDropdown">
+                <component :is="selectedEngine.icon" :size="16" :style="{ color: selectedEngine.color }" />
+                <span class="engine-name">{{ selectedEngine.name }}</span>
+                <ChevronDown :size="14" class="engine-arrow" :class="{ rotated: showEngineDropdown }" />
+              </button>
+              <Transition name="dropdown">
+                <div v-if="showEngineDropdown" class="engine-dropdown">
+                  <button
+                    v-for="engine in searchEngines"
+                    :key="engine.id"
+                    :class="['engine-option', { active: engine.id === selectedEngine.id }]"
+                    @click="selectEngine(engine)"
+                  >
+                    <component :is="engine.icon" :size="15" :style="{ color: engine.color }" />
+                    <span>{{ engine.name }}</span>
+                    <div v-if="engine.id === selectedEngine.id" class="engine-check" />
+                  </button>
+                </div>
+              </Transition>
+            </div>
             <textarea
               v-model="browserInput"
-              placeholder="有问题尽管问 Luomi，或让 AI 帮你操作浏览器"
+              :placeholder="selectedEngine.id === 'ai' ? '向 AI 提问...' : `在 ${selectedEngine.name} 中搜索...`"
               rows="2"
               class="ai-textarea"
+              @keydown="handleSearchKeydown"
             ></textarea>
             <div class="ai-input-actions">
               <div class="ai-actions-left">
@@ -283,8 +602,15 @@ async function executeDevAction() {
                 <button class="ai-tool-btn icon-only" title="更多">
                   <ChevronDown :size="16" />
                 </button>
-                <button class="ai-send-btn" title="发送">
-                  <Send :size="17" />
+                <button
+                  class="ai-send-btn"
+                  :class="{ loading: isSearching }"
+                  :disabled="!browserInput.trim() || isSearching"
+                  title="搜索"
+                  @click="handleSearch"
+                >
+                  <Send v-if="!isSearching" :size="17" />
+                  <div v-else class="loading-spinner" />
                 </button>
               </div>
             </div>
@@ -417,12 +743,21 @@ async function executeDevAction() {
 
 .tab-icon {
   flex-shrink: 0;
-  opacity: 0.5;
+  opacity: 0.6;
+}
+
+.tab-favicon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 2px;
 }
 
 .tab-title {
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--browser-text);
 }
 
 .tab-close {
@@ -440,6 +775,28 @@ async function executeDevAction() {
 
 .tab-item:hover .tab-close {
   opacity: 0.6;
+}
+
+.tab-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--browser-border);
+  border-top-color: var(--lumi-primary);
+  border-radius: 50%;
+  animation: tab-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes tab-spin {
+  to { transform: rotate(360deg); }
+}
+
+.tab-item.error .tab-title {
+  color: #f87171;
+}
+
+.tab-item.error .tab-icon {
+  color: #f87171;
 }
 
 .tab-close:hover {
@@ -580,6 +937,7 @@ async function executeDevAction() {
 .bm-name {
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--browser-text);
 }
 
 .bookmark-more {
@@ -606,7 +964,8 @@ async function executeDevAction() {
   justify-content: center;
   overflow: hidden;
   position: relative;
-  min-height: 0;
+  min-height: 400px;
+  contain: layout style;
 }
 
 .browser-content.with-panel {
@@ -696,6 +1055,86 @@ async function executeDevAction() {
 .ai-input-box:focus-within {
   border-color: rgba(13, 148, 136, 0.4);
   box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.08), 0 8px 32px rgba(0,0,0,0.3);
+}
+
+.search-engine-bar {
+  position: relative;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--browser-border);
+}
+
+.engine-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--browser-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.engine-selector:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.engine-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--browser-text);
+}
+
+.engine-arrow {
+  color: var(--browser-text-dim);
+  transition: transform var(--transition-fast);
+}
+
+.engine-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.engine-dropdown {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: 16px;
+  min-width: 160px;
+  background: var(--browser-elevated);
+  border: 1px solid var(--browser-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.engine-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--browser-text-dim);
+  transition: all var(--transition-fast);
+}
+
+.engine-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--browser-text);
+}
+
+.engine-option.active {
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--browser-text);
+}
+
+.engine-check {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--lumi-primary);
 }
 
 .ai-textarea {
@@ -963,5 +1402,68 @@ async function executeDevAction() {
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(10px); height: 0; }
   to { opacity: 1; transform: translateY(0); height: 220px; }
+}
+
+.ai-send-btn.loading {
+  background: var(--lumi-primary-hover);
+  cursor: wait;
+}
+
+.ai-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.loading-spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all var(--transition-fast);
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out both;
+}
+
+.animate-slide-up {
+  animation: slideUpFade 0.6s ease-out both;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.4s ease-out both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 </style>

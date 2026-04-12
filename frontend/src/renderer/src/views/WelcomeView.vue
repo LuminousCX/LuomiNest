@@ -78,7 +78,12 @@ const i18n = computed(() => {
 
 const agreed = ref(false)
 
-const features = [
+const features: Array<{
+  icon: any
+  color: string
+  key: 'featAgent' | 'featWorkflow' | 'featBrowser' | 'featAvatar'
+  keyDesc: 'featAgentDesc' | 'featWorkflowDesc' | 'featBrowserDesc' | 'featAvatarDesc'
+}> = [
   { icon: Bot, color: '#6366f1', key: 'featAgent', keyDesc: 'featAgentDesc' },
   { icon: Zap, color: '#f59e0b', key: 'featWorkflow', keyDesc: 'featWorkflowDesc' },
   { icon: Globe, color: '#3b82f6', key: 'featBrowser', keyDesc: 'featBrowserDesc' },

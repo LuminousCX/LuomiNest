@@ -92,7 +92,7 @@ const selectAgent = (agent: typeof agents.value[0]) => {
   <div class="lumi-sidebar" :class="{ 'is-browser': isBrowserMode }">
     <div class="sidebar-icon-rail">
       <div class="rail-top">
-        <button class="avatar-btn" title="辰汐账户">
+        <button class="avatar-btn" aria-label="辰汐账户">
           <div class="avatar-ring">
             <span class="avatar-initial">L</span>
           </div>
@@ -102,7 +102,7 @@ const selectAgent = (agent: typeof agents.value[0]) => {
             v-for="item in navItems"
             :key="item.id"
             :class="['icon-btn', { active: route.path === item.id }]"
-            :title="item.label"
+            :aria-label="item.label"
             @click="router.push(item.id)"
           >
             <component :is="item.icon" :size="20" />
@@ -110,7 +110,7 @@ const selectAgent = (agent: typeof agents.value[0]) => {
         </nav>
       </div>
       <div class="rail-bottom">
-        <button class="icon-btn" title="设置" @click="router.push('/settings')">
+        <button class="icon-btn" aria-label="设置" @click="router.push('/settings')">
           <Settings :size="20" />
         </button>
       </div>
@@ -125,7 +125,7 @@ const selectAgent = (agent: typeof agents.value[0]) => {
           </div>
         </div>
 
-        <button class="new-agent-btn">
+        <button class="new-agent-btn" aria-label="新建 Agent">
           <Plus :size="16" />
           <span>新建 Agent</span>
         </button>
@@ -151,6 +151,7 @@ const selectAgent = (agent: typeof agents.value[0]) => {
               <button
                 v-if="!agent.isCustom"
                 class="expand-btn"
+                :aria-label="expandedAgents.includes(agent.id) ? '收起' : '展开'"
                 @click.stop="toggleAgent(agent.id)"
               >
                 <ChevronDown v-if="expandedAgents.includes(agent.id)" :size="14" />

@@ -6,6 +6,7 @@ export interface TabInfo {
   url: string
   active: boolean
   loading?: boolean
+  error?: string
 }
 
 const api = {
@@ -40,17 +41,40 @@ const api = {
     activate: (tabId: string) => ipcRenderer.invoke('tab:activate', tabId),
     closeManaged: (tabId: string) => ipcRenderer.invoke('tab:closeManaged', tabId),
     getAll: () => ipcRenderer.invoke('tab:getAll'),
-    getActive: () => ipcRenderer.invoke('tab:getActive')
+    getActive: () => ipcRenderer.invoke('tab:getActive'),
+    hideAll: () => ipcRenderer.invoke('tab:hideAll'),
+    cleanupAll: () => ipcRenderer.invoke('tab:cleanupAll'),
+    getCookies: () => ipcRenderer.invoke('tab:getCookies'),
+    clearBrowserData: () => ipcRenderer.invoke('tab:clearBrowserData'),
+    setBoundsConfig: (config: { sidebarWidth?: number; devPanelHeight?: number }) =>
+      ipcRenderer.invoke('tab:setBoundsConfig', config)
+  }
+}
+
+const electronBridge = {
+  ipcRenderer: {
+    on: (channel: string, listener: (event: any, ...args: any[]) => void) => {
+      ipcRenderer.on(channel, listener)
+    },
+    removeListener: (channel: string, listener: (...args: any[]) => void) => {
+      ipcRenderer.removeListener(channel, listener)
+    },
+    send: (channel: string, ...args: any[]) => {
+      ipcRenderer.send(channel, ...args)
+    }
   }
 }
 
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('api', api)
+    contextBridge.exposeInMainWorld('electron', electronBridge)
   } catch (error) {
     console.error(error)
   }
 } else {
   // @ts-ignore
   window.api = api
+  // @ts-ignore
+  window.electron = electronBridge
 }
