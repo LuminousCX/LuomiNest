@@ -6,6 +6,7 @@ export interface TabInfo {
   url: string
   active: boolean
   loading?: boolean
+  error?: string
 }
 
 export interface ElectronApi {
