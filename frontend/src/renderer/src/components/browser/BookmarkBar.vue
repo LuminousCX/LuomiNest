@@ -36,13 +36,23 @@ const emit = defineEmits<{
 .bookmark-bar {
   height: 34px;
   background: #fafaf9;
-  border-bottom: 1px solid #e7e5e4;
   display: flex;
   align-items: center;
   padding: 0 12px;
   gap: 4px;
   overflow-x: auto;
   scrollbar-width: none;
+  position: relative;
+}
+
+.bookmark-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #e7e5e4 15%, #e7e5e4 85%, transparent 100%);
 }
 
 .bookmark-bar::-webkit-scrollbar {
@@ -54,11 +64,11 @@ const emit = defineEmits<{
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.2s ease-in-out;
   white-space: nowrap;
 }
 
@@ -82,12 +92,12 @@ const emit = defineEmits<{
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   cursor: pointer;
   color: #a8a29e;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease-in-out;
 }
 
 .bookmark-more:hover {

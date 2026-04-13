@@ -216,8 +216,18 @@ function formatMessage(text: string): string {
   align-items: center;
   justify-content: space-between;
   padding: 12px 24px;
-  border-bottom: 1px solid var(--workspace-border);
   flex-shrink: 0;
+  position: relative;
+}
+
+.workspace-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: var(--divider-soft);
 }
 
 .header-left {
@@ -465,9 +475,9 @@ function formatMessage(text: string): string {
 
 .input-wrapper {
   background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm), var(--shadow-inset);
   overflow: hidden;
   transition: all var(--transition-fast);
 }
@@ -498,7 +508,17 @@ function formatMessage(text: string): string {
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px 12px;
-  border-top: 1px solid var(--workspace-border);
+  position: relative;
+}
+
+.input-toolbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: var(--divider-soft);
 }
 
 .toolbar-left,

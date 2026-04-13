@@ -1,59 +1,86 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
-  Palette,
-  Sparkles,
-  Heart,
-  Eye,
-  Smile,
-  Frown,
-  Meh,
-  Zap,
-  Volume2,
-  RotateCcw,
-  Maximize2,
-  Download,
-  Settings2
+  Palette, Sparkles, Heart, Eye, Smile, Frown, Meh, Zap,
+  Volume2, RotateCcw, Maximize2, Download, Settings2,
+  Loader2, AlertCircle, FolderOpen, Check
 } from 'lucide-vue-next'
+import { useLuomiNestAvatar } from '@/composables/useLuomiNestLive2D'
+import type { LuomiNestModelInfo } from '@/composables/useLuomiNestLive2D'
+import {
+  LUOMINEST_BUILTIN_MODELS,
+  validateLuomiNestModel3Json,
+  LUOMINEST_MODEL_ACCEPT_EXTENSIONS
+} from '@/config/luominest-models'
+
+const {
+  isLoading,
+  loadError,
+  isModelReady,
+  currentModelInfo,
+  availableMotions,
+  availableExpressions,
+  mountAvatar,
+  mountAvatarFromModelInfo,
+  triggerMotion,
+  driveEmotion,
+  resetAvatarPose,
+  teardown
+} = useLuomiNestAvatar()
+
+const canvasRef = ref<HTMLCanvasElement | null>(null)
+const importInputRef = ref<HTMLInputElement | null>(null)
+const importError = ref<string | null>(null)
+const importedModels = ref<LuomiNestModelInfo[]>([])
+const showImportSuccess = ref(false)
 
 const avatarModes = [
-  { id: 'live2d', label: 'Live2D', desc: 'Cubism 5 二次元', active: true },
-  { id: 'vrm', label: 'VRM', desc: '3D 全身模型', active: false },
-  { id: 'pixel', label: 'PixelPet', desc: 'Q版电子宠物', active: false }
+  { id: 'live2d', label: 'Live2D', desc: 'Cubism 4/5', active: true },
+  { id: 'vrm', label: 'VRM', desc: '3D Model', active: false },
+  { id: 'pixel', label: 'PixelPet', desc: 'Q-version Pet', active: false }
 ]
 
 const currentMode = ref('live2d')
 
 const emotions = [
-  { id: 'happy', icon: Smile, label: '开心', color: '#f59e0b' },
-  { id: 'sad', icon: Frown, label: '难过', color: '#6366f1' },
-  { id: 'neutral', icon: Meh, label: '平静', color: '#8b5cf6' },
-  { id: 'love', icon: Heart, label: '喜爱', color: '#ec4899' },
-  { id: 'surprise', icon: Zap, label: '惊讶', color: '#22c55e' }
+  { id: 'happy', icon: Smile, label: 'Happy', color: '#f59e0b' },
+  { id: 'sad', icon: Frown, label: 'Sad', color: '#6366f1' },
+  { id: 'neutral', icon: Meh, label: 'Neutral', color: '#8b5cf6' },
+  { id: 'love', icon: Heart, label: 'Love', color: '#ec4899' },
+  { id: 'surprise', icon: Zap, label: 'Surprise', color: '#22c55e' }
 ]
 
-const currentEmotion = ref(emotions[0])
+const currentEmotionLocal = ref(emotions[2])
 
 const expressionValue = computed(() => {
   const map: Record<string, number> = {
     happy: 0.8, sad: -0.4, neutral: 0, love: 0.6, surprise: 0.7
   }
-  return map[currentEmotion.value.id] ?? 0
+  return map[currentEmotionLocal.value.id] ?? 0
 })
 
-const idleAnimations = [
-  { name: '呼吸', status: 'running', progress: 65 },
-  { name: '眨眼', status: 'running', progress: 40 },
-  { name: '待机微动', status: 'running', progress: 80 },
-  { name: '头部追踪', status: 'paused', progress: 0 }
-]
+const idleAnimations = computed(() => [
+  { name: 'Breath', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 65 : 0 },
+  { name: 'Blink', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 40 : 0 },
+  { name: 'Idle Motion', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 80 : 0 },
+  { name: 'Head Track', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 50 : 0 }
+])
 
-const skinList = [
-  { name: '洛洛 · 默认', type: 'Live2D', thumb: null, tags: ['默认', '日常'] },
-  { name: '洛洛 · 睡衣', type: 'Live2D', thumb: null, tags: ['休闲', '夜晚'] },
-  { name: '洛洛 · 学院风', type: 'VRM', thumb: null, tags: ['正式', '3D'] },
-  { name: '像素洛洛', type: 'PixelPet', thumb: null, tags: ['复古', '轻量'] }
-]
+const skinList = computed(() => {
+  const builtin = LUOMINEST_BUILTIN_MODELS.map(m => ({
+    name: `${m.name}`,
+    type: m.type === 'live2d' ? 'Live2D' : m.type === 'vrm' ? 'VRM' : 'PixelPet',
+    tags: m.tags,
+    modelInfo: m as LuomiNestModelInfo | null
+  }))
+  const imported = importedModels.value.map(m => ({
+    name: m.name,
+    type: 'Live2D',
+    tags: ['Imported', ...m.tags],
+    modelInfo: m as LuomiNestModelInfo | null
+  }))
+  return [...builtin, ...imported]
+})
 
 const selectedSkin = ref(0)
 
@@ -62,8 +89,90 @@ function selectMode(modeId: string) {
 }
 
 function selectEmotion(emo: typeof emotions[0]) {
-  currentEmotion.value = emo
+  currentEmotionLocal.value = emo
+  driveEmotion({ id: emo.id, label: emo.label, intensity: expressionValue.value })
 }
+
+async function handleResetPose() {
+  resetAvatarPose()
+  try {
+    await triggerMotion('Idle', 0)
+  } catch {
+    // ignore
+  }
+}
+
+async function handleSkinSelect(idx: number) {
+  selectedSkin.value = idx
+  const skin = skinList.value[idx]
+  if (skin.modelInfo && canvasRef.value) {
+    await mountAvatarFromModelInfo(canvasRef.value, skin.modelInfo)
+  }
+}
+
+function handleImportClick() {
+  importError.value = null
+  importInputRef.value?.click()
+}
+
+async function handleFileImport(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (!file.name.endsWith('.model3.json')) {
+    importError.value = 'Invalid file type. Please select a .model3.json file.'
+    input.value = ''
+    return
+  }
+
+  try {
+    const text = await file.text()
+    const json = JSON.parse(text)
+    const validation = validateLuomiNestModel3Json(json)
+    if (!validation.valid) {
+      importError.value = `Invalid model: ${validation.errors.join('; ')}`
+      input.value = ''
+      return
+    }
+
+    const modelName = file.name.replace('.model3.json', '')
+    const modelInfo: LuomiNestModelInfo = {
+      id: `imported-${Date.now()}`,
+      name: modelName,
+      url: URL.createObjectURL(file),
+      scale: 0.25,
+      type: 'live2d',
+      tags: ['Imported']
+    }
+
+    importedModels.value.push(modelInfo)
+    importError.value = null
+    showImportSuccess.value = true
+    setTimeout(() => { showImportSuccess.value = false }, 2000)
+
+    if (canvasRef.value) {
+      selectedSkin.value = skinList.value.length - 1
+      await mountAvatarFromModelInfo(canvasRef.value, modelInfo)
+    }
+  } catch (err) {
+    importError.value = err instanceof Error ? err.message : 'Failed to parse model file'
+  }
+
+  input.value = ''
+}
+
+onMounted(async () => {
+  await nextTick()
+  if (canvasRef.value) {
+    const defaultModel = LUOMINEST_BUILTIN_MODELS[0]
+    await mountAvatarFromModelInfo(canvasRef.value, defaultModel)
+  }
+})
+
+onBeforeUnmount(() => {
+  teardown()
+})
 </script>
 
 <template>
@@ -71,21 +180,43 @@ function selectEmotion(emo: typeof emotions[0]) {
     <div class="avatar-header">
       <div class="header-left">
         <Palette :size="20" />
-        <h2>皮套工坊</h2>
-        <span class="header-badge">Live2D / VRM / PixelPet</span>
+        <h2>Avatar Studio</h2>
+        <span class="header-badge">LuomiNest</span>
       </div>
       <div class="header-actions">
-        <button class="h-btn" title="重置姿态"><RotateCcw :size="16" /></button>
-        <button class="h-btn" title="全屏模式"><Maximize2 :size="16" /></button>
-        <button class="h-btn primary" title="导入皮套"><Download :size="16" /> 导入</button>
-        <button class="h-btn" title="高级设置"><Settings2 :size="16" /></button>
+        <button class="h-btn" title="Reset Pose" @click="handleResetPose"><RotateCcw :size="16" /></button>
+        <button class="h-btn" title="Fullscreen"><Maximize2 :size="16" /></button>
+        <button class="h-btn primary" title="Import Avatar" @click="handleImportClick">
+          <Download :size="16" /> Import
+        </button>
+        <button class="h-btn" title="Settings"><Settings2 :size="16" /></button>
       </div>
+      <input
+        ref="importInputRef"
+        type="file"
+        :accept="LUOMINEST_MODEL_ACCEPT_EXTENSIONS"
+        style="display: none"
+        @change="handleFileImport"
+      />
     </div>
 
     <div class="avatar-body">
       <div class="avatar-stage animate-stage-appear">
         <div class="stage-canvas">
-          <div class="avatar-placeholder" :class="[`emotion-${currentEmotion.id}`]">
+          <canvas ref="canvasRef" class="live2d-canvas"></canvas>
+
+          <div v-if="isLoading" class="stage-loading">
+            <Loader2 :size="32" class="loading-spinner" />
+            <span class="loading-text">Loading LuomiNest Avatar...</span>
+          </div>
+
+          <div v-if="loadError" class="stage-error">
+            <AlertCircle :size="32" />
+            <span class="error-text">{{ loadError }}</span>
+            <span class="error-hint">Check model resources and try again</span>
+          </div>
+
+          <div v-if="!isLoading && !loadError && !isModelReady" class="avatar-placeholder" :class="[`emotion-${currentEmotionLocal.id}`]">
             <div class="avatar-ring"></div>
             <div class="avatar-core">
               <Sparkles :size="48" class="avatar-sparkle" />
@@ -95,13 +226,17 @@ function selectEmotion(emo: typeof emotions[0]) {
               <span v-for="i in 6" :key="i" class="particle" :style="{ '--delay': `${i * 0.15}s` }"></span>
             </div>
           </div>
+
           <div class="stage-overlay">
             <div class="overlay-tag mode-tag">
               <Eye :size="12" /> {{ avatarModes.find(m => m.id === currentMode)?.label }}
             </div>
-            <div class="overlay-tag emotion-tag" :style="{ borderColor: currentEmotion.color }">
-              <component :is="currentEmotion.icon" :size="12" />
-              {{ currentEmotion.label }}
+            <div class="overlay-tag emotion-tag" :style="{ borderColor: currentEmotionLocal.color }">
+              <component :is="currentEmotionLocal.icon" :size="12" />
+              {{ currentEmotionLocal.label }}
+            </div>
+            <div v-if="isModelReady" class="overlay-tag status-tag">
+              <span class="status-dot"></span> LuomiNest Ready
             </div>
           </div>
         </div>
@@ -122,14 +257,14 @@ function selectEmotion(emo: typeof emotions[0]) {
           <div class="emotion-panel">
             <div class="panel-title">
               <Heart :size="14" />
-              <span>情感驱动</span>
+              <span>Emotion</span>
               <span class="expression-value">PAD: {{ expressionValue > 0 ? '+' : '' }}{{ expressionValue.toFixed(1) }}</span>
             </div>
             <div class="emotion-grid">
               <button
                 v-for="emo in emotions"
                 :key="emo.id"
-                :class="['emo-btn', { active: currentEmotion.id === emo.id }]"
+                :class="['emo-btn', { active: currentEmotionLocal.id === emo.id }]"
                 :style="{ '--emo-color': emo.color }"
                 @click="selectEmotion(emo)"
               >
@@ -142,7 +277,7 @@ function selectEmotion(emo: typeof emotions[0]) {
           <div class="idle-panel">
             <div class="panel-title">
               <Volume2 :size="14" />
-              <span>闲置动画</span>
+              <span>Idle Animation</span>
             </div>
             <div class="idle-list">
               <div
@@ -152,7 +287,7 @@ function selectEmotion(emo: typeof emotions[0]) {
               >
                 <div class="idle-info">
                   <span class="idle-name">{{ anim.name }}</span>
-                  <span :class="['idle-status', anim.status]">{{ anim.status === 'running' ? '运行中' : '已暂停' }}</span>
+                  <span :class="['idle-status', anim.status]">{{ anim.status === 'running' ? 'Running' : 'Paused' }}</span>
                 </div>
                 <div class="idle-bar">
                   <div
@@ -168,13 +303,24 @@ function selectEmotion(emo: typeof emotions[0]) {
       </div>
 
       <div class="skin-sidebar animate-slide-right">
-        <div class="sidebar-title">皮套库</div>
+        <div class="sidebar-title">Avatar Library</div>
+
+        <div v-if="importError" class="import-error">
+          <AlertCircle :size="14" />
+          <span>{{ importError }}</span>
+        </div>
+
+        <div v-if="showImportSuccess" class="import-success">
+          <Check :size="14" />
+          <span>Model imported successfully</span>
+        </div>
+
         <div class="skin-list">
           <div
             v-for="(skin, idx) in skinList"
             :key="idx"
             :class="['skin-card', { selected: selectedSkin === idx }]"
-            @click="selectedSkin = idx"
+            @click="handleSkinSelect(idx)"
           >
             <div class="skin-thumb">
               <Palette :size="24" />
@@ -188,6 +334,11 @@ function selectEmotion(emo: typeof emotions[0]) {
             </div>
           </div>
         </div>
+
+        <button class="import-btn" @click="handleImportClick">
+          <FolderOpen :size="16" />
+          <span>Import .model3.json</span>
+        </button>
       </div>
     </div>
   </div>
@@ -208,8 +359,18 @@ function selectEmotion(emo: typeof emotions[0]) {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  position: relative;
+}
+
+.avatar-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: var(--divider-soft);
 }
 
 .header-left {
@@ -296,6 +457,69 @@ function selectEmotion(emo: typeof emotions[0]) {
   overflow: hidden;
 }
 
+.live2d-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.stage-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+[data-theme="dark"] .stage-loading {
+  background: rgba(12, 10, 9, 0.6);
+}
+
+.loading-spinner {
+  color: var(--lumi-primary);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.stage-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 10;
+  color: var(--lumi-accent);
+}
+
+.error-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.error-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .avatar-placeholder {
   position: relative;
   width: 260px;
@@ -303,10 +527,12 @@ function selectEmotion(emo: typeof emotions[0]) {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 24px;
-  background: linear-gradient(145deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-inset);
   transition: all 500ms ease-in-out;
+  z-index: 2;
 }
 
 .avatar-ring {
@@ -377,6 +603,7 @@ function selectEmotion(emo: typeof emotions[0]) {
   left: 16px;
   display: flex;
   gap: 8px;
+  z-index: 20;
 }
 
 .overlay-tag {
@@ -398,13 +625,41 @@ function selectEmotion(emo: typeof emotions[0]) {
   color: var(--emo-color, var(--lumi-primary));
 }
 
+.status-tag {
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #22c55e;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: dot-pulse 2s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 .stage-controls {
   display: flex;
   gap: 16px;
   padding: 16px 20px;
-  border-top: 1px solid var(--border);
   flex-shrink: 0;
   overflow-x: auto;
+  position: relative;
+}
+
+.stage-controls::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  height: 1px;
+  background: var(--divider-soft);
 }
 
 .mode-switcher {
@@ -419,8 +674,8 @@ function selectEmotion(emo: typeof emotions[0]) {
   align-items: center;
   gap: 2px;
   padding: 10px 18px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -485,8 +740,8 @@ function selectEmotion(emo: typeof emotions[0]) {
   align-items: center;
   gap: 4px;
   padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -571,11 +826,23 @@ function selectEmotion(emo: typeof emotions[0]) {
 
 .skin-sidebar {
   width: 260px;
-  border-left: 1px solid var(--border);
   padding: 20px 16px;
   overflow-y: auto;
   flex-shrink: 0;
   background: var(--surface);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.skin-sidebar::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 0;
+  width: 1px;
+  background: var(--divider-vertical);
 }
 
 .sidebar-title {
@@ -585,10 +852,41 @@ function selectEmotion(emo: typeof emotions[0]) {
   color: var(--text);
 }
 
+.import-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.import-success {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  font-size: 12px;
+  margin-bottom: 12px;
+  animation: fade-in 300ms ease-in-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .skin-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
 }
 
 .skin-card {
@@ -596,8 +894,8 @@ function selectEmotion(emo: typeof emotions[0]) {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
   cursor: pointer;
   transition: all 300ms ease-in-out;
 }
@@ -656,6 +954,29 @@ function selectEmotion(emo: typeof emotions[0]) {
   border-radius: 8px;
   background: var(--surface-hover);
   color: var(--text-muted);
+}
+
+.import-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-light);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
+  font-size: 13px;
+  margin-top: 16px;
+  flex-shrink: 0;
+}
+
+.import-btn:hover {
+  border-color: var(--lumi-primary);
+  color: var(--lumi-primary);
+  background: rgba(13, 148, 136, 0.05);
 }
 
 @keyframes stage-appear {

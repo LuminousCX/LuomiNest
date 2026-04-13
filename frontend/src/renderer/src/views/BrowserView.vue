@@ -43,7 +43,7 @@ watch(showDevPanel, async (show) => {
       devPanelHeight: show ? 220 : 0
     })
   } catch (e) {
-    console.error('[Browser] 设置面板高度失败:', e)
+    console.error('[ERROR][LuomiNestBrowser] Failed to set panel height:', e)
   }
 })
 
@@ -55,13 +55,13 @@ onMounted(async () => {
     try {
       await window.api?.tab.showActive()
     } catch (e) {
-      console.error('[Browser] 恢复活跃标签页失败:', e)
+      console.error('[ERROR][LuomiNestBrowser] Failed to restore active tab:', e)
     }
   } else if (active?.url && active.sleeping) {
     try {
       await window.api?.tab.activate(active.id)
     } catch (e) {
-      console.error('[Browser] 唤醒标签页失败:', e)
+      console.error('[ERROR][LuomiNestBrowser] Failed to wake up tab:', e)
     }
   }
 
@@ -180,7 +180,7 @@ async function createTab(url: string = '') {
       })
     }
   } catch (e: any) {
-    console.error('[Browser] 创建标签页失败:', e.message)
+    console.error('[ERROR][LuomiNestBrowser] Failed to create tab:', e.message)
     tabs.value.push({
       id: `error-${Date.now()}`,
       title: '加载失败',
@@ -208,7 +208,7 @@ async function selectTab(tabId: string) {
       addressBar.value = tab.url
       await syncNavigationState()
     } catch (e) {
-      console.error('[Browser] 切换标签页失败:', e)
+      console.error('[ERROR][LuomiNestBrowser] Failed to switch tab:', e)
     }
   } else {
     showHomePage.value = true
@@ -228,7 +228,7 @@ async function closeTab(tabId: string) {
   try {
     await window.api?.tab.close(tabId)
   } catch (e) {
-    console.error('[Browser] 关闭标签页失败:', e)
+    console.error('[ERROR][LuomiNestBrowser] Failed to close tab:', e)
   }
 
   tabs.value.splice(idx, 1)
@@ -278,7 +278,7 @@ async function refreshTab() {
     }
     await window.api?.tab.reload(tab.id)
   } catch (e) {
-    console.error('[Browser] 刷新标签页失败:', e)
+    console.error('[ERROR][LuomiNestBrowser] Failed to reload tab:', e)
   }
 }
 
@@ -286,7 +286,7 @@ async function goBack() {
   try {
     await window.api?.tab.goBack()
   } catch (e) {
-    console.error('[Browser] 后退失败:', e)
+    console.error('[ERROR][LuomiNestBrowser] Failed to go back:', e)
   }
 }
 
@@ -294,7 +294,7 @@ async function goForward() {
   try {
     await window.api?.tab.goForward()
   } catch (e) {
-    console.error('[Browser] 前进失败:', e)
+    console.error('[ERROR][LuomiNestBrowser] Failed to go forward:', e)
   }
 }
 
@@ -406,12 +406,22 @@ async function handleQuickAction(action: string) {
 
 .captcha-banner {
   height: 36px;
-  background: #fef3c7;
-  border-bottom: 1px solid #f59e0b;
+  background: linear-gradient(90deg, rgba(254,243,199,0.9), rgba(254,243,199,0.7));
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  position: relative;
+}
+
+.captcha-banner::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #f59e0b 20%, #f59e0b 80%, transparent 100%);
 }
 
 .captcha-banner-content {

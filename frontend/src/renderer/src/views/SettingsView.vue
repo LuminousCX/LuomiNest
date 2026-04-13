@@ -159,9 +159,10 @@ const navigateTo = (route: string) => {
 
 .setting-items {
   background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-xs);
 }
 
 .setting-item {
@@ -173,11 +174,21 @@ const navigateTo = (route: string) => {
   text-align: left;
   cursor: pointer;
   transition: all var(--transition-fast);
-  border-bottom: 1px solid var(--workspace-border);
+  position: relative;
 }
 
-.setting-item:last-child {
-  border-bottom: none;
+.setting-item::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 18px;
+  right: 18px;
+  height: 1px;
+  background: var(--divider-soft);
+}
+
+.setting-item:last-child::after {
+  display: none;
 }
 
 .setting-item:hover {
@@ -188,7 +199,7 @@ const navigateTo = (route: string) => {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
-  background: var(--workspace-panel);
+  background: linear-gradient(135deg, rgba(13,148,136,0.06), rgba(99,102,241,0.04));
   display: flex;
   align-items: center;
   justify-content: center;

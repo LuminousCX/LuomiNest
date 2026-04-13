@@ -1,0 +1,735 @@
+ Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+warnAboutInsecureCSP @ node:electron/js2c/renderer_init:2
+logSecurityWarnings @ node:electron/js2c/renderer_init:2
+(anonymous) @ node:electron/js2c/renderer_init:2
+ [Live2DModel(uninitialized)] options.autoInteract is deprecated since v0.5.0, use autoHitTest and autoFocus instead.
+warn @ pixi-live2d-display-….js?v=aaca7c0c:7786
+_Automator2 @ pixi-live2d-display-…js?v=aaca7c0c:12849
+Live2DModel @ pixi-live2d-display-…js?v=aaca7c0c:12989
+from @ pixi-live2d-display-…js?v=aaca7c0c:12999
+mountAvatar @ useLuomiNestLive2D.ts:63
+await in mountAvatar
+(anonymous) @ AvatarView.vue:105
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:158
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+ [CSM][I]Live2D Cubism Core version: 06.00.0001 (100663297)
+
+ [CSM][I]CubismFramework.startUp() is complete.
+
+ [CSM][I]CubismFramework.initialize() is complete.
+
+ Live2D Cubism SDK Core Version 6.0.1
+pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423 Uncaught TypeError: Cannot read properties of undefined (reading '0')
+    at CubismRenderer_WebGL.doDrawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423:32)
+    at CubismRenderer_WebGL.drawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171:10)
+    at Cubism4InternalModel.draw (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765:19)
+    at Live2DModel._render (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290:24)
+    at Live2DModel.render (chunk-TY56K7TD.js?v=aaca7c0c:15108:14)
+    at _Container2.render (chunk-TY56K7TD.js?v=aaca7c0c:15110:29)
+    at ObjectRendererSystem.render (chunk-TY56K7TD.js?v=aaca7c0c:13185:189)
+    at _Renderer2.render (chunk-TY56K7TD.js?v=aaca7c0c:13269:25)
+    at _Application2.render (pixi__js.js?v=aaca7c0c:3865:19)
+    at TickerListener.emit (chunk-TY56K7TD.js?v=aaca7c0c:12604:40)
+doDrawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423
+drawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171
+draw @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765
+_render @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15108
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15110
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13185
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13269
+render @ pixi__js.js?v=aaca7c0c:3865
+emit @ chunk-TY56K7TD.js?v=aaca7c0c:12604
+update @ chunk-TY56K7TD.js?v=aaca7c0c:12779
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_requestIfNeeded @ chunk-TY56K7TD.js?v=aaca7c0c:12644
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12738
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12930
+init @ chunk-TY56K7TD.js?v=aaca7c0c:12931
+(anonymous) @ pixi__js.js?v=aaca7c0c:3860
+_Application2 @ pixi__js.js?v=aaca7c0c:3859
+initRenderHost @ useLuomiNestLive2D.ts:41
+mountAvatar @ useLuomiNestLive2D.ts:81
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+useLuomiNestLive2D.ts:90 [Live2DModel(uninitialized)] options.autoInteract is deprecated since v0.5.0, use autoHitTest and autoFocus instead.
+warn @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7786
+_Automator2 @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12849
+Live2DModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12989
+from @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12999
+mountAvatar @ useLuomiNestLive2D.ts:90
+await in mountAvatar
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+live2dcubismcore.min.js:9 Live2D Cubism SDK Core Version 6.0.1
+pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423 Uncaught TypeError: Cannot read properties of undefined (reading '0')
+    at CubismRenderer_WebGL.doDrawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423:32)
+    at CubismRenderer_WebGL.drawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171:10)
+    at Cubism4InternalModel.draw (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765:19)
+    at Live2DModel._render (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290:24)
+    at Live2DModel.render (chunk-TY56K7TD.js?v=aaca7c0c:15108:14)
+    at _Container2.render (chunk-TY56K7TD.js?v=aaca7c0c:15110:29)
+    at ObjectRendererSystem.render (chunk-TY56K7TD.js?v=aaca7c0c:13185:189)
+    at _Renderer2.render (chunk-TY56K7TD.js?v=aaca7c0c:13269:25)
+    at _Application2.render (pixi__js.js?v=aaca7c0c:3865:19)
+    at TickerListener.emit (chunk-TY56K7TD.js?v=aaca7c0c:12604:40)
+doDrawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423
+drawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171
+draw @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765
+_render @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15108
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15110
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13185
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13269
+render @ pixi__js.js?v=aaca7c0c:3865
+emit @ chunk-TY56K7TD.js?v=aaca7c0c:12604
+update @ chunk-TY56K7TD.js?v=aaca7c0c:12779
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_requestIfNeeded @ chunk-TY56K7TD.js?v=aaca7c0c:12644
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12738
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12930
+init @ chunk-TY56K7TD.js?v=aaca7c0c:12931
+(anonymous) @ pixi__js.js?v=aaca7c0c:3860
+_Application2 @ pixi__js.js?v=aaca7c0c:3859
+initRenderHost @ useLuomiNestLive2D.ts:41
+mountAvatar @ useLuomiNestLive2D.ts:81
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+useLuomiNestLive2D.ts:90 [Live2DModel(uninitialized)] options.autoInteract is deprecated since v0.5.0, use autoHitTest and autoFocus instead.
+warn @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7786
+_Automator2 @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12849
+Live2DModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12989
+from @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12999
+mountAvatar @ useLuomiNestLive2D.ts:90
+await in mountAvatar
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+live2dcubismcore.min.js:9 Live2D Cubism SDK Core Version 6.0.1
+pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423 Uncaught TypeError: Cannot read properties of undefined (reading '0')
+    at CubismRenderer_WebGL.doDrawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423:32)
+    at CubismRenderer_WebGL.drawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171:10)
+    at Cubism4InternalModel.draw (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765:19)
+    at Live2DModel._render (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290:24)
+    at Live2DModel.render (chunk-TY56K7TD.js?v=aaca7c0c:15108:14)
+    at _Container2.render (chunk-TY56K7TD.js?v=aaca7c0c:15110:29)
+    at ObjectRendererSystem.render (chunk-TY56K7TD.js?v=aaca7c0c:13185:189)
+    at _Renderer2.render (chunk-TY56K7TD.js?v=aaca7c0c:13269:25)
+    at _Application2.render (pixi__js.js?v=aaca7c0c:3865:19)
+    at TickerListener.emit (chunk-TY56K7TD.js?v=aaca7c0c:12604:40)
+doDrawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423
+drawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171
+draw @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765
+_render @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15108
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15110
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13185
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13269
+render @ pixi__js.js?v=aaca7c0c:3865
+emit @ chunk-TY56K7TD.js?v=aaca7c0c:12604
+update @ chunk-TY56K7TD.js?v=aaca7c0c:12779
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_requestIfNeeded @ chunk-TY56K7TD.js?v=aaca7c0c:12644
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12738
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12930
+init @ chunk-TY56K7TD.js?v=aaca7c0c:12931
+(anonymous) @ pixi__js.js?v=aaca7c0c:3860
+_Application2 @ pixi__js.js?v=aaca7c0c:3859
+initRenderHost @ useLuomiNestLive2D.ts:41
+mountAvatar @ useLuomiNestLive2D.ts:81
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+useLuomiNestLive2D.ts:90 [Live2DModel(uninitialized)] options.autoInteract is deprecated since v0.5.0, use autoHitTest and autoFocus instead.
+warn @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7786
+_Automator2 @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12849
+Live2DModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12989
+from @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12999
+mountAvatar @ useLuomiNestLive2D.ts:90
+await in mountAvatar
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+live2dcubismcore.min.js:9 Live2D Cubism SDK Core Version 6.0.1
+pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423 Uncaught TypeError: Cannot read properties of undefined (reading '0')
+    at CubismRenderer_WebGL.doDrawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423:32)
+    at CubismRenderer_WebGL.drawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171:10)
+    at Cubism4InternalModel.draw (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765:19)
+    at Live2DModel._render (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290:24)
+    at Live2DModel.render (chunk-TY56K7TD.js?v=aaca7c0c:15108:14)
+    at _Container2.render (chunk-TY56K7TD.js?v=aaca7c0c:15110:29)
+    at ObjectRendererSystem.render (chunk-TY56K7TD.js?v=aaca7c0c:13185:189)
+    at _Renderer2.render (chunk-TY56K7TD.js?v=aaca7c0c:13269:25)
+    at _Application2.render (pixi__js.js?v=aaca7c0c:3865:19)
+    at TickerListener.emit (chunk-TY56K7TD.js?v=aaca7c0c:12604:40)
+doDrawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423
+drawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171
+draw @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765
+_render @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15108
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15110
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13185
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13269
+render @ pixi__js.js?v=aaca7c0c:3865
+emit @ chunk-TY56K7TD.js?v=aaca7c0c:12604
+update @ chunk-TY56K7TD.js?v=aaca7c0c:12779
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_requestIfNeeded @ chunk-TY56K7TD.js?v=aaca7c0c:12644
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12738
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12930
+init @ chunk-TY56K7TD.js?v=aaca7c0c:12931
+(anonymous) @ pixi__js.js?v=aaca7c0c:3860
+_Application2 @ pixi__js.js?v=aaca7c0c:3859
+initRenderHost @ useLuomiNestLive2D.ts:41
+mountAvatar @ useLuomiNestLive2D.ts:81
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+useLuomiNestLive2D.ts:90 [Live2DModel(uninitialized)] options.autoInteract is deprecated since v0.5.0, use autoHitTest and autoFocus instead.
+warn @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7786
+_Automator2 @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12849
+Live2DModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12989
+from @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12999
+mountAvatar @ useLuomiNestLive2D.ts:90
+await in mountAvatar
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+live2dcubismcore.min.js:9 Live2D Cubism SDK Core Version 6.0.1
+pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423 Uncaught TypeError: Cannot read properties of undefined (reading '0')
+    at CubismRenderer_WebGL.doDrawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423:32)
+    at CubismRenderer_WebGL.drawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171:10)
+    at Cubism4InternalModel.draw (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765:19)
+    at Live2DModel._render (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290:24)
+    at Live2DModel.render (chunk-TY56K7TD.js?v=aaca7c0c:15108:14)
+    at _Container2.render (chunk-TY56K7TD.js?v=aaca7c0c:15110:29)
+    at ObjectRendererSystem.render (chunk-TY56K7TD.js?v=aaca7c0c:13185:189)
+    at _Renderer2.render (chunk-TY56K7TD.js?v=aaca7c0c:13269:25)
+    at _Application2.render (pixi__js.js?v=aaca7c0c:3865:19)
+    at TickerListener.emit (chunk-TY56K7TD.js?v=aaca7c0c:12604:40)
+doDrawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423
+drawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171
+draw @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765
+_render @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15108
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15110
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13185
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13269
+render @ pixi__js.js?v=aaca7c0c:3865
+emit @ chunk-TY56K7TD.js?v=aaca7c0c:12604
+update @ chunk-TY56K7TD.js?v=aaca7c0c:12779
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_requestIfNeeded @ chunk-TY56K7TD.js?v=aaca7c0c:12644
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12738
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12930
+init @ chunk-TY56K7TD.js?v=aaca7c0c:12931
+(anonymous) @ pixi__js.js?v=aaca7c0c:3860
+_Application2 @ pixi__js.js?v=aaca7c0c:3859
+initRenderHost @ useLuomiNestLive2D.ts:41
+mountAvatar @ useLuomiNestLive2D.ts:81
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+useLuomiNestLive2D.ts:90 [Live2DModel(uninitialized)] options.autoInteract is deprecated since v0.5.0, use autoHitTest and autoFocus instead.
+warn @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7786
+_Automator2 @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12849
+Live2DModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12989
+from @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12999
+mountAvatar @ useLuomiNestLive2D.ts:90
+await in mountAvatar
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+live2dcubismcore.min.js:9 Live2D Cubism SDK Core Version 6.0.1
+pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423 Uncaught TypeError: Cannot read properties of undefined (reading '0')
+    at CubismRenderer_WebGL.doDrawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423:32)
+    at CubismRenderer_WebGL.drawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171:10)
+    at Cubism4InternalModel.draw (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765:19)
+    at Live2DModel._render (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290:24)
+    at Live2DModel.render (chunk-TY56K7TD.js?v=aaca7c0c:15108:14)
+    at _Container2.render (chunk-TY56K7TD.js?v=aaca7c0c:15110:29)
+    at ObjectRendererSystem.render (chunk-TY56K7TD.js?v=aaca7c0c:13185:189)
+    at _Renderer2.render (chunk-TY56K7TD.js?v=aaca7c0c:13269:25)
+    at _Application2.render (pixi__js.js?v=aaca7c0c:3865:19)
+    at TickerListener.emit (chunk-TY56K7TD.js?v=aaca7c0c:12604:40)
+doDrawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423
+drawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171
+draw @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765
+_render @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15108
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15110
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13185
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13269
+render @ pixi__js.js?v=aaca7c0c:3865
+emit @ chunk-TY56K7TD.js?v=aaca7c0c:12604
+update @ chunk-TY56K7TD.js?v=aaca7c0c:12779
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_requestIfNeeded @ chunk-TY56K7TD.js?v=aaca7c0c:12644
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12738
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12930
+init @ chunk-TY56K7TD.js?v=aaca7c0c:12931
+(anonymous) @ pixi__js.js?v=aaca7c0c:3860
+_Application2 @ pixi__js.js?v=aaca7c0c:3859
+initRenderHost @ useLuomiNestLive2D.ts:41
+mountAvatar @ useLuomiNestLive2D.ts:81
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+useLuomiNestLive2D.ts:90 [Live2DModel(uninitialized)] options.autoInteract is deprecated since v0.5.0, use autoHitTest and autoFocus instead.
+warn @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7786
+_Automator2 @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12849
+Live2DModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12989
+from @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:12999
+mountAvatar @ useLuomiNestLive2D.ts:90
+await in mountAvatar
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522
+live2dcubismcore.min.js:9 Live2D Cubism SDK Core Version 6.0.1
+pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423 Uncaught TypeError: Cannot read properties of undefined (reading '0')
+    at CubismRenderer_WebGL.doDrawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423:32)
+    at CubismRenderer_WebGL.drawModel (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171:10)
+    at Cubism4InternalModel.draw (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765:19)
+    at Live2DModel._render (pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290:24)
+    at Live2DModel.render (chunk-TY56K7TD.js?v=aaca7c0c:15108:14)
+    at _Container2.render (chunk-TY56K7TD.js?v=aaca7c0c:15110:29)
+    at ObjectRendererSystem.render (chunk-TY56K7TD.js?v=aaca7c0c:13185:189)
+    at _Renderer2.render (chunk-TY56K7TD.js?v=aaca7c0c:13269:25)
+    at _Application2.render (pixi__js.js?v=aaca7c0c:3865:19)
+    at TickerListener.emit (chunk-TY56K7TD.js?v=aaca7c0c:12604:40)
+doDrawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:7423
+drawModel @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:1171
+draw @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13765
+_render @ pixi-live2d-display-mulmotion_cubism4.js?v=aaca7c0c:13290
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15108
+render @ chunk-TY56K7TD.js?v=aaca7c0c:15110
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13185
+render @ chunk-TY56K7TD.js?v=aaca7c0c:13269
+render @ pixi__js.js?v=aaca7c0c:3865
+emit @ chunk-TY56K7TD.js?v=aaca7c0c:12604
+update @ chunk-TY56K7TD.js?v=aaca7c0c:12779
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_tick @ chunk-TY56K7TD.js?v=aaca7c0c:12634
+requestAnimationFrame
+_requestIfNeeded @ chunk-TY56K7TD.js?v=aaca7c0c:12644
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12738
+start @ chunk-TY56K7TD.js?v=aaca7c0c:12930
+init @ chunk-TY56K7TD.js?v=aaca7c0c:12931
+(anonymous) @ pixi__js.js?v=aaca7c0c:3860
+_Application2 @ pixi__js.js?v=aaca7c0c:3859
+initRenderHost @ useLuomiNestLive2D.ts:41
+mountAvatar @ useLuomiNestLive2D.ts:81
+(anonymous) @ AvatarView.vue:101
+await in (anonymous)
+(anonymous) @ chunk-MDJKIZJQ.js?v=aaca7c0c:5265
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+hook.__weh.hook.__weh @ chunk-MDJKIZJQ.js?v=aaca7c0c:5245
+flushPostFlushCbs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2536
+flushJobs @ chunk-MDJKIZJQ.js?v=aaca7c0c:2578
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=aaca7c0c:2473
+queueJob @ chunk-MDJKIZJQ.js?v=aaca7c0c:2468
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=aaca7c0c:8419
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:535
+endBatch @ chunk-MDJKIZJQ.js?v=aaca7c0c:593
+notify @ chunk-MDJKIZJQ.js?v=aaca7c0c:855
+trigger @ chunk-MDJKIZJQ.js?v=aaca7c0c:829
+set value @ chunk-MDJKIZJQ.js?v=aaca7c0c:1743
+finalizeNavigation @ vue-router.js?v=aaca7c0c:5849
+(anonymous) @ vue-router.js?v=aaca7c0c:5787
+Promise.then
+pushWithRedirect @ vue-router.js?v=aaca7c0c:5774
+push @ vue-router.js?v=aaca7c0c:5725
+onClick @ LumiSidebar.vue:108
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=aaca7c0c:2358
+invoker @ chunk-MDJKIZJQ.js?v=aaca7c0c:11522

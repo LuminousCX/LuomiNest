@@ -65,6 +65,7 @@ export interface ElectronApi {
 
 declare global {
   interface Window {
+    Live2DCubismCore: any
     api: ElectronApi
     electron?: {
       ipcRenderer: {

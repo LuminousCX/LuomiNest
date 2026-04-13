@@ -63,7 +63,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   justify-content: space-between;
   height: 34px;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
   -webkit-app-region: drag;
   user-select: none;
   flex-shrink: 0;

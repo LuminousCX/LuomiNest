@@ -261,7 +261,7 @@ export function initBrowserSession(): void {
   })
 
   initialized = true
-  console.log('[Browser] Session initialized with stealth measures')
+  console.info('[INFO][LuomiNestBrowser] Session initialized with stealth measures')
 }
 
 export function getStealthScript(): string {
@@ -282,7 +282,7 @@ export function getCookies(): Promise<Electron.Cookie[]> {
   return browserSession.cookies.get({})
 }
 
-export function setCookie(cookie: Electron.Cookie): Promise<void> {
+export function setCookie(cookie: Electron.CookiesSetDetails): Promise<void> {
   const browserSession = session.fromPartition(DEFAULT_BROWSER_CONFIG.sessionPartition)
   return browserSession.cookies.set(cookie)
 }

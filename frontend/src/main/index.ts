@@ -4,6 +4,10 @@ import { platform } from 'os'
 import { tabManager } from './services/browser'
 import { setupNetworkConfig } from './services/browser/view'
 
+if (platform() === 'win32') {
+  process.stdout.write('\x1b[?65001h')
+}
+
 setupNetworkConfig()
 
 let mainWindow: BrowserWindow | null = null
@@ -59,6 +63,19 @@ const createWindow = (): void => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
+
+  if (isDev) {
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:"
+          ]
+        }
+      })
+    })
+  }
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -226,6 +243,9 @@ function registerIpcHandlers(): void {
 }
 
 app.whenReady().then(() => {
+  const userDataPath = app.getPath('userData')
+  app.setPath('cache', join(userDataPath, 'Cache'))
+
   createWindow()
   createMenu()
   createTray()

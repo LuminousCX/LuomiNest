@@ -60,10 +60,20 @@ function getTabTooltip(tab: Tab): string {
 .tab-bar {
   height: 38px;
   background: #f5f5f4;
-  border-bottom: 1px solid #e7e5e4;
   display: flex;
   align-items: center;
   padding: 0 8px;
+  position: relative;
+}
+
+.tab-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #e7e5e4 15%, #e7e5e4 85%, transparent 100%);
 }
 
 .tab-list {
@@ -87,9 +97,9 @@ function getTabTooltip(tab: Tab): string {
   max-width: 200px;
   height: 30px;
   background: #e7e5e4;
-  border-radius: 6px 6px 0 0;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.15s ease-in-out;
+  transition: background 0.15s ease-in-out, transform 0.15s ease-in-out;
 }
 
 .tab-item:hover {
@@ -186,13 +196,13 @@ function getTabTooltip(tab: Tab): string {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   cursor: pointer;
   color: #78716c;
   font-size: 16px;
-  transition: all 0.15s ease-in-out;
+  transition: all 0.2s ease-in-out;
 }
 
 .tab-add:hover {

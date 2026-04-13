@@ -38,6 +38,12 @@ export default defineConfig({
             if (id.includes('node_modules/vue/') || id.includes('node_modules/vue-router/')) {
               return 'vue-vendor'
             }
+            if (id.includes('node_modules/pixi.js') || id.includes('node_modules/@pixi')) {
+              return 'pixi-vendor'
+            }
+            if (id.includes('node_modules/pixi-live2d-display')) {
+              return 'live2d-vendor'
+            }
           }
         }
       }
@@ -46,6 +52,14 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src/renderer/src')
+      }
+    },
+    server: {
+      fs: {
+        allow: [
+          resolve(__dirname, 'resources'),
+          resolve(__dirname, 'src')
+        ]
       }
     }
   }

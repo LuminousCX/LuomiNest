@@ -1,0 +1,414 @@
+import { ref, shallowRef, onUnmounted } from 'vue'
+import { Application, Ticker } from 'pixi.js'
+import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'
+
+export interface LuomiNestEmotion {
+  id: string
+  label: string
+  intensity: number
+}
+
+export interface LuomiNestPadVector {
+  pleasure: number
+  arousal: number
+  dominance: number
+}
+
+export interface LuomiNestAvatarConfig {
+  url: string
+  scale?: number
+  position?: { x: number; y: number }
+  autoInteract?: boolean
+}
+
+export interface LuomiNestModelInfo {
+  id: string
+  name: string
+  url: string
+  scale: number
+  type: 'live2d' | 'vrm' | 'pixelpet'
+  tags: string[]
+}
+
+const LIP_SYNC_PARAMS = {
+  mouthOpenY: 'ParamMouthOpenY',
+  mouthForm: 'ParamMouthForm',
+  mouthSize: 'ParamMouthSize'
+} as const
+
+const VOWEL_LIP_MAP: Record<string, { open: number; form: number }> = {
+  a: { open: 1.0, form: 0.0 },
+  e: { open: 0.5, form: 0.3 },
+  i: { open: 0.2, form: 1.0 },
+  o: { open: 0.7, form: -0.5 },
+  u: { open: 0.3, form: -1.0 },
+  n: { open: 0.1, form: 0.0 },
+  s: { open: 0.1, form: 0.0 },
+  ' ': { open: 0.0, form: 0.0 }
+}
+
+const AVATAR_BOUNDS = {
+  MIN_SCALE: 0.08,
+  MAX_SCALE: 1.2,
+  SCALE_STEP: 0.02,
+  POSITION_MARGIN: 50
+} as const
+
+const DEFAULT_AVATAR_CONFIG: Partial<LuomiNestAvatarConfig> = {
+  scale: 0.25,
+  position: { x: 0.5, y: 0.5 },
+  autoInteract: true
+}
+
+export const useLuomiNestAvatar = () => {
+  const renderHost = shallowRef<Application | null>(null)
+  const avatarModel = shallowRef<Live2DModel | null>(null)
+  const isLoading = ref(false)
+  const loadError = ref<string | null>(null)
+  const activeEmotionState = ref<LuomiNestEmotion>({ id: 'neutral', label: 'Calm', intensity: 0 })
+  const padVector = ref<LuomiNestPadVector>({ pleasure: 0, arousal: 0, dominance: 0 })
+  const isModelReady = ref(false)
+  const currentModelInfo = ref<LuomiNestModelInfo | null>(null)
+  const availableMotions = ref<string[]>([])
+  const availableExpressions = ref<string[]>([])
+  const avatarScale = ref(DEFAULT_AVATAR_CONFIG.scale ?? 0.25)
+
+  let resizeObserver: ResizeObserver | null = null
+  let isDragging = false
+  let dragOffset = { x: 0, y: 0 }
+
+  const clampPosition = (model: Live2DModel, containerWidth: number, containerHeight: number) => {
+    const halfW = (model.width * model.scale.x) / 2
+    const halfH = (model.height * model.scale.y) / 2
+    const margin = AVATAR_BOUNDS.POSITION_MARGIN
+    model.x = Math.max(halfW - margin, Math.min(containerWidth - halfW + margin, model.x))
+    model.y = Math.max(halfH - margin, Math.min(containerHeight - halfH + margin, model.y))
+  }
+
+  const clampScale = (scale: number): number => {
+    return Math.max(AVATAR_BOUNDS.MIN_SCALE, Math.min(AVATAR_BOUNDS.MAX_SCALE, scale))
+  }
+
+  const scanModelCapabilities = (model: Live2DModel) => {
+    const motions: string[] = []
+    const expressions: string[] = []
+    try {
+      const internalModel = model.internalModel as any
+      const settings = internalModel?.settings
+      if (settings?.motions) {
+        for (const group of Object.keys(settings.motions)) {
+          motions.push(group)
+        }
+      }
+      if (settings?.expressions) {
+        for (const exp of settings.expressions) {
+          if (exp?.Name) expressions.push(exp.Name)
+        }
+      }
+    } catch (err) {
+      console.warn('[WARNING][LuomiNestAvatar] scanModelCapabilities error:', err)
+    }
+    availableMotions.value = motions
+    availableExpressions.value = expressions
+  }
+
+  const initRenderHost = async (canvas: HTMLCanvasElement) => {
+    if (renderHost.value) return renderHost.value
+
+    const parent = canvas.parentElement
+    const width = parent?.clientWidth ?? 800
+    const height = parent?.clientHeight ?? 600
+
+    const app = new Application({
+      view: canvas,
+      autoStart: true,
+      resizeTo: parent ?? undefined,
+      backgroundAlpha: 0,
+      antialias: true,
+      width,
+      height,
+      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      autoDensity: true
+    })
+
+    renderHost.value = app
+
+    if (parent) {
+      resizeObserver = new ResizeObserver(() => {
+        app.renderer.resize(parent.clientWidth, parent.clientHeight)
+        if (avatarModel.value) {
+          clampPosition(avatarModel.value, parent.clientWidth, parent.clientHeight)
+        }
+      })
+      resizeObserver.observe(parent)
+    }
+
+    return app
+  }
+
+  const positionAvatar = (model: Live2DModel, containerWidth: number, containerHeight: number) => {
+    const config = { ...DEFAULT_AVATAR_CONFIG }
+    model.anchor.set(0.5, 0.5)
+    model.x = containerWidth * (config.position?.x ?? 0.5)
+    model.y = containerHeight * (config.position?.y ?? 0.5)
+  }
+
+  const bindDragEvents = (canvas: HTMLCanvasElement) => {
+    const onPointerDown = (e: PointerEvent) => {
+      if (!avatarModel.value) return
+      isDragging = true
+      dragOffset.x = e.clientX - avatarModel.value.x
+      dragOffset.y = e.clientY - avatarModel.value.y
+      canvas.setPointerCapture(e.pointerId)
+    }
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!isDragging || !avatarModel.value) return
+      const parent = canvas.parentElement
+      if (!parent) return
+      avatarModel.value.x = e.clientX - dragOffset.x
+      avatarModel.value.y = e.clientY - dragOffset.y
+      clampPosition(avatarModel.value, parent.clientWidth, parent.clientHeight)
+    }
+
+    const onPointerUp = () => {
+      isDragging = false
+    }
+
+    const onWheel = (e: WheelEvent) => {
+      if (!avatarModel.value) return
+      e.preventDefault()
+      const delta = e.deltaY > 0 ? -AVATAR_BOUNDS.SCALE_STEP : AVATAR_BOUNDS.SCALE_STEP
+      const newScale = clampScale(avatarModel.value.scale.x + delta)
+      avatarModel.value.scale.set(newScale)
+      avatarScale.value = newScale
+      const parent = canvas.parentElement
+      if (parent) {
+        clampPosition(avatarModel.value, parent.clientWidth, parent.clientHeight)
+      }
+    }
+
+    canvas.addEventListener('pointerdown', onPointerDown)
+    canvas.addEventListener('pointermove', onPointerMove)
+    canvas.addEventListener('pointerup', onPointerUp)
+    canvas.addEventListener('pointercancel', onPointerUp)
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+
+    const cleanup = () => {
+      canvas.removeEventListener('pointerdown', onPointerDown)
+      canvas.removeEventListener('pointermove', onPointerMove)
+      canvas.removeEventListener('pointerup', onPointerUp)
+      canvas.removeEventListener('pointercancel', onPointerUp)
+      canvas.removeEventListener('wheel', onWheel)
+    }
+
+    return cleanup
+  }
+
+  const mountAvatar = async (canvas: HTMLCanvasElement, config: LuomiNestAvatarConfig) => {
+    isLoading.value = true
+    loadError.value = null
+    isModelReady.value = false
+
+    try {
+      const app = await initRenderHost(canvas)
+      const mergedConfig = { ...DEFAULT_AVATAR_CONFIG, ...config }
+
+      if (avatarModel.value) {
+        app.stage.removeChild(avatarModel.value)
+        avatarModel.value.destroy()
+        avatarModel.value = null
+      }
+
+      const model = await Live2DModel.from(mergedConfig.url, {
+        autoHitTest: mergedConfig.autoInteract,
+        autoFocus: mergedConfig.autoInteract,
+        ticker: Ticker.shared
+      })
+
+      const scale = clampScale(mergedConfig.scale ?? 0.25)
+      model.scale.set(scale)
+      avatarScale.value = scale
+
+      positionAvatar(model, app.renderer.width / (app.renderer.resolution || 1), app.renderer.height / (app.renderer.resolution || 1))
+
+      model.on('hit', (hitAreas: string[]) => {
+        if (hitAreas.includes('body')) {
+          triggerMotion('TapBody', 0)
+        } else if (hitAreas.includes('head')) {
+          triggerMotion('TapBody', 0)
+        }
+      })
+
+      app.stage.addChild(model)
+      avatarModel.value = model
+      isModelReady.value = true
+
+      scanModelCapabilities(model)
+      bindDragEvents(canvas)
+
+      try {
+        await triggerMotion('Idle', 0)
+      } catch {
+        // idle motion may not exist
+      }
+
+      console.info('[INFO][LuomiNestAvatar] Model loaded successfully:', config.url)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load LuomiNest avatar model'
+      loadError.value = message
+      console.error('[ERROR][LuomiNestAvatar] Model load error:', message)
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const mountAvatarFromModelInfo = async (canvas: HTMLCanvasElement, modelInfo: LuomiNestModelInfo) => {
+    currentModelInfo.value = modelInfo
+    await mountAvatar(canvas, {
+      url: modelInfo.url,
+      scale: modelInfo.scale
+    })
+  }
+
+  const triggerMotion = async (group: string, index: number): Promise<void> => {
+    if (!avatarModel.value) return
+    try {
+      await avatarModel.value.motion(group, index)
+    } catch (err) {
+      console.warn(`[WARNING][LuomiNestAvatar] Motion "${group}[${index}]" not available:`, err)
+    }
+  }
+
+  const applyExpression = async (name: string): Promise<void> => {
+    if (!avatarModel.value) return
+    try {
+      await avatarModel.value.expression(name)
+    } catch (err) {
+      console.warn(`[WARNING][LuomiNestAvatar] Expression "${name}" not available:`, err)
+    }
+  }
+
+  const syncLipParam = (value: number): void => {
+    if (!avatarModel.value) return
+    const clamped = Math.max(0, Math.min(value, 1))
+    setCoreParam(LIP_SYNC_PARAMS.mouthOpenY, clamped)
+  }
+
+  const syncLipVowel = (vowel: string): void => {
+    const mapping = VOWEL_LIP_MAP[vowel.toLowerCase()]
+    if (!mapping) return
+    setCoreParam(LIP_SYNC_PARAMS.mouthOpenY, mapping.open)
+    setCoreParam(LIP_SYNC_PARAMS.mouthForm, mapping.form)
+  }
+
+  const setCoreParam = (paramId: string, value: number): void => {
+    if (!avatarModel.value) return
+    try {
+      const internalModel = avatarModel.value.internalModel
+      if (internalModel && 'coreModel' in internalModel) {
+        const coreModel = (internalModel as any).coreModel
+        if (coreModel && typeof coreModel.setParameterValueById === 'function') {
+          coreModel.setParameterValueById(paramId, value)
+        }
+      }
+    } catch (err) {
+      console.warn(`[WARNING][LuomiNestAvatar] setCoreParam("${paramId}") error:`, err)
+    }
+  }
+
+  const driveEmotion = (emotion: LuomiNestEmotion): void => {
+    activeEmotionState.value = emotion
+    applyExpression(emotion.id)
+  }
+
+  const drivePadEmotion = (pad: LuomiNestPadVector): void => {
+    padVector.value = pad
+    const { pleasure, arousal, dominance } = pad
+    let emotionId = 'neutral'
+    let intensity = 0
+    if (pleasure > 0.3 && arousal > 0.3) { emotionId = 'happy'; intensity = pleasure }
+    else if (pleasure < -0.3 && arousal > 0) { emotionId = 'angry'; intensity = Math.abs(pleasure) }
+    else if (pleasure < -0.3 && arousal < -0.2) { emotionId = 'sad'; intensity = Math.abs(pleasure) }
+    else if (pleasure > 0 && arousal < -0.3) { emotionId = 'love'; intensity = pleasure }
+    else if (arousal > 0.5 && dominance < -0.2) { emotionId = 'surprise'; intensity = arousal }
+    driveEmotion({ id: emotionId, label: emotionId, intensity })
+  }
+
+  const driveLimbParam = (paramId: string, value: number): void => {
+    setCoreParam(paramId, value)
+  }
+
+  const driveFaceParam = (paramId: string, value: number): void => {
+    setCoreParam(paramId, value)
+  }
+
+  const resetAvatarPose = (): void => {
+    if (!avatarModel.value) return
+    try {
+      const internalModel = avatarModel.value.internalModel as any
+      if (internalModel?.poseModel) {
+        internalModel.poseModel.resetPose()
+      }
+    } catch (err) {
+      console.warn('[WARNING][LuomiNestAvatar] resetAvatarPose error:', err)
+    }
+  }
+
+  const adjustAvatarScale = (scale: number): void => {
+    if (!avatarModel.value) return
+    const clamped = clampScale(scale)
+    avatarModel.value.scale.set(clamped)
+    avatarScale.value = clamped
+  }
+
+  const teardown = (): void => {
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
+    if (avatarModel.value) {
+      avatarModel.value.destroy()
+      avatarModel.value = null
+    }
+    if (renderHost.value) {
+      renderHost.value.destroy(true)
+      renderHost.value = null
+    }
+    isModelReady.value = false
+    currentModelInfo.value = null
+    availableMotions.value = []
+    availableExpressions.value = []
+  }
+
+  onUnmounted(() => {
+    teardown()
+  })
+
+  return {
+    renderHost,
+    avatarModel,
+    isLoading,
+    loadError,
+    isModelReady,
+    activeEmotionState,
+    padVector,
+    currentModelInfo,
+    availableMotions,
+    availableExpressions,
+    avatarScale,
+    mountAvatar,
+    mountAvatarFromModelInfo,
+    triggerMotion,
+    applyExpression,
+    syncLipParam,
+    syncLipVowel,
+    driveEmotion,
+    drivePadEmotion,
+    driveLimbParam,
+    driveFaceParam,
+    resetAvatarPose,
+    adjustAvatarScale,
+    teardown
+  }
+}

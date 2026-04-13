@@ -62,7 +62,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('api', api)
     contextBridge.exposeInMainWorld('electron', electronBridge)
   } catch (error) {
-    console.error(error)
+    console.error('[ERROR][LuomiNestPreload] Failed to expose electron bridge:', error)
   }
 } else {
   // @ts-ignore

@@ -67,11 +67,21 @@ function handleKeydown(e: KeyboardEvent) {
 .nav-bar {
   height: 52px;
   background: #ffffff;
-  border-bottom: 1px solid #e7e5e4;
   display: flex;
   align-items: center;
   padding: 0 12px;
   gap: 12px;
+  position: relative;
+}
+
+.nav-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #e7e5e4 15%, #e7e5e4 85%, transparent 100%);
 }
 
 .nav-buttons {
@@ -85,7 +95,7 @@ function handleKeydown(e: KeyboardEvent) {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -114,7 +124,7 @@ function handleKeydown(e: KeyboardEvent) {
   align-items: center;
   height: 34px;
   background: #f5f5f4;
-  border-radius: 17px;
+  border-radius: var(--radius-xl);
   padding: 0 12px;
   gap: 8px;
 }

@@ -179,7 +179,7 @@ const selectAgent = (agent: typeof agents.value[0]) => {
   display: flex;
   height: 100%;
   background: var(--surface);
-  border-right: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
   transition: all var(--transition-normal);
 }
 
@@ -190,8 +190,18 @@ const selectAgent = (agent: typeof agents.value[0]) => {
   width: 60px;
   height: 100%;
   padding: 12px 0;
-  border-right: 1px solid var(--border);
   flex-shrink: 0;
+  position: relative;
+}
+
+.sidebar-icon-rail::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  right: 0;
+  width: 1px;
+  background: var(--divider-vertical);
 }
 
 .rail-top {
@@ -441,7 +451,17 @@ const selectAgent = (agent: typeof agents.value[0]) => {
 
 .panel-footer {
   padding: 12px 14px;
-  border-top: 1px solid var(--border);
+  position: relative;
+}
+
+.panel-footer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: var(--divider-soft);
 }
 
 .update-notice {
