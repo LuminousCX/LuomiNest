@@ -6,7 +6,31 @@ export interface TabInfo {
   url: string
   active: boolean
   loading?: boolean
-  error?: string
+  favicon?: string
+  error?: TabErrorInfo
+  captchaDetected?: boolean
+  sleeping?: boolean
+}
+
+export interface TabErrorInfo {
+  code: number
+  title: string
+  message: string
+}
+
+export interface CookieInfo {
+  name: string
+  value: string
+  domain?: string
+  path?: string
+  secure?: boolean
+  httpOnly?: boolean
+  expirationDate?: number
+}
+
+export interface NavigationStateInfo {
+  canGoBack: boolean
+  canGoForward: boolean
 }
 
 export interface ElectronApi {
@@ -20,33 +44,22 @@ export interface ElectronApi {
     getVersion: () => Promise<string>
     getName: () => Promise<string>
   }
-  playwright: {
-    createTab: (url?: string) => Promise<TabInfo>
-    closeTab: (tabId: string) => Promise<void>
-    navigate: (tabId: string, url: string) => Promise<TabInfo>
-    executeScript: (tabId: string, script: string) => Promise<any>
-    clickElement: (tabId: string, selector: string) => Promise<void>
-    fillForm: (tabId: string, selector: string, value: string) => Promise<void>
-    screenshot: (tabId: string) => Promise<string>
-    getDom: (tabId: string) => Promise<string>
-    getAllTabs: () => Promise<TabInfo[]>
-  }
-  cdp: {
-    listTargets: () => Promise<any[]>
-    sendCommand: (targetId: string, method: string, params?: Record<string, any>) => Promise<any>
-  }
   tab: {
-    createManaged: (url?: string) => Promise<TabInfo>
+    create: (url?: string) => Promise<TabInfo>
     activate: (tabId: string) => Promise<void>
-    closeManaged: (tabId: string) => Promise<void>
+    close: (tabId: string) => Promise<void>
     getAll: () => Promise<TabInfo[]>
     getActive: () => Promise<TabInfo | undefined>
+    reload: (tabId?: string) => Promise<void>
+    goBack: (tabId?: string) => Promise<void>
+    goForward: (tabId?: string) => Promise<void>
+    getNavigationState: (tabId?: string) => Promise<NavigationStateInfo>
     hideAll: () => Promise<void>
-    cleanupAll: () => Promise<void>
-    getCookies: () => Promise<Electron.Cookie[]>
-    clearBrowserData: () => Promise<void>
+    showActive: () => Promise<void>
     setBoundsConfig: (config: { sidebarWidth?: number; devPanelHeight?: number }) => Promise<void>
-    reload: () => Promise<void>
+    cleanup: () => Promise<void>
+    getCookies: () => Promise<CookieInfo[]>
+    clearData: () => Promise<void>
   }
 }
 

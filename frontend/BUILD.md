@@ -49,7 +49,7 @@ npm run build:win
 打包完成后，在 `release/dist/` 目录下会生成：
 
 ### 1. NSIS 安装包
-- **文件名**: `LuomiNest Setup 1.0.0.exe`
+- **文件名**: `LuomiNest Setup 0.2.0.exe`
 - **大小**: ~80MB
 - **特点**: 
   - 完整安装程序
@@ -59,7 +59,7 @@ npm run build:win
   - 支持卸载
 
 ### 2. 便携版 (Portable)
-- **文件名**: `LuomiNest 1.0.0.exe`
+- **文件名**: `LuomiNest 0.2.0.exe`
 - **大小**: ~80MB
 - **特点**:
   - 单文件可执行

@@ -85,6 +85,84 @@ release/
     └── LuomiNest-Setup-1.0.0.exe  # Inno Setup 安装程序
 ```
 
+## 常见问题排查
+
+### 1. 'electron-vite' 不是内部或外部命令
+
+**原因**：项目依赖未安装
+
+**解决**：
+```powershell
+cd frontend
+pnpm install
+```
+
+### 2. 'iscc' 不是内部或外部命令
+
+**原因**：Inno Setup 安装后未添加到系统 PATH，或安装到了用户目录
+
+**解决步骤**：
+
+1. 确认 Inno Setup 安装位置（默认或用户目录）
+2. 将以下路径添加到用户环境变量 PATH：
+   - 默认安装：`C:\Program Files (x86)\Inno Setup 6`
+   - 用户安装：`C:\Users\<用户名>\AppData\Local\Programs\Inno Setup 6`
+
+3. 使用 PowerShell 添加环境变量（示例）：
+```powershell
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Users\$env:USERNAME\AppData\Local\Programs\Inno Setup 6", "User")
+```
+
+4. **重启终端**后再次运行构建命令
+
+### 3. Couldn't open include file "ChineseSimplified.isl"
+
+**原因**：Inno Setup 6 默认安装不包含简体中文语言包
+
+**解决步骤**：
+
+1. 从 GitHub 下载简体中文语言文件：
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile "C:\Users\$env:USERNAME\AppData\Local\Programs\Inno Setup 6\Languages\ChineseSimplified.isl"
+```
+
+2. 如果 Inno Setup 安装在默认位置，修改路径：
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl"
+```
+
+3. 或者修改 `installer.iss`，只使用英文：
+```iss
+[Languages]
+; 删除或注释中文行
+Name: "english"; MessagesFile: "compiler:Default.isl"
+```
+
+### 4. 构建流程总结
+
+首次构建完整流程：
+```powershell
+# 1. 安装 pnpm
+npm install -g pnpm@10.33.0
+
+# 2. 安装 Inno Setup 6
+winget install --id JRSoftware.InnoSetup -e -s winget -i
+
+# 3. 安装项目依赖
+cd frontend
+pnpm install
+pnpm approve-builds  # 首次需要批准构建脚本
+
+# 4. 下载中文语言包（如果使用安装版）
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile "C:\Users\$env:USERNAME\AppData\Local\Programs\Inno Setup 6\Languages\ChineseSimplified.isl"
+
+# 5. 添加 iscc 到 PATH（如果安装到用户目录）
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Users\$env:USERNAME\AppData\Local\Programs\Inno Setup 6", "User")
+
+# 6. 重启终端，然后构建
+pnpm run build:all
+```
+
 ## 项目结构
 
 ```

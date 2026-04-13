@@ -1,9 +1,10 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, NativeImage, MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { platform } from 'os'
-import * as playwrightService from './services/playwright'
-import * as cdpService from './services/cdp'
-import * as tabManager from './services/tab-manager'
+import { tabManager } from './services/browser'
+import { setupNetworkConfig } from './services/browser/view'
+
+setupNetworkConfig()
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -31,15 +32,27 @@ const createWindow = (): void => {
     }
   })
 
-  tabManager.setMainWindow(mainWindow)
+  tabManager.setWindow(mainWindow)
+  
+  tabManager.setCallbacks(
+    (tabId, updates) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('tab:updated', { tabId, updates })
+      }
+    },
+    (event, data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(`tab:${event}`, data)
+      }
+    }
+  )
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
   })
 
-  // 监听窗口大小改变，更新浏览器视图边界
   mainWindow.on('resize', () => {
-    tabManager.handleWindowResize()
+    tabManager.handleResize()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details: { url: string }) => {
@@ -49,7 +62,6 @@ const createWindow = (): void => {
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    // 使用 detach 模式打开 DevTools，避免与 BrowserView 冲突
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
@@ -117,7 +129,7 @@ const createMenu = (): void => {
             type: 'info',
             title: '关于 LuomiNest',
             message: 'LuomiNest 辰汐分布式AI伴侣平台',
-            detail: `版本: ${app.getVersion()}\n基于 Electron + Vue3 + Playwright 构建`
+            detail: `版本: ${app.getVersion()}\n基于 Electron + Vue3 构建`
           })
         }
       }]
@@ -133,6 +145,7 @@ const createMenu = (): void => {
 }
 
 function registerIpcHandlers(): void {
+  // Window controls
   ipcMain.handle('window:minimize', () => mainWindow?.minimize())
   ipcMain.handle('window:maximize', () => {
     if (mainWindow?.isMaximized()) {
@@ -143,95 +156,72 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle('window:close', () => mainWindow?.close())
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
+  
+  // App info
   ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('app:getName', () => app.getName())
 
-  ipcMain.handle('playwright:createTab', async (_e, url?: string) => {
-    return playwrightService.createTab(url)
-  })
-
-  ipcMain.handle('playwright:closeTab', async (_e, tabId: string) => {
-    return playwrightService.closeTab(tabId)
-  })
-
-  ipcMain.handle('playwright:navigate', async (_e, tabId: string, url: string) => {
-    return playwrightService.navigateTab(tabId, url)
-  })
-
-  ipcMain.handle('playwright:executeScript', async (_e, tabId: string, script: string) => {
-    return playwrightService.executeScript(tabId, script)
-  })
-
-  ipcMain.handle('playwright:clickElement', async (_e, tabId: string, selector: string) => {
-    return playwrightService.clickElement(tabId, selector)
-  })
-
-  ipcMain.handle('playwright:fillForm', async (_e, tabId: string, selector: string, value: string) => {
-    return playwrightService.fillForm(tabId, selector, value)
-  })
-
-  ipcMain.handle('playwright:screenshot', async (_e, tabId: string) => {
-    return playwrightService.takeScreenshot(tabId)
-  })
-
-  ipcMain.handle('playwright:getDom', async (_e, tabId: string) => {
-    return playwrightService.getDomContent(tabId)
-  })
-
-  ipcMain.handle('playwright:getAllTabs', async () => {
-    return playwrightService.getAllTabs()
-  })
-
-  ipcMain.handle('cdp:listTargets', async () => {
-    return cdpService.listCdpTargets()
-  })
-
-  ipcMain.handle('cdp:sendCommand', async (_e, targetId: string, method: string, params?: Record<string, any>) => {
-    return cdpService.sendCdpCommand(targetId, method, params)
-  })
-
-  ipcMain.handle('tab:createManaged', async (_e, url?: string) => {
-    return tabManager.createManagedTab(url)
+  // Tab management
+  ipcMain.handle('tab:create', async (_e, url?: string) => {
+    return tabManager.createTab(url)
   })
 
   ipcMain.handle('tab:activate', async (_e, tabId: string) => {
     return tabManager.activateTab(tabId)
   })
 
-  ipcMain.handle('tab:closeManaged', async (_e, tabId: string) => {
-    return tabManager.closeManagedTab(tabId)
+  ipcMain.handle('tab:close', async (_e, tabId: string) => {
+    return tabManager.closeTab(tabId)
   })
 
   ipcMain.handle('tab:getAll', async () => {
-    return tabManager.getAllManagedTabs()
+    return tabManager.getAllTabs()
   })
 
   ipcMain.handle('tab:getActive', async () => {
     return tabManager.getActiveTab()
   })
 
-  ipcMain.handle('tab:hideAll', async () => {
-    return tabManager.hideAllTabs()
+  ipcMain.handle('tab:reload', async (_e, tabId?: string) => {
+    return tabManager.reloadTab(tabId)
   })
 
-  ipcMain.handle('tab:setBoundsConfig', async (_e, config: { sidebarWidth?: number; devPanelHeight?: number }) => {
+  ipcMain.handle('tab:goBack', async (_e, tabId?: string) => {
+    return tabManager.goBack(tabId)
+  })
+
+  ipcMain.handle('tab:goForward', async (_e, tabId?: string) => {
+    return tabManager.goForward(tabId)
+  })
+
+  ipcMain.handle('tab:getNavigationState', async (_e, tabId?: string) => {
+    return tabManager.getNavigationState(tabId)
+  })
+
+  ipcMain.handle('tab:hideAll', async () => {
+    return tabManager.hideAll()
+  })
+
+  ipcMain.handle('tab:showActive', async () => {
+    return tabManager.showActive()
+  })
+
+  ipcMain.handle('tab:setBoundsConfig', async (_e, config) => {
     return tabManager.setBoundsConfig(config)
   })
 
-  ipcMain.handle('tab:cleanupAll', async () => {
-    return tabManager.cleanupAllTabs()
+  ipcMain.handle('tab:cleanup', async () => {
+    return tabManager.cleanup()
   })
 
   ipcMain.handle('tab:getCookies', async () => {
-    return tabManager.getCookies()
+    const { getCookies } = await import('./services/browser')
+    return getCookies()
   })
 
-  ipcMain.handle('tab:clearBrowserData', async () => {
-    return tabManager.clearBrowserData()
-  })
-
-  ipcMain.handle('tab:reload', async () => {
-    return tabManager.reloadCurrentTab()
+  ipcMain.handle('tab:clearData', async () => {
+    const { clearBrowserData } = await import('./services/browser')
+    return clearBrowserData()
   })
 }
 
@@ -248,15 +238,12 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (platform() !== 'darwin') {
-    // 应用退出时清理所有浏览器标签页
-    tabManager.cleanupAllTabs()
+    tabManager.cleanup()
     tray?.destroy()
-    playwrightService.shutdown()
     app.quit()
   }
 })
 
-// 应用退出前清理
 app.on('before-quit', () => {
-  tabManager.cleanupAllTabs()
+  tabManager.cleanup()
 })

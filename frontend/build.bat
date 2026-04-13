@@ -46,8 +46,8 @@ echo ========================================
 echo   Build Success!
 echo ========================================
 echo.
-echo Installer: release\installer\LuomiNest-Setup-1.0.0.exe
-echo Portable:  release\dist\LuomiNest 1.0.0.exe
+echo Installer: release\installer\LuomiNest-Setup-0.2.0.exe
+echo Portable:  release\dist\LuomiNest 0.2.0.exe
 echo.
 
 pause

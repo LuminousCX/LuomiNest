@@ -1,163 +1,147 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import {
-  Send,
-  Paperclip,
-  MessageSquare,
-  AtSign,
-  ChevronDown,
-  Plus,
-  X,
-  ArrowLeft,
-  ArrowRight,
-  RotateCw,
-  Star,
-  Search,
-  ChevronRight,
-  Globe,
-  MousePointerClick,
-  Code2,
-  Camera,
-  Bot,
-  Tv,
-  Video
-} from 'lucide-vue-next'
+import TabBar from '../components/browser/TabBar.vue'
+import NavBar from '../components/browser/NavBar.vue'
+import BookmarkBar from '../components/browser/BookmarkBar.vue'
+import HomePage from '../components/browser/HomePage.vue'
+import ErrorPage from '../components/browser/ErrorPage.vue'
+import DevPanel from '../components/browser/DevPanel.vue'
 
-interface TabData {
+interface Tab {
   id: string
   title: string
   url: string
-  active: boolean
   favicon?: string
   loading?: boolean
-  error?: string
+  error?: { code: number; title: string; message: string }
+  active?: boolean
+  captchaDetected?: boolean
+  sleeping?: boolean
 }
 
-interface SearchEngine {
-  id: string
-  name: string
-  icon: any
-  url: string
-  color: string
-}
-
-const searchEngines: SearchEngine[] = [
-  { id: 'bing', name: 'Bing', icon: Search, url: 'https://www.bing.com/search?q=', color: '#00809d' },
-  { id: 'google', name: 'Google', icon: Globe, url: 'https://www.google.com/search?q=', color: '#4285f4' },
-  { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=', color: '#00a1d6' },
-  { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: '#ff0000' },
-  { id: 'ai', name: 'AI (本地)', icon: Bot, url: '', color: '#8b5cf6' }
-]
-
-const tabs = ref<TabData[]>([])
+const tabs = ref<Tab[]>([])
 const addressBar = ref('')
-const browserInput = ref('')
-const currentUrl = ref('')
-const selectedEngine = ref<SearchEngine>(searchEngines[0])
-const showEngineDropdown = ref(false)
-const isSearching = ref(false)
 const showHomePage = ref(true)
+const showDevPanel = ref(false)
+const devOutput = ref('')
+const canGoBack = ref(false)
+const canGoForward = ref(false)
 
-const bookmarks = ref([
+const bookmarks = [
   { name: 'GitHub', url: 'https://github.com' },
   { name: 'Google', url: 'https://google.com' },
   { name: 'MDN', url: 'https://developer.mozilla.org' },
-  { name: 'Stack Overflow', url: 'https://stackoverflow.com' },
-  { name: 'Playwright', url: 'https://playwright.dev' },
-  { name: 'Electron', url: 'https://electronjs.org' }
-])
-
-const quickActions = ref([
-  { icon: Code2, label: '执行脚本', color: '#8b5cf6', action: 'script' },
-  { icon: Camera, label: '页面截图', color: '#3b82f6', action: 'screenshot' },
-  { icon: MousePointerClick, label: '点击元素', color: '#22c55e', action: 'click' },
-  { icon: Globe, label: '读取DOM', color: '#f59e0b', action: 'dom' },
-  { icon: Send, label: '填表单', color: '#f43f5e', action: 'fill' }
-])
-
-const showDevPanel = ref(false)
-const devPanelMode = ref<'script' | 'dom'>('script')
-const devScriptInput = ref('')
-const devOutput = ref('')
+  { name: 'Stack Overflow', url: 'https://stackoverflow.com' }
+]
 
 const activeTab = computed(() => tabs.value.find(t => t.active))
-
-const DEV_PANEL_HEIGHT = 220
+const showCaptchaBanner = computed(() => activeTab.value?.captchaDetected && !activeTab.value?.loading)
 
 watch(showDevPanel, async (show) => {
   try {
     await window.api?.tab.setBoundsConfig({
-      devPanelHeight: show ? DEV_PANEL_HEIGHT : 0
+      devPanelHeight: show ? 220 : 0
     })
   } catch (e) {
-    console.error('[LuomiNest] 设置边界配置失败:', e)
+    console.error('[Browser] 设置面板高度失败:', e)
   }
 })
 
 onMounted(async () => {
   await syncTabs()
 
-  // 监听来自主进程的创建新标签页请求
-  window.electron?.ipcRenderer?.on('browser:create-tab', handleCreateTabFromLink)
+  const active = tabs.value.find(t => t.active)
+  if (active?.url && !active.sleeping) {
+    try {
+      await window.api?.tab.showActive()
+    } catch (e) {
+      console.error('[Browser] 恢复活跃标签页失败:', e)
+    }
+  } else if (active?.url && active.sleeping) {
+    try {
+      await window.api?.tab.activate(active.id)
+    } catch (e) {
+      console.error('[Browser] 唤醒标签页失败:', e)
+    }
+  }
 
-  // 监听标签页更新（标题、URL）
-  window.electron?.ipcRenderer?.on('browser:tab-updated', handleTabUpdated)
-
-  // 监听 favicon 更新
-  window.electron?.ipcRenderer?.on('browser:tab-favicon', handleTabFavicon)
+  window.electron?.ipcRenderer?.on('tab:updated', handleTabUpdated)
+  window.electron?.ipcRenderer?.on('tab:new-tab-request', handleNewTabRequest)
+  window.electron?.ipcRenderer?.on('tab:navigation-state', handleNavigationState)
 })
 
 onUnmounted(() => {
-  // 移除监听器
-  window.electron?.ipcRenderer?.removeListener('browser:create-tab', handleCreateTabFromLink)
-  window.electron?.ipcRenderer?.removeListener('browser:tab-updated', handleTabUpdated)
-  window.electron?.ipcRenderer?.removeListener('browser:tab-favicon', handleTabFavicon)
+  window.electron?.ipcRenderer?.removeListener('tab:updated', handleTabUpdated)
+  window.electron?.ipcRenderer?.removeListener('tab:new-tab-request', handleNewTabRequest)
+  window.electron?.ipcRenderer?.removeListener('tab:navigation-state', handleNavigationState)
 
-  // 切换页面时只隐藏视图，不关闭标签页
-  // 标签页只在应用退出时清空
   window.api?.tab.hideAll().catch(() => {})
   window.api?.tab.setBoundsConfig({ devPanelHeight: 0 }).catch(() => {})
 })
 
-function handleTabUpdated(_event: any, data: { id: string; title: string; url: string; loading?: boolean; error?: string }) {
-  const tab = tabs.value.find(t => t.id === data.id)
+function handleTabUpdated(_event: any, data: { tabId: string; updates: Partial<Tab> }) {
+  const tab = tabs.value.find(t => t.id === data.tabId)
   if (tab) {
-    tab.title = data.title
-    tab.url = data.url
-    tab.loading = data.loading
-    tab.error = data.error
-    if (tab.active) {
-      addressBar.value = data.url
-      currentUrl.value = data.url
+    Object.assign(tab, data.updates)
+    if (tab.active && data.updates.url !== undefined) {
+      addressBar.value = data.updates.url
+    }
+    if (data.updates.sleeping !== undefined && !data.updates.sleeping && tab.active) {
+      syncNavigationState()
     }
   }
 }
 
-function handleTabFavicon(_event: any, data: { id: string; favicon: string }) {
-  const tab = tabs.value.find(t => t.id === data.id)
-  if (tab) {
-    tab.favicon = data.favicon
+function handleNewTabRequest(_event: any, data: { url: string }) {
+  createTab(data.url)
+}
+
+function handleNavigationState(_event: any, data: { tabId: string; canGoBack: boolean; canGoForward: boolean }) {
+  const tab = tabs.value.find(t => t.id === data.tabId)
+  if (tab?.active) {
+    canGoBack.value = data.canGoBack
+    canGoForward.value = data.canGoForward
+  }
+}
+
+async function syncNavigationState() {
+  try {
+    const state = await window.api?.tab.getNavigationState()
+    if (state) {
+      canGoBack.value = state.canGoBack
+      canGoForward.value = state.canGoForward
+    }
+  } catch {
+    canGoBack.value = false
+    canGoForward.value = false
   }
 }
 
 async function syncTabs() {
   try {
-    const managedTabs = await window.api?.tab.getAll() || []
-    if (managedTabs.length === 0) {
+    const allTabs = await window.api?.tab.getAll() || []
+    if (allTabs.length === 0) {
       tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
       showHomePage.value = true
     } else {
-      tabs.value = managedTabs.map(t => ({
+      tabs.value = allTabs.map(t => ({
         id: t.id,
         title: t.title || '加载中...',
         url: t.url,
-        active: t.active
+        active: t.active,
+        loading: t.loading,
+        favicon: t.favicon,
+        error: t.error,
+        captchaDetected: t.captchaDetected,
+        sleeping: t.sleeping
       }))
       const active = tabs.value.find(t => t.active)
       if (active?.url) {
         showHomePage.value = false
         addressBar.value = active.url
-        currentUrl.value = active.url
+        if (!active.sleeping) {
+          await syncNavigationState()
+        }
       }
     }
   } catch (e) {
@@ -165,193 +149,161 @@ async function syncTabs() {
   }
 }
 
-function selectEngine(engine: SearchEngine) {
-  selectedEngine.value = engine
-  showEngineDropdown.value = false
-}
-
-async function closeTab(id: string) {
-  if (tabs.value.length <= 1) return
-  
-  const idx = tabs.value.findIndex(t => t.id === id)
-  if (idx === -1) return
-  
-  try {
-    await window.api?.tab.closeManaged(id)
-  } catch (e) {
-    console.error('[LuomiNest] 关闭标签页失败:', e)
-  }
-  
-  tabs.value.splice(idx, 1)
-  
-  if (tabs.value.length > 0) {
-    const newActiveIdx = Math.min(idx, tabs.value.length - 1)
-    const newActiveTab = tabs.value[newActiveIdx]
-    newActiveTab.active = true
-    
-    if (newActiveTab.url) {
-      try {
-        await window.api?.tab.activate(newActiveTab.id)
-      } catch (e) {
-        console.error('[LuomiNest] 激活标签页失败:', e)
-      }
-      showHomePage.value = false
-      addressBar.value = newActiveTab.url
-      currentUrl.value = newActiveTab.url
-    } else {
-      showHomePage.value = true
-      addressBar.value = ''
-      currentUrl.value = ''
-      await window.api?.tab.hideAll()
-    }
-  }
-}
-
-async function addTab() {
+async function createTab(url: string = '') {
   tabs.value.forEach(t => t.active = false)
-  tabs.value.push({ id: `home-${Date.now()}`, title: '新标签页', url: '', active: true })
-  showHomePage.value = true
-  addressBar.value = ''
-  currentUrl.value = ''
-  await window.api?.tab.hideAll()
-}
 
-async function handleCreateTabFromLink(_event: any, url: string) {
-  if (!url) return
-
-  tabs.value.forEach(t => t.active = false)
-  const newTabId = `tab-${Date.now()}`
-  const newTab: TabData = {
-    id: newTabId,
-    title: '加载中...',
-    url,
-    active: true,
-    loading: true
+  if (!url) {
+    tabs.value.push({ id: `home-${Date.now()}`, title: '新标签页', url: '', active: true })
+    showHomePage.value = true
+    addressBar.value = ''
+    canGoBack.value = false
+    canGoForward.value = false
+    await window.api?.tab.hideAll()
+    return
   }
-  tabs.value.push(newTab)
+
   showHomePage.value = false
   addressBar.value = url
-  currentUrl.value = url
 
   try {
-    const result = await window.api?.tab.createManaged(url)
-    if (result) {
-      const tab = tabs.value.find(t => t.id === newTabId)
-      if (tab) {
-        tab.id = result.id
-        tab.title = result.title
-        tab.loading = result.loading
-        tab.error = result.error
-      }
+    const newTab = await window.api?.tab.create(url)
+    if (newTab) {
+      tabs.value.push({
+        id: newTab.id,
+        title: newTab.title || '加载中...',
+        url: newTab.url,
+        active: true,
+        loading: newTab.loading,
+        error: newTab.error,
+        captchaDetected: newTab.captchaDetected,
+        sleeping: newTab.sleeping
+      })
     }
   } catch (e: any) {
-    console.error('[LuomiNest] 创建链接标签页失败:', e.message)
-    const tab = tabs.value.find(t => t.id === newTabId)
-    if (tab) {
-      tab.title = '加载失败'
-      tab.loading = false
-      tab.error = e.message
-    }
+    console.error('[Browser] 创建标签页失败:', e.message)
+    tabs.value.push({
+      id: `error-${Date.now()}`,
+      title: '加载失败',
+      url,
+      active: true,
+      error: { code: -1, title: '加载失败', message: e.message }
+    })
   }
 }
 
 async function selectTab(tabId: string) {
   const tab = tabs.value.find(t => t.id === tabId)
   if (!tab) return
-  
+
   tabs.value.forEach(t => t.active = t.id === tabId)
-  
+
   if (tab.url) {
     try {
+      if (tab.sleeping) {
+        tab.sleeping = false
+        tab.loading = true
+      }
       await window.api?.tab.activate(tabId)
       showHomePage.value = false
       addressBar.value = tab.url
-      currentUrl.value = tab.url
+      await syncNavigationState()
     } catch (e) {
-      console.error('[LuomiNest] 切换标签页失败:', e)
+      console.error('[Browser] 切换标签页失败:', e)
     }
   } else {
     showHomePage.value = true
     addressBar.value = ''
-    currentUrl.value = ''
+    canGoBack.value = false
+    canGoForward.value = false
     await window.api?.tab.hideAll()
   }
 }
 
- async function refreshTab() {
+async function closeTab(tabId: string) {
+  if (tabs.value.length <= 1) return
+
+  const idx = tabs.value.findIndex(t => t.id === tabId)
+  if (idx === -1) return
+
+  try {
+    await window.api?.tab.close(tabId)
+  } catch (e) {
+    console.error('[Browser] 关闭标签页失败:', e)
+  }
+
+  tabs.value.splice(idx, 1)
+
+  if (tabs.value.length > 0) {
+    const newActiveIdx = Math.min(idx, tabs.value.length - 1)
+    const newActiveTab = tabs.value[newActiveIdx]
+    newActiveTab.active = true
+
+    if (newActiveTab.url) {
+      await selectTab(newActiveTab.id)
+    } else {
+      showHomePage.value = true
+      addressBar.value = ''
+      await window.api?.tab.hideAll()
+    }
+  }
+}
+
+async function navigateToUrl(url: string) {
+  if (!url.trim()) return
+
+  let normalizedUrl = url.trim()
+  if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+    normalizedUrl = 'https://' + normalizedUrl
+  }
+
+  const tab = activeTab.value
+  if (tab && !tab.url) {
+    const idx = tabs.value.findIndex(t => t.id === tab.id)
+    if (idx !== -1) {
+      tabs.value.splice(idx, 1)
+    }
+  }
+
+  await createTab(normalizedUrl)
+}
+
+async function refreshTab() {
   const tab = activeTab.value
   if (!tab?.url) return
 
   try {
-    const targetTab = tabs.value.find(t => t.id === tab.id)
-    if (targetTab) {
-      targetTab.loading = true
+    if (tab.sleeping) {
+      tab.sleeping = false
+      tab.loading = true
     }
-    await window.api?.tab.reload()
+    await window.api?.tab.reload(tab.id)
   } catch (e) {
-    console.error('[LuomiNest] 刷新标签页失败:', e)
+    console.error('[Browser] 刷新标签页失败:', e)
   }
 }
 
-async function navigateToUrl() {
-  let url = addressBar.value.trim()
-  if (!url) return
-
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    url = 'https://' + url
-  }
-
-  const tab = activeTab.value
-  if (!tab) return
-
-  tabs.value.forEach(t => t.active = false)
-  
-  const newTabId = `tab-${Date.now()}`
-  const newTab: TabData = {
-    id: newTabId,
-    title: '加载中...',
-    url,
-    active: true,
-    loading: true
-  }
-  
-  const existingIdx = tabs.value.findIndex(t => t.id === tab.id && !t.url)
-  if (existingIdx !== -1) {
-    tabs.value[existingIdx] = newTab
-  } else {
-    tabs.value.push(newTab)
-  }
-  
-  showHomePage.value = false
-  addressBar.value = url
-  currentUrl.value = url
-
+async function goBack() {
   try {
-    const result = await window.api?.tab.createManaged(url)
-    if (result) {
-      const targetTab = tabs.value.find(t => t.id === newTabId)
-      if (targetTab) {
-        targetTab.id = result.id
-        targetTab.title = result.title
-        targetTab.loading = result.loading
-        targetTab.error = result.error
-      }
-    }
-  } catch (e: any) {
-    console.error('[LuomiNest] 导航失败:', e.message)
-    const targetTab = tabs.value.find(t => t.id === newTabId)
-    if (targetTab) {
-      targetTab.title = '加载失败'
-      targetTab.loading = false
-      targetTab.error = e.message
-    }
+    await window.api?.tab.goBack()
+  } catch (e) {
+    console.error('[Browser] 后退失败:', e)
   }
 }
 
-async function handleBookmark(bm: typeof bookmarks.value[0]) {
-  if (!bm.url) return
-  addressBar.value = bm.url
-  await navigateToUrl()
+async function goForward() {
+  try {
+    await window.api?.tab.goForward()
+  } catch (e) {
+    console.error('[Browser] 前进失败:', e)
+  }
+}
+
+function handleBookmarkSelect(url: string) {
+  navigateToUrl(url)
+}
+
+function handleSearch(url: string) {
+  navigateToUrl(url)
 }
 
 async function handleQuickAction(action: string) {
@@ -365,335 +317,82 @@ async function handleQuickAction(action: string) {
   switch (action) {
     case 'script':
       showDevPanel.value = !showDevPanel.value
-      devPanelMode.value = 'script'
       break
     case 'screenshot':
-      try {
-        const pwTab = await window.api?.playwright.createTab(tab.url)
-        if (pwTab) {
-          const dataUrl = await window.api?.playwright.screenshot(pwTab.id)
-          devOutput.value = `[截图成功] 长度: ${Math.round((dataUrl?.length || 0) / 1024)}KB`
-          showDevPanel.value = true
-          devPanelMode.value = 'dom'
-        }
-      } catch (e: any) {
-        devOutput.value = `[错误] ${e.message}`
-        showDevPanel.value = true
-      }
+      devOutput.value = '[提示] 截图功能开发中...'
+      showDevPanel.value = true
       break
     case 'dom':
-      try {
-        const pwTab = await window.api?.playwright.createTab(tab.url)
-        if (pwTab) {
-          const dom = await window.api?.playwright.getDom(pwTab.id)
-          devOutput.value = (dom || '').substring(0, 2000) + ((dom?.length || 0) > 2000 ? '\n... (截断)' : '')
-          showDevPanel.value = true
-          devPanelMode.value = 'dom'
-        }
-      } catch (e: any) {
-        devOutput.value = `[错误] ${e.message}`
-        showDevPanel.value = true
-      }
+      devOutput.value = '[提示] DOM 读取功能开发中...'
+      showDevPanel.value = true
       break
     case 'click':
-      devOutput.value = '[提示] 请在下方输入 CSS 选择器，然后点击执行'
-      devScriptInput.value = ''
+      devOutput.value = '[提示] 请输入 CSS 选择器'
       showDevPanel.value = true
-      devPanelMode.value = 'script'
       break
     case 'fill':
-      devOutput.value = '[提示] 格式: selector|value （选择器和值用|分隔）'
-      devScriptInput.value = ''
+      devOutput.value = '[提示] 格式: selector|value'
       showDevPanel.value = true
-      devPanelMode.value = 'script'
       break
-  }
-}
-
-async function executeDevAction() {
-  const tab = activeTab.value
-  if (!tab?.url) return
-
-  const input = devScriptInput.value.trim()
-  if (!input) return
-
-  try {
-    const pwTab = await window.api?.playwright.createTab(tab.url)
-    if (pwTab && devPanelMode.value === 'script') {
-      const result = await window.api?.playwright.executeScript(pwTab.id, input)
-      devOutput.value = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
-    }
-  } catch (e: any) {
-    devOutput.value = `[执行错误] ${e.message}`
-  }
-}
-
-async function handleSearch() {
-  const query = browserInput.value.trim()
-  if (!query) return
-
-  isSearching.value = true
-
-  if (selectedEngine.value.id === 'ai') {
-    console.log('[LuomiNest] AI本地搜索:', query)
-    await new Promise(resolve => setTimeout(resolve, 300))
-  } else {
-    const searchUrl = selectedEngine.value.url + encodeURIComponent(query)
-    
-    try {
-      const newTab = await window.api?.tab.createManaged(searchUrl)
-      if (newTab) {
-        tabs.value.forEach(t => t.active = false)
-        
-        const homeTabIdx = tabs.value.findIndex(t => !t.url && t.active === false)
-        if (homeTabIdx !== -1) {
-          tabs.value[homeTabIdx] = {
-            id: newTab.id,
-            title: `${selectedEngine.value.name} - ${query}`,
-            url: newTab.url,
-            active: true
-          }
-        } else {
-          tabs.value.push({
-            id: newTab.id,
-            title: `${selectedEngine.value.name} - ${query}`,
-            url: newTab.url,
-            active: true
-          })
-        }
-        
-        showHomePage.value = false
-        addressBar.value = searchUrl
-        currentUrl.value = searchUrl
-      }
-    } catch (e: any) {
-      console.error('[LuomiNest] 创建搜索标签页失败:', e.message)
-    }
-  }
-
-  setTimeout(() => {
-    isSearching.value = false
-    browserInput.value = ''
-  }, 300)
-}
-
-function handleSearchKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    handleSearch()
   }
 }
 </script>
 
 <template>
   <div class="browser-view">
-    <div class="browser-tab-bar">
-      <div class="tab-list">
-        <div
-          v-for="tab in tabs"
-          :key="tab.id"
-          :class="['tab-item', { active: tab.active, error: tab.error }]"
-          @click="selectTab(tab.id)"
-        >
-          <div v-if="tab.loading" class="tab-loading-spinner" />
-          <img v-else-if="tab.favicon" :src="tab.favicon" class="tab-favicon" alt="" />
-          <Globe v-else-if="tab.url" :size="12" class="tab-icon" />
-          <span class="tab-title">{{ tab.title }}</span>
-          <button class="tab-close" aria-label="关闭标签页" @click.stop="closeTab(tab.id)">
-            <X :size="12" />
-          </button>
-        </div>
-        <button class="tab-add" aria-label="新建标签页" @click="addTab">
-          <Plus :size="14" />
-        </button>
+    <TabBar
+      :tabs="tabs"
+      @select="selectTab"
+      @close="closeTab"
+      @add="createTab()"
+    />
+
+    <NavBar
+      :url="addressBar"
+      :can-go-back="canGoBack"
+      :can-go-forward="canGoForward"
+      :show-dev-panel="showDevPanel"
+      @navigate="navigateToUrl"
+      @refresh="refreshTab"
+      @back="goBack"
+      @forward="goForward"
+      @toggle-dev-panel="showDevPanel = !showDevPanel"
+    />
+
+    <BookmarkBar
+      :bookmarks="bookmarks"
+      @select="handleBookmarkSelect"
+    />
+
+    <div v-if="showCaptchaBanner" class="captcha-banner">
+      <div class="captcha-banner-content">
+        <span class="captcha-icon">&#9888;</span>
+        <span>检测到人机验证页面，请在下方完成验证后继续浏览</span>
       </div>
     </div>
 
-    <div class="browser-nav-bar">
-      <div class="nav-buttons">
-        <button class="nav-btn" aria-label="后退">
-          <ArrowLeft :size="16" />
-        </button>
-        <button class="nav-btn" aria-label="前进">
-          <ArrowRight :size="16" />
-        </button>
-        <button class="nav-btn" aria-label="刷新" @click="refreshTab">
-          <RotateCw :size="14" />
-        </button>
-      </div>
-      <div class="address-bar">
-        <Search :size="15" class="addr-icon" />
-        <input
-          v-model="addressBar"
-          type="text"
-          class="addr-input"
-          placeholder="搜索或输入网址"
-          @keydown.enter="navigateToUrl"
-        />
-      </div>
-      <div class="nav-right">
-        <button class="nav-btn" aria-label="收藏">
-          <Star :size="15" />
-        </button>
-        <button
-          :class="['nav-btn', 'dev-toggle', { active: showDevPanel }]"
-          aria-label="开发者面板"
-          @click="showDevPanel = !showDevPanel"
-        >
-          <Code2 :size="15" />
-        </button>
-      </div>
+    <div class="browser-content" :class="{ 'with-panel': showDevPanel, 'with-captcha': showCaptchaBanner }">
+      <ErrorPage
+        v-if="activeTab?.error && !activeTab?.loading"
+        :code="activeTab.error.code"
+        :title="activeTab.error.title"
+        :message="activeTab.error.message"
+        :url="activeTab.url"
+        @retry="refreshTab"
+        @new-tab="createTab()"
+      />
+
+      <HomePage
+        v-else-if="showHomePage"
+        @search="handleSearch"
+        @action="handleQuickAction"
+      />
     </div>
 
-    <div class="bookmark-bar">
-      <button
-        v-for="(bm, idx) in bookmarks"
-        :key="idx"
-        class="bookmark-item"
-        @click="handleBookmark(bm)"
-      >
-        <Globe :size="13" class="bm-icon-svg" />
-        <span class="bm-name">{{ bm.name }}</span>
-      </button>
-      <button class="bookmark-more" aria-label="更多书签">
-        <ChevronRight :size="14" />
-      </button>
-    </div>
-
-    <div class="browser-content" :class="{ 'with-panel': showDevPanel }">
-      <div v-if="showHomePage" class="copilot-center">
-        <div class="brand-area">
-          <h1 class="brand-title animate-brand-reveal">
-            <span class="brand-lumi">Luomi</span><span class="brand-sub">Nest</span>
-          </h1>
-          <p class="brand-tagline animate-fade-in">copilot · playwright powered</p>
-        </div>
-
-        <div class="ai-input-section animate-slide-up">
-          <div class="ai-input-box">
-            <div class="search-engine-bar">
-              <button class="engine-selector" @click="showEngineDropdown = !showEngineDropdown">
-                <component :is="selectedEngine.icon" :size="16" :style="{ color: selectedEngine.color }" />
-                <span class="engine-name">{{ selectedEngine.name }}</span>
-                <ChevronDown :size="14" class="engine-arrow" :class="{ rotated: showEngineDropdown }" />
-              </button>
-              <Transition name="dropdown">
-                <div v-if="showEngineDropdown" class="engine-dropdown">
-                  <button
-                    v-for="engine in searchEngines"
-                    :key="engine.id"
-                    :class="['engine-option', { active: engine.id === selectedEngine.id }]"
-                    @click="selectEngine(engine)"
-                  >
-                    <component :is="engine.icon" :size="15" :style="{ color: engine.color }" />
-                    <span>{{ engine.name }}</span>
-                    <div v-if="engine.id === selectedEngine.id" class="engine-check" />
-                  </button>
-                </div>
-              </Transition>
-            </div>
-            <textarea
-              v-model="browserInput"
-              :placeholder="selectedEngine.id === 'ai' ? '向 AI 提问...' : `在 ${selectedEngine.name} 中搜索...`"
-              rows="2"
-              class="ai-textarea"
-              @keydown="handleSearchKeydown"
-            ></textarea>
-            <div class="ai-input-actions">
-              <div class="ai-actions-left">
-                <button class="ai-tool-btn" title="对话模式">
-                  <MessageSquare :size="16" />
-                  <span>对话模式</span>
-                  <ChevronDown :size="13" />
-                </button>
-                <button class="ai-tool-btn icon-only" title="@提及">
-                  <AtSign :size="16" />
-                </button>
-              </div>
-              <div class="ai-actions-right">
-                <button class="ai-tool-btn icon-only" title="附件">
-                  <Paperclip :size="16" />
-                </button>
-                <button class="ai-tool-btn icon-only" title="更多">
-                  <ChevronDown :size="16" />
-                </button>
-                <button
-                  class="ai-send-btn"
-                  :class="{ loading: isSearching }"
-                  :disabled="!browserInput.trim() || isSearching"
-                  title="搜索"
-                  @click="handleSearch"
-                >
-                  <Send v-if="!isSearching" :size="17" />
-                  <div v-else class="loading-spinner" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="quick-actions-grid animate-scale-in">
-          <button
-            v-for="action in quickActions"
-            :key="action.label"
-            class="qa-card"
-            :style="{ '--qa-color': action.color }"
-            @click="handleQuickAction(action.action)"
-          >
-            <div class="qa-icon-wrap">
-              <component :is="action.icon" :size="22" />
-            </div>
-            <span class="qa-label">{{ action.label }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <Transition name="panel-slide-up">
-      <div v-if="showDevPanel" class="dev-panel">
-        <div class="dev-panel-header">
-          <div class="dev-tabs">
-            <button
-              :class="['dev-tab', { active: devPanelMode === 'script' }]"
-              @click="devPanelMode = 'script'"
-            >
-              <Code2 :size="13" />
-              <span>脚本</span>
-            </button>
-            <button
-              :class="['dev-tab', { active: devPanelMode === 'dom' }]"
-              @click="devPanelMode = 'dom'"
-            >
-              <Globe :size="13" />
-              <span>输出</span>
-            </button>
-          </div>
-          <button class="dev-close-btn" @click="showDevPanel = false">
-            <X :size="14" />
-          </button>
-        </div>
-        <div v-if="devPanelMode === 'script'" class="dev-panel-body">
-          <input
-            v-model="devScriptInput"
-            type="text"
-            class="dev-script-input"
-            placeholder="输入 JS 表达式 / CSS 选择器 / selector|值 ..."
-            @keydown.enter="executeDevAction"
-          />
-          <button class="dev-exec-btn" @click="executeDevAction">
-            <Send :size="13" />
-            执行
-          </button>
-        </div>
-        <div class="dev-output">
-          <pre v-if="devOutput" class="dev-output-text">{{ devOutput }}</pre>
-          <div v-else class="dev-output-placeholder">
-            <Code2 :size="20" />
-            <span>执行结果将显示在这里</span>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <DevPanel
+      v-if="showDevPanel"
+      @close="showDevPanel = false"
+    />
   </div>
 </template>
 
@@ -702,783 +401,48 @@ function handleSearchKeydown(e: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg);
-  color: var(--text);
+  background: #fafaf9;
 }
 
-.browser-tab-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 38px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  padding-left: 8px;
-}
-
-.tab-list {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 1;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.tab-list::-webkit-scrollbar {
-  display: none;
-}
-
-.tab-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 180px;
-  height: 32px;
-  padding: 0 10px 0 14px;
-  border-radius: 6px 6px 0 0;
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-  position: relative;
-}
-
-.tab-item:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.tab-item.active {
-  background: var(--bg);
-  color: var(--text);
-}
-
-.tab-icon {
-  flex-shrink: 0;
-  opacity: 0.6;
-}
-
-.tab-favicon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  object-fit: contain;
-  border-radius: 2px;
-}
-
-.tab-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text);
-}
-
-.tab-close {
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  opacity: 0;
-  transition: all var(--transition-fast);
-  color: inherit;
-  flex-shrink: 0;
-}
-
-.tab-item:hover .tab-close {
-  opacity: 0.6;
-}
-
-.tab-loading-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border);
-  border-top-color: var(--lumi-primary);
-  border-radius: 50%;
-  animation: tab-spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-
-@keyframes tab-spin {
-  to { transform: rotate(360deg); }
-}
-
-.tab-item.error .tab-title {
-  color: #f87171;
-}
-
-.tab-item.error .tab-icon {
-  color: #f87171;
-}
-
-.tab-close:hover {
-  opacity: 1 !important;
-  background: var(--surface-hover);
-}
-
-.tab-add {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-  margin-right: 8px;
-}
-
-.tab-add:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.browser-nav-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--surface);
-  flex-shrink: 0;
-}
-
-.nav-buttons {
-  display: flex;
-  gap: 2px;
-}
-
-.nav-btn {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.nav-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.nav-btn.dev-toggle.active {
-  color: #8b5cf6;
-  background: rgba(139, 92, 246, 0.12);
-}
-
-.address-bar {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.captcha-banner {
   height: 36px;
-  padding: 0 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  transition: all var(--transition-fast);
-}
-
-.address-bar:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.2);
-}
-
-.addr-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.addr-input {
-  flex: 1;
-  background: transparent;
-  font-size: 13px;
-  color: var(--text);
-}
-
-.addr-input::placeholder {
-  color: var(--text-muted);
-}
-
-.nav-right {
-  display: flex;
-  gap: 2px;
-}
-
-.bookmark-bar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 12px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  overflow-x: auto;
-  flex-shrink: 0;
-  scrollbar-width: none;
-}
-
-.bookmark-bar::-webkit-scrollbar {
-  display: none;
-}
-
-.bookmark-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  transition: all var(--transition-fast);
-}
-
-.bookmark-item:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.bm-icon-svg {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.bm-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text);
-}
-
-.bookmark-more {
-  width: 24px;
-  height: 24px;
+  background: #fef3c7;
+  border-bottom: 1px solid #f59e0b;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
-  border-radius: 4px;
   flex-shrink: 0;
-  transition: all var(--transition-fast);
 }
 
-.bookmark-more:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+.captcha-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+.captcha-icon {
+  font-size: 16px;
 }
 
 .browser-content {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   overflow: hidden;
-  position: relative;
-  min-height: 400px;
-  contain: layout style;
+  transition: height 0.2s ease-in-out;
 }
 
 .browser-content.with-panel {
-  align-items: stretch;
+  height: calc(100% - 220px);
 }
 
-.copilot-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 40px;
-  width: 100%;
-  max-width: 680px;
-  padding: 40px;
+.browser-content.with-captcha {
+  height: calc(100% - 36px);
 }
 
-.brand-area {
-  text-align: center;
-  user-select: none;
-}
-
-@keyframes brand-reveal {
-  0% {
-    opacity: 0;
-    transform: translateY(24px) scale(0.96);
-    filter: blur(8px);
-    letter-spacing: 8px;
-  }
-  60% {
-    opacity: 1;
-    filter: blur(0);
-    letter-spacing: -2px;
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    letter-spacing: -3px;
-  }
-}
-
-.animate-brand-reveal {
-  animation: brand-reveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.brand-title {
-  font-size: 56px;
-  font-weight: 300;
-  letter-spacing: -3px;
-  line-height: 1;
-  margin-bottom: 4px;
-}
-
-.brand-lumi {
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--text) 0%, var(--text-secondary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.brand-sub {
-  font-weight: 300;
-  color: var(--text-muted);
-  -webkit-text-fill-color: var(--text-muted);
-}
-
-.brand-tagline {
-  font-size: 15px;
-  font-weight: 400;
-  color: var(--text-muted);
-  letter-spacing: 3px;
-  text-transform: lowercase;
-}
-
-.ai-input-section {
-  width: 100%;
-}
-
-.ai-input-box {
-  background: var(--surface-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  transition: all var(--transition-normal);
-}
-
-.ai-input-box:focus-within {
-  border-color: rgba(13, 148, 136, 0.4);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.08), var(--shadow-lg);
-}
-
-.search-engine-bar {
-  position: relative;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.engine-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--surface-hover);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.engine-selector:hover {
-  background: var(--surface-elevated);
-  border-color: var(--text-muted);
-}
-
-.engine-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.engine-arrow {
-  color: var(--text-muted);
-  transition: transform var(--transition-fast);
-}
-
-.engine-arrow.rotated {
-  transform: rotate(180deg);
-}
-
-.engine-dropdown {
-  position: absolute;
-  top: calc(100% - 4px);
-  left: 16px;
-  min-width: 160px;
-  background: var(--surface-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xl);
-  z-index: 100;
-  overflow: hidden;
-}
-
-.engine-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 14px;
-  font-size: 13px;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.engine-option:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.engine-option.active {
-  background: rgba(13, 148, 136, 0.1);
-  color: var(--text);
-}
-
-.engine-check {
-  width: 6px;
-  height: 6px;
-  margin-left: auto;
-  border-radius: 50%;
-  background: var(--lumi-primary);
-}
-
-.ai-textarea {
-  width: 100%;
-  padding: 18px 20px;
-  font-size: 15px;
-  resize: none;
-  min-height: 56px;
-  max-height: 140px;
-  background: transparent;
-  color: var(--text);
-  line-height: 1.6;
-}
-
-.ai-textarea::placeholder {
-  color: var(--text-muted);
-}
-
-.ai-input-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px 14px;
-  border-top: 1px solid var(--border);
-}
-
-.ai-actions-left,
-.ai-actions-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.ai-tool-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 11px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-}
-
-.ai-tool-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.ai-tool-btn.icon-only {
-  padding: 7px;
-}
-
-.ai-send-btn {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  background: var(--lumi-primary);
-  color: white;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  margin-left: 6px;
-}
-
-.ai-send-btn:hover {
-  background: var(--lumi-primary-hover);
-  transform: scale(1.05);
-  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.35);
-}
-
-.quick-actions-grid {
-  display: flex;
-  gap: 16px;
-}
-
-.qa-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 18px 20px;
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  min-width: 90px;
-}
-
-.qa-card:hover {
-  border-color: var(--qa-color);
-  box-shadow: 0 4px 20px color-mix(in srgb, var(--qa-color) 15%, transparent);
-  transform: translateY(-3px);
-}
-
-.qa-icon-wrap {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--qa-color) 12%, transparent);
-  color: var(--qa-color);
-  transition: all var(--transition-normal);
-}
-
-.qa-card:hover .qa-icon-wrap {
-  background: color-mix(in srgb, var(--qa-color) 20%, transparent);
-  transform: scale(1.08);
-}
-
-.qa-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 500;
-  transition: color var(--transition-fast);
-}
-
-.qa-card:hover .qa-label {
-  color: var(--text);
-}
-
-.dev-panel {
-  height: 220px;
-  background: var(--surface-elevated);
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-}
-
-.dev-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border);
-  height: 38px;
-  flex-shrink: 0;
-}
-
-.dev-tabs {
-  display: flex;
-  gap: 2px;
-}
-
-.dev-tab {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 14px;
-  height: 38px;
-  font-size: 12px;
-  color: var(--text-muted);
-  border-bottom: 2px solid transparent;
-  transition: all var(--transition-fast);
-}
-
-.dev-tab.active {
-  color: var(--text);
-  border-bottom-color: #8b5cf6;
-}
-
-.dev-close-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.dev-close-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.dev-panel-body {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  flex-shrink: 0;
-}
-
-.dev-script-input {
-  flex: 1;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--text);
-  font-family: 'Cascadia Code', 'Fira Code', monospace;
-}
-
-.dev-script-input::placeholder {
-  color: var(--text-muted);
-}
-
-.dev-exec-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 7px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 500;
-  background: #8b5cf6;
-  color: white;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-}
-
-.dev-exec-btn:hover {
-  background: #7c3aed;
-  transform: scale(1.02);
-}
-
-.dev-output {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 12px 10px;
-  min-height: 0;
-}
-
-.dev-output-text {
-  font-family: 'Cascadia Code', 'Fira Code', monospace;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--text-muted);
-  white-space: pre-wrap;
-  word-break: break-all;
-  margin: 0;
-}
-
-.dev-output-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 24px;
-  color: var(--text-muted);
-  opacity: 0.4;
-  font-size: 12px;
-}
-
-.panel-slide-up-enter-active {
-  animation: slideUp 0.25s ease-out both;
-}
-
-.panel-slide-up-leave-active {
-  animation: slideUp 0.2s ease-in reverse both;
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(10px); height: 0; }
-  to { opacity: 1; transform: translateY(0); height: 220px; }
-}
-
-.ai-send-btn.loading {
-  background: var(--lumi-primary-hover);
-  cursor: wait;
-}
-
-.ai-send-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-.loading-spinner {
-  width: 17px;
-  height: 17px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.dropdown-enter-active,
-.dropdown-leave-active {
-  transition: all var(--transition-fast);
-}
-
-.dropdown-enter-from,
-.dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.5s ease-out both;
-}
-
-.animate-slide-up {
-  animation: slideUpFade 0.6s ease-out both;
-}
-
-.animate-scale-in {
-  animation: scaleIn 0.4s ease-out both;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideUpFade {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+.browser-content.with-panel.with-captcha {
+  height: calc(100% - 256px);
 }
 </style>

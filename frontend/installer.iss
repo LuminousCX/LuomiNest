@@ -1,6 +1,6 @@
 #define MyAppName "LuomiNest"
-#define MyAppVersion "1.0.0"
-#define MyAppPublisher "辰汐项目研发组"
+#define MyAppVersion "0.2.0"
+#define MyAppPublisher "LuminousCX R&D Team"
 #define MyAppExeName "LuomiNest.exe"
 #define MyAppId "com.luominest.desktop"
 
@@ -36,7 +36,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsAdminInstallMode
+Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; Check: not IsAdminInstallMode
 
 [Files]
 Source: "release\dist\win-unpacked\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

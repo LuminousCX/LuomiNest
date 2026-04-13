@@ -43,3 +43,28 @@ export interface ChatMessage {
   timestamp: number
   agentId?: string
 }
+
+export interface Tab {
+  id: string
+  title: string
+  url: string
+  favicon?: string
+  loading?: boolean
+  error?: TabError
+  active?: boolean
+  captchaDetected?: boolean
+  sleeping?: boolean
+}
+
+export interface TabError {
+  code: number
+  title: string
+  message: string
+}
+
+export interface Bookmark {
+  name: string
+  url: string
+}
+
+export {}

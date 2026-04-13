@@ -68,8 +68,8 @@ Write-Host "  BUILD SUCCESS!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Output files:" -ForegroundColor White
-Write-Host "  - Installer: release\installer\LuomiNest-Setup-1.0.0.exe" -ForegroundColor Cyan
-Write-Host "  - Portable:  release\dist\LuomiNest 1.0.0.exe" -ForegroundColor Cyan
+Write-Host "  - Installer: release\installer\LuomiNest-Setup-0.2.0.exe" -ForegroundColor Cyan
+Write-Host "  - Portable:  release\dist\LuomiNest 0.2.0.exe" -ForegroundColor Cyan
 Write-Host ""
 
 Write-Host "Press any key to exit..." -ForegroundColor Gray
