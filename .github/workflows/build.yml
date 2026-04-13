@@ -28,20 +28,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package.json
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm install
+        run: pnpm install
 
       - name: Build Electron app
         working-directory: frontend
-        run: npm run build
+        run: pnpm run build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -62,7 +65,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.os }}
-          path: frontend/release/
+          path: |
+            frontend/release/dist/**
+            frontend/release/installer/**
           if-no-files-found: warn
 
   release:
