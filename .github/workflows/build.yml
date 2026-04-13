@@ -62,7 +62,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.os }}
-          path: release/
+          path: frontend/release/
           if-no-files-found: warn
 
   release:
@@ -73,27 +73,31 @@ jobs:
       contents: write
 
     steps:
-      - name: Create artifacts directory
-        run: mkdir -p artifacts
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: build-*
+          merge-multiple: false
 
       - name: List downloaded artifacts
         run: |
           echo "=== Artifacts directory ==="
-          ls -la artifacts/ || echo "artifacts directory empty"
-          echo "=== All files ==="
-          find artifacts -type f 2>/dev/null || echo "no files found"
+          ls -laR artifacts/ || echo "artifacts directory empty"
+        shell: bash
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-files
+          find artifacts -type f -exec cp {} release-files/ \;
+          echo "=== Flattened files ==="
+          ls -la release-files/
         shell: bash
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/**
+          files: release-files/*
           draft: false
           prerelease: true
           generate_release_notes: true
