@@ -1,4 +1,7 @@
 from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from app.core.config import settings
@@ -8,6 +11,7 @@ from app.infrastructure.redis import init_redis, close_redis
 from app.infrastructure.mqtt import init_mqtt, close_mqtt
 from app.runtime.event_bus import EventBus
 from app.runtime.pipeline import Pipeline
+from app.services.model_storage import storage_manager
 
 
 @asynccontextmanager
@@ -17,6 +21,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     await init_redis()
     await init_mqtt()
+    await storage_manager.initialize()
 
     app.state.event_bus = EventBus()
     app.state.pipeline = Pipeline(app.state.event_bus)
@@ -30,9 +35,6 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    from fastapi import FastAPI
-    from fastapi.middleware.cors import CORSMiddleware
-
     app = FastAPI(
         title="LuomiNest API",
         version="0.1.0",

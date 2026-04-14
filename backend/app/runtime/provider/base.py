@@ -21,7 +21,7 @@ class LLMProvider(ABC):
 
 
 class STTProvider(ABC):
-    provider_name: stt_base = "base"
+    provider_name: str = "base"
 
     @abstractmethod
     async def transcribe(self, audio_data: bytes, format: str = "wav") -> str:
@@ -29,7 +29,7 @@ class STTProvider(ABC):
 
 
 class TTSProvider(ABC):
-    provider_name: tts_base = "base"
+    provider_name: str = "base"
 
     @abstractmethod
     async def synthesize(self, text: str, voice: str = "default") -> bytes:
@@ -37,7 +37,7 @@ class TTSProvider(ABC):
 
 
 class EmbeddingProvider(ABC):
-    provider_name: embedding_base = "base"
+    provider_name: str = "base"
 
     @abstractmethod
     async def embed(self, text: str) -> list[float]:

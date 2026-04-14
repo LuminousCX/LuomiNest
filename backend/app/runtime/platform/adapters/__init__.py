@@ -2,7 +2,7 @@ import json
 import asyncio
 from typing import Any
 from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
-from app.infrastructure.mqtt import mqtt_client
+from app.infrastructure.mqtt import get_mqtt_client
 from app.core.config import settings
 from loguru import logger
 
@@ -19,19 +19,27 @@ class MQTTTerminalAdapter(BasePlatformAdapter):
         self._subscribed_devices: set[str] = set()
 
     async def start(self) -> None:
-        await mqtt_client.subscribe("luominestai/device/+/status")
-        await mqtt_client.subscribe("luominestai/device/+/audio")
-        await mqtt_client.subscribe("luominestai/device/+/location")
+        client = get_mqtt_client()
+        if not client:
+            logger.warning(f"[{self.platform_name}] MQTT client not available, adapter will not function")
+            return
+        await client.subscribe("luominestai/device/+/status")
+        await client.subscribe("luominestai/device/+/audio")
+        await client.subscribe("luominestai/device/+/location")
         logger.info(f"[{self.platform_name}] MQTT Terminal adapter started")
 
     async def send_message(self, response: PlatformResponse, target: str) -> bool:
+        client = get_mqtt_client()
+        if not client:
+            logger.warning(f"[{self.platform_name}] MQTT client not available")
+            return False
         topic = self.TOPIC_COMMAND.format(device_id=target)
         payload = {
             "type": response.message_type,
             "content": response.content,
             **(response.extra or {}),
         }
-        await mqtt_client.publish(topic, json.dumps(payload), qos=1)
+        await client.publish(topic, json.dumps(payload), qos=1)
         return True
 
     async def handle_event(self, event: dict[str, Any]) -> PlatformMessage | None:

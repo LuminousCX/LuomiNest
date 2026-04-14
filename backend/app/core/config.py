@@ -33,8 +33,16 @@ class Settings(BaseSettings):
     DATA_DIR: str = "./data"
     UPLOAD_DIR: str = "./data/uploads"
     AVATAR_DIR: str = "./data/avatars"
-    PLUGIN_DIR: string = "./plugins"
+    PLUGIN_DIR: str = "./plugins"
     SKILL_DIR: str = "./skills"
+
+    MODEL_MAX_UPLOAD_SIZE_MB: int = 500
+    MODEL_ALLOWED_EXTENSIONS: list[str] = [
+        ".moc3", ".json", ".zip", ".glb", ".gltf", ".blend", ".var", ".vam", ".vrm"
+    ]
+    MODEL_CACHE_TTL_SECONDS: int = 3600
+    MODEL_PREVIEW_FPS: int = 30
+    MODEL_TEMP_CLEANUP_HOURS: int = 24
 
     class Config:
         env_file = ".env"

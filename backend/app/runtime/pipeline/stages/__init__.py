@@ -35,13 +35,16 @@ class AuthStage(PipelineStage):
         return 2
 
     async def process(self, ctx: PipelineContext) -> PipelineContext:
-        from app.security.auth import verify_token
         token = ctx.extra.get("token", "")
         if token:
-            user = await verify_token(token)
-            if user and ctx.user_context:
-                ctx.user_context.user_id = user.id
-                ctx.user_context.permissions = user.permissions
+            try:
+                from app.security.auth import verify_token
+                user = await verify_token(token)
+                if user and ctx.user_context:
+                    ctx.user_context.user_id = user.id
+                    ctx.user_context.permissions = user.permissions
+            except (ImportError, Exception) as e:
+                logger.debug(f"Auth verification skipped: {e}")
         return ctx
 
 
@@ -108,10 +111,14 @@ class AgentRouteStage(PipelineStage):
         return 7
 
     async def process(self, ctx: PipelineContext) -> PipelineContext:
-        from app.domains.agent.router import IntentClassifier
-        classifier = IntentClassifier()
-        ctx.intent = await classifier.classify(ctx.raw_input)
-        ctx.matched_agent = classifier.select_agent(ctx.intent)
+        try:
+            from app.domains.intent_classifier import IntentClassifier
+            classifier = IntentClassifier()
+            ctx.intent = await classifier.classify(ctx.raw_input)
+            ctx.matched_agent = classifier.select_agent(ctx.intent)
+        except (ImportError, Exception) as e:
+            logger.debug(f"Agent routing skipped: {e}")
+            ctx.intent = "general"
         return ctx
 
 
@@ -126,13 +133,11 @@ class LLMInferenceStage(PipelineStage):
 
     async def process(self, ctx: PipelineContext) -> PipelineContext:
         from app.runtime.provider.llm.adapter import LLMAdapter
+        from app.runtime.context import AgentResult
         adapter = LLMAdapter()
         messages = [{"role": m.role.value, "content": m.content} for m in ctx.messages]
         response_text = await adapter.chat(messages)
-        ctx.agent_result.__class__.__dict__.setdefault('text', response_text)
-        object.__setattr__(ctx.agent_result if ctx.agent_result else object(), 'text', response_text)
         if ctx.agent_result is None:
-            from app.runtime.context import AgentResult
             ctx.agent_result = AgentResult(text=response_text)
         else:
             ctx.agent_result.text = response_text

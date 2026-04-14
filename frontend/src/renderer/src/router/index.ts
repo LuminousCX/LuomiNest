@@ -67,6 +67,13 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '皮套工坊 - LuomiNest', icon: 'Palette' }
   },
   {
+    path: '/avatar/model/:id',
+    name: 'ModelDetail',
+    component: () => import('../views/ModelDetailView.vue'),
+    meta: { title: '模型详情 - LuomiNest', icon: 'Box' },
+    props: true
+  },
+  {
     path: '/memory',
     name: 'Memory',
     component: () => import('../views/MemoryView.vue'),

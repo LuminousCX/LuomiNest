@@ -1,3 +1,9 @@
+from typing import Any
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+
 class LuomiNestError(Exception):
     def __init__(self, message: str, code: str = "UNKNOWN_ERROR", status_code: int = 500):
         self.message = message
@@ -43,9 +49,6 @@ class PluginError(LuomiNestError):
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    from fastapi import Request
-    from fastapi.responses import JSONResponse
-
     @app.exception_handler(LuomiNestError)
     async def luominest_error_handler(request: Request, exc: LuomiNestError):
         return JSONResponse(

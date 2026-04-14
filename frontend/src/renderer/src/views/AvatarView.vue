@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   Palette,
   Sparkles,
@@ -13,16 +13,32 @@ import {
   RotateCcw,
   Maximize2,
   Download,
-  Settings2
+  Settings2,
+  Trash2,
+  Search,
+  Filter,
+  Grid3X3,
+  List,
+  MoreVertical,
+  FileUp,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  ChevronRight
 } from 'lucide-vue-next'
+import ModelImportDialog from '../components/model/ModelImportDialog.vue'
+import ModelConfigPanel from '../components/model/ModelConfigPanel.vue'
+import type { ModelAsset, ModelType } from '../types'
+import { modelApi } from '../services/modelApi'
 
 const avatarModes = [
   { id: 'live2d', label: 'Live2D', desc: 'Cubism 5 二次元', active: true },
   { id: 'vrm', label: 'VRM', desc: '3D 全身模型', active: false },
-  { id: 'pixel', label: 'PixelPet', desc: 'Q版电子宠物', active: false }
+  { id: 'blender', label: 'Blender', desc: 'glTF 3D模型', active: false },
+  { id: 'vam', label: 'VAM', desc: 'Virt-A-Mate', active: false }
 ]
 
-const currentMode = ref('live2d')
+const currentMode = ref<ModelType>('live2d')
 
 const emotions = [
   { id: 'happy', icon: Smile, label: '开心', color: '#f59e0b' },
@@ -41,28 +57,98 @@ const expressionValue = computed(() => {
   return map[currentEmotion.value.id] ?? 0
 })
 
-const idleAnimations = [
-  { name: '呼吸', status: 'running', progress: 65 },
-  { name: '眨眼', status: 'running', progress: 40 },
-  { name: '待机微动', status: 'running', progress: 80 },
-  { name: '头部追踪', status: 'paused', progress: 0 }
-]
+const models = ref<ModelAsset[]>([])
+const totalModels = ref(0)
+const currentPage = ref(1)
+const selectedModelId = ref<string | null>(null)
+const searchQuery = ref('')
+const showImportDialog = ref(false)
+const showConfigPanel = ref(false)
+const isLoadingModels = ref(false)
+const viewMode = ref<'grid' | 'list'>('grid')
 
-const skinList = [
-  { name: '洛洛 · 默认', type: 'Live2D', thumb: null, tags: ['默认', '日常'] },
-  { name: '洛洛 · 睡衣', type: 'Live2D', thumb: null, tags: ['休闲', '夜晚'] },
-  { name: '洛洛 · 学院风', type: 'VRM', thumb: null, tags: ['正式', '3D'] },
-  { name: '像素洛洛', type: 'PixelPet', thumb: null, tags: ['复古', '轻量'] }
-]
+const selectedModel = computed(() => {
+  return models.value.find(m => m.id === selectedModelId.value) || null
+})
 
-const selectedSkin = ref(0)
+const filteredModels = computed(() => {
+  if (!searchQuery.value) return models.value
+  const q = searchQuery.value.toLowerCase()
+  return models.value.filter(m =>
+    m.name.toLowerCase().includes(q) ||
+    (m.tags && m.tags.some(t => t.toLowerCase().includes(q)))
+  )
+})
+
+onMounted(async () => {
+  await loadModels()
+})
+
+async function loadModels() {
+  isLoadingModels.value = true
+  try {
+    const result = await modelApi.list({
+      model_type: currentMode.value,
+      page: currentPage.value,
+      page_size: 50
+    })
+    models.value = result.items
+    totalModels.value = result.total
+    if (result.items.length > 0 && !selectedModelId.value) {
+      selectedModelId.value = result.items[0].id
+    }
+  } catch (err) {
+    console.error('Failed to load models:', err)
+  } finally {
+    isLoadingModels.value = false
+  }
+}
 
 function selectMode(modeId: string) {
-  currentMode.value = modeId
+  currentMode.value = modeId as ModelType
+  currentPage.value = 1
+  selectedModelId.value = null
+  loadModels()
 }
 
 function selectEmotion(emo: typeof emotions[0]) {
   currentEmotion.value = emo
+}
+
+function selectModel(modelId: string) {
+  selectedModelId.value = modelId
+}
+
+async function onModelImported(model: ModelAsset) {
+  showImportDialog.value = false
+  await loadModels()
+  selectedModelId.value = model.id
+}
+
+async function deleteModel(modelId: string) {
+  try {
+    await modelApi.delete(modelId)
+    if (selectedModelId.value === modelId) {
+      selectedModelId.value = null
+    }
+    await loadModels()
+  } catch (err) {
+    console.error('Failed to delete model:', err)
+  }
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+const statusLabel: Record<string, { text: string; color: string }> = {
+  uploading: { text: '上传中', color: '#eab308' },
+  processing: { text: '处理中', color: '#3b82f6' },
+  ready: { text: '就绪', color: '#22c55e' },
+  error: { text: '错误', color: '#f43f5e' },
+  archived: { text: '归档', color: '#6b7280' }
 }
 </script>
 
@@ -72,13 +158,21 @@ function selectEmotion(emo: typeof emotions[0]) {
       <div class="header-left">
         <Palette :size="20" />
         <h2>皮套工坊</h2>
-        <span class="header-badge">Live2D / VRM / PixelPet</span>
+        <span class="header-badge">Live2D / VRM / Blender / VAM</span>
       </div>
       <div class="header-actions">
         <button class="h-btn" title="重置姿态"><RotateCcw :size="16" /></button>
         <button class="h-btn" title="全屏模式"><Maximize2 :size="16" /></button>
-        <button class="h-btn primary" title="导入皮套"><Download :size="16" /> 导入</button>
-        <button class="h-btn" title="高级设置"><Settings2 :size="16" /></button>
+        <button class="h-btn primary" title="导入模型" @click="showImportDialog = true">
+          <Download :size="16" /> 导入
+        </button>
+        <button
+          :class="['h-btn', { active: showConfigPanel }]"
+          title="配置面板"
+          @click="showConfigPanel = !showConfigPanel"
+        >
+          <Settings2 :size="16" />
+        </button>
       </div>
     </div>
 
@@ -90,6 +184,7 @@ function selectEmotion(emo: typeof emotions[0]) {
             <div class="avatar-core">
               <Sparkles :size="48" class="avatar-sparkle" />
               <span class="avatar-label">{{ currentMode.toUpperCase() }}</span>
+              <span v-if="selectedModel" class="avatar-model-name">{{ selectedModel.name }}</span>
             </div>
             <div class="avatar-particles">
               <span v-for="i in 6" :key="i" class="particle" :style="{ '--delay': `${i * 0.15}s` }"></span>
@@ -102,6 +197,10 @@ function selectEmotion(emo: typeof emotions[0]) {
             <div class="overlay-tag emotion-tag" :style="{ borderColor: currentEmotion.color }">
               <component :is="currentEmotion.icon" :size="12" />
               {{ currentEmotion.label }}
+            </div>
+            <div v-if="selectedModel" class="overlay-tag status-tag">
+              <CheckCircle :size="12" :style="{ color: statusLabel[selectedModel.status]?.color }" />
+              {{ statusLabel[selectedModel.status]?.text || selectedModel.status }}
             </div>
           </div>
         </div>
@@ -138,58 +237,107 @@ function selectEmotion(emo: typeof emotions[0]) {
               </button>
             </div>
           </div>
-
-          <div class="idle-panel">
-            <div class="panel-title">
-              <Volume2 :size="14" />
-              <span>闲置动画</span>
-            </div>
-            <div class="idle-list">
-              <div
-                v-for="(anim, idx) in idleAnimations"
-                :key="idx"
-                class="idle-item"
-              >
-                <div class="idle-info">
-                  <span class="idle-name">{{ anim.name }}</span>
-                  <span :class="['idle-status', anim.status]">{{ anim.status === 'running' ? '运行中' : '已暂停' }}</span>
-                </div>
-                <div class="idle-bar">
-                  <div
-                    class="idle-fill"
-                    :class="anim.status"
-                    :style="{ width: anim.progress + '%' }"
-                  ></div>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
       <div class="skin-sidebar animate-slide-right">
-        <div class="sidebar-title">皮套库</div>
-        <div class="skin-list">
-          <div
-            v-for="(skin, idx) in skinList"
-            :key="idx"
-            :class="['skin-card', { selected: selectedSkin === idx }]"
-            @click="selectedSkin = idx"
-          >
-            <div class="skin-thumb">
-              <Palette :size="24" />
-            </div>
-            <div class="skin-info">
-              <span class="skin-name">{{ skin.name }}</span>
-              <span class="skin-type">{{ skin.type }}</span>
-            </div>
-            <div class="skin-tags">
-              <span v-for="tag in skin.tags" :key="tag" class="skin-tag">{{ tag }}</span>
-            </div>
+        <div class="sidebar-header">
+          <span class="sidebar-title">模型库</span>
+          <div class="sidebar-actions">
+            <button
+              :class="['view-btn', { active: viewMode === 'grid' }]"
+              @click="viewMode = 'grid'"
+            >
+              <Grid3X3 :size="14" />
+            </button>
+            <button
+              :class="['view-btn', { active: viewMode === 'list' }]"
+              @click="viewMode = 'list'"
+            >
+              <List :size="14" />
+            </button>
           </div>
         </div>
+
+        <div class="search-box">
+          <Search :size="14" class="search-icon" />
+          <input v-model="searchQuery" type="text" placeholder="搜索模型..." class="search-input" />
+        </div>
+
+        <div class="skin-list" v-if="!isLoadingModels">
+          <div v-if="filteredModels.length === 0" class="empty-list">
+            <FileUp :size="28" />
+            <span>暂无模型，点击导入</span>
+          </div>
+
+          <template v-if="viewMode === 'grid'">
+            <div
+              v-for="model in filteredModels"
+              :key="model.id"
+              :class="['skin-card', { selected: selectedModelId === model.id }]"
+              @click="selectModel(model.id)"
+            >
+              <div class="skin-thumb">
+                <Palette :size="24" />
+                <span class="thumb-type">{{ model.model_type.toUpperCase() }}</span>
+              </div>
+              <div class="skin-info">
+                <span class="skin-name">{{ model.name }}</span>
+                <span class="skin-type">v{{ model.version }} · {{ formatSize(model.file_size) }}</span>
+              </div>
+              <div class="skin-tags">
+                <span
+                  v-for="tag in (model.tags || []).slice(0, 2)"
+                  :key="tag"
+                  class="skin-tag"
+                >{{ tag }}</span>
+                <span
+                  class="skin-tag status"
+                  :style="{ color: statusLabel[model.status]?.color }"
+                >{{ statusLabel[model.status]?.text }}</span>
+              </div>
+            </div>
+          </template>
+
+          <template v-else>
+            <div
+              v-for="model in filteredModels"
+              :key="model.id"
+              :class="['skin-row', { selected: selectedModelId === model.id }]"
+              @click="selectModel(model.id)"
+            >
+              <div class="row-type">{{ model.model_type.toUpperCase() }}</div>
+              <div class="row-info">
+                <span class="row-name">{{ model.name }}</span>
+                <span class="row-meta">v{{ model.version }} · {{ formatSize(model.file_size) }}</span>
+              </div>
+              <ChevronRight :size="14" class="row-arrow" />
+            </div>
+          </template>
+        </div>
+
+        <div v-else class="loading-list">
+          <Loader2 :size="20" class="spin" />
+          <span>加载中...</span>
+        </div>
+
+        <div class="sidebar-footer">
+          <span class="footer-count">共 {{ totalModels }} 个模型</span>
+        </div>
       </div>
+
+      <ModelConfigPanel
+        v-if="showConfigPanel && selectedModel"
+        :model="selectedModel"
+        class="config-sidebar"
+      />
     </div>
+
+    <ModelImportDialog
+      v-if="showImportDialog"
+      @close="showImportDialog = false"
+      @imported="onModelImported"
+    />
   </div>
 </template>
 
@@ -269,6 +417,11 @@ function selectEmotion(emo: typeof emotions[0]) {
   box-shadow: 0 4px 14px rgba(13, 148, 136, 0.3);
 }
 
+.h-btn.active {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
 .avatar-body {
   display: flex;
   flex: 1;
@@ -326,7 +479,7 @@ function selectEmotion(emo: typeof emotions[0]) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   z-index: 1;
 }
 
@@ -346,6 +499,15 @@ function selectEmotion(emo: typeof emotions[0]) {
   font-weight: 600;
   letter-spacing: 3px;
   color: var(--text-muted);
+}
+
+.avatar-model-name {
+  font-size: 11px;
+  color: var(--lumi-primary);
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .avatar-particles {
@@ -377,6 +539,7 @@ function selectEmotion(emo: typeof emotions[0]) {
   left: 16px;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .overlay-tag {
@@ -396,6 +559,10 @@ function selectEmotion(emo: typeof emotions[0]) {
 .emotion-tag {
   border-color: var(--emo-color, var(--lumi-primary));
   color: var(--emo-color, var(--lumi-primary));
+}
+
+.status-tag {
+  border-color: transparent;
 }
 
 .stage-controls {
@@ -449,11 +616,10 @@ function selectEmotion(emo: typeof emotions[0]) {
   opacity: 0.6;
 }
 
-.emotion-panel,
-.idle-panel {
+.emotion-panel {
   flex-shrink: 0;
   min-width: 200px;
-  max-width: 240px;
+  max-width: 280px;
 }
 
 .panel-title {
@@ -507,94 +673,111 @@ function selectEmotion(emo: typeof emotions[0]) {
   box-shadow: 0 2px 12px color-mix(in srgb, var(--emo-color, #888) 18%, transparent);
 }
 
-.idle-list {
+.skin-sidebar {
+  width: 280px;
+  border-left: 1px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  background: var(--surface);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
-.idle-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.idle-info {
+.sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.idle-name {
-  font-size: 12px;
-  color: var(--text);
-}
-
-.idle-status {
-  font-size: 10px;
-  padding: 1px 8px;
-  border-radius: 10px;
-}
-
-.idle-status.running {
-  background: rgba(34, 197, 94, 0.12);
-  color: #22c55e;
-}
-
-.idle-status.paused {
-  background: rgba(107, 114, 128, 0.12);
-  color: #6b7280;
-}
-
-.idle-bar {
-  height: 3px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.idle-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 1000ms ease-in-out;
-}
-
-.idle-fill.running {
-  background: linear-gradient(90deg, var(--lumi-primary), #22c55e);
-  animation: bar-pulse 2s ease-in-out infinite;
-}
-
-@keyframes bar-pulse {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
-}
-
-.skin-sidebar {
-  width: 260px;
-  border-left: 1px solid var(--border);
-  padding: 20px 16px;
-  overflow-y: auto;
-  flex-shrink: 0;
-  background: var(--surface);
-}
-
 .sidebar-title {
   font-size: 14px;
   font-weight: 600;
-  margin-bottom: 16px;
   color: var(--text);
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.view-btn:hover {
+  background: var(--surface-hover);
+}
+
+.view-btn.active {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.search-box:focus-within {
+  border-color: var(--lumi-primary);
+  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+}
+
+.search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
 }
 
 .skin-list {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.empty-list,
+.loading-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 10px;
+  padding: 40px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 .skin-card {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   padding: 12px;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -613,29 +796,42 @@ function selectEmotion(emo: typeof emotions[0]) {
 }
 
 .skin-thumb {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: 100%;
+  height: 80px;
+  border-radius: 8px;
   background: var(--surface-hover);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  flex-shrink: 0;
+  position: relative;
+}
+
+.thumb-type {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.3);
+  color: rgba(255,255,255,0.8);
+  font-weight: 500;
 }
 
 .skin-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: 1;
-  min-width: 0;
 }
 
 .skin-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .skin-type {
@@ -647,7 +843,6 @@ function selectEmotion(emo: typeof emotions[0]) {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 6px;
 }
 
 .skin-tag {
@@ -656,6 +851,81 @@ function selectEmotion(emo: typeof emotions[0]) {
   border-radius: 8px;
   background: var(--surface-hover);
   color: var(--text-muted);
+}
+
+.skin-tag.status {
+  background: transparent;
+  font-weight: 500;
+}
+
+.skin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.skin-row:hover {
+  background: var(--surface-hover);
+}
+
+.skin-row.selected {
+  background: var(--lumi-primary-light);
+}
+
+.row-type {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.row-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sidebar-footer {
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+.footer-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.config-sidebar {
+  width: 320px;
+  flex-shrink: 0;
 }
 
 @keyframes stage-appear {
@@ -674,5 +944,13 @@ function selectEmotion(emo: typeof emotions[0]) {
 
 .animate-slide-right {
   animation: slide-right 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
