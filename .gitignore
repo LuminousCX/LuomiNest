@@ -34,6 +34,12 @@ pnpm-debug.log*
 .env.*.local
 .env.production
 
+# 编译输出
+dist/
+
+# 虚拟环境
+.venv/
+
 # IDE配置
 .idea/
 .vscode/
@@ -48,6 +54,9 @@ pnpm-debug.log*
 
 # Codebuddy配置文件
 .codebuddy/
+
+# Notion配置文件
+.notion/
 
 # Cursor 配置文件
 .cursor/

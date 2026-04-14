@@ -3,7 +3,8 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   Palette, Sparkles, Heart, Eye, Smile, Frown, Meh, Zap,
   Volume2, RotateCcw, Maximize2, Download, Settings2,
-  Loader2, AlertCircle, FolderOpen, Check
+  Loader2, AlertCircle, FolderOpen, Check, Monitor, MonitorOff,
+  ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
 import { useLuomiNestAvatar } from '@/composables/useLuomiNestLive2D'
 import type { LuomiNestModelInfo } from '@/composables/useLuomiNestLive2D'
@@ -24,6 +25,9 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const importError = ref<string | null>(null)
 const importedModels = ref<LuomiNestModelInfo[]>([])
 const showImportSuccess = ref(false)
+const isDesktopMode = ref(false)
+const isDesktopPetRunning = ref(false)
+const skinSidebarVisible = ref(true)
 
 const avatarModes = [
   { id: 'live2d', label: 'Live2D', desc: 'Cubism 4/5', active: true },
@@ -75,6 +79,11 @@ const skinList = computed(() => {
 
 const selectedSkin = ref(0)
 
+const currentModelInfo = computed(() => {
+  const skin = skinList.value[selectedSkin.value]
+  return skin?.modelInfo ?? null
+})
+
 function selectMode(modeId: string) {
   currentMode.value = modeId
 }
@@ -96,8 +105,14 @@ async function handleResetPose() {
 async function handleSkinSelect(idx: number) {
   selectedSkin.value = idx
   const skin = skinList.value[idx]
-  if (skin.modelInfo && canvasRef.value) {
-    await mountAvatarFromModelInfo(canvasRef.value, skin.modelInfo)
+  if (isDesktopMode.value && isDesktopPetRunning.value) {
+    if (skin.modelInfo) {
+      await window.api.desktopPet.loadModel(skin.modelInfo)
+    }
+  } else {
+    if (skin.modelInfo && canvasRef.value) {
+      await mountAvatarFromModelInfo(canvasRef.value, skin.modelInfo)
+    }
   }
 }
 
@@ -132,7 +147,13 @@ async function handleImportClick() {
       showImportSuccess.value = true
       setTimeout(() => { showImportSuccess.value = false }, 2000)
 
-      if (canvasRef.value) {
+      if (isDesktopMode.value) {
+        selectedSkin.value = skinList.value.findIndex(s => s.modelInfo?.name === modelInfo.name)
+        if (selectedSkin.value < 0) selectedSkin.value = skinList.value.length - 1
+        if (isDesktopPetRunning.value) {
+          await window.api.desktopPet.loadModel(modelInfo)
+        }
+      } else if (canvasRef.value) {
         selectedSkin.value = skinList.value.findIndex(s => s.modelInfo?.name === modelInfo.name)
         if (selectedSkin.value < 0) selectedSkin.value = skinList.value.length - 1
         await mountAvatarFromModelInfo(canvasRef.value, modelInfo)
@@ -141,6 +162,35 @@ async function handleImportClick() {
   } catch (err) {
     importError.value = err instanceof Error ? err.message : 'Failed to import model'
   }
+}
+
+async function toggleDesktopMode() {
+  if (isDesktopMode.value) {
+    await switchToInlineMode()
+  } else {
+    await switchToDesktopMode()
+  }
+}
+
+async function switchToDesktopMode() {
+  isDesktopMode.value = true
+  const modelInfo = currentModelInfo.value
+  await window.api.desktopPet.open(modelInfo ?? undefined)
+  isDesktopPetRunning.value = true
+}
+
+async function switchToInlineMode() {
+  isDesktopMode.value = false
+  await window.api.desktopPet.close()
+  isDesktopPetRunning.value = false
+  await nextTick()
+  if (canvasRef.value && currentModelInfo.value) {
+    await mountAvatarFromModelInfo(canvasRef.value, currentModelInfo.value)
+  }
+}
+
+function toggleSkinSidebar() {
+  skinSidebarVisible.value = !skinSidebarVisible.value
 }
 
 const loadPersistedModels = async () => {
@@ -159,10 +209,19 @@ const loadPersistedModels = async () => {
   }
 }
 
+const checkDesktopPetStatus = async () => {
+  try {
+    isDesktopPetRunning.value = await window.api.desktopPet.isRunning()
+  } catch {
+    isDesktopPetRunning.value = false
+  }
+}
+
 onMounted(async () => {
   await loadPersistedModels()
+  await checkDesktopPetStatus()
   await nextTick()
-  if (canvasRef.value) {
+  if (!isDesktopPetRunning.value && canvasRef.value) {
     const defaultModel = LUOMINEST_BUILTIN_MODELS[0]
     await mountAvatarFromModelInfo(canvasRef.value, defaultModel)
   }
@@ -182,6 +241,11 @@ onBeforeUnmount(() => {
         <span class="header-badge">LuomiNest</span>
       </div>
       <div class="header-actions">
+        <div class="desktop-mode-toggle" :class="{ active: isDesktopMode }" @click="toggleDesktopMode" :title="isDesktopMode ? 'Switch to Inline Mode' : 'Switch to Desktop Mode'">
+          <component :is="isDesktopMode ? MonitorOff : Monitor" :size="16" />
+          <span class="toggle-label">{{ isDesktopMode ? 'Inline' : 'Desktop' }}</span>
+        </div>
+        <div class="header-divider"></div>
         <button class="h-btn" title="Reset Pose" @click="handleResetPose"><RotateCcw :size="16" /></button>
         <button class="h-btn" title="Fullscreen"><Maximize2 :size="16" /></button>
         <button class="h-btn primary" title="Import Avatar" @click="handleImportClick">
@@ -193,46 +257,66 @@ onBeforeUnmount(() => {
 
     <div class="avatar-body">
       <div class="avatar-stage animate-stage-appear">
-        <div class="stage-canvas">
-          <canvas ref="canvasRef" class="live2d-canvas"></canvas>
+        <div class="stage-canvas" :class="{ 'desktop-mode-active': isDesktopMode }">
+          <template v-if="!isDesktopMode">
+            <canvas ref="canvasRef" class="live2d-canvas"></canvas>
 
-          <div v-if="isLoading" class="stage-loading">
-            <Loader2 :size="32" class="loading-spinner" />
-            <span class="loading-text">Loading LuomiNest Avatar...</span>
-          </div>
-
-          <div v-if="loadError" class="stage-error">
-            <AlertCircle :size="32" />
-            <span class="error-text">{{ loadError }}</span>
-            <span class="error-hint">Check model resources and try again</span>
-          </div>
-
-          <div v-if="!isLoading && !loadError && !isModelReady" class="avatar-placeholder" :class="[`emotion-${currentEmotionLocal.id}`]">
-            <div class="avatar-ring"></div>
-            <div class="avatar-core">
-              <Sparkles :size="48" class="avatar-sparkle" />
-              <span class="avatar-label">{{ currentMode.toUpperCase() }}</span>
+            <div v-if="isLoading" class="stage-loading">
+              <Loader2 :size="32" class="loading-spinner" />
+              <span class="loading-text">Loading LuomiNest Avatar...</span>
             </div>
-            <div class="avatar-particles">
-              <span v-for="i in 6" :key="i" class="particle" :style="{ '--delay': `${i * 0.15}s` }"></span>
+
+            <div v-if="loadError" class="stage-error">
+              <AlertCircle :size="32" />
+              <span class="error-text">{{ loadError }}</span>
+              <span class="error-hint">Check model resources and try again</span>
             </div>
+
+            <div v-if="!isLoading && !loadError && !isModelReady" class="avatar-placeholder" :class="[`emotion-${currentEmotionLocal.id}`]">
+              <div class="avatar-ring"></div>
+              <div class="avatar-core">
+                <Sparkles :size="48" class="avatar-sparkle" />
+                <span class="avatar-label">{{ currentMode.toUpperCase() }}</span>
+              </div>
+              <div class="avatar-particles">
+                <span v-for="i in 6" :key="i" class="particle" :style="{ '--delay': `${i * 0.15}s` }"></span>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="isDesktopMode" class="desktop-mode-hint">
+            <div class="hint-icon">
+              <Monitor :size="40" />
+            </div>
+            <div class="hint-content">
+              <h3>Desktop Pet Mode</h3>
+              <p>The model has been switched to the desktop. You can interact with it directly on your desktop.</p>
+              <p class="hint-sub">Right-click the desktop pet for more options. Use the toggle above to switch back.</p>
+            </div>
+            <button class="hint-back-btn" @click="toggleDesktopMode">
+              <MonitorOff :size="16" />
+              <span>Back to Inline</span>
+            </button>
           </div>
 
           <div class="stage-overlay">
             <div class="overlay-tag mode-tag">
               <Eye :size="12" /> {{ avatarModes.find(m => m.id === currentMode)?.label }}
             </div>
-            <div class="overlay-tag emotion-tag" :style="{ borderColor: currentEmotionLocal.color }">
+            <div v-if="isDesktopMode" class="overlay-tag desktop-tag">
+              <Monitor :size="12" /> Desktop
+            </div>
+            <div v-else class="overlay-tag emotion-tag" :style="{ borderColor: currentEmotionLocal.color }">
               <component :is="currentEmotionLocal.icon" :size="12" />
               {{ currentEmotionLocal.label }}
             </div>
-            <div v-if="isModelReady" class="overlay-tag status-tag">
+            <div v-if="isModelReady && !isDesktopMode" class="overlay-tag status-tag">
               <span class="status-dot"></span> LuomiNest Ready
             </div>
           </div>
         </div>
 
-        <div class="stage-controls">
+        <div v-if="!isDesktopMode" class="stage-controls">
           <div class="mode-switcher">
             <button
               v-for="mode in avatarModes"
@@ -293,43 +377,49 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div class="skin-sidebar animate-slide-right">
-        <div class="sidebar-title">Avatar Library</div>
+      <div :class="['skin-sidebar', { 'sidebar-collapsed': !skinSidebarVisible }, 'animate-slide-right']">
+        <button class="sidebar-toggle" @click="toggleSkinSidebar" :title="skinSidebarVisible ? 'Hide Library' : 'Show Library'">
+          <component :is="skinSidebarVisible ? ChevronRight : ChevronLeft" :size="14" />
+        </button>
 
-        <div v-if="importError" class="import-error">
-          <AlertCircle :size="14" />
-          <span>{{ importError }}</span>
-        </div>
+        <template v-if="skinSidebarVisible">
+          <div class="sidebar-title">Avatar Library</div>
 
-        <div v-if="showImportSuccess" class="import-success">
-          <Check :size="14" />
-          <span>Model imported successfully</span>
-        </div>
+          <div v-if="importError" class="import-error">
+            <AlertCircle :size="14" />
+            <span>{{ importError }}</span>
+          </div>
 
-        <div class="skin-list">
-          <div
-            v-for="(skin, idx) in skinList"
-            :key="idx"
-            :class="['skin-card', { selected: selectedSkin === idx }]"
-            @click="handleSkinSelect(idx)"
-          >
-            <div class="skin-thumb">
-              <Palette :size="24" />
-            </div>
-            <div class="skin-info">
-              <span class="skin-name">{{ skin.name }}</span>
-              <span class="skin-type">{{ skin.type }}</span>
-            </div>
-            <div class="skin-tags">
-              <span v-for="tag in skin.tags" :key="tag" class="skin-tag">{{ tag }}</span>
+          <div v-if="showImportSuccess" class="import-success">
+            <Check :size="14" />
+            <span>Model imported successfully</span>
+          </div>
+
+          <div class="skin-list">
+            <div
+              v-for="(skin, idx) in skinList"
+              :key="idx"
+              :class="['skin-card', { selected: selectedSkin === idx }]"
+              @click="handleSkinSelect(idx)"
+            >
+              <div class="skin-thumb">
+                <Palette :size="24" />
+              </div>
+              <div class="skin-info">
+                <span class="skin-name">{{ skin.name }}</span>
+                <span class="skin-type">{{ skin.type }}</span>
+              </div>
+              <div class="skin-tags">
+                <span v-for="tag in skin.tags" :key="tag" class="skin-tag">{{ tag }}</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <button class="import-btn" @click="handleImportClick">
-          <FolderOpen :size="16" />
-          <span>Import .model3.json</span>
-        </button>
+          <button class="import-btn" @click="handleImportClick">
+            <FolderOpen :size="16" />
+            <span>Import .model3.json</span>
+          </button>
+        </template>
       </div>
     </div>
   </div>
@@ -392,6 +482,44 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 
+.header-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--divider-soft);
+  margin: 0 4px;
+}
+
+.desktop-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--surface-hover);
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
+  user-select: none;
+}
+
+.desktop-mode-toggle:hover {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--lumi-primary);
+}
+
+.desktop-mode-toggle.active {
+  background: rgba(13, 148, 136, 0.15);
+  color: var(--lumi-primary);
+  border: 1px solid rgba(13, 148, 136, 0.3);
+}
+
+.toggle-label {
+  font-weight: 600;
+}
+
 .h-btn {
   display: flex;
   align-items: center;
@@ -448,12 +576,93 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+.stage-canvas.desktop-mode-active {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(13, 148, 136, 0.06) 0%, transparent 70%),
+    var(--surface);
+}
+
 .live2d-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   z-index: 1;
+}
+
+.desktop-mode-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px;
+  z-index: 5;
+  text-align: center;
+  animation: hint-fade-in 500ms ease-in-out;
+}
+
+@keyframes hint-fade-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hint-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--lumi-primary);
+  animation: hint-icon-pulse 3s ease-in-out infinite;
+}
+
+@keyframes hint-icon-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.15); }
+  50% { box-shadow: 0 0 0 12px rgba(13, 148, 136, 0); }
+}
+
+.hint-content h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.hint-content p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 360px;
+}
+
+.hint-sub {
+  font-size: 12px !important;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+.hint-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: var(--radius-lg);
+  background: var(--lumi-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
+  margin-top: 8px;
+}
+
+.hint-back-btn:hover {
+  background: var(--lumi-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.3);
 }
 
 .stage-loading {
@@ -614,6 +823,11 @@ onBeforeUnmount(() => {
 .emotion-tag {
   border-color: var(--emo-color, var(--lumi-primary));
   color: var(--emo-color, var(--lumi-primary));
+}
+
+.desktop-tag {
+  border-color: rgba(13, 148, 136, 0.5);
+  color: var(--lumi-primary);
 }
 
 .status-tag {
@@ -824,6 +1038,13 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   flex-direction: column;
+  transition: width 300ms ease-in-out, padding 300ms ease-in-out;
+}
+
+.skin-sidebar.sidebar-collapsed {
+  width: 36px;
+  padding: 20px 6px;
+  overflow: hidden;
 }
 
 .skin-sidebar::before {
@@ -834,6 +1055,31 @@ onBeforeUnmount(() => {
   left: 0;
   width: 1px;
   background: var(--divider-vertical);
+}
+
+.sidebar-toggle {
+  position: absolute;
+  top: 50%;
+  left: -12px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  cursor: pointer;
+  z-index: 10;
+  transition: all 300ms ease-in-out;
+}
+
+.sidebar-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--lumi-primary);
+  border-color: var(--lumi-primary);
 }
 
 .sidebar-title {

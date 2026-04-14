@@ -162,6 +162,18 @@ html, body {
   overflow: hidden;
 }
 
+html.desktop-pet, html.desktop-pet body {
+  background: transparent !important;
+  min-width: unset !important;
+  min-height: unset !important;
+}
+
+html.desktop-pet #app {
+  min-width: unset !important;
+  min-height: unset !important;
+  background: transparent !important;
+}
+
 #app {
   height: 100%;
   min-width: 960px;

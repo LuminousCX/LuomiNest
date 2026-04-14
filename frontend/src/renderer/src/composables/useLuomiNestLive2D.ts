@@ -48,9 +48,9 @@ const VOWEL_LIP_MAP: Record<string, { open: number; form: number }> = {
 }
 
 const AVATAR_BOUNDS = {
-  MIN_SCALE: 0.08,
-  MAX_SCALE: 1.2,
-  SCALE_STEP: 0.02,
+  MIN_SCALE: 0.05,
+  MAX_SCALE: 2.0,
+  SCALE_FACTOR: 0.05,
   POSITION_MARGIN: 50
 } as const
 
@@ -178,8 +178,10 @@ export const useLuomiNestAvatar = () => {
     const onWheel = (e: WheelEvent) => {
       if (!avatarModel.value) return
       e.preventDefault()
-      const delta = e.deltaY > 0 ? -AVATAR_BOUNDS.SCALE_STEP : AVATAR_BOUNDS.SCALE_STEP
-      const newScale = clampScale(avatarModel.value.scale.x + delta)
+      const scaleFactor = e.deltaY > 0
+        ? (1 - AVATAR_BOUNDS.SCALE_FACTOR)
+        : (1 + AVATAR_BOUNDS.SCALE_FACTOR)
+      const newScale = clampScale(avatarModel.value.scale.x * scaleFactor)
       avatarModel.value.scale.set(newScale)
       avatarScale.value = newScale
       const parent = canvas.parentElement

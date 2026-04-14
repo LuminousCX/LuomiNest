@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, NativeImage, MenuItemConstructorOptions, dialog, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, NativeImage, MenuItemConstructorOptions, dialog, protocol, screen } from 'electron'
 import { join, dirname, basename } from 'path'
 import { platform } from 'os'
 import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync, rmSync, statSync } from 'fs'
@@ -13,8 +13,10 @@ setupNetworkConfig()
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+let desktopPetWindow: BrowserWindow | null = null
 
 const isDev = !app.isPackaged
+const isMac = platform() === 'darwin'
 
 let live2dBasePath = ''
 
@@ -147,12 +149,127 @@ const createTray = (): void => {
     { label: '显示窗口', click: () => { mainWindow?.show(); mainWindow?.focus() } },
     { label: '隐藏窗口', click: () => mainWindow?.hide() },
     { type: 'separator' },
+    { label: '显示桌面宠物', click: () => { createDesktopPet() } },
+    { label: '隐藏桌面宠物', click: () => { if (desktopPetWindow && !desktopPetWindow.isDestroyed()) desktopPetWindow.hide() } },
+    { type: 'separator' },
     { label: '退出', click: () => { tray?.destroy(); app.quit() } }
   ])
   tray.setToolTip('LuomiNest')
   tray.setContextMenu(contextMenu)
   tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus() })
 }
+
+const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
+  if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+    desktopPetWindow.show()
+    if (modelInfo) {
+      desktopPetWindow.webContents.send('desktop-pet:load-model', modelInfo)
+    }
+    return
+  }
+
+  const display = screen.getPrimaryDisplay()
+  const { width: screenWidth, height: screenHeight } = display.workAreaSize
+
+  desktopPetWindow = new BrowserWindow({
+    width: screenWidth,
+    height: screenHeight,
+    x: 0,
+    y: 0,
+    transparent: true,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    show: false,
+    focusable: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  desktopPetWindow.setVisibleOnAllWorkspaces(true)
+  desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
+  if (isMac) {
+    desktopPetWindow.setIgnoreMouseEvents(true)
+  } else {
+    desktopPetWindow.setIgnoreMouseEvents(true, { forward: true })
+  }
+
+  const petContextMenu = Menu.buildFromTemplate([
+    { label: 'Show Main Window', click: () => { mainWindow?.show(); mainWindow?.focus() } },
+    { type: 'separator' },
+    { label: 'Switch Model', submenu: [
+      ...LUOMINEST_BUILTIN_MODELS.map(m => ({
+        label: m.name,
+        click: () => {
+          desktopPetWindow?.webContents.send('desktop-pet:load-model', m)
+        }
+      }))
+    ]},
+    { type: 'separator' },
+    { label: 'Play Motion', submenu: [
+      { label: 'Idle', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-motion', 'Idle', 0) },
+      { label: 'TapBody', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-motion', 'TapBody', 0) }
+    ]},
+    { type: 'separator' },
+    { label: 'Hide Pet', click: () => desktopPetWindow?.hide() },
+    { label: 'Show Pet', click: () => { desktopPetWindow?.show(); desktopPetWindow?.setAlwaysOnTop(true, 'screen-saver') } },
+    { type: 'separator' },
+    { label: 'Close Desktop Pet', click: () => { desktopPetWindow?.close(); desktopPetWindow = null } },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { tray?.destroy(); app.quit() } }
+  ])
+
+  desktopPetWindow.webContents.on('context-menu', () => {
+    petContextMenu.popup()
+  })
+
+  ipcMain.on('desktop-pet:set-ignore-mouse-events', (_event, ignore: boolean) => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      if (isMac) {
+        desktopPetWindow.setIgnoreMouseEvents(ignore)
+      } else {
+        desktopPetWindow.setIgnoreMouseEvents(ignore, { forward: true })
+      }
+    }
+  })
+
+  ipcMain.on('desktop-pet:show-context-menu', () => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      petContextMenu.popup({ window: desktopPetWindow })
+    }
+  })
+
+  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
+    desktopPetWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '#/desktop-pet')
+  } else {
+    desktopPetWindow.loadFile(join(__dirname, '../renderer/index.html'), { hash: '/desktop-pet' })
+  }
+
+  desktopPetWindow.on('closed', () => {
+    desktopPetWindow = null
+  })
+
+  desktopPetWindow.once('ready-to-show', () => {
+    desktopPetWindow?.show()
+    if (modelInfo) {
+      setTimeout(() => {
+        desktopPetWindow?.webContents.send('desktop-pet:load-model', modelInfo)
+      }, 500)
+    }
+  })
+}
+
+const LUOMINEST_BUILTIN_MODELS = [
+  { id: 'hiyori', name: 'Hiyori', url: '/live2d/hiyori/Hiyori.model3.json', scale: 0.25, type: 'live2d', tags: ['Default', 'Cubism4', 'Built-in'] },
+  { id: 'shizuku', name: 'Shizuku', url: '/live2d/shizuku/shizuku.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] }
+]
 
 const createMenu = (): void => {
   const template: MenuItemConstructorOptions[] = [
@@ -388,6 +505,62 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('avatar:getImportedModelsPath', () => {
     return live2dBasePath
+  })
+
+  ipcMain.handle('desktop-pet:open', async (_e, modelInfo?: ImportedModelRecord) => {
+    createDesktopPet(modelInfo)
+    return { success: true }
+  })
+
+  ipcMain.handle('desktop-pet:close', async () => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.close()
+      desktopPetWindow = null
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle('desktop-pet:isRunning', async () => {
+    return desktopPetWindow !== null && !desktopPetWindow.isDestroyed()
+  })
+
+  ipcMain.handle('desktop-pet:loadModel', async (_e, modelInfo: ImportedModelRecord) => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:load-model', modelInfo)
+      return { success: true }
+    }
+    return { success: false, error: 'Desktop pet window not running' }
+  })
+
+  ipcMain.handle('desktop-pet:show', async () => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.show()
+      desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle('desktop-pet:hide', async () => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.hide()
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle('desktop-pet:triggerMotion', async (_e, group: string, index: number) => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:trigger-motion', group, index)
+      return { success: true }
+    }
+    return { success: false }
+  })
+
+  ipcMain.handle('desktop-pet:triggerExpression', async (_e, name: string) => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:trigger-expression', name)
+      return { success: true }
+    }
+    return { success: false }
   })
 }
 

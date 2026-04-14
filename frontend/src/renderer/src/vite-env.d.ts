@@ -85,6 +85,16 @@ export interface ElectronApi {
     deleteModel: (modelName: string) => Promise<{ success: boolean; error?: string }>
     getImportedModelsPath: () => Promise<string>
   }
+  desktopPet: {
+    open: (modelInfo?: { id: string; name: string; url: string; scale: number; type: string; tags: string[] }) => Promise<{ success: boolean }>
+    close: () => Promise<{ success: boolean }>
+    isRunning: () => Promise<boolean>
+    loadModel: (modelInfo: { id: string; name: string; url: string; scale: number; type: string; tags: string[] }) => Promise<{ success: boolean; error?: string }>
+    show: () => Promise<{ success: boolean }>
+    hide: () => Promise<{ success: boolean }>
+    triggerMotion: (group: string, index: number) => Promise<{ success: boolean }>
+    triggerExpression: (name: string) => Promise<{ success: boolean }>
+  }
 }
 
 declare global {

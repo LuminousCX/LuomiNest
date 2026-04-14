@@ -47,6 +47,17 @@ const api = {
     listImportedModels: () => ipcRenderer.invoke('avatar:listImportedModels'),
     deleteModel: (modelName: string) => ipcRenderer.invoke('avatar:deleteModel', modelName),
     getImportedModelsPath: () => ipcRenderer.invoke('avatar:getImportedModelsPath')
+  },
+
+  desktopPet: {
+    open: (modelInfo?: any) => ipcRenderer.invoke('desktop-pet:open', modelInfo),
+    close: () => ipcRenderer.invoke('desktop-pet:close'),
+    isRunning: () => ipcRenderer.invoke('desktop-pet:isRunning'),
+    loadModel: (modelInfo: any) => ipcRenderer.invoke('desktop-pet:loadModel', modelInfo),
+    show: () => ipcRenderer.invoke('desktop-pet:show'),
+    hide: () => ipcRenderer.invoke('desktop-pet:hide'),
+    triggerMotion: (group: string, index: number) => ipcRenderer.invoke('desktop-pet:triggerMotion', group, index),
+    triggerExpression: (name: string) => ipcRenderer.invoke('desktop-pet:triggerExpression', name)
   }
 }
 
