@@ -7,20 +7,12 @@ import {
 } from 'lucide-vue-next'
 import { useLuomiNestAvatar } from '@/composables/useLuomiNestLive2D'
 import type { LuomiNestModelInfo } from '@/composables/useLuomiNestLive2D'
-import {
-  LUOMINEST_BUILTIN_MODELS,
-  validateLuomiNestModel3Json,
-  LUOMINEST_MODEL_ACCEPT_EXTENSIONS
-} from '@/config/luominest-models'
+import { LUOMINEST_BUILTIN_MODELS } from '@/config/luominest-models'
 
 const {
   isLoading,
   loadError,
   isModelReady,
-  currentModelInfo,
-  availableMotions,
-  availableExpressions,
-  mountAvatar,
   mountAvatarFromModelInfo,
   triggerMotion,
   driveEmotion,
@@ -29,7 +21,6 @@ const {
 } = useLuomiNestAvatar()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
-const importInputRef = ref<HTMLInputElement | null>(null)
 const importError = ref<string | null>(null)
 const importedModels = ref<LuomiNestModelInfo[]>([])
 const showImportSuccess = ref(false)
@@ -110,59 +101,66 @@ async function handleSkinSelect(idx: number) {
   }
 }
 
-function handleImportClick() {
+async function handleImportClick() {
   importError.value = null
-  importInputRef.value?.click()
-}
-
-async function handleFileImport(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-
-  if (!file.name.endsWith('.model3.json')) {
-    importError.value = 'Invalid file type. Please select a .model3.json file.'
-    input.value = ''
-    return
-  }
-
   try {
-    const text = await file.text()
-    const json = JSON.parse(text)
-    const validation = validateLuomiNestModel3Json(json)
-    if (!validation.valid) {
-      importError.value = `Invalid model: ${validation.errors.join('; ')}`
-      input.value = ''
+    const result = await window.api.avatar.importModel()
+    if (!result.success) {
+      if (result.error !== 'Cancelled') {
+        importError.value = result.error ?? 'Import failed'
+      }
       return
     }
 
-    const modelName = file.name.replace('.model3.json', '')
-    const modelInfo: LuomiNestModelInfo = {
-      id: `imported-${Date.now()}`,
-      name: modelName,
-      url: URL.createObjectURL(file),
-      scale: 0.25,
-      type: 'live2d',
-      tags: ['Imported']
-    }
+    if (result.modelInfo) {
+      const modelInfo: LuomiNestModelInfo = {
+        id: result.modelInfo.id,
+        name: result.modelInfo.name,
+        url: result.modelInfo.url,
+        scale: result.modelInfo.scale,
+        type: result.modelInfo.type as LuomiNestModelInfo['type'],
+        tags: result.modelInfo.tags
+      }
 
-    importedModels.value.push(modelInfo)
-    importError.value = null
-    showImportSuccess.value = true
-    setTimeout(() => { showImportSuccess.value = false }, 2000)
+      const existingIdx = importedModels.value.findIndex(m => m.name === modelInfo.name)
+      if (existingIdx >= 0) {
+        importedModels.value[existingIdx] = modelInfo
+      } else {
+        importedModels.value.push(modelInfo)
+      }
 
-    if (canvasRef.value) {
-      selectedSkin.value = skinList.value.length - 1
-      await mountAvatarFromModelInfo(canvasRef.value, modelInfo)
+      showImportSuccess.value = true
+      setTimeout(() => { showImportSuccess.value = false }, 2000)
+
+      if (canvasRef.value) {
+        selectedSkin.value = skinList.value.findIndex(s => s.modelInfo?.name === modelInfo.name)
+        if (selectedSkin.value < 0) selectedSkin.value = skinList.value.length - 1
+        await mountAvatarFromModelInfo(canvasRef.value, modelInfo)
+      }
     }
   } catch (err) {
-    importError.value = err instanceof Error ? err.message : 'Failed to parse model file'
+    importError.value = err instanceof Error ? err.message : 'Failed to import model'
   }
+}
 
-  input.value = ''
+const loadPersistedModels = async () => {
+  try {
+    const models = await window.api.avatar.listImportedModels()
+    importedModels.value = models.map(m => ({
+      id: m.id,
+      name: m.name,
+      url: m.url,
+      scale: m.scale,
+      type: m.type as LuomiNestModelInfo['type'],
+      tags: m.tags
+    }))
+  } catch {
+    // ignore
+  }
 }
 
 onMounted(async () => {
+  await loadPersistedModels()
   await nextTick()
   if (canvasRef.value) {
     const defaultModel = LUOMINEST_BUILTIN_MODELS[0]
@@ -191,13 +189,6 @@ onBeforeUnmount(() => {
         </button>
         <button class="h-btn" title="Settings"><Settings2 :size="16" /></button>
       </div>
-      <input
-        ref="importInputRef"
-        type="file"
-        :accept="LUOMINEST_MODEL_ACCEPT_EXTENSIONS"
-        style="display: none"
-        @change="handleFileImport"
-      />
     </div>
 
     <div class="avatar-body">

@@ -61,6 +61,30 @@ export interface ElectronApi {
     getCookies: () => Promise<CookieInfo[]>
     clearData: () => Promise<void>
   }
+  avatar: {
+    importModel: () => Promise<{
+      success: boolean
+      error?: string
+      modelInfo?: {
+        id: string
+        name: string
+        url: string
+        scale: number
+        type: string
+        tags: string[]
+      }
+    }>
+    listImportedModels: () => Promise<{
+      id: string
+      name: string
+      url: string
+      scale: number
+      type: string
+      tags: string[]
+    }[]>
+    deleteModel: (modelName: string) => Promise<{ success: boolean; error?: string }>
+    getImportedModelsPath: () => Promise<string>
+  }
 }
 
 declare global {

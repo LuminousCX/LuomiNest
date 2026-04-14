@@ -40,6 +40,13 @@ const api = {
     cleanup: () => ipcRenderer.invoke('tab:cleanup'),
     getCookies: () => ipcRenderer.invoke('tab:getCookies'),
     clearData: () => ipcRenderer.invoke('tab:clearData')
+  },
+
+  avatar: {
+    importModel: () => ipcRenderer.invoke('avatar:importModel'),
+    listImportedModels: () => ipcRenderer.invoke('avatar:listImportedModels'),
+    deleteModel: (modelName: string) => ipcRenderer.invoke('avatar:deleteModel', modelName),
+    getImportedModelsPath: () => ipcRenderer.invoke('avatar:getImportedModelsPath')
   }
 }
 

@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, NativeImage, MenuItemConstructorOptions } from 'electron'
-import { join } from 'path'
+import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, NativeImage, MenuItemConstructorOptions, dialog, protocol } from 'electron'
+import { join, dirname, basename } from 'path'
 import { platform } from 'os'
+import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync, rmSync, statSync } from 'fs'
 import { tabManager } from './services/browser'
 import { setupNetworkConfig } from './services/browser/view'
 
@@ -14,6 +15,50 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 
 const isDev = !app.isPackaged
+
+let live2dBasePath = ''
+
+interface ImportedModelRecord {
+  id: string
+  name: string
+  url: string
+  scale: number
+  type: string
+  tags: string[]
+}
+
+const IMPORTED_MODELS_FILE = 'imported-models.json'
+
+const loadImportedModels = (): ImportedModelRecord[] => {
+  const filePath = join(live2dBasePath, IMPORTED_MODELS_FILE)
+  if (!existsSync(filePath)) return []
+  try {
+    const data = readFileSync(filePath, 'utf-8')
+    return JSON.parse(data) as ImportedModelRecord[]
+  } catch {
+    return []
+  }
+}
+
+const saveImportedModels = (models: ImportedModelRecord[]): void => {
+  mkdirSync(live2dBasePath, { recursive: true })
+  const filePath = join(live2dBasePath, IMPORTED_MODELS_FILE)
+  writeFileSync(filePath, JSON.stringify(models, null, 2), 'utf-8')
+}
+
+const copyDirRecursive = (src: string, dst: string): void => {
+  mkdirSync(dst, { recursive: true })
+  const entries = readdirSync(src, { withFileTypes: true })
+  for (const entry of entries) {
+    const srcPath = join(src, entry.name)
+    const dstPath = join(dst, entry.name)
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, dstPath)
+    } else if (entry.isFile()) {
+      copyFileSync(srcPath, dstPath)
+    }
+  }
+}
 
 const createWindow = (): void => {
   mainWindow = new BrowserWindow({
@@ -70,7 +115,7 @@ const createWindow = (): void => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:"
+            "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
           ]
         }
       })
@@ -162,7 +207,6 @@ const createMenu = (): void => {
 }
 
 function registerIpcHandlers(): void {
-  // Window controls
   ipcMain.handle('window:minimize', () => mainWindow?.minimize())
   ipcMain.handle('window:maximize', () => {
     if (mainWindow?.isMaximized()) {
@@ -174,11 +218,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle('window:close', () => mainWindow?.close())
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
   
-  // App info
   ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('app:getName', () => app.getName())
 
-  // Tab management
   ipcMain.handle('tab:create', async (_e, url?: string) => {
     return tabManager.createTab(url)
   })
@@ -240,11 +282,153 @@ function registerIpcHandlers(): void {
     const { clearBrowserData } = await import('./services/browser')
     return clearBrowserData()
   })
+
+  ipcMain.handle('avatar:importModel', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Import LuomiNest Avatar Model',
+        filters: [
+          { name: 'Live2D Model', extensions: ['model3.json'] }
+        ],
+        properties: ['openFile']
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, error: 'Cancelled' }
+      }
+
+      const selectedFile = result.filePaths[0]
+      const modelDir = dirname(selectedFile)
+      const modelFileName = basename(selectedFile)
+      const modelName = modelFileName.replace('.model3.json', '')
+
+      const destDir = join(live2dBasePath, modelName)
+
+      if (existsSync(destDir)) {
+        rmSync(destDir, { recursive: true, force: true })
+      }
+
+      mkdirSync(live2dBasePath, { recursive: true })
+      copyDirRecursive(modelDir, destDir)
+
+      const modelJsonPath = join(destDir, modelFileName)
+      if (!existsSync(modelJsonPath)) {
+        rmSync(destDir, { recursive: true, force: true })
+        return { success: false, error: `Model file "${modelFileName}" not found after copy` }
+      }
+
+      try {
+        const modelJsonContent = readFileSync(modelJsonPath, 'utf-8')
+        const modelJson = JSON.parse(modelJsonContent)
+        if (!modelJson.FileReferences || !modelJson.FileReferences.Moc) {
+          rmSync(destDir, { recursive: true, force: true })
+          return { success: false, error: 'Invalid model3.json: missing FileReferences.Moc' }
+        }
+      } catch {
+        rmSync(destDir, { recursive: true, force: true })
+        return { success: false, error: 'Invalid model3.json: parse error' }
+      }
+
+      const modelUrl = `luominest-avatar://${modelName}/${modelFileName}`
+
+      const modelRecord: ImportedModelRecord = {
+        id: `imported-${Date.now()}`,
+        name: modelName,
+        url: modelUrl,
+        scale: 0.25,
+        type: 'live2d',
+        tags: ['Imported']
+      }
+
+      const models = loadImportedModels()
+      const existingIdx = models.findIndex(m => m.name === modelName)
+      if (existingIdx >= 0) {
+        models[existingIdx] = modelRecord
+      } else {
+        models.push(modelRecord)
+      }
+      saveImportedModels(models)
+
+      console.info(`[INFO][LuomiNestAvatar] Model imported: ${modelName} -> ${destDir}`)
+
+      return {
+        success: true,
+        modelInfo: modelRecord
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[ERROR][LuomiNestAvatar] Import failed:', message)
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle('avatar:listImportedModels', () => {
+    return loadImportedModels()
+  })
+
+  ipcMain.handle('avatar:deleteModel', async (_e, modelName: string) => {
+    try {
+      const destDir = join(live2dBasePath, modelName)
+      if (existsSync(destDir)) {
+        rmSync(destDir, { recursive: true, force: true })
+      }
+
+      const models = loadImportedModels()
+      const filtered = models.filter(m => m.name !== modelName)
+      saveImportedModels(filtered)
+
+      console.info(`[INFO][LuomiNestAvatar] Model deleted: ${modelName}`)
+      return { success: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[ERROR][LuomiNestAvatar] Delete failed:', message)
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle('avatar:getImportedModelsPath', () => {
+    return live2dBasePath
+  })
 }
 
 app.whenReady().then(() => {
   const userDataPath = app.getPath('userData')
   app.setPath('cache', join(userDataPath, 'Cache'))
+
+  live2dBasePath = join(userDataPath, 'live2d')
+  mkdirSync(live2dBasePath, { recursive: true })
+
+  protocol.handle('luominest-avatar', (request) => {
+    const url = new URL(request.url)
+    const modelDir = url.hostname
+    const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, '')
+    const filePath = join(live2dBasePath, modelDir, relativePath)
+
+    if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+      return new Response('Not Found', { status: 404 })
+    }
+
+    const ext = filePath.split('.').pop()?.toLowerCase()
+    const mimeMap: Record<string, string> = {
+      json: 'application/json',
+      moc3: 'application/octet-stream',
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      mtn: 'application/octet-stream',
+      exp3: 'application/json',
+      physics3: 'application/json',
+      pose3: 'application/json',
+      motion3: 'application/json',
+      cdi3: 'application/json',
+      userdata3: 'application/json'
+    }
+    const mimeType = mimeMap[ext ?? ''] ?? 'application/octet-stream'
+    const data = readFileSync(filePath)
+    return new Response(data, {
+      headers: { 'content-type': mimeType, 'access-control-allow-origin': '*' }
+    })
+  })
 
   createWindow()
   createMenu()
