@@ -1,0 +1,96 @@
+# CodeRabbit AI Code Review Configuration
+# LuomiNest Project - AI Review Settings
+
+language: zh-CN
+
+reviews:
+  # Review request settings
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  path_filters:
+    # Include paths for review
+    - "!**/*.log"
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/release/**"
+    - "!**/*.lock"
+    - "!**/*.min.js"
+    - "!**/*.min.css"
+    - "!frontend/resources/**"
+    - "!Docs/**"
+  
+  # Review configuration
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "master"
+      - "main"
+    
+  # Code review settings
+  path_instructions:
+    - path: "frontend/src/**/*.ts"
+      instructions: |
+        Review TypeScript code for:
+        - Type safety and proper type annotations
+        - ES modules usage (import/export)
+        - Arrow functions preference
+        - const/let usage
+        - Error handling with proper types
+        - IPC handler security
+        
+    - path: "frontend/src/**/*.vue"
+      instructions: |
+        Review Vue components for:
+        - Composition API usage
+        - Proper type definitions
+        - Component naming (PascalCase)
+        - Reactive state management
+        - Event handling
+        
+    - path: "frontend/src/**/*.css"
+      instructions: |
+        Review CSS for:
+        - Class naming (kebab-case)
+        - No purple/indigo gradients
+        - Use ease-in-out animations
+        - Lucide icons only (no emoji)
+        
+    - path: "**/*.py"
+      instructions: |
+        Review Python code for:
+        - Type hints
+        - Docstrings
+        - Error handling
+        - SQL injection prevention (parameterized queries)
+        - No sensitive info logging
+        
+    - path: ".github/workflows/**"
+      instructions: |
+        Review GitHub Actions for:
+        - Security best practices
+        - Proper permissions
+        - Secret usage
+        - Node.js version compatibility
+
+  # Review comments settings
+  review_comments:
+    enabled: true
+    auto_resolve: false
+    
+  # Knowledge base
+  knowledge_base:
+    learnings:
+      enabled: true
+    issues:
+      enabled: true
+
+# Chat settings
+chat:
+  auto_reply: true
+  
+# Early access features
+early_access: false

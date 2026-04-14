@@ -30,10 +30,25 @@ export interface LuomiNestModelInfo {
   tags: string[]
 }
 
+/**
+ * 口型同步参数映射
+ * 用于语音驱动口型动画
+ */
 const LIP_SYNC_PARAMS = {
   mouthOpenY: 'ParamMouthOpenY',
   mouthForm: 'ParamMouthForm',
   mouthSize: 'ParamMouthSize'
+} as const
+
+/**
+ * 水印控制参数
+ * 某些 Live2D 模型（如 llny）内置水印图层，通过参数控制显示/隐藏
+ * Param14 = 0 隐藏水印，Param14 = 1 显示水印
+ */
+const WATERMARK_PARAM = {
+  id: 'Param14',
+  hideValue: 0,
+  showValue: 1
 } as const
 
 const VOWEL_LIP_MAP: Record<string, { open: number; form: number }> = {
@@ -47,6 +62,10 @@ const VOWEL_LIP_MAP: Record<string, { open: number; form: number }> = {
   ' ': { open: 0.0, form: 0.0 }
 }
 
+/**
+ * 模型边界约束常量
+ * 用于限制缩放和位置范围
+ */
 const AVATAR_BOUNDS = {
   MIN_SCALE: 0.05,
   MAX_SCALE: 2.0,
@@ -54,6 +73,9 @@ const AVATAR_BOUNDS = {
   POSITION_MARGIN: 50
 } as const
 
+/**
+ * 默认模型配置
+ */
 const DEFAULT_AVATAR_CONFIG: Partial<LuomiNestAvatarConfig> = {
   scale: 0.25,
   position: { x: 0.5, y: 0.5 },
@@ -77,6 +99,9 @@ export const useLuomiNestAvatar = () => {
   let isDragging = false
   let dragOffset = { x: 0, y: 0 }
 
+  /**
+   * 限制模型位置在容器范围内
+   */
   const clampPosition = (model: Live2DModel, containerWidth: number, containerHeight: number) => {
     const halfW = (model.width * model.scale.x) / 2
     const halfH = (model.height * model.scale.y) / 2
@@ -85,10 +110,16 @@ export const useLuomiNestAvatar = () => {
     model.y = Math.max(halfH - margin, Math.min(containerHeight - halfH + margin, model.y))
   }
 
+  /**
+   * 限制缩放值在有效范围内
+   */
   const clampScale = (scale: number): number => {
     return Math.max(AVATAR_BOUNDS.MIN_SCALE, Math.min(AVATAR_BOUNDS.MAX_SCALE, scale))
   }
 
+  /**
+   * 扫描模型支持的动作和表情
+   */
   const scanModelCapabilities = (model: Live2DModel) => {
     const motions: string[] = []
     const expressions: string[] = []
@@ -112,6 +143,9 @@ export const useLuomiNestAvatar = () => {
     availableExpressions.value = expressions
   }
 
+  /**
+   * 初始化 PixiJS 渲染环境
+   */
   const initRenderHost = async (canvas: HTMLCanvasElement) => {
     if (renderHost.value) return renderHost.value
 
@@ -146,6 +180,9 @@ export const useLuomiNestAvatar = () => {
     return app
   }
 
+  /**
+   * 设置模型初始位置（居中显示）
+   */
   const positionAvatar = (model: Live2DModel, containerWidth: number, containerHeight: number) => {
     const config = { ...DEFAULT_AVATAR_CONFIG }
     model.anchor.set(0.5, 0.5)
@@ -153,6 +190,9 @@ export const useLuomiNestAvatar = () => {
     model.y = containerHeight * (config.position?.y ?? 0.5)
   }
 
+  /**
+   * 绑定拖拽和滚轮缩放事件
+   */
   const bindDragEvents = (canvas: HTMLCanvasElement) => {
     const onPointerDown = (e: PointerEvent) => {
       if (!avatarModel.value) return
@@ -207,6 +247,9 @@ export const useLuomiNestAvatar = () => {
     return cleanup
   }
 
+  /**
+   * 加载并挂载 Live2D 模型到画布
+   */
   const mountAvatar = async (canvas: HTMLCanvasElement, config: LuomiNestAvatarConfig) => {
     isLoading.value = true
     loadError.value = null
@@ -246,6 +289,10 @@ export const useLuomiNestAvatar = () => {
       avatarModel.value = model
       isModelReady.value = true
 
+      // 隐藏模型水印（如果存在）
+      // 某些模型如 llny 使用 Param14 控制水印显示
+      setCoreParam(WATERMARK_PARAM.id, WATERMARK_PARAM.hideValue)
+
       scanModelCapabilities(model)
       bindDragEvents(canvas)
 
@@ -265,6 +312,9 @@ export const useLuomiNestAvatar = () => {
     }
   }
 
+  /**
+   * 使用模型信息加载模型
+   */
   const mountAvatarFromModelInfo = async (canvas: HTMLCanvasElement, modelInfo: LuomiNestModelInfo) => {
     currentModelInfo.value = modelInfo
     await mountAvatar(canvas, {
@@ -273,6 +323,9 @@ export const useLuomiNestAvatar = () => {
     })
   }
 
+  /**
+   * 触发模型动作
+   */
   const triggerMotion = async (group: string, index: number): Promise<void> => {
     if (!avatarModel.value) return
     try {
@@ -282,6 +335,9 @@ export const useLuomiNestAvatar = () => {
     }
   }
 
+  /**
+   * 应用表情
+   */
   const applyExpression = async (name: string): Promise<void> => {
     if (!avatarModel.value) return
     try {
@@ -291,12 +347,18 @@ export const useLuomiNestAvatar = () => {
     }
   }
 
+  /**
+   * 同步口型参数（数值模式）
+   */
   const syncLipParam = (value: number): void => {
     if (!avatarModel.value) return
     const clamped = Math.max(0, Math.min(value, 1))
     setCoreParam(LIP_SYNC_PARAMS.mouthOpenY, clamped)
   }
 
+  /**
+   * 同步口型参数（元音模式）
+   */
   const syncLipVowel = (vowel: string): void => {
     const mapping = VOWEL_LIP_MAP[vowel.toLowerCase()]
     if (!mapping) return
@@ -304,6 +366,10 @@ export const useLuomiNestAvatar = () => {
     setCoreParam(LIP_SYNC_PARAMS.mouthForm, mapping.form)
   }
 
+  /**
+   * 设置 Live2D 核心参数
+   * 用于直接控制模型参数值
+   */
   const setCoreParam = (paramId: string, value: number): void => {
     if (!avatarModel.value) return
     try {
@@ -319,11 +385,18 @@ export const useLuomiNestAvatar = () => {
     }
   }
 
+  /**
+   * 驱动情感表情
+   */
   const driveEmotion = (emotion: LuomiNestEmotion): void => {
     activeEmotionState.value = emotion
     applyExpression(emotion.id)
   }
 
+  /**
+   * 驱动 PAD 情感向量
+   * PAD = Pleasure(愉悦度), Arousal(激活度), Dominance(支配度)
+   */
   const drivePadEmotion = (pad: LuomiNestPadVector): void => {
     padVector.value = pad
     const { pleasure, arousal, dominance } = pad
@@ -337,14 +410,23 @@ export const useLuomiNestAvatar = () => {
     driveEmotion({ id: emotionId, label: emotionId, intensity })
   }
 
+  /**
+   * 驱动肢体参数
+   */
   const driveLimbParam = (paramId: string, value: number): void => {
     setCoreParam(paramId, value)
   }
 
+  /**
+   * 驱动面部参数
+   */
   const driveFaceParam = (paramId: string, value: number): void => {
     setCoreParam(paramId, value)
   }
 
+  /**
+   * 重置模型姿势
+   */
   const resetAvatarPose = (): void => {
     if (!avatarModel.value) return
     try {
@@ -357,6 +439,9 @@ export const useLuomiNestAvatar = () => {
     }
   }
 
+  /**
+   * 调整模型缩放比例
+   */
   const adjustAvatarScale = (scale: number): void => {
     if (!avatarModel.value) return
     const clamped = clampScale(scale)
@@ -364,6 +449,9 @@ export const useLuomiNestAvatar = () => {
     avatarScale.value = clamped
   }
 
+  /**
+   * 销毁模型和渲染资源
+   */
   const teardown = (): void => {
     if (resizeObserver) {
       resizeObserver.disconnect()

@@ -13,6 +13,8 @@
     "build:portable": "pnpm run build && electron-builder --win portable",
     "build:installer": "pnpm run build && electron-builder --win dir && iscc installer.iss",
     "build:all": "pnpm run build && electron-builder --win && iscc installer.iss",
+    "build:backend": "cd ../backend && build.bat",
+    "build:complete": "cd .. && build-all.bat",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
@@ -43,6 +45,13 @@
     },
     "files": [
       "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/backend",
+        "to": "backend",
+        "filter": ["**/*"]
+      }
     ],
     "win": {
       "target": [

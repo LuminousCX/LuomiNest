@@ -4,6 +4,7 @@ import { platform } from 'os'
 import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync, rmSync, statSync } from 'fs'
 import { tabManager } from './services/browser'
 import { setupNetworkConfig } from './services/browser/view'
+import { startBackend, stopBackend, isBackendReady, getBackendUrl } from './services/backend'
 
 if (platform() === 'win32') {
   process.stdout.write('\x1b[?65001h')
@@ -564,7 +565,7 @@ function registerIpcHandlers(): void {
   })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const userDataPath = app.getPath('userData')
   app.setPath('cache', join(userDataPath, 'Cache'))
 
@@ -603,6 +604,14 @@ app.whenReady().then(() => {
     })
   })
 
+  console.log('[Main] Starting backend service...')
+  const backendStarted = await startBackend()
+  if (!backendStarted) {
+    console.error('[Main] Failed to start backend service')
+  } else {
+    console.log('[Main] Backend service started at:', getBackendUrl())
+  }
+
   createWindow()
   createMenu()
   createTray()
@@ -616,6 +625,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (platform() !== 'darwin') {
     tabManager.cleanup()
+    stopBackend()
     tray?.destroy()
     app.quit()
   }
@@ -623,4 +633,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   tabManager.cleanup()
+  stopBackend()
 })
