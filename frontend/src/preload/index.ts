@@ -49,6 +49,20 @@ const api = {
     getImportedModelsPath: () => ipcRenderer.invoke('avatar:getImportedModelsPath')
   },
 
+  dialog: {
+    showOpenDialog: (options?: {
+      title?: string
+      defaultPath?: string
+      filters?: { name: string; extensions: string[] }[]
+      properties?: string[]
+    }) => ipcRenderer.invoke('dialog:showOpenDialog', options)
+  },
+
+  skill: {
+    upload: (config: { filePath: string; name: string; overwrite?: boolean }) =>
+      ipcRenderer.invoke('skill:upload', config)
+  },
+
   desktopPet: {
     open: (modelInfo?: any) => ipcRenderer.invoke('desktop-pet:open', modelInfo),
     close: () => ipcRenderer.invoke('desktop-pet:close'),

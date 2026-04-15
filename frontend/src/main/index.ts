@@ -562,6 +562,40 @@ function registerIpcHandlers(): void {
     }
     return { success: false }
   })
+
+  ipcMain.handle('dialog:showOpenDialog', async (_e, options?: {
+    title?: string
+    defaultPath?: string
+    filters?: { name: string; extensions: string[] }[]
+    properties?: string[]
+  }) => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: options?.title || '选择文件',
+      filters: options?.filters,
+      properties: options?.properties as any
+    })
+    return result
+  })
+
+  ipcMain.handle('skill:upload', async (_e, config: { filePath: string; name: string; overwrite?: boolean }) => {
+    const skillsDir = join(app.getPath('userData'), 'skills')
+    mkdirSync(skillsDir, { recursive: true })
+    const destDir = join(skillsDir, config.name)
+    if (existsSync(destDir) && !config.overwrite) {
+      return { success: false, error: '同名技能已存在，请勾选覆盖选项' }
+    }
+    if (existsSync(destDir)) {
+      rmSync(destDir, { recursive: true, force: true })
+    }
+    const srcStat = statSync(config.filePath)
+    if (srcStat.isDirectory()) {
+      copyDirRecursive(config.filePath, destDir)
+    } else {
+      mkdirSync(destDir, { recursive: true })
+      copyFileSync(config.filePath, join(destDir, basename(config.filePath)))
+    }
+    return { success: true, path: destDir }
+  })
 }
 
 app.whenReady().then(() => {

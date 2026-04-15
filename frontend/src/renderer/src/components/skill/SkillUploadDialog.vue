@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import {
   X,
   Upload,
@@ -7,8 +7,7 @@ import {
   FileArchive,
   Loader2,
   CheckCircle2,
-  AlertCircle,
-  FileCheck
+  AlertCircle
 } from 'lucide-vue-next'
 
 const emit = defineEmits<{
@@ -18,12 +17,20 @@ const emit = defineEmits<{
 
 type UploadStep = 'select' | 'uploading' | 'success' | 'error'
 
+interface SelectedFile {
+  name: string
+  path: string
+  size: number
+}
+
 const step = ref<UploadStep>('select')
-const selectedFiles = ref<{ name: string; path: string; size: number }[]>([])
+const selectedFiles = ref<SelectedFile[]>([])
 const skillName = ref('')
 const overwrite = ref(false)
 const errorMessage = ref('')
 const uploadProgress = ref(0)
+let progressTimer: ReturnType<typeof setInterval> | null = null
+let successTimer: ReturnType<typeof setTimeout> | null = null
 
 const canUpload = computed(() => selectedFiles.value.length > 0 && skillName.value.trim().length > 0)
 
@@ -34,13 +41,38 @@ const totalSize = computed(() => {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 })
 
+function clearTimers() {
+  if (progressTimer !== null) {
+    clearInterval(progressTimer)
+    progressTimer = null
+  }
+  if (successTimer !== null) {
+    clearTimeout(successTimer)
+    successTimer = null
+  }
+}
+
+onBeforeUnmount(() => {
+  clearTimers()
+})
+
 function handleOverlayClick() {
   emit('close')
 }
 
+function extractFileName(filePath: string): string {
+  return filePath.split(/[\\/]/).pop() || filePath
+}
+
 async function handleBrowse() {
   try {
-    const result = await window.api?.dialog?.showOpenDialog?.({
+    if (!window.api?.dialog?.showOpenDialog) {
+      errorMessage.value = '当前环境不支持文件选择对话框，请使用拖拽方式添加文件'
+      step.value = 'error'
+      return
+    }
+
+    const result = await window.api.dialog.showOpenDialog({
       title: '选择技能文件',
       properties: ['openFile', 'multiSelections'],
       filters: [
@@ -48,11 +80,12 @@ async function handleBrowse() {
         { name: '所有文件', extensions: ['*'] }
       ]
     })
+
     if (result && !result.canceled && result.filePaths.length > 0) {
-      const newFiles = result.filePaths.map(p => ({
-        name: p.split(/[\\/]/).pop() || p,
+      const newFiles: SelectedFile[] = result.filePaths.map(p => ({
+        name: extractFileName(p),
         path: p,
-        size: Math.floor(Math.random() * 500000) + 10000
+        size: 0
       }))
       selectedFiles.value = [...selectedFiles.value, ...newFiles]
       if (!skillName.value && newFiles.length > 0) {
@@ -60,15 +93,9 @@ async function handleBrowse() {
         skillName.value = baseName
       }
     }
-  } catch {
-    selectedFiles.value.push({
-      name: 'skill-package.zip',
-      path: '/path/to/skill-package.zip',
-      size: 128000
-    })
-    if (!skillName.value) {
-      skillName.value = 'skill-package'
-    }
+  } catch (err) {
+    errorMessage.value = err instanceof Error ? err.message : '打开文件对话框失败'
+    step.value = 'error'
   }
 }
 
@@ -77,11 +104,13 @@ function removeFile(idx: number) {
 }
 
 async function handleUpload() {
+  if (!canUpload.value) return
+
   step.value = 'uploading'
   uploadProgress.value = 0
   errorMessage.value = ''
 
-  const progressInterval = setInterval(() => {
+  progressTimer = setInterval(() => {
     if (uploadProgress.value < 90) {
       uploadProgress.value += Math.random() * 12
       if (uploadProgress.value > 90) uploadProgress.value = 90
@@ -89,31 +118,41 @@ async function handleUpload() {
   }, 300)
 
   try {
-    await new Promise((resolve, reject) => {
-      setTimeout(() => {
-        if (Math.random() > 0.1) {
-          resolve(true)
-        } else {
-          reject(new Error('上传失败，请检查文件格式后重试'))
+    if (window.api?.skill?.upload) {
+      for (const file of selectedFiles.value) {
+        const result = await window.api.skill.upload({
+          filePath: file.path,
+          name: skillName.value.trim(),
+          overwrite: overwrite.value
+        })
+        if (!result.success) {
+          throw new Error(result.error || '上传失败')
         }
-      }, 2000)
-    })
+      }
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        setTimeout(() => {
+          resolve()
+        }, 2000)
+      })
+    }
 
-    clearInterval(progressInterval)
+    clearTimers()
     uploadProgress.value = 100
     step.value = 'success'
 
-    setTimeout(() => {
+    successTimer = setTimeout(() => {
       emit('complete', skillName.value)
     }, 1200)
   } catch (err) {
-    clearInterval(progressInterval)
+    clearTimers()
     errorMessage.value = err instanceof Error ? err.message : '上传失败，请重试'
     step.value = 'error'
   }
 }
 
 function handleRetry() {
+  clearTimers()
   step.value = 'select'
   uploadProgress.value = 0
   errorMessage.value = ''
@@ -121,16 +160,29 @@ function handleRetry() {
 
 function handleDrop(e: DragEvent) {
   e.preventDefault()
-  if (e.dataTransfer?.files) {
-    const newFiles = Array.from(e.dataTransfer.files).map(f => ({
+  if (!e.dataTransfer?.files) return
+
+  const newFiles: SelectedFile[] = []
+  for (let i = 0; i < e.dataTransfer.files.length; i++) {
+    const f = e.dataTransfer.files[i]
+    const filePath = (f as File & { path?: string }).path
+    newFiles.push({
       name: f.name,
-      path: f.path || f.name,
+      path: filePath || '',
       size: f.size
-    }))
-    selectedFiles.value = [...selectedFiles.value, ...newFiles]
-    if (!skillName.value && newFiles.length > 0) {
-      skillName.value = newFiles[0].name.replace(/\.(zip|tar\.gz|tgz|json)$/i, '')
-    }
+    })
+  }
+
+  if (newFiles.length === 0) return
+
+  const hasEmptyPaths = newFiles.some(f => !f.path)
+  if (hasEmptyPaths) {
+    errorMessage.value = '部分文件无法获取路径，请使用"选择文件"按钮浏览文件'
+  }
+
+  selectedFiles.value = [...selectedFiles.value, ...newFiles]
+  if (!skillName.value && newFiles.length > 0) {
+    skillName.value = newFiles[0].name.replace(/\.(zip|tar\.gz|tgz|json)$/i, '')
   }
 }
 
@@ -683,5 +735,21 @@ function handleDragOver(e: DragEvent) {
 .footer-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 540px) {
+  .upload-dialog {
+    border-radius: var(--radius-lg);
+  }
+
+  .drop-zone {
+    padding: 20px 16px;
+  }
+
+  .file-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
 }
 </style>

@@ -85,6 +85,24 @@ export interface ElectronApi {
     deleteModel: (modelName: string) => Promise<{ success: boolean; error?: string }>
     getImportedModelsPath: () => Promise<string>
   }
+  dialog: {
+    showOpenDialog: (options?: {
+      title?: string
+      defaultPath?: string
+      filters?: { name: string; extensions: string[] }[]
+      properties?: string[]
+    }) => Promise<{
+      canceled: boolean
+      filePaths: string[]
+    }>
+  }
+  skill: {
+    upload: (config: { filePath: string; name: string; overwrite?: boolean }) => Promise<{
+      success: boolean
+      error?: string
+      path?: string
+    }>
+  }
   desktopPet: {
     open: (modelInfo?: { id: string; name: string; url: string; scale: number; type: string; tags: string[] }) => Promise<{ success: boolean }>
     close: () => Promise<{ success: boolean }>
