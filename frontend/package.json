@@ -89,7 +89,10 @@
       "createStartMenuShortcut": true,
       "shortcutName": "LuomiNest",
       "include": "build/nsis-extra.nsh",
-      "artifactName": "LuomiNest-Setup-${version}.${ext}"
+      "artifactName": "LuomiNest-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "menuCategory": true
     },
     "portable": {
       "artifactName": "LuomiNest-Portable-${version}.${ext}"
@@ -110,7 +113,8 @@
         }
       ],
       "category": "Utility",
-      "icon": "resources/icon.svg"
+      "icon": "resources/icon.svg",
+      "maintainer": "LuminousCX R&D Team"
     },
     "mac": {
       "target": [
@@ -124,6 +128,10 @@
       ],
       "category": "public.app-category.utilities",
       "icon": "resources/icon.svg"
-    }
+    },
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ]
   }
 }

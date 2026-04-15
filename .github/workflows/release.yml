@@ -42,25 +42,60 @@ jobs:
           python-version: '3.12'
 
       - name: Install backend dependencies
+        shell: bash
         run: |
           cd backend
           python -m venv .venv
-          .venv/Scripts/activate 2>/dev/null || .venv/bin/activate
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            source .venv/Scripts/activate
+          else
+            source .venv/bin/activate
+          fi
           pip install --upgrade pip
           pip install pyinstaller
           pip install -e ".[dev]"
 
       - name: Build backend
+        shell: bash
         run: |
           cd backend
-          .venv/Scripts/activate 2>/dev/null || .venv/bin/activate
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            source .venv/Scripts/activate
+          else
+            source .venv/bin/activate
+          fi
           pyinstaller luominest-backend.spec --clean --noconfirm
+
+      - name: Verify backend build
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            BACKEND_EXE="backend/dist/luominest-backend.exe"
+          else
+            BACKEND_EXE="backend/dist/luominest-backend"
+          fi
+          if [ ! -f "$BACKEND_EXE" ]; then
+            echo "[ERROR] Backend executable not found: $BACKEND_EXE"
+            echo "The backend build may have failed. Check the build output above."
+            exit 1
+          fi
+          echo "[OK] Backend executable verified: $BACKEND_EXE"
 
       - name: Prepare backend resources
         shell: bash
         run: |
           mkdir -p frontend/resources/backend
-          cp backend/dist/luominest-backend* frontend/resources/backend/ || true
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            cp backend/dist/luominest-backend.exe frontend/resources/backend/
+          else
+            cp backend/dist/luominest-backend frontend/resources/backend/
+          fi
+
+      - name: Create NSIS build directory
+        if: matrix.platform == 'win'
+        shell: bash
+        run: |
+          mkdir -p frontend/build
 
       - name: Install frontend dependencies
         run: |

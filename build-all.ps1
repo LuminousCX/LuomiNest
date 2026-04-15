@@ -25,7 +25,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "[Step 2/5] Creating distribution directory..." -ForegroundColor Yellow
+Write-Host "[Step 2/5] Verifying backend and creating distribution directory..." -ForegroundColor Yellow
+if (-not (Test-Path $BackendExe)) {
+    Write-Host "[ERROR] Backend executable not found: $BackendExe" -ForegroundColor Red
+    Write-Host "The backend build may have failed. Check the build output above." -ForegroundColor Red
+    exit 1
+}
 if (Test-Path $DistDir) { Remove-Item -Recurse -Force $DistDir }
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $DistDir "backend") | Out-Null
@@ -33,6 +38,10 @@ New-Item -ItemType Directory -Force -Path (Join-Path $DistDir "backend") | Out-N
 Write-Host ""
 Write-Host "[Step 3/5] Copying backend to distribution..." -ForegroundColor Yellow
 Copy-Item $BackendExe (Join-Path $DistDir "backend\") -Force
+if (-not (Test-Path (Join-Path $DistDir "backend\luominest-backend.exe"))) {
+    Write-Host "[ERROR] Failed to copy backend executable" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host ""
 Write-Host "[Step 4/5] Preparing frontend resources and building..." -ForegroundColor Yellow
@@ -42,6 +51,10 @@ if (-not (Test-Path $ResourcesBackend)) {
     New-Item -ItemType Directory -Force -Path $ResourcesBackend | Out-Null
 }
 Copy-Item $BackendExe $ResourcesBackend -Force
+if (-not (Test-Path (Join-Path $ResourcesBackend "luominest-backend.exe"))) {
+    Write-Host "[ERROR] Failed to copy backend executable to frontend resources" -ForegroundColor Red
+    exit 1
+}
 
 & pnpm run build
 if ($LASTEXITCODE -ne 0) {

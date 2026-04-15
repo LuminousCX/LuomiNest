@@ -26,7 +26,12 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
-echo [Step 2/5] Creating distribution directory...
+echo [Step 2/5] Verifying backend and creating distribution directory...
+if not exist "%BACKEND_EXE%" (
+    echo [ERROR] Backend executable not found: %BACKEND_EXE%
+    echo The backend build may have failed. Check the build output above.
+    exit /b 1
+)
 if not exist "%DIST_DIR%" mkdir "%DIST_DIR%"
 if exist "%DIST_DIR%\backend" rmdir /s /q "%DIST_DIR%\backend"
 mkdir "%DIST_DIR%\backend"
@@ -45,6 +50,10 @@ cd /d "%FRONTEND_DIR%"
 
 if not exist "%RESOURCES_BACKEND%" mkdir "%RESOURCES_BACKEND%"
 copy "%BACKEND_EXE%" "%RESOURCES_BACKEND%\" /Y
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Failed to copy backend executable to frontend resources
+    exit /b 1
+)
 
 call pnpm run build
 if %ERRORLEVEL% neq 0 (

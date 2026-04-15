@@ -29,11 +29,19 @@ if (-not (Test-Path $BackendExe)) {
 }
 
 Write-Host ""
-Write-Host "[2/4] Preparing backend resources..." -ForegroundColor Yellow
+Write-Host "[2/4] Verifying and preparing backend resources..." -ForegroundColor Yellow
+if (-not (Test-Path $BackendExe)) {
+    Write-Host "[ERROR] Backend executable not found after build: $BackendExe" -ForegroundColor Red
+    exit 1
+}
 if (-not (Test-Path $ResourcesBackend)) {
     New-Item -ItemType Directory -Force -Path $ResourcesBackend | Out-Null
 }
 Copy-Item $BackendExe $ResourcesBackend -Force
+if (-not (Test-Path (Join-Path $ResourcesBackend "luominest-backend.exe"))) {
+    Write-Host "[ERROR] Failed to copy backend executable to resources" -ForegroundColor Red
+    exit 1
+}
 Write-Host "[2/4] Backend resources ready" -ForegroundColor Green
 
 Write-Host ""

@@ -30,9 +30,17 @@ if not exist "%BACKEND_EXE%" (
 )
 
 echo.
-echo [2/4] Preparing backend resources...
+echo [2/4] Verifying and preparing backend resources...
+if not exist "%BACKEND_EXE%" (
+    echo [ERROR] Backend executable not found after build: %BACKEND_EXE%
+    exit /b 1
+)
 if not exist "%RESOURCES_BACKEND%" mkdir "%RESOURCES_BACKEND%"
 copy /Y "%BACKEND_EXE%" "%RESOURCES_BACKEND%\" >nul
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Failed to copy backend executable to resources
+    exit /b 1
+)
 echo [2/4] Backend resources ready
 
 echo.
