@@ -2,63 +2,55 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  LuomiNest Inno Setup Build Script" -ForegroundColor Cyan
+Write-Host "  LuomiNest Build Script" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-Write-Host "[1/4] Setting up mirror acceleration..." -ForegroundColor Yellow
+$FrontendDir = $PSScriptRoot
+$ProjectRoot = Split-Path -Parent $FrontendDir
+$BackendDir = Join-Path $ProjectRoot "backend"
+$BackendExe = Join-Path $BackendDir "dist\luominest-backend.exe"
+$ResourcesBackend = Join-Path $FrontendDir "resources\backend"
+
 $env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
 $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://npmmirror.com/mirrors/electron-builder-binaries/"
-Write-Host "[OK] Mirror configured" -ForegroundColor Green
 
-Write-Host ""
-Write-Host "[2/4] Building application..." -ForegroundColor Yellow
-pnpm run build
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Build failed!" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host ""
-Write-Host "[3/4] Packing files..." -ForegroundColor Yellow
-pnpm exec electron-builder --win --dir
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Pack failed!" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host ""
-Write-Host "[4/4] Creating Inno Setup installer..." -ForegroundColor Yellow
-
-$innoSetupPath = Get-Command "iscc" -ErrorAction SilentlyContinue
-if (-not $innoSetupPath) {
-    $defaultPaths = @(
-        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-        "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
-    )
-    foreach ($path in $defaultPaths) {
-        if (Test-Path $path) {
-            $innoSetupPath = $path
-            break
-        }
+Write-Host "[1/4] Checking backend executable..." -ForegroundColor Yellow
+if (-not (Test-Path $BackendExe)) {
+    Write-Host "[1/4] Backend not found, building backend..." -ForegroundColor Yellow
+    Set-Location $BackendDir
+    & ".\build.bat"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] Backend build failed" -ForegroundColor Red
+        exit 1
     }
+} else {
+    Write-Host "[1/4] Backend executable found" -ForegroundColor Green
 }
 
-if (-not $innoSetupPath) {
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Red
-    Write-Host "  Inno Setup not found!" -ForegroundColor Red
-    Write-Host "========================================" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Please install Inno Setup 6 from:" -ForegroundColor Yellow
-    Write-Host "https://jrsoftware.org/isdl.php" -ForegroundColor Cyan
-    Write-Host ""
+Write-Host ""
+Write-Host "[2/4] Preparing backend resources..." -ForegroundColor Yellow
+if (-not (Test-Path $ResourcesBackend)) {
+    New-Item -ItemType Directory -Force -Path $ResourcesBackend | Out-Null
+}
+Copy-Item $BackendExe $ResourcesBackend -Force
+Write-Host "[2/4] Backend resources ready" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "[3/4] Building frontend..." -ForegroundColor Yellow
+Set-Location $FrontendDir
+& pnpm run build
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] Frontend build failed" -ForegroundColor Red
     exit 1
 }
+Write-Host "[3/4] Frontend build complete" -ForegroundColor Green
 
-& $innoSetupPath "installer.iss"
+Write-Host ""
+Write-Host "[4/4] Creating installer packages..." -ForegroundColor Yellow
+& pnpm exec electron-builder --win
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Inno Setup build failed!" -ForegroundColor Red
+    Write-Host "[ERROR] Package creation failed" -ForegroundColor Red
     exit 1
 }
 
@@ -68,8 +60,8 @@ Write-Host "  BUILD SUCCESS!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Output files:" -ForegroundColor White
-Write-Host "  - Installer: release\installer\LuomiNest-Setup-0.2.0.exe" -ForegroundColor Cyan
-Write-Host "  - Portable:  release\dist\LuomiNest 0.2.0.exe" -ForegroundColor Cyan
+Write-Host "  - NSIS Installer: release\dist\LuomiNest-Setup-0.2.0.exe" -ForegroundColor Cyan
+Write-Host "  - Portable:       release\dist\LuomiNest-Portable-0.2.0.exe" -ForegroundColor Cyan
 Write-Host ""
 
 Write-Host "Press any key to exit..." -ForegroundColor Gray

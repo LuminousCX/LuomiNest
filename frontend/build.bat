@@ -1,53 +1,68 @@
 @echo off
+setlocal EnableDelayedExpansion
 chcp 65001 >nul
+
 echo ========================================
-echo   LuomiNest Inno Setup Build Script
+echo   LuomiNest Build Script
 echo ========================================
 echo.
 
-echo [1/3] Setting up mirror acceleration...
+set FRONTEND_DIR=%~dp0
+set PROJECT_ROOT=%FRONTEND_DIR%..
+set BACKEND_DIR=%PROJECT_ROOT%\backend
+set BACKEND_EXE=%BACKEND_DIR%\dist\luominest-backend.exe
+set RESOURCES_BACKEND=%FRONTEND_DIR%resources\backend
+
 set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
 
-echo [2/3] Building application...
+echo [1/4] Checking backend executable...
+if not exist "%BACKEND_EXE%" (
+    echo [1/4] Backend not found, building backend...
+    cd /d "%BACKEND_DIR%"
+    call build.bat
+    if %ERRORLEVEL% neq 0 (
+        echo [ERROR] Backend build failed
+        exit /b 1
+    )
+) else (
+    echo [1/4] Backend executable found
+)
+
+echo.
+echo [2/4] Preparing backend resources...
+if not exist "%RESOURCES_BACKEND%" mkdir "%RESOURCES_BACKEND%"
+copy /Y "%BACKEND_EXE%" "%RESOURCES_BACKEND%\" >nul
+echo [2/4] Backend resources ready
+
+echo.
+echo [3/4] Building frontend...
+cd /d "%FRONTEND_DIR%"
 call pnpm run build
-if %errorlevel% neq 0 (
-    echo Build failed!
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Frontend build failed
     pause
     exit /b 1
 )
-
-echo [3/3] Packing files...
-call pnpm exec electron-builder --win --dir
-if %errorlevel% neq 0 (
-    echo Pack failed!
-    pause
-    exit /b 1
-)
+echo [3/4] Frontend build complete
 
 echo.
-echo [4/4] Creating Inno Setup installer...
-iscc installer.iss
-if %errorlevel% neq 0 (
-    echo.
-    echo ========================================
-    echo   Inno Setup not found!
-    echo ========================================
-    echo.
-    echo Please install Inno Setup 6 from:
-    echo https://jrsoftware.org/isdl.php
-    echo.
+echo [4/4] Creating installer packages...
+call pnpm exec electron-builder --win
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Package creation failed
     pause
     exit /b 1
 )
 
 echo.
 echo ========================================
-echo   Build Success!
+echo   BUILD SUCCESS!
 echo ========================================
 echo.
-echo Installer: release\installer\LuomiNest-Setup-0.2.0.exe
-echo Portable:  release\dist\LuomiNest 0.2.0.exe
+echo Output files:
+echo   - NSIS Installer: release\dist\LuomiNest-Setup-0.2.0.exe
+echo   - Portable:       release\dist\LuomiNest-Portable-0.2.0.exe
 echo.
 
 pause

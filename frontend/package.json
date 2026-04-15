@@ -10,9 +10,11 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
-    "build:portable": "pnpm run build && electron-builder --win portable",
-    "build:installer": "pnpm run build && electron-builder --win dir && iscc installer.iss",
-    "build:all": "pnpm run build && electron-builder --win && iscc installer.iss",
+    "build:win": "pnpm run build && electron-builder --win",
+    "build:win-nsis": "pnpm run build && electron-builder --win nsis",
+    "build:win-portable": "pnpm run build && electron-builder --win portable",
+    "build:linux": "pnpm run build && electron-builder --linux",
+    "build:mac": "pnpm run build && electron-builder --mac",
     "build:backend": "cd ../backend && build.bat",
     "build:complete": "cd .. && build-all.bat",
     "typecheck": "vue-tsc --noEmit"
@@ -40,6 +42,7 @@
   "build": {
     "appId": "com.luominest.desktop",
     "productName": "LuomiNest",
+    "copyright": "Copyright © 2026 LuminousCX R&D Team",
     "directories": {
       "output": "release/dist"
     },
@@ -69,7 +72,27 @@
         }
       ],
       "icon": "resources/icon.ico",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": ["zh_CN", "en_US"],
+      "language": "2052",
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico",
+      "license": "../LICENSE",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LuomiNest",
+      "include": "build/nsis-extra.nsh",
+      "artifactName": "LuomiNest-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "LuomiNest-Portable-${version}.${ext}"
     },
     "linux": {
       "target": [

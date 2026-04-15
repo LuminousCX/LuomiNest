@@ -10,11 +10,112 @@ permissions:
 
 jobs:
   release:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+          - os: ubuntu-latest
+            platform: linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          python -m venv .venv
+          .venv/Scripts/activate 2>/dev/null || .venv/bin/activate
+          pip install --upgrade pip
+          pip install pyinstaller
+          pip install -e ".[dev]"
+
+      - name: Build backend
+        run: |
+          cd backend
+          .venv/Scripts/activate 2>/dev/null || .venv/bin/activate
+          pyinstaller luominest-backend.spec --clean --noconfirm
+
+      - name: Prepare backend resources
+        shell: bash
+        run: |
+          mkdir -p frontend/resources/backend
+          cp backend/dist/luominest-backend* frontend/resources/backend/ || true
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          pnpm install
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          pnpm run build
+
+      - name: Build Windows installer
+        if: matrix.platform == 'win'
+        run: |
+          cd frontend
+          pnpm exec electron-builder --win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build macOS DMG
+        if: matrix.platform == 'mac'
+        run: |
+          cd frontend
+          pnpm exec electron-builder --mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Linux packages
+        if: matrix.platform == 'linux'
+        run: |
+          cd frontend
+          pnpm exec electron-builder --linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: LuomiNest-${{ matrix.platform }}
+          path: |
+            frontend/release/dist/*
+            frontend/release/installer/*
+
+  create-release:
+    needs: release
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -22,5 +123,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          files: artifacts/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
