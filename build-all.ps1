@@ -1,8 +1,15 @@
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $FrontendDir = Join-Path $ProjectRoot "frontend"
 $BackendDir = Join-Path $ProjectRoot "backend"
 $DistDir = Join-Path $ProjectRoot "dist"
+$BackendExe = Join-Path $BackendDir "dist\luominest-backend.exe"
+$ResourcesBackend = Join-Path $FrontendDir "resources\backend"
+
+$env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
+$env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://npmmirror.com/mirrors/electron-builder-binaries/"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " LuomiNest All-in-One Build Script" -ForegroundColor Cyan
@@ -18,25 +25,36 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "[Step 2/5] Creating distribution directory..." -ForegroundColor Yellow
+Write-Host "[Step 2/5] Verifying backend and creating distribution directory..." -ForegroundColor Yellow
+if (-not (Test-Path $BackendExe)) {
+    Write-Host "[ERROR] Backend executable not found: $BackendExe" -ForegroundColor Red
+    Write-Host "The backend build may have failed. Check the build output above." -ForegroundColor Red
+    exit 1
+}
 if (Test-Path $DistDir) { Remove-Item -Recurse -Force $DistDir }
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $DistDir "backend") | Out-Null
 
 Write-Host ""
 Write-Host "[Step 3/5] Copying backend to distribution..." -ForegroundColor Yellow
-$BackendExe = Join-Path $BackendDir "dist\luominest-backend.exe"
 Copy-Item $BackendExe (Join-Path $DistDir "backend\") -Force
+if (-not (Test-Path (Join-Path $DistDir "backend\luominest-backend.exe"))) {
+    Write-Host "[ERROR] Failed to copy backend executable" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host ""
-Write-Host "[Step 4/5] Building frontend with embedded backend..." -ForegroundColor Yellow
+Write-Host "[Step 4/5] Preparing frontend resources and building..." -ForegroundColor Yellow
 Set-Location $FrontendDir
 
-$ResourcesBackend = Join-Path $FrontendDir "resources\backend"
 if (-not (Test-Path $ResourcesBackend)) {
     New-Item -ItemType Directory -Force -Path $ResourcesBackend | Out-Null
 }
 Copy-Item $BackendExe $ResourcesBackend -Force
+if (-not (Test-Path (Join-Path $ResourcesBackend "luominest-backend.exe"))) {
+    Write-Host "[ERROR] Failed to copy backend executable to frontend resources" -ForegroundColor Red
+    exit 1
+}
 
 & pnpm run build
 if ($LASTEXITCODE -ne 0) {
@@ -45,8 +63,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "[Step 5/5] Creating installer..." -ForegroundColor Yellow
-& pnpm run build:installer
+Write-Host "[Step 5/5] Creating installer packages..." -ForegroundColor Yellow
+& pnpm exec electron-builder --win
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Installer creation failed" -ForegroundColor Red
     exit 1
@@ -55,7 +73,8 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host " All-in-One build completed!" -ForegroundColor Green
-Write-Host " Installer: $FrontendDir\release\" -ForegroundColor Green
+Write-Host " NSIS Installer: $FrontendDir\release\dist\" -ForegroundColor Green
+Write-Host " Portable:       $FrontendDir\release\dist\" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 
 Set-Location $ProjectRoot

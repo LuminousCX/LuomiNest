@@ -89,7 +89,6 @@ doc/
 # 锁文件（根据项目规则）
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
 
 # 测试覆盖率
 coverage/
