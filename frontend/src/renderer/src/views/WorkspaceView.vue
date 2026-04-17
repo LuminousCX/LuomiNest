@@ -430,7 +430,7 @@ onMounted(async () => {
             </div>
           </div>
           <div class="history-list">
-            <button
+            <div
               v-for="conv in agentConversations"
               :key="conv.id"
               :class="['history-item', { active: chatStore.currentConversation?.id === conv.id }]"
@@ -444,7 +444,7 @@ onMounted(async () => {
               <button class="history-item-delete" title="删除" @click.stop="handleDeleteConversation(conv.id)">
                 <Trash2 :size="12" />
               </button>
-            </button>
+            </div>
             <div v-if="agentConversations.length === 0" class="history-empty">
               <Clock :size="24" />
               <p>暂无对话记录</p>
@@ -1103,6 +1103,7 @@ onMounted(async () => {
   text-align: left;
   transition: all var(--transition-fast);
   position: relative;
+  cursor: pointer;
 }
 
 .history-item:hover {
