@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import {
   Send,
   Paperclip,
@@ -10,66 +10,183 @@ import {
   Bot,
   AtSign,
   Link2,
-  MoreHorizontal
+  MoreHorizontal,
+  Loader2,
+  Settings,
+  AlertTriangle,
+  StopCircle,
+  RotateCcw
 } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
+import { useChatStore } from '../stores/chat'
+import { useAgentStore } from '../stores/agent'
+import { useModelStore } from '../stores/model'
 
-const selectedAgent = ref('代可行')
-
-const agentCards = ref([
-  {
-    name: '无言',
-    desc: '寡言的自由撰稿人',
-    color: '#6366f1',
-    avatar: null
-  },
-  {
-    name: '代可行',
-    desc: '热爱手搓的程序员',
-    color: '#0d9488',
-    avatar: null,
-    selected: true
-  },
-  {
-    name: '林且慢',
-    desc: '少年系系的辅导员',
-    color: '#f59e0b',
-    avatar: null
-  },
-  {
-    name: '自定义',
-    desc: '创建全新 Agent',
-    color: '#f43f5e',
-    avatar: null
-  }
-])
-
-const messages = ref([
-  {
-    id: 1,
-    role: 'assistant' as const,
-    content: `好嘞，你已选择Agent"代可行"，这是TA的人物介绍～\n\n• 名字：代可行\n• 一句话介绍：热爱手搓的程序员\n• 经历：计算机出身，毕业后在大厂做了四年后端开发。代码review从不废话，批注从不解释为什么，默认你能看懂。下班后爱打游戏，风险甚高。\n• 风格：极度务实，只关注能不能解决问题，以结果为导向。沉默寡言但并非冷漠，对自己要求严苛，极度自律。冷静理性，几乎不会情绪化，擅长寻找对策。`,
-    time: '14:32'
-  }
-])
+const router = useRouter()
+const chatStore = useChatStore()
+const agentStore = useAgentStore()
+const modelStore = useModelStore()
 
 const inputText = ref('')
-const showAgentPicker = ref(true)
+const messagesContainer = ref<HTMLElement | null>(null)
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const showModelDropdown = ref(false)
 
-const sendMessage = () => {
-  if (!inputText.value.trim()) return
-  messages.value.push({
-    id: Date.now(),
-    role: 'user',
-    content: inputText.value,
-    time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  })
-  inputText.value = ''
+const agentCards = computed(() => {
+  const agents = agentStore.agents.map(a => ({
+    id: a.id,
+    name: a.name,
+    desc: a.description,
+    color: a.color,
+    avatar: a.avatar,
+    selected: agentStore.activeAgent?.id === a.id
+  }))
+  return [
+    ...agents,
+    {
+      id: '__custom__',
+      name: '自定义',
+      desc: '创建全新 Agent',
+      color: '#f43f5e',
+      avatar: null,
+      selected: false
+    }
+  ]
+})
+
+const messages = computed(() => chatStore.messages)
+const isStreaming = computed(() => chatStore.isStreaming)
+const isBackendReady = computed(() => chatStore.isBackendReady)
+
+const currentModel = computed(() => {
+  const agent = agentStore.activeAgent
+  if (agent?.model) return agent.model
+  return modelStore.modelConfig.defaultModel || '未配置模型'
+})
+
+const currentProvider = computed(() => {
+  const agent = agentStore.activeAgent
+  if (agent?.provider) return agent.provider
+  return modelStore.modelConfig.defaultProvider || ''
+})
+
+const hasProvider = computed(() => modelStore.providers.length > 0)
+
+const selectAgent = (agent: { id: string; name: string; desc: string; color: string }) => {
+  if (agent.id === '__custom__') {
+    showCreateAgentDialog.value = true
+    return
+  }
+  const found = agentStore.agents.find(a => a.id === agent.id)
+  if (found) {
+    agentStore.setActiveAgent(found)
+    chatStore.clearMessages()
+  }
 }
 
-const quickActions = [
-  { label: '修改', action: 'edit' },
-  { label: '很完美，就是TA了', action: 'confirm' }
-]
+const sendMessage = async () => {
+  if (!inputText.value.trim() || isStreaming.value) return
+  if (!isBackendReady.value) return
+
+  const content = inputText.value
+  inputText.value = ''
+  resetTextareaHeight()
+
+  const agent = agentStore.activeAgent
+  const options: any = {
+    model: agent?.model || modelStore.modelConfig.defaultModel || undefined,
+    provider: agent?.provider || modelStore.modelConfig.defaultProvider || undefined,
+    temperature: modelStore.modelConfig.defaultTemperature,
+    maxTokens: modelStore.modelConfig.defaultMaxTokens,
+    topP: modelStore.modelConfig.defaultTopP,
+  }
+  if (agent?.systemPrompt) options.systemPrompt = agent.systemPrompt
+
+  await chatStore.sendMessage(content, options)
+  await nextTick()
+  scrollToBottom()
+}
+
+const scrollToBottom = () => {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+  }
+}
+
+const resetTextareaHeight = () => {
+  if (textareaRef.value) {
+    textareaRef.value.style.height = 'auto'
+  }
+}
+
+const autoResize = () => {
+  if (textareaRef.value) {
+    textareaRef.value.style.height = 'auto'
+    textareaRef.value.style.height = `${Math.min(textareaRef.value.scrollHeight, 120)}px`
+  }
+}
+
+const formatMessage = (text: string): string => {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+  return escaped
+    .replace(/\n/g, '<br>')
+    .replace(/•\s*/g, '<span class="bullet">•</span>&nbsp;')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+}
+
+watch(messages, () => {
+  nextTick(scrollToBottom)
+}, { deep: true })
+
+const showCreateAgentDialog = ref(false)
+const newAgentForm = ref({
+  name: '',
+  description: '',
+  systemPrompt: '',
+  color: '#0d9488'
+})
+const agentColors = ['#0d9488', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
+
+const handleCreateAgent = async () => {
+  if (!newAgentForm.value.name.trim()) return
+  try {
+    await agentStore.createAgent({
+      name: newAgentForm.value.name.trim(),
+      description: newAgentForm.value.description.trim(),
+      systemPrompt: newAgentForm.value.systemPrompt.trim(),
+      color: newAgentForm.value.color,
+      capabilities: ['chat'],
+    })
+    showCreateAgentDialog.value = false
+    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#0d9488' }
+  } catch (e: any) {
+    console.error('Failed to create agent:', e)
+  }
+}
+
+const handleDeleteAgent = async (agentId: string) => {
+  try {
+    await agentStore.deleteAgent(agentId)
+  } catch (e: any) {
+    console.error('Failed to delete agent:', e)
+  }
+}
+
+onMounted(async () => {
+  await chatStore.checkBackend()
+  if (chatStore.isBackendReady) {
+    await Promise.all([
+      agentStore.fetchAgents(),
+      modelStore.fetchProviders(),
+      modelStore.fetchModelConfig(),
+    ])
+  }
+})
 </script>
 
 <template>
@@ -78,16 +195,46 @@ const quickActions = [
       <div class="header-left">
         <span class="header-badge">
           <Sparkles :size="14" />
-          龙虾管家
+          LuomiNest
         </span>
         <span class="header-stats">
           <AtSign :size="13" />
-          已用4.1万，剩余99%
+          {{ currentModel }}
         </span>
       </div>
       <div class="header-right">
-        <button class="header-icon-btn" title="历史记录">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <button v-if="!isBackendReady" class="header-icon-btn warning" title="后端未连接" @click="chatStore.checkBackend()">
+          <AlertTriangle :size="18" />
+        </button>
+        <button class="header-icon-btn" title="设置" @click="router.push('/settings/ai-model')">
+          <Settings :size="18" />
+        </button>
+      </div>
+    </div>
+
+    <div v-if="!isBackendReady" class="backend-warning">
+      <div class="warning-content">
+        <AlertTriangle :size="20" />
+        <div class="warning-text">
+          <p class="warning-title">后端服务未连接</p>
+          <p class="warning-desc">请确保 LuomiNest 后端服务已启动 (端口 18000)</p>
+        </div>
+        <button class="retry-btn" @click="chatStore.checkBackend()">
+          <RotateCcw :size="14" />
+          重试
+        </button>
+      </div>
+    </div>
+
+    <div v-if="!hasProvider && isBackendReady" class="backend-warning info">
+      <div class="warning-content">
+        <Wand2 :size="20" />
+        <div class="warning-text">
+          <p class="warning-title">尚未配置模型供应商</p>
+          <p class="warning-desc">请先前往设置页面添加 Ollama 或其他模型供应商</p>
+        </div>
+        <button class="retry-btn" @click="router.push('/settings/ai-model')">
+          去设置
         </button>
       </div>
     </div>
@@ -96,50 +243,67 @@ const quickActions = [
       <div class="agent-cards-scroll">
         <button
           v-for="(card, idx) in agentCards"
-          :key="card.name"
+          :key="card.id"
           :class="['agent-card', { selected: card.selected }]"
           :style="{ animationDelay: `${idx * 60}ms` }"
+          @click="selectAgent(card)"
         >
           <div class="card-avatar" :style="{ background: card.color + '14', color: card.color, borderColor: card.selected ? card.color : 'transparent' }">
-            <Bot v-if="card.name !== '自定义'" :size="26" />
+            <Bot v-if="card.id !== '__custom__'" :size="26" />
             <Sparkles v-else :size="26" />
           </div>
           <div class="card-info">
             <span class="card-name">{{ card.name }}</span>
             <span class="card-desc">{{ card.desc }}</span>
           </div>
+          <button
+            v-if="card.id !== '__custom__' && !card.id.startsWith('default-')"
+            class="card-delete"
+            title="删除 Agent"
+            @click.stop="handleDeleteAgent(card.id)"
+          >
+            <MoreHorizontal :size="14" />
+          </button>
         </button>
       </div>
       <Transition name="selection-fade">
-        <div v-if="selectedAgent" class="selection-toast">
-          我选择「{{ selectedAgent }}」作为我的新Agent
+        <div v-if="agentStore.activeAgent" class="selection-toast">
+          我选择「{{ agentStore.activeAgent.name }}」作为我的Agent
         </div>
       </Transition>
     </div>
 
-    <div class="chat-area">
+    <div ref="messagesContainer" class="chat-area">
       <div class="messages-container">
         <div
           v-for="msg in messages"
           :key="msg.id"
           :class="['message-row', msg.role]"
         >
+          <div class="message-avatar" v-if="msg.role === 'assistant'">
+            <div class="avatar-assistant">
+              <Bot :size="16" />
+            </div>
+          </div>
           <div class="message-bubble">
             <div class="message-content" v-html="formatMessage(msg.content)"></div>
-            <div v-if="msg.role === 'assistant'" class="quick-actions">
-              <button
-                v-for="action in quickActions"
-                :key="action.label"
-                class="quick-action-btn"
-              >
-                {{ action.label }}
-              </button>
+            <div v-if="msg.role === 'assistant' && !msg.done && isStreaming" class="streaming-cursor">
+              <span class="cursor-blink"></span>
             </div>
           </div>
         </div>
 
-        <div class="typing-indicator">
-          <span></span><span></span><span></span>
+        <div v-if="messages.length === 0" class="empty-state">
+          <div class="empty-icon">
+            <Bot :size="48" />
+          </div>
+          <p class="empty-title">选择一个Agent开始对话</p>
+          <p class="empty-desc">或直接在下方输入框中提问</p>
+          <div class="empty-quick-actions">
+            <button class="quick-action" @click="inputText = '你好，请介绍一下你自己'">打个招呼</button>
+            <button class="quick-action" @click="inputText = '帮我写一段 Python 代码'">写段代码</button>
+            <button class="quick-action" @click="inputText = '解释一下什么是大语言模型'">了解 LLM</button>
+          </div>
         </div>
       </div>
     </div>
@@ -147,31 +311,26 @@ const quickActions = [
     <div class="input-area">
       <div class="input-wrapper">
         <textarea
+          ref="textareaRef"
           v-model="inputText"
           placeholder="可以描述任务或提问任何问题"
           rows="1"
           class="chat-input"
+          :disabled="isStreaming || !isBackendReady"
           @keydown.enter.exact.prevent="sendMessage"
+          @input="autoResize"
         ></textarea>
         <div class="input-toolbar">
           <div class="toolbar-left">
-            <button class="tool-btn" title="选择模型">
+            <button class="tool-btn" title="选择模型" @click="showModelDropdown = !showModelDropdown">
               <Wand2 :size="16" />
-              <span>默认大模型</span>
+              <span>{{ currentModel }}</span>
               <ChevronDown :size="14" />
             </button>
             <button class="tool-btn" title="技能">
               <Link2 :size="16" />
               <span>技能</span>
               <ChevronDown :size="14" />
-            </button>
-            <button class="tool-btn" title="找灵感">
-              <Sparkles :size="16" />
-              <span>找灵感</span>
-              <ChevronDown :size="14" />
-            </button>
-            <button class="tool-btn icon-only" title="更多">
-              <MoreHorizontal :size="16" />
             </button>
           </div>
           <div class="toolbar-right">
@@ -181,8 +340,13 @@ const quickActions = [
             <button class="tool-btn icon-only" title="语音">
               <Mic :size="16" />
             </button>
-            <button class="send-btn" title="发送" @click="sendMessage">
-              <Send :size="17" />
+            <button
+              :class="['send-btn', { disabled: isStreaming || !inputText.trim() || !isBackendReady }]"
+              title="发送"
+              @click="sendMessage"
+            >
+              <Loader2 v-if="isStreaming" :size="17" class="spin-animation" />
+              <Send v-else :size="17" />
             </button>
           </div>
         </div>
@@ -191,16 +355,58 @@ const quickActions = [
         <span>内容由AI生成，请仔细核对</span>
       </div>
     </div>
+
+    <Transition name="selection-fade">
+      <div v-if="showCreateAgentDialog" class="add-dialog-overlay" @click.self="showCreateAgentDialog = false">
+        <div class="add-dialog">
+          <h3>创建自定义 Agent</h3>
+          <div class="form-group">
+            <label class="form-label">
+              名称
+              <span class="required-mark">*</span>
+            </label>
+            <input v-model="newAgentForm.name" type="text" class="form-input" placeholder="如: 小助手" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <input v-model="newAgentForm.description" type="text" class="form-input" placeholder="如: 通用对话助手" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">系统提示词</label>
+            <textarea
+              v-model="newAgentForm.systemPrompt"
+              class="form-input form-textarea"
+              placeholder="定义 Agent 的角色和行为..."
+              rows="4"
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">颜色</label>
+            <div class="color-picker">
+              <button
+                v-for="color in agentColors"
+                :key="color"
+                :class="['color-dot', { active: newAgentForm.color === color }]"
+                :style="{ background: color }"
+                @click="newAgentForm.color = color"
+              ></button>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button class="dialog-btn cancel" @click="showCreateAgentDialog = false">取消</button>
+            <button
+              :class="['dialog-btn confirm', { disabled: !newAgentForm.name.trim() }]"
+              :disabled="!newAgentForm.name.trim()"
+              @click="handleCreateAgent"
+            >
+              创建
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
-
-<script lang="ts">
-function formatMessage(text: string): string {
-  return text
-    .replace(/\n/g, '<br>')
-    .replace(/•\s*/g, '<span class="bullet">•</span>&nbsp;')
-}
-</script>
 
 <style scoped>
 .workspace-view {
@@ -277,6 +483,83 @@ function formatMessage(text: string): string {
   color: var(--text-secondary);
 }
 
+.header-icon-btn.warning {
+  color: var(--lumi-accent);
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.backend-warning {
+  margin: 8px 24px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--lumi-accent-light);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  flex-shrink: 0;
+}
+
+.backend-warning.info {
+  background: rgba(13, 148, 136, 0.08);
+  border-color: rgba(13, 148, 136, 0.2);
+}
+
+.warning-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--lumi-accent);
+}
+
+.backend-warning.info .warning-content {
+  color: var(--lumi-primary);
+}
+
+.warning-text {
+  flex: 1;
+}
+
+.warning-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.warning-desc {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.retry-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lumi-accent);
+  background: rgba(244, 63, 94, 0.1);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.backend-warning.info .retry-btn {
+  color: var(--lumi-primary);
+  background: rgba(13, 148, 136, 0.1);
+}
+
+.retry-btn:hover {
+  background: rgba(244, 63, 94, 0.2);
+}
+
+.backend-warning.info .retry-btn:hover {
+  background: rgba(13, 148, 136, 0.2);
+}
+
 .agent-selector-row {
   padding: 16px 24px 0;
   position: relative;
@@ -308,6 +591,7 @@ function formatMessage(text: string): string {
   flex-shrink: 0;
   animation: lumi-fade-in 0.4s ease-out both;
   box-shadow: var(--shadow-xs);
+  position: relative;
 }
 
 .agent-card:hover {
@@ -354,6 +638,30 @@ function formatMessage(text: string): string {
   text-overflow: ellipsis;
 }
 
+.card-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: all var(--transition-fast);
+}
+
+.agent-card:hover .card-delete {
+  opacity: 1;
+}
+
+.card-delete:hover {
+  background: var(--lumi-accent-light);
+  color: var(--lumi-accent);
+}
+
 .selection-toast {
   margin-top: 10px;
   text-align: center;
@@ -388,10 +696,30 @@ function formatMessage(text: string): string {
 .message-row {
   margin-bottom: 20px;
   animation: lumi-slide-up 0.3s ease-out both;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.message-avatar {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.avatar-assistant {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .message-bubble {
   max-width: 85%;
+  position: relative;
 }
 
 .message-content {
@@ -409,63 +737,114 @@ function formatMessage(text: string): string {
   font-weight: 600;
 }
 
+.message-content :deep(code) {
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 13px;
+  background: var(--workspace-panel);
+  color: var(--lumi-primary);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.message-content :deep(strong) {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .message-row.assistant .message-bubble {
   border-top-left-radius: 4px;
 }
 
+.message-row.user {
+  justify-content: flex-end;
+}
+
 .message-row.user .message-bubble {
-  margin-left: auto;
   border-top-right-radius: 4px;
   background: linear-gradient(135deg, var(--lumi-primary), #14b8a6);
   color: white;
 }
 
-.quick-actions {
+.message-row.user .message-content {
+  color: white;
+  background: transparent;
+  box-shadow: none;
+}
+
+.streaming-cursor {
+  display: inline-block;
+  margin-left: 2px;
+}
+
+.cursor-blink {
+  display: inline-block;
+  width: 2px;
+  height: 16px;
+  background: var(--lumi-primary);
+  animation: blink 1s step-end infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-xl);
+  background: var(--lumi-primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lumi-primary);
+  margin-bottom: 20px;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.empty-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.empty-quick-actions {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
-  padding: 0 4px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
-.quick-action-btn {
-  padding: 7px 18px;
+.quick-action {
+  padding: 8px 16px;
   border-radius: var(--radius-full);
   font-size: 13px;
-  font-weight: 500;
   color: var(--text-secondary);
-  background: var(--workspace-panel);
+  background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
-  cursor: pointer;
   transition: all var(--transition-fast);
+  cursor: pointer;
 }
 
-.quick-action-btn:hover {
+.quick-action:hover {
   border-color: var(--lumi-primary);
   color: var(--lumi-primary);
   background: var(--lumi-primary-light);
-}
-
-.typing-indicator {
-  display: flex;
-  gap: 5px;
-  padding: 12px 16px;
-  opacity: 0.4;
-}
-
-.typing-indicator span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  animation: lumi-pulse-soft 1.4s ease-in-out infinite;
-}
-
-.typing-indicator span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-indicator span:nth-child(3) {
-  animation-delay: 0.4s;
 }
 
 .input-area {
@@ -501,6 +880,10 @@ function formatMessage(text: string): string {
 
 .chat-input::placeholder {
   color: var(--text-muted);
+}
+
+.chat-input:disabled {
+  opacity: 0.6;
 }
 
 .input-toolbar {
@@ -573,6 +956,21 @@ function formatMessage(text: string): string {
   transform: scale(0.95);
 }
 
+.send-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .input-footer {
   text-align: center;
   margin-top: 8px;
@@ -581,5 +979,144 @@ function formatMessage(text: string): string {
 .input-footer span {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.add-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.add-dialog {
+  background: var(--workspace-card);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  width: 440px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.add-dialog h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.required-mark {
+  color: var(--lumi-accent);
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--workspace-panel);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.form-input:focus {
+  border-color: var(--lumi-primary);
+  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.color-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.color-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 2px solid transparent;
+}
+
+.color-dot:hover {
+  transform: scale(1.15);
+}
+
+.color-dot.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.dialog-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dialog-btn.cancel {
+  color: var(--text-muted);
+  background: var(--workspace-panel);
+}
+
+.dialog-btn.cancel:hover {
+  background: var(--workspace-hover);
+}
+
+.dialog-btn.confirm {
+  color: white;
+  background: var(--lumi-primary);
+}
+
+.dialog-btn.confirm:hover {
+  background: var(--lumi-primary-hover);
+}
+
+.dialog-btn.confirm.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

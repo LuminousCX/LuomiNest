@@ -11,41 +11,44 @@ const BACKEND_HOST = '127.0.0.1'
 const MAX_STARTUP_WAIT = 30000
 const CHECK_INTERVAL = 500
 
+const getBackendExecutableName = (): string => {
+  const os = platform()
+  if (os === 'win32') return 'luominest-backend.exe'
+  return 'luominest-backend'
+}
+
 const getBackendExecutablePath = (): string => {
   const isDev = !app.isPackaged
   const os = platform()
-  
+
   if (isDev) {
-    const projectRoot = join(__dirname, '../../../../..')
+    const projectRoot = join(__dirname, '../../..')
     if (os === 'win32') {
       return join(projectRoot, 'backend', '.venv', 'Scripts', 'python.exe')
     }
     return join(projectRoot, 'backend', '.venv', 'bin', 'python')
   }
-  
+
   const resourcesPath = process.resourcesPath
-  if (os === 'win32') {
-    return join(resourcesPath, 'backend', 'luominest-backend.exe')
-  }
-  return join(resourcesPath, 'backend', 'luominest-backend')
+  return join(resourcesPath, 'backend', getBackendExecutableName())
 }
 
 const getBackendMainPath = (): string => {
   const isDev = !app.isPackaged
-  
+
   if (isDev) {
-    const projectRoot = join(__dirname, '../../../../..')
+    const projectRoot = join(__dirname, '../../..')
     return join(projectRoot, 'backend', 'main.py')
   }
-  
+
   return ''
 }
 
 const getBackendCwd = (): string => {
   const isDev = !app.isPackaged
-  
+
   if (isDev) {
-    const projectRoot = join(__dirname, '../../../../..')
+    const projectRoot = join(__dirname, '../../..')
     return join(projectRoot, 'backend')
   }
   
@@ -97,6 +100,7 @@ export const startBackend = async (): Promise<boolean> => {
   }
   
   console.log('[BackendService] Starting backend...')
+  console.log('[BackendService] Platform:', platform())
   console.log('[BackendService] Executable:', backendPath)
   console.log('[BackendService] Working directory:', cwd)
   
@@ -104,13 +108,24 @@ export const startBackend = async (): Promise<boolean> => {
     ? [mainPath, '--host', BACKEND_HOST, '--port', String(BACKEND_PORT)]
     : ['--host', BACKEND_HOST, '--port', String(BACKEND_PORT)]
   
+  const env = {
+    ...process.env,
+    PYTHONUNBUFFERED: '1',
+    LUOMINEST_DATA_DIR: join(app.getPath('userData'), 'data')
+  }
+
+  if (platform() === 'linux' || platform() === 'darwin') {
+    if (!isDev) {
+      env.LD_LIBRARY_PATH = [
+        join(cwd, 'lib'),
+        process.env.LD_LIBRARY_PATH || ''
+      ].filter(Boolean).join(':')
+    }
+  }
+  
   backendProcess = spawn(backendPath, args, {
     cwd,
-    env: {
-      ...process.env,
-      PYTHONUNBUFFERED: '1',
-      LUOMINEST_DATA_DIR: join(app.getPath('userData'), 'data')
-    },
+    env,
     stdio: ['ignore', 'pipe', 'pipe']
   })
   

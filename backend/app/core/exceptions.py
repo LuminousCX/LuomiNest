@@ -42,7 +42,7 @@ class PluginError(LuomiNestError):
         super().__init__(message, "PLUGIN_ERROR", 500)
 
 
-def register_exception_handlers(app: FastAPI) -> None:
+def register_exception_handlers(app) -> None:
     from fastapi import Request
     from fastapi.responses import JSONResponse
 

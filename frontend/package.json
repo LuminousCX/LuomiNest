@@ -14,12 +14,16 @@
     "build:win-nsis": "pnpm run build && electron-builder --win nsis",
     "build:win-portable": "pnpm run build && electron-builder --win portable",
     "build:linux": "pnpm run build && electron-builder --linux",
+    "build:linux-appimage": "pnpm run build && electron-builder --linux AppImage",
+    "build:linux-deb": "pnpm run build && electron-builder --linux deb",
     "build:mac": "pnpm run build && electron-builder --mac",
+    "build:mac-dmg": "pnpm run build && electron-builder --mac dmg",
     "build:backend": "cd ../backend && build.bat",
     "build:complete": "cd .. && build-all.bat",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "pinia": "^3.0.4",
     "pixi-live2d-display-mulmotion": "0.5.0-mm-6",
     "pixi.js": "^7.4.3",
     "playwright": "^1.59.1",
@@ -53,7 +57,23 @@
       {
         "from": "resources/backend",
         "to": "backend",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "src/renderer/public/live2d",
+        "to": "live2d",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "src/renderer/public/cubism-core",
+        "to": "cubism-core",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
@@ -73,14 +93,18 @@
       ],
       "icon": "resources/icon.ico",
       "signAndEditExecutable": false,
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "LuomiNest-Setup-${version}-win-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
-      "installerLanguages": ["zh_CN", "en_US"],
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
       "language": "2052",
       "installerIcon": "resources/icon.ico",
       "uninstallerIcon": "resources/icon.ico",
@@ -110,11 +134,32 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "category": "Utility",
       "icon": "resources/icon.svg",
-      "maintainer": "LuminousCX R&D Team"
+      "maintainer": "LuminousCX R&D Team",
+      "vendor": "LuminousCX",
+      "synopsis": "LuomiNest - Distributed AI Companion Platform",
+      "description": "LuomiNest is a distributed whole-house AI companion system that provides intelligent conversation, IoT control, and Live2D avatar interaction.",
+      "artifactName": "LuomiNest-${version}-linux-${arch}.${ext}"
+    },
+    "appImage": {
+      "artifactName": "LuomiNest-${version}-linux-${arch}.AppImage"
+    },
+    "deb": {
+      "depends": [
+        "libnotify4",
+        "libxtst6",
+        "libnss3"
+      ],
+      "artifactName": "LuomiNest-${version}-linux-${arch}.deb"
     },
     "mac": {
       "target": [
@@ -124,10 +169,49 @@
             "x64",
             "arm64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "category": "public.app-category.utilities",
-      "icon": "resources/icon.svg"
+      "icon": "resources/icon.svg",
+      "artifactName": "LuomiNest-${version}-mac-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "LuomiNest needs access to your microphone for voice interaction.",
+        "NSCameraUsageDescription": "LuomiNest needs access to your camera for visual interaction."
+      }
+    },
+    "dmg": {
+      "background": null,
+      "backgroundColor": "#fafaf9",
+      "window": {
+        "x": 400,
+        "y": 100,
+        "width": 600,
+        "height": 500
+      },
+      "contents": [
+        {
+          "x": 150,
+          "y": 200
+        },
+        {
+          "x": 450,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "artifactName": "LuomiNest-${version}-mac-${arch}.dmg"
     },
     "asar": true,
     "asarUnpack": [

@@ -3,33 +3,16 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
-from app.infrastructure.database import init_db, close_db
-from app.infrastructure.redis import init_redis, close_redis
-from app.infrastructure.mqtt import init_mqtt, close_mqtt
-from app.runtime.event_bus import EventBus
-from app.runtime.pipeline import Pipeline
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app):
     logger.info("LuomiNest starting up...")
-
-    await init_db()
-    await init_redis()
-    await init_mqtt()
-
-    app.state.event_bus = EventBus()
-    app.state.pipeline = Pipeline(app.state.event_bus)
-
     yield
-
     logger.info("LuomiNest shutting down...")
-    await close_mqtt()
-    await close_redis()
-    await close_db()
 
 
-def create_app() -> FastAPI:
+def create_app():
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
 
@@ -53,6 +36,10 @@ def create_app() -> FastAPI:
 
     from app.api.ws.router import ws_router
     app.include_router(ws_router, prefix="/ws")
+
+    @app.get("/health")
+    async def health():
+        return {"status": "ok", "app": settings.APP_NAME, "version": settings.APP_VERSION}
 
     register_exception_handlers(app)
 

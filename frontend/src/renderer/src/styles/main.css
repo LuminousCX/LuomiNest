@@ -285,3 +285,22 @@ img {
 .animate-scale-in {
   animation: lumi-scale-in 0.3s ease-out both;
 }
+
+@keyframes lumi-slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes lumi-bounce-subtle {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+.animate-slide-in-right {
+  animation: lumi-slide-in-right 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Wizard overlay backdrop */
+.wizard-backdrop {
+  animation: lumi-fade-in 0.25s ease-out both;
+}

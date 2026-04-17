@@ -20,6 +20,8 @@ const isDev = !app.isPackaged
 const isMac = platform() === 'darwin'
 
 let live2dBasePath = ''
+let builtinBasePath = ''
+let cubismCoreBasePath = ''
 
 interface ImportedModelRecord {
   id: string
@@ -112,18 +114,16 @@ const createWindow = (): void => {
     return { action: 'deny' }
   })
 
-  if (isDev) {
-    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [
-            "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
-          ]
-        }
-      })
+  const CSP_POLICY = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [CSP_POLICY]
+      }
     })
-  }
+  })
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -268,8 +268,9 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
 }
 
 const LUOMINEST_BUILTIN_MODELS = [
-  { id: 'hiyori', name: 'Hiyori', url: '/live2d/hiyori/Hiyori.model3.json', scale: 0.25, type: 'live2d', tags: ['Default', 'Cubism4', 'Built-in'] },
-  { id: 'shizuku', name: 'Shizuku', url: '/live2d/shizuku/shizuku.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] }
+  { id: 'llny', name: 'Llny', url: 'luominest-avatar://llny/llny.model3.json', scale: 0.25, type: 'live2d', tags: ['Default', 'Cubism4', 'Built-in'] },
+  { id: 'hiyori', name: 'Hiyori', url: 'luominest-avatar://hiyori/Hiyori.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] },
+  { id: 'shizuku', name: 'Shizuku', url: 'luominest-avatar://shizuku/shizuku.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] }
 ]
 
 const createMenu = (): void => {
@@ -572,37 +573,67 @@ app.whenReady().then(async () => {
   live2dBasePath = join(userDataPath, 'live2d')
   mkdirSync(live2dBasePath, { recursive: true })
 
+  builtinBasePath = isDev
+    ? join(app.getAppPath(), 'src/renderer/public/live2d')
+    : join(process.resourcesPath, 'live2d')
+
+  cubismCoreBasePath = isDev
+    ? join(app.getAppPath(), 'src/renderer/public/cubism-core')
+    : join(process.resourcesPath, 'cubism-core')
+
+  const MIME_MAP: Record<string, string> = {
+    json: 'application/json',
+    moc3: 'application/octet-stream',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    mtn: 'application/octet-stream',
+    exp3: 'application/json',
+    physics3: 'application/json',
+    pose3: 'application/json',
+    motion3: 'application/json',
+    cdi3: 'application/json',
+    userdata3: 'application/json',
+    js: 'application/javascript'
+  }
+
+  const resolveModelFile = (hostname: string, relativePath: string): string | null => {
+    if (hostname === 'cubism-core') {
+      const filePath = join(cubismCoreBasePath, relativePath)
+      if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
+      return null
+    }
+
+    const importedPath = join(live2dBasePath, hostname, relativePath)
+    if (existsSync(importedPath) && statSync(importedPath).isFile()) return importedPath
+
+    const builtinPath = join(builtinBasePath, hostname, relativePath)
+    if (existsSync(builtinPath) && statSync(builtinPath).isFile()) return builtinPath
+
+    return null
+  }
+
   protocol.handle('luominest-avatar', (request) => {
     const url = new URL(request.url)
-    const modelDir = url.hostname
+    const hostname = url.hostname
     const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, '')
-    const filePath = join(live2dBasePath, modelDir, relativePath)
 
-    if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+    const filePath = resolveModelFile(hostname, relativePath)
+    if (!filePath) {
+      console.warn(`[WARNING][LuomiNestAvatar] Resource not found: ${hostname}/${relativePath}`)
       return new Response('Not Found', { status: 404 })
     }
 
     const ext = filePath.split('.').pop()?.toLowerCase()
-    const mimeMap: Record<string, string> = {
-      json: 'application/json',
-      moc3: 'application/octet-stream',
-      png: 'image/png',
-      jpg: 'image/jpeg',
-      jpeg: 'image/jpeg',
-      mtn: 'application/octet-stream',
-      exp3: 'application/json',
-      physics3: 'application/json',
-      pose3: 'application/json',
-      motion3: 'application/json',
-      cdi3: 'application/json',
-      userdata3: 'application/json'
-    }
-    const mimeType = mimeMap[ext ?? ''] ?? 'application/octet-stream'
+    const mimeType = MIME_MAP[ext ?? ''] ?? 'application/octet-stream'
     const data = readFileSync(filePath)
     return new Response(data, {
       headers: { 'content-type': mimeType, 'access-control-allow-origin': '*' }
     })
   })
+
+  console.info(`[INFO][LuomiNestAvatar] Protocol registered. Builtin path: ${builtinBasePath}`)
+  console.info(`[INFO][LuomiNestAvatar] Cubism core path: ${cubismCoreBasePath}`)
 
   console.log('[Main] Starting backend service...')
   const backendStarted = await startBackend()

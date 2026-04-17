@@ -25,7 +25,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = ""
     ANTHROPIC_API_KEY: str = ""
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+    LLM_DEFAULT_MODEL: str = "gpt-4o-mini"
+    LLM_DEFAULT_TEMPERATURE: float = 0.7
+    LLM_DEFAULT_MAX_TOKENS: int = 4096
+    LLM_DEFAULT_TOP_P: float = 0.9
 
     LIVE2D_MODEL_PATH: str = "./models/live2d"
     VRM_MODEL_PATH: str = "./models/vrm"
@@ -33,7 +39,7 @@ class Settings(BaseSettings):
     DATA_DIR: str = "./data"
     UPLOAD_DIR: str = "./data/uploads"
     AVATAR_DIR: str = "./data/avatars"
-    PLUGIN_DIR: string = "./plugins"
+    PLUGIN_DIR: str = "./plugins"
     SKILL_DIR: str = "./skills"
 
     class Config:

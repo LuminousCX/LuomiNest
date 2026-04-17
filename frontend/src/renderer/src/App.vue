@@ -3,20 +3,15 @@ import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TitleBar from './components/TitleBar.vue'
 import LumiSidebar from './components/LumiSidebar.vue'
+import { useThemeStore } from './stores/theme'
 
 const route = useRoute()
+const themeStore = useThemeStore()
 
 const isWelcomePage = computed(() => route.path === '/welcome')
 const isDesktopPetPage = computed(() => route.path === '/desktop-pet')
+const isAgentCreatePage = computed(() => route.path === '/agent/create')
 const isMinimalLayout = computed(() => isWelcomePage.value || isDesktopPetPage.value)
-
-const isDarkMode = ref(false)
-
-const updateTheme = () => {
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-  isDarkMode.value = mediaQuery.matches
-  document.documentElement.setAttribute('data-theme', mediaQuery.matches ? 'dark' : 'light')
-}
 
 watch(isDesktopPetPage, (val) => {
   if (val) {
@@ -25,12 +20,6 @@ watch(isDesktopPetPage, (val) => {
     document.documentElement.classList.remove('desktop-pet')
   }
 }, { immediate: true })
-
-onMounted(() => {
-  updateTheme()
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-  mediaQuery.addEventListener('change', updateTheme)
-})
 </script>
 
 <template>

@@ -41,6 +41,12 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools rpm
+
       - name: Install backend dependencies
         shell: bash
         run: |
@@ -89,9 +95,10 @@ jobs:
             cp backend/dist/luominest-backend.exe frontend/resources/backend/
           else
             cp backend/dist/luominest-backend frontend/resources/backend/
+            chmod +x frontend/resources/backend/luominest-backend
           fi
 
-      - name: Create NSIS build directory
+      - name: Create build directory
         if: matrix.platform == 'win'
         shell: bash
         run: |

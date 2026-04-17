@@ -1,4 +1,10 @@
-.PHONY: help check install dev dev-frontend dev-backend build build-frontend build-backend build-win build-linux build-mac build-portable build-installer prepare-backend verify-backend clean clean-frontend clean-backend clean-all config doctor lint lint-frontend lint-backend test test-frontend test-backend
+.PHONY: help check install dev dev-frontend dev-backend build build-frontend build-backend \
+       build-win build-win-nsis build-win-portable \
+       build-linux build-linux-appimage build-linux-deb \
+       build-mac build-mac-dmg \
+       prepare-backend verify-backend \
+       clean clean-frontend clean-backend clean-all config doctor \
+       lint lint-frontend lint-backend test test-frontend test-backend
 
 PYTHON  ?= python
 PNPM    ?= pnpm
@@ -12,59 +18,75 @@ DIST_DIR        := $(PROJECT_ROOT)/dist
 VERSION         := 0.2.0
 
 ifeq ($(OS),Windows_NT)
-  ACTIVATE   := .venv\Scripts\activate &&
-  RM_RF      := rmdir /s /q
-  MKDIR_P    := mkdir
-  COPY       := copy /Y
-  NULL       := > nul
-  DEV_NULL   := > nul 2>&1
-  BACKEND_EXE := luominest-backend.exe
-  PLATFORM   := win
+  ACTIVATE      := .venv\Scripts\activate &&
+  RM_RF         := rmdir /s /q
+  MKDIR_P       := mkdir
+  COPY          := copy /Y
+  NULL          := > nul
+  DEV_NULL      := > nul 2>&1
+  BACKEND_EXE   := luominest-backend.exe
+  BUILD_SCRIPT  := build.bat
+  PLATFORM      := win
 else
-  ACTIVATE   := . .venv/bin/activate &&
-  RM_RF      := rm -rf
-  MKDIR_P    := mkdir -p
-  COPY       := cp
-  NULL       :=
-  DEV_NULL   :=
-  BACKEND_EXE := luominest-backend
-  PLATFORM   := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+  ACTIVATE      := . .venv/bin/activate &&
+  RM_RF         := rm -rf
+  MKDIR_P       := mkdir -p
+  COPY          := cp
+  NULL          :=
+  DEV_NULL      :=
+  BACKEND_EXE   := luominest-backend
+  BUILD_SCRIPT  := build.sh
+  UNAME_S       := $(shell uname -s)
+  ifeq ($(UNAME_S),Darwin)
+    PLATFORM    := mac
+  else
+    PLATFORM    := linux
+  endif
 endif
 
 help:
-	@echo "LuomiNest - Distributed AI Companion Platform"
+	@echo "LuomiNest - Distributed AI Companion Platform (v$(VERSION))"
 	@echo ""
 	@echo "Development Commands:"
-	@echo "  make check           - Check prerequisites (Node.js, pnpm, Python)"
-	@echo "  make doctor          - Diagnose setup issues and show fix hints"
-	@echo "  make install         - Install all dependencies (frontend + backend)"
-	@echo "  make dev             - Start frontend dev server"
-	@echo "  make dev-frontend    - Start frontend dev server"
-	@echo "  make dev-backend     - Start backend dev server"
+	@echo "  make check                - Check prerequisites (Node.js, pnpm, Python)"
+	@echo "  make doctor               - Diagnose setup issues and show fix hints"
+	@echo "  make install              - Install all dependencies (frontend + backend)"
+	@echo "  make install-backend      - Install backend dependencies"
+	@echo "  make install-frontend     - Install frontend dependencies"
+	@echo "  make dev                  - Start frontend dev server"
+	@echo "  make dev-frontend         - Start frontend dev server"
+	@echo "  make dev-backend          - Start backend dev server"
 	@echo ""
 	@echo "Build Commands:"
-	@echo "  make build           - Build frontend + backend"
-	@echo "  make build-frontend  - Build frontend only"
-	@echo "  make build-backend   - Build backend only (PyInstaller)"
-	@echo "  make build-win       - Build Windows installer (NSIS)"
-	@echo "  make build-portable  - Build Windows portable executable"
-	@echo "  make build-installer - Build Windows Inno Setup installer"
-	@echo "  make build-linux     - Build Linux packages"
-	@echo "  make build-mac       - Build macOS DMG"
+	@echo "  make build                - Build frontend + backend"
+	@echo "  make build-frontend       - Build frontend only"
+	@echo "  make build-backend        - Build backend only (PyInstaller)"
+	@echo ""
+	@echo "Platform-Specific Build:"
+	@echo "  make build-win            - Build Windows installer (NSIS + portable)"
+	@echo "  make build-win-nsis       - Build Windows NSIS installer only"
+	@echo "  make build-win-portable   - Build Windows portable executable"
+	@echo "  make build-linux          - Build Linux packages (AppImage + deb + tar.gz)"
+	@echo "  make build-linux-appimage - Build Linux AppImage only"
+	@echo "  make build-linux-deb      - Build Linux deb package only"
+	@echo "  make build-mac            - Build macOS DMG + zip"
+	@echo "  make build-mac-dmg        - Build macOS DMG only"
 	@echo ""
 	@echo "Quality Commands:"
-	@echo "  make lint            - Run all linters"
-	@echo "  make lint-frontend   - Run frontend linter"
-	@echo "  make lint-backend    - Run backend linter"
-	@echo "  make test            - Run all tests"
-	@echo "  make test-frontend   - Run frontend tests"
-	@echo "  make test-backend    - Run backend tests"
+	@echo "  make lint                 - Run all linters"
+	@echo "  make lint-frontend        - Run frontend linter"
+	@echo "  make lint-backend         - Run backend linter"
+	@echo "  make test                 - Run all tests"
+	@echo "  make test-frontend        - Run frontend tests"
+	@echo "  make test-backend         - Run backend tests"
 	@echo ""
 	@echo "Clean Commands:"
-	@echo "  make clean           - Clean all build artifacts"
-	@echo "  make clean-frontend  - Clean frontend build artifacts"
-	@echo "  make clean-backend   - Clean backend build artifacts"
+	@echo "  make clean                - Clean all build artifacts"
+	@echo "  make clean-frontend       - Clean frontend build artifacts"
+	@echo "  make clean-backend        - Clean backend build artifacts"
 	@echo ""
+	@echo "Current Platform: $(PLATFORM)"
+	@echo "Backend Executable: $(BACKEND_EXE)"
 
 check:
 	@echo "Checking prerequisites..."
@@ -79,6 +101,10 @@ check:
 doctor:
 	@echo "LuomiNest Environment Diagnostics"
 	@echo "=================================="
+	@echo ""
+	@echo "[Platform]"
+	@echo "  OS: $(PLATFORM)"
+	@echo "  Backend exe: $(BACKEND_EXE)"
 	@echo ""
 	@echo "[Python]"
 	@-$(PYTHON) --version 2>&1 || echo "  NOT FOUND - Install Python 3.12+"
@@ -100,6 +126,12 @@ doctor:
 	@echo ""
 	@echo "[NSIS extra script]"
 	@if [ -f "$(FRONTEND_DIR)/build/nsis-extra.nsh" ]; then echo "  OK - nsis-extra.nsh exists"; else echo "  MISSING - Will be created during build"; fi
+	@echo ""
+	@echo "[macOS entitlements]"
+	@if [ -f "$(FRONTEND_DIR)/build/entitlements.mac.plist" ]; then echo "  OK - entitlements.mac.plist exists"; else echo "  MISSING - Required for macOS build"; fi
+	@echo ""
+	@echo "[Linux desktop entry]"
+	@if [ -f "$(FRONTEND_DIR)/build/luominest.desktop" ]; then echo "  OK - luominest.desktop exists"; else echo "  MISSING - Required for Linux build"; fi
 
 config:
 	@echo "[Config] Copying example configuration files..."
@@ -148,39 +180,17 @@ build: build-backend build-frontend
 
 build-backend:
 	@echo "[Backend] Building with PyInstaller..."
-	cd $(BACKEND_DIR) && $(ACTIVATE) pyinstaller luominest-backend.spec --clean --noconfirm
+ifeq ($(OS),Windows_NT)
+	cd $(BACKEND_DIR) && call $(BUILD_SCRIPT)
+else
+	cd $(BACKEND_DIR) && chmod +x $(BUILD_SCRIPT) && bash $(BUILD_SCRIPT)
+endif
 	@echo "[Backend] Build complete: $(BACKEND_DIR)/dist/$(BACKEND_EXE)"
 
 build-frontend:
 	@echo "[Frontend] Building with electron-vite..."
 	cd $(FRONTEND_DIR) && $(PNPM) run build
 	@echo "[Frontend] Build complete."
-
-build-win: prepare-backend
-	@echo "[Frontend] Building Windows installer (NSIS)..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build:win
-	@echo "Output: $(FRONTEND_DIR)/release/dist/"
-
-build-portable: prepare-backend
-	@echo "[Frontend] Building Windows portable..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build:win-portable
-	@echo "Output: $(FRONTEND_DIR)/release/dist/"
-
-build-installer: prepare-backend
-	@echo "[Frontend] Building Windows Inno Setup installer..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build && $(PNPM) exec electron-builder --win --dir
-	cd $(FRONTEND_DIR) && iscc installer.iss
-	@echo "Output: $(FRONTEND_DIR)/release/installer/"
-
-build-linux: prepare-backend
-	@echo "[Frontend] Building Linux packages..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build:linux
-	@echo "Output: $(FRONTEND_DIR)/release/dist/"
-
-build-mac: prepare-backend
-	@echo "[Frontend] Building macOS DMG..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build:mac
-	@echo "Output: $(FRONTEND_DIR)/release/dist/"
 
 prepare-backend: build-backend verify-backend
 	@echo "[Prepare] Copying backend to frontend resources..."
@@ -190,7 +200,7 @@ else
 	$(MKDIR_P) $(FRONTEND_DIR)/resources/backend
 endif
 	$(COPY) $(BACKEND_DIR)/dist/$(BACKEND_EXE) $(FRONTEND_DIR)/resources/backend/ $(NULL)
-	@echo "[Prepare] Backend ready."
+	@echo "[Prepare] Backend ready for platform: $(PLATFORM)"
 
 verify-backend:
 	@if [ ! -f "$(BACKEND_DIR)/dist/$(BACKEND_EXE)" ]; then \
@@ -199,6 +209,46 @@ verify-backend:
 		exit 1; \
 	fi
 	@echo "[Verify] Backend executable verified: $(BACKEND_DIR)/dist/$(BACKEND_EXE)"
+
+build-win: prepare-backend
+	@echo "[Frontend] Building Windows installer (NSIS + portable)..."
+	cd $(FRONTEND_DIR) && $(PNPM) run build:win
+	@echo "Output: $(FRONTEND_DIR)/release/dist/"
+
+build-win-nsis: prepare-backend
+	@echo "[Frontend] Building Windows NSIS installer..."
+	cd $(FRONTEND_DIR) && $(PNPM) run build:win-nsis
+	@echo "Output: $(FRONTEND_DIR)/release/dist/"
+
+build-win-portable: prepare-backend
+	@echo "[Frontend] Building Windows portable..."
+	cd $(FRONTEND_DIR) && $(PNPM) run build:win-portable
+	@echo "Output: $(FRONTEND_DIR)/release/dist/"
+
+build-linux: prepare-backend
+	@echo "[Frontend] Building Linux packages (AppImage + deb + tar.gz)..."
+	cd $(FRONTEND_DIR) && $(PNPM) run build:linux
+	@echo "Output: $(FRONTEND_DIR)/release/dist/"
+
+build-linux-appimage: prepare-backend
+	@echo "[Frontend] Building Linux AppImage..."
+	cd $(FRONTEND_DIR) && $(PNPM) run build:linux-appimage
+	@echo "Output: $(FRONTEND_DIR)/release/dist/"
+
+build-linux-deb: prepare-backend
+	@echo "[Frontend] Building Linux deb package..."
+	cd $(FRONTEND_DIR) && $(PNPM) run build:linux-deb
+	@echo "Output: $(FRONTEND_DIR)/release/dist/"
+
+build-mac: prepare-backend
+	@echo "[Frontend] Building macOS DMG + zip..."
+	cd $(FRONTEND_DIR) && $(PNPM) run build:mac
+	@echo "Output: $(FRONTEND_DIR)/release/dist/"
+
+build-mac-dmg: prepare-backend
+	@echo "[Frontend] Building macOS DMG..."
+	cd $(FRONTEND_DIR) && $(PNPM) run build:mac-dmg
+	@echo "Output: $(FRONTEND_DIR)/release/dist/"
 
 lint: lint-frontend lint-backend
 

@@ -14,7 +14,7 @@ import {
 } from 'lucide-vue-next'
 
 defineProps<{
-  version: string
+  version?: string
 }>()
 
 const router = useRouter()
