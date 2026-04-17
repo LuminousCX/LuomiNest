@@ -15,12 +15,18 @@ import {
   Settings,
   AlertTriangle,
   StopCircle,
-  RotateCcw
+  RotateCcw,
+  Clock,
+  MessageSquare,
+  Trash2,
+  X,
+  Plus
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
+import { getProviderLogo } from '../config/provider-logos'
 
 const router = useRouter()
 const chatStore = useChatStore()
@@ -31,6 +37,7 @@ const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const showModelDropdown = ref(false)
+const showHistoryPanel = ref(false)
 
 const agentCards = computed(() => {
   const agents = agentStore.agents.map(a => ({
@@ -70,9 +77,44 @@ const currentProvider = computed(() => {
   return modelStore.modelConfig.defaultProvider || ''
 })
 
+const currentProviderLogo = computed(() => getProviderLogo(currentProvider.value))
+
 const hasProvider = computed(() => modelStore.providers.length > 0)
 
-const selectAgent = (agent: { id: string; name: string; desc: string; color: string }) => {
+const availableModelOptions = computed(() => {
+  const options: { providerId: string; providerName: string; providerLogo: ReturnType<typeof getProviderLogo>; modelId: string; modelName: string }[] = []
+  for (const provider of modelStore.providers) {
+    const logo = getProviderLogo(provider.id)
+    if (provider.models.length > 0) {
+      for (const model of provider.models) {
+        options.push({
+          providerId: provider.id,
+          providerName: provider.name,
+          providerLogo: logo,
+          modelId: model.id,
+          modelName: model.name,
+        })
+      }
+    } else {
+      options.push({
+        providerId: provider.id,
+        providerName: provider.name,
+        providerLogo: logo,
+        modelId: provider.defaultModel,
+        modelName: provider.defaultModel,
+      })
+    }
+  }
+  return options
+})
+
+const agentConversations = computed(() => {
+  const agentId = agentStore.activeAgent?.id
+  if (!agentId) return chatStore.conversations
+  return chatStore.conversations.filter(c => c.agentId === agentId || !c.agentId)
+})
+
+const selectAgent = async (agent: { id: string; name: string; desc: string; color: string }) => {
   if (agent.id === '__custom__') {
     showCreateAgentDialog.value = true
     return
@@ -81,7 +123,18 @@ const selectAgent = (agent: { id: string; name: string; desc: string; color: str
   if (found) {
     agentStore.setActiveAgent(found)
     chatStore.clearMessages()
+    await chatStore.fetchConversations()
   }
+}
+
+const selectModel = (providerId: string, modelId: string) => {
+  if (agentStore.activeAgent) {
+    agentStore.updateAgent(agentStore.activeAgent.id, {
+      provider: providerId,
+      model: modelId,
+    })
+  }
+  showModelDropdown.value = false
 }
 
 const sendMessage = async () => {
@@ -93,6 +146,16 @@ const sendMessage = async () => {
   resetTextareaHeight()
 
   const agent = agentStore.activeAgent
+
+  if (!chatStore.currentConversation) {
+    await chatStore.createConversation(
+      content.slice(0, 30),
+      agent?.id,
+      agent?.model || modelStore.modelConfig.defaultModel || undefined,
+      agent?.provider || modelStore.modelConfig.defaultProvider || undefined,
+    )
+  }
+
   const options: any = {
     model: agent?.model || modelStore.modelConfig.defaultModel || undefined,
     provider: agent?.provider || modelStore.modelConfig.defaultProvider || undefined,
@@ -139,6 +202,36 @@ const formatMessage = (text: string): string => {
     .replace(/`([^`]+)`/g, '<code>$1</code>')
 }
 
+const formatTime = (dateStr: string) => {
+  try {
+    const d = new Date(dateStr)
+    const now = new Date()
+    const isToday = d.toDateString() === now.toDateString()
+    if (isToday) {
+      return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    }
+    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
+  }
+}
+
+const handleLoadConversation = async (convId: string) => {
+  await chatStore.loadConversation(convId)
+  showHistoryPanel.value = false
+  await nextTick()
+  scrollToBottom()
+}
+
+const handleDeleteConversation = async (convId: string) => {
+  await chatStore.deleteConversation(convId)
+}
+
+const startNewConversation = () => {
+  chatStore.clearMessages()
+  showHistoryPanel.value = false
+}
+
 watch(messages, () => {
   nextTick(scrollToBottom)
 }, { deep: true })
@@ -177,6 +270,13 @@ const handleDeleteAgent = async (agentId: string) => {
   }
 }
 
+const handleClickOutsideModel = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+  if (!target.closest('.model-dropdown-container')) {
+    showModelDropdown.value = false
+  }
+}
+
 onMounted(async () => {
   await chatStore.checkBackend()
   if (chatStore.isBackendReady) {
@@ -184,8 +284,10 @@ onMounted(async () => {
       agentStore.fetchAgents(),
       modelStore.fetchProviders(),
       modelStore.fetchModelConfig(),
+      chatStore.fetchConversations(),
     ])
   }
+  document.addEventListener('click', handleClickOutsideModel)
 })
 </script>
 
@@ -198,13 +300,18 @@ onMounted(async () => {
           LuomiNest
         </span>
         <span class="header-stats">
-          <AtSign :size="13" />
+          <span class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+            {{ currentProviderLogo.initials }}
+          </span>
           {{ currentModel }}
         </span>
       </div>
       <div class="header-right">
         <button v-if="!isBackendReady" class="header-icon-btn warning" title="后端未连接" @click="chatStore.checkBackend()">
           <AlertTriangle :size="18" />
+        </button>
+        <button class="header-icon-btn" title="历史记录" @click="showHistoryPanel = !showHistoryPanel">
+          <Clock :size="18" />
         </button>
         <button class="header-icon-btn" title="设置" @click="router.push('/settings/ai-model')">
           <Settings :size="18" />
@@ -273,39 +380,78 @@ onMounted(async () => {
       </Transition>
     </div>
 
-    <div ref="messagesContainer" class="chat-area">
-      <div class="messages-container">
-        <div
-          v-for="msg in messages"
-          :key="msg.id"
-          :class="['message-row', msg.role]"
-        >
-          <div class="message-avatar" v-if="msg.role === 'assistant'">
-            <div class="avatar-assistant">
-              <Bot :size="16" />
+    <div class="main-content-area">
+      <div ref="messagesContainer" class="chat-area" :class="{ 'with-history': showHistoryPanel }">
+        <div class="messages-container">
+          <div
+            v-for="msg in messages"
+            :key="msg.id"
+            :class="['message-row', msg.role]"
+          >
+            <div class="message-avatar" v-if="msg.role === 'assistant'">
+              <div class="avatar-assistant">
+                <Bot :size="16" />
+              </div>
+            </div>
+            <div class="message-bubble">
+              <div class="message-content" v-html="formatMessage(msg.content)"></div>
+              <div v-if="msg.role === 'assistant' && !msg.done && isStreaming" class="streaming-cursor">
+                <span class="cursor-blink"></span>
+              </div>
             </div>
           </div>
-          <div class="message-bubble">
-            <div class="message-content" v-html="formatMessage(msg.content)"></div>
-            <div v-if="msg.role === 'assistant' && !msg.done && isStreaming" class="streaming-cursor">
-              <span class="cursor-blink"></span>
-            </div>
-          </div>
-        </div>
 
-        <div v-if="messages.length === 0" class="empty-state">
-          <div class="empty-icon">
-            <Bot :size="48" />
-          </div>
-          <p class="empty-title">选择一个Agent开始对话</p>
-          <p class="empty-desc">或直接在下方输入框中提问</p>
-          <div class="empty-quick-actions">
-            <button class="quick-action" @click="inputText = '你好，请介绍一下你自己'">打个招呼</button>
-            <button class="quick-action" @click="inputText = '帮我写一段 Python 代码'">写段代码</button>
-            <button class="quick-action" @click="inputText = '解释一下什么是大语言模型'">了解 LLM</button>
+          <div v-if="messages.length === 0" class="empty-state">
+            <div class="empty-icon">
+              <Bot :size="48" />
+            </div>
+            <p class="empty-title">选择一个Agent开始对话</p>
+            <p class="empty-desc">或直接在下方输入框中提问</p>
+            <div class="empty-quick-actions">
+              <button class="quick-action" @click="inputText = '你好，请介绍一下你自己'">打个招呼</button>
+              <button class="quick-action" @click="inputText = '帮我写一段 Python 代码'">写段代码</button>
+              <button class="quick-action" @click="inputText = '解释一下什么是大语言模型'">了解 LLM</button>
+            </div>
           </div>
         </div>
       </div>
+
+      <Transition name="history-slide">
+        <div v-if="showHistoryPanel" class="history-panel">
+          <div class="history-header">
+            <h3>对话历史</h3>
+            <div class="history-header-actions">
+              <button class="history-action-btn" title="新建对话" @click="startNewConversation">
+                <Plus :size="16" />
+              </button>
+              <button class="history-action-btn" title="关闭" @click="showHistoryPanel = false">
+                <X :size="16" />
+              </button>
+            </div>
+          </div>
+          <div class="history-list">
+            <button
+              v-for="conv in agentConversations"
+              :key="conv.id"
+              :class="['history-item', { active: chatStore.currentConversation?.id === conv.id }]"
+              @click="handleLoadConversation(conv.id)"
+            >
+              <MessageSquare :size="14" class="history-item-icon" />
+              <div class="history-item-info">
+                <span class="history-item-title">{{ conv.title }}</span>
+                <span class="history-item-time">{{ formatTime(conv.updatedAt) }}</span>
+              </div>
+              <button class="history-item-delete" title="删除" @click.stop="handleDeleteConversation(conv.id)">
+                <Trash2 :size="12" />
+              </button>
+            </button>
+            <div v-if="agentConversations.length === 0" class="history-empty">
+              <Clock :size="24" />
+              <p>暂无对话记录</p>
+            </div>
+          </div>
+        </div>
+      </Transition>
     </div>
 
     <div class="input-area">
@@ -322,11 +468,39 @@ onMounted(async () => {
         ></textarea>
         <div class="input-toolbar">
           <div class="toolbar-left">
-            <button class="tool-btn" title="选择模型" @click="showModelDropdown = !showModelDropdown">
-              <Wand2 :size="16" />
-              <span>{{ currentModel }}</span>
-              <ChevronDown :size="14" />
-            </button>
+            <div class="model-dropdown-container">
+              <button class="tool-btn" title="选择模型" @click.stop="showModelDropdown = !showModelDropdown">
+                <span class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+                  {{ currentProviderLogo.initials }}
+                </span>
+                <span class="model-btn-text">{{ currentModel }}</span>
+                <ChevronDown :size="14" />
+              </button>
+              <Transition name="dropdown-fade">
+                <div v-if="showModelDropdown" class="model-dropdown">
+                  <div class="dropdown-header">选择模型</div>
+                  <div class="dropdown-list">
+                    <button
+                      v-for="opt in availableModelOptions"
+                      :key="`${opt.providerId}-${opt.modelId}`"
+                      :class="['dropdown-item', { active: currentProvider === opt.providerId && currentModel === opt.modelId }]"
+                      @click="selectModel(opt.providerId, opt.modelId)"
+                    >
+                      <span class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
+                        {{ opt.providerLogo.initials }}
+                      </span>
+                      <div class="dropdown-item-info">
+                        <span class="dropdown-item-model">{{ opt.modelName }}</span>
+                        <span class="dropdown-item-provider">{{ opt.providerName }}</span>
+                      </div>
+                    </button>
+                    <div v-if="availableModelOptions.length === 0" class="dropdown-empty">
+                      暂无可用模型，请先配置供应商
+                    </div>
+                  </div>
+                </div>
+              </Transition>
+            </div>
             <button class="tool-btn" title="技能">
               <Link2 :size="16" />
               <span>技能</span>
@@ -457,9 +631,22 @@ onMounted(async () => {
 .header-stats {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.provider-icon-mini {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
 }
 
 .header-right {
@@ -682,10 +869,18 @@ onMounted(async () => {
   animation: lumi-fade-in 0.2s ease-out reverse;
 }
 
+.main-content-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
 .chat-area {
   flex: 1;
   overflow-y: auto;
   padding: 20px 24px;
+  transition: all var(--transition-normal);
 }
 
 .messages-container {
@@ -847,6 +1042,163 @@ onMounted(async () => {
   background: var(--lumi-primary-light);
 }
 
+.history-panel {
+  width: 280px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--workspace-border);
+  background: var(--workspace-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--workspace-border);
+}
+
+.history-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.history-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.history-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.history-action-btn:hover {
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
+}
+
+.history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.history-item:hover {
+  background: var(--workspace-hover);
+}
+
+.history-item.active {
+  background: var(--lumi-primary-light);
+}
+
+.history-item-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.history-item.active .history-item-icon {
+  color: var(--lumi-primary);
+}
+
+.history-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-item-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.history-item-delete {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.history-item:hover .history-item-delete {
+  opacity: 1;
+}
+
+.history-item-delete:hover {
+  background: var(--lumi-accent-light);
+  color: var(--lumi-accent);
+}
+
+.history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  gap: 8px;
+}
+
+.history-empty p {
+  font-size: 13px;
+}
+
+.history-slide-enter-active {
+  animation: history-slide-in 0.3s ease-out;
+}
+
+.history-slide-leave-active {
+  animation: history-slide-in 0.2s ease-out reverse;
+}
+
+@keyframes history-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .input-area {
   padding: 12px 24px 16px;
   flex-shrink: 0;
@@ -931,6 +1283,116 @@ onMounted(async () => {
 
 .tool-btn.icon-only {
   padding: 6px;
+}
+
+.model-btn-text {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-dropdown-container {
+  position: relative;
+}
+
+.model-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 280px;
+  background: var(--workspace-card);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+  overflow: hidden;
+}
+
+.dropdown-header {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--workspace-border);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dropdown-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: all var(--transition-fast);
+}
+
+.dropdown-item:hover {
+  background: var(--workspace-hover);
+}
+
+.dropdown-item.active {
+  background: var(--lumi-primary-light);
+}
+
+.dropdown-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dropdown-item-model {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-item-provider {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dropdown-item.active .dropdown-item-model {
+  color: var(--lumi-primary);
+}
+
+.dropdown-empty {
+  padding: 20px 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dropdown-fade-enter-active {
+  animation: dropdown-in 0.2s ease-out;
+}
+
+.dropdown-fade-leave-active {
+  animation: dropdown-in 0.15s ease-out reverse;
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .send-btn {

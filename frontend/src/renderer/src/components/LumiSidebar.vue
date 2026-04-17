@@ -46,6 +46,7 @@ const searchQuery = ref('')
 const agents = computed(() => {
   const storeAgents = agentStore.agents
     .filter(a => {
+      if (a.isMain) return false
       if (!searchQuery.value) return true
       const q = searchQuery.value.toLowerCase()
       return a.name.toLowerCase().includes(q) || a.description.toLowerCase().includes(q)

@@ -9,8 +9,24 @@ export interface AgentProfile {
   provider?: string
   capabilities: string[]
   isActive: boolean
+  isMain?: boolean
   createdAt?: string
   updatedAt?: string
+}
+
+export interface MainAgentConfig {
+  provider: string
+  model: string
+  systemPrompt: string
+  temperature: number
+  maxTokens: number
+}
+
+export interface ProviderLogo {
+  id: string
+  name: string
+  color: string
+  initials: string
 }
 
 export interface WorkflowNode {

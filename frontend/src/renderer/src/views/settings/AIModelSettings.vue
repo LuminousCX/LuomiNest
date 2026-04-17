@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowLeft,
@@ -24,17 +24,21 @@ import {
   AlertCircle,
   Loader2,
   Server,
-  Edit3
+  Edit3,
+  Sparkles
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
+import { useAgentStore } from '../../stores/agent'
 import type { ProviderTemplate } from '../../types'
 
 const router = useRouter()
 const modelStore = useModelStore()
+const agentStore = useAgentStore()
 
 const activeTile = ref('service')
 
 const modelTiles = [
+  { id: 'main-agent', label: '主Agent', icon: Sparkles },
   { id: 'service', label: '模型服务', icon: Cloud },
   { id: 'main', label: '主模型', icon: Cpu },
   { id: 'fast', label: '快速模型', icon: Gauge },
@@ -141,6 +145,37 @@ const visionModelConfig = ref({
   enableDesktopVision: false,
   wakeWord: ''
 })
+
+const mainAgentConfigForm = ref({
+  provider: '',
+  model: '',
+  systemPrompt: '',
+  temperature: 0.7,
+  maxTokens: 4096,
+})
+const mainAgentSaveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+const mainAgentAvailableModels = computed(() => {
+  return modelStore.getProviderModels(mainAgentConfigForm.value.provider)
+})
+
+const handleSaveMainAgentConfig = async () => {
+  mainAgentSaveStatus.value = 'saving'
+  try {
+    await agentStore.updateMainAgentConfig({
+      provider: mainAgentConfigForm.value.provider,
+      model: mainAgentConfigForm.value.model,
+      systemPrompt: mainAgentConfigForm.value.systemPrompt,
+      temperature: mainAgentConfigForm.value.temperature,
+      maxTokens: mainAgentConfigForm.value.maxTokens,
+    })
+    mainAgentSaveStatus.value = 'saved'
+    setTimeout(() => { mainAgentSaveStatus.value = 'idle' }, 2000)
+  } catch {
+    mainAgentSaveStatus.value = 'error'
+    setTimeout(() => { mainAgentSaveStatus.value = 'idle' }, 3000)
+  }
+}
 
 const currentTileLabel = computed(() => {
   const tile = modelTiles.find(t => t.id === activeTile.value)
@@ -310,6 +345,15 @@ onMounted(async () => {
   await modelStore.fetchProviders()
   await modelStore.fetchTemplates()
   await modelStore.fetchModelConfig()
+  await agentStore.fetchMainAgentConfig()
+
+  const mainCfg = agentStore.mainAgentConfig
+  mainAgentConfigForm.value.provider = mainCfg.provider
+  mainAgentConfigForm.value.model = mainCfg.model
+  mainAgentConfigForm.value.systemPrompt = mainCfg.systemPrompt
+  mainAgentConfigForm.value.temperature = mainCfg.temperature
+  mainAgentConfigForm.value.maxTokens = mainCfg.maxTokens
+
   const cfg = modelStore.modelConfig
   mainModelConfig.value.selectedProvider = cfg.defaultProvider
   mainModelConfig.value.model = cfg.defaultModel
@@ -367,6 +411,118 @@ onMounted(async () => {
       </div>
 
       <div class="detail-content animate-slide-up" :style="{ animationDelay: '100ms' }">
+        <!-- 主Agent配置 -->
+        <div v-if="activeTile === 'main-agent'" class="content-section">
+          <div class="section-banner">
+            <div class="banner-accent">HOST</div>
+            <div class="banner-body">
+              <div class="banner-icon-box">
+                <Sparkles :size="24" />
+              </div>
+              <div class="banner-text">
+                <h3>主Agent配置</h3>
+                <p>
+                  主Agent是控制 Live2D 皮套的专属智能体，不会出现在 Agent 列表中。<br>
+                  它负责驱动皮套的表情、动作和对话响应，是 LuomiNest 的核心交互入口。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-form">
+            <div class="form-group">
+              <label class="form-label">
+                供应商
+                <span class="required-mark">*</span>
+              </label>
+              <div class="form-select-wrap">
+                <select v-model="mainAgentConfigForm.provider" class="form-select">
+                  <option value="">请选择供应商</option>
+                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+                <ChevronRight :size="14" class="select-icon" />
+              </div>
+              <span v-if="providers.length === 0" class="form-hint">
+                暂无供应商，请先前往模型服务添加
+              </span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                模型
+                <span class="required-mark">*</span>
+              </label>
+              <div class="form-select-wrap">
+                <select v-model="mainAgentConfigForm.model" class="form-select">
+                  <option value="">请选择模型</option>
+                  <option v-for="m in mainAgentAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+                </select>
+                <ChevronRight :size="14" class="select-icon" />
+              </div>
+              <span v-if="mainAgentConfigForm.provider && mainAgentAvailableModels.length === 0" class="form-hint">
+                暂无模型列表，请前往模型服务点击搜索图标获取
+              </span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">系统提示词</label>
+              <textarea
+                v-model="mainAgentConfigForm.systemPrompt"
+                class="form-input form-textarea"
+                placeholder="定义主Agent的角色和行为，用于驱动 Live2D 皮套..."
+                rows="5"
+              ></textarea>
+              <span class="form-hint">此提示词将用于控制皮套的对话风格和情感表达</span>
+            </div>
+
+            <div class="form-group">
+              <div class="form-label-row">
+                <label class="form-label">Temperature</label>
+                <span class="form-value">{{ mainAgentConfigForm.temperature }}</span>
+              </div>
+              <input
+                type="range"
+                v-model.number="mainAgentConfigForm.temperature"
+                min="0"
+                max="2"
+                step="0.1"
+                class="form-slider"
+              />
+              <div class="slider-labels">
+                <span>精确</span>
+                <span>创意</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <div class="form-label-row">
+                <label class="form-label">Max Tokens</label>
+                <span class="form-value">{{ mainAgentConfigForm.maxTokens }}</span>
+              </div>
+              <input
+                type="range"
+                v-model.number="mainAgentConfigForm.maxTokens"
+                min="256"
+                max="8192"
+                step="256"
+                class="form-slider"
+              />
+            </div>
+
+            <button
+              :class="['save-btn', { saving: mainAgentSaveStatus === 'saving', saved: mainAgentSaveStatus === 'saved', error: mainAgentSaveStatus === 'error' }]"
+              :disabled="mainAgentSaveStatus === 'saving'"
+              @click="handleSaveMainAgentConfig"
+            >
+              <Loader2 v-if="mainAgentSaveStatus === 'saving'" :size="16" class="spin-animation" />
+              <Check v-else-if="mainAgentSaveStatus === 'saved'" :size="16" />
+              <AlertCircle v-else-if="mainAgentSaveStatus === 'error'" :size="16" />
+              <Check v-else :size="16" />
+              {{ mainAgentSaveStatus === 'saving' ? '保存中...' : mainAgentSaveStatus === 'saved' ? '已保存' : mainAgentSaveStatus === 'error' ? '保存失败' : '保存配置' }}
+            </button>
+          </div>
+        </div>
+
         <!-- 模型服务 -->
         <div v-if="activeTile === 'service'" class="content-section">
           <div class="section-banner">
@@ -1531,6 +1687,13 @@ onMounted(async () => {
 
 .form-input::placeholder {
   color: var(--text-muted);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+  line-height: 1.6;
 }
 
 .form-slider {

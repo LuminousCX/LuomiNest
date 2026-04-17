@@ -1,12 +1,17 @@
 import uuid
+import os
+import json
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Any
 from loguru import logger
 
 from app.runtime.provider.llm.adapter import llm_adapter
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "data")
+MAIN_AGENT_CONFIG_FILE = os.path.join(CONFIG_DIR, "main_agent.json")
 
 
 class AgentCreate(BaseModel):
@@ -43,8 +48,29 @@ class AgentResponse(BaseModel):
     avatar: str | None = None
     capabilities: list[str]
     is_active: bool = True
+    is_main: bool = False
     created_at: str = ""
     updated_at: str = ""
+
+
+class MainAgentConfigUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    provider: str | None = None
+    model: str | None = None
+    system_prompt: str | None = Field(alias="systemPrompt", default=None)
+    temperature: float | None = None
+    max_tokens: int | None = Field(alias="maxTokens", default=None)
+
+
+class MainAgentConfigResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, by_alias=True)
+
+    provider: str = ""
+    model: str = ""
+    system_prompt: str = Field(alias="systemPrompt", default="")
+    temperature: float = 0.7
+    max_tokens: int = Field(alias="maxTokens", default=4096)
 
 
 _agents: dict[str, dict] = {
@@ -59,6 +85,7 @@ _agents: dict[str, dict] = {
         "avatar": None,
         "capabilities": ["chat", "code", "tools"],
         "is_active": True,
+        "is_main": False,
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:00Z",
     },
@@ -73,6 +100,7 @@ _agents: dict[str, dict] = {
         "avatar": None,
         "capabilities": ["chat", "writing"],
         "is_active": True,
+        "is_main": False,
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:00Z",
     },
@@ -87,15 +115,90 @@ _agents: dict[str, dict] = {
         "avatar": None,
         "capabilities": ["chat", "counseling"],
         "is_active": True,
+        "is_main": False,
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:00Z",
     },
 }
 
+_DEFAULT_MAIN_AGENT_CONFIG = {
+    "provider": "",
+    "model": "",
+    "system_prompt": "你是 LuomiNest 的主控智能体，负责控制 Live2D 皮套的行为和表情。你需要根据对话内容做出恰当的情感反应，并保持角色的一致性。你的回答应该简洁自然，适合通过皮套形象表达。",
+    "temperature": 0.7,
+    "max_tokens": 4096,
+}
+
+
+def _ensure_config_dir():
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+
+
+def _load_main_agent_config() -> dict:
+    _ensure_config_dir()
+    if not os.path.exists(MAIN_AGENT_CONFIG_FILE):
+        return dict(_DEFAULT_MAIN_AGENT_CONFIG)
+    try:
+        with open(MAIN_AGENT_CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning(f"Failed to load main agent config: {e}")
+        return dict(_DEFAULT_MAIN_AGENT_CONFIG)
+
+
+def _save_main_agent_config(config: dict):
+    _ensure_config_dir()
+    try:
+        with open(MAIN_AGENT_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save main agent config: {e}")
+
+
+@router.get("/main-agent/config", response_model=MainAgentConfigResponse)
+async def get_main_agent_config():
+    config = _load_main_agent_config()
+    return MainAgentConfigResponse(
+        provider=config.get("provider", ""),
+        model=config.get("model", ""),
+        system_prompt=config.get("system_prompt", ""),
+        temperature=config.get("temperature", 0.7),
+        max_tokens=config.get("max_tokens", 4096),
+    )
+
+
+@router.patch("/main-agent/config", response_model=MainAgentConfigResponse)
+async def update_main_agent_config(request: MainAgentConfigUpdate):
+    config = _load_main_agent_config()
+    update_data = request.model_dump(exclude_unset=True, by_alias=False)
+
+    if "system_prompt" in update_data or "systemPrompt" in update_data:
+        val = update_data.get("system_prompt") or update_data.get("systemPrompt")
+        if val is not None:
+            config["system_prompt"] = val
+    if "max_tokens" in update_data or "maxTokens" in update_data:
+        val = update_data.get("max_tokens") or update_data.get("maxTokens")
+        if val is not None:
+            config["max_tokens"] = val
+
+    for key in ("provider", "model", "temperature"):
+        if key in update_data and update_data[key] is not None:
+            config[key] = update_data[key]
+
+    _save_main_agent_config(config)
+
+    return MainAgentConfigResponse(
+        provider=config.get("provider", ""),
+        model=config.get("model", ""),
+        system_prompt=config.get("system_prompt", ""),
+        temperature=config.get("temperature", 0.7),
+        max_tokens=config.get("max_tokens", 4096),
+    )
+
 
 @router.get("", response_model=list[AgentResponse])
 async def list_agents():
-    return list(_agents.values())
+    return [a for a in _agents.values() if not a.get("is_main", False)]
 
 
 @router.post("", response_model=AgentResponse)
@@ -114,6 +217,7 @@ async def create_agent(request: AgentCreate):
         "avatar": request.avatar,
         "capabilities": request.capabilities,
         "is_active": True,
+        "is_main": False,
         "created_at": now,
         "updated_at": now,
     }

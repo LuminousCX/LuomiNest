@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { AgentProfile } from '../types'
+import type { AgentProfile, MainAgentConfig } from '../types'
 import { useApi } from '../composables/useApi'
 
 export const useAgentStore = defineStore('agent', () => {
@@ -9,6 +9,13 @@ export const useAgentStore = defineStore('agent', () => {
   const agents = ref<AgentProfile[]>([])
   const activeAgent = ref<AgentProfile | null>(null)
   const loading = ref(false)
+  const mainAgentConfig = ref<MainAgentConfig>({
+    provider: '',
+    model: '',
+    systemPrompt: '',
+    temperature: 0.7,
+    maxTokens: 4096,
+  })
 
   const activeAgents = computed(() => agents.value.filter(a => a.isActive))
 
@@ -16,20 +23,23 @@ export const useAgentStore = defineStore('agent', () => {
     loading.value = true
     try {
       const data = await apiGet<any[]>('/agents')
-      agents.value = data.map(a => ({
-        id: a.id,
-        name: a.name,
-        description: a.description,
-        avatar: a.avatar,
-        color: a.color,
-        systemPrompt: a.system_prompt,
-        model: a.model || '',
-        provider: a.provider,
-        capabilities: a.capabilities || [],
-        isActive: a.is_active ?? true,
-        createdAt: a.created_at,
-        updatedAt: a.updated_at,
-      }))
+      agents.value = data
+        .filter(a => !a.is_main)
+        .map(a => ({
+          id: a.id,
+          name: a.name,
+          description: a.description,
+          avatar: a.avatar,
+          color: a.color,
+          systemPrompt: a.system_prompt,
+          model: a.model || '',
+          provider: a.provider,
+          capabilities: a.capabilities || [],
+          isActive: a.is_active ?? true,
+          isMain: a.is_main ?? false,
+          createdAt: a.created_at,
+          updatedAt: a.updated_at,
+        }))
       if (!activeAgent.value && agents.value.length > 0) {
         activeAgent.value = agents.value[0]
       }
@@ -100,15 +110,52 @@ export const useAgentStore = defineStore('agent', () => {
     activeAgent.value = agent
   }
 
+  const fetchMainAgentConfig = async () => {
+    try {
+      const result = await apiGet<any>('/agents/main-agent/config')
+      mainAgentConfig.value = {
+        provider: result.provider || '',
+        model: result.model || '',
+        systemPrompt: result.systemPrompt || result.system_prompt || '',
+        temperature: result.temperature ?? 0.7,
+        maxTokens: result.maxTokens || result.max_tokens || 4096,
+      }
+    } catch {
+      // use defaults
+    }
+  }
+
+  const updateMainAgentConfig = async (updates: Partial<MainAgentConfig>) => {
+    const body: any = {}
+    if (updates.provider !== undefined) body.provider = updates.provider
+    if (updates.model !== undefined) body.model = updates.model
+    if (updates.systemPrompt !== undefined) body.systemPrompt = updates.systemPrompt
+    if (updates.temperature !== undefined) body.temperature = updates.temperature
+    if (updates.maxTokens !== undefined) body.maxTokens = updates.maxTokens
+
+    const result = await apiPatch<any>('/agents/main-agent/config', body)
+    mainAgentConfig.value = {
+      provider: result.provider || '',
+      model: result.model || '',
+      systemPrompt: result.systemPrompt || result.system_prompt || '',
+      temperature: result.temperature ?? 0.7,
+      maxTokens: result.maxTokens || result.max_tokens || 4096,
+    }
+    return result
+  }
+
   return {
     agents,
     activeAgent,
     loading,
+    mainAgentConfig,
     activeAgents,
     fetchAgents,
     createAgent,
     updateAgent,
     deleteAgent,
     setActiveAgent,
+    fetchMainAgentConfig,
+    updateMainAgentConfig,
   }
 })
