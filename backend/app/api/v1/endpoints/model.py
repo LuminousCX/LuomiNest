@@ -1,3 +1,4 @@
+import time
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
@@ -87,6 +88,7 @@ def _build_provider_response(provider_id: str) -> ProviderResponse:
 
 @router.get("/providers/templates", response_model=list[ProviderTemplateResponse])
 async def list_provider_templates():
+    logger.info("[API] GET /models/providers/templates - Listing provider templates")
     result = []
     for key, tmpl in PROVIDER_TEMPLATES.items():
         result.append(ProviderTemplateResponse(
@@ -97,11 +99,14 @@ async def list_provider_templates():
             default_model=tmpl["default_model"],
             description=tmpl["description"],
         ))
+    logger.success(f"[API] GET /models/providers/templates - Success: returned {len(result)} templates")
     return result
 
 
 @router.get("/providers", response_model=list[ProviderResponse])
 async def list_providers():
+    logger.info("[API] GET /models/providers - Listing all providers")
+    start_time = time.time()
     providers_info = llm_adapter.list_providers()
     result = []
     for p in providers_info:
@@ -110,8 +115,9 @@ async def list_providers():
         if provider_instance:
             try:
                 models = await provider_instance.list_models()
-            except Exception:
-                pass
+                logger.debug(f"[API] GET /models/providers - Provider {p['id']} has {len(models)} models")
+            except Exception as e:
+                logger.warning(f"[API] GET /models/providers - Failed to list models for {p['id']}: {e}")
 
         result.append(ProviderResponse(
             id=p["id"],
@@ -123,12 +129,16 @@ async def list_providers():
             is_default=p["is_default"],
             models=models,
         ))
+    elapsed = time.time() - start_time
+    logger.success(f"[API] GET /models/providers - Success: returned {len(result)} providers, elapsed={elapsed:.2f}s")
     return result
 
 
 @router.post("/providers", response_model=ProviderResponse)
 async def add_provider(request: ProviderCreate):
+    logger.info(f"[API] POST /models/providers - Adding provider: id={request.id}, vendor={request.vendor}")
     if request.id in llm_adapter.providers:
+        logger.error(f"[API] POST /models/providers - Provider already exists: {request.id}")
         raise ValidationError(f"Provider [{request.id}] already exists")
 
     config = {
@@ -148,12 +158,14 @@ async def add_provider(request: ProviderCreate):
         config=config,
         set_default=request.is_default,
     )
+    logger.success(f"[API] POST /models/providers - Provider registered: id={request.id}, base_url={provider.base_url}")
 
     models = []
     try:
         models = await provider.list_models()
-    except Exception:
-        pass
+        logger.debug(f"[API] POST /models/providers - Fetched {len(models)} models for {request.id}")
+    except Exception as e:
+        logger.warning(f"[API] POST /models/providers - Failed to fetch models: {e}")
 
     return ProviderResponse(
         id=request.id,
@@ -169,24 +181,33 @@ async def add_provider(request: ProviderCreate):
 
 @router.patch("/providers/{provider_id}", response_model=ProviderResponse)
 async def update_provider(provider_id: str, request: ProviderUpdate):
+    logger.info(f"[API] PATCH /models/providers/{provider_id} - Updating provider")
     if provider_id not in llm_adapter.providers:
+        logger.error(f"[API] PATCH /models/providers/{provider_id} - Provider not found")
         raise NotFoundError(f"Provider [{provider_id}] not found")
 
     existing_cfg = llm_adapter.get_provider_config(provider_id) or {}
     updated_cfg = dict(existing_cfg)
+    updated_fields = []
 
     if request.name is not None:
         updated_cfg["name"] = request.name
+        updated_fields.append("name")
     if request.vendor is not None:
         updated_cfg["vendor"] = request.vendor
+        updated_fields.append("vendor")
     if request.base_url is not None:
         updated_cfg["base_url"] = request.base_url.rstrip("/")
+        updated_fields.append("base_url")
     if request.api_key is not None:
         updated_cfg["api_key"] = request.api_key
+        updated_fields.append("api_key")
     if request.default_model is not None:
         updated_cfg["default_model"] = request.default_model
+        updated_fields.append("default_model")
     if request.is_default is not None:
         updated_cfg["is_default"] = request.is_default
+        updated_fields.append("is_default")
 
     provider = _create_provider_from_config(updated_cfg)
     set_default = request.is_default if request.is_default is not None else False
@@ -196,59 +217,86 @@ async def update_provider(provider_id: str, request: ProviderUpdate):
         config=updated_cfg,
         set_default=set_default,
     )
+    logger.success(f"[API] PATCH /models/providers/{provider_id} - Updated fields: {updated_fields}")
 
     return _build_provider_response(provider_id)
 
 
 @router.delete("/providers/{provider_id}")
 async def remove_provider(provider_id: str):
+    logger.info(f"[API] DELETE /models/providers/{provider_id} - Removing provider")
     if provider_id not in llm_adapter.providers:
+        logger.error(f"[API] DELETE /models/providers/{provider_id} - Provider not found")
         raise NotFoundError(f"Provider [{provider_id}] not found")
 
     llm_adapter.remove_provider(provider_id)
+    logger.success(f"[API] DELETE /models/providers/{provider_id} - Provider removed")
     return {"error": None, "data": {"deleted": True, "id": provider_id}}
 
 
 @router.get("/providers/{provider_id}/models")
 async def list_provider_models(provider_id: str):
-    models = await llm_adapter.list_models(provider_id)
-    return {"error": None, "data": models}
+    logger.info(f"[API] GET /models/providers/{provider_id}/models - Listing models")
+    start_time = time.time()
+    try:
+        models = await llm_adapter.list_models(provider_id)
+        elapsed = time.time() - start_time
+        logger.success(f"[API] GET /models/providers/{provider_id}/models - Success: {len(models)} models, elapsed={elapsed:.2f}s")
+        return {"error": None, "data": models}
+    except Exception as e:
+        elapsed = time.time() - start_time
+        logger.error(f"[API] GET /models/providers/{provider_id}/models - Failed: elapsed={elapsed:.2f}s, error={e}")
+        raise
 
 
 @router.get("/list")
 async def list_all_models():
+    logger.info("[API] GET /models/list - Listing all models")
+    start_time = time.time()
     models = await llm_adapter.list_models()
+    elapsed = time.time() - start_time
+    logger.success(f"[API] GET /models/list - Success: {len(models)} models, elapsed={elapsed:.2f}s")
     return {"error": None, "data": models}
 
 
 @router.get("/config")
 async def get_model_config():
+    logger.info("[API] GET /models/config - Getting model config")
     from app.core.config import settings
-    return {
-        "error": None,
-        "data": {
-            "default_provider": llm_adapter.default_provider,
-            "default_model": settings.LLM_DEFAULT_MODEL,
-            "default_temperature": settings.LLM_DEFAULT_TEMPERATURE,
-            "default_max_tokens": settings.LLM_DEFAULT_MAX_TOKENS,
-            "default_top_p": settings.LLM_DEFAULT_TOP_P,
-        }
+    config = {
+        "default_provider": llm_adapter.default_provider,
+        "default_model": settings.LLM_DEFAULT_MODEL,
+        "default_temperature": settings.LLM_DEFAULT_TEMPERATURE,
+        "default_max_tokens": settings.LLM_DEFAULT_MAX_TOKENS,
+        "default_top_p": settings.LLM_DEFAULT_TOP_P,
     }
+    logger.success(f"[API] GET /models/config - Success: provider={config['default_provider']}, model={config['default_model']}")
+    return {"error": None, "data": config}
 
 
 @router.patch("/config")
 async def update_model_config(request: ModelConfigUpdate):
+    logger.info(f"[API] PATCH /models/config - Updating model config")
     from app.core.config import settings
+    updated_fields = []
+
     if request.provider is not None:
         llm_adapter.default_provider = request.provider
+        updated_fields.append("provider")
     if request.model is not None:
         settings.LLM_DEFAULT_MODEL = request.model
+        updated_fields.append("model")
     if request.temperature is not None:
         settings.LLM_DEFAULT_TEMPERATURE = request.temperature
+        updated_fields.append("temperature")
     if request.max_tokens is not None:
         settings.LLM_DEFAULT_MAX_TOKENS = request.max_tokens
+        updated_fields.append("max_tokens")
     if request.top_p is not None:
         settings.LLM_DEFAULT_TOP_P = request.top_p
+        updated_fields.append("top_p")
+
+    logger.success(f"[API] PATCH /models/config - Updated fields: {updated_fields}")
     return {
         "error": None,
         "data": {
