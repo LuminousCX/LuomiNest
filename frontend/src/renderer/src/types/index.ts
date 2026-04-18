@@ -64,6 +64,11 @@ export interface ChatMessage {
   model?: string
   provider?: string
   done?: boolean
+  usage?: {
+    promptTokens?: number
+    completionTokens?: number
+    totalTokens?: number
+  }
 }
 
 export interface ChatRequest {
@@ -92,6 +97,11 @@ export interface ChatStreamChunk {
   model: string
   provider: string
   done: boolean
+  usage?: {
+    promptTokens?: number
+    completionTokens?: number
+    totalTokens?: number
+  }
 }
 
 export interface Conversation {

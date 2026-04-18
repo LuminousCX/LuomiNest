@@ -23,6 +23,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "marked": "^18.0.1",
     "pinia": "^3.0.4",
     "pixi-live2d-display-mulmotion": "0.5.0-mm-6",
     "pixi.js": "^7.4.3",

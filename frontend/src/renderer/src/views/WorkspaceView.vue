@@ -20,13 +20,21 @@ import {
   MessageSquare,
   Trash2,
   X,
-  Plus
+  Plus,
+  Copy,
+  Check
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
 import { getProviderLogo } from '../config/provider-logos'
+import { marked } from 'marked'
+
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+})
 
 const router = useRouter()
 const chatStore = useChatStore()
@@ -38,6 +46,7 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const showModelDropdown = ref(false)
 const showHistoryPanel = ref(false)
+const copiedId = ref<string | null>(null)
 
 const agentCards = computed(() => {
   const agents = agentStore.agents.map(a => ({
@@ -189,17 +198,27 @@ const autoResize = () => {
   }
 }
 
-const formatMessage = (text: string): string => {
-  const escaped = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-  return escaped
-    .replace(/\n/g, '<br>')
-    .replace(/•\s*/g, '<span class="bullet">•</span>&nbsp;')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
+const renderMarkdown = (text: string): string => {
+  if (!text) return ''
+  return marked.parse(text) as string
+}
+
+const contextUsage = computed(() => {
+  const lastAssistantMsg = [...messages.value].reverse().find(m => m.role === 'assistant' && m.done)
+  return lastAssistantMsg?.usage || chatStore.lastUsage || null
+})
+
+const contextPercent = computed(() => {
+  if (!contextUsage.value?.totalTokens || !modelStore.modelConfig.defaultMaxTokens) return 0
+  return Math.min(100, Math.round((contextUsage.value.totalTokens / modelStore.modelConfig.defaultMaxTokens) * 100))
+})
+
+const copyMessage = async (msgId: string, content: string) => {
+  try {
+    await navigator.clipboard.writeText(content)
+    copiedId.value = msgId
+    setTimeout(() => { copiedId.value = null }, 2000)
+  } catch {}
 }
 
 const formatTime = (dateStr: string) => {
@@ -393,10 +412,19 @@ onMounted(async () => {
                 <Bot :size="16" />
               </div>
             </div>
-            <div class="message-bubble">
-              <div class="message-content" v-html="formatMessage(msg.content)"></div>
+            <div class="message-body">
+              <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
+              <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div v-else class="message-content user-message">{{ msg.content }}</div>
               <div v-if="msg.role === 'assistant' && !msg.done && isStreaming" class="streaming-cursor">
                 <span class="cursor-blink"></span>
+              </div>
+              <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
+                <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
+                  <Check v-if="copiedId === msg.id" :size="13" />
+                  <Copy v-else :size="13" />
+                  <span>{{ copiedId === msg.id ? '已复制' : '复制' }}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -526,7 +554,13 @@ onMounted(async () => {
         </div>
       </div>
       <div class="input-footer">
-        <span>内容由AI生成，请仔细核对</span>
+        <div v-if="contextUsage" class="context-usage">
+          <div class="context-bar">
+            <div class="context-bar-fill" :style="{ width: contextPercent + '%' }" :class="{ warn: contextPercent > 70, danger: contextPercent > 90 }"></div>
+          </div>
+          <span class="context-text">{{ contextUsage.totalTokens?.toLocaleString() || 0 }} tokens · {{ contextPercent }}%</span>
+        </div>
+        <span v-else>内容由AI生成，请仔细核对</span>
       </div>
     </div>
 
@@ -889,21 +923,21 @@ onMounted(async () => {
 }
 
 .message-row {
-  margin-bottom: 20px;
+  margin-bottom: 28px;
   animation: lumi-slide-up 0.3s ease-out both;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-start;
 }
 
 .message-avatar {
   flex-shrink: 0;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .avatar-assistant {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-sm);
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
@@ -912,58 +946,69 @@ onMounted(async () => {
   justify-content: center;
 }
 
-.message-bubble {
+.message-body {
   max-width: 85%;
+  min-width: 0;
   position: relative;
+}
+
+.message-sender {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
 }
 
 .message-content {
   font-size: 14px;
   line-height: 1.75;
   color: var(--text-primary);
-  padding: 16px 20px;
-  border-radius: var(--radius-lg);
-  background: var(--workspace-card);
-  box-shadow: var(--shadow-xs);
-}
-
-.message-content :deep(.bullet) {
-  color: var(--lumi-primary);
-  font-weight: 600;
-}
-
-.message-content :deep(code) {
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 13px;
-  background: var(--workspace-panel);
-  color: var(--lumi-primary);
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-}
-
-.message-content :deep(strong) {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.message-row.assistant .message-bubble {
-  border-top-left-radius: 4px;
 }
 
 .message-row.user {
   justify-content: flex-end;
 }
 
-.message-row.user .message-bubble {
-  border-top-right-radius: 4px;
-  background: linear-gradient(135deg, var(--lumi-primary), #14b8a6);
-  color: white;
+.message-row.user .message-body {
+  max-width: 70%;
 }
 
-.message-row.user .message-content {
-  color: white;
-  background: transparent;
-  box-shadow: none;
+.user-message {
+  padding: 10px 16px;
+  border-radius: var(--radius-lg);
+  border-top-right-radius: 4px;
+  background: rgba(13, 148, 136, 0.08);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.message-row:hover .message-actions {
+  opacity: 1;
+}
+
+.msg-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.msg-action-btn:hover {
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
 }
 
 .streaming-cursor {
@@ -1581,5 +1626,186 @@ onMounted(async () => {
 .dialog-btn.confirm.disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.markdown-body {
+  word-break: break-word;
+}
+
+.markdown-body :deep(p) {
+  margin: 0 0 12px;
+}
+
+.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3),
+.markdown-body :deep(h4),
+.markdown-body :deep(h5),
+.markdown-body :deep(h6) {
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 20px 0 10px;
+  line-height: 1.4;
+}
+
+.markdown-body :deep(h1) { font-size: 22px; }
+.markdown-body :deep(h2) { font-size: 18px; border-bottom: 1px solid var(--border-light); padding-bottom: 6px; }
+.markdown-body :deep(h3) { font-size: 16px; }
+.markdown-body :deep(h4) { font-size: 15px; }
+
+.markdown-body :deep(h1:first-child),
+.markdown-body :deep(h2:first-child),
+.markdown-body :deep(h3:first-child) {
+  margin-top: 0;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.markdown-body :deep(li) {
+  margin: 4px 0;
+  line-height: 1.7;
+}
+
+.markdown-body :deep(li::marker) {
+  color: var(--lumi-primary);
+}
+
+.markdown-body :deep(blockquote) {
+  margin: 12px 0;
+  padding: 8px 16px;
+  border-left: 3px solid var(--lumi-primary);
+  background: var(--lumi-primary-light);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-secondary);
+}
+
+.markdown-body :deep(blockquote p) {
+  margin: 0;
+}
+
+.markdown-body :deep(code) {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  background: var(--workspace-panel);
+  color: var(--lumi-primary);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+.markdown-body :deep(pre) {
+  margin: 12px 0;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: #1c1917;
+  overflow-x: auto;
+  position: relative;
+}
+
+.markdown-body :deep(pre code) {
+  padding: 0;
+  background: none;
+  color: #e7e5e4;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.markdown-body :deep(table) {
+  width: 100%;
+  margin: 12px 0;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  padding: 8px 12px;
+  border: 1px solid var(--workspace-border);
+  text-align: left;
+}
+
+.markdown-body :deep(th) {
+  background: var(--workspace-panel);
+  font-weight: 600;
+}
+
+.markdown-body :deep(tr:nth-child(even)) {
+  background: var(--lumi-primary-light);
+}
+
+.markdown-body :deep(hr) {
+  margin: 16px 0;
+  border: none;
+  height: 1px;
+  background: var(--workspace-border);
+}
+
+.markdown-body :deep(a) {
+  color: var(--lumi-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-body :deep(a:hover) {
+  color: var(--lumi-primary-hover);
+}
+
+.markdown-body :deep(img) {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  margin: 8px 0;
+}
+
+.markdown-body :deep(strong) {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.markdown-body :deep(em) {
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.context-usage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+.context-bar {
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--workspace-panel);
+  overflow: hidden;
+}
+
+.context-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--lumi-primary);
+  transition: width 0.4s ease-in-out, background 0.3s ease-in-out;
+}
+
+.context-bar-fill.warn {
+  background: var(--lumi-warning);
+}
+
+.context-bar-fill.danger {
+  background: var(--lumi-accent);
+}
+
+.context-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 </style>

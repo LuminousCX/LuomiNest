@@ -13,6 +13,7 @@ export const useChatStore = defineStore('chat', () => {
   const isBackendReady = ref(false)
   const streamingContent = ref('')
   const lastError = ref<string | null>(null)
+  const lastUsage = ref<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | null>(null)
 
   const currentMessages = computed(() => messages.value)
 
@@ -128,6 +129,13 @@ export const useChatStore = defineStore('chat', () => {
         if (lastMsg && lastMsg.role === 'assistant') {
           lastMsg.content = streamingContent.value
         }
+        if (chunk.usage) {
+          lastUsage.value = chunk.usage
+          const lastMsgRef = messages.value[messages.value.length - 1]
+          if (lastMsgRef && lastMsgRef.role === 'assistant') {
+            lastMsgRef.usage = chunk.usage
+          }
+        }
       },
       () => {
         const lastMsg = messages.value[messages.value.length - 1]
@@ -167,6 +175,7 @@ export const useChatStore = defineStore('chat', () => {
     isBackendReady,
     streamingContent,
     lastError,
+    lastUsage,
     checkBackend,
     fetchConversations,
     createConversation,

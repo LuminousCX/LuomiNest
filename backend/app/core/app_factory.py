@@ -14,7 +14,6 @@ from app.api.v1.router import api_router
 async def lifespan(app: FastAPI):
     logger.info(f"[LuomiNest] Starting application...")
     logger.info(f"[LuomiNest] Environment: {'Development' if settings.DEBUG else 'Production'}")
-    logger.info(f"[LuomiNest] API docs: http://127.0.0.1:{settings.PORT}/docs")
     yield
     logger.info(f"[LuomiNest] Shutting down application...")
 
