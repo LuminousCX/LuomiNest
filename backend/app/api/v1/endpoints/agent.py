@@ -3,10 +3,7 @@ import os
 import json
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Any
 from loguru import logger
-
-from app.runtime.provider.llm.adapter import llm_adapter
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 

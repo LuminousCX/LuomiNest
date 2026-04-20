@@ -55,11 +55,19 @@ New-Item -ItemType Directory -Force -Path (Join-Path $DistDir "backend") | Out-N
 Write-Host ""
 Write-Host "[Step 4/6] Copying backend to distribution and frontend resources..." -ForegroundColor Yellow
 Copy-Item $BackendExe (Join-Path $DistDir "backend\") -Force
+if (-not (Test-Path (Join-Path $DistDir "backend\luominest-backend.exe"))) {
+    Write-Host "[ERROR] Failed to copy backend executable" -ForegroundColor Red
+    exit 1
+}
 
 if (-not (Test-Path $ResourcesBackend)) {
     New-Item -ItemType Directory -Force -Path $ResourcesBackend | Out-Null
 }
 Copy-Item $BackendExe $ResourcesBackend -Force
+if (-not (Test-Path (Join-Path $ResourcesBackend "luominest-backend.exe"))) {
+    Write-Host "[ERROR] Failed to copy backend executable to frontend resources" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host ""
 Write-Host "[Step 5/6] Building frontend with electron-vite..." -ForegroundColor Yellow
