@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.runtime.provider.llm.adapter import llm_adapter, _create_provider_from_config
-from app.runtime.provider.llm.providers import OpenAICompatibleProvider, PROVIDER_TEMPLATES
+from app.runtime.provider.llm.providers import PROVIDER_TEMPLATES
 from app.core.exceptions import NotFoundError, ValidationError
 
 router = APIRouter(prefix="/models", tags=["models"])
