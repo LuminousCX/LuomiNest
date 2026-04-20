@@ -1,0 +1,362 @@
+2026-04-15 11:51:47,450 - luminest - INFO - API 依赖已加载
+2026-04-15 13:08:40,131 - luminest - WARNING - Selenium 未安装，动态网页解析功能不可用。请运行: pip install selenium webdriver-manager
+2026-04-15 13:08:40,136 - luminest - WARNING - API 依赖未安装，将使用备用模式运行: No module named 'openai'
+2026-04-15 13:21:20,090 - luminest - WARNING - Selenium 未安装，动态网页解析功能不可用。请运行: pip install selenium webdriver-manager
+2026-04-15 13:21:20,091 - luminest - WARNING - API 依赖未安装，将使用备用模式运行: No module named 'openai'
+2026-04-15 13:24:50,022 - luminest - WARNING - Selenium 未安装，动态网页解析功能不可用。请运行: pip install selenium webdriver-manager
+2026-04-15 13:24:51,073 - luminest - INFO - API 依赖已加载
+2026-04-15 13:26:48,756 - luminest - WARNING - Selenium 未安装，动态网页解析功能不可用。请运行: pip install selenium webdriver-manager
+2026-04-15 13:26:49,682 - luminest - INFO - API 依赖已加载
+2026-04-15 13:29:06,167 - luminest - WARNING - Selenium 未安装，动态网页解析功能不可用。请运行: pip install selenium webdriver-manager
+2026-04-15 13:29:07,304 - luminest - INFO - API 依赖已加载
+2026-04-15 13:30:16,321 - luminest - INFO - API 依赖已加载
+2026-04-15 13:39:42,488 - luminest - INFO - API 依赖已加载
+2026-04-15 15:08:35.656 | INFO     |  |  | src.app:lifespan:27 | LuomiNest 服务启动中...
+2026-04-15 15:08:36.437 | INFO     |  |  | src.dao.agent_dao:insert:104 | Agent 创建成功: id=e4a6c618bcc74e9292c16ddd790cfd77, name=代可行
+2026-04-15 15:08:36.438 | INFO     |  |  | src.service.agent_service:_init_preset_agents:59 | 预设 Agent 初始化完成: 代可行
+2026-04-15 15:08:36.609 | INFO     |  |  | src.dao.agent_dao:insert:104 | Agent 创建成功: id=c06962d3740f4ee79ceac443442226e4, name=无言
+2026-04-15 15:08:36.609 | INFO     |  |  | src.service.agent_service:_init_preset_agents:59 | 预设 Agent 初始化完成: 无言
+2026-04-15 15:08:36.780 | INFO     |  |  | src.dao.agent_dao:insert:104 | Agent 创建成功: id=59f6b45eb2cc499d8992a143395d7629, name=林且慢
+2026-04-15 15:08:36.781 | INFO     |  |  | src.service.agent_service:_init_preset_agents:59 | 预设 Agent 初始化完成: 林且慢
+2026-04-15 15:08:36.853 | INFO     |  |  | src.api.deps:init_services:61 | 所有服务初始化完成
+2026-04-15 15:08:36.853 | INFO     |  |  | src.app:lifespan:29 | LuomiNest 服务启动完成
+2026-04-15 15:09:07.421 | INFO     | 88051fb554264e07 |  | src.api.middleware:dispatch:76 | 请求开始: GET /health
+2026-04-15 15:09:07.423 | INFO     | 88051fb554264e07 |  | src.api.middleware:dispatch:83 | 请求完成: GET /health | 状态码: 200 | 耗时: 2ms
+2026-04-15 15:09:22.965 | INFO     | 0b8a718a544f4649 |  | src.api.middleware:dispatch:76 | 请求开始: GET /api/v1/agents
+2026-04-15 15:09:23.059 | INFO     | 0b8a718a544f4649 |  | src.api.middleware:dispatch:83 | 请求完成: GET /api/v1/agents | 状态码: 200 | 耗时: 94ms
+2026-04-15 15:09:40.826 | INFO     | eb677d62ef5b43dd |  | src.api.middleware:dispatch:76 | 请求开始: GET /api/v1/agents/current
+2026-04-15 15:09:40.891 | INFO     | eb677d62ef5b43dd |  | src.api.middleware:dispatch:83 | 请求完成: GET /api/v1/agents/current | 状态码: 200 | 耗时: 64ms
+2026-04-15 15:09:55.628 | INFO     | 9ab904b69a654f47 |  | src.api.middleware:dispatch:76 | 请求开始: POST /api/v1/agents
+2026-04-15 15:09:55.839 | INFO     | 9ab904b69a654f47 |  | src.dao.agent_dao:insert:104 | Agent 创建成功: id=caaa0f54fac141b38f2f39891a5eb630, name=????
+2026-04-15 15:09:55.839 | INFO     | 9ab904b69a654f47 |  | src.service.agent_service:create_agent:142 | 自定义 Agent 创建成功: ????
+2026-04-15 15:09:55.842 | INFO     | 9ab904b69a654f47 |  | src.api.middleware:dispatch:83 | 请求完成: POST /api/v1/agents | 状态码: 200 | 耗时: 213ms
+2026-04-15 15:10:14.862 | INFO     | f304614b22744c58 |  | src.api.middleware:dispatch:76 | 请求开始: GET /api/v1/chat/token-usage
+2026-04-15 15:10:14.862 | INFO     | f304614b22744c58 |  | src.api.middleware:dispatch:83 | 请求完成: GET /api/v1/chat/token-usage | 状态码: 200 | 耗时: 0ms
+2026-04-15 18:16:23,212 - luminest - ERROR - API_KEY 或 MODEL_ID 未配置，请在 .env 文件中设置
+2026-04-15 18:20:54.295 | INFO     |  |  | src.api.deps:init_services:61 | 所有服务初始化完成
+2026-04-15 18:21:19,945 - luminest - ERROR - API_KEY 或 MODEL_ID 未配置，请在 .env 文件中设置
+2026-04-15 18:22:22,559 - luminest - ERROR - API_KEY 或 MODEL_ID 未配置，请在 .env 文件中设置
+2026-04-15 18:26:30,026 - luminest - INFO - API 依赖已加载
+2026-04-15 21:25:41,513 - luminest - ERROR - 处理输入时出错: EOF when reading a line
+2026-04-15 21:27:35.906 | INFO     |  |  | src.api.deps:init_services:61 | 所有服务初始化完成
+2026-04-15 21:27:36.233 | INFO     |  |  | src.api.deps:init_services:61 | 所有服务初始化完成
+2026-04-15 21:27:36.519 | INFO     |  |  | src.api.deps:init_services:61 | 所有服务初始化完成
+2026-04-15 21:27:36.703 | INFO     |  |  | src.api.deps:init_services:61 | 所有服务初始化完成
+2026-04-15 21:33:59,510 - luminest - INFO - API 依赖已加载
+2026-04-15 21:35:56,659 - luminest - INFO - API 依赖已加载
+2026-04-15 21:38:28,234 - luminest - INFO - API 依赖已加载
+2026-04-15 21:44:00,765 - luminest - INFO - API 依赖已加载
+2026-04-15 21:45:47,347 - luminest - INFO - API 依赖已加载
+2026-04-15 21:46:47,590 - luminest - INFO - 检测到动态网页，使用 Selenium 解析: https://ra3battle.net/#/auth这个网站讲了什么
+2026-04-15 21:46:56,711 - luminest - INFO - 使用 Edge 浏览器解析
+2026-04-15 22:11:33.848 | INFO     |  |  | src.service.prompt_template:__init__:42 | Prompt 模板服务初始化完成，模板目录: D:\python学习\LuomiNest\src\templates
+2026-04-15 22:26:35.488 | INFO     |  |  | src.dao.agent_dao:__init__:53 | Agent DAO 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp91tp3b2a\test.db
+2026-04-15 22:26:35.493 | INFO     |  |  | src.dao.agent_dao:insert:91 | Agent 创建成功: id=1, name=DAO测试助手
+2026-04-15 22:26:35.531 | INFO     |  |  | src.dao.agent_dao:update:116 | Agent 更新成功: id=1
+2026-04-15 22:26:35.570 | INFO     |  |  | src.dao.agent_dao:delete:132 | Agent 删除成功: id=1
+2026-04-15 22:27:23.797 | INFO     |  |  | src.dao.agent_dao:__init__:53 | Agent DAO 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpor0wqw7o\test.db
+2026-04-15 22:27:23.800 | INFO     |  |  | src.dao.agent_dao:insert:91 | Agent 创建成功: id=1, name=DAO测试助手
+2026-04-15 22:27:23.834 | INFO     |  |  | src.dao.agent_dao:update:116 | Agent 更新成功: id=1
+2026-04-15 22:27:23.872 | INFO     |  |  | src.dao.agent_dao:delete:132 | Agent 删除成功: id=1
+2026-04-15 22:27:23.921 | INFO     |  |  | src.service.prompt_template:__init__:47 | Prompt 模板服务初始化完成，模板目录: D:\python学习\LuomiNest\src\templates
+2026-04-15 22:39:49.978 | INFO     |  |  | src.utils.prompt_util:__init__:58 | PromptUtil 初始化完成，模板目录: D:\python学习\LuomiNest\src\templates\prompts
+2026-04-15 22:39:49.983 | INFO     |  |  | src.utils.prompt_util:create_template:183 | 创建模板文件: D:\python学习\LuomiNest\src\templates\prompts\test_template.j2
+2026-04-15 22:59:25.994 | INFO     |  |  | src.service.file_service:__init__:42 | FileService 初始化完成，上传目录: C:\Users\Lenovo\AppData\Local\Temp\tmpszg9cdl1\uploads
+2026-04-15 22:59:25.995 | INFO     |  |  | src.service.file_service:save_file:74 | 文件保存成功: C:\Users\Lenovo\AppData\Local\Temp\tmpszg9cdl1\uploads\e42334c17881490990804b751a3c000b.txt, 原始文件名: test.txt
+2026-04-15 22:59:26.000 | INFO     |  |  | src.service.file_service:parse_file:96 | 开始解析文件: C:\Users\Lenovo\AppData\Local\Temp\tmpszg9cdl1\uploads\e42334c17881490990804b751a3c000b.txt
+2026-04-15 22:59:26.029 | INFO     |  |  | src.service.file_service:delete_file:126 | 文件删除成功: C:\Users\Lenovo\AppData\Local\Temp\tmpszg9cdl1\uploads\e42334c17881490990804b751a3c000b.txt
+2026-04-16 10:44:11,536 - luminest - INFO - API 依赖已加载
+2026-04-16 10:47:02,580 - luminest - INFO - API 依赖已加载
+2026-04-16 11:51:12.096 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpnk89acjn\test_memory.db
+2026-04-16 11:51:12.148 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpj1c5u_nm\test_memory.db
+2026-04-16 11:51:12.205 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpmfaluy4c\test_chunk.db
+2026-04-16 11:51:28.291 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpa5zog7mc\test_chunk.db
+2026-04-16 11:51:28.342 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpeqafla5z\test_chunk.db
+2026-04-16 11:51:28.406 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpj_ocjnpx\test_chunk.db
+2026-04-16 11:51:28.484 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpm8waa3ov\test_embedding.db
+2026-04-16 11:51:28.542 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp34jowpoc\test_embedding.db
+2026-04-16 11:51:28.598 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmphl1li3yn\test_entity.db
+2026-04-16 11:51:28.651 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpnnu569pt\test_entity.db
+2026-04-16 11:51:28.703 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp4m78q49p\test_service.db
+2026-04-16 11:51:28.794 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp8qqcqx38\test_service.db
+2026-04-16 11:51:28.852 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpealwwayd\test_service.db
+2026-04-16 11:51:28.909 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpyw8ozlya\test_service.db
+2026-04-16 11:51:35.688 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmping8plpu\test_memory.db
+2026-04-16 11:51:35.737 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpbp3ne68n\test_memory.db
+2026-04-16 11:51:35.791 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp0hp4l7_d\test_chunk.db
+2026-04-16 11:51:36.356 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp4iv45jnl\test_chunk.db
+2026-04-16 11:51:36.404 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp2p7wgsxy\test_chunk.db
+2026-04-16 11:51:36.465 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp2wp_la_4\test_chunk.db
+2026-04-16 11:51:36.516 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpuckip646\test_embedding.db
+2026-04-16 11:51:36.571 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpcvk2b00d\test_embedding.db
+2026-04-16 11:51:36.626 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpbix0cq_j\test_entity.db
+2026-04-16 11:51:36.681 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp1tni0wrq\test_entity.db
+2026-04-16 11:51:36.734 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpincxzolu\test_service.db
+2026-04-16 11:51:36.793 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp5emnmrfb\test_service.db
+2026-04-16 11:51:36.855 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmprgkbnq4h\test_service.db
+2026-04-16 11:51:36.914 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpl1c6t63s\test_service.db
+2026-04-16 11:51:49.457 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp94ugpvd3\test_memory.db
+2026-04-16 11:51:49.510 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpygtsdtgj\test_memory.db
+2026-04-16 11:51:49.564 | INFO     |  |  | src.dao.database:__init__:96 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp1oxqxcda\test_chunk.db
+2026-04-16 11:52:36.652 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp1w5bjo_s\test_memory.db
+2026-04-16 11:52:36.703 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp4nnofr9t\test_memory.db
+2026-04-16 11:52:36.752 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpmiek6kjm\test_chunk.db
+2026-04-16 11:52:36.817 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpe_z8w3l0\test_chunk.db
+2026-04-16 11:52:36.866 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmppch7h__6\test_chunk.db
+2026-04-16 11:52:36.926 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmprluhzflw\test_chunk.db
+2026-04-16 11:52:36.998 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpcjnz1lh3\test_embedding.db
+2026-04-16 11:53:28.575 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpmyci93hu\test_memory.db
+2026-04-16 11:53:28.622 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp8bvbgotc\test_memory.db
+2026-04-16 11:53:28.673 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpf5s1airf\test_chunk.db
+2026-04-16 11:53:28.737 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmps83h6feb\test_chunk.db
+2026-04-16 11:53:28.788 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpk5l20_ti\test_chunk.db
+2026-04-16 11:53:28.848 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpm248od2m\test_chunk.db
+2026-04-16 11:53:28.906 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpf7gcpdsk\test_embedding.db
+2026-04-16 11:53:28.963 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpid9wbg2t\test_embedding.db
+2026-04-16 11:53:29.027 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp8l5kwt2_\test_entity.db
+2026-04-16 11:53:29.080 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp5xyrt24f\test_entity.db
+2026-04-16 11:53:29.136 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpkag8_6hp\test_service.db
+2026-04-16 11:53:52.599 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpcs0ahlxh\test_memory.db
+2026-04-16 11:53:52.650 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpz8s7zao7\test_memory.db
+2026-04-16 11:53:52.702 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpxy4jratu\test_chunk.db
+2026-04-16 11:53:52.770 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp8wtz2j64\test_chunk.db
+2026-04-16 11:53:52.828 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpoaorvjva\test_chunk.db
+2026-04-16 11:53:52.900 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpm7gq7yse\test_chunk.db
+2026-04-16 11:53:52.962 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpb58j1o27\test_embedding.db
+2026-04-16 11:53:53.009 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp1wmrvket\test_embedding.db
+2026-04-16 11:53:53.065 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpy8g9w2cq\test_entity.db
+2026-04-16 11:53:53.111 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpkibo2tsz\test_entity.db
+2026-04-16 11:53:53.173 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp522i2wql\test_service.db
+2026-04-16 11:54:16.840 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmptd89db6q\test_memory.db
+2026-04-16 11:54:16.892 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpahnhdodc\test_memory.db
+2026-04-16 11:54:16.951 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpjifgo6ot\test_chunk.db
+2026-04-16 11:54:17.035 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmplic8ei36\test_chunk.db
+2026-04-16 11:54:17.089 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp5klllh5z\test_chunk.db
+2026-04-16 11:54:17.152 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp7d_6j0kl\test_chunk.db
+2026-04-16 11:54:17.211 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpuqm7m81b\test_embedding.db
+2026-04-16 11:54:17.262 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmps72u_rpp\test_embedding.db
+2026-04-16 11:54:17.319 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpuclt5_xz\test_entity.db
+2026-04-16 11:54:17.375 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp8mq5yokt\test_entity.db
+2026-04-16 11:54:17.437 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpn2_81q0y\test_service.db
+2026-04-16 11:54:52.726 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 11:54:52.731 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 11:54:52.735 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 11:55:03.262 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpu8ilx1pe\test_memory.db
+2026-04-16 11:55:03.310 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpvvq7gm4s\test_memory.db
+2026-04-16 11:55:03.355 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpsfc837or\test_chunk.db
+2026-04-16 11:55:03.423 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp2etliuer\test_chunk.db
+2026-04-16 11:55:03.473 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp0nbjavj0\test_chunk.db
+2026-04-16 11:55:03.527 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpt47tg83s\test_chunk.db
+2026-04-16 11:55:03.582 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpy2r20wrs\test_embedding.db
+2026-04-16 11:55:03.634 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpjorngjmi\test_embedding.db
+2026-04-16 11:55:03.686 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpcj5tb0tp\test_entity.db
+2026-04-16 11:55:03.736 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp578l7e4r\test_entity.db
+2026-04-16 11:55:03.789 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpxvpwldfx\test_service.db
+2026-04-16 11:55:10.072 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 11:56:02.038 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpd4a8cngj\test_memory.db
+2026-04-16 11:56:02.089 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpbdgizaga\test_memory.db
+2026-04-16 11:56:02.134 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp2hvk3nnw\test_chunk.db
+2026-04-16 11:56:02.209 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmphcbyuqic\test_chunk.db
+2026-04-16 11:56:02.256 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp5cdp3t7c\test_chunk.db
+2026-04-16 11:56:02.316 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpfj8n25bc\test_chunk.db
+2026-04-16 11:56:02.373 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp_e2su030\test_embedding.db
+2026-04-16 11:56:02.426 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpef48gw1r\test_embedding.db
+2026-04-16 11:56:02.506 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpua1ubcz0\test_entity.db
+2026-04-16 11:56:02.558 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpopf_stt3\test_entity.db
+2026-04-16 11:56:02.615 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpkelx6p83\test_service.db
+2026-04-16 11:56:08.945 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 11:56:47.699 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp1nm2grvy\test_memory.db
+2026-04-16 11:56:47.747 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpamdpyle6\test_memory.db
+2026-04-16 11:56:47.797 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpilz_5sq2\test_chunk.db
+2026-04-16 11:56:47.854 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp9__4x99a\test_chunk.db
+2026-04-16 11:56:47.904 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp_6wzu3gu\test_chunk.db
+2026-04-16 11:56:47.960 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp4rdtwndj\test_chunk.db
+2026-04-16 11:56:48.009 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpts4wf_kt\test_embedding.db
+2026-04-16 11:56:48.060 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpc7f42bg8\test_embedding.db
+2026-04-16 11:56:48.114 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpu9apjnbn\test_entity.db
+2026-04-16 11:56:48.167 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp26pm7prv\test_entity.db
+2026-04-16 11:56:48.219 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpdm4yv0eb\test_service.db
+2026-04-16 11:56:54.492 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 11:57:43.683 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp2o2uzavq\test_memory.db
+2026-04-16 11:57:43.728 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpg2apnkhk\test_memory.db
+2026-04-16 11:57:43.776 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpw0ackmfp\test_chunk.db
+2026-04-16 11:57:43.840 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpq7aanvv7\test_chunk.db
+2026-04-16 11:57:43.891 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp8yd4m9_0\test_chunk.db
+2026-04-16 11:57:43.946 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpu4nre63e\test_chunk.db
+2026-04-16 11:57:43.998 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp8n832bcb\test_embedding.db
+2026-04-16 11:57:44.051 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpgkck9vn9\test_embedding.db
+2026-04-16 11:57:44.105 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp_lh2y_ga\test_entity.db
+2026-04-16 11:57:44.155 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpec1j_lh6\test_entity.db
+2026-04-16 11:57:44.208 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp7fep6257\test_service.db
+2026-04-16 11:57:50.426 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 11:59:41.396 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpkhr_mwd5\test_service.db
+2026-04-16 11:59:47.720 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:01:38.792 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmphcxmdw_m\test_memory.db
+2026-04-16 12:01:38.842 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpk5qwsmoe\test_memory.db
+2026-04-16 12:01:38.907 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpgcwncd0w\test_chunk.db
+2026-04-16 12:01:38.973 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp6ils8795\test_chunk.db
+2026-04-16 12:01:39.031 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmphwc7qayi\test_chunk.db
+2026-04-16 12:01:39.087 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp58j99fig\test_chunk.db
+2026-04-16 12:01:39.154 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpcbpne5qa\test_embedding.db
+2026-04-16 12:01:39.214 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpnzj25569\test_embedding.db
+2026-04-16 12:01:39.272 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpwsssrd6j\test_entity.db
+2026-04-16 12:01:39.324 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpmtwbsqua\test_entity.db
+2026-04-16 12:01:39.377 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmptbcbuefk\test_service.db
+2026-04-16 12:01:39.952 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmph07s9pew\test_service.db
+2026-04-16 12:01:40.016 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpq7nfw_bc\test_service.db
+2026-04-16 12:01:40.027 | INFO     |  |  | src.service.memory_service:clear:314 | Agent 记忆清空: agent_id=1, chunks=2, entities=0
+2026-04-16 12:01:40.075 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpbarqu5wo\test_service.db
+2026-04-16 12:01:40.087 | INFO     |  |  | src.service.memory_service:delete_memory:335 | 记忆删除: memory_id=2
+2026-04-16 12:02:09.482 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp6eadl3ap\test_memory.db
+2026-04-16 12:02:09.532 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp2ggloe66\test_memory.db
+2026-04-16 12:02:09.590 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp1x9gn2o1\test_chunk.db
+2026-04-16 12:02:09.662 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp7prhydd1\test_chunk.db
+2026-04-16 12:02:09.716 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp_ygvtcdb\test_chunk.db
+2026-04-16 12:02:09.775 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpbuau_h3c\test_chunk.db
+2026-04-16 12:02:09.848 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpsqt4j0iz\test_embedding.db
+2026-04-16 12:02:09.907 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpomhjjee4\test_embedding.db
+2026-04-16 12:02:09.968 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpoy7ubm9m\test_entity.db
+2026-04-16 12:02:10.021 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpvm6978b0\test_entity.db
+2026-04-16 12:02:10.082 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpmrfnd4ci\test_service.db
+2026-04-16 12:02:10.160 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpfi4wztoe\test_service.db
+2026-04-16 12:02:10.235 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmphnbwwsa8\test_service.db
+2026-04-16 12:02:10.248 | INFO     |  |  | src.service.memory_service:clear:314 | Agent 记忆清空: agent_id=1, chunks=2, entities=0
+2026-04-16 12:02:10.310 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpprltslpj\test_service.db
+2026-04-16 12:02:10.321 | INFO     |  |  | src.service.memory_service:delete_memory:335 | 记忆删除: memory_id=2
+2026-04-16 12:10:56.042 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:10:56.044 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:11:41.723 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:11:41.727 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:12:37.418 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:12:37.420 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:14:35.048 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:14:35.055 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:25:42.932 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:25:42.934 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:26:28.543 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:26:28.545 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:27:24.213 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:27:24.213 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:29:21.995 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:29:21.997 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:40:29.758 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:40:29.766 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:41:15.349 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:41:15.350 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:42:11.551 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:42:11.557 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:44:08.789 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:44:08.794 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:55:16.842 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:55:16.854 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:56:02.184 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:56:02.202 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:56:58.331 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:56:58.351 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 12:58:55.628 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 12:58:55.641 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:10:03.722 | WARNING  |  |  | src.service.memory_service:retrieve:283 | 查询向量生成失败，降级为纯BM25: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:10:03.910 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmp9ti48cno\test_service.db
+2026-04-16 13:10:03.916 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:10:48.958 | WARNING  |  |  | src.service.memory_service:retrieve:283 | 查询向量生成失败，降级为纯BM25: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:10:49.148 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpb0ppaehn\test_service.db
+2026-04-16 13:10:49.161 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:11:45.055 | WARNING  |  |  | src.service.memory_service:retrieve:283 | 查询向量生成失败，降级为纯BM25: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:11:45.241 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpgzppgaz_\test_service.db
+2026-04-16 13:11:45.246 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:13:42.453 | WARNING  |  |  | src.service.memory_service:retrieve:283 | 查询向量生成失败，降级为纯BM25: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:13:42.571 | INFO     |  |  | src.dao.database:__init__:97 | DatabaseManager 初始化完成，数据库: C:\Users\Lenovo\AppData\Local\Temp\tmpznod5id2\test_service.db
+2026-04-16 13:13:42.576 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:24:50.541 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:24:50.550 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:25:36.052 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:25:36.057 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:26:32.225 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:26:32.235 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:28:29.549 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:28:29.559 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:39:37.489 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:39:37.496 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:40:23.167 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:40:23.169 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:41:19.251 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:41:19.253 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:43:16.508 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:43:16.509 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:54:24.661 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:54:24.667 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:55:10.165 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:55:10.172 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:56:06.237 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:56:06.242 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 13:58:03.709 | WARNING  |  |  | src.service.memory_service:_find_similar_chunk:185 | 模糊合并查找失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 13:58:03.711 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 14:09:11.741 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 14:09:11.745 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 14:09:56.998 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 14:09:57.002 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 14:10:53.291 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 14:10:53.299 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 14:12:50.765 | WARNING  |  |  | src.service.memory_service:_store_chunk_with_embedding:166 | 向量嵌入生成失败: 嵌入模型加载失败: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.
+Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'.
+2026-04-16 14:12:50.772 | INFO     |  |  | src.utils.embedding_util:_ensure_model_loaded:51 | 正在加载嵌入模型: all-MiniLM-L6-v2
+2026-04-16 14:21:38,735 - luminest - INFO - API 依赖已加载
+2026-04-18 22:18:06,316 - luminest - INFO - API 依赖已加载
+2026-04-18 22:41:44,514 - luminest - ERROR - 处理输入时出错: EOF when reading a line
+2026-04-20 11:23:08,244 - luminest - INFO - API 依赖已加载
+2026-04-20 11:27:13,914 - luminest - INFO - API 依赖已加载
+2026-04-20 14:27:43,829 - luminest - INFO - API 依赖已加载
+2026-04-20 14:29:20,632 - luminest - INFO - API 依赖已加载
+2026-04-20 14:41:52,865 - luminest - INFO - API 依赖已加载
+2026-04-20 14:44:09,571 - luminest - INFO - API 依赖已加载
+2026-04-20 15:10:57,282 - luminest - INFO - API 依赖已加载
+2026-04-20 15:14:27,341 - luminest - INFO - API 依赖已加载
+2026-04-20 16:09:12,333 - luminest - INFO - API 依赖已加载
+2026-04-20 16:26:42,050 - luminest - INFO - API 依赖已加载
+2026-04-20 16:27:10,236 - luminest - INFO - API 依赖已加载
+2026-04-20 16:29:38,557 - luminest - INFO - API 依赖已加载
+2026-04-20 16:29:55,435 - luminest - INFO - API 依赖已加载
+2026-04-20 16:47:26,251 - luminest - INFO - API 依赖已加载
+2026-04-20 16:56:53,819 - luminest - INFO - API 依赖已加载
+2026-04-20 17:33:06,830 - luminest - INFO - API 依赖已加载
+2026-04-20 17:34:48,499 - luminest - ERROR - 处理输入时出错: EOF when reading a line
+2026-04-20 20:48:55,872 - luminest - INFO - API 依赖已加载
+2026-04-20 20:49:26,084 - luminest - INFO - API 依赖已加载
+2026-04-20 20:49:40,864 - luminest - ERROR - 处理输入时出错: EOF when reading a line
+2026-04-20 20:55:42,977 - luminest - INFO - API 依赖已加载
+2026-04-20 20:55:47,397 - luminest - ERROR - 处理输入时出错: EOF when reading a line

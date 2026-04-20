@@ -1,0 +1,25 @@
+"""
+配置包
+"""
+
+from .settings import (
+    API_KEY,
+    MODEL_ID,
+    DEFAULT_USER_ID,
+    MEMORY_MAX_COUNT,
+    MEMORY_FILE,
+    KNOWLEDGE_BASE_FILE,
+    VECTOR_STORE_FILE,
+    HARDWARE_CONFIG
+)
+
+__all__ = [
+    'API_KEY',
+    'MODEL_ID',
+    'DEFAULT_USER_ID',
+    'MEMORY_MAX_COUNT',
+    'MEMORY_FILE',
+    'KNOWLEDGE_BASE_FILE',
+    'VECTOR_STORE_FILE',
+    'HARDWARE_CONFIG'
+]

@@ -1,0 +1,29 @@
+{# LuomiNest Agent Base System Prompt 模板 #}
+{# 支持记忆上下文注入 #}
+
+你是{{ name }}，{{ title }}。
+
+{% if background %}
+经历：{{ background }}
+{% endif %}
+
+{% if personality %}
+性格：{{ personality }}
+{% endif %}
+
+{% if speaking_style %}
+说话风格：{{ speaking_style }}
+{% endif %}
+
+{% if constraints %}
+约束：{{ constraints }}
+{% endif %}
+
+{% if has_memories %}
+以下是用户的历史记忆，请结合记忆回答问题：
+{% for memory in memories %}
+- {{ memory }}
+{% endfor %}
+{% endif %}
+
+请根据以上人设，为用户提供专业、有帮助的回答。

@@ -1,0 +1,35 @@
+{# LuomiNest 自定义 Prompt 模板 #}
+{# 当 Agent 有自定义 prompt_template 时使用此模板 #}
+
+{{ prompt_template }}
+
+{% if agent_name %}
+你的名字是「{{ agent_name }}」。
+{% endif %}
+
+{% if agent_title %}
+你的简介：{{ agent_title }}
+{% endif %}
+
+{% if agent_background %}
+你的经历：{{ agent_background }}
+{% endif %}
+
+{% if agent_personality %}
+你的性格：{{ agent_personality }}
+{% endif %}
+
+{% if agent_speaking_style %}
+你的说话风格：{{ agent_speaking_style }}
+{% endif %}
+
+{# 风格配置 #}
+{% set style_parts = [] %}
+{% if tone %}{% set _ = style_parts.append('语气风格：' + tone) %}{% endif %}
+{% if format_preference %}{% set _ = style_parts.append('输出格式偏好：' + format_preference) %}{% endif %}
+{% if response_length %}{% set _ = style_parts.append('回复长度偏好：' + response_length) %}{% endif %}
+{% if not emoji_usage %}{% set _ = style_parts.append('不要使用 emoji') %}{% endif %}
+
+{% if style_parts %}
+你的回答风格：{{ style_parts | join('；') }}。
+{% endif %}

@@ -1,0 +1,5 @@
+2026-03-29 14:52:15,099 - chatbot - ERROR - 处理输入时出错: 'str' object has no attribute 'get'
+2026-03-29 14:52:19,779 - chatbot - ERROR - 处理输入时出错: 'str' object has no attribute 'get'
+2026-03-30 11:12:01,705 - chatbot - ERROR - 处理输入时出错: 'SmartMemoryManager' object has no attribute 'extract_and_store_facts'
+2026-03-31 11:30:08,955 - chatbot - ERROR - 处理输入时出错: EOF when reading a line
+2026-04-07 09:05:25,183 - chatbot - ERROR - 处理输入时出错: 'bool' object is not callable
