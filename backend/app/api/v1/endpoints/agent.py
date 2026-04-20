@@ -5,8 +5,6 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
-from app.runtime.provider.llm.adapter import llm_adapter
-
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "data")
