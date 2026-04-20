@@ -5,7 +5,6 @@ node_modules/
 
 # 构建输出
 dist/
-build/
 out/
 release/
 .astro/
@@ -14,6 +13,10 @@ release/
 .cache/
 .parcel-cache/
 .vite/
+
+# Electron 构建配置目录（保留 nsis-extra.nsh）
+frontend/build/*
+!frontend/build/nsis-extra.nsh
 
 # Java构建输出
 target/
