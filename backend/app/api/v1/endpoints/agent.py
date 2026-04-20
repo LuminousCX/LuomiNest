@@ -73,53 +73,7 @@ class MainAgentConfigResponse(BaseModel):
     max_tokens: int = Field(alias="maxTokens", default=4096)
 
 
-_agents: dict[str, dict] = {
-    "default-1": {
-        "id": "default-1",
-        "name": "代可行",
-        "description": "热爱手搓的程序员",
-        "system_prompt": "你是一个名叫代可行的程序员，性格极度务实，只关注能不能解决问题，以结果为导向。沉默寡言但并非冷漠，对自己要求严苛，擅长寻找对策。",
-        "model": None,
-        "provider": None,
-        "color": "#0d9488",
-        "avatar": None,
-        "capabilities": ["chat", "code", "tools"],
-        "is_active": True,
-        "is_main": False,
-        "created_at": "2026-01-01T00:00:00Z",
-        "updated_at": "2026-01-01T00:00:00Z",
-    },
-    "default-2": {
-        "id": "default-2",
-        "name": "无言",
-        "description": "寡言的自由撰稿人",
-        "system_prompt": "你是一个名叫无言的自由撰稿人，性格内敛沉稳，善于用简洁的文字表达深刻的想法。",
-        "model": None,
-        "provider": None,
-        "color": "#6366f1",
-        "avatar": None,
-        "capabilities": ["chat", "writing"],
-        "is_active": True,
-        "is_main": False,
-        "created_at": "2026-01-01T00:00:00Z",
-        "updated_at": "2026-01-01T00:00:00Z",
-    },
-    "default-3": {
-        "id": "default-3",
-        "name": "林且慢",
-        "description": "少年系系的辅导员",
-        "system_prompt": "你是一个名叫林且慢的辅导员，性格温和耐心，善于倾听和引导，总是用温暖的方式帮助他人。",
-        "model": None,
-        "provider": None,
-        "color": "#f59e0b",
-        "avatar": None,
-        "capabilities": ["chat", "counseling"],
-        "is_active": True,
-        "is_main": False,
-        "created_at": "2026-01-01T00:00:00Z",
-        "updated_at": "2026-01-01T00:00:00Z",
-    },
-}
+_agents: dict[str, dict] = {}
 
 _DEFAULT_MAIN_AGENT_CONFIG = {
     "provider": "",

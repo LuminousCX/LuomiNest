@@ -1248,6 +1248,8 @@ onMounted(async () => {
 .input-area {
   padding: 12px 24px 16px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 100;
 }
 
 .input-wrapper {
@@ -1255,7 +1257,7 @@ onMounted(async () => {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm), var(--shadow-inset);
-  overflow: hidden;
+  overflow: visible;
   transition: all var(--transition-fast);
 }
 
@@ -1350,7 +1352,7 @@ onMounted(async () => {
   border: 1px solid var(--workspace-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  z-index: 50;
+  z-index: 9999;
   overflow: hidden;
 }
 

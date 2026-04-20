@@ -11,6 +11,42 @@ const BACKEND_HOST = '127.0.0.1'
 const MAX_STARTUP_WAIT = 30000
 const CHECK_INTERVAL = 500
 
+const LOG_LEVEL_PATTERN = /\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|/
+
+const routeBackendLog = (data: Buffer, source: 'stdout' | 'stderr') => {
+  const text = data.toString().trim()
+  if (!text) return
+
+  if (source === 'stdout') {
+    console.log('[Backend]', text)
+    return
+  }
+
+  const match = text.match(LOG_LEVEL_PATTERN)
+  if (!match) {
+    console.log('[Backend]', text)
+    return
+  }
+
+  const level = match[1]
+  switch (level) {
+    case 'DEBUG':
+    case 'INFO':
+    case 'SUCCESS':
+      console.log('[Backend]', text)
+      break
+    case 'WARNING':
+      console.warn('[Backend Warning]', text)
+      break
+    case 'ERROR':
+    case 'CRITICAL':
+      console.error('[Backend Error]', text)
+      break
+    default:
+      console.log('[Backend]', text)
+  }
+}
+
 const getBackendExecutableName = (): string => {
   const os = platform()
   if (os === 'win32') return 'luominest-backend.exe'
@@ -130,11 +166,11 @@ export const startBackend = async (): Promise<boolean> => {
   })
   
   backendProcess.stdout?.on('data', (data) => {
-    console.log('[Backend]', data.toString().trim())
+    routeBackendLog(data, 'stdout')
   })
-  
+
   backendProcess.stderr?.on('data', (data) => {
-    console.error('[Backend Error]', data.toString().trim())
+    routeBackendLog(data, 'stderr')
   })
   
   backendProcess.on('error', (err) => {
