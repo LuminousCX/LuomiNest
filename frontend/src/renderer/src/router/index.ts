@@ -83,6 +83,12 @@ const routes: RouteRecordRaw[] = [
     name: 'DesktopPet',
     component: () => import('../views/DesktopPetView.vue'),
     meta: { title: 'LuomiNest Desktop Pet', icon: 'Palette' }
+  },
+  {
+    path: '/agent/create',
+    name: 'AgentCreate',
+    component: () => import('../views/AgentCreateView.vue'),
+    meta: { title: '创建智能体 - LuomiNest', icon: 'Sparkles' }
   }
 ]
 

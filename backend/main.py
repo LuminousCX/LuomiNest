@@ -31,10 +31,6 @@ def main():
         
         app = create_app()
         
-        @app.get("/health")
-        async def health_check():
-            return {"status": "ok", "service": "luominest-backend"}
-        
         uvicorn.run(
             app,
             host=args.host,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowLeft,
@@ -19,14 +19,26 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  Bot
+  Bot,
+  Check,
+  AlertCircle,
+  Loader2,
+  Server,
+  Edit3,
+  Sparkles
 } from 'lucide-vue-next'
+import { useModelStore } from '../../stores/model'
+import { useAgentStore } from '../../stores/agent'
+import type { ProviderTemplate } from '../../types'
 
 const router = useRouter()
+const modelStore = useModelStore()
+const agentStore = useAgentStore()
 
 const activeTile = ref('service')
 
 const modelTiles = [
+  { id: 'main-agent', label: '主Agent', icon: Sparkles },
   { id: 'service', label: '模型服务', icon: Cloud },
   { id: 'main', label: '主模型', icon: Cpu },
   { id: 'fast', label: '快速模型', icon: Gauge },
@@ -37,34 +49,72 @@ const modelTiles = [
   { id: 'tts', label: '语音合成', icon: Volume2 }
 ]
 
-const providers = ref([
-  {
-    id: 1,
-    vendor: 'OpenAI',
-    url: 'https://api.openai.com/v1',
-    apiKey: 'sk-****...****',
-    modelId: 'gpt-4o',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini', 'o3-mini']
-  },
-  {
-    id: 2,
-    vendor: 'DeepSeek',
-    url: 'https://api.deepseek.com/v1',
-    apiKey: 'sk-****...****',
-    modelId: 'deepseek-chat',
-    models: ['deepseek-chat', 'deepseek-reasoner']
+const providers = computed(() => modelStore.providers)
+
+const showApiKey = ref<Record<string, boolean>>({})
+const toggleApiKeyVisibility = (id: string) => { showApiKey.value[id] = !showApiKey.value[id] }
+
+const showAddDialog = ref(false)
+const addProviderError = ref('')
+const addProviderLoading = ref(false)
+const selectedTemplate = ref<string>('')
+const newProvider = ref({
+  id: '',
+  name: '',
+  vendor: 'openai_compatible',
+  baseUrl: '',
+  apiKey: '',
+  defaultModel: '',
+  isDefault: false
+})
+
+const showEditDialog = ref(false)
+const editProviderError = ref('')
+const editProviderLoading = ref(false)
+const editingProviderId = ref('')
+const editProvider = ref({
+  name: '',
+  vendor: 'openai_compatible',
+  baseUrl: '',
+  apiKey: '',
+  defaultModel: '',
+  isDefault: false
+})
+
+const handleTemplateSelect = (templateId: string) => {
+  selectedTemplate.value = templateId
+  const tmpl = modelStore.templates.find(t => t.id === templateId)
+  if (tmpl) {
+    newProvider.value.id = tmpl.id
+    newProvider.value.name = tmpl.name
+    newProvider.value.vendor = tmpl.vendor
+    newProvider.value.baseUrl = tmpl.baseUrl
+    newProvider.value.defaultModel = tmpl.defaultModel
+    if (tmpl.vendor === 'ollama') {
+      newProvider.value.apiKey = 'ollama'
+    } else if (tmpl.id === 'lmstudio') {
+      newProvider.value.apiKey = 'lmstudio'
+    } else {
+      newProvider.value.apiKey = ''
+    }
   }
-])
+}
 
-const showApiKey = ref<Record<number, boolean>>({})
-
-const toggleApiKeyVisibility = (id: number) => {
-  showApiKey.value[id] = !showApiKey.value[id]
+const handleVendorChange = () => {
+  if (newProvider.value.vendor === 'ollama') {
+    newProvider.value.baseUrl = 'http://localhost:11434/v1'
+    newProvider.value.apiKey = 'ollama'
+    newProvider.value.defaultModel = 'qwen2.5:7b'
+  } else {
+    newProvider.value.baseUrl = 'https://api.openai.com/v1'
+    newProvider.value.apiKey = ''
+    newProvider.value.defaultModel = 'gpt-4o-mini'
+  }
 }
 
 const mainModelConfig = ref({
-  selectedProvider: 'OpenAI',
-  model: 'gpt-4o',
+  selectedProvider: '',
+  model: '',
   temperature: 0.7,
   topP: 0.9,
   maxTokens: 4096,
@@ -73,32 +123,260 @@ const mainModelConfig = ref({
 })
 
 const fastModelConfig = ref({
-  selectedProvider: 'DeepSeek',
-  model: 'deepseek-chat',
+  selectedProvider: '',
+  model: '',
   temperature: 0.5,
   topP: 0.9,
   maxTokens: 2048
 })
 
 const reasonerModelConfig = ref({
-  selectedProvider: 'DeepSeek',
-  model: 'deepseek-reasoner',
+  selectedProvider: '',
+  model: '',
   temperature: 0.3,
   maxTokens: 8192,
   stopWords: ''
 })
 
 const visionModelConfig = ref({
-  selectedProvider: 'OpenAI',
-  model: 'gpt-4o',
+  selectedProvider: '',
+  model: '',
   temperature: 0.5,
   enableDesktopVision: false,
   wakeWord: ''
 })
 
+const mainAgentConfigForm = ref({
+  provider: '',
+  model: '',
+  systemPrompt: '',
+  temperature: 0.7,
+  maxTokens: 4096,
+})
+const mainAgentSaveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+const mainAgentAvailableModels = computed(() => {
+  return modelStore.getProviderModels(mainAgentConfigForm.value.provider)
+})
+
+const handleSaveMainAgentConfig = async () => {
+  mainAgentSaveStatus.value = 'saving'
+  try {
+    await agentStore.updateMainAgentConfig({
+      provider: mainAgentConfigForm.value.provider,
+      model: mainAgentConfigForm.value.model,
+      systemPrompt: mainAgentConfigForm.value.systemPrompt,
+      temperature: mainAgentConfigForm.value.temperature,
+      maxTokens: mainAgentConfigForm.value.maxTokens,
+    })
+    mainAgentSaveStatus.value = 'saved'
+    setTimeout(() => { mainAgentSaveStatus.value = 'idle' }, 2000)
+  } catch {
+    mainAgentSaveStatus.value = 'error'
+    setTimeout(() => { mainAgentSaveStatus.value = 'idle' }, 3000)
+  }
+}
+
 const currentTileLabel = computed(() => {
   const tile = modelTiles.find(t => t.id === activeTile.value)
   return tile?.label ?? ''
+})
+
+const getModelsForProvider = (providerId: string) => {
+  return modelStore.getProviderModels(providerId)
+}
+
+const mainAvailableModels = computed(() => {
+  return getModelsForProvider(mainModelConfig.value.selectedProvider)
+})
+
+const fastAvailableModels = computed(() => {
+  return getModelsForProvider(fastModelConfig.value.selectedProvider)
+})
+
+const reasonerAvailableModels = computed(() => {
+  return getModelsForProvider(reasonerModelConfig.value.selectedProvider)
+})
+
+const visionAvailableModels = computed(() => {
+  return getModelsForProvider(visionModelConfig.value.selectedProvider)
+})
+
+const newProviderFormValid = computed(() => {
+  return newProvider.value.id.trim() !== '' && newProvider.value.baseUrl.trim() !== ''
+})
+
+const editProviderFormValid = computed(() => {
+  return editProvider.value.name.trim() !== '' && editProvider.value.baseUrl.trim() !== ''
+})
+
+const openAddDialog = () => {
+  selectedTemplate.value = ''
+  newProvider.value = { id: '', name: '', vendor: 'openai_compatible', baseUrl: '', apiKey: '', defaultModel: '', isDefault: false }
+  addProviderError.value = ''
+  showAddDialog.value = true
+}
+
+const handleAddProvider = async () => {
+  if (!newProviderFormValid.value) {
+    addProviderError.value = '请填写必填项（标识 ID 和 API 地址）'
+    return
+  }
+  addProviderError.value = ''
+  addProviderLoading.value = true
+  try {
+    await modelStore.addProvider({
+      id: newProvider.value.id.trim(),
+      name: newProvider.value.name.trim() || newProvider.value.id.trim(),
+      vendor: newProvider.value.vendor,
+      baseUrl: newProvider.value.baseUrl.trim(),
+      apiKey: newProvider.value.apiKey,
+      defaultModel: newProvider.value.defaultModel.trim(),
+      isDefault: newProvider.value.isDefault,
+    })
+    showAddDialog.value = false
+  } catch (e: any) {
+    addProviderError.value = e.message || '添加失败'
+  } finally {
+    addProviderLoading.value = false
+  }
+}
+
+const openEditDialog = (providerId: string) => {
+  const p = providers.value.find(pr => pr.id === providerId)
+  if (!p) return
+  editingProviderId.value = providerId
+  editProvider.value = {
+    name: p.name,
+    vendor: p.vendor,
+    baseUrl: p.baseUrl,
+    apiKey: '',
+    defaultModel: p.defaultModel,
+    isDefault: p.isDefault,
+  }
+  editProviderError.value = ''
+  showEditDialog.value = true
+}
+
+const handleEditProvider = async () => {
+  if (!editProviderFormValid.value) {
+    editProviderError.value = '请填写必填项'
+    return
+  }
+  editProviderError.value = ''
+  editProviderLoading.value = true
+  try {
+    const updates: any = {
+      name: editProvider.value.name,
+      vendor: editProvider.value.vendor,
+      baseUrl: editProvider.value.baseUrl,
+      defaultModel: editProvider.value.defaultModel,
+      isDefault: editProvider.value.isDefault,
+    }
+    if (editProvider.value.apiKey) {
+      updates.apiKey = editProvider.value.apiKey
+    }
+    await modelStore.updateProvider(editingProviderId.value, updates)
+    showEditDialog.value = false
+  } catch (e: any) {
+    editProviderError.value = e.message || '更新失败'
+  } finally {
+    editProviderLoading.value = false
+  }
+}
+
+const handleRemoveProvider = async (providerId: string) => {
+  try {
+    await modelStore.removeProvider(providerId)
+  } catch (e: any) {
+    console.error('Failed to remove provider:', e)
+  }
+}
+
+const handleFetchModels = async (providerId: string) => {
+  try {
+    await modelStore.fetchProviderModels(providerId)
+  } catch (e: any) {
+    console.error('Failed to fetch models:', e)
+  }
+}
+
+const handleCopy = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {}
+}
+
+const handleSaveConfig = async (configType: string) => {
+  let config: any = {}
+  if (configType === 'main') {
+    config = {
+      defaultProvider: mainModelConfig.value.selectedProvider,
+      defaultModel: mainModelConfig.value.model,
+      defaultTemperature: mainModelConfig.value.temperature,
+      defaultMaxTokens: mainModelConfig.value.maxTokens,
+      defaultTopP: mainModelConfig.value.topP,
+    }
+  } else if (configType === 'fast') {
+    config = {
+      fastProvider: fastModelConfig.value.selectedProvider,
+      fastModel: fastModelConfig.value.model,
+      fastTemperature: fastModelConfig.value.temperature,
+      fastMaxTokens: fastModelConfig.value.maxTokens,
+    }
+  } else if (configType === 'reasoner') {
+    config = {
+      reasonerProvider: reasonerModelConfig.value.selectedProvider,
+      reasonerModel: reasonerModelConfig.value.model,
+      reasonerTemperature: reasonerModelConfig.value.temperature,
+      reasonerMaxTokens: reasonerModelConfig.value.maxTokens,
+    }
+  } else if (configType === 'vision') {
+    config = {
+      visionProvider: visionModelConfig.value.selectedProvider,
+      visionModel: visionModelConfig.value.model,
+      visionTemperature: visionModelConfig.value.temperature,
+    }
+  }
+  await modelStore.updateModelConfig(config)
+}
+
+onMounted(async () => {
+  await modelStore.fetchProviders()
+  await modelStore.fetchTemplates()
+  await modelStore.fetchModelConfig()
+  await agentStore.fetchMainAgentConfig()
+
+  const mainCfg = agentStore.mainAgentConfig
+  mainAgentConfigForm.value.provider = mainCfg.provider
+  mainAgentConfigForm.value.model = mainCfg.model
+  mainAgentConfigForm.value.systemPrompt = mainCfg.systemPrompt
+  mainAgentConfigForm.value.temperature = mainCfg.temperature
+  mainAgentConfigForm.value.maxTokens = mainCfg.maxTokens
+
+  const cfg = modelStore.modelConfig
+  mainModelConfig.value.selectedProvider = cfg.defaultProvider
+  mainModelConfig.value.model = cfg.defaultModel
+  mainModelConfig.value.temperature = cfg.defaultTemperature
+  mainModelConfig.value.topP = cfg.defaultTopP
+  mainModelConfig.value.maxTokens = cfg.defaultMaxTokens
+  if (cfg.fastProvider) {
+    fastModelConfig.value.selectedProvider = cfg.fastProvider
+    fastModelConfig.value.model = cfg.fastModel || ''
+    fastModelConfig.value.temperature = cfg.fastTemperature || 0.5
+    fastModelConfig.value.maxTokens = cfg.fastMaxTokens || 2048
+  }
+  if (cfg.reasonerProvider) {
+    reasonerModelConfig.value.selectedProvider = cfg.reasonerProvider
+    reasonerModelConfig.value.model = cfg.reasonerModel || ''
+    reasonerModelConfig.value.temperature = cfg.reasonerTemperature || 0.3
+    reasonerModelConfig.value.maxTokens = cfg.reasonerMaxTokens || 8192
+  }
+  if (cfg.visionProvider) {
+    visionModelConfig.value.selectedProvider = cfg.visionProvider
+    visionModelConfig.value.model = cfg.visionModel || ''
+    visionModelConfig.value.temperature = cfg.visionTemperature || 0.5
+  }
 })
 </script>
 
@@ -113,7 +391,7 @@ const currentTileLabel = computed(() => {
       </div>
       <div>
         <h1 class="page-title">AI 模型</h1>
-        <p class="page-subtitle">配置大语言模型推理引擎与参数</p>
+        <p class="page-subtitle">配置 LuomiNest 大语言模型推理引擎与参数</p>
       </div>
     </div>
 
@@ -133,6 +411,118 @@ const currentTileLabel = computed(() => {
       </div>
 
       <div class="detail-content animate-slide-up" :style="{ animationDelay: '100ms' }">
+        <!-- 主Agent配置 -->
+        <div v-if="activeTile === 'main-agent'" class="content-section">
+          <div class="section-banner">
+            <div class="banner-accent">HOST</div>
+            <div class="banner-body">
+              <div class="banner-icon-box">
+                <Sparkles :size="24" />
+              </div>
+              <div class="banner-text">
+                <h3>主Agent配置</h3>
+                <p>
+                  主Agent是控制 Live2D 皮套的专属智能体，不会出现在 Agent 列表中。<br>
+                  它负责驱动皮套的表情、动作和对话响应，是 LuomiNest 的核心交互入口。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-form">
+            <div class="form-group">
+              <label class="form-label">
+                供应商
+                <span class="required-mark">*</span>
+              </label>
+              <div class="form-select-wrap">
+                <select v-model="mainAgentConfigForm.provider" class="form-select">
+                  <option value="">请选择供应商</option>
+                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+                <ChevronRight :size="14" class="select-icon" />
+              </div>
+              <span v-if="providers.length === 0" class="form-hint">
+                暂无供应商，请先前往模型服务添加
+              </span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                模型
+                <span class="required-mark">*</span>
+              </label>
+              <div class="form-select-wrap">
+                <select v-model="mainAgentConfigForm.model" class="form-select">
+                  <option value="">请选择模型</option>
+                  <option v-for="m in mainAgentAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+                </select>
+                <ChevronRight :size="14" class="select-icon" />
+              </div>
+              <span v-if="mainAgentConfigForm.provider && mainAgentAvailableModels.length === 0" class="form-hint">
+                暂无模型列表，请前往模型服务点击搜索图标获取
+              </span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">系统提示词</label>
+              <textarea
+                v-model="mainAgentConfigForm.systemPrompt"
+                class="form-input form-textarea"
+                placeholder="定义主Agent的角色和行为，用于驱动 Live2D 皮套..."
+                rows="5"
+              ></textarea>
+              <span class="form-hint">此提示词将用于控制皮套的对话风格和情感表达</span>
+            </div>
+
+            <div class="form-group">
+              <div class="form-label-row">
+                <label class="form-label">Temperature</label>
+                <span class="form-value">{{ mainAgentConfigForm.temperature }}</span>
+              </div>
+              <input
+                type="range"
+                v-model.number="mainAgentConfigForm.temperature"
+                min="0"
+                max="2"
+                step="0.1"
+                class="form-slider"
+              />
+              <div class="slider-labels">
+                <span>精确</span>
+                <span>创意</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <div class="form-label-row">
+                <label class="form-label">Max Tokens</label>
+                <span class="form-value">{{ mainAgentConfigForm.maxTokens }}</span>
+              </div>
+              <input
+                type="range"
+                v-model.number="mainAgentConfigForm.maxTokens"
+                min="256"
+                max="8192"
+                step="256"
+                class="form-slider"
+              />
+            </div>
+
+            <button
+              :class="['save-btn', { saving: mainAgentSaveStatus === 'saving', saved: mainAgentSaveStatus === 'saved', error: mainAgentSaveStatus === 'error' }]"
+              :disabled="mainAgentSaveStatus === 'saving'"
+              @click="handleSaveMainAgentConfig"
+            >
+              <Loader2 v-if="mainAgentSaveStatus === 'saving'" :size="16" class="spin-animation" />
+              <Check v-else-if="mainAgentSaveStatus === 'saved'" :size="16" />
+              <AlertCircle v-else-if="mainAgentSaveStatus === 'error'" :size="16" />
+              <Check v-else :size="16" />
+              {{ mainAgentSaveStatus === 'saving' ? '保存中...' : mainAgentSaveStatus === 'saved' ? '已保存' : mainAgentSaveStatus === 'error' ? '保存失败' : '保存配置' }}
+            </button>
+          </div>
+        </div>
+
         <!-- 模型服务 -->
         <div v-if="activeTile === 'service'" class="content-section">
           <div class="section-banner">
@@ -145,7 +535,7 @@ const currentTileLabel = computed(() => {
                 <h3>模型服务配置</h3>
                 <p>
                   1. 所有配置均保存在本地，不会上传至任何服务器<br>
-                  2. 添加供应商后，输入 API Key 即可获取可用模型列表<br>
+                  2. 添加供应商后，点击搜索图标获取可用模型列表<br>
                   3. 支持所有兼容 OpenAI API 格式的供应商
                 </p>
               </div>
@@ -160,20 +550,18 @@ const currentTileLabel = computed(() => {
             >
               <div class="card-header">
                 <div class="vendor-badge">
-                  <Bot :size="18" />
-                  <span class="vendor-name">{{ provider.vendor }}</span>
+                  <Server :size="18" />
+                  <span class="vendor-name">{{ provider.name }}</span>
+                  <span v-if="provider.isDefault" class="default-badge">默认</span>
                 </div>
                 <div class="card-actions">
-                  <button class="action-btn" title="复制配置">
-                    <Copy :size="14" />
-                  </button>
-                  <button class="action-btn" title="获取 API Key">
-                    <Key :size="14" />
-                  </button>
-                  <button class="action-btn" title="获取模型列表">
+                  <button class="action-btn" title="获取模型列表" @click="handleFetchModels(provider.id)">
                     <Search :size="14" />
                   </button>
-                  <button class="action-btn danger" title="删除">
+                  <button class="action-btn" title="编辑" @click="openEditDialog(provider.id)">
+                    <Edit3 :size="14" />
+                  </button>
+                  <button class="action-btn danger" title="删除" @click="handleRemoveProvider(provider.id)">
                     <Trash2 :size="14" />
                   </button>
                 </div>
@@ -183,8 +571,8 @@ const currentTileLabel = computed(() => {
                 <div class="field-item">
                   <label>API 地址</label>
                   <div class="field-input-wrap">
-                    <input type="text" :value="provider.url" class="field-input" readonly />
-                    <button class="field-action" title="复制">
+                    <input type="text" :value="provider.baseUrl" class="field-input" readonly />
+                    <button class="field-action" title="复制" @click="handleCopy(provider.baseUrl)">
                       <Copy :size="13" />
                     </button>
                   </div>
@@ -194,7 +582,7 @@ const currentTileLabel = computed(() => {
                   <div class="field-input-wrap">
                     <input
                       :type="showApiKey[provider.id] ? 'text' : 'password'"
-                      :value="provider.apiKey"
+                      :value="provider.apiKeySet ? 'sk-****...****' : '未设置'"
                       class="field-input"
                       readonly
                     />
@@ -209,20 +597,184 @@ const currentTileLabel = computed(() => {
                   </div>
                 </div>
                 <div class="field-item">
-                  <label>模型 ID</label>
+                  <label>默认模型</label>
                   <div class="field-input-wrap">
-                    <input type="text" :value="provider.modelId" class="field-input" readonly />
+                    <input type="text" :value="provider.defaultModel" class="field-input" readonly />
                     <ChevronRight :size="14" class="field-select-icon" />
+                  </div>
+                </div>
+                <div v-if="provider.models.length > 0" class="field-item">
+                  <label>可用模型 ({{ provider.models.length }})</label>
+                  <div class="model-list">
+                    <span v-for="m in provider.models.slice(0, 5)" :key="m.id" class="model-tag">{{ m.name }}</span>
+                    <span v-if="provider.models.length > 5" class="model-tag more">+{{ provider.models.length - 5 }}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <button class="provider-card add-card">
+            <button class="provider-card add-card" @click="openAddDialog">
               <Plus :size="32" />
               <span>添加供应商</span>
             </button>
           </div>
+
+          <!-- Add Dialog -->
+          <Transition name="selection-fade">
+            <div v-if="showAddDialog" class="add-dialog-overlay" @click.self="showAddDialog = false">
+              <div class="add-dialog">
+                <h3>添加模型供应商</h3>
+
+                <div v-if="addProviderError" class="form-error-banner">
+                  <AlertCircle :size="16" />
+                  <span>{{ addProviderError }}</span>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">选择模板</label>
+                  <div class="template-grid">
+                    <button
+                      v-for="tmpl in modelStore.templates"
+                      :key="tmpl.id"
+                      :class="['template-chip', { active: selectedTemplate === tmpl.id }]"
+                      @click="handleTemplateSelect(tmpl.id)"
+                    >
+                      {{ tmpl.name }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">
+                    标识 ID
+                    <span class="required-mark">*</span>
+                  </label>
+                  <input v-model="newProvider.id" type="text" class="form-input" placeholder="如: my-ollama" />
+                  <span class="form-hint">唯一标识，不可与已有供应商重复</span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">显示名称</label>
+                  <input v-model="newProvider.name" type="text" class="form-input" placeholder="如: My Ollama" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">类型</label>
+                  <div class="form-select-wrap">
+                    <select v-model="newProvider.vendor" class="form-select" @change="handleVendorChange">
+                      <option value="openai_compatible">OpenAI 兼容</option>
+                      <option value="ollama">Ollama</option>
+                    </select>
+                    <ChevronRight :size="14" class="select-icon" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">
+                    API 地址
+                    <span class="required-mark">*</span>
+                  </label>
+                  <input v-model="newProvider.baseUrl" type="text" class="form-input" placeholder="http://localhost:11434/v1" />
+                  <span class="form-hint">Ollama: http://localhost:11434/v1 | 其他: 含 /v1 后缀</span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">API Key</label>
+                  <input v-model="newProvider.apiKey" type="password" class="form-input" placeholder="sk-..." />
+                  <span class="form-hint">Ollama 自动填充，其他供应商需填写真实密钥</span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">默认模型</label>
+                  <input v-model="newProvider.defaultModel" type="text" class="form-input" placeholder="如: qwen2.5:7b" />
+                  <span class="form-hint">添加后可点击搜索图标获取可用模型列表</span>
+                </div>
+                <div class="form-group">
+                  <div class="toggle-row">
+                    <label class="form-label">设为默认</label>
+                    <button
+                      :class="['toggle-switch', { active: newProvider.isDefault }]"
+                      @click="newProvider.isDefault = !newProvider.isDefault"
+                    >
+                      <span class="toggle-thumb" />
+                    </button>
+                  </div>
+                </div>
+                <div class="dialog-actions">
+                  <button class="dialog-btn cancel" @click="showAddDialog = false">取消</button>
+                  <button
+                    :class="['dialog-btn confirm', { disabled: !newProviderFormValid || addProviderLoading }]"
+                    :disabled="!newProviderFormValid || addProviderLoading"
+                    @click="handleAddProvider"
+                  >
+                    <Loader2 v-if="addProviderLoading" :size="16" class="spin-animation" />
+                    <Check v-else :size="16" />
+                    添加
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Transition>
+
+          <!-- Edit Dialog -->
+          <Transition name="selection-fade">
+            <div v-if="showEditDialog" class="add-dialog-overlay" @click.self="showEditDialog = false">
+              <div class="add-dialog">
+                <h3>编辑供应商 - {{ editProvider.name }}</h3>
+
+                <div v-if="editProviderError" class="form-error-banner">
+                  <AlertCircle :size="16" />
+                  <span>{{ editProviderError }}</span>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">显示名称</label>
+                  <input v-model="editProvider.name" type="text" class="form-input" placeholder="显示名称" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">类型</label>
+                  <div class="form-select-wrap">
+                    <select v-model="editProvider.vendor" class="form-select">
+                      <option value="openai_compatible">OpenAI 兼容</option>
+                      <option value="ollama">Ollama</option>
+                    </select>
+                    <ChevronRight :size="14" class="select-icon" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">API 地址</label>
+                  <input v-model="editProvider.baseUrl" type="text" class="form-input" placeholder="API 地址" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">API Key</label>
+                  <input v-model="editProvider.apiKey" type="password" class="form-input" placeholder="留空则不修改" />
+                  <span class="form-hint">留空表示不修改现有密钥</span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">默认模型</label>
+                  <input v-model="editProvider.defaultModel" type="text" class="form-input" placeholder="默认模型" />
+                </div>
+                <div class="form-group">
+                  <div class="toggle-row">
+                    <label class="form-label">设为默认</label>
+                    <button
+                      :class="['toggle-switch', { active: editProvider.isDefault }]"
+                      @click="editProvider.isDefault = !editProvider.isDefault"
+                    >
+                      <span class="toggle-thumb" />
+                    </button>
+                  </div>
+                </div>
+                <div class="dialog-actions">
+                  <button class="dialog-btn cancel" @click="showEditDialog = false">取消</button>
+                  <button
+                    :class="['dialog-btn confirm', { disabled: !editProviderFormValid || editProviderLoading }]"
+                    :disabled="!editProviderFormValid || editProviderLoading"
+                    @click="handleEditProvider"
+                  >
+                    <Loader2 v-if="editProviderLoading" :size="16" class="spin-animation" />
+                    <Check v-else :size="16" />
+                    保存
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Transition>
         </div>
 
         <!-- 主模型 -->
@@ -242,26 +794,34 @@ const currentTileLabel = computed(() => {
 
           <div class="config-form">
             <div class="form-group">
-              <label class="form-label">供应商</label>
+              <label class="form-label">
+                供应商
+                <span class="required-mark">*</span>
+              </label>
               <div class="form-select-wrap">
                 <select v-model="mainModelConfig.selectedProvider" class="form-select">
-                  <option value="OpenAI">OpenAI</option>
-                  <option value="DeepSeek">DeepSeek</option>
+                  <option value="">请选择供应商</option>
+                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
                 <ChevronRight :size="14" class="select-icon" />
               </div>
             </div>
 
             <div class="form-group">
-              <label class="form-label">模型</label>
+              <label class="form-label">
+                模型
+                <span class="required-mark">*</span>
+              </label>
               <div class="form-select-wrap">
                 <select v-model="mainModelConfig.model" class="form-select">
-                  <option value="gpt-4o">gpt-4o</option>
-                  <option value="gpt-4o-mini">gpt-4o-mini</option>
-                  <option value="deepseek-chat">deepseek-chat</option>
+                  <option value="">请选择模型</option>
+                  <option v-for="m in mainAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </select>
                 <ChevronRight :size="14" class="select-icon" />
               </div>
+              <span v-if="mainModelConfig.selectedProvider && mainAvailableModels.length === 0" class="form-hint">
+                暂无模型列表，请前往模型服务点击搜索图标获取
+              </span>
             </div>
 
             <div class="form-group">
@@ -339,6 +899,18 @@ const currentTileLabel = computed(() => {
                 <ChevronRight :size="14" class="select-icon" />
               </div>
             </div>
+
+            <button
+              :class="['save-btn', { saving: modelStore.saveStatus === 'saving', saved: modelStore.saveStatus === 'saved', error: modelStore.saveStatus === 'error' }]"
+              :disabled="modelStore.saveStatus === 'saving'"
+              @click="handleSaveConfig('main')"
+            >
+              <Loader2 v-if="modelStore.saveStatus === 'saving'" :size="16" class="spin-animation" />
+              <Check v-else-if="modelStore.saveStatus === 'saved'" :size="16" />
+              <AlertCircle v-else-if="modelStore.saveStatus === 'error'" :size="16" />
+              <Check v-else :size="16" />
+              {{ modelStore.saveStatus === 'saving' ? '保存中...' : modelStore.saveStatus === 'saved' ? '已保存' : modelStore.saveStatus === 'error' ? '保存失败' : '保存配置' }}
+            </button>
           </div>
         </div>
 
@@ -362,8 +934,8 @@ const currentTileLabel = computed(() => {
               <label class="form-label">供应商</label>
               <div class="form-select-wrap">
                 <select v-model="fastModelConfig.selectedProvider" class="form-select">
-                  <option value="OpenAI">OpenAI</option>
-                  <option value="DeepSeek">DeepSeek</option>
+                  <option value="">请选择供应商</option>
+                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
                 <ChevronRight :size="14" class="select-icon" />
               </div>
@@ -372,8 +944,8 @@ const currentTileLabel = computed(() => {
               <label class="form-label">模型</label>
               <div class="form-select-wrap">
                 <select v-model="fastModelConfig.model" class="form-select">
-                  <option value="gpt-4o-mini">gpt-4o-mini</option>
-                  <option value="deepseek-chat">deepseek-chat</option>
+                  <option value="">请选择模型</option>
+                  <option v-for="m in fastAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </select>
                 <ChevronRight :size="14" class="select-icon" />
               </div>
@@ -406,6 +978,15 @@ const currentTileLabel = computed(() => {
                 class="form-slider"
               />
             </div>
+
+            <button
+              :class="['save-btn', { saving: modelStore.saveStatus === 'saving', saved: modelStore.saveStatus === 'saved', error: modelStore.saveStatus === 'error' }]"
+              :disabled="modelStore.saveStatus === 'saving'"
+              @click="handleSaveConfig('fast')"
+            >
+              <Check :size="16" />
+              保存配置
+            </button>
           </div>
         </div>
 
@@ -429,8 +1010,8 @@ const currentTileLabel = computed(() => {
               <label class="form-label">供应商</label>
               <div class="form-select-wrap">
                 <select v-model="reasonerModelConfig.selectedProvider" class="form-select">
-                  <option value="DeepSeek">DeepSeek</option>
-                  <option value="OpenAI">OpenAI</option>
+                  <option value="">请选择供应商</option>
+                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
                 <ChevronRight :size="14" class="select-icon" />
               </div>
@@ -439,9 +1020,8 @@ const currentTileLabel = computed(() => {
               <label class="form-label">模型</label>
               <div class="form-select-wrap">
                 <select v-model="reasonerModelConfig.model" class="form-select">
-                  <option value="deepseek-reasoner">deepseek-reasoner</option>
-                  <option value="o1">o1</option>
-                  <option value="o3-mini">o3-mini</option>
+                  <option value="">请选择模型</option>
+                  <option v-for="m in reasonerAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </select>
                 <ChevronRight :size="14" class="select-icon" />
               </div>
@@ -483,6 +1063,15 @@ const currentTileLabel = computed(() => {
                 placeholder="用逗号分隔多个停止词"
               />
             </div>
+
+            <button
+              :class="['save-btn', { saving: modelStore.saveStatus === 'saving', saved: modelStore.saveStatus === 'saved', error: modelStore.saveStatus === 'error' }]"
+              :disabled="modelStore.saveStatus === 'saving'"
+              @click="handleSaveConfig('reasoner')"
+            >
+              <Check :size="16" />
+              保存配置
+            </button>
           </div>
         </div>
 
@@ -506,8 +1095,8 @@ const currentTileLabel = computed(() => {
               <label class="form-label">供应商</label>
               <div class="form-select-wrap">
                 <select v-model="visionModelConfig.selectedProvider" class="form-select">
-                  <option value="OpenAI">OpenAI</option>
-                  <option value="DeepSeek">DeepSeek</option>
+                  <option value="">请选择供应商</option>
+                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
                 <ChevronRight :size="14" class="select-icon" />
               </div>
@@ -516,7 +1105,8 @@ const currentTileLabel = computed(() => {
               <label class="form-label">模型</label>
               <div class="form-select-wrap">
                 <select v-model="visionModelConfig.model" class="form-select">
-                  <option value="gpt-4o">gpt-4o</option>
+                  <option value="">请选择模型</option>
+                  <option v-for="m in visionAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </select>
                 <ChevronRight :size="14" class="select-icon" />
               </div>
@@ -556,6 +1146,15 @@ const currentTileLabel = computed(() => {
                 placeholder="输入唤醒词触发视觉分析"
               />
             </div>
+
+            <button
+              :class="['save-btn', { saving: modelStore.saveStatus === 'saving', saved: modelStore.saveStatus === 'saved', error: modelStore.saveStatus === 'error' }]"
+              :disabled="modelStore.saveStatus === 'saving'"
+              @click="handleSaveConfig('vision')"
+            >
+              <Check :size="16" />
+              保存配置
+            </button>
           </div>
         </div>
 
@@ -569,53 +1168,14 @@ const currentTileLabel = computed(() => {
               </div>
               <div class="banner-text">
                 <h3>文生图模型配置</h3>
-                <p>配置图像生成模型，支持 DALL-E、Stable Diffusion 等文生图服务</p>
+                <p>配置图像生成模型，支持 DALL-E、Stable Diffusion 等文生图服务（即将支持）</p>
               </div>
             </div>
           </div>
 
-          <div class="config-form">
-            <div class="form-group">
-              <label class="form-label">供应商</label>
-              <div class="form-select-wrap">
-                <select class="form-select">
-                  <option value="openai">OpenAI (DALL-E)</option>
-                  <option value="stability">Stability AI</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">模型</label>
-              <div class="form-select-wrap">
-                <select class="form-select">
-                  <option value="dall-e-3">dall-e-3</option>
-                  <option value="stable-diffusion-xl">stable-diffusion-xl</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">默认尺寸</label>
-              <div class="form-select-wrap">
-                <select class="form-select">
-                  <option value="1024x1024">1024 x 1024</option>
-                  <option value="1792x1024">1792 x 1024</option>
-                  <option value="1024x1792">1024 x 1792</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">默认质量</label>
-              <div class="form-select-wrap">
-                <select class="form-select">
-                  <option value="standard">标准</option>
-                  <option value="hd">高清</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
+          <div class="coming-soon-placeholder">
+            <Pencil :size="32" />
+            <p>该功能即将上线，敬请期待</p>
           </div>
         </div>
 
@@ -629,42 +1189,14 @@ const currentTileLabel = computed(() => {
               </div>
               <div class="banner-text">
                 <h3>语音识别模型配置</h3>
-                <p>配置语音转文字服务，支持 Whisper 等语音识别模型</p>
+                <p>配置语音转文字服务，支持 Whisper 等语音识别模型（即将支持）</p>
               </div>
             </div>
           </div>
 
-          <div class="config-form">
-            <div class="form-group">
-              <label class="form-label">供应商</label>
-              <div class="form-select-wrap">
-                <select class="form-select">
-                  <option value="openai">OpenAI</option>
-                  <option value="azure">Azure Speech</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">模型</label>
-              <div class="form-select-wrap">
-                <select class="form-select">
-                  <option value="whisper-1">whisper-1</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">默认语言</label>
-              <div class="form-select-wrap">
-                <select class="form-select">
-                  <option value="zh">中文</option>
-                  <option value="en">English</option>
-                  <option value="ja">日本語</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
+          <div class="coming-soon-placeholder">
+            <Mic :size="32" />
+            <p>该功能即将上线，敬请期待</p>
           </div>
         </div>
 
@@ -678,54 +1210,14 @@ const currentTileLabel = computed(() => {
               </div>
               <div class="banner-text">
                 <h3>语音合成模型配置</h3>
-                <p>配置文字转语音服务，为 Agent 赋予语音输出能力</p>
+                <p>配置文字转语音服务，为 Agent 赋予语音输出能力（即将支持）</p>
               </div>
             </div>
           </div>
 
-          <div class="config-form">
-            <div class="form-group">
-              <label class="form-label">供应商</label>
-              <div class="form-select-wrap">
-                <select class="form-select">
-                  <option value="openai">OpenAI</option>
-                  <option value="azure">Azure TTS</option>
-                  <option value="edge">Edge TTS</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">模型</label>
-              <div class="form-select-wrap">
-                <select class="form-select">
-                  <option value="tts-1">tts-1</option>
-                  <option value="tts-1-hd">tts-1-hd</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">默认语音</label>
-              <div class="form-select-wrap">
-                <select class="form-select">
-                  <option value="alloy">Alloy</option>
-                  <option value="echo">Echo</option>
-                  <option value="fable">Fable</option>
-                  <option value="onyx">Onyx</option>
-                  <option value="nova">Nova</option>
-                  <option value="shimmer">Shimmer</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-            <div class="form-group">
-              <div class="form-label-row">
-                <label class="form-label">语速</label>
-                <span class="form-value">1.0x</span>
-              </div>
-              <input type="range" min="0.5" max="2" step="0.1" value="1" class="form-slider" />
-            </div>
+          <div class="coming-soon-placeholder">
+            <Volume2 :size="32" />
+            <p>该功能即将上线，敬请期待</p>
           </div>
         </div>
       </div>
@@ -1056,6 +1548,36 @@ const currentTileLabel = computed(() => {
   background: var(--lumi-primary-light);
 }
 
+.template-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.template-chip {
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--workspace-panel);
+  border: 1px solid var(--workspace-border);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.template-chip:hover {
+  border-color: var(--lumi-primary);
+  color: var(--lumi-primary);
+}
+
+.template-chip.active {
+  background: var(--lumi-primary-light);
+  border-color: var(--lumi-primary);
+  color: var(--lumi-primary);
+  font-weight: 600;
+}
+
 .config-form {
   display: flex;
   flex-direction: column;
@@ -1073,6 +1595,33 @@ const currentTileLabel = computed(() => {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.required-mark {
+  color: var(--lumi-accent);
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: -4px;
+}
+
+.form-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--lumi-accent-light);
+  color: var(--lumi-accent);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .form-label-row {
@@ -1138,6 +1687,13 @@ const currentTileLabel = computed(() => {
 
 .form-input::placeholder {
   color: var(--text-muted);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+  line-height: 1.6;
 }
 
 .form-slider {
@@ -1209,9 +1765,165 @@ const currentTileLabel = computed(() => {
   transform: translateX(20px);
 }
 
-.form-hint {
+.default-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--lumi-primary);
+  color: white;
+  font-weight: 500;
+}
+
+.model-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.model-tag {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
   font-size: 11px;
+  background: var(--workspace-panel);
+  color: var(--text-secondary);
+  border: 1px solid var(--workspace-border);
+}
+
+.model-tag.more {
+  color: var(--lumi-primary);
+  border-color: var(--lumi-primary);
+}
+
+.add-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.add-dialog {
+  background: var(--workspace-card);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.add-dialog h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.dialog-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dialog-btn.cancel {
   color: var(--text-muted);
-  margin-top: -4px;
+  background: var(--workspace-panel);
+}
+
+.dialog-btn.cancel:hover {
+  background: var(--workspace-hover);
+}
+
+.dialog-btn.confirm {
+  color: white;
+  background: var(--lumi-primary);
+}
+
+.dialog-btn.confirm:hover {
+  background: var(--lumi-primary-hover);
+}
+
+.dialog-btn.confirm.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.save-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 24px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  background: var(--lumi-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  align-self: flex-start;
+}
+
+.save-btn:hover {
+  background: var(--lumi-primary-hover);
+}
+
+.save-btn.saving {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+.save-btn.saved {
+  background: #10b981;
+}
+
+.save-btn.error {
+  background: var(--lumi-accent);
+}
+
+.coming-soon-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  gap: 12px;
+}
+
+.coming-soon-placeholder p {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.selection-fade-enter-active {
+  animation: lumi-fade-in 0.3s ease-out;
+}
+
+.selection-fade-leave-active {
+  animation: lumi-fade-in 0.2s ease-out reverse;
 }
 </style>

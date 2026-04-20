@@ -51,6 +51,8 @@ const WATERMARK_PARAM = {
   showValue: 1
 } as const
 
+const EXPRESSION_BLOCKLIST = ['水印', 'watermark', 'copyright', 'credit', 'logo']
+
 const VOWEL_LIP_MAP: Record<string, { open: number; form: number }> = {
   a: { open: 1.0, form: 0.0 },
   e: { open: 0.5, form: 0.3 },
@@ -69,17 +71,16 @@ const VOWEL_LIP_MAP: Record<string, { open: number; form: number }> = {
 const AVATAR_BOUNDS = {
   MIN_SCALE: 0.05,
   MAX_SCALE: 2.0,
-  SCALE_FACTOR: 0.05,
+  SCALE_FACTOR: 0.03,
   POSITION_MARGIN: 50
 } as const
 
-/**
- * 默认模型配置
- */
+const FOCUS_DAMPING = 0.15
+
 const DEFAULT_AVATAR_CONFIG: Partial<LuomiNestAvatarConfig> = {
   scale: 0.25,
   position: { x: 0.5, y: 0.5 },
-  autoInteract: true
+  autoInteract: false
 }
 
 export const useLuomiNestAvatar = () => {
@@ -98,6 +99,11 @@ export const useLuomiNestAvatar = () => {
   let resizeObserver: ResizeObserver | null = null
   let isDragging = false
   let dragOffset = { x: 0, y: 0 }
+  let focusTargetX = 0
+  let focusTargetY = 0
+  let focusCurrentX = 0
+  let focusCurrentY = 0
+  let focusTickerCallback: (() => void) | null = null
 
   /**
    * 限制模型位置在容器范围内
@@ -133,7 +139,11 @@ export const useLuomiNestAvatar = () => {
       }
       if (settings?.expressions) {
         for (const exp of settings.expressions) {
-          if (exp?.Name) expressions.push(exp.Name)
+          const name = exp?.Name ?? ''
+          const isBlocked = EXPRESSION_BLOCKLIST.some(
+            blocked => name.toLowerCase().includes(blocked.toLowerCase())
+          )
+          if (name && !isBlocked) expressions.push(name)
         }
       }
     } catch (err) {
@@ -247,6 +257,64 @@ export const useLuomiNestAvatar = () => {
     return cleanup
   }
 
+  const setupDampenedFocus = (canvas: HTMLCanvasElement, model: Live2DModel) => {
+    if (focusTickerCallback) {
+      Ticker.shared.remove(focusTickerCallback)
+      focusTickerCallback = null
+    }
+
+    const onMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect()
+      focusTargetX = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      focusTargetY = -(((e.clientY - rect.top) / rect.height) * 2 - 1)
+    }
+
+    const onMouseLeave = () => {
+      focusTargetX = 0
+      focusTargetY = 0
+    }
+
+    focusTickerCallback = () => {
+      if (!avatarModel.value) return
+      focusCurrentX += (focusTargetX - focusCurrentX) * FOCUS_DAMPING
+      focusCurrentY += (focusTargetY - focusCurrentY) * FOCUS_DAMPING
+
+      try {
+        const internalModel = avatarModel.value.internalModel as any
+        const coreModel = internalModel?.coreModel
+        if (!coreModel) return
+
+        const angleXParam = coreModel.getParameterIndex('ParamAngleX')
+        const angleYParam = coreModel.getParameterIndex('ParamAngleY')
+        const eyeBallXParam = coreModel.getParameterIndex('ParamEyeBallX')
+        const eyeBallYParam = coreModel.getParameterIndex('ParamEyeBallY')
+
+        if (angleXParam >= 0) {
+          const base = coreModel.getParameterValueByIndex(angleXParam)
+          coreModel.setParameterValueByIndex(angleXParam, base * 0.6 + focusCurrentX * 15 * 0.4)
+        }
+        if (angleYParam >= 0) {
+          const base = coreModel.getParameterValueByIndex(angleYParam)
+          coreModel.setParameterValueByIndex(angleYParam, base * 0.6 + focusCurrentY * 15 * 0.4)
+        }
+        if (eyeBallXParam >= 0) {
+          const base = coreModel.getParameterValueByIndex(eyeBallXParam)
+          coreModel.setParameterValueByIndex(eyeBallXParam, base * 0.5 + focusCurrentX * 0.5)
+        }
+        if (eyeBallYParam >= 0) {
+          const base = coreModel.getParameterValueByIndex(eyeBallYParam)
+          coreModel.setParameterValueByIndex(eyeBallYParam, base * 0.5 + focusCurrentY * 0.5)
+        }
+      } catch {
+        // ignore parameter errors
+      }
+    }
+
+    canvas.addEventListener('mousemove', onMouseMove)
+    canvas.addEventListener('mouseleave', onMouseLeave)
+    Ticker.shared.add(focusTickerCallback)
+  }
+
   /**
    * 加载并挂载 Live2D 模型到画布
    */
@@ -266,8 +334,8 @@ export const useLuomiNestAvatar = () => {
       }
 
       const model = await Live2DModel.from(mergedConfig.url, {
-        autoHitTest: mergedConfig.autoInteract,
-        autoFocus: mergedConfig.autoInteract,
+        autoHitTest: true,
+        autoFocus: false,
         ticker: Ticker.shared
       })
 
@@ -289,12 +357,11 @@ export const useLuomiNestAvatar = () => {
       avatarModel.value = model
       isModelReady.value = true
 
-      // 隐藏模型水印（如果存在）
-      // 某些模型如 llny 使用 Param14 控制水印显示
       setCoreParam(WATERMARK_PARAM.id, WATERMARK_PARAM.hideValue)
 
       scanModelCapabilities(model)
       bindDragEvents(canvas)
+      setupDampenedFocus(canvas, model)
 
       try {
         await triggerMotion('Idle', 0)
@@ -453,6 +520,10 @@ export const useLuomiNestAvatar = () => {
    * 销毁模型和渲染资源
    */
   const teardown = (): void => {
+    if (focusTickerCallback) {
+      Ticker.shared.remove(focusTickerCallback)
+      focusTickerCallback = null
+    }
     if (resizeObserver) {
       resizeObserver.disconnect()
       resizeObserver = null

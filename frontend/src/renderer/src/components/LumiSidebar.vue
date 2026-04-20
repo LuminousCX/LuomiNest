@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   MessageCircle,
@@ -16,11 +16,15 @@ import {
   Bot,
   Palette,
   Brain,
-  Users
+  Users,
+  Trash2,
+  Check
 } from 'lucide-vue-next'
+import { useAgentStore } from '../stores/agent'
 
 const route = useRoute()
 const router = useRouter()
+const agentStore = useAgentStore()
 
 const hideAgentPanelRoutes = ['/browser', '/social', '/settings']
 
@@ -37,45 +41,43 @@ const navItems = [
   { id: '/browser', label: '浏览器', icon: Globe }
 ]
 
-const agents = ref([
-  {
-    id: 1,
-    name: '代可行',
-    desc: '热爱手搓的程序员',
-    avatar: '',
-    color: '#0d9488',
-    active: true
-  },
-  {
-    id: 2,
-    name: '无言',
-    desc: '寡言的自由撰稿人',
-    avatar: '',
-    color: '#6366f1',
-    active: false
-  },
-  {
-    id: 3,
-    name: '林且慢',
-    desc: '少年系系的辅导员',
-    avatar: '',
-    color: '#f59e0b',
-    active: false
-  },
-  {
-    id: 4,
-    name: '自定义',
-    desc: '创建全新 Agent',
-    avatar: '',
-    color: '#f43f5e',
-    active: false,
-    isCustom: true
-  }
-])
+const searchQuery = ref('')
 
-const expandedAgents = ref([1])
+const agents = computed(() => {
+  const storeAgents = agentStore.agents
+    .filter(a => {
+      if (a.isMain) return false
+      if (!searchQuery.value) return true
+      const q = searchQuery.value.toLowerCase()
+      return a.name.toLowerCase().includes(q) || a.description.toLowerCase().includes(q)
+    })
+    .map(a => ({
+      id: a.id,
+      name: a.name,
+      desc: a.description,
+      avatar: a.avatar || '',
+      color: a.color,
+      active: agentStore.activeAgent?.id === a.id,
+      isDefault: a.id.startsWith('default-')
+    }))
+  return [
+    ...storeAgents,
+    {
+      id: '__custom__',
+      name: '自定义',
+      desc: '创建全新 Agent',
+      avatar: '',
+      color: '#f43f5e',
+      active: false,
+      isCustom: true,
+      isDefault: false
+    }
+  ]
+})
 
-const toggleAgent = (id: number) => {
+const expandedAgents = ref<string[]>([])
+
+const toggleAgent = (id: string) => {
   const idx = expandedAgents.value.indexOf(id)
   if (idx > -1) {
     expandedAgents.value.splice(idx, 1)
@@ -85,16 +87,62 @@ const toggleAgent = (id: number) => {
 }
 
 const selectAgent = (agent: typeof agents.value[0]) => {
-  agents.value.forEach(a => a.active = false)
-  agent.active = true
+  if (agent.isCustom) {
+    showCreateDialog.value = true
+    return
+  }
+  const found = agentStore.agents.find(a => a.id === agent.id)
+  if (found) {
+    agentStore.setActiveAgent(found)
+    router.push('/workspace')
+  }
 }
+
+const handleDeleteAgent = async (agentId: string) => {
+  try {
+    await agentStore.deleteAgent(agentId)
+  } catch (e: any) {
+    console.error('Failed to delete agent:', e)
+  }
+}
+
+const showCreateDialog = ref(false)
+const newAgentForm = ref({
+  name: '',
+  description: '',
+  systemPrompt: '',
+  color: '#0d9488'
+})
+const agentColors = ['#0d9488', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
+
+const handleCreateAgent = async () => {
+  if (!newAgentForm.value.name.trim()) return
+  try {
+    await agentStore.createAgent({
+      name: newAgentForm.value.name.trim(),
+      description: newAgentForm.value.description.trim(),
+      systemPrompt: newAgentForm.value.systemPrompt.trim(),
+      color: newAgentForm.value.color,
+      capabilities: ['chat'],
+    })
+    showCreateDialog.value = false
+    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#0d9488' }
+    router.push('/workspace')
+  } catch (e: any) {
+    console.error('Failed to create agent:', e)
+  }
+}
+
+onMounted(async () => {
+  await agentStore.fetchAgents()
+})
 </script>
 
 <template>
   <div class="lumi-sidebar">
     <div class="sidebar-icon-rail">
       <div class="rail-top">
-        <button class="avatar-btn" aria-label="辰汐账户">
+        <button class="avatar-btn" aria-label="LuminousChenXi 账户">
           <div class="avatar-ring">
             <span class="avatar-initial">L</span>
           </div>
@@ -123,11 +171,11 @@ const selectAgent = (agent: typeof agents.value[0]) => {
         <div class="panel-header">
           <div class="search-box">
             <Search :size="15" class="search-icon" />
-            <input type="text" placeholder="搜索" class="search-input" />
+            <input v-model="searchQuery" type="text" placeholder="搜索" class="search-input" />
           </div>
         </div>
 
-        <button class="new-agent-btn" aria-label="新建 Agent">
+        <button class="new-agent-btn" aria-label="新建 Agent" @click="showCreateDialog = true">
           <Plus :size="16" />
           <span>新建 Agent</span>
         </button>
@@ -151,7 +199,7 @@ const selectAgent = (agent: typeof agents.value[0]) => {
                 <span class="agent-desc">{{ agent.desc }}</span>
               </div>
               <button
-                v-if="!agent.isCustom"
+                v-if="!agent.isCustom && !agent.isDefault"
                 class="expand-btn"
                 :aria-label="expandedAgents.includes(agent.id) ? '收起' : '展开'"
                 @click.stop="toggleAgent(agent.id)"
@@ -160,13 +208,73 @@ const selectAgent = (agent: typeof agents.value[0]) => {
                 <ChevronRight v-else :size="14" />
               </button>
             </button>
+
+            <Transition name="expand">
+              <div v-if="expandedAgents.includes(agent.id) && !agent.isCustom && !agent.isDefault" class="agent-expanded">
+                <button class="expanded-action delete" @click.stop="handleDeleteAgent(agent.id)">
+                  <Trash2 :size="13" />
+                  <span>删除</span>
+                </button>
+              </div>
+            </Transition>
           </div>
         </div>
 
         <div class="panel-footer">
           <div class="update-notice">
             <Sparkles :size="14" />
-            <span>新版本下载中...</span>
+            <span>LuomiNest v0.1.0</span>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <Transition name="selection-fade">
+      <div v-if="showCreateDialog" class="create-dialog-overlay" @click.self="showCreateDialog = false">
+        <div class="create-dialog">
+          <h3>创建自定义 Agent</h3>
+          <div class="form-group">
+            <label class="form-label">
+              名称
+              <span class="required-mark">*</span>
+            </label>
+            <input v-model="newAgentForm.name" type="text" class="form-input" placeholder="如: 小助手" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <input v-model="newAgentForm.description" type="text" class="form-input" placeholder="如: 通用对话助手" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">系统提示词</label>
+            <textarea
+              v-model="newAgentForm.systemPrompt"
+              class="form-input form-textarea"
+              placeholder="定义 Agent 的角色和行为..."
+              rows="4"
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">颜色</label>
+            <div class="color-picker">
+              <button
+                v-for="color in agentColors"
+                :key="color"
+                :class="['color-dot', { active: newAgentForm.color === color }]"
+                :style="{ background: color }"
+                @click="newAgentForm.color = color"
+              ></button>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button class="dialog-btn cancel" @click="showCreateDialog = false">取消</button>
+            <button
+              :class="['dialog-btn confirm', { disabled: !newAgentForm.name.trim() }]"
+              :disabled="!newAgentForm.name.trim()"
+              @click="handleCreateAgent"
+            >
+              <Check :size="16" />
+              创建
+            </button>
           </div>
         </div>
       </div>
@@ -449,6 +557,45 @@ const selectAgent = (agent: typeof agents.value[0]) => {
   color: var(--lumi-accent);
 }
 
+.agent-expanded {
+  display: flex;
+  gap: 4px;
+  padding: 4px 10px 8px 58px;
+}
+
+.expanded-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  transition: all var(--transition-fast);
+}
+
+.expanded-action.delete {
+  color: var(--text-muted);
+}
+
+.expanded-action.delete:hover {
+  background: var(--lumi-accent-light);
+  color: var(--lumi-accent);
+}
+
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.2s ease-in-out;
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 .panel-footer {
   padding: 12px 14px;
   position: relative;
@@ -486,5 +633,152 @@ const selectAgent = (agent: typeof agents.value[0]) => {
   opacity: 0;
   transform: translateX(-16px);
   width: 0;
+}
+
+.create-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.create-dialog {
+  background: var(--workspace-card);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.create-dialog h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.required-mark {
+  color: var(--lumi-accent);
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--workspace-panel);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.form-input:focus {
+  border-color: var(--lumi-primary);
+  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.color-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.color-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 2px solid transparent;
+}
+
+.color-dot:hover {
+  transform: scale(1.15);
+}
+
+.color-dot.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.dialog-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dialog-btn.cancel {
+  color: var(--text-muted);
+  background: var(--workspace-panel);
+}
+
+.dialog-btn.cancel:hover {
+  background: var(--workspace-hover);
+}
+
+.dialog-btn.confirm {
+  color: white;
+  background: var(--lumi-primary);
+}
+
+.dialog-btn.confirm:hover {
+  background: var(--lumi-primary-hover);
+}
+
+.dialog-btn.confirm.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.selection-fade-enter-active {
+  animation: lumi-fade-in 0.3s ease-out;
+}
+
+.selection-fade-leave-active {
+  animation: lumi-fade-in 0.2s ease-out reverse;
 }
 </style>

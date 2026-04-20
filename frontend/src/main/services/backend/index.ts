@@ -11,41 +11,80 @@ const BACKEND_HOST = '127.0.0.1'
 const MAX_STARTUP_WAIT = 30000
 const CHECK_INTERVAL = 500
 
+const LOG_LEVEL_PATTERN = /\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|/
+
+const routeBackendLog = (data: Buffer, source: 'stdout' | 'stderr') => {
+  const text = data.toString().trim()
+  if (!text) return
+
+  if (source === 'stdout') {
+    console.log('[Backend]', text)
+    return
+  }
+
+  const match = text.match(LOG_LEVEL_PATTERN)
+  if (!match) {
+    console.log('[Backend]', text)
+    return
+  }
+
+  const level = match[1]
+  switch (level) {
+    case 'DEBUG':
+    case 'INFO':
+    case 'SUCCESS':
+      console.log('[Backend]', text)
+      break
+    case 'WARNING':
+      console.warn('[Backend Warning]', text)
+      break
+    case 'ERROR':
+    case 'CRITICAL':
+      console.error('[Backend Error]', text)
+      break
+    default:
+      console.log('[Backend]', text)
+  }
+}
+
+const getBackendExecutableName = (): string => {
+  const os = platform()
+  if (os === 'win32') return 'luominest-backend.exe'
+  return 'luominest-backend'
+}
+
 const getBackendExecutablePath = (): string => {
   const isDev = !app.isPackaged
   const os = platform()
-  
+
   if (isDev) {
-    const projectRoot = join(__dirname, '../../../../..')
+    const projectRoot = join(__dirname, '../../..')
     if (os === 'win32') {
       return join(projectRoot, 'backend', '.venv', 'Scripts', 'python.exe')
     }
     return join(projectRoot, 'backend', '.venv', 'bin', 'python')
   }
-  
+
   const resourcesPath = process.resourcesPath
-  if (os === 'win32') {
-    return join(resourcesPath, 'backend', 'luominest-backend.exe')
-  }
-  return join(resourcesPath, 'backend', 'luominest-backend')
+  return join(resourcesPath, 'backend', getBackendExecutableName())
 }
 
 const getBackendMainPath = (): string => {
   const isDev = !app.isPackaged
-  
+
   if (isDev) {
-    const projectRoot = join(__dirname, '../../../../..')
+    const projectRoot = join(__dirname, '../../..')
     return join(projectRoot, 'backend', 'main.py')
   }
-  
+
   return ''
 }
 
 const getBackendCwd = (): string => {
   const isDev = !app.isPackaged
-  
+
   if (isDev) {
-    const projectRoot = join(__dirname, '../../../../..')
+    const projectRoot = join(__dirname, '../../..')
     return join(projectRoot, 'backend')
   }
   
@@ -97,6 +136,7 @@ export const startBackend = async (): Promise<boolean> => {
   }
   
   console.log('[BackendService] Starting backend...')
+  console.log('[BackendService] Platform:', platform())
   console.log('[BackendService] Executable:', backendPath)
   console.log('[BackendService] Working directory:', cwd)
   
@@ -104,22 +144,33 @@ export const startBackend = async (): Promise<boolean> => {
     ? [mainPath, '--host', BACKEND_HOST, '--port', String(BACKEND_PORT)]
     : ['--host', BACKEND_HOST, '--port', String(BACKEND_PORT)]
   
+  const env = {
+    ...process.env,
+    PYTHONUNBUFFERED: '1',
+    LUOMINEST_DATA_DIR: join(app.getPath('userData'), 'data')
+  }
+
+  if (platform() === 'linux' || platform() === 'darwin') {
+    if (!isDev) {
+      env.LD_LIBRARY_PATH = [
+        join(cwd, 'lib'),
+        process.env.LD_LIBRARY_PATH || ''
+      ].filter(Boolean).join(':')
+    }
+  }
+  
   backendProcess = spawn(backendPath, args, {
     cwd,
-    env: {
-      ...process.env,
-      PYTHONUNBUFFERED: '1',
-      LUOMINEST_DATA_DIR: join(app.getPath('userData'), 'data')
-    },
+    env,
     stdio: ['ignore', 'pipe', 'pipe']
   })
   
   backendProcess.stdout?.on('data', (data) => {
-    console.log('[Backend]', data.toString().trim())
+    routeBackendLog(data, 'stdout')
   })
-  
+
   backendProcess.stderr?.on('data', (data) => {
-    console.error('[Backend Error]', data.toString().trim())
+    routeBackendLog(data, 'stderr')
   })
   
   backendProcess.on('error', (err) => {

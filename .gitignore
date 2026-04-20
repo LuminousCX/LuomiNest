@@ -40,6 +40,13 @@ dist/
 # 虚拟环境
 .venv/
 
+# Python缓存
+__pycache__/
+*.pyc
+
+# 后端数据目录
+backend/data/
+
 # IDE配置
 .idea/
 .vscode/
@@ -97,6 +104,16 @@ coverage/
 *.tmp
 *.temp
 *.zip
-*.tar.gz
-*.tar.bz2
-*.tar.xz
+
+# 可执行文件和库文件
+*.exe
+*.dll
+*.bin
+*.so
+*.dylib
+*.app
+
+# 后端打包输出
+backend/dist/
+backend/build/
+frontend/resources/backend/*.exe

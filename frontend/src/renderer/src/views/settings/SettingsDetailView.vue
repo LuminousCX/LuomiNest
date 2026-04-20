@@ -9,11 +9,15 @@ import {
   Shield,
   Database,
   Globe,
-  Settings
+  Settings,
+  Sun,
+  Moon
 } from 'lucide-vue-next'
+import { useThemeStore } from '../../stores/theme'
 
 const route = useRoute()
 const router = useRouter()
+const themeStore = useThemeStore()
 
 const section = computed(() => route.params.section as string)
 
@@ -128,8 +132,24 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
               <span class="row-desc">{{ item.desc }}</span>
             </div>
             <div class="row-control">
-              <div v-if="item.type === 'toggle'" class="toggle-switch">
+              <div v-if="item.type === 'toggle' && item.label === '动画效果'" class="toggle-switch" :class="{ on: true }">
                 <span class="toggle-thumb" />
+              </div>
+              <div v-else-if="item.type === 'select' && section === 'appearance' && item.label === '主题模式'" class="theme-mode-selector">
+                <button
+                  :class="['theme-option', { active: !themeStore.isDark }]"
+                  @click="themeStore.setTheme(false)"
+                >
+                  <Sun :size="14" />
+                  <span>浅色</span>
+                </button>
+                <button
+                  :class="['theme-option', { active: themeStore.isDark }]"
+                  @click="themeStore.setTheme(true)"
+                >
+                  <Moon :size="14" />
+                  <span>深色</span>
+                </button>
               </div>
               <div v-else-if="item.type === 'select'" class="control-select">
                 <span class="control-placeholder">请选择</span>
@@ -287,6 +307,10 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
   transition: background var(--transition-fast);
 }
 
+.toggle-switch.on {
+  background: var(--lumi-primary);
+}
+
 .toggle-thumb {
   position: absolute;
   top: 3px;
@@ -296,6 +320,41 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
   border-radius: 50%;
   background: white;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: all var(--transition-fast);
+}
+
+.toggle-switch.on .toggle-thumb {
+  left: 23px;
+}
+
+.theme-mode-selector {
+  display: flex;
+  gap: 4px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--workspace-panel);
+  border: 1px solid var(--workspace-border);
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: none;
+}
+
+.theme-option.active {
+  background: var(--workspace-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xs);
 }
 
 .control-select,
