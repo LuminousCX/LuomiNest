@@ -1,7 +1,7 @@
 import uuid
 import json
 import time
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
