@@ -23,14 +23,16 @@ _conversations: dict[str, dict] = {}
 @router.post("/completions")
 async def chat_completions(request: ChatRequest):
     start_time = time.time()
-    logger.info(f"[API] POST /chat/completions - provider={request.provider}, model={request.model}, stream={request.stream}")
+    resolved_provider = request.provider or llm_adapter.default_provider
+    resolved_model = request.model or llm_adapter.get_provider(resolved_provider).default_model
+    logger.info(f"[API] POST /chat/completions - provider={resolved_provider}, model={resolved_model}, stream={request.stream}")
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
     logger.debug(f"[API] POST /chat/completions - Message count: {len(messages)}")
 
     if request.stream:
         logger.info(f"[API] POST /chat/completions - Starting stream response")
         return StreamingResponse(
-            _stream_chat(messages, request),
+            _stream_chat(messages, request, resolved_provider, resolved_model),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -42,8 +44,8 @@ async def chat_completions(request: ChatRequest):
     try:
         result = await llm_adapter.chat(
             messages=messages,
-            provider_name=request.provider,
-            model=request.model,
+            provider_name=resolved_provider,
+            model=resolved_model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             top_p=request.top_p,
@@ -54,8 +56,8 @@ async def chat_completions(request: ChatRequest):
         return ChatResponse(
             id=str(uuid.uuid4()),
             content=result,
-            model=request.model or llm_adapter.get_provider(request.provider).default_model,
-            provider=request.provider or llm_adapter.default_provider,
+            model=resolved_model,
+            provider=resolved_provider,
         )
     except Exception as e:
         elapsed = time.time() - start_time
@@ -63,25 +65,25 @@ async def chat_completions(request: ChatRequest):
         raise
 
 
-async def _stream_chat(messages: list[dict], request: ChatRequest):
+async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str, model: str):
     start_time = time.time()
     chat_id = str(uuid.uuid4())
-    model = request.model or llm_adapter.get_provider(request.provider).default_model
-    provider = request.provider or llm_adapter.default_provider
     chunk_count = 0
+    full_content = ""
 
     logger.info(f"[STREAM] Starting stream: chat_id={chat_id}, provider={provider}, model={model}")
 
     try:
         async for chunk in llm_adapter.chat_stream(
             messages=messages,
-            provider_name=request.provider,
-            model=request.model,
+            provider_name=provider,
+            model=model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             top_p=request.top_p,
             tools=request.tools,
         ):
+            full_content += chunk
             chunk_count += 1
             data = ChatStreamChunk(
                 id=chat_id,
@@ -191,17 +193,76 @@ async def add_message(conv_id: str, request: ChatRequest):
         raise NotFoundError(f"Conversation {conv_id} not found")
 
     from datetime import datetime, timezone
+
+    existing_count = len(conv["messages"])
     for m in request.messages:
-        conv["messages"].append({"role": m.role, "content": m.content})
+        msg_entry = {"role": m.role, "content": m.content}
+        if conv["messages"] and conv["messages"][-1] == msg_entry:
+            continue
+        conv["messages"].append(msg_entry)
+    new_msg_count = len(conv["messages"]) - existing_count
     conv["updated_at"] = datetime.now(timezone.utc).isoformat()
-    logger.debug(f"[API] POST /chat/conversations/{conv_id}/messages - Added {len(request.messages)} messages")
+    logger.debug(f"[API] POST /chat/conversations/{conv_id}/messages - Added {new_msg_count} new messages (skipped duplicates)")
+
+    resolved_provider = request.provider or conv.get("provider") or llm_adapter.default_provider
+    resolved_model = request.model or conv.get("model") or llm_adapter.get_provider(resolved_provider).default_model
 
     all_messages = [{"role": m["role"], "content": m["content"]} for m in conv["messages"]]
 
     if request.stream:
         logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Starting stream response")
+
+        async def stream_with_save():
+            accumulated = ""
+            chat_id = str(uuid.uuid4())
+            chunk_count = 0
+            try:
+                async for chunk in llm_adapter.chat_stream(
+                    messages=all_messages,
+                    provider_name=resolved_provider,
+                    model=resolved_model,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                    top_p=request.top_p,
+                    tools=request.tools,
+                ):
+                    accumulated += chunk
+                    chunk_count += 1
+                    data = ChatStreamChunk(
+                        id=chat_id,
+                        content=chunk,
+                        model=resolved_model,
+                        provider=resolved_provider,
+                    )
+                    yield f"data: {data.model_dump_json()}\n\n"
+
+                done_data = ChatStreamChunk(
+                    id=chat_id,
+                    content="",
+                    model=resolved_model,
+                    provider=resolved_provider,
+                    done=True,
+                )
+                yield f"data: {done_data.model_dump_json()}\n\n"
+
+                conv["messages"].append({"role": "assistant", "content": accumulated})
+                conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+                elapsed = time.time() - start_time
+                logger.success(f"[STREAM] Stream completed & saved: conv={conv_id}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
+            except Exception as e:
+                elapsed = time.time() - start_time
+                logger.error(f"[STREAM] Stream failed: conv={conv_id}, elapsed={elapsed:.2f}s, error={e}")
+                error_data = ChatStreamChunk(
+                    id=chat_id,
+                    content=f"[Error] {str(e)}",
+                    model=resolved_model,
+                    provider=resolved_provider,
+                    done=True,
+                )
+                yield f"data: {error_data.model_dump_json()}\n\n"
+
         return StreamingResponse(
-            _stream_chat(all_messages, request),
+            stream_with_save(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -212,8 +273,8 @@ async def add_message(conv_id: str, request: ChatRequest):
 
     result = await llm_adapter.chat(
         messages=all_messages,
-        provider_name=request.provider or conv.get("provider"),
-        model=request.model or conv.get("model"),
+        provider_name=resolved_provider,
+        model=resolved_model,
         temperature=request.temperature,
         max_tokens=request.max_tokens,
         top_p=request.top_p,
@@ -229,6 +290,6 @@ async def add_message(conv_id: str, request: ChatRequest):
     return ChatResponse(
         id=str(uuid.uuid4()),
         content=result,
-        model=request.model or conv.get("model", ""),
-        provider=request.provider or conv.get("provider", ""),
+        model=resolved_model,
+        provider=resolved_provider,
     )
