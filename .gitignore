@@ -104,3 +104,16 @@ coverage/
 *.tmp
 *.temp
 *.zip
+
+# 可执行文件和库文件
+*.exe
+*.dll
+*.bin
+*.so
+*.dylib
+*.app
+
+# 后端打包输出
+backend/dist/
+backend/build/
+frontend/resources/backend/*.exe
