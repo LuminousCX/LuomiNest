@@ -38,19 +38,21 @@ class AgentUpdate(BaseModel):
 
 
 class AgentResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, by_alias=True)
+
     id: str
     name: str
     description: str
-    system_prompt: str
+    system_prompt: str = Field(alias="systemPrompt")
     model: str | None = None
     provider: str | None = None
     color: str
     avatar: str | None = None
     capabilities: list[str]
-    is_active: bool = True
-    is_main: bool = False
-    created_at: str = ""
-    updated_at: str = ""
+    is_active: bool = Field(alias="isActive", default=True)
+    is_main: bool = Field(alias="isMain", default=False)
+    created_at: str = Field(alias="createdAt", default="")
+    updated_at: str = Field(alias="updatedAt", default="")
 
 
 class MainAgentConfigUpdate(BaseModel):
@@ -91,7 +93,7 @@ def _ensure_config_dir():
 def _load_main_agent_config() -> dict:
     _ensure_config_dir()
     if not os.path.exists(MAIN_AGENT_CONFIG_FILE):
-        logger.debug(f"Main agent config file not found, using defaults")
+        logger.debug("Main agent config file not found, using defaults")
         return dict(_DEFAULT_MAIN_AGENT_CONFIG)
     try:
         with open(MAIN_AGENT_CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -111,6 +113,7 @@ def _save_main_agent_config(config: dict):
         logger.success(f"Saved main agent config to {MAIN_AGENT_CONFIG_FILE}")
     except Exception as e:
         logger.error(f"Failed to save main agent config: {e}")
+        raise
 
 
 @router.get("/main-agent/config", response_model=MainAgentConfigResponse)
@@ -130,21 +133,17 @@ async def get_main_agent_config():
 
 @router.patch("/main-agent/config", response_model=MainAgentConfigResponse)
 async def update_main_agent_config(request: MainAgentConfigUpdate):
-    logger.info(f"[API] PATCH /agents/main-agent/config - Updating main agent config")
+    logger.info("[API] PATCH /agents/main-agent/config - Updating main agent config")
     config = _load_main_agent_config()
     update_data = request.model_dump(exclude_unset=True, by_alias=False)
 
     updated_fields = []
-    if "system_prompt" in update_data or "systemPrompt" in update_data:
-        val = update_data.get("system_prompt") or update_data.get("systemPrompt")
-        if val is not None:
-            config["system_prompt"] = val
-            updated_fields.append("system_prompt")
-    if "max_tokens" in update_data or "maxTokens" in update_data:
-        val = update_data.get("max_tokens") or update_data.get("maxTokens")
-        if val is not None:
-            config["max_tokens"] = val
-            updated_fields.append("max_tokens")
+    if update_data.get("system_prompt") is not None:
+        config["system_prompt"] = update_data["system_prompt"]
+        updated_fields.append("system_prompt")
+    if update_data.get("max_tokens") is not None:
+        config["max_tokens"] = update_data["max_tokens"]
+        updated_fields.append("max_tokens")
 
     for key in ("provider", "model", "temperature"):
         if key in update_data and update_data[key] is not None:
