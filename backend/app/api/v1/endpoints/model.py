@@ -65,6 +65,20 @@ class ModelConfigUpdate(BaseModel):
     temperature: float | None = None
     max_tokens: int | None = Field(alias="maxTokens", default=None)
     top_p: float | None = Field(alias="topP", default=None)
+    reasoner_provider: str | None = Field(alias="reasonerProvider", default=None)
+    reasoner_model: str | None = Field(alias="reasonerModel", default=None)
+    reasoner_temperature: float | None = Field(alias="reasonerTemperature", default=None)
+    reasoner_max_tokens: int | None = Field(alias="reasonerMaxTokens", default=None)
+    reasoner_effort: str | None = Field(alias="reasonerEffort", default=None)
+    tts_provider: str | None = Field(alias="ttsProvider", default=None)
+    tts_model: str | None = Field(alias="ttsModel", default=None)
+    tts_voice: str | None = Field(alias="ttsVoice", default=None)
+    tts_speed: float | None = Field(alias="ttsSpeed", default=None)
+    stt_provider: str | None = Field(alias="sttProvider", default=None)
+    stt_model: str | None = Field(alias="sttModel", default=None)
+    stt_language: str | None = Field(alias="sttLanguage", default=None)
+    stt_auto_send: bool | None = Field(alias="sttAutoSend", default=None)
+    stt_auto_send_delay: int | None = Field(alias="sttAutoSendDelay", default=None)
 
 
 def _build_provider_response(provider_id: str) -> ProviderResponse:
@@ -106,19 +120,9 @@ async def list_provider_templates():
 @router.get("/providers", response_model=list[ProviderResponse])
 async def list_providers():
     logger.info("[API] GET /models/providers - Listing all providers")
-    start_time = time.time()
     providers_info = llm_adapter.list_providers()
     result = []
     for p in providers_info:
-        provider_instance = llm_adapter.providers.get(p["id"])
-        models = []
-        if provider_instance:
-            try:
-                models = await provider_instance.list_models()
-                logger.debug(f"[API] GET /models/providers - Provider {p['id']} has {len(models)} models")
-            except Exception as e:
-                logger.warning(f"[API] GET /models/providers - Failed to list models for {p['id']}: {e}")
-
         result.append(ProviderResponse(
             id=p["id"],
             name=p["name"],
@@ -127,10 +131,9 @@ async def list_providers():
             api_key_set=p["api_key_set"],
             default_model=p["default_model"],
             is_default=p["is_default"],
-            models=models,
+            models=[],
         ))
-    elapsed = time.time() - start_time
-    logger.success(f"[API] GET /models/providers - Success: returned {len(result)} providers, elapsed={elapsed:.2f}s")
+    logger.success(f"[API] GET /models/providers - Success: returned {len(result)} providers")
     return result
 
 
@@ -295,6 +298,34 @@ async def update_model_config(request: ModelConfigUpdate):
     if request.top_p is not None:
         settings.LLM_DEFAULT_TOP_P = request.top_p
         updated_fields.append("top_p")
+    if request.reasoner_provider is not None:
+        updated_fields.append("reasoner_provider")
+    if request.reasoner_model is not None:
+        updated_fields.append("reasoner_model")
+    if request.reasoner_temperature is not None:
+        updated_fields.append("reasoner_temperature")
+    if request.reasoner_max_tokens is not None:
+        updated_fields.append("reasoner_max_tokens")
+    if request.reasoner_effort is not None:
+        updated_fields.append("reasoner_effort")
+    if request.tts_provider is not None:
+        updated_fields.append("tts_provider")
+    if request.tts_model is not None:
+        updated_fields.append("tts_model")
+    if request.tts_voice is not None:
+        updated_fields.append("tts_voice")
+    if request.tts_speed is not None:
+        updated_fields.append("tts_speed")
+    if request.stt_provider is not None:
+        updated_fields.append("stt_provider")
+    if request.stt_model is not None:
+        updated_fields.append("stt_model")
+    if request.stt_language is not None:
+        updated_fields.append("stt_language")
+    if request.stt_auto_send is not None:
+        updated_fields.append("stt_auto_send")
+    if request.stt_auto_send_delay is not None:
+        updated_fields.append("stt_auto_send_delay")
 
     logger.success(f"[API] PATCH /models/config - Updated fields: {updated_fields}")
     return {

@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    LLM_DEFAULT_MODEL: str = "选择模型"
+    LLM_DEFAULT_MODEL: str = ""
     LLM_DEFAULT_TEMPERATURE: float = 0.7
     LLM_DEFAULT_MAX_TOKENS: int = 4096
     LLM_DEFAULT_TOP_P: float = 0.9

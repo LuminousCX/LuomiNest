@@ -22,9 +22,10 @@ export const useChatStore = defineStore('chat', () => {
     return isBackendReady.value
   }
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (agentId?: string) => {
     try {
-      conversations.value = await apiGet<ConversationListItem[]>('/chat/conversations')
+      const query = agentId ? `?agent_id=${agentId}` : ''
+      conversations.value = await apiGet<ConversationListItem[]>(`/chat/conversations${query}`)
     } catch {
       conversations.value = []
     }
@@ -39,7 +40,7 @@ export const useChatStore = defineStore('chat', () => {
     })
     currentConversation.value = conv
     messages.value = []
-    await fetchConversations()
+    await fetchConversations(agentId)
     return conv
   }
 
@@ -54,13 +55,13 @@ export const useChatStore = defineStore('chat', () => {
     }))
   }
 
-  const deleteConversation = async (convId: string) => {
+  const deleteConversation = async (convId: string, agentId?: string) => {
     await apiDelete(`/chat/conversations/${convId}`)
     if (currentConversation.value?.id === convId) {
       currentConversation.value = null
       messages.value = []
     }
-    await fetchConversations()
+    await fetchConversations(agentId)
   }
 
   const sendMessage = async (
@@ -72,6 +73,7 @@ export const useChatStore = defineStore('chat', () => {
       maxTokens?: number
       topP?: number
       systemPrompt?: string
+      agentId?: string
     }
   ) => {
     lastError.value = null
@@ -110,7 +112,7 @@ export const useChatStore = defineStore('chat', () => {
       ? `/chat/conversations/${convId}/messages`
       : '/chat/completions'
 
-    const requestBody = {
+    const requestBody: any = {
       messages: apiMessages,
       model: options?.model,
       provider: options?.provider,
@@ -118,6 +120,10 @@ export const useChatStore = defineStore('chat', () => {
       max_tokens: options?.maxTokens,
       top_p: options?.topP,
       stream: true,
+    }
+
+    if (options?.agentId) {
+      requestBody.agent_id = options.agentId
     }
 
     await apiStream(

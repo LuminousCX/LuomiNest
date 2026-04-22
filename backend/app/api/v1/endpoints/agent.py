@@ -1,9 +1,12 @@
 import uuid
 import os
 import json
+from datetime import datetime, timezone
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
+
+from app.infrastructure.database.json_store import agents_store
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -19,7 +22,9 @@ class AgentCreate(BaseModel):
     provider: str | None = None
     color: str = "#0d9488"
     avatar: str | None = None
-    capabilities: list[str] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=lambda: ["chat"])
+    skills: list[str] = Field(default_factory=list)
+    mcp_servers: list[str] = Field(default_factory=list)
 
 
 class AgentUpdate(BaseModel):
@@ -32,6 +37,8 @@ class AgentUpdate(BaseModel):
     avatar: str | None = None
     capabilities: list[str] | None = None
     is_active: bool | None = None
+    skills: list[str] | None = None
+    mcp_servers: list[str] | None = None
 
 
 class AgentResponse(BaseModel):
@@ -40,14 +47,16 @@ class AgentResponse(BaseModel):
     id: str
     name: str
     description: str
-    system_prompt: str = Field(alias="systemPrompt")
+    system_prompt: str = Field(alias="systemPrompt", default="")
     model: str | None = None
     provider: str | None = None
     color: str
     avatar: str | None = None
-    capabilities: list[str]
+    capabilities: list[str] = Field(default_factory=lambda: ["chat"])
     is_active: bool = Field(alias="isActive", default=True)
     is_main: bool = Field(alias="isMain", default=False)
+    skills: list[str] = Field(default_factory=list)
+    mcp_servers: list[str] = Field(default_factory=list)
     created_at: str = Field(alias="createdAt", default="")
     updated_at: str = Field(alias="updatedAt", default="")
 
@@ -72,12 +81,10 @@ class MainAgentConfigResponse(BaseModel):
     max_tokens: int = Field(alias="maxTokens", default=4096)
 
 
-_agents: dict[str, dict] = {}
-
 _DEFAULT_MAIN_AGENT_CONFIG = {
     "provider": "",
     "model": "",
-    "system_prompt": "你是 LuomiNest 的主控智能体，负责控制 Live2D 皮套的行为和表情。你需要根据对话内容做出恰当的情感反应，并保持角色的一致性。你的回答应该简洁自然，适合通过皮套形象表达。",
+    "system_prompt": "你是 LuomiNest 的主控智能体，负责控制 Live2D 皮套的行为和表情。你需要根据对话内容做出恰当的情感反应，并保持角色的一致性。你的回答应该简洁自然，适合通过皮套形象表达。\n\n你可以使用以下工具来帮助用户：\n- search: 搜索知识库获取相关信息\n- execute_skill: 执行已注册的技能\n- call_mcp_tool: 调用MCP工具\n\n当需要使用工具时，请在回复中使用以下格式：\n<tool_call name=\"工具名\">参数</tool_call\n\n请根据用户的需求选择合适的工具，如果不需要工具则直接回复。",
     "temperature": 0.7,
     "max_tokens": 4096,
 }
@@ -162,7 +169,7 @@ async def update_main_agent_config(request: MainAgentConfigUpdate):
 @router.get("", response_model=list[AgentResponse])
 async def list_agents():
     logger.info("[API] GET /agents - Listing all agents")
-    agents = [a for a in _agents.values() if not a.get("is_main", False)]
+    agents = [a for a in agents_store.values() if not a.get("is_main", False)]
     logger.success(f"[API] GET /agents - Success: returned {len(agents)} agents")
     return agents
 
@@ -170,7 +177,6 @@ async def list_agents():
 @router.post("", response_model=AgentResponse)
 async def create_agent(request: AgentCreate):
     logger.info(f"[API] POST /agents - Creating agent: name={request.name}")
-    from datetime import datetime, timezone
     agent_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     agent = {
@@ -185,10 +191,12 @@ async def create_agent(request: AgentCreate):
         "capabilities": request.capabilities,
         "is_active": True,
         "is_main": False,
+        "skills": request.skills,
+        "mcp_servers": request.mcp_servers,
         "created_at": now,
         "updated_at": now,
     }
-    _agents[agent_id] = agent
+    agents_store.set(agent_id, agent)
     logger.success(f"[API] POST /agents - Agent created: id={agent_id}, name={request.name}")
     return AgentResponse(**agent)
 
@@ -196,7 +204,7 @@ async def create_agent(request: AgentCreate):
 @router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent(agent_id: str):
     logger.info(f"[API] GET /agents/{agent_id} - Fetching agent")
-    agent = _agents.get(agent_id)
+    agent = agents_store.get(agent_id)
     if not agent:
         logger.error(f"[API] GET /agents/{agent_id} - Agent not found")
         from app.core.exceptions import NotFoundError
@@ -208,7 +216,7 @@ async def get_agent(agent_id: str):
 @router.patch("/{agent_id}", response_model=AgentResponse)
 async def update_agent(agent_id: str, request: AgentUpdate):
     logger.info(f"[API] PATCH /agents/{agent_id} - Updating agent")
-    agent = _agents.get(agent_id)
+    agent = agents_store.get(agent_id)
     if not agent:
         logger.error(f"[API] PATCH /agents/{agent_id} - Agent not found")
         from app.core.exceptions import NotFoundError
@@ -217,9 +225,8 @@ async def update_agent(agent_id: str, request: AgentUpdate):
     update_data = request.model_dump(exclude_unset=True)
     updated_fields = list(update_data.keys())
     agent.update(update_data)
-
-    from datetime import datetime, timezone
     agent["updated_at"] = datetime.now(timezone.utc).isoformat()
+    agents_store.set(agent_id, agent)
 
     logger.success(f"[API] PATCH /agents/{agent_id} - Updated fields: {updated_fields}")
     return AgentResponse(**agent)
@@ -228,10 +235,11 @@ async def update_agent(agent_id: str, request: AgentUpdate):
 @router.delete("/{agent_id}")
 async def delete_agent(agent_id: str):
     logger.info(f"[API] DELETE /agents/{agent_id} - Deleting agent")
-    if agent_id in _agents:
-        agent_name = _agents[agent_id].get("name", "unknown")
-        del _agents[agent_id]
+    agent = agents_store.get(agent_id)
+    if agent:
+        agent_name = agent.get("name", "unknown")
+        agents_store.delete(agent_id)
         logger.success(f"[API] DELETE /agents/{agent_id} - Agent deleted: name={agent_name}")
     else:
         logger.warning(f"[API] DELETE /agents/{agent_id} - Agent not found (already deleted)")
-    return {"data": {"deleted": True}}
+    return {"error": None, "data": {"deleted": True}}
