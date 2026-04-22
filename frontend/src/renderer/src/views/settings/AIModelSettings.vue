@@ -1817,30 +1817,6 @@ export default { name: 'AIModelSettings' }
   gap: 6px;
 }
 
-.template-chip {
-  padding: 6px 12px;
-  border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  transition: all 250ms ease-in-out;
-  cursor: pointer;
-}
-
-.template-chip:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-}
-
-.template-chip.active {
-  background: var(--lumi-primary-light);
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  font-weight: 600;
-}
-
 .add-dialog {
   width: 560px;
   max-height: 85vh;
