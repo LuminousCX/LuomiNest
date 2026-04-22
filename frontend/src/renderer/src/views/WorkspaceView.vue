@@ -181,7 +181,7 @@ const sendMessage = async () => {
 
 const scrollToBottom = () => {
   if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    messagesContainer.value.scrollTo({ top: messagesContainer.value.scrollHeight, behavior: 'smooth' })
   }
 }
 
@@ -402,32 +402,34 @@ onMounted(async () => {
     <div class="main-content-area">
       <div ref="messagesContainer" class="chat-area" :class="{ 'with-history': showHistoryPanel }">
         <div class="messages-container">
-          <div
-            v-for="msg in messages"
-            :key="msg.id"
-            :class="['message-row', msg.role]"
-          >
-            <div class="message-avatar" v-if="msg.role === 'assistant'">
-              <div class="avatar-assistant">
-                <Bot :size="16" />
+          <TransitionGroup name="msg-appear" tag="div">
+            <div
+              v-for="msg in messages"
+              :key="msg.id"
+              :class="['message-row', msg.role]"
+            >
+              <div class="message-avatar" v-if="msg.role === 'assistant'">
+                <div class="avatar-assistant">
+                  <Bot :size="16" />
+                </div>
+              </div>
+              <div class="message-body">
+                <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
+                <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+                <div v-else class="message-content user-message">{{ msg.content }}</div>
+                <div v-if="msg.role === 'assistant' && !msg.done && isStreaming" class="streaming-cursor">
+                  <span class="cursor-blink"></span>
+                </div>
+                <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
+                  <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
+                    <Check v-if="copiedId === msg.id" :size="13" />
+                    <Copy v-else :size="13" />
+                    <span>{{ copiedId === msg.id ? '已复制' : '复制' }}</span>
+                  </button>
+                </div>
               </div>
             </div>
-            <div class="message-body">
-              <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
-              <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              <div v-else class="message-content user-message">{{ msg.content }}</div>
-              <div v-if="msg.role === 'assistant' && !msg.done && isStreaming" class="streaming-cursor">
-                <span class="cursor-blink"></span>
-              </div>
-              <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
-                <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
-                  <Check v-if="copiedId === msg.id" :size="13" />
-                  <Copy v-else :size="13" />
-                  <span>{{ copiedId === msg.id ? '已复制' : '复制' }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
+          </TransitionGroup>
 
           <div v-if="messages.length === 0" class="empty-state">
             <div class="empty-icon">
@@ -719,13 +721,28 @@ onMounted(async () => {
   padding: 12px 16px;
   border-radius: var(--radius-md);
   background: var(--lumi-accent-light);
-  border: 1px solid rgba(244, 63, 94, 0.2);
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.backend-warning::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--lumi-accent);
+  border-radius: 0 3px 3px 0;
 }
 
 .backend-warning.info {
-  background: rgba(13, 148, 136, 0.08);
-  border-color: rgba(13, 148, 136, 0.2);
+  background: rgba(13, 148, 136, 0.06);
+}
+
+.backend-warning.info::before {
+  background: var(--lumi-primary);
 }
 
 .warning-content {
@@ -887,8 +904,8 @@ onMounted(async () => {
   margin-top: 10px;
   text-align: center;
   font-size: 13px;
-  color: var(--lumi-accent);
-  background: var(--lumi-accent-light);
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
   padding: 8px 20px;
   border-radius: var(--radius-full);
   display: inline-block;
@@ -913,8 +930,9 @@ onMounted(async () => {
 .chat-area {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: 24px;
   transition: all var(--transition-normal);
+  scroll-behavior: smooth;
 }
 
 .messages-container {
@@ -923,11 +941,16 @@ onMounted(async () => {
 }
 
 .message-row {
-  margin-bottom: 28px;
-  animation: lumi-slide-up 0.3s ease-out both;
+  margin-bottom: 24px;
+  animation: msg-slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
   display: flex;
   gap: 12px;
   align-items: flex-start;
+}
+
+@keyframes msg-slide-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .message-avatar {
@@ -944,6 +967,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 250ms ease-in-out;
+}
+
+.message-row:hover .avatar-assistant {
+  transform: scale(1.08);
 }
 
 .message-body {
@@ -974,13 +1002,18 @@ onMounted(async () => {
 }
 
 .user-message {
-  padding: 10px 16px;
+  padding: 12px 18px;
   border-radius: var(--radius-lg);
   border-top-right-radius: 4px;
-  background: rgba(13, 148, 136, 0.08);
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(13, 148, 136, 0.04));
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
+  transition: all 250ms ease-in-out;
+}
+
+.message-row:hover .user-message {
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(13, 148, 136, 0.06));
 }
 
 .message-actions {
@@ -1036,6 +1069,7 @@ onMounted(async () => {
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
+  animation: lumi-fade-in 0.5s ease-out both;
 }
 
 .empty-icon {
@@ -1048,6 +1082,11 @@ onMounted(async () => {
   justify-content: center;
   color: var(--lumi-primary);
   margin-bottom: 20px;
+  transition: transform 300ms ease-in-out;
+}
+
+.empty-icon:hover {
+  transform: scale(1.05) rotate(-3deg);
 }
 
 .empty-title {
@@ -1076,25 +1115,36 @@ onMounted(async () => {
   font-size: 13px;
   color: var(--text-secondary);
   background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-xs);
+  transition: all 300ms ease-in-out;
   cursor: pointer;
 }
 
 .quick-action:hover {
-  border-color: var(--lumi-primary);
   color: var(--lumi-primary);
   background: var(--lumi-primary-light);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .history-panel {
   width: 280px;
   flex-shrink: 0;
-  border-left: 1px solid var(--workspace-border);
   background: var(--workspace-card);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+.history-panel::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--divider-vertical);
 }
 
 .history-header {
@@ -1102,7 +1152,17 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  border-bottom: 1px solid var(--workspace-border);
+  position: relative;
+}
+
+.history-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: var(--divider-soft);
 }
 
 .history-header h3 {
@@ -1146,17 +1206,38 @@ onMounted(async () => {
   padding: 10px 12px;
   border-radius: var(--radius-md);
   text-align: left;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
   position: relative;
   cursor: pointer;
+}
+
+.history-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 3px;
+  height: 60%;
+  border-radius: 0 3px 3px 0;
+  background: var(--lumi-primary);
+  transition: transform 300ms ease-in-out;
 }
 
 .history-item:hover {
   background: var(--workspace-hover);
 }
 
+.history-item:hover::before {
+  transform: translateY(-50%) scaleY(1);
+}
+
 .history-item.active {
   background: var(--lumi-primary-light);
+}
+
+.history-item.active::before {
+  transform: translateY(-50%) scaleY(1);
 }
 
 .history-item-icon {
@@ -1254,16 +1335,14 @@ onMounted(async () => {
 
 .input-wrapper {
   background: var(--workspace-card);
-  border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm), var(--shadow-inset);
   overflow: visible;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
 }
 
 .input-wrapper:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow), var(--shadow-lg);
+  box-shadow: 0 0 0 2px var(--lumi-primary-glow), var(--shadow-lg);
 }
 
 .chat-input {
@@ -1320,7 +1399,7 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
   white-space: nowrap;
 }
 
@@ -1349,7 +1428,6 @@ onMounted(async () => {
   left: 0;
   width: 280px;
   background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: 9999;
@@ -1361,9 +1439,19 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
-  border-bottom: 1px solid var(--workspace-border);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  position: relative;
+}
+
+.dropdown-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: var(--divider-soft);
 }
 
 .dropdown-list {
@@ -1380,7 +1468,7 @@ onMounted(async () => {
   padding: 8px 10px;
   border-radius: var(--radius-md);
   text-align: left;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
 }
 
 .dropdown-item:hover {
@@ -1453,7 +1541,7 @@ onMounted(async () => {
   background: var(--lumi-primary);
   color: white;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
   margin-left: 4px;
 }
 
@@ -1499,6 +1587,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   z-index: 100;
+  backdrop-filter: blur(4px);
 }
 
 .add-dialog {
@@ -1508,7 +1597,13 @@ onMounted(async () => {
   width: 440px;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-xl);
+  animation: dialog-enter 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes dialog-enter {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .add-dialog h3 {
@@ -1544,16 +1639,14 @@ onMounted(async () => {
   width: 100%;
   padding: 10px 14px;
   background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
   border-radius: var(--radius-md);
   font-size: 13px;
   color: var(--text-primary);
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
 }
 
 .form-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  box-shadow: 0 0 0 2px var(--lumi-primary-glow);
 }
 
 .form-input::placeholder {
@@ -1575,7 +1668,7 @@ onMounted(async () => {
   height: 28px;
   border-radius: 50%;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
   border: 2px solid transparent;
 }
 
@@ -1604,7 +1697,7 @@ onMounted(async () => {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
 }
 
 .dialog-btn.cancel {
@@ -1809,5 +1902,14 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.msg-appear-enter-active {
+  transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.msg-appear-enter-from {
+  opacity: 0;
+  transform: translateY(16px) scale(0.97);
 }
 </style>
