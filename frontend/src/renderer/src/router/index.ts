@@ -89,6 +89,18 @@ const routes: RouteRecordRaw[] = [
     name: 'AgentCreate',
     component: () => import('../views/AgentCreateView.vue'),
     meta: { title: '创建智能体 - LuomiNest', icon: 'Sparkles' }
+  },
+  {
+    path: '/marketplace',
+    name: 'Marketplace',
+    component: () => import('../views/marketplace/MarketplaceView.vue'),
+    meta: { title: '市场 - LuomiNest', icon: 'Store' }
+  },
+  {
+    path: '/marketplace/:type/:id',
+    name: 'MarketplaceDetail',
+    component: () => import('../views/marketplace/MarketplaceDetailView.vue'),
+    meta: { title: '市场详情 - LuomiNest', icon: 'Store' }
   }
 ]
 

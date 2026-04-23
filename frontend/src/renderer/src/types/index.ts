@@ -207,4 +207,6 @@ export interface ApiResponse<T> {
   error?: ApiError
 }
 
+export type { MarketItem, MarketReview, MarketCategory, MarketFilter, MarketItemType, InstallStatus, SortOption } from './marketplace'
+
 export {}

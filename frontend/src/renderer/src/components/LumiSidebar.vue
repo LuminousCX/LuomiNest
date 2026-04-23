@@ -18,7 +18,8 @@ import {
   Brain,
   Users,
   Trash2,
-  Check
+  Check,
+  Store
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 
@@ -26,7 +27,7 @@ const route = useRoute()
 const router = useRouter()
 const agentStore = useAgentStore()
 
-const hideAgentPanelRoutes = ['/browser', '/social', '/settings']
+const hideAgentPanelRoutes = ['/browser', '/social', '/settings', '/marketplace']
 
 const isBrowserMode = computed(() => hideAgentPanelRoutes.some(r => route.path.startsWith(r)))
 
@@ -35,6 +36,7 @@ const navItems = [
   { id: '/workflow', label: '工作流', icon: GitBranch },
   { id: '/inspire', label: '灵感', icon: Lightbulb },
   { id: '/tasks', label: '任务', icon: CheckSquare },
+  { id: '/marketplace', label: '市场', icon: Store },
   { id: '/avatar', label: '皮套', icon: Palette },
   { id: '/memory', label: '记忆', icon: Brain },
   { id: '/social', label: '社交', icon: Users },
@@ -151,7 +153,7 @@ onMounted(async () => {
           <button
             v-for="item in navItems"
             :key="item.id"
-            :class="['icon-btn', { active: route.path === item.id }]"
+            :class="['icon-btn', { active: route.path === item.id || (item.id === '/marketplace' && route.path.startsWith('/marketplace')) }]"
             :aria-label="item.label"
             @click="router.push(item.id)"
           >
