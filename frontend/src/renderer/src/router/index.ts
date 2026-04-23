@@ -91,16 +91,28 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '创建智能体 - LuomiNest', icon: 'Sparkles' }
   },
   {
-    path: '/marketplace',
-    name: 'Marketplace',
-    component: () => import('../views/marketplace/MarketplaceView.vue'),
-    meta: { title: '市场 - LuomiNest', icon: 'Store' }
+    path: '/plugins',
+    name: 'PluginMarket',
+    component: () => import('../views/PluginMarketView.vue'),
+    meta: { title: '插件市场 - LuomiNest', icon: 'Puzzle' }
   },
   {
-    path: '/marketplace/:type/:id',
-    name: 'MarketplaceDetail',
-    component: () => import('../views/marketplace/MarketplaceDetailView.vue'),
-    meta: { title: '市场详情 - LuomiNest', icon: 'Store' }
+    path: '/plugins/:id',
+    name: 'PluginDetail',
+    component: () => import('../views/MarketDetailView.vue'),
+    meta: { title: '插件详情 - LuomiNest', icon: 'Puzzle' }
+  },
+  {
+    path: '/skills',
+    name: 'SkillMarket',
+    component: () => import('../views/SkillMarketView.vue'),
+    meta: { title: '技能市场 - LuomiNest', icon: 'Sparkles' }
+  },
+  {
+    path: '/skills/:id',
+    name: 'SkillDetail',
+    component: () => import('../views/MarketDetailView.vue'),
+    meta: { title: '技能详情 - LuomiNest', icon: 'Sparkles' }
   }
 ]
 
