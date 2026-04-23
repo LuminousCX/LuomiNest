@@ -130,9 +130,7 @@ const availableModelOptions = computed(() => {
 })
 
 const agentConversations = computed(() => {
-  const agentId = agentStore.activeAgent?.id
-  if (!agentId) return chatStore.conversations
-  return chatStore.conversations.filter(c => c.agentId === agentId || !c.agentId)
+  return chatStore.conversations
 })
 
 const activeSkills = computed(() => skillStore.skills.filter(s => s.isActive))
@@ -145,8 +143,13 @@ const selectAgent = async (agent: { id: string; name: string; desc: string; colo
   const found = agentStore.agents.find(a => a.id === agent.id)
   if (found) {
     agentStore.setActiveAgent(found)
-    chatStore.clearMessages()
+    // 不要清空消息，让watch监听器处理状态切换
     await chatStore.fetchConversations(found.id)
+    // 如果有对话历史，加载最新的对话
+    if (chatStore.conversations.length > 0) {
+      const latestConv = chatStore.conversations[0]
+      await chatStore.loadConversation(latestConv.id)
+    }
   }
 }
 
@@ -220,7 +223,8 @@ const renderMarkdown = (text: string): string => {
 }
 
 const contextUsage = computed(() => {
-  const lastAssistantMsg = [...messages.value].reverse().find(m => m.role === 'assistant' && m.done)
+  // 修复：倒序渲染问题 - 改用正序查找最后一条完成的助手消息
+  const lastAssistantMsg = messages.value.findLast(m => m.role === 'assistant' && m.done)
   return lastAssistantMsg?.usage || chatStore.lastUsage || null
 })
 
@@ -238,16 +242,26 @@ const copyMessage = async (msgId: string, content: string) => {
 }
 
 const formatTime = (dateStr: string) => {
+  // 修复：历史记录实时更新 - 处理Invalid Date问题
+  if (!dateStr || dateStr === 'undefined' || dateStr === 'null') {
+    return '刚刚'
+  }
+  
   try {
     const d = new Date(dateStr)
+    if (isNaN(d.getTime())) {
+      return '刚刚'
+    }
+    
     const now = new Date()
     const isToday = d.toDateString() === now.toDateString()
+    
     if (isToday) {
       return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     }
     return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return ''
+  } catch (error) {
+    return '刚刚'
   }
 }
 
@@ -457,8 +471,9 @@ onMounted(async () => {
                     <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
                     <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
                     <div v-else class="message-content user-message">{{ msg.content }}</div>
-                    <div v-if="msg.role === 'assistant' && !msg.done && isStreaming" class="streaming-cursor">
-                      <span class="cursor-blink"></span>
+                    <div v-if="msg.role === 'assistant' && !msg.done && isStreaming && msg.id === messages[messages.length - 1].id" class="loading-status">
+                      <Loader2 :size="16" class="spin-animation" />
+                      <span>正在分析问题...</span>
                     </div>
                     <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
                       <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
@@ -1206,17 +1221,22 @@ onMounted(async () => {
   margin-left: 2px;
 }
 
-.cursor-blink {
-  display: inline-block;
-  width: 2px;
-  height: 16px;
-  background: var(--lumi-primary);
-  animation: blink 1s step-end infinite;
-  vertical-align: text-bottom;
+.loading-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
-@keyframes blink {
-  50% { opacity: 0; }
+.loading-status .spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .empty-state {
