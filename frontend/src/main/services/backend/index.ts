@@ -3,6 +3,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { platform } from 'os'
+import { PATHS } from '../paths'
 
 let backendProcess: ChildProcess | null = null
 let backendReady = false
@@ -147,7 +148,7 @@ export const startBackend = async (): Promise<boolean> => {
   const env = {
     ...process.env,
     PYTHONUNBUFFERED: '1',
-    LUOMINEST_DATA_DIR: join(app.getPath('userData'), 'data')
+    LUOMINEST_DATA_DIR: PATHS.backendData
   }
 
   if (platform() === 'linux' || platform() === 'darwin') {

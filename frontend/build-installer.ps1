@@ -92,5 +92,5 @@ Write-Host "  BUILD SUCCESS!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Output files:" -ForegroundColor White
-Write-Host "  - Inno Setup Installer: release\installer\LuomiNest-Setup-0.2.0.exe" -ForegroundColor Cyan
+Write-Host "  - Inno Setup Installer: release\installer\LuomiNest-Setup-0.3.0.exe" -ForegroundColor Cyan
 Write-Host ""

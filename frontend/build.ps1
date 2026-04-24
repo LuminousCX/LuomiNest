@@ -99,8 +99,8 @@ switch ($Platform) {
         Write-Host "  - TAR.GZ:   release\dist\LuomiNest-*-linux-*.tar.gz" -ForegroundColor Cyan
     }
     default {
-        Write-Host "  - NSIS Installer: release\dist\LuomiNest-Setup-0.2.0.exe" -ForegroundColor Cyan
-        Write-Host "  - Portable:       release\dist\LuomiNest-Portable-0.2.0.exe" -ForegroundColor Cyan
+        Write-Host "  - NSIS Installer: release\dist\LuomiNest-Setup-0.3.0.exe" -ForegroundColor Cyan
+        Write-Host "  - Portable:       release\dist\LuomiNest-Portable-0.3.0.exe" -ForegroundColor Cyan
     }
 }
 Write-Host ""

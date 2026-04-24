@@ -69,8 +69,8 @@ echo   BUILD SUCCESS!
 echo ========================================
 echo.
 echo Output files:
-echo   - NSIS Installer: release\dist\LuomiNest-Setup-0.2.0.exe
-echo   - Portable:       release\dist\LuomiNest-Portable-0.2.0.exe
+echo   - NSIS Installer: release\dist\LuomiNest-Setup-0.3.0.exe
+echo   - Portable:       release\dist\LuomiNest-Portable-0.3.0.exe
 echo.
 
 pause

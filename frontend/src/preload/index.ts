@@ -17,12 +17,30 @@ const api = {
     close: () => ipcRenderer.invoke('window:close'),
     isMaximized: () => ipcRenderer.invoke('window:isMaximized')
   },
-  
+
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
-    getName: () => ipcRenderer.invoke('app:getName')
+    getName: () => ipcRenderer.invoke('app:getName'),
+    getPaths: () => ipcRenderer.invoke('app:getPaths'),
   },
-  
+
+  config: {
+    getTheme: () => ipcRenderer.invoke('config:getTheme'),
+    setTheme: (theme: 'light' | 'dark' | 'system') => ipcRenderer.invoke('config:setTheme', theme),
+    getTTS: () => ipcRenderer.invoke('config:getTTS'),
+    setTTS: (updates: any) => ipcRenderer.invoke('config:setTTS', updates),
+    getSTT: () => ipcRenderer.invoke('config:getSTT'),
+    setSTT: (updates: any) => ipcRenderer.invoke('config:setSTT', updates),
+    getAll: () => ipcRenderer.invoke('config:getAll'),
+  },
+
+  cache: {
+    getSize: () => ipcRenderer.invoke('cache:getSize'),
+    getBreakdown: () => ipcRenderer.invoke('cache:getBreakdown'),
+    clearAll: () => ipcRenderer.invoke('cache:clearAll'),
+    clearDir: (dirName: string) => ipcRenderer.invoke('cache:clearDir', dirName),
+  },
+
   tab: {
     create: (url?: string) => ipcRenderer.invoke('tab:create', url),
     activate: (tabId: string) => ipcRenderer.invoke('tab:activate', tabId),

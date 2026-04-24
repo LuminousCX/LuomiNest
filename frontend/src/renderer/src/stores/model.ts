@@ -326,13 +326,15 @@ export const useModelStore = defineStore('model', () => {
 
   const saveTTSConfigToLocal = () => {
     const cfg = ttsConfig.value
-    localStorage.setItem('luominest-tts-config', JSON.stringify({
+    const data = {
       provider: cfg.provider,
       model: cfg.model,
       voice: cfg.voice,
       speed: cfg.speed,
       baseUrl: cfg.baseUrl,
-    }))
+    }
+    localStorage.setItem('luominest-tts-config', JSON.stringify(data))
+    window.api?.config?.setTTS(data).catch(() => {})
   }
 
   const loadTTSConfigFromLocal = () => {
@@ -365,14 +367,16 @@ export const useModelStore = defineStore('model', () => {
 
   const saveSTTConfigToLocal = () => {
     const cfg = sttConfig.value
-    localStorage.setItem('luominest-stt-config', JSON.stringify({
+    const data = {
       provider: cfg.provider,
       model: cfg.model,
       language: cfg.language,
       autoSend: cfg.autoSend,
       autoSendDelay: cfg.autoSendDelay,
       baseUrl: cfg.baseUrl,
-    }))
+    }
+    localStorage.setItem('luominest-stt-config', JSON.stringify(data))
+    window.api?.config?.setSTT(data).catch(() => {})
   }
 
   const loadSTTConfigFromLocal = () => {

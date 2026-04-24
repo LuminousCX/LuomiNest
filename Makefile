@@ -15,7 +15,7 @@ FRONTEND_DIR    := $(PROJECT_ROOT)/frontend
 BACKEND_DIR     := $(PROJECT_ROOT)/backend
 DIST_DIR        := $(PROJECT_ROOT)/dist
 
-VERSION         := 0.2.0
+VERSION         := 0.3.0
 
 ifeq ($(OS),Windows_NT)
   ACTIVATE      := .venv\Scripts\activate &&
