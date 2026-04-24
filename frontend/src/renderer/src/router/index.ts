@@ -89,30 +89,6 @@ const routes: RouteRecordRaw[] = [
     name: 'AgentCreate',
     component: () => import('../views/AgentCreateView.vue'),
     meta: { title: '创建智能体 - LuomiNest', icon: 'Sparkles' }
-  },
-  {
-    path: '/plugins',
-    name: 'PluginMarket',
-    component: () => import('../views/PluginMarketView.vue'),
-    meta: { title: '插件市场 - LuomiNest', icon: 'Puzzle' }
-  },
-  {
-    path: '/plugins/:id',
-    name: 'PluginDetail',
-    component: () => import('../views/MarketDetailView.vue'),
-    meta: { title: '插件详情 - LuomiNest', icon: 'Puzzle' }
-  },
-  {
-    path: '/skills',
-    name: 'SkillMarket',
-    component: () => import('../views/SkillMarketView.vue'),
-    meta: { title: '技能市场 - LuomiNest', icon: 'Sparkles' }
-  },
-  {
-    path: '/skills/:id',
-    name: 'SkillDetail',
-    component: () => import('../views/MarketDetailView.vue'),
-    meta: { title: '技能详情 - LuomiNest', icon: 'Sparkles' }
   }
 ]
 
