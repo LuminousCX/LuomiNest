@@ -5,10 +5,9 @@ import { useApi } from '../composables/useApi'
 import { useAgentStore } from './agent'
 
 export const useChatStore = defineStore('chat', () => {
-  const { apiGet, apiPost, apiDelete, apiStream, checkHealth } = useApi()
+  const { apiGet, apiPost, apiDelete, apiStream, checkHealth, abort } = useApi()
   const agentStore = useAgentStore()
 
-  // 按agentId隔离存储对话状态
   const agentConversations = ref<Record<string, ConversationListItem[]>>({})
   const agentCurrentConversation = ref<Record<string, Conversation | null>>({})
   const agentMessages = ref<Record<string, ChatMessage[]>>({})
@@ -18,10 +17,8 @@ export const useChatStore = defineStore('chat', () => {
   const lastError = ref<string | null>(null)
   const lastUsage = ref<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | null>(null)
 
-  // 当前激活的agent的streaming状态
   const isStreaming = computed(() => agentStreaming.value[activeAgentId.value] || false)
   
-  // 当前激活的agent的streaming内容
   const streamingContent = computed({
     get: () => agentStreamingContent.value[activeAgentId.value] || '',
     set: (value) => {
@@ -31,13 +28,10 @@ export const useChatStore = defineStore('chat', () => {
     }
   })
 
-  // 当前激活的agentId
   const activeAgentId = computed(() => agentStore.activeAgent?.id || '')
 
-  // 当前agent的对话列表
   const conversations = computed(() => agentConversations.value[activeAgentId.value] || [])
   
-  // 当前agent的当前对话
   const currentConversation = computed({
     get: () => agentCurrentConversation.value[activeAgentId.value] || null,
     set: (value) => {
@@ -47,7 +41,6 @@ export const useChatStore = defineStore('chat', () => {
     }
   })
 
-  // 当前agent的消息列表 - 确保正序返回
   const messages = computed({
     get: () => agentMessages.value[activeAgentId.value] || [],
     set: (value) => {
@@ -59,10 +52,8 @@ export const useChatStore = defineStore('chat', () => {
 
   const currentMessages = computed(() => messages.value)
 
-  // 监听activeAgent变化，切换对话状态
   watch(() => activeAgentId.value, async (newAgentId, oldAgentId) => {
     if (newAgentId) {
-      // 确保新agent有对应的存储
       if (!agentConversations.value[newAgentId]) {
         agentConversations.value[newAgentId] = []
       }
@@ -79,27 +70,22 @@ export const useChatStore = defineStore('chat', () => {
         agentStreamingContent.value[newAgentId] = ''
       }
       
-      // 加载该agent的对话历史
       await fetchConversations(newAgentId)
       
-      // 如果该agent有当前对话，加载其消息
       const currentConv = agentCurrentConversation.value[newAgentId]
       if (currentConv && currentConv.id) {
         try {
           await loadConversation(currentConv.id)
         } catch (error) {
-          // 如果加载失败，可能是对话已被删除，重置为null
           agentCurrentConversation.value[newAgentId] = null
           agentMessages.value[newAgentId] = []
         }
       } else if (agentConversations.value[newAgentId].length > 0) {
-        // 如果没有当前对话但有历史对话，加载最新的一个
         const latestConv = agentConversations.value[newAgentId][0]
         if (latestConv && latestConv.id) {
           try {
             await loadConversation(latestConv.id)
           } catch (error) {
-            // 如果加载失败，忽略
           }
         }
       }
@@ -134,7 +120,6 @@ export const useChatStore = defineStore('chat', () => {
       provider,
     })
     agentCurrentConversation.value[targetAgentId] = conv
-    // 修复：异步状态捕获问题 - 使用新数组替换原数组
     agentMessages.value[targetAgentId] = []
     await fetchConversations(targetAgentId)
     return conv
@@ -145,7 +130,6 @@ export const useChatStore = defineStore('chat', () => {
     
     const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
     agentCurrentConversation.value[activeAgentId.value] = conv
-    // 修复：异步状态捕获问题 - 使用新数组替换原数组，确保正序
     agentMessages.value[activeAgentId.value] = (conv.messages || []).map((m: any) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       role: m.role,
@@ -161,10 +145,28 @@ export const useChatStore = defineStore('chat', () => {
     await apiDelete(`/chat/conversations/${convId}`)
     if (agentCurrentConversation.value[targetAgentId]?.id === convId) {
       agentCurrentConversation.value[targetAgentId] = null
-      // 修复：异步状态捕获问题 - 使用新数组替换原数组
       agentMessages.value[targetAgentId] = []
     }
     await fetchConversations(targetAgentId)
+  }
+
+  const cancelCurrentRequest = () => {
+    abort()
+    if (activeAgentId.value) {
+      agentStreaming.value[activeAgentId.value] = false
+      const currentMsgs = agentMessages.value[activeAgentId.value] || []
+      const lastIndex = currentMsgs.length - 1
+      if (lastIndex >= 0 && currentMsgs[lastIndex]?.role === 'assistant' && !currentMsgs[lastIndex].done) {
+        const updatedMsgs = [...currentMsgs]
+        updatedMsgs[lastIndex] = {
+          ...updatedMsgs[lastIndex],
+          done: true,
+          content: updatedMsgs[lastIndex].content || '[已中断]'
+        }
+        agentMessages.value[activeAgentId.value] = updatedMsgs
+      }
+      agentStreamingContent.value[activeAgentId.value] = ''
+    }
   }
 
   const sendMessage = async (
@@ -182,6 +184,10 @@ export const useChatStore = defineStore('chat', () => {
     const targetAgentId = options?.agentId || activeAgentId.value
     if (!targetAgentId) return
     
+    if (agentStreaming.value[targetAgentId]) {
+      cancelCurrentRequest()
+    }
+    
     lastError.value = null
 
     const userMessage: ChatMessage = {
@@ -190,7 +196,6 @@ export const useChatStore = defineStore('chat', () => {
       content,
       timestamp: Date.now(),
     }
-    // 修复：异步状态捕获问题 - 使用新数组替换原数组，确保消息追加到末尾
     const currentMsgs = agentMessages.value[targetAgentId] || []
     agentMessages.value[targetAgentId] = [...currentMsgs, userMessage]
 
@@ -211,7 +216,6 @@ export const useChatStore = defineStore('chat', () => {
       timestamp: Date.now(),
       done: false,
     }
-    // 修复：异步状态捕获问题 - 使用新数组替换原数组，确保消息追加到末尾
     const msgsWithUser = agentMessages.value[targetAgentId] || []
     agentMessages.value[targetAgentId] = [...msgsWithUser, assistantMessage]
     
@@ -219,7 +223,6 @@ export const useChatStore = defineStore('chat', () => {
     agentStreamingContent.value[targetAgentId] = ''
 
     let convId = agentCurrentConversation.value[targetAgentId]?.id
-    // 如果没有当前对话，创建一个新的
     if (!convId) {
       const conv = await createConversation(
         content.slice(0, 30),
@@ -253,7 +256,6 @@ export const useChatStore = defineStore('chat', () => {
       requestBody,
       (chunk: ChatStreamChunk) => {
         agentStreamingContent.value[targetAgentId] += chunk.content
-        // 修复：异步状态捕获问题 - 使用新数组替换原数组
         const currentMsgList = agentMessages.value[targetAgentId] || []
         const lastIndex = currentMsgList.length - 1
         if (lastIndex >= 0 && currentMsgList[lastIndex]?.role === 'assistant') {
@@ -266,7 +268,6 @@ export const useChatStore = defineStore('chat', () => {
         }
         if (chunk.usage) {
           lastUsage.value = chunk.usage
-          // 修复：异步状态捕获问题 - 使用新数组替换原数组
           const msgListForUsage = agentMessages.value[targetAgentId] || []
           const usageLastIndex = msgListForUsage.length - 1
           if (usageLastIndex >= 0 && msgListForUsage[usageLastIndex]?.role === 'assistant') {
@@ -280,7 +281,6 @@ export const useChatStore = defineStore('chat', () => {
         }
       },
       () => {
-        // 修复：异步状态捕获问题 - 使用新数组替换原数组
         const completeMsgList = agentMessages.value[targetAgentId] || []
         const completeLastIndex = completeMsgList.length - 1
         if (completeLastIndex >= 0 && completeMsgList[completeLastIndex]?.role === 'assistant') {
@@ -293,12 +293,9 @@ export const useChatStore = defineStore('chat', () => {
         }
         agentStreaming.value[targetAgentId] = false
         agentStreamingContent.value[targetAgentId] = ''
-        // 修复：历史记录实时更新 - 发送消息后立即更新历史记录
         fetchConversations(targetAgentId)
-        // 注意：不再调用 loadConversation，避免重新加载导致消息重复
       },
       (err: string) => {
-        // 修复：异步状态捕获问题 - 使用新数组替换原数组
         const errorMsgList = agentMessages.value[targetAgentId] || []
         const errorLastIndex = errorMsgList.length - 1
         if (errorLastIndex >= 0 && errorMsgList[errorLastIndex]?.role === 'assistant') {
@@ -315,7 +312,6 @@ export const useChatStore = defineStore('chat', () => {
         agentStreaming.value[targetAgentId] = false
         agentStreamingContent.value[targetAgentId] = ''
         lastError.value = err
-        // 修复：历史记录实时更新 - 发送消息后立即更新历史记录
         fetchConversations(targetAgentId)
       }
     )
@@ -323,7 +319,6 @@ export const useChatStore = defineStore('chat', () => {
 
   const clearMessages = () => {
     if (activeAgentId.value) {
-      // 修复：异步状态捕获问题 - 使用新数组替换原数组
       agentMessages.value[activeAgentId.value] = []
       agentCurrentConversation.value[activeAgentId.value] = null
     }
@@ -348,5 +343,6 @@ export const useChatStore = defineStore('chat', () => {
     deleteConversation,
     sendMessage,
     clearMessages,
+    cancelCurrentRequest,
   }
 })

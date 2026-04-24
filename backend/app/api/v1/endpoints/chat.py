@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 import time
 from datetime import datetime, timezone
@@ -17,10 +18,52 @@ from app.runtime.provider.llm.adapter import llm_adapter
 from app.infrastructure.database.json_store import conversations_store, agents_store
 from app.runtime.plugin.skill.executor import SkillExecutor
 from app.runtime.plugin.skill.registry import SkillRegistry
+from app.engines.memory.core import (
+    get_memory_storage,
+    MemoryUpdater,
+    MemoryInjector,
+)
+from app.core.config import settings
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 _skill_executor = SkillExecutor()
+
+
+def _inject_memory_to_messages(messages: list[dict], agent_id: str | None) -> list[dict]:
+    try:
+        storage = get_memory_storage()
+        memory_data = storage.load(agent_id)
+        injector = MemoryInjector()
+        return injector.inject_memory_to_messages(messages, memory_data)
+    except Exception as e:
+        logger.warning(f"[Memory] Failed to inject memory: {e}")
+        return messages
+
+
+async def _update_memory_from_conversation(
+    messages: list[dict],
+    thread_id: str,
+    agent_id: str | None = None,
+) -> None:
+    try:
+        storage = get_memory_storage()
+        updater = MemoryUpdater(storage)
+        result = await updater.update_from_conversation(messages, thread_id, agent_id)
+        if result.get("updated"):
+            logger.info(
+                f"[Memory] Updated memory: +{result.get('facts_added', 0)} facts, "
+                f"-{result.get('facts_removed', 0)} facts"
+            )
+    except Exception as e:
+        logger.warning(f"[Memory] Failed to update memory: {e}")
+
+
+def _schedule_memory_update(messages: list[dict], thread_id: str, agent_id: str | None = None) -> None:
+    try:
+        asyncio.create_task(_update_memory_from_conversation(messages, thread_id, agent_id))
+    except Exception as e:
+        logger.warning(f"[Memory] Failed to schedule memory update: {e}")
 
 
 def _build_system_prompt_with_tools(agent_id: str | None) -> str:
@@ -34,6 +77,22 @@ def _build_system_prompt_with_tools(agent_id: str | None) -> str:
     if not available_skills:
         return base_prompt
 
+    core_rules = """【工具调用核心规则 - 必须严格遵守】
+
+1. 触发必要性：仅当用户明确提出对应需求时，才可以调用对应工具。禁止预判、猜测用户需求，无差别触发工具。
+   - 例如：用户说"明天想去北京"，这是出行表达，不是天气查询需求，绝对不允许触发天气工具
+   - 只有用户明确说"明天去北京天气怎么样""去北京要带什么衣服"等，才能触发天气工具
+
+2. 前置校验：调用任何工具前，必须先校验请求参数是否合法、功能是否可用。不合法/不可用时，直接使用用户友好的兜底话术，禁止暴露任何内部信息。
+
+3. 结果封装：工具返回的结果，必须转化为通顺自然的口语化中文输出给用户。禁止直接输出接口原始数据、参数、报错代码、JSON格式。
+
+4. 对话优先：永远先回应用户的核心表达，再处理工具调用需求。禁止跳过用户的对话内容，直接执行工具调用。
+
+5. 信息隔离：禁止向用户输出任何工具调用的参数、代码、报错信息、系统内部状态。所有给用户的回复，必须是通顺自然的口语化中文，不得出现任何用户看不懂的技术内容。
+
+"""
+
     tools_section = "\n\n## 可用工具\n\n你可以使用以下工具来帮助用户：\n\n"
     for skill in available_skills:
         if skill.get("is_active", True):
@@ -45,9 +104,35 @@ def _build_system_prompt_with_tools(agent_id: str | None) -> str:
                     tools_section += f"- {pname}: {pinfo.get('description', '')} ({pinfo.get('type', 'string')})\n"
             tools_section += "\n"
 
-    tools_section += "\n## 工具调用格式\n\n当需要使用工具时，请在回复中使用以下XML格式：\n\n<tool_call name=\"工具名\">\n{\"param1\": \"value1\", \"param2\": \"value2\"}\n</tool_call]\n\n你可以同时调用多个工具。调用工具后，系统会返回结果，你可以基于结果继续回答。\n如果不需要使用工具，直接回复用户即可。\n"
+    tools_section += """## 工具调用格式
 
-    return base_prompt + tools_section
+当需要使用工具时，请在回复中使用以下XML格式：
+
+<tool_call name="工具名">
+{"param1": "value1"}
+</tool_call
+
+注意：结束标签是 </tool_call（没有方括号）
+
+如果工具不需要参数，可以使用空对象：
+<tool_call name="工具名">
+{}
+</tool_call
+
+## 工具调用示例
+
+用户：明天去北京，天气怎么样？
+助手：<tool_call name="web_search">
+{"query": "北京明天天气"}
+</tool_call
+
+用户：我明天想去北京
+助手：明天去北京呀，提前祝你出行顺利~ 要是需要我帮你查天气、交通攻略、游玩推荐之类的，随时告诉我哦
+
+如果不需要使用工具，直接回复用户即可。
+"""
+
+    return core_rules + base_prompt + tools_section
 
 
 def _parse_tool_calls(content: str) -> list[dict]:
@@ -68,21 +153,44 @@ def _parse_tool_calls(content: str) -> list[dict]:
 async def _execute_tool_calls(tool_calls: list[dict], agent_id: str | None = None) -> list[dict]:
     results = []
     for call in tool_calls:
+        tool_name = call.get("name", "unknown")
+        if not isinstance(call.get("arguments"), dict):
+            results.append({
+                "tool": tool_name,
+                "result": "参数格式错误，请检查工具调用格式。",
+                "status": "error",
+            })
+            continue
         try:
+            skill_data = SkillRegistry.get_skill(tool_name)
+            if not skill_data:
+                results.append({
+                    "tool": tool_name,
+                    "result": "该功能暂时不可用，请稍后再试或尝试其他方式。",
+                    "status": "error",
+                })
+                continue
+
             result = await _skill_executor.execute(
-                skill_name=call["name"],
+                skill_name=tool_name,
                 arguments=call["arguments"],
                 agent_id=agent_id,
             )
             results.append({
-                "tool": call["name"],
+                "tool": tool_name,
                 "result": result,
                 "status": "success",
             })
         except Exception as e:
+            logger.error(f"[ToolExecutor] Tool execution failed: {tool_name}, error: {e}", exc_info=True)
+            error_msg = (
+                f"功能执行遇到问题：{str(e)}"
+                if settings.DEBUG
+                else "功能执行遇到问题，请稍后再试，或尝试用其他方式描述您的需求。"
+            )
             results.append({
-                "tool": call["name"],
-                "result": str(e),
+                "tool": tool_name,
+                "result": error_msg,
                 "status": "error",
             })
     return results
@@ -100,6 +208,8 @@ async def chat_completions(request: ChatRequest):
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.extend([{"role": m.role, "content": m.content} for m in request.messages])
+
+    messages = _inject_memory_to_messages(messages, request.agent_id)
     logger.debug(f"[API] POST /chat/completions - Message count: {len(messages)}")
 
     if request.stream:
@@ -143,6 +253,12 @@ async def chat_completions(request: ChatRequest):
                 top_p=request.top_p,
             )
 
+        thread_id = str(uuid.uuid4())
+        conversation_messages = [
+            {"role": m.role, "content": m.content} for m in request.messages
+        ] + [{"role": "assistant", "content": result}]
+        _schedule_memory_update(conversation_messages, thread_id, request.agent_id)
+
         elapsed = time.time() - start_time
         logger.success(f"[API] POST /chat/completions - Success: elapsed={elapsed:.2f}s, response_len={len(result)}")
         return ChatResponse(
@@ -177,25 +293,43 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
         ):
             full_content += chunk
             chunk_count += 1
-            data = ChatStreamChunk(
-                id=chat_id,
-                content=chunk,
-                model=model,
-                provider=provider,
-            )
-            yield f"data: {data.model_dump_json()}\n\n"
 
         tool_calls = _parse_tool_calls(full_content)
         if tool_calls:
             tool_results = await _execute_tool_calls(tool_calls, request.agent_id)
-            for tr in tool_results:
-                result_chunk = ChatStreamChunk(
+            tool_result_text = "\n\n".join(
+                f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
+            )
+            messages.append({"role": "assistant", "content": full_content})
+            messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
+
+            async for chunk in llm_adapter.chat_stream(
+                messages=messages,
+                provider_name=provider,
+                model=model,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                top_p=request.top_p,
+            ):
+                full_content += chunk
+                chunk_count += 1
+                data = ChatStreamChunk(
                     id=chat_id,
-                    content=f"\n\n[Tool: {tr['tool']}] {tr['result']}\n\n",
+                    content=chunk,
                     model=model,
                     provider=provider,
                 )
-                yield f"data: {result_chunk.model_dump_json()}\n\n"
+                yield f"data: {data.model_dump_json()}\n\n"
+        else:
+            for i in range(0, len(full_content), 10):
+                chunk = full_content[i:i+10]
+                data = ChatStreamChunk(
+                    id=chat_id,
+                    content=chunk,
+                    model=model,
+                    provider=provider,
+                )
+                yield f"data: {data.model_dump_json()}\n\n"
 
         done_data = ChatStreamChunk(
             id=chat_id,
@@ -205,6 +339,12 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
             done=True,
         )
         yield f"data: {done_data.model_dump_json()}\n\n"
+
+        conversation_messages = [
+            {"role": m.role, "content": m.content} for m in request.messages
+        ] + [{"role": "assistant", "content": full_content}]
+        _schedule_memory_update(conversation_messages, chat_id, request.agent_id)
+
         elapsed = time.time() - start_time
         logger.success(f"[STREAM] Stream completed: chat_id={chat_id}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
     except Exception as e:
@@ -318,6 +458,8 @@ async def add_message(conv_id: str, request: ChatRequest):
         all_messages.append({"role": "system", "content": system_prompt})
     all_messages.extend([{"role": m["role"], "content": m["content"]} for m in conv["messages"]])
 
+    all_messages = _inject_memory_to_messages(all_messages, conv.get("agent_id"))
+
     if request.stream:
         logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Starting stream response")
 
@@ -337,26 +479,43 @@ async def add_message(conv_id: str, request: ChatRequest):
                 ):
                     accumulated += chunk
                     chunk_count += 1
-                    data = ChatStreamChunk(
-                        id=chat_id,
-                        content=chunk,
-                        model=resolved_model,
-                        provider=resolved_provider,
-                    )
-                    yield f"data: {data.model_dump_json()}\n\n"
 
                 tool_calls = _parse_tool_calls(accumulated)
                 if tool_calls:
                     tool_results = await _execute_tool_calls(tool_calls, conv.get("agent_id"))
-                    for tr in tool_results:
-                        result_chunk = ChatStreamChunk(
+                    tool_result_text = "\n\n".join(
+                        f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
+                    )
+                    all_messages.append({"role": "assistant", "content": accumulated})
+                    all_messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
+
+                    async for chunk in llm_adapter.chat_stream(
+                        messages=all_messages,
+                        provider_name=resolved_provider,
+                        model=resolved_model,
+                        temperature=request.temperature,
+                        max_tokens=request.max_tokens,
+                        top_p=request.top_p,
+                    ):
+                        accumulated += chunk
+                        chunk_count += 1
+                        data = ChatStreamChunk(
                             id=chat_id,
-                            content=f"\n\n[Tool: {tr['tool']}] {tr['result']}\n\n",
+                            content=chunk,
                             model=resolved_model,
                             provider=resolved_provider,
                         )
-                        yield f"data: {result_chunk.model_dump_json()}\n\n"
-                        accumulated += f"\n\n[Tool: {tr['tool']}] {tr['result']}\n\n"
+                        yield f"data: {data.model_dump_json()}\n\n"
+                else:
+                    for i in range(0, len(accumulated), 10):
+                        chunk = accumulated[i:i+10]
+                        data = ChatStreamChunk(
+                            id=chat_id,
+                            content=chunk,
+                            model=resolved_model,
+                            provider=resolved_provider,
+                        )
+                        yield f"data: {data.model_dump_json()}\n\n"
 
                 done_data = ChatStreamChunk(
                     id=chat_id,
@@ -370,6 +529,13 @@ async def add_message(conv_id: str, request: ChatRequest):
                 conv["messages"].append({"role": "assistant", "content": accumulated})
                 conv["updated_at"] = datetime.now(timezone.utc).isoformat()
                 conversations_store.set(conv_id, conv)
+
+                _schedule_memory_update(
+                    conv["messages"],
+                    conv_id,
+                    conv.get("agent_id"),
+                )
+
                 elapsed = time.time() - start_time
                 logger.success(f"[STREAM] Stream completed & saved: conv={conv_id}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
             except Exception as e:
@@ -425,6 +591,12 @@ async def add_message(conv_id: str, request: ChatRequest):
     conv["messages"].append({"role": "assistant", "content": result})
     conv["updated_at"] = datetime.now(timezone.utc).isoformat()
     conversations_store.set(conv_id, conv)
+
+    _schedule_memory_update(
+        conv["messages"],
+        conv_id,
+        conv.get("agent_id"),
+    )
 
     elapsed = time.time() - start_time
     logger.success(f"[API] POST /chat/conversations/{conv_id}/messages - Success: elapsed={elapsed:.2f}s, response_len={len(result)}")
