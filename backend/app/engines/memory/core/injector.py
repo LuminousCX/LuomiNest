@@ -71,7 +71,8 @@ class MemoryInjector:
             parts.append(f"爱好: {hobbies_str}")
         if profile.preferences:
             for key, value in list(profile.preferences.items())[:5]:
-                parts.append(f"{key}: {self._sanitize_content(value)}")
+                sanitized_key = self._sanitize_content(key)
+                parts.append(f"{sanitized_key}: {self._sanitize_content(value)}")
         if profile.notes:
             parts.append(f"备注: {self._sanitize_content(profile.notes[:500])}")
         
@@ -101,8 +102,33 @@ class MemoryInjector:
 
         if user_context_parts:
             section = "=== User Context ===\n" + "\n".join(user_context_parts)
-            sections.append(section)
-            total_tokens += self._estimate_tokens(section)
+            section_tokens = self._estimate_tokens(section)
+            if total_tokens + section_tokens > self._max_tokens_estimate:
+                budget = self._max_tokens_estimate - total_tokens
+                for i, line in enumerate(user_context_parts):
+                    line_tokens = self._estimate_tokens(line)
+                    if i == 0:
+                        header_tokens = self._estimate_tokens("=== User Context ===\n")
+                        budget -= header_tokens
+                    if line_tokens <= budget:
+                        fitted_parts = user_context_parts[:i + 1]
+                        budget -= line_tokens
+                    else:
+                        max_chars = budget * 4
+                        if max_chars > 0:
+                            fitted_parts = user_context_parts[:i] + [user_context_parts[i][:max_chars]]
+                        else:
+                            fitted_parts = user_context_parts[:i] if i > 0 else []
+                        break
+                else:
+                    fitted_parts = user_context_parts
+                if fitted_parts:
+                    section = "=== User Context ===\n" + "\n".join(fitted_parts)
+                    sections.append(section)
+                    total_tokens += self._estimate_tokens(section)
+            else:
+                sections.append(section)
+                total_tokens += section_tokens
 
         sorted_facts = sorted(
             memory_data.facts,

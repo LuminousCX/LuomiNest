@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 from typing import Any
 
 from loguru import logger
@@ -59,9 +60,20 @@ If no updates needed, output: {{"facts_to_add": [], "fact_ids_to_remove": [], "u
 
 
 class MemoryUpdater:
+    _agent_locks: dict[str, threading.Lock] = {}
+    _locks_lock = threading.Lock()
+
     def __init__(self, storage: MemoryStorage):
         self._storage = storage
         self._llm_adapter = llm_adapter
+
+    @classmethod
+    def _get_agent_lock(cls, agent_id: str | None) -> threading.Lock:
+        key = agent_id or "__global__"
+        with cls._locks_lock:
+            if key not in cls._agent_locks:
+                cls._agent_locks[key] = threading.Lock()
+            return cls._agent_locks[key]
 
     def _format_memory_for_prompt(self, memory_data: MemoryData) -> str:
         lines = []
@@ -169,68 +181,73 @@ class MemoryUpdater:
         updates_applied = {}
 
         facts_to_add = parsed.get("facts_to_add", [])
-        for fact_data in facts_to_add:
-            content = fact_data.get("content", "").strip()
-            if not content or len(content) < 5:
-                continue
-            if self._should_skip_content(content):
-                continue
-            if self._is_duplicate_fact(content, memory_data.facts):
-                continue
-
-            category = fact_data.get("category", "context")
-            if category not in ["preference", "knowledge", "context", "behavior", "goal", "correction"]:
-                category = "context"
-
-            confidence = fact_data.get("confidence", 0.5)
-            try:
-                confidence = float(confidence)
-                confidence = max(0.0, min(1.0, confidence))
-            except (TypeError, ValueError):
-                confidence = 0.5
-
-            new_fact = MemoryFact(
-                content=content,
-                category=category,
-                confidence=confidence,
-                source=thread_id,
-            )
-            memory_data.facts.append(new_fact)
-            facts_added += 1
-
         fact_ids_to_remove = parsed.get("fact_ids_to_remove", [])
-        if fact_ids_to_remove:
-            original_count = len(memory_data.facts)
-            memory_data.facts = [
-                f for f in memory_data.facts if f.id not in fact_ids_to_remove
-            ]
-            facts_removed = original_count - len(memory_data.facts)
-
         updates = parsed.get("updates", {})
-        if updates.get("user_work_context"):
-            memory_data.user.work_context.summary = updates["user_work_context"]
-            memory_data.user.work_context.updated_at = utc_now_iso_z()
-            updates_applied["work_context"] = updates["user_work_context"]
-        if updates.get("user_personal_context"):
-            memory_data.user.personal_context.summary = updates["user_personal_context"]
-            memory_data.user.personal_context.updated_at = utc_now_iso_z()
-            updates_applied["personal_context"] = updates["user_personal_context"]
-        if updates.get("user_top_of_mind"):
-            memory_data.user.top_of_mind.summary = updates["user_top_of_mind"]
-            memory_data.user.top_of_mind.updated_at = utc_now_iso_z()
-            updates_applied["top_of_mind"] = updates["user_top_of_mind"]
 
-        if facts_added > 0 or facts_removed > 0 or updates_applied:
-            self._storage.save(memory_data, agent_id)
-            logger.info(
-                f"[Memory] Updated: +{facts_added} facts, -{facts_removed} facts, "
-                f"{len(updates_applied)} context updates"
-            )
-            return {
-                "updated": True,
-                "facts_added": facts_added,
-                "facts_removed": facts_removed,
-                "updates_applied": updates_applied,
-            }
+        agent_lock = self._get_agent_lock(agent_id)
+        with agent_lock:
+            fresh_memory = self._storage.load(agent_id)
+
+            for fact_data in facts_to_add:
+                content = fact_data.get("content", "").strip()
+                if not content or len(content) < 5:
+                    continue
+                if self._should_skip_content(content):
+                    continue
+                if self._is_duplicate_fact(content, fresh_memory.facts):
+                    continue
+
+                category = fact_data.get("category", "context")
+                if category not in ["preference", "knowledge", "context", "behavior", "goal", "correction"]:
+                    category = "context"
+
+                confidence = fact_data.get("confidence", 0.5)
+                try:
+                    confidence = float(confidence)
+                    confidence = max(0.0, min(1.0, confidence))
+                except (TypeError, ValueError):
+                    confidence = 0.5
+
+                new_fact = MemoryFact(
+                    content=content,
+                    category=category,
+                    confidence=confidence,
+                    source=thread_id,
+                )
+                fresh_memory.facts.append(new_fact)
+                facts_added += 1
+
+            if fact_ids_to_remove:
+                original_count = len(fresh_memory.facts)
+                fresh_memory.facts = [
+                    f for f in fresh_memory.facts if f.id not in fact_ids_to_remove
+                ]
+                facts_removed = original_count - len(fresh_memory.facts)
+
+            if updates.get("user_work_context"):
+                fresh_memory.user.work_context.summary = updates["user_work_context"]
+                fresh_memory.user.work_context.updated_at = utc_now_iso_z()
+                updates_applied["work_context"] = updates["user_work_context"]
+            if updates.get("user_personal_context"):
+                fresh_memory.user.personal_context.summary = updates["user_personal_context"]
+                fresh_memory.user.personal_context.updated_at = utc_now_iso_z()
+                updates_applied["personal_context"] = updates["user_personal_context"]
+            if updates.get("user_top_of_mind"):
+                fresh_memory.user.top_of_mind.summary = updates["user_top_of_mind"]
+                fresh_memory.user.top_of_mind.updated_at = utc_now_iso_z()
+                updates_applied["top_of_mind"] = updates["user_top_of_mind"]
+
+            if facts_added > 0 or facts_removed > 0 or updates_applied:
+                self._storage.save(fresh_memory, agent_id)
+                logger.info(
+                    f"[Memory] Updated: +{facts_added} facts, -{facts_removed} facts, "
+                    f"{len(updates_applied)} context updates"
+                )
+                return {
+                    "updated": True,
+                    "facts_added": facts_added,
+                    "facts_removed": facts_removed,
+                    "updates_applied": updates_applied,
+                }
 
         return {"updated": False, "reason": "No changes needed"}

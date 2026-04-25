@@ -79,9 +79,10 @@ class MemoryData(BaseModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "MemoryData":
-        if "profile" not in data:
-            data["profile"] = {}
-        return cls.model_validate(data)
+        copied = dict(data)
+        if "profile" not in copied:
+            copied["profile"] = {}
+        return cls.model_validate(copied)
 
 
 def create_empty_memory() -> MemoryData:

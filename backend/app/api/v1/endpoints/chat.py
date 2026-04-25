@@ -30,28 +30,37 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 _skill_executor = SkillExecutor()
 
 
-def _inject_memory_to_messages(messages: list[dict], agent_id: str | None) -> list[dict]:
+async def _inject_memory_to_messages(messages: list[dict], agent_id: str | None) -> list[dict]:
     try:
         storage = get_memory_storage()
-        
-        # 始终加载全局记忆（memory.json）
-        global_memory = storage.load(None)
-        
-        # 如果有 agent_id，也加载 Agent 特定的记忆并合并
+
+        global_memory = await asyncio.to_thread(storage.load, None)
+
         if agent_id:
-            agent_memory = storage.load(agent_id)
-            # 合并：全局记忆优先，Agent 特定记忆补充
-            if not global_memory.profile.name and agent_memory.profile.name:
-                global_memory.profile = agent_memory.profile
-            if not global_memory.facts:
-                global_memory.facts = agent_memory.facts
-        
+            agent_memory = await asyncio.to_thread(storage.load, agent_id)
+            for field_name in ("name", "nickname", "age", "gender", "occupation",
+                               "location", "timezone", "language", "notes"):
+                if not getattr(global_memory.profile, field_name, None) and getattr(agent_memory.profile, field_name, None):
+                    setattr(global_memory.profile, field_name, getattr(agent_memory.profile, field_name))
+            if not global_memory.profile.interests and agent_memory.profile.interests:
+                global_memory.profile.interests = list(agent_memory.profile.interests)
+            if not global_memory.profile.hobbies and agent_memory.profile.hobbies:
+                global_memory.profile.hobbies = list(agent_memory.profile.hobbies)
+            if not global_memory.profile.preferences and agent_memory.profile.preferences:
+                global_memory.profile.preferences = dict(agent_memory.profile.preferences)
+            existing_fact_ids = {f.id for f in global_memory.facts}
+            for fact in agent_memory.facts:
+                if fact.id not in existing_fact_ids:
+                    global_memory.facts.append(fact)
+
         injector = MemoryInjector()
-        
+
         profile = global_memory.profile
-        logger.info(f"[Memory] Injecting memory for agent_id={agent_id}")
-        logger.info(f"[Memory] Profile: name={profile.name}, occupation={profile.occupation}, location={profile.location}")
-        
+        profile_field_count = sum(1 for f in ("name", "nickname", "age", "gender", "occupation",
+                                               "location", "timezone", "language", "notes")
+                                  if getattr(profile, f, None))
+        logger.info(f"[Memory] Injecting memory for agent_id={agent_id}, memory_hit={profile_field_count > 0 or bool(global_memory.facts)}, profile_fields={profile_field_count}, facts={len(global_memory.facts)}")
+
         result = injector.inject_memory_to_messages(messages, global_memory)
         logger.info(f"[Memory] Memory injection completed, messages count: {len(result)}")
         return result
@@ -256,7 +265,7 @@ async def chat_completions(request: ChatRequest):
         messages.append({"role": "system", "content": system_prompt})
     messages.extend([{"role": m.role, "content": m.content} for m in request.messages])
 
-    messages = _inject_memory_to_messages(messages, request.agent_id)
+    messages = await _inject_memory_to_messages(messages, request.agent_id)
     logger.debug(f"[API] POST /chat/completions - Message count: {len(messages)}")
 
     if request.stream:
@@ -517,7 +526,7 @@ async def add_message(conv_id: str, request: ChatRequest):
     for m in conv["messages"]:
         all_messages.append({"role": m["role"], "content": m["content"]})
 
-    all_messages = _inject_memory_to_messages(all_messages, conv.get("agent_id"))
+    all_messages = await _inject_memory_to_messages(all_messages, conv.get("agent_id"))
 
     if request.stream:
         logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Starting stream response")
@@ -595,7 +604,7 @@ async def add_message(conv_id: str, request: ChatRequest):
                     conversations_store.set(conv_id, conv)
 
                 _schedule_memory_update(
-                    conv["messages"],
+                    [dict(m) for m in conv["messages"]],
                     conv_id,
                     conv.get("agent_id"),
                 )
@@ -660,7 +669,7 @@ async def add_message(conv_id: str, request: ChatRequest):
         conversations_store.set(conv_id, conv)
 
     _schedule_memory_update(
-        conv["messages"],
+        [dict(m) for m in conv["messages"]],
         conv_id,
         conv.get("agent_id"),
     )
