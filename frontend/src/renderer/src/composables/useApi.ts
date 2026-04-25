@@ -74,14 +74,17 @@ export const useApi = () => {
   }
 
   const apiGet = <T>(path: string): Promise<T> => request<T>(path)
-  
-  const apiPost = <T>(path: string, body: any): Promise<T> => 
+
+  const apiPost = <T>(path: string, body: any): Promise<T> =>
     request<T>(path, { method: 'POST', body })
-  
-  const apiPatch = <T>(path: string, body: any): Promise<T> => 
+
+  const apiPut = <T>(path: string, body: any): Promise<T> =>
+    request<T>(path, { method: 'PUT', body })
+
+  const apiPatch = <T>(path: string, body: any): Promise<T> =>
     request<T>(path, { method: 'PATCH', body })
-  
-  const apiDelete = <T = void>(path: string): Promise<T | void> => 
+
+  const apiDelete = <T = void>(path: string): Promise<T | void> =>
     request<T>(path, { method: 'DELETE' })
 
   const apiStream = async (
@@ -179,6 +182,7 @@ export const useApi = () => {
     abort,
     apiGet,
     apiPost,
+    apiPut,
     apiPatch,
     apiDelete,
     apiStream,

@@ -33,9 +33,28 @@ _skill_executor = SkillExecutor()
 def _inject_memory_to_messages(messages: list[dict], agent_id: str | None) -> list[dict]:
     try:
         storage = get_memory_storage()
-        memory_data = storage.load(agent_id)
+        
+        # 始终加载全局记忆（memory.json）
+        global_memory = storage.load(None)
+        
+        # 如果有 agent_id，也加载 Agent 特定的记忆并合并
+        if agent_id:
+            agent_memory = storage.load(agent_id)
+            # 合并：全局记忆优先，Agent 特定记忆补充
+            if not global_memory.profile.name and agent_memory.profile.name:
+                global_memory.profile = agent_memory.profile
+            if not global_memory.facts:
+                global_memory.facts = agent_memory.facts
+        
         injector = MemoryInjector()
-        return injector.inject_memory_to_messages(messages, memory_data)
+        
+        profile = global_memory.profile
+        logger.info(f"[Memory] Injecting memory for agent_id={agent_id}")
+        logger.info(f"[Memory] Profile: name={profile.name}, occupation={profile.occupation}, location={profile.location}")
+        
+        result = injector.inject_memory_to_messages(messages, global_memory)
+        logger.info(f"[Memory] Memory injection completed, messages count: {len(result)}")
+        return result
     except Exception as e:
         logger.warning(f"[Memory] Failed to inject memory: {e}")
         return messages
@@ -67,11 +86,39 @@ def _schedule_memory_update(messages: list[dict], thread_id: str, agent_id: str 
 
 
 def _build_system_prompt_with_tools(agent_id: str | None) -> str:
+    agent_name = "AI助手"
+    agent_description = "一个友好、智能的AI助手"
     base_prompt = ""
+    
     if agent_id:
         agent = agents_store.get(agent_id)
-        if agent and agent.get("system_prompt"):
-            base_prompt = agent["system_prompt"]
+        if agent:
+            agent_name = agent.get("name", agent_name)
+            agent_description = agent.get("description", agent_description)
+            if agent.get("system_prompt"):
+                base_prompt = agent["system_prompt"]
+
+    identity_prompt = f"""【身份设定】
+你的名字是「{agent_name}」，{agent_description}。
+
+【核心规则 - 必须严格遵守】
+
+规则1：当用户询问AI身份时（如"你是谁""你叫什么名字"）
+- 回答你自己的身份
+- 示例："你好！我是{agent_name}，{agent_description}。很高兴为你服务！"
+- 绝对禁止反问用户"你是谁"
+
+规则2：当用户询问用户自己的身份时（如"我是谁""你知道我是谁吗""我是谁"）
+- 查看<user_memory>中的用户档案
+- 如果有档案："你是[姓名]，[职业]，来自[所在地]..."
+- 如果没有档案："我还不太了解你呢，你愿意介绍一下自己吗？"
+
+规则3：其他情况
+- 正常回答用户的问题
+- 不要重复用户的话
+
+"""
+    base_prompt = identity_prompt + base_prompt
 
     available_skills = SkillRegistry.list_skills()
     if not available_skills:
@@ -163,7 +210,7 @@ async def _execute_tool_calls(tool_calls: list[dict], agent_id: str | None = Non
             continue
         try:
             skill_data = SkillRegistry.get_skill(tool_name)
-            if not skill_data:
+            if not skill_data or not skill_data.get("is_active", True):
                 results.append({
                     "tool": tool_name,
                     "result": "该功能暂时不可用，请稍后再试或尝试其他方式。",
@@ -277,7 +324,8 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
     start_time = time.time()
     chat_id = str(uuid.uuid4())
     chunk_count = 0
-    full_content = ""
+    tool_draft = ""
+    final_answer = ""
 
     logger.info(f"[STREAM] Starting stream: chat_id={chat_id}, provider={provider}, model={model}")
 
@@ -291,16 +339,16 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
             top_p=request.top_p,
             tools=request.tools,
         ):
-            full_content += chunk
+            tool_draft += chunk
             chunk_count += 1
 
-        tool_calls = _parse_tool_calls(full_content)
+        tool_calls = _parse_tool_calls(tool_draft)
         if tool_calls:
             tool_results = await _execute_tool_calls(tool_calls, request.agent_id)
             tool_result_text = "\n\n".join(
                 f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
             )
-            messages.append({"role": "assistant", "content": full_content})
+            messages.append({"role": "assistant", "content": tool_draft})
             messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
 
             async for chunk in llm_adapter.chat_stream(
@@ -311,7 +359,7 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
                 max_tokens=request.max_tokens,
                 top_p=request.top_p,
             ):
-                full_content += chunk
+                final_answer += chunk
                 chunk_count += 1
                 data = ChatStreamChunk(
                     id=chat_id,
@@ -321,8 +369,9 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
                 )
                 yield f"data: {data.model_dump_json()}\n\n"
         else:
-            for i in range(0, len(full_content), 10):
-                chunk = full_content[i:i+10]
+            final_answer = tool_draft
+            for i in range(0, len(final_answer), 10):
+                chunk = final_answer[i:i+10]
                 data = ChatStreamChunk(
                     id=chat_id,
                     content=chunk,
@@ -342,7 +391,7 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
 
         conversation_messages = [
             {"role": m.role, "content": m.content} for m in request.messages
-        ] + [{"role": "assistant", "content": full_content}]
+        ] + [{"role": "assistant", "content": final_answer}]
         _schedule_memory_update(conversation_messages, chat_id, request.agent_id)
 
         elapsed = time.time() - start_time
@@ -439,24 +488,34 @@ async def add_message(conv_id: str, request: ChatRequest):
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
 
-    existing_count = len(conv["messages"])
-    for m in request.messages:
-        msg_entry = {"role": m.role, "content": m.content}
-        if conv["messages"] and conv["messages"][-1] == msg_entry:
-            continue
-        conv["messages"].append(msg_entry)
-    new_msg_count = len(conv["messages"]) - existing_count
+    # 获取用户的新消息（最后一条用户消息）
+    last_user_msg = None
+    for m in reversed(request.messages):
+        if m.role == "user":
+            last_user_msg = m
+            break
+    
+    # 保存用户消息到对话历史
+    if last_user_msg:
+        msg_entry = {"role": "user", "content": last_user_msg.content}
+        if not conv["messages"] or conv["messages"][-1] != msg_entry:
+            conv["messages"].append(msg_entry)
+            logger.debug(f"[API] POST /chat/conversations/{conv_id}/messages - Added user message")
+    
     conv["updated_at"] = datetime.now(timezone.utc).isoformat()
-    logger.debug(f"[API] POST /chat/conversations/{conv_id}/messages - Added {new_msg_count} new messages")
 
     resolved_provider = request.provider or conv.get("provider") or llm_adapter.default_provider
     resolved_model = request.model or conv.get("model") or llm_adapter.get_provider(resolved_provider).default_model
 
+    # 构建发送给LLM的消息列表
     system_prompt = _build_system_prompt_with_tools(conv.get("agent_id"))
     all_messages = []
     if system_prompt:
         all_messages.append({"role": "system", "content": system_prompt})
-    all_messages.extend([{"role": m["role"], "content": m["content"]} for m in conv["messages"]])
+    
+    # 使用对话历史中的消息（已经包含刚添加的用户消息）
+    for m in conv["messages"]:
+        all_messages.append({"role": m["role"], "content": m["content"]})
 
     all_messages = _inject_memory_to_messages(all_messages, conv.get("agent_id"))
 
@@ -464,7 +523,8 @@ async def add_message(conv_id: str, request: ChatRequest):
         logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Starting stream response")
 
         async def stream_with_save():
-            accumulated = ""
+            tool_draft = ""
+            final_answer = ""
             chat_id = str(uuid.uuid4())
             chunk_count = 0
             try:
@@ -477,16 +537,16 @@ async def add_message(conv_id: str, request: ChatRequest):
                     top_p=request.top_p,
                     tools=request.tools,
                 ):
-                    accumulated += chunk
+                    tool_draft += chunk
                     chunk_count += 1
 
-                tool_calls = _parse_tool_calls(accumulated)
+                tool_calls = _parse_tool_calls(tool_draft)
                 if tool_calls:
                     tool_results = await _execute_tool_calls(tool_calls, conv.get("agent_id"))
                     tool_result_text = "\n\n".join(
                         f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
                     )
-                    all_messages.append({"role": "assistant", "content": accumulated})
+                    all_messages.append({"role": "assistant", "content": tool_draft})
                     all_messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
 
                     async for chunk in llm_adapter.chat_stream(
@@ -497,7 +557,7 @@ async def add_message(conv_id: str, request: ChatRequest):
                         max_tokens=request.max_tokens,
                         top_p=request.top_p,
                     ):
-                        accumulated += chunk
+                        final_answer += chunk
                         chunk_count += 1
                         data = ChatStreamChunk(
                             id=chat_id,
@@ -507,8 +567,9 @@ async def add_message(conv_id: str, request: ChatRequest):
                         )
                         yield f"data: {data.model_dump_json()}\n\n"
                 else:
-                    for i in range(0, len(accumulated), 10):
-                        chunk = accumulated[i:i+10]
+                    final_answer = tool_draft
+                    for i in range(0, len(final_answer), 10):
+                        chunk = final_answer[i:i+10]
                         data = ChatStreamChunk(
                             id=chat_id,
                             content=chunk,
@@ -526,9 +587,12 @@ async def add_message(conv_id: str, request: ChatRequest):
                 )
                 yield f"data: {done_data.model_dump_json()}\n\n"
 
-                conv["messages"].append({"role": "assistant", "content": accumulated})
-                conv["updated_at"] = datetime.now(timezone.utc).isoformat()
-                conversations_store.set(conv_id, conv)
+                # 检查最后一条消息是否已经是助手回复，避免重复
+                assistant_msg = {"role": "assistant", "content": final_answer}
+                if not conv["messages"] or conv["messages"][-1] != assistant_msg:
+                    conv["messages"].append(assistant_msg)
+                    conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+                    conversations_store.set(conv_id, conv)
 
                 _schedule_memory_update(
                     conv["messages"],
@@ -588,9 +652,12 @@ async def add_message(conv_id: str, request: ChatRequest):
             top_p=request.top_p,
         )
 
-    conv["messages"].append({"role": "assistant", "content": result})
-    conv["updated_at"] = datetime.now(timezone.utc).isoformat()
-    conversations_store.set(conv_id, conv)
+    # 检查最后一条消息是否已经是助手回复，避免重复
+    assistant_msg = {"role": "assistant", "content": result}
+    if not conv["messages"] or conv["messages"][-1] != assistant_msg:
+        conv["messages"].append(assistant_msg)
+        conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+        conversations_store.set(conv_id, conv)
 
     _schedule_memory_update(
         conv["messages"],

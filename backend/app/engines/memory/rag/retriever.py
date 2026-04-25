@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import re
@@ -31,7 +32,7 @@ class RAGRetriever:
         self._index_dir = os.path.join(settings.DATA_DIR, "rag", "index")
         os.makedirs(self._index_dir, exist_ok=True)
 
-    def _load_chunks(self) -> list[dict]:
+    def _load_chunks_sync(self) -> list[dict]:
         index_file = os.path.join(self._index_dir, "chunks.json")
         if not os.path.exists(index_file):
             return []
@@ -41,6 +42,9 @@ class RAGRetriever:
         except Exception as e:
             logger.error(f"[RAG] Failed to load index: {e}")
             return []
+
+    async def _load_chunks(self) -> list[dict]:
+        return await asyncio.to_thread(self._load_chunks_sync)
 
     async def search(self, query: str, top_k: int = 5) -> list[dict]:
         if not query or not query.strip():
@@ -63,20 +67,19 @@ class RAGRetriever:
         except Exception as e:
             logger.warning(f"[RAG] Embedding failed, falling back to keyword search: {e}")
 
-        with self._global_lock:
-            chunks = self._load_chunks()
-            if not chunks:
-                logger.info("[RAG] No index file found, returning empty results")
-                return []
+        chunks = await self._load_chunks()
+        if not chunks:
+            logger.info("[RAG] No index file found, returning empty results")
+            return []
 
-            scored = []
-            for chunk in chunks:
-                embedding = chunk.get("embedding", [])
-                if query_embedding and embedding and len(embedding) == len(query_embedding):
-                    score = self._cosine_similarity(query_embedding, embedding)
-                else:
-                    score = self._keyword_score(query, chunk.get("content", ""))
-                scored.append((score, chunk))
+        scored = []
+        for chunk in chunks:
+            embedding = chunk.get("embedding", [])
+            if query_embedding and embedding and len(embedding) == len(query_embedding):
+                score = self._cosine_similarity(query_embedding, embedding)
+            else:
+                score = self._keyword_score(query, chunk.get("content", ""))
+            scored.append((score, chunk))
 
         scored.sort(key=lambda x: x[0], reverse=True)
         results = []
@@ -106,23 +109,22 @@ class RAGRetriever:
         except Exception as e:
             logger.warning(f"[RAG] Embedding failed for hybrid search: {e}")
 
-        with self._global_lock:
-            chunks = self._load_chunks()
-            if not chunks:
-                return []
+        chunks = await self._load_chunks()
+        if not chunks:
+            return []
 
-            scored = []
-            for chunk in chunks:
-                vector_score = 0.0
-                keyword_score = 0.0
+        scored = []
+        for chunk in chunks:
+            vector_score = 0.0
+            keyword_score = 0.0
 
-                embedding = chunk.get("embedding", [])
-                if query_embedding and embedding and len(embedding) == len(query_embedding):
-                    vector_score = self._cosine_similarity(query_embedding, embedding)
+            embedding = chunk.get("embedding", [])
+            if query_embedding and embedding and len(embedding) == len(query_embedding):
+                vector_score = self._cosine_similarity(query_embedding, embedding)
 
-                keyword_score = self._keyword_score(query, chunk.get("content", ""))
-                combined = vector_weight * vector_score + (1 - vector_weight) * keyword_score
-                scored.append((combined, chunk))
+            keyword_score = self._keyword_score(query, chunk.get("content", ""))
+            combined = vector_weight * vector_score + (1 - vector_weight) * keyword_score
+            scored.append((combined, chunk))
 
         scored.sort(key=lambda x: x[0], reverse=True)
         return [

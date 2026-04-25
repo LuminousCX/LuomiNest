@@ -5,13 +5,14 @@ import { useApi } from '../composables/useApi'
 import { useAgentStore } from './agent'
 
 export const useChatStore = defineStore('chat', () => {
-  const { apiGet, apiPost, apiDelete, apiStream, checkHealth, abort } = useApi()
+  const { apiGet, apiPost, apiDelete, apiStream, checkHealth } = useApi()
   const agentStore = useAgentStore()
 
   const agentConversations = ref<Record<string, ConversationListItem[]>>({})
   const agentCurrentConversation = ref<Record<string, Conversation | null>>({})
   const agentMessages = ref<Record<string, ChatMessage[]>>({})
   const agentStreaming = ref<Record<string, boolean>>({})
+  const agentAbortControllers = ref<Record<string, AbortController>>({})
   const isBackendReady = ref(false)
   const agentStreamingContent = ref<Record<string, string>>({})
   const lastError = ref<string | null>(null)
@@ -36,7 +37,10 @@ export const useChatStore = defineStore('chat', () => {
     get: () => agentCurrentConversation.value[activeAgentId.value] || null,
     set: (value) => {
       if (activeAgentId.value) {
-        agentCurrentConversation.value[activeAgentId.value] = value
+        agentCurrentConversation.value = {
+          ...agentCurrentConversation.value,
+          [activeAgentId.value]: value
+        }
       }
     }
   })
@@ -45,7 +49,10 @@ export const useChatStore = defineStore('chat', () => {
     get: () => agentMessages.value[activeAgentId.value] || [],
     set: (value) => {
       if (activeAgentId.value) {
-        agentMessages.value[activeAgentId.value] = value
+        agentMessages.value = {
+          ...agentMessages.value,
+          [activeAgentId.value]: value
+        }
       }
     }
   })
@@ -54,38 +61,68 @@ export const useChatStore = defineStore('chat', () => {
 
   watch(() => activeAgentId.value, async (newAgentId, oldAgentId) => {
     if (newAgentId) {
+      // 初始化 Agent 的数据结构
       if (!agentConversations.value[newAgentId]) {
-        agentConversations.value[newAgentId] = []
+        agentConversations.value = {
+          ...agentConversations.value,
+          [newAgentId]: []
+        }
       }
       if (!agentCurrentConversation.value[newAgentId]) {
-        agentCurrentConversation.value[newAgentId] = null
+        agentCurrentConversation.value = {
+          ...agentCurrentConversation.value,
+          [newAgentId]: null
+        }
       }
       if (!agentMessages.value[newAgentId]) {
-        agentMessages.value[newAgentId] = []
+        agentMessages.value = {
+          ...agentMessages.value,
+          [newAgentId]: []
+        }
       }
       if (!agentStreaming.value[newAgentId]) {
-        agentStreaming.value[newAgentId] = false
+        agentStreaming.value = {
+          ...agentStreaming.value,
+          [newAgentId]: false
+        }
       }
       if (!agentStreamingContent.value[newAgentId]) {
-        agentStreamingContent.value[newAgentId] = ''
+        agentStreamingContent.value = {
+          ...agentStreamingContent.value,
+          [newAgentId]: ''
+        }
       }
+      
+      // 检查是否已有消息或正在流式输出
+      const existingMessages = agentMessages.value[newAgentId]
+      const hasExistingMessages = existingMessages && existingMessages.length > 0
+      const isCurrentlyStreaming = agentStreaming.value[newAgentId]
       
       await fetchConversations(newAgentId)
       
-      const currentConv = agentCurrentConversation.value[newAgentId]
-      if (currentConv && currentConv.id) {
-        try {
-          await loadConversation(currentConv.id)
-        } catch (error) {
-          agentCurrentConversation.value[newAgentId] = null
-          agentMessages.value[newAgentId] = []
-        }
-      } else if (agentConversations.value[newAgentId].length > 0) {
-        const latestConv = agentConversations.value[newAgentId][0]
-        if (latestConv && latestConv.id) {
+      // 只有在没有现有消息且不在流式输出时才加载对话
+      if (!hasExistingMessages && !isCurrentlyStreaming) {
+        const currentConv = agentCurrentConversation.value[newAgentId]
+        if (currentConv && currentConv.id) {
           try {
-            await loadConversation(latestConv.id)
+            await loadConversation(currentConv.id)
           } catch (error) {
+            agentCurrentConversation.value = {
+              ...agentCurrentConversation.value,
+              [newAgentId]: null
+            }
+            agentMessages.value = {
+              ...agentMessages.value,
+              [newAgentId]: []
+            }
+          }
+        } else if (agentConversations.value[newAgentId].length > 0) {
+          const latestConv = agentConversations.value[newAgentId][0]
+          if (latestConv && latestConv.id) {
+            try {
+              await loadConversation(latestConv.id)
+            } catch (error) {
+            }
           }
         }
       }
@@ -103,9 +140,16 @@ export const useChatStore = defineStore('chat', () => {
     
     try {
       const query = `?agent_id=${targetAgentId}`
-      agentConversations.value[targetAgentId] = await apiGet<ConversationListItem[]>(`/chat/conversations${query}`)
+      const convs = await apiGet<ConversationListItem[]>(`/chat/conversations${query}`)
+      agentConversations.value = {
+        ...agentConversations.value,
+        [targetAgentId]: convs
+      }
     } catch {
-      agentConversations.value[targetAgentId] = []
+      agentConversations.value = {
+        ...agentConversations.value,
+        [targetAgentId]: []
+      }
     }
   }
 
@@ -119,8 +163,14 @@ export const useChatStore = defineStore('chat', () => {
       model,
       provider,
     })
-    agentCurrentConversation.value[targetAgentId] = conv
-    agentMessages.value[targetAgentId] = []
+    agentCurrentConversation.value = {
+      ...agentCurrentConversation.value,
+      [targetAgentId]: conv
+    }
+    agentMessages.value = {
+      ...agentMessages.value,
+      [targetAgentId]: []
+    }
     await fetchConversations(targetAgentId)
     return conv
   }
@@ -129,13 +179,19 @@ export const useChatStore = defineStore('chat', () => {
     if (!activeAgentId.value) return
     
     const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
-    agentCurrentConversation.value[activeAgentId.value] = conv
-    agentMessages.value[activeAgentId.value] = (conv.messages || []).map((m: any) => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      role: m.role,
-      content: m.content,
-      timestamp: Date.now(),
-    }))
+    agentCurrentConversation.value = {
+      ...agentCurrentConversation.value,
+      [activeAgentId.value]: conv
+    }
+    agentMessages.value = {
+      ...agentMessages.value,
+      [activeAgentId.value]: (conv.messages || []).map((m: any) => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        role: m.role,
+        content: m.content,
+        timestamp: Date.now(),
+      }))
+    }
   }
 
   const deleteConversation = async (convId: string, agentId?: string) => {
@@ -144,29 +200,42 @@ export const useChatStore = defineStore('chat', () => {
     
     await apiDelete(`/chat/conversations/${convId}`)
     if (agentCurrentConversation.value[targetAgentId]?.id === convId) {
-      agentCurrentConversation.value[targetAgentId] = null
-      agentMessages.value[targetAgentId] = []
+      agentCurrentConversation.value = {
+        ...agentCurrentConversation.value,
+        [targetAgentId]: null
+      }
+      agentMessages.value = {
+        ...agentMessages.value,
+        [targetAgentId]: []
+      }
     }
     await fetchConversations(targetAgentId)
   }
 
-  const cancelCurrentRequest = () => {
-    abort()
-    if (activeAgentId.value) {
-      agentStreaming.value[activeAgentId.value] = false
-      const currentMsgs = agentMessages.value[activeAgentId.value] || []
-      const lastIndex = currentMsgs.length - 1
-      if (lastIndex >= 0 && currentMsgs[lastIndex]?.role === 'assistant' && !currentMsgs[lastIndex].done) {
-        const updatedMsgs = [...currentMsgs]
-        updatedMsgs[lastIndex] = {
-          ...updatedMsgs[lastIndex],
-          done: true,
-          content: updatedMsgs[lastIndex].content || '[已中断]'
-        }
-        agentMessages.value[activeAgentId.value] = updatedMsgs
-      }
-      agentStreamingContent.value[activeAgentId.value] = ''
+  const cancelCurrentRequest = (agentId?: string) => {
+    const targetAgentId = agentId || activeAgentId.value
+    if (!targetAgentId) return
+    
+    const controller = agentAbortControllers.value[targetAgentId]
+    if (controller) {
+      controller.abort()
+      delete agentAbortControllers.value[targetAgentId]
     }
+    
+    agentStreaming.value[targetAgentId] = false
+    const currentMsgs = agentMessages.value[targetAgentId] || []
+    const lastIndex = currentMsgs.length - 1
+    if (lastIndex >= 0 && currentMsgs[lastIndex]?.role === 'assistant' && !currentMsgs[lastIndex].done) {
+      agentMessages.value = {
+        ...agentMessages.value,
+        [targetAgentId]: [...currentMsgs.slice(0, lastIndex), {
+          ...currentMsgs[lastIndex],
+          done: true,
+          content: currentMsgs[lastIndex].content || '[已中断]'
+        }]
+      }
+    }
+    agentStreamingContent.value[targetAgentId] = ''
   }
 
   const sendMessage = async (
@@ -185,7 +254,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!targetAgentId) return
     
     if (agentStreaming.value[targetAgentId]) {
-      cancelCurrentRequest()
+      cancelCurrentRequest(targetAgentId)
     }
     
     lastError.value = null
@@ -197,7 +266,10 @@ export const useChatStore = defineStore('chat', () => {
       timestamp: Date.now(),
     }
     const currentMsgs = agentMessages.value[targetAgentId] || []
-    agentMessages.value[targetAgentId] = [...currentMsgs, userMessage]
+    agentMessages.value = {
+      ...agentMessages.value,
+      [targetAgentId]: [...currentMsgs, userMessage]
+    }
 
     const apiMessages: { role: string; content: string }[] = []
     if (options?.systemPrompt) {
@@ -217,7 +289,10 @@ export const useChatStore = defineStore('chat', () => {
       done: false,
     }
     const msgsWithUser = agentMessages.value[targetAgentId] || []
-    agentMessages.value[targetAgentId] = [...msgsWithUser, assistantMessage]
+    agentMessages.value = {
+      ...agentMessages.value,
+      [targetAgentId]: [...msgsWithUser, assistantMessage]
+    }
     
     agentStreaming.value[targetAgentId] = true
     agentStreamingContent.value[targetAgentId] = ''
@@ -251,6 +326,10 @@ export const useChatStore = defineStore('chat', () => {
       requestBody.agent_id = targetAgentId
     }
 
+    // 创建独立的 AbortController
+    const controller = new AbortController()
+    agentAbortControllers.value[targetAgentId] = controller
+
     await apiStream(
       endpoint,
       requestBody,
@@ -259,68 +338,100 @@ export const useChatStore = defineStore('chat', () => {
         const currentMsgList = agentMessages.value[targetAgentId] || []
         const lastIndex = currentMsgList.length - 1
         if (lastIndex >= 0 && currentMsgList[lastIndex]?.role === 'assistant') {
-          const updatedMsgs = [...currentMsgList]
-          updatedMsgs[lastIndex] = {
-            ...updatedMsgs[lastIndex],
-            content: agentStreamingContent.value[targetAgentId]
+          agentMessages.value = {
+            ...agentMessages.value,
+            [targetAgentId]: [...currentMsgList.slice(0, lastIndex), {
+              ...currentMsgList[lastIndex],
+              content: agentStreamingContent.value[targetAgentId]
+            }]
           }
-          agentMessages.value[targetAgentId] = updatedMsgs
         }
         if (chunk.usage) {
           lastUsage.value = chunk.usage
           const msgListForUsage = agentMessages.value[targetAgentId] || []
           const usageLastIndex = msgListForUsage.length - 1
           if (usageLastIndex >= 0 && msgListForUsage[usageLastIndex]?.role === 'assistant') {
-            const updatedMsgsWithUsage = [...msgListForUsage]
-            updatedMsgsWithUsage[usageLastIndex] = {
-              ...updatedMsgsWithUsage[usageLastIndex],
-              usage: chunk.usage
+            agentMessages.value = {
+              ...agentMessages.value,
+              [targetAgentId]: [...msgListForUsage.slice(0, usageLastIndex), {
+                ...msgListForUsage[usageLastIndex],
+                usage: chunk.usage
+              }]
             }
-            agentMessages.value[targetAgentId] = updatedMsgsWithUsage
           }
         }
       },
-      () => {
+      async () => {
+        delete agentAbortControllers.value[targetAgentId]
         const completeMsgList = agentMessages.value[targetAgentId] || []
         const completeLastIndex = completeMsgList.length - 1
         if (completeLastIndex >= 0 && completeMsgList[completeLastIndex]?.role === 'assistant') {
-          const completedMsgs = [...completeMsgList]
-          completedMsgs[completeLastIndex] = {
-            ...completedMsgs[completeLastIndex],
-            done: true
+          agentMessages.value = {
+            ...agentMessages.value,
+            [targetAgentId]: [...completeMsgList.slice(0, completeLastIndex), {
+              ...completeMsgList[completeLastIndex],
+              done: true
+            }]
           }
-          agentMessages.value[targetAgentId] = completedMsgs
         }
         agentStreaming.value[targetAgentId] = false
         agentStreamingContent.value[targetAgentId] = ''
-        fetchConversations(targetAgentId)
+        await fetchConversations(targetAgentId)
+        // 重新加载对话以确保消息同步
+        const convId = agentCurrentConversation.value[targetAgentId]?.id
+        if (convId) {
+          try {
+            const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
+            agentMessages.value = {
+              ...agentMessages.value,
+              [targetAgentId]: (conv.messages || []).map((m: any) => ({
+                id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                role: m.role,
+                content: m.content,
+                timestamp: Date.now(),
+                done: true,
+              }))
+            }
+          } catch (e) {
+            console.error('Failed to reload conversation:', e)
+          }
+        }
       },
       (err: string) => {
+        delete agentAbortControllers.value[targetAgentId]
         const errorMsgList = agentMessages.value[targetAgentId] || []
         const errorLastIndex = errorMsgList.length - 1
         if (errorLastIndex >= 0 && errorMsgList[errorLastIndex]?.role === 'assistant') {
-          const errorUpdatedMsgs = [...errorMsgList]
-          errorUpdatedMsgs[errorLastIndex] = {
-            ...errorUpdatedMsgs[errorLastIndex],
-            content: errorUpdatedMsgs[errorLastIndex].content
-              ? `${errorUpdatedMsgs[errorLastIndex].content}\n\n[Error] ${err}`
-              : `[Error] ${err}`,
-            done: true
+          agentMessages.value = {
+            ...agentMessages.value,
+            [targetAgentId]: [...errorMsgList.slice(0, errorLastIndex), {
+              ...errorMsgList[errorLastIndex],
+              content: errorMsgList[errorLastIndex].content
+                ? `${errorMsgList[errorLastIndex].content}\n\n[Error] ${err}`
+                : `[Error] ${err}`,
+              done: true
+            }]
           }
-          agentMessages.value[targetAgentId] = errorUpdatedMsgs
         }
         agentStreaming.value[targetAgentId] = false
         agentStreamingContent.value[targetAgentId] = ''
         lastError.value = err
         fetchConversations(targetAgentId)
-      }
+      },
+      controller.signal
     )
   }
 
   const clearMessages = () => {
     if (activeAgentId.value) {
-      agentMessages.value[activeAgentId.value] = []
-      agentCurrentConversation.value[activeAgentId.value] = null
+      agentMessages.value = {
+        ...agentMessages.value,
+        [activeAgentId.value]: []
+      }
+      agentCurrentConversation.value = {
+        ...agentCurrentConversation.value,
+        [activeAgentId.value]: null
+      }
     }
     lastError.value = null
   }

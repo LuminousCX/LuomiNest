@@ -476,7 +476,7 @@ onMounted(async () => {
                     <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
                     <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
                     <div v-else class="message-content user-message">{{ msg.content }}</div>
-                    <div v-if="msg.role === 'assistant' && !msg.done && isStreaming && msg.id === messages[messages.length - 1].id" class="loading-status">
+                    <div v-if="msg.role === 'assistant' && !msg.done && !msg.content && msg.id === messages[messages.length - 1].id" class="loading-status">
                       <Loader2 :size="16" class="spin-animation" />
                       <span>正在分析问题...</span>
                     </div>

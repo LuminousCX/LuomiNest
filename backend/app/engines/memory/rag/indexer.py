@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import os
@@ -19,7 +20,7 @@ class RAGIndexer:
     def _get_content_hash(self, content: str) -> str:
         return hashlib.md5(content.strip().encode()).hexdigest()[:16]
 
-    def _load_existing_chunks(self) -> tuple[list[dict], set[str]]:
+    def _load_existing_chunks_sync(self) -> tuple[list[dict], set[str]]:
         index_file = os.path.join(self._index_dir, "chunks.json")
         existing = []
         existing_hashes = set()
@@ -37,6 +38,9 @@ class RAGIndexer:
                 logger.warning(f"[RAG] Failed to load existing chunks: {e}")
                 existing = []
         return existing, existing_hashes
+
+    async def _load_existing_chunks(self) -> tuple[list[dict], set[str]]:
+        return await asyncio.to_thread(self._load_existing_chunks_sync)
 
     async def index_text(
         self,
@@ -59,100 +63,105 @@ class RAGIndexer:
         logger.info(f"[RAG] Indexing text from source: {source}, content_len={len(content)}")
         chunks = self._chunk_text(content, chunk_size, overlap)
 
+        existing, existing_hashes = await self._load_existing_chunks()
+        indexed = []
+        skipped = 0
+
+        for i, chunk in enumerate(chunks):
+            if not chunk.strip():
+                continue
+
+            content_hash = self._get_content_hash(chunk)
+            if skip_duplicates and content_hash in existing_hashes:
+                skipped += 1
+                continue
+
+            try:
+                embedding = await llm_adapter.embed(chunk)
+                if embedding:
+                    if self._embedding_dim is None:
+                        self._embedding_dim = len(embedding)
+                    elif len(embedding) != self._embedding_dim:
+                        logger.warning(
+                            f"[RAG] Embedding dimension mismatch: expected {self._embedding_dim}, got {len(embedding)}"
+                        )
+                        embedding = []
+            except Exception as e:
+                logger.warning(f"[RAG] Embedding failed for chunk {i}: {e}")
+                embedding = []
+
+            indexed.append({
+                "content": chunk,
+                "content_hash": content_hash,
+                "source": source,
+                "chunk_index": i,
+                "embedding": embedding,
+                "metadata": metadata or {},
+            })
+            existing_hashes.add(content_hash)
+
+        if not indexed:
+            logger.info(f"[RAG] No new chunks to index (skipped {skipped} duplicates)")
+            return 0
+
+        existing.extend(indexed)
+        await self._save_chunks(existing)
+
+        logger.success(f"[RAG] Indexed {len(indexed)} chunks from {source} (skipped {skipped} duplicates)")
+        return len(indexed)
+
+    def _save_chunks_sync(self, chunks: list[dict]) -> None:
         with self._global_lock:
-            existing, existing_hashes = self._load_existing_chunks()
-            indexed = []
-            skipped = 0
-
-            for i, chunk in enumerate(chunks):
-                if not chunk.strip():
-                    continue
-
-                content_hash = self._get_content_hash(chunk)
-                if skip_duplicates and content_hash in existing_hashes:
-                    skipped += 1
-                    continue
-
-                try:
-                    embedding = await llm_adapter.embed(chunk)
-                    if embedding:
-                        if self._embedding_dim is None:
-                            self._embedding_dim = len(embedding)
-                        elif len(embedding) != self._embedding_dim:
-                            logger.warning(
-                                f"[RAG] Embedding dimension mismatch: expected {self._embedding_dim}, got {len(embedding)}"
-                            )
-                            embedding = []
-                except Exception as e:
-                    logger.warning(f"[RAG] Embedding failed for chunk {i}: {e}")
-                    embedding = []
-
-                indexed.append({
-                    "content": chunk,
-                    "content_hash": content_hash,
-                    "source": source,
-                    "chunk_index": i,
-                    "embedding": embedding,
-                    "metadata": metadata or {},
-                })
-                existing_hashes.add(content_hash)
-
-            if not indexed:
-                logger.info(f"[RAG] No new chunks to index (skipped {skipped} duplicates)")
-                return 0
-
-            existing.extend(indexed)
             index_file = os.path.join(self._index_dir, "chunks.json")
             temp_file = index_file + ".tmp"
             with open(temp_file, "w", encoding="utf-8") as f:
-                json.dump(existing, f, ensure_ascii=False, indent=2)
+                json.dump(chunks, f, ensure_ascii=False, indent=2)
             os.replace(temp_file, index_file)
 
-            logger.success(f"[RAG] Indexed {len(indexed)} chunks from {source} (skipped {skipped} duplicates)")
-            return len(indexed)
+    async def _save_chunks(self, chunks: list[dict]) -> None:
+        await asyncio.to_thread(self._save_chunks_sync, chunks)
 
     async def index_file(self, file_path: str, metadata: dict | None = None, max_size_mb: int = 100) -> int:
         logger.info(f"[RAG] Indexing file: {file_path}")
         try:
-            file_size = os.path.getsize(file_path)
+            file_size = await asyncio.to_thread(os.path.getsize, file_path)
             max_size = max_size_mb * 1024 * 1024
             if file_size > max_size:
                 logger.warning(f"[RAG] File too large ({file_size} bytes), skipping")
                 return 0
 
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
+            content = await asyncio.to_thread(
+                lambda: open(file_path, "r", encoding="utf-8").read()
+            )
             return await self.index_text(content, source=file_path, metadata=metadata)
         except Exception as e:
             logger.error(f"[RAG] Failed to index file {file_path}: {e}")
             return 0
 
-    def clear_index(self):
+    def clear_index_sync(self):
         with self._global_lock:
             index_file = os.path.join(self._index_dir, "chunks.json")
             if os.path.exists(index_file):
                 os.remove(index_file)
                 logger.info("[RAG] Index cleared")
 
-    def remove_by_source(self, source: str) -> int:
-        with self._global_lock:
-            existing, _ = self._load_existing_chunks()
-            original_count = len(existing)
-            filtered = [c for c in existing if c.get("source") != source]
-            removed = original_count - len(filtered)
+    async def clear_index(self):
+        await asyncio.to_thread(self.clear_index_sync)
 
-            if removed > 0:
-                index_file = os.path.join(self._index_dir, "chunks.json")
-                temp_file = index_file + ".tmp"
-                with open(temp_file, "w", encoding="utf-8") as f:
-                    json.dump(filtered, f, ensure_ascii=False, indent=2)
-                os.replace(temp_file, index_file)
-                logger.info(f"[RAG] Removed {removed} chunks from source: {source}")
+    async def remove_by_source(self, source: str) -> int:
+        existing, _ = await self._load_existing_chunks()
+        original_count = len(existing)
+        filtered = [c for c in existing if c.get("source") != source]
+        removed = original_count - len(filtered)
 
-            return removed
+        if removed > 0:
+            await self._save_chunks(filtered)
+            logger.info(f"[RAG] Removed {removed} chunks from source: {source}")
 
-    def get_stats(self) -> dict:
-        existing, _ = self._load_existing_chunks()
+        return removed
+
+    async def get_stats(self) -> dict:
+        existing, _ = await self._load_existing_chunks()
         sources = set()
         total_with_embedding = 0
         for chunk in existing:

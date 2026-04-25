@@ -514,6 +514,7 @@ function handleSearch() {
 
 .memory-detail {
   flex: 1;
+  min-height: 0;
   padding: 24px;
   overflow-y: auto;
   display: flex;

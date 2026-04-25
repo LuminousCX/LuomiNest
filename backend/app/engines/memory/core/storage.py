@@ -1,3 +1,4 @@
+import copy
 import json
 import threading
 from pathlib import Path
@@ -48,10 +49,10 @@ class MemoryStorage:
 
             cached = self._cache.get(agent_id)
             if cached is not None and cached[1] == current_mtime:
-                return cached[0]
+                return copy.deepcopy(cached[0])
 
             memory_data = self._load_from_file(agent_id)
-            self._cache[agent_id] = (memory_data, current_mtime)
+            self._cache[agent_id] = (copy.deepcopy(memory_data), current_mtime)
             return memory_data
 
     def reload(self, agent_id: str | None = None) -> MemoryData:
@@ -62,7 +63,7 @@ class MemoryStorage:
                 mtime = file_path.stat().st_mtime if file_path.exists() else None
             except OSError:
                 mtime = None
-            self._cache[agent_id] = (memory_data, mtime)
+            self._cache[agent_id] = (copy.deepcopy(memory_data), mtime)
             return memory_data
 
     def save(self, memory_data: MemoryData, agent_id: str | None = None) -> bool:
@@ -89,7 +90,8 @@ class MemoryStorage:
     def clear(self, agent_id: str | None = None) -> MemoryData:
         with self._lock:
             empty = create_empty_memory()
-            self.save(empty, agent_id)
+            if not self.save(empty, agent_id):
+                raise RuntimeError("Failed to clear memory: save operation failed")
             return empty
 
     def add_fact(
@@ -112,14 +114,19 @@ class MemoryStorage:
                 source_error=source_error,
             )
             memory_data.facts.append(fact)
-            self.save(memory_data, agent_id)
+            if not self.save(memory_data, agent_id):
+                raise RuntimeError("Failed to add fact: save operation failed")
             return memory_data
 
     def delete_fact(self, fact_id: str, agent_id: str | None = None) -> MemoryData:
         with self._lock:
             memory_data = self.load(agent_id)
+            original_count = len(memory_data.facts)
             memory_data.facts = [f for f in memory_data.facts if f.id != fact_id]
-            self.save(memory_data, agent_id)
+            if len(memory_data.facts) == original_count:
+                raise ValueError(f"Fact with id '{fact_id}' not found")
+            if not self.save(memory_data, agent_id):
+                raise RuntimeError("Failed to delete fact: save operation failed")
             return memory_data
 
     def update_fact(
@@ -132,8 +139,10 @@ class MemoryStorage:
     ) -> MemoryData:
         with self._lock:
             memory_data = self.load(agent_id)
+            found = False
             for i, fact in enumerate(memory_data.facts):
                 if fact.id == fact_id:
+                    found = True
                     if content is not None:
                         fact.content = content.strip()
                     if category is not None:
@@ -142,7 +151,10 @@ class MemoryStorage:
                         fact.confidence = confidence
                     memory_data.facts[i] = fact
                     break
-            self.save(memory_data, agent_id)
+            if not found:
+                raise ValueError(f"Fact with id '{fact_id}' not found")
+            if not self.save(memory_data, agent_id):
+                raise RuntimeError("Failed to update fact: save operation failed")
             return memory_data
 
 
