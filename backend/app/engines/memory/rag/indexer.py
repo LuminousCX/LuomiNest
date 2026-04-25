@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import json
 import os
-import re
 import threading
 from loguru import logger
 from app.core.config import settings
