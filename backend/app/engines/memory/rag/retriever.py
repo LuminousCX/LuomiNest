@@ -116,7 +116,6 @@ class RAGRetriever:
         scored = []
         for chunk in chunks:
             vector_score = 0.0
-            keyword_score = 0.0
 
             embedding = chunk.get("embedding", [])
             if query_embedding and embedding and len(embedding) == len(query_embedding):
