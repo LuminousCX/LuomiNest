@@ -239,7 +239,7 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
     }
   })
 
-  desktopPetWindow.setVisibleOnAllWorkspaces(true, { makeKey: false })
+  desktopPetWindow.setVisibleOnAllWorkspaces(true)
   desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
 
   if (isMac) {
@@ -644,43 +644,80 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('desktop-pet:setPosition', async (_e, x: number, y: number) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return { success: false, error: 'Invalid position: x and y must be finite numbers' }
+    }
+    const clampedX = Math.max(-10000, Math.min(10000, x))
+    const clampedY = Math.max(-10000, Math.min(10000, y))
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
-      desktopPetWindow.webContents.send('desktop-pet:set-position', x, y)
+      desktopPetWindow.webContents.send('desktop-pet:set-position', clampedX, clampedY)
       return { success: true }
     }
-    return { success: false }
+    return { success: false, error: 'Desktop pet window not running' }
   })
 
   ipcMain.handle('desktop-pet:setScale', async (_e, scale: number) => {
+    if (!Number.isFinite(scale)) {
+      return { success: false, error: 'Invalid scale: must be a finite number' }
+    }
+    const clampedScale = Math.max(0.1, Math.min(10, scale))
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
-      desktopPetWindow.webContents.send('desktop-pet:set-scale', scale)
+      desktopPetWindow.webContents.send('desktop-pet:set-scale', clampedScale)
       return { success: true }
     }
-    return { success: false }
+    return { success: false, error: 'Desktop pet window not running' }
   })
 
   ipcMain.handle('desktop-pet:driveLipSync', async (_e, value: number) => {
+    if (!Number.isFinite(value)) {
+      return { success: false, error: 'Invalid lip-sync value: must be a finite number' }
+    }
+    const clampedValue = Math.max(-1, Math.min(1, value))
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
-      desktopPetWindow.webContents.send('desktop-pet:lip-sync', value)
+      desktopPetWindow.webContents.send('desktop-pet:lip-sync', clampedValue)
       return { success: true }
     }
-    return { success: false }
+    return { success: false, error: 'Desktop pet window not running' }
   })
 
   ipcMain.handle('desktop-pet:drivePadEmotion', async (_e, pleasure: number, arousal: number, dominance: number) => {
+    if (!Number.isFinite(pleasure) || !Number.isFinite(arousal) || !Number.isFinite(dominance)) {
+      return { success: false, error: 'Invalid PAD values: all must be finite numbers' }
+    }
+    const clampedPleasure = Math.max(-1, Math.min(1, pleasure))
+    const clampedArousal = Math.max(-1, Math.min(1, arousal))
+    const clampedDominance = Math.max(-1, Math.min(1, dominance))
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
-      desktopPetWindow.webContents.send('desktop-pet:pad-emotion', { pleasure, arousal, dominance })
+      desktopPetWindow.webContents.send('desktop-pet:pad-emotion', { pleasure: clampedPleasure, arousal: clampedArousal, dominance: clampedDominance })
       return { success: true }
     }
-    return { success: false }
+    return { success: false, error: 'Desktop pet window not running' }
   })
 
   ipcMain.handle('desktop-pet:setCoreParam', async (_e, paramId: string, value: number) => {
+    const ALLOWED_PARAMS = new Set([
+      'ParamAngleX', 'ParamAngleY', 'ParamAngleZ',
+      'ParamEyeLOpen', 'ParamEyeROpen',
+      'ParamEyeBallX', 'ParamEyeBallY',
+      'ParamBrowLY', 'ParamBrowRY',
+      'ParamBrowLAngle', 'ParamBrowRAngle',
+      'ParamBrowLForm', 'ParamBrowRForm',
+      'ParamMouthOpenY', 'ParamMouthForm',
+      'ParamCheek', 'ParamBreath',
+      'ParamBodyAngleX', 'ParamBodyAngleY', 'ParamBodyAngleZ',
+      'Param14'
+    ])
+    if (typeof paramId !== 'string' || !ALLOWED_PARAMS.has(paramId)) {
+      return { success: false, error: `Invalid paramId: "${paramId}" is not in the allowed whitelist` }
+    }
+    if (!Number.isFinite(value)) {
+      return { success: false, error: 'Invalid param value: must be a finite number' }
+    }
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       desktopPetWindow.webContents.send('desktop-pet:set-core-param', paramId, value)
       return { success: true }
     }
-    return { success: false }
+    return { success: false, error: 'Desktop pet window not running' }
   })
 
   ipcMain.handle('desktop-pet:getModelCapabilities', async () => {

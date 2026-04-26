@@ -66,7 +66,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         autoStart: true,
         backgroundAlpha: 0,
         antialias: true,
-        resizeTo: canvasRef.value.parentElement,
+        resizeTo: canvasRef.value.parentElement ?? undefined,
         resolution: Math.min(window.devicePixelRatio || 1, 2),
         autoDensity: true
       })
@@ -309,6 +309,9 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   }
 
   const setupWheel = (model: Live2DModel) => {
+    if (wheelHandler) {
+      canvasRef.value?.removeEventListener('wheel', wheelHandler)
+    }
     wheelHandler = (e: WheelEvent) => {
       if (!model) return
       e.preventDefault()
@@ -339,7 +342,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     await triggerExpression(emotionId)
   }
 
-  const drivePadEmotion = (pleasure: number, arousal: number, dominance: number) => {
+  const drivePadEmotion = (pleasure: number, _arousal: number, _dominance: number) => {
     if (!currentModel) return
     try {
       const internalModel = currentModel.internalModel as any

@@ -43,6 +43,16 @@ let focusCurrentY = 0
 let focusTickerCallback: (() => void) | null = null
 let focusMouseMoveHandler: ((e: MouseEvent) => void) | null = null
 let focusMouseLeaveHandler: (() => void) | null = null
+let ipcLoadModelHandler: ((event: any, modelInfo: PetModelInfo) => void) | null = null
+let ipcTriggerMotionHandler: ((event: any, group: string, index: number) => void) | null = null
+let ipcTriggerExpressionHandler: ((event: any, name: string) => void) | null = null
+let ipcSetPositionHandler: ((event: any, x: number, y: number) => void) | null = null
+let ipcSetScaleHandler: ((event: any, scale: number) => void) | null = null
+let ipcLipSyncHandler: ((event: any, value: number) => void) | null = null
+let ipcPadEmotionHandler: ((event: any, pad: { pleasure: number; arousal: number; dominance: number }) => void) | null = null
+let ipcSetCoreParamHandler: ((event: any, paramId: string, value: number) => void) | null = null
+let ipcGetModelCapabilitiesHandler: ((event: any, requestId: string) => void) | null = null
+let contextMenuHandler: ((e: MouseEvent) => void) | null = null
 let retryCount = 0
 let retryTimerId: ReturnType<typeof setTimeout> | null = null
 let currentLoadToken = 0
@@ -277,6 +287,9 @@ const setupDrag = (model: Live2DModel) => {
 }
 
 const setupWheel = (model: Live2DModel) => {
+  if (wheelHandler) {
+    window.removeEventListener('wheel', wheelHandler)
+  }
   wheelHandler = (e: WheelEvent) => {
     if (!model) return
     e.preventDefault()
@@ -427,52 +440,58 @@ onMounted(async () => {
     await loadModel(modelToLoad.url, modelToLoad.scale)
   }
 
-  window.electron?.ipcRenderer.on('desktop-pet:load-model', async (_event: any, modelInfo: PetModelInfo) => {
+  ipcLoadModelHandler = async (_event: any, modelInfo: PetModelInfo) => {
     currentModelName.value = modelInfo.name
     retryCount = 0
     if (canvasRef.value) {
       await loadModel(modelInfo.url, modelInfo.scale)
     }
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:load-model', ipcLoadModelHandler)
 
-  window.electron?.ipcRenderer.on('desktop-pet:trigger-motion', async (_event: any, group: string, index: number) => {
+  ipcTriggerMotionHandler = async (_event: any, group: string, index: number) => {
     if (currentModel) {
       try {
         await currentModel.motion(group, index)
       } catch {
       }
     }
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:trigger-motion', ipcTriggerMotionHandler)
 
-  window.electron?.ipcRenderer.on('desktop-pet:trigger-expression', async (_event: any, name: string) => {
+  ipcTriggerExpressionHandler = async (_event: any, name: string) => {
     if (currentModel) {
       try {
         await currentModel.expression(name)
       } catch {
       }
     }
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:trigger-expression', ipcTriggerExpressionHandler)
 
-  window.electron?.ipcRenderer.on('desktop-pet:set-position', (_event: any, x: number, y: number) => {
+  ipcSetPositionHandler = (_event: any, x: number, y: number) => {
     if (currentModel) {
       currentModel.x = x
       currentModel.y = y
     }
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:set-position', ipcSetPositionHandler)
 
-  window.electron?.ipcRenderer.on('desktop-pet:set-scale', (_event: any, scale: number) => {
+  ipcSetScaleHandler = (_event: any, scale: number) => {
     if (currentModel) {
       const clamped = Math.max(0.05, Math.min(3.0, scale))
       currentModel.scale.set(clamped)
     }
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:set-scale', ipcSetScaleHandler)
 
-  window.electron?.ipcRenderer.on('desktop-pet:lip-sync', (_event: any, value: number) => {
+  ipcLipSyncHandler = (_event: any, value: number) => {
     const clamped = Math.max(0, Math.min(1, value))
     setCoreParam('ParamMouthOpenY', clamped)
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:lip-sync', ipcLipSyncHandler)
 
-  window.electron?.ipcRenderer.on('desktop-pet:pad-emotion', (_event: any, pad: { pleasure: number; arousal: number; dominance: number }) => {
+  ipcPadEmotionHandler = (_event: any, pad: { pleasure: number; arousal: number; dominance: number }) => {
     const emotionId = mapPADtoEmotion(pad.pleasure, pad.arousal, pad.dominance)
     if (currentModel) {
       try {
@@ -480,13 +499,15 @@ onMounted(async () => {
       } catch {
       }
     }
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:pad-emotion', ipcPadEmotionHandler)
 
-  window.electron?.ipcRenderer.on('desktop-pet:set-core-param', (_event: any, paramId: string, value: number) => {
+  ipcSetCoreParamHandler = (_event: any, paramId: string, value: number) => {
     setCoreParam(paramId, value)
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:set-core-param', ipcSetCoreParamHandler)
 
-  window.electron?.ipcRenderer.on('desktop-pet:get-model-capabilities', (_event: any, requestId: string) => {
+  ipcGetModelCapabilitiesHandler = (_event: any, requestId: string) => {
     window.electron?.ipcRenderer.send(
       'desktop-pet:model-capabilities-response',
       requestId,
@@ -497,14 +518,16 @@ onMounted(async () => {
         isReady: isModelReady.value
       }
     )
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:get-model-capabilities', ipcGetModelCapabilitiesHandler)
 
-  window.addEventListener('contextmenu', (e) => {
+  contextMenuHandler = (e: MouseEvent) => {
     e.preventDefault()
     setIgnoreMouseEvents(false)
     window.electron?.ipcRenderer.send('desktop-pet:show-context-menu')
     setTimeout(() => setIgnoreMouseEvents(true), 1000)
-  })
+  }
+  window.addEventListener('contextmenu', contextMenuHandler)
 })
 
 onBeforeUnmount(() => {
@@ -515,10 +538,54 @@ onBeforeUnmount(() => {
   currentLoadToken++
   if (islandHideTimer) clearTimeout(islandHideTimer)
   cleanupFocus()
+
+  if (ipcLoadModelHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:load-model', ipcLoadModelHandler)
+    ipcLoadModelHandler = null
+  }
+  if (ipcTriggerMotionHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:trigger-motion', ipcTriggerMotionHandler)
+    ipcTriggerMotionHandler = null
+  }
+  if (ipcTriggerExpressionHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:trigger-expression', ipcTriggerExpressionHandler)
+    ipcTriggerExpressionHandler = null
+  }
+  if (ipcSetPositionHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:set-position', ipcSetPositionHandler)
+    ipcSetPositionHandler = null
+  }
+  if (ipcSetScaleHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:set-scale', ipcSetScaleHandler)
+    ipcSetScaleHandler = null
+  }
+  if (ipcLipSyncHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:lip-sync', ipcLipSyncHandler)
+    ipcLipSyncHandler = null
+  }
+  if (ipcPadEmotionHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:pad-emotion', ipcPadEmotionHandler)
+    ipcPadEmotionHandler = null
+  }
+  if (ipcSetCoreParamHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:set-core-param', ipcSetCoreParamHandler)
+    ipcSetCoreParamHandler = null
+  }
+  if (ipcGetModelCapabilitiesHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:get-model-capabilities', ipcGetModelCapabilitiesHandler)
+    ipcGetModelCapabilitiesHandler = null
+  }
+
+  if (contextMenuHandler) {
+    window.removeEventListener('contextmenu', contextMenuHandler)
+    contextMenuHandler = null
+  }
+
   if (wheelHandler) {
     window.removeEventListener('wheel', wheelHandler)
     wheelHandler = null
   }
+
   if (currentModel) {
     currentModel.destroy()
     currentModel = null

@@ -105,7 +105,8 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
   const triggerMotion = async (group: string, index: number = 0): Promise<boolean> => {
     try {
       if (isDesktopPetRunning.value) {
-        return await window.api.desktopPet.triggerMotion(group, index)
+        const result = await window.api.desktopPet.triggerMotion(group, index)
+        return result?.success === true
       }
       return false
     } catch (error: unknown) {
@@ -116,9 +117,13 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
 
   const triggerExpression = async (name: string, intensity: number = 0.5): Promise<boolean> => {
     try {
-      currentEmotion.value = { id: name, label: name, intensity }
       if (isDesktopPetRunning.value) {
-        return await window.api.desktopPet.triggerExpression(name)
+        const result = await window.api.desktopPet.triggerExpression(name)
+        if (result?.success === true) {
+          currentEmotion.value = { id: name, label: name, intensity }
+          return true
+        }
+        return false
       }
       return false
     } catch (error: unknown) {
@@ -128,15 +133,22 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
   }
 
   const driveEmotion = async (emotionId: string, intensity: number = 0.5): Promise<boolean> => {
-    currentEmotion.value = { id: emotionId, label: emotionId, intensity }
-    return triggerExpression(emotionId, intensity)
+    const result = await triggerExpression(emotionId, intensity)
+    if (result) {
+      currentEmotion.value = { id: emotionId, label: emotionId, intensity }
+    }
+    return result
   }
 
   const drivePadEmotion = async (pleasure: number, arousal: number, dominance: number): Promise<boolean> => {
-    padVector.value = { pleasure, arousal, dominance }
     try {
       if (isDesktopPetRunning.value) {
-        return await window.api.desktopPet.drivePadEmotion(pleasure, arousal, dominance)
+        const result = await window.api.desktopPet.drivePadEmotion(pleasure, arousal, dominance)
+        if (result?.success === true) {
+          padVector.value = { pleasure, arousal, dominance }
+          return true
+        }
+        return false
       }
       return false
     } catch (error: unknown) {
@@ -146,10 +158,15 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
   }
 
   const driveLipSync = async (value: number): Promise<boolean> => {
-    lipSyncValue.value = Math.max(0, Math.min(1, value))
+    const clampedValue = Math.max(0, Math.min(1, value))
     try {
       if (isDesktopPetRunning.value) {
-        return await window.api.desktopPet.driveLipSync(lipSyncValue.value)
+        const result = await window.api.desktopPet.driveLipSync(clampedValue)
+        if (result?.success === true) {
+          lipSyncValue.value = clampedValue
+          return true
+        }
+        return false
       }
       return false
     } catch (error: unknown) {
@@ -165,7 +182,8 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
     }
     try {
       if (isDesktopPetRunning.value) {
-        return await window.api.desktopPet.setCoreParam(paramId, value)
+        const result = await window.api.desktopPet.setCoreParam(paramId, value)
+        return result?.success === true
       }
       return false
     } catch (error: unknown) {
@@ -177,7 +195,8 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
   const setModelPosition = async (x: number, y: number): Promise<boolean> => {
     try {
       if (isDesktopPetRunning.value) {
-        return await window.api.desktopPet.setPosition(x, y)
+        const result = await window.api.desktopPet.setPosition(x, y)
+        return result?.success === true
       }
       return false
     } catch (error: unknown) {
@@ -189,7 +208,8 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
   const setModelScale = async (scale: number): Promise<boolean> => {
     try {
       if (isDesktopPetRunning.value) {
-        return await window.api.desktopPet.setScale(scale)
+        const result = await window.api.desktopPet.setScale(scale)
+        return result?.success === true
       }
       return false
     } catch (error: unknown) {
