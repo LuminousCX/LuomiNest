@@ -1,10 +1,13 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, NativeImage, MenuItemConstructorOptions, dialog, protocol, screen } from 'electron'
 import { join, dirname, basename } from 'path'
 import { platform } from 'os'
-import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync, rmSync, statSync } from 'fs'
+import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs'
 import { tabManager } from './services/browser'
 import { setupNetworkConfig } from './services/browser/view'
-import { startBackend, stopBackend, isBackendReady, getBackendUrl } from './services/backend'
+import { startBackend, stopBackend, getBackendUrl } from './services/backend'
+import { PATHS, initAppPaths } from './services/paths'
+import { configStore } from './services/config-store'
+import { cacheManager } from './services/cache-manager'
 
 if (platform() === 'win32') {
   process.stdout.write('\x1b[?65001h')
@@ -19,9 +22,13 @@ let desktopPetWindow: BrowserWindow | null = null
 const isDev = !app.isPackaged
 const isMac = platform() === 'darwin'
 
-let live2dBasePath = ''
-let builtinBasePath = ''
-let cubismCoreBasePath = ''
+const builtinBasePath = isDev
+  ? join(app.getAppPath(), 'src/renderer/public/live2d')
+  : join(process.resourcesPath, 'live2d')
+
+const cubismCoreBasePath = isDev
+  ? join(app.getAppPath(), 'resources/cubism-core')
+  : join(process.resourcesPath, 'cubism-core')
 
 interface ImportedModelRecord {
   id: string
@@ -32,10 +39,8 @@ interface ImportedModelRecord {
   tags: string[]
 }
 
-const IMPORTED_MODELS_FILE = 'imported-models.json'
-
 const loadImportedModels = (): ImportedModelRecord[] => {
-  const filePath = join(live2dBasePath, IMPORTED_MODELS_FILE)
+  const filePath = PATHS.importedModelsPath
   if (!existsSync(filePath)) return []
   try {
     const data = readFileSync(filePath, 'utf-8')
@@ -46,9 +51,8 @@ const loadImportedModels = (): ImportedModelRecord[] => {
 }
 
 const saveImportedModels = (models: ImportedModelRecord[]): void => {
-  mkdirSync(live2dBasePath, { recursive: true })
-  const filePath = join(live2dBasePath, IMPORTED_MODELS_FILE)
-  writeFileSync(filePath, JSON.stringify(models, null, 2), 'utf-8')
+  mkdirSync(PATHS.live2d, { recursive: true })
+  writeFileSync(PATHS.importedModelsPath, JSON.stringify(models, null, 2), 'utf-8')
 }
 
 const copyDirRecursive = (src: string, dst: string): void => {
@@ -65,10 +69,31 @@ const copyDirRecursive = (src: string, dst: string): void => {
   }
 }
 
+const saveWindowState = (): void => {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  try {
+    const bounds = mainWindow.getBounds()
+    const isMaximized = mainWindow.isMaximized()
+    configStore.setWindowState({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      isMaximized,
+    })
+  } catch {
+    // ignore save errors
+  }
+}
+
 const createWindow = (): void => {
+  const savedState = configStore.getWindowState()
+
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    width: savedState.width || 1280,
+    height: savedState.height || 820,
+    x: savedState.x,
+    y: savedState.y,
     minWidth: 960,
     minHeight: 640,
     frame: false,
@@ -86,8 +111,12 @@ const createWindow = (): void => {
     }
   })
 
+  if (savedState.isMaximized) {
+    mainWindow.maximize()
+  }
+
   tabManager.setWindow(mainWindow)
-  
+
   tabManager.setCallbacks(
     (tabId, updates) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -107,6 +136,10 @@ const createWindow = (): void => {
 
   mainWindow.on('resize', () => {
     tabManager.handleResize()
+  })
+
+  mainWindow.on('close', () => {
+    saveWindowState()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details: { url: string }) => {
@@ -338,9 +371,31 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle('window:close', () => mainWindow?.close())
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
-  
+
   ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('app:getName', () => app.getName())
+
+  ipcMain.handle('app:getPaths', () => ({
+    userData: PATHS.userData,
+    cache: PATHS.cache,
+    data: PATHS.data,
+    config: PATHS.config,
+    logs: PATHS.logs,
+    live2d: PATHS.live2d,
+  }))
+
+  ipcMain.handle('config:getTheme', () => configStore.getTheme())
+  ipcMain.handle('config:setTheme', (_e, theme: 'light' | 'dark' | 'system') => configStore.setTheme(theme))
+  ipcMain.handle('config:getTTS', () => configStore.getTTSConfig())
+  ipcMain.handle('config:setTTS', (_e, updates: any) => configStore.setTTSConfig(updates))
+  ipcMain.handle('config:getSTT', () => configStore.getSTTConfig())
+  ipcMain.handle('config:setSTT', (_e, updates: any) => configStore.setSTTConfig(updates))
+  ipcMain.handle('config:getAll', () => configStore.getAll())
+
+  ipcMain.handle('cache:getSize', () => cacheManager.getCacheSizeMB())
+  ipcMain.handle('cache:getBreakdown', () => cacheManager.getCacheBreakdown())
+  ipcMain.handle('cache:clearAll', () => { cacheManager.clearAllCache(); return true })
+  ipcMain.handle('cache:clearDir', (_e, dirName: string) => cacheManager.clearCacheDir(dirName))
 
   ipcMain.handle('tab:create', async (_e, url?: string) => {
     return tabManager.createTab(url)
@@ -423,13 +478,13 @@ function registerIpcHandlers(): void {
       const modelFileName = basename(selectedFile)
       const modelName = modelFileName.replace('.model3.json', '')
 
-      const destDir = join(live2dBasePath, modelName)
+      const destDir = join(PATHS.live2d, modelName)
 
       if (existsSync(destDir)) {
         rmSync(destDir, { recursive: true, force: true })
       }
 
-      mkdirSync(live2dBasePath, { recursive: true })
+      mkdirSync(PATHS.live2d, { recursive: true })
       copyDirRecursive(modelDir, destDir)
 
       const modelJsonPath = join(destDir, modelFileName)
@@ -489,7 +544,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('avatar:deleteModel', async (_e, modelName: string) => {
     try {
-      const destDir = join(live2dBasePath, modelName)
+      const destDir = join(PATHS.live2d, modelName)
       if (existsSync(destDir)) {
         rmSync(destDir, { recursive: true, force: true })
       }
@@ -508,7 +563,7 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('avatar:getImportedModelsPath', () => {
-    return live2dBasePath
+    return PATHS.live2d
   })
 
   ipcMain.handle('desktop-pet:open', async (_e, modelInfo?: ImportedModelRecord) => {
@@ -568,52 +623,40 @@ function registerIpcHandlers(): void {
   })
 }
 
-app.whenReady().then(async () => {
-  const userDataPath = app.getPath('userData')
-  app.setPath('cache', join(userDataPath, 'Cache'))
+const MIME_MAP: Record<string, string> = {
+  json: 'application/json',
+  moc3: 'application/octet-stream',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  mtn: 'application/octet-stream',
+  exp3: 'application/json',
+  physics3: 'application/json',
+  pose3: 'application/json',
+  motion3: 'application/json',
+  cdi3: 'application/json',
+  userdata3: 'application/json',
+  js: 'application/javascript'
+}
 
-  live2dBasePath = join(userDataPath, 'live2d')
-  mkdirSync(live2dBasePath, { recursive: true })
-
-  builtinBasePath = isDev
-    ? join(app.getAppPath(), 'src/renderer/public/live2d')
-    : join(process.resourcesPath, 'live2d')
-
-  cubismCoreBasePath = isDev
-    ? join(app.getAppPath(), 'src/renderer/public/cubism-core')
-    : join(process.resourcesPath, 'cubism-core')
-
-  const MIME_MAP: Record<string, string> = {
-    json: 'application/json',
-    moc3: 'application/octet-stream',
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    mtn: 'application/octet-stream',
-    exp3: 'application/json',
-    physics3: 'application/json',
-    pose3: 'application/json',
-    motion3: 'application/json',
-    cdi3: 'application/json',
-    userdata3: 'application/json',
-    js: 'application/javascript'
-  }
-
-  const resolveModelFile = (hostname: string, relativePath: string): string | null => {
-    if (hostname === 'cubism-core') {
-      const filePath = join(cubismCoreBasePath, relativePath)
-      if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
-      return null
-    }
-
-    const importedPath = join(live2dBasePath, hostname, relativePath)
-    if (existsSync(importedPath) && statSync(importedPath).isFile()) return importedPath
-
-    const builtinPath = join(builtinBasePath, hostname, relativePath)
-    if (existsSync(builtinPath) && statSync(builtinPath).isFile()) return builtinPath
-
+const resolveModelFile = (hostname: string, relativePath: string): string | null => {
+  if (hostname === 'cubism-core') {
+    const filePath = join(cubismCoreBasePath, relativePath)
+    if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
     return null
   }
+
+  const importedPath = join(PATHS.live2d, hostname, relativePath)
+  if (existsSync(importedPath) && statSync(importedPath).isFile()) return importedPath
+
+  const builtinPath = join(builtinBasePath, hostname, relativePath)
+  if (existsSync(builtinPath) && statSync(builtinPath).isFile()) return builtinPath
+
+  return null
+}
+
+app.whenReady().then(async () => {
+  initAppPaths()
 
   protocol.handle('luominest-avatar', (request) => {
     const url = new URL(request.url)
@@ -665,6 +708,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  saveWindowState()
   tabManager.cleanup()
   stopBackend()
 })

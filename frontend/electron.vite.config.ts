@@ -35,7 +35,7 @@ export default defineConfig({
             if (id.includes('lucide-vue-next')) {
               return 'lucide-vendor'
             }
-            if (id.includes('node_modules/vue/') || id.includes('node_modules/vue-router/')) {
+            if (id.includes('node_modules/vue/') || id.includes('node_modules/vue-router/') || id.includes('node_modules/pinia')) {
               return 'vue-vendor'
             }
             if (id.includes('node_modules/pixi.js') || id.includes('node_modules/@pixi')) {
@@ -43,6 +43,9 @@ export default defineConfig({
             }
             if (id.includes('node_modules/pixi-live2d-display')) {
               return 'live2d-vendor'
+            }
+            if (id.includes('node_modules/marked')) {
+              return 'marked-vendor'
             }
           }
         }

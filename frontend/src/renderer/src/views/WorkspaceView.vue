@@ -8,7 +8,6 @@ import {
   ChevronDown,
   Sparkles,
   Bot,
-  AtSign,
   Link2,
   MoreHorizontal,
   Loader2,
@@ -22,12 +21,18 @@ import {
   X,
   Plus,
   Copy,
-  Check
+  Check,
+  Search,
+  Zap,
+  Server,
+  PanelRightOpen,
+  PanelRightClose,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
+import { useSkillStore } from '../stores/skill'
 import { getProviderLogo } from '../config/provider-logos'
 import { marked } from 'marked'
 
@@ -40,12 +45,17 @@ const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const modelStore = useModelStore()
+const skillStore = useSkillStore()
 
 const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const showModelDropdown = ref(false)
-const showHistoryPanel = ref(false)
+const showHistoryPanel = ref(true)
+const showSkillDropdown = ref(false)
+const showSearchPanel = ref(false)
+const searchQuery = ref('')
+const searchResults = ref<any[]>([])
 const copiedId = ref<string | null>(null)
 
 const agentCards = computed(() => {
@@ -77,13 +87,15 @@ const isBackendReady = computed(() => chatStore.isBackendReady)
 const currentModel = computed(() => {
   const agent = agentStore.activeAgent
   if (agent?.model) return agent.model
-  return modelStore.modelConfig.defaultModel || '未配置模型'
+  const resolved = modelStore.resolveModel
+  return resolved?.model || '未配置模型'
 })
 
 const currentProvider = computed(() => {
   const agent = agentStore.activeAgent
   if (agent?.provider) return agent.provider
-  return modelStore.modelConfig.defaultProvider || ''
+  const resolved = modelStore.resolveModel
+  return resolved?.provider || ''
 })
 
 const currentProviderLogo = computed(() => getProviderLogo(currentProvider.value))
@@ -118,10 +130,10 @@ const availableModelOptions = computed(() => {
 })
 
 const agentConversations = computed(() => {
-  const agentId = agentStore.activeAgent?.id
-  if (!agentId) return chatStore.conversations
-  return chatStore.conversations.filter(c => c.agentId === agentId || !c.agentId)
+  return chatStore.conversations
 })
+
+const activeSkills = computed(() => skillStore.skills.filter(s => s.isActive))
 
 const selectAgent = async (agent: { id: string; name: string; desc: string; color: string }) => {
   if (agent.id === '__custom__') {
@@ -131,8 +143,13 @@ const selectAgent = async (agent: { id: string; name: string; desc: string; colo
   const found = agentStore.agents.find(a => a.id === agent.id)
   if (found) {
     agentStore.setActiveAgent(found)
-    chatStore.clearMessages()
-    await chatStore.fetchConversations()
+    // 不要清空消息，让watch监听器处理状态切换
+    await chatStore.fetchConversations(found.id)
+    // 如果有对话历史，加载最新的对话
+    if (chatStore.conversations.length > 0) {
+      const latestConv = chatStore.conversations[0]
+      await chatStore.loadConversation(latestConv.id)
+    }
   }
 }
 
@@ -155,24 +172,26 @@ const sendMessage = async () => {
   resetTextareaHeight()
 
   const agent = agentStore.activeAgent
+  const resolved = modelStore.resolveModel
 
   if (!chatStore.currentConversation) {
     await chatStore.createConversation(
       content.slice(0, 30),
       agent?.id,
-      agent?.model || modelStore.modelConfig.defaultModel || undefined,
-      agent?.provider || modelStore.modelConfig.defaultProvider || undefined,
+      agent?.model || resolved?.model || undefined,
+      agent?.provider || resolved?.provider || undefined,
     )
   }
 
   const options: any = {
-    model: agent?.model || modelStore.modelConfig.defaultModel || undefined,
-    provider: agent?.provider || modelStore.modelConfig.defaultProvider || undefined,
+    model: agent?.model || resolved?.model || undefined,
+    provider: agent?.provider || resolved?.provider || undefined,
     temperature: modelStore.modelConfig.defaultTemperature,
     maxTokens: modelStore.modelConfig.defaultMaxTokens,
     topP: modelStore.modelConfig.defaultTopP,
   }
   if (agent?.systemPrompt) options.systemPrompt = agent.systemPrompt
+  if (agent?.id) options.agentId = agent.id
 
   await chatStore.sendMessage(content, options)
   await nextTick()
@@ -181,7 +200,7 @@ const sendMessage = async () => {
 
 const scrollToBottom = () => {
   if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    messagesContainer.value.scrollTo({ top: messagesContainer.value.scrollHeight, behavior: 'smooth' })
   }
 }
 
@@ -204,7 +223,8 @@ const renderMarkdown = (text: string): string => {
 }
 
 const contextUsage = computed(() => {
-  const lastAssistantMsg = [...messages.value].reverse().find(m => m.role === 'assistant' && m.done)
+  // 修复：倒序渲染问题 - 改用正序查找最后一条完成的助手消息
+  const lastAssistantMsg = messages.value.findLast(m => m.role === 'assistant' && m.done)
   return lastAssistantMsg?.usage || chatStore.lastUsage || null
 })
 
@@ -222,33 +242,56 @@ const copyMessage = async (msgId: string, content: string) => {
 }
 
 const formatTime = (dateStr: string) => {
+  // 修复：历史记录实时更新 - 处理Invalid Date问题
+  if (!dateStr || dateStr === 'undefined' || dateStr === 'null') {
+    return '刚刚'
+  }
+  
   try {
     const d = new Date(dateStr)
+    if (isNaN(d.getTime())) {
+      return '刚刚'
+    }
+    
     const now = new Date()
     const isToday = d.toDateString() === now.toDateString()
+    
     if (isToday) {
       return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     }
     return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return ''
+  } catch (error) {
+    return '刚刚'
   }
 }
 
 const handleLoadConversation = async (convId: string) => {
   await chatStore.loadConversation(convId)
-  showHistoryPanel.value = false
   await nextTick()
   scrollToBottom()
 }
 
 const handleDeleteConversation = async (convId: string) => {
-  await chatStore.deleteConversation(convId)
+  await chatStore.deleteConversation(convId, agentStore.activeAgent?.id)
 }
 
 const startNewConversation = () => {
   chatStore.clearMessages()
-  showHistoryPanel.value = false
+}
+
+const handleSearch = async () => {
+  if (!searchQuery.value.trim()) return
+  try {
+    searchResults.value = await skillStore.executeSkill('search', { query: searchQuery.value })
+  } catch {
+    searchResults.value = []
+  }
+}
+
+const insertSkillToInput = (skillName: string) => {
+  inputText.value += `<tool_call name="${skillName}">\n{}\n</tool_call`
+  showSkillDropdown.value = false
+  if (textareaRef.value) textareaRef.value.focus()
 }
 
 watch(messages, () => {
@@ -294,6 +337,9 @@ const handleClickOutsideModel = (e: MouseEvent) => {
   if (!target.closest('.model-dropdown-container')) {
     showModelDropdown.value = false
   }
+  if (!target.closest('.skill-dropdown-container')) {
+    showSkillDropdown.value = false
+  }
 }
 
 onMounted(async () => {
@@ -304,6 +350,8 @@ onMounted(async () => {
       modelStore.fetchProviders(),
       modelStore.fetchModelConfig(),
       chatStore.fetchConversations(),
+      skillStore.fetchSkills(),
+      skillStore.fetchMcpServers(),
     ])
   }
   document.addEventListener('click', handleClickOutsideModel)
@@ -311,151 +359,315 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="workspace-view">
-    <div class="workspace-header">
-      <div class="header-left">
-        <span class="header-badge">
-          <Sparkles :size="14" />
-          LuomiNest
-        </span>
-        <span class="header-stats">
-          <span class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
-            {{ currentProviderLogo.initials }}
-          </span>
-          {{ currentModel }}
-        </span>
-      </div>
-      <div class="header-right">
-        <button v-if="!isBackendReady" class="header-icon-btn warning" title="后端未连接" @click="chatStore.checkBackend()">
-          <AlertTriangle :size="18" />
-        </button>
-        <button class="header-icon-btn" title="历史记录" @click="showHistoryPanel = !showHistoryPanel">
-          <Clock :size="18" />
-        </button>
-        <button class="header-icon-btn" title="设置" @click="router.push('/settings/ai-model')">
-          <Settings :size="18" />
-        </button>
-      </div>
-    </div>
-
-    <div v-if="!isBackendReady" class="backend-warning">
-      <div class="warning-content">
-        <AlertTriangle :size="20" />
-        <div class="warning-text">
-          <p class="warning-title">后端服务未连接</p>
-          <p class="warning-desc">请确保 LuomiNest 后端服务已启动 (端口 18000)</p>
-        </div>
-        <button class="retry-btn" @click="chatStore.checkBackend()">
-          <RotateCcw :size="14" />
-          重试
-        </button>
-      </div>
-    </div>
-
-    <div v-if="!hasProvider && isBackendReady" class="backend-warning info">
-      <div class="warning-content">
-        <Wand2 :size="20" />
-        <div class="warning-text">
-          <p class="warning-title">尚未配置模型供应商</p>
-          <p class="warning-desc">请先前往设置页面添加 Ollama 或其他模型供应商</p>
-        </div>
-        <button class="retry-btn" @click="router.push('/settings/ai-model')">
-          去设置
-        </button>
-      </div>
-    </div>
-
-    <div class="agent-selector-row">
-      <div class="agent-cards-scroll">
-        <button
-          v-for="(card, idx) in agentCards"
-          :key="card.id"
-          :class="['agent-card', { selected: card.selected }]"
-          :style="{ animationDelay: `${idx * 60}ms` }"
-          @click="selectAgent(card)"
-        >
-          <div class="card-avatar" :style="{ background: card.color + '14', color: card.color, borderColor: card.selected ? card.color : 'transparent' }">
-            <Bot v-if="card.id !== '__custom__'" :size="26" />
-            <Sparkles v-else :size="26" />
+  <div class="workspace-layout">
+    <div class="workspace-main">
+      <div class="workspace-view">
+        <div class="workspace-header">
+          <div class="header-left">
+            <span class="header-badge">
+              <Sparkles :size="14" />
+              LuomiNest
+            </span>
+            <span class="header-stats">
+              <span class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+                {{ currentProviderLogo.initials }}
+              </span>
+              {{ currentModel }}
+            </span>
           </div>
-          <div class="card-info">
-            <span class="card-name">{{ card.name }}</span>
-            <span class="card-desc">{{ card.desc }}</span>
+          <div class="header-right">
+            <button v-if="!isBackendReady" class="header-icon-btn warning" title="后端未连接" @click="chatStore.checkBackend()">
+              <AlertTriangle :size="18" />
+            </button>
+            <button class="header-icon-btn" :class="{ active: showSearchPanel }" title="搜索知识库" @click="showSearchPanel = !showSearchPanel">
+              <Search :size="18" />
+            </button>
+            <button class="header-icon-btn" :class="{ active: showHistoryPanel }" title="历史记录" @click="showHistoryPanel = !showHistoryPanel">
+              <PanelRightOpen v-if="!showHistoryPanel" :size="18" />
+              <PanelRightClose v-else :size="18" />
+            </button>
+            <button class="header-icon-btn" title="设置" @click="router.push('/settings/ai-model')">
+              <Settings :size="18" />
+            </button>
           </div>
-          <button
-            v-if="card.id !== '__custom__' && !card.id.startsWith('default-')"
-            class="card-delete"
-            title="删除 Agent"
-            @click.stop="handleDeleteAgent(card.id)"
-          >
-            <MoreHorizontal :size="14" />
-          </button>
-        </button>
-      </div>
-      <Transition name="selection-fade">
-        <div v-if="agentStore.activeAgent" class="selection-toast">
-          我选择「{{ agentStore.activeAgent.name }}」作为我的Agent
         </div>
-      </Transition>
-    </div>
 
-    <div class="main-content-area">
-      <div ref="messagesContainer" class="chat-area" :class="{ 'with-history': showHistoryPanel }">
-        <div class="messages-container">
-          <div
-            v-for="msg in messages"
-            :key="msg.id"
-            :class="['message-row', msg.role]"
-          >
-            <div class="message-avatar" v-if="msg.role === 'assistant'">
-              <div class="avatar-assistant">
-                <Bot :size="16" />
+        <div v-if="!isBackendReady" class="backend-warning">
+          <div class="warning-content">
+            <AlertTriangle :size="20" />
+            <div class="warning-text">
+              <p class="warning-title">后端服务未连接</p>
+              <p class="warning-desc">请确保 LuomiNest 后端服务已启动 (端口 18000)</p>
+            </div>
+            <button class="retry-btn" @click="chatStore.checkBackend()">
+              <RotateCcw :size="14" />
+              重试
+            </button>
+          </div>
+        </div>
+
+        <div v-if="!hasProvider && isBackendReady" class="backend-warning info">
+          <div class="warning-content">
+            <Wand2 :size="20" />
+            <div class="warning-text">
+              <p class="warning-title">尚未配置模型供应商</p>
+              <p class="warning-desc">请先前往设置页面添加 Ollama 或其他模型供应商</p>
+            </div>
+            <button class="retry-btn" @click="router.push('/settings/ai-model')">
+              去设置
+            </button>
+          </div>
+        </div>
+
+        <div class="agent-selector-row">
+          <div class="agent-cards-scroll">
+            <button
+              v-for="(card, idx) in agentCards"
+              :key="card.id"
+              :class="['agent-card', { selected: card.selected }]"
+              :style="{ animationDelay: `${idx * 60}ms` }"
+              @click="selectAgent(card)"
+            >
+              <div class="card-avatar" :style="{ background: card.color + '14', color: card.color, borderColor: card.selected ? card.color : 'transparent' }">
+                <Bot v-if="card.id !== '__custom__'" :size="26" />
+                <Sparkles v-else :size="26" />
+              </div>
+              <div class="card-info">
+                <span class="card-name">{{ card.name }}</span>
+                <span class="card-desc">{{ card.desc }}</span>
+              </div>
+              <button
+                v-if="card.id !== '__custom__' && !card.id.startsWith('default-')"
+                class="card-delete"
+                title="删除 Agent"
+                @click.stop="handleDeleteAgent(card.id)"
+              >
+                <MoreHorizontal :size="14" />
+              </button>
+            </button>
+          </div>
+          <Transition name="selection-fade">
+            <div v-if="agentStore.activeAgent" class="selection-toast">
+              我选择「{{ agentStore.activeAgent.name }}」作为我的Agent
+            </div>
+          </Transition>
+        </div>
+
+        <div class="chat-area">
+          <div ref="messagesContainer" class="messages-scroll">
+            <div class="messages-container">
+              <TransitionGroup name="msg-appear" tag="div">
+                <div
+                  v-for="msg in messages"
+                  :key="msg.id"
+                  :class="['message-row', msg.role]"
+                >
+                  <div class="message-avatar" v-if="msg.role === 'assistant'">
+                    <div class="avatar-assistant">
+                      <Bot :size="16" />
+                    </div>
+                  </div>
+                  <div class="message-body">
+                    <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
+                    <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+                    <div v-else class="message-content user-message">{{ msg.content }}</div>
+                    <div v-if="msg.role === 'assistant' && !msg.done && isStreaming && msg.id === messages[messages.length - 1].id" class="loading-status">
+                      <Loader2 :size="16" class="spin-animation" />
+                      <span>正在分析问题...</span>
+                    </div>
+                    <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
+                      <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
+                        <Check v-if="copiedId === msg.id" :size="13" />
+                        <Copy v-else :size="13" />
+                        <span>{{ copiedId === msg.id ? '已复制' : '复制' }}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </TransitionGroup>
+
+              <div v-if="messages.length === 0" class="empty-state">
+                <div class="empty-icon">
+                  <Bot :size="48" />
+                </div>
+                <p class="empty-title">选择一个Agent开始对话</p>
+                <p class="empty-desc">或直接在下方输入框中提问</p>
+                <div class="empty-quick-actions">
+                  <button class="quick-action" @click="inputText = '你好，请介绍一下你自己'">打个招呼</button>
+                  <button class="quick-action" @click="inputText = '帮我写一段 Python 代码'">写段代码</button>
+                  <button class="quick-action" @click="inputText = '解释一下什么是大语言模型'">了解 LLM</button>
+                </div>
               </div>
             </div>
-            <div class="message-body">
-              <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
-              <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              <div v-else class="message-content user-message">{{ msg.content }}</div>
-              <div v-if="msg.role === 'assistant' && !msg.done && isStreaming" class="streaming-cursor">
-                <span class="cursor-blink"></span>
+          </div>
+        </div>
+
+        <div class="input-area">
+          <div class="input-wrapper">
+            <textarea
+              ref="textareaRef"
+              v-model="inputText"
+              placeholder="可以描述任务或提问任何问题"
+              rows="1"
+              class="chat-input"
+              :disabled="isStreaming || !isBackendReady"
+              @keydown.enter.exact.prevent="sendMessage"
+              @input="autoResize"
+            ></textarea>
+            <div class="input-toolbar">
+              <div class="toolbar-left">
+                <div class="model-dropdown-container">
+                  <button class="tool-btn" title="选择模型" @click.stop="showModelDropdown = !showModelDropdown">
+                    <span class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+                      {{ currentProviderLogo.initials }}
+                    </span>
+                    <span class="model-btn-text">{{ currentModel }}</span>
+                    <ChevronDown :size="14" />
+                  </button>
+                  <Transition name="dropdown-fade">
+                    <div v-if="showModelDropdown" class="model-dropdown">
+                      <div class="dropdown-header">选择模型</div>
+                      <div class="dropdown-list">
+                        <button
+                          v-for="opt in availableModelOptions"
+                          :key="`${opt.providerId}-${opt.modelId}`"
+                          :class="['dropdown-item', { active: currentProvider === opt.providerId && currentModel === opt.modelId }]"
+                          @click="selectModel(opt.providerId, opt.modelId)"
+                        >
+                          <span class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
+                            {{ opt.providerLogo.initials }}
+                          </span>
+                          <div class="dropdown-item-info">
+                            <span class="dropdown-item-model">{{ opt.modelName }}</span>
+                            <span class="dropdown-item-provider">{{ opt.providerName }}</span>
+                          </div>
+                        </button>
+                        <div v-if="availableModelOptions.length === 0" class="dropdown-empty">
+                          暂无可用模型，请先配置供应商
+                        </div>
+                      </div>
+                    </div>
+                  </Transition>
+                </div>
+                <div class="skill-dropdown-container">
+                  <button class="tool-btn" title="技能与工具" @click.stop="showSkillDropdown = !showSkillDropdown">
+                    <Zap :size="16" />
+                    <span>技能</span>
+                    <ChevronDown :size="14" />
+                  </button>
+                  <Transition name="dropdown-fade">
+                    <div v-if="showSkillDropdown" class="skill-dropdown">
+                      <div class="dropdown-header">
+                        <Zap :size="14" />
+                        可用技能
+                      </div>
+                      <div class="dropdown-list">
+                        <button
+                          v-for="skill in activeSkills"
+                          :key="skill.name"
+                          class="dropdown-item"
+                          @click="insertSkillToInput(skill.name)"
+                        >
+                          <div class="skill-icon-badge" :class="skill.category">
+                            <Zap v-if="skill.category === 'utility'" :size="14" />
+                            <Search v-else-if="skill.category === 'knowledge'" :size="14" />
+                            <Bot v-else-if="skill.category === 'agent'" :size="14" />
+                            <Link2 v-else :size="14" />
+                          </div>
+                          <div class="dropdown-item-info">
+                            <span class="dropdown-item-model">{{ skill.name }}</span>
+                            <span class="dropdown-item-provider">{{ skill.description }}</span>
+                          </div>
+                          <span v-if="skill.isBuiltin" class="skill-badge builtin">内置</span>
+                          <span v-else class="skill-badge custom">自定义</span>
+                        </button>
+                        <div v-if="skillStore.mcpServers.length > 0" class="dropdown-section">
+                          <div class="dropdown-section-title">
+                            <Server :size="12" />
+                            MCP 服务器
+                          </div>
+                          <div
+                            v-for="server in skillStore.mcpServers"
+                            :key="server.name"
+                            class="dropdown-item mcp-server-item"
+                          >
+                            <Server :size="14" class="mcp-icon" />
+                            <div class="dropdown-item-info">
+                              <span class="dropdown-item-model">{{ server.name }}</span>
+                              <span class="dropdown-item-provider">{{ server.transport }}</span>
+                            </div>
+                            <span class="skill-badge mcp">MCP</span>
+                          </div>
+                        </div>
+                        <div v-if="activeSkills.length === 0 && skillStore.mcpServers.length === 0" class="dropdown-empty">
+                          暂无可用技能
+                        </div>
+                      </div>
+                    </div>
+                  </Transition>
+                </div>
               </div>
-              <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
-                <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
-                  <Check v-if="copiedId === msg.id" :size="13" />
-                  <Copy v-else :size="13" />
-                  <span>{{ copiedId === msg.id ? '已复制' : '复制' }}</span>
+              <div class="toolbar-right">
+                <button class="tool-btn icon-only" title="附件">
+                  <Paperclip :size="16" />
+                </button>
+                <button class="tool-btn icon-only" title="语音">
+                  <Mic :size="16" />
+                </button>
+                <button
+                  :class="['send-btn', { disabled: isStreaming || !inputText.trim() || !isBackendReady }]"
+                  title="发送"
+                  @click="sendMessage"
+                >
+                  <Loader2 v-if="isStreaming" :size="17" class="spin-animation" />
+                  <Send v-else :size="17" />
                 </button>
               </div>
             </div>
           </div>
-
-          <div v-if="messages.length === 0" class="empty-state">
-            <div class="empty-icon">
-              <Bot :size="48" />
+          <div class="input-footer">
+            <div v-if="contextUsage" class="context-usage">
+              <div class="context-bar">
+                <div class="context-bar-fill" :style="{ width: contextPercent + '%' }" :class="{ warn: contextPercent > 70, danger: contextPercent > 90 }"></div>
+              </div>
+              <span class="context-text">{{ contextUsage.totalTokens?.toLocaleString() || 0 }} tokens · {{ contextPercent }}%</span>
             </div>
-            <p class="empty-title">选择一个Agent开始对话</p>
-            <p class="empty-desc">或直接在下方输入框中提问</p>
-            <div class="empty-quick-actions">
-              <button class="quick-action" @click="inputText = '你好，请介绍一下你自己'">打个招呼</button>
-              <button class="quick-action" @click="inputText = '帮我写一段 Python 代码'">写段代码</button>
-              <button class="quick-action" @click="inputText = '解释一下什么是大语言模型'">了解 LLM</button>
-            </div>
+            <span v-else>内容由AI生成，请仔细核对</span>
           </div>
         </div>
       </div>
+    </div>
 
-      <Transition name="history-slide">
-        <div v-if="showHistoryPanel" class="history-panel">
-          <div class="history-header">
-            <h3>对话历史</h3>
-            <div class="history-header-actions">
-              <button class="history-action-btn" title="新建对话" @click="startNewConversation">
-                <Plus :size="16" />
-              </button>
-              <button class="history-action-btn" title="关闭" @click="showHistoryPanel = false">
-                <X :size="16" />
-              </button>
+    <Transition name="panel-slide">
+      <div v-if="showHistoryPanel" class="right-panel">
+        <div class="panel-tabs">
+          <button
+            :class="['panel-tab', { active: !showSearchPanel }]"
+            @click="showSearchPanel = false"
+          >
+            <Clock :size="14" />
+            历史
+          </button>
+          <button
+            :class="['panel-tab', { active: showSearchPanel }]"
+            @click="showSearchPanel = true"
+          >
+            <Search :size="14" />
+            搜索
+          </button>
+        </div>
+
+        <div v-if="!showSearchPanel" class="panel-content">
+          <div class="panel-header-bar">
+            <div class="panel-header-info">
+              <span v-if="agentStore.activeAgent" class="panel-agent-tag" :style="{ background: agentStore.activeAgent.color + '14', color: agentStore.activeAgent.color }">
+                {{ agentStore.activeAgent.name }}
+              </span>
+              <span class="panel-count">{{ agentConversations.length }} 个对话</span>
             </div>
+            <button class="panel-action-btn" title="新建对话" @click="startNewConversation">
+              <Plus :size="16" />
+            </button>
           </div>
           <div class="history-list">
             <div
@@ -467,7 +679,10 @@ onMounted(async () => {
               <MessageSquare :size="14" class="history-item-icon" />
               <div class="history-item-info">
                 <span class="history-item-title">{{ conv.title }}</span>
-                <span class="history-item-time">{{ formatTime(conv.updatedAt) }}</span>
+                <span class="history-item-meta">
+                  <span class="history-item-time">{{ formatTime(conv.updatedAt) }}</span>
+                  <span v-if="conv.lastMessage" class="history-item-preview">{{ conv.lastMessage }}</span>
+                </span>
               </div>
               <button class="history-item-delete" title="删除" @click.stop="handleDeleteConversation(conv.id)">
                 <Trash2 :size="12" />
@@ -479,90 +694,32 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-      </Transition>
-    </div>
 
-    <div class="input-area">
-      <div class="input-wrapper">
-        <textarea
-          ref="textareaRef"
-          v-model="inputText"
-          placeholder="可以描述任务或提问任何问题"
-          rows="1"
-          class="chat-input"
-          :disabled="isStreaming || !isBackendReady"
-          @keydown.enter.exact.prevent="sendMessage"
-          @input="autoResize"
-        ></textarea>
-        <div class="input-toolbar">
-          <div class="toolbar-left">
-            <div class="model-dropdown-container">
-              <button class="tool-btn" title="选择模型" @click.stop="showModelDropdown = !showModelDropdown">
-                <span class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
-                  {{ currentProviderLogo.initials }}
-                </span>
-                <span class="model-btn-text">{{ currentModel }}</span>
-                <ChevronDown :size="14" />
-              </button>
-              <Transition name="dropdown-fade">
-                <div v-if="showModelDropdown" class="model-dropdown">
-                  <div class="dropdown-header">选择模型</div>
-                  <div class="dropdown-list">
-                    <button
-                      v-for="opt in availableModelOptions"
-                      :key="`${opt.providerId}-${opt.modelId}`"
-                      :class="['dropdown-item', { active: currentProvider === opt.providerId && currentModel === opt.modelId }]"
-                      @click="selectModel(opt.providerId, opt.modelId)"
-                    >
-                      <span class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
-                        {{ opt.providerLogo.initials }}
-                      </span>
-                      <div class="dropdown-item-info">
-                        <span class="dropdown-item-model">{{ opt.modelName }}</span>
-                        <span class="dropdown-item-provider">{{ opt.providerName }}</span>
-                      </div>
-                    </button>
-                    <div v-if="availableModelOptions.length === 0" class="dropdown-empty">
-                      暂无可用模型，请先配置供应商
-                    </div>
-                  </div>
-                </div>
-              </Transition>
+        <div v-else class="panel-content">
+          <div class="search-box">
+            <Search :size="16" class="search-icon" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="搜索知识库..."
+              class="search-input"
+              @keydown.enter="handleSearch"
+            />
+          </div>
+          <div class="search-results">
+            <div v-for="(result, idx) in searchResults" :key="idx" class="search-result-item">
+              <div class="search-result-source">{{ result.source }}</div>
+              <div class="search-result-content">{{ result.content }}</div>
+              <div class="search-result-score">相关度: {{ (result.score * 100).toFixed(1) }}%</div>
             </div>
-            <button class="tool-btn" title="技能">
-              <Link2 :size="16" />
-              <span>技能</span>
-              <ChevronDown :size="14" />
-            </button>
-          </div>
-          <div class="toolbar-right">
-            <button class="tool-btn icon-only" title="附件">
-              <Paperclip :size="16" />
-            </button>
-            <button class="tool-btn icon-only" title="语音">
-              <Mic :size="16" />
-            </button>
-            <button
-              :class="['send-btn', { disabled: isStreaming || !inputText.trim() || !isBackendReady }]"
-              title="发送"
-              @click="sendMessage"
-            >
-              <Loader2 v-if="isStreaming" :size="17" class="spin-animation" />
-              <Send v-else :size="17" />
-            </button>
+            <div v-if="searchResults.length === 0 && searchQuery" class="history-empty">
+              <Search :size="24" />
+              <p>输入关键词搜索知识库</p>
+            </div>
           </div>
         </div>
       </div>
-      <div class="input-footer">
-        <div v-if="contextUsage" class="context-usage">
-          <div class="context-bar">
-            <div class="context-bar-fill" :style="{ width: contextPercent + '%' }" :class="{ warn: contextPercent > 70, danger: contextPercent > 90 }"></div>
-          </div>
-          <span class="context-text">{{ contextUsage.totalTokens?.toLocaleString() || 0 }} tokens · {{ contextPercent }}%</span>
-        </div>
-        <span v-else>内容由AI生成，请仔细核对</span>
-      </div>
-    </div>
+    </Transition>
 
     <Transition name="selection-fade">
       <div v-if="showCreateAgentDialog" class="add-dialog-overlay" @click.self="showCreateAgentDialog = false">
@@ -617,11 +774,24 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.workspace-layout {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background: var(--workspace-bg);
+}
+
+.workspace-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .workspace-view {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--workspace-bg);
   overflow: hidden;
 }
 
@@ -704,6 +874,11 @@ onMounted(async () => {
   color: var(--text-secondary);
 }
 
+.header-icon-btn.active {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
 .header-icon-btn.warning {
   color: var(--lumi-accent);
   animation: pulse-warning 2s ease-in-out infinite;
@@ -719,13 +894,28 @@ onMounted(async () => {
   padding: 12px 16px;
   border-radius: var(--radius-md);
   background: var(--lumi-accent-light);
-  border: 1px solid rgba(244, 63, 94, 0.2);
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.backend-warning::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--lumi-accent);
+  border-radius: 0 3px 3px 0;
 }
 
 .backend-warning.info {
-  background: rgba(13, 148, 136, 0.08);
-  border-color: rgba(13, 148, 136, 0.2);
+  background: rgba(13, 148, 136, 0.06);
+}
+
+.backend-warning.info::before {
+  background: var(--lumi-primary);
 }
 
 .warning-content {
@@ -887,8 +1077,8 @@ onMounted(async () => {
   margin-top: 10px;
   text-align: center;
   font-size: 13px;
-  color: var(--lumi-accent);
-  background: var(--lumi-accent-light);
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
   padding: 8px 20px;
   border-radius: var(--radius-full);
   display: inline-block;
@@ -903,18 +1093,18 @@ onMounted(async () => {
   animation: lumi-fade-in 0.2s ease-out reverse;
 }
 
-.main-content-area {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  position: relative;
-}
-
 .chat-area {
   flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages-scroll {
+  flex: 1;
   overflow-y: auto;
-  padding: 20px 24px;
-  transition: all var(--transition-normal);
+  padding: 24px;
+  scroll-behavior: smooth;
 }
 
 .messages-container {
@@ -923,11 +1113,16 @@ onMounted(async () => {
 }
 
 .message-row {
-  margin-bottom: 28px;
-  animation: lumi-slide-up 0.3s ease-out both;
+  margin-bottom: 24px;
+  animation: msg-slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
   display: flex;
   gap: 12px;
   align-items: flex-start;
+}
+
+@keyframes msg-slide-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .message-avatar {
@@ -944,6 +1139,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 250ms ease-in-out;
+}
+
+.message-row:hover .avatar-assistant {
+  transform: scale(1.08);
 }
 
 .message-body {
@@ -974,13 +1174,18 @@ onMounted(async () => {
 }
 
 .user-message {
-  padding: 10px 16px;
+  padding: 12px 18px;
   border-radius: var(--radius-lg);
   border-top-right-radius: 4px;
-  background: rgba(13, 148, 136, 0.08);
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(13, 148, 136, 0.04));
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
+  transition: all 250ms ease-in-out;
+}
+
+.message-row:hover .user-message {
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(13, 148, 136, 0.06));
 }
 
 .message-actions {
@@ -1016,17 +1221,22 @@ onMounted(async () => {
   margin-left: 2px;
 }
 
-.cursor-blink {
-  display: inline-block;
-  width: 2px;
-  height: 16px;
-  background: var(--lumi-primary);
-  animation: blink 1s step-end infinite;
-  vertical-align: text-bottom;
+.loading-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
-@keyframes blink {
-  50% { opacity: 0; }
+.loading-status .spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .empty-state {
@@ -1036,6 +1246,7 @@ onMounted(async () => {
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
+  animation: lumi-fade-in 0.5s ease-out both;
 }
 
 .empty-icon {
@@ -1048,6 +1259,11 @@ onMounted(async () => {
   justify-content: center;
   color: var(--lumi-primary);
   margin-bottom: 20px;
+  transition: transform 300ms ease-in-out;
+}
+
+.empty-icon:hover {
+  transform: scale(1.05) rotate(-3deg);
 }
 
 .empty-title {
@@ -1076,47 +1292,102 @@ onMounted(async () => {
   font-size: 13px;
   color: var(--text-secondary);
   background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-xs);
+  transition: all 300ms ease-in-out;
   cursor: pointer;
 }
 
 .quick-action:hover {
-  border-color: var(--lumi-primary);
   color: var(--lumi-primary);
   background: var(--lumi-primary-light);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
-.history-panel {
-  width: 280px;
+.right-panel {
+  width: 300px;
   flex-shrink: 0;
-  border-left: 1px solid var(--workspace-border);
   background: var(--workspace-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--divider-vertical);
+}
+
+.panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--divider-soft);
+  flex-shrink: 0;
+}
+
+.panel-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.panel-tab:hover {
+  color: var(--text-secondary);
+  background: var(--workspace-hover);
+}
+
+.panel-tab.active {
+  color: var(--lumi-primary);
+}
+
+.panel-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: var(--lumi-primary);
+  border-radius: 2px 2px 0 0;
+}
+
+.panel-content {
+  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.history-header {
+.panel-header-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
-  border-bottom: 1px solid var(--workspace-border);
+  padding: 12px 16px;
+  flex-shrink: 0;
 }
 
-.history-header h3 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.history-header-actions {
+.panel-header-info {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
 }
 
-.history-action-btn {
+.panel-agent-tag {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.panel-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.panel-action-btn {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
@@ -1127,7 +1398,7 @@ onMounted(async () => {
   transition: all var(--transition-fast);
 }
 
-.history-action-btn:hover {
+.panel-action-btn:hover {
   background: var(--workspace-hover);
   color: var(--text-secondary);
 }
@@ -1135,7 +1406,7 @@ onMounted(async () => {
 .history-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 4px 8px;
 }
 
 .history-item {
@@ -1146,17 +1417,38 @@ onMounted(async () => {
   padding: 10px 12px;
   border-radius: var(--radius-md);
   text-align: left;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
   position: relative;
   cursor: pointer;
+}
+
+.history-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 3px;
+  height: 60%;
+  border-radius: 0 3px 3px 0;
+  background: var(--lumi-primary);
+  transition: transform 300ms ease-in-out;
 }
 
 .history-item:hover {
   background: var(--workspace-hover);
 }
 
+.history-item:hover::before {
+  transform: translateY(-50%) scaleY(1);
+}
+
 .history-item.active {
   background: var(--lumi-primary-light);
+}
+
+.history-item.active::before {
+  transform: translateY(-50%) scaleY(1);
 }
 
 .history-item-icon {
@@ -1185,9 +1477,24 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
+.history-item-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
 .history-item-time {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.history-item-preview {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.7;
 }
 
 .history-item-delete {
@@ -1226,15 +1533,15 @@ onMounted(async () => {
   font-size: 13px;
 }
 
-.history-slide-enter-active {
-  animation: history-slide-in 0.3s ease-out;
+.panel-slide-enter-active {
+  animation: panel-slide-in 0.3s ease-out;
 }
 
-.history-slide-leave-active {
-  animation: history-slide-in 0.2s ease-out reverse;
+.panel-slide-leave-active {
+  animation: panel-slide-in 0.2s ease-out reverse;
 }
 
-@keyframes history-slide-in {
+@keyframes panel-slide-in {
   from {
     opacity: 0;
     transform: translateX(20px);
@@ -1243,6 +1550,75 @@ onMounted(async () => {
     opacity: 1;
     transform: translateX(0);
   }
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--divider-soft);
+}
+
+.search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: var(--workspace-panel);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.search-result-item {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--workspace-panel);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
+}
+
+.search-result-item:hover {
+  background: var(--workspace-hover);
+}
+
+.search-result-source {
+  font-size: 11px;
+  color: var(--lumi-primary);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.search-result-content {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.search-result-score {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
 }
 
 .input-area {
@@ -1254,16 +1630,14 @@ onMounted(async () => {
 
 .input-wrapper {
   background: var(--workspace-card);
-  border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm), var(--shadow-inset);
   overflow: visible;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
 }
 
 .input-wrapper:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow), var(--shadow-lg);
+  box-shadow: 0 0 0 2px var(--lumi-primary-glow), var(--shadow-lg);
 }
 
 .chat-input {
@@ -1320,7 +1694,7 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
   white-space: nowrap;
 }
 
@@ -1339,17 +1713,18 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-.model-dropdown-container {
+.model-dropdown-container,
+.skill-dropdown-container {
   position: relative;
 }
 
-.model-dropdown {
+.model-dropdown,
+.skill-dropdown {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
   width: 280px;
   background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: 9999;
@@ -1361,13 +1736,26 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
-  border-bottom: 1px solid var(--workspace-border);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dropdown-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: var(--divider-soft);
 }
 
 .dropdown-list {
-  max-height: 240px;
+  max-height: 280px;
   overflow-y: auto;
   padding: 4px;
 }
@@ -1380,7 +1768,7 @@ onMounted(async () => {
   padding: 8px 10px;
   border-radius: var(--radius-md);
   text-align: left;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
 }
 
 .dropdown-item:hover {
@@ -1411,6 +1799,9 @@ onMounted(async () => {
 .dropdown-item-provider {
   font-size: 11px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dropdown-item.active .dropdown-item-model {
@@ -1422,6 +1813,82 @@ onMounted(async () => {
   text-align: center;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.dropdown-section {
+  padding: 4px 0;
+}
+
+.dropdown-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.skill-icon-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.skill-icon-badge.knowledge {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.skill-icon-badge.utility {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.skill-icon-badge.agent {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
+
+.skill-icon-badge.general {
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--lumi-primary);
+}
+
+.skill-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.skill-badge.builtin {
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--lumi-primary);
+}
+
+.skill-badge.custom {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.skill-badge.mcp {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.mcp-icon {
+  color: #3b82f6;
+}
+
+.mcp-server-item {
+  cursor: default;
 }
 
 .dropdown-fade-enter-active {
@@ -1453,7 +1920,7 @@ onMounted(async () => {
   background: var(--lumi-primary);
   color: white;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
   margin-left: 4px;
 }
 
@@ -1499,6 +1966,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   z-index: 100;
+  backdrop-filter: blur(4px);
 }
 
 .add-dialog {
@@ -1508,7 +1976,13 @@ onMounted(async () => {
   width: 440px;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-xl);
+  animation: dialog-enter 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes dialog-enter {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .add-dialog h3 {
@@ -1544,16 +2018,14 @@ onMounted(async () => {
   width: 100%;
   padding: 10px 14px;
   background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
   border-radius: var(--radius-md);
   font-size: 13px;
   color: var(--text-primary);
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
 }
 
 .form-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  box-shadow: 0 0 0 2px var(--lumi-primary-glow);
 }
 
 .form-input::placeholder {
@@ -1575,7 +2047,7 @@ onMounted(async () => {
   height: 28px;
   border-radius: 50%;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
   border: 2px solid transparent;
 }
 
@@ -1604,7 +2076,7 @@ onMounted(async () => {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 300ms ease-in-out;
 }
 
 .dialog-btn.cancel {
@@ -1809,5 +2281,14 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.msg-appear-enter-active {
+  transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.msg-appear-enter-from {
+  opacity: 0;
+  transform: translateY(16px) scale(0.97);
 }
 </style>

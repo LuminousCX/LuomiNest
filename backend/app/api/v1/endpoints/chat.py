@@ -1,5 +1,6 @@
 import uuid
 import time
+from datetime import datetime, timezone
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from loguru import logger
@@ -13,10 +14,78 @@ from app.schemas.chat import (
     ConversationListResponse,
 )
 from app.runtime.provider.llm.adapter import llm_adapter
+from app.infrastructure.database.json_store import conversations_store, agents_store
+from app.runtime.plugin.skill.executor import SkillExecutor
+from app.runtime.plugin.skill.registry import SkillRegistry
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-_conversations: dict[str, dict] = {}
+_skill_executor = SkillExecutor()
+
+
+def _build_system_prompt_with_tools(agent_id: str | None) -> str:
+    base_prompt = ""
+    if agent_id:
+        agent = agents_store.get(agent_id)
+        if agent and agent.get("system_prompt"):
+            base_prompt = agent["system_prompt"]
+
+    available_skills = SkillRegistry.list_skills()
+    if not available_skills:
+        return base_prompt
+
+    tools_section = "\n\n## 可用工具\n\n你可以使用以下工具来帮助用户：\n\n"
+    for skill in available_skills:
+        if skill.get("is_active", True):
+            tools_section += f"### {skill['name']}\n{skill.get('description', '')}\n"
+            params = skill.get("parameters", {})
+            if params:
+                tools_section += "参数:\n"
+                for pname, pinfo in params.items():
+                    tools_section += f"- {pname}: {pinfo.get('description', '')} ({pinfo.get('type', 'string')})\n"
+            tools_section += "\n"
+
+    tools_section += "\n## 工具调用格式\n\n当需要使用工具时，请在回复中使用以下XML格式：\n\n<tool_call name=\"工具名\">\n{\"param1\": \"value1\", \"param2\": \"value2\"}\n</tool_call]\n\n你可以同时调用多个工具。调用工具后，系统会返回结果，你可以基于结果继续回答。\n如果不需要使用工具，直接回复用户即可。\n"
+
+    return base_prompt + tools_section
+
+
+def _parse_tool_calls(content: str) -> list[dict]:
+    import re
+    pattern = r'<tool_call\s+name="([^"]+)">\s*(.*?)\s*</tool_call'
+    matches = re.findall(pattern, content, re.DOTALL)
+    results = []
+    for name, args_str in matches:
+        try:
+            import json
+            args = json.loads(args_str) if args_str.strip() else {}
+        except json.JSONDecodeError:
+            args = {"raw_input": args_str}
+        results.append({"name": name, "arguments": args})
+    return results
+
+
+async def _execute_tool_calls(tool_calls: list[dict], agent_id: str | None = None) -> list[dict]:
+    results = []
+    for call in tool_calls:
+        try:
+            result = await _skill_executor.execute(
+                skill_name=call["name"],
+                arguments=call["arguments"],
+                agent_id=agent_id,
+            )
+            results.append({
+                "tool": call["name"],
+                "result": result,
+                "status": "success",
+            })
+        except Exception as e:
+            results.append({
+                "tool": call["name"],
+                "result": str(e),
+                "status": "error",
+            })
+    return results
 
 
 @router.post("/completions")
@@ -25,7 +94,12 @@ async def chat_completions(request: ChatRequest):
     resolved_provider = request.provider or llm_adapter.default_provider
     resolved_model = request.model or llm_adapter.get_provider(resolved_provider).default_model
     logger.info(f"[API] POST /chat/completions - provider={resolved_provider}, model={resolved_model}, stream={request.stream}")
-    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+
+    system_prompt = _build_system_prompt_with_tools(request.agent_id)
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.extend([{"role": m.role, "content": m.content} for m in request.messages])
     logger.debug(f"[API] POST /chat/completions - Message count: {len(messages)}")
 
     if request.stream:
@@ -50,6 +124,25 @@ async def chat_completions(request: ChatRequest):
             top_p=request.top_p,
             tools=request.tools,
         )
+
+        tool_calls = _parse_tool_calls(result)
+        if tool_calls:
+            tool_results = await _execute_tool_calls(tool_calls, request.agent_id)
+            tool_result_text = "\n\n".join(
+                f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
+            )
+            messages.append({"role": "assistant", "content": result})
+            messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
+
+            result = await llm_adapter.chat(
+                messages=messages,
+                provider_name=resolved_provider,
+                model=resolved_model,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                top_p=request.top_p,
+            )
+
         elapsed = time.time() - start_time
         logger.success(f"[API] POST /chat/completions - Success: elapsed={elapsed:.2f}s, response_len={len(result)}")
         return ChatResponse(
@@ -92,6 +185,18 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
             )
             yield f"data: {data.model_dump_json()}\n\n"
 
+        tool_calls = _parse_tool_calls(full_content)
+        if tool_calls:
+            tool_results = await _execute_tool_calls(tool_calls, request.agent_id)
+            for tr in tool_results:
+                result_chunk = ChatStreamChunk(
+                    id=chat_id,
+                    content=f"\n\n[Tool: {tr['tool']}] {tr['result']}\n\n",
+                    model=model,
+                    provider=provider,
+                )
+                yield f"data: {result_chunk.model_dump_json()}\n\n"
+
         done_data = ChatStreamChunk(
             id=chat_id,
             content="",
@@ -116,10 +221,12 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
 
 
 @router.get("/conversations", response_model=list[ConversationListResponse])
-async def list_conversations():
-    logger.info("[API] GET /chat/conversations - Listing all conversations")
+async def list_conversations(agent_id: str | None = None):
+    logger.info(f"[API] GET /chat/conversations - Listing conversations, agent_id={agent_id}")
     result = []
-    for conv_id, conv in _conversations.items():
+    for conv_id, conv in conversations_store.items():
+        if agent_id and conv.get("agent_id") != agent_id:
+            continue
         messages = conv.get("messages", [])
         last_msg = messages[-1]["content"][:50] if messages else None
         result.append(ConversationListResponse(
@@ -132,6 +239,7 @@ async def list_conversations():
             created_at=conv.get("created_at", ""),
             updated_at=conv.get("updated_at", ""),
         ))
+    result.sort(key=lambda x: x.updated_at, reverse=True)
     logger.success(f"[API] GET /chat/conversations - Success: returned {len(result)} conversations")
     return result
 
@@ -139,7 +247,6 @@ async def list_conversations():
 @router.post("/conversations", response_model=ConversationResponse)
 async def create_conversation(request: ConversationCreate):
     logger.info(f"[API] POST /chat/conversations - Creating conversation: title={request.title}, agent_id={request.agent_id}")
-    from datetime import datetime, timezone
     conv_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     conv = {
@@ -152,7 +259,7 @@ async def create_conversation(request: ConversationCreate):
         "created_at": now,
         "updated_at": now,
     }
-    _conversations[conv_id] = conv
+    conversations_store.set(conv_id, conv)
     logger.success(f"[API] POST /chat/conversations - Conversation created: id={conv_id}")
     return ConversationResponse(**conv)
 
@@ -160,7 +267,7 @@ async def create_conversation(request: ConversationCreate):
 @router.get("/conversations/{conv_id}", response_model=ConversationResponse)
 async def get_conversation(conv_id: str):
     logger.info(f"[API] GET /chat/conversations/{conv_id} - Fetching conversation")
-    conv = _conversations.get(conv_id)
+    conv = conversations_store.get(conv_id)
     if not conv:
         logger.error(f"[API] GET /chat/conversations/{conv_id} - Conversation not found")
         from app.core.exceptions import NotFoundError
@@ -172,26 +279,25 @@ async def get_conversation(conv_id: str):
 @router.delete("/conversations/{conv_id}")
 async def delete_conversation(conv_id: str):
     logger.info(f"[API] DELETE /chat/conversations/{conv_id} - Deleting conversation")
-    if conv_id in _conversations:
-        conv_title = _conversations[conv_id].get("title", "unknown")
-        del _conversations[conv_id]
+    conv = conversations_store.get(conv_id)
+    if conv:
+        conv_title = conv.get("title", "unknown")
+        conversations_store.delete(conv_id)
         logger.success(f"[API] DELETE /chat/conversations/{conv_id} - Conversation deleted: title={conv_title}")
     else:
         logger.warning(f"[API] DELETE /chat/conversations/{conv_id} - Conversation not found")
-    return {"data": {"deleted": True}}
+    return {"error": None, "data": {"deleted": True}}
 
 
 @router.post("/conversations/{conv_id}/messages")
 async def add_message(conv_id: str, request: ChatRequest):
     start_time = time.time()
     logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Adding message")
-    conv = _conversations.get(conv_id)
+    conv = conversations_store.get(conv_id)
     if not conv:
         logger.error(f"[API] POST /chat/conversations/{conv_id}/messages - Conversation not found")
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
-
-    from datetime import datetime, timezone
 
     existing_count = len(conv["messages"])
     for m in request.messages:
@@ -201,12 +307,16 @@ async def add_message(conv_id: str, request: ChatRequest):
         conv["messages"].append(msg_entry)
     new_msg_count = len(conv["messages"]) - existing_count
     conv["updated_at"] = datetime.now(timezone.utc).isoformat()
-    logger.debug(f"[API] POST /chat/conversations/{conv_id}/messages - Added {new_msg_count} new messages (skipped duplicates)")
+    logger.debug(f"[API] POST /chat/conversations/{conv_id}/messages - Added {new_msg_count} new messages")
 
     resolved_provider = request.provider or conv.get("provider") or llm_adapter.default_provider
     resolved_model = request.model or conv.get("model") or llm_adapter.get_provider(resolved_provider).default_model
 
-    all_messages = [{"role": m["role"], "content": m["content"]} for m in conv["messages"]]
+    system_prompt = _build_system_prompt_with_tools(conv.get("agent_id"))
+    all_messages = []
+    if system_prompt:
+        all_messages.append({"role": "system", "content": system_prompt})
+    all_messages.extend([{"role": m["role"], "content": m["content"]} for m in conv["messages"]])
 
     if request.stream:
         logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Starting stream response")
@@ -235,6 +345,19 @@ async def add_message(conv_id: str, request: ChatRequest):
                     )
                     yield f"data: {data.model_dump_json()}\n\n"
 
+                tool_calls = _parse_tool_calls(accumulated)
+                if tool_calls:
+                    tool_results = await _execute_tool_calls(tool_calls, conv.get("agent_id"))
+                    for tr in tool_results:
+                        result_chunk = ChatStreamChunk(
+                            id=chat_id,
+                            content=f"\n\n[Tool: {tr['tool']}] {tr['result']}\n\n",
+                            model=resolved_model,
+                            provider=resolved_provider,
+                        )
+                        yield f"data: {result_chunk.model_dump_json()}\n\n"
+                        accumulated += f"\n\n[Tool: {tr['tool']}] {tr['result']}\n\n"
+
                 done_data = ChatStreamChunk(
                     id=chat_id,
                     content="",
@@ -246,6 +369,7 @@ async def add_message(conv_id: str, request: ChatRequest):
 
                 conv["messages"].append({"role": "assistant", "content": accumulated})
                 conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+                conversations_store.set(conv_id, conv)
                 elapsed = time.time() - start_time
                 logger.success(f"[STREAM] Stream completed & saved: conv={conv_id}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
             except Exception as e:
@@ -280,8 +404,27 @@ async def add_message(conv_id: str, request: ChatRequest):
         tools=request.tools,
     )
 
+    tool_calls = _parse_tool_calls(result)
+    if tool_calls:
+        tool_results = await _execute_tool_calls(tool_calls, conv.get("agent_id"))
+        tool_result_text = "\n\n".join(
+            f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
+        )
+        all_messages.append({"role": "assistant", "content": result})
+        all_messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
+
+        result = await llm_adapter.chat(
+            messages=all_messages,
+            provider_name=resolved_provider,
+            model=resolved_model,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            top_p=request.top_p,
+        )
+
     conv["messages"].append({"role": "assistant", "content": result})
     conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+    conversations_store.set(conv_id, conv)
 
     elapsed = time.time() - start_time
     logger.success(f"[API] POST /chat/conversations/{conv_id}/messages - Success: elapsed={elapsed:.2f}s, response_len={len(result)}")

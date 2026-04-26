@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, watch, onMounted } from 'vue'
 import {
   Users,
   Bot,
@@ -9,287 +9,420 @@ import {
   Search,
   MoreVertical,
   Send,
-  Heart,
-  Smile,
-  Frown,
-  Laugh,
-  Meh,
-  Globe,
-  Shield,
   Sparkles,
   Hash,
-  CircleDot
+  ImagePlus,
+  Mic,
+  Trash2,
+  UserPlus,
+  X,
+  Loader2,
 } from 'lucide-vue-next'
+import { useSocialStore } from '../stores/social'
+import { useAgentStore } from '../stores/agent'
+import type { GroupInfo, GroupMessage } from '../types'
 
-interface AIFriend {
-  id: string
-  name: string
-  avatar: string
-  status: 'online' | 'idle' | 'busy'
-  personality: string
-  tagline: string
-  platform?: string
-}
+const socialStore = useSocialStore()
+const agentStore = useAgentStore()
 
-interface GroupChat {
-  id: string
-  name: string
-  type: 'ai-only' | 'mixed'
-  members: number
-  aiCount: number
-  lastMsg: string
-  lastTime: string
-}
-
-interface ChatMessage {
-  id: string
-  sender: string
-  senderType: 'user' | 'ai'
-  avatar: string
-  content: string
-  time: string
-  emotion?: string
-}
-
-const friends = ref<AIFriend[]>([
-  { id: 'alice', name: 'Alice-AI', avatar: 'A', status: 'online', personality: '理性分析师', tagline: '数据不会说谎，让我来帮你理清思路', platform: 'Discord' },
-  { id: 'bob', name: 'Bob-AI', avatar: 'B', status: 'online', personality: '创意伙伴', tagline: '今天有什么有趣的想法？一起头脑风暴吧！', platform: 'Telegram' },
-  { id: 'carol', name: 'Carol-AI', avatar: 'C', status: 'idle', personality: '温柔倾听者', tagline: '慢慢说，我在听呢~' },
-  { id: 'diana', name: 'Diana-AI', avatar: 'D', status: 'online', personality: '技术专家', tagline: '代码、架构、部署，有问必答' },
-  { id: 'eve', name: 'Eve-AI', avatar: 'E', status: 'busy', personality: '游戏搭子', tagline: '上号！今天打什么？' }
-])
-
-const groups = ref<GroupChat[]>([
-  { id: 'g1', name: 'AI 研究小组', type: 'ai-only', members: 4, aiCount: 4, lastMsg: 'Alice: 这篇论文的注意力机制很有意思...', lastTime: '刚刚' },
-  { id: 'g2', name: 'LuomiNest 开发组', type: 'mixed', members: 6, aiCount: 3, lastMsg: 'Bob: 前端动画效果已经调好了', lastTime: '5min' },
-  { id: 'g3', name: '闲聊茶话会', type: 'ai-only', members: 5, aiCount: 5, lastMsg: 'Carol: 今天天气真好呢~', lastTime: '12min' },
-  { id: 'g4', name: '项目协作群', type: 'mixed', members: 8, aiCount: 2, lastMsg: '用户小明: 帮我查一下明天会议安排', lastTime: '1h' }
-])
-
-const activeTab = ref<'friends' | 'groups'>('friends')
-
-const selectedFriend = ref<AIFriend | null>(null)
-const selectedGroup = ref<GroupChat | null>(null)
-
-const chatMessages = ref<ChatMessage[]>([
-  { id: 'm1', sender: 'Alice-AI', senderType: 'ai', avatar: 'A', content: '大家好！今天看到一篇关于稀疏注意力机制的论文，感觉对 LuomiNest 的记忆系统设计很有参考价值。', time: '10:23', emotion: 'happy' },
-  { id: 'm2', sender: 'Bob-AI', senderType: 'ai', avatar: 'B', content: '哦？是 MSA 那篇吗？16K 到 1亿 Token 的扩展确实很震撼。不过我觉得实际落地时还要考虑推理延迟。', time: '10:24', emotion: 'thinking' },
-  { id: 'm3', sender: 'Carol-AI', senderType: 'ai', avatar: 'C', content: '两位又在讨论技术了... 不过听起来很厉害的样子！能简单解释一下吗？', time: '10:25', emotion: 'curious' },
-  { id: 'm4', sender: 'Diana-AI', senderType: 'ai', avatar: 'D', content: '简单说就是：传统 AI 记忆像一张小桌子，放不下太多东西；MSA 的方案像是给 AI 盖了个无限大的仓库，还能快速找到需要的东西。', time: '10:26', emotion: 'neutral' },
-  { id: 'm5', sender: '你', senderType: 'user', avatar: 'U', content: '这个比喻很形象！Diana 说得对。我们可以在下一版架构文档中加入 MaaS 的概念。', time: '10:28' }
-])
-
+const activeTab = ref<'friends' | 'groups'>('groups')
+const selectedGroupId = ref<string | null>(null)
 const chatInput = ref('')
-const showEmoji = ref(false)
+const searchQuery = ref('')
+const messagesContainer = ref<HTMLElement | null>(null)
+const showAddAgentDialog = ref(false)
+const showCreateGroupDialog = ref(false)
+const addAgentRole = ref('')
+const addAgentId = ref('')
+const newGroupName = ref('')
+const newGroupDesc = ref('')
+const sendingMessage = ref(false)
 
-const currentChatName = computed(() => {
-  if (selectedFriend.value) return selectedFriend.value.name
-  if (selectedGroup.value) return selectedGroup.value.name
-  return ''
+const selectedGroup = computed(() => {
+  if (!selectedGroupId.value) return null
+  return socialStore.groups.find(g => g.id === selectedGroupId.value) || null
 })
 
-const isAIOnly = computed(() => {
-  return selectedGroup.value?.type === 'ai-only'
+const groupMessages = computed(() => socialStore.groupMessages)
+
+const filteredGroups = computed(() => {
+  if (!searchQuery.value) return socialStore.groups
+  const q = searchQuery.value.toLowerCase()
+  return socialStore.groups.filter(g => g.name.toLowerCase().includes(q))
 })
 
-function selectTab(tab: typeof activeTab.value) {
+const availableAgentsForGroup = computed(() => {
+  if (!selectedGroup.value) return agentStore.agents
+  const memberIds = selectedGroup.value.members.map(m => m.agentId)
+  return agentStore.agents.filter(a => !memberIds.includes(a.id))
+})
+
+const selectTab = (tab: typeof activeTab.value) => {
   activeTab.value = tab
-  selectedFriend.value = null
-  selectedGroup.value = null
+  selectedGroupId.value = null
 }
 
-function openFriendChat(friend: AIFriend) {
-  selectedFriend.value = friend
-  selectedGroup.value = null
+const openGroupChat = (group: GroupInfo) => {
+  selectedGroupId.value = group.id
+  socialStore.currentGroup = group
 }
 
-function openGroupChat(group: GroupChat) {
-  selectedGroup.value = group
-  selectedFriend.value = null
-}
-
-function sendMessage() {
-  if (!chatInput.value.trim()) return
-  const newMsg: ChatMessage = {
-    id: `m${Date.now()}`,
-    sender: '你',
-    senderType: 'user',
-    avatar: 'U',
-    content: chatInput.value,
-    time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+const sendMessage = async () => {
+  if (!chatInput.value.trim() || !selectedGroupId.value) return
+  sendingMessage.value = true
+  try {
+    await socialStore.sendGroupMessage(selectedGroupId.value, chatInput.value)
+    chatInput.value = ''
+    await nextTick()
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTo({ top: messagesContainer.value.scrollHeight, behavior: 'smooth' })
+    }
+  } catch (e) {
+    console.error('Failed to send message:', e)
+  } finally {
+    sendingMessage.value = false
   }
-  chatMessages.value.push(newMsg)
-  chatInput.value = ''
 }
+
+const createGroup = async () => {
+  if (!newGroupName.value.trim()) return
+  try {
+    const group = await socialStore.createGroup(newGroupName.value.trim(), newGroupDesc.value.trim())
+    newGroupName.value = ''
+    newGroupDesc.value = ''
+    showCreateGroupDialog.value = false
+    if (group) {
+      selectedGroupId.value = group.id
+    }
+  } catch (e) {
+    console.error('Failed to create group:', e)
+  }
+}
+
+const deleteGroup = async (groupId: string) => {
+  try {
+    await socialStore.deleteGroup(groupId)
+    if (selectedGroupId.value === groupId) {
+      selectedGroupId.value = null
+    }
+  } catch (e) {
+    console.error('Failed to delete group:', e)
+  }
+}
+
+const addAgentToGroup = async () => {
+  if (!addAgentId.value || !selectedGroupId.value) return
+  try {
+    await socialStore.addAgentToGroup(selectedGroupId.value, addAgentId.value, addAgentRole.value || '成员')
+    addAgentId.value = ''
+    addAgentRole.value = ''
+    showAddAgentDialog.value = false
+  } catch (e) {
+    console.error('Failed to add agent:', e)
+  }
+}
+
+const removeAgentFromGroup = async (groupId: string, agentId: string) => {
+  try {
+    await socialStore.removeAgentFromGroup(groupId, agentId)
+  } catch (e) {
+    console.error('Failed to remove agent:', e)
+  }
+}
+
+const formatTime = (dateStr: string) => {
+  try {
+    const d = new Date(dateStr)
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
+  }
+}
+
+watch(groupMessages, () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTo({ top: messagesContainer.value.scrollHeight, behavior: 'smooth' })
+    }
+  })
+}, { deep: true })
+
+onMounted(async () => {
+  await Promise.all([
+    socialStore.fetchGroups(),
+    socialStore.fetchAvailableAgents(),
+    agentStore.fetchAgents(),
+  ])
+})
 </script>
 
 <template>
   <div class="social-view">
     <div class="social-header">
       <div class="header-left">
-        <Users :size="20" />
-        <h2>AI 社交</h2>
-        <span class="header-badge">AI-AI · 人机混合群</span>
+        <div class="header-icon-wrap">
+          <Users :size="18" />
+        </div>
+        <div class="header-text">
+          <h2>AI 社交</h2>
+          <span class="header-sub">LuomiNest Social</span>
+        </div>
       </div>
       <div class="header-actions">
-        <button class="h-btn primary"><Plus :size="15" /> 新建群组</button>
-        <button class="h-btn"><Globe :size="15" /> 平台映射</button>
+        <button class="h-btn primary" @click="showCreateGroupDialog = true">
+          <Plus :size="14" />
+          新建群组
+        </button>
       </div>
     </div>
 
     <div class="social-body">
-      <div class="social-sidebar animate-slide-in-left">
+      <div class="social-sidebar">
         <div class="sidebar-tabs">
-          <button :class="['tab-btn', { active: activeTab === 'friends' }]" @click="selectTab('friends')">
-            <Bot :size="14" /> AI 好友
+          <button
+            :class="['tab-btn', { active: activeTab === 'friends' }]"
+            @click="selectTab('friends')"
+          >
+            <Bot :size="14" />
+            <span>AI Agents</span>
+            <span class="tab-count">{{ agentStore.agents.length }}</span>
           </button>
-          <button :class="['tab-btn', { active: activeTab === 'groups' }]" @click="selectTab('groups')">
-            <Users :size="14" /> 群组
+          <button
+            :class="['tab-btn', { active: activeTab === 'groups' }]"
+            @click="selectTab('groups')"
+          >
+            <Users :size="14" />
+            <span>群组</span>
+            <span class="tab-count">{{ socialStore.groups.length }}</span>
           </button>
         </div>
 
         <div class="sidebar-search">
-          <Search :size="13" />
-          <input type="text" placeholder="搜索..." />
+          <Search :size="14" class="search-icon" />
+          <input v-model="searchQuery" type="text" placeholder="搜索..." />
         </div>
 
         <div v-if="activeTab === 'friends'" class="friend-list">
           <div
-            v-for="friend in friends"
-            :key="friend.id"
-            :class="['friend-item', { selected: selectedFriend?.id === friend.id }]"
-            @click="openFriendChat(friend)"
+            v-for="agent in agentStore.agents"
+            :key="agent.id"
+            class="friend-item"
           >
             <div class="friend-avatar-wrap">
-              <span class="friend-avatar">{{ friend.avatar }}</span>
-              <span :class="['status-dot', friend.status]"></span>
+              <span class="friend-avatar" :style="{ background: agent.color + '14', color: agent.color }">
+                <Bot :size="18" />
+              </span>
+              <span class="status-indicator online"></span>
             </div>
             <div class="friend-info">
-              <span class="friend-name">{{ friend.name }}</span>
-              <span class="friend-personality">{{ friend.personality }}</span>
+              <div class="friend-top-row">
+                <span class="friend-name">{{ agent.name }}</span>
+              </div>
+              <span class="friend-personality">{{ agent.description || '暂无描述' }}</span>
             </div>
-            <span v-if="friend.platform" class="friend-platform">{{ friend.platform }}</span>
+          </div>
+          <div v-if="agentStore.agents.length === 0" class="list-empty">
+            <Bot :size="24" />
+            <p>暂无 Agent，请先在聊天页面创建</p>
           </div>
         </div>
 
         <div v-else class="group-list">
           <div
-            v-for="group in groups"
+            v-for="group in filteredGroups"
             :key="group.id"
-            :class="['group-item', { selected: selectedGroup?.id === group.id }]"
+            :class="['group-item', { selected: selectedGroupId === group.id }]"
             @click="openGroupChat(group)"
           >
             <div :class="['group-icon', group.type]">
               <Hash :size="16" />
             </div>
             <div class="group-info">
-              <span class="group-name">{{ group.name }}</span>
-              <span class="group-preview">{{ group.lastMsg }}</span>
+              <div class="group-top-row">
+                <span class="group-name">{{ group.name }}</span>
+                <span class="group-member-count">{{ group.aiCount }} AI</span>
+              </div>
+              <span class="group-preview">{{ group.description || '暂无描述' }}</span>
             </div>
-            <div class="group-meta">
-              <span :class="['group-type-badge', group.type]">
-                {{ group.type === 'ai-only' ? 'AI群' : '混合' }}
-              </span>
-              <span class="group-time">{{ group.lastTime }}</span>
-            </div>
+            <button class="group-delete-btn" @click.stop="deleteGroup(group.id)">
+              <Trash2 :size="12" />
+            </button>
+          </div>
+          <div v-if="socialStore.groups.length === 0" class="list-empty">
+            <Users :size="24" />
+            <p>暂无群组，点击右上角创建</p>
           </div>
         </div>
       </div>
 
-      <div class="social-chat animate-fade-up" v-if="selectedFriend || selectedGroup">
+      <div class="social-chat" v-if="selectedGroup">
         <div class="chat-header">
           <div class="chat-title-area">
-            <component :is="selectedFriend ? Bot : Users" :size="18" />
-            <h3>{{ currentChatName }}</h3>
-            <span v-if="isAIOnly" class="chat-ai-badge"><Sparkles :size="11" /> 纯AI群</span>
-            <span v-else-if="selectedFriend" class="chat-status-badge">{{ selectedFriend.personality }}</span>
+            <div class="chat-avatar-mini">
+              <Users :size="14" />
+            </div>
+            <div class="chat-title-text">
+              <h3>{{ selectedGroup.name }}</h3>
+              <span class="chat-status-line">
+                {{ selectedGroup.members.length }} 成员 · {{ selectedGroup.aiCount }} AI
+              </span>
+            </div>
           </div>
           <div class="chat-actions">
-            <button class="chat-action-btn"><Shield :size="15" /></button>
+            <button class="chat-action-btn" title="添加 Agent" @click="showAddAgentDialog = true">
+              <UserPlus :size="15" />
+            </button>
             <button class="chat-action-btn"><MoreVertical :size="15" /></button>
           </div>
         </div>
 
-        <div class="chat-messages">
-          <TransitionGroup name="msg-list" tag="div" class="msg-container">
+        <div class="chat-members-bar" v-if="selectedGroup.members.length > 0">
+          <div class="members-scroll">
             <div
-              v-for="(msg, idx) in chatMessages"
-              :key="msg.id"
-              :class="['msg-row', msg.senderType]"
-              :style="{ '--msg-delay': `${idx * 0.06}s` }"
+              v-for="member in selectedGroup.members"
+              :key="member.agentId"
+              class="member-chip"
+              :style="{ background: member.color + '14', color: member.color }"
             >
-              <div v-if="msg.senderType === 'ai'" class="msg-avatar">
-                <span>{{ msg.avatar }}</span>
-              </div>
-              <div :class="['msg-bubble', msg.senderType]">
-                <span class="msg-sender" v-if="msg.senderType === 'ai'">{{ msg.sender }}</span>
-                <p class="msg-text">{{ msg.content }}</p>
-                <div class="msg-footer">
-                  <span class="msg-time">{{ msg.time }}</span>
-                  <span v-if="msg.emotion" :class="['msg-emotion', msg.emotion]">
-                    <component :is="{ happy: Smile, thinking: Frown, curious: Laugh, neutral: Meh }[msg.emotion as string] ?? Smile" :size="12" />
-                  </span>
-                </div>
-              </div>
-              <div v-if="msg.senderType === 'user'" class="msg-avatar user-avatar">
-                <User :size="18" />
+              <Bot :size="12" />
+              <span>{{ member.name }}</span>
+              <span class="member-role">{{ member.role }}</span>
+              <button class="member-remove" @click="removeAgentFromGroup(selectedGroup!.id, member.agentId)">
+                <X :size="10" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div ref="messagesContainer" class="chat-messages">
+          <div
+            v-for="msg in groupMessages"
+            :key="msg.id"
+            :class="['msg-row', msg.senderType]"
+          >
+            <div v-if="msg.senderType === 'agent'" class="msg-avatar">
+              <div class="avatar-agent">
+                <Bot :size="14" />
               </div>
             </div>
-          </TransitionGroup>
+            <div :class="['msg-bubble', msg.senderType]">
+              <span class="msg-sender" v-if="msg.senderType === 'agent'">
+                {{ msg.senderName || 'AI' }}
+                <span v-if="msg.role" class="msg-role-tag">{{ msg.role }}</span>
+              </span>
+              <p class="msg-text">{{ msg.content }}</p>
+              <span class="msg-time">{{ formatTime(msg.timestamp) }}</span>
+            </div>
+            <div v-if="msg.senderType === 'user'" class="msg-avatar user-avatar">
+              <User :size="16" />
+            </div>
+          </div>
+          <div v-if="groupMessages.length === 0" class="chat-empty">
+            <MessageCircle :size="32" />
+            <p>群聊已创建，添加 Agent 开始协作</p>
+          </div>
         </div>
 
         <div class="chat-input-bar">
-          <div class="input-wrapper">
-            <button class="input-tool-btn" @click="showEmoji = !showEmoji">
-              <Smile :size="17" />
-            </button>
+          <div class="input-tools">
+            <button class="input-tool-btn"><ImagePlus :size="16" /></button>
+            <button class="input-tool-btn"><Mic :size="16" /></button>
+          </div>
+          <div class="input-main">
             <input
               v-model="chatInput"
               type="text"
-              placeholder="输入消息..."
+              placeholder="发送消息到群聊..."
+              :disabled="sendingMessage"
               @keydown.enter="sendMessage"
             />
-            <button class="input-send-btn" @click="sendMessage" :disabled="!chatInput.trim()">
-              <Send :size="16" />
+            <button class="input-send-btn" @click="sendMessage" :disabled="!chatInput.trim() || sendingMessage">
+              <Loader2 v-if="sendingMessage" :size="15" class="spin-animation" />
+              <Send v-else :size="15" />
             </button>
           </div>
         </div>
       </div>
 
-      <div class="social-empty animate-scale-in" v-else>
-        <div class="empty-icon-wrap">
-          <MessageCircle :size="48" class="empty-icon" />
-          <div class="empty-rings">
-            <span class="ring ring-1"></span>
-            <span class="ring ring-2"></span>
-            <span class="ring ring-3"></span>
+      <div class="social-empty" v-else>
+        <div class="empty-visual">
+          <div class="empty-orb">
+            <MessageCircle :size="36" />
           </div>
         </div>
-        <h3>选择一个对话开始</h3>
-        <p>每个 AI 实例都是独立的社交节点，支持 AI-AI 纯 AI 对话和人机混合群聊</p>
-        <div class="empty-features">
-          <div class="ef-item">
-            <CircleDot :size="14" /><span>AI 身份管理</span>
+        <h3>选择一个群组开始协作</h3>
+        <p>在左侧选择已有群组，或创建新群组邀请 AI Agent 加入</p>
+        <button class="empty-action-btn" @click="showCreateGroupDialog = true">
+          <Plus :size="16" />
+          创建群组
+        </button>
+      </div>
+    </div>
+
+    <Transition name="selection-fade">
+      <div v-if="showCreateGroupDialog" class="dialog-overlay" @click.self="showCreateGroupDialog = false">
+        <div class="add-dialog">
+          <h3>创建群组</h3>
+          <div class="form-group">
+            <label class="form-label">群组名称 <span class="required-mark">*</span></label>
+            <input v-model="newGroupName" type="text" class="form-input" placeholder="如: 项目讨论组" />
           </div>
-          <div class="ef-item">
-            <Heart :size="14" /><span>好友关系系统</span>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <input v-model="newGroupDesc" type="text" class="form-input" placeholder="群组用途描述" />
           </div>
-          <div class="ef-item">
-            <Users :size="14" /><span>多平台映射</span>
+          <div class="dialog-actions">
+            <button class="dialog-btn cancel" @click="showCreateGroupDialog = false">取消</button>
+            <button class="dialog-btn confirm" :disabled="!newGroupName.trim()" @click="createGroup">创建</button>
           </div>
         </div>
       </div>
-    </div>
+    </Transition>
+
+    <Transition name="selection-fade">
+      <div v-if="showAddAgentDialog" class="dialog-overlay" @click.self="showAddAgentDialog = false">
+        <div class="add-dialog">
+          <h3>添加 Agent 到群组</h3>
+          <div v-if="availableAgentsForGroup.length === 0" class="dialog-empty">
+            <Bot :size="24" />
+            <p>所有 Agent 都已在群组中，或暂无可用 Agent</p>
+          </div>
+          <div v-else class="agent-select-list">
+            <div
+              v-for="agent in availableAgentsForGroup"
+              :key="agent.id"
+              :class="['agent-select-item', { selected: addAgentId === agent.id }]"
+              @click="addAgentId = agent.id"
+            >
+              <div class="agent-select-avatar" :style="{ background: agent.color + '14', color: agent.color }">
+                <Bot :size="18" />
+              </div>
+              <div class="agent-select-info">
+                <span class="agent-select-name">{{ agent.name }}</span>
+                <span class="agent-select-desc">{{ agent.description || '暂无描述' }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="addAgentId" class="form-group">
+            <label class="form-label">角色定位</label>
+            <input v-model="addAgentRole" type="text" class="form-input" placeholder="如: 代码审查员、文档撰写者" />
+          </div>
+          <div class="dialog-actions">
+            <button class="dialog-btn cancel" @click="showAddAgentDialog = false">取消</button>
+            <button class="dialog-btn confirm" :disabled="!addAgentId" @click="addAgentToGroup">添加</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
 .social-view {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--workspace-bg);
   overflow: hidden;
 }
 
@@ -298,36 +431,42 @@ function sendMessage() {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--divider-soft);
   flex-shrink: 0;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--text-muted);
+  gap: 12px;
 }
 
-.header-left h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
+.header-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.header-badge {
+.header-text h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.header-sub {
   font-size: 11px;
-  padding: 3px 10px;
-  border-radius: 20px;
-  background: rgba(236, 72, 153, 0.1);
-  color: #ec4899;
-  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .header-actions {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .h-btn {
@@ -335,49 +474,51 @@ function sendMessage() {
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
-  color: var(--text-muted);
+  font-weight: 500;
   cursor: pointer;
   transition: all 300ms ease-in-out;
-  white-space: nowrap;
-}
-
-.h-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
 }
 
 .h-btn.primary {
-  background: #ec4899;
-  color: #fff;
+  background: var(--lumi-primary);
+  color: white;
 }
 
 .h-btn.primary:hover {
-  background: #db2777;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(236, 72, 153, 0.35);
+  background: var(--lumi-primary-hover);
+}
+
+.h-btn.ghost {
+  color: var(--text-secondary);
+  background: var(--workspace-card);
+}
+
+.h-btn.ghost:hover {
+  background: var(--workspace-hover);
 }
 
 .social-body {
-  display: flex;
   flex: 1;
-  min-height: 0;
+  display: flex;
   overflow: hidden;
 }
 
 .social-sidebar {
-  width: 290px;
-  border-right: 1px solid var(--border);
+  width: 280px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--divider-vertical);
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-  background: var(--surface);
+  overflow: hidden;
 }
 
 .sidebar-tabs {
   display: flex;
-  border-bottom: 1px solid var(--border);
+  padding: 8px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .tab-btn {
@@ -386,41 +527,56 @@ function sendMessage() {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 12px;
+  padding: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 500;
   color: var(--text-muted);
   cursor: pointer;
   transition: all 300ms ease-in-out;
-  border-bottom: 2px solid transparent;
 }
 
 .tab-btn:hover {
-  color: var(--text);
-  background: var(--surface-hover);
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
 }
 
 .tab-btn.active {
-  color: #ec4899;
-  border-bottom-color: #ec4899;
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.tab-count {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--workspace-panel);
+}
+
+.tab-btn.active .tab-count {
+  background: rgba(13, 148, 136, 0.15);
 }
 
 .sidebar-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 10px 12px;
-  padding: 7px 12px;
-  border-radius: 9px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  padding: 8px 12px;
+  flex-shrink: 0;
+}
+
+.search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .sidebar-search input {
-  width: 100%;
-  font-size: 12px;
-  background: transparent;
-  color: var(--text);
+  flex: 1;
+  background: var(--workspace-panel);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
 }
 
 .sidebar-search input::placeholder {
@@ -439,17 +595,13 @@ function sendMessage() {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 300ms ease-in-out;
 }
 
 .friend-item:hover {
-  background: var(--surface-hover);
-}
-
-.friend-item.selected {
-  background: rgba(236, 72, 153, 0.08);
+  background: var(--workspace-hover);
 }
 
 .friend-avatar-wrap {
@@ -458,44 +610,46 @@ function sendMessage() {
 }
 
 .friend-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
-  background: linear-gradient(135deg, #ec4899, #8b5cf6);
-  color: #fff;
 }
 
-.status-dot {
+.status-indicator {
   position: absolute;
-  bottom: 0;
-  right: 0;
+  bottom: -1px;
+  right: -1px;
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid var(--surface);
+  border: 2px solid var(--workspace-bg);
+  background: var(--status-color, #78716c);
 }
 
-.status-dot.online { background: #22c55e; }
-.status-dot.idle { background: #f59e0b; }
-.status-dot.busy { background: #ef4444; }
+.status-indicator.online {
+  --status-color: #22c55e;
+}
 
 .friend-info {
   flex: 1;
   min-width: 0;
+}
+
+.friend-top-row {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
 }
 
 .friend-name {
   font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .friend-personality {
@@ -504,15 +658,7 @@ function sendMessage() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.friend-platform {
-  font-size: 10px;
-  padding: 2px 7px;
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text-muted);
-  flex-shrink: 0;
+  display: block;
 }
 
 .group-item {
@@ -520,23 +666,24 @@ function sendMessage() {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 300ms ease-in-out;
+  position: relative;
 }
 
 .group-item:hover {
-  background: var(--surface-hover);
+  background: var(--workspace-hover);
 }
 
 .group-item.selected {
-  background: rgba(236, 72, 153, 0.08);
+  background: var(--lumi-primary-light);
 }
 
 .group-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -544,27 +691,35 @@ function sendMessage() {
 }
 
 .group-icon.ai-only {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(236, 72, 153, 0.1));
-  color: #a78bfa;
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
 }
 
 .group-icon.mixed {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(13, 148, 136, 0.1));
-  color: #22c55e;
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--lumi-primary);
 }
 
 .group-info {
   flex: 1;
   min-width: 0;
+}
+
+.group-top-row {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
 }
 
 .group-name {
   font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.group-member-count {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .group-preview {
@@ -573,43 +728,50 @@ function sendMessage() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
 }
 
-.group-meta {
+.group-delete-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: all 300ms ease-in-out;
   flex-shrink: 0;
 }
 
-.group-type-badge {
-  font-size: 10px;
-  padding: 1px 7px;
-  border-radius: 8px;
-  font-weight: 500;
+.group-item:hover .group-delete-btn {
+  opacity: 1;
 }
 
-.group-type-badge.ai-only {
-  background: rgba(139, 92, 246, 0.12);
-  color: #a78bfa;
+.group-delete-btn:hover {
+  background: var(--lumi-accent-light);
+  color: var(--lumi-accent);
 }
 
-.group-type-badge.mixed {
-  background: rgba(34, 197, 94, 0.12);
-  color: #22c55e;
-}
-
-.group-time {
-  font-size: 10px;
+.list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
   color: var(--text-muted);
+  gap: 8px;
+}
+
+.list-empty p {
+  font-size: 12px;
+  text-align: center;
 }
 
 .social-chat {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 0;
   overflow: hidden;
 }
 
@@ -617,37 +779,36 @@ function sendMessage() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--divider-soft);
   flex-shrink: 0;
 }
 
 .chat-title-area {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #ec4899;
+  gap: 10px;
 }
 
-.chat-title-area h3 {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.chat-ai-badge {
+.chat-avatar-mini {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: rgba(139, 92, 246, 0.12);
-  color: #a78bfa;
-  font-weight: 500;
+  justify-content: center;
 }
 
-.chat-status-badge {
+.chat-title-text h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.chat-status-line {
   font-size: 11px;
   color: var(--text-muted);
 }
@@ -660,201 +821,268 @@ function sendMessage() {
 .chat-action-btn {
   width: 32px;
   height: 32px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
   color: var(--text-muted);
-  cursor: pointer;
-  transition: all 200ms ease-in-out;
+  transition: all 300ms ease-in-out;
 }
 
 .chat-action-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
+}
+
+.chat-members-bar {
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--divider-soft);
+  flex-shrink: 0;
+}
+
+.members-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.members-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.member-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.member-role {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.member-remove {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 200ms ease-in-out;
+}
+
+.member-chip:hover .member-remove {
+  opacity: 1;
+}
+
+.member-remove:hover {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
-}
-
-.msg-container {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  padding: 16px 20px;
 }
 
 .msg-row {
+  margin-bottom: 16px;
   display: flex;
-  gap: 10px;
-  max-width: 80%;
-  opacity: 0;
-  animation: msg-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: var(--msg-delay);
+  gap: 8px;
+  align-items: flex-start;
+  animation: msg-slide-in 0.3s ease-out both;
 }
 
-@keyframes msg-enter {
-  from { opacity: 0; transform: translateY(10px); }
+@keyframes msg-slide-in {
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.msg-row.ai {
-  align-self: flex-start;
-}
-
 .msg-row.user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
+  justify-content: flex-end;
 }
 
 .msg-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #ec4899, #8b5cf6);
-  color: #fff;
   flex-shrink: 0;
 }
 
-.user-avatar {
-  background: linear-gradient(135deg, var(--lumi-primary), #0d9488);
-  color: #fff;
+.avatar-agent {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .msg-bubble {
+  max-width: 70%;
   padding: 10px 14px;
-  border-radius: 14px;
-  max-width: 100%;
-}
-
-.msg-bubble.ai {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-top-left-radius: 4px;
-}
-
-.msg-bubble.user {
-  background: linear-gradient(135deg, #ec4899, #db2777);
-  color: #fff;
-  border-top-right-radius: 4px;
-}
-
-.msg-sender {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  color: #ec4899;
-  margin-bottom: 4px;
-}
-
-.msg-text {
+  border-radius: var(--radius-lg);
   font-size: 13px;
   line-height: 1.6;
 }
 
-.msg-footer {
+.msg-bubble.agent {
+  background: var(--workspace-card);
+  color: var(--text-primary);
+  border-top-left-radius: 4px;
+}
+
+.msg-bubble.user {
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(13, 148, 136, 0.04));
+  color: var(--text-primary);
+  border-top-right-radius: 4px;
+}
+
+.msg-sender {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.msg-role-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--lumi-primary);
+  font-weight: 500;
+}
+
+.msg-text {
+  margin: 0;
+  word-break: break-word;
 }
 
 .msg-time {
   font-size: 10px;
-  opacity: 0.5;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
 }
 
-.msg-emotion {
-  display: flex;
-  align-items: center;
-}
-
-.msg-emotion.happy { color: #f59e0b; }
-.msg-emotion.thinking { color: #6366f1; }
-.msg-emotion.curious { color: #22c55e; }
-.msg-emotion.neutral { color: var(--text-muted); }
-
-.chat-input-bar {
-  padding: 14px 20px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  transition: all 300ms ease-in-out;
-}
-
-.input-wrapper:focus-within {
-  border-color: #ec4899;
-  box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.12);
-}
-
-.input-tool-btn {
-  width: 34px;
-  height: 34px;
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--lumi-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+}
+
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
   color: var(--text-muted);
-  cursor: pointer;
-  transition: all 200ms ease-in-out;
+  gap: 8px;
+}
+
+.chat-empty p {
+  font-size: 13px;
+}
+
+.chat-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--divider-soft);
   flex-shrink: 0;
 }
 
+.input-tools {
+  display: flex;
+  gap: 4px;
+}
+
+.input-tool-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all 300ms ease-in-out;
+}
+
 .input-tool-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
 }
 
-.input-wrapper input {
+.input-main {
   flex: 1;
-  font-size: 13px;
-  background: transparent;
-  color: var(--text);
+  display: flex;
+  gap: 8px;
+  background: var(--workspace-card);
+  border-radius: var(--radius-lg);
+  padding: 4px 4px 4px 14px;
+  box-shadow: var(--shadow-xs);
 }
 
-.input-wrapper input::placeholder {
+.input-main input {
+  flex: 1;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 6px 0;
+}
+
+.input-main input::placeholder {
   color: var(--text-muted);
 }
 
 .input-send-btn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--lumi-primary);
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  background: #ec4899;
-  color: #fff;
   cursor: pointer;
   transition: all 300ms ease-in-out;
   flex-shrink: 0;
 }
 
 .input-send-btn:hover:not(:disabled) {
-  background: #db2777;
-  transform: scale(1.05);
-  box-shadow: 0 4px 14px rgba(236, 72, 153, 0.35);
+  background: var(--lumi-primary-hover);
 }
 
 .input-send-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .social-empty {
@@ -863,108 +1091,239 @@ function sendMessage() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 40px;
+  gap: 12px;
 }
 
-.empty-icon-wrap {
+.empty-visual {
   position: relative;
+  margin-bottom: 8px;
+}
+
+.empty-orb {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.empty-icon {
-  color: var(--text-muted);
-  opacity: 0.3;
-}
-
-.empty-rings {
-  position: absolute;
-  inset: -20px;
-}
-
-.ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1px solid rgba(236, 72, 153, 0.1);
-  animation: ring-pulse 3s ease-in-out infinite;
-}
-
-.ring-1 { animation-delay: 0s; }
-.ring-2 { inset: -10px; animation-delay: 0.5s; }
-.ring-3 { inset: -20px; animation-delay: 1s; }
-
-@keyframes ring-pulse {
-  0%, 100% { opacity: 0.3; transform: scale(0.95); }
-  50% { opacity: 0.7; transform: scale(1.05); }
-}
-
 .social-empty h3 {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-primary);
+  margin: 0;
 }
 
 .social-empty p {
   font-size: 13px;
   color: var(--text-muted);
-  text-align: center;
-  max-width: 360px;
-  line-height: 1.6;
+  margin: 0;
 }
 
-.empty-features {
-  display: flex;
-  gap: 20px;
-  margin-top: 8px;
-}
-
-.ef-item {
+.empty-action-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  background: var(--lumi-primary);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
+  margin-top: 8px;
+}
+
+.empty-action-btn:hover {
+  background: var(--lumi-primary-hover);
+  transform: translateY(-1px);
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(4px);
+}
+
+.add-dialog {
+  background: var(--workspace-card);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-xl);
+  animation: dialog-enter 0.3s ease-out both;
+}
+
+@keyframes dialog-enter {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.add-dialog h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 16px;
+}
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.required-mark {
+  color: var(--lumi-accent);
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--workspace-panel);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: all 300ms ease-in-out;
+}
+
+.form-input:focus {
+  box-shadow: 0 0 0 2px var(--lumi-primary-glow);
+}
+
+.form-input::placeholder {
   color: var(--text-muted);
 }
 
-.ef-item svg {
-  color: #ec4899;
+.agent-select-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 12px;
 }
 
-@keyframes slide-in-left {
-  0% { opacity: 0; transform: translateX(-20px); }
-  100% { opacity: 1; transform: translateX(0); }
+.agent-select-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
 }
 
-.animate-slide-in-left {
-  animation: slide-in-left 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+.agent-select-item:hover {
+  background: var(--workspace-hover);
 }
 
-@keyframes fade-up {
-  0% { opacity: 0; transform: translateY(20px); }
-  100% { opacity: 1; transform: translateY(0); }
+.agent-select-item.selected {
+  background: var(--lumi-primary-light);
 }
 
-.animate-fade-up {
-  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+.agent-select-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-@keyframes scale-in {
-  0% { opacity: 0; transform: scale(0.94); }
-  100% { opacity: 1; transform: scale(1); }
+.agent-select-info {
+  flex: 1;
+  min-width: 0;
 }
 
-.animate-scale-in {
-  animation: scale-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+.agent-select-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.msg-list-enter-active {
-  transition: all 350ms ease-in-out;
+.agent-select-desc {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.msg-list-enter-from {
-  opacity: 0;
-  transform: translateY(12px);
+
+.dialog-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  color: var(--text-muted);
+  gap: 8px;
+}
+
+.dialog-empty p {
+  font-size: 12px;
+  text-align: center;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.dialog-btn {
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
+}
+
+.dialog-btn.cancel {
+  color: var(--text-muted);
+  background: var(--workspace-panel);
+}
+
+.dialog-btn.cancel:hover {
+  background: var(--workspace-hover);
+}
+
+.dialog-btn.confirm {
+  color: white;
+  background: var(--lumi-primary);
+}
+
+.dialog-btn.confirm:hover:not(:disabled) {
+  background: var(--lumi-primary-hover);
+}
+
+.dialog-btn.confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.selection-fade-enter-active {
+  animation: lumi-fade-in 0.3s ease-out;
+}
+
+.selection-fade-leave-active {
+  animation: lumi-fade-in 0.2s ease-out reverse;
 }
 </style>

@@ -10,6 +10,8 @@ export interface AgentProfile {
   capabilities: string[]
   isActive: boolean
   isMain?: boolean
+  skills: string[]
+  mcpServers: string[]
   createdAt?: string
   updatedAt?: string
 }
@@ -146,6 +148,25 @@ export interface ModelInfo {
   modified_at?: string
 }
 
+export interface TTSConfig {
+  provider: string
+  model: string
+  voice: string
+  speed: number
+  baseUrl: string
+  apiKeySet: boolean
+}
+
+export interface STTConfig {
+  provider: string
+  model: string
+  language: string
+  autoSend: boolean
+  autoSendDelay: number
+  baseUrl: string
+  apiKeySet: boolean
+}
+
 export interface ModelConfig {
   defaultProvider: string
   defaultModel: string
@@ -163,6 +184,16 @@ export interface ModelConfig {
   visionProvider?: string
   visionModel?: string
   visionTemperature?: number
+  reasonerEffort?: string
+  ttsProvider?: string
+  ttsModel?: string
+  ttsVoice?: string
+  ttsSpeed?: number
+  sttProvider?: string
+  sttModel?: string
+  sttLanguage?: string
+  sttAutoSend?: boolean
+  sttAutoSendDelay?: number
 }
 
 export interface ProviderTemplate {
@@ -172,6 +203,9 @@ export interface ProviderTemplate {
   baseUrl: string
   defaultModel: string
   description: string
+  category: 'cloud' | 'local' | 'aggregator'
+  color: string
+  initials: string
 }
 
 export interface Tab {
@@ -205,6 +239,85 @@ export interface ApiError {
 export interface ApiResponse<T> {
   data?: T
   error?: ApiError
+}
+
+export interface SkillDefinition {
+  name: string
+  description: string
+  category: string
+  parameters: Record<string, SkillParameter>
+  isActive: boolean
+  isBuiltin: boolean
+  promptTemplate?: string
+  tags: string[]
+}
+
+export interface SkillParameter {
+  type: string
+  description: string
+  required: boolean
+  default?: any
+}
+
+export interface MCPServer {
+  name: string
+  command: string
+  args: string[]
+  env?: Record<string, string>
+  transport: 'stdio' | 'sse' | 'http'
+  url?: string
+  description: string
+  isActive: boolean
+}
+
+export interface MCPTool {
+  name: string
+  description: string
+  parameters: Record<string, any>
+}
+
+export interface GroupInfo {
+  id: string
+  name: string
+  description: string
+  type: string
+  members: GroupMember[]
+  memberCount: number
+  aiCount: number
+  lastMessage?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GroupMember {
+  agentId: string
+  name: string
+  type: 'agent' | 'user'
+  role: string
+  color: string
+}
+
+export interface GroupMessage {
+  id: string
+  senderId: string
+  senderName?: string
+  senderType: 'user' | 'agent'
+  content: string
+  timestamp: string
+  role?: string
+}
+
+export interface RAGSearchResult {
+  content: string
+  source: string
+  score: number
+  metadata: Record<string, any>
+}
+
+export interface ToolCallResult {
+  tool: string
+  result: string
+  status: 'success' | 'error'
 }
 
 export {}

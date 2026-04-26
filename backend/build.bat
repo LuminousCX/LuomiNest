@@ -20,6 +20,7 @@ python --version
 echo.
 echo [2/4] Creating virtual environment...
 if not exist ".venv" (
+    python -m pip install --upgrade pip
     python -m venv .venv
     if %ERRORLEVEL% neq 0 (
         echo [ERROR] Failed to create virtual environment

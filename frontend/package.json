@@ -27,7 +27,6 @@
     "pinia": "^3.0.4",
     "pixi-live2d-display-mulmotion": "0.5.0-mm-6",
     "pixi.js": "^7.4.3",
-    "playwright": "^1.59.1",
     "vue-router": "^5.0.4"
   },
   "devDependencies": {
@@ -63,17 +62,22 @@
         ]
       },
       {
-        "from": "src/renderer/public/live2d",
-        "to": "live2d",
+        "from": "resources/cubism-core",
+        "to": "cubism-core",
         "filter": [
           "**/*"
         ]
       },
       {
-        "from": "src/renderer/public/cubism-core",
-        "to": "cubism-core",
+        "from": "src/renderer/public/live2d",
+        "to": "live2d",
         "filter": [
-          "**/*"
+          "**/*.moc3",
+          "**/*.model3.json",
+          "**/*.physics3.json",
+          "**/*.pose3.json",
+          "**/*.cdi3.json",
+          "**/*.png"
         ]
       }
     ],
