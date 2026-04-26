@@ -117,6 +117,10 @@ class RAGIndexer:
                 json.dump(chunks, f, ensure_ascii=False, indent=2)
             os.replace(temp_file, index_file)
 
+    def _read_file_sync(self, file_path: str) -> str:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+
     async def _save_chunks(self, chunks: list[dict]) -> None:
         await asyncio.to_thread(self._save_chunks_sync, chunks)
 
@@ -129,9 +133,7 @@ class RAGIndexer:
                 logger.warning(f"[RAG] File too large ({file_size} bytes), skipping")
                 return 0
 
-            content = await asyncio.to_thread(
-                lambda: open(file_path, "r", encoding="utf-8").read()
-            )
+            content = await asyncio.to_thread(self._read_file_sync, file_path)
             return await self.index_text(content, source=file_path, metadata=metadata)
         except Exception as e:
             logger.error(f"[RAG] Failed to index file {file_path}: {e}")
