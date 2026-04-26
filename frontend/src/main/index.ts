@@ -82,7 +82,6 @@ const saveWindowState = (): void => {
       isMaximized,
     })
   } catch {
-    // ignore save errors
   }
 }
 
@@ -195,11 +194,21 @@ const createTray = (): void => {
   tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus() })
 }
 
+const LUOMINEST_BUILTIN_MODELS = [
+  { id: 'llny', name: 'Llny', url: 'luominest-avatar://llny/llny.model3.json', scale: 0.25, type: 'live2d', tags: ['Default', 'Cubism4', 'Built-in'] },
+  { id: 'hiyori', name: 'Hiyori', url: 'luominest-avatar://hiyori/Hiyori.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] },
+  { id: 'shizuku', name: 'Shizuku', url: 'luominest-avatar://shizuku/shizuku.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] }
+]
+
 const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
   if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
     desktopPetWindow.show()
+    desktopPetWindow.setFocusable(true)
+    desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
     if (modelInfo) {
-      desktopPetWindow.webContents.send('desktop-pet:load-model', modelInfo)
+      setTimeout(() => {
+        desktopPetWindow?.webContents.send('desktop-pet:load-model', modelInfo)
+      }, 300)
     }
     return
   }
@@ -225,23 +234,27 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      backgroundThrottling: false
     }
   })
 
-  desktopPetWindow.setVisibleOnAllWorkspaces(true)
+  desktopPetWindow.setVisibleOnAllWorkspaces(true, { makeKey: false })
   desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
+
   if (isMac) {
     desktopPetWindow.setIgnoreMouseEvents(true)
   } else {
     desktopPetWindow.setIgnoreMouseEvents(true, { forward: true })
   }
 
+  const allModels = [...LUOMINEST_BUILTIN_MODELS, ...loadImportedModels()]
+
   const petContextMenu = Menu.buildFromTemplate([
     { label: 'Show Main Window', click: () => { mainWindow?.show(); mainWindow?.focus() } },
     { type: 'separator' },
     { label: 'Switch Model', submenu: [
-      ...LUOMINEST_BUILTIN_MODELS.map(m => ({
+      ...allModels.map(m => ({
         label: m.name,
         click: () => {
           desktopPetWindow?.webContents.send('desktop-pet:load-model', m)
@@ -252,6 +265,13 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
     { label: 'Play Motion', submenu: [
       { label: 'Idle', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-motion', 'Idle', 0) },
       { label: 'TapBody', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-motion', 'TapBody', 0) }
+    ]},
+    { label: 'Set Emotion', submenu: [
+      { label: 'Happy', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-expression', 'happy') },
+      { label: 'Sad', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-expression', 'sad') },
+      { label: 'Neutral', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-expression', 'neutral') },
+      { label: 'Angry', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-expression', 'angry') },
+      { label: 'Surprise', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-expression', 'surprise') }
     ]},
     { type: 'separator' },
     { label: 'Hide Pet', click: () => desktopPetWindow?.hide() },
@@ -266,6 +286,7 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
     petContextMenu.popup()
   })
 
+  ipcMain.removeHandler('desktop-pet:set-ignore-mouse-events')
   ipcMain.on('desktop-pet:set-ignore-mouse-events', (_event, ignore: boolean) => {
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       if (isMac) {
@@ -297,16 +318,16 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
     if (modelInfo) {
       setTimeout(() => {
         desktopPetWindow?.webContents.send('desktop-pet:load-model', modelInfo)
-      }, 500)
+      }, 800)
+    }
+  })
+
+  desktopPetWindow.webContents.on('did-finish-load', () => {
+    if (modelInfo) {
+      desktopPetWindow?.webContents.send('desktop-pet:load-model', modelInfo)
     }
   })
 }
-
-const LUOMINEST_BUILTIN_MODELS = [
-  { id: 'llny', name: 'Llny', url: 'luominest-avatar://llny/llny.model3.json', scale: 0.25, type: 'live2d', tags: ['Default', 'Cubism4', 'Built-in'] },
-  { id: 'hiyori', name: 'Hiyori', url: 'luominest-avatar://hiyori/Hiyori.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] },
-  { id: 'shizuku', name: 'Shizuku', url: 'luominest-avatar://shizuku/shizuku.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] }
-]
 
 const createMenu = (): void => {
   const template: MenuItemConstructorOptions[] = [
@@ -621,6 +642,67 @@ function registerIpcHandlers(): void {
     }
     return { success: false }
   })
+
+  ipcMain.handle('desktop-pet:setPosition', async (_e, x: number, y: number) => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:set-position', x, y)
+      return { success: true }
+    }
+    return { success: false }
+  })
+
+  ipcMain.handle('desktop-pet:setScale', async (_e, scale: number) => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:set-scale', scale)
+      return { success: true }
+    }
+    return { success: false }
+  })
+
+  ipcMain.handle('desktop-pet:driveLipSync', async (_e, value: number) => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:lip-sync', value)
+      return { success: true }
+    }
+    return { success: false }
+  })
+
+  ipcMain.handle('desktop-pet:drivePadEmotion', async (_e, pleasure: number, arousal: number, dominance: number) => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:pad-emotion', { pleasure, arousal, dominance })
+      return { success: true }
+    }
+    return { success: false }
+  })
+
+  ipcMain.handle('desktop-pet:setCoreParam', async (_e, paramId: string, value: number) => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:set-core-param', paramId, value)
+      return { success: true }
+    }
+    return { success: false }
+  })
+
+  ipcMain.handle('desktop-pet:getModelCapabilities', async () => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      return new Promise((resolve) => {
+        const requestId = `cap-${Date.now()}`
+        const handler = (_event: any, id: string, capabilities: any) => {
+          if (id === requestId) {
+            ipcMain.removeListener('desktop-pet:model-capabilities-response', handler)
+            resolve(capabilities)
+          }
+        }
+        ipcMain.on('desktop-pet:model-capabilities-response', handler)
+        desktopPetWindow!.webContents.send('desktop-pet:get-model-capabilities', requestId)
+        setTimeout(() => {
+          ipcMain.removeListener('desktop-pet:model-capabilities-response', handler)
+          resolve(null)
+        }, 3000)
+      })
+    }
+    return null
+  })
 }
 
 const MIME_MAP: Record<string, string> = {
@@ -673,7 +755,11 @@ app.whenReady().then(async () => {
     const mimeType = MIME_MAP[ext ?? ''] ?? 'application/octet-stream'
     const data = readFileSync(filePath)
     return new Response(data, {
-      headers: { 'content-type': mimeType, 'access-control-allow-origin': '*' }
+      headers: {
+        'content-type': mimeType,
+        'access-control-allow-origin': '*',
+        'cache-control': 'no-cache'
+      }
     })
   })
 

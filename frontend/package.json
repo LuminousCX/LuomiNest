@@ -78,7 +78,11 @@
           "**/*.physics3.json",
           "**/*.pose3.json",
           "**/*.cdi3.json",
-          "**/*.png"
+          "**/*.exp3.json",
+          "**/*.motion3.json",
+          "**/*.userdata3.json",
+          "**/*.png",
+          "**/*.jpg"
         ]
       }
     ],

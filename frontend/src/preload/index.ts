@@ -75,7 +75,15 @@ const api = {
     show: () => ipcRenderer.invoke('desktop-pet:show'),
     hide: () => ipcRenderer.invoke('desktop-pet:hide'),
     triggerMotion: (group: string, index: number) => ipcRenderer.invoke('desktop-pet:triggerMotion', group, index),
-    triggerExpression: (name: string) => ipcRenderer.invoke('desktop-pet:triggerExpression', name)
+    triggerExpression: (name: string) => ipcRenderer.invoke('desktop-pet:triggerExpression', name),
+    setPosition: (x: number, y: number) => ipcRenderer.invoke('desktop-pet:setPosition', x, y),
+    setScale: (scale: number) => ipcRenderer.invoke('desktop-pet:setScale', scale),
+    driveLipSync: (value: number) => ipcRenderer.invoke('desktop-pet:driveLipSync', value),
+    drivePadEmotion: (pleasure: number, arousal: number, dominance: number) =>
+      ipcRenderer.invoke('desktop-pet:drivePadEmotion', pleasure, arousal, dominance),
+    setCoreParam: (paramId: string, value: number) =>
+      ipcRenderer.invoke('desktop-pet:setCoreParam', paramId, value),
+    getModelCapabilities: () => ipcRenderer.invoke('desktop-pet:getModelCapabilities')
   }
 }
 

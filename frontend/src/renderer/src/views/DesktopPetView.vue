@@ -17,6 +17,8 @@ interface PetModelInfo {
   tags: string[]
 }
 
+const EXPRESSION_BLOCKLIST = ['水印', 'watermark', 'copyright', 'credit', 'logo']
+
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const isModelReady = ref(false)
 const isLoading = ref(false)
@@ -25,6 +27,8 @@ const currentModelName = ref('')
 const isIslandExpanded = ref(false)
 const isAlwaysOnTop = ref(true)
 const isMousePassthrough = ref(true)
+const availableMotions = ref<string[]>([])
+const availableExpressions = ref<string[]>([])
 
 let pixiApp: Application | null = null
 let currentModel: Live2DModel | null = null
@@ -32,10 +36,57 @@ let isDragging = false
 let dragOffset = { x: 0, y: 0 }
 let islandHideTimer: ReturnType<typeof setTimeout> | null = null
 let wheelHandler: ((e: WheelEvent) => void) | null = null
+let focusTargetX = 0
+let focusTargetY = 0
+let focusCurrentX = 0
+let focusCurrentY = 0
+let focusTickerCallback: (() => void) | null = null
+let retryCount = 0
+const MAX_RETRIES = 3
 
 const setIgnoreMouseEvents = (ignore: boolean) => {
   isMousePassthrough.value = ignore
   window.electron?.ipcRenderer.send('desktop-pet:set-ignore-mouse-events', ignore)
+}
+
+const setCoreParam = (paramId: string, value: number) => {
+  if (!currentModel) return
+  try {
+    const internalModel = currentModel.internalModel
+    if (internalModel && 'coreModel' in internalModel) {
+      const coreModel = (internalModel as any).coreModel
+      if (coreModel && typeof coreModel.setParameterValueById === 'function') {
+        coreModel.setParameterValueById(paramId, value)
+      }
+    }
+  } catch {
+  }
+}
+
+const scanModelCapabilities = (model: Live2DModel) => {
+  const motions: string[] = []
+  const expressions: string[] = []
+  try {
+    const internalModel = model.internalModel as any
+    const settings = internalModel?.settings
+    if (settings?.motions) {
+      for (const group of Object.keys(settings.motions)) {
+        motions.push(group)
+      }
+    }
+    if (settings?.expressions) {
+      for (const exp of settings.expressions) {
+        const name = exp?.Name ?? ''
+        const isBlocked = EXPRESSION_BLOCKLIST.some(
+          blocked => name.toLowerCase().includes(blocked.toLowerCase())
+        )
+        if (name && !isBlocked) expressions.push(name)
+      }
+    }
+  } catch {
+  }
+  availableMotions.value = motions
+  availableExpressions.value = expressions
 }
 
 const loadModel = async (url: string, scale: number) => {
@@ -56,12 +107,19 @@ const loadModel = async (url: string, scale: number) => {
       })
     }
 
-    if (!pixiApp) return
+    if (!pixiApp) {
+      throw new Error('Failed to initialize PixiJS application')
+    }
 
     if (currentModel) {
       pixiApp.stage.removeChild(currentModel)
       currentModel.destroy()
       currentModel = null
+    }
+
+    if (focusTickerCallback) {
+      Ticker.shared.remove(focusTickerCallback)
+      focusTickerCallback = null
     }
 
     const model = await Live2DModel.from(url, {
@@ -75,6 +133,18 @@ const loadModel = async (url: string, scale: number) => {
     model.anchor.set(0.5, 0.5)
     model.x = window.innerWidth * 0.75
     model.y = window.innerHeight * 0.55
+
+    try {
+      const internalModel = model.internalModel as any
+      if (internalModel?.coreModel) {
+        const coreModel = internalModel.coreModel
+        const param14Idx = coreModel.getParameterIndex('Param14')
+        if (param14Idx >= 0) {
+          coreModel.setParameterValueByIndex(param14Idx, 0)
+        }
+      }
+    } catch {
+    }
 
     model.on('hit', (hitAreas: string[]) => {
       if (hitAreas.includes('body')) {
@@ -96,18 +166,33 @@ const loadModel = async (url: string, scale: number) => {
 
     setupDrag(model)
     setupWheel(model)
+    setupFocus(model)
 
     pixiApp.stage.addChild(model)
     currentModel = model
     isModelReady.value = true
+    retryCount = 0
+
+    scanModelCapabilities(model)
 
     try {
       await model.motion('Idle', 0)
     } catch {
-      // idle motion may not exist
     }
+
+    console.info('[INFO][LuomiNestDesktopPet] Model loaded successfully:', url)
   } catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Failed to load model'
+    const message = err instanceof Error ? err.message : 'Failed to load model'
+    loadError.value = message
+    console.error('[ERROR][LuomiNestDesktopPet] Model load error:', message)
+
+    if (retryCount < MAX_RETRIES) {
+      retryCount++
+      console.info(`[INFO][LuomiNestDesktopPet] Retrying (${retryCount}/${MAX_RETRIES})...`)
+      setTimeout(async () => {
+        await loadModel(url, scale)
+      }, 1000 * retryCount)
+    }
   } finally {
     isLoading.value = false
   }
@@ -155,6 +240,64 @@ const setupWheel = (model: Live2DModel) => {
   window.addEventListener('wheel', wheelHandler, { passive: false })
 }
 
+const setupFocus = (model: Live2DModel) => {
+  if (focusTickerCallback) {
+    Ticker.shared.remove(focusTickerCallback)
+    focusTickerCallback = null
+  }
+
+  const FOCUS_DAMPING = 0.15
+
+  const onMouseMove = (e: MouseEvent) => {
+    focusTargetX = (e.clientX / window.innerWidth) * 2 - 1
+    focusTargetY = -((e.clientY / window.innerHeight) * 2 - 1)
+  }
+
+  const onMouseLeave = () => {
+    focusTargetX = 0
+    focusTargetY = 0
+  }
+
+  focusTickerCallback = () => {
+    if (!currentModel) return
+    focusCurrentX += (focusTargetX - focusCurrentX) * FOCUS_DAMPING
+    focusCurrentY += (focusTargetY - focusCurrentY) * FOCUS_DAMPING
+
+    try {
+      const internalModel = currentModel.internalModel as any
+      const coreModel = internalModel?.coreModel
+      if (!coreModel) return
+
+      const angleXParam = coreModel.getParameterIndex('ParamAngleX')
+      const angleYParam = coreModel.getParameterIndex('ParamAngleY')
+      const eyeBallXParam = coreModel.getParameterIndex('ParamEyeBallX')
+      const eyeBallYParam = coreModel.getParameterIndex('ParamEyeBallY')
+
+      if (angleXParam >= 0) {
+        const base = coreModel.getParameterValueByIndex(angleXParam)
+        coreModel.setParameterValueByIndex(angleXParam, base * 0.6 + focusCurrentX * 15 * 0.4)
+      }
+      if (angleYParam >= 0) {
+        const base = coreModel.getParameterValueByIndex(angleYParam)
+        coreModel.setParameterValueByIndex(angleYParam, base * 0.6 + focusCurrentY * 15 * 0.4)
+      }
+      if (eyeBallXParam >= 0) {
+        const base = coreModel.getParameterValueByIndex(eyeBallXParam)
+        coreModel.setParameterValueByIndex(eyeBallXParam, base * 0.5 + focusCurrentX * 0.5)
+      }
+      if (eyeBallYParam >= 0) {
+        const base = coreModel.getParameterValueByIndex(eyeBallYParam)
+        coreModel.setParameterValueByIndex(eyeBallYParam, base * 0.5 + focusCurrentY * 0.5)
+      }
+    } catch {
+    }
+  }
+
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseleave', onMouseLeave)
+  Ticker.shared.add(focusTickerCallback)
+}
+
 const toggleIsland = () => {
   isIslandExpanded.value = !isIslandExpanded.value
   if (isIslandExpanded.value) {
@@ -191,7 +334,6 @@ const handleResetPose = async () => {
     try {
       await currentModel.motion('Idle', 0)
     } catch {
-      // ignore
     }
   }
   resetIslandTimer()
@@ -224,7 +366,6 @@ onMounted(async () => {
     try {
       modelToLoad = JSON.parse(decodeURIComponent(modelInfoStr))
     } catch {
-      // ignore
     }
   }
 
@@ -241,6 +382,7 @@ onMounted(async () => {
 
   window.electron?.ipcRenderer.on('desktop-pet:load-model', async (_event: any, modelInfo: PetModelInfo) => {
     currentModelName.value = modelInfo.name
+    retryCount = 0
     if (canvasRef.value) {
       await loadModel(modelInfo.url, modelInfo.scale)
     }
@@ -251,7 +393,6 @@ onMounted(async () => {
       try {
         await currentModel.motion(group, index)
       } catch {
-        // motion may not exist
       }
     }
   })
@@ -261,9 +402,61 @@ onMounted(async () => {
       try {
         await currentModel.expression(name)
       } catch {
-        // expression may not exist
       }
     }
+  })
+
+  window.electron?.ipcRenderer.on('desktop-pet:set-position', (_event: any, x: number, y: number) => {
+    if (currentModel) {
+      currentModel.x = x
+      currentModel.y = y
+    }
+  })
+
+  window.electron?.ipcRenderer.on('desktop-pet:set-scale', (_event: any, scale: number) => {
+    if (currentModel) {
+      const clamped = Math.max(0.05, Math.min(3.0, scale))
+      currentModel.scale.set(clamped)
+    }
+  })
+
+  window.electron?.ipcRenderer.on('desktop-pet:lip-sync', (_event: any, value: number) => {
+    const clamped = Math.max(0, Math.min(1, value))
+    setCoreParam('ParamMouthOpenY', clamped)
+  })
+
+  window.electron?.ipcRenderer.on('desktop-pet:pad-emotion', (_event: any, pad: { pleasure: number; arousal: number; dominance: number }) => {
+    const { pleasure, arousal, dominance } = pad
+    let emotionId = 'neutral'
+    if (pleasure > 0.3 && arousal > 0.3) emotionId = 'happy'
+    else if (pleasure < -0.3 && arousal > 0) emotionId = 'angry'
+    else if (pleasure < -0.3 && arousal < -0.2) emotionId = 'sad'
+    else if (pleasure > 0 && arousal < -0.3) emotionId = 'love'
+    else if (arousal > 0.5 && dominance < -0.2) emotionId = 'surprise'
+
+    if (currentModel) {
+      try {
+        currentModel.expression(emotionId)
+      } catch {
+      }
+    }
+  })
+
+  window.electron?.ipcRenderer.on('desktop-pet:set-core-param', (_event: any, paramId: string, value: number) => {
+    setCoreParam(paramId, value)
+  })
+
+  window.electron?.ipcRenderer.on('desktop-pet:get-model-capabilities', (_event: any, requestId: string) => {
+    window.electron?.ipcRenderer.send(
+      'desktop-pet:model-capabilities-response',
+      requestId,
+      {
+        motions: availableMotions.value,
+        expressions: availableExpressions.value,
+        modelName: currentModelName.value,
+        isReady: isModelReady.value
+      }
+    )
   })
 
   window.addEventListener('contextmenu', (e) => {
@@ -276,6 +469,10 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (islandHideTimer) clearTimeout(islandHideTimer)
+  if (focusTickerCallback) {
+    Ticker.shared.remove(focusTickerCallback)
+    focusTickerCallback = null
+  }
   if (wheelHandler) {
     window.removeEventListener('wheel', wheelHandler)
     wheelHandler = null
@@ -515,16 +712,13 @@ onBeforeUnmount(() => {
 .island-enter-active {
   transition: all 400ms cubic-bezier(0.32, 0.72, 0, 1);
 }
-
 .island-leave-active {
   transition: all 300ms cubic-bezier(0.32, 0.72, 0, 1);
 }
-
 .island-enter-from {
   opacity: 0;
   transform: translateY(12px) scale(0.9);
 }
-
 .island-leave-to {
   opacity: 0;
   transform: translateY(8px) scale(0.95);

@@ -1,11 +1,18 @@
-import type { LuomiNestModelInfo } from '@/composables/useLuomiNestLive2D'
+export interface LuomiNestModelInfo {
+  id: string
+  name: string
+  url: string
+  scale: number
+  type: 'live2d' | 'vrm' | 'pixel'
+  tags: string[]
+}
 
 export const LUOMINEST_BUILTIN_MODELS: LuomiNestModelInfo[] = [
   {
     id: 'llny',
     name: 'Llny',
     url: 'luominest-avatar://llny/llny.model3.json',
-    scale: 0.15,
+    scale: 0.25,
     type: 'live2d',
     tags: ['Default', 'Cubism4', 'Built-in']
   },
@@ -13,7 +20,7 @@ export const LUOMINEST_BUILTIN_MODELS: LuomiNestModelInfo[] = [
     id: 'hiyori',
     name: 'Hiyori',
     url: 'luominest-avatar://hiyori/Hiyori.model3.json',
-    scale: 0.15,
+    scale: 0.25,
     type: 'live2d',
     tags: ['Cubism4', 'Built-in']
   },
@@ -21,13 +28,17 @@ export const LUOMINEST_BUILTIN_MODELS: LuomiNestModelInfo[] = [
     id: 'shizuku',
     name: 'Shizuku',
     url: 'luominest-avatar://shizuku/shizuku.model3.json',
-    scale: 0.15,
+    scale: 0.25,
     type: 'live2d',
     tags: ['Cubism4', 'Built-in']
   }
 ]
 
 export const LUOMINEST_MODEL_ACCEPT_EXTENSIONS = '.model3.json'
+
+export const validateLuomiNestModelUrl = (url: string): boolean => {
+  return url.startsWith('luominest-avatar://') && url.endsWith('.model3.json')
+}
 
 export const validateLuomiNestModel3Json = (data: unknown): { valid: boolean; errors: string[] } => {
   const errors: string[] = []

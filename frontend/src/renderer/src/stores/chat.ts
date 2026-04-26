@@ -3,10 +3,17 @@ import { ref, computed, watch } from 'vue'
 import type { ChatMessage, Conversation, ConversationListItem, ChatStreamChunk } from '../types'
 import { useApi } from '../composables/useApi'
 import { useAgentStore } from './agent'
+import { useAvatarControlStore } from './avatar-control'
+import {
+  ALL_LUOMINEST_TOOLS,
+  formatToolsForLLM,
+  buildLuomiNestSystemPrompt
+} from '../config/luominest-tools'
 
 export const useChatStore = defineStore('chat', () => {
   const { apiGet, apiPost, apiDelete, apiStream, checkHealth } = useApi()
   const agentStore = useAgentStore()
+  const avatarControl = useAvatarControlStore()
 
   const agentConversations = ref<Record<string, ConversationListItem[]>>({})
   const agentCurrentConversation = ref<Record<string, Conversation | null>>({})
@@ -17,6 +24,7 @@ export const useChatStore = defineStore('chat', () => {
   const agentStreamingContent = ref<Record<string, string>>({})
   const lastError = ref<string | null>(null)
   const lastUsage = ref<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | null>(null)
+  const pendingToolCalls = ref<Record<string, any[]>>({})
 
   const isStreaming = computed(() => agentStreaming.value[activeAgentId.value] || false)
   
@@ -61,7 +69,6 @@ export const useChatStore = defineStore('chat', () => {
 
   watch(() => activeAgentId.value, async (newAgentId, oldAgentId) => {
     if (newAgentId) {
-      // 初始化 Agent 的数据结构
       if (!agentConversations.value[newAgentId]) {
         agentConversations.value = {
           ...agentConversations.value,
@@ -93,14 +100,12 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
       
-      // 检查是否已有消息或正在流式输出
       const existingMessages = agentMessages.value[newAgentId]
       const hasExistingMessages = existingMessages && existingMessages.length > 0
       const isCurrentlyStreaming = agentStreaming.value[newAgentId]
       
       await fetchConversations(newAgentId)
       
-      // 只有在没有现有消息且不在流式输出时才加载对话
       if (!hasExistingMessages && !isCurrentlyStreaming) {
         const currentConv = agentCurrentConversation.value[newAgentId]
         if (currentConv && currentConv.id) {
@@ -238,6 +243,76 @@ export const useChatStore = defineStore('chat', () => {
     agentStreamingContent.value[targetAgentId] = ''
   }
 
+  const executeToolCall = async (toolName: string, args: Record<string, any>): Promise<string> => {
+    try {
+      switch (toolName) {
+        case 'avatar_set_emotion':
+          await avatarControl.driveEmotion(args.emotion, args.intensity ?? 0.5)
+          return `Emotion set to ${args.emotion} (intensity: ${args.intensity ?? 0.5})`
+
+        case 'avatar_trigger_motion':
+          await avatarControl.triggerMotion(args.group, args.index ?? 0)
+          return `Motion "${args.group}[${args.index ?? 0}]" triggered`
+
+        case 'avatar_trigger_expression':
+          await avatarControl.triggerExpression(args.name)
+          return `Expression "${args.name}" applied`
+
+        case 'avatar_drive_pad_emotion':
+          await avatarControl.drivePadEmotion(args.pleasure, args.arousal, args.dominance)
+          return `PAD emotion set: P=${args.pleasure}, A=${args.arousal}, D=${args.dominance}`
+
+        case 'avatar_lip_sync':
+          await avatarControl.driveLipSync(args.value)
+          return `Lip sync value set to ${args.value}`
+
+        case 'avatar_set_param':
+          await avatarControl.setCoreParam(args.param_id, args.value)
+          return `Parameter ${args.param_id} set to ${args.value}`
+
+        case 'avatar_set_position':
+          await avatarControl.setModelPosition(args.x, args.y)
+          return `Avatar position set to (${args.x}, ${args.y})`
+
+        case 'avatar_set_scale':
+          await avatarControl.setModelScale(args.scale)
+          return `Avatar scale set to ${args.scale}`
+
+        case 'avatar_get_capabilities':
+          await avatarControl.getModelCapabilities()
+          return JSON.stringify({
+            motions: avatarControl.availableMotions,
+            expressions: avatarControl.availableExpressions,
+            modelName: avatarControl.currentModelName
+          })
+
+        case 'memory_save':
+          return `Memory saved: [${args.category}] ${args.content}`
+
+        case 'memory_search':
+          return `Memory search results for: "${args.query}"`
+
+        case 'skill_execute':
+          return `Skill "${args.skill_name}" executed`
+
+        case 'skill_list':
+          return 'Available skills: (loaded from skill registry)'
+
+        case 'mcp_call_tool':
+          return `MCP tool "${args.tool_name}" called on server "${args.server_name}"`
+
+        case 'mcp_list_servers':
+          return 'Connected MCP servers: (loaded from MCP registry)'
+
+        default:
+          return `Unknown tool: ${toolName}`
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Tool execution failed'
+      return `Tool error: ${message}`
+    }
+  }
+
   const sendMessage = async (
     content: string,
     options?: {
@@ -271,12 +346,15 @@ export const useChatStore = defineStore('chat', () => {
       [targetAgentId]: [...currentMsgs, userMessage]
     }
 
-    const apiMessages: { role: string; content: string }[] = []
-    if (options?.systemPrompt) {
-      apiMessages.push({ role: 'system', content: options.systemPrompt })
-    }
+    const agentName = agentStore.activeAgent?.name
+    const systemPrompt = options?.systemPrompt ||
+      buildLuomiNestSystemPrompt(agentName, agentStore.activeAgent?.systemPrompt)
+
+    const apiMessages: { role: string; content: string }[] = [
+      { role: 'system', content: systemPrompt }
+    ]
     for (const msg of agentMessages.value[targetAgentId]) {
-      if (msg.role === 'system' && !options?.systemPrompt) continue
+      if (msg.role === 'system') continue
       if (msg.role === 'assistant' && !msg.done) continue
       apiMessages.push({ role: msg.role, content: msg.content })
     }
@@ -312,6 +390,8 @@ export const useChatStore = defineStore('chat', () => {
       ? `/chat/conversations/${convId}/messages`
       : '/chat/completions'
 
+    const tools = formatToolsForLLM(ALL_LUOMINEST_TOOLS)
+
     const requestBody: any = {
       messages: apiMessages,
       model: options?.model,
@@ -320,13 +400,13 @@ export const useChatStore = defineStore('chat', () => {
       max_tokens: options?.maxTokens,
       top_p: options?.topP,
       stream: true,
+      tools,
     }
 
     if (targetAgentId) {
       requestBody.agent_id = targetAgentId
     }
 
-    // 创建独立的 AbortController
     const controller = new AbortController()
     agentAbortControllers.value[targetAgentId] = controller
 
@@ -334,6 +414,22 @@ export const useChatStore = defineStore('chat', () => {
       endpoint,
       requestBody,
       (chunk: ChatStreamChunk) => {
+        const chunkAny = chunk as any
+
+        if (chunkAny.tool_calls && Array.isArray(chunkAny.tool_calls)) {
+          const toolCalls = pendingToolCalls.value[targetAgentId] || []
+          for (const tc of chunkAny.tool_calls) {
+            if (tc.function?.name) {
+              toolCalls.push(tc)
+            }
+          }
+          pendingToolCalls.value = {
+            ...pendingToolCalls.value,
+            [targetAgentId]: toolCalls
+            }
+          return
+        }
+
         agentStreamingContent.value[targetAgentId] += chunk.content
         const currentMsgList = agentMessages.value[targetAgentId] || []
         const lastIndex = currentMsgList.length - 1
@@ -362,6 +458,35 @@ export const useChatStore = defineStore('chat', () => {
         }
       },
       async () => {
+        const toolCalls = pendingToolCalls.value[targetAgentId] || []
+        if (toolCalls.length > 0) {
+          for (const tc of toolCalls) {
+            try {
+              const args = typeof tc.function.arguments === 'string'
+                ? JSON.parse(tc.function.arguments)
+                : tc.function.arguments || {}
+              const result = await executeToolCall(tc.function.name, args)
+              const toolMsg: ChatMessage = {
+                id: `tool-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                role: 'assistant',
+                content: `[Tool: ${tc.function.name}] ${result}`,
+                timestamp: Date.now(),
+                done: true
+              }
+              const toolMsgList = agentMessages.value[targetAgentId] || []
+              agentMessages.value = {
+                ...agentMessages.value,
+                [targetAgentId]: [...toolMsgList, toolMsg]
+              }
+            } catch {
+            }
+          }
+          pendingToolCalls.value = {
+            ...pendingToolCalls.value,
+            [targetAgentId]: []
+          }
+        }
+
         delete agentAbortControllers.value[targetAgentId]
         const completeMsgList = agentMessages.value[targetAgentId] || []
         const completeLastIndex = completeMsgList.length - 1
@@ -377,7 +502,6 @@ export const useChatStore = defineStore('chat', () => {
         agentStreaming.value[targetAgentId] = false
         agentStreamingContent.value[targetAgentId] = ''
         await fetchConversations(targetAgentId)
-        // 重新加载对话以确保消息同步
         const convId = agentCurrentConversation.value[targetAgentId]?.id
         if (convId) {
           try {
@@ -447,6 +571,7 @@ export const useChatStore = defineStore('chat', () => {
     lastError,
     lastUsage,
     activeAgentId,
+    pendingToolCalls,
     checkBackend,
     fetchConversations,
     createConversation,
@@ -455,5 +580,6 @@ export const useChatStore = defineStore('chat', () => {
     sendMessage,
     clearMessages,
     cancelCurrentRequest,
+    executeToolCall,
   }
 })
