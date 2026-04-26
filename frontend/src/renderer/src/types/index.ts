@@ -173,10 +173,17 @@ export interface ModelConfig {
   defaultTemperature: number
   defaultMaxTokens: number
   defaultTopP: number
+  fastProvider?: string
+  fastModel?: string
+  fastTemperature?: number
+  fastMaxTokens?: number
   reasonerProvider?: string
   reasonerModel?: string
   reasonerTemperature?: number
   reasonerMaxTokens?: number
+  visionProvider?: string
+  visionModel?: string
+  visionTemperature?: number
   reasonerEffort?: string
   ttsProvider?: string
   ttsModel?: string

@@ -82,7 +82,6 @@ const saveWindowState = (): void => {
       isMaximized,
     })
   } catch {
-    // ignore save errors
   }
 }
 
@@ -195,11 +194,21 @@ const createTray = (): void => {
   tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus() })
 }
 
+const LUOMINEST_BUILTIN_MODELS = [
+  { id: 'llny', name: 'Llny', url: 'luominest-avatar://llny/llny.model3.json', scale: 0.25, type: 'live2d', tags: ['Default', 'Cubism4', 'Built-in'] },
+  { id: 'hiyori', name: 'Hiyori', url: 'luominest-avatar://hiyori/Hiyori.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] },
+  { id: 'shizuku', name: 'Shizuku', url: 'luominest-avatar://shizuku/shizuku.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] }
+]
+
 const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
   if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
     desktopPetWindow.show()
+    desktopPetWindow.setFocusable(true)
+    desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
     if (modelInfo) {
-      desktopPetWindow.webContents.send('desktop-pet:load-model', modelInfo)
+      setTimeout(() => {
+        desktopPetWindow?.webContents.send('desktop-pet:load-model', modelInfo)
+      }, 300)
     }
     return
   }
@@ -225,23 +234,27 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      backgroundThrottling: false
     }
   })
 
   desktopPetWindow.setVisibleOnAllWorkspaces(true)
   desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
+
   if (isMac) {
     desktopPetWindow.setIgnoreMouseEvents(true)
   } else {
     desktopPetWindow.setIgnoreMouseEvents(true, { forward: true })
   }
 
+  const allModels = [...LUOMINEST_BUILTIN_MODELS, ...loadImportedModels()]
+
   const petContextMenu = Menu.buildFromTemplate([
     { label: 'Show Main Window', click: () => { mainWindow?.show(); mainWindow?.focus() } },
     { type: 'separator' },
     { label: 'Switch Model', submenu: [
-      ...LUOMINEST_BUILTIN_MODELS.map(m => ({
+      ...allModels.map(m => ({
         label: m.name,
         click: () => {
           desktopPetWindow?.webContents.send('desktop-pet:load-model', m)
@@ -252,6 +265,13 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
     { label: 'Play Motion', submenu: [
       { label: 'Idle', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-motion', 'Idle', 0) },
       { label: 'TapBody', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-motion', 'TapBody', 0) }
+    ]},
+    { label: 'Set Emotion', submenu: [
+      { label: 'Happy', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-expression', 'happy') },
+      { label: 'Sad', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-expression', 'sad') },
+      { label: 'Neutral', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-expression', 'neutral') },
+      { label: 'Angry', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-expression', 'angry') },
+      { label: 'Surprise', click: () => desktopPetWindow?.webContents.send('desktop-pet:trigger-expression', 'surprise') }
     ]},
     { type: 'separator' },
     { label: 'Hide Pet', click: () => desktopPetWindow?.hide() },
@@ -266,6 +286,7 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
     petContextMenu.popup()
   })
 
+  ipcMain.removeAllListeners('desktop-pet:set-ignore-mouse-events')
   ipcMain.on('desktop-pet:set-ignore-mouse-events', (_event, ignore: boolean) => {
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       if (isMac) {
@@ -297,16 +318,16 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
     if (modelInfo) {
       setTimeout(() => {
         desktopPetWindow?.webContents.send('desktop-pet:load-model', modelInfo)
-      }, 500)
+      }, 800)
+    }
+  })
+
+  desktopPetWindow.webContents.on('did-finish-load', () => {
+    if (modelInfo) {
+      desktopPetWindow?.webContents.send('desktop-pet:load-model', modelInfo)
     }
   })
 }
-
-const LUOMINEST_BUILTIN_MODELS = [
-  { id: 'llny', name: 'Llny', url: 'luominest-avatar://llny/llny.model3.json', scale: 0.25, type: 'live2d', tags: ['Default', 'Cubism4', 'Built-in'] },
-  { id: 'hiyori', name: 'Hiyori', url: 'luominest-avatar://hiyori/Hiyori.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] },
-  { id: 'shizuku', name: 'Shizuku', url: 'luominest-avatar://shizuku/shizuku.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] }
-]
 
 const createMenu = (): void => {
   const template: MenuItemConstructorOptions[] = [
@@ -621,6 +642,110 @@ function registerIpcHandlers(): void {
     }
     return { success: false }
   })
+
+  ipcMain.handle('desktop-pet:setPosition', async (_e, x: number, y: number) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return { success: false, error: 'Invalid position: x and y must be finite numbers' }
+    }
+    const clampedX = Math.max(-10000, Math.min(10000, x))
+    const clampedY = Math.max(-10000, Math.min(10000, y))
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:set-position', clampedX, clampedY)
+      return { success: true }
+    }
+    return { success: false, error: 'Desktop pet window not running' }
+  })
+
+  ipcMain.handle('desktop-pet:setScale', async (_e, scale: number) => {
+    if (!Number.isFinite(scale)) {
+      return { success: false, error: 'Invalid scale: must be a finite number' }
+    }
+    const clampedScale = Math.max(0.1, Math.min(10, scale))
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:set-scale', clampedScale)
+      return { success: true }
+    }
+    return { success: false, error: 'Desktop pet window not running' }
+  })
+
+  ipcMain.handle('desktop-pet:driveLipSync', async (_e, value: number) => {
+    if (!Number.isFinite(value)) {
+      return { success: false, error: 'Invalid lip-sync value: must be a finite number' }
+    }
+    const clampedValue = Math.max(-1, Math.min(1, value))
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:lip-sync', clampedValue)
+      return { success: true }
+    }
+    return { success: false, error: 'Desktop pet window not running' }
+  })
+
+  ipcMain.handle('desktop-pet:drivePadEmotion', async (_e, pleasure: number, arousal: number, dominance: number) => {
+    if (!Number.isFinite(pleasure) || !Number.isFinite(arousal) || !Number.isFinite(dominance)) {
+      return { success: false, error: 'Invalid PAD values: all must be finite numbers' }
+    }
+    const clampedPleasure = Math.max(-1, Math.min(1, pleasure))
+    const clampedArousal = Math.max(-1, Math.min(1, arousal))
+    const clampedDominance = Math.max(-1, Math.min(1, dominance))
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:pad-emotion', { pleasure: clampedPleasure, arousal: clampedArousal, dominance: clampedDominance })
+      return { success: true }
+    }
+    return { success: false, error: 'Desktop pet window not running' }
+  })
+
+  ipcMain.handle('desktop-pet:setCoreParam', async (_e, paramId: string, value: number) => {
+    const ALLOWED_PARAMS = new Set([
+      'ParamAngleX', 'ParamAngleY', 'ParamAngleZ',
+      'ParamEyeLOpen', 'ParamEyeROpen',
+      'ParamEyeBallX', 'ParamEyeBallY',
+      'ParamBrowLY', 'ParamBrowRY',
+      'ParamBrowLAngle', 'ParamBrowRAngle',
+      'ParamBrowLForm', 'ParamBrowRForm',
+      'ParamMouthOpenY', 'ParamMouthForm',
+      'ParamCheek', 'ParamBreath',
+      'ParamBodyAngleX', 'ParamBodyAngleY', 'ParamBodyAngleZ',
+      'Param14'
+    ])
+    if (typeof paramId !== 'string' || !ALLOWED_PARAMS.has(paramId)) {
+      return { success: false, error: `Invalid paramId: "${paramId}" is not in the allowed whitelist` }
+    }
+    if (!Number.isFinite(value)) {
+      return { success: false, error: 'Invalid param value: must be a finite number' }
+    }
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:set-core-param', paramId, value)
+      return { success: true }
+    }
+    return { success: false, error: 'Desktop pet window not running' }
+  })
+
+  ipcMain.handle('desktop-pet:getModelCapabilities', async () => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      return new Promise((resolve) => {
+        const requestId = `cap-${Date.now()}`
+        let handled = false
+        const handler = (_event: any, id: string, capabilities: any) => {
+          if (id === requestId && !handled) {
+            handled = true
+            ipcMain.removeListener('desktop-pet:model-capabilities-response', handler)
+            clearTimeout(timeoutId)
+            resolve(capabilities)
+          }
+        }
+        ipcMain.on('desktop-pet:model-capabilities-response', handler)
+        desktopPetWindow!.webContents.send('desktop-pet:get-model-capabilities', requestId)
+        const timeoutId = setTimeout(() => {
+          if (!handled) {
+            handled = true
+            ipcMain.removeListener('desktop-pet:model-capabilities-response', handler)
+            resolve(null)
+          }
+        }, 3000)
+      })
+    }
+    return null
+  })
 }
 
 const MIME_MAP: Record<string, string> = {
@@ -673,7 +798,11 @@ app.whenReady().then(async () => {
     const mimeType = MIME_MAP[ext ?? ''] ?? 'application/octet-stream'
     const data = readFileSync(filePath)
     return new Response(data, {
-      headers: { 'content-type': mimeType, 'access-control-allow-origin': '*' }
+      headers: {
+        'content-type': mimeType,
+        'access-control-allow-origin': '*',
+        'cache-control': 'no-cache'
+      }
     })
   })
 

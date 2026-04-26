@@ -17,6 +17,8 @@ interface PetModelInfo {
   tags: string[]
 }
 
+const EXPRESSION_BLOCKLIST = ['水印', 'watermark', 'copyright', 'credit', 'logo']
+
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const isModelReady = ref(false)
 const isLoading = ref(false)
@@ -25,6 +27,8 @@ const currentModelName = ref('')
 const isIslandExpanded = ref(false)
 const isAlwaysOnTop = ref(true)
 const isMousePassthrough = ref(true)
+const availableMotions = ref<string[]>([])
+const availableExpressions = ref<string[]>([])
 
 let pixiApp: Application | null = null
 let currentModel: Live2DModel | null = null
@@ -32,13 +36,109 @@ let isDragging = false
 let dragOffset = { x: 0, y: 0 }
 let islandHideTimer: ReturnType<typeof setTimeout> | null = null
 let wheelHandler: ((e: WheelEvent) => void) | null = null
+let focusTargetX = 0
+let focusTargetY = 0
+let focusCurrentX = 0
+let focusCurrentY = 0
+let focusTickerCallback: (() => void) | null = null
+let focusMouseMoveHandler: ((e: MouseEvent) => void) | null = null
+let focusMouseLeaveHandler: (() => void) | null = null
+let ipcLoadModelHandler: ((event: any, modelInfo: PetModelInfo) => void) | null = null
+let ipcTriggerMotionHandler: ((event: any, group: string, index: number) => void) | null = null
+let ipcTriggerExpressionHandler: ((event: any, name: string) => void) | null = null
+let ipcSetPositionHandler: ((event: any, x: number, y: number) => void) | null = null
+let ipcSetScaleHandler: ((event: any, scale: number) => void) | null = null
+let ipcLipSyncHandler: ((event: any, value: number) => void) | null = null
+let ipcPadEmotionHandler: ((event: any, pad: { pleasure: number; arousal: number; dominance: number }) => void) | null = null
+let ipcSetCoreParamHandler: ((event: any, paramId: string, value: number) => void) | null = null
+let ipcGetModelCapabilitiesHandler: ((event: any, requestId: string) => void) | null = null
+let contextMenuHandler: ((e: MouseEvent) => void) | null = null
+let retryCount = 0
+let retryTimerId: ReturnType<typeof setTimeout> | null = null
+let currentLoadToken = 0
+const MAX_RETRIES = 3
+
+const mapPADtoEmotion = (pleasure: number, arousal: number, dominance: number): string => {
+  if (pleasure > 0.3 && arousal > 0.5) return 'happy'
+  if (pleasure < -0.3 && arousal > 0.3) return 'angry'
+  if (pleasure < -0.3 && arousal <= 0.3) return 'sad'
+  if (arousal > 0.5 && dominance < -0.2) return 'surprise'
+  if (pleasure > 0.3 && arousal < -0.2) return 'love'
+  if (pleasure > 0.1 && pleasure <= 0.3 && arousal < -0.1) return 'love'
+  if (pleasure < -0.1 && arousal > -0.1 && arousal < 0.2) return 'awkward'
+  if (arousal > 0.2 && arousal <= 0.5 && pleasure > -0.1) return 'curious'
+  if (pleasure > -0.1 && arousal < -0.2) return 'think'
+  return 'neutral'
+}
+
+const cleanupFocus = () => {
+  if (focusTickerCallback) {
+    Ticker.shared.remove(focusTickerCallback)
+    focusTickerCallback = null
+  }
+  if (focusMouseMoveHandler) {
+    window.removeEventListener('mousemove', focusMouseMoveHandler)
+    focusMouseMoveHandler = null
+  }
+  if (focusMouseLeaveHandler) {
+    window.removeEventListener('mouseleave', focusMouseLeaveHandler)
+    focusMouseLeaveHandler = null
+  }
+}
 
 const setIgnoreMouseEvents = (ignore: boolean) => {
   isMousePassthrough.value = ignore
   window.electron?.ipcRenderer.send('desktop-pet:set-ignore-mouse-events', ignore)
 }
 
+const setCoreParam = (paramId: string, value: number) => {
+  if (!currentModel) return
+  try {
+    const internalModel = currentModel.internalModel
+    if (internalModel && 'coreModel' in internalModel) {
+      const coreModel = (internalModel as any).coreModel
+      if (coreModel && typeof coreModel.setParameterValueById === 'function') {
+        coreModel.setParameterValueById(paramId, value)
+      }
+    }
+  } catch {
+  }
+}
+
+const scanModelCapabilities = (model: Live2DModel) => {
+  const motions: string[] = []
+  const expressions: string[] = []
+  try {
+    const internalModel = model.internalModel as any
+    const settings = internalModel?.settings
+    if (settings?.motions) {
+      for (const group of Object.keys(settings.motions)) {
+        motions.push(group)
+      }
+    }
+    if (settings?.expressions) {
+      for (const exp of settings.expressions) {
+        const name = exp?.Name ?? ''
+        const isBlocked = EXPRESSION_BLOCKLIST.some(
+          blocked => name.toLowerCase().includes(blocked.toLowerCase())
+        )
+        if (name && !isBlocked) expressions.push(name)
+      }
+    }
+  } catch {
+  }
+  availableMotions.value = motions
+  availableExpressions.value = expressions
+}
+
 const loadModel = async (url: string, scale: number) => {
+  if (retryTimerId !== null) {
+    clearTimeout(retryTimerId)
+    retryTimerId = null
+  }
+  currentLoadToken++
+  const loadToken = currentLoadToken
+
   isLoading.value = true
   loadError.value = null
   isModelReady.value = false
@@ -56,7 +156,11 @@ const loadModel = async (url: string, scale: number) => {
       })
     }
 
-    if (!pixiApp) return
+    if (!pixiApp) {
+      throw new Error('Failed to initialize PixiJS application')
+    }
+
+    if (loadToken !== currentLoadToken) return
 
     if (currentModel) {
       pixiApp.stage.removeChild(currentModel)
@@ -64,11 +168,18 @@ const loadModel = async (url: string, scale: number) => {
       currentModel = null
     }
 
+    cleanupFocus()
+
     const model = await Live2DModel.from(url, {
       autoHitTest: true,
       autoFocus: false,
       ticker: Ticker.shared
     })
+
+    if (loadToken !== currentLoadToken) {
+      model.destroy()
+      return
+    }
 
     const clampedScale = Math.max(0.05, Math.min(2.0, scale))
     model.scale.set(clampedScale)
@@ -76,10 +187,20 @@ const loadModel = async (url: string, scale: number) => {
     model.x = window.innerWidth * 0.75
     model.y = window.innerHeight * 0.55
 
+    try {
+      const internalModel = model.internalModel as any
+      if (internalModel?.coreModel) {
+        const coreModel = internalModel.coreModel
+        const param14Idx = coreModel.getParameterIndex('Param14')
+        if (param14Idx >= 0) {
+          coreModel.setParameterValueByIndex(param14Idx, 0)
+        }
+      }
+    } catch {
+    }
+
     model.on('hit', (hitAreas: string[]) => {
-      if (hitAreas.includes('body')) {
-        model.motion('TapBody', 0)
-      } else if (hitAreas.includes('head')) {
+      if (hitAreas.includes('body') || hitAreas.includes('head')) {
         model.motion('TapBody', 0)
       }
     })
@@ -96,20 +217,41 @@ const loadModel = async (url: string, scale: number) => {
 
     setupDrag(model)
     setupWheel(model)
+    setupFocus(model)
 
     pixiApp.stage.addChild(model)
     currentModel = model
     isModelReady.value = true
+    retryCount = 0
+
+    scanModelCapabilities(model)
 
     try {
       await model.motion('Idle', 0)
     } catch {
-      // idle motion may not exist
     }
+
+    console.info('[INFO][LuomiNestDesktopPet] Model loaded successfully:', url)
   } catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Failed to load model'
+    if (loadToken !== currentLoadToken) return
+
+    const message = err instanceof Error ? err.message : 'Failed to load model'
+    loadError.value = message
+    console.error('[ERROR][LuomiNestDesktopPet] Model load error:', message)
+
+    if (retryCount < MAX_RETRIES) {
+      retryCount++
+      console.info(`[INFO][LuomiNestDesktopPet] Retrying (${retryCount}/${MAX_RETRIES})...`)
+      retryTimerId = setTimeout(async () => {
+        retryTimerId = null
+        if (loadToken !== currentLoadToken) return
+        await loadModel(url, scale)
+      }, 1000 * retryCount)
+    }
   } finally {
-    isLoading.value = false
+    if (loadToken === currentLoadToken) {
+      isLoading.value = false
+    }
   }
 }
 
@@ -145,6 +287,9 @@ const setupDrag = (model: Live2DModel) => {
 }
 
 const setupWheel = (model: Live2DModel) => {
+  if (wheelHandler) {
+    window.removeEventListener('wheel', wheelHandler)
+  }
   wheelHandler = (e: WheelEvent) => {
     if (!model) return
     e.preventDefault()
@@ -153,6 +298,64 @@ const setupWheel = (model: Live2DModel) => {
     model.scale.set(newScale)
   }
   window.addEventListener('wheel', wheelHandler, { passive: false })
+}
+
+const setupFocus = (_model: Live2DModel) => {
+  cleanupFocus()
+
+  const FOCUS_DAMPING = 0.15
+
+  const onMouseMove = (e: MouseEvent) => {
+    focusTargetX = (e.clientX / window.innerWidth) * 2 - 1
+    focusTargetY = -((e.clientY / window.innerHeight) * 2 - 1)
+  }
+
+  const onMouseLeave = () => {
+    focusTargetX = 0
+    focusTargetY = 0
+  }
+
+  focusMouseMoveHandler = onMouseMove
+  focusMouseLeaveHandler = onMouseLeave
+
+  focusTickerCallback = () => {
+    if (!currentModel) return
+    focusCurrentX += (focusTargetX - focusCurrentX) * FOCUS_DAMPING
+    focusCurrentY += (focusTargetY - focusCurrentY) * FOCUS_DAMPING
+
+    try {
+      const internalModel = currentModel.internalModel as any
+      const coreModel = internalModel?.coreModel
+      if (!coreModel) return
+
+      const angleXParam = coreModel.getParameterIndex('ParamAngleX')
+      const angleYParam = coreModel.getParameterIndex('ParamAngleY')
+      const eyeBallXParam = coreModel.getParameterIndex('ParamEyeBallX')
+      const eyeBallYParam = coreModel.getParameterIndex('ParamEyeBallY')
+
+      if (angleXParam >= 0) {
+        const base = coreModel.getParameterValueByIndex(angleXParam)
+        coreModel.setParameterValueByIndex(angleXParam, base * 0.6 + focusCurrentX * 15 * 0.4)
+      }
+      if (angleYParam >= 0) {
+        const base = coreModel.getParameterValueByIndex(angleYParam)
+        coreModel.setParameterValueByIndex(angleYParam, base * 0.6 + focusCurrentY * 15 * 0.4)
+      }
+      if (eyeBallXParam >= 0) {
+        const base = coreModel.getParameterValueByIndex(eyeBallXParam)
+        coreModel.setParameterValueByIndex(eyeBallXParam, base * 0.5 + focusCurrentX * 0.5)
+      }
+      if (eyeBallYParam >= 0) {
+        const base = coreModel.getParameterValueByIndex(eyeBallYParam)
+        coreModel.setParameterValueByIndex(eyeBallYParam, base * 0.5 + focusCurrentY * 0.5)
+      }
+    } catch {
+    }
+  }
+
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseleave', onMouseLeave)
+  Ticker.shared.add(focusTickerCallback)
 }
 
 const toggleIsland = () => {
@@ -191,7 +394,6 @@ const handleResetPose = async () => {
     try {
       await currentModel.motion('Idle', 0)
     } catch {
-      // ignore
     }
   }
   resetIslandTimer()
@@ -224,7 +426,6 @@ onMounted(async () => {
     try {
       modelToLoad = JSON.parse(decodeURIComponent(modelInfoStr))
     } catch {
-      // ignore
     }
   }
 
@@ -239,47 +440,152 @@ onMounted(async () => {
     await loadModel(modelToLoad.url, modelToLoad.scale)
   }
 
-  window.electron?.ipcRenderer.on('desktop-pet:load-model', async (_event: any, modelInfo: PetModelInfo) => {
+  ipcLoadModelHandler = async (_event: any, modelInfo: PetModelInfo) => {
     currentModelName.value = modelInfo.name
+    retryCount = 0
     if (canvasRef.value) {
       await loadModel(modelInfo.url, modelInfo.scale)
     }
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:load-model', ipcLoadModelHandler)
 
-  window.electron?.ipcRenderer.on('desktop-pet:trigger-motion', async (_event: any, group: string, index: number) => {
+  ipcTriggerMotionHandler = async (_event: any, group: string, index: number) => {
     if (currentModel) {
       try {
         await currentModel.motion(group, index)
       } catch {
-        // motion may not exist
       }
     }
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:trigger-motion', ipcTriggerMotionHandler)
 
-  window.electron?.ipcRenderer.on('desktop-pet:trigger-expression', async (_event: any, name: string) => {
+  ipcTriggerExpressionHandler = async (_event: any, name: string) => {
     if (currentModel) {
       try {
         await currentModel.expression(name)
       } catch {
-        // expression may not exist
       }
     }
-  })
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:trigger-expression', ipcTriggerExpressionHandler)
 
-  window.addEventListener('contextmenu', (e) => {
+  ipcSetPositionHandler = (_event: any, x: number, y: number) => {
+    if (currentModel) {
+      currentModel.x = x
+      currentModel.y = y
+    }
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:set-position', ipcSetPositionHandler)
+
+  ipcSetScaleHandler = (_event: any, scale: number) => {
+    if (currentModel) {
+      const clamped = Math.max(0.05, Math.min(3.0, scale))
+      currentModel.scale.set(clamped)
+    }
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:set-scale', ipcSetScaleHandler)
+
+  ipcLipSyncHandler = (_event: any, value: number) => {
+    const clamped = Math.max(0, Math.min(1, value))
+    setCoreParam('ParamMouthOpenY', clamped)
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:lip-sync', ipcLipSyncHandler)
+
+  ipcPadEmotionHandler = (_event: any, pad: { pleasure: number; arousal: number; dominance: number }) => {
+    const emotionId = mapPADtoEmotion(pad.pleasure, pad.arousal, pad.dominance)
+    if (currentModel) {
+      try {
+        currentModel.expression(emotionId)
+      } catch {
+      }
+    }
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:pad-emotion', ipcPadEmotionHandler)
+
+  ipcSetCoreParamHandler = (_event: any, paramId: string, value: number) => {
+    setCoreParam(paramId, value)
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:set-core-param', ipcSetCoreParamHandler)
+
+  ipcGetModelCapabilitiesHandler = (_event: any, requestId: string) => {
+    window.electron?.ipcRenderer.send(
+      'desktop-pet:model-capabilities-response',
+      requestId,
+      {
+        motions: availableMotions.value,
+        expressions: availableExpressions.value,
+        modelName: currentModelName.value,
+        isReady: isModelReady.value
+      }
+    )
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:get-model-capabilities', ipcGetModelCapabilitiesHandler)
+
+  contextMenuHandler = (e: MouseEvent) => {
     e.preventDefault()
     setIgnoreMouseEvents(false)
     window.electron?.ipcRenderer.send('desktop-pet:show-context-menu')
     setTimeout(() => setIgnoreMouseEvents(true), 1000)
-  })
+  }
+  window.addEventListener('contextmenu', contextMenuHandler)
 })
 
 onBeforeUnmount(() => {
+  if (retryTimerId !== null) {
+    clearTimeout(retryTimerId)
+    retryTimerId = null
+  }
+  currentLoadToken++
   if (islandHideTimer) clearTimeout(islandHideTimer)
+  cleanupFocus()
+
+  if (ipcLoadModelHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:load-model', ipcLoadModelHandler)
+    ipcLoadModelHandler = null
+  }
+  if (ipcTriggerMotionHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:trigger-motion', ipcTriggerMotionHandler)
+    ipcTriggerMotionHandler = null
+  }
+  if (ipcTriggerExpressionHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:trigger-expression', ipcTriggerExpressionHandler)
+    ipcTriggerExpressionHandler = null
+  }
+  if (ipcSetPositionHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:set-position', ipcSetPositionHandler)
+    ipcSetPositionHandler = null
+  }
+  if (ipcSetScaleHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:set-scale', ipcSetScaleHandler)
+    ipcSetScaleHandler = null
+  }
+  if (ipcLipSyncHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:lip-sync', ipcLipSyncHandler)
+    ipcLipSyncHandler = null
+  }
+  if (ipcPadEmotionHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:pad-emotion', ipcPadEmotionHandler)
+    ipcPadEmotionHandler = null
+  }
+  if (ipcSetCoreParamHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:set-core-param', ipcSetCoreParamHandler)
+    ipcSetCoreParamHandler = null
+  }
+  if (ipcGetModelCapabilitiesHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:get-model-capabilities', ipcGetModelCapabilitiesHandler)
+    ipcGetModelCapabilitiesHandler = null
+  }
+
+  if (contextMenuHandler) {
+    window.removeEventListener('contextmenu', contextMenuHandler)
+    contextMenuHandler = null
+  }
+
   if (wheelHandler) {
     window.removeEventListener('wheel', wheelHandler)
     wheelHandler = null
   }
+
   if (currentModel) {
     currentModel.destroy()
     currentModel = null
@@ -515,16 +821,13 @@ onBeforeUnmount(() => {
 .island-enter-active {
   transition: all 400ms cubic-bezier(0.32, 0.72, 0, 1);
 }
-
 .island-leave-active {
   transition: all 300ms cubic-bezier(0.32, 0.72, 0, 1);
 }
-
 .island-enter-from {
   opacity: 0;
   transform: translateY(12px) scale(0.9);
 }
-
 .island-leave-to {
   opacity: 0;
   transform: translateY(8px) scale(0.95);

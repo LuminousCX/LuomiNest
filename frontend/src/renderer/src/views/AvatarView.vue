@@ -6,22 +6,29 @@ import {
   Loader2, AlertCircle, FolderOpen, Check, Monitor, MonitorOff,
   ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
-import { useLuomiNestAvatar } from '@/composables/useLuomiNestLive2D'
-import type { LuomiNestModelInfo } from '@/composables/useLuomiNestLive2D'
-import { LUOMINEST_BUILTIN_MODELS } from '@/config/luominest-models'
-
-const {
-  isLoading,
-  loadError,
-  isModelReady,
-  mountAvatarFromModelInfo,
-  triggerMotion,
-  driveEmotion,
-  resetAvatarPose,
-  teardown
-} = useLuomiNestAvatar()
+import { useLuomiNestLive2D } from '@/composables/useLuomiNestLive2D'
+import { useAvatarControlStore } from '@/stores/avatar-control'
+import { LUOMINEST_BUILTIN_MODELS, type LuomiNestModelInfo } from '@/config/luominest-models'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const avatarControl = useAvatarControlStore()
+
+const {
+  isReady: isModelReady,
+  isLoading,
+  error: loadError,
+  currentModelName,
+  availableMotions,
+  availableExpressions,
+  loadModel,
+  triggerMotion,
+  driveEmotion,
+  drivePadEmotion,
+  syncLipParam,
+  resetPose,
+  destroy: teardown
+} = useLuomiNestLive2D(canvasRef)
+
 const importError = ref<string | null>(null)
 const importedModels = ref<LuomiNestModelInfo[]>([])
 const showImportSuccess = ref(false)
@@ -90,16 +97,11 @@ function selectMode(modeId: string) {
 
 function selectEmotion(emo: typeof emotions[0]) {
   currentEmotionLocal.value = emo
-  driveEmotion({ id: emo.id, label: emo.label, intensity: expressionValue.value })
+  driveEmotion(emo.id)
 }
 
 async function handleResetPose() {
-  resetAvatarPose()
-  try {
-    await triggerMotion('Idle', 0)
-  } catch {
-    // ignore
-  }
+  await resetPose()
 }
 
 async function handleSkinSelect(idx: number) {
@@ -110,8 +112,8 @@ async function handleSkinSelect(idx: number) {
       await window.api.desktopPet.loadModel(skin.modelInfo)
     }
   } else {
-    if (skin.modelInfo && canvasRef.value) {
-      await mountAvatarFromModelInfo(canvasRef.value, skin.modelInfo)
+    if (skin.modelInfo) {
+      await loadModel(skin.modelInfo.url, skin.modelInfo.scale)
     }
   }
 }
@@ -153,10 +155,10 @@ async function handleImportClick() {
         if (isDesktopPetRunning.value) {
           await window.api.desktopPet.loadModel(modelInfo)
         }
-      } else if (canvasRef.value) {
+      } else {
         selectedSkin.value = skinList.value.findIndex(s => s.modelInfo?.name === modelInfo.name)
         if (selectedSkin.value < 0) selectedSkin.value = skinList.value.length - 1
-        await mountAvatarFromModelInfo(canvasRef.value, modelInfo)
+        await loadModel(modelInfo.url, modelInfo.scale)
       }
     }
   } catch (err) {
@@ -177,15 +179,17 @@ async function switchToDesktopMode() {
   const modelInfo = currentModelInfo.value
   await window.api.desktopPet.open(modelInfo ?? undefined)
   isDesktopPetRunning.value = true
+  avatarControl.checkDesktopPetStatus()
 }
 
 async function switchToInlineMode() {
   isDesktopMode.value = false
   await window.api.desktopPet.close()
   isDesktopPetRunning.value = false
+  avatarControl.checkDesktopPetStatus()
   await nextTick()
-  if (canvasRef.value && currentModelInfo.value) {
-    await mountAvatarFromModelInfo(canvasRef.value, currentModelInfo.value)
+  if (currentModelInfo.value) {
+    await loadModel(currentModelInfo.value.url, currentModelInfo.value.scale)
   }
 }
 
@@ -205,7 +209,6 @@ const loadPersistedModels = async () => {
       tags: m.tags
     }))
   } catch {
-    // ignore
   }
 }
 
@@ -220,10 +223,11 @@ const checkDesktopPetStatus = async () => {
 onMounted(async () => {
   await loadPersistedModels()
   await checkDesktopPetStatus()
+  await avatarControl.checkDesktopPetStatus()
   await nextTick()
-  if (!isDesktopPetRunning.value && canvasRef.value) {
+  if (!isDesktopPetRunning.value) {
     const defaultModel = LUOMINEST_BUILTIN_MODELS[0]
-    await mountAvatarFromModelInfo(canvasRef.value, defaultModel)
+    await loadModel(defaultModel.url, defaultModel.scale)
   }
 })
 

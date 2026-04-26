@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.infrastructure.database.json_store import agents_store
-
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "data")

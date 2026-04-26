@@ -85,6 +85,24 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'AI社交 - LuomiNest', icon: 'Users' }
   },
   {
+    path: '/market/plugins',
+    name: 'PluginMarket',
+    component: () => import('../views/PluginMarketView.vue'),
+    meta: { title: '插件市场 - LuomiNest', icon: 'Puzzle' }
+  },
+  {
+    path: '/market/skills',
+    name: 'SkillMarket',
+    component: () => import('../views/SkillMarketView.vue'),
+    meta: { title: '技能市场 - LuomiNest', icon: 'Sparkles' }
+  },
+  {
+    path: '/market/detail/:type/:id',
+    name: 'MarketDetail',
+    component: () => import('../views/MarketDetailView.vue'),
+    meta: { title: '市场详情 - LuomiNest', icon: 'Puzzle' }
+  },
+  {
     path: '/desktop-pet',
     name: 'DesktopPet',
     component: () => import('../views/DesktopPetView.vue'),
