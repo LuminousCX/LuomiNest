@@ -27,6 +27,7 @@ import {
   Server,
   PanelRightOpen,
   PanelRightClose,
+  Square,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
@@ -164,7 +165,7 @@ const selectModel = (providerId: string, modelId: string) => {
 }
 
 const sendMessage = async () => {
-  if (!inputText.value.trim() || isStreaming.value) return
+  if (!inputText.value.trim()) return
   if (!isBackendReady.value) return
 
   const content = inputText.value
@@ -196,6 +197,10 @@ const sendMessage = async () => {
   await chatStore.sendMessage(content, options)
   await nextTick()
   scrollToBottom()
+}
+
+const cancelStreaming = () => {
+  chatStore.cancelCurrentRequest()
 }
 
 const scrollToBottom = () => {
@@ -471,7 +476,7 @@ onMounted(async () => {
                     <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
                     <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
                     <div v-else class="message-content user-message">{{ msg.content }}</div>
-                    <div v-if="msg.role === 'assistant' && !msg.done && isStreaming && msg.id === messages[messages.length - 1].id" class="loading-status">
+                    <div v-if="msg.role === 'assistant' && !msg.done && !msg.content && msg.id === messages[messages.length - 1].id" class="loading-status">
                       <Loader2 :size="16" class="spin-animation" />
                       <span>正在分析问题...</span>
                     </div>
@@ -510,7 +515,7 @@ onMounted(async () => {
               placeholder="可以描述任务或提问任何问题"
               rows="1"
               class="chat-input"
-              :disabled="isStreaming || !isBackendReady"
+              :disabled="!isBackendReady"
               @keydown.enter.exact.prevent="sendMessage"
               @input="autoResize"
             ></textarea>
@@ -615,12 +620,20 @@ onMounted(async () => {
                   <Mic :size="16" />
                 </button>
                 <button
-                  :class="['send-btn', { disabled: isStreaming || !inputText.trim() || !isBackendReady }]"
+                  v-if="isStreaming"
+                  class="send-btn stop"
+                  title="停止生成"
+                  @click="cancelStreaming"
+                >
+                  <Square :size="16" />
+                </button>
+                <button
+                  v-else
+                  :class="['send-btn', { disabled: !inputText.trim() || !isBackendReady }]"
                   title="发送"
                   @click="sendMessage"
                 >
-                  <Loader2 v-if="isStreaming" :size="17" class="spin-animation" />
-                  <Send v-else :size="17" />
+                  <Send :size="17" />
                 </button>
               </div>
             </div>
@@ -1937,6 +1950,14 @@ onMounted(async () => {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+.send-btn.stop {
+  background: var(--lumi-danger, #ef4444);
+}
+
+.send-btn.stop:hover {
+  background: var(--lumi-danger-hover, #dc2626);
 }
 
 .spin-animation {

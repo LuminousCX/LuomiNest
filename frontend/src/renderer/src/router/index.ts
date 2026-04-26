@@ -73,6 +73,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '记忆中枢 - LuomiNest', icon: 'Brain' }
   },
   {
+    path: '/profile',
+    name: 'Profile',
+    component: () => import('../views/UserProfileView.vue'),
+    meta: { title: '个人信息 - LuomiNest', icon: 'UserCircle' }
+  },
+  {
     path: '/social',
     name: 'Social',
     component: () => import('../views/SocialView.vue'),

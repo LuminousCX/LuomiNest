@@ -5,117 +5,65 @@ const BACKEND_URL = 'http://127.0.0.1:18000/api/v1'
 
 const getApiUrl = (path: string) => `${BACKEND_URL}${path}`
 
+const extractErrorMessage = (errData: any, status: number): string => {
+  let errMsg = errData?.error?.message || errData?.detail || ''
+  if (Array.isArray(errMsg)) {
+    errMsg = errMsg.map((e: any) => e.msg || e.message || JSON.stringify(e)).join('; ')
+  } else if (typeof errMsg === 'object' && errMsg !== null) {
+    errMsg = JSON.stringify(errMsg)
+  }
+  return errMsg || `API error: ${status}`
+}
+
 export const useApi = () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const abortController = ref<AbortController | null>(null)
 
-  const apiGet = async <T>(path: string): Promise<T> => {
-    loading.value = true
-    error.value = null
-    try {
-      const resp = await fetch(getApiUrl(path), {
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => null)
-        let errMsg = errData?.error?.message || errData?.detail || ''
-        if (Array.isArray(errMsg)) {
-          errMsg = errMsg.map((e: any) => e.msg || e.message || JSON.stringify(e)).join('; ')
-        } else if (typeof errMsg === 'object' && errMsg !== null) {
-          errMsg = JSON.stringify(errMsg)
-        }
-        throw new Error(errMsg || `API error: ${resp.status}`)
-      }
-      return await resp.json()
-    } catch (e: any) {
-      error.value = e.message
-      throw e
-    } finally {
-      loading.value = false
+  const abort = () => {
+    if (abortController.value) {
+      abortController.value.abort()
+      abortController.value = null
     }
   }
 
-  const apiPost = async <T>(path: string, body: any): Promise<T> => {
+  const request = async <T>(
+    path: string,
+    options: {
+      method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+      body?: any
+      timeout?: number
+    } = {}
+  ): Promise<T> => {
+    const { method = 'GET', body, timeout = 15000 } = options
+    
     loading.value = true
     error.value = null
+    
     try {
-      const resp = await fetch(getApiUrl(path), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => null)
-        let errMsg = errData?.error?.message || errData?.detail || ''
-        if (Array.isArray(errMsg)) {
-          errMsg = errMsg.map((e: any) => e.msg || e.message || JSON.stringify(e)).join('; ')
-        } else if (typeof errMsg === 'object' && errMsg !== null) {
-          errMsg = JSON.stringify(errMsg)
-        }
-        throw new Error(errMsg || `API error: ${resp.status}`)
+      const fetchOptions: RequestInit = {
+        method,
+        signal: AbortSignal.timeout(timeout),
       }
-      return await resp.json()
-    } catch (e: any) {
-      error.value = e.message
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
+      
+      if (body) {
+        fetchOptions.headers = { 'Content-Type': 'application/json' }
+        fetchOptions.body = JSON.stringify(body)
+      }
 
-  const apiPatch = async <T>(path: string, body: any): Promise<T> => {
-    loading.value = true
-    error.value = null
-    try {
-      const resp = await fetch(getApiUrl(path), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => null)
-        let errMsg = errData?.error?.message || errData?.detail || ''
-        if (Array.isArray(errMsg)) {
-          errMsg = errMsg.map((e: any) => e.msg || e.message || JSON.stringify(e)).join('; ')
-        } else if (typeof errMsg === 'object' && errMsg !== null) {
-          errMsg = JSON.stringify(errMsg)
-        }
-        throw new Error(errMsg || `API error: ${resp.status}`)
-      }
-      return await resp.json()
-    } catch (e: any) {
-      error.value = e.message
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
+      const resp = await fetch(getApiUrl(path), fetchOptions)
 
-  const apiDelete = async <T = void>(path: string): Promise<T | void> => {
-    loading.value = true
-    error.value = null
-    try {
-      const resp = await fetch(getApiUrl(path), {
-        method: 'DELETE',
-        signal: AbortSignal.timeout(15000),
-      })
       if (!resp.ok) {
         const errData = await resp.json().catch(() => null)
-        let errMsg = errData?.error?.message || errData?.detail || ''
-        if (Array.isArray(errMsg)) {
-          errMsg = errMsg.map((e: any) => e.msg || e.message || JSON.stringify(e)).join('; ')
-        } else if (typeof errMsg === 'object' && errMsg !== null) {
-          errMsg = JSON.stringify(errMsg)
-        }
-        throw new Error(errMsg || `API error: ${resp.status}`)
+        throw new Error(extractErrorMessage(errData, resp.status))
       }
+
       if (resp.status === 204 || resp.headers.get('content-length') === '0') {
-        return
+        return undefined as T
       }
+
       const text = await resp.text()
-      if (!text) return
+      if (!text) return undefined as T
       return JSON.parse(text)
     } catch (e: any) {
       error.value = e.message
@@ -125,24 +73,46 @@ export const useApi = () => {
     }
   }
 
+  const apiGet = <T>(path: string): Promise<T> => request<T>(path)
+
+  const apiPost = <T>(path: string, body: any): Promise<T> =>
+    request<T>(path, { method: 'POST', body })
+
+  const apiPut = <T>(path: string, body: any): Promise<T> =>
+    request<T>(path, { method: 'PUT', body })
+
+  const apiPatch = <T>(path: string, body: any): Promise<T> =>
+    request<T>(path, { method: 'PATCH', body })
+
+  const apiDelete = <T = void>(path: string): Promise<T | void> =>
+    request<T>(path, { method: 'DELETE' })
+
   const apiStream = async (
     path: string,
     body: any,
     onChunk: (chunk: ChatStreamChunk) => void,
     onDone: () => void,
-    onError: (err: string) => void
+    onError: (err: string) => void,
+    externalAbortSignal?: AbortSignal
   ) => {
+    const controller = new AbortController()
+    abortController.value = controller
+
+    const signal = externalAbortSignal 
+      ? AbortSignal.any([controller.signal, externalAbortSignal])
+      : controller.signal
+
     try {
       const resp = await fetch(getApiUrl(path), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(180000),
+        signal,
       })
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => null)
-        throw new Error(errData?.error?.message || errData?.detail || `API error: ${resp.status}`)
+        throw new Error(extractErrorMessage(errData, resp.status))
       }
 
       const reader = resp.body?.getReader()
@@ -184,7 +154,13 @@ export const useApi = () => {
 
       onDone()
     } catch (e: any) {
+      if (e.name === 'AbortError') {
+        onDone()
+        return
+      }
       onError(e.message)
+    } finally {
+      abortController.value = null
     }
   }
 
@@ -202,8 +178,11 @@ export const useApi = () => {
   return {
     loading,
     error,
+    abortController,
+    abort,
     apiGet,
     apiPost,
+    apiPut,
     apiPatch,
     apiDelete,
     apiStream,
