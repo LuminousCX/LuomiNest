@@ -1,7 +1,7 @@
-import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import { Application, Ticker } from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'
-import { LUOMINEST_BUILTIN_MODELS, validateLuomiNestModelUrl } from '@/config/luominest-models'
+import { validateLuomiNestModelUrl } from '@/config/luominest-models'
 
 const EXPRESSION_BLOCKLIST = ['水印', 'watermark', 'copyright', 'credit', 'logo']
 
@@ -29,11 +29,32 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   let focusCurrentX = 0
   let focusCurrentY = 0
   let focusTickerCallback: (() => void) | null = null
+  let focusMouseMoveHandler: ((e: MouseEvent) => void) | null = null
+  let focusMouseLeaveHandler: (() => void) | null = null
+  let focusParentEl: HTMLElement | null = null
   let wheelHandler: ((e: WheelEvent) => void) | null = null
   let isDragging = false
   let dragOffset = { x: 0, y: 0 }
   let retryCount = 0
+  let retryTimerId: ReturnType<typeof setTimeout> | null = null
+  let currentLoadToken = 0
   const MAX_RETRIES = 3
+
+  const cleanupFocus = () => {
+    if (focusTickerCallback) {
+      Ticker.shared.remove(focusTickerCallback)
+      focusTickerCallback = null
+    }
+    if (focusMouseMoveHandler && focusParentEl) {
+      focusParentEl.removeEventListener('mousemove', focusMouseMoveHandler)
+    }
+    if (focusMouseLeaveHandler && focusParentEl) {
+      focusParentEl.removeEventListener('mouseleave', focusMouseLeaveHandler)
+    }
+    focusMouseMoveHandler = null
+    focusMouseLeaveHandler = null
+    focusParentEl = null
+  }
 
   const initPixi = async (): Promise<Application | null> => {
     if (pixiApp) return pixiApp
@@ -85,6 +106,13 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   }
 
   const loadModel = async (url: string, scale: number = 0.25) => {
+    if (retryTimerId !== null) {
+      clearTimeout(retryTimerId)
+      retryTimerId = null
+    }
+    currentLoadToken++
+    const loadToken = currentLoadToken
+
     isLoading.value = true
     error.value = null
     isReady.value = false
@@ -101,22 +129,26 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         throw new Error('PixiJS application not initialized')
       }
 
+      if (loadToken !== currentLoadToken) return
+
       if (currentModel) {
         app.stage.removeChild(currentModel)
         currentModel.destroy()
         currentModel = null
       }
 
-      if (focusTickerCallback) {
-        Ticker.shared.remove(focusTickerCallback)
-        focusTickerCallback = null
-      }
+      cleanupFocus()
 
       const model = await Live2DModel.from(url, {
         autoHitTest: true,
         autoFocus: false,
         ticker: Ticker.shared
       })
+
+      if (loadToken !== currentLoadToken) {
+        model.destroy()
+        return
+      }
 
       const clampedScale = Math.max(0.05, Math.min(2.0, scale))
       model.scale.set(clampedScale)
@@ -161,6 +193,8 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
 
       console.info('[INFO][LuomiNestLive2D] Model loaded:', url)
     } catch (err) {
+      if (loadToken !== currentLoadToken) return
+
       const message = err instanceof Error ? err.message : 'Failed to load model'
       error.value = message
       console.error('[ERROR][LuomiNestLive2D] Load error:', message)
@@ -168,12 +202,16 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       if (retryCount < MAX_RETRIES) {
         retryCount++
         console.info(`[INFO][LuomiNestLive2D] Retrying (${retryCount}/${MAX_RETRIES})...`)
-        setTimeout(async () => {
+        retryTimerId = setTimeout(async () => {
+          retryTimerId = null
+          if (loadToken !== currentLoadToken) return
           await loadModel(url, scale)
         }, 1000 * retryCount)
       }
     } finally {
-      isLoading.value = false
+      if (loadToken === currentLoadToken) {
+        isLoading.value = false
+      }
     }
   }
 
@@ -206,11 +244,8 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     })
   }
 
-  const setupFocus = (model: Live2DModel) => {
-    if (focusTickerCallback) {
-      Ticker.shared.remove(focusTickerCallback)
-      focusTickerCallback = null
-    }
+  const setupFocus = (_model: Live2DModel) => {
+    cleanupFocus()
 
     const FOCUS_DAMPING = 0.12
 
@@ -225,6 +260,9 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       focusTargetX = 0
       focusTargetY = 0
     }
+
+    focusMouseMoveHandler = onMouseMove
+    focusMouseLeaveHandler = onMouseLeave
 
     focusTickerCallback = () => {
       if (!currentModel) return
@@ -263,6 +301,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
 
     const parent = canvasRef.value?.parentElement
     if (parent) {
+      focusParentEl = parent
       parent.addEventListener('mousemove', onMouseMove)
       parent.addEventListener('mouseleave', onMouseLeave)
     }
@@ -403,10 +442,12 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   }
 
   const destroy = () => {
-    if (focusTickerCallback) {
-      Ticker.shared.remove(focusTickerCallback)
-      focusTickerCallback = null
+    if (retryTimerId !== null) {
+      clearTimeout(retryTimerId)
+      retryTimerId = null
     }
+    currentLoadToken++
+    cleanupFocus()
     if (wheelHandler) {
       canvasRef.value?.removeEventListener('wheel', wheelHandler)
       wheelHandler = null

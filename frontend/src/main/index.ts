@@ -286,7 +286,7 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
     petContextMenu.popup()
   })
 
-  ipcMain.removeHandler('desktop-pet:set-ignore-mouse-events')
+  ipcMain.removeAllListeners('desktop-pet:set-ignore-mouse-events')
   ipcMain.on('desktop-pet:set-ignore-mouse-events', (_event, ignore: boolean) => {
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       if (isMac) {
@@ -687,17 +687,23 @@ function registerIpcHandlers(): void {
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       return new Promise((resolve) => {
         const requestId = `cap-${Date.now()}`
+        let handled = false
         const handler = (_event: any, id: string, capabilities: any) => {
-          if (id === requestId) {
+          if (id === requestId && !handled) {
+            handled = true
             ipcMain.removeListener('desktop-pet:model-capabilities-response', handler)
+            clearTimeout(timeoutId)
             resolve(capabilities)
           }
         }
         ipcMain.on('desktop-pet:model-capabilities-response', handler)
         desktopPetWindow!.webContents.send('desktop-pet:get-model-capabilities', requestId)
-        setTimeout(() => {
-          ipcMain.removeListener('desktop-pet:model-capabilities-response', handler)
-          resolve(null)
+        const timeoutId = setTimeout(() => {
+          if (!handled) {
+            handled = true
+            ipcMain.removeListener('desktop-pet:model-capabilities-response', handler)
+            resolve(null)
+          }
         }, 3000)
       })
     }

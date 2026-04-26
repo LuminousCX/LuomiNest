@@ -1,6 +1,29 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+export type AvatarCoreParamId =
+  | 'ParamAngleX' | 'ParamAngleY' | 'ParamAngleZ'
+  | 'ParamEyeLOpen' | 'ParamEyeROpen'
+  | 'ParamEyeBallX' | 'ParamEyeBallY'
+  | 'ParamBrowLY' | 'ParamBrowRY'
+  | 'ParamBrowLAngle' | 'ParamBrowRAngle'
+  | 'ParamBrowLForm' | 'ParamBrowRForm'
+  | 'ParamMouthOpenY' | 'ParamMouthForm'
+  | 'ParamCheek' | 'ParamBreath'
+  | 'ParamBodyAngleX' | 'ParamBodyAngleY' | 'ParamBodyAngleZ'
+
+const AVATAR_CORE_PARAM_WHITELIST = new Set<string>([
+  'ParamAngleX', 'ParamAngleY', 'ParamAngleZ',
+  'ParamEyeLOpen', 'ParamEyeROpen',
+  'ParamEyeBallX', 'ParamEyeBallY',
+  'ParamBrowLY', 'ParamBrowRY',
+  'ParamBrowLAngle', 'ParamBrowRAngle',
+  'ParamBrowLForm', 'ParamBrowRForm',
+  'ParamMouthOpenY', 'ParamMouthForm',
+  'ParamCheek', 'ParamBreath',
+  'ParamBodyAngleX', 'ParamBodyAngleY', 'ParamBodyAngleZ'
+])
+
 export interface AvatarEmotion {
   id: string
   label: string
@@ -11,6 +34,15 @@ export interface AvatarPadVector {
   pleasure: number
   arousal: number
   dominance: number
+}
+
+export interface PetModelInfo {
+  id: string
+  name: string
+  url: string
+  scale: number
+  type: string
+  tags: string[]
 }
 
 export const AVATAR_EMOTIONS = [
@@ -76,36 +108,39 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
         return await window.api.desktopPet.triggerMotion(group, index)
       }
       return false
-    } catch {
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] triggerMotion failed', { group, index, error })
       return false
     }
   }
 
-  const triggerExpression = async (name: string): Promise<boolean> => {
+  const triggerExpression = async (name: string, intensity: number = 0.5): Promise<boolean> => {
     try {
-      currentEmotion.value = { id: name, label: name, intensity: 0.5 }
+      currentEmotion.value = { id: name, label: name, intensity }
       if (isDesktopPetRunning.value) {
         return await window.api.desktopPet.triggerExpression(name)
       }
       return false
-    } catch {
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] triggerExpression failed', { name, intensity, error })
       return false
     }
   }
 
   const driveEmotion = async (emotionId: string, intensity: number = 0.5): Promise<boolean> => {
     currentEmotion.value = { id: emotionId, label: emotionId, intensity }
-    return triggerExpression(emotionId)
+    return triggerExpression(emotionId, intensity)
   }
 
   const drivePadEmotion = async (pleasure: number, arousal: number, dominance: number): Promise<boolean> => {
     padVector.value = { pleasure, arousal, dominance }
     try {
       if (isDesktopPetRunning.value) {
-        return await (window.api as any).desktopPet.drivePadEmotion(pleasure, arousal, dominance)
+        return await window.api.desktopPet.drivePadEmotion(pleasure, arousal, dominance)
       }
       return false
-    } catch {
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] drivePadEmotion failed', { pleasure, arousal, dominance, error })
       return false
     }
   }
@@ -114,21 +149,27 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
     lipSyncValue.value = Math.max(0, Math.min(1, value))
     try {
       if (isDesktopPetRunning.value) {
-        return await (window.api as any).desktopPet.driveLipSync(lipSyncValue.value)
+        return await window.api.desktopPet.driveLipSync(lipSyncValue.value)
       }
       return false
-    } catch {
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] driveLipSync failed', { value, error })
       return false
     }
   }
 
-  const setCoreParam = async (paramId: string, value: number): Promise<boolean> => {
+  const setCoreParam = async (paramId: AvatarCoreParamId | string, value: number): Promise<boolean> => {
+    if (!AVATAR_CORE_PARAM_WHITELIST.has(paramId)) {
+      console.warn('[LuomiNestAvatarControl] setCoreParam rejected: param not in whitelist', { paramId })
+      return false
+    }
     try {
       if (isDesktopPetRunning.value) {
-        return await (window.api as any).desktopPet.setCoreParam(paramId, value)
+        return await window.api.desktopPet.setCoreParam(paramId, value)
       }
       return false
-    } catch {
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] setCoreParam failed', { paramId, value, error })
       return false
     }
   }
@@ -136,10 +177,11 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
   const setModelPosition = async (x: number, y: number): Promise<boolean> => {
     try {
       if (isDesktopPetRunning.value) {
-        return await (window.api as any).desktopPet.setPosition(x, y)
+        return await window.api.desktopPet.setPosition(x, y)
       }
       return false
-    } catch {
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] setModelPosition failed', { x, y, error })
       return false
     }
   }
@@ -147,30 +189,39 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
   const setModelScale = async (scale: number): Promise<boolean> => {
     try {
       if (isDesktopPetRunning.value) {
-        return await (window.api as any).desktopPet.setScale(scale)
+        return await window.api.desktopPet.setScale(scale)
       }
       return false
-    } catch {
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] setModelScale failed', { scale, error })
       return false
     }
   }
 
-  const openDesktopPet = async (modelInfo?: any): Promise<boolean> => {
+  const openDesktopPet = async (modelInfo?: PetModelInfo): Promise<boolean> => {
     try {
-      await window.api.desktopPet.open(modelInfo)
-      isDesktopPetRunning.value = true
-      return true
-    } catch {
+      const res = await window.api.desktopPet.open(modelInfo)
+      if (res.success) {
+        isDesktopPetRunning.value = await window.api.desktopPet.isRunning()
+      }
+      return res.success
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] openDesktopPet failed', { modelInfo, error })
+      isDesktopPetRunning.value = false
       return false
     }
   }
 
   const closeDesktopPet = async (): Promise<boolean> => {
     try {
-      await window.api.desktopPet.close()
+      const res = await window.api.desktopPet.close()
+      if (res.success) {
+        isDesktopPetRunning.value = await window.api.desktopPet.isRunning()
+      }
+      return res.success
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] closeDesktopPet failed', error)
       isDesktopPetRunning.value = false
-      return true
-    } catch {
       return false
     }
   }
@@ -178,7 +229,8 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
   const checkDesktopPetStatus = async () => {
     try {
       isDesktopPetRunning.value = await window.api.desktopPet.isRunning()
-    } catch {
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] checkDesktopPetStatus failed', error)
       isDesktopPetRunning.value = false
     }
   }
@@ -186,14 +238,15 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
   const getModelCapabilities = async () => {
     try {
       if (isDesktopPetRunning.value) {
-        const caps = await (window.api as any).desktopPet.getModelCapabilities()
+        const caps = await window.api.desktopPet.getModelCapabilities()
         if (caps) {
           availableMotions.value = caps.motions || []
           availableExpressions.value = caps.expressions || []
           currentModelName.value = caps.modelName || ''
         }
       }
-    } catch {
+    } catch (error: unknown) {
+      console.error('[LuomiNestAvatarControl] getModelCapabilities failed', error)
     }
   }
 

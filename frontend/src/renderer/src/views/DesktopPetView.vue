@@ -41,8 +41,40 @@ let focusTargetY = 0
 let focusCurrentX = 0
 let focusCurrentY = 0
 let focusTickerCallback: (() => void) | null = null
+let focusMouseMoveHandler: ((e: MouseEvent) => void) | null = null
+let focusMouseLeaveHandler: (() => void) | null = null
 let retryCount = 0
+let retryTimerId: ReturnType<typeof setTimeout> | null = null
+let currentLoadToken = 0
 const MAX_RETRIES = 3
+
+const mapPADtoEmotion = (pleasure: number, arousal: number, dominance: number): string => {
+  if (pleasure > 0.3 && arousal > 0.5) return 'happy'
+  if (pleasure < -0.3 && arousal > 0.3) return 'angry'
+  if (pleasure < -0.3 && arousal <= 0.3) return 'sad'
+  if (arousal > 0.5 && dominance < -0.2) return 'surprise'
+  if (pleasure > 0.3 && arousal < -0.2) return 'love'
+  if (pleasure > 0.1 && pleasure <= 0.3 && arousal < -0.1) return 'love'
+  if (pleasure < -0.1 && arousal > -0.1 && arousal < 0.2) return 'awkward'
+  if (arousal > 0.2 && arousal <= 0.5 && pleasure > -0.1) return 'curious'
+  if (pleasure > -0.1 && arousal < -0.2) return 'think'
+  return 'neutral'
+}
+
+const cleanupFocus = () => {
+  if (focusTickerCallback) {
+    Ticker.shared.remove(focusTickerCallback)
+    focusTickerCallback = null
+  }
+  if (focusMouseMoveHandler) {
+    window.removeEventListener('mousemove', focusMouseMoveHandler)
+    focusMouseMoveHandler = null
+  }
+  if (focusMouseLeaveHandler) {
+    window.removeEventListener('mouseleave', focusMouseLeaveHandler)
+    focusMouseLeaveHandler = null
+  }
+}
 
 const setIgnoreMouseEvents = (ignore: boolean) => {
   isMousePassthrough.value = ignore
@@ -90,6 +122,13 @@ const scanModelCapabilities = (model: Live2DModel) => {
 }
 
 const loadModel = async (url: string, scale: number) => {
+  if (retryTimerId !== null) {
+    clearTimeout(retryTimerId)
+    retryTimerId = null
+  }
+  currentLoadToken++
+  const loadToken = currentLoadToken
+
   isLoading.value = true
   loadError.value = null
   isModelReady.value = false
@@ -111,22 +150,26 @@ const loadModel = async (url: string, scale: number) => {
       throw new Error('Failed to initialize PixiJS application')
     }
 
+    if (loadToken !== currentLoadToken) return
+
     if (currentModel) {
       pixiApp.stage.removeChild(currentModel)
       currentModel.destroy()
       currentModel = null
     }
 
-    if (focusTickerCallback) {
-      Ticker.shared.remove(focusTickerCallback)
-      focusTickerCallback = null
-    }
+    cleanupFocus()
 
     const model = await Live2DModel.from(url, {
       autoHitTest: true,
       autoFocus: false,
       ticker: Ticker.shared
     })
+
+    if (loadToken !== currentLoadToken) {
+      model.destroy()
+      return
+    }
 
     const clampedScale = Math.max(0.05, Math.min(2.0, scale))
     model.scale.set(clampedScale)
@@ -147,9 +190,7 @@ const loadModel = async (url: string, scale: number) => {
     }
 
     model.on('hit', (hitAreas: string[]) => {
-      if (hitAreas.includes('body')) {
-        model.motion('TapBody', 0)
-      } else if (hitAreas.includes('head')) {
+      if (hitAreas.includes('body') || hitAreas.includes('head')) {
         model.motion('TapBody', 0)
       }
     })
@@ -182,6 +223,8 @@ const loadModel = async (url: string, scale: number) => {
 
     console.info('[INFO][LuomiNestDesktopPet] Model loaded successfully:', url)
   } catch (err) {
+    if (loadToken !== currentLoadToken) return
+
     const message = err instanceof Error ? err.message : 'Failed to load model'
     loadError.value = message
     console.error('[ERROR][LuomiNestDesktopPet] Model load error:', message)
@@ -189,12 +232,16 @@ const loadModel = async (url: string, scale: number) => {
     if (retryCount < MAX_RETRIES) {
       retryCount++
       console.info(`[INFO][LuomiNestDesktopPet] Retrying (${retryCount}/${MAX_RETRIES})...`)
-      setTimeout(async () => {
+      retryTimerId = setTimeout(async () => {
+        retryTimerId = null
+        if (loadToken !== currentLoadToken) return
         await loadModel(url, scale)
       }, 1000 * retryCount)
     }
   } finally {
-    isLoading.value = false
+    if (loadToken === currentLoadToken) {
+      isLoading.value = false
+    }
   }
 }
 
@@ -240,11 +287,8 @@ const setupWheel = (model: Live2DModel) => {
   window.addEventListener('wheel', wheelHandler, { passive: false })
 }
 
-const setupFocus = (model: Live2DModel) => {
-  if (focusTickerCallback) {
-    Ticker.shared.remove(focusTickerCallback)
-    focusTickerCallback = null
-  }
+const setupFocus = (_model: Live2DModel) => {
+  cleanupFocus()
 
   const FOCUS_DAMPING = 0.15
 
@@ -257,6 +301,9 @@ const setupFocus = (model: Live2DModel) => {
     focusTargetX = 0
     focusTargetY = 0
   }
+
+  focusMouseMoveHandler = onMouseMove
+  focusMouseLeaveHandler = onMouseLeave
 
   focusTickerCallback = () => {
     if (!currentModel) return
@@ -426,14 +473,7 @@ onMounted(async () => {
   })
 
   window.electron?.ipcRenderer.on('desktop-pet:pad-emotion', (_event: any, pad: { pleasure: number; arousal: number; dominance: number }) => {
-    const { pleasure, arousal, dominance } = pad
-    let emotionId = 'neutral'
-    if (pleasure > 0.3 && arousal > 0.3) emotionId = 'happy'
-    else if (pleasure < -0.3 && arousal > 0) emotionId = 'angry'
-    else if (pleasure < -0.3 && arousal < -0.2) emotionId = 'sad'
-    else if (pleasure > 0 && arousal < -0.3) emotionId = 'love'
-    else if (arousal > 0.5 && dominance < -0.2) emotionId = 'surprise'
-
+    const emotionId = mapPADtoEmotion(pad.pleasure, pad.arousal, pad.dominance)
     if (currentModel) {
       try {
         currentModel.expression(emotionId)
@@ -468,11 +508,13 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  if (islandHideTimer) clearTimeout(islandHideTimer)
-  if (focusTickerCallback) {
-    Ticker.shared.remove(focusTickerCallback)
-    focusTickerCallback = null
+  if (retryTimerId !== null) {
+    clearTimeout(retryTimerId)
+    retryTimerId = null
   }
+  currentLoadToken++
+  if (islandHideTimer) clearTimeout(islandHideTimer)
+  cleanupFocus()
   if (wheelHandler) {
     window.removeEventListener('wheel', wheelHandler)
     wheelHandler = null
