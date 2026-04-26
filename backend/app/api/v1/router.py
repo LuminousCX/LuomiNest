@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import system, chat, agent, model, skill, mcp, social
+from app.api.v1.endpoints import system, chat, agent, model, skill, mcp, social, memory
 
 api_router = APIRouter()
 
@@ -11,3 +11,4 @@ api_router.include_router(model.router)
 api_router.include_router(skill.router)
 api_router.include_router(mcp.router)
 api_router.include_router(social.router)
+api_router.include_router(memory.router)
