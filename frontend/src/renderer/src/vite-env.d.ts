@@ -60,6 +60,15 @@ export interface ElectronApi {
     getVersion: () => Promise<string>
     getName: () => Promise<string>
   }
+  config: {
+    getTheme: () => Promise<string>
+    setTheme: (theme: 'light' | 'dark' | 'system') => Promise<void>
+    getTTS: () => Promise<any>
+    setTTS: (updates: any) => Promise<void>
+    getSTT: () => Promise<any>
+    setSTT: (updates: any) => Promise<void>
+    getAll: () => Promise<any>
+  }
   tab: {
     create: (url?: string) => Promise<TabInfo>
     activate: (tabId: string) => Promise<void>

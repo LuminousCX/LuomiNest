@@ -13,12 +13,10 @@ import {
   Loader2,
   Settings,
   AlertTriangle,
-  StopCircle,
   RotateCcw,
   Clock,
   MessageSquare,
   Trash2,
-  X,
   Plus,
   Copy,
   Check,
@@ -287,7 +285,7 @@ const startNewConversation = () => {
 const handleSearch = async () => {
   if (!searchQuery.value.trim()) return
   try {
-    searchResults.value = await skillStore.executeSkill('search', { query: searchQuery.value })
+    searchResults.value = (await skillStore.executeSkill('search', { query: searchQuery.value })) as unknown as any[] ?? []
   } catch {
     searchResults.value = []
   }

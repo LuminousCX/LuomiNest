@@ -9,7 +9,6 @@ import {
   Search,
   MoreVertical,
   Send,
-  Sparkles,
   Hash,
   ImagePlus,
   Mic,
@@ -20,7 +19,7 @@ import {
 } from 'lucide-vue-next'
 import { useSocialStore } from '../stores/social'
 import { useAgentStore } from '../stores/agent'
-import type { GroupInfo, GroupMessage } from '../types'
+import type { GroupInfo } from '../types'
 
 const socialStore = useSocialStore()
 const agentStore = useAgentStore()

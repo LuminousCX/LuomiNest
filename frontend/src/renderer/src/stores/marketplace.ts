@@ -6,6 +6,7 @@ import type {
   MarketplaceCategory,
   MarketplaceFilter,
   MarketplaceReview,
+  MarketplaceReviewReply,
   SearchSuggestion,
   InstallProgress,
 } from '../types/marketplace'
@@ -67,7 +68,6 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
         ...r,
         replies: r.replies?.map(rp => ({
           ...rp,
-          userAvatar: rp.userAvatar,
         })),
       }))
     }

@@ -67,7 +67,7 @@ export const useChatStore = defineStore('chat', () => {
 
   const currentMessages = computed(() => messages.value)
 
-  watch(() => activeAgentId.value, async (newAgentId, oldAgentId) => {
+  watch(() => activeAgentId.value, async (newAgentId, _oldAgentId) => {
     if (newAgentId) {
       if (!agentConversations.value[newAgentId]) {
         agentConversations.value = {

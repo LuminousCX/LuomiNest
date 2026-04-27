@@ -11,16 +11,9 @@
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
     "build:win": "pnpm run build && electron-builder --win",
-    "build:win-nsis": "pnpm run build && electron-builder --win nsis",
-    "build:win-portable": "pnpm run build && electron-builder --win portable",
-    "build:linux": "pnpm run build && electron-builder --linux",
-    "build:linux-appimage": "pnpm run build && electron-builder --linux AppImage",
-    "build:linux-deb": "pnpm run build && electron-builder --linux deb",
+    "build:linux": "pnpm run build && electron-builder --linux AppImage deb rpm",
     "build:mac": "pnpm run build && electron-builder --mac",
-    "build:mac-dmg": "pnpm run build && electron-builder --mac dmg",
-    "build:backend": "cd ../backend && build.bat",
-    "build:complete": "cd .. && build-all.bat",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && vue-tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
     "marked": "^18.0.1",
@@ -126,7 +119,12 @@
       "artifactName": "LuomiNest-Setup-${version}.${ext}",
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true,
-      "menuCategory": true
+      "menuCategory": true,
+      "displayLanguageSelector": true,
+      "installerSidebarImage": "",
+      "uninstallDisplayName": "LuomiNest",
+      "installerHeaderIcon": "resources/icon.ico",
+      "unicode": true
     },
     "portable": {
       "artifactName": "LuomiNest-Portable-${version}.${ext}"
@@ -146,7 +144,7 @@
           ]
         },
         {
-          "target": "tar.gz",
+          "target": "rpm",
           "arch": [
             "x64"
           ]
@@ -170,6 +168,14 @@
         "libnss3"
       ],
       "artifactName": "LuomiNest-${version}-linux-${arch}.deb"
+    },
+    "rpm": {
+      "depends": [
+        "libnotify",
+        "libXtst6",
+        "nss"
+      ],
+      "artifactName": "LuomiNest-${version}-linux-${arch}.rpm"
     },
     "mac": {
       "target": [
@@ -224,8 +230,11 @@
       "artifactName": "LuomiNest-${version}-mac-${arch}.dmg"
     },
     "asar": true,
-    "asarUnpack": [
-      "**/*.node"
-    ]
+  "asarUnpack": [
+    "**/*.node",
+    "**/*.moc3",
+    "**/*.png",
+    "**/*.jpg"
+  ]
   }
 }

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed } from 'vue'
 import { Puzzle, SlidersHorizontal, X } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
 import MarketplaceSearch from '../components/marketplace/MarketplaceSearch.vue'
@@ -10,7 +9,6 @@ import MarketplaceCard from '../components/marketplace/MarketplaceCard.vue'
 import MarketplaceBanner from '../components/marketplace/MarketplaceBanner.vue'
 import type { MarketplaceFilter } from '../types/marketplace'
 
-const router = useRouter()
 const store = useMarketplaceStore()
 
 const categories = computed(() => store.getCategories('plugin'))

@@ -10,7 +10,6 @@ import {
   Mic,
   Plus,
   ChevronRight,
-  Copy,
   Search,
   Trash2,
   Eye,
@@ -56,7 +55,6 @@ const toggleInfo = (section: string) => {
 const providers = computed(() => modelStore.providers)
 
 const showApiKey = ref<Record<string, boolean>>({ add: false })
-const toggleApiKeyVisibility = (id: string) => { showApiKey.value[id] = !showApiKey.value[id] }
 
 const showAddDialog = ref(false)
 const showProviderList = ref(false)
@@ -267,12 +265,6 @@ const handleFetchModels = async (providerId: string) => {
   } catch (e: any) {
     console.error('Failed to fetch models:', e)
   }
-}
-
-const handleCopy = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {}
 }
 
 const saveStatus = reactive<Record<string, 'idle' | 'saving' | 'saved' | 'error'>>({

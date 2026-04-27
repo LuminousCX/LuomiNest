@@ -124,7 +124,7 @@ async function syncTabs() {
       tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
       showHomePage.value = true
     } else {
-      tabs.value = allTabs.map(t => ({
+      tabs.value = allTabs.map((t: any) => ({
         id: t.id,
         title: t.title || '加载中...',
         url: t.url,

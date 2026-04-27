@@ -153,7 +153,7 @@ const loadModel = async (url: string, scale: number) => {
         resizeTo: window,
         resolution: Math.min(window.devicePixelRatio || 1, 2),
         autoDensity: true
-      })
+      } as any)
     }
 
     if (!pixiApp) {
@@ -406,14 +406,6 @@ const handleToggleAlwaysOnTop = () => {
 
 const handleClose = () => {
   window.api.desktopPet.close()
-}
-
-const handleSwitchModel = async (modelInfo: PetModelInfo) => {
-  currentModelName.value = modelInfo.name
-  if (canvasRef.value) {
-    await loadModel(modelInfo.url, modelInfo.scale)
-  }
-  isIslandExpanded.value = false
 }
 
 onMounted(async () => {

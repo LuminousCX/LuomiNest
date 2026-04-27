@@ -63,7 +63,8 @@ const agents = computed(() => {
       avatar: a.avatar || '',
       color: a.color,
       active: agentStore.activeAgent?.id === a.id,
-      isDefault: a.id.startsWith('default-')
+      isDefault: a.id.startsWith('default-'),
+      isCustom: false as const
     }))
   return [
     ...storeAgents,

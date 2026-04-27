@@ -1,12 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
-declare global {
-  interface Window {
-    api?: any
-  }
-}
-
 export const useThemeStore = defineStore('theme', () => {
   const STORAGE_KEY = 'luominest-theme'
 

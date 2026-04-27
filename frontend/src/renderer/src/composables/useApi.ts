@@ -30,7 +30,7 @@ export const useApi = () => {
   const request = async <T>(
     path: string,
     options: {
-      method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+      method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
       body?: any
       timeout?: number
     } = {}

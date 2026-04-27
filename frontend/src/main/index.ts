@@ -761,53 +761,93 @@ const MIME_MAP: Record<string, string> = {
   motion3: 'application/json',
   cdi3: 'application/json',
   userdata3: 'application/json',
-  js: 'application/javascript'
+  js: 'application/javascript',
+  wasm: 'application/wasm',
+  txt: 'text/plain'
 }
 
 const resolveModelFile = (hostname: string, relativePath: string): string | null => {
   if (hostname === 'cubism-core') {
     const filePath = join(cubismCoreBasePath, relativePath)
     if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
+    console.warn(`[WARNING][LuomiNestAvatar] Cubism core not found: ${filePath}`)
     return null
   }
 
-  const importedPath = join(PATHS.live2d, hostname, relativePath)
-  if (existsSync(importedPath) && statSync(importedPath).isFile()) return importedPath
+  const searchPaths: { label: string; path: string }[] = [
+    { label: 'imported', path: join(PATHS.live2d, hostname, relativePath) },
+    { label: 'builtin', path: join(builtinBasePath, hostname, relativePath) }
+  ]
 
-  const builtinPath = join(builtinBasePath, hostname, relativePath)
-  if (existsSync(builtinPath) && statSync(builtinPath).isFile()) return builtinPath
+  for (const sp of searchPaths) {
+    try {
+      if (existsSync(sp.path) && statSync(sp.path).isFile()) return sp.path
+    } catch {
+      continue
+    }
+  }
 
+  console.warn(`[WARNING][LuomiNestAvatar] Resource not found: ${hostname}/${relativePath}`)
+  console.warn(`[WARNING][LuomiNestAvatar]   Searched: ${searchPaths.map(s => s.label + ':' + s.path).join(' | ')}`)
   return null
 }
 
 app.whenReady().then(async () => {
   initAppPaths()
 
-  protocol.handle('luominest-avatar', (request) => {
-    const url = new URL(request.url)
-    const hostname = url.hostname
-    const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, '')
-
-    const filePath = resolveModelFile(hostname, relativePath)
-    if (!filePath) {
-      console.warn(`[WARNING][LuomiNestAvatar] Resource not found: ${hostname}/${relativePath}`)
-      return new Response('Not Found', { status: 404 })
+  const verifyResourcePath = (label: string, path: string, sampleFile: string): boolean => {
+    const fullPath = join(path, sampleFile)
+    const exists = existsSync(fullPath)
+    if (!exists) {
+      console.warn(`[WARNING][LuomiNestAvatar] ${label} path check FAILED: ${path} (sample: ${fullPath})`)
+    } else {
+      console.info(`[INFO][LuomiNestAvatar] ${label} path OK: ${path}`)
     }
+    return exists
+  }
 
-    const ext = filePath.split('.').pop()?.toLowerCase()
-    const mimeType = MIME_MAP[ext ?? ''] ?? 'application/octet-stream'
-    const data = readFileSync(filePath)
-    return new Response(data, {
-      headers: {
-        'content-type': mimeType,
-        'access-control-allow-origin': '*',
-        'cache-control': 'no-cache'
+  verifyResourcePath('Builtin Live2D', builtinBasePath, 'llny/llny.model3.json')
+  verifyResourcePath('Cubism Core', cubismCoreBasePath, 'live2dcubismcore.min.js')
+
+  protocol.handle('luominest-avatar', (request) => {
+    try {
+      const url = new URL(request.url)
+      const hostname = url.hostname
+      const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, '')
+
+      if (!hostname || !relativePath) {
+        return new Response('Bad Request: invalid URL', { status: 400 })
       }
-    })
+
+      const filePath = resolveModelFile(hostname, relativePath)
+      if (!filePath) {
+        console.warn(`[WARNING][LuomiNestAvatar] 404: ${hostname}/${relativePath}`)
+        return new Response('Not Found', { status: 404 })
+      }
+
+      const ext = filePath.split('.').pop()?.toLowerCase()
+      const mimeType = MIME_MAP[ext ?? ''] ?? 'application/octet-stream'
+      const data = readFileSync(filePath)
+      return new Response(data, {
+        headers: {
+          'content-type': mimeType,
+          'access-control-allow-origin': '*',
+          'cache-control': 'no-cache',
+          'content-length': String(data.byteLength)
+        }
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error(`[ERROR][LuomiNestAvatar] Protocol handler error:`, message)
+      return new Response('Internal Server Error', { status: 500 })
+    }
   })
 
-  console.info(`[INFO][LuomiNestAvatar] Protocol registered. Builtin path: ${builtinBasePath}`)
-  console.info(`[INFO][LuomiNestAvatar] Cubism core path: ${cubismCoreBasePath}`)
+  console.info(`[INFO][LuomiNestAvatar] Protocol "luominest-avatar" registered successfully`)
+  console.info(`[INFO][LuomiNestAvatar]   builtinBasePath → ${builtinBasePath}`)
+  console.info(`[INFO][LuomiNestAvatar]   cubismCoreBasePath → ${cubismCoreBasePath}`)
+  console.info(`[INFO][LuomiNestAvatar]   isPackaged → ${app.isPackaged}`)
+  console.info(`[INFO][LuomiNestAvatar]   resourcesPath → ${process.resourcesPath}`)
 
   console.log('[Main] Starting backend service...')
   const backendStarted = await startBackend()

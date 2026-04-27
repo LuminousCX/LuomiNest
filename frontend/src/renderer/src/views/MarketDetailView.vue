@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  ArrowLeft, Star, Download, Users, Calendar, Tag,
-  ExternalLink, Check, FileText, Shield, ChevronDown,
+  ArrowLeft, Star, Download, Users, Tag,
+  ExternalLink, Check, FileText, ChevronDown,
   ChevronRight
 } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
-import MarketplaceRating from '../components/marketplace/MarketplaceRating.vue'
 import MarketplaceInstallBtn from '../components/marketplace/MarketplaceInstallBtn.vue'
 import MarketplaceReviews from '../components/marketplace/MarketplaceReviews.vue'
 import type { MarketplaceType } from '../types/marketplace'

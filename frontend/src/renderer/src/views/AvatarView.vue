@@ -17,14 +17,8 @@ const {
   isReady: isModelReady,
   isLoading,
   error: loadError,
-  currentModelName,
-  availableMotions,
-  availableExpressions,
   loadModel,
-  triggerMotion,
   driveEmotion,
-  drivePadEmotion,
-  syncLipParam,
   resetPose,
   destroy: teardown
 } = useLuomiNestLive2D(canvasRef)
@@ -200,7 +194,7 @@ function toggleSkinSidebar() {
 const loadPersistedModels = async () => {
   try {
     const models = await window.api.avatar.listImportedModels()
-    importedModels.value = models.map(m => ({
+    importedModels.value = models.map((m: any) => ({
       id: m.id,
       name: m.name,
       url: m.url,
@@ -347,7 +341,7 @@ onBeforeUnmount(() => {
                 :style="{ '--emo-color': emo.color }"
                 @click="selectEmotion(emo)"
               >
-                <component :is="emo.icon" :size="20" />
+                <component :is="emo.icon" :size="18" />
                 <span>{{ emo.label }}</span>
               </button>
             </div>
@@ -407,7 +401,7 @@ onBeforeUnmount(() => {
               @click="handleSkinSelect(idx)"
             >
               <div class="skin-thumb">
-                <Palette :size="24" />
+                <Palette :size="18" />
               </div>
               <div class="skin-info">
                 <span class="skin-name">{{ skin.name }}</span>
@@ -420,7 +414,7 @@ onBeforeUnmount(() => {
           </div>
 
           <button class="import-btn" @click="handleImportClick">
-            <FolderOpen :size="16" />
+            <FolderOpen :size="14" />
             <span>Import .model3.json</span>
           </button>
         </template>
@@ -854,11 +848,12 @@ onBeforeUnmount(() => {
 
 .stage-controls {
   display: flex;
-  gap: 16px;
-  padding: 16px 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 20px;
   flex-shrink: 0;
-  overflow-x: auto;
   position: relative;
+  align-items: flex-start;
 }
 
 .stage-controls::before {
@@ -873,7 +868,7 @@ onBeforeUnmount(() => {
 
 .mode-switcher {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
@@ -881,8 +876,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 10px 18px;
+  gap: 1px;
+  padding: 8px 14px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-light);
   background: transparent;
@@ -909,31 +904,31 @@ onBeforeUnmount(() => {
 }
 
 .mode-desc {
-  font-size: 10px;
-  opacity: 0.6;
+  font-size: 9px;
+  opacity: 0.55;
 }
 
 .emotion-panel,
 .idle-panel {
   flex-shrink: 0;
-  min-width: 200px;
-  max-width: 240px;
+  min-width: 180px;
+  max-width: 220px;
 }
 
 .panel-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .expression-value {
   margin-left: auto;
   font-family: monospace;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--lumi-primary);
   opacity: 0.7;
 }
@@ -947,8 +942,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 10px 12px;
+  gap: 3px;
+  padding: 8px 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
   background: transparent;
@@ -974,13 +969,13 @@ onBeforeUnmount(() => {
 .idle-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .idle-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .idle-info {
@@ -990,14 +985,14 @@ onBeforeUnmount(() => {
 }
 
 .idle-name {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
 }
 
 .idle-status {
-  font-size: 10px;
-  padding: 1px 8px;
-  border-radius: 10px;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
 }
 
 .idle-status.running {
@@ -1034,9 +1029,10 @@ onBeforeUnmount(() => {
 }
 
 .skin-sidebar {
-  width: 260px;
-  padding: 20px 16px;
+  width: 230px;
+  padding: 16px 12px;
   overflow-y: auto;
+  overflow-x: hidden;
   flex-shrink: 0;
   background: var(--surface);
   position: relative;
@@ -1087,34 +1083,35 @@ onBeforeUnmount(() => {
 }
 
 .sidebar-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   color: var(--text);
+  letter-spacing: 0.3px;
 }
 
 .import-error {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 5px;
+  padding: 6px 10px;
   border-radius: 8px;
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
-  font-size: 12px;
-  margin-bottom: 12px;
+  font-size: 11px;
+  margin-bottom: 10px;
 }
 
 .import-success {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 5px;
+  padding: 6px 10px;
   border-radius: 8px;
   background: rgba(34, 197, 94, 0.1);
   color: #22c55e;
-  font-size: 12px;
-  margin-bottom: 12px;
+  font-size: 11px;
+  margin-bottom: 10px;
   animation: fade-in 300ms ease-in-out;
 }
 
@@ -1126,19 +1123,39 @@ onBeforeUnmount(() => {
 .skin-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   flex: 1;
+  overflow-y: auto;
+  margin-right: 2px;
+  padding-right: 2px;
+}
+
+.skin-list::-webkit-scrollbar {
+  width: 3px;
+}
+
+.skin-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.skin-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.skin-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .skin-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border-radius: var(--radius-lg);
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
   cursor: pointer;
-  transition: all 300ms ease-in-out;
+  transition: all 250ms ease-in-out;
 }
 
 .skin-card:hover {
@@ -1152,9 +1169,9 @@ onBeforeUnmount(() => {
 }
 
 .skin-thumb {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
   background: var(--surface-hover);
   display: flex;
   align-items: center;
@@ -1172,45 +1189,47 @@ onBeforeUnmount(() => {
 }
 
 .skin-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text);
 }
 
 .skin-type {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
+  opacity: 0.75;
 }
 
 .skin-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
+  gap: 3px;
+  margin-top: 4px;
 }
 
 .skin-tag {
-  font-size: 10px;
-  padding: 2px 7px;
-  border-radius: 8px;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 6px;
   background: var(--surface-hover);
   color: var(--text-muted);
+  line-height: 1.4;
 }
 
 .import-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: var(--radius-lg);
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
   border: 1px dashed var(--border-light);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   transition: all 300ms ease-in-out;
-  font-size: 13px;
-  margin-top: 16px;
+  font-size: 12px;
+  margin-top: 12px;
   flex-shrink: 0;
 }
 

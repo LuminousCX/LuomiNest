@@ -17,7 +17,7 @@ export const PATHS = {
     return app.getPath('appData')
   },
   get cache() {
-    return app.getPath('cache')
+    return ensureDir(join(app.getPath('userData'), 'Cache'))
   },
   get logs() {
     return ensureDir(join(app.getPath('userData'), 'Logs'))

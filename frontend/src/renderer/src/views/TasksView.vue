@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import {
-  CheckSquare,
   Plus,
-  Clock,
   Calendar,
-  AlertCircle,
   CheckCircle2,
   Circle,
   Trash2,

@@ -3,9 +3,8 @@ import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   X, ChevronRight, ChevronLeft, Upload, Sparkles,
-  Bot, FileText, Brain, Terminal, Presentation,
-  FileSpreadsheet, FileCode, Plus, CircleDot,
-  Sun, Moon, Check
+  FileText, Brain, Terminal, Presentation,
+  FileSpreadsheet, FileCode, Plus, CircleDot
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 
