@@ -1,5 +1,5 @@
-﻿<script setup lang="ts">
-import { ref, onMounted, nextTick, watch, computed } from 'vue'
+﻿﻿﻿<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import {
   Send,
   Paperclip,
@@ -50,7 +50,7 @@ const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const showModelDropdown = ref(false)
-const showHistoryPanel = ref(true)
+const showHistoryPanel = ref(false)
 const showSkillDropdown = ref(false)
 const showSearchPanel = ref(false)
 const searchQuery = ref('')
@@ -58,6 +58,9 @@ const searchResults = ref<any[]>([])
 const copiedId = ref<string | null>(null)
 const isNearBottom = ref(true)
 const SCROLL_BOTTOM_THRESHOLD = 120
+const showScrollToBottomBtn = ref(false)
+const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
+let resizeObserver: ResizeObserver | null = null
 
 const agentCards = computed(() => {
   const agents = agentStore.agents.map(a => ({
@@ -143,11 +146,6 @@ const selectAgent = async (agent: { id: string; name: string; desc: string; colo
   }
   const found = agentStore.agents.find(a => a.id === agent.id)
   if (found) {
-    const currentConvId = chatStore.currentConversation?.id
-    if (currentConvId) {
-      chatStore.cacheConversationMessages(currentConvId)
-    }
-
     agentStore.setActiveAgent(found)
     await chatStore.fetchConversations(found.id)
     if (chatStore.conversations.length > 0) {
@@ -180,15 +178,6 @@ const sendMessage = async () => {
   const agent = agentStore.activeAgent
   const resolved = modelStore.resolveModel
 
-  if (!chatStore.currentConversation) {
-    await chatStore.createConversation(
-      content.slice(0, 30),
-      agent?.id,
-      agent?.model || resolved?.model || undefined,
-      agent?.provider || resolved?.provider || undefined,
-    )
-  }
-
   const options: any = {
     model: agent?.model || resolved?.model || undefined,
     provider: agent?.provider || resolved?.provider || undefined,
@@ -214,14 +203,28 @@ const scrollToBottom = (force = false) => {
   if (!force && !isNearBottom.value) return
   messagesContainer.value.scrollTo({
     top: messagesContainer.value.scrollHeight,
-    behavior: 'auto'
+    behavior: force ? 'auto' : 'smooth'
   })
 }
 
 const handleMessagesScroll = () => {
   if (!messagesContainer.value) return
   const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
-  isNearBottom.value = scrollHeight - scrollTop - clientHeight < SCROLL_BOTTOM_THRESHOLD
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+  isNearBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
+  showScrollToBottomBtn.value = !isNearBottom.value && messages.value.length > 0
+}
+
+const setupResizeObserver = () => {
+  if (!messagesContainer.value) return
+  const inner = messagesContainer.value.querySelector('.messages-container') as HTMLElement
+  if (!inner) return
+  resizeObserver = new ResizeObserver(() => {
+    if (isNearBottom.value) {
+      scrollToBottom(true)
+    }
+  })
+  resizeObserver.observe(inner)
 }
 
 const resetTextareaHeight = () => {
@@ -286,16 +289,7 @@ const formatTime = (dateStr: string) => {
 }
 
 const handleLoadConversation = async (convId: string) => {
-  if (chatStore.currentConversation?.id === convId) return
-
-  const currentConvId = chatStore.currentConversation?.id
-  if (currentConvId) {
-    chatStore.cacheConversationMessages(currentConvId)
-  }
-
-  if (isStreaming.value) {
-    chatStore.cancelCurrentRequest()
-  }
+  if (chatStore.currentConvId === convId) return
 
   await chatStore.loadConversation(convId)
   await nextTick()
@@ -307,6 +301,7 @@ const handleDeleteConversation = async (convId: string) => {
 }
 
 const startNewConversation = () => {
+  chatStore.cleanupUnusedConversations()
   chatStore.clearMessages()
 }
 
@@ -328,9 +323,17 @@ const insertSkillToInput = (skillName: string) => {
 
 watch(messages, () => {
   if (isStreaming.value && isNearBottom.value) {
-    nextTick(() => scrollToBottom(true))
+    nextTick(() => scrollToBottom())
   }
 }, { deep: true })
+
+watch(isLoadingCurrentConv, (loading) => {
+  if (loading) {
+    isNearBottom.value = true
+  } else {
+    nextTick(() => scrollToBottom(true))
+  }
+})
 
 const showCreateAgentDialog = ref(false)
 const newAgentForm = ref({
@@ -389,6 +392,12 @@ onMounted(async () => {
     ])
   }
   document.addEventListener('click', handleClickOutsideModel)
+  nextTick(() => setupResizeObserver())
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  document.removeEventListener('click', handleClickOutsideModel)
 })
 </script>
 
@@ -509,6 +518,9 @@ onMounted(async () => {
                       <Loader2 :size="16" class="spin-animation" />
                       <span>正在分析问题...</span>
                     </div>
+                    <div v-if="msg.role === 'assistant' && !msg.done && msg.content" class="streaming-indicator">
+                      <span class="streaming-dot"></span>
+                    </div>
                     <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
                       <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
                         <Check v-if="copiedId === msg.id" :size="13" />
@@ -520,7 +532,7 @@ onMounted(async () => {
                 </div>
               </TransitionGroup>
 
-              <div v-if="messages.length === 0" class="empty-state">
+              <div v-if="messages.length === 0 && !isLoadingCurrentConv" class="empty-state">
                 <div class="empty-icon">
                   <Bot :size="48" />
                 </div>
@@ -534,6 +546,21 @@ onMounted(async () => {
               </div>
             </div>
           </div>
+
+          <Transition name="conv-loading-fade">
+            <div v-if="isLoadingCurrentConv" class="conv-loading-overlay">
+              <div class="conv-loading-content">
+                <Loader2 :size="20" class="spin-animation" />
+                <span>加载对话中...</span>
+              </div>
+            </div>
+          </Transition>
+
+          <Transition name="scroll-btn-fade">
+            <button v-if="showScrollToBottomBtn" class="scroll-to-bottom-btn" @click="scrollToBottom(true)">
+              <ChevronDown :size="18" />
+            </button>
+          </Transition>
         </div>
 
         <div class="input-area">
@@ -715,7 +742,7 @@ onMounted(async () => {
             <div
               v-for="conv in agentConversations"
               :key="conv.id"
-              :class="['history-item', { active: chatStore.currentConversation?.id === conv.id }]"
+              :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
               @click="handleLoadConversation(conv.id)"
             >
               <MessageSquare :size="14" class="history-item-icon" />
@@ -726,6 +753,7 @@ onMounted(async () => {
                   <span v-if="conv.lastMessage" class="history-item-preview">{{ conv.lastMessage }}</span>
                 </span>
               </div>
+              <Loader2 v-if="chatStore.isConversationStreaming(conv.id)" :size="12" class="history-streaming-icon spin-animation" />
               <button class="history-item-delete" title="删除" @click.stop="handleDeleteConversation(conv.id)">
                 <Trash2 :size="12" />
               </button>
@@ -1140,6 +1168,7 @@ onMounted(async () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .messages-scroll {
@@ -1273,6 +1302,99 @@ onMounted(async () => {
 
 .loading-status .spin-animation {
   animation: spin 1s linear infinite;
+}
+
+.streaming-indicator {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.streaming-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lumi-primary);
+  animation: streaming-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes streaming-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.conv-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--workspace-bg);
+  opacity: 0.85;
+  z-index: 10;
+}
+
+.conv-loading-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--workspace-card);
+  box-shadow: var(--shadow-md);
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.conv-loading-fade-enter-active {
+  animation: conv-loading-in 0.25s ease-out;
+}
+
+.conv-loading-fade-leave-active {
+  animation: conv-loading-in 0.2s ease-out reverse;
+}
+
+@keyframes conv-loading-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--workspace-card);
+  box-shadow: var(--shadow-md);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: all 300ms ease-in-out;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-50%) scale(1.08);
+}
+
+.scroll-btn-fade-enter-active {
+  animation: scroll-btn-in 0.25s ease-out;
+}
+
+.scroll-btn-fade-leave-active {
+  animation: scroll-btn-in 0.2s ease-out reverse;
+}
+
+@keyframes scroll-btn-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 @keyframes spin {
@@ -1558,6 +1680,18 @@ onMounted(async () => {
 .history-item-delete:hover {
   background: var(--lumi-accent-light);
   color: var(--lumi-accent);
+}
+
+.history-streaming-icon {
+  color: var(--lumi-primary);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.history-item.active .history-streaming-icon,
+.history-item:hover .history-streaming-icon {
+  opacity: 1;
 }
 
 .history-empty {

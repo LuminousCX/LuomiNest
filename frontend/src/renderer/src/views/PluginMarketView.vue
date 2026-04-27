@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+﻿﻿﻿<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Puzzle, SlidersHorizontal, X } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
