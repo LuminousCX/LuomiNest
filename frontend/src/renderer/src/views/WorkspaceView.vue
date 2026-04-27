@@ -84,6 +84,9 @@ const agentCards = computed(() => {
 const messages = computed(() => chatStore.messages)
 const isStreaming = computed(() => chatStore.isStreaming)
 const isBackendReady = computed(() => chatStore.isBackendReady)
+const isLoadingConversation = computed(() => chatStore.isLoadingConversation)
+const isSwitchingAgent = computed(() => chatStore.isSwitchingAgent)
+const pendingConversationId = computed(() => chatStore.pendingConversationId)
 
 const currentModel = computed(() => {
   const agent = agentStore.activeAgent
@@ -271,9 +274,14 @@ const formatTime = (dateStr: string) => {
 }
 
 const handleLoadConversation = async (convId: string) => {
-  await chatStore.loadConversation(convId)
-  await nextTick()
-  scrollToBottom()
+  try {
+    await chatStore.loadConversation(convId)
+    await nextTick()
+    await nextTick()
+    scrollToBottom()
+  } catch (error) {
+    console.error('Failed to load conversation:', error)
+  }
 }
 
 const handleDeleteConversation = async (convId: string) => {
@@ -461,48 +469,80 @@ onMounted(async () => {
         <div class="chat-area">
           <div ref="messagesContainer" class="messages-scroll">
             <div class="messages-container">
-              <TransitionGroup name="msg-appear" tag="div">
-                <div
-                  v-for="msg in messages"
-                  :key="msg.id"
-                  :class="['message-row', msg.role]"
-                >
-                  <div class="message-avatar" v-if="msg.role === 'assistant'">
-                    <div class="avatar-assistant">
-                      <Bot :size="16" />
+              <Transition name="fade-slide" mode="out-in">
+                <div v-if="isLoadingConversation || isSwitchingAgent" key="loading" class="conversation-loading">
+                  <div class="loading-skeleton">
+                    <div class="skeleton-row">
+                      <div class="skeleton-avatar"></div>
+                      <div class="skeleton-content">
+                        <div class="skeleton-line skeleton-title"></div>
+                        <div class="skeleton-line skeleton-text"></div>
+                        <div class="skeleton-line skeleton-text short"></div>
+                      </div>
+                    </div>
+                    <div class="skeleton-row user">
+                      <div class="skeleton-content user-content">
+                        <div class="skeleton-line skeleton-text"></div>
+                      </div>
+                    </div>
+                    <div class="skeleton-row">
+                      <div class="skeleton-avatar"></div>
+                      <div class="skeleton-content">
+                        <div class="skeleton-line skeleton-title"></div>
+                        <div class="skeleton-line skeleton-text"></div>
+                      </div>
                     </div>
                   </div>
-                  <div class="message-body">
-                    <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
-                    <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-                    <div v-else class="message-content user-message">{{ msg.content }}</div>
-                    <div v-if="msg.role === 'assistant' && !msg.done && !msg.content && msg.id === messages[messages.length - 1].id" class="loading-status">
-                      <Loader2 :size="16" class="spin-animation" />
-                      <span>正在分析问题...</span>
-                    </div>
-                    <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
-                      <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
-                        <Check v-if="copiedId === msg.id" :size="13" />
-                        <Copy v-else :size="13" />
-                        <span>{{ copiedId === msg.id ? '已复制' : '复制' }}</span>
-                      </button>
-                    </div>
+                  <div class="loading-label">
+                    <Loader2 :size="16" class="spin-animation" />
+                    <span>{{ isSwitchingAgent ? '正在切换 Agent...' : '正在加载对话...' }}</span>
                   </div>
                 </div>
-              </TransitionGroup>
+                <div v-else key="messages">
+                  <TransitionGroup name="msg-appear" tag="div">
+                    <div
+                      v-for="msg in messages"
+                      :key="msg.id"
+                      :class="['message-row', msg.role]"
+                    >
+                      <div class="message-avatar" v-if="msg.role === 'assistant'">
+                        <div class="avatar-assistant">
+                          <Bot :size="16" />
+                        </div>
+                      </div>
+                      <div class="message-body">
+                        <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
+                        <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+                        <div v-else class="message-content user-message">{{ msg.content }}</div>
+                        <div v-if="msg.role === 'assistant' && !msg.done && !msg.content && msg.id === messages[messages.length - 1].id" class="loading-status">
+                          <Loader2 :size="16" class="spin-animation" />
+                          <span>正在分析问题...</span>
+                        </div>
+                        <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
+                          <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
+                            <Check v-if="copiedId === msg.id" :size="13" />
+                            <Copy v-else :size="13" />
+                            <span>{{ copiedId === msg.id ? '已复制' : '复制' }}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </TransitionGroup>
 
-              <div v-if="messages.length === 0" class="empty-state">
-                <div class="empty-icon">
-                  <Bot :size="48" />
+                  <div v-if="messages.length === 0" class="empty-state">
+                    <div class="empty-icon">
+                      <Bot :size="48" />
+                    </div>
+                    <p class="empty-title">选择一个Agent开始对话</p>
+                    <p class="empty-desc">或直接在下方输入框中提问</p>
+                    <div class="empty-quick-actions">
+                      <button class="quick-action" @click="inputText = '你好，请介绍一下你自己'">打个招呼</button>
+                      <button class="quick-action" @click="inputText = '帮我写一段 Python 代码'">写段代码</button>
+                      <button class="quick-action" @click="inputText = '解释一下什么是大语言模型'">了解 LLM</button>
+                    </div>
+                  </div>
                 </div>
-                <p class="empty-title">选择一个Agent开始对话</p>
-                <p class="empty-desc">或直接在下方输入框中提问</p>
-                <div class="empty-quick-actions">
-                  <button class="quick-action" @click="inputText = '你好，请介绍一下你自己'">打个招呼</button>
-                  <button class="quick-action" @click="inputText = '帮我写一段 Python 代码'">写段代码</button>
-                  <button class="quick-action" @click="inputText = '解释一下什么是大语言模型'">了解 LLM</button>
-                </div>
-              </div>
+              </Transition>
             </div>
           </div>
         </div>
@@ -678,18 +718,26 @@ onMounted(async () => {
               </span>
               <span class="panel-count">{{ agentConversations.length }} 个对话</span>
             </div>
-            <button class="panel-action-btn" title="新建对话" @click="startNewConversation">
+            <button class="new-conversation-btn" title="新建对话" @click="startNewConversation">
               <Plus :size="16" />
+              <span>新建对话</span>
             </button>
           </div>
           <div class="history-list">
             <div
               v-for="conv in agentConversations"
               :key="conv.id"
-              :class="['history-item', { active: chatStore.currentConversation?.id === conv.id }]"
+              :class="[
+                'history-item',
+                { 
+                  active: pendingConversationId === conv.id || (!pendingConversationId && chatStore.currentConversation?.id === conv.id),
+                  loading: isLoadingConversation && pendingConversationId === conv.id
+                }
+              ]"
               @click="handleLoadConversation(conv.id)"
             >
-              <MessageSquare :size="14" class="history-item-icon" />
+              <Loader2 v-if="isLoadingConversation && pendingConversationId === conv.id" :size="14" class="history-item-icon spin-animation" />
+              <MessageSquare v-else :size="14" class="history-item-icon" />
               <div class="history-item-info">
                 <span class="history-item-title">{{ conv.title }}</span>
                 <span class="history-item-meta">
@@ -1416,6 +1464,24 @@ onMounted(async () => {
   color: var(--text-secondary);
 }
 
+.new-conversation-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
+  transition: all var(--transition-fast);
+}
+
+.new-conversation-btn:hover {
+  background: var(--lumi-primary);
+  color: white;
+}
+
 .history-list {
   flex: 1;
   overflow-y: auto;
@@ -1462,6 +1528,11 @@ onMounted(async () => {
 
 .history-item.active::before {
   transform: translateY(-50%) scaleY(1);
+}
+
+.history-item.loading {
+  pointer-events: none;
+  opacity: 0.7;
 }
 
 .history-item-icon {
@@ -2311,5 +2382,110 @@ onMounted(async () => {
 .msg-appear-enter-from {
   opacity: 0;
   transform: translateY(16px) scale(0.97);
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.conversation-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  padding: 40px 20px;
+}
+
+.loading-skeleton {
+  width: 100%;
+  max-width: 600px;
+}
+
+.skeleton-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-row.user {
+  justify-content: flex-end;
+}
+
+.skeleton-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--workspace-panel) 25%, var(--workspace-hover) 50%, var(--workspace-panel) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.skeleton-content {
+  flex: 1;
+  max-width: 70%;
+}
+
+.skeleton-content.user-content {
+  max-width: 50%;
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--workspace-panel) 25%, var(--workspace-hover) 50%, var(--workspace-panel) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  margin-bottom: 8px;
+}
+
+.skeleton-line:last-child {
+  margin-bottom: 0;
+}
+
+.skeleton-title {
+  width: 30%;
+  height: 12px;
+  margin-bottom: 10px;
+}
+
+.skeleton-text {
+  width: 100%;
+}
+
+.skeleton-text.short {
+  width: 60%;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+.loading-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 </style>

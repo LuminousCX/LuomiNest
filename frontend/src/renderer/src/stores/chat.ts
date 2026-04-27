@@ -17,8 +17,36 @@ export const useChatStore = defineStore('chat', () => {
   const agentStreamingContent = ref<Record<string, string>>({})
   const lastError = ref<string | null>(null)
   const lastUsage = ref<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | null>(null)
+  const pendingToolCalls = ref<Record<string, any[]>>({})
+  const agentLoadingConversation = ref<Record<string, boolean>>({})
+  const agentPendingConversationId = ref<Record<string, string | null>>({})
+  const agentSwitchingAgent = ref<Record<string, boolean>>({})
+  const agentLoadingDelayed = ref<Record<string, boolean>>({})
+  const loadingDelayTimers = ref<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const isStreaming = computed(() => agentStreaming.value[activeAgentId.value] || false)
+  
+  const isLoadingConversation = computed(() => {
+    if (!activeAgentId.value) return false
+    return agentLoadingDelayed.value[activeAgentId.value] || false
+  })
+  
+  const pendingConversationId = computed({
+    get: () => agentPendingConversationId.value[activeAgentId.value] || null,
+    set: (value) => {
+      if (activeAgentId.value) {
+        agentPendingConversationId.value = {
+          ...agentPendingConversationId.value,
+          [activeAgentId.value]: value
+        }
+      }
+    }
+  })
+  
+  const isSwitchingAgent = computed(() => {
+    if (!activeAgentId.value) return false
+    return agentSwitchingAgent.value[activeAgentId.value] || false
+  })
   
   const streamingContent = computed({
     get: () => agentStreamingContent.value[activeAgentId.value] || '',
@@ -58,77 +86,6 @@ export const useChatStore = defineStore('chat', () => {
   })
 
   const currentMessages = computed(() => messages.value)
-
-  watch(() => activeAgentId.value, async (newAgentId, oldAgentId) => {
-    if (newAgentId) {
-      // 初始化 Agent 的数据结构
-      if (!agentConversations.value[newAgentId]) {
-        agentConversations.value = {
-          ...agentConversations.value,
-          [newAgentId]: []
-        }
-      }
-      if (!agentCurrentConversation.value[newAgentId]) {
-        agentCurrentConversation.value = {
-          ...agentCurrentConversation.value,
-          [newAgentId]: null
-        }
-      }
-      if (!agentMessages.value[newAgentId]) {
-        agentMessages.value = {
-          ...agentMessages.value,
-          [newAgentId]: []
-        }
-      }
-      if (!agentStreaming.value[newAgentId]) {
-        agentStreaming.value = {
-          ...agentStreaming.value,
-          [newAgentId]: false
-        }
-      }
-      if (!agentStreamingContent.value[newAgentId]) {
-        agentStreamingContent.value = {
-          ...agentStreamingContent.value,
-          [newAgentId]: ''
-        }
-      }
-      
-      // 检查是否已有消息或正在流式输出
-      const existingMessages = agentMessages.value[newAgentId]
-      const hasExistingMessages = existingMessages && existingMessages.length > 0
-      const isCurrentlyStreaming = agentStreaming.value[newAgentId]
-      
-      await fetchConversations(newAgentId)
-      
-      // 只有在没有现有消息且不在流式输出时才加载对话
-      if (!hasExistingMessages && !isCurrentlyStreaming) {
-        const currentConv = agentCurrentConversation.value[newAgentId]
-        if (currentConv && currentConv.id) {
-          try {
-            await loadConversation(currentConv.id)
-          } catch (error) {
-            agentCurrentConversation.value = {
-              ...agentCurrentConversation.value,
-              [newAgentId]: null
-            }
-            agentMessages.value = {
-              ...agentMessages.value,
-              [newAgentId]: []
-            }
-          }
-        } else if (agentConversations.value[newAgentId].length > 0) {
-          const latestConv = agentConversations.value[newAgentId][0]
-          if (latestConv && latestConv.id) {
-            try {
-              await loadConversation(latestConv.id)
-            } catch (error) {
-            }
-          }
-        }
-      }
-    }
-  }, { immediate: true })
-
   const checkBackend = async () => {
     isBackendReady.value = await checkHealth()
     return isBackendReady.value
@@ -178,19 +135,80 @@ export const useChatStore = defineStore('chat', () => {
   const loadConversation = async (convId: string) => {
     if (!activeAgentId.value) return
     
-    const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
-    agentCurrentConversation.value = {
-      ...agentCurrentConversation.value,
-      [activeAgentId.value]: conv
+    if (agentLoadingConversation.value[activeAgentId.value]) {
+      return
     }
-    agentMessages.value = {
-      ...agentMessages.value,
-      [activeAgentId.value]: (conv.messages || []).map((m: any) => ({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        role: m.role,
-        content: m.content,
-        timestamp: Date.now(),
-      }))
+    
+    // 如果已经加载了这个对话，直接返回成功
+    if (agentCurrentConversation.value[activeAgentId.value]?.id === convId) {
+      return
+    }
+    
+    agentPendingConversationId.value = {
+      ...agentPendingConversationId.value,
+      [activeAgentId.value]: convId
+    }
+    
+    agentLoadingConversation.value = {
+      ...agentLoadingConversation.value,
+      [activeAgentId.value]: true
+    }
+    
+    // 延迟 200ms 才显示加载状态，避免快速加载时的闪烁
+    if (loadingDelayTimers.value[activeAgentId.value]) {
+      clearTimeout(loadingDelayTimers.value[activeAgentId.value])
+    }
+    loadingDelayTimers.value = {
+      ...loadingDelayTimers.value,
+      [activeAgentId.value]: setTimeout(() => {
+        if (agentLoadingConversation.value[activeAgentId.value]) {
+          agentLoadingDelayed.value = {
+            ...agentLoadingDelayed.value,
+            [activeAgentId.value]: true
+          }
+        }
+      }, 200)
+    }
+    
+    try {
+      const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
+      agentCurrentConversation.value = {
+        ...agentCurrentConversation.value,
+        [activeAgentId.value]: conv
+      }
+      agentMessages.value = {
+        ...agentMessages.value,
+        [activeAgentId.value]: (conv.messages || []).map((m: any) => ({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          role: m.role,
+          content: m.content,
+          timestamp: Date.now(),
+        }))
+      }
+    } catch (error: any) {
+      lastError.value = error.message || '加载对话失败'
+      throw error
+    } finally {
+      agentLoadingConversation.value = {
+        ...agentLoadingConversation.value,
+        [activeAgentId.value]: false
+      }
+      agentLoadingDelayed.value = {
+        ...agentLoadingDelayed.value,
+        [activeAgentId.value]: false
+      }
+      agentPendingConversationId.value = {
+        ...agentPendingConversationId.value,
+        [activeAgentId.value]: null
+      }
+      // 清除定时器
+      if (loadingDelayTimers.value[activeAgentId.value]) {
+        clearTimeout(loadingDelayTimers.value[activeAgentId.value])
+        loadingDelayTimers.value = {
+          ...loadingDelayTimers.value,
+          [activeAgentId.value]: undefined as any
+        }
+      }
     }
   }
 
@@ -436,6 +454,110 @@ export const useChatStore = defineStore('chat', () => {
     lastError.value = null
   }
 
+  // Watch 必须在所有函数定义之后
+  watch(() => activeAgentId.value, async (newAgentId, oldAgentId) => {
+    if (newAgentId) {
+      if (!agentConversations.value[newAgentId]) {
+        agentConversations.value = {
+          ...agentConversations.value,
+          [newAgentId]: []
+        }
+      }
+      if (!agentCurrentConversation.value[newAgentId]) {
+        agentCurrentConversation.value = {
+          ...agentCurrentConversation.value,
+          [newAgentId]: null
+        }
+      }
+      if (!agentMessages.value[newAgentId]) {
+        agentMessages.value = {
+          ...agentMessages.value,
+          [newAgentId]: []
+        }
+      }
+      if (!agentStreaming.value[newAgentId]) {
+        agentStreaming.value = {
+          ...agentStreaming.value,
+          [newAgentId]: false
+        }
+      }
+      if (!agentStreamingContent.value[newAgentId]) {
+        agentStreamingContent.value = {
+          ...agentStreamingContent.value,
+          [newAgentId]: ''
+        }
+      }
+      if (!agentLoadingConversation.value[newAgentId]) {
+        agentLoadingConversation.value = {
+          ...agentLoadingConversation.value,
+          [newAgentId]: false
+        }
+      }
+      if (!agentPendingConversationId.value[newAgentId]) {
+        agentPendingConversationId.value = {
+          ...agentPendingConversationId.value,
+          [newAgentId]: null
+        }
+      }
+      if (!agentSwitchingAgent.value[newAgentId]) {
+        agentSwitchingAgent.value = {
+          ...agentSwitchingAgent.value,
+          [newAgentId]: false
+        }
+      }
+      
+      const existingMessages = agentMessages.value[newAgentId]
+      const hasExistingMessages = existingMessages && existingMessages.length > 0
+      const isCurrentlyStreaming = agentStreaming.value[newAgentId]
+      
+      // 只有在真正切换 Agent 时才显示切换状态
+      const isActuallySwitching = newAgentId !== oldAgentId && oldAgentId !== undefined
+      
+      if (isActuallySwitching) {
+        agentSwitchingAgent.value = {
+          ...agentSwitchingAgent.value,
+          [newAgentId]: true
+        }
+      }
+      
+      await fetchConversations(newAgentId)
+      
+      if (!hasExistingMessages && !isCurrentlyStreaming) {
+        const currentConv = agentCurrentConversation.value[newAgentId]
+        if (currentConv && currentConv.id) {
+          try {
+            await loadConversation(currentConv.id)
+          } catch (error) {
+            agentCurrentConversation.value = {
+              ...agentCurrentConversation.value,
+              [newAgentId]: null
+            }
+            agentMessages.value = {
+              ...agentMessages.value,
+              [newAgentId]: []
+            }
+          }
+        } else if (agentConversations.value[newAgentId].length > 0) {
+          const latestConv = agentConversations.value[newAgentId][0]
+          if (latestConv && latestConv.id) {
+            try {
+              await loadConversation(latestConv.id)
+            } catch (error) {
+            }
+          }
+        }
+      }
+      
+      // 重置切换状态
+      if (isActuallySwitching) {
+        agentSwitchingAgent.value = {
+          ...agentSwitchingAgent.value,
+          [newAgentId]: false
+        }
+      }
+    }
+  }, { immediate: true })
+
   return {
     conversations,
     currentConversation,
@@ -447,6 +569,10 @@ export const useChatStore = defineStore('chat', () => {
     lastError,
     lastUsage,
     activeAgentId,
+    pendingToolCalls,
+    isLoadingConversation,
+    pendingConversationId,
+    isSwitchingAgent,
     checkBackend,
     fetchConversations,
     createConversation,
