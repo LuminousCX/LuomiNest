@@ -92,11 +92,11 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/market/plugins',
-    redirect: '/market'
+    redirect: '/market?tab=plugin'
   },
   {
     path: '/market/skills',
-    redirect: '/market'
+    redirect: '/market?tab=skill'
   },
   {
     path: '/market/detail/:type/:id',

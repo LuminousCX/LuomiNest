@@ -9,6 +9,7 @@ import {
 import { useLuomiNestLive2D } from '@/composables/useLuomiNestLive2D'
 import { useAvatarControlStore } from '@/stores/avatar-control'
 import { LUOMINEST_BUILTIN_MODELS, type LuomiNestModelInfo } from '@/config/luominest-models'
+import type { PetModelInfo } from '../vite-env.d'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const avatarControl = useAvatarControlStore()
@@ -194,7 +195,7 @@ function toggleSkinSidebar() {
 const loadPersistedModels = async () => {
   try {
     const models = await window.api.avatar.listImportedModels()
-    importedModels.value = models.map((m: any) => ({
+    importedModels.value = models.map((m: PetModelInfo) => ({
       id: m.id,
       name: m.name,
       url: m.url,

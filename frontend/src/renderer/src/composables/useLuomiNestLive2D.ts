@@ -121,6 +121,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         }
       }
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
     availableMotions.value = motions
     availableExpressions.value = expressions
@@ -191,6 +192,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
           }
         }
       } catch {
+      // intentionally ignored: expected non-fatal error
       }
 
       setupInteraction(model)
@@ -210,6 +212,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       try {
         await model.motion('Idle', 0)
       } catch {
+      // intentionally ignored: expected non-fatal error
       }
 
       console.info('[INFO][LuomiNestLive2D] Model loaded:', url)
@@ -317,6 +320,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
           coreModel.setParameterValueByIndex(eyeBallYParam, base * 0.5 + focusCurrentY * 0.5)
         }
       } catch {
+      // intentionally ignored: expected non-fatal error
       }
     }
 
@@ -348,6 +352,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     try {
       await currentModel.motion(group, index)
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -356,6 +361,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     try {
       await currentModel.expression(name)
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -401,6 +407,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         coreModel.setParameterValueByIndex(cheekIdx, pleasure * 0.5)
       }
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -415,6 +422,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         coreModel.setParameterValueByIndex(mouthOpenIdx, Math.max(0, Math.min(1, value)))
       }
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -442,6 +450,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         if (mouthFormIdx >= 0) coreModel.setParameterValueByIndex(mouthFormIdx, mapping.form)
       }
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -454,6 +463,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         coreModel.setParameterValueById(paramId, value)
       }
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -462,6 +472,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     try {
       await currentModel.motion('Idle', 0)
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 

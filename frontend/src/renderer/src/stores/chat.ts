@@ -575,6 +575,7 @@ export const useChatStore = defineStore('chat', () => {
           try {
             await loadConversation(currentConv.id)
           } catch (error) {
+            console.warn(`[ChatStore] Failed to load conversation ${currentConv.id} for agent ${newAgentId}:`, error)
             agentCurrentConversation.value = {
               ...agentCurrentConversation.value,
               [newAgentId]: null
@@ -590,6 +591,7 @@ export const useChatStore = defineStore('chat', () => {
             try {
               await loadConversation(latestConv.id)
             } catch (error) {
+              console.warn(`[ChatStore] Failed to load latest conversation ${latestConv.id} for agent ${newAgentId}:`, error)
             }
           }
         }

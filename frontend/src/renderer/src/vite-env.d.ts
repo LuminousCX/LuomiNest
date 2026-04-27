@@ -49,6 +49,37 @@ export interface ModelCapabilities {
   isReady: boolean
 }
 
+export interface TTSConfig {
+  provider?: string
+  model?: string
+  voice?: string
+  speed?: number
+}
+
+export interface STTConfig {
+  provider?: string
+  model?: string
+  language?: string
+  autoSend?: boolean
+  autoSendDelay?: number
+}
+
+export interface AppConfig {
+  theme?: string
+  provider?: string
+  model?: string
+  temperature?: number
+  maxTokens?: number
+  topP?: number
+  reasonerProvider?: string
+  reasonerModel?: string
+  reasonerTemperature?: number
+  reasonerMaxTokens?: number
+  reasonerEffort?: string
+  tts?: TTSConfig
+  stt?: STTConfig
+}
+
 export interface ElectronApi {
   window: {
     minimize: () => Promise<void>
@@ -63,11 +94,11 @@ export interface ElectronApi {
   config: {
     getTheme: () => Promise<string>
     setTheme: (theme: 'light' | 'dark' | 'system') => Promise<void>
-    getTTS: () => Promise<any>
-    setTTS: (updates: any) => Promise<void>
-    getSTT: () => Promise<any>
-    setSTT: (updates: any) => Promise<void>
-    getAll: () => Promise<any>
+    getTTS: () => Promise<TTSConfig>
+    setTTS: (updates: Partial<TTSConfig>) => Promise<void>
+    getSTT: () => Promise<STTConfig>
+    setSTT: (updates: Partial<STTConfig>) => Promise<void>
+    getAll: () => Promise<AppConfig>
   }
   tab: {
     create: (url?: string) => Promise<TabInfo>

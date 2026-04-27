@@ -1,212 +1,274 @@
-VM4422 renderer_init:2 Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security
-  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
-  this app to unnecessary security risks.
+Verify each finding against the current code and only fix it if needed.
 
-For more information and help, consult
-https://electronjs.org/docs/tutorial/security.
-This warning will not show up
-once the app is packaged.
-warnAboutInsecureCSP @ VM4422 renderer_init:2
-logSecurityWarnings @ VM4422 renderer_init:2
-（匿名） @ VM4422 renderer_init:2
-chat.ts:59 [Vue warn]: Unhandled error during execution of watcher callback 
-  at <WorkspaceView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) {__v_skip: true} > > 
-  at <RouterView> 
-  at <App>
-warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
-logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
-handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
-（匿名） @ chunk-MDJKIZJQ.js?v=fe22181a:2361
-Promise.catch
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2360
-baseWatchOptions.call @ chunk-MDJKIZJQ.js?v=fe22181a:3043
-job @ chunk-MDJKIZJQ.js?v=fe22181a:2081
-watch @ chunk-MDJKIZJQ.js?v=fe22181a:2116
-doWatch @ chunk-MDJKIZJQ.js?v=fe22181a:3071
-watch2 @ chunk-MDJKIZJQ.js?v=fe22181a:3004
-（匿名） @ chat.ts:59
-（匿名） @ pinia.js?v=fe22181a:5363
-run @ chunk-MDJKIZJQ.js?v=fe22181a:385
-（匿名） @ pinia.js?v=fe22181a:5363
-run @ chunk-MDJKIZJQ.js?v=fe22181a:385
-（匿名） @ pinia.js?v=fe22181a:5363
-runWithContext @ chunk-MDJKIZJQ.js?v=fe22181a:6468
-createSetupStore @ pinia.js?v=fe22181a:5363
-useStore @ pinia.js?v=fe22181a:5536
-setup @ WorkspaceView.vue:46
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-setupStatefulComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10295
-setupComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10257
-mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8183
-processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8377
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
-Promise.then
-queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
-queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
-baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
-effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
-endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
-notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
-set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
-finalizeNavigation @ vue-router.js?v=fe22181a:5643
-（匿名） @ vue-router.js?v=fe22181a:5581
-Promise.then
-pushWithRedirect @ vue-router.js?v=fe22181a:5568
-push @ vue-router.js?v=fe22181a:5519
-install @ vue-router.js?v=fe22181a:5751
-use @ chunk-MDJKIZJQ.js?v=fe22181a:6331
-（匿名） @ main.ts:11
-chat.ts:94 Uncaught (in promise) ReferenceError: Cannot access 'fetchConversations' before initialization
-    at watch.immediate (chat.ts:94:7)
-    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:19)
-    at callWithAsyncErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2358:17)
-    at baseWatchOptions.call (chunk-MDJKIZJQ.js?v=fe22181a:3043:47)
-    at job (chunk-MDJKIZJQ.js?v=fe22181a:2081:18)
-    at watch (chunk-MDJKIZJQ.js?v=fe22181a:2116:7)
-    at doWatch (chunk-MDJKIZJQ.js?v=fe22181a:3071:23)
-    at watch2 (chunk-MDJKIZJQ.js?v=fe22181a:3004:10)
-    at chat.ts:59:3
-    at pinia.js?v=fe22181a:5363:96
-watch.immediate @ chat.ts:94
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-baseWatchOptions.call @ chunk-MDJKIZJQ.js?v=fe22181a:3043
-job @ chunk-MDJKIZJQ.js?v=fe22181a:2081
-watch @ chunk-MDJKIZJQ.js?v=fe22181a:2116
-doWatch @ chunk-MDJKIZJQ.js?v=fe22181a:3071
-watch2 @ chunk-MDJKIZJQ.js?v=fe22181a:3004
-（匿名） @ chat.ts:59
-（匿名） @ pinia.js?v=fe22181a:5363
-run @ chunk-MDJKIZJQ.js?v=fe22181a:385
-（匿名） @ pinia.js?v=fe22181a:5363
-run @ chunk-MDJKIZJQ.js?v=fe22181a:385
-（匿名） @ pinia.js?v=fe22181a:5363
-runWithContext @ chunk-MDJKIZJQ.js?v=fe22181a:6468
-createSetupStore @ pinia.js?v=fe22181a:5363
-useStore @ pinia.js?v=fe22181a:5536
-setup @ WorkspaceView.vue:46
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-setupStatefulComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10295
-setupComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10257
-mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8183
-processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8377
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
-Promise.then
-queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
-queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
-baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
-effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
-endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
-notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
-set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
-finalizeNavigation @ vue-router.js?v=fe22181a:5643
-（匿名） @ vue-router.js?v=fe22181a:5581
-Promise.then
-pushWithRedirect @ vue-router.js?v=fe22181a:5568
-push @ vue-router.js?v=fe22181a:5519
-install @ vue-router.js?v=fe22181a:5751
-use @ chunk-MDJKIZJQ.js?v=fe22181a:6331
-（匿名） @ main.ts:11
-WorkspaceView.vue:31  GET http://localhost:5173/src/stores/chat.ts?t=1777255179337 net::ERR_ABORTED 500 (Internal Server Error)
-client:882 [vite] Failed to reload /src/views/WorkspaceView.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
-error @ client:882
-warnFailedUpdate @ client:169
-fetchUpdate @ client:206
-await in fetchUpdate
-queueUpdate @ client:179
-（匿名） @ client:930
-handleMessage @ client:928
-await in handleMessage
-（匿名） @ client:490
-dequeue @ client:516
-（匿名） @ client:504
-enqueue @ client:498
-（匿名） @ client:490
-onMessage @ client:309
-（匿名） @ client:439
-chunk-MDJKIZJQ.js?v=fe22181a:2204 [Vue warn]: Unhandled error during execution of native event handler 
-  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
-  at <Transition name="panel-slide" > 
-  at <WorkspaceView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) {__v_skip: true} > > 
-  at <RouterView> 
-  at <App>
-warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
-logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
-handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
-（匿名） @ chunk-MDJKIZJQ.js?v=fe22181a:2361
-Promise.catch
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2360
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-WorkspaceView.vue:293 Uncaught (in promise) TypeError: chatStore.cacheConversationMessages is not a function
-    at Proxy.handleLoadConversation (WorkspaceView.vue:293:15)
-    at onClick (WorkspaceView.vue:718:23)
-    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:19)
-    at callWithAsyncErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2358:17)
-    at HTMLDivElement.invoker (chunk-MDJKIZJQ.js?v=fe22181a:11522:5)
-handleLoadConversation @ WorkspaceView.vue:293
-onClick @ WorkspaceView.vue:718
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-chunk-MDJKIZJQ.js?v=fe22181a:2204 [Vue warn]: Unhandled error during execution of native event handler 
-  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
-  at <Transition name="panel-slide" > 
-  at <WorkspaceView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) {__v_skip: true} > > 
-  at <RouterView> 
-  at <App>
-warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
-logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
-handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
-（匿名） @ chunk-MDJKIZJQ.js?v=fe22181a:2361
-Promise.catch
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2360
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-WorkspaceView.vue:293 Uncaught (in promise) TypeError: chatStore.cacheConversationMessages is not a function
-    at Proxy.handleLoadConversation (WorkspaceView.vue:293:15)
-    at onClick (WorkspaceView.vue:718:23)
-    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:19)
-    at callWithAsyncErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2358:17)
-    at HTMLDivElement.invoker (chunk-MDJKIZJQ.js?v=fe22181a:11522:5)
-handleLoadConversation @ WorkspaceView.vue:293
-onClick @ WorkspaceView.vue:718
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-chunk-MDJKIZJQ.js?v=fe22181a:2204 [Vue warn]: Unhandled error during execution of native event handler 
-  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
-  at <Transition name="panel-slide" > 
-  at <WorkspaceView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) {__v_skip: true} > > 
-  at <RouterView> 
-  at <App>
-warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
-logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
-handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
-（匿名） @ chunk-MDJKIZJQ.js?v=fe22181a:2361
-Promise.catch
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2360
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-WorkspaceView.vue:293 Uncaught (in promise) TypeError: chatStore.cacheConversationMessages is not a function
-    at Proxy.handleLoadConversation (WorkspaceView.vue:293:15)
-    at onClick (WorkspaceView.vue:718:23)
-    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:19)
-    at callWithAsyncErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2358:17)
-    at HTMLDivElement.invoker (chunk-MDJKIZJQ.js?v=fe22181a:11522:5)
-handleLoadConversation @ WorkspaceView.vue:293
-onClick @ WorkspaceView.vue:718
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
+Inline comments:
+In `@backend/build.bat`:
+- Around line 84-89: The batch file block that prints the build completion
+banner is missing an echo on the separator line (the line with =====...),
+causing a syntax error; update the banner in backend/build.bat so every output
+line uses echo (e.g., add an "echo" before the separator line and any other bare
+text lines in the build-completed block that currently lack it) so the printed
+lines "========================================", "Build completed
+successfully!", the blank line, "Output: dist\luominest-backend.exe", and "Size:
+!SIZEMB! MB" are each prefixed with echo.
+
+In `@backend/build.sh`:
+- Around line 56-61: The pip install block is currently checking `$?` which is
+ineffective under set -e because the script will exit on failure; change the
+pattern to run the command directly in the if conditional (e.g., use `if ! pip
+install -e ".[dev]" --quiet; then`) so the install failure is caught without
+exiting, then keep the existing warning and continue logic; update the block
+around the pip install command (the lines calling pip and the subsequent if/echo
+warnings) to use the `if ! <command>; then` form so the soft-fail behavior works
+under set -e.
+
+In `@build-all.ps1`:
+- Around line 140-147: The script hardcodes a Windows path into PROJECT_SRC so
+the WSL copy only works on the author’s machine; instead derive PROJECT_SRC from
+the existing $ProjectRoot and convert it to a WSL path before copying. Replace
+the literal string assignment to PROJECT_SRC with logic that uses $ProjectRoot
+and runs wslpath (or equivalent conversion) to produce the correct /mnt/...
+path, then use that PROJECT_SRC with the existing WSL_BUILD_DIR, mkdir -p, rm
+-rf and cp commands so the script works on other dev machines.
+- Around line 188-189: 在生成 $wslScriptPath 时第二个 -replace 的 scriptblock 使用了字面量
+'/mnt/$1'，导致正则捕获组无法展开；在对 scriptPath 执行 -replace 时将驱动器盘符替换为 /mnt/<letter> 时改为在
+scriptblock 中通过 $_.Groups[1].Value 访问捕获组并调用 ToLower()（即使用
+$_.Groups[1].Value.ToLower() 拼接 '/mnt/'），以确保 $wslScriptPath 得到正确的小写
+/mnt/<letter> 前缀并传给 wsl -d $wslDistro -- bash $wslScriptPath。
+
+In `@build-all.sh`:
+- Around line 105-124: The script is using set -euo pipefail so non-zero exits
+from optional commands (the pnpm exec electron-builder calls and iscc) will
+abort the whole run before the subsequent "[ $? -eq 0 ]" checks; change each
+pattern like "pnpm exec electron-builder --win; if [ $? -eq 0 ]; then ..." to
+use the command as the if condition directly (e.g., if pnpm exec
+electron-builder --win; then ... else ... fi) and do the same for the other
+electron-builder invocation and the iscc invocation, keeping the PLATFORM
+branches and messages unchanged so failures become non-fatal and handled by the
+if/else blocks.
+
+In `@frontend/BUILD.md`:
+- Around line 7-13: Update BUILD.md to remove references to deleted scripts
+(build-installer.ps1/.bat, build:win-nsis, build:win-portable, build-all.bat)
+and any old 6-step/tar.gz instructions and instead document the current npm
+scripts defined in frontend/package.json (build:win, build:linux, build:mac,
+typecheck); ensure all affected sections (including the table rows and prose at
+the ranges noted) describe the new single-step build commands and their outputs
+and remove or replace links/commands that would fail because the standalone
+build scripts no longer exist.
+- Line 119: The environment variable name is misspelled as
+ELECTRON_BUILDER_BUILDER_BINARIES_MIRROR; change it to
+ELECTRON_BUILDER_BINARIES_MIRROR wherever it appears (e.g., the snippet with set
+ELECTRON_BUILDER_BUILDER_BINARIES_MIRROR=...) so electron-builder will pick up
+the mirror; update any other occurrences in the document to the correct symbol
+ELECTRON_BUILDER_BINARIES_MIRROR.
+
+In `@frontend/build/nsis-extra.nsh`:
+- Around line 46-49: customUnInit 宏在卸载初始化阶段执行，删除目录的 RMDir /r
+"$INSTDIR\resources" 和 RMDir /r "$INSTDIR\locales" 可能会在应用仍运行或文件被锁定时触发；请将这两条
+RMDir /r 调用从宏 customUnInit 中移除并放到卸载完成后执行的宏 customUnInstall
+中，确保目录删除在主卸载流程完成且进程已终止后运行（保留原始路径变量 $INSTDIR\resources 和 $INSTDIR\locales 且不要改变
+RMDir 选项）。
+
+In `@frontend/installer.iss`:
+- Line 135: The installer task "autolaunch" has duplicate Flags entries
+("unchecked" appears twice); edit the task definition for autolaunch and remove
+the redundant "unchecked" so the Flags list contains a single "unchecked" value
+(keep the rest of the line unchanged).
+- Line 44: 行首有多余空格导致 Inno Setup 配置解析失败：请在 frontend/installer.iss 中找到包含
+"LZMAUseSeparateProcess=yes" 的行并移除行首的空格，使该行从开头直接以 LZMAUseSeparateProcess=yes
+开始；同时快速扫一遍附近配置行确保没有其他行存在多余前导空白字符。
+- Around line 183-192: The code attempts to load an .ico into TBitmapImage via
+LogoImage.Bitmap.LoadFromFile(ExpandConstant('{`#SetupIconFile`}')), but
+LoadFromFile on TBitmapImage cannot read .ico and will fail; fix by either (A)
+stop dynamically loading the .ico and use Inno Setup's built-in wizard image
+setting (WizardSmallImageFile / WizardImageFile) instead of manipulating
+LogoImage on WizardForm.WelcomePage, or (B) convert the icon to a BMP and point
+LoadFromFile to that BMP (e.g., replace ExpandConstant('{`#SetupIconFile`}') with
+the BMP path), and ensure LogoImage.AutoSize/Width/Height/Stretch remain
+appropriate for TBitmapImage.
+
+In `@frontend/package.json`:
+- Around line 172-179: Update the RPM depends array in package.json (the "rpm"
+-> "depends" entry) to replace "libXtst6" with the RPM virtual dependency
+"(libXtst or libXtst6)" and add the recommended full dependency list: "gtk3",
+"libXScrnSaver", "xdg-utils", "at-spi2-core", and "(libuuid or libuuid1)"
+alongside existing "libnotify" and "nss" so the generated RPM is compatible
+across Debian/Ubuntu and Fedora/RHEL/CentOS/Rocky families.
+
+In `@frontend/src/main/index.ts`:
+- Around line 769-792: resolveModelFile currently joins user-supplied
+relativePath into cubismCoreBasePath / PATHS.live2d / builtinBasePath and only
+checks existence, which allows path traversal; to fix, for each candidate path
+(including the cubismCoreBasePath branch and the searchPaths loop) compute the
+absolute path via path.resolve(baseDir, decodedRelativePath) and then verify
+with path.relative(baseDir, absPath) that the result does not start with '..'
+(or equivalently that absPath.startsWith(path.resolve(baseDir) + path.sep))
+before checking existsSync/statSync; apply this check to cubismCoreBasePath,
+PATHS.live2d, and builtinBasePath for the cubism-core branch and sp.path checks
+in resolveModelFile, and reject/log/return null if the validation fails.
+
+In `@frontend/src/renderer/src/router/index.ts`:
+- Around line 94-99: 当前把 /market/plugins 和 /market/skills 都重定向到 /market 丢失了 tab
+语义；在 router 的这两个路由（当前 diff 中的 path: '/market/plugins' 和 path:
+'/market/skills'）改为重定向到包含查询参数的 URL（例如 /market?tab=plugins 或
+/market?tab=skills），并在 MarketView.vue 中使用 useRoute() 读取 route.query.tab
+来初始化并在需要时同步到组件的 activeTab（组件中默认 activeTab 的赋值处应改为基于 route.query.tab
+并在路由变化时更新），这样旧入口/书签/外链会保留原有的 tab 行为。
+
+In `@frontend/src/renderer/src/views/MarketDetailView.vue`:
+- Around line 21-23: The computed itemType currently casts route.params.type
+with "as MarketplaceType" which only affects TypeScript and doesn't validate
+runtime values, allowing invalid strings like 'foo' to pass through and cause
+getItemByTypeAndId to return incorrect data; update the computed itemType to
+perform a runtime whitelist/normalization: read route.params.type, check it
+against the allowed MarketplaceType values (e.g., 'plugin', 'skill', etc.), and
+if it isn't one of them default to 'plugin' (or another safe default) so
+downstream calls to getItemByTypeAndId always receive a validated
+MarketplaceType.
+
+In `@frontend/src/renderer/src/views/MarketView.vue`:
+- Around line 14-19: Currently category state is duplicated between local
+activeCategory and the store filters (store.pluginFilter / store.skillFilter),
+causing UI and list mismatches; remove the local activeCategory and make
+category selection and resets operate directly on the store filter for the
+current tab. Update the computed/filter logic (the computed named filter and
+categories) to read from store.filteredPluginItems / store.filteredSkillItems as
+the source list, change selectCategory to set store.pluginFilter.category or
+store.skillFilter.category depending on activeTab, and wire the “reset filters”
+action to the store’s reset/clear API (or add one that resets all filter fields
+for the current tab) so MarketplaceFilters and the list share a single source of
+truth.
+
+In `@frontend/src/renderer/src/vite-env.d.ts`:
+- Around line 63-71: Replace the loose any types in the config API by declaring
+explicit interfaces for TTS and STT and an aggregate config type, then update
+the signatures: define interfaces TTSConfig and STTConfig (with the expected
+fields for your TTS/STT settings) and an AppConfig (or ConfigAll) that composes
+them, change getTTS/getSTT to return Promise<TTSConfig>/Promise<STTConfig>,
+setTTS/setSTT to accept TTSConfig or Partial<TTSConfig> as appropriate, and
+change getAll to return Promise<AppConfig>; update the method parameter/return
+types for config.getTTS, config.setTTS, config.getSTT, config.setSTT, and
+config.getAll accordingly so no any remains.
+
+---
+
+Outside diff comments:
+In `@frontend/src/renderer/src/views/DesktopPetView.vue`:
+- Around line 620-622: The template currently renders a clickable Switch Model
+button with an empty handler (`@click`="() => {}") after the handleSwitchModel
+function was removed; replace this with a clear, actionable fix: either remove
+the <button class="island-btn"> entirely if the feature is deprecated, or
+disable it and add a tooltip and accessible state if it's planned for future
+work. Concretely, remove the empty `@click` and either delete the Island
+button/ArrowLeftRight usage or bind a computed like isSwitchModelAvailable to
+:disabled and aria-disabled, add a title or v-tooltip explaining "Feature coming
+soon" and ensure any reference to handleSwitchModel is cleaned up from the
+component.
+
+---
+
+Nitpick comments:
+In @.gitignore:
+- Line 33: The .gitignore currently ignores only the literal file name
+"log.log"; change it to a general rule so all log files are ignored (e.g., use a
+glob like "*.log" and/or a logs/ directory rule) to prevent accidental commits
+of build.log, error.log, etc.; edit the .gitignore entry that currently contains
+"log.log" and replace or augment it with a wildcard pattern such as "*.log" and
+optionally add "logs/" for directory-based logging outputs.
+
+In `@backend/build.bat`:
+- Around line 52-56: The script currently runs pip install -e ".[dev]" and
+swallows failures by only printing a warning in the ERRORLEVEL check; change
+this so critical dependency failures terminate the build while optional/dev
+failures only warn. Concretely, split installation into critical and dev
+installs (e.g. run pip install -e ".[prod]" or pip install -r requirements.txt
+first), check %ERRORLEVEL% after the critical install and call exit /b 1 (or
+otherwise fail the script) if non-zero, and keep the existing warning/continue
+behavior only for the dev install (the pip install -e ".[dev]" step and its
+ERRORLEVEL check).
+
+In `@frontend/build/nsis-extra.nsh`:
+- Around line 40-44: The customUnInstall macro leaves an empty registry key
+under HKCU after calling DeleteRegValue; update the macro (customUnInstall) to
+remove the now-empty key "Software\Classes\Applications\${PRODUCT_NAME}.exe" as
+well by calling DeleteRegKey for that same path after DeleteRegValue (so the
+value is removed first, then the empty key is cleaned up); keep the existing
+DeleteRegKey for the Uninstall key intact.
+
+In `@frontend/installer.iss`:
+- Around line 329-335: The code hard-codes TasksList indices (0/1/2) assuming
+Tasks order, which breaks if [Tasks] order changes; update the ShortcutsPage
+handler to set TasksList.Checked by resolving each task by name instead of fixed
+indices (e.g., lookup the task entry for "desktopicon"/"startmenu"/"autolaunch"
+via TasksList.IndexOfName/IndexOf or equivalent) or call WizardIsTaskSelected to
+validate/drive selections; change references to
+WizardForm.TasksList.Checked[0/1/2] to use the found index for DesktopCheck,
+StartMenuCheck and AutoLaunchCheck and add a short comment about the dependency.
+
+In `@frontend/src/main/services/paths.ts`:
+- Around line 7-10: The ensureDir function is called every time the PATHS getter
+runs, causing repeated synchronous mkdirSync calls; modify ensureDir (and/or the
+PATHS getter) to cache created directories so mkdirSync is only invoked once per
+path: add an in-module Set (e.g., createdDirs) and have ensureDir(dir) check
+createdDirs.has(dir) before calling mkdirSync, add dir to createdDirs after
+successful creation, and ensure PATHS uses this cached ensureDir to avoid
+redundant synchronous I/O.
+
+In `@frontend/src/renderer/src/composables/useLuomiNestLive2D.ts`:
+- Around line 123-124: There are multiple empty catch blocks in
+useLuomiNestLive2D.ts that silently swallow errors; update each empty catch in
+that module to either (a) include a short explanatory comment like "//
+intentionally ignored: expected non-fatal error" or (b) log a debug-level
+message in non-production builds (e.g., if (process.env.NODE_ENV !==
+'production') console.debug('useLuomiNestLive2D caught:', err)) so errors are
+visible during development; apply this change to every anonymous catch clause in
+the file so the intent is clear and debugging information is available when
+needed.
+
+In `@frontend/src/renderer/src/stores/chat.ts`:
+- Around line 533-598: The two empty catch blocks inside the watch on
+activeAgentId (the ones wrapping await loadConversation(currentConv.id) and
+await loadConversation(latestConv.id)) swallow errors; update those catch blocks
+to log the error (e.g., console.error or the app logger) including context such
+as newAgentId and the conversation id, and keep the existing recovery behavior
+(resetting agentCurrentConversation/agentMessages where applicable) so failures
+are visible during debugging; locate these in the watch callback around the
+calls to loadConversation and fetchConversations.
+- Line 28: conversationMessagesCache currently is an unbounded
+ref<Record<string, ChatMessage[]>> which can grow without limit; replace it with
+a bounded/LRU-backed cache and expose get/set/clear helpers: introduce a
+MAX_CACHE_ENTRIES constant, swap the plain object ref for an LRU structure
+(e.g., a Map maintained in insertion/usage order) or use an LRU utility, update
+usages to call cacheGet(cacheKey)/cacheSet(cacheKey, messages) so that cacheSet
+evicts the least-recently-used entry when size > MAX_CACHE_ENTRIES, and add
+explicit clear calls (cacheClear) on Agent switch and application shutdown to
+avoid stale growth; reference the symbol conversationMessagesCache and the
+ChatMessage[] values when locating the code to modify.
+
+In `@frontend/src/renderer/src/views/AvatarView.vue`:
+- Around line 197-204: The map callback currently types the API response as any;
+define a concrete interface (e.g., ImportedModelResponse with id, name, url,
+scale, type, tags) and use it in the listImportedModels() handling and the map
+callback so that importedModels.value = models.map((m: ImportedModelResponse) =>
+({ ... })) instead of using any; update any related variables/params that
+receive the API response to use this new interface to ensure type safety while
+keeping the same shape used in the mapping logic.
+
+In `@frontend/src/renderer/src/views/BrowserView.vue`:
+- Around line 127-137: Replace the use of an untyped any in the tabs mapping
+with the proper TabInfo type: change the iterator parameter from (t: any) to (t:
+TabInfo) and ensure allTabs is treated as Promise<TabInfo[]> (from
+window.api.tab.getAll()) so the mapping in tabs.value = allTabs.map(...) uses
+TabInfo for type safety; update any relevant import/ambient reference to TabInfo
+from vite-env.d.ts if needed and keep the same property accesses (id, title,
+url, active, loading, favicon, error, captchaDetected, sleeping).
+
+In `@frontend/src/renderer/src/views/WorkspaceView.vue`:
+- Line 316: The assignment uses a double-cast "as unknown as any[]" which
+bypasses TypeScript checks; update the code and types so the result from
+skillStore.executeSkill('search', { query: searchQuery.value }) has a concrete
+type (e.g., make executeSkill generic or add a specific return type for the
+'search' skill) and replace the unsafe cast with that type or a runtime guard
+(e.g., check Array.isArray and item shape) before assigning to
+searchResults.value; target the call to skillStore.executeSkill, the
+searchResults variable and searchQuery reference when making the change.

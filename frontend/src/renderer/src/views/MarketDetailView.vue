@@ -18,9 +18,12 @@ const store = useMarketplaceStore()
 const activeTab = ref<'info' | 'versions' | 'reviews'>('info')
 const expandedVersion = ref<string | null>(null)
 
-const itemType = computed<MarketplaceType>(() =>
-  route.params.type as MarketplaceType || 'plugin'
-)
+const VALID_TYPES: MarketplaceType[] = ['plugin', 'skill']
+
+const itemType = computed<MarketplaceType>(() => {
+  const t = route.params.type as string
+  return VALID_TYPES.includes(t as MarketplaceType) ? (t as MarketplaceType) : 'plugin'
+})
 
 const itemId = computed(() => route.params.id as string)
 

@@ -41,7 +41,7 @@ ShowLanguageDialog=no
 UsePreviousLanguage=no
 MinVersion=6.1sp1
 InternalCompressLevel=ultra
- LZMAUseSeparateProcess=yes
+LZMAUseSeparateProcess=yes
 LZMABlockSize=8192
 LZMANumFastBytes=256
 LZMADictionarySize=196608
@@ -132,7 +132,7 @@ english.FinishedLabel=Click Finish to close this wizard.
 [Tasks]
 Name: "desktopicon"; Description: "{cm:DesktopShortcut}"; GroupDescription: "{cm:ShortcutsTitle}"; Flags: unchecked
 Name: "startmenu"; Description: "{cm:StartMenuShortcut}"; GroupDescription: "{cm:ShortcutsTitle}"; Flags: checkedonce
-Name: "autolaunch"; Description: "{cm:AutoLaunchShortcut}"; GroupDescription: "{cm:ShortcutsTitle}"; Flags: unchecked unchecked
+Name: "autolaunch"; Description: "{cm:AutoLaunchShortcut}"; GroupDescription: "{cm:ShortcutsTitle}"; Flags: unchecked
 
 [Files]
 Source: "release\dist\win-unpacked\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -157,8 +157,6 @@ var
   InstallModePage: TInputOptionWizardPage;
   ShortcutsPage: TWizardPage;
   DesktopCheck, StartMenuCheck, AutoLaunchCheck: TCheckBox;
-  WelcomeLabel1, WelcomeLabel2: TLabel;
-  LogoImage: TBitmapImage;
   IsAdmin: Boolean;
 
 function IsAdminUser: Boolean;
@@ -178,18 +176,6 @@ begin
   WizardForm.Color := $FFFFFF;
   WizardForm.OuterNotebook.Color := $FFFFFF;
   WizardForm.InnerNotebook.Color := $FFFFFF;
-
-  ; Create custom welcome page with logo
-  LogoImage := TBitmapImage.Create(WizardForm);
-  LogoImage.Parent := WizardForm.WelcomePage;
-  LogoImage.Bitmap.LoadFromFile(ExpandConstant('{#SetupIconFile}'));
-  LogoImage.Left := WizardForm.WelcomePage.Width - ScaleX(120);
-  LogoImage.Top := ScaleY(20);
-  LogoImage.AutoSize := False;
-  LogoImage.Width := ScaleX(100);
-  LogoImage.Height := ScaleY(100);
-  LogoImage.Stretch := True;
-  LogoImage.Transparent := True;
 
   ; Customize welcome page labels
   WizardForm.WelcomeLabel1.Font.Size := 16;
@@ -328,10 +314,9 @@ begin
   end
   else if CurPageID = ShortcutsPage.ID then
   begin
-    ; Update task selections based on checkbox states
-    WizardForm.TasksList.Checked[0] := DesktopCheck.Checked;
-    WizardForm.TasksList.Checked[1] := StartMenuCheck.Checked;
-    WizardForm.TasksList.Checked[2] := AutoLaunchCheck.Checked;
+    WizardForm.TasksList.Checked[WizardForm.TasksList.Items.IndexOfName('desktopicon')] := DesktopCheck.Checked;
+    WizardForm.TasksList.Checked[WizardForm.TasksList.Items.IndexOfName('startmenu')] := StartMenuCheck.Checked;
+    WizardForm.TasksList.Checked[WizardForm.TasksList.Items.IndexOfName('autolaunch')] := AutoLaunchCheck.Checked;
   end;
 end;
 
@@ -384,7 +369,4 @@ end;
 
 procedure DeInitializeSetup();
 begin
-  ; Cleanup
-  if Assigned(LogoImage) then
-    LogoImage.Free;
 end;

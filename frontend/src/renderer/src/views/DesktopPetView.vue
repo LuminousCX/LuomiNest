@@ -617,7 +617,7 @@ onBeforeUnmount(() => {
             <button class="island-btn" title="Reset Pose" @click="handleResetPose">
               <RotateCcw :size="16" />
             </button>
-            <button class="island-btn" title="Switch Model" @click="() => {}">
+            <button class="island-btn" title="Switch Model (Coming Soon)" disabled aria-disabled="true">
               <ArrowLeftRight :size="16" />
             </button>
             <button

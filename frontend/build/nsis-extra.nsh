@@ -39,13 +39,13 @@
 
 !macro customUnInstall
   DeleteRegKey SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
-  DeleteRegValue HKCU "Software\Classes\Applications\${PRODUCT_NAME}.exe" "FriendlyAppName"
+  DeleteRegKey HKCU "Software\Classes\Applications\${PRODUCT_NAME}.exe"
   Delete "$SMSTARTUP\${PRODUCT_NAME}.lnk"
+  RMDir /r "$INSTDIR\resources"
+  RMDir /r "$INSTDIR\locales"
 !macroend
 
 !macro customUnInit
-  RMDir /r "$INSTDIR\resources"
-  RMDir /r "$INSTDIR\locales"
 !macroend
 
 !define MUI_COMPONENTSPAGE_SMALLDESC

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, NativeImage, MenuItemConstructorOptions, dialog, protocol, screen } from 'electron'
-import { join, dirname, basename } from 'path'
+import { join, dirname, basename, resolve, sep } from 'path'
 import { platform } from 'os'
 import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs'
 import { tabManager } from './services/browser'
@@ -766,29 +766,46 @@ const MIME_MAP: Record<string, string> = {
   txt: 'text/plain'
 }
 
+const isPathSafe = (baseDir: string, targetPath: string): boolean => {
+  const resolved = resolve(baseDir, targetPath)
+  const resolvedBase = resolve(baseDir) + sep
+  return resolved.startsWith(resolvedBase)
+}
+
 const resolveModelFile = (hostname: string, relativePath: string): string | null => {
+  const decodedPath = decodeURIComponent(relativePath)
+
   if (hostname === 'cubism-core') {
-    const filePath = join(cubismCoreBasePath, relativePath)
+    const filePath = resolve(cubismCoreBasePath, decodedPath)
+    if (!isPathSafe(cubismCoreBasePath, decodedPath)) {
+      console.warn(`[SECURITY][LuomiNestAvatar] Path traversal blocked: ${decodedPath}`)
+      return null
+    }
     if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
     console.warn(`[WARNING][LuomiNestAvatar] Cubism core not found: ${filePath}`)
     return null
   }
 
-  const searchPaths: { label: string; path: string }[] = [
-    { label: 'imported', path: join(PATHS.live2d, hostname, relativePath) },
-    { label: 'builtin', path: join(builtinBasePath, hostname, relativePath) }
+  const searchPaths: { label: string; base: string; sub: string }[] = [
+    { label: 'imported', base: PATHS.live2d, sub: join(hostname, decodedPath) },
+    { label: 'builtin', base: builtinBasePath, sub: join(hostname, decodedPath) }
   ]
 
   for (const sp of searchPaths) {
     try {
-      if (existsSync(sp.path) && statSync(sp.path).isFile()) return sp.path
+      if (!isPathSafe(sp.base, sp.sub)) {
+        console.warn(`[SECURITY][LuomiNestAvatar] Path traversal blocked: ${sp.label}:${sp.sub}`)
+        continue
+      }
+      const filePath = resolve(sp.base, sp.sub)
+      if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
     } catch {
       continue
     }
   }
 
   console.warn(`[WARNING][LuomiNestAvatar] Resource not found: ${hostname}/${relativePath}`)
-  console.warn(`[WARNING][LuomiNestAvatar]   Searched: ${searchPaths.map(s => s.label + ':' + s.path).join(' | ')}`)
+  console.warn(`[WARNING][LuomiNestAvatar]   Searched: ${searchPaths.map(s => s.label + ':' + resolve(s.base, s.sub)).join(' | ')}`)
   return null
 }
 

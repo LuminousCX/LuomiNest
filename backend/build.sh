@@ -22,8 +22,7 @@ if ! command -v python3 &>/dev/null; then
 fi
 
 echo "[1/5] Checking Python version..."
-$PYTHON_CMD --version
-if [ $? -ne 0 ]; then
+if ! $PYTHON_CMD --version; then
     echo "[ERROR] Failed to check Python version"
     exit 1
 fi
@@ -54,8 +53,7 @@ echo "Installing PyInstaller..."
 pip install pyinstaller --quiet
 
 echo "Installing project dependencies (development mode)..."
-pip install -e ".[dev]" --quiet
-if [ $? -ne 0 ]; then
+if ! pip install -e ".[dev]" --quiet; then
     echo "[WARNING] Some dependencies may have failed to install"
     echo "Continuing with build..."
 fi
@@ -73,9 +71,7 @@ echo ""
 echo "[5/5] Building executable with PyInstaller..."
 echo "This may take a few minutes..."
 
-pyinstaller luominest-backend.spec --clean --noconfirm
-
-if [ $? -ne 0 ]; then
+if ! pyinstaller luominest-backend.spec --clean --noconfirm; then
     echo ""
     echo "[ERROR] PyInstaller build failed"
     echo "Please check the error messages above."

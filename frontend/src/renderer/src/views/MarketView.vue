@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Puzzle, Sparkles, SlidersHorizontal, X, Package } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
 import MarketplaceSearch from '../components/marketplace/MarketplaceSearch.vue'
@@ -9,14 +10,26 @@ import MarketplaceCard from '../components/marketplace/MarketplaceCard.vue'
 import MarketplaceBanner from '../components/marketplace/MarketplaceBanner.vue'
 import type { MarketplaceFilter, MarketplaceType } from '../types/marketplace'
 
+const route = useRoute()
 const store = useMarketplaceStore()
 
+const VALID_TABS: MarketplaceType[] = ['plugin', 'skill']
 const activeTab = ref<MarketplaceType>('plugin')
-const activeCategory = ref('all')
 const showFilters = ref(false)
+
+watch(() => route.query.tab, (tab) => {
+  const t = typeof tab === 'string' ? tab : ''
+  if (VALID_TABS.includes(t as MarketplaceType)) {
+    activeTab.value = t as MarketplaceType
+  }
+}, { immediate: true })
 
 const categories = computed(() => store.getCategories(activeTab.value))
 const filter = computed(() => activeTab.value === 'plugin' ? store.pluginFilter : store.skillFilter)
+const activeCategory = computed({
+  get: () => filter.value.category || 'all',
+  set: (val: string) => store.setFilter(activeTab.value, { category: val === 'all' ? undefined : val })
+})
 
 const filteredItems = computed(() => {
   const items = activeTab.value === 'plugin' ? store.filteredPluginItems : store.filteredSkillItems
@@ -55,7 +68,7 @@ const headerConfig = computed(() => {
 
 function switchTab(tab: MarketplaceType) {
   activeTab.value = tab
-  activeCategory.value = 'all'
+  store.setFilter(tab, { category: undefined })
   showFilters.value = false
 }
 

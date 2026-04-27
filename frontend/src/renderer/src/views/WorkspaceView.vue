@@ -313,7 +313,8 @@ const startNewConversation = () => {
 const handleSearch = async () => {
   if (!searchQuery.value.trim()) return
   try {
-    searchResults.value = (await skillStore.executeSkill('search', { query: searchQuery.value })) as unknown as any[] ?? []
+    const result = await skillStore.executeSkill('search', { query: searchQuery.value })
+    searchResults.value = Array.isArray(result) ? result : []
   } catch {
     searchResults.value = []
   }

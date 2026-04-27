@@ -41,8 +41,7 @@ START_TIME=$(date +%s)
 echo "[Step 1/6] Building backend with PyInstaller..."
 cd "$BACKEND_DIR"
 chmod +x build.sh 2>/dev/null || true
-bash build.sh
-if [ $? -ne 0 ]; then
+if ! bash build.sh; then
     echo "[ERROR] Backend build failed"
     exit 1
 fi
@@ -68,8 +67,7 @@ echo "Backend resources copied"
 echo ""
 echo "[Step 3/6] Building frontend with electron-vite..."
 cd "$FRONTEND_DIR"
-pnpm run build
-if [ $? -ne 0 ]; then
+if ! pnpm run build; then
     echo "[ERROR] Frontend build failed"
     exit 1
 fi
@@ -82,18 +80,22 @@ echo ""
 echo "[Step 4/6] Creating installer packages for current platform..."
 if [ "$PLATFORM" = "mac" ]; then
     echo "Building macOS packages..."
-    pnpm exec electron-builder --mac
+    if ! pnpm exec electron-builder --mac; then
+        echo "[ERROR] Current platform packaging failed"
+        exit 1
+    fi
 elif [ "$PLATFORM" = "linux" ]; then
     echo "Building Linux packages..."
-    pnpm exec electron-builder --linux AppImage deb rpm
+    if ! pnpm exec electron-builder --linux AppImage deb rpm; then
+        echo "[ERROR] Current platform packaging failed"
+        exit 1
+    fi
 else
     echo "Building Windows packages..."
-    pnpm exec electron-builder --win
-fi
-
-if [ $? -ne 0 ]; then
-    echo "[ERROR] Current platform packaging failed"
-    exit 1
+    if ! pnpm exec electron-builder --win; then
+        echo "[ERROR] Current platform packaging failed"
+        exit 1
+    fi
 fi
 echo "Current platform packages created"
 
@@ -104,16 +106,14 @@ echo ""
 echo "[Step 5/6] Cross-platform build..."
 if [ "$PLATFORM" = "linux" ]; then
     echo "Building Windows packages via cross-compilation..."
-    pnpm exec electron-builder --win
-    if [ $? -eq 0 ]; then
+    if pnpm exec electron-builder --win; then
         echo "Windows packages built via cross-compilation"
     else
         echo "[WARNING] Windows cross-build failed"
     fi
 elif [ "$PLATFORM" = "mac" ]; then
     echo "Building Linux + Windows packages via cross-compilation..."
-    pnpm exec electron-builder --linux AppImage deb rpm --win
-    if [ $? -eq 0 ]; then
+    if pnpm exec electron-builder --linux AppImage deb rpm --win; then
         echo "Linux + Windows packages built"
     else
         echo "[WARNING] Cross-platform build partially failed"
@@ -130,8 +130,7 @@ echo ""
 echo "[Step 6/6] Checking for Inno Setup (Windows only)..."
 if [ "$PLATFORM" = "win" ] && command -v iscc &>/dev/null; then
     echo "Inno Setup found, creating Ollama-style installer..."
-    iscc "$FRONTEND_DIR/installer.iss"
-    if [ $? -eq 0 ]; then
+    if iscc "$FRONTEND_DIR/installer.iss"; then
         echo "Inno Setup installer created"
     else
         echo "[WARNING] Inno Setup build failed, NSIS packages are ready"

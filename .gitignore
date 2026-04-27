@@ -30,7 +30,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-log.log
+*.log
+logs/
 
 # 环境变量
 .env
