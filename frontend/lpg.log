@@ -1,86 +1,126 @@
 Verify each finding against the current code and only fix it if needed.
 
-In `@frontend/src/renderer/src/views/MarketView.vue` around lines 69 - 73,
-switchTab currently updates only local state (activeTab, store.setFilter,
-showFilters) but does not sync the route query, causing stale route.query.tab
-and navigation/bookmark issues; update switchTab to call router.replace() with
-the same route but with query.tab set to the new tab value (preserving other
-query params if any) so route.query.tab matches activeTab, and keep the existing
-store.setFilter and showFilters behavior; reference the switchTab function and
-use router.replace() and route.query.tab to implement this synchronization.
+In `@frontend/src/renderer/src/views/WorkspaceView.vue` at line 1, 该文件在开头包含 UTF-8
+BOM（EF BB BF），请从文件顶部移除该字节顺序标记以避免解析/构建问题；打开
+frontend/src/renderer/src/views/WorkspaceView.vue 并确保文件以 "<script setup
+lang=\"ts\">" 开始（没有任何隐藏字符或 BOM）然后保存即可。
 
 Verify each finding against the current code and only fix it if needed.
 
-In `@frontend/src/renderer/src/stores/chat.ts` around lines 91 - 139, In
-loadConversation, prevent stale responses from overwriting the store by
-capturing the current activeAgentId.value and convId into local constants before
-the await apiGet(...) call and, after the await (and in the catch/finally paths
-if needed), verify that activeAgentId.value and the current convId still match
-those captured values; if they don't match, abort updating
-agentCurrentConversation, agentMessages, and conversationMessagesCache.
-Alternatively implement a per-agent/per-request sequence id or AbortController
-and check the sequence/aborted state before applying any state mutations;
-reference loadConversation, activeAgentId, convId, agentCurrentConversation,
-agentMessages, and conversationMessagesCache when making the checks.
+In `@frontend/installer.iss` around lines 317 - 330, 当前使用的 WizardSelectTask
+函数不存在，会导致编译失败；在处理 DesktopCheck, StartMenuCheck, AutoLaunchCheck 的分支中，将对不存在的
+WizardSelectTask 的调用替换为官方 API WizardSelectTasks，并使用单个任务名字符串或带前缀的“!”来取消选择（例如将
+WizardSelectTask('desktopicon', True/False) 改为 WizardSelectTasks('desktopicon')
+或 WizardSelectTasks('!desktopicon')，同理处理 'startmenu' 和 'autolaunch'）。
 
 Verify each finding against the current code and only fix it if needed.
 
-In `@frontend/src/renderer/src/stores/chat.ts` around lines 28 - 29, The single
-global boolean isLoadingConversation causes race conditions for parallel loads;
-change isLoadingConversation from a ref<boolean> to a ref<Record<string,
-boolean>> keyed by agentId or conversationId (similar to
-conversationMessagesCache) and update all reads/writes to use that key (set
-isLoadingConversation.value[agentId]=true/false and check existence for loading
-state). Locate and update every place that accesses isLoadingConversation
-(including the loading setters/getters around the message-fetching logic and the
-areas noted in the diff) to read/write the per-agent key and ensure cleanup
-deletes the key when finished to avoid stale entries.
+Inline comments:
+In `@frontend/src/renderer/src/stores/chat.ts`:
+- Around line 456-457: There's an empty catch block swallowing errors during
+tool invocation in the chat store; replace it with a typed catch (error:
+unknown) and log at least a warning with context (e.g., console.warn or the
+store's logger) including the error and identifying info (tool name / arguments)
+so failures aren't silent; update the anonymous empty catch to something like
+catch (error: unknown) { console.warn('Tool execution failed in chat store', {
+error, toolName, payload }) } ensuring any caught Error is preserved or rethrown
+if needed.
 
-Verify each finding against the current code and only fix it if needed.
+In `@frontend/src/renderer/src/views/AvatarView.vue`:
+- Around line 908-910: 在 AvatarView.vue 中有多处样式把描述/状态文本的 font-size 降到
+9–10px（出现在原始 diff 对应的 908、994、1199、1212 等位置），可读性偏弱；请将这些选择器中把 font-size 设为 9px 或
+10px 的规则调整为 11–12px（或改用基于根字体的 rem 变量以便统一控制），并确保关键状态/标签样式（相应的 CSS 规则在
+AvatarView.vue 中设置 font-size 的那些块）保持至少
+11px-12px，同时在桌面常见缩放下复测显示效果并更新注释或样式变量以反映更大字号。
 
-In `@frontend/src/main/index.ts` around lines 833 - 839, The handler decodes
-url.pathname into relativePath then passes it into resolveModelFile which
-decodes it again, enabling double-decoding path traversal bypass; fix by
-removing one decode: either stop calling decodeURIComponent when constructing
-relativePath in the request handler (keep raw url.pathname) or remove the second
-decode inside resolveModelFile so only a single decode happens; update
-references to relativePath and the resolveModelFile call to reflect the
-single-decoding choice and add a comment near resolveModelFile and the handler
-to document the decoding responsibility.
+In `@frontend/src/renderer/src/views/settings/AIModelSettings.vue`:
+- Line 1: The file frontend/src/renderer/src/views/settings/AIModelSettings.vue
+contains a UTF-8 BOM at the start (before the "<script setup lang=\"ts\">"),
+which can break tooling; remove the leading U+FEFF character so the file begins
+exactly with "<script setup lang=\"ts\">", ensure your editor/save operation
+writes UTF-8 without BOM, and re-run linters/build to confirm the issue is
+resolved.
 
+In `@frontend/src/renderer/src/views/WelcomeView.vue`:
+- Around line 285-291: The condition uses tmplId (a ComputedRef) incorrectly and
+mixes checks on tmpl.vendor vs template ID; change the equality check to use
+tmplId.value (or use templateId directly) and make the logic consistent by
+deciding whether to branch on tmpl.vendor or on template ID—e.g., if you want
+vendor-based behavior keep the first branch using tmpl.vendor and replace the
+tmplId === 'lmstudio' check with the equivalent vendor check, otherwise compare
+templateId (or tmplId.value) to 'lmstudio'; update the assignment to
+newProvider.value.apiKey accordingly (references: tmplId, templateId,
+tmpl.vendor, newProvider.value.apiKey).
 
+---
 
-Verify each finding against the current code and only fix it if needed.
+Outside diff comments:
+In `@frontend/src/renderer/src/views/AvatarView.vue`:
+- Around line 198-205: The mapping that sets importedModels from
+window.api.avatar.listImportedModels() uses only TypeScript casts and lacks
+runtime validation, so historical dirty records (e.g., missing or non-array
+tags) can break downstream code (see usage of ['Imported', ...m.tags]); update
+the mapping in the block that assigns importedModels (the map over PetModelInfo
+to LuomiNestModelInfo) to perform runtime checks and provide safe defaults:
+ensure tags is an array (default []), ensure id/name/url/scale/type have sane
+fallbacks or are filtered out, and coerce type to LuomiNestModelInfo['type']
+only after validation so downstream consumers won't throw.
 
-In `@frontend/installer.iss` around lines 336 - 339, The message for an
-already-installed detection is hardcoded in English; add a localized message key
-(e.g., AlreadyInstalledMsg) to your [CustomMessages] for both chinesesimplified
-and english, then replace the inline English text in the MsgBox call with
-FmtMessage(CustomMessage('AlreadyInstalledMsg'), []) (keeping the existing
-FmtMessage(CustomMessage('WelcomeDesc1'), []) and concatenation/line breaks), so
-MsgBox uses CustomMessage('AlreadyInstalledMsg') instead of the hardcoded
-'{`#MyAppName`} is already installed...'.
+---
 
-Verify each finding against the current code and only fix it if needed.
+Nitpick comments:
+In `@frontend/src/renderer/src/stores/chat.ts`:
+- Line 25: convPendingToolCalls is typed as Record<string, any[]> which loses
+type safety; define a concrete interface (e.g., ToolCall with a nested
+FunctionDescriptor having name: string and arguments: Record<string, unknown> or
+a proper arg type) and change convPendingToolCalls to ref<Record<string,
+ToolCall[]>>; update references that access tc.function.name and
+tc.function.arguments to use the new types so TypeScript can validate them
+(search for convPendingToolCalls and usages of tc.function to apply the new
+ToolCall/FunctionDescriptor types).
+- Around line 122-123: The exported function cacheConversationMessages is an
+empty stub—either implement its intended behavior or remove it from the public
+API; if you intend to keep it as a placeholder, add a clear TODO comment above
+the function mentioning the planned behavior and a ticket/issue reference and
+ensure it remains unexported until implemented, otherwise delete the function
+and remove any import/usage sites; locate the stub by the function name
+cacheConversationMessages in chat.ts and apply the chosen change.
 
-In `@frontend/installer.iss` around lines 315 - 320, The code currently calls
-WizardForm.TasksList.Items.IndexOfName which doesn't exist and also assumes
-tasks are at fixed indexes (but a group header shifts indexes); replace those
-IndexOfName calls by locating tasks properly—either use
-WizardForm.TasksList.Items.IndexOf(CustomMessage('cm:ShortcutsDesktop')) /
-Items.IndexOf(CustomMessage('cm:ShortcutsStartMenu')) /
-Items.IndexOf(CustomMessage('cm:ShortcutsAutoLaunch')) to get the correct item
-index before setting WizardForm.TasksList.Checked, or (preferably) use the
-TasksList helper APIs: call WizardForm.TasksList.IsTaskSelected('desktopicon') /
-IsTaskSelected('startmenu') / IsTaskSelected('autolaunch') to read state and
-call the corresponding selector (e.g. SetTaskSelected or the Tasks API your
-codebase provides) to set selection based on DesktopCheck.Checked,
-StartMenuCheck.Checked and AutoLaunchCheck.Checked; update the block under
-CurPageID = ShortcutsPage.ID to use these valid methods instead of IndexOfName.
+In `@frontend/src/renderer/src/views/AvatarView.vue`:
+- Line 12: Move PetModelInfo (and related pet types like ModelCapabilities) out
+of the umbrella vite-env.d.ts into a dedicated types file to reduce coupling:
+create a new file (e.g., types/pet.ts) exporting interfaces such as PetModelInfo
+and ModelCapabilities, update imports in AvatarView.vue (and any other files
+currently importing from vite-env.d.ts) to import from the new module, and keep
+vite-env.d.ts for global/ambient types only; ensure exported names match the
+existing identifiers (PetModelInfo, ModelCapabilities) so no call sites need to
+change other than their import paths.
 
-Verify each finding against the current code and only fix it if needed.
+In `@frontend/src/renderer/src/views/PluginMarketView.vue`:
+- Around line 146-147: The background linear-gradient in PluginMarketView.vue
+currently uses hard-coded RGBA colors (e.g., rgba(20, 126, 188, ...)) which
+makes theming difficult; replace those literals with a design-token based RGB
+variable (e.g., a --lumi-primary-rgb or similar) and use that variable to
+compose the transparent colors (so you can supply alpha per use), updating both
+occurrences (the background definition around the display:flex block and the
+second occurrence at the other location mentioned). Locate the CSS rules that
+set background in this file and swap the rgba(...) literals for uses of the
+token (keeping the same alpha values) so future skinning only needs to change
+the token value.
 
-In `@backend/build.sh` around lines 97 - 101, 更新提示中已过时的构建命令：修改 backend/build.sh
-中打印的“cd ../frontend && ./build-installer.sh (or .ps1 on Windows)”那一行，将引用的
-./build-installer.sh 替换为 ../build-all.sh（或直接删除这两行只保留已有的 ../build-all.sh
-提示），以避免提示用户运行不存在的脚本；定位参考点为文件中输出“Next steps:”后紧接的 echo 行并相应更新文本。
+In `@frontend/src/renderer/src/views/SocialView.vue`:
+- Line 1: Remove the invisible prefix character (BOM/ZWNBSP) at the very start
+of the file so the file begins with the normal "<script setup lang=\"ts\">"
+token; open frontend/src/renderer/src/views/SocialView.vue in a UTF‑8 aware
+editor and delete the non‑printing character(s) before the "<script setup
+lang=\"ts\">" tag, then save the file with a standard UTF‑8 encoding (no BOM).
+
+In `@frontend/src/renderer/src/views/WelcomeView.vue`:
+- Around line 297-299: The current computed newProviderFormValid only checks
+newProvider.value.id and newProvider.value.baseUrl but misses validating apiKey
+for cloud providers; update newProviderFormValid to also require
+newProvider.value.apiKey.trim() !== '' when the provider is a cloud-type
+provider (e.g., newProvider.value.type === 'cloud') or when the id/baseUrl
+indicates a cloud vendor (e.g., matches "openai"), so the form is invalid if the
+apiKey is empty for those cases; modify the computed (newProviderFormValid) to
+include this conditional apiKey check while keeping existing id/baseUrl checks.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Globe,
@@ -17,20 +17,18 @@ import {
   X,
   Eye,
   EyeOff,
-  RefreshCw,
   Cloud,
   Monitor,
   Network,
   Loader2,
   AlertCircle,
-  Info,
 } from 'lucide-vue-next'
 import { useApi } from '../composables/useApi'
 import { useModelStore } from '../stores/model'
 import type { UserProfile } from '../types'
 
 const router = useRouter()
-const { apiGet, apiPut, apiPost } = useApi()
+const { apiGet, apiPut } = useApi()
 const modelStore = useModelStore()
 
 const VERSION = '0.1.0'
@@ -284,7 +282,7 @@ const handleTemplateSelect = (templateId: string) => {
     newProvider.value.defaultModel = tmpl.defaultModel
     if (tmpl.vendor === 'ollama') {
       newProvider.value.apiKey = 'ollama'
-    } else if (tmplId === 'lmstudio') {
+    } else if (tmpl.id === 'lmstudio') {
       newProvider.value.apiKey = 'lmstudio'
     } else {
       newProvider.value.apiKey = ''
@@ -292,11 +290,13 @@ const handleTemplateSelect = (templateId: string) => {
   }
 }
 
-const tmplId = computed(() => selectedTemplate.value)
-
-const newProviderFormValid = computed(() =>
-  newProvider.value.id.trim() !== '' && newProvider.value.baseUrl.trim() !== ''
-)
+const newProviderFormValid = computed(() => {
+  const hasId = newProvider.value.id.trim() !== ''
+  const hasBaseUrl = newProvider.value.baseUrl.trim() !== ''
+  const isCloudProvider = newProvider.value.vendor === 'openai_compatible'
+  const hasApiKey = !isCloudProvider || newProvider.value.apiKey.trim() !== ''
+  return hasId && hasBaseUrl && hasApiKey
+})
 
 const addProviderAndNext = async () => {
   if (!newProviderFormValid.value) {

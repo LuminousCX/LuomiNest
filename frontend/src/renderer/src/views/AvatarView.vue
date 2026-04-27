@@ -1,4 +1,4 @@
-﻿﻿<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   Palette, Sparkles, Heart, Eye, Smile, Frown, Meh, Zap,
@@ -196,12 +196,12 @@ const loadPersistedModels = async () => {
   try {
     const models = await window.api.avatar.listImportedModels()
     importedModels.value = models.map((m: PetModelInfo) => ({
-      id: m.id,
-      name: m.name,
-      url: m.url,
-      scale: m.scale,
-      type: m.type as LuomiNestModelInfo['type'],
-      tags: m.tags
+      id: m.id || '',
+      name: m.name || 'Unknown',
+      url: m.url || '',
+      scale: m.scale || 1,
+      type: (['live2d', 'spine', 'vrm'].includes(m.type) ? m.type : 'live2d') as LuomiNestModelInfo['type'],
+      tags: Array.isArray(m.tags) ? m.tags : []
     }))
   } catch {
   }
@@ -905,7 +905,7 @@ onBeforeUnmount(() => {
 }
 
 .mode-desc {
-  font-size: 9px;
+  font-size: 11px;
   opacity: 0.55;
 }
 
@@ -929,7 +929,7 @@ onBeforeUnmount(() => {
 .expression-value {
   margin-left: auto;
   font-family: monospace;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--lumi-primary);
   opacity: 0.7;
 }
@@ -991,7 +991,7 @@ onBeforeUnmount(() => {
 }
 
 .idle-status {
-  font-size: 9px;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 8px;
 }
@@ -1196,7 +1196,7 @@ onBeforeUnmount(() => {
 }
 
 .skin-type {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-muted);
   opacity: 0.75;
 }
@@ -1209,7 +1209,7 @@ onBeforeUnmount(() => {
 }
 
 .skin-tag {
-  font-size: 9px;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 6px;
   background: var(--surface-hover);

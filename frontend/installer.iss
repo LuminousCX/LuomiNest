@@ -317,17 +317,17 @@ begin
   else if CurPageID = ShortcutsPage.ID then
   begin
     if DesktopCheck.Checked then
-      WizardSelectTask('desktopicon', True)
+      WizardSelectTasks('desktopicon')
     else
-      WizardSelectTask('desktopicon', False);
+      WizardSelectTasks('!desktopicon');
     if StartMenuCheck.Checked then
-      WizardSelectTask('startmenu', True)
+      WizardSelectTasks('startmenu')
     else
-      WizardSelectTask('startmenu', False);
+      WizardSelectTasks('!startmenu');
     if AutoLaunchCheck.Checked then
-      WizardSelectTask('autolaunch', True)
+      WizardSelectTasks('autolaunch')
     else
-      WizardSelectTask('autolaunch', False);
+      WizardSelectTasks('!autolaunch');
   end;
 end;
 

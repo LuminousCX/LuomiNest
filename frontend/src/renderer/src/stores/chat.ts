@@ -120,6 +120,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   const cacheConversationMessages = (_convId: string) => {
+    // TODO: implement LRU cache eviction for conversation messages
   }
 
   const checkBackend = async () => {
@@ -453,7 +454,8 @@ export const useChatStore = defineStore('chat', () => {
                 ...convMessages.value,
                 [streamingConvId]: [...(convMessages.value[streamingConvId] || []), toolMsg]
               }
-            } catch {
+            } catch (error: unknown) {
+              console.warn('[ChatStore] Tool execution failed:', { error, toolName: tc.function?.name })
             }
           }
           convPendingToolCalls.value = {
