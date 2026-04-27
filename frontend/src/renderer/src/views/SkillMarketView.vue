@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { SlidersHorizontal, X } from 'lucide-vue-next'
+import { Sparkles, SlidersHorizontal, X } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
 import MarketplaceSearch from '../components/marketplace/MarketplaceSearch.vue'
 import MarketplaceCategories from '../components/marketplace/MarketplaceCategories.vue'

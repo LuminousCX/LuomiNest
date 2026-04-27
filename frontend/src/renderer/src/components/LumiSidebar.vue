@@ -17,7 +17,7 @@ import {
   Palette,
   Brain,
   Users,
-  Puzzle,
+  Package,
   Trash2,
   Check,
   UserCircle
@@ -40,8 +40,7 @@ const navItems = [
   { id: '/avatar', label: '皮套', icon: Palette },
   { id: '/memory', label: '记忆', icon: Brain },
   { id: '/profile', label: '个人信息', icon: UserCircle },
-  { id: '/market/plugins', label: '插件市场', icon: Puzzle },
-  { id: '/market/skills', label: '技能市场', icon: Sparkles },
+  { id: '/market', label: '扩展', icon: Package },
   { id: '/social', label: '社交', icon: Users },
   { id: '/browser', label: '浏览器', icon: Globe }
 ]

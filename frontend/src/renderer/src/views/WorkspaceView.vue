@@ -56,6 +56,8 @@ const showSearchPanel = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<any[]>([])
 const copiedId = ref<string | null>(null)
+const isNearBottom = ref(true)
+const SCROLL_BOTTOM_THRESHOLD = 120
 
 const agentCards = computed(() => {
   const agents = agentStore.agents.map(a => ({
@@ -141,14 +143,19 @@ const selectAgent = async (agent: { id: string; name: string; desc: string; colo
   }
   const found = agentStore.agents.find(a => a.id === agent.id)
   if (found) {
+    const currentConvId = chatStore.currentConversation?.id
+    if (currentConvId) {
+      chatStore.cacheConversationMessages(currentConvId)
+    }
+
     agentStore.setActiveAgent(found)
-    // 不要清空消息，让watch监听器处理状态切换
     await chatStore.fetchConversations(found.id)
-    // 如果有对话历史，加载最新的对话
     if (chatStore.conversations.length > 0) {
       const latestConv = chatStore.conversations[0]
       await chatStore.loadConversation(latestConv.id)
     }
+    await nextTick()
+    scrollToBottom(true)
   }
 }
 
@@ -192,19 +199,29 @@ const sendMessage = async () => {
   if (agent?.systemPrompt) options.systemPrompt = agent.systemPrompt
   if (agent?.id) options.agentId = agent.id
 
+  isNearBottom.value = true
   await chatStore.sendMessage(content, options)
   await nextTick()
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 const cancelStreaming = () => {
   chatStore.cancelCurrentRequest()
 }
 
-const scrollToBottom = () => {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTo({ top: messagesContainer.value.scrollHeight, behavior: 'smooth' })
-  }
+const scrollToBottom = (force = false) => {
+  if (!messagesContainer.value) return
+  if (!force && !isNearBottom.value) return
+  messagesContainer.value.scrollTo({
+    top: messagesContainer.value.scrollHeight,
+    behavior: 'auto'
+  })
+}
+
+const handleMessagesScroll = () => {
+  if (!messagesContainer.value) return
+  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+  isNearBottom.value = scrollHeight - scrollTop - clientHeight < SCROLL_BOTTOM_THRESHOLD
 }
 
 const resetTextareaHeight = () => {
@@ -269,9 +286,20 @@ const formatTime = (dateStr: string) => {
 }
 
 const handleLoadConversation = async (convId: string) => {
+  if (chatStore.currentConversation?.id === convId) return
+
+  const currentConvId = chatStore.currentConversation?.id
+  if (currentConvId) {
+    chatStore.cacheConversationMessages(currentConvId)
+  }
+
+  if (isStreaming.value) {
+    chatStore.cancelCurrentRequest()
+  }
+
   await chatStore.loadConversation(convId)
   await nextTick()
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 const handleDeleteConversation = async (convId: string) => {
@@ -298,7 +326,9 @@ const insertSkillToInput = (skillName: string) => {
 }
 
 watch(messages, () => {
-  nextTick(scrollToBottom)
+  if (isStreaming.value && isNearBottom.value) {
+    nextTick(() => scrollToBottom(true))
+  }
 }, { deep: true })
 
 const showCreateAgentDialog = ref(false)
@@ -457,7 +487,7 @@ onMounted(async () => {
         </div>
 
         <div class="chat-area">
-          <div ref="messagesContainer" class="messages-scroll">
+          <div ref="messagesContainer" class="messages-scroll" @scroll="handleMessagesScroll">
             <div class="messages-container">
               <TransitionGroup name="msg-appear" tag="div">
                 <div
@@ -1115,7 +1145,6 @@ onMounted(async () => {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
-  scroll-behavior: smooth;
 }
 
 .messages-container {

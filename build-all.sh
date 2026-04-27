@@ -9,8 +9,11 @@ fi
 
 echo "========================================"
 echo " LuomiNest Unified Build Script"
-echo " Platform: $PLATFORM"
-echo " Targets: Win (NSIS+Portable) / Linux (AppImage+deb+rpm)"
+echo " Host Platform: $PLATFORM"
+echo " Targets: Win64 (NSIS+Portable) + Linux (AppImage+deb+rpm)"
+if [ "$PLATFORM" = "mac" ]; then
+    echo "          + macOS (DMG+zip)"
+fi
 echo "========================================"
 echo ""
 
@@ -19,6 +22,7 @@ FRONTEND_DIR="$SCRIPT_DIR/frontend"
 BACKEND_DIR="$SCRIPT_DIR/backend"
 DIST_DIR="$SCRIPT_DIR/dist"
 RESOURCES_BACKEND="$FRONTEND_DIR/resources/backend"
+RELEASE_DIR="$FRONTEND_DIR/release/dist"
 
 if [ "$PLATFORM" = "win" ]; then
     BACKEND_EXE="$BACKEND_DIR/dist/luominest-backend.exe"
@@ -31,7 +35,10 @@ export ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-
 
 START_TIME=$(date +%s)
 
-echo "[Step 1/5] Building backend with PyInstaller..."
+# ============================================================
+# Step 1: Build backend
+# ============================================================
+echo "[Step 1/6] Building backend with PyInstaller..."
 cd "$BACKEND_DIR"
 chmod +x build.sh 2>/dev/null || true
 bash build.sh
@@ -40,8 +47,11 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# ============================================================
+# Step 2: Verify and copy backend executable
+# ============================================================
 echo ""
-echo "[Step 2/5] Verifying backend executable..."
+echo "[Step 2/6] Verifying backend executable..."
 if [ ! -f "$BACKEND_EXE" ]; then
     echo "[ERROR] Backend executable not found: $BACKEND_EXE"
     exit 1
@@ -52,8 +62,11 @@ mkdir -p "$RESOURCES_BACKEND"
 cp "$BACKEND_EXE" "$RESOURCES_BACKEND/"
 echo "Backend resources copied"
 
+# ============================================================
+# Step 3: Build frontend
+# ============================================================
 echo ""
-echo "[Step 3/5] Building frontend with electron-vite..."
+echo "[Step 3/6] Building frontend with electron-vite..."
 cd "$FRONTEND_DIR"
 pnpm run build
 if [ $? -ne 0 ]; then
@@ -62,27 +75,59 @@ if [ $? -ne 0 ]; then
 fi
 echo "Frontend build complete"
 
+# ============================================================
+# Step 4: Package for current platform
+# ============================================================
 echo ""
-echo "[Step 4/5] Creating installer packages (electron-builder)..."
+echo "[Step 4/6] Creating installer packages for current platform..."
 if [ "$PLATFORM" = "mac" ]; then
-    echo "Building macOS DMG + zip..."
+    echo "Building macOS packages..."
     pnpm exec electron-builder --mac
 elif [ "$PLATFORM" = "linux" ]; then
-    echo "Building Linux AppImage + deb + rpm..."
+    echo "Building Linux packages..."
     pnpm exec electron-builder --linux AppImage deb rpm
 else
-    echo "Building Windows NSIS + portable..."
+    echo "Building Windows packages..."
     pnpm exec electron-builder --win
 fi
 
 if [ $? -ne 0 ]; then
-    echo "[ERROR] Installer creation failed"
+    echo "[ERROR] Current platform packaging failed"
     exit 1
 fi
-echo "Electron-builder packages created"
+echo "Current platform packages created"
 
+# ============================================================
+# Step 5: Cross-platform build
+# ============================================================
 echo ""
-echo "[Step 5/5] Checking for Inno Setup (Windows only)..."
+echo "[Step 5/6] Cross-platform build..."
+if [ "$PLATFORM" = "linux" ]; then
+    echo "Building Windows packages via cross-compilation..."
+    pnpm exec electron-builder --win
+    if [ $? -eq 0 ]; then
+        echo "Windows packages built via cross-compilation"
+    else
+        echo "[WARNING] Windows cross-build failed"
+    fi
+elif [ "$PLATFORM" = "mac" ]; then
+    echo "Building Linux + Windows packages via cross-compilation..."
+    pnpm exec electron-builder --linux AppImage deb rpm --win
+    if [ $? -eq 0 ]; then
+        echo "Linux + Windows packages built"
+    else
+        echo "[WARNING] Cross-platform build partially failed"
+    fi
+else
+    echo "Cross-compilation from Windows to Linux requires WSL."
+    echo "Run build-all.ps1 on Windows for automatic WSL integration."
+fi
+
+# ============================================================
+# Step 6: Inno Setup (Windows only, optional)
+# ============================================================
+echo ""
+echo "[Step 6/6] Checking for Inno Setup (Windows only)..."
 if [ "$PLATFORM" = "win" ] && command -v iscc &>/dev/null; then
     echo "Inno Setup found, creating Ollama-style installer..."
     iscc "$FRONTEND_DIR/installer.iss"
@@ -103,17 +148,21 @@ SECONDS=$((DURATION % 60))
 echo ""
 echo "========================================"
 echo " Build completed!"
-echo " Platform: $PLATFORM"
+echo " Host Platform: $PLATFORM"
 echo " Duration: ${MINUTES}m ${SECONDS}s"
-echo " Output: $FRONTEND_DIR/release/"
+echo " Output: $RELEASE_DIR"
 echo "========================================"
 echo ""
 
 echo "Generated packages:"
-for file in "$FRONTEND_DIR/release/dist/"*; do
+for file in "$RELEASE_DIR/"*; do
     if [ -f "$file" ]; then
-        SIZE=$(du -h "$file" | cut -f1)
-        echo "  $(basename "$file") ($SIZE)"
+        case "$file" in
+            *.exe|*.AppImage|*.deb|*.rpm|*.dmg|*.zip)
+                SIZE=$(du -h "$file" | cut -f1)
+                echo "  $(basename "$file") ($SIZE)"
+                ;;
+        esac
     fi
 done
 

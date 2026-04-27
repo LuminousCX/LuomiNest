@@ -19,7 +19,7 @@ const activeTab = ref<'info' | 'versions' | 'reviews'>('info')
 const expandedVersion = ref<string | null>(null)
 
 const itemType = computed<MarketplaceType>(() =>
-  route.path.startsWith('/plugins') ? 'plugin' : 'skill'
+  route.params.type as MarketplaceType || 'plugin'
 )
 
 const itemId = computed(() => route.params.id as string)
@@ -37,7 +37,7 @@ const downloadDisplay = computed(() => {
 })
 
 function goBack() {
-  router.push(itemType.value === 'plugin' ? '/plugins' : '/skills')
+  router.push('/market')
 }
 
 function toggleVersion(version: string) {

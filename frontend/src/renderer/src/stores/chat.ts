@@ -25,6 +25,8 @@ export const useChatStore = defineStore('chat', () => {
   const lastError = ref<string | null>(null)
   const lastUsage = ref<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | null>(null)
   const pendingToolCalls = ref<Record<string, any[]>>({})
+  const conversationMessagesCache = ref<Record<string, ChatMessage[]>>({})
+  const isLoadingConversation = ref<boolean>(false)
 
   const isStreaming = computed(() => agentStreaming.value[activeAgentId.value] || false)
   
@@ -67,78 +69,6 @@ export const useChatStore = defineStore('chat', () => {
 
   const currentMessages = computed(() => messages.value)
 
-  watch(() => activeAgentId.value, async (newAgentId, _oldAgentId) => {
-    if (newAgentId) {
-      if (!agentConversations.value[newAgentId]) {
-        agentConversations.value = {
-          ...agentConversations.value,
-          [newAgentId]: []
-        }
-      }
-      if (!agentCurrentConversation.value[newAgentId]) {
-        agentCurrentConversation.value = {
-          ...agentCurrentConversation.value,
-          [newAgentId]: null
-        }
-      }
-      if (!agentMessages.value[newAgentId]) {
-        agentMessages.value = {
-          ...agentMessages.value,
-          [newAgentId]: []
-        }
-      }
-      if (!agentStreaming.value[newAgentId]) {
-        agentStreaming.value = {
-          ...agentStreaming.value,
-          [newAgentId]: false
-        }
-      }
-      if (!agentStreamingContent.value[newAgentId]) {
-        agentStreamingContent.value = {
-          ...agentStreamingContent.value,
-          [newAgentId]: ''
-        }
-      }
-      
-      const existingMessages = agentMessages.value[newAgentId]
-      const hasExistingMessages = existingMessages && existingMessages.length > 0
-      const isCurrentlyStreaming = agentStreaming.value[newAgentId]
-      
-      await fetchConversations(newAgentId)
-      
-      if (!hasExistingMessages && !isCurrentlyStreaming) {
-        const currentConv = agentCurrentConversation.value[newAgentId]
-        if (currentConv && currentConv.id) {
-          try {
-            await loadConversation(currentConv.id)
-          } catch (error) {
-            agentCurrentConversation.value = {
-              ...agentCurrentConversation.value,
-              [newAgentId]: null
-            }
-            agentMessages.value = {
-              ...agentMessages.value,
-              [newAgentId]: []
-            }
-          }
-        } else if (agentConversations.value[newAgentId].length > 0) {
-          const latestConv = agentConversations.value[newAgentId][0]
-          if (latestConv && latestConv.id) {
-            try {
-              await loadConversation(latestConv.id)
-            } catch (error) {
-            }
-          }
-        }
-      }
-    }
-  }, { immediate: true })
-
-  const checkBackend = async () => {
-    isBackendReady.value = await checkHealth()
-    return isBackendReady.value
-  }
-
   const fetchConversations = async (agentId?: string) => {
     const targetAgentId = agentId || activeAgentId.value
     if (!targetAgentId) return
@@ -156,6 +86,72 @@ export const useChatStore = defineStore('chat', () => {
         [targetAgentId]: []
       }
     }
+  }
+
+  const loadConversation = async (convId: string) => {
+    if (!activeAgentId.value) return
+
+    const cached = conversationMessagesCache.value[convId]
+    if (cached && cached.length > 0) {
+      agentMessages.value = {
+        ...agentMessages.value,
+        [activeAgentId.value]: cached.map(m => ({ ...m }))
+      }
+    } else {
+      agentMessages.value = {
+        ...agentMessages.value,
+        [activeAgentId.value]: []
+      }
+    }
+
+    isLoadingConversation.value = true
+
+    try {
+      const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
+      agentCurrentConversation.value = {
+        ...agentCurrentConversation.value,
+        [activeAgentId.value]: conv
+      }
+      const mappedMessages = (conv.messages || []).map((m: any) => ({
+        id: m.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp || Date.now(),
+        done: true,
+      }))
+      agentMessages.value = {
+        ...agentMessages.value,
+        [activeAgentId.value]: mappedMessages
+      }
+      conversationMessagesCache.value = {
+        ...conversationMessagesCache.value,
+        [convId]: mappedMessages
+      }
+    } catch (error) {
+      if (!cached || cached.length === 0) {
+        agentMessages.value = {
+          ...agentMessages.value,
+          [activeAgentId.value]: []
+        }
+      }
+    } finally {
+      isLoadingConversation.value = false
+    }
+  }
+
+  const cacheConversationMessages = (convId: string) => {
+    const msgs = agentMessages.value[activeAgentId.value]
+    if (msgs && msgs.length > 0) {
+      conversationMessagesCache.value = {
+        ...conversationMessagesCache.value,
+        [convId]: [...msgs]
+      }
+    }
+  }
+
+  const checkBackend = async () => {
+    isBackendReady.value = await checkHealth()
+    return isBackendReady.value
   }
 
   const createConversation = async (title?: string, agentId?: string, model?: string, provider?: string) => {
@@ -180,30 +176,14 @@ export const useChatStore = defineStore('chat', () => {
     return conv
   }
 
-  const loadConversation = async (convId: string) => {
-    if (!activeAgentId.value) return
-    
-    const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
-    agentCurrentConversation.value = {
-      ...agentCurrentConversation.value,
-      [activeAgentId.value]: conv
-    }
-    agentMessages.value = {
-      ...agentMessages.value,
-      [activeAgentId.value]: (conv.messages || []).map((m: any) => ({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        role: m.role,
-        content: m.content,
-        timestamp: Date.now(),
-      }))
-    }
-  }
-
   const deleteConversation = async (convId: string, agentId?: string) => {
     const targetAgentId = agentId || activeAgentId.value
     if (!targetAgentId) return
     
     await apiDelete(`/chat/conversations/${convId}`)
+    const newCache = { ...conversationMessagesCache.value }
+    delete newCache[convId]
+    conversationMessagesCache.value = newCache
     if (agentCurrentConversation.value[targetAgentId]?.id === convId) {
       agentCurrentConversation.value = {
         ...agentCurrentConversation.value,
@@ -504,20 +484,10 @@ export const useChatStore = defineStore('chat', () => {
         await fetchConversations(targetAgentId)
         const convId = agentCurrentConversation.value[targetAgentId]?.id
         if (convId) {
-          try {
-            const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
-            agentMessages.value = {
-              ...agentMessages.value,
-              [targetAgentId]: (conv.messages || []).map((m: any) => ({
-                id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                role: m.role,
-                content: m.content,
-                timestamp: Date.now(),
-                done: true,
-              }))
-            }
-          } catch (e) {
-            console.error('Failed to reload conversation:', e)
+          const finalMsgs = agentMessages.value[targetAgentId] || []
+          conversationMessagesCache.value = {
+            ...conversationMessagesCache.value,
+            [convId]: [...finalMsgs]
           }
         }
       },
@@ -560,6 +530,73 @@ export const useChatStore = defineStore('chat', () => {
     lastError.value = null
   }
 
+  watch(() => activeAgentId.value, async (newAgentId, _oldAgentId) => {
+    if (newAgentId) {
+      if (!agentConversations.value[newAgentId]) {
+        agentConversations.value = {
+          ...agentConversations.value,
+          [newAgentId]: []
+        }
+      }
+      if (!agentCurrentConversation.value[newAgentId]) {
+        agentCurrentConversation.value = {
+          ...agentCurrentConversation.value,
+          [newAgentId]: null
+        }
+      }
+      if (!agentMessages.value[newAgentId]) {
+        agentMessages.value = {
+          ...agentMessages.value,
+          [newAgentId]: []
+        }
+      }
+      if (!agentStreaming.value[newAgentId]) {
+        agentStreaming.value = {
+          ...agentStreaming.value,
+          [newAgentId]: false
+        }
+      }
+      if (!agentStreamingContent.value[newAgentId]) {
+        agentStreamingContent.value = {
+          ...agentStreamingContent.value,
+          [newAgentId]: ''
+        }
+      }
+
+      const existingMessages = agentMessages.value[newAgentId]
+      const hasExistingMessages = existingMessages && existingMessages.length > 0
+      const isCurrentlyStreaming = agentStreaming.value[newAgentId]
+
+      await fetchConversations(newAgentId)
+
+      if (!hasExistingMessages && !isCurrentlyStreaming) {
+        const currentConv = agentCurrentConversation.value[newAgentId]
+        if (currentConv && currentConv.id) {
+          try {
+            await loadConversation(currentConv.id)
+          } catch (error) {
+            agentCurrentConversation.value = {
+              ...agentCurrentConversation.value,
+              [newAgentId]: null
+            }
+            agentMessages.value = {
+              ...agentMessages.value,
+              [newAgentId]: []
+            }
+          }
+        } else if (agentConversations.value[newAgentId].length > 0) {
+          const latestConv = agentConversations.value[newAgentId][0]
+          if (latestConv && latestConv.id) {
+            try {
+              await loadConversation(latestConv.id)
+            } catch (error) {
+            }
+          }
+        }
+      }
+    }
+  }, { immediate: true })
+
   return {
     conversations,
     currentConversation,
@@ -567,6 +604,7 @@ export const useChatStore = defineStore('chat', () => {
     currentMessages,
     isStreaming,
     isBackendReady,
+    isLoadingConversation,
     streamingContent,
     lastError,
     lastUsage,
@@ -576,6 +614,7 @@ export const useChatStore = defineStore('chat', () => {
     fetchConversations,
     createConversation,
     loadConversation,
+    cacheConversationMessages,
     deleteConversation,
     sendMessage,
     clearMessages,

@@ -1,4 +1,4 @@
-VM118 renderer_init:2 Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security
+VM4422 renderer_init:2 Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security
   Policy set or a policy with "unsafe-eval" enabled. This exposes users of
   this app to unnecessary security risks.
 
@@ -6,10 +6,10 @@ For more information and help, consult
 https://electronjs.org/docs/tutorial/security.
 This warning will not show up
 once the app is packaged.
-warnAboutInsecureCSP @ VM118 renderer_init:2
-logSecurityWarnings @ VM118 renderer_init:2
-（匿名） @ VM118 renderer_init:2
-chat.ts:70 [Vue warn]: Unhandled error during execution of watcher callback 
+warnAboutInsecureCSP @ VM4422 renderer_init:2
+logSecurityWarnings @ VM4422 renderer_init:2
+（匿名） @ VM4422 renderer_init:2
+chat.ts:59 [Vue warn]: Unhandled error during execution of watcher callback 
   at <WorkspaceView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) {__v_skip: true} > > 
   at <RouterView> 
   at <App>
@@ -24,7 +24,7 @@ job @ chunk-MDJKIZJQ.js?v=fe22181a:2081
 watch @ chunk-MDJKIZJQ.js?v=fe22181a:2116
 doWatch @ chunk-MDJKIZJQ.js?v=fe22181a:3071
 watch2 @ chunk-MDJKIZJQ.js?v=fe22181a:3004
-（匿名） @ chat.ts:70
+（匿名） @ chat.ts:59
 （匿名） @ pinia.js?v=fe22181a:5363
 run @ chunk-MDJKIZJQ.js?v=fe22181a:385
 （匿名） @ pinia.js?v=fe22181a:5363
@@ -33,31 +33,13 @@ run @ chunk-MDJKIZJQ.js?v=fe22181a:385
 runWithContext @ chunk-MDJKIZJQ.js?v=fe22181a:6468
 createSetupStore @ pinia.js?v=fe22181a:5363
 useStore @ pinia.js?v=fe22181a:5536
-setup @ WorkspaceView.vue:44
+setup @ WorkspaceView.vue:46
 callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
 setupStatefulComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10295
 setupComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10257
 mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8183
 processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
 patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8297
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-setupRenderEffect @ chunk-MDJKIZJQ.js?v=fe22181a:8425
-mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8197
-processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
-mountChildren @ chunk-MDJKIZJQ.js?v=fe22181a:7897
-mountElement @ chunk-MDJKIZJQ.js?v=fe22181a:7813
-processElement @ chunk-MDJKIZJQ.js?v=fe22181a:7768
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7634
-mountChildren @ chunk-MDJKIZJQ.js?v=fe22181a:7897
-mountElement @ chunk-MDJKIZJQ.js?v=fe22181a:7813
-processElement @ chunk-MDJKIZJQ.js?v=fe22181a:7768
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7634
-patchBlockChildren @ chunk-MDJKIZJQ.js?v=fe22181a:8019
-patchElement @ chunk-MDJKIZJQ.js?v=fe22181a:7937
-processElement @ chunk-MDJKIZJQ.js?v=fe22181a:7784
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7634
 componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8377
 run @ chunk-MDJKIZJQ.js?v=fe22181a:507
 runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
@@ -78,12 +60,11 @@ finalizeNavigation @ vue-router.js?v=fe22181a:5643
 Promise.then
 pushWithRedirect @ vue-router.js?v=fe22181a:5568
 push @ vue-router.js?v=fe22181a:5519
-skipWizard @ WelcomeView.vue:106
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-chat.ts:107 Uncaught (in promise) ReferenceError: Cannot access 'fetchConversations' before initialization
-    at watch.immediate (chat.ts:107:7)
+install @ vue-router.js?v=fe22181a:5751
+use @ chunk-MDJKIZJQ.js?v=fe22181a:6331
+（匿名） @ main.ts:11
+chat.ts:94 Uncaught (in promise) ReferenceError: Cannot access 'fetchConversations' before initialization
+    at watch.immediate (chat.ts:94:7)
     at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:19)
     at callWithAsyncErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2358:17)
     at baseWatchOptions.call (chunk-MDJKIZJQ.js?v=fe22181a:3043:47)
@@ -91,9 +72,9 @@ chat.ts:107 Uncaught (in promise) ReferenceError: Cannot access 'fetchConversati
     at watch (chunk-MDJKIZJQ.js?v=fe22181a:2116:7)
     at doWatch (chunk-MDJKIZJQ.js?v=fe22181a:3071:23)
     at watch2 (chunk-MDJKIZJQ.js?v=fe22181a:3004:10)
-    at chat.ts:70:3
+    at chat.ts:59:3
     at pinia.js?v=fe22181a:5363:96
-watch.immediate @ chat.ts:107
+watch.immediate @ chat.ts:94
 callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
 callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
 baseWatchOptions.call @ chunk-MDJKIZJQ.js?v=fe22181a:3043
@@ -101,7 +82,7 @@ job @ chunk-MDJKIZJQ.js?v=fe22181a:2081
 watch @ chunk-MDJKIZJQ.js?v=fe22181a:2116
 doWatch @ chunk-MDJKIZJQ.js?v=fe22181a:3071
 watch2 @ chunk-MDJKIZJQ.js?v=fe22181a:3004
-（匿名） @ chat.ts:70
+（匿名） @ chat.ts:59
 （匿名） @ pinia.js?v=fe22181a:5363
 run @ chunk-MDJKIZJQ.js?v=fe22181a:385
 （匿名） @ pinia.js?v=fe22181a:5363
@@ -110,31 +91,13 @@ run @ chunk-MDJKIZJQ.js?v=fe22181a:385
 runWithContext @ chunk-MDJKIZJQ.js?v=fe22181a:6468
 createSetupStore @ pinia.js?v=fe22181a:5363
 useStore @ pinia.js?v=fe22181a:5536
-setup @ WorkspaceView.vue:44
+setup @ WorkspaceView.vue:46
 callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
 setupStatefulComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10295
 setupComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10257
 mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8183
 processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
 patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8297
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-setupRenderEffect @ chunk-MDJKIZJQ.js?v=fe22181a:8425
-mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8197
-processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
-mountChildren @ chunk-MDJKIZJQ.js?v=fe22181a:7897
-mountElement @ chunk-MDJKIZJQ.js?v=fe22181a:7813
-processElement @ chunk-MDJKIZJQ.js?v=fe22181a:7768
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7634
-mountChildren @ chunk-MDJKIZJQ.js?v=fe22181a:7897
-mountElement @ chunk-MDJKIZJQ.js?v=fe22181a:7813
-processElement @ chunk-MDJKIZJQ.js?v=fe22181a:7768
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7634
-patchBlockChildren @ chunk-MDJKIZJQ.js?v=fe22181a:8019
-patchElement @ chunk-MDJKIZJQ.js?v=fe22181a:7937
-processElement @ chunk-MDJKIZJQ.js?v=fe22181a:7784
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7634
 componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8377
 run @ chunk-MDJKIZJQ.js?v=fe22181a:507
 runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
@@ -155,87 +118,95 @@ finalizeNavigation @ vue-router.js?v=fe22181a:5643
 Promise.then
 pushWithRedirect @ vue-router.js?v=fe22181a:5568
 push @ vue-router.js?v=fe22181a:5519
-skipWizard @ WelcomeView.vue:106
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-SkillMarketView.vue:113 [Vue warn]: Failed to resolve component: Sparkles
-If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
-  at <SkillMarketView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< null > > 
+install @ vue-router.js?v=fe22181a:5751
+use @ chunk-MDJKIZJQ.js?v=fe22181a:6331
+（匿名） @ main.ts:11
+WorkspaceView.vue:31  GET http://localhost:5173/src/stores/chat.ts?t=1777255179337 net::ERR_ABORTED 500 (Internal Server Error)
+client:882 [vite] Failed to reload /src/views/WorkspaceView.vue. This could be due to syntax errors or importing non-existent modules. (see errors above)
+error @ client:882
+warnFailedUpdate @ client:169
+fetchUpdate @ client:206
+await in fetchUpdate
+queueUpdate @ client:179
+（匿名） @ client:930
+handleMessage @ client:928
+await in handleMessage
+（匿名） @ client:490
+dequeue @ client:516
+（匿名） @ client:504
+enqueue @ client:498
+（匿名） @ client:490
+onMessage @ client:309
+（匿名） @ client:439
+chunk-MDJKIZJQ.js?v=fe22181a:2204 [Vue warn]: Unhandled error during execution of native event handler 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="panel-slide" > 
+  at <WorkspaceView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) {__v_skip: true} > > 
   at <RouterView> 
   at <App>
 warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
-resolveAsset @ chunk-MDJKIZJQ.js?v=fe22181a:5327
-resolveComponent @ chunk-MDJKIZJQ.js?v=fe22181a:5289
-_sfc_render @ SkillMarketView.vue:113
-renderComponentRoot @ chunk-MDJKIZJQ.js?v=fe22181a:6722
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8290
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-setupRenderEffect @ chunk-MDJKIZJQ.js?v=fe22181a:8425
-mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8197
-processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8377
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
-Promise.then
-queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
-queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
-baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
-effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
-endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
-notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
-set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
-finalizeNavigation @ vue-router.js?v=fe22181a:5643
-（匿名） @ vue-router.js?v=fe22181a:5581
-Promise.then
-pushWithRedirect @ vue-router.js?v=fe22181a:5568
-push @ vue-router.js?v=fe22181a:5519
-onClick @ LumiSidebar.vue:162
+logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
+handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
+（匿名） @ chunk-MDJKIZJQ.js?v=fe22181a:2361
+Promise.catch
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2360
+invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
+WorkspaceView.vue:293 Uncaught (in promise) TypeError: chatStore.cacheConversationMessages is not a function
+    at Proxy.handleLoadConversation (WorkspaceView.vue:293:15)
+    at onClick (WorkspaceView.vue:718:23)
+    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:19)
+    at callWithAsyncErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2358:17)
+    at HTMLDivElement.invoker (chunk-MDJKIZJQ.js?v=fe22181a:11522:5)
+handleLoadConversation @ WorkspaceView.vue:293
+onClick @ WorkspaceView.vue:718
 callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
 callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
 invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-SkillMarketView.vue:113 [Vue warn]: Failed to resolve component: Sparkles
-If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
-  at <SkillMarketView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< null > > 
+chunk-MDJKIZJQ.js?v=fe22181a:2204 [Vue warn]: Unhandled error during execution of native event handler 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="panel-slide" > 
+  at <WorkspaceView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) {__v_skip: true} > > 
   at <RouterView> 
   at <App>
 warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
-resolveAsset @ chunk-MDJKIZJQ.js?v=fe22181a:5327
-resolveComponent @ chunk-MDJKIZJQ.js?v=fe22181a:5289
-_sfc_render @ SkillMarketView.vue:113
-renderComponentRoot @ chunk-MDJKIZJQ.js?v=fe22181a:6722
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8290
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-setupRenderEffect @ chunk-MDJKIZJQ.js?v=fe22181a:8425
-mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8197
-processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8377
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
+logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
+handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
+（匿名） @ chunk-MDJKIZJQ.js?v=fe22181a:2361
+Promise.catch
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2360
+invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
+WorkspaceView.vue:293 Uncaught (in promise) TypeError: chatStore.cacheConversationMessages is not a function
+    at Proxy.handleLoadConversation (WorkspaceView.vue:293:15)
+    at onClick (WorkspaceView.vue:718:23)
+    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:19)
+    at callWithAsyncErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2358:17)
+    at HTMLDivElement.invoker (chunk-MDJKIZJQ.js?v=fe22181a:11522:5)
+handleLoadConversation @ WorkspaceView.vue:293
+onClick @ WorkspaceView.vue:718
 callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
-Promise.then
-queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
-queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
-baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
-effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
-endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
-notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
-set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
-finalizeNavigation @ vue-router.js?v=fe22181a:5643
-（匿名） @ vue-router.js?v=fe22181a:5581
-Promise.then
-pushWithRedirect @ vue-router.js?v=fe22181a:5568
-push @ vue-router.js?v=fe22181a:5519
-onClick @ LumiSidebar.vue:162
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
+invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
+chunk-MDJKIZJQ.js?v=fe22181a:2204 [Vue warn]: Unhandled error during execution of native event handler 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="panel-slide" > 
+  at <WorkspaceView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) {__v_skip: true} > > 
+  at <RouterView> 
+  at <App>
+warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
+logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
+handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
+（匿名） @ chunk-MDJKIZJQ.js?v=fe22181a:2361
+Promise.catch
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2360
+invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
+WorkspaceView.vue:293 Uncaught (in promise) TypeError: chatStore.cacheConversationMessages is not a function
+    at Proxy.handleLoadConversation (WorkspaceView.vue:293:15)
+    at onClick (WorkspaceView.vue:718:23)
+    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:19)
+    at callWithAsyncErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2358:17)
+    at HTMLDivElement.invoker (chunk-MDJKIZJQ.js?v=fe22181a:11522:5)
+handleLoadConversation @ WorkspaceView.vue:293
+onClick @ WorkspaceView.vue:718
 callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
 callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
 invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
