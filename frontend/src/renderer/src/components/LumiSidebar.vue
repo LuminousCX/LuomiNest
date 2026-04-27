@@ -19,8 +19,7 @@ import {
   Users,
   Package,
   Trash2,
-  Check,
-  UserCircle
+  Check
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 
@@ -39,7 +38,6 @@ const navItems = [
   { id: '/tasks', label: '任务', icon: CheckSquare },
   { id: '/avatar', label: '皮套', icon: Palette },
   { id: '/memory', label: '记忆', icon: Brain },
-  { id: '/profile', label: '个人信息', icon: UserCircle },
   { id: '/market', label: '扩展', icon: Package },
   { id: '/social', label: '社交', icon: Users },
   { id: '/browser', label: '浏览器', icon: Globe }
@@ -116,9 +114,9 @@ const newAgentForm = ref({
   name: '',
   description: '',
   systemPrompt: '',
-  color: '#0d9488'
+  color: '#147EBC'
 })
-const agentColors = ['#0d9488', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
+const agentColors = ['#147EBC', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
 
 const handleCreateAgent = async () => {
   if (!newAgentForm.value.name.trim()) return
@@ -131,7 +129,7 @@ const handleCreateAgent = async () => {
       capabilities: ['chat'],
     })
     showCreateDialog.value = false
-    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#0d9488' }
+    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#147EBC' }
     router.push('/workspace')
   } catch (e: any) {
     console.error('Failed to create agent:', e)
@@ -149,7 +147,9 @@ onMounted(async () => {
       <div class="rail-top">
         <button class="avatar-btn" aria-label="LuminousChenXi 账户">
           <div class="avatar-ring">
-            <span class="avatar-initial">L</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white" stroke="white" stroke-width="1"/>
+            </svg>
           </div>
         </button>
         <nav class="icon-nav">
@@ -227,8 +227,13 @@ onMounted(async () => {
 
         <div class="panel-footer">
           <div class="update-notice">
-            <Sparkles :size="14" />
-            <span>LuomiNest v0.1.0</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="var(--lumi-primary)" stroke="var(--lumi-primary)" stroke-width="1.5"/>
+            </svg>
+            <div class="footer-brand">
+              <span class="footer-name">LuomiNest</span>
+              <span class="footer-sub">LuminousChenXi v0.1.0</span>
+            </div>
           </div>
         </div>
       </div>
@@ -347,11 +352,11 @@ onMounted(async () => {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--lumi-primary), #14b8a6);
+  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3);
+  box-shadow: 0 4px 12px rgba(20, 126, 188, 0.3);
 }
 
 .avatar-initial {
@@ -619,13 +624,31 @@ onMounted(async () => {
 .update-notice {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 11px;
   color: var(--text-muted);
 }
 
-.update-notice svg {
-  color: var(--lumi-primary);
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  line-height: 1.3;
+}
+
+.footer-name {
+  font-size: 12px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.footer-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 .panel-slide-enter-active,

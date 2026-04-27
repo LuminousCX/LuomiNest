@@ -240,7 +240,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   }
 
   const setupInteraction = (model: Live2DModel) => {
-    model.interactive = true
+    model.eventMode = 'static'
 
     model.on('pointerdown', (e: any) => {
       if (e.data.button !== 0) return

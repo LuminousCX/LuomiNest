@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   Palette, Sparkles, Heart, Eye, Smile, Frown, Meh, Zap,
@@ -470,7 +470,7 @@ onBeforeUnmount(() => {
   font-size: 11px;
   padding: 3px 10px;
   border-radius: 20px;
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
   font-weight: 500;
 }
@@ -510,9 +510,9 @@ onBeforeUnmount(() => {
 }
 
 .desktop-mode-toggle.active {
-  background: rgba(13, 148, 136, 0.15);
+  background: rgba(20, 126, 188, 0.15);
   color: var(--lumi-primary);
-  border: 1px solid rgba(13, 148, 136, 0.3);
+  border: 1px solid rgba(20, 126, 188, 0.3);
 }
 
 .toggle-label {
@@ -545,7 +545,7 @@ onBeforeUnmount(() => {
 .h-btn.primary:hover {
   background: var(--lumi-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.3);
+  box-shadow: 0 4px 14px rgba(20, 126, 188, 0.3);
 }
 
 .avatar-body {
@@ -570,14 +570,14 @@ onBeforeUnmount(() => {
   justify-content: center;
   min-height: 320px;
   background:
-    radial-gradient(circle at 50% 50%, rgba(13, 148, 136, 0.04) 0%, transparent 70%),
+    radial-gradient(circle at 50% 50%, rgba(20, 126, 188, 0.04) 0%, transparent 70%),
     var(--surface);
   overflow: hidden;
 }
 
 .stage-canvas.desktop-mode-active {
   background:
-    radial-gradient(circle at 50% 50%, rgba(13, 148, 136, 0.06) 0%, transparent 70%),
+    radial-gradient(circle at 50% 50%, rgba(20, 126, 188, 0.06) 0%, transparent 70%),
     var(--surface);
 }
 
@@ -613,14 +613,14 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
   animation: hint-icon-pulse 3s ease-in-out infinite;
 }
 
 @keyframes hint-icon-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.15); }
-  50% { box-shadow: 0 0 0 12px rgba(13, 148, 136, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(20, 126, 188, 0.15); }
+  50% { box-shadow: 0 0 0 12px rgba(20, 126, 188, 0); }
 }
 
 .hint-content h3 {
@@ -661,7 +661,7 @@ onBeforeUnmount(() => {
 .hint-back-btn:hover {
   background: var(--lumi-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.3);
+  box-shadow: 0 4px 14px rgba(20, 126, 188, 0.3);
 }
 
 .stage-loading {
@@ -739,7 +739,7 @@ onBeforeUnmount(() => {
   width: 200px;
   height: 200px;
   border-radius: 50%;
-  border: 1.5px dashed rgba(13, 148, 136, 0.25);
+  border: 1.5px dashed rgba(20, 126, 188, 0.25);
   animation: ring-spin 12s linear infinite;
 }
 
@@ -825,7 +825,7 @@ onBeforeUnmount(() => {
 }
 
 .desktop-tag {
-  border-color: rgba(13, 148, 136, 0.5);
+  border-color: rgba(20, 126, 188, 0.5);
   color: var(--lumi-primary);
 }
 
@@ -894,7 +894,7 @@ onBeforeUnmount(() => {
 }
 
 .mode-btn.active {
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   border-color: var(--lumi-primary);
   color: var(--lumi-primary);
 }
@@ -1161,11 +1161,11 @@ onBeforeUnmount(() => {
 
 .skin-card:hover {
   background: var(--surface-hover);
-  border-color: rgba(13, 148, 136, 0.3);
+  border-color: rgba(20, 126, 188, 0.3);
 }
 
 .skin-card.selected {
-  background: rgba(13, 148, 136, 0.08);
+  background: rgba(20, 126, 188, 0.08);
   border-color: var(--lumi-primary);
 }
 
@@ -1237,7 +1237,7 @@ onBeforeUnmount(() => {
 .import-btn:hover {
   border-color: var(--lumi-primary);
   color: var(--lumi-primary);
-  background: rgba(13, 148, 136, 0.05);
+  background: rgba(20, 126, 188, 0.05);
 }
 
 @keyframes stage-appear {

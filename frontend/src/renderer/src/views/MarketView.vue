@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Puzzle, Sparkles, SlidersHorizontal, X, Package } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
 import MarketplaceSearch from '../components/marketplace/MarketplaceSearch.vue'
@@ -11,6 +11,7 @@ import MarketplaceBanner from '../components/marketplace/MarketplaceBanner.vue'
 import type { MarketplaceFilter, MarketplaceType } from '../types/marketplace'
 
 const route = useRoute()
+const router = useRouter()
 const store = useMarketplaceStore()
 
 const VALID_TABS: MarketplaceType[] = ['plugin', 'skill']
@@ -70,6 +71,7 @@ function switchTab(tab: MarketplaceType) {
   activeTab.value = tab
   store.setFilter(tab, { category: undefined })
   showFilters.value = false
+  router.replace({ path: route.path, query: { ...route.query, tab } })
 }
 
 function selectCategory(id: string) {
@@ -211,7 +213,7 @@ function toggleFilters() {
   width: 52px;
   height: 52px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.1), rgba(20, 184, 166, 0.1));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.1));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -314,7 +316,7 @@ function toggleFilters() {
 .filter-toggle-btn:hover {
   border-color: var(--lumi-primary);
   color: var(--lumi-primary);
-  background: rgba(13, 148, 136, 0.06);
+  background: rgba(20, 126, 188, 0.06);
 }
 
 .filter-toggle-btn.active {

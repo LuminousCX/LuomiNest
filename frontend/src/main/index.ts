@@ -22,6 +22,10 @@ let desktopPetWindow: BrowserWindow | null = null
 const isDev = !app.isPackaged
 const isMac = platform() === 'darwin'
 
+if (isDev) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
+}
+
 const builtinBasePath = isDev
   ? join(app.getAppPath(), 'src/renderer/public/live2d')
   : join(process.resourcesPath, 'live2d')
@@ -99,7 +103,7 @@ const createWindow = (): void => {
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
     trafficLightPosition: { x: 12, y: 10 },
-    backgroundColor: '#fafaf9',
+    backgroundColor: '#F5F8FB',
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -146,8 +150,8 @@ const createWindow = (): void => {
     return { action: 'deny' }
   })
 
-  const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
-  const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+  const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+  const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
   const CSP_POLICY = isDev ? CSP_DEV : CSP_PROD
 
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -773,6 +777,8 @@ const isPathSafe = (baseDir: string, targetPath: string): boolean => {
 }
 
 const resolveModelFile = (hostname: string, relativePath: string): string | null => {
+  // Decoding responsibility: this function owns URI decoding.
+  // Callers must pass raw (still percent-encoded) relativePath.
   const decodedPath = decodeURIComponent(relativePath)
 
   if (hostname === 'cubism-core') {
@@ -830,7 +836,7 @@ app.whenReady().then(async () => {
     try {
       const url = new URL(request.url)
       const hostname = url.hostname
-      const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, '')
+      const relativePath = url.pathname.replace(/^\/+/, '')
 
       if (!hostname || !relativePath) {
         return new Response('Bad Request: invalid URL', { status: 400 })

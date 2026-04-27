@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import {
   Send,
@@ -337,9 +337,9 @@ const newAgentForm = ref({
   name: '',
   description: '',
   systemPrompt: '',
-  color: '#0d9488'
+  color: '#147EBC'
 })
-const agentColors = ['#0d9488', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
+const agentColors = ['#147EBC', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
 
 const handleCreateAgent = async () => {
   if (!newAgentForm.value.name.trim()) return
@@ -352,7 +352,7 @@ const handleCreateAgent = async () => {
       capabilities: ['chat'],
     })
     showCreateAgentDialog.value = false
-    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#0d9488' }
+    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#147EBC' }
   } catch (e: any) {
     console.error('Failed to create agent:', e)
   }
@@ -953,7 +953,7 @@ onMounted(async () => {
 }
 
 .backend-warning.info {
-  background: rgba(13, 148, 136, 0.06);
+  background: rgba(20, 126, 188, 0.06);
 }
 
 .backend-warning.info::before {
@@ -1002,7 +1002,7 @@ onMounted(async () => {
 
 .backend-warning.info .retry-btn {
   color: var(--lumi-primary);
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
 }
 
 .retry-btn:hover {
@@ -1010,7 +1010,7 @@ onMounted(async () => {
 }
 
 .backend-warning.info .retry-btn:hover {
-  background: rgba(13, 148, 136, 0.2);
+  background: rgba(20, 126, 188, 0.2);
 }
 
 .agent-selector-row {
@@ -1055,7 +1055,7 @@ onMounted(async () => {
 .agent-card.selected {
   border-color: var(--lumi-primary);
   background: white;
-  box-shadow: 0 4px 20px rgba(13, 148, 136, 0.12);
+  box-shadow: 0 4px 20px rgba(20, 126, 188, 0.12);
 }
 
 .card-avatar {
@@ -1218,7 +1218,7 @@ onMounted(async () => {
   padding: 12px 18px;
   border-radius: var(--radius-lg);
   border-top-right-radius: 4px;
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(13, 148, 136, 0.04));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.08), rgba(20, 126, 188, 0.04));
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
@@ -1226,7 +1226,7 @@ onMounted(async () => {
 }
 
 .message-row:hover .user-message {
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(13, 148, 136, 0.06));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(20, 126, 188, 0.06));
 }
 
 .message-actions {
@@ -1897,7 +1897,7 @@ onMounted(async () => {
 }
 
 .skill-icon-badge.general {
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
 }
 
@@ -1910,7 +1910,7 @@ onMounted(async () => {
 }
 
 .skill-badge.builtin {
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
 }
 

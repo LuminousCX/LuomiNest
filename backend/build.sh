@@ -95,10 +95,8 @@ if [ -f "$BACKEND_EXE" ]; then
     echo "Size: $SIZE"
     echo ""
     echo "Next steps:"
-    echo "  1. Run frontend build script to create installer"
-    echo "     cd ../frontend && ./build-installer.sh (or .ps1 on Windows)"
-    echo "  2. Or run global build script"
-    echo "     ../build-all.sh (or .ps1 on Windows)"
+    echo "  1. Run the global build script to create installer"
+    echo "     cd .. && ./build-all.sh (or .ps1 on Windows)"
 else
     echo ""
     echo "[ERROR] Build output not found: dist/luominest-backend"

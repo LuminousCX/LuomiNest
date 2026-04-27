@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from 'vue'
 import {
   Bot,
@@ -40,7 +40,7 @@ const nodes = ref<WorkflowNode[]>([
     name: '用户输入',
     type: 'input',
     icon: MousePointerClick,
-    color: '#0d9488',
+    color: '#147EBC',
     x: 80,
     y: 200
   },
@@ -595,7 +595,7 @@ function getNodePos(nodeId: string): { x: number; y: number } {
 
 .workflow-node.selected {
   border-color: var(--lumi-primary);
-  box-shadow: 0 4px 20px rgba(13, 148, 136, 0.15);
+  box-shadow: 0 4px 20px rgba(20, 126, 188, 0.15);
 }
 
 .workflow-node.running .node-icon-wrap {
@@ -603,8 +603,8 @@ function getNodePos(nodeId: string): { x: number; y: number } {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.3); }
-  50% { box-shadow: 0 0 0 8px rgba(13, 148, 136, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(20, 126, 188, 0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(20, 126, 188, 0); }
 }
 
 .node-drag-handle {

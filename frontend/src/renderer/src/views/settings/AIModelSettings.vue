@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -1108,7 +1108,7 @@ export default { name: 'AIModelSettings' }
   width: 44px;
   height: 44px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.1), rgba(20, 184, 166, 0.06));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.06));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1256,7 +1256,7 @@ export default { name: 'AIModelSettings' }
 }
 
 .main-icon {
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(13, 148, 136, 0.04));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(20, 126, 188, 0.04));
   color: var(--lumi-primary);
 }
 
@@ -1511,7 +1511,7 @@ export default { name: 'AIModelSettings' }
   border-radius: 50%;
   background: var(--lumi-primary);
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.3);
+  box-shadow: 0 2px 6px rgba(20, 126, 188, 0.3);
   transition: transform 250ms ease-in-out;
 }
 
@@ -1824,7 +1824,7 @@ export default { name: 'AIModelSettings' }
   width: 32px;
   height: 32px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(13, 148, 136, 0.04));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(20, 126, 188, 0.04));
   display: flex;
   align-items: center;
   justify-content: center;

@@ -111,8 +111,8 @@ Write-Host "[Step 5/6] Cross-platform Linux build..." -ForegroundColor Yellow
 if ($Platform -eq "win") {
     $wslAvailable = $false
     try {
-        $wslList = wsl --list --quiet 2>$null
-        if ($LASTEXITCODE -eq 0 -and $wslList) {
+        $wslListRaw = wsl --list --quiet 2>$null
+        if ($LASTEXITCODE -eq 0 -and $wslListRaw) {
             $wslAvailable = $true
         }
     } catch {}
@@ -121,8 +121,10 @@ if ($Platform -eq "win") {
         Write-Host "WSL detected, building Linux packages via WSL..." -ForegroundColor Yellow
 
         $wslDistro = $null
-        foreach ($line in (wsl --list --quiet 2>$null)) {
-            $trimmed = $line.Trim()
+        $wslListRaw = wsl --list --quiet 2>$null
+        foreach ($line in $wslListRaw) {
+            $cleanBytes = [System.Text.Encoding]::Unicode.GetBytes($line) | Where-Object { $_ -ne 0 }
+            $trimmed = [System.Text.Encoding]::ASCII.GetString($cleanBytes).Trim()
             if ($trimmed -and $trimmed -ne "docker-desktop") {
                 $wslDistro = $trimmed
                 break

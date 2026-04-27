@@ -26,7 +26,7 @@ const i18n = computed(() => {
     return {
       title: 'Welcome to',
       appName: 'LuomiNest',
-      subtitle: 'Your AI Companion Workspace',
+      subtitle: 'LuminousChenXi AI Companion Platform',
       version: `Version ${VERSION}`,
       langTitle: 'Select Language',
       langZh: '中文',
@@ -52,7 +52,7 @@ const i18n = computed(() => {
   return {
     title: '欢迎来到',
     appName: 'LuomiNest',
-    subtitle: '你的 AI 伴侣工作台',
+    subtitle: 'LuminousChenXi 辰汐 AI 伴侣平台',
     version: `版本 ${VERSION}`,
     langTitle: '选择语言',
     langZh: '中文',
@@ -270,8 +270,8 @@ function skipWizard() {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(13, 148, 136, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(13, 148, 136, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(20, 126, 188, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 126, 188, 0.03) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
@@ -286,7 +286,7 @@ function skipWizard() {
 .bg-orb-1 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, rgba(13, 148, 136, 0.15), transparent 70%);
+  background: radial-gradient(circle, rgba(20, 126, 188, 0.15), transparent 70%);
   top: -100px;
   right: -80px;
   animation-delay: 0s;
@@ -295,7 +295,7 @@ function skipWizard() {
 .bg-orb-2 {
   width: 320px;
   height: 320px;
-  background: radial-gradient(circle, rgba(20, 184, 166, 0.12), transparent 70%);
+  background: radial-gradient(circle, rgba(98, 169, 200, 0.12), transparent 70%);
   bottom: -60px;
   left: -60px;
   animation-delay: -6s;
@@ -351,11 +351,11 @@ function skipWizard() {
   width: 72px;
   height: 72px;
   border-radius: 20px;
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.1), rgba(20, 184, 166, 0.08));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.08));
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 32px rgba(13, 148, 136, 0.15);
+  box-shadow: 0 8px 32px rgba(20, 126, 188, 0.15);
 }
 
 .brand-title {
@@ -374,7 +374,7 @@ function skipWizard() {
 
 .brand-name {
   display: block;
-  background: linear-gradient(135deg, var(--lumi-primary), #14b8a6, #2dd4bf);
+  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft), #A8D1E1);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -436,15 +436,15 @@ function skipWizard() {
 }
 
 .lang-card:hover {
-  border-color: rgba(13, 148, 136, 0.4);
+  border-color: rgba(20, 126, 188, 0.4);
   box-shadow: var(--shadow-sm);
   transform: translateY(-2px);
 }
 
 .lang-card.active {
   border-color: var(--lumi-primary);
-  background: rgba(13, 148, 136, 0.04);
-  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.04);
+  box-shadow: 0 4px 16px rgba(20, 126, 188, 0.1);
 }
 
 .lang-flag {
@@ -551,7 +551,7 @@ function skipWizard() {
   width: 96px;
   height: 96px;
   border-radius: 28px;
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(20, 184, 166, 0.06));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.08), rgba(98, 169, 200, 0.06));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -559,8 +559,8 @@ function skipWizard() {
 }
 
 @keyframes ring-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.2); }
-  50% { box-shadow: 0 0 0 12px rgba(13, 148, 136, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(20, 126, 188, 0.2); }
+  50% { box-shadow: 0 0 0 12px rgba(20, 126, 188, 0); }
 }
 
 .ready-shield {
@@ -661,7 +661,7 @@ function skipWizard() {
 .primary-btn:hover:not(:disabled) {
   background: var(--lumi-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(13, 148, 136, 0.25);
+  box-shadow: 0 6px 20px rgba(20, 126, 188, 0.25);
 }
 
 .primary-btn:active:not(:disabled) {
@@ -674,11 +674,11 @@ function skipWizard() {
 }
 
 .launch-btn {
-  background: linear-gradient(135deg, var(--lumi-primary), #14b8a6);
+  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
 }
 
 .launch-btn:hover:not(:disabled) {
-  box-shadow: 0 8px 28px rgba(13, 148, 136, 0.35);
+  box-shadow: 0 8px 28px rgba(20, 126, 188, 0.35);
 }
 
 .ghost-btn {

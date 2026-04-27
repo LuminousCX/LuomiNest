@@ -26,9 +26,10 @@ export const useChatStore = defineStore('chat', () => {
   const lastUsage = ref<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | null>(null)
   const pendingToolCalls = ref<Record<string, any[]>>({})
   const conversationMessagesCache = ref<Record<string, ChatMessage[]>>({})
-  const isLoadingConversation = ref<boolean>(false)
+  const isLoadingConversation = ref<Record<string, boolean>>({})
 
   const isStreaming = computed(() => agentStreaming.value[activeAgentId.value] || false)
+  const isLoadingCurrentConversation = computed(() => !!isLoadingConversation.value[activeAgentId.value])
   
   const streamingContent = computed({
     get: () => agentStreamingContent.value[activeAgentId.value] || '',
@@ -91,26 +92,29 @@ export const useChatStore = defineStore('chat', () => {
   const loadConversation = async (convId: string) => {
     if (!activeAgentId.value) return
 
+    const currentAgentId = activeAgentId.value
+
     const cached = conversationMessagesCache.value[convId]
     if (cached && cached.length > 0) {
       agentMessages.value = {
         ...agentMessages.value,
-        [activeAgentId.value]: cached.map(m => ({ ...m }))
+        [currentAgentId]: cached.map(m => ({ ...m }))
       }
     } else {
       agentMessages.value = {
         ...agentMessages.value,
-        [activeAgentId.value]: []
+        [currentAgentId]: []
       }
     }
 
-    isLoadingConversation.value = true
+    isLoadingConversation.value[currentAgentId] = true
 
     try {
       const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
+      if (activeAgentId.value !== currentAgentId) return
       agentCurrentConversation.value = {
         ...agentCurrentConversation.value,
-        [activeAgentId.value]: conv
+        [currentAgentId]: conv
       }
       const mappedMessages = (conv.messages || []).map((m: any) => ({
         id: m.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -121,21 +125,23 @@ export const useChatStore = defineStore('chat', () => {
       }))
       agentMessages.value = {
         ...agentMessages.value,
-        [activeAgentId.value]: mappedMessages
+        [currentAgentId]: mappedMessages
       }
       conversationMessagesCache.value = {
         ...conversationMessagesCache.value,
         [convId]: mappedMessages
       }
     } catch (error) {
+      if (activeAgentId.value !== currentAgentId) return
       if (!cached || cached.length === 0) {
         agentMessages.value = {
           ...agentMessages.value,
-          [activeAgentId.value]: []
+          [currentAgentId]: []
         }
       }
     } finally {
-      isLoadingConversation.value = false
+      delete isLoadingConversation.value[currentAgentId]
+      isLoadingConversation.value = { ...isLoadingConversation.value }
     }
   }
 
@@ -607,6 +613,7 @@ export const useChatStore = defineStore('chat', () => {
     isStreaming,
     isBackendReady,
     isLoadingConversation,
+    isLoadingCurrentConversation,
     streamingContent,
     lastError,
     lastUsage,

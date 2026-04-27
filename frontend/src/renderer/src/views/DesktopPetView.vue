@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Application, Ticker } from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'
@@ -692,8 +692,8 @@ onBeforeUnmount(() => {
 .pet-loading-spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(13, 148, 136, 0.3);
-  border-top-color: #0d9488;
+  border: 2px solid rgba(20, 126, 188, 0.3);
+  border-top-color: #147EBC;
   border-radius: 50%;
   animation: pet-spin 0.8s linear infinite;
 }
@@ -768,9 +768,9 @@ onBeforeUnmount(() => {
 }
 
 .island-btn.active {
-  background: rgba(13, 148, 136, 0.2);
-  border-color: rgba(13, 148, 136, 0.4);
-  color: #0d9488;
+  background: rgba(20, 126, 188, 0.2);
+  border-color: rgba(20, 126, 188, 0.4);
+  color: #147EBC;
 }
 
 .island-btn.danger:hover {

@@ -117,7 +117,7 @@ const navigateTo = (route: string) => {
   width: 52px;
   height: 52px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.1), rgba(20, 184, 166, 0.1));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.1));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -199,7 +199,7 @@ const navigateTo = (route: string) => {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, rgba(13,148,136,0.06), rgba(99,102,241,0.04));
+  background: linear-gradient(135deg, rgba(20,126,188,0.06), rgba(98,169,200,0.04));
   display: flex;
   align-items: center;
   justify-content: center;

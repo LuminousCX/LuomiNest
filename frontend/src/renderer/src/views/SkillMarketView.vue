@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Sparkles, SlidersHorizontal, X } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
@@ -143,7 +143,7 @@ function toggleFilters() {
   width: 52px;
   height: 52px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.1), rgba(20, 184, 166, 0.1));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.1));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -215,7 +215,7 @@ function toggleFilters() {
 .filter-toggle-btn:hover {
   border-color: var(--lumi-primary);
   color: var(--lumi-primary);
-  background: rgba(13, 148, 136, 0.06);
+  background: rgba(20, 126, 188, 0.06);
 }
 
 .filter-toggle-btn.active {

@@ -99,6 +99,7 @@ chinesesimplified.FinishedTitle=安装完成
 chinesesimplified.FinishedSubTitle={#MyAppName} 已成功安装到您的电脑
 chinesesimplified.FinishedRunLabel=启动 {#MyAppName}
 chinesesimplified.FinishedLabel=点击"完成"关闭此向导。
+chinesesimplified.AlreadyInstalledMsg={#MyAppName} 已经安装在您的电脑上。%n%n是否要先卸载之前的版本？
 
 ; English
 english.WelcomeTitle=Welcome to {#MyAppName}
@@ -128,6 +129,7 @@ english.FinishedTitle=Installation Complete
 english.FinishedSubTitle={#MyAppName} has been successfully installed on your computer.
 english.FinishedRunLabel=Launch {#MyAppName}
 english.FinishedLabel=Click Finish to close this wizard.
+english.AlreadyInstalledMsg={#MyAppName} is already installed on your computer.%n%nDo you want to uninstall the previous version first?
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:DesktopShortcut}"; GroupDescription: "{cm:ShortcutsTitle}"; Flags: unchecked
@@ -173,18 +175,18 @@ begin
   WizardForm.ClientHeight := ScaleY(500);
   WizardForm.Font.Name := 'Segoe UI';
   WizardForm.Font.Size := 9;
-  WizardForm.Color := $FFFFFF;
-  WizardForm.OuterNotebook.Color := $FFFFFF;
-  WizardForm.InnerNotebook.Color := $FFFFFF;
+  WizardForm.Color := TColor($FFFFFF);
+  WizardForm.OuterNotebook.Color := TColor($FFFFFF);
+  WizardForm.InnerNotebook.Color := TColor($FFFFFF);
 
   ; Customize welcome page labels
   WizardForm.WelcomeLabel1.Font.Size := 16;
   WizardForm.WelcomeLabel1.Font.Style := [fsBold];
-  WizardForm.WelcomeLabel1.Font.Color := $333333;
+  WizardForm.WelcomeLabel1.Font.Color := TColor($333333);
   WizardForm.WelcomeLabel1.Top := ScaleY(50);
 
   WizardForm.WelcomeLabel2.Font.Size := 10;
-  WizardForm.WelcomeLabel2.Font.Color := $666666;
+  WizardForm.WelcomeLabel2.Font.Color := TColor($666666);
   WizardForm.WelcomeLabel2.WordWrap := True;
   WizardForm.WelcomeLabel2.Top := ScaleY(100);
 
@@ -252,7 +254,7 @@ begin
 
   ; Set button colors and styles
   WizardForm.NextButton.ParentColor := False;
-  WizardForm.NextButton.Color := $0078D4;
+  WizardForm.NextButton.Color := TColor($0078D4);
   WizardForm.NextButton.Font.Color := clWhite;
 end;
 
@@ -272,7 +274,7 @@ begin
   begin
     WizardForm.PageNameLabel.Caption := ExpandConstant('{cm:InstallingTitle}');
     WizardForm.PageDescriptionLabel.Caption := ExpandConstant('{cm:InstallingSubtitle}');
-    WizardForm.FileNameLabel.Font.Color := $666666;
+    WizardForm.FileNameLabel.Font.Color := TColor($666666);
     WizardForm.ProgressGauge.ForeColor := $0078D4;
     WizardForm.ProgressGauge.BackColor := $E5E5E5;
   end
@@ -280,7 +282,7 @@ begin
   begin
     WizardForm.PageNameLabel.Caption := ExpandConstant('{cm:FinishedTitle}');
     WizardForm.PageDescriptionLabel.Caption := ExpandConstant('{cm:FinishedSubTitle}');
-    WizardForm.RunLabel.Font.Color := $0078D4;
+    WizardForm.RunLabel.Font.Color := TColor($0078D4);
   end;
 end;
 
@@ -314,9 +316,18 @@ begin
   end
   else if CurPageID = ShortcutsPage.ID then
   begin
-    WizardForm.TasksList.Checked[WizardForm.TasksList.Items.IndexOfName('desktopicon')] := DesktopCheck.Checked;
-    WizardForm.TasksList.Checked[WizardForm.TasksList.Items.IndexOfName('startmenu')] := StartMenuCheck.Checked;
-    WizardForm.TasksList.Checked[WizardForm.TasksList.Items.IndexOfName('autolaunch')] := AutoLaunchCheck.Checked;
+    if DesktopCheck.Checked then
+      WizardSelectTask('desktopicon', True)
+    else
+      WizardSelectTask('desktopicon', False);
+    if StartMenuCheck.Checked then
+      WizardSelectTask('startmenu', True)
+    else
+      WizardSelectTask('startmenu', False);
+    if AutoLaunchCheck.Checked then
+      WizardSelectTask('autolaunch', True)
+    else
+      WizardSelectTask('autolaunch', False);
   end;
 end;
 
@@ -333,10 +344,7 @@ begin
      RegQueryStringValue(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1',
     'UninstallString', OldUninstallString) then
   begin
-    if MsgBox(FmtMessage(CustomMessage('WelcomeDesc1'), []) + #13#10 + #13#10 +
-      '{#MyAppName} is already installed.' + #13#10 +
-      'Do you want to uninstall the previous version first?',
-      mbConfirmation, MB_YESNO) = IDYES then
+    if MsgBox(CustomMessage('AlreadyInstalledMsg'), mbConfirmation, MB_YESNO) = IDYES then
     begin
       OldUninstallString := RemoveQuotes(OldUninstallString);
       Exec(OldUninstallString, '/SILENT /NORESTART', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);

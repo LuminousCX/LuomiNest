@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -32,7 +32,7 @@ const avatarCategories = [
 
 const avatarOptions: Record<string, AvatarOption[]> = {
   classic: [
-    { id: 'c1', emoji: '\u{1F9D4}', color: '#0d9488' },
+    { id: 'c1', emoji: '\u{1F9D4}', color: '#147EBC' },
     { id: 'c2', emoji: '\u{1F9D3}', color: '#3b82f6' },
     { id: 'c3', emoji: '\u{1F9D1}\u200D\u{1F52C}', color: '#8b5cf6' }
   ],
@@ -49,7 +49,7 @@ const avatarOptions: Record<string, AvatarOption[]> = {
   artistic: [
     { id: 'a1', emoji: '\u{1F3A8}', color: '#ec4899' },
     { id: 'a2', emoji: '\u{1F3B8}', color: '#a855f7' },
-    { id: 'a3', emoji: '\u{2728}', color: '#14b8a6' }
+    { id: 'a3', emoji: '\u{2728}', color: '#62A9C8' }
   ]
 }
 
@@ -1059,7 +1059,7 @@ const handleCreateAgent = async () => {
   border-radius: 50%;
   background: var(--lumi-primary);
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.3);
+  box-shadow: 0 2px 6px rgba(20, 126, 188, 0.3);
   transition: transform var(--transition-fast);
 }
 
@@ -1240,7 +1240,7 @@ const handleCreateAgent = async () => {
 .next-btn:hover:not(.disabled) {
   background: var(--lumi-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.25);
+  box-shadow: 0 4px 12px rgba(20, 126, 188, 0.25);
 }
 
 .footer-btn.disabled {

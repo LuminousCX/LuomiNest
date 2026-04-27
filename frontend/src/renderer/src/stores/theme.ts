@@ -13,7 +13,7 @@ export const useThemeStore = defineStore('theme', () => {
   function getInitialTheme(): boolean {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) return stored === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
+    return false
   }
 
   function applyTheme(dark: boolean) {
@@ -29,23 +29,29 @@ export const useThemeStore = defineStore('theme', () => {
     applyTheme(dark)
   }
 
+  let initialized = false
+
   watch(isDark, (val) => {
     localStorage.setItem(STORAGE_KEY, val ? 'dark' : 'light')
-    getApi()?.setTheme(val ? 'dark' : 'light').catch(() => {})
-  }, { immediate: true })
-
-  applyTheme(isDark.value)
-
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    if (!localStorage.getItem(STORAGE_KEY)) {
-      applyTheme(e.matches)
+    if (initialized) {
+      getApi()?.setTheme(val ? 'dark' : 'light').catch(() => {})
     }
   })
 
-  getApi()?.getTheme().then((theme: string) => {
-    if (theme === 'dark') applyTheme(true)
-    else if (theme === 'light') applyTheme(false)
-  }).catch(() => {})
+  applyTheme(isDark.value)
+
+  const api = getApi()
+  if (api) {
+    api.getTheme().then((theme: string) => {
+      if (theme === 'dark') applyTheme(true)
+      else if (theme === 'light') applyTheme(false)
+      initialized = true
+    }).catch(() => {
+      initialized = true
+    })
+  } else {
+    initialized = true
+  }
 
   return {
     isDark,
