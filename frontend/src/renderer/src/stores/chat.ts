@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import type { ChatMessage, Conversation, ConversationListItem, ChatStreamChunk, ToolCallResult } from '../types'
+import type { ChatMessage, Conversation, ConversationListItem, ChatStreamChunk } from '../types'
 import { useApi } from '../composables/useApi'
 import { useAgentStore } from './agent'
 import { useAvatarControlStore } from './avatar-control'

@@ -3,12 +3,14 @@ import type { MarketplaceCategory } from '../../types/marketplace'
 import {
   LayoutGrid, Cpu, Wrench, Puzzle, Palette, Zap,
   MessageCircle, BookOpen, Code, Image, Heart,
+  Bot, Lightbulb, BarChart3, Terminal, GraduationCap,
   ChevronRight
 } from 'lucide-vue-next'
 
 const ICON_MAP: Record<string, any> = {
   LayoutGrid, Cpu, Wrench, Puzzle, Palette, Zap,
   MessageCircle, BookOpen, Code, Image, Heart,
+  Bot, Lightbulb, BarChart3, Terminal, GraduationCap,
 }
 
 defineProps<{

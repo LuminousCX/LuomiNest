@@ -13,27 +13,48 @@ import type {
 import {
   PLUGIN_CATEGORIES,
   SKILL_CATEGORIES,
+  AGENT_CATEGORIES,
   MOCK_PLUGINS,
   MOCK_SKILLS,
+  MOCK_AGENTS,
   MOCK_REVIEWS,
 } from '../config/marketplace-data'
 
 const SEARCH_HISTORY_KEY = 'luominest-marketplace-search-history'
 const FAVORITES_KEY = 'luominest-marketplace-favorites'
 
+const ALL_CATEGORIES = [...PLUGIN_CATEGORIES, ...SKILL_CATEGORIES, ...AGENT_CATEGORIES]
+
 export const useMarketplaceStore = defineStore('marketplace', () => {
   const pluginItems = ref<MarketplaceItem[]>([...MOCK_PLUGINS])
   const skillItems = ref<MarketplaceItem[]>([...MOCK_SKILLS])
+  const agentItems = ref<MarketplaceItem[]>([...MOCK_AGENTS])
   const loading = ref(false)
   const searchQuery = ref('')
   const searchHistory = ref<string[]>(loadSearchHistory())
   const showSearchSuggestions = ref(false)
   const pluginFilter = ref<MarketplaceFilter>({ sortBy: 'popular' })
   const skillFilter = ref<MarketplaceFilter>({ sortBy: 'popular' })
-  const installProgress = ref<Map<string, InstallProgress>>(new Map())
+  const agentFilter = ref<MarketplaceFilter>({ sortBy: 'popular' })
+  const installProgress = ref<Record<string, InstallProgress>>({})
   const reviews = ref<Record<string, MarketplaceReview[]>>(loadMockReviews())
+  const favorites = ref<string[]>(loadFavorites())
 
-  const favorites = ref<Set<string>>(loadFavorites())
+  const syncFavoriteFlags = () => {
+    const syncItems = (items: MarketplaceItem[]) => {
+      for (const item of items) {
+        item.isFavorite = favorites.value.includes(item.id)
+      }
+    }
+    syncItems(pluginItems.value)
+    syncItems(skillItems.value)
+    syncItems(agentItems.value)
+  }
+
+  syncFavoriteFlags()
+
+  const activeIntervals = new Set<ReturnType<typeof setInterval>>()
+  const cancelledInstalls = new Set<string>()
 
   function loadSearchHistory(): string[] {
     try {
@@ -44,21 +65,25 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     }
   }
 
-  function saveSearchHistory(history: string[]) {
+  const saveSearchHistory = (history: string[]) => {
     localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, 20)))
   }
 
-  function loadFavorites(): Set<string> {
+  function loadFavorites(): string[] {
     try {
       const stored = localStorage.getItem(FAVORITES_KEY)
-      return stored ? new Set(JSON.parse(stored)) : new Set()
+      return stored ? JSON.parse(stored) : []
     } catch {
-      return new Set()
+      return []
     }
   }
 
-  function saveFavorites() {
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites.value]))
+  const saveFavorites = () => {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites.value))
+  }
+
+  const isFavorite = (itemId: string): boolean => {
+    return favorites.value.includes(itemId)
   }
 
   function loadMockReviews(): Record<string, MarketplaceReview[]> {
@@ -75,20 +100,27 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   }
 
   const getCategories = (type: MarketplaceType): MarketplaceCategory[] => {
-    return type === 'plugin' ? PLUGIN_CATEGORIES : SKILL_CATEGORIES
+    if (type === 'plugin') return PLUGIN_CATEGORIES
+    if (type === 'skill') return SKILL_CATEGORIES
+    return AGENT_CATEGORIES
   }
 
   const getItems = (type: MarketplaceType): MarketplaceItem[] => {
-    return type === 'plugin' ? pluginItems.value : skillItems.value
+    if (type === 'plugin') return pluginItems.value
+    if (type === 'skill') return skillItems.value
+    return agentItems.value
   }
 
   const getFilter = (type: MarketplaceType) => {
-    return type === 'plugin' ? pluginFilter : skillFilter
+    if (type === 'plugin') return pluginFilter
+    if (type === 'skill') return skillFilter
+    return agentFilter
   }
 
+  const allItems = computed(() => [...pluginItems.value, ...skillItems.value, ...agentItems.value])
+
   const featuredItems = computed(() => {
-    const all = [...pluginItems.value, ...skillItems.value]
-    return all.filter(i => i.featured).sort((a, b) => b.rating - a.rating).slice(0, 6)
+    return allItems.value.filter(i => i.featured).sort((a, b) => b.rating - a.rating).slice(0, 6)
   })
 
   const featuredPlugins = computed(() => {
@@ -99,6 +131,10 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     return skillItems.value.filter(i => i.featured).sort((a, b) => b.rating - a.rating)
   })
 
+  const featuredAgents = computed(() => {
+    return agentItems.value.filter(i => i.featured).sort((a, b) => b.rating - a.rating)
+  })
+
   const filteredPluginItems = computed(() => {
     return applyFilters(pluginItems.value, pluginFilter.value)
   })
@@ -107,14 +143,17 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     return applyFilters(skillItems.value, skillFilter.value)
   })
 
-  function applyFilters(items: MarketplaceItem[], filter: MarketplaceFilter): MarketplaceItem[] {
+  const filteredAgentItems = computed(() => {
+    return applyFilters(agentItems.value, agentFilter.value)
+  })
+
+  const applyFilters = (items: MarketplaceItem[], filter: MarketplaceFilter): MarketplaceItem[] => {
     let result = [...items]
 
     if (filter.category && filter.category !== 'all') {
       result = result.filter(i => {
         if (i.category === filter.category) return true
-        const allCats = [...PLUGIN_CATEGORIES, ...SKILL_CATEGORIES]
-        const parent = allCats.find(c => c.id === filter.category)
+        const parent = ALL_CATEGORIES.find(c => c.id === filter.category)
         if (parent?.children?.some(c => c.id === i.category)) return true
         return false
       })
@@ -164,16 +203,14 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
 
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.toLowerCase().trim()
-      const allItems = [...pluginItems.value, ...skillItems.value]
-      const matched = allItems.filter(i =>
+      const matched = allItems.value.filter(i =>
         i.name.toLowerCase().includes(q) || i.summary.toLowerCase().includes(q)
       ).slice(0, 5)
       for (const item of matched) {
         suggestions.push({ text: item.name, type: 'suggestion' })
       }
 
-      const allCats = [...PLUGIN_CATEGORIES, ...SKILL_CATEGORIES]
-      for (const cat of allCats) {
+      for (const cat of ALL_CATEGORIES) {
         if (cat.name.toLowerCase().includes(q) && cat.id !== 'all') {
           suggestions.push({ text: cat.name, type: 'category' })
         }
@@ -192,16 +229,15 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     return suggestions.slice(0, 8)
   })
 
-  function getItemById(id: string): MarketplaceItem | undefined {
-    return [...pluginItems.value, ...skillItems.value].find(i => i.id === id)
+  const getItemById = (id: string): MarketplaceItem | undefined => {
+    return allItems.value.find(i => i.id === id)
   }
 
-  function getItemByTypeAndId(type: MarketplaceType, id: string): MarketplaceItem | undefined {
-    const items = type === 'plugin' ? pluginItems.value : skillItems.value
-    return items.find(i => i.id === id)
+  const getItemByTypeAndId = (type: MarketplaceType, id: string): MarketplaceItem | undefined => {
+    return getItems(type).find(i => i.id === id)
   }
 
-  function performSearch(query: string) {
+  const performSearch = (query: string) => {
     searchQuery.value = query
     if (query.trim()) {
       searchHistory.value = [
@@ -213,44 +249,45 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     showSearchSuggestions.value = false
   }
 
-  function clearSearch() {
+  const clearSearch = () => {
     searchQuery.value = ''
     showSearchSuggestions.value = false
   }
 
-  function removeSearchHistoryEntry(entry: string) {
+  const removeSearchHistoryEntry = (entry: string) => {
     searchHistory.value = searchHistory.value.filter(h => h !== entry)
     saveSearchHistory(searchHistory.value)
   }
 
-  function clearSearchHistory() {
+  const clearSearchHistory = () => {
     searchHistory.value = []
     saveSearchHistory([])
   }
 
-  function setFilter(type: MarketplaceType, filter: Partial<MarketplaceFilter>) {
-    const target = type === 'plugin' ? pluginFilter : skillFilter
+  const setFilter = (type: MarketplaceType, filter: Partial<MarketplaceFilter>) => {
+    const target = type === 'plugin' ? pluginFilter : type === 'skill' ? skillFilter : agentFilter
     target.value = { ...target.value, ...filter }
   }
 
-  function toggleFavorite(itemId: string) {
-    if (favorites.value.has(itemId)) {
-      favorites.value.delete(itemId)
+  const resetFilters = (type: MarketplaceType) => {
+    const target = type === 'plugin' ? pluginFilter : type === 'skill' ? skillFilter : agentFilter
+    target.value = { sortBy: 'popular' }
+    clearSearch()
+  }
+
+  const toggleFavorite = (itemId: string) => {
+    const idx = favorites.value.indexOf(itemId)
+    if (idx >= 0) {
+      favorites.value.splice(idx, 1)
     } else {
-      favorites.value.add(itemId)
+      favorites.value.push(itemId)
     }
     saveFavorites()
-
-    const updateItem = (items: MarketplaceItem[]) => {
-      const item = items.find(i => i.id === itemId)
-      if (item) item.isFavorite = favorites.value.has(itemId)
-    }
-    updateItem(pluginItems.value)
-    updateItem(skillItems.value)
+    syncFavoriteFlags()
   }
 
   const favoriteItems = computed(() => {
-    return [...pluginItems.value, ...skillItems.value].filter(i => i.isFavorite)
+    return allItems.value.filter(i => i.isFavorite)
   })
 
   const favoritePlugins = computed(() => {
@@ -261,140 +298,191 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     return skillItems.value.filter(i => i.isFavorite)
   })
 
-  function startInstall(itemId: string) {
+  const favoriteAgents = computed(() => {
+    return agentItems.value.filter(i => i.isFavorite)
+  })
+
+  const setProgress = (itemId: string, progress: InstallProgress) => {
+    installProgress.value = { ...installProgress.value, [itemId]: progress }
+  }
+
+  const removeProgress = (itemId: string) => {
+    const { [itemId]: _, ...rest } = installProgress.value
+    installProgress.value = rest
+  }
+
+  const cleanupInterval = (intervalId: ReturnType<typeof setInterval>) => {
+    activeIntervals.delete(intervalId)
+    clearInterval(intervalId)
+  }
+
+  const startInstall = (itemId: string) => {
     const progress: InstallProgress = {
       itemId,
       status: 'downloading',
       progress: 0,
       message: '正在下载...',
     }
-    installProgress.value.set(itemId, progress)
+    setProgress(itemId, progress)
     simulateInstall(itemId)
   }
 
-  function simulateInstall(itemId: string) {
+  const simulateInstall = (itemId: string) => {
     let progress = 0
-    const interval = setInterval(() => {
+    const intervalId = setInterval(() => {
       progress += Math.random() * 15 + 5
       if (progress >= 100) {
         progress = 100
-        clearInterval(interval)
-        const current = installProgress.value.get(itemId)
-        if (current) {
-          if (current.status === 'downloading') {
-            installProgress.value.set(itemId, {
-              ...current,
-              status: 'installing',
-              progress: 0,
-              message: '正在安装...',
-            })
-            simulateInstalling(itemId)
-          }
+        cleanupInterval(intervalId)
+        const current = installProgress.value[itemId]
+        if (current && current.status === 'downloading') {
+          setProgress(itemId, {
+            ...current,
+            status: 'installing',
+            progress: 0,
+            message: '正在安装...',
+          })
+          simulateInstalling(itemId)
         }
       } else {
-        const current = installProgress.value.get(itemId)
+        const current = installProgress.value[itemId]
         if (current) {
-          installProgress.value.set(itemId, { ...current, progress: Math.min(progress, 99) })
+          setProgress(itemId, { ...current, progress: Math.min(progress, 99) })
         }
       }
     }, 200)
+    activeIntervals.add(intervalId)
   }
 
-  function simulateInstalling(itemId: string) {
+  const simulateInstalling = (itemId: string) => {
     let progress = 0
-    const interval = setInterval(() => {
+    const intervalId = setInterval(() => {
+      if (cancelledInstalls.has(itemId)) {
+        cleanupInterval(intervalId)
+        cancelledInstalls.delete(itemId)
+        return
+      }
       progress += Math.random() * 20 + 10
       if (progress >= 100) {
-        clearInterval(interval)
-        installProgress.value.set(itemId, {
+        cleanupInterval(intervalId)
+        if (cancelledInstalls.has(itemId)) {
+          cancelledInstalls.delete(itemId)
+          return
+        }
+        setProgress(itemId, {
           itemId,
           status: 'installed',
           progress: 100,
           message: '安装完成',
         })
-        const updateItem = (items: MarketplaceItem[]) => {
+        const updateInstalledItem = (items: MarketplaceItem[]) => {
           const item = items.find(i => i.id === itemId)
           if (item) {
             item.installStatus = 'installed'
             item.installedCount += 1
           }
         }
-        updateItem(pluginItems.value)
-        updateItem(skillItems.value)
+        updateInstalledItem(pluginItems.value)
+        updateInstalledItem(skillItems.value)
+        updateInstalledItem(agentItems.value)
         setTimeout(() => {
-          installProgress.value.delete(itemId)
+          removeProgress(itemId)
         }, 2000)
       } else {
-        const current = installProgress.value.get(itemId)
+        const current = installProgress.value[itemId]
         if (current) {
-          installProgress.value.set(itemId, { ...current, progress: Math.min(progress, 99) })
+          setProgress(itemId, { ...current, progress: Math.min(progress, 99) })
         }
       }
     }, 150)
+    activeIntervals.add(intervalId)
   }
 
-  function uninstallItem(itemId: string) {
-    const updateItem = (items: MarketplaceItem[]) => {
+  const uninstallItem = (itemId: string) => {
+    cancelledInstalls.add(itemId)
+    const current = installProgress.value[itemId]
+    if (current) {
+      for (const intervalId of activeIntervals) {
+        if ((current as any)._intervalId === intervalId) {
+          cleanupInterval(intervalId)
+        }
+      }
+    }
+    removeProgress(itemId)
+
+    const updateUninstalledItem = (items: MarketplaceItem[]) => {
       const item = items.find(i => i.id === itemId)
       if (item) {
         item.installStatus = 'none'
         item.installedCount = Math.max(0, item.installedCount - 1)
       }
     }
-    updateItem(pluginItems.value)
-    updateItem(skillItems.value)
-    installProgress.value.delete(itemId)
+    updateUninstalledItem(pluginItems.value)
+    updateUninstalledItem(skillItems.value)
+    updateUninstalledItem(agentItems.value)
   }
 
-  function updateItem(itemId: string) {
+  const updateItem = (itemId: string) => {
+    cancelledInstalls.delete(itemId)
     const progress: InstallProgress = {
       itemId,
       status: 'updating',
       progress: 0,
       message: '正在更新...',
     }
-    installProgress.value.set(itemId, progress)
+    setProgress(itemId, progress)
 
     let progressVal = 0
-    const interval = setInterval(() => {
+    const intervalId = setInterval(() => {
+      if (cancelledInstalls.has(itemId)) {
+        cleanupInterval(intervalId)
+        cancelledInstalls.delete(itemId)
+        return
+      }
       progressVal += Math.random() * 18 + 8
       if (progressVal >= 100) {
-        clearInterval(interval)
-        installProgress.value.set(itemId, {
+        cleanupInterval(intervalId)
+        if (cancelledInstalls.has(itemId)) {
+          cancelledInstalls.delete(itemId)
+          return
+        }
+        setProgress(itemId, {
           itemId,
           status: 'installed',
           progress: 100,
           message: '更新完成',
         })
-        const updateItemInList = (items: MarketplaceItem[]) => {
+        const updateItemVersion = (items: MarketplaceItem[]) => {
           const item = items.find(i => i.id === itemId)
           if (item && item.latestVersion) {
             item.version = item.latestVersion
           }
         }
-        updateItemInList(pluginItems.value)
-        updateItemInList(skillItems.value)
+        updateItemVersion(pluginItems.value)
+        updateItemVersion(skillItems.value)
+        updateItemVersion(agentItems.value)
         setTimeout(() => {
-          installProgress.value.delete(itemId)
+          removeProgress(itemId)
         }, 2000)
       } else {
-        const current = installProgress.value.get(itemId)
+        const current = installProgress.value[itemId]
         if (current) {
-          installProgress.value.set(itemId, { ...current, progress: Math.min(progressVal, 99) })
+          setProgress(itemId, { ...current, progress: Math.min(progressVal, 99) })
         }
       }
     }, 180)
+    activeIntervals.add(intervalId)
   }
 
-  function getInstallProgress(itemId: string): InstallProgress | undefined {
-    return installProgress.value.get(itemId)
+  const getInstallProgress = (itemId: string): InstallProgress | undefined => {
+    return installProgress.value[itemId]
   }
 
-  function getItemReviews(itemId: string): MarketplaceReview[] {
+  const getItemReviews = (itemId: string): MarketplaceReview[] => {
     return reviews.value[itemId] || []
   }
 
-  function addReview(itemId: string, review: Omit<MarketplaceReview, 'id' | 'createdAt'>) {
+  const addReview = (itemId: string, review: Omit<MarketplaceReview, 'id' | 'createdAt'>) => {
     const newReview: MarketplaceReview = {
       ...review,
       id: `r-${Date.now()}`,
@@ -416,9 +504,10 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     }
     updateRating(pluginItems.value)
     updateRating(skillItems.value)
+    updateRating(agentItems.value)
   }
 
-  function addReviewReply(itemId: string, reviewId: string, reply: Omit<MarketplaceReviewReply, 'id' | 'createdAt'>) {
+  const addReviewReply = (itemId: string, reviewId: string, reply: Omit<MarketplaceReviewReply, 'id' | 'createdAt'>) => {
     const itemReviews = reviews.value[itemId]
     if (!itemReviews) return
     const review = itemReviews.find(r => r.id === reviewId)
@@ -431,26 +520,39 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     })
   }
 
+  const cleanup = () => {
+    for (const intervalId of activeIntervals) {
+      clearInterval(intervalId)
+    }
+    activeIntervals.clear()
+  }
+
   return {
     pluginItems,
     skillItems,
+    agentItems,
     loading,
     searchQuery,
     searchHistory,
     showSearchSuggestions,
     pluginFilter,
     skillFilter,
+    agentFilter,
     favorites,
     reviews,
     featuredItems,
     featuredPlugins,
     featuredSkills,
+    featuredAgents,
     filteredPluginItems,
     filteredSkillItems,
+    filteredAgentItems,
     searchSuggestions,
     favoriteItems,
     favoritePlugins,
     favoriteSkills,
+    favoriteAgents,
+    isFavorite,
     getCategories,
     getItems,
     getFilter,
@@ -461,6 +563,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     removeSearchHistoryEntry,
     clearSearchHistory,
     setFilter,
+    resetFilters,
     toggleFavorite,
     startInstall,
     uninstallItem,
@@ -469,5 +572,6 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     getItemReviews,
     addReview,
     addReviewReply,
+    cleanup,
   }
 })

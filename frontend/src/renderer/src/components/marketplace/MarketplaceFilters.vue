@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { TrendingUp, Clock, Star, Download, Filter } from 'lucide-vue-next'
-import type { MarketplaceFilter } from '../../types/marketplace'
+import type { MarketplaceFilter, InstallStatus } from '../../types/marketplace'
 
 const props = defineProps<{
   filter: MarketplaceFilter
@@ -17,7 +17,7 @@ const sortOptions: { value: MarketplaceFilter['sortBy']; label: string; icon: an
   { value: 'downloads', label: '安装量', icon: Download },
 ]
 
-const installStatusOptions: { value: string; label: string }[] = [
+const installStatusOptions: { value: InstallStatus | 'all'; label: string }[] = [
   { value: 'all', label: '全部' },
   { value: 'installed', label: '已安装' },
   { value: 'none', label: '未安装' },
@@ -54,7 +54,7 @@ const installStatusOptions: { value: string; label: string }[] = [
           v-for="opt in installStatusOptions"
           :key="opt.value"
           :class="['filter-chip', { active: (filter.installStatus || 'all') === opt.value }]"
-          @click="emit('update', { installStatus: opt.value as any })"
+          @click="emit('update', { installStatus: opt.value as InstallStatus | 'all' })"
         >
           {{ opt.label }}
         </button>

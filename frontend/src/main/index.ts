@@ -246,6 +246,15 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
   desktopPetWindow.setVisibleOnAllWorkspaces(true)
   desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
 
+  desktopPetWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [CSP_PET_WINDOW]
+      }
+    })
+  })
+
   if (isMac) {
     desktopPetWindow.setIgnoreMouseEvents(true)
   } else {

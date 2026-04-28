@@ -1,7 +1,7 @@
-﻿﻿﻿﻿<script setup lang="ts">
+﻿﻿<script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Puzzle, Sparkles, SlidersHorizontal, X, Package } from 'lucide-vue-next'
+import { Puzzle, Sparkles, SlidersHorizontal, X, Package, Bot } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
 import MarketplaceSearch from '../components/marketplace/MarketplaceSearch.vue'
 import MarketplaceCategories from '../components/marketplace/MarketplaceCategories.vue'
@@ -14,7 +14,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useMarketplaceStore()
 
-const VALID_TABS: MarketplaceType[] = ['plugin', 'skill']
+const VALID_TABS: MarketplaceType[] = ['plugin', 'skill', 'agent']
 const activeTab = ref<MarketplaceType>('plugin')
 const showFilters = ref(false)
 
@@ -26,25 +26,27 @@ watch(() => route.query.tab, (tab) => {
 }, { immediate: true })
 
 const categories = computed(() => store.getCategories(activeTab.value))
-const filter = computed(() => activeTab.value === 'plugin' ? store.pluginFilter : store.skillFilter)
+const filter = computed(() => {
+  if (activeTab.value === 'plugin') return store.pluginFilter
+  if (activeTab.value === 'skill') return store.skillFilter
+  return store.agentFilter
+})
 const activeCategory = computed({
   get: () => filter.value.category || 'all',
   set: (val: string) => store.setFilter(activeTab.value, { category: val === 'all' ? undefined : val })
 })
 
 const filteredItems = computed(() => {
-  const items = activeTab.value === 'plugin' ? store.filteredPluginItems : store.filteredSkillItems
-  if (activeCategory.value === 'all') return items
-  return items.filter(i => {
-    if (i.category === activeCategory.value) return true
-    const cat = categories.value.find(c => c.id === activeCategory.value)
-    return cat?.children?.some(c => c.id === i.category)
-  })
+  if (activeTab.value === 'plugin') return store.filteredPluginItems
+  if (activeTab.value === 'skill') return store.filteredSkillItems
+  return store.filteredAgentItems
 })
 
-const featuredItems = computed(() =>
-  activeTab.value === 'plugin' ? store.featuredPlugins : store.featuredSkills
-)
+const featuredItems = computed(() => {
+  if (activeTab.value === 'plugin') return store.featuredPlugins
+  if (activeTab.value === 'skill') return store.featuredSkills
+  return store.featuredAgents
+})
 
 const headerConfig = computed(() => {
   if (activeTab.value === 'plugin') {
@@ -57,13 +59,23 @@ const headerConfig = computed(() => {
       emptyText: '没有找到匹配的插件',
     }
   }
+  if (activeTab.value === 'skill') {
+    return {
+      icon: Sparkles,
+      title: '技能市场',
+      subtitle: '赋予 AI 更丰富的专业技能',
+      allLabel: '全部技能',
+      emptyIcon: Sparkles,
+      emptyText: '没有找到匹配的技能',
+    }
+  }
   return {
-    icon: Sparkles,
-    title: '技能市场',
-    subtitle: '赋予 AI 更丰富的专业技能',
-    allLabel: '全部技能',
-    emptyIcon: Sparkles,
-    emptyText: '没有找到匹配的技能',
+    icon: Bot,
+    title: '智能体市场',
+    subtitle: '打造专属 AI 智能助手',
+    allLabel: '全部智能体',
+    emptyIcon: Bot,
+    emptyText: '没有找到匹配的智能体',
   }
 })
 
@@ -96,7 +108,7 @@ function toggleFilters() {
         </div>
         <div class="header-text">
           <h1 class="page-title">扩展</h1>
-          <p class="page-subtitle">插件与技能，一站式管理</p>
+          <p class="page-subtitle">插件、技能与智能体，一站式管理</p>
         </div>
       </div>
       <div class="market-switch">
@@ -113,6 +125,13 @@ function toggleFilters() {
         >
           <Sparkles :size="14" />
           <span>技能市场</span>
+        </button>
+        <button
+          :class="['switch-btn', { active: activeTab === 'agent' }]"
+          @click="switchTab('agent')"
+        >
+          <Bot :size="14" />
+          <span>智能体市场</span>
         </button>
       </div>
     </div>
@@ -153,14 +172,14 @@ function toggleFilters() {
         <MarketplaceBanner
           v-if="featuredItems.length > 0 && activeCategory === 'all' && !store.searchQuery"
           :items="featuredItems"
-          :title="activeTab === 'plugin' ? '热门插件' : '热门技能'"
+          :title="activeTab === 'plugin' ? '热门插件' : activeTab === 'skill' ? '热门技能' : '热门智能体'"
           :type="activeTab"
         />
 
         <div class="items-section">
           <div class="section-header">
             <h3 class="section-title">
-              {{ activeCategory === 'all' ? headerConfig.allLabel : categories.find(c => c.id === activeCategory)?.name || (activeTab === 'plugin' ? '插件' : '技能') }}
+              {{ activeCategory === 'all' ? headerConfig.allLabel : categories.find(c => c.id === activeCategory)?.name || (activeTab === 'plugin' ? '插件' : activeTab === 'skill' ? '技能' : '智能体') }}
             </h3>
             <span class="section-count">{{ filteredItems.length }} 个</span>
           </div>
@@ -213,7 +232,7 @@ function toggleFilters() {
   width: 52px;
   height: 52px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.1));
+  background: var(--gradient-hero-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -316,7 +335,7 @@ function toggleFilters() {
 .filter-toggle-btn:hover {
   border-color: var(--lumi-primary);
   color: var(--lumi-primary);
-  background: rgba(20, 126, 188, 0.06);
+  background: var(--lumi-primary-light);
 }
 
 .filter-toggle-btn.active {
@@ -420,7 +439,7 @@ function toggleFilters() {
 
 .reset-btn:hover {
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
 }
 
 .filter-slide-enter-active {

@@ -1,4 +1,4 @@
-﻿﻿<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Puzzle, SlidersHorizontal, X } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
@@ -12,33 +12,30 @@ import type { MarketplaceFilter } from '../types/marketplace'
 const store = useMarketplaceStore()
 
 const categories = computed(() => store.getCategories('plugin'))
-const activeCategory = ref('all')
 const showFilters = ref(false)
 
 const filter = computed(() => store.pluginFilter)
 
-const filteredItems = computed(() => {
-  const items = store.filteredPluginItems
-  if (activeCategory.value === 'all') return items
-  return items.filter(i => {
-    if (i.category === activeCategory.value) return true
-    const cat = categories.value.find(c => c.id === activeCategory.value)
-    return cat?.children?.some(c => c.id === i.category)
-  })
-})
+const activeCategory = computed(() => filter.value.category || 'all')
+
+const filteredItems = computed(() => store.filteredPluginItems)
 
 const featuredItems = computed(() => store.featuredPlugins)
 
-function selectCategory(id: string) {
-  activeCategory.value = id
+const selectCategory = (id: string) => {
+  store.setFilter('plugin', { category: id === 'all' ? undefined : id })
 }
 
-function updateFilter(updates: Partial<MarketplaceFilter>) {
+const updateFilter = (updates: Partial<MarketplaceFilter>) => {
   store.setFilter('plugin', updates)
 }
 
-function toggleFilters() {
+const toggleFilters = () => {
   showFilters.value = !showFilters.value
+}
+
+const resetFilters = () => {
+  store.resetFilters('plugin')
 }
 </script>
 
@@ -113,7 +110,7 @@ function toggleFilters() {
           <div v-else class="empty-state">
             <Puzzle :size="48" />
             <p>没有找到匹配的插件</p>
-            <button class="reset-btn" @click="activeCategory = 'all'; store.clearSearch()">
+            <button class="reset-btn" @click="resetFilters">
               重置筛选
             </button>
           </div>
@@ -323,10 +320,10 @@ function toggleFilters() {
 }
 
 .filter-slide-enter-active {
-  animation: lumi-fade-in 0.25s ease-out;
+  animation: lumi-fade-in 0.25s ease-in-out;
 }
 
 .filter-slide-leave-active {
-  animation: lumi-fade-in 0.15s ease-out reverse;
+  animation: lumi-fade-in 0.15s ease-in-out reverse;
 }
 </style>

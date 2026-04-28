@@ -66,6 +66,8 @@ const availableAgentsForGroup = computed(() => {
 const collaborationPhase = computed(() => socialStore.collaborationPhase)
 const collaborationActive = computed(() => socialStore.collaborationActive)
 const collaborationTasks = computed(() => socialStore.collaborationTasks)
+const agentsResponding = computed(() => socialStore.agentsResponding)
+const respondingAgentNames = computed(() => socialStore.respondingAgentNames)
 
 const phaseLabel = computed(() => {
   const labels: Record<CollaborationPhase, string> = {
@@ -105,11 +107,11 @@ const openGroupChat = (group: GroupInfo) => {
 const sendMessage = async () => {
   if (!chatInput.value.trim() || !selectedGroupId.value) return
   sendingMessage.value = true
+  const userContent = chatInput.value
+  chatInput.value = ''
+
   try {
     if (collaborationMode.value) {
-      const userContent = chatInput.value
-      chatInput.value = ''
-
       socialStore.groupMessages.push({
         id: `user-${Date.now()}`,
         senderId: 'user',
@@ -126,8 +128,7 @@ const sendMessage = async () => {
         () => {},
       )
     } else {
-      await socialStore.sendGroupMessage(selectedGroupId.value, chatInput.value)
-      chatInput.value = ''
+      await socialStore.sendGroupMessage(selectedGroupId.value, userContent)
     }
     await nextTick()
     if (messagesContainer.value) {
@@ -440,6 +441,17 @@ onMounted(async () => {
             </div>
           </div>
 
+          <div v-if="agentsResponding && !collaborationActive" class="collab-progress-msg">
+            <div class="collab-progress-inner">
+              <Loader2 :size="14" class="spin-animation" />
+              <span class="collab-progress-text">
+                {{ respondingAgentNames.length > 0
+                  ? `${respondingAgentNames.join('、')} 正在思考...`
+                  : 'Agent 正在响应...' }}
+              </span>
+            </div>
+          </div>
+
           <div v-if="groupMessages.length === 0 && !collaborationActive" class="chat-empty">
             <MessageCircle :size="32" />
             <p>群聊已创建，添加 Agent 开始协作</p>
@@ -456,11 +468,11 @@ onMounted(async () => {
               v-model="chatInput"
               type="text"
               :placeholder="collaborationMode ? '输入消息，Agent 团队将协作处理...' : '发送消息到群聊...'"
-              :disabled="sendingMessage || collaborationActive"
+              :disabled="sendingMessage || collaborationActive || agentsResponding"
               @keydown.enter="sendMessage"
             />
-            <button class="input-send-btn" @click="sendMessage" :disabled="!chatInput.trim() || sendingMessage || collaborationActive">
-              <Loader2 v-if="sendingMessage || collaborationActive" :size="15" class="spin-animation" />
+            <button class="input-send-btn" @click="sendMessage" :disabled="!chatInput.trim() || sendingMessage || collaborationActive || agentsResponding">
+              <Loader2 v-if="sendingMessage || collaborationActive || agentsResponding" :size="15" class="spin-animation" />
               <Send v-else :size="15" />
             </button>
           </div>

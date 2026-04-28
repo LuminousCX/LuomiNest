@@ -11,7 +11,7 @@ from app.runtime.provider.llm.providers import (
 from loguru import logger
 
 
-CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "data")
+CONFIG_DIR = settings.DATA_DIR
 CONFIG_FILE = os.path.join(CONFIG_DIR, "providers.json")
 
 

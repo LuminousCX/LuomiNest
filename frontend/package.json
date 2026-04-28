@@ -17,6 +17,7 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && vue-tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
+    "@pixi/unsafe-eval": "^7.4.3",
     "marked": "^18.0.1",
     "pinia": "^3.0.4",
     "pixi-live2d-display-mulmotion": "0.5.0-mm-6",
@@ -46,7 +47,8 @@
       "output": "release/dist"
     },
     "files": [
-      "out/**/*"
+      "out/**/*",
+      "!out/renderer/live2d/**/*"
     ],
     "extraResources": [
       {
@@ -67,16 +69,7 @@
         "from": "src/renderer/public/live2d",
         "to": "live2d",
         "filter": [
-          "**/*.moc3",
-          "**/*.model3.json",
-          "**/*.physics3.json",
-          "**/*.pose3.json",
-          "**/*.cdi3.json",
-          "**/*.exp3.json",
-          "**/*.motion3.json",
-          "**/*.userdata3.json",
-          "**/*.png",
-          "**/*.jpg"
+          "**/*"
         ]
       }
     ],
@@ -230,11 +223,8 @@
       "artifactName": "LuomiNest-${version}-mac-${arch}.dmg"
     },
     "asar": true,
-  "asarUnpack": [
-    "**/*.node",
-    "**/*.moc3",
-    "**/*.png",
-    "**/*.jpg"
-  ]
+    "asarUnpack": [
+      "**/*.node"
+    ]
   }
 }
