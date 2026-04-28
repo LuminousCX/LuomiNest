@@ -1,9 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Star, Download, Heart, Check, Loader2 } from 'lucide-vue-next'
+import {
+  Star, Download, Heart, Check, Loader2, Package,
+  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
+  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
+  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
+} from 'lucide-vue-next'
 import type { MarketplaceItem, InstallProgress } from '../../types/marketplace'
 import { useMarketplaceStore } from '../../stores/marketplace'
+import { formatDownloadCount } from '../../utils/format'
+
+const ITEM_ICON_MAP: Record<string, any> = {
+  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
+  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
+  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
+  Package,
+}
 
 const props = defineProps<{
   item: MarketplaceItem
@@ -37,12 +50,7 @@ const installLabel = computed(() => {
 
 const ratingDisplay = computed(() => props.item.rating.toFixed(1))
 
-const downloadDisplay = computed(() => {
-  const n = props.item.downloadCount
-  if (n >= 10000) return (n / 10000).toFixed(1) + 'w'
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
-  return n.toString()
-})
+const downloadDisplay = computed(() => formatDownloadCount(props.item.downloadCount))
 
 function navigateToDetail() {
   router.push(`/market/detail/${props.item.type}/${props.item.id}`)
@@ -62,7 +70,9 @@ function handleFavorite(e: Event) {
 <template>
   <div class="market-card" @click="navigateToDetail">
     <div class="card-header">
-      <div class="card-icon">{{ item.icon }}</div>
+      <div class="card-icon">
+        <component :is="ITEM_ICON_MAP[item.icon] || Package" :size="24" />
+      </div>
       <div class="card-badge-area">
         <span v-if="item.featured" class="badge badge-featured">推荐</span>
         <span v-if="item.installStatus === 'installed'" class="badge badge-installed">已安装</span>
@@ -162,7 +172,7 @@ function handleFavorite(e: Event) {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  color: var(--lumi-primary);
 }
 
 .card-badge-area {
@@ -183,8 +193,8 @@ function handleFavorite(e: Event) {
 }
 
 .badge-installed {
-  background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+  background: var(--lumi-success-light);
+  color: var(--lumi-success);
 }
 
 .card-body {
@@ -264,7 +274,7 @@ function handleFavorite(e: Event) {
 }
 
 .stat-icon.star {
-  color: #f59e0b;
+  color: var(--lumi-star);
 }
 
 .card-actions {
@@ -301,7 +311,7 @@ function handleFavorite(e: Event) {
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
-  color: white;
+  color: var(--text-inverse);
   background: var(--lumi-primary);
   transition: all var(--transition-fast);
 }
@@ -316,8 +326,8 @@ function handleFavorite(e: Event) {
 }
 
 .install-btn.installed {
-  background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+  background: var(--lumi-success-light);
+  color: var(--lumi-success);
 }
 
 .progress-text {

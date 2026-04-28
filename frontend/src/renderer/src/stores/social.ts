@@ -29,6 +29,9 @@ export const useSocialStore = defineStore('social', () => {
   const collaborationActive = ref(false)
   const collaborationSessionId = ref<string | null>(null)
 
+  const agentsResponding = ref(false)
+  const respondingAgentNames = ref<string[]>([])
+
   const fetchGroups = async () => {
     loading.value = true
     try {
@@ -78,25 +81,131 @@ export const useSocialStore = defineStore('social', () => {
   }
 
   const sendGroupMessage = async (groupId: string, content: string) => {
-    const response = await apiPost<{ data: GroupMessage[] }>(`/social/groups/${groupId}/messages`, {
-      content,
-      sender_id: 'user',
-    })
-    const messages = response.data || []
-    if (messages.length > 0) {
-      groupMessages.value = [...groupMessages.value, ...messages]
+    agentsResponding.value = true
+    respondingAgentNames.value = []
+
+    try {
+      const resp = await fetch(`${BACKEND_URL}/social/groups/${groupId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content,
+          sender_id: 'user',
+        }),
+      })
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => null)
+        throw new Error(errData?.error?.message || `API error: ${resp.status}`)
+      }
+
+      const reader = resp.body?.getReader()
+      if (!reader) throw new Error('No readable stream')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data: ')) continue
+          const dataStr = trimmed.slice(6)
+          if (!dataStr.trim()) continue
+
+          try {
+            const event = JSON.parse(dataStr)
+            _handleMessageEvent(event)
+          } catch {
+            continue
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error('Failed to send message:', e)
+    } finally {
+      agentsResponding.value = false
+      respondingAgentNames.value = []
+      await fetchGroups()
     }
-    return messages
+  }
+
+  const _handleMessageEvent = (event: any) => {
+    switch (event.type) {
+      case 'user_message':
+        if (event.data) {
+          groupMessages.value.push(event.data as GroupMessage)
+        }
+        break
+
+      case 'agents_start':
+        respondingAgentNames.value = event.data?.agentNames || event.data?.agent_names || []
+        break
+
+      case 'agent_message':
+        if (event.data) {
+          groupMessages.value.push(event.data as GroupMessage)
+        }
+        break
+
+      case 'agent_error':
+        if (event.data) {
+          groupMessages.value.push(event.data as GroupMessage)
+        }
+        break
+
+      case 'agents_done':
+        agentsResponding.value = false
+        respondingAgentNames.value = []
+        break
+
+      case 'info':
+        if (event.data?.message) {
+          groupMessages.value.push({
+            id: `info-${Date.now()}`,
+            senderId: 'system',
+            senderName: '系统',
+            senderType: 'agent',
+            content: event.data.message,
+            timestamp: new Date().toISOString(),
+            role: '系统',
+          })
+        }
+        break
+
+      case 'error':
+        console.error('Message stream error:', event.data?.message)
+        break
+    }
   }
 
   const fetchGroupMessages = async (groupId: string) => {
     try {
       const response = await apiGet<{ data: { messages: GroupMessage[] } }>(`/social/groups/${groupId}`)
       if (response.data?.messages) {
-        groupMessages.value = response.data.messages
+        groupMessages.value = response.data.messages.map((msg: any) => _normalizeMessage(msg))
       }
     } catch {
       groupMessages.value = []
+    }
+  }
+
+  const _normalizeMessage = (msg: any): GroupMessage => {
+    return {
+      id: msg.id || msg.message_id || '',
+      senderId: msg.senderId || msg.sender_id || '',
+      senderName: msg.senderName || msg.sender_name || '',
+      senderType: msg.senderType || msg.sender_type || 'user',
+      content: msg.content || '',
+      timestamp: msg.timestamp || '',
+      role: msg.role,
+      collaboration: msg.collaboration,
     }
   }
 
@@ -374,6 +483,8 @@ export const useSocialStore = defineStore('social', () => {
     collaborationTasks,
     collaborationActive,
     collaborationSessionId,
+    agentsResponding,
+    respondingAgentNames,
     fetchGroups,
     createGroup,
     deleteGroup,

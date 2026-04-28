@@ -1,12 +1,24 @@
 <script setup lang="ts">
-import { Star, Download, ArrowRight } from 'lucide-vue-next'
+import {
+  Star, Download, ArrowRight, Package,
+  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
+  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
+  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
+} from 'lucide-vue-next'
 import type { MarketplaceItem } from '../../types/marketplace'
 import { useRouter } from 'vue-router'
 
-defineProps<{
+const ITEM_ICON_MAP: Record<string, any> = {
+  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
+  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
+  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
+  Package,
+}
+
+const props = defineProps<{
   items: MarketplaceItem[]
   title: string
-  type: 'plugin' | 'skill'
+  type: 'plugin' | 'skill' | 'agent'
 }>()
 
 const router = useRouter()
@@ -16,7 +28,7 @@ function navigateToDetail(item: MarketplaceItem) {
 }
 
 function navigateToList() {
-  router.push('/market')
+  router.push(`/market?tab=${props.type}`)
 }
 </script>
 
@@ -37,7 +49,9 @@ function navigateToList() {
         class="banner-card"
         @click="navigateToDetail(item)"
       >
-        <div class="banner-card-icon">{{ item.icon }}</div>
+        <div class="banner-card-icon">
+          <component :is="ITEM_ICON_MAP[item.icon] || Package" :size="20" />
+        </div>
         <div class="banner-card-info">
           <h4>{{ item.name }}</h4>
           <p>{{ item.summary }}</p>
@@ -131,7 +145,7 @@ function navigateToList() {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  color: var(--lumi-primary);
   flex-shrink: 0;
 }
 
@@ -170,6 +184,6 @@ function navigateToList() {
 }
 
 .star-icon {
-  color: #f59e0b;
+  color: var(--lumi-star);
 }
 </style>

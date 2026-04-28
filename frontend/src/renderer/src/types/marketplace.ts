@@ -1,4 +1,4 @@
-export type MarketplaceType = 'plugin' | 'skill'
+export type MarketplaceType = 'plugin' | 'skill' | 'agent'
 
 export type InstallStatus = 'none' | 'downloading' | 'installing' | 'installed' | 'updating' | 'error'
 

@@ -120,7 +120,7 @@ function handleFavorite() {
 }
 
 .install-btn {
-  color: white;
+  color: var(--text-inverse);
   background: var(--lumi-primary);
 }
 
@@ -129,8 +129,8 @@ function handleFavorite() {
 }
 
 .installed-btn {
-  color: #22c55e;
-  background: rgba(34, 197, 94, 0.1);
+  color: var(--lumi-success);
+  background: var(--lumi-success-light);
 }
 
 .update-btn {
@@ -141,7 +141,7 @@ function handleFavorite() {
 
 .update-btn:hover {
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
 }
 
 .uninstall-btn {

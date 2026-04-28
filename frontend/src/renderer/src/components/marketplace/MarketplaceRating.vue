@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Star } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -12,10 +13,10 @@ const emit = defineEmits<{
   'update:modelValue': [value: number]
 }>()
 
-const maxStars = props.max ?? 5
-const starSize = props.size ?? 16
+const maxStars = computed(() => props.max ?? 5)
+const starSize = computed(() => props.size ?? 16)
 
-function selectStar(index: number) {
+const selectStar = (index: number) => {
   if (props.readonly) return
   emit('update:modelValue', index + 1)
 }
@@ -62,7 +63,7 @@ function selectStar(index: number) {
 }
 
 .star-icon.filled {
-  color: #f59e0b;
-  fill: #f59e0b;
+  color: var(--lumi-star);
+  fill: var(--lumi-star);
 }
 </style>
