@@ -149,9 +149,15 @@ const loadPersistedData = () => {
         nextTaskId.value = data.nextId
       }
       if (data.viewDate && typeof data.viewDate === 'string') {
-        const parsed = new Date(data.viewDate)
-        if (!isNaN(parsed.getTime())) {
-          viewDate.value = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+        const parts = String(data.viewDate).split('-')
+        if (parts.length === 3) {
+          const y = Number(parts[0])
+          const m = Number(parts[1]) - 1
+          const d = Number(parts[2])
+          const parsed = new Date(y, m, d)
+          if (!isNaN(parsed.getTime())) {
+            viewDate.value = parsed
+          }
         }
       }
       if (data.currentView && ['card', 'week', 'month'].includes(data.currentView)) {
@@ -273,7 +279,7 @@ const monthGrid = computed(() => {
   const month = viewDate.value.getMonth()
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
-  const startDayOfWeek = firstDay.getDay()
+  const startDayOfWeek = (firstDay.getDay() + 6) % 7
   const daysInMonth = lastDay.getDate()
   const prevMonthLastDay = new Date(year, month, 0).getDate()
 
@@ -370,7 +376,7 @@ const priorityLabel = (p: string) => {
 }
 
 const getTasksForDate = (fullDate: string) => {
-  return tasks.value.filter(t => t.dueDate === fullDate)
+  return filteredTasks.value.filter(t => t.dueDate === fullDate)
 }
 
 const filteredTasks = computed(() => {
@@ -483,7 +489,11 @@ const createTask = () => {
 }
 
 const openEditModal = (task: LuomiNestTask) => {
-  editingTask.value = { ...task }
+  editingTask.value = {
+    ...task,
+    tags: [...task.tags],
+    assignees: [...task.assignees],
+  }
   newTagInput.value = ''
   showEditModal.value = true
 }
@@ -691,6 +701,7 @@ const timeSlotOptions = [
 
                 <div class="card-top-row">
                   <div class="card-tags">
+                    <span :class="['card-priority', task.priority]">{{ priorityLabel(task.priority) }}</span>
                     <span v-for="tag in task.tags" :key="tag" class="card-tag">{{ tag }}</span>
                   </div>
                   <button class="card-menu"><MoreHorizontal :size="13" /></button>
@@ -1762,6 +1773,29 @@ const timeSlotOptions = [
   color: var(--task-purple);
   text-transform: uppercase;
   letter-spacing: 0.4px;
+}
+
+.card-priority {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.3px;
+}
+
+.card-priority.high {
+  background: var(--task-red-soft);
+  color: var(--task-red);
+}
+
+.card-priority.medium {
+  background: var(--task-yellow-soft);
+  color: var(--task-yellow);
+}
+
+.card-priority.low {
+  background: var(--task-green-soft);
+  color: var(--task-green);
 }
 
 .card-menu {

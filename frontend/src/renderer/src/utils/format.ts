@@ -2,6 +2,8 @@ const RELATIVE_THRESHOLD = 7 * 24 * 60 * 60 * 1000
 
 const formatDateRelative = (dateStr: string): string => {
   const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return '—'
+
   const now = new Date()
   const diff = now.getTime() - date.getTime()
 

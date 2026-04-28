@@ -1,168 +1,216 @@
-LumiSidebar.vue:161 [Vue warn]: Unhandled error during execution of setup function 
-  at <TasksView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< null > > 
-  at <RouterView> 
-  at <App>
-warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
-logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
-handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2353
-setupStatefulComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10295
-setupComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10257
-mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8183
-processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8377
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
-Promise.then
-queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
-queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
-baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
-effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
-endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
-notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
-set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
-finalizeNavigation @ vue-router.js?v=fe22181a:5643
-（匿名） @ vue-router.js?v=fe22181a:5581
-Promise.then
-pushWithRedirect @ vue-router.js?v=fe22181a:5568
-push @ vue-router.js?v=fe22181a:5519
-onClick @ LumiSidebar.vue:161
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-LumiSidebar.vue:161 [Vue warn]: Unhandled error during execution of component update 
-  at <RouterView> 
-  at <App>
-warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
-logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
-handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2353
-flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
-Promise.then
-queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
-queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
-baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
-effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
-endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
-notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
-set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
-finalizeNavigation @ vue-router.js?v=fe22181a:5643
-（匿名） @ vue-router.js?v=fe22181a:5581
-Promise.then
-pushWithRedirect @ vue-router.js?v=fe22181a:5568
-push @ vue-router.js?v=fe22181a:5519
-onClick @ LumiSidebar.vue:161
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-TasksView.vue:176 Uncaught (in promise) ReferenceError: Cannot access 'formatDateStr' before initialization
-    at defaultNewTask (TasksView.vue:176:12)
-    at setup (TasksView.vue:184:21)
-    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:19)
-    at setupStatefulComponent (chunk-MDJKIZJQ.js?v=fe22181a:10295:25)
-    at setupComponent (chunk-MDJKIZJQ.js?v=fe22181a:10257:36)
-    at mountComponent (chunk-MDJKIZJQ.js?v=fe22181a:8183:7)
-    at processComponent (chunk-MDJKIZJQ.js?v=fe22181a:8149:9)
-    at patch (chunk-MDJKIZJQ.js?v=fe22181a:7646:11)
-    at ReactiveEffect.componentUpdateFn [as fn] (chunk-MDJKIZJQ.js?v=fe22181a:8377:9)
-    at ReactiveEffect.run (chunk-MDJKIZJQ.js?v=fe22181a:507:19)
-defaultNewTask @ TasksView.vue:176
-setup @ TasksView.vue:184
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-setupStatefulComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10295
-setupComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10257
-mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8183
-processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
-patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8377
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
-Promise.then
-queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
-queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
-baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
-effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
-endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
-notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
-set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
-finalizeNavigation @ vue-router.js?v=fe22181a:5643
-（匿名） @ vue-router.js?v=fe22181a:5581
-Promise.then
-pushWithRedirect @ vue-router.js?v=fe22181a:5568
-push @ vue-router.js?v=fe22181a:5519
-onClick @ LumiSidebar.vue:161
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-LumiSidebar.vue:161 [Vue warn]: Unhandled error during execution of component update 
-  at <RouterView> 
-  at <App>
-warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
-logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
-handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2353
-flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
-Promise.then
-queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
-queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
-baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
-effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
-endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
-notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
-set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
-finalizeNavigation @ vue-router.js?v=fe22181a:5643
-（匿名） @ vue-router.js?v=fe22181a:5581
-Promise.then
-pushWithRedirect @ vue-router.js?v=fe22181a:5568
-push @ vue-router.js?v=fe22181a:5519
-onClick @ LumiSidebar.vue:161
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
-chunk-MDJKIZJQ.js?v=fe22181a:9098 Uncaught (in promise) TypeError: Cannot read properties of null (reading 'component')
-    at locateNonHydratedAsyncRoot (chunk-MDJKIZJQ.js?v=fe22181a:9098:41)
-    at locateNonHydratedAsyncRoot (chunk-MDJKIZJQ.js?v=fe22181a:9103:14)
-    at ReactiveEffect.componentUpdateFn [as fn] (chunk-MDJKIZJQ.js?v=fe22181a:8332:40)
-    at ReactiveEffect.run (chunk-MDJKIZJQ.js?v=fe22181a:507:19)
-    at ReactiveEffect.runIfDirty (chunk-MDJKIZJQ.js?v=fe22181a:545:12)
-    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:33)
-    at flushJobs (chunk-MDJKIZJQ.js?v=fe22181a:2559:9)
-locateNonHydratedAsyncRoot @ chunk-MDJKIZJQ.js?v=fe22181a:9098
-locateNonHydratedAsyncRoot @ chunk-MDJKIZJQ.js?v=fe22181a:9103
-componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8332
-run @ chunk-MDJKIZJQ.js?v=fe22181a:507
-runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
-Promise.then
-queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
-queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
-baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
-effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
-endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
-notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
-trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
-set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
-finalizeNavigation @ vue-router.js?v=fe22181a:5643
-（匿名） @ vue-router.js?v=fe22181a:5581
-Promise.then
-pushWithRedirect @ vue-router.js?v=fe22181a:5568
-push @ vue-router.js?v=fe22181a:5519
-onClick @ LumiSidebar.vue:161
-callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
-callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
-invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
+Verify each finding against the current code and only fix it if needed.
+
+Inline comments:
+In `@backend/app/api/v1/endpoints/social.py`:
+- Around line 193-217: The handler send_group_message currently treats any
+non-"user" sender_id as an agent, allowing spoofed agent messages; update
+send_group_message to reject or validate non-user senders: if request.sender_id
+!= "user" then verify the id belongs to the group's membership (via
+groups_store.get(group_id).members or equivalent) and ensure the caller is an
+authorized/trusted service before setting sender_type="agent"; otherwise return
+a 403/BadRequest or force sender_type="user". Make the check before calling
+_group_manager.send_group_message_stream so unauthorized agent IDs cannot be
+streamed/ persisted.
+
+In `@backend/app/domains/social/agent_orchestrator.py`:
+- Around line 313-319: The code currently only forwards execution_order and
+depends_on to the frontend (in the yield that emits "plan_created" using
+session.plan and plan.get("execution_order")), but the actual executor logic
+(the blocks that iterate tasks around the list order at the currently referenced
+scheduling sites) ignores depends_on; replace the ad-hoc list-order scheduling
+with a single DAG-based ready-queue scheduler: build a graph from
+plan.get("tasks") using each task's "id" and "depends_on", compute in-degree,
+seed a ready queue with tasks whose depends_on are empty, and then
+pop-ready->execute->on-completion decrement dependents' in-degree to push
+newly-ready tasks; refactor both streaming and non-streaming execution paths to
+call the same scheduler entrypoint (e.g., a new
+schedule_tasks_ready_queue(task_list, execute_task_callback)) so that tasks are
+only dispatched when all dependencies are complete and both execution paths
+reuse identical semantics.
+- Around line 778-863: _save_messages is writing back the original snapshot of
+group and can overwrite concurrent updates; before calling
+groups_store.set(group["id"], group) re-load the current group from the store
+(using groups_store.get(group["id"])), append only the new messages you created
+(the user_msg, task_msg(s), synthesis_msg/direct_msg/error_msg) to the freshly
+fetched group's "messages", re-compute any derived fields (like coordinator via
+_find_coordinator_agent on the fresh group) and update "updated_at", then
+persist that merged group with groups_store.set; ensure you reference the
+message IDs you generated (id fields) to avoid duplicating messages if needed.
+
+In `@backend/app/domains/social/agent_role_registry.py`:
+- Around line 210-217: The endpoint that returns roles should stop exposing the
+coordinator role: replace calls to AgentRoleRegistry.list_roles() with
+AgentRoleRegistry.list_worker_roles() (which filters out role_id ==
+"coordinator") in the code that powers the /agent-roles response so the frontend
+only receives worker roles; locate usages of list_roles() (and any places that
+feed the /agent-roles payload) and switch them to list_worker_roles() to prevent
+coordinator role suggestions from being assignable to group members.
+
+In `@backend/app/domains/social/group_chat.py`:
+- Around line 81-109: The current implementation uses asyncio.gather on the
+tasks for ai_members which blocks until all agents finish, preventing true
+streaming; change the logic to schedule per-agent coroutines with
+asyncio.create_task (calling self._respond_as_agent for each member) and then
+iterate over asyncio.as_completed(tasks) (or consume results from an
+asyncio.Queue populated by those tasks) so you yield each agent's response as
+soon as it completes rather than waiting for all; update the loop that currently
+iterates over results and yields agent_error/agent_message to instead handle
+each completed task result immediately, preserving the same error handling and
+payload shape.
+
+In `@frontend/src/renderer/src/utils/format.ts`:
+- Around line 3-24: The function formatDateRelative creates a Date from dateStr
+but doesn't validate it, so an invalid date yields "Invalid Date" in the UI; fix
+by validating the parsed date immediately after const date = new Date(dateStr)
+(e.g., check isNaN(date.getTime())), and if invalid return a safe fallback
+(empty string or a localized placeholder like '—') before computing diff and the
+relative text; update formatDateRelative to perform this early-return validation
+so no "Invalid Date" string reaches the UI.
+
+In `@frontend/src/renderer/src/views/TasksView.vue`:
+- Around line 485-488: openEditModal currently shallow-copies the task so nested
+arrays like tags and assignees remain shared; change the assignment in
+openEditModal to deep-clone those nested fields (e.g., create a new object for
+editingTask.value and clone task.tags and task.assignees into new
+arrays/objects) so edits in the modal don't mutate the original task; update
+references to editingTask, openEditModal, and the tags/assignees properties to
+ensure newTagInput and showEditModal keep working with the cloned data.
+- Around line 372-384: getTasksForDate currently reads directly from tasks.value
+so the search filter has no effect; change it to filter from the computed
+filteredTasks (use filteredTasks.value.filter(...)) instead of tasks.value,
+keeping the same predicate (t => t.dueDate === fullDate). Ensure filteredTasks
+is in scope when getTasksForDate is defined so the date-based views
+(cards/week/month) reflect the search.
+- Around line 271-283: monthGrid uses firstDay.getDay() which treats Sunday as
+day 0 while your header starts Monday, causing the calendar to shift right; in
+the monthGrid computed, normalize the weekday so Monday is treated as index 0
+(e.g. startDayOfWeek = (firstDay.getDay() + 6) % 7) and use that normalized
+startDayOfWeek for the loop that generates the leading prev-month cells (the
+loop currently using startDayOfWeek - 1 and prevMonthLastDay) so the month grid
+aligns under the "一..日" header; update the startDayOfWeek calculation inside the
+monthGrid computed property and keep the rest of the cell-generation logic using
+the normalized value.
+- Around line 151-154: 当前从 persisted YYYY-MM-DD 字符串恢复 viewDate 时使用 new
+Date(data.viewDate) 会按 UTC 解析导致时区为 UTC- 的用户出现前一天偏移；在 TasksView.vue 中替换该解析逻辑（检查
+data.viewDate 为字符串的分支）为手动解析 YYYY-MM-DD（用 split 或正则提取 year, month, day 并用 new
+Date(year, month - 1, day) 构造），并保留现有 isNaN/getTime 验证后再赋值到
+viewDate.value，以确保在本地时区不会发生日期漂移。
+
+In `@frontend/src/renderer/src/views/WorkspaceView.vue`:
+- Line 1: 文件开头在 <script setup lang="ts"> 之前包含不可见字符，导致编码噪音和多余 diff；请打开
+frontend/src/renderer/src/views/WorkspaceView.vue，删除该文件开头位于 <script setup
+lang="ts"> 之前的所有不可见/控制字符（BOM、零宽空格等），确保文件以精确的 '<script setup lang="ts">'
+标签开头并保存为项目约定的编码（如 UTF-8 无 BOM）；提交后确认 diffs 不再包含这些隐形字符。
+
+---
+
+Nitpick comments:
+In `@backend/app/domains/social/agent_orchestrator.py`:
+- Around line 34-60: Add concise docstrings to the core orchestration contracts:
+document the SubTask and CollaborationSession dataclasses (describe each field,
+allowed values for phase/TaskStatus, and lifecycle timestamps), and add clear
+docstrings to AgentOrchestrator.orchestrate() and
+AgentOrchestrator.orchestrate_stream() explaining inputs, return types,
+streaming behavior (events produced, event types/schema), phase transitions, and
+failure semantics (how errors are surfaced in SubTask.error vs exceptions).
+Ensure the docstrings mention expected event names/payload shapes, how
+dependences in SubTask.depends_on are interpreted, and any side effects (state
+mutation of CollaborationSession and coordinator_response/final_result).
+
+In `@backend/app/domains/social/agent_role_registry.py`:
+- Around line 203-222: Add missing docstrings to the public class methods
+get_role, list_roles, list_worker_roles, and register_role in AgentRoleRegistry:
+for each method include a short description of purpose, parameters (e.g.,
+role_id: str or role: AgentRoleDefinition), return type (e.g.,
+AgentRoleDefinition | None or list[AgentRoleDefinition]) and any side effects
+(e.g., register_role updates _custom_roles and logs). Place the docstrings
+directly above each method definition (triple-quoted) and keep them concise and
+consistent with project docstring style.
+- Around line 199-201: AgentRoleRegistry currently defines mutable class-level
+attributes _roles and _custom_roles initialized from BUILTIN_ROLES, which can
+cause accidental shared state; change these to instance attributes by removing
+the class-level dicts and initializing self._roles = dict(BUILTIN_ROLES) and
+self._custom_roles = {} inside AgentRoleRegistry.__init__ (or otherwise ensure
+each instance gets its own copy), referencing the AgentRoleRegistry class and
+the symbols _roles, _custom_roles, and BUILTIN_ROLES to locate where to make the
+change.
+
+In `@frontend/src/renderer/src/components/marketplace/MarketplaceBanner.vue`:
+- Around line 11-16: ITEM_ICON_MAP is duplicated in MarketplaceCard.vue and
+MarketplaceBanner.vue; extract it into a shared module (e.g., create
+utils/marketplace-icons.ts) that imports the lucide-vue-next icons and exports
+ITEM_ICON_MAP typed as Record<string, Component> and a DEFAULT_ICON (Package).
+Update both MarketplaceCard.vue and MarketplaceBanner.vue to import
+ITEM_ICON_MAP and DEFAULT_ICON from the new module and remove their local
+definitions to avoid duplication and tighten the icon type.
+
+In `@frontend/src/renderer/src/components/marketplace/MarketplaceCard.vue`:
+- Around line 14-19: ITEM_ICON_MAP is typed as Record<string, any>, losing type
+safety for the Lucide icon components; change its type to a more specific
+component type (e.g., Record<string, Component> or Record<string,
+DefineComponent<{}, {}, any>>) so TypeScript can validate usage of icons. Update
+the file to import the appropriate Vue type (Component or DefineComponent) and
+replace Record<string, any> with that concrete type for ITEM_ICON_MAP, keeping
+the same object keys (Brain, Home, MessageSquare, etc.) so icons remain mapped
+correctly.
+
+In `@frontend/src/renderer/src/components/marketplace/MarketplaceReviews.vue`:
+- Around line 73-75: The small wrapper function formatDate simply forwards to
+formatDateRelative; remove the unnecessary formatDate function and update usages
+(e.g., in the template) to call formatDateRelative directly, or alternatively
+change the import to rename formatDateRelative to formatDate and update
+references; locate the wrapper and template references by looking for the
+function name formatDate and replace them with formatDateRelative (or adjust the
+import alias) to eliminate the extra indirection.
+
+In `@frontend/src/renderer/src/stores/marketplace.ts`:
+- Around line 258-274: toggleFavorite mutates favorites.value and then mutates
+item.isFavorite via updateFavoriteFlag, which may not trigger updates if
+MarketplaceItem objects lack a predefined isFavorite or aren't reactive; ensure
+MarketplaceItem always includes an isFavorite property when items are
+created/loaded (initialize to false) or update items immutably so Vue detects
+the change (e.g., replace the item in the corresponding ref array rather than
+assigning a new property) — update the creation/loader code for
+pluginItems/skillItems/agentItems to set isFavorite, or change
+updateFavoriteFlag in toggleFavorite to find the item index and replace
+items[index] with a new object that spreads the old item and sets isFavorite to
+isFavorite(itemId), and keep saveFavorites/isFavorite logic unchanged.
+
+In `@frontend/src/renderer/src/stores/social.ts`:
+- Around line 139-186: _handlerMessageEvent currently pushes event.data directly
+into groupMessages as GroupMessage without structure checks; add a validation
+step (e.g., an isValidGroupMessage helper) and only push when required fields
+(id, senderId, senderName, senderType, content, timestamp, role) exist and are
+correctly typed, otherwise log a warning and skip or normalize (fill defaults)
+before pushing; apply this check for the 'user_message', 'agent_message', and
+'agent_error' cases and use the same helper when creating the synthetic message
+in the 'info' branch to ensure consistent shape.
+
+In `@frontend/src/renderer/src/views/MarketDetailView.vue`:
+- Around line 18-23: The ITEM_ICON_MAP is currently typed as Record<string,
+any>; tighten this by importing and using a proper Vue component type (for
+example Component or DefineComponent from 'vue') and change the declaration to
+something like Record<string, Component> (or Record<string, DefineComponent<{},
+{}, any>> if you need props/slots typing). Update the ITEM_ICON_MAP variable
+signature accordingly and ensure the mapped values (Brain, Home, MessageSquare,
+etc.) conform to that component type so TypeScript can validate usages of
+ITEM_ICON_MAP across the file.
+
+In `@frontend/src/renderer/src/views/PluginMarketView.vue`:
+- Around line 323-329: The animation timing function in
+.filter-slide-enter-active and .filter-slide-leave-active within
+PluginMarketView.vue uses "ease-out" and "ease-out reverse"; update both to use
+"ease-in-out" (i.e., change the timing function for .filter-slide-enter-active
+and the corresponding .filter-slide-leave-active rule so the leave animation
+keeps the same reversed direction but uses ease-in-out) to comply with the
+frontend/src/**/*.css guideline; locate the CSS rules named
+.filter-slide-enter-active and .filter-slide-leave-active and replace the timing
+function accordingly.
+
+In `@frontend/src/renderer/src/views/SkillMarketView.vue`:
+- Around line 323-329: The CSS animation timing function violates the guideline
+by using ease-out; update the two classes .filter-slide-enter-active and
+.filter-slide-leave-active to use ease-in-out instead (keep the same animation
+name lumi-fade-in, durations 0.25s and 0.15s, and preserve the reverse direction
+on the leave rule so it becomes ease-in-out reverse) so the animations conform
+to the frontend/src/**/*.css "Use ease-in-out animations" rule.

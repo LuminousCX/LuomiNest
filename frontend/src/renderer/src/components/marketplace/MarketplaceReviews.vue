@@ -4,7 +4,7 @@ import { MessageCircle, Send } from 'lucide-vue-next'
 import type { MarketplaceReview } from '../../types/marketplace'
 import MarketplaceRating from './MarketplaceRating.vue'
 import { useMarketplaceStore } from '../../stores/marketplace'
-import { formatDateRelative } from '../../utils/format'
+import { formatDateRelative as formatDate } from '../../utils/format'
 
 const props = defineProps<{
   itemId: string
@@ -70,9 +70,6 @@ function submitReply(reviewId: string) {
   showReplyInput.value = null
 }
 
-function formatDate(dateStr: string) {
-  return formatDateRelative(dateStr)
-}
 </script>
 
 <template>

@@ -1,22 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  Star, Download, Heart, Check, Loader2, Package,
-  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
-  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
-  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
-} from 'lucide-vue-next'
+import { Star, Download, Heart, Check, Loader2 } from 'lucide-vue-next'
 import type { MarketplaceItem, InstallProgress } from '../../types/marketplace'
 import { useMarketplaceStore } from '../../stores/marketplace'
 import { formatDownloadCount } from '../../utils/format'
-
-const ITEM_ICON_MAP: Record<string, any> = {
-  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
-  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
-  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
-  Package,
-}
+import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
 
 const props = defineProps<{
   item: MarketplaceItem
@@ -71,7 +60,7 @@ function handleFavorite(e: Event) {
   <div class="market-card" @click="navigateToDetail">
     <div class="card-header">
       <div class="card-icon">
-        <component :is="ITEM_ICON_MAP[item.icon] || Package" :size="24" />
+        <component :is="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON" :size="24" />
       </div>
       <div class="card-badge-area">
         <span v-if="item.featured" class="badge badge-featured">推荐</span>
@@ -217,6 +206,7 @@ function handleFavorite(e: Event) {
   margin-bottom: 8px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }

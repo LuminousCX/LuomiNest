@@ -4,23 +4,14 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft, Star, Download, Users, Tag,
   ExternalLink, Check, FileText, ChevronDown,
-  ChevronRight, Package,
-  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
-  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, BarChart3,
-  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
+  ChevronRight,
 } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
 import MarketplaceInstallBtn from '../components/marketplace/MarketplaceInstallBtn.vue'
 import MarketplaceReviews from '../components/marketplace/MarketplaceReviews.vue'
 import type { MarketplaceType } from '../types/marketplace'
 import { formatDateRelative, formatFileSize, formatDownloadCount } from '../utils/format'
-
-const ITEM_ICON_MAP: Record<string, any> = {
-  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
-  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
-  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
-  Package,
-}
+import { ITEM_ICON_MAP, DEFAULT_ICON } from '../utils/marketplace-icons'
 
 const route = useRoute()
 const router = useRouter()
@@ -72,7 +63,7 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
     <div class="detail-content">
       <div class="detail-hero animate-slide-up">
         <div class="hero-icon">
-          <component :is="ITEM_ICON_MAP[item.icon] || Package" :size="40" />
+          <component :is="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON" :size="40" />
         </div>
         <div class="hero-info">
           <div class="hero-title-row">

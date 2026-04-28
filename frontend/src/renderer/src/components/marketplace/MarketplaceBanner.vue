@@ -1,19 +1,8 @@
 <script setup lang="ts">
-import {
-  Star, Download, ArrowRight, Package,
-  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
-  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
-  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
-} from 'lucide-vue-next'
+import { Star, Download, ArrowRight } from 'lucide-vue-next'
 import type { MarketplaceItem } from '../../types/marketplace'
 import { useRouter } from 'vue-router'
-
-const ITEM_ICON_MAP: Record<string, any> = {
-  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
-  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
-  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
-  Package,
-}
+import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
 
 const props = defineProps<{
   items: MarketplaceItem[]
@@ -50,7 +39,7 @@ function navigateToList() {
         @click="navigateToDetail(item)"
       >
         <div class="banner-card-icon">
-          <component :is="ITEM_ICON_MAP[item.icon] || Package" :size="20" />
+          <component :is="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON" :size="20" />
         </div>
         <div class="banner-card-info">
           <h4>{{ item.name }}</h4>

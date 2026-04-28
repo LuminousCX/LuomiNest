@@ -1,4 +1,4 @@
-﻿﻿<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Puzzle, SlidersHorizontal, X } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
@@ -321,10 +321,10 @@ const resetFilters = () => {
 }
 
 .filter-slide-enter-active {
-  animation: lumi-fade-in 0.25s ease-out;
+  animation: lumi-fade-in 0.25s ease-in-out;
 }
 
 .filter-slide-leave-active {
-  animation: lumi-fade-in 0.15s ease-out reverse;
+  animation: lumi-fade-in 0.15s ease-in-out reverse;
 }
 </style>
