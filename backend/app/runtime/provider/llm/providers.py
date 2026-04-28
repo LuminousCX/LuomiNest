@@ -171,6 +171,33 @@ PROVIDER_TEMPLATES = {
 }
 
 
+class LLMResponse:
+    __slots__ = ("content", "tool_calls", "finish_reason", "usage")
+
+    def __init__(
+        self,
+        content: str | None = None,
+        tool_calls: list[dict] | None = None,
+        finish_reason: str = "stop",
+        usage: dict | None = None,
+    ):
+        self.content = content or ""
+        self.tool_calls = tool_calls
+        self.finish_reason = finish_reason
+        self.usage = usage
+
+    def has_tool_calls(self) -> bool:
+        return bool(self.tool_calls)
+
+
+class StreamEvent:
+    __slots__ = ("type", "data")
+
+    def __init__(self, event_type: str, data: dict | None = None):
+        self.type = event_type
+        self.data = data or {}
+
+
 class OpenAICompatibleProvider(LLMProvider):
     provider_name = "openai_compatible"
 
@@ -192,9 +219,34 @@ class OpenAICompatibleProvider(LLMProvider):
         tools: list[dict] | None = None,
         stream: bool = False,
         **kwargs
-    ) -> str | AsyncIterator[str]:
+    ) -> LLMResponse:
         if stream:
-            return self.chat_stream(messages, tools, **kwargs)
+            chunks = []
+            tool_calls_map: dict[int, dict] = {}
+            async for event in self.chat_stream(messages, tools, **kwargs):
+                if event.type == "content":
+                    chunks.append(event.data.get("content", ""))
+                elif event.type == "tool_call_delta":
+                    idx = event.data.get("index", 0)
+                    if idx not in tool_calls_map:
+                        tool_calls_map[idx] = {
+                            "id": "",
+                            "type": "function",
+                            "function": {"name": "", "arguments": ""},
+                        }
+                    tc = tool_calls_map[idx]
+                    if event.data.get("tool_call_id"):
+                        tc["id"] = event.data["tool_call_id"]
+                    fn = tc["function"]
+                    if event.data.get("function_name"):
+                        fn["name"] += event.data["function_name"]
+                    if event.data.get("function_arguments"):
+                        fn["arguments"] += event.data["function_arguments"]
+                elif event.type == "usage":
+                    pass
+            content = "".join(chunks)
+            tool_calls = list(tool_calls_map.values()) if tool_calls_map else None
+            return LLMResponse(content=content, tool_calls=tool_calls, finish_reason="stop")
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             payload = self._build_payload(messages, tools, stream=False, **kwargs)
@@ -205,14 +257,14 @@ class OpenAICompatibleProvider(LLMProvider):
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            return self._parse_response(data)
 
     async def chat_stream(
         self,
         messages: list[dict],
         tools: list[dict] | None = None,
         **kwargs
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[StreamEvent]:
         payload = self._build_payload(messages, tools, stream=True, **kwargs)
         async with httpx.AsyncClient(timeout=180.0) as client:
             async with client.stream(
@@ -227,13 +279,38 @@ class OpenAICompatibleProvider(LLMProvider):
                         continue
                     data_str = line[6:]
                     if data_str.strip() == "[DONE]":
+                        yield StreamEvent("done")
                         break
                     try:
                         data = json.loads(data_str)
-                        delta = data.get("choices", [{}])[0].get("delta", {})
+                        choice = data.get("choices", [{}])[0]
+                        delta = choice.get("delta", {})
+                        finish_reason = choice.get("finish_reason")
+
                         content = delta.get("content", "")
                         if content:
-                            yield content
+                            yield StreamEvent("content", {"content": content})
+
+                        tc_deltas = delta.get("tool_calls")
+                        if tc_deltas:
+                            for tc_delta in tc_deltas:
+                                idx = tc_delta.get("index", 0)
+                                event_data = {"index": idx}
+                                if tc_delta.get("id"):
+                                    event_data["tool_call_id"] = tc_delta["id"]
+                                fn = tc_delta.get("function", {})
+                                if fn.get("name"):
+                                    event_data["function_name"] = fn["name"]
+                                if fn.get("arguments"):
+                                    event_data["function_arguments"] = fn["arguments"]
+                                yield StreamEvent("tool_call_delta", event_data)
+
+                        if finish_reason:
+                            yield StreamEvent("finish_reason", {"finish_reason": finish_reason})
+
+                        usage = data.get("usage")
+                        if usage:
+                            yield StreamEvent("usage", {"usage": usage})
                     except json.JSONDecodeError:
                         continue
 
@@ -294,4 +371,34 @@ class OpenAICompatibleProvider(LLMProvider):
             payload["top_p"] = kwargs["top_p"]
         if tools:
             payload["tools"] = tools
+            payload["tool_choice"] = "auto"
         return payload
+
+    @staticmethod
+    def _parse_response(data: dict) -> LLMResponse:
+        choice = data.get("choices", [{}])[0]
+        message = choice.get("message", {})
+        content = message.get("content") or ""
+        tool_calls = message.get("tool_calls")
+        finish_reason = choice.get("finish_reason", "stop")
+        usage = data.get("usage")
+
+        parsed_tool_calls = None
+        if tool_calls:
+            parsed_tool_calls = []
+            for tc in tool_calls:
+                parsed_tool_calls.append({
+                    "id": tc.get("id", ""),
+                    "type": tc.get("type", "function"),
+                    "function": {
+                        "name": tc.get("function", {}).get("name", ""),
+                        "arguments": tc.get("function", {}).get("arguments", "{}"),
+                    },
+                })
+
+        return LLMResponse(
+            content=content,
+            tool_calls=parsed_tool_calls,
+            finish_reason=finish_reason,
+            usage=usage,
+        )

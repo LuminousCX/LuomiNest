@@ -67,13 +67,15 @@ class GroupChatManager:
                     max_tokens=500,
                 )
 
+                response_content = result.content if hasattr(result, 'content') else str(result)
+
                 now = datetime.now(timezone.utc).isoformat()
                 response_msg = {
                     "id": str(uuid.uuid4()),
                     "sender_id": agent["id"],
                     "sender_name": agent["name"],
                     "sender_type": "agent",
-                    "content": result,
+                    "content": response_content,
                     "timestamp": now,
                     "role": member.get("role", ""),
                 }

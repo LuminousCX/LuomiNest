@@ -6,6 +6,8 @@ from app.core.config import settings
 from app.core.exceptions import ProviderError
 from app.runtime.provider.llm.providers import (
     OpenAICompatibleProvider,
+    LLMResponse,
+    StreamEvent,
     PROVIDER_TEMPLATES,
 )
 from loguru import logger
@@ -170,18 +172,19 @@ class LLMAdapter:
         stream: bool = False,
         provider_name: str | None = None,
         **kwargs
-    ) -> str | AsyncIterator[str]:
+    ) -> LLMResponse:
         provider = self.get_provider(provider_name)
         actual_provider = provider_name or self.default_provider
         model = kwargs.get("model") or provider.default_model
-        logger.info(f"[LLM] Chat request: provider={actual_provider}, model={model}, messages={len(messages)}")
+        logger.info(f"[LLM] Chat request: provider={actual_provider}, model={model}, messages={len(messages)}, tools={len(tools) if tools else 0}")
 
         start_time = time.time()
         try:
             result = await provider.chat(messages, tools, stream, **kwargs)
             elapsed = time.time() - start_time
-            if isinstance(result, str):
-                logger.success(f"[LLM] Chat response: provider={actual_provider}, elapsed={elapsed:.2f}s, len={len(result)}")
+            if isinstance(result, LLMResponse):
+                tc_count = len(result.tool_calls) if result.tool_calls else 0
+                logger.success(f"[LLM] Chat response: provider={actual_provider}, elapsed={elapsed:.2f}s, content_len={len(result.content)}, tool_calls={tc_count}")
             else:
                 logger.info(f"[LLM] Chat stream started: provider={actual_provider}")
             return result
@@ -198,7 +201,7 @@ class LLMAdapter:
         tools: list[dict] | None = None,
         stream: bool = False,
         **kwargs
-    ) -> str | AsyncIterator[str]:
+    ) -> LLMResponse:
         logger.warning("[LLM] Starting fallback chat...")
         provider_names = list(self.providers.keys())
         if self.default_provider in self.providers:
@@ -229,18 +232,18 @@ class LLMAdapter:
         tools: list[dict] | None = None,
         provider_name: str | None = None,
         **kwargs
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[StreamEvent]:
         provider = self.get_provider(provider_name)
         actual_provider = provider_name or self.default_provider
         model = kwargs.get("model") or provider.default_model
-        logger.info(f"[LLM] Stream request: provider={actual_provider}, model={model}, messages={len(messages)}")
+        logger.info(f"[LLM] Stream request: provider={actual_provider}, model={model}, messages={len(messages)}, tools={len(tools) if tools else 0}")
 
         chunk_count = 0
         start_time = time.time()
         try:
-            async for chunk in provider.chat_stream(messages, tools, **kwargs):
+            async for event in provider.chat_stream(messages, tools, **kwargs):
                 chunk_count += 1
-                yield chunk
+                yield event
             elapsed = time.time() - start_time
             logger.success(f"[LLM] Stream completed: provider={actual_provider}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
         except Exception as e:

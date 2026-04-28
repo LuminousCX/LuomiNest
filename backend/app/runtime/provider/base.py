@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import AsyncIterator
+from typing import AsyncIterator, Any
 
 
 class LLMProvider(ABC):
@@ -12,7 +12,7 @@ class LLMProvider(ABC):
         tools: list[dict] | None = None,
         stream: bool = False,
         **kwargs
-    ) -> str | AsyncIterator[str]:
+    ) -> Any:
         pass
 
     @abstractmethod
@@ -21,7 +21,7 @@ class LLMProvider(ABC):
         messages: list[dict],
         tools: list[dict] | None = None,
         **kwargs
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[Any]:
         pass
 
     @abstractmethod

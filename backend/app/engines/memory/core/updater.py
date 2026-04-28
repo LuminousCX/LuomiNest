@@ -154,16 +154,17 @@ class MemoryUpdater:
         )
 
         try:
-            response = await self._llm_adapter.chat(
+            llm_response = await self._llm_adapter.chat(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=1000,
             )
+            response_text = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
         except Exception as e:
             logger.error(f"[Memory] LLM call failed: {e}")
             return {"updated": False, "reason": str(e)}
 
-        parsed = self._parse_llm_response(response)
+        parsed = self._parse_llm_response(response_text)
         facts_added = 0
         facts_removed = 0
         updates_applied = {}

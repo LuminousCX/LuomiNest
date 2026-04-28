@@ -50,17 +50,19 @@ class AIToAIChat:
                     max_tokens=300,
                 )
 
+                response_content = result.content if hasattr(result, 'content') else str(result)
+
                 now = datetime.now(timezone.utc).isoformat()
                 messages_log.append({
                     "id": str(uuid.uuid4()),
                     "sender_id": current_speaker["id"],
                     "sender_name": current_speaker["name"],
-                    "content": result,
+                    "content": response_content,
                     "timestamp": now,
                     "round": round_num + 1,
                 })
 
-                conversation.append({"role": "assistant", "content": result})
+                conversation.append({"role": "assistant", "content": response_content})
                 conversation.append({"role": "user", "content": f"[{current_listener['name']}的回应]"})
 
                 current_speaker, current_listener = current_listener, current_speaker

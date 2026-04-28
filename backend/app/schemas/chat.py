@@ -1,10 +1,26 @@
 from pydantic import BaseModel, Field
 from typing import Any
+from datetime import datetime, timezone
 
 
 class ChatMessageCreate(BaseModel):
-    role: str = Field(..., pattern="^(user|assistant|system)$")
-    content: str
+    role: str = Field(..., pattern="^(user|assistant|system|tool)$")
+    content: str | list[dict[str, Any]] = ""
+    name: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_call_id: str | None = None
+    timestamp: float | None = None
+
+
+class ToolCallFunction(BaseModel):
+    name: str
+    arguments: str
+
+
+class ToolCallInfo(BaseModel):
+    id: str
+    type: str = "function"
+    function: ToolCallFunction
 
 
 class ChatRequest(BaseModel):
@@ -17,22 +33,37 @@ class ChatRequest(BaseModel):
     stream: bool = False
     agent_id: str | None = None
     tools: list[dict[str, Any]] | None = None
+    timestamp: float | None = None
+
+
+class ToolCallResult(BaseModel):
+    tool_call_id: str
+    tool_name: str
+    result: str
+    status: str = "success"
 
 
 class ChatResponse(BaseModel):
     id: str
-    content: str
+    content: str | None = None
     model: str
     provider: str
+    tool_calls: list[ToolCallInfo] | None = None
+    tool_results: list[ToolCallResult] | None = None
     usage: dict[str, int] | None = None
+    timestamp: float | None = None
 
 
 class ChatStreamChunk(BaseModel):
     id: str
-    content: str
+    content: str = ""
     model: str
     provider: str
     done: bool = False
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_results: list[ToolCallResult] | None = None
+    usage: dict[str, int] | None = None
+    timestamp: float | None = None
 
 
 class ConversationCreate(BaseModel):

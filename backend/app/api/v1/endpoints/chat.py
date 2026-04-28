@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 import time
 from datetime import datetime, timezone
@@ -13,8 +14,10 @@ from app.schemas.chat import (
     ConversationCreate,
     ConversationResponse,
     ConversationListResponse,
+    ToolCallResult,
 )
 from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.providers import LLMResponse
 from app.infrastructure.database.json_store import conversations_store, agents_store
 from app.runtime.plugin.skill.executor import SkillExecutor
 from app.runtime.plugin.skill.registry import SkillRegistry
@@ -29,34 +32,59 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 _skill_executor = SkillExecutor()
 
+MAX_TOOL_LOOP_ROUNDS = 5
+
+
+def _get_timestamp() -> float:
+    return time.time()
+
 
 def _inject_memory_to_messages(messages: list[dict], agent_id: str | None) -> list[dict]:
     try:
         storage = get_memory_storage()
-        
-        # 始终加载全局记忆（memory.json）
         global_memory = storage.load(None)
-        
-        # 如果有 agent_id，也加载 Agent 特定的记忆并合并
         if agent_id:
             agent_memory = storage.load(agent_id)
-            # 合并：全局记忆优先，Agent 特定记忆补充
             if not global_memory.profile.name and agent_memory.profile.name:
                 global_memory.profile = agent_memory.profile
             if not global_memory.facts:
                 global_memory.facts = agent_memory.facts
-        
         injector = MemoryInjector()
-        
         profile = global_memory.profile
         logger.info(f"[Memory] Injecting memory for agent_id={agent_id}")
         logger.info(f"[Memory] Profile: name={profile.name}, occupation={profile.occupation}, location={profile.location}")
-        
         result = injector.inject_memory_to_messages(messages, global_memory)
         logger.info(f"[Memory] Memory injection completed, messages count: {len(result)}")
         return result
     except Exception as e:
         logger.warning(f"[Memory] Failed to inject memory: {e}")
+        return messages
+
+
+async def _inject_rag_context(messages: list[dict], user_query: str) -> list[dict]:
+    try:
+        from app.engines.memory.rag.retriever import RAGRetriever
+        retriever = RAGRetriever()
+        results = await retriever.search(user_query, top_k=3)
+        if not results:
+            return messages
+        rag_text = "\n".join(
+            f"- [{r.get('source', 'unknown')}] {r.get('content', '')} (score: {r.get('score', 0)})"
+            for r in results
+        )
+        rag_context = f"<rag_context>\nRetrieved relevant knowledge:\n{rag_text}\n</rag_context>"
+        new_messages = list(messages)
+        if new_messages and new_messages[0].get("role") == "system":
+            new_messages[0] = {
+                "role": "system",
+                "content": new_messages[0]["content"] + "\n\n" + rag_context,
+            }
+        else:
+            new_messages.insert(0, {"role": "system", "content": rag_context})
+        logger.info(f"[RAG] Injected {len(results)} RAG results for query: '{user_query[:50]}'")
+        return new_messages
+    except Exception as e:
+        logger.warning(f"[RAG] Failed to inject RAG context: {e}")
         return messages
 
 
@@ -85,11 +113,11 @@ def _schedule_memory_update(messages: list[dict], thread_id: str, agent_id: str 
         logger.warning(f"[Memory] Failed to schedule memory update: {e}")
 
 
-def _build_system_prompt_with_tools(agent_id: str | None) -> str:
-    agent_name = "AI助手"
-    agent_description = "一个友好、智能的AI助手"
+def _build_system_prompt(agent_id: str | None) -> str:
+    agent_name = "LuomiNest AI"
+    agent_description = "an intelligent companion powered by the LuminousCX platform"
     base_prompt = ""
-    
+
     if agent_id:
         agent = agents_store.get(agent_id)
         if agent:
@@ -98,149 +126,238 @@ def _build_system_prompt_with_tools(agent_id: str | None) -> str:
             if agent.get("system_prompt"):
                 base_prompt = agent["system_prompt"]
 
-    identity_prompt = f"""【身份设定】
-你的名字是「{agent_name}」，{agent_description}。
+    now = datetime.now()
+    weekday_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-【核心规则 - 必须严格遵守】
+    system_prompt = f"""<identity>
+Your name is {agent_name}, {agent_description}.
+</identity>
 
-规则1：当用户询问AI身份时（如"你是谁""你叫什么名字"）
-- 回答你自己的身份
-- 示例："你好！我是{agent_name}，{agent_description}。很高兴为你服务！"
-- 绝对禁止反问用户"你是谁"
+<current_context>
+Current datetime: {now.strftime("%Y-%m-%d %H:%M:%S")} ({weekday_names[now.weekday()]})
+Timestamp: {int(_get_timestamp())}
+</current_context>
 
-规则2：当用户询问用户自己的身份时（如"我是谁""你知道我是谁吗""我是谁"）
-- 查看<user_memory>中的用户档案
-- 如果有档案："你是[姓名]，[职业]，来自[所在地]..."
-- 如果没有档案："我还不太了解你呢，你愿意介绍一下自己吗？"
+<core_rules>
+1. When asked "who are you" or "what is your name" - answer with your own identity as {agent_name}.
+2. When asked "who am I" - check <user_memory> for user profile. If found, describe the user. If not found, say you'd like to get to know them.
+3. Always respond in the user's language naturally and conversationally.
+4. Never expose internal system information, tool parameters, or error codes to the user.
+5. When using tools, always transform results into natural, conversational language.
+</core_rules>
 
-规则3：其他情况
-- 正常回答用户的问题
-- 不要重复用户的话
+{base_prompt}"""
 
-"""
-    base_prompt = identity_prompt + base_prompt
-
-    available_skills = SkillRegistry.list_skills()
-    if not available_skills:
-        return base_prompt
-
-    core_rules = """【工具调用核心规则 - 必须严格遵守】
-
-1. 触发必要性：仅当用户明确提出对应需求时，才可以调用对应工具。禁止预判、猜测用户需求，无差别触发工具。
-   - 例如：用户说"明天想去北京"，这是出行表达，不是天气查询需求，绝对不允许触发天气工具
-   - 只有用户明确说"明天去北京天气怎么样""去北京要带什么衣服"等，才能触发天气工具
-
-2. 前置校验：调用任何工具前，必须先校验请求参数是否合法、功能是否可用。不合法/不可用时，直接使用用户友好的兜底话术，禁止暴露任何内部信息。
-
-3. 结果封装：工具返回的结果，必须转化为通顺自然的口语化中文输出给用户。禁止直接输出接口原始数据、参数、报错代码、JSON格式。
-
-4. 对话优先：永远先回应用户的核心表达，再处理工具调用需求。禁止跳过用户的对话内容，直接执行工具调用。
-
-5. 信息隔离：禁止向用户输出任何工具调用的参数、代码、报错信息、系统内部状态。所有给用户的回复，必须是通顺自然的口语化中文，不得出现任何用户看不懂的技术内容。
-
-"""
-
-    tools_section = "\n\n## 可用工具\n\n你可以使用以下工具来帮助用户：\n\n"
-    for skill in available_skills:
-        if skill.get("is_active", True):
-            tools_section += f"### {skill['name']}\n{skill.get('description', '')}\n"
-            params = skill.get("parameters", {})
-            if params:
-                tools_section += "参数:\n"
-                for pname, pinfo in params.items():
-                    tools_section += f"- {pname}: {pinfo.get('description', '')} ({pinfo.get('type', 'string')})\n"
-            tools_section += "\n"
-
-    tools_section += """## 工具调用格式
-
-当需要使用工具时，请在回复中使用以下XML格式：
-
-<tool_call name="工具名">
-{"param1": "value1"}
-</tool_call
-
-注意：结束标签是 </tool_call（没有方括号）
-
-如果工具不需要参数，可以使用空对象：
-<tool_call name="工具名">
-{}
-</tool_call
-
-## 工具调用示例
-
-用户：明天去北京，天气怎么样？
-助手：<tool_call name="web_search">
-{"query": "北京明天天气"}
-</tool_call
-
-用户：我明天想去北京
-助手：明天去北京呀，提前祝你出行顺利~ 要是需要我帮你查天气、交通攻略、游玩推荐之类的，随时告诉我哦
-
-如果不需要使用工具，直接回复用户即可。
-"""
-
-    return core_rules + base_prompt + tools_section
+    return system_prompt
 
 
-def _parse_tool_calls(content: str) -> list[dict]:
-    import re
-    pattern = r'<tool_call\s+name="([^"]+)">\s*(.*?)\s*</tool_call'
-    matches = re.findall(pattern, content, re.DOTALL)
-    results = []
-    for name, args_str in matches:
-        try:
-            import json
-            args = json.loads(args_str) if args_str.strip() else {}
-        except json.JSONDecodeError:
-            args = {"raw_input": args_str}
-        results.append({"name": name, "arguments": args})
-    return results
+def _collect_all_tools(agent_id: str | None) -> list[dict]:
+    tools = []
+
+    skill_tools = SkillRegistry.get_openai_tools()
+    tools.extend(skill_tools)
+
+    try:
+        from app.domains.mcp_tools.gateway import MCPGateway
+        servers = MCPGateway.list_servers()
+        for server in servers:
+            if not server.get("is_active", True):
+                continue
+            server_name = server.get("name", "")
+            try:
+                mcp_tools = asyncio.get_event_loop().run_until_complete(
+                    MCPGateway.list_tools(server_name)
+                )
+                for t in mcp_tools:
+                    tool_name = f"mcp_{server_name}_{t['name']}"
+                    tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "description": t.get("description", ""),
+                            "parameters": t.get("parameters", {"type": "object", "properties": {}}),
+                        },
+                    })
+            except Exception as e:
+                logger.warning(f"[Tools] Failed to get MCP tools for {server_name}: {e}")
+    except Exception as e:
+        logger.debug(f"[Tools] MCP tools collection skipped: {e}")
+
+    if agent_id:
+        agent = agents_store.get(agent_id)
+        if agent:
+            agent_skills = agent.get("skills", [])
+            if agent_skills:
+                filtered = [t for t in tools if t["function"]["name"] in agent_skills]
+                if filtered:
+                    tools = filtered
+
+    logger.info(f"[Tools] Collected {len(tools)} tools for agent_id={agent_id}")
+    return tools
+
+
+async def _execute_tool_call(tool_call: dict, agent_id: str | None = None) -> dict:
+    tool_name = tool_call["function"]["name"]
+    tool_call_id = tool_call.get("id", "")
+    arguments_str = tool_call["function"].get("arguments", "{}")
+
+    try:
+        arguments = json.loads(arguments_str) if arguments_str else {}
+    except json.JSONDecodeError:
+        arguments = {"raw_input": arguments_str}
+
+    logger.info(f"[ToolExec] Executing tool: {tool_name}, call_id={tool_call_id}")
+
+    if tool_name.startswith("mcp_"):
+        parts = tool_name.split("_", 2)
+        if len(parts) >= 3:
+            server_name = parts[1]
+            actual_tool_name = parts[2]
+            try:
+                from app.domains.mcp_tools.tool_executor import MCPToolExecutor
+                mcp_executor = MCPToolExecutor()
+                result = await mcp_executor.execute(
+                    server_name=server_name,
+                    tool_name=actual_tool_name,
+                    arguments=arguments,
+                )
+                return {
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "result": str(result),
+                    "status": "success",
+                }
+            except Exception as e:
+                logger.error(f"[ToolExec] MCP tool error: {tool_name}, error: {e}")
+                return {
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "result": f"Tool execution error: {e}",
+                    "status": "error",
+                }
+
+    try:
+        skill_data = SkillRegistry.get_skill(tool_name)
+        if not skill_data or not skill_data.get("is_active", True):
+            return {
+                "tool_call_id": tool_call_id,
+                "tool_name": tool_name,
+                "result": "This tool is currently unavailable. Please try a different approach.",
+                "status": "error",
+            }
+
+        result = await _skill_executor.execute(
+            skill_name=tool_name,
+            arguments=arguments,
+            agent_id=agent_id,
+        )
+        return {
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name,
+            "result": str(result),
+            "status": "success",
+        }
+    except Exception as e:
+        logger.error(f"[ToolExec] Tool execution failed: {tool_name}, error: {e}", exc_info=True)
+        error_msg = (
+            f"Tool execution error: {str(e)}"
+            if settings.DEBUG
+            else "Tool execution encountered an issue. Please try again or use a different approach."
+        )
+        return {
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name,
+            "result": error_msg,
+            "status": "error",
+        }
 
 
 async def _execute_tool_calls(tool_calls: list[dict], agent_id: str | None = None) -> list[dict]:
     results = []
     for call in tool_calls:
-        tool_name = call.get("name", "unknown")
-        if not isinstance(call.get("arguments"), dict):
-            results.append({
-                "tool": tool_name,
-                "result": "参数格式错误，请检查工具调用格式。",
-                "status": "error",
-            })
-            continue
-        try:
-            skill_data = SkillRegistry.get_skill(tool_name)
-            if not skill_data or not skill_data.get("is_active", True):
-                results.append({
-                    "tool": tool_name,
-                    "result": "该功能暂时不可用，请稍后再试或尝试其他方式。",
-                    "status": "error",
-                })
-                continue
-
-            result = await _skill_executor.execute(
-                skill_name=tool_name,
-                arguments=call["arguments"],
-                agent_id=agent_id,
-            )
-            results.append({
-                "tool": tool_name,
-                "result": result,
-                "status": "success",
-            })
-        except Exception as e:
-            logger.error(f"[ToolExecutor] Tool execution failed: {tool_name}, error: {e}", exc_info=True)
-            error_msg = (
-                f"功能执行遇到问题：{str(e)}"
-                if settings.DEBUG
-                else "功能执行遇到问题，请稍后再试，或尝试用其他方式描述您的需求。"
-            )
-            results.append({
-                "tool": tool_name,
-                "result": error_msg,
-                "status": "error",
-            })
+        result = await _execute_tool_call(call, agent_id)
+        results.append(result)
     return results
+
+
+def _build_tool_result_messages(
+    assistant_content: str | None,
+    tool_calls: list[dict],
+    tool_results: list[dict],
+) -> list[dict]:
+    messages = []
+    assistant_msg = {"role": "assistant", "content": assistant_content or ""}
+    if tool_calls:
+        assistant_msg["tool_calls"] = tool_calls
+    messages.append(assistant_msg)
+
+    for result in tool_results:
+        messages.append({
+            "role": "tool",
+            "content": result["result"],
+            "tool_call_id": result["tool_call_id"],
+            "name": result["tool_name"],
+        })
+
+    return messages
+
+
+async def _run_agent_loop(
+    messages: list[dict],
+    tools: list[dict],
+    provider: str,
+    model: str,
+    agent_id: str | None,
+    temperature: float | None,
+    max_tokens: int | None,
+    top_p: float | None,
+) -> LLMResponse:
+    current_messages = list(messages)
+    all_tool_results = []
+    all_tool_calls_info = []
+
+    for round_num in range(MAX_TOOL_LOOP_ROUNDS):
+        logger.info(f"[AgentLoop] Round {round_num + 1}/{MAX_TOOL_LOOP_ROUNDS}")
+
+        llm_response = await llm_adapter.chat(
+            messages=current_messages,
+            tools=tools if round_num == 0 else tools,
+            provider_name=provider,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=top_p,
+        )
+
+        if not llm_response.has_tool_calls():
+            if all_tool_results:
+                llm_response.tool_results = all_tool_results
+            return llm_response
+
+        logger.info(f"[AgentLoop] LLM requested {len(llm_response.tool_calls)} tool calls")
+
+        tool_results = await _execute_tool_calls(llm_response.tool_calls, agent_id)
+        all_tool_results.extend(tool_results)
+        all_tool_calls_info.extend(llm_response.tool_calls)
+
+        tool_messages = _build_tool_result_messages(
+            llm_response.content,
+            llm_response.tool_calls,
+            tool_results,
+        )
+        current_messages.extend(tool_messages)
+
+    final_response = await llm_adapter.chat(
+        messages=current_messages,
+        tools=None,
+        provider_name=provider,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        top_p=top_p,
+    )
+    final_response.tool_results = all_tool_results
+    return final_response
 
 
 @router.post("/completions")
@@ -248,21 +365,43 @@ async def chat_completions(request: ChatRequest):
     start_time = time.time()
     resolved_provider = request.provider or llm_adapter.default_provider
     resolved_model = request.model or llm_adapter.get_provider(resolved_provider).default_model
-    logger.info(f"[API] POST /chat/completions - provider={resolved_provider}, model={resolved_model}, stream={request.stream}")
+    request_ts = request.timestamp or _get_timestamp()
+    logger.info(f"[API] POST /chat/completions - provider={resolved_provider}, model={resolved_model}, stream={request.stream}, ts={request_ts}")
 
-    system_prompt = _build_system_prompt_with_tools(request.agent_id)
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.extend([{"role": m.role, "content": m.content} for m in request.messages])
+    system_prompt = _build_system_prompt(request.agent_id)
+    messages = [{"role": "system", "content": system_prompt}]
+
+    for m in request.messages:
+        if m.role == "system":
+            continue
+        msg_dict = {"role": m.role, "content": m.content}
+        if m.tool_calls:
+            msg_dict["tool_calls"] = m.tool_calls
+        if m.tool_call_id:
+            msg_dict["tool_call_id"] = m.tool_call_id
+        if m.name:
+            msg_dict["name"] = m.name
+        messages.append(msg_dict)
 
     messages = _inject_memory_to_messages(messages, request.agent_id)
-    logger.debug(f"[API] POST /chat/completions - Message count: {len(messages)}")
+
+    user_query = ""
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            content = m.get("content", "")
+            user_query = content if isinstance(content, str) else str(content)
+            break
+    if user_query:
+        messages = await _inject_rag_context(messages, user_query)
+
+    tools = _collect_all_tools(request.agent_id)
+    if not tools:
+        tools = None
 
     if request.stream:
         logger.info(f"[API] POST /chat/completions - Starting stream response")
         return StreamingResponse(
-            _stream_chat(messages, request, resolved_provider, resolved_model),
+            _stream_chat(messages, tools, request, resolved_provider, resolved_model, request.agent_id),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -272,47 +411,54 @@ async def chat_completions(request: ChatRequest):
         )
 
     try:
-        result = await llm_adapter.chat(
+        result = await _run_agent_loop(
             messages=messages,
-            provider_name=resolved_provider,
+            tools=tools,
+            provider=resolved_provider,
             model=resolved_model,
+            agent_id=request.agent_id,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             top_p=request.top_p,
-            tools=request.tools,
         )
-
-        tool_calls = _parse_tool_calls(result)
-        if tool_calls:
-            tool_results = await _execute_tool_calls(tool_calls, request.agent_id)
-            tool_result_text = "\n\n".join(
-                f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
-            )
-            messages.append({"role": "assistant", "content": result})
-            messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
-
-            result = await llm_adapter.chat(
-                messages=messages,
-                provider_name=resolved_provider,
-                model=resolved_model,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                top_p=request.top_p,
-            )
 
         thread_id = str(uuid.uuid4())
         conversation_messages = [
-            {"role": m.role, "content": m.content} for m in request.messages
-        ] + [{"role": "assistant", "content": result}]
+            {"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)}
+            for m in request.messages
+        ] + [{"role": "assistant", "content": result.content}]
         _schedule_memory_update(conversation_messages, thread_id, request.agent_id)
 
         elapsed = time.time() - start_time
-        logger.success(f"[API] POST /chat/completions - Success: elapsed={elapsed:.2f}s, response_len={len(result)}")
+        logger.success(f"[API] POST /chat/completions - Success: elapsed={elapsed:.2f}s, response_len={len(result.content)}")
+
+        tool_calls_data = None
+        if result.tool_calls:
+            tool_calls_data = [
+                {
+                    "id": tc["id"],
+                    "type": tc.get("type", "function"),
+                    "function": tc["function"],
+                }
+                for tc in result.tool_calls
+            ]
+
+        tool_results_data = None
+        if result.tool_results:
+            tool_results_data = [
+                {"tool_call_id": r["tool_call_id"], "tool_name": r["tool_name"], "result": r["result"], "status": r["status"]}
+                for r in result.tool_results
+            ]
+
         return ChatResponse(
             id=str(uuid.uuid4()),
-            content=result,
+            content=result.content,
             model=resolved_model,
             provider=resolved_provider,
+            tool_calls=tool_calls_data,
+            tool_results=tool_results_data,
+            usage=result.usage,
+            timestamp=_get_timestamp(),
         )
     except Exception as e:
         elapsed = time.time() - start_time
@@ -320,65 +466,110 @@ async def chat_completions(request: ChatRequest):
         raise
 
 
-async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str, model: str):
+async def _stream_chat(
+    messages: list[dict],
+    tools: list[dict] | None,
+    request: ChatRequest,
+    provider: str,
+    model: str,
+    agent_id: str | None,
+):
     start_time = time.time()
     chat_id = str(uuid.uuid4())
     chunk_count = 0
-    tool_draft = ""
-    final_answer = ""
 
     logger.info(f"[STREAM] Starting stream: chat_id={chat_id}, provider={provider}, model={model}")
 
     try:
-        async for chunk in llm_adapter.chat_stream(
-            messages=messages,
-            provider_name=provider,
-            model=model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            top_p=request.top_p,
-            tools=request.tools,
-        ):
-            tool_draft += chunk
-            chunk_count += 1
+        current_messages = list(messages)
+        all_tool_results = []
+        all_tool_calls_info = []
 
-        tool_calls = _parse_tool_calls(tool_draft)
-        if tool_calls:
-            tool_results = await _execute_tool_calls(tool_calls, request.agent_id)
-            tool_result_text = "\n\n".join(
-                f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
-            )
-            messages.append({"role": "assistant", "content": tool_draft})
-            messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
+        for round_num in range(MAX_TOOL_LOOP_ROUNDS):
+            tool_calls_map: dict[int, dict] = {}
+            content_parts = []
 
-            async for chunk in llm_adapter.chat_stream(
-                messages=messages,
+            async for event in llm_adapter.chat_stream(
+                messages=current_messages,
+                tools=tools,
                 provider_name=provider,
                 model=model,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
                 top_p=request.top_p,
             ):
-                final_answer += chunk
-                chunk_count += 1
-                data = ChatStreamChunk(
+                if event.type == "content":
+                    content_parts.append(event.data.get("content", ""))
+                    chunk_count += 1
+                    data = ChatStreamChunk(
+                        id=chat_id,
+                        content=event.data.get("content", ""),
+                        model=model,
+                        provider=provider,
+                        timestamp=_get_timestamp(),
+                    )
+                    yield f"data: {data.model_dump_json()}\n\n"
+
+                elif event.type == "tool_call_delta":
+                    idx = event.data.get("index", 0)
+                    if idx not in tool_calls_map:
+                        tool_calls_map[idx] = {
+                            "id": "",
+                            "type": "function",
+                            "function": {"name": "", "arguments": ""},
+                        }
+                    tc = tool_calls_map[idx]
+                    if event.data.get("tool_call_id"):
+                        tc["id"] = event.data["tool_call_id"]
+                    fn = tc["function"]
+                    if event.data.get("function_name"):
+                        fn["name"] += event.data["function_name"]
+                    if event.data.get("function_arguments"):
+                        fn["arguments"] += event.data["function_arguments"]
+
+                elif event.type == "usage":
+                    pass
+
+                elif event.type == "done":
+                    break
+
+            accumulated_content = "".join(content_parts)
+            tool_calls_list = list(tool_calls_map.values()) if tool_calls_map else None
+
+            if not tool_calls_list:
+                final_answer = accumulated_content
+                break
+
+            logger.info(f"[STREAM] Round {round_num + 1}: LLM requested {len(tool_calls_list)} tool calls")
+
+            tool_results = await _execute_tool_calls(tool_calls_list, agent_id)
+            all_tool_results.extend(tool_results)
+            all_tool_calls_info.extend(tool_calls_list)
+
+            for r in tool_results:
+                tr_data = ChatStreamChunk(
                     id=chat_id,
-                    content=chunk,
+                    content="",
                     model=model,
                     provider=provider,
+                    tool_results=[ToolCallResult(
+                        tool_call_id=r["tool_call_id"],
+                        tool_name=r["tool_name"],
+                        result=r["result"],
+                        status=r["status"],
+                    )],
+                    timestamp=_get_timestamp(),
                 )
-                yield f"data: {data.model_dump_json()}\n\n"
+                yield f"data: {tr_data.model_dump_json()}\n\n"
+
+            tool_messages = _build_tool_result_messages(
+                accumulated_content,
+                tool_calls_list,
+                tool_results,
+            )
+            current_messages.extend(tool_messages)
         else:
-            final_answer = tool_draft
-            for i in range(0, len(final_answer), 10):
-                chunk = final_answer[i:i+10]
-                data = ChatStreamChunk(
-                    id=chat_id,
-                    content=chunk,
-                    model=model,
-                    provider=provider,
-                )
-                yield f"data: {data.model_dump_json()}\n\n"
+            final_answer = accumulated_content
 
         done_data = ChatStreamChunk(
             id=chat_id,
@@ -386,13 +577,25 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
             model=model,
             provider=provider,
             done=True,
+            timestamp=_get_timestamp(),
         )
+        if all_tool_results:
+            done_data.tool_results = [
+                ToolCallResult(
+                    tool_call_id=r["tool_call_id"],
+                    tool_name=r["tool_name"],
+                    result=r["result"],
+                    status=r["status"],
+                )
+                for r in all_tool_results
+            ]
         yield f"data: {done_data.model_dump_json()}\n\n"
 
         conversation_messages = [
-            {"role": m.role, "content": m.content} for m in request.messages
+            {"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)}
+            for m in request.messages
         ] + [{"role": "assistant", "content": final_answer}]
-        _schedule_memory_update(conversation_messages, chat_id, request.agent_id)
+        _schedule_memory_update(conversation_messages, chat_id, agent_id)
 
         elapsed = time.time() - start_time
         logger.success(f"[STREAM] Stream completed: chat_id={chat_id}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
@@ -405,6 +608,7 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
             model=model,
             provider=provider,
             done=True,
+            timestamp=_get_timestamp(),
         )
         yield f"data: {error_data.model_dump_json()}\n\n"
 
@@ -481,93 +685,147 @@ async def delete_conversation(conv_id: str):
 @router.post("/conversations/{conv_id}/messages")
 async def add_message(conv_id: str, request: ChatRequest):
     start_time = time.time()
-    logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Adding message")
+    request_ts = request.timestamp or _get_timestamp()
+    logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Adding message, ts={request_ts}")
     conv = conversations_store.get(conv_id)
     if not conv:
         logger.error(f"[API] POST /chat/conversations/{conv_id}/messages - Conversation not found")
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
 
-    # 获取用户的新消息（最后一条用户消息）
     last_user_msg = None
     for m in reversed(request.messages):
         if m.role == "user":
             last_user_msg = m
             break
-    
-    # 保存用户消息到对话历史
+
     if last_user_msg:
-        msg_entry = {"role": "user", "content": last_user_msg.content}
+        msg_entry = {"role": "user", "content": last_user_msg.content, "timestamp": request_ts}
         if not conv["messages"] or conv["messages"][-1] != msg_entry:
             conv["messages"].append(msg_entry)
-            logger.debug(f"[API] POST /chat/conversations/{conv_id}/messages - Added user message")
-    
+
     conv["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     resolved_provider = request.provider or conv.get("provider") or llm_adapter.default_provider
     resolved_model = request.model or conv.get("model") or llm_adapter.get_provider(resolved_provider).default_model
 
-    # 构建发送给LLM的消息列表
-    system_prompt = _build_system_prompt_with_tools(conv.get("agent_id"))
-    all_messages = []
-    if system_prompt:
-        all_messages.append({"role": "system", "content": system_prompt})
-    
-    # 使用对话历史中的消息（已经包含刚添加的用户消息）
+    system_prompt = _build_system_prompt(conv.get("agent_id"))
+    all_messages = [{"role": "system", "content": system_prompt}]
+
     for m in conv["messages"]:
         all_messages.append({"role": m["role"], "content": m["content"]})
 
     all_messages = _inject_memory_to_messages(all_messages, conv.get("agent_id"))
 
+    user_query = ""
+    for m in reversed(all_messages):
+        if m.get("role") == "user":
+            content = m.get("content", "")
+            user_query = content if isinstance(content, str) else str(content)
+            break
+    if user_query:
+        all_messages = await _inject_rag_context(all_messages, user_query)
+
+    tools = _collect_all_tools(conv.get("agent_id"))
+    if not tools:
+        tools = None
+
     if request.stream:
         logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Starting stream response")
 
         async def stream_with_save():
-            tool_draft = ""
-            final_answer = ""
             chat_id = str(uuid.uuid4())
             chunk_count = 0
+            current_messages = list(all_messages)
+            all_tool_results = []
+
             try:
-                async for chunk in llm_adapter.chat_stream(
-                    messages=all_messages,
-                    provider_name=resolved_provider,
-                    model=resolved_model,
-                    temperature=request.temperature,
-                    max_tokens=request.max_tokens,
-                    top_p=request.top_p,
-                    tools=request.tools,
-                ):
-                    tool_draft += chunk
-                    chunk_count += 1
+                for round_num in range(MAX_TOOL_LOOP_ROUNDS):
+                    tool_calls_map: dict[int, dict] = {}
+                    content_parts = []
 
-                tool_calls = _parse_tool_calls(tool_draft)
-                if tool_calls:
-                    tool_results = await _execute_tool_calls(tool_calls, conv.get("agent_id"))
-                    tool_result_text = "\n\n".join(
-                        f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
-                    )
-                    all_messages.append({"role": "assistant", "content": tool_draft})
-                    all_messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
-
-                    async for chunk in llm_adapter.chat_stream(
-                        messages=all_messages,
+                    async for event in llm_adapter.chat_stream(
+                        messages=current_messages,
+                        tools=tools,
                         provider_name=resolved_provider,
                         model=resolved_model,
                         temperature=request.temperature,
                         max_tokens=request.max_tokens,
                         top_p=request.top_p,
                     ):
-                        final_answer += chunk
-                        chunk_count += 1
-                        data = ChatStreamChunk(
+                        if event.type == "content":
+                            content_parts.append(event.data.get("content", ""))
+                            chunk_count += 1
+                            data = ChatStreamChunk(
+                                id=chat_id,
+                                content=event.data.get("content", ""),
+                                model=resolved_model,
+                                provider=resolved_provider,
+                                timestamp=_get_timestamp(),
+                            )
+                            yield f"data: {data.model_dump_json()}\n\n"
+
+                        elif event.type == "tool_call_delta":
+                            idx = event.data.get("index", 0)
+                            if idx not in tool_calls_map:
+                                tool_calls_map[idx] = {
+                                    "id": "",
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            tc = tool_calls_map[idx]
+                            if event.data.get("tool_call_id"):
+                                tc["id"] = event.data["tool_call_id"]
+                            fn = tc["function"]
+                            if event.data.get("function_name"):
+                                fn["name"] += event.data["function_name"]
+                            if event.data.get("function_arguments"):
+                                fn["arguments"] += event.data["function_arguments"]
+
+                        elif event.type == "done":
+                            break
+
+                accumulated_content = "".join(content_parts)
+                tool_calls_list = list(tool_calls_map.values()) if tool_calls_map else None
+
+                if tool_calls_list:
+                    logger.info(f"[STREAM] Round {round_num + 1}: LLM requested {len(tool_calls_list)} tool calls")
+                    tool_results = await _execute_tool_calls(tool_calls_list, conv.get("agent_id"))
+                    all_tool_results.extend(tool_results)
+
+                    for r in tool_results:
+                        tr_data = ChatStreamChunk(
                             id=chat_id,
-                            content=chunk,
+                            content="",
                             model=resolved_model,
                             provider=resolved_provider,
+                            tool_results=[ToolCallResult(
+                                tool_call_id=r["tool_call_id"],
+                                tool_name=r["tool_name"],
+                                result=r["result"],
+                                status=r["status"],
+                            )],
+                            timestamp=_get_timestamp(),
                         )
-                        yield f"data: {data.model_dump_json()}\n\n"
-                else:
-                    final_answer = tool_draft
+                        yield f"data: {tr_data.model_dump_json()}\n\n"
+
+                    tool_messages = _build_tool_result_messages(
+                        accumulated_content,
+                        tool_calls_list,
+                        tool_results,
+                    )
+                    current_messages.extend(tool_messages)
+
+                    final_response = await llm_adapter.chat(
+                        messages=current_messages,
+                        tools=None,
+                        provider_name=resolved_provider,
+                        model=resolved_model,
+                        temperature=request.temperature,
+                        max_tokens=request.max_tokens,
+                        top_p=request.top_p,
+                    )
+                    final_answer = final_response.content
                     for i in range(0, len(final_answer), 10):
                         chunk = final_answer[i:i+10]
                         data = ChatStreamChunk(
@@ -575,8 +833,11 @@ async def add_message(conv_id: str, request: ChatRequest):
                             content=chunk,
                             model=resolved_model,
                             provider=resolved_provider,
+                            timestamp=_get_timestamp(),
                         )
                         yield f"data: {data.model_dump_json()}\n\n"
+                else:
+                    final_answer = accumulated_content
 
                 done_data = ChatStreamChunk(
                     id=chat_id,
@@ -584,10 +845,20 @@ async def add_message(conv_id: str, request: ChatRequest):
                     model=resolved_model,
                     provider=resolved_provider,
                     done=True,
+                    timestamp=_get_timestamp(),
                 )
+                if all_tool_results:
+                    done_data.tool_results = [
+                        ToolCallResult(
+                            tool_call_id=r["tool_call_id"],
+                            tool_name=r["tool_name"],
+                            result=r["result"],
+                            status=r["status"],
+                        )
+                        for r in all_tool_results
+                    ]
                 yield f"data: {done_data.model_dump_json()}\n\n"
 
-                # 检查最后一条消息是否已经是助手回复，避免重复
                 assistant_msg = {"role": "assistant", "content": final_answer}
                 if not conv["messages"] or conv["messages"][-1] != assistant_msg:
                     conv["messages"].append(assistant_msg)
@@ -611,6 +882,7 @@ async def add_message(conv_id: str, request: ChatRequest):
                     model=resolved_model,
                     provider=resolved_provider,
                     done=True,
+                    timestamp=_get_timestamp(),
                 )
                 yield f"data: {error_data.model_dump_json()}\n\n"
 
@@ -624,36 +896,18 @@ async def add_message(conv_id: str, request: ChatRequest):
             },
         )
 
-    result = await llm_adapter.chat(
+    result = await _run_agent_loop(
         messages=all_messages,
-        provider_name=resolved_provider,
+        tools=tools,
+        provider=resolved_provider,
         model=resolved_model,
+        agent_id=conv.get("agent_id"),
         temperature=request.temperature,
         max_tokens=request.max_tokens,
         top_p=request.top_p,
-        tools=request.tools,
     )
 
-    tool_calls = _parse_tool_calls(result)
-    if tool_calls:
-        tool_results = await _execute_tool_calls(tool_calls, conv.get("agent_id"))
-        tool_result_text = "\n\n".join(
-            f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
-        )
-        all_messages.append({"role": "assistant", "content": result})
-        all_messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
-
-        result = await llm_adapter.chat(
-            messages=all_messages,
-            provider_name=resolved_provider,
-            model=resolved_model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            top_p=request.top_p,
-        )
-
-    # 检查最后一条消息是否已经是助手回复，避免重复
-    assistant_msg = {"role": "assistant", "content": result}
+    assistant_msg = {"role": "assistant", "content": result.content}
     if not conv["messages"] or conv["messages"][-1] != assistant_msg:
         conv["messages"].append(assistant_msg)
         conv["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -666,11 +920,33 @@ async def add_message(conv_id: str, request: ChatRequest):
     )
 
     elapsed = time.time() - start_time
-    logger.success(f"[API] POST /chat/conversations/{conv_id}/messages - Success: elapsed={elapsed:.2f}s, response_len={len(result)}")
+    logger.success(f"[API] POST /chat/conversations/{conv_id}/messages - Success: elapsed={elapsed:.2f}s, response_len={len(result.content)}")
+
+    tool_calls_data = None
+    if result.tool_calls:
+        tool_calls_data = [
+            {
+                "id": tc["id"],
+                "type": tc.get("type", "function"),
+                "function": tc["function"],
+            }
+            for tc in result.tool_calls
+        ]
+
+    tool_results_data = None
+    if result.tool_results:
+        tool_results_data = [
+            {"tool_call_id": r["tool_call_id"], "tool_name": r["tool_name"], "result": r["result"], "status": r["status"]}
+            for r in result.tool_results
+        ]
 
     return ChatResponse(
         id=str(uuid.uuid4()),
-        content=result,
+        content=result.content,
         model=resolved_model,
         provider=resolved_provider,
+        tool_calls=tool_calls_data,
+        tool_results=tool_results_data,
+        usage=result.usage,
+        timestamp=_get_timestamp(),
     )

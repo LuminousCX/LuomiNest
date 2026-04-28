@@ -1,24 +1,39 @@
-﻿﻿script setup lang="ts">
-import { ref, computed } from 'vue'
-import { Sparkles, SlidersHorizontal, X } from 'lucide-vue-next'
+﻿﻿<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Puzzle, Sparkles, SlidersHorizontal, X, Package } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
 import MarketplaceSearch from '../components/marketplace/MarketplaceSearch.vue'
 import MarketplaceCategories from '../components/marketplace/MarketplaceCategories.vue'
 import MarketplaceFilters from '../components/marketplace/MarketplaceFilters.vue'
 import MarketplaceCard from '../components/marketplace/MarketplaceCard.vue'
 import MarketplaceBanner from '../components/marketplace/MarketplaceBanner.vue'
-import type { MarketplaceFilter } from '../types/marketplace'
+import type { MarketplaceFilter, MarketplaceType } from '../types/marketplace'
 
+const route = useRoute()
+const router = useRouter()
 const store = useMarketplaceStore()
 
-const categories = computed(() => store.getCategories('skill'))
-const activeCategory = ref('all')
+const VALID_TABS: MarketplaceType[] = ['plugin', 'skill']
+const activeTab = ref<MarketplaceType>('plugin')
 const showFilters = ref(false)
 
-const filter = computed(() => store.skillFilter)
+watch(() => route.query.tab, (tab) => {
+  const t = typeof tab === 'string' ? tab : ''
+  if (VALID_TABS.includes(t as MarketplaceType)) {
+    activeTab.value = t as MarketplaceType
+  }
+}, { immediate: true })
+
+const categories = computed(() => store.getCategories(activeTab.value))
+const filter = computed(() => activeTab.value === 'plugin' ? store.pluginFilter : store.skillFilter)
+const activeCategory = computed({
+  get: () => filter.value.category || 'all',
+  set: (val: string) => store.setFilter(activeTab.value, { category: val === 'all' ? undefined : val })
+})
 
 const filteredItems = computed(() => {
-  const items = store.filteredSkillItems
+  const items = activeTab.value === 'plugin' ? store.filteredPluginItems : store.filteredSkillItems
   if (activeCategory.value === 'all') return items
   return items.filter(i => {
     if (i.category === activeCategory.value) return true
@@ -27,14 +42,44 @@ const filteredItems = computed(() => {
   })
 })
 
-const featuredItems = computed(() => store.featuredSkills)
+const featuredItems = computed(() =>
+  activeTab.value === 'plugin' ? store.featuredPlugins : store.featuredSkills
+)
+
+const headerConfig = computed(() => {
+  if (activeTab.value === 'plugin') {
+    return {
+      icon: Puzzle,
+      title: '插件市场',
+      subtitle: '扩展 LuomiNest 的能力边界',
+      allLabel: '全部插件',
+      emptyIcon: Puzzle,
+      emptyText: '没有找到匹配的插件',
+    }
+  }
+  return {
+    icon: Sparkles,
+    title: '技能市场',
+    subtitle: '赋予 AI 更丰富的专业技能',
+    allLabel: '全部技能',
+    emptyIcon: Sparkles,
+    emptyText: '没有找到匹配的技能',
+  }
+})
+
+function switchTab(tab: MarketplaceType) {
+  activeTab.value = tab
+  store.setFilter(tab, { category: undefined })
+  showFilters.value = false
+  router.replace({ path: route.path, query: { ...route.query, tab } })
+}
 
 function selectCategory(id: string) {
   activeCategory.value = id
 }
 
 function updateFilter(updates: Partial<MarketplaceFilter>) {
-  store.setFilter('skill', updates)
+  store.setFilter(activeTab.value, updates)
 }
 
 function toggleFilters() {
@@ -43,14 +88,32 @@ function toggleFilters() {
 </script>
 
 <template>
-  <div class="skill-market-view">
+  <div class="market-view">
     <div class="market-header animate-fade-in">
-      <div class="header-icon-wrap">
-        <Sparkles :size="24" />
+      <div class="header-left">
+        <div class="header-icon-wrap">
+          <Package :size="24" />
+        </div>
+        <div class="header-text">
+          <h1 class="page-title">扩展</h1>
+          <p class="page-subtitle">插件与技能，一站式管理</p>
+        </div>
       </div>
-      <div class="header-text">
-        <h1 class="page-title">技能市场</h1>
-        <p class="page-subtitle">赋予 AI 更丰富的专业技能</p>
+      <div class="market-switch">
+        <button
+          :class="['switch-btn', { active: activeTab === 'plugin' }]"
+          @click="switchTab('plugin')"
+        >
+          <Puzzle :size="14" />
+          <span>插件市场</span>
+        </button>
+        <button
+          :class="['switch-btn', { active: activeTab === 'skill' }]"
+          @click="switchTab('skill')"
+        >
+          <Sparkles :size="14" />
+          <span>技能市场</span>
+        </button>
       </div>
     </div>
 
@@ -90,14 +153,14 @@ function toggleFilters() {
         <MarketplaceBanner
           v-if="featuredItems.length > 0 && activeCategory === 'all' && !store.searchQuery"
           :items="featuredItems"
-          title="热门推荐"
-          type="skill"
+          :title="activeTab === 'plugin' ? '热门插件' : '热门技能'"
+          :type="activeTab"
         />
 
         <div class="items-section">
           <div class="section-header">
             <h3 class="section-title">
-              {{ activeCategory === 'all' ? '全部技能' : categories.find(c => c.id === activeCategory)?.name || '技能' }}
+              {{ activeCategory === 'all' ? headerConfig.allLabel : categories.find(c => c.id === activeCategory)?.name || (activeTab === 'plugin' ? '插件' : '技能') }}
             </h3>
             <span class="section-count">{{ filteredItems.length }} 个</span>
           </div>
@@ -111,8 +174,8 @@ function toggleFilters() {
           </div>
 
           <div v-else class="empty-state">
-            <Sparkles :size="48" />
-            <p>没有找到匹配的技能</p>
+            <component :is="headerConfig.emptyIcon" :size="48" />
+            <p>{{ headerConfig.emptyText }}</p>
             <button class="reset-btn" @click="activeCategory = 'all'; store.clearSearch()">
               重置筛选
             </button>
@@ -124,7 +187,7 @@ function toggleFilters() {
 </template>
 
 <style scoped>
-.skill-market-view {
+.market-view {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -135,8 +198,15 @@ function toggleFilters() {
 .market-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   padding: 24px 28px 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .header-icon-wrap {
@@ -160,6 +230,37 @@ function toggleFilters() {
   font-size: 13px;
   color: var(--text-muted);
   margin-top: 2px;
+}
+
+.market-switch {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--workspace-panel);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--workspace-border);
+}
+
+.switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: all 0.25s ease-in-out;
+}
+
+.switch-btn:hover {
+  color: var(--text-secondary);
+}
+
+.switch-btn.active {
+  background: var(--workspace-card);
+  color: var(--lumi-primary);
+  box-shadow: var(--shadow-xs);
 }
 
 .market-toolbar {

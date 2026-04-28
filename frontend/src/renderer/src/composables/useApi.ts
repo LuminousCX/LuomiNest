@@ -91,7 +91,7 @@ export const useApi = () => {
     path: string,
     body: any,
     onChunk: (chunk: ChatStreamChunk) => void,
-    onDone: () => void,
+    onDone: () => void | Promise<void>,
     onError: (err: string) => void,
     externalAbortSignal?: AbortSignal
   ) => {
@@ -135,7 +135,7 @@ export const useApi = () => {
           const dataStr = trimmed.slice(6)
           if (!dataStr.trim()) continue
           if (dataStr.trim() === '[DONE]') {
-            onDone()
+            await onDone()
             return
           }
 
@@ -143,7 +143,7 @@ export const useApi = () => {
             const chunk: ChatStreamChunk = JSON.parse(dataStr)
             onChunk(chunk)
             if (chunk.done) {
-              onDone()
+              await onDone()
               return
             }
           } catch {
@@ -152,10 +152,10 @@ export const useApi = () => {
         }
       }
 
-      onDone()
+      await onDone()
     } catch (e: any) {
       if (e.name === 'AbortError') {
-        onDone()
+        await onDone()
         return
       }
       onError(e.message)

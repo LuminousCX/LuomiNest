@@ -1,12 +1,16 @@
 import uuid
+import json
 from datetime import datetime, timezone
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from loguru import logger
 
 from app.infrastructure.database.json_store import groups_store, agents_store
 from app.domains.social.group_chat import GroupChatManager
 from app.domains.social.ai_to_ai_chat import AIToAIChat
+from app.domains.social.agent_orchestrator import agent_orchestrator
+from app.domains.social.agent_role_registry import AgentRoleRegistry
 
 router = APIRouter(prefix="/social", tags=["social"])
 
@@ -36,6 +40,12 @@ class GroupMemberRemove(BaseModel):
 class GroupMessageSend(BaseModel):
     content: str
     sender_id: str = "user"
+
+
+class CollaborationRequest(BaseModel):
+    content: str
+    sender_id: str = "user"
+    stream: bool = True
 
 
 class AIChatRequest(BaseModel):
@@ -192,6 +202,85 @@ async def send_group_message(group_id: str, request: GroupMessageSend):
         content=request.content,
     )
     return {"error": None, "data": results}
+
+
+@router.post("/groups/{group_id}/collaborate")
+async def collaborate(group_id: str, request: CollaborationRequest):
+    logger.info(f"[API] POST /social/groups/{group_id}/collaborate - Multi-agent collaboration")
+    group = groups_store.get(group_id)
+    if not group:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Group {group_id} not found")
+
+    if request.stream:
+        async def event_stream():
+            async for event in agent_orchestrator.orchestrate_stream(
+                group_id=group_id,
+                user_message=request.content,
+                sender_id=request.sender_id,
+            ):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    session = await agent_orchestrator.orchestrate(
+        group_id=group_id,
+        user_message=request.content,
+        sender_id=request.sender_id,
+    )
+
+    return {
+        "error": None,
+        "data": {
+            "session_id": session.session_id,
+            "phase": session.phase.value,
+            "plan": session.plan,
+            "sub_tasks": [
+                {
+                    "task_id": t.task_id,
+                    "role_id": t.role_id,
+                    "agent_id": t.agent_id,
+                    "description": t.description,
+                    "status": t.status.value,
+                    "result": t.result,
+                    "error": t.error,
+                }
+                for t in session.sub_tasks
+            ],
+            "final_result": session.final_result,
+            "coordinator_response": session.coordinator_response,
+        },
+    }
+
+
+@router.get("/agent-roles")
+async def list_agent_roles():
+    logger.info("[API] GET /social/agent-roles - Listing agent roles")
+    roles = AgentRoleRegistry.list_roles()
+    return {
+        "error": None,
+        "data": [
+            {
+                "role_id": r.role_id,
+                "name": r.name,
+                "description": r.description,
+                "capabilities": r.capabilities,
+                "execution_mode": r.execution_mode,
+                "max_concurrent_tasks": r.max_concurrent_tasks,
+                "timeout_seconds": r.timeout_seconds,
+                "color": r.color,
+            }
+            for r in roles
+        ],
+    }
 
 
 @router.post("/ai-chat")
