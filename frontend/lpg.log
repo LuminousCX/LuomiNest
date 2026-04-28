@@ -1,20 +1,5 @@
 Verify each finding against the current code and only fix it if needed.
 
-In `@frontend/src/renderer/src/views/WorkspaceView.vue` at line 1, 该文件在开头包含 UTF-8
-BOM（EF BB BF），请从文件顶部移除该字节顺序标记以避免解析/构建问题；打开
-frontend/src/renderer/src/views/WorkspaceView.vue 并确保文件以 "<script setup
-lang=\"ts\">" 开始（没有任何隐藏字符或 BOM）然后保存即可。
-
-Verify each finding against the current code and only fix it if needed.
-
-In `@frontend/installer.iss` around lines 317 - 330, 当前使用的 WizardSelectTask
-函数不存在，会导致编译失败；在处理 DesktopCheck, StartMenuCheck, AutoLaunchCheck 的分支中，将对不存在的
-WizardSelectTask 的调用替换为官方 API WizardSelectTasks，并使用单个任务名字符串或带前缀的“!”来取消选择（例如将
-WizardSelectTask('desktopicon', True/False) 改为 WizardSelectTasks('desktopicon')
-或 WizardSelectTasks('!desktopicon')，同理处理 'startmenu' 和 'autolaunch'）。
-
-Verify each finding against the current code and only fix it if needed.
-
 Inline comments:
 In `@frontend/src/renderer/src/stores/chat.ts`:
 - Around line 456-457: There's an empty catch block swallowing errors during

@@ -75,7 +75,8 @@ export const useChatStore = defineStore('chat', () => {
         ...agentConversations.value,
         [targetAgentId]: convs
       }
-    } catch {
+    } catch (error: unknown) {
+      console.warn('[ChatStore] Failed to fetch conversations:', error)
       agentConversations.value = {
         ...agentConversations.value,
         [targetAgentId]: []

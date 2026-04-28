@@ -1,4 +1,4 @@
-﻿﻿<script setup lang="ts">
+﻿﻿﻿﻿<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Application, Ticker } from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'

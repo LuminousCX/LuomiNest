@@ -1,4 +1,4 @@
-﻿﻿<script setup lang="ts">
+﻿﻿﻿﻿﻿<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import {
   Send,
