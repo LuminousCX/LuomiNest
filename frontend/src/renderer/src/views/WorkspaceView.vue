@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿<script setup lang="ts">
+﻿﻿<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import {
   Send,
@@ -9,7 +9,6 @@ import {
   Sparkles,
   Bot,
   Link2,
-  MoreHorizontal,
   Loader2,
   Settings,
   AlertTriangle,
@@ -61,28 +60,6 @@ const SCROLL_BOTTOM_THRESHOLD = 120
 const showScrollToBottomBtn = ref(false)
 const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
 let resizeObserver: ResizeObserver | null = null
-
-const agentCards = computed(() => {
-  const agents = agentStore.agents.map(a => ({
-    id: a.id,
-    name: a.name,
-    desc: a.description,
-    color: a.color,
-    avatar: a.avatar,
-    selected: agentStore.activeAgent?.id === a.id
-  }))
-  return [
-    ...agents,
-    {
-      id: '__custom__',
-      name: '自定义',
-      desc: '创建全新 Agent',
-      color: '#f43f5e',
-      avatar: null,
-      selected: false
-    }
-  ]
-})
 
 const messages = computed(() => chatStore.messages)
 const isStreaming = computed(() => chatStore.isStreaming)
@@ -138,24 +115,6 @@ const agentConversations = computed(() => {
 })
 
 const activeSkills = computed(() => skillStore.skills.filter(s => s.isActive))
-
-const selectAgent = async (agent: { id: string; name: string; desc: string; color: string }) => {
-  if (agent.id === '__custom__') {
-    showCreateAgentDialog.value = true
-    return
-  }
-  const found = agentStore.agents.find(a => a.id === agent.id)
-  if (found) {
-    agentStore.setActiveAgent(found)
-    await chatStore.fetchConversations(found.id)
-    if (chatStore.conversations.length > 0) {
-      const latestConv = chatStore.conversations[0]
-      await chatStore.loadConversation(latestConv.id)
-    }
-    await nextTick()
-    scrollToBottom(true)
-  }
-}
 
 const selectModel = (providerId: string, modelId: string) => {
   if (agentStore.activeAgent) {
@@ -335,40 +294,6 @@ watch(isLoadingCurrentConv, (loading) => {
   }
 })
 
-const showCreateAgentDialog = ref(false)
-const newAgentForm = ref({
-  name: '',
-  description: '',
-  systemPrompt: '',
-  color: '#147EBC'
-})
-const agentColors = ['#147EBC', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
-
-const handleCreateAgent = async () => {
-  if (!newAgentForm.value.name.trim()) return
-  try {
-    await agentStore.createAgent({
-      name: newAgentForm.value.name.trim(),
-      description: newAgentForm.value.description.trim(),
-      systemPrompt: newAgentForm.value.systemPrompt.trim(),
-      color: newAgentForm.value.color,
-      capabilities: ['chat'],
-    })
-    showCreateAgentDialog.value = false
-    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#147EBC' }
-  } catch (e: any) {
-    console.error('Failed to create agent:', e)
-  }
-}
-
-const handleDeleteAgent = async (agentId: string) => {
-  try {
-    await agentStore.deleteAgent(agentId)
-  } catch (e: any) {
-    console.error('Failed to delete agent:', e)
-  }
-}
-
 const handleClickOutsideModel = (e: MouseEvent) => {
   const target = e.target as HTMLElement
   if (!target.closest('.model-dropdown-container')) {
@@ -460,40 +385,6 @@ onBeforeUnmount(() => {
               去设置
             </button>
           </div>
-        </div>
-
-        <div class="agent-selector-row">
-          <div class="agent-cards-scroll">
-            <button
-              v-for="(card, idx) in agentCards"
-              :key="card.id"
-              :class="['agent-card', { selected: card.selected }]"
-              :style="{ animationDelay: `${idx * 60}ms` }"
-              @click="selectAgent(card)"
-            >
-              <div class="card-avatar" :style="{ background: card.color + '14', color: card.color, borderColor: card.selected ? card.color : 'transparent' }">
-                <Bot v-if="card.id !== '__custom__'" :size="26" />
-                <Sparkles v-else :size="26" />
-              </div>
-              <div class="card-info">
-                <span class="card-name">{{ card.name }}</span>
-                <span class="card-desc">{{ card.desc }}</span>
-              </div>
-              <button
-                v-if="card.id !== '__custom__' && !card.id.startsWith('default-')"
-                class="card-delete"
-                title="删除 Agent"
-                @click.stop="handleDeleteAgent(card.id)"
-              >
-                <MoreHorizontal :size="14" />
-              </button>
-            </button>
-          </div>
-          <Transition name="selection-fade">
-            <div v-if="agentStore.activeAgent" class="selection-toast">
-              我选择「{{ agentStore.activeAgent.name }}」作为我的Agent
-            </div>
-          </Transition>
         </div>
 
         <div class="chat-area">
@@ -791,55 +682,6 @@ onBeforeUnmount(() => {
       </div>
     </Transition>
 
-    <Transition name="selection-fade">
-      <div v-if="showCreateAgentDialog" class="add-dialog-overlay" @click.self="showCreateAgentDialog = false">
-        <div class="add-dialog">
-          <h3>创建自定义 Agent</h3>
-          <div class="form-group">
-            <label class="form-label">
-              名称
-              <span class="required-mark">*</span>
-            </label>
-            <input v-model="newAgentForm.name" type="text" class="form-input" placeholder="如: 小助手" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">描述</label>
-            <input v-model="newAgentForm.description" type="text" class="form-input" placeholder="如: 通用对话助手" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">系统提示词</label>
-            <textarea
-              v-model="newAgentForm.systemPrompt"
-              class="form-input form-textarea"
-              placeholder="定义 Agent 的角色和行为..."
-              rows="4"
-            ></textarea>
-          </div>
-          <div class="form-group">
-            <label class="form-label">颜色</label>
-            <div class="color-picker">
-              <button
-                v-for="color in agentColors"
-                :key="color"
-                :class="['color-dot', { active: newAgentForm.color === color }]"
-                :style="{ background: color }"
-                @click="newAgentForm.color = color"
-              ></button>
-            </div>
-          </div>
-          <div class="dialog-actions">
-            <button class="dialog-btn cancel" @click="showCreateAgentDialog = false">取消</button>
-            <button
-              :class="['dialog-btn confirm', { disabled: !newAgentForm.name.trim() }]"
-              :disabled="!newAgentForm.name.trim()"
-              @click="handleCreateAgent"
-            >
-              创建
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
   </div>
 </template>
 
@@ -1039,128 +881,6 @@ onBeforeUnmount(() => {
 
 .backend-warning.info .retry-btn:hover {
   background: rgba(20, 126, 188, 0.2);
-}
-
-.agent-selector-row {
-  padding: 16px 24px 0;
-  position: relative;
-  flex-shrink: 0;
-}
-
-.agent-cards-scroll {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 12px;
-  scrollbar-width: none;
-}
-
-.agent-cards-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.agent-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px 10px 10px;
-  border-radius: var(--radius-lg);
-  border: 1.5px solid transparent;
-  background: var(--workspace-card);
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  flex-shrink: 0;
-  animation: lumi-fade-in 0.4s ease-out both;
-  box-shadow: var(--shadow-xs);
-  position: relative;
-}
-
-.agent-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-.agent-card.selected {
-  border-color: var(--lumi-primary);
-  background: white;
-  box-shadow: 0 4px 20px rgba(20, 126, 188, 0.12);
-}
-
-.card-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid transparent;
-  transition: border-color var(--transition-fast);
-}
-
-.card-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: left;
-}
-
-.card-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.card-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  max-width: 120px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.card-delete {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  opacity: 0;
-  transition: all var(--transition-fast);
-}
-
-.agent-card:hover .card-delete {
-  opacity: 1;
-}
-
-.card-delete:hover {
-  background: var(--lumi-accent-light);
-  color: var(--lumi-accent);
-}
-
-.selection-toast {
-  margin-top: 10px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
-  padding: 8px 20px;
-  border-radius: var(--radius-full);
-  display: inline-block;
-  width: 100%;
-}
-
-.selection-fade-enter-active {
-  animation: lumi-fade-in 0.3s ease-out;
-}
-
-.selection-fade-leave-active {
-  animation: lumi-fade-in 0.2s ease-out reverse;
 }
 
 .chat-area {
@@ -2139,150 +1859,6 @@ onBeforeUnmount(() => {
 .input-footer span {
   font-size: 11px;
   color: var(--text-muted);
-}
-
-.add-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  backdrop-filter: blur(4px);
-}
-
-.add-dialog {
-  background: var(--workspace-card);
-  border-radius: var(--radius-xl);
-  padding: 28px;
-  width: 440px;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: var(--shadow-xl);
-  animation: dialog-enter 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes dialog-enter {
-  from { opacity: 0; transform: scale(0.95) translateY(10px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-.add-dialog h3 {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 20px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.form-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.required-mark {
-  color: var(--lumi-accent);
-  font-weight: 700;
-  margin-left: 2px;
-}
-
-.form-input {
-  width: 100%;
-  padding: 10px 14px;
-  background: var(--workspace-panel);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  color: var(--text-primary);
-  transition: all 300ms ease-in-out;
-}
-
-.form-input:focus {
-  box-shadow: 0 0 0 2px var(--lumi-primary-glow);
-}
-
-.form-input::placeholder {
-  color: var(--text-muted);
-}
-
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.color-picker {
-  display: flex;
-  gap: 8px;
-}
-
-.color-dot {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-  border: 2px solid transparent;
-}
-
-.color-dot:hover {
-  transform: scale(1.15);
-}
-
-.color-dot.active {
-  border-color: var(--text-primary);
-  box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
-}
-
-.dialog-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.dialog-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 20px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-}
-
-.dialog-btn.cancel {
-  color: var(--text-muted);
-  background: var(--workspace-panel);
-}
-
-.dialog-btn.cancel:hover {
-  background: var(--workspace-hover);
-}
-
-.dialog-btn.confirm {
-  color: white;
-  background: var(--lumi-primary);
-}
-
-.dialog-btn.confirm:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.dialog-btn.confirm.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .markdown-body {
