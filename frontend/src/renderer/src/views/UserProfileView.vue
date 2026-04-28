@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { User, Save, RotateCcw, Plus, X, Sparkles, UserCircle, Heart, Briefcase, MapPin, Globe, Clock, FileText, Check } from 'lucide-vue-next'
 import { useApi } from '../composables/useApi'
@@ -356,7 +356,7 @@ onMounted(() => {
   font-size: 11px;
   padding: 3px 10px;
   border-radius: 20px;
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
   font-weight: 500;
 }
@@ -477,7 +477,7 @@ onMounted(() => {
 .form-group select:focus {
   outline: none;
   border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
+  box-shadow: 0 0 0 3px rgba(20, 126, 188, 0.1);
 }
 
 .form-group input::placeholder {
@@ -710,7 +710,7 @@ onMounted(() => {
 .form-section textarea:focus {
   outline: none;
   border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
+  box-shadow: 0 0 0 3px rgba(20, 126, 188, 0.1);
 }
 
 .form-section textarea::placeholder {

@@ -1,5 +1,5 @@
-<script setup lang="ts">
-import { ref, onMounted, nextTick, watch, computed } from 'vue'
+﻿﻿﻿﻿﻿<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import {
   Send,
   Paperclip,
@@ -13,12 +13,10 @@ import {
   Loader2,
   Settings,
   AlertTriangle,
-  StopCircle,
   RotateCcw,
   Clock,
   MessageSquare,
   Trash2,
-  X,
   Plus,
   Copy,
   Check,
@@ -52,12 +50,17 @@ const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const showModelDropdown = ref(false)
-const showHistoryPanel = ref(true)
+const showHistoryPanel = ref(false)
 const showSkillDropdown = ref(false)
 const showSearchPanel = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<any[]>([])
 const copiedId = ref<string | null>(null)
+const isNearBottom = ref(true)
+const SCROLL_BOTTOM_THRESHOLD = 120
+const showScrollToBottomBtn = ref(false)
+const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
+let resizeObserver: ResizeObserver | null = null
 
 const agentCards = computed(() => {
   const agents = agentStore.agents.map(a => ({
@@ -144,13 +147,13 @@ const selectAgent = async (agent: { id: string; name: string; desc: string; colo
   const found = agentStore.agents.find(a => a.id === agent.id)
   if (found) {
     agentStore.setActiveAgent(found)
-    // 不要清空消息，让watch监听器处理状态切换
     await chatStore.fetchConversations(found.id)
-    // 如果有对话历史，加载最新的对话
     if (chatStore.conversations.length > 0) {
       const latestConv = chatStore.conversations[0]
       await chatStore.loadConversation(latestConv.id)
     }
+    await nextTick()
+    scrollToBottom(true)
   }
 }
 
@@ -175,15 +178,6 @@ const sendMessage = async () => {
   const agent = agentStore.activeAgent
   const resolved = modelStore.resolveModel
 
-  if (!chatStore.currentConversation) {
-    await chatStore.createConversation(
-      content.slice(0, 30),
-      agent?.id,
-      agent?.model || resolved?.model || undefined,
-      agent?.provider || resolved?.provider || undefined,
-    )
-  }
-
   const options: any = {
     model: agent?.model || resolved?.model || undefined,
     provider: agent?.provider || resolved?.provider || undefined,
@@ -194,19 +188,43 @@ const sendMessage = async () => {
   if (agent?.systemPrompt) options.systemPrompt = agent.systemPrompt
   if (agent?.id) options.agentId = agent.id
 
+  isNearBottom.value = true
   await chatStore.sendMessage(content, options)
   await nextTick()
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 const cancelStreaming = () => {
   chatStore.cancelCurrentRequest()
 }
 
-const scrollToBottom = () => {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTo({ top: messagesContainer.value.scrollHeight, behavior: 'smooth' })
-  }
+const scrollToBottom = (force = false) => {
+  if (!messagesContainer.value) return
+  if (!force && !isNearBottom.value) return
+  messagesContainer.value.scrollTo({
+    top: messagesContainer.value.scrollHeight,
+    behavior: force ? 'auto' : 'smooth'
+  })
+}
+
+const handleMessagesScroll = () => {
+  if (!messagesContainer.value) return
+  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+  isNearBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
+  showScrollToBottomBtn.value = !isNearBottom.value && messages.value.length > 0
+}
+
+const setupResizeObserver = () => {
+  if (!messagesContainer.value) return
+  const inner = messagesContainer.value.querySelector('.messages-container') as HTMLElement
+  if (!inner) return
+  resizeObserver = new ResizeObserver(() => {
+    if (isNearBottom.value) {
+      scrollToBottom(true)
+    }
+  })
+  resizeObserver.observe(inner)
 }
 
 const resetTextareaHeight = () => {
@@ -271,9 +289,11 @@ const formatTime = (dateStr: string) => {
 }
 
 const handleLoadConversation = async (convId: string) => {
+  if (chatStore.currentConvId === convId) return
+
   await chatStore.loadConversation(convId)
   await nextTick()
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 const handleDeleteConversation = async (convId: string) => {
@@ -281,13 +301,15 @@ const handleDeleteConversation = async (convId: string) => {
 }
 
 const startNewConversation = () => {
+  chatStore.cleanupUnusedConversations()
   chatStore.clearMessages()
 }
 
 const handleSearch = async () => {
   if (!searchQuery.value.trim()) return
   try {
-    searchResults.value = await skillStore.executeSkill('search', { query: searchQuery.value })
+    const result = await skillStore.executeSkill('search', { query: searchQuery.value })
+    searchResults.value = Array.isArray(result) ? result : []
   } catch {
     searchResults.value = []
   }
@@ -300,17 +322,27 @@ const insertSkillToInput = (skillName: string) => {
 }
 
 watch(messages, () => {
-  nextTick(scrollToBottom)
+  if (isStreaming.value && isNearBottom.value) {
+    nextTick(() => scrollToBottom())
+  }
 }, { deep: true })
+
+watch(isLoadingCurrentConv, (loading) => {
+  if (loading) {
+    isNearBottom.value = true
+  } else {
+    nextTick(() => scrollToBottom(true))
+  }
+})
 
 const showCreateAgentDialog = ref(false)
 const newAgentForm = ref({
   name: '',
   description: '',
   systemPrompt: '',
-  color: '#0d9488'
+  color: '#147EBC'
 })
-const agentColors = ['#0d9488', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
+const agentColors = ['#147EBC', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
 
 const handleCreateAgent = async () => {
   if (!newAgentForm.value.name.trim()) return
@@ -323,7 +355,7 @@ const handleCreateAgent = async () => {
       capabilities: ['chat'],
     })
     showCreateAgentDialog.value = false
-    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#0d9488' }
+    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#147EBC' }
   } catch (e: any) {
     console.error('Failed to create agent:', e)
   }
@@ -360,6 +392,12 @@ onMounted(async () => {
     ])
   }
   document.addEventListener('click', handleClickOutsideModel)
+  nextTick(() => setupResizeObserver())
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  document.removeEventListener('click', handleClickOutsideModel)
 })
 </script>
 
@@ -459,7 +497,7 @@ onMounted(async () => {
         </div>
 
         <div class="chat-area">
-          <div ref="messagesContainer" class="messages-scroll">
+          <div ref="messagesContainer" class="messages-scroll" @scroll="handleMessagesScroll">
             <div class="messages-container">
               <TransitionGroup name="msg-appear" tag="div">
                 <div
@@ -480,6 +518,9 @@ onMounted(async () => {
                       <Loader2 :size="16" class="spin-animation" />
                       <span>正在分析问题...</span>
                     </div>
+                    <div v-if="msg.role === 'assistant' && !msg.done && msg.content" class="streaming-indicator">
+                      <span class="streaming-dot"></span>
+                    </div>
                     <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
                       <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
                         <Check v-if="copiedId === msg.id" :size="13" />
@@ -491,7 +532,7 @@ onMounted(async () => {
                 </div>
               </TransitionGroup>
 
-              <div v-if="messages.length === 0" class="empty-state">
+              <div v-if="messages.length === 0 && !isLoadingCurrentConv" class="empty-state">
                 <div class="empty-icon">
                   <Bot :size="48" />
                 </div>
@@ -505,6 +546,21 @@ onMounted(async () => {
               </div>
             </div>
           </div>
+
+          <Transition name="conv-loading-fade">
+            <div v-if="isLoadingCurrentConv" class="conv-loading-overlay">
+              <div class="conv-loading-content">
+                <Loader2 :size="20" class="spin-animation" />
+                <span>加载对话中...</span>
+              </div>
+            </div>
+          </Transition>
+
+          <Transition name="scroll-btn-fade">
+            <button v-if="showScrollToBottomBtn" class="scroll-to-bottom-btn" @click="scrollToBottom(true)">
+              <ChevronDown :size="18" />
+            </button>
+          </Transition>
         </div>
 
         <div class="input-area">
@@ -686,7 +742,7 @@ onMounted(async () => {
             <div
               v-for="conv in agentConversations"
               :key="conv.id"
-              :class="['history-item', { active: chatStore.currentConversation?.id === conv.id }]"
+              :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
               @click="handleLoadConversation(conv.id)"
             >
               <MessageSquare :size="14" class="history-item-icon" />
@@ -697,6 +753,7 @@ onMounted(async () => {
                   <span v-if="conv.lastMessage" class="history-item-preview">{{ conv.lastMessage }}</span>
                 </span>
               </div>
+              <Loader2 v-if="chatStore.isConversationStreaming(conv.id)" :size="12" class="history-streaming-icon spin-animation" />
               <button class="history-item-delete" title="删除" @click.stop="handleDeleteConversation(conv.id)">
                 <Trash2 :size="12" />
               </button>
@@ -924,7 +981,7 @@ onMounted(async () => {
 }
 
 .backend-warning.info {
-  background: rgba(13, 148, 136, 0.06);
+  background: rgba(20, 126, 188, 0.06);
 }
 
 .backend-warning.info::before {
@@ -973,7 +1030,7 @@ onMounted(async () => {
 
 .backend-warning.info .retry-btn {
   color: var(--lumi-primary);
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
 }
 
 .retry-btn:hover {
@@ -981,7 +1038,7 @@ onMounted(async () => {
 }
 
 .backend-warning.info .retry-btn:hover {
-  background: rgba(13, 148, 136, 0.2);
+  background: rgba(20, 126, 188, 0.2);
 }
 
 .agent-selector-row {
@@ -1026,7 +1083,7 @@ onMounted(async () => {
 .agent-card.selected {
   border-color: var(--lumi-primary);
   background: white;
-  box-shadow: 0 4px 20px rgba(13, 148, 136, 0.12);
+  box-shadow: 0 4px 20px rgba(20, 126, 188, 0.12);
 }
 
 .card-avatar {
@@ -1111,13 +1168,13 @@ onMounted(async () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .messages-scroll {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
-  scroll-behavior: smooth;
 }
 
 .messages-container {
@@ -1190,7 +1247,7 @@ onMounted(async () => {
   padding: 12px 18px;
   border-radius: var(--radius-lg);
   border-top-right-radius: 4px;
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(13, 148, 136, 0.04));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.08), rgba(20, 126, 188, 0.04));
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
@@ -1198,7 +1255,7 @@ onMounted(async () => {
 }
 
 .message-row:hover .user-message {
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(13, 148, 136, 0.06));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(20, 126, 188, 0.06));
 }
 
 .message-actions {
@@ -1245,6 +1302,99 @@ onMounted(async () => {
 
 .loading-status .spin-animation {
   animation: spin 1s linear infinite;
+}
+
+.streaming-indicator {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.streaming-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lumi-primary);
+  animation: streaming-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes streaming-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.conv-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--workspace-bg);
+  opacity: 0.85;
+  z-index: 10;
+}
+
+.conv-loading-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--workspace-card);
+  box-shadow: var(--shadow-md);
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.conv-loading-fade-enter-active {
+  animation: conv-loading-in 0.25s ease-out;
+}
+
+.conv-loading-fade-leave-active {
+  animation: conv-loading-in 0.2s ease-out reverse;
+}
+
+@keyframes conv-loading-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--workspace-card);
+  box-shadow: var(--shadow-md);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: all 300ms ease-in-out;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-50%) scale(1.08);
+}
+
+.scroll-btn-fade-enter-active {
+  animation: scroll-btn-in 0.25s ease-out;
+}
+
+.scroll-btn-fade-leave-active {
+  animation: scroll-btn-in 0.2s ease-out reverse;
+}
+
+@keyframes scroll-btn-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 @keyframes spin {
@@ -1530,6 +1680,18 @@ onMounted(async () => {
 .history-item-delete:hover {
   background: var(--lumi-accent-light);
   color: var(--lumi-accent);
+}
+
+.history-streaming-icon {
+  color: var(--lumi-primary);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.history-item.active .history-streaming-icon,
+.history-item:hover .history-streaming-icon {
+  opacity: 1;
 }
 
 .history-empty {
@@ -1869,7 +2031,7 @@ onMounted(async () => {
 }
 
 .skill-icon-badge.general {
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
 }
 
@@ -1882,7 +2044,7 @@ onMounted(async () => {
 }
 
 .skill-badge.builtin {
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
 }
 

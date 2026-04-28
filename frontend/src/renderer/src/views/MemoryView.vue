@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed } from 'vue'
 import {
   Brain,
@@ -688,7 +688,7 @@ function handleSearch() {
 .portrait-card {
   padding: 18px;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(13, 148, 136, 0.04));
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(20, 126, 188, 0.04));
   border: 1px solid var(--border);
 }
 

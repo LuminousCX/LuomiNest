@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿﻿﻿﻿<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Application, Ticker } from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'
@@ -153,7 +153,7 @@ const loadModel = async (url: string, scale: number) => {
         resizeTo: window,
         resolution: Math.min(window.devicePixelRatio || 1, 2),
         autoDensity: true
-      })
+      } as any)
     }
 
     if (!pixiApp) {
@@ -408,14 +408,6 @@ const handleClose = () => {
   window.api.desktopPet.close()
 }
 
-const handleSwitchModel = async (modelInfo: PetModelInfo) => {
-  currentModelName.value = modelInfo.name
-  if (canvasRef.value) {
-    await loadModel(modelInfo.url, modelInfo.scale)
-  }
-  isIslandExpanded.value = false
-}
-
 onMounted(async () => {
   await nextTick()
 
@@ -625,7 +617,7 @@ onBeforeUnmount(() => {
             <button class="island-btn" title="Reset Pose" @click="handleResetPose">
               <RotateCcw :size="16" />
             </button>
-            <button class="island-btn" title="Switch Model" @click="() => {}">
+            <button class="island-btn" title="Switch Model (Coming Soon)" disabled aria-disabled="true">
               <ArrowLeftRight :size="16" />
             </button>
             <button
@@ -700,8 +692,8 @@ onBeforeUnmount(() => {
 .pet-loading-spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(13, 148, 136, 0.3);
-  border-top-color: #0d9488;
+  border: 2px solid rgba(20, 126, 188, 0.3);
+  border-top-color: #147EBC;
   border-radius: 50%;
   animation: pet-spin 0.8s linear infinite;
 }
@@ -776,9 +768,9 @@ onBeforeUnmount(() => {
 }
 
 .island-btn.active {
-  background: rgba(13, 148, 136, 0.2);
-  border-color: rgba(13, 148, 136, 0.4);
-  color: #0d9488;
+  background: rgba(20, 126, 188, 0.2);
+  border-color: rgba(20, 126, 188, 0.4);
+  color: #147EBC;
 }
 
 .island-btn.danger:hover {

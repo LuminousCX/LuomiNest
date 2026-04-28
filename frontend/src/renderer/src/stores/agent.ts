@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+﻿import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { AgentProfile, MainAgentConfig } from '../types'
 import { useApi } from '../composables/useApi'
@@ -69,7 +69,7 @@ export const useAgentStore = defineStore('agent', () => {
       system_prompt: agent.systemPrompt || '',
       model: agent.model,
       provider: agent.provider,
-      color: agent.color || '#0d9488',
+      color: agent.color || '#147EBC',
       capabilities: agent.capabilities || ['chat'],
       skills: agent.skills || [],
       mcp_servers: agent.mcpServers || [],

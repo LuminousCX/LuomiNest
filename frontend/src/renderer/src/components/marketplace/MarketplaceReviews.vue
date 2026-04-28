@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Check, MessageCircle, ChevronDown, Send } from 'lucide-vue-next'
+import { MessageCircle, Send } from 'lucide-vue-next'
 import type { MarketplaceReview } from '../../types/marketplace'
 import MarketplaceRating from './MarketplaceRating.vue'
 import { useMarketplaceStore } from '../../stores/marketplace'

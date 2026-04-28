@@ -15,8 +15,6 @@ jobs:
         include:
           - os: windows-latest
             platform: win
-          - os: macos-latest
-            platform: mac
           - os: ubuntu-latest
             platform: linux
 
@@ -82,7 +80,6 @@ jobs:
           fi
           if [ ! -f "$BACKEND_EXE" ]; then
             echo "[ERROR] Backend executable not found: $BACKEND_EXE"
-            echo "The backend build may have failed. Check the build output above."
             exit 1
           fi
           echo "[OK] Backend executable verified: $BACKEND_EXE"
@@ -122,19 +119,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build macOS DMG
-        if: matrix.platform == 'mac'
-        run: |
-          cd frontend
-          pnpm exec electron-builder --mac
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build Linux packages
         if: matrix.platform == 'linux'
         run: |
           cd frontend
-          pnpm exec electron-builder --linux
+          pnpm exec electron-builder --linux AppImage deb rpm
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -144,7 +133,6 @@ jobs:
           name: LuomiNest-${{ matrix.platform }}
           path: |
             frontend/release/dist/*
-            frontend/release/installer/*
 
   create-release:
     needs: release

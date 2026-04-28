@@ -14,6 +14,7 @@ import {
   Moon
 } from 'lucide-vue-next'
 import { useThemeStore } from '../../stores/theme'
+import UserProfileEditor from '../../components/UserProfileEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -121,7 +122,10 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
       </div>
 
       <div class="settings-body">
-        <div class="setting-items-card animate-slide-up">
+        <div v-if="section === 'profile'" class="profile-section animate-slide-up">
+          <UserProfileEditor />
+        </div>
+        <div v-else class="setting-items-card animate-slide-up">
           <div
             v-for="(item, idx) in currentSection.items"
             :key="item.label"
@@ -224,7 +228,7 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
   width: 44px;
   height: 44px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.1), rgba(20, 184, 166, 0.1));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.1));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -247,6 +251,15 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
   flex: 1;
   overflow-y: auto;
   padding: 24px 28px;
+}
+
+.profile-section {
+  max-width: 640px;
+}
+
+.profile-section :deep(.profile-editor) {
+  max-height: none;
+  border-radius: var(--radius-lg);
 }
 
 .setting-items-card {

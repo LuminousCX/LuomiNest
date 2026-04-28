@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TitleBar from './components/TitleBar.vue'
 import LumiSidebar from './components/LumiSidebar.vue'
-import { useThemeStore } from './stores/theme'
 
 const route = useRoute()
-const themeStore = useThemeStore()
 
 const isWelcomePage = computed(() => route.path === '/welcome')
 const isDesktopPetPage = computed(() => route.path === '/desktop-pet')
-const isAgentCreatePage = computed(() => route.path === '/agent/create')
 const isMinimalLayout = computed(() => isWelcomePage.value || isDesktopPetPage.value)
 
 watch(isDesktopPetPage, (val) => {

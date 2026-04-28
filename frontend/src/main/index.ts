@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, NativeImage, MenuItemConstructorOptions, dialog, protocol, screen } from 'electron'
-import { join, dirname, basename } from 'path'
+import { join, dirname, basename, resolve, sep } from 'path'
 import { platform } from 'os'
 import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs'
 import { tabManager } from './services/browser'
@@ -21,6 +21,10 @@ let desktopPetWindow: BrowserWindow | null = null
 
 const isDev = !app.isPackaged
 const isMac = platform() === 'darwin'
+
+if (isDev) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
+}
 
 const builtinBasePath = isDev
   ? join(app.getAppPath(), 'src/renderer/public/live2d')
@@ -99,7 +103,7 @@ const createWindow = (): void => {
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
     trafficLightPosition: { x: 12, y: 10 },
-    backgroundColor: '#fafaf9',
+    backgroundColor: '#F5F8FB',
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -146,8 +150,8 @@ const createWindow = (): void => {
     return { action: 'deny' }
   })
 
-  const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
-  const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+  const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+  const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
   const CSP_POLICY = isDev ? CSP_DEV : CSP_PROD
 
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -761,53 +765,112 @@ const MIME_MAP: Record<string, string> = {
   motion3: 'application/json',
   cdi3: 'application/json',
   userdata3: 'application/json',
-  js: 'application/javascript'
+  js: 'application/javascript',
+  wasm: 'application/wasm',
+  txt: 'text/plain'
+}
+
+const isPathSafe = (baseDir: string, targetPath: string): boolean => {
+  const resolved = resolve(baseDir, targetPath)
+  const resolvedBase = resolve(baseDir) + sep
+  return resolved.startsWith(resolvedBase)
 }
 
 const resolveModelFile = (hostname: string, relativePath: string): string | null => {
+  // Decoding responsibility: this function owns URI decoding.
+  // Callers must pass raw (still percent-encoded) relativePath.
+  const decodedPath = decodeURIComponent(relativePath)
+
   if (hostname === 'cubism-core') {
-    const filePath = join(cubismCoreBasePath, relativePath)
+    const filePath = resolve(cubismCoreBasePath, decodedPath)
+    if (!isPathSafe(cubismCoreBasePath, decodedPath)) {
+      console.warn(`[SECURITY][LuomiNestAvatar] Path traversal blocked: ${decodedPath}`)
+      return null
+    }
     if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
+    console.warn(`[WARNING][LuomiNestAvatar] Cubism core not found: ${filePath}`)
     return null
   }
 
-  const importedPath = join(PATHS.live2d, hostname, relativePath)
-  if (existsSync(importedPath) && statSync(importedPath).isFile()) return importedPath
+  const searchPaths: { label: string; base: string; sub: string }[] = [
+    { label: 'imported', base: PATHS.live2d, sub: join(hostname, decodedPath) },
+    { label: 'builtin', base: builtinBasePath, sub: join(hostname, decodedPath) }
+  ]
 
-  const builtinPath = join(builtinBasePath, hostname, relativePath)
-  if (existsSync(builtinPath) && statSync(builtinPath).isFile()) return builtinPath
+  for (const sp of searchPaths) {
+    try {
+      if (!isPathSafe(sp.base, sp.sub)) {
+        console.warn(`[SECURITY][LuomiNestAvatar] Path traversal blocked: ${sp.label}:${sp.sub}`)
+        continue
+      }
+      const filePath = resolve(sp.base, sp.sub)
+      if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
+    } catch {
+      continue
+    }
+  }
 
+  console.warn(`[WARNING][LuomiNestAvatar] Resource not found: ${hostname}/${relativePath}`)
+  console.warn(`[WARNING][LuomiNestAvatar]   Searched: ${searchPaths.map(s => s.label + ':' + resolve(s.base, s.sub)).join(' | ')}`)
   return null
 }
 
 app.whenReady().then(async () => {
   initAppPaths()
 
-  protocol.handle('luominest-avatar', (request) => {
-    const url = new URL(request.url)
-    const hostname = url.hostname
-    const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, '')
-
-    const filePath = resolveModelFile(hostname, relativePath)
-    if (!filePath) {
-      console.warn(`[WARNING][LuomiNestAvatar] Resource not found: ${hostname}/${relativePath}`)
-      return new Response('Not Found', { status: 404 })
+  const verifyResourcePath = (label: string, path: string, sampleFile: string): boolean => {
+    const fullPath = join(path, sampleFile)
+    const exists = existsSync(fullPath)
+    if (!exists) {
+      console.warn(`[WARNING][LuomiNestAvatar] ${label} path check FAILED: ${path} (sample: ${fullPath})`)
+    } else {
+      console.info(`[INFO][LuomiNestAvatar] ${label} path OK: ${path}`)
     }
+    return exists
+  }
 
-    const ext = filePath.split('.').pop()?.toLowerCase()
-    const mimeType = MIME_MAP[ext ?? ''] ?? 'application/octet-stream'
-    const data = readFileSync(filePath)
-    return new Response(data, {
-      headers: {
-        'content-type': mimeType,
-        'access-control-allow-origin': '*',
-        'cache-control': 'no-cache'
+  verifyResourcePath('Builtin Live2D', builtinBasePath, 'llny/llny.model3.json')
+  verifyResourcePath('Cubism Core', cubismCoreBasePath, 'live2dcubismcore.min.js')
+
+  protocol.handle('luominest-avatar', (request) => {
+    try {
+      const url = new URL(request.url)
+      const hostname = url.hostname
+      const relativePath = url.pathname.replace(/^\/+/, '')
+
+      if (!hostname || !relativePath) {
+        return new Response('Bad Request: invalid URL', { status: 400 })
       }
-    })
+
+      const filePath = resolveModelFile(hostname, relativePath)
+      if (!filePath) {
+        console.warn(`[WARNING][LuomiNestAvatar] 404: ${hostname}/${relativePath}`)
+        return new Response('Not Found', { status: 404 })
+      }
+
+      const ext = filePath.split('.').pop()?.toLowerCase()
+      const mimeType = MIME_MAP[ext ?? ''] ?? 'application/octet-stream'
+      const data = readFileSync(filePath)
+      return new Response(data, {
+        headers: {
+          'content-type': mimeType,
+          'access-control-allow-origin': '*',
+          'cache-control': 'no-cache',
+          'content-length': String(data.byteLength)
+        }
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error(`[ERROR][LuomiNestAvatar] Protocol handler error:`, message)
+      return new Response('Internal Server Error', { status: 500 })
+    }
   })
 
-  console.info(`[INFO][LuomiNestAvatar] Protocol registered. Builtin path: ${builtinBasePath}`)
-  console.info(`[INFO][LuomiNestAvatar] Cubism core path: ${cubismCoreBasePath}`)
+  console.info(`[INFO][LuomiNestAvatar] Protocol "luominest-avatar" registered successfully`)
+  console.info(`[INFO][LuomiNestAvatar]   builtinBasePath → ${builtinBasePath}`)
+  console.info(`[INFO][LuomiNestAvatar]   cubismCoreBasePath → ${cubismCoreBasePath}`)
+  console.info(`[INFO][LuomiNestAvatar]   isPackaged → ${app.isPackaged}`)
+  console.info(`[INFO][LuomiNestAvatar]   resourcesPath → ${process.resourcesPath}`)
 
   console.log('[Main] Starting backend service...')
   const backendStarted = await startBackend()

@@ -1,11 +1,8 @@
-<script setup lang="ts">
+﻿﻿<script setup lang="ts">
 import { ref } from 'vue'
 import {
-  CheckSquare,
   Plus,
-  Clock,
   Calendar,
-  AlertCircle,
   CheckCircle2,
   Circle,
   Trash2,
@@ -173,7 +170,7 @@ const stats = ref([
 .add-task-btn:hover {
   background: var(--lumi-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.25);
+  box-shadow: 0 4px 12px rgba(20, 126, 188, 0.25);
 }
 
 .stats-row {

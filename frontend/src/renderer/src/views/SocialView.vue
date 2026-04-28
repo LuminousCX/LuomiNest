@@ -9,7 +9,6 @@ import {
   Search,
   MoreVertical,
   Send,
-  Sparkles,
   Hash,
   ImagePlus,
   Mic,
@@ -20,7 +19,7 @@ import {
 } from 'lucide-vue-next'
 import { useSocialStore } from '../stores/social'
 import { useAgentStore } from '../stores/agent'
-import type { GroupInfo, GroupMessage } from '../types'
+import type { GroupInfo } from '../types'
 
 const socialStore = useSocialStore()
 const agentStore = useAgentStore()
@@ -554,7 +553,7 @@ onMounted(async () => {
 }
 
 .tab-btn.active .tab-count {
-  background: rgba(13, 148, 136, 0.15);
+  background: rgba(20, 126, 188, 0.15);
 }
 
 .sidebar-search {
@@ -696,7 +695,7 @@ onMounted(async () => {
 }
 
 .group-icon.mixed {
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
 }
 
@@ -940,7 +939,7 @@ onMounted(async () => {
 }
 
 .msg-bubble.user {
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(13, 148, 136, 0.04));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.08), rgba(20, 126, 188, 0.04));
   color: var(--text-primary);
   border-top-right-radius: 4px;
 }
@@ -959,7 +958,7 @@ onMounted(async () => {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: var(--radius-full);
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
   font-weight: 500;
 }
@@ -980,7 +979,7 @@ onMounted(async () => {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
   display: flex;
   align-items: center;

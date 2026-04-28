@@ -1,4 +1,4 @@
-import type { MarketplaceCategory, MarketplaceTag, MarketplaceItem, MarketplaceAuthor } from '../types/marketplace'
+﻿import type { MarketplaceCategory, MarketplaceTag, MarketplaceItem, MarketplaceAuthor } from '../types/marketplace'
 
 export const PLUGIN_CATEGORIES: MarketplaceCategory[] = [
   { id: 'all', name: '全部', icon: 'LayoutGrid' },
@@ -67,14 +67,14 @@ export const SKILL_CATEGORIES: MarketplaceCategory[] = [
 ]
 
 export const COMMON_TAGS: MarketplaceTag[] = [
-  { id: 'official', name: '官方', color: '#0d9488' },
+  { id: 'official', name: '官方', color: '#147EBC' },
   { id: 'community', name: '社区', color: '#6366f1' },
   { id: 'free', name: '免费', color: '#22c55e' },
   { id: 'premium', name: '付费', color: '#f59e0b' },
   { id: 'popular', name: '热门', color: '#f43f5e' },
   { id: 'new', name: '新品', color: '#3b82f6' },
   { id: 'experimental', name: '实验性', color: '#8b5cf6' },
-  { id: 'stable', name: '稳定', color: '#0d9488' },
+  { id: 'stable', name: '稳定', color: '#147EBC' },
 ]
 
 const MOCK_AUTHORS: MarketplaceAuthor[] = [
