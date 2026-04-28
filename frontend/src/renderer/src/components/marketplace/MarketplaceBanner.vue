@@ -12,12 +12,11 @@ defineProps<{
 const router = useRouter()
 
 function navigateToDetail(item: MarketplaceItem) {
-  const prefix = item.type === 'plugin' ? '/plugins' : '/skills'
-  router.push(`${prefix}/${item.id}`)
+  router.push(`/market/detail/${item.type}/${item.id}`)
 }
 
-function navigateToList(type: 'plugin' | 'skill') {
-  router.push(type === 'plugin' ? '/plugins' : '/skills')
+function navigateToList() {
+  router.push('/market')
 }
 </script>
 
@@ -25,7 +24,7 @@ function navigateToList(type: 'plugin' | 'skill') {
   <div class="market-banner">
     <div class="banner-header">
       <h2 class="banner-title">{{ title }}</h2>
-      <button class="view-all-btn" @click="navigateToList(type)">
+      <button class="view-all-btn" @click="navigateToList()">
         查看全部
         <ArrowRight :size="14" />
       </button>

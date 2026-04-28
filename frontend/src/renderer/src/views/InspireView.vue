@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from 'vue'
 import {
   Lightbulb,
@@ -10,7 +10,7 @@ import {
 } from 'lucide-vue-next'
 
 const ideas = ref([
-  { title: '今日灵感', desc: '基于你的对话历史生成的创意方向', icon: Sparkles, color: '#0d9488' },
+  { title: '今日灵感', desc: '基于你的对话历史生成的创意方向', icon: Sparkles, color: '#147EBC' },
   { title: '写作助手', desc: 'AI辅助文案创作与润色', icon: Wand2, color: '#6366f1' },
   { title: '知识图谱', desc: '探索你的记忆与认知网络', icon: Brain, color: '#f59e0b' },
   { title: '阅读推荐', desc: '根据兴趣为你精选内容', icon: BookOpen, color: '#f43f5e' }

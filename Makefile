@@ -1,7 +1,5 @@
 .PHONY: help check install dev dev-frontend dev-backend build build-frontend build-backend \
-       build-win build-win-nsis build-win-portable \
-       build-linux build-linux-appimage build-linux-deb \
-       build-mac build-mac-dmg \
+       build-win build-linux build-mac \
        prepare-backend verify-backend \
        clean clean-frontend clean-backend clean-all config doctor \
        lint lint-frontend lint-backend test test-frontend test-backend
@@ -64,13 +62,8 @@ help:
 	@echo ""
 	@echo "Platform-Specific Build:"
 	@echo "  make build-win            - Build Windows installer (NSIS + portable)"
-	@echo "  make build-win-nsis       - Build Windows NSIS installer only"
-	@echo "  make build-win-portable   - Build Windows portable executable"
-	@echo "  make build-linux          - Build Linux packages (AppImage + deb + tar.gz)"
-	@echo "  make build-linux-appimage - Build Linux AppImage only"
-	@echo "  make build-linux-deb      - Build Linux deb package only"
+	@echo "  make build-linux          - Build Linux packages (AppImage + deb + rpm)"
 	@echo "  make build-mac            - Build macOS DMG + zip"
-	@echo "  make build-mac-dmg        - Build macOS DMG only"
 	@echo ""
 	@echo "Quality Commands:"
 	@echo "  make lint                 - Run all linters"
@@ -215,39 +208,14 @@ build-win: prepare-backend
 	cd $(FRONTEND_DIR) && $(PNPM) run build:win
 	@echo "Output: $(FRONTEND_DIR)/release/dist/"
 
-build-win-nsis: prepare-backend
-	@echo "[Frontend] Building Windows NSIS installer..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build:win-nsis
-	@echo "Output: $(FRONTEND_DIR)/release/dist/"
-
-build-win-portable: prepare-backend
-	@echo "[Frontend] Building Windows portable..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build:win-portable
-	@echo "Output: $(FRONTEND_DIR)/release/dist/"
-
 build-linux: prepare-backend
-	@echo "[Frontend] Building Linux packages (AppImage + deb + tar.gz)..."
+	@echo "[Frontend] Building Linux packages (AppImage + deb + rpm)..."
 	cd $(FRONTEND_DIR) && $(PNPM) run build:linux
-	@echo "Output: $(FRONTEND_DIR)/release/dist/"
-
-build-linux-appimage: prepare-backend
-	@echo "[Frontend] Building Linux AppImage..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build:linux-appimage
-	@echo "Output: $(FRONTEND_DIR)/release/dist/"
-
-build-linux-deb: prepare-backend
-	@echo "[Frontend] Building Linux deb package..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build:linux-deb
 	@echo "Output: $(FRONTEND_DIR)/release/dist/"
 
 build-mac: prepare-backend
 	@echo "[Frontend] Building macOS DMG + zip..."
 	cd $(FRONTEND_DIR) && $(PNPM) run build:mac
-	@echo "Output: $(FRONTEND_DIR)/release/dist/"
-
-build-mac-dmg: prepare-backend
-	@echo "[Frontend] Building macOS DMG..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build:mac-dmg
 	@echo "Output: $(FRONTEND_DIR)/release/dist/"
 
 lint: lint-frontend lint-backend

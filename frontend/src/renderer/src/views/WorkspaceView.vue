@@ -1,5 +1,5 @@
-<script setup lang="ts">
-import { ref, onMounted, nextTick, watch, computed } from 'vue'
+﻿﻿<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import {
   Send,
   Paperclip,
@@ -9,16 +9,13 @@ import {
   Sparkles,
   Bot,
   Link2,
-  MoreHorizontal,
   Loader2,
   Settings,
   AlertTriangle,
-  StopCircle,
   RotateCcw,
   Clock,
   MessageSquare,
   Trash2,
-  X,
   Plus,
   Copy,
   Check,
@@ -52,34 +49,17 @@ const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const showModelDropdown = ref(false)
-const showHistoryPanel = ref(true)
+const showHistoryPanel = ref(false)
 const showSkillDropdown = ref(false)
 const showSearchPanel = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<any[]>([])
 const copiedId = ref<string | null>(null)
-
-const agentCards = computed(() => {
-  const agents = agentStore.agents.map(a => ({
-    id: a.id,
-    name: a.name,
-    desc: a.description,
-    color: a.color,
-    avatar: a.avatar,
-    selected: agentStore.activeAgent?.id === a.id
-  }))
-  return [
-    ...agents,
-    {
-      id: '__custom__',
-      name: '自定义',
-      desc: '创建全新 Agent',
-      color: '#f43f5e',
-      avatar: null,
-      selected: false
-    }
-  ]
-})
+const isNearBottom = ref(true)
+const SCROLL_BOTTOM_THRESHOLD = 120
+const showScrollToBottomBtn = ref(false)
+const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
+let resizeObserver: ResizeObserver | null = null
 
 const messages = computed(() => chatStore.messages)
 const isStreaming = computed(() => chatStore.isStreaming)
@@ -136,24 +116,6 @@ const agentConversations = computed(() => {
 
 const activeSkills = computed(() => skillStore.skills.filter(s => s.isActive))
 
-const selectAgent = async (agent: { id: string; name: string; desc: string; color: string }) => {
-  if (agent.id === '__custom__') {
-    showCreateAgentDialog.value = true
-    return
-  }
-  const found = agentStore.agents.find(a => a.id === agent.id)
-  if (found) {
-    agentStore.setActiveAgent(found)
-    // 不要清空消息，让watch监听器处理状态切换
-    await chatStore.fetchConversations(found.id)
-    // 如果有对话历史，加载最新的对话
-    if (chatStore.conversations.length > 0) {
-      const latestConv = chatStore.conversations[0]
-      await chatStore.loadConversation(latestConv.id)
-    }
-  }
-}
-
 const selectModel = (providerId: string, modelId: string) => {
   if (agentStore.activeAgent) {
     agentStore.updateAgent(agentStore.activeAgent.id, {
@@ -175,15 +137,6 @@ const sendMessage = async () => {
   const agent = agentStore.activeAgent
   const resolved = modelStore.resolveModel
 
-  if (!chatStore.currentConversation) {
-    await chatStore.createConversation(
-      content.slice(0, 30),
-      agent?.id,
-      agent?.model || resolved?.model || undefined,
-      agent?.provider || resolved?.provider || undefined,
-    )
-  }
-
   const options: any = {
     model: agent?.model || resolved?.model || undefined,
     provider: agent?.provider || resolved?.provider || undefined,
@@ -194,19 +147,43 @@ const sendMessage = async () => {
   if (agent?.systemPrompt) options.systemPrompt = agent.systemPrompt
   if (agent?.id) options.agentId = agent.id
 
+  isNearBottom.value = true
   await chatStore.sendMessage(content, options)
   await nextTick()
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 const cancelStreaming = () => {
   chatStore.cancelCurrentRequest()
 }
 
-const scrollToBottom = () => {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTo({ top: messagesContainer.value.scrollHeight, behavior: 'smooth' })
-  }
+const scrollToBottom = (force = false) => {
+  if (!messagesContainer.value) return
+  if (!force && !isNearBottom.value) return
+  messagesContainer.value.scrollTo({
+    top: messagesContainer.value.scrollHeight,
+    behavior: force ? 'auto' : 'smooth'
+  })
+}
+
+const handleMessagesScroll = () => {
+  if (!messagesContainer.value) return
+  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+  isNearBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
+  showScrollToBottomBtn.value = !isNearBottom.value && messages.value.length > 0
+}
+
+const setupResizeObserver = () => {
+  if (!messagesContainer.value) return
+  const inner = messagesContainer.value.querySelector('.messages-container') as HTMLElement
+  if (!inner) return
+  resizeObserver = new ResizeObserver(() => {
+    if (isNearBottom.value) {
+      scrollToBottom(true)
+    }
+  })
+  resizeObserver.observe(inner)
 }
 
 const resetTextareaHeight = () => {
@@ -271,9 +248,11 @@ const formatTime = (dateStr: string) => {
 }
 
 const handleLoadConversation = async (convId: string) => {
+  if (chatStore.currentConvId === convId) return
+
   await chatStore.loadConversation(convId)
   await nextTick()
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 const handleDeleteConversation = async (convId: string) => {
@@ -281,13 +260,15 @@ const handleDeleteConversation = async (convId: string) => {
 }
 
 const startNewConversation = () => {
+  chatStore.cleanupUnusedConversations()
   chatStore.clearMessages()
 }
 
 const handleSearch = async () => {
   if (!searchQuery.value.trim()) return
   try {
-    searchResults.value = await skillStore.executeSkill('search', { query: searchQuery.value })
+    const result = await skillStore.executeSkill('search', { query: searchQuery.value })
+    searchResults.value = Array.isArray(result) ? result : []
   } catch {
     searchResults.value = []
   }
@@ -300,42 +281,18 @@ const insertSkillToInput = (skillName: string) => {
 }
 
 watch(messages, () => {
-  nextTick(scrollToBottom)
+  if (isStreaming.value && isNearBottom.value) {
+    nextTick(() => scrollToBottom())
+  }
 }, { deep: true })
 
-const showCreateAgentDialog = ref(false)
-const newAgentForm = ref({
-  name: '',
-  description: '',
-  systemPrompt: '',
-  color: '#0d9488'
+watch(isLoadingCurrentConv, (loading) => {
+  if (loading) {
+    isNearBottom.value = true
+  } else {
+    nextTick(() => scrollToBottom(true))
+  }
 })
-const agentColors = ['#0d9488', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
-
-const handleCreateAgent = async () => {
-  if (!newAgentForm.value.name.trim()) return
-  try {
-    await agentStore.createAgent({
-      name: newAgentForm.value.name.trim(),
-      description: newAgentForm.value.description.trim(),
-      systemPrompt: newAgentForm.value.systemPrompt.trim(),
-      color: newAgentForm.value.color,
-      capabilities: ['chat'],
-    })
-    showCreateAgentDialog.value = false
-    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#0d9488' }
-  } catch (e: any) {
-    console.error('Failed to create agent:', e)
-  }
-}
-
-const handleDeleteAgent = async (agentId: string) => {
-  try {
-    await agentStore.deleteAgent(agentId)
-  } catch (e: any) {
-    console.error('Failed to delete agent:', e)
-  }
-}
 
 const handleClickOutsideModel = (e: MouseEvent) => {
   const target = e.target as HTMLElement
@@ -360,6 +317,12 @@ onMounted(async () => {
     ])
   }
   document.addEventListener('click', handleClickOutsideModel)
+  nextTick(() => setupResizeObserver())
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  document.removeEventListener('click', handleClickOutsideModel)
 })
 </script>
 
@@ -424,42 +387,8 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="agent-selector-row">
-          <div class="agent-cards-scroll">
-            <button
-              v-for="(card, idx) in agentCards"
-              :key="card.id"
-              :class="['agent-card', { selected: card.selected }]"
-              :style="{ animationDelay: `${idx * 60}ms` }"
-              @click="selectAgent(card)"
-            >
-              <div class="card-avatar" :style="{ background: card.color + '14', color: card.color, borderColor: card.selected ? card.color : 'transparent' }">
-                <Bot v-if="card.id !== '__custom__'" :size="26" />
-                <Sparkles v-else :size="26" />
-              </div>
-              <div class="card-info">
-                <span class="card-name">{{ card.name }}</span>
-                <span class="card-desc">{{ card.desc }}</span>
-              </div>
-              <button
-                v-if="card.id !== '__custom__' && !card.id.startsWith('default-')"
-                class="card-delete"
-                title="删除 Agent"
-                @click.stop="handleDeleteAgent(card.id)"
-              >
-                <MoreHorizontal :size="14" />
-              </button>
-            </button>
-          </div>
-          <Transition name="selection-fade">
-            <div v-if="agentStore.activeAgent" class="selection-toast">
-              我选择「{{ agentStore.activeAgent.name }}」作为我的Agent
-            </div>
-          </Transition>
-        </div>
-
         <div class="chat-area">
-          <div ref="messagesContainer" class="messages-scroll">
+          <div ref="messagesContainer" class="messages-scroll" @scroll="handleMessagesScroll">
             <div class="messages-container">
               <TransitionGroup name="msg-appear" tag="div">
                 <div
@@ -480,6 +409,9 @@ onMounted(async () => {
                       <Loader2 :size="16" class="spin-animation" />
                       <span>正在分析问题...</span>
                     </div>
+                    <div v-if="msg.role === 'assistant' && !msg.done && msg.content" class="streaming-indicator">
+                      <span class="streaming-dot"></span>
+                    </div>
                     <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
                       <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
                         <Check v-if="copiedId === msg.id" :size="13" />
@@ -491,7 +423,7 @@ onMounted(async () => {
                 </div>
               </TransitionGroup>
 
-              <div v-if="messages.length === 0" class="empty-state">
+              <div v-if="messages.length === 0 && !isLoadingCurrentConv" class="empty-state">
                 <div class="empty-icon">
                   <Bot :size="48" />
                 </div>
@@ -505,6 +437,21 @@ onMounted(async () => {
               </div>
             </div>
           </div>
+
+          <Transition name="conv-loading-fade">
+            <div v-if="isLoadingCurrentConv" class="conv-loading-overlay">
+              <div class="conv-loading-content">
+                <Loader2 :size="20" class="spin-animation" />
+                <span>加载对话中...</span>
+              </div>
+            </div>
+          </Transition>
+
+          <Transition name="scroll-btn-fade">
+            <button v-if="showScrollToBottomBtn" class="scroll-to-bottom-btn" @click="scrollToBottom(true)">
+              <ChevronDown :size="18" />
+            </button>
+          </Transition>
         </div>
 
         <div class="input-area">
@@ -686,7 +633,7 @@ onMounted(async () => {
             <div
               v-for="conv in agentConversations"
               :key="conv.id"
-              :class="['history-item', { active: chatStore.currentConversation?.id === conv.id }]"
+              :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
               @click="handleLoadConversation(conv.id)"
             >
               <MessageSquare :size="14" class="history-item-icon" />
@@ -697,6 +644,7 @@ onMounted(async () => {
                   <span v-if="conv.lastMessage" class="history-item-preview">{{ conv.lastMessage }}</span>
                 </span>
               </div>
+              <Loader2 v-if="chatStore.isConversationStreaming(conv.id)" :size="12" class="history-streaming-icon spin-animation" />
               <button class="history-item-delete" title="删除" @click.stop="handleDeleteConversation(conv.id)">
                 <Trash2 :size="12" />
               </button>
@@ -734,55 +682,6 @@ onMounted(async () => {
       </div>
     </Transition>
 
-    <Transition name="selection-fade">
-      <div v-if="showCreateAgentDialog" class="add-dialog-overlay" @click.self="showCreateAgentDialog = false">
-        <div class="add-dialog">
-          <h3>创建自定义 Agent</h3>
-          <div class="form-group">
-            <label class="form-label">
-              名称
-              <span class="required-mark">*</span>
-            </label>
-            <input v-model="newAgentForm.name" type="text" class="form-input" placeholder="如: 小助手" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">描述</label>
-            <input v-model="newAgentForm.description" type="text" class="form-input" placeholder="如: 通用对话助手" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">系统提示词</label>
-            <textarea
-              v-model="newAgentForm.systemPrompt"
-              class="form-input form-textarea"
-              placeholder="定义 Agent 的角色和行为..."
-              rows="4"
-            ></textarea>
-          </div>
-          <div class="form-group">
-            <label class="form-label">颜色</label>
-            <div class="color-picker">
-              <button
-                v-for="color in agentColors"
-                :key="color"
-                :class="['color-dot', { active: newAgentForm.color === color }]"
-                :style="{ background: color }"
-                @click="newAgentForm.color = color"
-              ></button>
-            </div>
-          </div>
-          <div class="dialog-actions">
-            <button class="dialog-btn cancel" @click="showCreateAgentDialog = false">取消</button>
-            <button
-              :class="['dialog-btn confirm', { disabled: !newAgentForm.name.trim() }]"
-              :disabled="!newAgentForm.name.trim()"
-              @click="handleCreateAgent"
-            >
-              创建
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
   </div>
 </template>
 
@@ -924,7 +823,7 @@ onMounted(async () => {
 }
 
 .backend-warning.info {
-  background: rgba(13, 148, 136, 0.06);
+  background: rgba(20, 126, 188, 0.06);
 }
 
 .backend-warning.info::before {
@@ -973,7 +872,7 @@ onMounted(async () => {
 
 .backend-warning.info .retry-btn {
   color: var(--lumi-primary);
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
 }
 
 .retry-btn:hover {
@@ -981,129 +880,7 @@ onMounted(async () => {
 }
 
 .backend-warning.info .retry-btn:hover {
-  background: rgba(13, 148, 136, 0.2);
-}
-
-.agent-selector-row {
-  padding: 16px 24px 0;
-  position: relative;
-  flex-shrink: 0;
-}
-
-.agent-cards-scroll {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 12px;
-  scrollbar-width: none;
-}
-
-.agent-cards-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.agent-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px 10px 10px;
-  border-radius: var(--radius-lg);
-  border: 1.5px solid transparent;
-  background: var(--workspace-card);
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  flex-shrink: 0;
-  animation: lumi-fade-in 0.4s ease-out both;
-  box-shadow: var(--shadow-xs);
-  position: relative;
-}
-
-.agent-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-.agent-card.selected {
-  border-color: var(--lumi-primary);
-  background: white;
-  box-shadow: 0 4px 20px rgba(13, 148, 136, 0.12);
-}
-
-.card-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid transparent;
-  transition: border-color var(--transition-fast);
-}
-
-.card-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: left;
-}
-
-.card-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.card-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  max-width: 120px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.card-delete {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  opacity: 0;
-  transition: all var(--transition-fast);
-}
-
-.agent-card:hover .card-delete {
-  opacity: 1;
-}
-
-.card-delete:hover {
-  background: var(--lumi-accent-light);
-  color: var(--lumi-accent);
-}
-
-.selection-toast {
-  margin-top: 10px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
-  padding: 8px 20px;
-  border-radius: var(--radius-full);
-  display: inline-block;
-  width: 100%;
-}
-
-.selection-fade-enter-active {
-  animation: lumi-fade-in 0.3s ease-out;
-}
-
-.selection-fade-leave-active {
-  animation: lumi-fade-in 0.2s ease-out reverse;
+  background: rgba(20, 126, 188, 0.2);
 }
 
 .chat-area {
@@ -1111,13 +888,13 @@ onMounted(async () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .messages-scroll {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
-  scroll-behavior: smooth;
 }
 
 .messages-container {
@@ -1190,7 +967,7 @@ onMounted(async () => {
   padding: 12px 18px;
   border-radius: var(--radius-lg);
   border-top-right-radius: 4px;
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(13, 148, 136, 0.04));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.08), rgba(20, 126, 188, 0.04));
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
@@ -1198,7 +975,7 @@ onMounted(async () => {
 }
 
 .message-row:hover .user-message {
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(13, 148, 136, 0.06));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(20, 126, 188, 0.06));
 }
 
 .message-actions {
@@ -1245,6 +1022,99 @@ onMounted(async () => {
 
 .loading-status .spin-animation {
   animation: spin 1s linear infinite;
+}
+
+.streaming-indicator {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.streaming-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lumi-primary);
+  animation: streaming-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes streaming-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.conv-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--workspace-bg);
+  opacity: 0.85;
+  z-index: 10;
+}
+
+.conv-loading-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--workspace-card);
+  box-shadow: var(--shadow-md);
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.conv-loading-fade-enter-active {
+  animation: conv-loading-in 0.25s ease-out;
+}
+
+.conv-loading-fade-leave-active {
+  animation: conv-loading-in 0.2s ease-out reverse;
+}
+
+@keyframes conv-loading-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--workspace-card);
+  box-shadow: var(--shadow-md);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: all 300ms ease-in-out;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-50%) scale(1.08);
+}
+
+.scroll-btn-fade-enter-active {
+  animation: scroll-btn-in 0.25s ease-out;
+}
+
+.scroll-btn-fade-leave-active {
+  animation: scroll-btn-in 0.2s ease-out reverse;
+}
+
+@keyframes scroll-btn-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 @keyframes spin {
@@ -1530,6 +1400,18 @@ onMounted(async () => {
 .history-item-delete:hover {
   background: var(--lumi-accent-light);
   color: var(--lumi-accent);
+}
+
+.history-streaming-icon {
+  color: var(--lumi-primary);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.history-item.active .history-streaming-icon,
+.history-item:hover .history-streaming-icon {
+  opacity: 1;
 }
 
 .history-empty {
@@ -1869,7 +1751,7 @@ onMounted(async () => {
 }
 
 .skill-icon-badge.general {
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
 }
 
@@ -1882,7 +1764,7 @@ onMounted(async () => {
 }
 
 .skill-badge.builtin {
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
 }
 
@@ -1977,150 +1859,6 @@ onMounted(async () => {
 .input-footer span {
   font-size: 11px;
   color: var(--text-muted);
-}
-
-.add-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  backdrop-filter: blur(4px);
-}
-
-.add-dialog {
-  background: var(--workspace-card);
-  border-radius: var(--radius-xl);
-  padding: 28px;
-  width: 440px;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: var(--shadow-xl);
-  animation: dialog-enter 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes dialog-enter {
-  from { opacity: 0; transform: scale(0.95) translateY(10px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-.add-dialog h3 {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 20px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.form-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.required-mark {
-  color: var(--lumi-accent);
-  font-weight: 700;
-  margin-left: 2px;
-}
-
-.form-input {
-  width: 100%;
-  padding: 10px 14px;
-  background: var(--workspace-panel);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  color: var(--text-primary);
-  transition: all 300ms ease-in-out;
-}
-
-.form-input:focus {
-  box-shadow: 0 0 0 2px var(--lumi-primary-glow);
-}
-
-.form-input::placeholder {
-  color: var(--text-muted);
-}
-
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.color-picker {
-  display: flex;
-  gap: 8px;
-}
-
-.color-dot {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-  border: 2px solid transparent;
-}
-
-.color-dot:hover {
-  transform: scale(1.15);
-}
-
-.color-dot.active {
-  border-color: var(--text-primary);
-  box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
-}
-
-.dialog-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.dialog-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 20px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-}
-
-.dialog-btn.cancel {
-  color: var(--text-muted);
-  background: var(--workspace-panel);
-}
-
-.dialog-btn.cancel:hover {
-  background: var(--workspace-hover);
-}
-
-.dialog-btn.confirm {
-  color: white;
-  background: var(--lumi-primary);
-}
-
-.dialog-btn.confirm:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.dialog-btn.confirm.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .markdown-body {

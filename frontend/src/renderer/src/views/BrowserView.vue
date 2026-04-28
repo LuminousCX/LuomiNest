@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import type { TabInfo } from '../vite-env.d'
 import TabBar from '../components/browser/TabBar.vue'
 import NavBar from '../components/browser/NavBar.vue'
 import BookmarkBar from '../components/browser/BookmarkBar.vue'
@@ -124,7 +125,7 @@ async function syncTabs() {
       tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
       showHomePage.value = true
     } else {
-      tabs.value = allTabs.map(t => ({
+      tabs.value = allTabs.map((t: TabInfo) => ({
         id: t.id,
         title: t.title || '加载中...',
         url: t.url,

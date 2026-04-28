@@ -99,7 +99,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: -0.2px;
-  background: linear-gradient(135deg, var(--lumi-primary), #14b8a6);
+  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

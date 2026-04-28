@@ -145,7 +145,7 @@ export const startBackend = async (): Promise<boolean> => {
     ? [mainPath, '--host', BACKEND_HOST, '--port', String(BACKEND_PORT)]
     : ['--host', BACKEND_HOST, '--port', String(BACKEND_PORT)]
   
-  const env = {
+  const env: Record<string, string | undefined> = {
     ...process.env,
     PYTHONUNBUFFERED: '1',
     LUOMINEST_DATA_DIR: PATHS.backendData

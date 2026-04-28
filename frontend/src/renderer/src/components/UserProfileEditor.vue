@@ -296,7 +296,7 @@ onMounted(() => {
   justify-content: space-between;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.06), rgba(139, 92, 246, 0.04));
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.06), rgba(98, 169, 200, 0.04));
 }
 
 .header-title {
@@ -319,7 +319,7 @@ onMounted(() => {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(13, 148, 136, 0.1);
+  background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
   font-weight: 500;
 }
@@ -409,7 +409,7 @@ onMounted(() => {
 .form-group select:focus {
   outline: none;
   border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
+  box-shadow: 0 0 0 3px rgba(20, 126, 188, 0.1);
 }
 
 .form-group input::placeholder {
@@ -446,8 +446,8 @@ onMounted(() => {
   gap: 4px;
   padding: 5px 10px;
   border-radius: 20px;
-  background: rgba(139, 92, 246, 0.1);
-  color: #a78bfa;
+  background: rgba(20, 126, 188, 0.1);
+  color: var(--lumi-primary);
   font-size: 12px;
 }
 
@@ -466,7 +466,7 @@ onMounted(() => {
 }
 
 .tag-remove:hover {
-  background: rgba(139, 92, 246, 0.2);
+  background: rgba(20, 126, 188, 0.2);
 }
 
 .tag-add {
@@ -619,7 +619,7 @@ onMounted(() => {
 .form-section textarea:focus {
   outline: none;
   border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
+  box-shadow: 0 0 0 3px rgba(20, 126, 188, 0.1);
 }
 
 .form-section textarea::placeholder {

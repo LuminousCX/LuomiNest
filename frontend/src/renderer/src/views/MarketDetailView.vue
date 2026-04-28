@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  ArrowLeft, Star, Download, Users, Calendar, Tag,
-  ExternalLink, Check, FileText, Shield, ChevronDown,
+  ArrowLeft, Star, Download, Users, Tag,
+  ExternalLink, Check, FileText, ChevronDown,
   ChevronRight
 } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
-import MarketplaceRating from '../components/marketplace/MarketplaceRating.vue'
 import MarketplaceInstallBtn from '../components/marketplace/MarketplaceInstallBtn.vue'
 import MarketplaceReviews from '../components/marketplace/MarketplaceReviews.vue'
 import type { MarketplaceType } from '../types/marketplace'
@@ -19,9 +18,12 @@ const store = useMarketplaceStore()
 const activeTab = ref<'info' | 'versions' | 'reviews'>('info')
 const expandedVersion = ref<string | null>(null)
 
-const itemType = computed<MarketplaceType>(() =>
-  route.path.startsWith('/plugins') ? 'plugin' : 'skill'
-)
+const VALID_TYPES: MarketplaceType[] = ['plugin', 'skill']
+
+const itemType = computed<MarketplaceType>(() => {
+  const t = route.params.type as string
+  return VALID_TYPES.includes(t as MarketplaceType) ? (t as MarketplaceType) : 'plugin'
+})
 
 const itemId = computed(() => route.params.id as string)
 
@@ -38,7 +40,7 @@ const downloadDisplay = computed(() => {
 })
 
 function goBack() {
-  router.push(itemType.value === 'plugin' ? '/plugins' : '/skills')
+  router.push('/market')
 }
 
 function toggleVersion(version: string) {

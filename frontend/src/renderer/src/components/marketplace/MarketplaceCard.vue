@@ -45,8 +45,7 @@ const downloadDisplay = computed(() => {
 })
 
 function navigateToDetail() {
-  const prefix = props.item.type === 'plugin' ? '/plugins' : '/skills'
-  router.push(`${prefix}/${props.item.id}`)
+  router.push(`/market/detail/${props.item.type}/${props.item.id}`)
 }
 
 function handleInstall(e: Event) {

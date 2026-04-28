@@ -4,8 +4,13 @@ import { mkdirSync } from 'fs'
 
 const APP_NAME = 'LuomiNest'
 
+const createdDirs = new Set<string>()
+
 const ensureDir = (dir: string): string => {
-  mkdirSync(dir, { recursive: true })
+  if (!createdDirs.has(dir)) {
+    mkdirSync(dir, { recursive: true })
+    createdDirs.add(dir)
+  }
   return dir
 }
 
@@ -17,7 +22,7 @@ export const PATHS = {
     return app.getPath('appData')
   },
   get cache() {
-    return app.getPath('cache')
+    return ensureDir(join(app.getPath('userData'), 'Cache'))
   },
   get logs() {
     return ensureDir(join(app.getPath('userData'), 'Logs'))

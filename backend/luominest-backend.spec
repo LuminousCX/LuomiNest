@@ -69,6 +69,11 @@ excludes = [
     'pytest',
     'ruff',
     'mypy',
+    'pysqlite2',
+    'MySQLdb',
+    'mysql',
+    'mysqlclient',
+    'pymysql',
 ]
 
 datas = [

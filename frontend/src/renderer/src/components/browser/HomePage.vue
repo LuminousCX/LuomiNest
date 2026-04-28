@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from 'vue'
 import {
   Send,
@@ -184,7 +184,7 @@ function handleKeydown(e: KeyboardEvent) {
   justify-content: center;
   padding: 40px;
   gap: 32px;
-  background: linear-gradient(180deg, #fafaf9 0%, rgba(13,148,136,0.02) 50%, #f5f5f4 100%);
+  background: linear-gradient(180deg, #fafaf9 0%, rgba(20,126,188,0.02) 50%, #f5f5f4 100%);
 }
 
 .brand-area {
@@ -227,8 +227,8 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .search-box:focus-within {
-  border-color: rgba(13,148,136,0.3);
-  box-shadow: var(--shadow-md), 0 0 0 3px rgba(13,148,136,0.08);
+  border-color: rgba(20,126,188,0.3);
+  box-shadow: var(--shadow-md), 0 0 0 3px rgba(20,126,188,0.08);
 }
 
 .engine-bar {
@@ -432,7 +432,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 .qa-card:hover {
   border-color: var(--qa-color);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 0 0 1px rgba(13,148,136,0.05);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 0 0 1px rgba(20,126,188,0.05);
   transform: translateY(-2px);
 }
 

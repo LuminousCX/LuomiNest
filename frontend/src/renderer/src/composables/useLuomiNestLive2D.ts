@@ -58,7 +58,11 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
 
   const initPixi = async (): Promise<Application | null> => {
     if (pixiApp) return pixiApp
-    if (!canvasRef.value) return null
+    if (!canvasRef.value) {
+      console.error('[ERROR][LuomiNestLive2D] Canvas element not found')
+      error.value = 'Canvas element not available'
+      return null
+    }
 
     try {
       pixiApp = new Application({
@@ -68,14 +72,31 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         antialias: true,
         resizeTo: canvasRef.value.parentElement ?? undefined,
         resolution: Math.min(window.devicePixelRatio || 1, 2),
-        autoDensity: true
-      })
+        autoDensity: true,
+        powerPreference: 'high-performance'
+      } as any)
+      console.info('[INFO][LuomiNestLive2D] PixiJS initialized successfully (WebGL)')
       return pixiApp
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to initialize PixiJS'
-      error.value = message
-      console.error('[ERROR][LuomiNestLive2D] PixiJS init error:', message)
-      return null
+    } catch (webglErr) {
+      console.warn('[WARN][LuomiNestLive2D] WebGL init failed, trying canvas fallback:', webglErr instanceof Error ? webglErr.message : webglErr)
+      try {
+        pixiApp = new Application({
+          view: canvasRef.value,
+          autoStart: true,
+          backgroundAlpha: 0,
+          antialias: true,
+          resizeTo: canvasRef.value.parentElement ?? undefined,
+          resolution: Math.min(window.devicePixelRatio || 1, 2),
+          autoDensity: true
+        } as any)
+        console.info('[INFO][LuomiNestLive2D] PixiJS initialized successfully (Canvas fallback)')
+        return pixiApp
+      } catch (canvasErr) {
+        const message = canvasErr instanceof Error ? canvasErr.message : 'Unknown error'
+        error.value = `Graphics initialization failed: ${message}`
+        console.error('[ERROR][LuomiNestLive2D] Both WebGL and Canvas failed:', message)
+        return null
+      }
     }
   }
 
@@ -100,6 +121,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         }
       }
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
     availableMotions.value = motions
     availableExpressions.value = expressions
@@ -126,7 +148,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     try {
       const app = await initPixi()
       if (!app) {
-        throw new Error('PixiJS application not initialized')
+        throw new Error(error.value || 'PixiJS Application not initialized. Please check graphics drivers and restart.')
       }
 
       if (loadToken !== currentLoadToken) return
@@ -170,6 +192,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
           }
         }
       } catch {
+      // intentionally ignored: expected non-fatal error
       }
 
       setupInteraction(model)
@@ -189,6 +212,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       try {
         await model.motion('Idle', 0)
       } catch {
+      // intentionally ignored: expected non-fatal error
       }
 
       console.info('[INFO][LuomiNestLive2D] Model loaded:', url)
@@ -216,7 +240,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   }
 
   const setupInteraction = (model: Live2DModel) => {
-    model.interactive = true
+    model.eventMode = 'static'
 
     model.on('pointerdown', (e: any) => {
       if (e.data.button !== 0) return
@@ -296,6 +320,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
           coreModel.setParameterValueByIndex(eyeBallYParam, base * 0.5 + focusCurrentY * 0.5)
         }
       } catch {
+      // intentionally ignored: expected non-fatal error
       }
     }
 
@@ -327,6 +352,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     try {
       await currentModel.motion(group, index)
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -335,6 +361,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     try {
       await currentModel.expression(name)
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -380,6 +407,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         coreModel.setParameterValueByIndex(cheekIdx, pleasure * 0.5)
       }
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -394,6 +422,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         coreModel.setParameterValueByIndex(mouthOpenIdx, Math.max(0, Math.min(1, value)))
       }
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -421,6 +450,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         if (mouthFormIdx >= 0) coreModel.setParameterValueByIndex(mouthFormIdx, mapping.form)
       }
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -433,6 +463,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         coreModel.setParameterValueById(paramId, value)
       }
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
@@ -441,6 +472,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     try {
       await currentModel.motion('Idle', 0)
     } catch {
+      // intentionally ignored: expected non-fatal error
     }
   }
 
