@@ -34,6 +34,9 @@ const cubismCoreBasePath = isDev
   ? join(app.getAppPath(), 'resources/cubism-core')
   : join(process.resourcesPath, 'cubism-core')
 
+const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+
 interface ImportedModelRecord {
   id: string
   name: string
@@ -150,8 +153,6 @@ const createWindow = (): void => {
     return { action: 'deny' }
   })
 
-  const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
-  const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
   const CSP_POLICY = isDev ? CSP_DEV : CSP_PROD
 
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -204,6 +205,8 @@ const LUOMINEST_BUILTIN_MODELS = [
   { id: 'shizuku', name: 'Shizuku', url: 'luominest-avatar://shizuku/shizuku.model3.json', scale: 0.25, type: 'live2d', tags: ['Cubism4', 'Built-in'] }
 ]
 
+const CSP_PET_WINDOW = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+
 const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
   if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
     desktopPetWindow.show()
@@ -245,6 +248,16 @@ const createDesktopPet = (modelInfo?: ImportedModelRecord): void => {
 
   desktopPetWindow.setVisibleOnAllWorkspaces(true)
   desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
+
+  const CSP_PET_POLICY = isDev ? CSP_DEV : CSP_PET_WINDOW
+  desktopPetWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [CSP_PET_POLICY]
+      }
+    })
+  })
 
   if (isMac) {
     desktopPetWindow.setIgnoreMouseEvents(true)

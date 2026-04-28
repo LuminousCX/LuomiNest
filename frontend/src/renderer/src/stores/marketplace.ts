@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type {
   MarketplaceType,
   MarketplaceItem,
@@ -40,7 +40,18 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   const reviews = ref<Record<string, MarketplaceReview[]>>(loadMockReviews())
   const favorites = ref<string[]>(loadFavorites())
 
-  const activeIntervals = new Set<ReturnType<typeof setInterval>>()
+  const activeIntervals = new Map<string, ReturnType<typeof setInterval>>()
+
+  const syncFavoritesToItems = () => {
+    const syncItems = (items: MarketplaceItem[]) => {
+      for (const item of items) {
+        item.isFavorite = favorites.value.includes(item.id)
+      }
+    }
+    syncItems(pluginItems.value)
+    syncItems(skillItems.value)
+    syncItems(agentItems.value)
+  }
 
   function loadSearchHistory(): string[] {
     try {
@@ -304,9 +315,12 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     installProgress.value = rest
   }
 
-  const cleanupInterval = (intervalId: ReturnType<typeof setInterval>) => {
-    activeIntervals.delete(intervalId)
-    clearInterval(intervalId)
+  const cleanupInterval = (itemId: string) => {
+    const intervalId = activeIntervals.get(itemId)
+    if (intervalId) {
+      clearInterval(intervalId)
+      activeIntervals.delete(itemId)
+    }
   }
 
   const startInstall = (itemId: string) => {
@@ -323,12 +337,18 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   const simulateInstall = (itemId: string) => {
     let progress = 0
     const intervalId = setInterval(() => {
+      const current = installProgress.value[itemId]
+      if (!current) {
+        // Installation was cancelled
+        cleanupInterval(itemId)
+        return
+      }
+
       progress += Math.random() * 15 + 5
       if (progress >= 100) {
         progress = 100
-        cleanupInterval(intervalId)
-        const current = installProgress.value[itemId]
-        if (current && current.status === 'downloading') {
+        cleanupInterval(itemId)
+        if (current.status === 'downloading') {
           setProgress(itemId, {
             ...current,
             status: 'installing',
@@ -338,21 +358,25 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           simulateInstalling(itemId)
         }
       } else {
-        const current = installProgress.value[itemId]
-        if (current) {
-          setProgress(itemId, { ...current, progress: Math.min(progress, 99) })
-        }
+        setProgress(itemId, { ...current, progress: Math.min(progress, 99) })
       }
     }, 200)
-    activeIntervals.add(intervalId)
+    activeIntervals.set(itemId, intervalId)
   }
 
   const simulateInstalling = (itemId: string) => {
     let progress = 0
     const intervalId = setInterval(() => {
+      const current = installProgress.value[itemId]
+      if (!current) {
+        // Installation was cancelled
+        cleanupInterval(itemId)
+        return
+      }
+
       progress += Math.random() * 20 + 10
       if (progress >= 100) {
-        cleanupInterval(intervalId)
+        cleanupInterval(itemId)
         setProgress(itemId, {
           itemId,
           status: 'installed',
@@ -373,16 +397,20 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           removeProgress(itemId)
         }, 2000)
       } else {
-        const current = installProgress.value[itemId]
-        if (current) {
-          setProgress(itemId, { ...current, progress: Math.min(progress, 99) })
-        }
+        setProgress(itemId, { ...current, progress: Math.min(progress, 99) })
       }
     }, 150)
-    activeIntervals.add(intervalId)
+    activeIntervals.set(itemId, intervalId)
   }
 
   const uninstallItem = (itemId: string) => {
+    // Cancel any active interval for this item
+    cleanupInterval(itemId)
+
+    // Remove progress entry
+    removeProgress(itemId)
+
+    // Update item status atomically
     const updateUninstalledItem = (items: MarketplaceItem[]) => {
       const item = items.find(i => i.id === itemId)
       if (item) {
@@ -393,7 +421,6 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     updateUninstalledItem(pluginItems.value)
     updateUninstalledItem(skillItems.value)
     updateUninstalledItem(agentItems.value)
-    removeProgress(itemId)
   }
 
   const updateItem = (itemId: string) => {
@@ -407,9 +434,16 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
 
     let progressVal = 0
     const intervalId = setInterval(() => {
+      const current = installProgress.value[itemId]
+      if (!current) {
+        // Update was cancelled
+        cleanupInterval(itemId)
+        return
+      }
+
       progressVal += Math.random() * 18 + 8
       if (progressVal >= 100) {
-        cleanupInterval(intervalId)
+        cleanupInterval(itemId)
         setProgress(itemId, {
           itemId,
           status: 'installed',
@@ -429,13 +463,10 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           removeProgress(itemId)
         }, 2000)
       } else {
-        const current = installProgress.value[itemId]
-        if (current) {
-          setProgress(itemId, { ...current, progress: Math.min(progressVal, 99) })
-        }
+        setProgress(itemId, { ...current, progress: Math.min(progressVal, 99) })
       }
     }, 180)
-    activeIntervals.add(intervalId)
+    activeIntervals.set(itemId, intervalId)
   }
 
   const getInstallProgress = (itemId: string): InstallProgress | undefined => {
@@ -485,11 +516,17 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   }
 
   const cleanup = () => {
-    for (const intervalId of activeIntervals) {
+    for (const intervalId of activeIntervals.values()) {
       clearInterval(intervalId)
     }
     activeIntervals.clear()
   }
+
+  // Initialize favorites sync on load
+  syncFavoritesToItems()
+
+  // Watch for changes to favorites and sync
+  watch(favorites, syncFavoritesToItems, { deep: true })
 
   return {
     pluginItems,

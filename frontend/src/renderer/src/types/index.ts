@@ -327,7 +327,7 @@ export interface GroupMessage {
   id: string
   senderId: string
   senderName?: string
-  senderType: 'user' | 'agent'
+  senderType: 'user' | 'agent' | 'system'
   content: string
   timestamp: string
   role?: string

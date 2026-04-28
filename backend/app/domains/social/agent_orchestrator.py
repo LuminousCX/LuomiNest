@@ -90,7 +90,7 @@ class SkillInterface:
         raise NotImplementedError("Skill execution is reserved for future implementation")
 
     async def list_skills(self) -> list[dict]:
-        logger.info(f"[SkillInterface] Reserved: list_skills()")
+        logger.info("[SkillInterface] Reserved: list_skills()")
         return []
 
 
@@ -130,14 +130,27 @@ def _extract_json_plan(text: str) -> dict | None:
 
 def _find_agent_for_role(group: dict, role_id: str) -> dict | None:
     members = group.get("members", [])
+    normalized_role_id = role_id.lower().strip()
+
     for member in members:
         if member.get("type") != "agent":
             continue
-        member_role = member.get("role", "").lower()
-        if role_id in member_role or member_role in role_id:
+        member_role = member.get("role", "").lower().strip()
+
+        # Exact match
+        if normalized_role_id == member_role:
             agent = agents_store.get(member.get("agent_id", ""))
             if agent and agent.get("is_active", True):
                 return agent
+
+        # Token-based match: split on - and _ and check if role_id matches any token
+        import re
+        tokens = re.split(r'[-_]', member_role)
+        if normalized_role_id in tokens:
+            agent = agents_store.get(member.get("agent_id", ""))
+            if agent and agent.get("is_active", True):
+                return agent
+
     return None
 
 

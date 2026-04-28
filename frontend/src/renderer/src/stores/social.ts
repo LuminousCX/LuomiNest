@@ -171,7 +171,7 @@ export const useSocialStore = defineStore('social', () => {
             id: `info-${Date.now()}`,
             senderId: 'system',
             senderName: '系统',
-            senderType: 'agent',
+            senderType: 'system',
             content: event.data.message,
             timestamp: new Date().toISOString(),
             role: '系统',

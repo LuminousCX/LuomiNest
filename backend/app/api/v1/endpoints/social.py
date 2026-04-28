@@ -267,14 +267,14 @@ async def collaborate(group_id: str, request: CollaborationRequest):
     return {
         "error": None,
         "data": {
-            "session_id": session.session_id,
+            "sessionId": session.session_id,
             "phase": session.phase.value,
             "plan": session.plan,
-            "sub_tasks": [
+            "subTasks": [
                 {
-                    "task_id": t.task_id,
-                    "role_id": t.role_id,
-                    "agent_id": t.agent_id,
+                    "taskId": t.task_id,
+                    "roleId": t.role_id,
+                    "agentId": t.agent_id,
                     "description": t.description,
                     "status": t.status.value,
                     "result": t.result,
@@ -282,8 +282,8 @@ async def collaborate(group_id: str, request: CollaborationRequest):
                 }
                 for t in session.sub_tasks
             ],
-            "final_result": session.final_result,
-            "coordinator_response": session.coordinator_response,
+            "finalResult": session.final_result,
+            "coordinatorResponse": session.coordinator_response,
         },
     }
 
@@ -295,7 +295,7 @@ async def list_agent_roles():
     return {
         "error": None,
         "data": [
-            {
+            to_camel_case({
                 "role_id": r.role_id,
                 "name": r.name,
                 "description": r.description,
@@ -304,7 +304,7 @@ async def list_agent_roles():
                 "max_concurrent_tasks": r.max_concurrent_tasks,
                 "timeout_seconds": r.timeout_seconds,
                 "color": r.color,
-            }
+            })
             for r in roles
         ],
     }
