@@ -1,14 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import type { ChatMessage, Conversation, ConversationListItem, ChatStreamChunk } from '../types'
+import type { ChatMessage, Conversation, ConversationListItem, ChatStreamChunk, ToolCallResult } from '../types'
 import { useApi } from '../composables/useApi'
 import { useAgentStore } from './agent'
 import { useAvatarControlStore } from './avatar-control'
-import {
-  ALL_LUOMINEST_TOOLS,
-  formatToolsForLLM,
-  buildLuomiNestSystemPrompt
-} from '../config/luominest-tools'
 
 export const useChatStore = defineStore('chat', () => {
   const { apiGet, apiPost, apiDelete, apiStream, checkHealth } = useApi()
@@ -22,7 +17,6 @@ export const useChatStore = defineStore('chat', () => {
   const convStreaming = ref<Record<string, boolean>>({})
   const convAbortControllers = ref<Record<string, AbortController>>({})
   const convStreamingContent = ref<Record<string, string>>({})
-  const convPendingToolCalls = ref<Record<string, any[]>>({})
   const convLoading = ref<Record<string, boolean>>({})
   const convData = ref<Record<string, Conversation>>({})
 
@@ -59,8 +53,6 @@ export const useChatStore = defineStore('chat', () => {
   })
 
   const currentMessages = computed(() => messages.value)
-
-  const pendingToolCalls = computed(() => convPendingToolCalls.value[currentConvId.value] || [])
 
   const isConversationStreaming = (convId: string) => !!convStreaming.value[convId]
 
@@ -120,10 +112,6 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  const cacheConversationMessages = (_convId: string) => {
-    // TODO: implement LRU cache eviction for conversation messages
-  }
-
   const checkBackend = async () => {
     isBackendReady.value = await checkHealth()
     return isBackendReady.value
@@ -176,10 +164,6 @@ export const useChatStore = defineStore('chat', () => {
     delete newLoading[convId]
     convLoading.value = newLoading
 
-    const newPending = { ...convPendingToolCalls.value }
-    delete newPending[convId]
-    convPendingToolCalls.value = newPending
-
     if (agentCurrentConvId.value[targetAgentId] === convId) {
       agentCurrentConvId.value = { ...agentCurrentConvId.value, [targetAgentId]: null }
     }
@@ -219,7 +203,7 @@ export const useChatStore = defineStore('chat', () => {
     cancelConversationRequest()
   }
 
-  const executeToolCall = async (toolName: string, args: Record<string, any>): Promise<string> => {
+  const executeAvatarToolCall = async (toolName: string, args: Record<string, any>): Promise<string> => {
     try {
       switch (toolName) {
         case 'avatar_set_emotion':
@@ -262,30 +246,12 @@ export const useChatStore = defineStore('chat', () => {
             modelName: avatarControl.currentModelName
           })
 
-        case 'memory_save':
-          return `Memory saved: [${args.category}] ${args.content}`
-
-        case 'memory_search':
-          return `Memory search results for: "${args.query}"`
-
-        case 'skill_execute':
-          return `Skill "${args.skill_name}" executed`
-
-        case 'skill_list':
-          return 'Available skills: (loaded from skill registry)'
-
-        case 'mcp_call_tool':
-          return `MCP tool "${args.tool_name}" called on server "${args.server_name}"`
-
-        case 'mcp_list_servers':
-          return 'Connected MCP servers: (loaded from MCP registry)'
-
         default:
-          return `Unknown tool: ${toolName}`
+          return `Unknown avatar tool: ${toolName}`
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Tool execution failed'
-      return `Tool error: ${message}`
+      const message = err instanceof Error ? err.message : 'Avatar tool execution failed'
+      return `Avatar tool error: ${message}`
     }
   }
 
@@ -297,7 +263,6 @@ export const useChatStore = defineStore('chat', () => {
       temperature?: number
       maxTokens?: number
       topP?: number
-      systemPrompt?: string
       agentId?: string
     }
   ) => {
@@ -334,10 +299,6 @@ export const useChatStore = defineStore('chat', () => {
       [convId]: [...(convMessages.value[convId] || []), userMessage]
     }
 
-    const agentName = agentStore.activeAgent?.name
-    const systemPrompt = options?.systemPrompt ||
-      buildLuomiNestSystemPrompt(agentName, agentStore.activeAgent?.systemPrompt)
-
     const assistantMessage: ChatMessage = {
       id: `assistant-${Date.now()}`,
       role: 'assistant',
@@ -353,17 +314,15 @@ export const useChatStore = defineStore('chat', () => {
     convStreaming.value = { ...convStreaming.value, [convId]: true }
     convStreamingContent.value = { ...convStreamingContent.value, [convId]: '' }
 
-    const apiMessages: { role: string; content: string }[] = [
-      { role: 'system', content: systemPrompt }
-    ]
+    const apiMessages: { role: string; content: string }[] = []
     for (const msg of convMessages.value[convId]) {
       if (msg.role === 'system') continue
       if (msg.role === 'assistant' && !msg.done) continue
+      if (msg.role === 'tool') continue
       apiMessages.push({ role: msg.role, content: msg.content })
     }
 
     const endpoint = `/chat/conversations/${convId}/messages`
-    const tools = formatToolsForLLM(ALL_LUOMINEST_TOOLS)
 
     const requestBody: any = {
       messages: apiMessages,
@@ -373,7 +332,7 @@ export const useChatStore = defineStore('chat', () => {
       max_tokens: options?.maxTokens,
       top_p: options?.topP,
       stream: true,
-      tools,
+      timestamp: Date.now() / 1000,
     }
 
     if (targetAgentId) {
@@ -389,19 +348,21 @@ export const useChatStore = defineStore('chat', () => {
       endpoint,
       requestBody,
       (chunk: ChatStreamChunk) => {
-        const chunkAny = chunk as any
-
-        if (chunkAny.tool_calls && Array.isArray(chunkAny.tool_calls)) {
-          const toolCalls = convPendingToolCalls.value[streamingConvId] || []
-          for (const tc of chunkAny.tool_calls) {
-            if (tc.function?.name) {
-              toolCalls.push(tc)
+        if (chunk.tool_results && chunk.tool_results.length > 0) {
+          for (const tr of chunk.tool_results) {
+            if (tr.tool_name.startsWith('avatar_')) {
+              try {
+                const args = JSON.parse(tr.result || '{}')
+                executeAvatarToolCall(tr.tool_name, args)
+              } catch {
+                console.debug('[ChatStore] Avatar tool result parse skipped:', tr.tool_name)
+              }
             }
           }
-          convPendingToolCalls.value = {
-            ...convPendingToolCalls.value,
-            [streamingConvId]: toolCalls
-          }
+          return
+        }
+
+        if (chunk.tool_calls && chunk.tool_calls.length > 0) {
           return
         }
 
@@ -422,49 +383,9 @@ export const useChatStore = defineStore('chat', () => {
         }
         if (chunk.usage) {
           lastUsage.value = chunk.usage
-          const msgListForUsage = convMessages.value[streamingConvId] || []
-          const usageLastIndex = msgListForUsage.length - 1
-          if (usageLastIndex >= 0 && msgListForUsage[usageLastIndex]?.role === 'assistant') {
-            convMessages.value = {
-              ...convMessages.value,
-              [streamingConvId]: [...msgListForUsage.slice(0, usageLastIndex), {
-                ...msgListForUsage[usageLastIndex],
-                usage: chunk.usage
-              }]
-            }
-          }
         }
       },
       async () => {
-        const toolCalls = convPendingToolCalls.value[streamingConvId] || []
-        if (toolCalls.length > 0) {
-          for (const tc of toolCalls) {
-            try {
-              const args = typeof tc.function.arguments === 'string'
-                ? JSON.parse(tc.function.arguments)
-                : tc.function.arguments || {}
-              const result = await executeToolCall(tc.function.name, args)
-              const toolMsg: ChatMessage = {
-                id: `tool-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                role: 'assistant',
-                content: `[Tool: ${tc.function.name}] ${result}`,
-                timestamp: Date.now(),
-                done: true
-              }
-              convMessages.value = {
-                ...convMessages.value,
-                [streamingConvId]: [...(convMessages.value[streamingConvId] || []), toolMsg]
-              }
-            } catch (error: unknown) {
-              console.warn('[ChatStore] Tool execution failed:', { error, toolName: tc.function?.name })
-            }
-          }
-          convPendingToolCalls.value = {
-            ...convPendingToolCalls.value,
-            [streamingConvId]: []
-          }
-        }
-
         const newControllers = { ...convAbortControllers.value }
         delete newControllers[streamingConvId]
         convAbortControllers.value = newControllers
@@ -537,7 +458,6 @@ export const useChatStore = defineStore('chat', () => {
     const newStreamingContent = { ...convStreamingContent.value }
     const newData = { ...convData.value }
     const newLoading = { ...convLoading.value }
-    const newPending = { ...convPendingToolCalls.value }
 
     for (const convId of keysToDelete) {
       delete newMessages[convId]
@@ -545,7 +465,6 @@ export const useChatStore = defineStore('chat', () => {
       delete newStreamingContent[convId]
       delete newData[convId]
       delete newLoading[convId]
-      delete newPending[convId]
     }
 
     convMessages.value = newMessages
@@ -553,7 +472,6 @@ export const useChatStore = defineStore('chat', () => {
     convStreamingContent.value = newStreamingContent
     convData.value = newData
     convLoading.value = newLoading
-    convPendingToolCalls.value = newPending
   }
 
   watch(() => activeAgentId.value, async (newAgentId) => {
@@ -595,13 +513,11 @@ export const useChatStore = defineStore('chat', () => {
     lastError,
     lastUsage,
     activeAgentId,
-    pendingToolCalls,
     convStreaming,
     checkBackend,
     fetchConversations,
     createConversation,
     loadConversation,
-    cacheConversationMessages,
     deleteConversation,
     sendMessage,
     clearMessages,
@@ -609,6 +525,6 @@ export const useChatStore = defineStore('chat', () => {
     cancelCurrentRequest,
     cancelConversationRequest,
     isConversationStreaming,
-    executeToolCall,
+    executeAvatarToolCall,
   }
 })

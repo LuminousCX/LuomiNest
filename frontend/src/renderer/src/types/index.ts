@@ -59,7 +59,7 @@ export interface WorkflowDefinition {
 
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant' | 'system'
+  role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   timestamp: number
   agentId?: string
@@ -71,10 +71,29 @@ export interface ChatMessage {
     completionTokens?: number
     totalTokens?: number
   }
+  toolCalls?: ToolCallInfo[]
+  toolCallId?: string
+  toolResults?: ToolCallResult[]
+}
+
+export interface ToolCallInfo {
+  id: string
+  type: string
+  function: {
+    name: string
+    arguments: string
+  }
+}
+
+export interface ToolCallResult {
+  tool_call_id: string
+  tool_name: string
+  result: string
+  status: 'success' | 'error'
 }
 
 export interface ChatRequest {
-  messages: { role: string; content: string }[]
+  messages: { role: string; content: string; tool_calls?: ToolCallInfo[]; tool_call_id?: string; name?: string }[]
   model?: string
   provider?: string
   temperature?: number
@@ -83,14 +102,18 @@ export interface ChatRequest {
   stream?: boolean
   agentId?: string
   tools?: Record<string, any>[]
+  timestamp?: number
 }
 
 export interface ChatResponse {
   id: string
-  content: string
+  content: string | null
   model: string
   provider: string
+  tool_calls?: ToolCallInfo[] | null
+  tool_results?: ToolCallResult[] | null
   usage?: Record<string, number>
+  timestamp?: number
 }
 
 export interface ChatStreamChunk {
@@ -99,11 +122,14 @@ export interface ChatStreamChunk {
   model: string
   provider: string
   done: boolean
+  tool_calls?: ToolCallInfo[] | null
+  tool_results?: ToolCallResult[] | null
   usage?: {
     promptTokens?: number
     completionTokens?: number
     totalTokens?: number
   }
+  timestamp?: number
 }
 
 export interface Conversation {
@@ -305,6 +331,75 @@ export interface GroupMessage {
   content: string
   timestamp: string
   role?: string
+  collaboration?: CollaborationInfo
+}
+
+export interface CollaborationInfo {
+  sessionId: string
+  taskId?: string
+  taskDescription?: string
+  type?: 'task_result' | 'synthesis'
+}
+
+export type CollaborationPhase = 'analyzing' | 'dispatching' | 'executing' | 'synthesizing' | 'completed' | 'failed'
+
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+export interface AgentRoleDefinition {
+  roleId: string
+  name: string
+  description: string
+  capabilities: string[]
+  executionMode: string
+  maxConcurrentTasks: number
+  timeoutSeconds: number
+  color: string
+}
+
+export interface CollaborationSubTask {
+  taskId: string
+  roleId: string
+  agentId: string | null
+  description: string
+  inputContent: string
+  dependsOn: string[]
+  status: TaskStatus
+  result: string | null
+  error: string | null
+  startedAt: string | null
+  completedAt: string | null
+}
+
+export interface CollaborationSession {
+  sessionId: string
+  groupId: string
+  userMessage: string
+  phase: CollaborationPhase
+  plan: string | null
+  subTasks: CollaborationSubTask[]
+  finalResult: string | null
+  coordinatorResponse: string | null
+  createdAt: string
+  completedAt: string | null
+}
+
+export type CollaborationEventType =
+  | 'session_start'
+  | 'phase_change'
+  | 'plan_created'
+  | 'tasks_started'
+  | 'task_started'
+  | 'task_agent_assigned'
+  | 'task_completed'
+  | 'task_failed'
+  | 'direct_response'
+  | 'final_result'
+  | 'session_end'
+  | 'error'
+
+export interface CollaborationEvent {
+  type: CollaborationEventType
+  data: Record<string, any>
 }
 
 export interface RAGSearchResult {

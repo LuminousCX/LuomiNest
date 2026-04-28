@@ -16,10 +16,16 @@ import {
   UserPlus,
   X,
   Loader2,
+  Zap,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Play,
+  Layers,
 } from 'lucide-vue-next'
 import { useSocialStore } from '../stores/social'
 import { useAgentStore } from '../stores/agent'
-import type { GroupInfo } from '../types'
+import type { GroupInfo, CollaborationPhase } from '../types'
 
 const socialStore = useSocialStore()
 const agentStore = useAgentStore()
@@ -36,6 +42,7 @@ const addAgentId = ref('')
 const newGroupName = ref('')
 const newGroupDesc = ref('')
 const sendingMessage = ref(false)
+const collaborationMode = ref(false)
 
 const selectedGroup = computed(() => {
   if (!selectedGroupId.value) return null
@@ -56,6 +63,34 @@ const availableAgentsForGroup = computed(() => {
   return agentStore.agents.filter(a => !memberIds.includes(a.id))
 })
 
+const collaborationPhase = computed(() => socialStore.collaborationPhase)
+const collaborationActive = computed(() => socialStore.collaborationActive)
+const collaborationTasks = computed(() => socialStore.collaborationTasks)
+
+const phaseLabel = computed(() => {
+  const labels: Record<CollaborationPhase, string> = {
+    analyzing: '分析中',
+    dispatching: '分配任务',
+    executing: '执行中',
+    synthesizing: '综合结果',
+    completed: '已完成',
+    failed: '失败',
+  }
+  return collaborationPhase.value ? labels[collaborationPhase.value] : ''
+})
+
+const phaseIcon = computed(() => {
+  const icons: Record<CollaborationPhase, typeof Loader2> = {
+    analyzing: Loader2,
+    dispatching: Layers,
+    executing: Play,
+    synthesizing: Layers,
+    completed: CheckCircle2,
+    failed: AlertCircle,
+  }
+  return collaborationPhase.value ? icons[collaborationPhase.value] : null
+})
+
 const selectTab = (tab: typeof activeTab.value) => {
   activeTab.value = tab
   selectedGroupId.value = null
@@ -64,14 +99,36 @@ const selectTab = (tab: typeof activeTab.value) => {
 const openGroupChat = (group: GroupInfo) => {
   selectedGroupId.value = group.id
   socialStore.currentGroup = group
+  socialStore.fetchGroupMessages(group.id)
 }
 
 const sendMessage = async () => {
   if (!chatInput.value.trim() || !selectedGroupId.value) return
   sendingMessage.value = true
   try {
-    await socialStore.sendGroupMessage(selectedGroupId.value, chatInput.value)
-    chatInput.value = ''
+    if (collaborationMode.value) {
+      const userContent = chatInput.value
+      chatInput.value = ''
+
+      socialStore.groupMessages.push({
+        id: `user-${Date.now()}`,
+        senderId: 'user',
+        senderType: 'user',
+        content: userContent,
+        timestamp: new Date().toISOString(),
+      })
+
+      await socialStore.collaborateStream(
+        selectedGroupId.value,
+        userContent,
+        () => {},
+        (err) => { console.error('Collaboration error:', err) },
+        () => {},
+      )
+    } else {
+      await socialStore.sendGroupMessage(selectedGroupId.value, chatInput.value)
+      chatInput.value = ''
+    }
     await nextTick()
     if (messagesContainer.value) {
       messagesContainer.value.scrollTo({ top: messagesContainer.value.scrollHeight, behavior: 'smooth' })
@@ -138,6 +195,24 @@ const formatTime = (dateStr: string) => {
   }
 }
 
+const getTaskStatusIcon = (status: string) => {
+  switch (status) {
+    case 'running': return Loader2
+    case 'completed': return CheckCircle2
+    case 'failed': return AlertCircle
+    default: return Clock
+  }
+}
+
+const getTaskStatusClass = (status: string) => {
+  switch (status) {
+    case 'running': return 'status-running'
+    case 'completed': return 'status-completed'
+    case 'failed': return 'status-failed'
+    default: return 'status-pending'
+  }
+}
+
 watch(groupMessages, () => {
   nextTick(() => {
     if (messagesContainer.value) {
@@ -150,6 +225,7 @@ onMounted(async () => {
   await Promise.all([
     socialStore.fetchGroups(),
     socialStore.fetchAvailableAgents(),
+    socialStore.fetchAgentRoles(),
     agentStore.fetchAgents(),
   ])
 })
@@ -268,10 +344,38 @@ onMounted(async () => {
             </div>
           </div>
           <div class="chat-actions">
+            <button
+              :class="['chat-action-btn', { active: collaborationMode }]"
+              title="协作模式"
+              @click="collaborationMode = !collaborationMode"
+            >
+              <Zap :size="15" />
+            </button>
             <button class="chat-action-btn" title="添加 Agent" @click="showAddAgentDialog = true">
               <UserPlus :size="15" />
             </button>
             <button class="chat-action-btn"><MoreVertical :size="15" /></button>
+          </div>
+        </div>
+
+        <div class="collaboration-bar" v-if="collaborationMode">
+          <div class="collab-mode-indicator">
+            <Zap :size="12" />
+            <span>多 Agent 协作模式</span>
+          </div>
+          <div class="collab-phase" v-if="collaborationActive && collaborationPhase">
+            <component :is="phaseIcon" :size="14" :class="{ 'spin-animation': collaborationPhase === 'analyzing' || collaborationPhase === 'executing' }" />
+            <span>{{ phaseLabel }}</span>
+          </div>
+          <div class="collab-tasks-mini" v-if="collaborationTasks.length > 0">
+            <div
+              v-for="task in collaborationTasks"
+              :key="task.taskId"
+              :class="['collab-task-chip', getTaskStatusClass(task.status)]"
+            >
+              <component :is="getTaskStatusIcon(task.status)" :size="10" :class="{ 'spin-animation': task.status === 'running' }" />
+              <span>{{ task.description.slice(0, 12) }}{{ task.description.length > 12 ? '...' : '' }}</span>
+            </div>
           </div>
         </div>
 
@@ -297,17 +401,22 @@ onMounted(async () => {
           <div
             v-for="msg in groupMessages"
             :key="msg.id"
-            :class="['msg-row', msg.senderType]"
+            :class="['msg-row', msg.senderType, { 'collab-synthesis': msg.collaboration?.type === 'synthesis' }]"
           >
             <div v-if="msg.senderType === 'agent'" class="msg-avatar">
-              <div class="avatar-agent">
+              <div class="avatar-agent" :style="msg.role === '调度员' ? { background: 'rgba(20, 126, 188, 0.15)', color: 'var(--lumi-primary)' } : {}">
                 <Bot :size="14" />
               </div>
             </div>
-            <div :class="['msg-bubble', msg.senderType]">
+            <div :class="['msg-bubble', msg.senderType, { 'synthesis-bubble': msg.collaboration?.type === 'synthesis' }]">
               <span class="msg-sender" v-if="msg.senderType === 'agent'">
                 {{ msg.senderName || 'AI' }}
-                <span v-if="msg.role" class="msg-role-tag">{{ msg.role }}</span>
+                <span v-if="msg.role" class="msg-role-tag" :style="msg.collaboration?.type === 'synthesis' ? { background: 'rgba(20, 126, 188, 0.15)', color: 'var(--lumi-primary)' } : {}">
+                  {{ msg.role }}
+                </span>
+                <span v-if="msg.collaboration?.taskId" class="msg-collab-tag">
+                  {{ msg.collaboration.taskDescription?.slice(0, 8) }}...
+                </span>
               </span>
               <p class="msg-text">{{ msg.content }}</p>
               <span class="msg-time">{{ formatTime(msg.timestamp) }}</span>
@@ -316,7 +425,22 @@ onMounted(async () => {
               <User :size="16" />
             </div>
           </div>
-          <div v-if="groupMessages.length === 0" class="chat-empty">
+
+          <div v-if="collaborationActive && collaborationPhase" class="collab-progress-msg">
+            <div class="collab-progress-inner">
+              <Loader2 :size="14" class="spin-animation" />
+              <span class="collab-progress-text">
+                <template v-if="collaborationPhase === 'analyzing'">调度员正在分析任务...</template>
+                <template v-else-if="collaborationPhase === 'dispatching'">正在分配子任务...</template>
+                <template v-else-if="collaborationPhase === 'executing'">
+                  Agent 团队执行中 ({{ collaborationTasks.filter(t => t.status === 'completed').length }}/{{ collaborationTasks.length }})
+                </template>
+                <template v-else-if="collaborationPhase === 'synthesizing'">调度员正在综合结果...</template>
+              </span>
+            </div>
+          </div>
+
+          <div v-if="groupMessages.length === 0 && !collaborationActive" class="chat-empty">
             <MessageCircle :size="32" />
             <p>群聊已创建，添加 Agent 开始协作</p>
           </div>
@@ -331,12 +455,12 @@ onMounted(async () => {
             <input
               v-model="chatInput"
               type="text"
-              placeholder="发送消息到群聊..."
-              :disabled="sendingMessage"
+              :placeholder="collaborationMode ? '输入消息，Agent 团队将协作处理...' : '发送消息到群聊...'"
+              :disabled="sendingMessage || collaborationActive"
               @keydown.enter="sendMessage"
             />
-            <button class="input-send-btn" @click="sendMessage" :disabled="!chatInput.trim() || sendingMessage">
-              <Loader2 v-if="sendingMessage" :size="15" class="spin-animation" />
+            <button class="input-send-btn" @click="sendMessage" :disabled="!chatInput.trim() || sendingMessage || collaborationActive">
+              <Loader2 v-if="sendingMessage || collaborationActive" :size="15" class="spin-animation" />
               <Send v-else :size="15" />
             </button>
           </div>
@@ -404,7 +528,18 @@ onMounted(async () => {
           </div>
           <div v-if="addAgentId" class="form-group">
             <label class="form-label">角色定位</label>
-            <input v-model="addAgentRole" type="text" class="form-input" placeholder="如: 代码审查员、文档撰写者" />
+            <input v-model="addAgentRole" type="text" class="form-input" placeholder="如: 调度员、数据专员、计算专员、审核专员" />
+            <div class="role-suggestions">
+              <button
+                v-for="role in socialStore.agentRoles"
+                :key="role.roleId"
+                class="role-suggestion-chip"
+                :style="{ background: role.color + '14', color: role.color }"
+                @click="addAgentRole = role.name"
+              >
+                {{ role.name }}
+              </button>
+            </div>
           </div>
           <div class="dialog-actions">
             <button class="dialog-btn cancel" @click="showAddAgentDialog = false">取消</button>
@@ -833,6 +968,85 @@ onMounted(async () => {
   color: var(--text-secondary);
 }
 
+.chat-action-btn.active {
+  background: rgba(20, 126, 188, 0.12);
+  color: var(--lumi-primary);
+}
+
+.collaboration-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--divider-soft);
+  background: rgba(20, 126, 188, 0.04);
+  flex-shrink: 0;
+}
+
+.collab-mode-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lumi-primary);
+}
+
+.collab-phase {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--workspace-card);
+}
+
+.collab-tasks-mini {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+}
+
+.collab-tasks-mini::-webkit-scrollbar {
+  display: none;
+}
+
+.collab-task-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.collab-task-chip.status-pending {
+  background: var(--workspace-panel);
+  color: var(--text-muted);
+}
+
+.collab-task-chip.status-running {
+  background: rgba(20, 126, 188, 0.1);
+  color: var(--lumi-primary);
+}
+
+.collab-task-chip.status-completed {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.collab-task-chip.status-failed {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
 .chat-members-bar {
   padding: 8px 20px;
   border-bottom: 1px solid var(--divider-soft);
@@ -909,6 +1123,12 @@ onMounted(async () => {
   justify-content: flex-end;
 }
 
+.msg-row.collab-synthesis {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--divider-soft);
+}
+
 .msg-avatar {
   flex-shrink: 0;
 }
@@ -944,6 +1164,11 @@ onMounted(async () => {
   border-top-right-radius: 4px;
 }
 
+.msg-bubble.synthesis-bubble {
+  background: linear-gradient(135deg, rgba(20, 126, 188, 0.06), rgba(20, 126, 188, 0.02));
+  border: 1px solid rgba(20, 126, 188, 0.12);
+}
+
 .msg-sender {
   display: flex;
   align-items: center;
@@ -960,6 +1185,15 @@ onMounted(async () => {
   border-radius: var(--radius-full);
   background: rgba(20, 126, 188, 0.1);
   color: var(--lumi-primary);
+  font-weight: 500;
+}
+
+.msg-collab-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
   font-weight: 500;
 }
 
@@ -984,6 +1218,29 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.collab-progress-msg {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  animation: msg-slide-in 0.3s ease-out both;
+}
+
+.collab-progress-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  background: var(--workspace-card);
+  color: var(--lumi-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.collab-progress-text {
+  color: var(--text-secondary);
 }
 
 .chat-empty {
@@ -1208,6 +1465,26 @@ onMounted(async () => {
 
 .form-input::placeholder {
   color: var(--text-muted);
+}
+
+.role-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.role-suggestion-chip {
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.role-suggestion-chip:hover {
+  opacity: 0.8;
 }
 
 .agent-select-list {
