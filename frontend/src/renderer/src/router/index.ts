@@ -99,6 +99,10 @@ const routes: RouteRecordRaw[] = [
     redirect: '/market?tab=skill'
   },
   {
+    path: '/market/agents',
+    redirect: '/market?tab=agent'
+  },
+  {
     path: '/market/detail/:type/:id',
     name: 'MarketDetail',
     component: () => import('../views/MarketDetailView.vue'),

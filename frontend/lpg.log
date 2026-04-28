@@ -1,111 +1,168 @@
-Verify each finding against the current code and only fix it if needed.
-
-Inline comments:
-In `@frontend/src/renderer/src/stores/chat.ts`:
-- Around line 456-457: There's an empty catch block swallowing errors during
-tool invocation in the chat store; replace it with a typed catch (error:
-unknown) and log at least a warning with context (e.g., console.warn or the
-store's logger) including the error and identifying info (tool name / arguments)
-so failures aren't silent; update the anonymous empty catch to something like
-catch (error: unknown) { console.warn('Tool execution failed in chat store', {
-error, toolName, payload }) } ensuring any caught Error is preserved or rethrown
-if needed.
-
-In `@frontend/src/renderer/src/views/AvatarView.vue`:
-- Around line 908-910: 在 AvatarView.vue 中有多处样式把描述/状态文本的 font-size 降到
-9–10px（出现在原始 diff 对应的 908、994、1199、1212 等位置），可读性偏弱；请将这些选择器中把 font-size 设为 9px 或
-10px 的规则调整为 11–12px（或改用基于根字体的 rem 变量以便统一控制），并确保关键状态/标签样式（相应的 CSS 规则在
-AvatarView.vue 中设置 font-size 的那些块）保持至少
-11px-12px，同时在桌面常见缩放下复测显示效果并更新注释或样式变量以反映更大字号。
-
-In `@frontend/src/renderer/src/views/settings/AIModelSettings.vue`:
-- Line 1: The file frontend/src/renderer/src/views/settings/AIModelSettings.vue
-contains a UTF-8 BOM at the start (before the "<script setup lang=\"ts\">"),
-which can break tooling; remove the leading U+FEFF character so the file begins
-exactly with "<script setup lang=\"ts\">", ensure your editor/save operation
-writes UTF-8 without BOM, and re-run linters/build to confirm the issue is
-resolved.
-
-In `@frontend/src/renderer/src/views/WelcomeView.vue`:
-- Around line 285-291: The condition uses tmplId (a ComputedRef) incorrectly and
-mixes checks on tmpl.vendor vs template ID; change the equality check to use
-tmplId.value (or use templateId directly) and make the logic consistent by
-deciding whether to branch on tmpl.vendor or on template ID—e.g., if you want
-vendor-based behavior keep the first branch using tmpl.vendor and replace the
-tmplId === 'lmstudio' check with the equivalent vendor check, otherwise compare
-templateId (or tmplId.value) to 'lmstudio'; update the assignment to
-newProvider.value.apiKey accordingly (references: tmplId, templateId,
-tmpl.vendor, newProvider.value.apiKey).
-
----
-
-Outside diff comments:
-In `@frontend/src/renderer/src/views/AvatarView.vue`:
-- Around line 198-205: The mapping that sets importedModels from
-window.api.avatar.listImportedModels() uses only TypeScript casts and lacks
-runtime validation, so historical dirty records (e.g., missing or non-array
-tags) can break downstream code (see usage of ['Imported', ...m.tags]); update
-the mapping in the block that assigns importedModels (the map over PetModelInfo
-to LuomiNestModelInfo) to perform runtime checks and provide safe defaults:
-ensure tags is an array (default []), ensure id/name/url/scale/type have sane
-fallbacks or are filtered out, and coerce type to LuomiNestModelInfo['type']
-only after validation so downstream consumers won't throw.
-
----
-
-Nitpick comments:
-In `@frontend/src/renderer/src/stores/chat.ts`:
-- Line 25: convPendingToolCalls is typed as Record<string, any[]> which loses
-type safety; define a concrete interface (e.g., ToolCall with a nested
-FunctionDescriptor having name: string and arguments: Record<string, unknown> or
-a proper arg type) and change convPendingToolCalls to ref<Record<string,
-ToolCall[]>>; update references that access tc.function.name and
-tc.function.arguments to use the new types so TypeScript can validate them
-(search for convPendingToolCalls and usages of tc.function to apply the new
-ToolCall/FunctionDescriptor types).
-- Around line 122-123: The exported function cacheConversationMessages is an
-empty stub—either implement its intended behavior or remove it from the public
-API; if you intend to keep it as a placeholder, add a clear TODO comment above
-the function mentioning the planned behavior and a ticket/issue reference and
-ensure it remains unexported until implemented, otherwise delete the function
-and remove any import/usage sites; locate the stub by the function name
-cacheConversationMessages in chat.ts and apply the chosen change.
-
-In `@frontend/src/renderer/src/views/AvatarView.vue`:
-- Line 12: Move PetModelInfo (and related pet types like ModelCapabilities) out
-of the umbrella vite-env.d.ts into a dedicated types file to reduce coupling:
-create a new file (e.g., types/pet.ts) exporting interfaces such as PetModelInfo
-and ModelCapabilities, update imports in AvatarView.vue (and any other files
-currently importing from vite-env.d.ts) to import from the new module, and keep
-vite-env.d.ts for global/ambient types only; ensure exported names match the
-existing identifiers (PetModelInfo, ModelCapabilities) so no call sites need to
-change other than their import paths.
-
-In `@frontend/src/renderer/src/views/PluginMarketView.vue`:
-- Around line 146-147: The background linear-gradient in PluginMarketView.vue
-currently uses hard-coded RGBA colors (e.g., rgba(20, 126, 188, ...)) which
-makes theming difficult; replace those literals with a design-token based RGB
-variable (e.g., a --lumi-primary-rgb or similar) and use that variable to
-compose the transparent colors (so you can supply alpha per use), updating both
-occurrences (the background definition around the display:flex block and the
-second occurrence at the other location mentioned). Locate the CSS rules that
-set background in this file and swap the rgba(...) literals for uses of the
-token (keeping the same alpha values) so future skinning only needs to change
-the token value.
-
-In `@frontend/src/renderer/src/views/SocialView.vue`:
-- Line 1: Remove the invisible prefix character (BOM/ZWNBSP) at the very start
-of the file so the file begins with the normal "<script setup lang=\"ts\">"
-token; open frontend/src/renderer/src/views/SocialView.vue in a UTF‑8 aware
-editor and delete the non‑printing character(s) before the "<script setup
-lang=\"ts\">" tag, then save the file with a standard UTF‑8 encoding (no BOM).
-
-In `@frontend/src/renderer/src/views/WelcomeView.vue`:
-- Around line 297-299: The current computed newProviderFormValid only checks
-newProvider.value.id and newProvider.value.baseUrl but misses validating apiKey
-for cloud providers; update newProviderFormValid to also require
-newProvider.value.apiKey.trim() !== '' when the provider is a cloud-type
-provider (e.g., newProvider.value.type === 'cloud') or when the id/baseUrl
-indicates a cloud vendor (e.g., matches "openai"), so the form is invalid if the
-apiKey is empty for those cases; modify the computed (newProviderFormValid) to
-include this conditional apiKey check while keeping existing id/baseUrl checks.
+LumiSidebar.vue:161 [Vue warn]: Unhandled error during execution of setup function 
+  at <TasksView onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< null > > 
+  at <RouterView> 
+  at <App>
+warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
+logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
+handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2353
+setupStatefulComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10295
+setupComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10257
+mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8183
+processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
+patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
+componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8377
+run @ chunk-MDJKIZJQ.js?v=fe22181a:507
+runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
+flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
+queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
+baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
+trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
+endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
+notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
+trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
+set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
+finalizeNavigation @ vue-router.js?v=fe22181a:5643
+（匿名） @ vue-router.js?v=fe22181a:5581
+Promise.then
+pushWithRedirect @ vue-router.js?v=fe22181a:5568
+push @ vue-router.js?v=fe22181a:5519
+onClick @ LumiSidebar.vue:161
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
+invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
+LumiSidebar.vue:161 [Vue warn]: Unhandled error during execution of component update 
+  at <RouterView> 
+  at <App>
+warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
+logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
+handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2353
+flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
+queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
+baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
+trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
+endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
+notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
+trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
+set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
+finalizeNavigation @ vue-router.js?v=fe22181a:5643
+（匿名） @ vue-router.js?v=fe22181a:5581
+Promise.then
+pushWithRedirect @ vue-router.js?v=fe22181a:5568
+push @ vue-router.js?v=fe22181a:5519
+onClick @ LumiSidebar.vue:161
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
+invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
+TasksView.vue:176 Uncaught (in promise) ReferenceError: Cannot access 'formatDateStr' before initialization
+    at defaultNewTask (TasksView.vue:176:12)
+    at setup (TasksView.vue:184:21)
+    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:19)
+    at setupStatefulComponent (chunk-MDJKIZJQ.js?v=fe22181a:10295:25)
+    at setupComponent (chunk-MDJKIZJQ.js?v=fe22181a:10257:36)
+    at mountComponent (chunk-MDJKIZJQ.js?v=fe22181a:8183:7)
+    at processComponent (chunk-MDJKIZJQ.js?v=fe22181a:8149:9)
+    at patch (chunk-MDJKIZJQ.js?v=fe22181a:7646:11)
+    at ReactiveEffect.componentUpdateFn [as fn] (chunk-MDJKIZJQ.js?v=fe22181a:8377:9)
+    at ReactiveEffect.run (chunk-MDJKIZJQ.js?v=fe22181a:507:19)
+defaultNewTask @ TasksView.vue:176
+setup @ TasksView.vue:184
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
+setupStatefulComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10295
+setupComponent @ chunk-MDJKIZJQ.js?v=fe22181a:10257
+mountComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8183
+processComponent @ chunk-MDJKIZJQ.js?v=fe22181a:8149
+patch @ chunk-MDJKIZJQ.js?v=fe22181a:7646
+componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8377
+run @ chunk-MDJKIZJQ.js?v=fe22181a:507
+runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
+flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
+queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
+baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
+trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
+endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
+notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
+trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
+set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
+finalizeNavigation @ vue-router.js?v=fe22181a:5643
+（匿名） @ vue-router.js?v=fe22181a:5581
+Promise.then
+pushWithRedirect @ vue-router.js?v=fe22181a:5568
+push @ vue-router.js?v=fe22181a:5519
+onClick @ LumiSidebar.vue:161
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
+invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
+LumiSidebar.vue:161 [Vue warn]: Unhandled error during execution of component update 
+  at <RouterView> 
+  at <App>
+warn$1 @ chunk-MDJKIZJQ.js?v=fe22181a:2204
+logError @ chunk-MDJKIZJQ.js?v=fe22181a:2415
+handleError @ chunk-MDJKIZJQ.js?v=fe22181a:2407
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2353
+flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
+queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
+baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
+trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
+endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
+notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
+trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
+set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
+finalizeNavigation @ vue-router.js?v=fe22181a:5643
+（匿名） @ vue-router.js?v=fe22181a:5581
+Promise.then
+pushWithRedirect @ vue-router.js?v=fe22181a:5568
+push @ vue-router.js?v=fe22181a:5519
+onClick @ LumiSidebar.vue:161
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
+invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522
+chunk-MDJKIZJQ.js?v=fe22181a:9098 Uncaught (in promise) TypeError: Cannot read properties of null (reading 'component')
+    at locateNonHydratedAsyncRoot (chunk-MDJKIZJQ.js?v=fe22181a:9098:41)
+    at locateNonHydratedAsyncRoot (chunk-MDJKIZJQ.js?v=fe22181a:9103:14)
+    at ReactiveEffect.componentUpdateFn [as fn] (chunk-MDJKIZJQ.js?v=fe22181a:8332:40)
+    at ReactiveEffect.run (chunk-MDJKIZJQ.js?v=fe22181a:507:19)
+    at ReactiveEffect.runIfDirty (chunk-MDJKIZJQ.js?v=fe22181a:545:12)
+    at callWithErrorHandling (chunk-MDJKIZJQ.js?v=fe22181a:2351:33)
+    at flushJobs (chunk-MDJKIZJQ.js?v=fe22181a:2559:9)
+locateNonHydratedAsyncRoot @ chunk-MDJKIZJQ.js?v=fe22181a:9098
+locateNonHydratedAsyncRoot @ chunk-MDJKIZJQ.js?v=fe22181a:9103
+componentUpdateFn @ chunk-MDJKIZJQ.js?v=fe22181a:8332
+run @ chunk-MDJKIZJQ.js?v=fe22181a:507
+runIfDirty @ chunk-MDJKIZJQ.js?v=fe22181a:545
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
+flushJobs @ chunk-MDJKIZJQ.js?v=fe22181a:2559
+Promise.then
+queueFlush @ chunk-MDJKIZJQ.js?v=fe22181a:2473
+queueJob @ chunk-MDJKIZJQ.js?v=fe22181a:2468
+baseWatchOptions.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:3055
+effect2.scheduler @ chunk-MDJKIZJQ.js?v=fe22181a:2097
+trigger @ chunk-MDJKIZJQ.js?v=fe22181a:535
+endBatch @ chunk-MDJKIZJQ.js?v=fe22181a:593
+notify @ chunk-MDJKIZJQ.js?v=fe22181a:855
+trigger @ chunk-MDJKIZJQ.js?v=fe22181a:829
+set value @ chunk-MDJKIZJQ.js?v=fe22181a:1743
+finalizeNavigation @ vue-router.js?v=fe22181a:5643
+（匿名） @ vue-router.js?v=fe22181a:5581
+Promise.then
+pushWithRedirect @ vue-router.js?v=fe22181a:5568
+push @ vue-router.js?v=fe22181a:5519
+onClick @ LumiSidebar.vue:161
+callWithErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2351
+callWithAsyncErrorHandling @ chunk-MDJKIZJQ.js?v=fe22181a:2358
+invoker @ chunk-MDJKIZJQ.js?v=fe22181a:11522

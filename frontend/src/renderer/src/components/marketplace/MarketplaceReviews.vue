@@ -4,6 +4,7 @@ import { MessageCircle, Send } from 'lucide-vue-next'
 import type { MarketplaceReview } from '../../types/marketplace'
 import MarketplaceRating from './MarketplaceRating.vue'
 import { useMarketplaceStore } from '../../stores/marketplace'
+import { formatDateRelative } from '../../utils/format'
 
 const props = defineProps<{
   itemId: string
@@ -70,7 +71,7 @@ function submitReply(reviewId: string) {
 }
 
 function formatDate(dateStr: string) {
-  return dateStr
+  return formatDateRelative(dateStr)
 }
 </script>
 
@@ -264,7 +265,7 @@ function formatDate(dateStr: string) {
 .bar-fill {
   height: 100%;
   border-radius: 3px;
-  background: #f59e0b;
+  background: var(--lumi-star);
   transition: width var(--transition-normal);
 }
 
@@ -311,7 +312,7 @@ function formatDate(dateStr: string) {
   border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 500;
-  color: white;
+  color: var(--text-inverse);
   background: var(--lumi-primary);
   transition: all var(--transition-fast);
 }
@@ -389,7 +390,7 @@ function formatDate(dateStr: string) {
   border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 500;
-  color: white;
+  color: var(--text-inverse);
   background: var(--lumi-primary);
   transition: all var(--transition-fast);
 }

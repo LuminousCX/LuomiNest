@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { Search, Clock, X, TrendingUp, ArrowRight } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../../stores/marketplace'
 
@@ -8,41 +8,53 @@ const store = useMarketplaceStore()
 const inputRef = ref<HTMLInputElement | null>(null)
 const localQuery = ref(store.searchQuery)
 
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+onUnmounted(() => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+})
+
 watch(() => store.searchQuery, (val) => {
   localQuery.value = val
 })
 
-function onInput() {
-  store.searchQuery = localQuery.value
+const onInput = () => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  const query = localQuery.value
+  store.showSearchSuggestions = true
+  debounceTimer = setTimeout(() => {
+    store.searchQuery = query
+  }, 200)
+}
+
+const onFocus = () => {
   store.showSearchSuggestions = true
 }
 
-function onFocus() {
-  store.showSearchSuggestions = true
-}
-
-function onBlur() {
+const onBlur = () => {
   setTimeout(() => {
     store.showSearchSuggestions = false
   }, 200)
 }
 
-function selectSuggestion(text: string) {
+const selectSuggestion = (text: string) => {
   localQuery.value = text
   store.performSearch(text)
 }
 
-function handleSubmit() {
+const handleSubmit = () => {
+  if (debounceTimer) clearTimeout(debounceTimer)
   store.performSearch(localQuery.value)
 }
 
-function clearInput() {
+const clearInput = () => {
+  if (debounceTimer) clearTimeout(debounceTimer)
   localQuery.value = ''
   store.clearSearch()
   inputRef.value?.focus()
 }
 
-function removeHistory(text: string, e: Event) {
+const removeHistory = (text: string, e: Event) => {
   e.stopPropagation()
   store.removeSearchHistoryEntry(text)
 }

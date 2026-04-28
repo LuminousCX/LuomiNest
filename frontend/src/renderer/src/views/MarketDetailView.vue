@@ -4,12 +4,23 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft, Star, Download, Users, Tag,
   ExternalLink, Check, FileText, ChevronDown,
-  ChevronRight
+  ChevronRight, Package,
+  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
+  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, BarChart3,
+  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
 } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
 import MarketplaceInstallBtn from '../components/marketplace/MarketplaceInstallBtn.vue'
 import MarketplaceReviews from '../components/marketplace/MarketplaceReviews.vue'
 import type { MarketplaceType } from '../types/marketplace'
+import { formatDateRelative, formatFileSize, formatDownloadCount } from '../utils/format'
+
+const ITEM_ICON_MAP: Record<string, any> = {
+  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
+  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
+  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
+  Package,
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -18,7 +29,7 @@ const store = useMarketplaceStore()
 const activeTab = ref<'info' | 'versions' | 'reviews'>('info')
 const expandedVersion = ref<string | null>(null)
 
-const VALID_TYPES: MarketplaceType[] = ['plugin', 'skill']
+const VALID_TYPES: MarketplaceType[] = ['plugin', 'skill', 'agent']
 
 const itemType = computed<MarketplaceType>(() => {
   const t = route.params.type as string
@@ -33,10 +44,7 @@ const itemReviews = computed(() => store.getItemReviews(itemId.value))
 
 const downloadDisplay = computed(() => {
   if (!item.value) return ''
-  const n = item.value.downloadCount
-  if (n >= 10000) return (n / 10000).toFixed(1) + 'w'
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
-  return n.toString()
+  return formatDownloadCount(item.value.downloadCount)
 })
 
 function goBack() {
@@ -47,15 +55,9 @@ function toggleVersion(version: string) {
   expandedVersion.value = expandedVersion.value === version ? null : version
 }
 
-function formatSize(bytes: number) {
-  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB'
-  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return bytes + ' B'
-}
+const formatSize = (bytes: number) => formatFileSize(bytes)
 
-function formatDate(dateStr: string) {
-  return dateStr
-}
+const formatDate = (dateStr: string) => formatDateRelative(dateStr)
 </script>
 
 <template>
@@ -63,13 +65,15 @@ function formatDate(dateStr: string) {
     <div class="detail-topbar animate-fade-in">
       <button class="back-btn" @click="goBack">
         <ArrowLeft :size="18" />
-        <span>{{ itemType === 'plugin' ? '插件市场' : '技能市场' }}</span>
+        <span>{{ itemType === 'plugin' ? '插件市场' : itemType === 'skill' ? '技能市场' : '智能体市场' }}</span>
       </button>
     </div>
 
     <div class="detail-content">
       <div class="detail-hero animate-slide-up">
-        <div class="hero-icon">{{ item.icon }}</div>
+        <div class="hero-icon">
+          <component :is="ITEM_ICON_MAP[item.icon] || Package" :size="40" />
+        </div>
         <div class="hero-info">
           <div class="hero-title-row">
             <h1 class="hero-title">{{ item.name }}</h1>
@@ -284,7 +288,7 @@ function formatDate(dateStr: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 40px;
+  color: var(--lumi-primary);
   flex-shrink: 0;
 }
 
@@ -344,7 +348,7 @@ function formatDate(dateStr: string) {
 }
 
 .hero-stat .star-icon {
-  color: #f59e0b;
+  color: var(--lumi-star);
 }
 
 .stat-value {
@@ -479,7 +483,7 @@ function formatDate(dateStr: string) {
 
 .info-link:hover {
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
 }
 
 .versions-list {
@@ -526,8 +530,8 @@ function formatDate(dateStr: string) {
   border-radius: var(--radius-full);
   font-size: 10px;
   font-weight: 600;
-  background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+  background: var(--lumi-success-light);
+  color: var(--lumi-success);
 }
 
 .version-date {
