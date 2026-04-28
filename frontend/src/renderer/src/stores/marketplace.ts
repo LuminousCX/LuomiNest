@@ -255,6 +255,12 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     target.value = { ...target.value, ...filter }
   }
 
+  const resetFilters = (type: MarketplaceType) => {
+    const target = type === 'plugin' ? pluginFilter : type === 'skill' ? skillFilter : agentFilter
+    target.value = { sortBy: 'popular' }
+    clearSearch()
+  }
+
   const toggleFavorite = (itemId: string) => {
     const idx = favorites.value.indexOf(itemId)
     if (idx >= 0) {
@@ -521,6 +527,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     removeSearchHistoryEntry,
     clearSearchHistory,
     setFilter,
+    resetFilters,
     toggleFavorite,
     startInstall,
     uninstallItem,

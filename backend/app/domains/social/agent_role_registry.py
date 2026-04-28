@@ -197,11 +197,20 @@ BUILTIN_ROLES: dict[str, AgentRoleDefinition] = {
 
 
 class AgentRoleRegistry:
-    _roles: dict[str, AgentRoleDefinition] = dict(BUILTIN_ROLES)
+    _roles: dict[str, AgentRoleDefinition] = {}
     _custom_roles: dict[str, AgentRoleDefinition] = {}
+    _initialized: bool = False
+
+    @classmethod
+    def _ensure_initialized(cls) -> None:
+        if not cls._initialized:
+            cls._roles = dict(BUILTIN_ROLES)
+            cls._custom_roles = {}
+            cls._initialized = True
 
     @classmethod
     def get_role(cls, role_id: str) -> AgentRoleDefinition | None:
+        cls._ensure_initialized()
         role = cls._roles.get(role_id) or cls._custom_roles.get(role_id)
         if not role:
             logger.warning(f"[RoleRegistry] Role not found: {role_id}")
@@ -209,20 +218,24 @@ class AgentRoleRegistry:
 
     @classmethod
     def list_roles(cls) -> list[AgentRoleDefinition]:
+        cls._ensure_initialized()
         all_roles = {**cls._roles, **cls._custom_roles}
         return list(all_roles.values())
 
     @classmethod
     def list_worker_roles(cls) -> list[AgentRoleDefinition]:
+        cls._ensure_initialized()
         return [r for r in cls.list_roles() if r.role_id != "coordinator"]
 
     @classmethod
     def register_role(cls, role: AgentRoleDefinition) -> None:
+        cls._ensure_initialized()
         logger.info(f"[RoleRegistry] Registering role: {role.role_id} ({role.name})")
         cls._custom_roles[role.role_id] = role
 
     @classmethod
     def build_coordinator_prompt(cls, coordinator_name: str = "调度员") -> str:
+        cls._ensure_initialized()
         worker_roles = cls.list_worker_roles()
         roles_text = "\n".join(
             f"- **{r.role_id}** ({r.name}): {r.description}，能力: {', '.join(r.capabilities)}"
@@ -235,6 +248,7 @@ class AgentRoleRegistry:
 
     @classmethod
     def build_agent_prompt(cls, role_id: str, agent_name: str) -> str | None:
+        cls._ensure_initialized()
         role = cls.get_role(role_id)
         if not role:
             return None

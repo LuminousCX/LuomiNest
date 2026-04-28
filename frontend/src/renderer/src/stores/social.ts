@@ -138,27 +138,27 @@ export const useSocialStore = defineStore('social', () => {
 
   const _handleMessageEvent = (event: any) => {
     switch (event.type) {
-      case 'user_message':
-        if (event.data) {
-          groupMessages.value.push(event.data as GroupMessage)
-        }
+      case 'user_message': {
+        const msg = _validateMessageData(event.data)
+        if (msg) groupMessages.value.push(msg)
         break
+      }
 
       case 'agents_start':
         respondingAgentNames.value = event.data?.agentNames || event.data?.agent_names || []
         break
 
-      case 'agent_message':
-        if (event.data) {
-          groupMessages.value.push(event.data as GroupMessage)
-        }
+      case 'agent_message': {
+        const msg = _validateMessageData(event.data)
+        if (msg) groupMessages.value.push(msg)
         break
+      }
 
-      case 'agent_error':
-        if (event.data) {
-          groupMessages.value.push(event.data as GroupMessage)
-        }
+      case 'agent_error': {
+        const msg = _validateMessageData(event.data)
+        if (msg) groupMessages.value.push(msg)
         break
+      }
 
       case 'agents_done':
         agentsResponding.value = false
@@ -198,15 +198,22 @@ export const useSocialStore = defineStore('social', () => {
 
   const _normalizeMessage = (msg: any): GroupMessage => {
     return {
-      id: msg.id || msg.message_id || '',
+      id: msg.id || msg.message_id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       senderId: msg.senderId || msg.sender_id || '',
       senderName: msg.senderName || msg.sender_name || '',
       senderType: msg.senderType || msg.sender_type || 'user',
-      content: msg.content || '',
-      timestamp: msg.timestamp || '',
+      content: typeof (msg.content) === 'string' ? msg.content : '',
+      timestamp: msg.timestamp || new Date().toISOString(),
       role: msg.role,
       collaboration: msg.collaboration,
     }
+  }
+
+  const _validateMessageData = (data: any): GroupMessage | null => {
+    if (!data || typeof data !== 'object') return null
+    const content = data.content ?? data.Content
+    if (typeof content !== 'string' || !content.trim()) return null
+    return _normalizeMessage(data)
   }
 
   const fetchAvailableAgents = async () => {

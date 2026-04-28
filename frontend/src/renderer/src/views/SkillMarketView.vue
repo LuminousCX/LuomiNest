@@ -35,8 +35,7 @@ const toggleFilters = () => {
 }
 
 const resetFilters = () => {
-  store.setFilter('skill', { category: undefined })
-  store.clearSearch()
+  store.resetFilters('skill')
 }
 </script>
 

@@ -78,22 +78,31 @@ class GroupChatManager:
 
         recent_context = self._build_recent_context(group)
 
-        tasks = []
         for member in ai_members:
-            tasks.append(self._respond_as_agent(group, member, content, recent_context))
+            try:
+                result = await self._respond_as_agent(group, member, content, recent_context)
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+                yield {
+                    "type": "agent_message",
+                    "data": to_camel_case(result),
+                }
 
-        for i, result in enumerate(results):
-            member = ai_members[i]
-            if isinstance(result, Exception):
+                fresh_group = groups_store.get(group_id)
+                if fresh_group:
+                    if "messages" not in fresh_group:
+                        fresh_group["messages"] = []
+                    fresh_group["messages"].append(result)
+                    fresh_group["updated_at"] = datetime.now(timezone.utc).isoformat()
+                    groups_store.set(group_id, fresh_group)
+
+            except Exception as e:
                 now = datetime.now(timezone.utc).isoformat()
                 error_msg = {
                     "id": str(uuid.uuid4()),
                     "sender_id": member.get("agent_id", "agent"),
                     "sender_name": member.get("name", "Agent"),
                     "sender_type": "agent",
-                    "content": f"[响应失败: {str(result)[:100]}]",
+                    "content": f"[响应失败: {str(e)[:100]}]",
                     "timestamp": now,
                     "role": member.get("role", ""),
                 }
@@ -101,21 +110,6 @@ class GroupChatManager:
                     "type": "agent_error",
                     "data": to_camel_case(error_msg),
                 }
-            else:
-                yield {
-                    "type": "agent_message",
-                    "data": to_camel_case(result),
-                }
-
-        group = groups_store.get(group_id)
-        if group:
-            for result in results:
-                if not isinstance(result, Exception) and result:
-                    if "messages" not in group:
-                        group["messages"] = []
-                    group["messages"].append(result)
-            group["updated_at"] = datetime.now(timezone.utc).isoformat()
-            groups_store.set(group_id, group)
 
         yield {"type": "agents_done", "data": {}}
 

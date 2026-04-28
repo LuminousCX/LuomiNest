@@ -35,8 +35,7 @@ const toggleFilters = () => {
 }
 
 const resetFilters = () => {
-  store.setFilter('plugin', { category: undefined })
-  store.clearSearch()
+  store.resetFilters('plugin')
 }
 </script>
 

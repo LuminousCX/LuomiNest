@@ -476,17 +476,42 @@ class AgentOrchestrator:
         group: dict,
         session: CollaborationSession,
     ) -> None:
-        independent = [t for t in sub_tasks if not t.depends_on]
-        dependent = [t for t in sub_tasks if t.depends_on]
+        completed_ids: set[str] = set()
+        max_iterations = len(sub_tasks) + 1
+        iteration = 0
 
-        if independent:
-            await asyncio.gather(*[
-                self._execute_single_task(t, group, session)
-                for t in independent
-            ])
+        while len(completed_ids) < len(sub_tasks) and iteration < max_iterations:
+            iteration += 1
+            ready = [
+                t for t in sub_tasks
+                if t.task_id not in completed_ids
+                and t.status not in (TaskStatus.RUNNING, TaskStatus.COMPLETED, TaskStatus.FAILED)
+                and all(dep in completed_ids for dep in t.depends_on)
+            ]
 
-        for task in dependent:
-            await self._execute_single_task(task, group, session)
+            if not ready:
+                stuck = [t for t in sub_tasks if t.task_id not in completed_ids and t.status != TaskStatus.FAILED]
+                if stuck:
+                    for t in stuck:
+                        t.status = TaskStatus.FAILED
+                        t.error = "Unresolvable dependency"
+                        t.completed_at = datetime.now(timezone.utc).isoformat()
+                        completed_ids.add(t.task_id)
+                break
+
+            if len(ready) == 1:
+                await self._execute_single_task(ready[0], group, session)
+            else:
+                results = await asyncio.gather(*[
+                    self._execute_single_task(t, group, session)
+                    for t in ready
+                ], return_exceptions=True)
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        logger.error(f"[Orchestrator] Task {ready[i].task_id} gather error: {result}")
+
+            for t in ready:
+                completed_ids.add(t.task_id)
 
     async def _execute_single_task(
         self,
@@ -776,6 +801,14 @@ class AgentOrchestrator:
         return prompt
 
     async def _save_messages(self, group: dict, session: CollaborationSession) -> None:
+        fresh_group = groups_store.get(group.get("id", ""))
+        if not fresh_group:
+            logger.warning(f"[Orchestrator] Group {group.get('id')} not found when saving messages")
+            return
+
+        if "messages" not in fresh_group:
+            fresh_group["messages"] = []
+
         now = datetime.now(timezone.utc).isoformat()
 
         user_msg = {
@@ -785,7 +818,7 @@ class AgentOrchestrator:
             "content": session.user_message,
             "timestamp": now,
         }
-        group["messages"].append(user_msg)
+        fresh_group["messages"].append(user_msg)
 
         if session.phase == CollaborationPhase.COMPLETED and session.sub_tasks:
             for task in session.sub_tasks:
@@ -793,7 +826,7 @@ class AgentOrchestrator:
                     agent = agents_store.get(task.agent_id) if task.agent_id else None
                     agent_name = agent["name"] if agent else "Agent"
                     member = None
-                    for m in group.get("members", []):
+                    for m in fresh_group.get("members", []):
                         if m.get("agent_id") == task.agent_id:
                             member = m
                             break
@@ -812,10 +845,10 @@ class AgentOrchestrator:
                             "task_description": task.description,
                         },
                     }
-                    group["messages"].append(task_msg)
+                    fresh_group["messages"].append(task_msg)
 
             if session.final_result:
-                coordinator = _find_coordinator_agent(group)
+                coordinator = _find_coordinator_agent(fresh_group)
                 coordinator_name = coordinator["name"] if coordinator else "调度员"
                 synthesis_msg = {
                     "id": str(uuid.uuid4()),
@@ -830,10 +863,10 @@ class AgentOrchestrator:
                         "type": "synthesis",
                     },
                 }
-                group["messages"].append(synthesis_msg)
+                fresh_group["messages"].append(synthesis_msg)
 
         elif session.coordinator_response:
-            coordinator = _find_coordinator_agent(group)
+            coordinator = _find_coordinator_agent(fresh_group)
             coordinator_name = coordinator["name"] if coordinator else "Agent"
             direct_msg = {
                 "id": str(uuid.uuid4()),
@@ -844,7 +877,7 @@ class AgentOrchestrator:
                 "timestamp": now,
                 "role": "调度员",
             }
-            group["messages"].append(direct_msg)
+            fresh_group["messages"].append(direct_msg)
 
         elif session.final_result:
             error_msg = {
@@ -856,10 +889,10 @@ class AgentOrchestrator:
                 "timestamp": now,
                 "role": "系统",
             }
-            group["messages"].append(error_msg)
+            fresh_group["messages"].append(error_msg)
 
-        group["updated_at"] = now
-        groups_store.set(group["id"], group)
+        fresh_group["updated_at"] = now
+        groups_store.set(fresh_group["id"], fresh_group)
 
     def get_session(self, session_id: str) -> CollaborationSession | None:
         return self._active_sessions.get(session_id)

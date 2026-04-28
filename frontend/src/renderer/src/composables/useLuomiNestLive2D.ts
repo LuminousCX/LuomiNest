@@ -1,3 +1,4 @@
+import '@pixi/unsafe-eval'
 import { ref, type Ref } from 'vue'
 import { Application, Ticker } from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'

@@ -197,6 +197,20 @@ async def send_group_message(group_id: str, request: GroupMessageSend):
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Group {group_id} not found")
 
+    if request.sender_id != "user":
+        members = group.get("members", [])
+        is_member = any(
+            m.get("agent_id") == request.sender_id or m.get("id") == request.sender_id
+            for m in members
+        )
+        if not is_member:
+            from app.core.exceptions import ValidationError
+            raise ValidationError(f"Sender {request.sender_id} is not a member of group {group_id}")
+
+    if not request.content or not request.content.strip():
+        from app.core.exceptions import ValidationError
+        raise ValidationError("Message content cannot be empty")
+
     async def message_stream():
         async for event in _group_manager.send_group_message_stream(
             group_id=group_id,
@@ -277,7 +291,7 @@ async def collaborate(group_id: str, request: CollaborationRequest):
 @router.get("/agent-roles")
 async def list_agent_roles():
     logger.info("[API] GET /social/agent-roles - Listing agent roles")
-    roles = AgentRoleRegistry.list_roles()
+    roles = AgentRoleRegistry.list_worker_roles()
     return {
         "error": None,
         "data": [

@@ -137,13 +137,36 @@ const DEFAULT_TASKS: LuomiNestTask[] = [
 
 const tasks = ref<LuomiNestTask[]>([...DEFAULT_TASKS])
 
+const normalizeTask = (raw: any, fallbackId: number): LuomiNestTask => ({
+  id: typeof raw.id === 'number' ? raw.id : fallbackId,
+  title: typeof raw.title === 'string' ? raw.title : '',
+  desc: typeof raw.desc === 'string' ? raw.desc : '',
+  priority: ['high', 'medium', 'low'].includes(raw.priority) ? raw.priority : 'medium',
+  status: ['done', 'progress', 'pending'].includes(raw.status) ? raw.status : 'pending',
+  dueDate: typeof raw.dueDate === 'string' ? raw.dueDate : formatDateStr(new Date()),
+  assignees: Array.isArray(raw.assignees) ? raw.assignees.filter((a: any) => typeof a === 'string') : [],
+  tags: Array.isArray(raw.tags) ? raw.tags.filter((t: any) => typeof t === 'string') : [],
+  progress: typeof raw.progress === 'number' ? Math.max(0, Math.min(100, raw.progress)) : 0,
+  colorVar: typeof raw.colorVar === 'string' ? raw.colorVar : '--task-blue',
+  timeSlot: typeof raw.timeSlot === 'string' ? raw.timeSlot : '待安排',
+})
+
+const normalizeTasks = (rawList: any[]): LuomiNestTask[] => {
+  if (!Array.isArray(rawList)) return [...DEFAULT_TASKS]
+  try {
+    return rawList.map((t, i) => normalizeTask(t, i + 1))
+  } catch {
+    return [...DEFAULT_TASKS]
+  }
+}
+
 const loadPersistedData = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const data = JSON.parse(raw)
       if (data.tasks && Array.isArray(data.tasks)) {
-        tasks.value = data.tasks
+        tasks.value = normalizeTasks(data.tasks)
       }
       if (data.nextId && typeof data.nextId === 'number') {
         nextTaskId.value = data.nextId
@@ -389,30 +412,46 @@ const filteredTasks = computed(() => {
   )
 })
 
+const MIN_YEAR = 2000
+const MAX_YEAR = 2099
+
+const clampViewDate = (d: Date) => {
+  const y = d.getFullYear()
+  if (y < MIN_YEAR) return new Date(MIN_YEAR, 0, 1)
+  if (y > MAX_YEAR) return new Date(MAX_YEAR, 11, 31)
+  return d
+}
+
 const navigatePrev = () => {
-  const d = cloneDate(viewDate.value)
   if (currentView.value === 'card') {
+    const d = cloneDate(viewDate.value)
     d.setDate(d.getDate() - 4)
+    viewDate.value = clampViewDate(d)
   } else if (currentView.value === 'week') {
+    const d = cloneDate(viewDate.value)
     d.setDate(d.getDate() - 7)
+    viewDate.value = clampViewDate(d)
   } else {
-    d.setMonth(d.getMonth() - 1)
-    d.setDate(1)
+    const y = viewDate.value.getFullYear()
+    const m = viewDate.value.getMonth()
+    viewDate.value = clampViewDate(new Date(y, m - 1, 1))
   }
-  viewDate.value = d
 }
 
 const navigateNext = () => {
-  const d = cloneDate(viewDate.value)
   if (currentView.value === 'card') {
+    const d = cloneDate(viewDate.value)
     d.setDate(d.getDate() + 4)
+    viewDate.value = clampViewDate(d)
   } else if (currentView.value === 'week') {
+    const d = cloneDate(viewDate.value)
     d.setDate(d.getDate() + 7)
+    viewDate.value = clampViewDate(d)
   } else {
-    d.setMonth(d.getMonth() + 1)
-    d.setDate(1)
+    const y = viewDate.value.getFullYear()
+    const m = viewDate.value.getMonth()
+    viewDate.value = clampViewDate(new Date(y, m + 1, 1))
   }
-  viewDate.value = d
 }
 
 const goToToday = () => {
@@ -452,10 +491,13 @@ const defaultNewTask = () => ({
 
 const newTask = ref(defaultNewTask())
 
-const openCreateModal = (prefillDate?: string) => {
+const openCreateModal = (prefillDate?: string, prefillTimeSlot?: string) => {
   newTask.value = defaultNewTask()
   if (prefillDate) {
     newTask.value.dueDate = prefillDate
+  }
+  if (prefillTimeSlot) {
+    newTask.value.timeSlot = prefillTimeSlot
   }
   newTagInput.value = ''
   showCreateModal.value = true
@@ -811,7 +853,11 @@ const timeSlotOptions = [
               v-for="slot in timeSlots"
               :key="slot"
               class="week-cell"
-              @click="openCreateModal(day.fullDate)"
+              tabindex="0"
+              role="button"
+              @click="openCreateModal(day.fullDate, `${slot} - ${timeSlots[timeSlots.indexOf(slot) + 1] || ''}`)"
+              @keydown.enter="openCreateModal(day.fullDate, `${slot} - ${timeSlots[timeSlots.indexOf(slot) + 1] || ''}`)"
+              @keydown.space.prevent="openCreateModal(day.fullDate, `${slot} - ${timeSlots[timeSlots.indexOf(slot) + 1] || ''}`)"
             >
               <div class="week-cell-time">{{ slot }}</div>
             </div>
@@ -866,7 +912,11 @@ const timeSlotOptions = [
               'is-weekend': cell.isWeekend,
               'is-other-month': !cell.isCurrentMonth
             }"
+            tabindex="0"
+            role="button"
             @click="openCreateModal(cell.fullDate)"
+            @keydown.enter="openCreateModal(cell.fullDate)"
+            @keydown.space.prevent="openCreateModal(cell.fullDate)"
           >
             <div class="month-cell-header">
               <span class="month-cell-date">{{ cell.date }}</span>
