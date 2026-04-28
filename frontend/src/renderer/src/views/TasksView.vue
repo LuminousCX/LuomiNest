@@ -137,37 +137,33 @@ const DEFAULT_TASKS: LuomiNestTask[] = [
 
 const tasks = ref<LuomiNestTask[]>([...DEFAULT_TASKS])
 
-const normalizeTask = (raw: any, fallbackId: number): LuomiNestTask | null => {
-  try {
-    if (typeof raw !== 'object' || raw === null) return null
-    return {
-      id: typeof raw.id === 'number' ? raw.id : fallbackId,
-      title: typeof raw.title === 'string' ? raw.title : '',
-      desc: typeof raw.desc === 'string' ? raw.desc : '',
-      priority: ['high', 'medium', 'low'].includes(raw.priority) ? raw.priority : 'medium',
-      status: ['done', 'progress', 'pending'].includes(raw.status) ? raw.status : 'pending',
-      dueDate: typeof raw.dueDate === 'string' ? raw.dueDate : formatDateStr(new Date()),
-      assignees: Array.isArray(raw.assignees) ? raw.assignees.filter((a: any) => typeof a === 'string') : [],
-      tags: Array.isArray(raw.tags) ? raw.tags.filter((t: any) => typeof t === 'string') : [],
-      progress: typeof raw.progress === 'number' ? Math.max(0, Math.min(100, raw.progress)) : 0,
-      colorVar: typeof raw.colorVar === 'string' ? raw.colorVar : '--task-blue',
-      timeSlot: typeof raw.timeSlot === 'string' ? raw.timeSlot : '待安排',
-    }
-  } catch {
-    return null
-  }
-}
+const normalizeTask = (raw: any, fallbackId: number): LuomiNestTask => ({
+  id: typeof raw.id === 'number' ? raw.id : fallbackId,
+  title: typeof raw.title === 'string' ? raw.title : '',
+  desc: typeof raw.desc === 'string' ? raw.desc : '',
+  priority: ['high', 'medium', 'low'].includes(raw.priority) ? raw.priority : 'medium',
+  status: ['done', 'progress', 'pending'].includes(raw.status) ? raw.status : 'pending',
+  dueDate: typeof raw.dueDate === 'string' ? raw.dueDate : formatDateStr(new Date()),
+  assignees: Array.isArray(raw.assignees) ? raw.assignees.filter((a: any) => typeof a === 'string') : [],
+  tags: Array.isArray(raw.tags) ? raw.tags.filter((t: any) => typeof t === 'string') : [],
+  progress: typeof raw.progress === 'number' ? Math.max(0, Math.min(100, raw.progress)) : 0,
+  colorVar: typeof raw.colorVar === 'string' ? raw.colorVar : '--task-blue',
+  timeSlot: typeof raw.timeSlot === 'string' ? raw.timeSlot : '待安排',
+})
 
 const normalizeTasks = (rawList: any[]): LuomiNestTask[] => {
   if (!Array.isArray(rawList)) return [...DEFAULT_TASKS]
-  const normalized: LuomiNestTask[] = []
+  const result: LuomiNestTask[] = []
   for (let i = 0; i < rawList.length; i++) {
-    const task = normalizeTask(rawList[i], i + 1)
-    if (task !== null) {
-      normalized.push(task)
+    const item = rawList[i]
+    if (typeof item !== 'object' || item === null) continue
+    try {
+      result.push(normalizeTask(item, i + 1))
+    } catch {
+      continue
     }
   }
-  return normalized.length > 0 ? normalized : [...DEFAULT_TASKS]
+  return result.length > 0 ? result : [...DEFAULT_TASKS]
 }
 
 const loadPersistedData = () => {
@@ -246,7 +242,7 @@ const colors = ref([
   { varName: '--task-green', active: false }
 ])
 
-const timeSlots = ref(['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'])
+const timeSlots = ref(['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'])
 
 const showCreateModal = ref(false)
 const showEditModal = ref(false)
@@ -412,20 +408,13 @@ const getTasksForDate = (fullDate: string) => {
   return filteredTasks.value.filter(t => t.dueDate === fullDate)
 }
 
-const getTasksForDateAndSlot = (fullDate: string, timeSlot: string) => {
-  return filteredTasks.value.filter(t => t.dueDate === fullDate && matchesTimeSlot(t.timeSlot, timeSlot))
-}
-
-const matchesTimeSlot = (taskSlot: string, slot: string): boolean => {
-  // Handle special cases
-  if (taskSlot === '全天' || taskSlot === '待安排') return false
-
-  // Extract start time from task slot (e.g., "10:15 - 12:15" -> "10:15")
-  const taskStart = taskSlot.split(' - ')[0]?.trim()
-  if (!taskStart) return false
-
-  // Check if task starts within this slot
-  return taskStart === slot
+const getTaskTopPosition = (task: LuomiNestTask) => {
+  if (task.timeSlot === '全天' || task.timeSlot === '待安排') return '0px'
+  const startHour = parseInt(task.timeSlot.split(':')[0], 10)
+  const firstHour = 8
+  const cellHeight = 38
+  const offset = (startHour - firstHour) * cellHeight
+  return `${offset}px`
 }
 
 const filteredTasks = computed(() => {
@@ -549,6 +538,9 @@ const removeNewTag = (tag: string) => {
 
 const createTask = () => {
   if (!newTask.value.title.trim()) return
+  if (!timeSlotOptions.includes(newTask.value.timeSlot)) {
+    newTask.value.timeSlot = '待安排'
+  }
   tasks.value.push({
     id: nextTaskId.value++,
     ...newTask.value
@@ -587,6 +579,9 @@ const removeEditTag = (tag: string) => {
 
 const saveEditTask = () => {
   if (!editingTask.value || !editingTask.value.title.trim()) return
+  if (!timeSlotOptions.includes(editingTask.value.timeSlot)) {
+    editingTask.value.timeSlot = '待安排'
+  }
   const idx = tasks.value.findIndex(t => t.id === editingTask.value!.id)
   if (idx !== -1) {
     tasks.value[idx] = { ...editingTask.value }
@@ -876,22 +871,25 @@ const timeSlotOptions = [
             :class="{ 'is-today': day.isToday, 'is-weekend': day.isWeekend }"
           >
             <div
-              v-for="(slot, slotIdx) in timeSlots"
+              v-for="slot in timeSlots.slice(0, -1)"
               :key="slot"
               class="week-cell"
               tabindex="0"
               role="button"
-              @click="slotIdx < timeSlots.length - 1 ? openCreateModal(day.fullDate, `${slot} - ${timeSlots[slotIdx + 1]}`) : openCreateModal(day.fullDate, '待安排')"
-              @keydown.enter="slotIdx < timeSlots.length - 1 ? openCreateModal(day.fullDate, `${slot} - ${timeSlots[slotIdx + 1]}`) : openCreateModal(day.fullDate, '待安排')"
-              @keydown.space.prevent="slotIdx < timeSlots.length - 1 ? openCreateModal(day.fullDate, `${slot} - ${timeSlots[slotIdx + 1]}`) : openCreateModal(day.fullDate, '待安排')"
+              @click="openCreateModal(day.fullDate, `${slot} - ${timeSlots[timeSlots.indexOf(slot) + 1]}`)"
+              @keydown.enter="openCreateModal(day.fullDate, `${slot} - ${timeSlots[timeSlots.indexOf(slot) + 1]}`)"
+              @keydown.space.prevent="openCreateModal(day.fullDate, `${slot} - ${timeSlots[timeSlots.indexOf(slot) + 1]}`)"
             >
               <div class="week-cell-time">{{ slot }}</div>
+            </div>
+
+            <div class="week-task-overlay">
               <div
-                v-for="task in getTasksForDateAndSlot(day.fullDate, slot)"
+                v-for="task in getTasksForDate(day.fullDate)"
                 :key="task.id"
                 class="week-task-item"
                 :class="[`status-${task.status}`]"
-                :style="{ '--card-accent': `var(${task.colorVar})` }"
+                :style="{ '--card-accent': `var(${task.colorVar})`, top: getTaskTopPosition(task) }"
                 @click.stop="openEditModal(task)"
               >
                 <div class="week-task-accent"></div>

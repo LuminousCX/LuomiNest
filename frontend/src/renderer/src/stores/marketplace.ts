@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import type {
   MarketplaceType,
   MarketplaceItem,
@@ -40,9 +40,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   const reviews = ref<Record<string, MarketplaceReview[]>>(loadMockReviews())
   const favorites = ref<string[]>(loadFavorites())
 
-  const activeIntervals = new Map<string, ReturnType<typeof setInterval>>()
-
-  const syncFavoritesToItems = () => {
+  const syncFavoriteFlags = () => {
     const syncItems = (items: MarketplaceItem[]) => {
       for (const item of items) {
         item.isFavorite = favorites.value.includes(item.id)
@@ -52,6 +50,11 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     syncItems(skillItems.value)
     syncItems(agentItems.value)
   }
+
+  syncFavoriteFlags()
+
+  const activeIntervals = new Set<ReturnType<typeof setInterval>>()
+  const cancelledInstalls = new Set<string>()
 
   function loadSearchHistory(): string[] {
     try {
@@ -280,14 +283,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       favorites.value.push(itemId)
     }
     saveFavorites()
-
-    const updateFavoriteFlag = (items: MarketplaceItem[]) => {
-      const item = items.find(i => i.id === itemId)
-      if (item) item.isFavorite = isFavorite(itemId)
-    }
-    updateFavoriteFlag(pluginItems.value)
-    updateFavoriteFlag(skillItems.value)
-    updateFavoriteFlag(agentItems.value)
+    syncFavoriteFlags()
   }
 
   const favoriteItems = computed(() => {
@@ -315,12 +311,9 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     installProgress.value = rest
   }
 
-  const cleanupInterval = (itemId: string) => {
-    const intervalId = activeIntervals.get(itemId)
-    if (intervalId) {
-      clearInterval(intervalId)
-      activeIntervals.delete(itemId)
-    }
+  const cleanupInterval = (intervalId: ReturnType<typeof setInterval>) => {
+    activeIntervals.delete(intervalId)
+    clearInterval(intervalId)
   }
 
   const startInstall = (itemId: string) => {
@@ -337,18 +330,12 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   const simulateInstall = (itemId: string) => {
     let progress = 0
     const intervalId = setInterval(() => {
-      const current = installProgress.value[itemId]
-      if (!current) {
-        // Installation was cancelled
-        cleanupInterval(itemId)
-        return
-      }
-
       progress += Math.random() * 15 + 5
       if (progress >= 100) {
         progress = 100
-        cleanupInterval(itemId)
-        if (current.status === 'downloading') {
+        cleanupInterval(intervalId)
+        const current = installProgress.value[itemId]
+        if (current && current.status === 'downloading') {
           setProgress(itemId, {
             ...current,
             status: 'installing',
@@ -358,25 +345,30 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           simulateInstalling(itemId)
         }
       } else {
-        setProgress(itemId, { ...current, progress: Math.min(progress, 99) })
+        const current = installProgress.value[itemId]
+        if (current) {
+          setProgress(itemId, { ...current, progress: Math.min(progress, 99) })
+        }
       }
     }, 200)
-    activeIntervals.set(itemId, intervalId)
+    activeIntervals.add(intervalId)
   }
 
   const simulateInstalling = (itemId: string) => {
     let progress = 0
     const intervalId = setInterval(() => {
-      const current = installProgress.value[itemId]
-      if (!current) {
-        // Installation was cancelled
-        cleanupInterval(itemId)
+      if (cancelledInstalls.has(itemId)) {
+        cleanupInterval(intervalId)
+        cancelledInstalls.delete(itemId)
         return
       }
-
       progress += Math.random() * 20 + 10
       if (progress >= 100) {
-        cleanupInterval(itemId)
+        cleanupInterval(intervalId)
+        if (cancelledInstalls.has(itemId)) {
+          cancelledInstalls.delete(itemId)
+          return
+        }
         setProgress(itemId, {
           itemId,
           status: 'installed',
@@ -397,20 +389,27 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           removeProgress(itemId)
         }, 2000)
       } else {
-        setProgress(itemId, { ...current, progress: Math.min(progress, 99) })
+        const current = installProgress.value[itemId]
+        if (current) {
+          setProgress(itemId, { ...current, progress: Math.min(progress, 99) })
+        }
       }
     }, 150)
-    activeIntervals.set(itemId, intervalId)
+    activeIntervals.add(intervalId)
   }
 
   const uninstallItem = (itemId: string) => {
-    // Cancel any active interval for this item
-    cleanupInterval(itemId)
-
-    // Remove progress entry
+    cancelledInstalls.add(itemId)
+    const current = installProgress.value[itemId]
+    if (current) {
+      for (const intervalId of activeIntervals) {
+        if ((current as any)._intervalId === intervalId) {
+          cleanupInterval(intervalId)
+        }
+      }
+    }
     removeProgress(itemId)
 
-    // Update item status atomically
     const updateUninstalledItem = (items: MarketplaceItem[]) => {
       const item = items.find(i => i.id === itemId)
       if (item) {
@@ -424,6 +423,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   }
 
   const updateItem = (itemId: string) => {
+    cancelledInstalls.delete(itemId)
     const progress: InstallProgress = {
       itemId,
       status: 'updating',
@@ -434,16 +434,18 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
 
     let progressVal = 0
     const intervalId = setInterval(() => {
-      const current = installProgress.value[itemId]
-      if (!current) {
-        // Update was cancelled
-        cleanupInterval(itemId)
+      if (cancelledInstalls.has(itemId)) {
+        cleanupInterval(intervalId)
+        cancelledInstalls.delete(itemId)
         return
       }
-
       progressVal += Math.random() * 18 + 8
       if (progressVal >= 100) {
-        cleanupInterval(itemId)
+        cleanupInterval(intervalId)
+        if (cancelledInstalls.has(itemId)) {
+          cancelledInstalls.delete(itemId)
+          return
+        }
         setProgress(itemId, {
           itemId,
           status: 'installed',
@@ -463,10 +465,13 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           removeProgress(itemId)
         }, 2000)
       } else {
-        setProgress(itemId, { ...current, progress: Math.min(progressVal, 99) })
+        const current = installProgress.value[itemId]
+        if (current) {
+          setProgress(itemId, { ...current, progress: Math.min(progressVal, 99) })
+        }
       }
     }, 180)
-    activeIntervals.set(itemId, intervalId)
+    activeIntervals.add(intervalId)
   }
 
   const getInstallProgress = (itemId: string): InstallProgress | undefined => {
@@ -516,17 +521,11 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   }
 
   const cleanup = () => {
-    for (const intervalId of activeIntervals.values()) {
+    for (const intervalId of activeIntervals) {
       clearInterval(intervalId)
     }
     activeIntervals.clear()
   }
-
-  // Initialize favorites sync on load
-  syncFavoritesToItems()
-
-  // Watch for changes to favorites and sync
-  watch(favorites, syncFavoritesToItems, { deep: true })
 
   return {
     pluginItems,

@@ -266,15 +266,15 @@ async def collaborate(group_id: str, request: CollaborationRequest):
 
     return {
         "error": None,
-        "data": {
-            "sessionId": session.session_id,
+        "data": to_camel_case({
+            "session_id": session.session_id,
             "phase": session.phase.value,
             "plan": session.plan,
-            "subTasks": [
+            "sub_tasks": [
                 {
-                    "taskId": t.task_id,
-                    "roleId": t.role_id,
-                    "agentId": t.agent_id,
+                    "task_id": t.task_id,
+                    "role_id": t.role_id,
+                    "agent_id": t.agent_id,
                     "description": t.description,
                     "status": t.status.value,
                     "result": t.result,
@@ -282,9 +282,9 @@ async def collaborate(group_id: str, request: CollaborationRequest):
                 }
                 for t in session.sub_tasks
             ],
-            "finalResult": session.final_result,
-            "coordinatorResponse": session.coordinator_response,
-        },
+            "final_result": session.final_result,
+            "coordinator_response": session.coordinator_response,
+        }),
     }
 
 

@@ -1,7 +1,6 @@
 import uuid
-import json
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
-from typing import AsyncIterator
 from loguru import logger
 
 from app.infrastructure.database.json_store import groups_store, agents_store
@@ -29,6 +28,18 @@ class GroupChatManager:
         sender_type: str,
         content: str,
     ) -> AsyncIterator[dict]:
+        """向群组发送消息并以 SSE 事件流形式返回响应。
+
+        Args:
+            group_id: 目标群组 ID
+            sender_id: 发送者 ID（"user" 或 agent_id）
+            sender_type: 发送者类型（"user" 或 "agent"）
+            content: 消息内容
+
+        Returns:
+            AsyncIterator[dict]: 事件流，每个事件为包含 "type" 和 "data" 键的字典。
+                事件类型包括: user_message, agent_message, agent_error, agents_start, agents_done, info, error
+        """
         group = groups_store.get(group_id)
         if not group:
             yield {"type": "error", "data": {"message": f"Group {group_id} not found"}}

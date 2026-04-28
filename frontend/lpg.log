@@ -1,66 +1,177 @@
 Verify each finding against the current code and only fix it if needed.
 
 Inline comments:
-In `@frontend/src/renderer/src/utils/marketplace-icons.ts`:
-- Around line 2-14: ITEM_ICON_MAP is missing several icon entries referenced by
-marketplace-data (so those keys fall back to DEFAULT_ICON); update ITEM_ICON_MAP
-in marketplace-icons.ts to include the missing lucide-vue-next components (e.g.,
-LayoutGrid, Cpu, Wrench, Puzzle, MessageCircle, Code, Image, Heart and any other
-names found in frontend/src/renderer/src/config/marketplace-data.ts) by
-importing them from 'lucide-vue-next' and adding them to the ITEM_ICON_MAP
-object so lookup by key returns the correct Component instead of DEFAULT_ICON.
+In `@backend/app/api/v1/endpoints/social.py`:
+- Around line 291-310: The /agent-roles endpoint (function list_agent_roles)
+returns snake_case keys (role_id, execution_mode, etc.) but other endpoints use
+to_camel_case; update list_agent_roles to map each
+AgentRoleRegistry.list_worker_roles() result through the same to_camel_case
+conversion used elsewhere so the response keys are camelCase that match the
+frontend AgentRoleDefinition; locate the list comprehension in list_agent_roles
+and apply the to_camel_case utility to each role dict (or build the dict then
+call to_camel_case) before returning in the "data" array.
+- Around line 267-288: The response payload in the non-streaming path returns
+snake_case keys (e.g., session_id, sub_tasks entries like
+task_id/role_id/agent_id, final_result, coordinator_response) which breaks the
+API's camelCase convention; update the returned dict in the endpoint (the return
+block that references session.session_id, session.sub_tasks,
+session.final_result, session.coordinator_response) to use camelCase keys
+(sessionId, phase, plan, subTasks with each subTask containing taskId, roleId,
+agentId, description, status, result, error, and finalResult -> finalResult and
+coordinatorResponse -> coordinatorResponse) so the JSON matches other endpoints'
+naming style.
 
-In `@frontend/src/renderer/src/views/PluginMarketView.vue`:
-- Around line 37-40: resetFilters 目前只清除了 category 和搜索词（store.setFilter('plugin',
-{ category: undefined }) / store.clearSearch()），未恢复其他可能的插件筛选状态；请改为调用 store
-提供的完整重置方法（例如 store.resetFilters('plugin') 或 store.reset('plugin')，根据 store API
-确切名称使用对应方法）以重置该插件视图的所有筛选项，替换掉当前的 setFilter/clearSearch 调用并确保所有 plugin
-相关的筛选状态都被恢复为默认值。
+In `@backend/app/domains/social/agent_orchestrator.py`:
+- Around line 92-94: 在 list_skills 函数的 logger 调用中移除不必要的 f-string 前缀：将
+logger.info(f"[SkillInterface] Reserved: list_skills()") 改为普通字符串调用
+logger.info("[SkillInterface] Reserved: list_skills()")，确保不再使用未包含占位符的
+f-string（定位符：函数名 list_skills）。
+- Around line 131-141: The role matching in _find_agent_for_role is too
+permissive because it uses substring checks (role_id in member_role or
+member_role in role_id); change this to a stricter comparison by normalizing
+both role_id and member_role (lowercase and trim) and then either require exact
+equality or split member_role on common delimiters (e.g., non-alphanumeric or
+'-'/'_') and check if role_id matches any whole token; ensure you still retrieve
+the agent from agents_store and respect agent.get("is_active", True) as before.
 
-In `@frontend/src/renderer/src/views/SkillMarketView.vue`:
-- Around line 37-40: The resetFilters function only clears category and search
-(it calls store.setFilter('skill', { category: undefined }) and
-store.clearSearch()), leaving other MarketplaceFilters (rating/price/tags/etc.)
-intact; replace this ad-hoc logic with the store's unified reset entry (e.g.,
-call store.resetFilters() or store.clearAllFilters()) so all MarketplaceFilters
-state is cleared, or if that helper does not exist add a single store method
-(resetFilters/resetAllFilters) that resets every filter field used by
-MarketplaceFilters and invoke it from resetFilters.
+In `@frontend/src/main/index.ts`:
+- Line 154: CSP_PROD currently includes 'unsafe-eval' globally; remove
+'unsafe-eval' from the CSP_PROD constant and instead define a separate relaxed
+policy (e.g., CSP_PET_WINDOW) that includes 'unsafe-eval' only for the
+desk-pet/standalone renderer, then apply that relaxed policy only when creating
+the pet window (e.g., in the createPetWindow / createRendererWindow code path or
+when constructing the BrowserWindow for the pet) by injecting the policy for
+that BrowserWindow (via a meta tag or per-window onHeadersReceived/session
+header override) while keeping createMainWindow and other windows using the
+strict CSP_PROD. Ensure you reference and update the CSP_PROD constant and add
+the new CSP_PET_WINDOW constant and the window-creation code where BrowserWindow
+is instantiated.
+
+In `@frontend/src/renderer/src/stores/marketplace.ts`:
+- Line 43: The uninstall flow is missing interval cancellation so background
+timers can still mark items installed; update uninstallItem() to clear any
+active interval for the item (use the activeIntervals Set keyed by the interval
+value), remove its installProgress entry, and decrement installedCount
+atomically; in simulateInstalling() and updateItem() ensure before writing back
+to installed/installedCount/version you check that the item still has
+installProgress (or a cancelled flag) and only proceed if it’s valid, and always
+clear the interval and remove it from activeIntervals on both completion and
+cancellation so no stray timers run after uninstall.
+- Around line 41-43: After loading persisted favorites into the ref favorites,
+the MarketplaceItem.isFavorite fields are not being synchronized so UI computed
+properties (the favorite* computed getters) and MarketplaceCard.vue that read
+item.isFavorite display stale state; fix this by, immediately after
+loadFavorites() and whenever favorites.value changes, iterating over the
+marketplace items collection and setting each MarketplaceItem.isFavorite =
+favorites.value.includes(item.id) (or clearing it) so the item objects reflect
+the persisted list; update the same synchronization where favorites is modified
+so item.isFavorite and favorites.value stay in sync.
+
+In `@frontend/src/renderer/src/stores/social.ts`:
+- Around line 168-180: 在处理 'info' 事件的分支中（case 'info'），groupMessages.value.push
+调用里将不一致的 senderType 从 'agent' 改为 'system'：确保在创建系统消息对象时使用 senderId: 'system' 和
+senderType: 'system'（定位到该 case 'info' 块和该 groupMessages.value.push 调用即可修改）。
 
 In `@frontend/src/renderer/src/views/TasksView.vue`:
-- Around line 398-400: The month-navigation code mutates Date d using
-d.setMonth(...) then d.setDate(1), which can overflow when d is at a month-end
-(e.g., 2026-01-31) and skip months; fix by normalizing the day to the 1st before
-changing the month or by replacing the logic with constructing a new Date for
-the target month (e.g., new Date(d.getFullYear(), d.getMonth() ± 1, 1)) so month
-increments/decrements never carry over day overflow; apply the same change to
-the symmetric block handling the other direction (the second occurrence around
-the subsequent setMonth/setDate pair).建议添加范围2000-2099年范围
-- Around line 455-458: The week-view click handler currently calls
-openCreateModal(prefillDate) but only sets newTask.value.dueDate, so the clicked
-time slot isn't prefilled; change openCreateModal to accept a second optional
-parameter (e.g., prefillTimeSlot?: string) and inside the function assign
-newTask.value.timeSlot = prefillTimeSlot when provided (preserving default
-otherwise). Update all callers (the week-view click handler and the other
-occurrence around the 811–815 region) to pass the clicked slot identifier/string
-along with day.fullDate so the modal opens with both dueDate and timeSlot
-prefilled.
-- Around line 803-815: The week/month views use non-focusable divs with `@click`
-(the week-cell elements generated from weekDays/timeSlots calling
-openCreateModal) so keyboard users can't activate them; update these interactive
-divs to be real controls or make them keyboard-accessible: either replace the
-div.week-cell (and the analogous month view cell) with <button type="button">
-elements that call openCreateModal(day.fullDate), or add tabindex="0",
-role="button" and a keydown handler that triggers openCreateModal when Enter or
-Space is pressed; ensure the same change is applied to the other similar block
-(month view) so both week and month entry points are reachable via keyboard.
-- Around line 145-146: The code assigns data.tasks directly to tasks.value which
-lets poisoned or legacy objects break downstream code (filteredTasks / template
-where t.title.toLowerCase(), t.desc.toLowerCase(), t.tags.some(...) are used);
-add a validation/normalization step before assigning: verify data.tasks is an
-array, map each entry through a normalizeTask routine that ensures title and
-desc are strings (fallback to ""), tags is an array (fallback to []), and other
-new fields have safe defaults, catching any exceptions and falling back to an
-empty array or your canonical default tasks; replace the direct assignment to
-tasks.value with the normalized array so filteredTasks and template access safe,
-well-shaped items.
+- Around line 865-889: The week view currently stacks all tasks in the
+week-task-overlay using getTasksForDate(day.fullDate) and only shows
+task.timeSlot as text, causing wrong vertical placement and overlap; change
+rendering so tasks are placed into their proper time row instead — either filter
+tasks per slot inside each week-cell (render only tasks whose task.timeSlot
+matches that cell) or compute a CSS top/row position from task.timeSlot when
+building week-task-item (use task.timeSlot parsing logic and apply inline style
+or class to position items). Update the template code that iterates tasks
+(getTasksForDate and the week-task-overlay / week-task-item block) and the click
+handlers (openEditModal, toggleTaskStatus, deleteTask) should remain unchanged;
+ensure reactive updates still occur when tasks change.
+- Around line 239-240: The timeSlots ref ends with '18:00' so the existing UI
+logic that builds ranges using "current slot + next slot" produces an invalid
+"18:00 - " value not present in timeSlotOptions; update the range-generation
+logic to only build ranges for indices where a next slot exists (i <
+timeSlots.length - 1) or extend timeSlots with an explicit end boundary (e.g.,
+add a final end time) so every slot has a successor, and also harden the
+save/submit flow by validating the selected time range against timeSlotOptions
+before persisting to avoid storing a dirty value; refer to the timeSlots ref and
+timeSlotOptions collection and the component methods that construct/select/save
+the slot range.
+- Around line 140-158: normalizeTasks currently maps rawList through
+normalizeTask and a single try/catch causes one malformed entry (e.g., null or
+primitive) to throw and revert the entire list to DEFAULT_TASKS; update
+normalizeTasks and/or normalizeTask so validation is done per-item: in
+normalizeTasks first filter rawList by ensuring each entry is a plain object
+(typeof item === 'object' && item !== null) or wrap the per-item call in a
+try/catch and skip invalid items, and ensure normalizeTask itself defensively
+reads fields (already uses type checks) so it never throws on bad inputs; do
+this by changing the mapping to skip non-objects and return a stable array of
+normalized tasks instead of falling back to DEFAULT_TASKS when one item is bad
+(refer to normalizeTasks, normalizeTask, and DEFAULT_TASKS).
+
+---
+
+Duplicate comments:
+In `@backend/app/domains/social/agent_orchestrator.py`:
+- Around line 349-351: orchestrate_stream currently iterates sub_tasks
+sequentially and ignores task.depends_on, causing semantic divergence from the
+dependency-aware scheduler in _execute_sub_tasks; refactor by extracting the DAG
+scheduling logic from _execute_sub_tasks into a shared helper (e.g.,
+_schedule_sub_tasks or _resolve_task_dag) that returns an execution plan or
+ready-task iterator based on depends_on, then have orchestrate_stream consume
+that plan and invoke _execute_single_task_stream for each task according to
+dependency readiness so the stream path respects the same DAG ordering and
+concurrency semantics as the non-stream path.
+
+---
+
+Nitpick comments:
+In `@backend/app/domains/social/agent_orchestrator.py`:
+- Around line 18-31: Replace the current Enum classes TaskStatus and
+CollaborationPhase (which inherit from (str, Enum)) with enum.StrEnum if the
+project runs on Python 3.11+: add "from enum import StrEnum" and change the
+bases of TaskStatus and CollaborationPhase to inherit from StrEnum instead of
+(str, Enum); ensure values remain unchanged. If the codebase must support older
+Python versions, provide a compatibility fallback (e.g., keep the existing (str,
+Enum) implementation or define a local StrEnum shim) and document the decision
+in a comment near the TaskStatus/CollaborationPhase definitions.
+- Around line 163-165: 为 AgentOrchestrator 类及其公共方法添加完整的 docstring：在 class
+AgentOrchestrator 上方添加描述类职责的三行简短中文/英文 docstring，随后为方法 orchestrate,
+orchestrate_stream, get_session 各自添加三段式 docstring（简要描述、Args 列表包括参数名和含义、Returns
+返回类型描述；必要时添加 Raises 描述可能抛出的异常），确保使用现有符号名（AgentOrchestrator, orchestrate,
+orchestrate_stream, get_session, CollaborationSession）以便定位并符合项目风格规范。
+- Around line 803-807: _save_messages currently does a non-atomic get → modify →
+set on groups_store (fresh_group = groups_store.get(...); ...
+groups_store.set(...)), which can race when multiple CollaborationSession saves
+happen concurrently; change this to an atomic update: either call a provided
+atomic update method (e.g., groups_store.update(group_id, updater_fn) or
+groups_store.compare_and_swap using a version/etag) or wrap the get/modify/set
+in a lock keyed by group id (acquire lock, re-fetch fresh_group, apply
+modifications, persist, release lock) so updates to the group are serialized and
+no messages are lost.
+- Around line 1-10: Remove the unused time import and update the AsyncIterator
+import to the modern location: delete "import time" from the top imports and
+replace "from typing import Any, AsyncIterator" with "from typing import Any"
+and add "from collections.abc import AsyncIterator"; ensure no other references
+to time remain and adjust any import grouping to match style; check identifiers
+in this file (e.g., AsyncIterator usage) to confirm imports resolve.
+
+In `@backend/app/domains/social/group_chat.py`:
+- Around line 1-10: Remove the unused "json" import and change the AsyncIterator
+import to come from collections.abc instead of typing; specifically, update the
+import line that currently reads "from typing import AsyncIterator" to "from
+collections.abc import AsyncIterator" and delete the "import json" line so only
+used modules (e.g., asyncio, uuid, datetime, timezone, AsyncIterator, logger,
+groups_store, agents_store, llm_adapter) remain imported.
+- Around line 25-32: 为 GroupChatManager 类的公有方法 send_group_message_stream 添加完整的
+docstring，说明每个参数（group_id, sender_id, sender_type, content）的类型和含义，描述返回值类型
+AsyncIterator[dict] 的结构（每个事件字典包含的键，如 "type"、"data"、"timestamp"
+等）并列出可能的事件类型/事件格式（例如 "message", "typing", "error", "ended"）以及流的行为/异常处理规则；确保
+docstring 简洁示例化调用约定并放在 send_group_message_stream 方法定义之上以便 API 层调用者和自动文档工具使用。
+
+In `@frontend/src/renderer/src/stores/social.ts`:
+- Around line 83-137: The outer catch in sendGroupMessage currently uses catch
+(e: any) and the inner JSON parse catch silently swallows errors; change the
+outer catch to use catch (e: unknown) and narrow/format the error before logging
+(e.g., extract message or stringify safely) and add a debug/log statement inside
+the inner catch where JSON.parse fails (include the raw dataStr and the parse
+error) so malformed SSE payloads are visible; update references in
+sendGroupMessage and the inner parsing loop that calls _handleMessageEvent to
+ensure logs provide context (groupId, snippet of dataStr) for easier debugging.

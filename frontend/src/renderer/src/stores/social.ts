@@ -122,13 +122,15 @@ export const useSocialStore = defineStore('social', () => {
           try {
             const event = JSON.parse(dataStr)
             _handleMessageEvent(event)
-          } catch {
+          } catch (parseErr) {
+            console.warn(`[Social] Failed to parse SSE data (groupId: ${groupId}):`, parseErr, `raw: ${dataStr.slice(0, 120)}`)
             continue
           }
         }
       }
-    } catch (e: any) {
-      console.error('Failed to send message:', e)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.error('Failed to send message:', message)
     } finally {
       agentsResponding.value = false
       respondingAgentNames.value = []
@@ -308,15 +310,16 @@ export const useSocialStore = defineStore('social', () => {
       collaborationActive.value = false
       await fetchGroups()
       onDone()
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') {
         collaborationActive.value = false
         onDone()
         return
       }
       collaborationActive.value = false
       collaborationPhase.value = 'failed'
-      onError(e.message)
+      const message = e instanceof Error ? e.message : String(e)
+      onError(message)
     }
   }
 
