@@ -1,4 +1,4 @@
-﻿﻿﻿﻿<script setup lang="ts">
+﻿﻿<script setup lang="ts">
 import '@pixi/unsafe-eval'
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Application, Ticker } from 'pixi.js'
