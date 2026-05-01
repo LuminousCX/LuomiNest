@@ -88,6 +88,7 @@ export interface ToolCallInfo {
 export interface ToolCallResult {
   tool_call_id: string
   tool_name: string
+  tool?: string
   result: string
   status: 'success' | 'error'
 }
@@ -407,12 +408,6 @@ export interface RAGSearchResult {
   source: string
   score: number
   metadata: Record<string, any>
-}
-
-export interface ToolCallResult {
-  tool: string
-  result: string
-  status: 'success' | 'error'
 }
 
 export interface UserProfile {

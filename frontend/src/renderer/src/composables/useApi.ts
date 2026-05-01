@@ -164,6 +164,75 @@ export const useApi = () => {
     }
   }
 
+  const apiSseStream = async <T = any>(
+    path: string,
+    body: any,
+    onEvent: (event: T) => void,
+    onDone: () => void | Promise<void>,
+    onError: (err: string) => void,
+    externalAbortSignal?: AbortSignal
+  ) => {
+    const controller = new AbortController()
+    abortController.value = controller
+
+    const signal = externalAbortSignal
+      ? AbortSignal.any([controller.signal, externalAbortSignal])
+      : controller.signal
+
+    try {
+      const resp = await fetch(getApiUrl(path), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      })
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => null)
+        throw new Error(extractErrorMessage(errData, resp.status))
+      }
+
+      const reader = resp.body?.getReader()
+      if (!reader) throw new Error('No readable stream')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data: ')) continue
+          const dataStr = trimmed.slice(6)
+          if (!dataStr.trim()) continue
+
+          try {
+            const event: T = JSON.parse(dataStr)
+            onEvent(event)
+          } catch {
+            continue
+          }
+        }
+      }
+
+      await onDone()
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        await onDone()
+        return
+      }
+      onError(e.message)
+    } finally {
+      abortController.value = null
+    }
+  }
+
   const checkHealth = async (): Promise<boolean> => {
     try {
       const resp = await fetch('http://127.0.0.1:18000/health', {
@@ -186,6 +255,7 @@ export const useApi = () => {
     apiPatch,
     apiDelete,
     apiStream,
+    apiSseStream,
     checkHealth,
   }
 }

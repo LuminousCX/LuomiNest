@@ -324,7 +324,7 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
     start_time = time.time()
     chat_id = str(uuid.uuid4())
     chunk_count = 0
-    tool_draft = ""
+    full_content = ""
     final_answer = ""
 
     logger.info(f"[STREAM] Starting stream: chat_id={chat_id}, provider={provider}, model={model}")
@@ -339,16 +339,23 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
             top_p=request.top_p,
             tools=request.tools,
         ):
-            tool_draft += chunk
+            full_content += chunk
             chunk_count += 1
+            data = ChatStreamChunk(
+                id=chat_id,
+                content=chunk,
+                model=model,
+                provider=provider,
+            )
+            yield f"data: {data.model_dump_json()}\n\n"
 
-        tool_calls = _parse_tool_calls(tool_draft)
+        tool_calls = _parse_tool_calls(full_content)
         if tool_calls:
             tool_results = await _execute_tool_calls(tool_calls, request.agent_id)
             tool_result_text = "\n\n".join(
                 f"[Tool: {r['tool']}] {r['result']}" for r in tool_results
             )
-            messages.append({"role": "assistant", "content": tool_draft})
+            messages.append({"role": "assistant", "content": full_content})
             messages.append({"role": "user", "content": f"工具执行结果：\n{tool_result_text}\n\n请基于以上工具结果回答用户的问题。"})
 
             async for chunk in llm_adapter.chat_stream(
@@ -369,16 +376,7 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
                 )
                 yield f"data: {data.model_dump_json()}\n\n"
         else:
-            final_answer = tool_draft
-            for i in range(0, len(final_answer), 10):
-                chunk = final_answer[i:i+10]
-                data = ChatStreamChunk(
-                    id=chat_id,
-                    content=chunk,
-                    model=model,
-                    provider=provider,
-                )
-                yield f"data: {data.model_dump_json()}\n\n"
+            final_answer = full_content
 
         done_data = ChatStreamChunk(
             id=chat_id,
