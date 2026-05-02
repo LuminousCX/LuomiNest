@@ -3,12 +3,10 @@ import { ref, computed, watch } from 'vue'
 import type { ChatMessage, Conversation, ConversationListItem, ChatStreamChunk } from '../types'
 import { useApi } from '../composables/useApi'
 import { useAgentStore } from './agent'
-import { useAvatarControlStore } from './avatar-control'
 
 export const useChatStore = defineStore('chat', () => {
   const { apiGet, apiPost, apiDelete, apiStream, checkHealth } = useApi()
   const agentStore = useAgentStore()
-  const avatarControl = useAvatarControlStore()
 
   const agentConversations = ref<Record<string, ConversationListItem[]>>({})
   const agentCurrentConvId = ref<Record<string, string | null>>({})
@@ -203,58 +201,6 @@ export const useChatStore = defineStore('chat', () => {
     cancelConversationRequest()
   }
 
-  const executeAvatarToolCall = async (toolName: string, args: Record<string, any>): Promise<string> => {
-    try {
-      switch (toolName) {
-        case 'avatar_set_emotion':
-          await avatarControl.driveEmotion(args.emotion, args.intensity ?? 0.5)
-          return `Emotion set to ${args.emotion} (intensity: ${args.intensity ?? 0.5})`
-
-        case 'avatar_trigger_motion':
-          await avatarControl.triggerMotion(args.group, args.index ?? 0)
-          return `Motion "${args.group}[${args.index ?? 0}]" triggered`
-
-        case 'avatar_trigger_expression':
-          await avatarControl.triggerExpression(args.name)
-          return `Expression "${args.name}" applied`
-
-        case 'avatar_drive_pad_emotion':
-          await avatarControl.drivePadEmotion(args.pleasure, args.arousal, args.dominance)
-          return `PAD emotion set: P=${args.pleasure}, A=${args.arousal}, D=${args.dominance}`
-
-        case 'avatar_lip_sync':
-          await avatarControl.driveLipSync(args.value)
-          return `Lip sync value set to ${args.value}`
-
-        case 'avatar_set_param':
-          await avatarControl.setCoreParam(args.param_id, args.value)
-          return `Parameter ${args.param_id} set to ${args.value}`
-
-        case 'avatar_set_position':
-          await avatarControl.setModelPosition(args.x, args.y)
-          return `Avatar position set to (${args.x}, ${args.y})`
-
-        case 'avatar_set_scale':
-          await avatarControl.setModelScale(args.scale)
-          return `Avatar scale set to ${args.scale}`
-
-        case 'avatar_get_capabilities':
-          await avatarControl.getModelCapabilities()
-          return JSON.stringify({
-            motions: avatarControl.availableMotions,
-            expressions: avatarControl.availableExpressions,
-            modelName: avatarControl.currentModelName
-          })
-
-        default:
-          return `Unknown avatar tool: ${toolName}`
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Avatar tool execution failed'
-      return `Avatar tool error: ${message}`
-    }
-  }
-
   const sendMessage = async (
     content: string,
     options?: {
@@ -318,7 +264,6 @@ export const useChatStore = defineStore('chat', () => {
     for (const msg of convMessages.value[convId]) {
       if (msg.role === 'system') continue
       if (msg.role === 'assistant' && !msg.done) continue
-      if (msg.role === 'tool') continue
       apiMessages.push({ role: msg.role, content: msg.content })
     }
 
@@ -348,24 +293,6 @@ export const useChatStore = defineStore('chat', () => {
       endpoint,
       requestBody,
       (chunk: ChatStreamChunk) => {
-        if (chunk.tool_results && chunk.tool_results.length > 0) {
-          for (const tr of chunk.tool_results) {
-            if (tr.tool_name.startsWith('avatar_')) {
-              try {
-                const args = JSON.parse(tr.result || '{}')
-                executeAvatarToolCall(tr.tool_name, args)
-              } catch {
-                console.debug('[ChatStore] Avatar tool result parse skipped:', tr.tool_name)
-              }
-            }
-          }
-          return
-        }
-
-        if (chunk.tool_calls && chunk.tool_calls.length > 0) {
-          return
-        }
-
         const prevContent = convStreamingContent.value[streamingConvId] || ''
         const newContent = prevContent + chunk.content
         convStreamingContent.value = { ...convStreamingContent.value, [streamingConvId]: newContent }
@@ -525,6 +452,5 @@ export const useChatStore = defineStore('chat', () => {
     cancelCurrentRequest,
     cancelConversationRequest,
     isConversationStreaming,
-    executeAvatarToolCall,
   }
 })

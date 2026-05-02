@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Settings,
-  User,
   Palette,
   Bell,
   Shield,
@@ -21,9 +20,8 @@ const router = useRouter()
 
 const settingGroups = ref([
   {
-    title: '账户与偏好',
+    title: '偏好',
     items: [
-      { icon: User, label: '个人资料', desc: '管理你的账户信息', route: '/settings/profile' },
       { icon: Palette, label: '外观主题', desc: '自定义界面颜色与风格', route: '/settings/appearance' },
       { icon: Bell, label: '通知设置', desc: '配置消息提醒方式', route: '/settings/notifications' }
     ]

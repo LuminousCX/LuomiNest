@@ -16,7 +16,6 @@ class ChatRequest(BaseModel):
     top_p: float | None = None
     stream: bool = False
     agent_id: str | None = None
-    tools: list[dict[str, Any]] | None = None
 
 
 class ChatResponse(BaseModel):

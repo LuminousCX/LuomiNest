@@ -1,50 +1,36 @@
-from .models import MemoryData
+import re
+from .models import MemoryData, MemoryTier
 
-
-MEMORY_INJECTION_TEMPLATE = """【记忆系统 - 豆包风格】
-
-以下是关于用户的记忆信息，请使用这些信息来提供个性化、有上下文的回复。
+MEMORY_INJECTION_TEMPLATE = """【用户上下文信息】
 
 {memory_content}
 
-【记忆使用规则 - 必须严格遵守】
-
-1. 核心目标锚定：
-- 始终优先关注当前对话的核心目标
-- 核心目标会一直保持在对话的最前面
-- 即使进行多次工具调用或子任务，也不能偏离核心目标
-
-2. 记忆使用方式：
-- 当用户询问"我是谁"等问题时，查看用户核心档案
-- 根据记忆信息自然地个性化回复，不要生硬地说"根据记忆"
-- 只在相关场景注入对应的记忆，避免记忆干扰
-
-3. 绝对禁止：
-- 不要向用户透露记忆系统的存在
-- 不要说"我记得你之前说过"之类的话
-- 不要在回复中重复记忆内容
-- 不要让用户感到被监视或记录
-
-4. 跨会话记忆：
-- 只有在用户明确提及或相关场景时才使用长期记忆
-- 不要主动提及很久以前的记忆内容
-- 对话之间的记忆是隔离的
-"""
+【使用规则】
+1. 核心目标锚定：始终优先关注当前对话的核心目标，不偏离
+2. 自然使用：根据上下文信息自然地个性化回复，不要生硬地说"根据记忆"
+3. 场景匹配：只在相关场景使用对应信息，避免无关信息干扰
+4. 隐私保护：不要向用户透露记忆系统的存在，不要说"我记得你之前说过"
+5. 跨会话谨慎：只有在用户明确提及或强相关场景时才使用长期记忆"""
 
 
 class MemoryInjector:
     def __init__(
-        self, 
-        max_facts: int = 15, 
-        max_tokens_estimate: int = 2000,
-        conversation_id: str | None = None,
+        self,
+        max_tokens_estimate: int | None = None,
     ):
-        self._max_facts = max_facts
-        self._max_tokens_estimate = max_tokens_estimate
-        self._conversation_id = conversation_id
+        self._max_tokens_estimate = max_tokens_estimate or 2000
+
+    def set_token_budget(self, model_context_window: int | None = None, existing_msg_tokens: int = 0):
+        if model_context_window and model_context_window > 0:
+            available = model_context_window - existing_msg_tokens
+            self._max_tokens_estimate = max(500, min(int(available * 0.15), 3000))
+        else:
+            self._max_tokens_estimate = 2000
 
     def _estimate_tokens(self, text: str) -> int:
-        return len(text) // 4
+        chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
+        other_chars = len(text) - chinese_chars
+        return int(chinese_chars * 1.5 + other_chars * 0.25)
 
     def _sanitize_content(self, content: str) -> str:
         if not content:
@@ -55,23 +41,32 @@ class MemoryInjector:
         return sanitized
 
     def _format_core_identity(self, memory_data: MemoryData) -> str | None:
-        profile = memory_data.profile
         parts = []
-        
+        identity_facts = memory_data.get_facts_by_tier("core_identity")
+        for fact in identity_facts[:5]:
+            parts.append(f"- {self._sanitize_content(fact.content)}")
+            fact.record_access()
+
+        profile = memory_data.profile
+        profile_parts = []
         if profile.name:
-            parts.append(f"姓名: {self._sanitize_content(profile.name)}")
+            profile_parts.append(f"姓名: {self._sanitize_content(profile.name)}")
         if profile.nickname:
-            parts.append(f"昵称: {self._sanitize_content(profile.nickname)}")
+            profile_parts.append(f"昵称: {self._sanitize_content(profile.nickname)}")
         if profile.occupation:
-            parts.append(f"职业: {self._sanitize_content(profile.occupation)}")
+            profile_parts.append(f"职业: {self._sanitize_content(profile.occupation)}")
         if profile.location:
-            parts.append(f"所在地: {self._sanitize_content(profile.location)}")
-        if profile.age:
-            parts.append(f"年龄: {self._sanitize_content(profile.age)}")
-        
-        if not parts:
+            profile_parts.append(f"所在地: {self._sanitize_content(profile.location)}")
+
+        if not parts and not profile_parts:
             return None
-        return "=== 【用户核心档案】 ===\n" + "\n".join(parts)
+
+        sections = []
+        if profile_parts:
+            sections.append("=== 【用户核心档案】 ===\n" + "\n".join(profile_parts))
+        if parts:
+            sections.append("=== 【核心身份标签】 ===\n" + "\n".join(parts))
+        return "\n".join(sections)
 
     def _format_core_goal(self, memory_data: MemoryData) -> str | None:
         if not memory_data.working_memory.core_goal:
@@ -80,10 +75,14 @@ class MemoryInjector:
             memory_data.working_memory.core_goal
         )
 
-    def _format_preferences(self, memory_data: MemoryData) -> str | None:
+    def _format_preferences(self, memory_data: MemoryData, user_query: str = "") -> str | None:
+        preference_facts = memory_data.get_facts_by_tier("long_term_preference")
+        if not preference_facts:
+            return None
+
         profile = memory_data.profile
         preference_parts = []
-        
+
         if profile.interests:
             interests_str = ", ".join(self._sanitize_content(i) for i in profile.interests[:5])
             preference_parts.append(f"兴趣: {interests_str}")
@@ -93,120 +92,140 @@ class MemoryInjector:
         if profile.preferences:
             for key, value in list(profile.preferences.items())[:5]:
                 preference_parts.append(f"{key}: {self._sanitize_content(value)}")
-        
+
+        relevant_facts = []
+        for fact in preference_facts:
+            if user_query and self._is_scene_relevant(fact.content, user_query):
+                relevant_facts.append(fact)
+            elif not user_query:
+                relevant_facts.append(fact)
+
+        for fact in relevant_facts[:5]:
+            preference_parts.append(f"- {self._sanitize_content(fact.content)}")
+            fact.record_access()
+
         if not preference_parts:
             return None
         return "=== 【长期偏好】 ===\n" + "\n".join(preference_parts)
 
-    def _format_relevant_facts(self, memory_data: MemoryData, query: str = "") -> str | None:
-        sorted_facts = sorted(
-            memory_data.facts,
-            key=lambda f: (f.confidence, f.access_count, f.last_accessed_at),
-            reverse=True
-        )
-        
-        tier_order = ["core_identity", "long_term_preference", "temporary_context"]
-        facts_by_tier: dict[str, list] = {}
-        for fact in sorted_facts:
-            if fact.tier not in facts_by_tier:
-                facts_by_tier[fact.tier] = []
-            facts_by_tier[fact.tier].append(fact)
-        
-        fact_lines = []
-        fact_tokens = 0
-        
-        tier_names = {
-            "core_identity": "核心身份",
-            "long_term_preference": "长期偏好",
-            "temporary_context": "临时上下文",
-        }
-        
-        for tier in tier_order:
-            if tier not in facts_by_tier:
-                continue
-            
-            tier_facts = facts_by_tier[tier]
-            if not tier_facts:
-                continue
-            
-            for fact in tier_facts[:5]:
-                if query and not (fact.content.lower() in query.lower() or query.lower() in fact.content.lower()):
-                    continue
-                
-                sanitized_content = self._sanitize_content(fact.content)
-                line = f"- [{tier_names.get(fact.tier, fact.tier)}] {sanitized_content}"
-                line_tokens = self._estimate_tokens(line)
-                if fact_tokens + line_tokens > 800:
-                    break
-                fact_lines.append(line)
-                fact_tokens += line_tokens
-                
-                fact.record_access()
-        
-        if not fact_lines:
+    def _format_temporary_context(self, memory_data: MemoryData, user_query: str = "") -> str | None:
+        context_facts = memory_data.get_facts_by_tier("temporary_context")
+        if not context_facts:
             return None
-        return "=== 【相关记忆点】 ===\n" + "\n".join(fact_lines)
 
-    def _format_episodic_events(self, memory_data: MemoryData, query: str = "") -> str | None:
+        relevant_facts = []
+        for fact in context_facts:
+            if user_query and self._is_scene_relevant(fact.content, user_query):
+                relevant_facts.append(fact)
+            elif not user_query:
+                relevant_facts.append(fact)
+
+        if not relevant_facts:
+            return None
+
+        lines = []
+        for fact in relevant_facts[:5]:
+            lines.append(f"- {self._sanitize_content(fact.content)}")
+            fact.record_access()
+
+        return "=== 【临时上下文】 ===\n" + "\n".join(lines)
+
+    def _format_episodic_events(self, memory_data: MemoryData, user_query: str = "") -> str | None:
         if not memory_data.episodic_events:
             return None
-        
+
         relevant_events = []
-        for event in memory_data.episodic_events[:10]:
-            if query and not event.matches_query(query):
-                continue
-            relevant_events.append(event)
-        
+        for event in memory_data.episodic_events:
+            if not user_query or event.matches_query(user_query):
+                relevant_events.append(event)
+
         if not relevant_events:
             return None
-        
+
+        relevant_events.sort(key=lambda e: e.time_distance_days())
+
         event_lines = []
         for event in relevant_events[:3]:
-            line = f"- [{', '.join(event.scene_tags) or '一般'}] {self._sanitize_content(event.core_goal)}"
+            days_ago = event.time_distance_days()
+            time_label = f"{days_ago}天前" if days_ago < 365 else f"{days_ago // 30}个月前"
+            tags = ', '.join(event.scene_tags[:3]) if event.scene_tags else '一般'
+            line = f"- [{time_label}|{tags}] {self._sanitize_content(event.core_goal)}"
+            if event.key_information:
+                line += f" → {self._sanitize_content(event.key_information[:80])}"
             event_lines.append(line)
-        
+
         return "=== 【相关历史事件】 ===\n" + "\n".join(event_lines)
 
     def _format_recent_context(self, memory_data: MemoryData) -> str | None:
-        if not memory_data.working_memory.recent_conversations:
+        wm = memory_data.working_memory
+        if not wm.recent_conversations:
             return None
-        
-        recent = memory_data.working_memory.recent_conversations[-5:]
-        lines = []
-        for conv in recent:
-            role = "用户" if conv["role"] == "user" else "助手"
-            content = self._sanitize_content(conv["content"][:100])
-            lines.append(f"{role}: {content}")
-        
-        return "=== 【最近对话摘要】 ===\n" + "\n".join(lines)
+
+        sections = []
+
+        if wm.conversation_summary:
+            sections.append(f"摘要: {self._sanitize_content(wm.conversation_summary)}")
+
+        recent = wm.get_recent_full(3)
+        if recent:
+            lines = []
+            for conv in recent:
+                role = "用户" if conv["role"] == "user" else "助手"
+                content = self._sanitize_content(conv["content"][:100])
+                lines.append(f"{role}: {content}")
+            sections.append("最近对话:\n" + "\n".join(lines))
+
+        if not sections:
+            return None
+        return "=== 【最近对话摘要】 ===\n" + "\n".join(sections)
+
+    def _is_scene_relevant(self, fact_content: str, user_query: str) -> bool:
+        query_lower = user_query.lower()
+        content_lower = fact_content.lower()
+
+        if content_lower in query_lower or query_lower in content_lower:
+            return True
+
+        query_words = set(re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]+', query_lower))
+        content_words = set(re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]+', content_lower))
+        overlap = query_words & content_words
+        if query_words and len(overlap) / len(query_words) > 0.3:
+            return True
+
+        return False
 
     def format_memory_for_injection(
-        self, 
+        self,
         memory_data: MemoryData,
         user_query: str = "",
     ) -> str:
         sections = []
         total_tokens = 0
 
-        core_identity = self._format_core_identity(memory_data)
-        if core_identity:
-            sections.append(core_identity)
-            total_tokens += self._estimate_tokens(core_identity)
-
         core_goal = self._format_core_goal(memory_data)
         if core_goal:
             sections.append(core_goal)
             total_tokens += self._estimate_tokens(core_goal)
 
-        preferences = self._format_preferences(memory_data)
+        core_identity = self._format_core_identity(memory_data)
+        if core_identity and total_tokens + self._estimate_tokens(core_identity) < self._max_tokens_estimate:
+            sections.append(core_identity)
+            total_tokens += self._estimate_tokens(core_identity)
+
+        preferences = self._format_preferences(memory_data, user_query)
         if preferences and total_tokens + self._estimate_tokens(preferences) < self._max_tokens_estimate:
             sections.append(preferences)
             total_tokens += self._estimate_tokens(preferences)
 
-        relevant_facts = self._format_relevant_facts(memory_data, user_query)
-        if relevant_facts and total_tokens + self._estimate_tokens(relevant_facts) < self._max_tokens_estimate:
-            sections.append(relevant_facts)
-            total_tokens += self._estimate_tokens(relevant_facts)
+        temp_context = self._format_temporary_context(memory_data, user_query)
+        if temp_context and total_tokens + self._estimate_tokens(temp_context) < self._max_tokens_estimate:
+            sections.append(temp_context)
+            total_tokens += self._estimate_tokens(temp_context)
+
+        recent_context = self._format_recent_context(memory_data)
+        if recent_context and total_tokens + self._estimate_tokens(recent_context) < self._max_tokens_estimate:
+            sections.append(recent_context)
+            total_tokens += self._estimate_tokens(recent_context)
 
         episodic_events = self._format_episodic_events(memory_data, user_query)
         if episodic_events and total_tokens + self._estimate_tokens(episodic_events) < self._max_tokens_estimate:
@@ -219,7 +238,6 @@ class MemoryInjector:
         self,
         messages: list[dict],
         memory_data: MemoryData,
-        position: str = "start",
         user_query: str = "",
     ) -> list[dict]:
         if not messages:
@@ -233,21 +251,18 @@ class MemoryInjector:
 
         new_messages = messages.copy()
 
-        if position == "start":
-            has_system = new_messages and new_messages[0].get("role") == "system"
-            if has_system:
-                existing = new_messages[0].get("content", "")
-                if isinstance(existing, str):
-                    new_messages[0] = {
-                        "role": "system",
-                        "content": existing + "\n\n" + system_content,
-                    }
-                else:
-                    new_messages.insert(0, {"role": "system", "content": system_content})
+        has_system = new_messages and new_messages[0].get("role") == "system"
+        if has_system:
+            existing = new_messages[0].get("content", "")
+            if isinstance(existing, str):
+                new_messages[0] = {
+                    "role": "system",
+                    "content": existing + "\n\n" + system_content,
+                }
             else:
                 new_messages.insert(0, {"role": "system", "content": system_content})
         else:
-            new_messages.append({"role": "system", "content": system_content})
+            new_messages.insert(0, {"role": "system", "content": system_content})
 
         return new_messages
 
@@ -258,7 +273,7 @@ class MemoryInjector:
 
         profile = memory_data.profile
         has_profile = bool(
-            profile.name or profile.nickname or profile.occupation or 
+            profile.name or profile.nickname or profile.occupation or
             profile.location or profile.interests or profile.hobbies
         )
 

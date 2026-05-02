@@ -59,7 +59,7 @@ export interface WorkflowDefinition {
 
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant' | 'system' | 'tool'
+  role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: number
   agentId?: string
@@ -71,30 +71,10 @@ export interface ChatMessage {
     completionTokens?: number
     totalTokens?: number
   }
-  toolCalls?: ToolCallInfo[]
-  toolCallId?: string
-  toolResults?: ToolCallResult[]
-}
-
-export interface ToolCallInfo {
-  id: string
-  type: string
-  function: {
-    name: string
-    arguments: string
-  }
-}
-
-export interface ToolCallResult {
-  tool_call_id: string
-  tool_name: string
-  tool?: string
-  result: string
-  status: 'success' | 'error'
 }
 
 export interface ChatRequest {
-  messages: { role: string; content: string; tool_calls?: ToolCallInfo[]; tool_call_id?: string; name?: string }[]
+  messages: { role: string; content: string }[]
   model?: string
   provider?: string
   temperature?: number
@@ -102,7 +82,6 @@ export interface ChatRequest {
   topP?: number
   stream?: boolean
   agentId?: string
-  tools?: Record<string, any>[]
   timestamp?: number
 }
 
@@ -111,8 +90,6 @@ export interface ChatResponse {
   content: string | null
   model: string
   provider: string
-  tool_calls?: ToolCallInfo[] | null
-  tool_results?: ToolCallResult[] | null
   usage?: Record<string, number>
   timestamp?: number
 }
@@ -123,8 +100,6 @@ export interface ChatStreamChunk {
   model: string
   provider: string
   done: boolean
-  tool_calls?: ToolCallInfo[] | null
-  tool_results?: ToolCallResult[] | null
   usage?: {
     promptTokens?: number
     completionTokens?: number
@@ -408,22 +383,6 @@ export interface RAGSearchResult {
   source: string
   score: number
   metadata: Record<string, any>
-}
-
-export interface UserProfile {
-  name: string
-  nickname: string
-  age: string
-  gender: string
-  occupation: string
-  location: string
-  timezone: string
-  language: string
-  interests: string[]
-  hobbies: string[]
-  preferences: Record<string, string>
-  notes: string
-  updated_at: string
 }
 
 export {}

@@ -11,21 +11,16 @@ import {
   Shield,
   Palette,
   ArrowRight,
-  User,
   Cpu,
-  Plus,
-  X,
   Eye,
   EyeOff,
   Cloud,
   Monitor,
   Network,
-  Loader2,
   AlertCircle,
 } from 'lucide-vue-next'
 import { useApi } from '../composables/useApi'
 import { useModelStore } from '../stores/model'
-import type { UserProfile } from '../types'
 
 const router = useRouter()
 const { apiGet, apiPut } = useApi()
@@ -34,7 +29,7 @@ const modelStore = useModelStore()
 const VERSION = '0.1.0'
 
 const currentStep = ref(0)
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 4
 
 const selectedLang = ref<'zh' | 'en'>('zh')
 
@@ -57,20 +52,6 @@ const i18n = computed(() => {
       featBrowserDesc: 'Let AI navigate and operate web pages for you',
       featAvatar: 'Avatar Workshop',
       featAvatarDesc: 'Customize Live2D / VRM / PixelPet avatars',
-      profileTitle: 'Personal Profile',
-      profileDesc: 'Tell LuomiNest about yourself for a personalized experience',
-      profileName: 'Name',
-      profileNickname: 'Nickname',
-      profileAge: 'Age',
-      profileGender: 'Gender',
-      profileOccupation: 'Occupation',
-      profileLocation: 'Location',
-      profileInterests: 'Interests',
-      profileNotes: 'Notes',
-      profileSkipHint: 'You can set this later in Settings',
-      profileSaving: 'Saving...',
-      profileSave: 'Save & Next',
-      profileNext: 'Next',
       aiModelTitle: 'AI Model Setup',
       aiModelDesc: 'Configure your first AI model provider to get started',
       aiModelProvider: 'Provider',
@@ -95,8 +76,6 @@ const i18n = computed(() => {
       btnBack: 'Back',
       agreeText: 'I agree to the terms and conditions',
       skip: 'Skip',
-      genderOptions: ['Male', 'Female', 'Other'],
-      genderPlaceholder: 'Select',
     }
   }
   return {
@@ -116,20 +95,6 @@ const i18n = computed(() => {
     featBrowserDesc: '让 AI 帮你操作网页',
     featAvatar: '皮套工坊',
     featAvatarDesc: '定制 Live2D / VRM / PixelPet 形象',
-    profileTitle: '个人资料',
-    profileDesc: '让 LuomiNest 更了解你，提供个性化体验',
-    profileName: '姓名',
-    profileNickname: '昵称',
-    profileAge: '年龄',
-    profileGender: '性别',
-    profileOccupation: '职业',
-    profileLocation: '所在地',
-    profileInterests: '兴趣爱好',
-    profileNotes: '备注',
-    profileSkipHint: '可以稍后在设置中完善',
-    profileSaving: '保存中...',
-    profileSave: '保存并继续',
-    profileNext: '下一步',
     aiModelTitle: 'AI 模型',
     aiModelDesc: '配置你的第一个 AI 模型供应商，开始对话',
     aiModelProvider: '供应商',
@@ -154,8 +119,6 @@ const i18n = computed(() => {
     btnBack: '上一步',
     agreeText: '我已阅读并同意相关条款',
     skip: '跳过',
-    genderOptions: ['男', '女', '其他'],
-    genderPlaceholder: '请选择',
   }
 })
 
@@ -187,65 +150,6 @@ function startApp() {
 
 function skipWizard() {
   router.push('/workspace')
-}
-
-// --- Profile Step ---
-const profile = ref<UserProfile>({
-  name: '',
-  nickname: '',
-  age: '',
-  gender: '',
-  occupation: '',
-  location: '',
-  timezone: '',
-  language: '',
-  interests: [],
-  hobbies: [],
-  preferences: {},
-  notes: '',
-  updated_at: ''
-})
-
-const newInterest = ref('')
-const profileSaving = ref(false)
-
-const loadProfile = async () => {
-  try {
-    const resp = await apiGet<{ profile: UserProfile }>('/memory/profile')
-    if (resp.profile) {
-      profile.value = {
-        ...resp.profile,
-        interests: resp.profile.interests || [],
-        hobbies: resp.profile.hobbies || [],
-        preferences: resp.profile.preferences || {}
-      }
-    }
-  } catch {
-    // no profile yet, that's fine
-  }
-}
-
-const addInterest = () => {
-  if (newInterest.value.trim()) {
-    profile.value.interests.push(newInterest.value.trim())
-    newInterest.value = ''
-  }
-}
-
-const removeInterest = (index: number) => {
-  profile.value.interests.splice(index, 1)
-}
-
-const saveProfileAndNext = async () => {
-  profileSaving.value = true
-  try {
-    await apiPut('/memory/profile', profile.value)
-  } catch {
-    // silent fail, user can configure later
-  } finally {
-    profileSaving.value = false
-  }
-  nextStep()
 }
 
 // --- AI Model Step ---
@@ -324,7 +228,6 @@ const addProviderAndNext = async () => {
 }
 
 onMounted(async () => {
-  loadProfile().catch(() => {})
   modelStore.fetchProviders().catch(() => {})
   modelStore.fetchTemplates().catch(() => {})
   modelStore.fetchModelConfig().catch(() => {})
@@ -428,100 +331,8 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Step 2: Profile -->
-        <div v-else-if="currentStep === 2" key="step-2" class="welcome-step step-profile">
-          <div class="step-hero animate-fade-in">
-            <div class="step-hero-icon profile-hero-icon">
-              <User :size="24" />
-            </div>
-            <div>
-              <h2 class="step-hero-title">{{ i18n.profileTitle }}</h2>
-              <p class="step-hero-desc">{{ i18n.profileDesc }}</p>
-            </div>
-          </div>
-
-          <div class="profile-form animate-slide-up">
-            <div class="form-grid">
-              <div class="form-group">
-                <label>{{ i18n.profileName }}</label>
-                <input v-model="profile.name" type="text" :placeholder="i18n.profileName" />
-              </div>
-              <div class="form-group">
-                <label>{{ i18n.profileNickname }}</label>
-                <input v-model="profile.nickname" type="text" :placeholder="i18n.profileNickname" />
-              </div>
-              <div class="form-group">
-                <label>{{ i18n.profileAge }}</label>
-                <input v-model="profile.age" type="text" :placeholder="i18n.profileAge" />
-              </div>
-              <div class="form-group">
-                <label>{{ i18n.profileGender }}</label>
-                <select v-model="profile.gender">
-                  <option value="">{{ i18n.genderPlaceholder }}</option>
-                  <option v-for="opt in i18n.genderOptions" :key="opt" :value="opt">{{ opt }}</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>{{ i18n.profileOccupation }}</label>
-                <input v-model="profile.occupation" type="text" :placeholder="i18n.profileOccupation" />
-              </div>
-              <div class="form-group">
-                <label>{{ i18n.profileLocation }}</label>
-                <input v-model="profile.location" type="text" :placeholder="i18n.profileLocation" />
-              </div>
-            </div>
-
-            <div class="form-section">
-              <label>{{ i18n.profileInterests }}</label>
-              <div class="tag-area">
-                <div class="tags" v-if="profile.interests.length > 0">
-                  <span v-for="(interest, idx) in profile.interests" :key="idx" class="tag">
-                    {{ interest }}
-                    <button @click="removeInterest(idx)" class="tag-remove">
-                      <X :size="12" />
-                    </button>
-                  </span>
-                </div>
-                <div class="tag-add">
-                  <input
-                    v-model="newInterest"
-                    type="text"
-                    :placeholder="i18n.profileInterests + '...'"
-                    @keydown.enter="addInterest"
-                  />
-                  <button @click="addInterest" :disabled="!newInterest.trim()">
-                    <Plus :size="14" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div class="form-section">
-              <label>{{ i18n.profileNotes }}</label>
-              <textarea
-                v-model="profile.notes"
-                :placeholder="i18n.profileNotes + '...'"
-                rows="2"
-              ></textarea>
-            </div>
-
-            <p class="skip-hint">{{ i18n.profileSkipHint }}</p>
-          </div>
-
-          <div class="step-actions">
-            <button class="ghost-btn" @click="prevStep">
-              {{ i18n.btnBack }}
-            </button>
-            <button class="primary-btn" @click="saveProfileAndNext" :disabled="profileSaving">
-              <Loader2 v-if="profileSaving" :size="16" class="spin-animation" />
-              <span>{{ profileSaving ? i18n.profileSaving : i18n.profileSave }}</span>
-              <ChevronRight v-if="!profileSaving" :size="16" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Step 3: AI Model -->
-        <div v-else-if="currentStep === 3" key="step-3" class="welcome-step step-ai-model">
+        <!-- Step 2: AI Model -->
+        <div v-else-if="currentStep === 2" key="step-2" class="welcome-step step-ai-model">
           <div class="step-hero animate-fade-in">
             <div class="step-hero-icon ai-hero-icon">
               <Cpu :size="24" />
@@ -617,8 +428,8 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Step 4: Ready -->
-        <div v-else key="step-4" class="welcome-step step-ready">
+        <!-- Step 3: Ready -->
+        <div v-else-if="currentStep === 3" key="step-3" class="welcome-step step-ready">
           <div class="ready-hero animate-scale-in">
             <div class="ready-ring">
               <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
@@ -974,11 +785,6 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.profile-hero-icon {
-  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.06));
-  color: var(--lumi-primary);
-}
-
 .ai-hero-icon {
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.04));
   color: #8b5cf6;
@@ -995,178 +801,6 @@ onMounted(async () => {
   color: var(--text-muted);
   margin-top: 2px;
   line-height: 1.5;
-}
-
-/* Profile Form */
-.profile-form {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.form-group label {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.form-group input,
-.form-group select {
-  padding: 9px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-card);
-  color: var(--text-primary);
-  font-size: 13px;
-  transition: all 200ms ease-in-out;
-}
-
-.form-group input:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px rgba(20, 126, 188, 0.1);
-}
-
-.form-group input::placeholder {
-  color: var(--text-muted);
-}
-
-.form-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-section > label {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.tag-area {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tag {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  background: rgba(20, 126, 188, 0.1);
-  color: var(--lumi-primary);
-  font-size: 12px;
-}
-
-.tag-remove {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: transparent;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  transition: background 200ms ease;
-}
-
-.tag-remove:hover {
-  background: rgba(20, 126, 188, 0.2);
-}
-
-.tag-add {
-  display: flex;
-  gap: 8px;
-}
-
-.tag-add input {
-  flex: 1;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-card);
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.tag-add input:focus {
-  outline: none;
-  border-color: var(--lumi-primary);
-}
-
-.tag-add button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--lumi-primary);
-  border: none;
-  color: white;
-  cursor: pointer;
-  transition: background 200ms ease;
-}
-
-.tag-add button:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-}
-
-.tag-add button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.form-section textarea {
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-card);
-  color: var(--text-primary);
-  font-size: 13px;
-  resize: vertical;
-  min-height: 60px;
-}
-
-.form-section textarea:focus {
-  outline: none;
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px rgba(20, 126, 188, 0.1);
-}
-
-.form-section textarea::placeholder {
-  color: var(--text-muted);
-}
-
-.skip-hint {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-align: center;
-  font-style: italic;
 }
 
 /* AI Model Form */
