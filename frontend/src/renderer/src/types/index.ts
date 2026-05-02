@@ -57,6 +57,18 @@ export interface WorkflowDefinition {
   updatedAt: number
 }
 
+export interface ExecutionStep {
+  id: string
+  label: string
+}
+
+export interface ExecutionStatus {
+  currentStepIndex: number
+  steps: ExecutionStep[]
+  isSkipped?: boolean
+  isComplete?: boolean
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -74,7 +86,7 @@ export interface ChatMessage {
 }
 
 export interface ChatRequest {
-  messages: { role: string; content: string }[]
+  messages: { role: ChatMessage['role']; content: string }[]
   model?: string
   provider?: string
   temperature?: number

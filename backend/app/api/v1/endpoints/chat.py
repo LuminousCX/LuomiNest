@@ -1,3 +1,4 @@
+import copy
 import uuid
 import time
 import asyncio
@@ -20,7 +21,13 @@ from app.core.config import settings
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-_memory_lock = asyncio.Lock()
+_memory_locks: dict[str | None, asyncio.Lock] = {}
+
+
+def _get_memory_lock(agent_id: str | None) -> asyncio.Lock:
+    if agent_id not in _memory_locks:
+        _memory_locks[agent_id] = asyncio.Lock()
+    return _memory_locks[agent_id]
 
 
 def _get_user_query(messages: list[dict]) -> str:
@@ -36,7 +43,8 @@ async def _inject_memory(messages: list[dict], agent_id: str | None = None, prov
     try:
         from app.engines.memory.core import MemoryInjector, get_memory_storage
         storage = get_memory_storage()
-        async with _memory_lock:
+        lock = _get_memory_lock(agent_id)
+        async with lock:
             memory_data = await asyncio.to_thread(storage.load, agent_id)
 
         if not memory_data.facts and not memory_data.working_memory.core_goal and not memory_data.episodic_events:
@@ -75,11 +83,13 @@ def _schedule_memory_update(
         from app.engines.memory.core import MemoryUpdater, get_memory_storage
         storage = get_memory_storage()
         updater = MemoryUpdater(storage, provider_name=provider_name)
+        messages_snapshot = copy.deepcopy(messages)
 
         async def _do_update():
             try:
-                async with _memory_lock:
-                    await updater.update_from_conversation(messages, conv_id, agent_id)
+                lock = _get_memory_lock(agent_id)
+                async with lock:
+                    await updater.update_from_conversation(messages_snapshot, conv_id, agent_id)
             except Exception as e:
                 logger.warning(f"[Memory] Async update failed: {e}")
 

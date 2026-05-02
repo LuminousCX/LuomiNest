@@ -86,7 +86,7 @@ export const useSocialStore = defineStore('social', () => {
       await apiSseStream(
         `/social/groups/${groupId}/messages`,
         { content, sender_id: 'user' },
-        (event: any) => _handleMessageEvent(event),
+        (event: { type?: string; data?: Record<string, unknown> }) => _handleMessageEvent(event as any),
         async () => {},
         (err: string) => console.error('Failed to send message:', err),
       )

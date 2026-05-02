@@ -18,6 +18,7 @@ import {
   Monitor,
   Network,
   AlertCircle,
+  Loader2,
 } from 'lucide-vue-next'
 import { useApi } from '../composables/useApi'
 import { useModelStore } from '../stores/model'

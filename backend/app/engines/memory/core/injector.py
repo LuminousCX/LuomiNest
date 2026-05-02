@@ -22,8 +22,11 @@ class MemoryInjector:
 
     def set_token_budget(self, model_context_window: int | None = None, existing_msg_tokens: int = 0):
         if model_context_window and model_context_window > 0:
-            available = model_context_window - existing_msg_tokens
-            self._max_tokens_estimate = max(500, min(int(available * 0.15), 3000))
+            available = max(0, model_context_window - existing_msg_tokens)
+            if available == 0:
+                self._max_tokens_estimate = 0
+            else:
+                self._max_tokens_estimate = min(int(available * 0.15), 3000)
         else:
             self._max_tokens_estimate = 2000
 

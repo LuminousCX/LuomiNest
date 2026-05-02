@@ -16,9 +16,9 @@ const currentStepIndex = computed(() => props.status.currentStepIndex)
 
 // 判断步骤状态
 const getStepStatus = (index: number) => {
-  if (props.status.isSkipped) return 'skipped'
   if (index < currentStepIndex.value) return 'completed'
   if (index === currentStepIndex.value) return 'in_progress'
+  if (props.status.isSkipped) return 'skipped'
   return 'pending'
 }
 
@@ -166,10 +166,12 @@ const getStepIcon = (index: number) => {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
+  border: none;
   border-radius: var(--radius-sm);
   font-size: 11px;
   color: var(--text-muted);
   background: transparent;
+  cursor: pointer;
   transition: all 0.2s ease;
 }
 

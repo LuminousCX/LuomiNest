@@ -18,7 +18,9 @@ from app.runtime.plugin.skill.base import SkillDefinition, SkillResult
 
 
 # 缓存目录
-_CACHE_DIR = Path(__file__).parent.parent.parent.parent.parent / "data" / "weather_cache"
+from app.core.config import settings
+
+_CACHE_DIR = Path(settings.DATA_DIR) / "weather_cache"
 _CACHE_EXPIRE_SECONDS = 2 * 60 * 60  # 2小时缓存
 
 
@@ -42,7 +44,7 @@ def _load_from_cache(city: str, date: str) -> dict | None:
         if not cache_path.exists():
             return None
         
-        with open(cache_path, 'r', encoding='utf-8') as f:
+        with open(cache_path, encoding='utf-8') as f:
             cached = json.load(f)
         
         # 检查缓存是否过期
@@ -148,7 +150,7 @@ async def _fetch_weather_from_web(city: str, date: str) -> dict | None:
             "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
             "daily": "weather_code,temperature_2m_max,temperature_2m_min",
             "timezone": "auto",
-            "forecast_days": max(7, days + 1),
+            "forecast_days": min(max(7, days + 1), 16),
         }
         
         weather_response = await client.get(weather_url, params=weather_params)

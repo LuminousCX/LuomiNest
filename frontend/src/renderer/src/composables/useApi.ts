@@ -164,9 +164,9 @@ export const useApi = () => {
     }
   }
 
-  const apiSseStream = async <T = any>(
+  const apiSseStream = async <T = unknown>(
     path: string,
-    body: any,
+    body: Record<string, unknown>,
     onEvent: (event: T) => void,
     onDone: () => void | Promise<void>,
     onError: (err: string) => void,
@@ -200,7 +200,27 @@ export const useApi = () => {
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          if (value) {
+            buffer += decoder.decode(value, { stream: false })
+          } else {
+            buffer += decoder.decode()
+          }
+          const lines = buffer.split('\n')
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed.startsWith('data: ')) continue
+            const dataStr = trimmed.slice(6)
+            if (!dataStr.trim()) continue
+            try {
+              const event: T = JSON.parse(dataStr)
+              onEvent(event)
+            } catch {
+              continue
+            }
+          }
+          break
+        }
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
@@ -222,12 +242,12 @@ export const useApi = () => {
       }
 
       await onDone()
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
-        await onDone()
-        return
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        throw e
       }
-      onError(e.message)
+      const message = e instanceof Error ? e.message : String(e)
+      onError(message)
     } finally {
       abortController.value = null
     }

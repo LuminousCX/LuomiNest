@@ -63,7 +63,7 @@ class MemoryFact(BaseModel):
             last_accessed = datetime.fromisoformat(self.last_accessed_at.replace("Z", "+00:00"))
             days_since_access = (current - last_accessed).days
             return days_since_access > self.decay_days
-        except:
+        except (ValueError, TypeError, AttributeError, OverflowError):
             return False
 
     def record_access(self):
@@ -168,7 +168,8 @@ class EpisodicEvent(BaseModel):
             created = datetime.fromisoformat(self.timestamp.replace("Z", "+00:00"))
             now = datetime.now(timezone.utc)
             return (now - created).days
-        except:
+        except (ValueError, TypeError) as e:
+            logger.debug(f"[Memory] Failed to parse timestamp in time_distance_days: {e}")
             return 9999
 
 

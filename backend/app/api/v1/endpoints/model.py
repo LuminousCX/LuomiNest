@@ -19,7 +19,7 @@ def _load_model_config() -> dict:
     if not os.path.exists(MODEL_CONFIG_FILE):
         return {}
     try:
-        with open(MODEL_CONFIG_FILE, "r", encoding="utf-8") as f:
+        with open(MODEL_CONFIG_FILE, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         logger.warning(f"[ModelConfig] Failed to load: {e}")

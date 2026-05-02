@@ -292,6 +292,9 @@ class MemoryUpdater:
             if e.time_distance_days() < 180 or e.importance >= 0.8
         ]
 
+        existing_recent = memory_data.working_memory.recent_conversations
+        last_existing = existing_recent[-1] if existing_recent else None
+
         for msg in messages:
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
@@ -301,8 +304,12 @@ class MemoryUpdater:
                     for c in content
                 )
             content = str(content)[:300]
-            if content:
-                memory_data.working_memory.add_conversation(role, content)
+            if not content:
+                continue
+            if last_existing and last_existing.get("role") == role and last_existing.get("content") == content:
+                continue
+            memory_data.working_memory.add_conversation(role, content)
+            last_existing = {"role": role, "content": content}
 
         updates = parsed.get("updates", {})
         if updates.get("user_work_context"):
@@ -320,8 +327,29 @@ class MemoryUpdater:
 
         memory_data.archive_expired_facts()
 
-        if facts_added > 0 or facts_removed > 0 or updates_applied or episodic_event_data:
-            self._storage.save(memory_data, agent_id)
+        working_memory_changed = bool(
+            core_goal and core_goal.strip()
+        ) or bool(
+            any(
+                msg.get("content") and (
+                    not last_existing or last_existing.get("role") != msg.get("role") or last_existing.get("content") != str(msg.get("content", ""))[:300]
+                )
+                for msg in messages
+            )
+        )
+        archive_changed = len(memory_data.archived_facts) > 0
+
+        should_save = (
+            facts_added > 0 or facts_removed > 0 or updates_applied
+            or episodic_event_data or working_memory_changed or archive_changed
+        )
+
+        if should_save:
+            try:
+                self._storage.save(memory_data, agent_id)
+            except Exception as e:
+                logger.error(f"[Memory] Failed to save memory: {e}")
+                return {"updated": False, "error": str(e)}
             logger.info(
                 f"[Memory] Updated: +{facts_added} facts, -{facts_removed} facts, "
                 f"events={len(memory_data.episodic_events)}, "
