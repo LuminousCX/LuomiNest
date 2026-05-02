@@ -30,29 +30,51 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 _skill_executor = SkillExecutor()
 
 
-def _inject_memory_to_messages(messages: list[dict], agent_id: str | None) -> list[dict]:
+def _inject_memory_to_messages(
+    messages: list[dict], 
+    agent_id: str | None, 
+    conversation_id: str | None = None,
+    user_query: str = "",
+) -> list[dict]:
     try:
         storage = get_memory_storage()
         
-        # 始终加载全局记忆（memory.json）
-        global_memory = storage.load(None)
+        # 确保会话之间的记忆隔离：优先使用 conversation_id，其次是 agent_id
+        memory_key = conversation_id or agent_id
         
-        # 如果有 agent_id，也加载 Agent 特定的记忆并合并
-        if agent_id:
-            agent_memory = storage.load(agent_id)
-            # 合并：全局记忆优先，Agent 特定记忆补充
-            if not global_memory.profile.name and agent_memory.profile.name:
-                global_memory.profile = agent_memory.profile
-            if not global_memory.facts:
-                global_memory.facts = agent_memory.facts
+        # 加载记忆
+        memory_data = storage.load(memory_key)
         
-        injector = MemoryInjector()
+        # 如果是新对话，初始化工作记忆
+        if conversation_id and not memory_data.working_memory.core_goal:
+            # 从用户的第一条消息提取核心目标
+            for msg in reversed(messages):
+                if msg.get("role") == "user" and msg.get("content"):
+                    memory_data.working_memory.set_core_goal(msg["content"][:200])
+                    break
         
-        profile = global_memory.profile
-        logger.info(f"[Memory] Injecting memory for agent_id={agent_id}")
+        # 更新工作记忆中的最近对话
+        for msg in messages[-3:]:
+            if msg.get("role") in ["user", "assistant"] and msg.get("content"):
+                memory_data.working_memory.add_conversation(
+                    msg["role"], 
+                    msg["content"][:500]
+                )
+        
+        # 归档过期记忆
+        memory_data.archive_expired_facts()
+        
+        # 保存更新后的记忆
+        if memory_key:
+            storage.save(memory_data, memory_key)
+        
+        injector = MemoryInjector(conversation_id=conversation_id)
+        
+        profile = memory_data.profile
+        logger.info(f"[Memory] Injecting memory for conversation_id={conversation_id}, agent_id={agent_id}")
         logger.info(f"[Memory] Profile: name={profile.name}, occupation={profile.occupation}, location={profile.location}")
         
-        result = injector.inject_memory_to_messages(messages, global_memory)
+        result = injector.inject_memory_to_messages(messages, memory_data, user_query=user_query)
         logger.info(f"[Memory] Memory injection completed, messages count: {len(result)}")
         return result
     except Exception as e:
@@ -256,7 +278,19 @@ async def chat_completions(request: ChatRequest):
         messages.append({"role": "system", "content": system_prompt})
     messages.extend([{"role": m.role, "content": m.content} for m in request.messages])
 
-    messages = _inject_memory_to_messages(messages, request.agent_id)
+    # 提取用户查询用于记忆检索
+    user_query = ""
+    for m in reversed(request.messages):
+        if m.role == "user":
+            user_query = m.content
+            break
+
+    messages = _inject_memory_to_messages(
+        messages, 
+        request.agent_id, 
+        conversation_id=None,
+        user_query=user_query
+    )
     logger.debug(f"[API] POST /chat/completions - Message count: {len(messages)}")
 
     if request.stream:
@@ -515,7 +549,17 @@ async def add_message(conv_id: str, request: ChatRequest):
     for m in conv["messages"]:
         all_messages.append({"role": m["role"], "content": m["content"]})
 
-    all_messages = _inject_memory_to_messages(all_messages, conv.get("agent_id"))
+    # 提取用户查询用于记忆检索
+    user_query = ""
+    if last_user_msg:
+        user_query = last_user_msg.content
+
+    all_messages = _inject_memory_to_messages(
+        all_messages, 
+        conv.get("agent_id"), 
+        conversation_id=conv_id,
+        user_query=user_query
+    )
 
     if request.stream:
         logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Starting stream response")
