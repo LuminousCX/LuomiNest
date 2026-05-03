@@ -1,0 +1,85 @@
+menu "LuomiNest Configuration"
+
+    config LN_WIFI_SSID
+        string "WiFi SSID"
+        default "Xiaomi_65DF"
+        help
+            Default WiFi network name (used when no NVS config saved).
+
+    config LN_WIFI_PASSWORD
+        string "WiFi Password"
+        default "18033810300xyr"
+        help
+            Default WiFi network password (used when no NVS config saved).
+
+    config LN_MQTT_BROKER
+        string "MQTT Broker URI"
+        default "mqtt://192.168.1.222:1883"
+        help
+            Default MQTT broker address (used when no NVS config saved).
+
+    config LN_MQTT_CLIENT_ID
+        string "MQTT Client ID"
+        default "luominest_s3_01"
+        help
+            Default MQTT client identifier (used when no NVS config saved).
+
+    config LN_AP_PASSWORD
+        string "AP Mode Password"
+        default "12345678"
+        help
+            Password for the configuration AP (min 8 chars for WPA2).
+
+    config LN_FRAME_QUEUE_SIZE
+        int "Frame queue size"
+        default 2
+        range 1 10
+        help
+            Number of JPEG frames to buffer before decoding.
+            Larger values use more PSRAM but reduce frame drops.
+
+    config LN_STATUS_INTERVAL_SEC
+        int "Status report interval (seconds)"
+        default 10
+        range 5 120
+        help
+            How often to publish device online status via MQTT.
+
+    config LN_ENABLE_WATCHDOG
+        bool "Enable task watchdog"
+        default y
+        help
+            Enable watchdog timer to detect and recover from hung tasks.
+
+    config LN_WATCHDOG_TIMEOUT_SEC
+        int "Watchdog timeout (seconds)"
+        default 30
+        range 5 120
+        depends on LN_ENABLE_WATCHDOG
+        help
+            Timeout before watchdog triggers a system reset.
+
+    config LN_MQTT_RECONNECT_MAX_MS
+        int "MQTT max reconnect backoff (ms)"
+        default 60000
+        range 5000 300000
+        help
+            Maximum delay between MQTT reconnection attempts (ms).
+            Uses exponential backoff starting from 1000ms.
+
+    config LN_WIFI_RECONNECT_MAX_MS
+        int "WiFi max reconnect backoff (ms)"
+        default 30000
+        range 5000 120000
+        help
+            Maximum delay between WiFi reconnection attempts (ms).
+            Uses exponential backoff starting from 500ms.
+
+    config LN_FRAME_DEDUP
+        bool "Enable frame deduplication"
+        default y
+        help
+            Skip decoding JPEG frames that are identical to the previous frame.
+            Saves CPU and reduces visual flicker on static scenes.
+
+endmenu

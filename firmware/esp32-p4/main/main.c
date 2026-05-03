@@ -1,0 +1,404 @@
+#include <string.h>
+#include "esp_log.h"
+#include "esp_heap_caps.h"
+#include "esp_vfs_fat.h"
+#include "driver/sdmmc_host.h"
+#include "sdmmc_cmd.h"
+#include "sd_pwr_ctrl_by_on_chip_ldo.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "nvs_flash.h"
+
+#include "pin_config.h"
+#include "mipi_lcd.h"
+#include "wifi_mgr.h"
+#include "app_mqtt.h"
+#include "avatar_engine.h"
+#include "web_config.h"
+#include "lvgl.h"
+#include "esp_lvgl_port.h"
+
+static const char *TAG = "main";
+
+#define DEFAULT_WIFI_SSID      CONFIG_LN_WIFI_SSID
+#define DEFAULT_WIFI_PASS      CONFIG_LN_WIFI_PASSWORD
+#define DEFAULT_MQTT_BROKER    CONFIG_LN_MQTT_BROKER
+#define DEFAULT_MQTT_CLIENT_ID CONFIG_LN_MQTT_CLIENT_ID
+
+#define TOPIC_CMD      "luominest/p4/cmd"
+#define TOPIC_STATUS   "luominest/p4/status"
+#define TOPIC_STREAM   "luominest/p4/stream"
+
+#define STATUS_INTERVAL_MS (CONFIG_LN_STATUS_INTERVAL_SEC * 1000)
+
+static lv_display_t *s_disp = NULL;
+static ln_config_t s_device_config = {0};
+static lv_obj_t *s_status_label = NULL;
+static lv_obj_t *s_hint_label = NULL;
+
+typedef struct {
+    uint8_t *data;
+    uint32_t len;
+} frame_msg_t;
+
+#define FRAME_QUEUE_LEN 2
+static QueueHandle_t s_frame_queue = NULL;
+
+static void create_ui(void)
+{
+    lv_obj_t *scr = lv_screen_active();
+
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x1A1A2E), LV_PART_MAIN);
+
+    lv_obj_t *title = lv_label_create(scr);
+    lv_label_set_text(title, "LuomiNest P4");
+    lv_obj_set_style_text_color(title, lv_color_hex(0xE0E0FF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+
+    s_status_label = lv_label_create(scr);
+    lv_label_set_text(s_status_label, "Connecting...");
+    lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xFFD93D), LV_PART_MAIN);
+    lv_obj_set_style_text_font(s_status_label, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_align(s_status_label, LV_ALIGN_TOP_RIGHT, -10, 10);
+
+    s_hint_label = lv_label_create(scr);
+    lv_label_set_text(s_hint_label, "");
+    lv_obj_set_style_text_color(s_hint_label, lv_color_hex(0x8888AA), LV_PART_MAIN);
+    lv_obj_set_style_text_font(s_hint_label, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_align(s_hint_label, LV_ALIGN_BOTTOM_LEFT, 10, -10);
+}
+
+static void update_ui_online(void)
+{
+    if (s_status_label) {
+        lvgl_port_lock(5000);
+        lv_label_set_text(s_status_label, "Online");
+        lv_obj_set_style_text_color(s_status_label, lv_color_hex(0x4ECDC4), LV_PART_MAIN);
+        lvgl_port_unlock();
+    }
+    if (s_hint_label) {
+        lvgl_port_lock(5000);
+        lv_label_set_text(s_hint_label, "");
+        lvgl_port_unlock();
+    }
+}
+
+static void update_ui_offline(void)
+{
+    if (s_status_label) {
+        lvgl_port_lock(5000);
+        lv_label_set_text(s_status_label, "Offline");
+        lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xFF6B6B), LV_PART_MAIN);
+        lvgl_port_unlock();
+    }
+}
+
+static void update_ui_ap_mode(void)
+{
+    if (s_status_label) {
+        lvgl_port_lock(5000);
+        lv_label_set_text(s_status_label, "AP Mode");
+        lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xFFD93D), LV_PART_MAIN);
+        lvgl_port_unlock();
+    }
+    if (s_hint_label) {
+        lvgl_port_lock(5000);
+        lv_label_set_text(s_hint_label, "Connect to LuomiNest-P4-* WiFi to configure");
+        lvgl_port_unlock();
+    }
+}
+
+static void on_mqtt_command(const char *topic, const char *data, int data_len)
+{
+    ESP_LOGI(TAG, "CMD [%s]: %.*s", topic, data_len, data);
+
+    if (strcmp(topic, TOPIC_CMD) == 0) {
+        if (strstr(data, "happy")) {
+            avatar_engine_play_state(AVATAR_STATE_HAPPY);
+        } else if (strstr(data, "sad")) {
+            avatar_engine_play_state(AVATAR_STATE_SAD);
+        } else if (strstr(data, "angry")) {
+            avatar_engine_play_state(AVATAR_STATE_ANGRY);
+        } else if (strstr(data, "surprised")) {
+            avatar_engine_play_state(AVATAR_STATE_SURPRISED);
+        } else if (strstr(data, "think")) {
+            avatar_engine_play_state(AVATAR_STATE_THINK);
+        } else if (strstr(data, "neutral")) {
+            avatar_engine_play_state(AVATAR_STATE_NEUTRAL);
+        } else if (strstr(data, "talk")) {
+            avatar_engine_play_state(AVATAR_STATE_TALK);
+        } else if (strstr(data, "idle")) {
+            avatar_engine_play_state(AVATAR_STATE_IDLE);
+        } else if (strstr(data, "stop")) {
+            avatar_engine_stop();
+        }
+    }
+}
+
+static void on_mqtt_stream(const char *topic, const uint8_t *data, int data_len)
+{
+    if (strcmp(topic, TOPIC_STREAM) != 0) return;
+    if (!s_frame_queue) return;
+
+    frame_msg_t msg = {0};
+    msg.len = data_len;
+    msg.data = heap_caps_malloc(data_len, MALLOC_CAP_SPIRAM);
+    if (!msg.data) {
+        ESP_LOGE(TAG, "No PSRAM for frame (%d bytes)", data_len);
+        return;
+    }
+    memcpy(msg.data, data, data_len);
+
+    frame_msg_t discarded = {0};
+    if (xQueueSend(s_frame_queue, &msg, 0) != pdTRUE) {
+        if (xQueueReceive(s_frame_queue, &discarded, 0) == pdTRUE) {
+            free(discarded.data);
+        }
+        xQueueSend(s_frame_queue, &msg, 0);
+    }
+}
+
+static void frame_decode_task(void *pvParameter)
+{
+    frame_msg_t msg = {0};
+    while (1) {
+        if (xQueueReceive(s_frame_queue, &msg, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            avatar_engine_show_frame(msg.data, msg.len);
+            free(msg.data);
+            msg.data = NULL;
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+    }
+}
+
+static void on_mqtt_connected(void)
+{
+    ESP_LOGI(TAG, "MQTT connected, subscribing...");
+    app_mqtt_subscribe(TOPIC_CMD, 1);
+    app_mqtt_subscribe(TOPIC_STREAM, 0);
+    update_ui_online();
+}
+
+static void on_mqtt_disconnected(void)
+{
+    ESP_LOGW(TAG, "MQTT disconnected, will auto-reconnect");
+    update_ui_offline();
+}
+
+static void on_wifi_connected(void)
+{
+    ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
+    const char *broker = s_device_config.mqtt_broker[0] ? s_device_config.mqtt_broker : DEFAULT_MQTT_BROKER;
+    const char *client = s_device_config.mqtt_client[0] ? s_device_config.mqtt_client : DEFAULT_MQTT_CLIENT_ID;
+    app_mqtt_init(broker, client);
+    app_mqtt_register_message_cb(on_mqtt_command);
+    app_mqtt_register_stream_cb(on_mqtt_stream);
+    app_mqtt_register_connected_cb(on_mqtt_connected);
+    app_mqtt_register_disconnected_cb(on_mqtt_disconnected);
+}
+
+static void on_wifi_disconnected(void)
+{
+    ESP_LOGW(TAG, "WiFi disconnected, MQTT paused until reconnected");
+    update_ui_offline();
+}
+
+static void status_task(void *pvParameter)
+{
+    char status_buf[256];
+    while (1) {
+        if (app_mqtt_is_connected()) {
+            const avatar_stats_t *stats = avatar_engine_get_stats();
+            int8_t rssi = wifi_mgr_get_rssi();
+            uint32_t free_heap = esp_get_free_heap_size();
+            uint32_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+
+            snprintf(status_buf, sizeof(status_buf),
+                     "{\"state\":\"online\",\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
+                     "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u},"
+                     "\"decode_ms\":%u}",
+                     rssi, (unsigned)free_heap, (unsigned)free_psram,
+                     (unsigned)stats->frames_received,
+                     (unsigned)stats->frames_displayed,
+                     (unsigned)stats->frames_skipped_dedup,
+                     (unsigned)stats->frames_skipped_error,
+                     (unsigned)stats->last_decode_ms);
+
+            app_mqtt_publish(TOPIC_STATUS, status_buf, strlen(status_buf), 1);
+        }
+        vTaskDelay(pdMS_TO_TICKS(STATUS_INTERVAL_MS));
+    }
+}
+
+static esp_err_t init_sdcard(void)
+{
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.slot = SDMMC_HOST_SLOT_0;
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+
+    sd_pwr_ctrl_ldo_config_t ldo_config = {
+        .ldo_chan_id = SD_LDO_CHAN,
+    };
+    sd_pwr_ctrl_handle_t pwr_ctrl_handle = NULL;
+    esp_err_t ret = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle);
+    if (ret == ESP_OK) {
+        host.pwr_ctrl_handle = pwr_ctrl_handle;
+        vTaskDelay(pdMS_TO_TICKS(200));
+    } else {
+        ESP_LOGW(TAG, "SD LDO power control init failed (0x%x), continuing without", ret);
+    }
+
+    sdmmc_slot_config_t slot_config = {
+        .clk = SDMMC_CLK_PIN,
+        .cmd = SDMMC_CMD_PIN,
+        .d0 = SDMMC_D0_PIN,
+        .d1 = SDMMC_D1_PIN,
+        .d2 = SDMMC_D2_PIN,
+        .d3 = SDMMC_D3_PIN,
+        .d4 = GPIO_NUM_NC,
+        .d5 = GPIO_NUM_NC,
+        .d6 = GPIO_NUM_NC,
+        .d7 = GPIO_NUM_NC,
+        .cd = SDMMC_SLOT_NO_CD,
+        .wp = SDMMC_SLOT_NO_WP,
+        .width = 4,
+        .flags = 0,
+    };
+
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 10,
+        .allocation_unit_size = 16 * 1024,
+    };
+
+    sdmmc_card_t *card = NULL;
+    ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config,
+                                           &mount_config, &card);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "SD card mount failed (0x%x), continuing without SD", ret);
+        ESP_LOGW(TAG, "Hint: ensure SD card is FAT32 formatted and properly inserted");
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "SD card mounted successfully");
+    sdmmc_card_print_info(stdout, card);
+    return ESP_OK;
+}
+
+static void load_device_config(void)
+{
+    if (web_config_load(&s_device_config) == ESP_OK && web_config_has_saved()) {
+        ESP_LOGI(TAG, "Loaded config from NVS: SSID=%s, Broker=%s",
+                 s_device_config.wifi_ssid, s_device_config.mqtt_broker);
+    } else {
+        ESP_LOGI(TAG, "No saved config, using defaults from menuconfig");
+        strncpy(s_device_config.wifi_ssid, DEFAULT_WIFI_SSID, sizeof(s_device_config.wifi_ssid) - 1);
+        strncpy(s_device_config.wifi_pass, DEFAULT_WIFI_PASS, sizeof(s_device_config.wifi_pass) - 1);
+        strncpy(s_device_config.mqtt_broker, DEFAULT_MQTT_BROKER, sizeof(s_device_config.mqtt_broker) - 1);
+        strncpy(s_device_config.mqtt_client, DEFAULT_MQTT_CLIENT_ID, sizeof(s_device_config.mqtt_client) - 1);
+    }
+}
+
+void app_main(void)
+{
+    ESP_LOGI(TAG, "=== LuomiNest P4 Firmware ===");
+    ESP_LOGI(TAG, "Free heap: %u, Free PSRAM: %u",
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
+    mipi_lcd_handle_t lcd = {
+        .rst_pin = LCD_RST_PIN,
+        .bl_pin = LCD_BL_PIN,
+        .width = MIPI_LCD_WIDTH,
+        .height = MIPI_LCD_HEIGHT,
+    };
+
+    ESP_LOGI(TAG, "Initializing MIPI DSI LCD...");
+    ESP_ERROR_CHECK(mipi_lcd_init(&lcd));
+
+    ESP_LOGI(TAG, "Initializing LVGL port...");
+    const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+    ESP_ERROR_CHECK(lvgl_port_init(&lvgl_cfg));
+
+    const lvgl_port_display_cfg_t disp_cfg = {
+        .io_handle = lcd.io,
+        .panel_handle = lcd.dpi_panel,
+        .control_handle = lcd.control,
+        .buffer_size = MIPI_LCD_WIDTH * 100,
+        .double_buffer = 0,
+        .hres = MIPI_LCD_WIDTH,
+        .vres = MIPI_LCD_HEIGHT,
+        .monochrome = false,
+        .rotation = {
+            .swap_xy = false,
+            .mirror_x = false,
+            .mirror_y = false,
+        },
+        .color_format = LV_COLOR_FORMAT_RGB565,
+        .flags = {
+            .buff_dma = false,
+            .buff_spiram = true,
+            .sw_rotate = true,
+        },
+    };
+    const lvgl_port_display_dsi_cfg_t dpi_cfg = {
+        .flags = {
+            .avoid_tearing = false,
+        },
+    };
+    s_disp = lvgl_port_add_disp_dsi(&disp_cfg, &dpi_cfg);
+    if (!s_disp) {
+        ESP_LOGE(TAG, "Failed to add DSI display to LVGL");
+        return;
+    }
+
+    lvgl_port_lock(5000);
+    ESP_ERROR_CHECK(avatar_engine_init(lv_screen_active()));
+    lvgl_port_unlock();
+
+    lvgl_port_lock(5000);
+    create_ui();
+    lvgl_port_unlock();
+
+    init_sdcard();
+
+    s_frame_queue = xQueueCreate(FRAME_QUEUE_LEN, sizeof(frame_msg_t));
+
+    xTaskCreatePinnedToCore(frame_decode_task, "frame_dec", 8192, NULL, 4, NULL, 1);
+
+    vTaskDelay(pdMS_TO_TICKS(200));
+    mipi_lcd_backlight_on();
+
+    wifi_mgr_register_connected_cb(on_wifi_connected);
+    wifi_mgr_register_disconnected_cb(on_wifi_disconnected);
+    wifi_mgr_init();
+
+    load_device_config();
+
+    ESP_LOGI(TAG, "WiFi SSID: %s", s_device_config.wifi_ssid);
+
+    esp_err_t wifi_result = wifi_mgr_connect(s_device_config.wifi_ssid, s_device_config.wifi_pass);
+
+    if (wifi_result == ESP_OK) {
+        xTaskCreatePinnedToCore(status_task, "status", 4096, NULL, 2, NULL, 0);
+    } else {
+        ESP_LOGW(TAG, "WiFi connection failed, starting AP config portal...");
+        esp_err_t ap_result = web_config_start_ap();
+        if (ap_result == ESP_OK) {
+            update_ui_ap_mode();
+        } else {
+            update_ui_offline();
+            if (s_hint_label) {
+                lvgl_port_lock(5000);
+                lv_label_set_text(s_hint_label, "WiFi unavailable, running offline");
+                lvgl_port_unlock();
+            }
+        }
+    }
+
+    ESP_LOGI(TAG, "LuomiNest P4 ready! Free heap: %u, Free PSRAM: %u",
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+}

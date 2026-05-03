@@ -1,0 +1,4 @@
+dependencies:
+  lvgl/lvgl: "~9.2"
+  espressif/mdns: "^1.8"
+  espressif/esp_jpeg: "^1.0"

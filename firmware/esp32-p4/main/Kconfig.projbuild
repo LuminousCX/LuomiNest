@@ -1,0 +1,52 @@
+menu "LuomiNest Configuration"
+
+    config LN_WIFI_SSID
+        string "WiFi SSID"
+        default "Xiaomi_65DF"
+        help
+            Default WiFi network name (used when no NVS config saved).
+
+    config LN_WIFI_PASSWORD
+        string "WiFi Password"
+        default "18033810300xyr"
+        help
+            Default WiFi network password (used when no NVS config saved).
+
+    config LN_AP_PASSWORD
+        string "AP mode password"
+        default "18033810300xyr"
+        help
+            Password for the configuration AP hotspot.
+
+    config LN_WIFI_RECONNECT_MAX_MS
+        int "WiFi max reconnect backoff (ms)"
+        default 30000
+        range 5000 300000
+
+    config LN_MQTT_BROKER
+        string "MQTT Broker URI"
+        default "mqtt://192.168.1.222:1883"
+        help
+            Default MQTT broker address (used when no NVS config saved).
+
+    config LN_MQTT_CLIENT_ID
+        string "MQTT Client ID"
+        default "luominest_p4_01"
+        help
+            Default MQTT client identifier.
+
+    config LN_MQTT_RECONNECT_MAX_MS
+        int "MQTT max reconnect backoff (ms)"
+        default 60000
+        range 5000 300000
+
+    config LN_FRAME_DEDUP
+        bool "Enable frame deduplication"
+        default y
+
+    config LN_STATUS_INTERVAL_SEC
+        int "Status report interval (seconds)"
+        default 10
+        range 5 120
+
+endmenu
