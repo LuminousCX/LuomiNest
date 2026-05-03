@@ -3,6 +3,7 @@ dependencies:
   espressif/esp_lcd_jd9165: "^1"
   espressif/esp_jpeg: "^1.0"
   espressif/esp_lvgl_port: "^2"
+  espressif/esp_lcd_touch_gt911: "^1"
   espressif/esp_wifi_remote:
     version: "*"
     rules:

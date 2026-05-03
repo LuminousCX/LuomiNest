@@ -27,4 +27,9 @@
 #define ETH_MDIO_PIN        GPIO_NUM_52
 #define ETH_PHY_RST_PIN     GPIO_NUM_51
 
+#define TOUCH_SDA_PIN       GPIO_NUM_7
+#define TOUCH_SCL_PIN       GPIO_NUM_8
+#define TOUCH_RST_PIN       GPIO_NUM_NC
+#define TOUCH_INT_PIN       GPIO_NUM_NC
+
 #endif

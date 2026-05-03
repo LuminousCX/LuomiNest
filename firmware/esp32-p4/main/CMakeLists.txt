@@ -7,6 +7,8 @@ idf_component_register(
         "eth_mgr.c"
         "app_mqtt.c"
         "web_config.c"
+        "touch_driver.c"
+        "chat_ui.c"
     INCLUDE_DIRS
         "."
     REQUIRES

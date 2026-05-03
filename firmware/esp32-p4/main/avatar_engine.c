@@ -26,8 +26,8 @@ static uint32_t s_jpeg_out_buf_size = 0;
 #define AVATAR_ALIGNED_ROW_BYTES (AVATAR_WIDTH * 2)
 
 #define AVATAR_POS_ALIGN   LV_ALIGN_BOTTOM_RIGHT
-#define AVATAR_POS_X_OFF   -80
-#define AVATAR_POS_Y_OFF   -30
+#define AVATAR_POS_X_OFF   -30
+#define AVATAR_POS_Y_OFF   -20
 
 #define STATS_LOG_INTERVAL 100
 

@@ -17,6 +17,266 @@ Live2D 桌面伴侣固件，支持 **ESP32-S3** 和 **ESP32-P4** 两款开发板
 
 ---
 
+## 推流传输原理
+
+### 四种方案对比
+
+在设计之初，我们考虑了四种将 Live2D 动画呈现到 ESP32 屏幕上的方案：
+
+| 方案 | 原理 | 带宽需求 | 可行性 | 当前状态 |
+|------|------|---------|--------|---------|
+| **① 逐帧图片流** | PC 渲染 → JPEG 编码 → MQTT 传输 → ESP32 解码显示 | 中 (~75-337 KB/s) | ✅ 完全可行 | **已实现** |
+| ② 小型视频流 | PC 渲染 → H.264/MJPEG 编码 → 传输 → ESP32 解码播放 | 低 (~10-30 KB/s) | ❌ ESP32 无 H.264 硬解 | 未实现 |
+| ③ ESP32 本地 Live2D | PC 发指令 → ESP32 运行 Live2D 渲染器 | 极低 (~100 B/s) | ❌ 无 GPU/OpenGL | 不可行 |
+| ④ 预渲染帧集 | PC 预渲染 → 启动时一次性传输 → ESP32 本地播放 | 启动时高，运行时零 | 🟡 部分可行 | 未实现 |
+
+**方案① 被选为当前方案**，原因：
+- ESP32-S3/P4 均有 JPEG 解码能力（S3 软解，P4 硬解）
+- 每帧独立，丢帧不影响后续帧，容错性好
+- 实现简单，延迟可控（50-100ms）
+- 帧去重机制可大幅降低静态场景带宽
+
+**方案② 不可行的原因**：
+- ESP32-S3/P4 **没有 H.264 硬件解码器**，CPU 无法软解
+- MJPEG 本质仍是逐帧 JPEG，无带宽优势
+- 视频流有 I帧/P帧 依赖，丢帧会导致花屏
+- 延迟更高（需等完整片段才能播放）
+
+**方案③ 不可行的原因**：
+- Live2D Cubism SDK 需要 **OpenGL ES 2.0+** 或 DirectX 11
+- ESP32 **没有 GPU**，不支持任何 OpenGL 变体
+- Live2D 运行时需要 50-200 MB 内存，ESP32 最多 32MB PSRAM
+- Live2D 模型文件（.moc3 + 纹理）通常 5-25 MB
+
+**方案④ 可探索的方向**：
+- 启动时将所有表情的帧序列预渲染并传输到 PSRAM/SD 卡
+- 运行时 PC 只发指令（如 `happy`），ESP32 从本地存储播放
+- 优点：运行时零带宽；缺点：表情种类有限，无法动态变化
+
+### 当前方案详解：逐帧 JPEG 图片流
+
+#### 完整数据流路径
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          PC 端 (server)                                 │
+│                                                                         │
+│  Live2D 渲染器 (live2d/)              简笔画渲染器 (pillow/)            │
+│  ┌────────────────────────┐          ┌────────────────────────┐        │
+│  │ PyQt5 + QOpenGLWidget  │          │ Pillow ImageDraw       │        │
+│  │ live2d-py 渲染模型      │          │ 简笔画头像             │        │
+│  │ 眨眼/呼吸/眼球/身体晃动 │          │ 基础表情切换           │        │
+│  └──────────┬─────────────┘          └──────────┬─────────────┘        │
+│             │ render()                          │ render()             │
+│             ▼                                   ▼                      │
+│     PIL Image (512×1024)               PIL Image (128×160)             │
+│             │                                                         │
+│             │ 裁剪 + 缩放 + 饱和度增强                                 │
+│             ▼                                                         │
+│     PIL Image (128×160 或 400×540)                                    │
+│             │                                                         │
+│             ├─→ img_to_jpeg() ──→ JPEG bytes                          │
+│             │      S3: ~3-8 KB/帧   P4: ~15-30 KB/帧                 │
+│             │                                                         │
+│             └─→ rgb888_to_rgb565_le() ──→ RGB565 raw bytes            │
+│                    S3: 40 KB/帧       P4: 432 KB/帧                   │
+│                         │                                              │
+│     ┌───────────────────┘                                              │
+│     ▼                                                                  │
+│  MQTT publish (QoS=0, fire-and-forget)                                │
+│  Topic: luominest/s3/stream 或 luominest/p4/stream                    │
+│  帧去重: MD5 采样哈希比较，相同帧不重复发送                             │
+└─────────────────────────────────────────────────────────────────────────┘
+                            │
+                            │ 局域网 MQTT (TCP 1883)
+                            │ 纯内网通信，不经外网
+                            ▼
+                ┌───────────────────────┐
+                │   MQTT Broker         │
+                │   Mosquitto           │
+                │   运行在局域网内       │
+                │   (可以是 PC 本机)     │
+                └───────────┬───────────┘
+                            │
+              ┌─────────────┴─────────────┐
+              ▼                           ▼
+┌───────────────────────────┐   ┌───────────────────────────┐
+│      ESP32-S3             │   │      ESP32-P4             │
+│                           │   │                           │
+│  WiFi 连接路由器           │   │  以太网(优先) / WiFi(备用) │
+│       │                   │   │       │                   │
+│  MQTT subscribe           │   │  MQTT subscribe           │
+│  luominest/s3/stream      │   │  luominest/p4/stream      │
+│  luominest/s3/cmd         │   │  luominest/p4/cmd         │
+│       │                   │   │  luominest/p4/chat        │
+│  ┌─────▼──────┐           │   │       │                   │
+│  │ 帧队列      │           │   │  ┌─────▼──────┐           │
+│  │ (2 slots)  │           │   │  │ 帧缓冲拼接  │           │
+│  └─────┬──────┘           │   │  │ (MQTT 分片  │           │
+│        │                  │   │  │  自动重组)   │           │
+│  ┌─────▼──────────┐       │   │  └─────┬──────┘           │
+│  │ 软件 JPEG 解码  │       │   │        │                  │
+│  │ esp_jpeg_decode │       │   │  ┌─────▼──────────┐       │
+│  │ ~20-60ms/帧     │       │   │  │ 硬件 JPEG 解码  │       │
+│  └─────┬──────────┘       │   │  │ jpeg_decoder_   │       │
+│        │                  │   │  │ process          │       │
+│  ┌─────▼──────────┐       │   │  │ ~2-15ms/帧       │       │
+│  │ LVGL frame_buf │       │   │  └─────┬──────────┘       │
+│  │ (RGB565, 40KB) │       │   │        │                  │
+│  └─────┬──────────┘       │   │  ┌─────▼──────────┐       │
+│        │                  │   │  │ LVGL frame_buf │       │
+│  ┌─────▼──────────┐       │   │  │ (RGB565,432KB) │       │
+│  │ ST7735S SPI LCD│       │   │  └─────┬──────────┘       │
+│  │ 128×160        │       │   │        │                  │
+│  │ 15MHz SPI      │       │   │  ┌─────▼──────────┐       │
+│  └────────────────┘       │   │  │ MIPI DSI LCD   │       │
+│                           │   │  │ 1024×600 IPS   │       │
+│  free(frame_data) ←──────│   │  │ 双缓冲+VSync   │       │
+│  帧数据立即释放            │   │  └────────────────┘       │
+│                           │   │                           │
+│                           │   │  free(frame_data) ←──────│
+│                           │   │  帧数据立即释放            │
+└───────────────────────────┘   └───────────────────────────┘
+```
+
+#### 帧数据生命周期：播放后即丢弃
+
+每一帧数据在显示完成后**立即释放**，不缓存、不累积、不泄漏：
+
+```
+  MQTT 收到帧
+       │
+       ▼
+  heap_caps_malloc(PSRAM)     ← 1. 在 PSRAM 中分配内存
+       │
+       ▼
+  memcpy 到队列消息            ← 2. 拷贝数据（原始 MQTT 缓冲区可被覆盖）
+       │
+       ▼
+  xQueueSend(frame_queue)     ← 3. 放入帧队列（队列满则丢弃最旧帧）
+       │
+       ▼
+  xQueueReceive               ← 4. frame_decode_task 取出消息
+       │
+       ▼
+  avatar_engine_show_frame()  ← 5. JPEG 解码 → 写入 LVGL frame_buf
+       │
+       ▼
+  free(msg.data)              ← 6. ★ 立即释放原始帧数据 ★
+       │
+       ▼
+  LVGL frame_buf 中的像素     ← 7. 在下一帧到来时被覆盖（循环复用）
+```
+
+**关键代码**（ESP32-S3 [main.c](esp32-s3/main/main.c)，ESP32-P4 [main.c](esp32-p4/main/main.c)）：
+
+```c
+static void frame_decode_task(void *pvParameter) {
+    frame_msg_t msg = {0};
+    while (1) {
+        if (xQueueReceive(s_frame_queue, &msg, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            avatar_engine_show_frame(msg.data, msg.len);  // 解码 + 显示
+            free(msg.data);   // ← 立即释放！不缓存
+            msg.data = NULL;
+        }
+    }
+}
+```
+
+**唯一常驻内存**：LVGL 的 frame_buf（S3: 40KB，P4: 432KB），在每帧解码时被覆盖复用。
+
+#### 帧去重机制
+
+两端均实现帧去重，静态 idle 场景可节省 ~94% 带宽：
+
+- **PC 端**（[pillow/stream_server.py](server/pillow/stream_server.py)）：MD5 采样哈希，相同帧不发送
+- **ESP32 端**（[avatar_engine.c](esp32-s3/main/avatar_engine.c)）：FNV-1a 尾部采样哈希，相同帧跳过解码
+
+```
+PC 端去重:
+  渲染帧 → 采样 MD5 → 与上一帧比较 → 相同则跳过 publish
+
+ESP32 端去重:
+  收到帧 → FNV-1a 哈希尾部 128 字节 → 与上一帧比较 → 相同则跳过解码
+```
+
+#### MQTT 分片重组（P4 专属）
+
+P4 的 JPEG 帧较大（15-30KB），可能超过单个 MQTT 数据事件的大小。P4 的 `app_mqtt.c` 实现了自动分片重组：
+
+```c
+// P4: MQTT 分片自动重组
+if (event->current_data_offset == 0) {
+    stream_buf_reset();                    // 新帧开始
+}
+stream_buf_ensure(event->total_data_len);  // 确保 PSRAM 缓冲够大
+memcpy(s_stream_buf + s_stream_buf_len, event->data, event->data_len);
+s_stream_buf_len += event->data_len;
+
+if (s_stream_buf_len >= event->total_data_len) {
+    s_stream_cb(s_stream_topic, s_stream_buf, s_stream_buf_len);  // 完整帧回调
+}
+```
+
+S3 的帧较小（3-8KB），通常在单个 MQTT 事件中完整到达，无需重组。
+
+### 网络流量分析
+
+#### 纯局域网，零外网流量
+
+所有通信都在局域网内完成：
+
+```
+PC (192.168.1.x) ←→ 路由器 (192.168.1.1) ←→ ESP32 (192.168.1.y)
+         │                                           │
+         └──── MQTT Broker (192.168.1.222) ──────────┘
+                    完全在局域网内
+```
+
+- MQTT Broker 默认地址 `192.168.1.222` 是**私有 IP**
+- Broker 可以运行在 PC 本机（`localhost`）或局域网内任何设备
+- 所有数据包不经过 WAN 口，**零外网流量，零流量费用**
+- 即使断开外网，只要路由器通电，系统正常工作
+
+#### 带宽估算
+
+| 场景 | 编码 | 每帧大小 | 每秒流量 (15fps) | 每分钟 | 每小时 |
+|------|------|---------|-----------------|--------|--------|
+| S3 | JPEG Q=60 | ~3-8 KB | ~45-120 KB/s | ~2.7-7.2 MB | ~162-432 MB |
+| S3 | RGB565 | 40 KB | ~600 KB/s | ~36 MB | ~2.1 GB |
+| P4 | JPEG Q=70 | ~15-30 KB | ~225-450 KB/s | ~13.5-27 MB | ~810 MB-1.6 GB |
+| P4 | RGB565 | 432 KB | ~6.5 MB/s | ~390 MB | ~23 GB |
+
+**推荐**：JPEG 模式（当前默认）。S3 约 75KB/s，P4 约 337KB/s，普通家用路由器完全够用。
+
+#### QoS 策略
+
+| Topic | QoS | 原因 |
+|-------|-----|------|
+| `*/stream` | 0 | 丢帧可接受，下一帧马上到，低延迟优先 |
+| `*/cmd` | 1 | 指令不能丢，必须送达 |
+| `*/status` | 1 | 设备状态需可靠传输 |
+| `*/mode` | 1 | 模式切换需可靠传输 |
+
+### 端到端延迟分析
+
+```
+PC 渲染一帧 (~5ms)
+    → JPEG 编码 (~2ms)
+    → MQTT publish (QoS=0, <1ms)
+    → 网络传输 (局域网 <1ms)
+    → MQTT broker 转发 (<1ms)
+    → ESP32 MQTT 接收 (<1ms)
+    → 帧队列等待 (0-66ms, 取决于队列深度)
+    → JPEG 解码 (S3: ~40ms / P4: ~5ms)
+    → LVGL 刷新 (下次 vsync)
+    → LCD 显示
+```
+
+**总延迟**：S3 约 50-120ms，P4 约 10-80ms（主要取决于帧队列等待和 vsync 时机）
+
+---
+
 ## 两个开发板对比
 
 | 特性 | ESP32-S3 N16R8 | ESP32-P4 |

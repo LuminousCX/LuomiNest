@@ -17,6 +17,8 @@
 #include "app_mqtt.h"
 #include "avatar_engine.h"
 #include "web_config.h"
+#include "touch_driver.h"
+#include "chat_ui.h"
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 
@@ -30,14 +32,25 @@ static const char *TAG = "main";
 #define TOPIC_CMD      "luominest/p4/cmd"
 #define TOPIC_STATUS   "luominest/p4/status"
 #define TOPIC_STREAM   "luominest/p4/stream"
+#define TOPIC_CHAT     "luominest/p4/chat"
 
 #define STATUS_INTERVAL_MS (CONFIG_LN_STATUS_INTERVAL_SEC * 1000)
 
+#define SCREEN_W       1024
+#define SCREEN_H       600
+#define STATUS_BAR_H   24
+#define CONTENT_H      (SCREEN_H - STATUS_BAR_H)
+#define LEFT_PANEL_W   560
+#define RIGHT_PANEL_W  (SCREEN_W - LEFT_PANEL_W)
+
 static lv_display_t *s_disp = NULL;
+static lv_indev_t *s_touch_indev = NULL;
 static ln_config_t s_device_config = {0};
 static lv_obj_t *s_status_label = NULL;
 static lv_obj_t *s_net_label = NULL;
-static lv_obj_t *s_hint_label = NULL;
+static lv_obj_t *s_speed_label = NULL;
+static lv_obj_t *s_right_panel = NULL;
+static chat_ui_t s_chat = {0};
 
 typedef struct {
     uint8_t *data;
@@ -47,42 +60,104 @@ typedef struct {
 #define FRAME_QUEUE_LEN 2
 static QueueHandle_t s_frame_queue = NULL;
 
+static volatile uint32_t s_stream_bytes = 0;
+static uint32_t s_last_stream_bytes = 0;
+static float s_current_speed_kbps = 0;
+
+#define COLOR_BG          lv_color_hex(0x0F0F1A)
+#define COLOR_STATUS_BG   lv_color_hex(0x161628)
+#define COLOR_STATUS_TEXT lv_color_hex(0x7878A0)
+#define COLOR_ONLINE      lv_color_hex(0x4ECDC4)
+#define COLOR_OFFLINE     lv_color_hex(0xFF6B6B)
+#define COLOR_CONNECTING  lv_color_hex(0xFFD93D)
+
 static void create_ui(void)
 {
     lv_obj_t *scr = lv_screen_active();
+    lv_obj_set_style_bg_color(scr, COLOR_BG, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x1A1A2E), LV_PART_MAIN);
+    lv_obj_t *status_bar = lv_obj_create(scr);
+    lv_obj_remove_style_all(status_bar);
+    lv_obj_set_size(status_bar, SCREEN_W, STATUS_BAR_H);
+    lv_obj_set_pos(status_bar, 0, 0);
+    lv_obj_set_style_bg_color(status_bar, COLOR_STATUS_BG, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(status_bar, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(status_bar, 12, 0);
+    lv_obj_set_style_pad_right(status_bar, 12, 0);
+    lv_obj_set_flex_flow(status_bar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(status_bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(status_bar, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "LuomiNest P4");
-    lv_obj_set_style_text_color(title, lv_color_hex(0xE0E0FF), LV_PART_MAIN);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 10, 10);
+    lv_obj_t *title = lv_label_create(status_bar);
+    lv_label_set_text(title, "LuomiNest");
+    lv_obj_set_style_text_color(title, lv_color_hex(0xA0A0D0), 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
 
-    s_status_label = lv_label_create(scr);
-    lv_label_set_text(s_status_label, "Connecting...");
-    lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xFFD93D), LV_PART_MAIN);
-    lv_obj_set_style_text_font(s_status_label, &lv_font_montserrat_14, LV_PART_MAIN);
-    lv_obj_align(s_status_label, LV_ALIGN_TOP_RIGHT, -10, 10);
+    lv_obj_t *sep1 = lv_label_create(status_bar);
+    lv_label_set_text(sep1, "  ");
+    lv_obj_set_style_text_font(sep1, &lv_font_montserrat_14, 0);
 
-    s_net_label = lv_label_create(scr);
+    s_status_label = lv_label_create(status_bar);
+    lv_label_set_text(s_status_label, LV_SYMBOL_WARNING " Connecting");
+    lv_obj_set_style_text_color(s_status_label, COLOR_CONNECTING, 0);
+    lv_obj_set_style_text_font(s_status_label, &lv_font_montserrat_14, 0);
+
+    lv_obj_t *sep2 = lv_label_create(status_bar);
+    lv_label_set_text(sep2, "  ");
+    lv_obj_set_style_text_font(sep2, &lv_font_montserrat_14, 0);
+
+    s_net_label = lv_label_create(status_bar);
     lv_label_set_text(s_net_label, "");
-    lv_obj_set_style_text_color(s_net_label, lv_color_hex(0x8899BB), LV_PART_MAIN);
-    lv_obj_set_style_text_font(s_net_label, &lv_font_montserrat_14, LV_PART_MAIN);
-    lv_obj_align(s_net_label, LV_ALIGN_TOP_RIGHT, -10, 30);
+    lv_obj_set_style_text_color(s_net_label, COLOR_STATUS_TEXT, 0);
+    lv_obj_set_style_text_font(s_net_label, &lv_font_montserrat_14, 0);
 
-    s_hint_label = lv_label_create(scr);
-    lv_label_set_text(s_hint_label, "");
-    lv_obj_set_style_text_color(s_hint_label, lv_color_hex(0x8888AA), LV_PART_MAIN);
-    lv_obj_set_style_text_font(s_hint_label, &lv_font_montserrat_14, LV_PART_MAIN);
-    lv_obj_align(s_hint_label, LV_ALIGN_BOTTOM_LEFT, 10, -10);
+    lv_obj_t *spacer = lv_obj_create(status_bar);
+    lv_obj_remove_style_all(spacer);
+    lv_obj_set_flex_grow(spacer, 1);
+    lv_obj_set_size(spacer, 0, 0);
+
+    s_speed_label = lv_label_create(status_bar);
+    lv_label_set_text(s_speed_label, "");
+    lv_obj_set_style_text_color(s_speed_label, lv_color_hex(0x6688AA), 0);
+    lv_obj_set_style_text_font(s_speed_label, &lv_font_montserrat_14, 0);
+
+    lv_obj_t *left_panel = lv_obj_create(scr);
+    lv_obj_remove_style_all(left_panel);
+    lv_obj_set_size(left_panel, LEFT_PANEL_W, CONTENT_H);
+    lv_obj_set_pos(left_panel, 0, STATUS_BAR_H);
+    lv_obj_set_style_bg_opa(left_panel, LV_OPA_TRANSP, 0);
+    lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_SCROLLABLE);
+
+    chat_ui_init(&s_chat, left_panel, LEFT_PANEL_W, CONTENT_H);
+
+    s_right_panel = lv_obj_create(scr);
+    lv_obj_remove_style_all(s_right_panel);
+    lv_obj_set_size(s_right_panel, RIGHT_PANEL_W, CONTENT_H);
+    lv_obj_set_pos(s_right_panel, LEFT_PANEL_W, STATUS_BAR_H);
+    lv_obj_set_style_bg_color(s_right_panel, COLOR_BG, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(s_right_panel, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_clear_flag(s_right_panel, LV_OBJ_FLAG_SCROLLABLE);
+}
+
+static void touch_init_task(void *pvParameter)
+{
+    ESP_LOGI(TAG, "Touch init task started");
+    esp_err_t ret = touch_driver_init(s_disp, &s_touch_indev);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Touch driver initialized successfully");
+    } else {
+        ESP_LOGW(TAG, "Touch driver init failed (0x%x)", ret);
+    }
+    vTaskDelete(NULL);
 }
 
 static void update_net_info(void)
 {
     if (!s_net_label) return;
 
-    char buf[64] = {0};
+    char buf[80] = {0};
     bool eth_up = eth_mgr_is_connected();
     bool wifi_up = wifi_mgr_is_connected();
 
@@ -94,7 +169,7 @@ static void update_net_info(void)
         char ip[16] = {0};
         wifi_mgr_get_ip_str(ip, sizeof(ip));
         int8_t rssi = wifi_mgr_get_rssi();
-        snprintf(buf, sizeof(buf), LV_SYMBOL_WIFI " WiFi %s  %ddBm", ip, rssi);
+        snprintf(buf, sizeof(buf), LV_SYMBOL_WIFI " %s %ddBm", ip, rssi);
     } else {
         snprintf(buf, sizeof(buf), LV_SYMBOL_WARNING " No network");
     }
@@ -102,10 +177,33 @@ static void update_net_info(void)
     lvgl_port_lock(5000);
     lv_label_set_text(s_net_label, buf);
     if (eth_up || wifi_up) {
-        lv_obj_set_style_text_color(s_net_label, lv_color_hex(0x88CCAA), LV_PART_MAIN);
+        lv_obj_set_style_text_color(s_net_label, lv_color_hex(0x88CCAA), 0);
     } else {
-        lv_obj_set_style_text_color(s_net_label, lv_color_hex(0xFF6B6B), LV_PART_MAIN);
+        lv_obj_set_style_text_color(s_net_label, COLOR_OFFLINE, 0);
     }
+    lvgl_port_unlock();
+}
+
+static void update_speed_display(void)
+{
+    if (!s_speed_label) return;
+
+    uint32_t current = s_stream_bytes;
+    uint32_t delta = current - s_last_stream_bytes;
+    s_last_stream_bytes = current;
+    s_current_speed_kbps = (float)(delta) / 1024.0f;
+
+    char buf[32] = {0};
+    if (s_current_speed_kbps > 1024.0f) {
+        snprintf(buf, sizeof(buf), "%.1f MB/s", s_current_speed_kbps / 1024.0f);
+    } else if (s_current_speed_kbps > 0.1f) {
+        snprintf(buf, sizeof(buf), "%.0f KB/s", s_current_speed_kbps);
+    } else {
+        buf[0] = '\0';
+    }
+
+    lvgl_port_lock(5000);
+    lv_label_set_text(s_speed_label, buf);
     lvgl_port_unlock();
 }
 
@@ -114,12 +212,7 @@ static void update_ui_online(void)
     if (s_status_label) {
         lvgl_port_lock(5000);
         lv_label_set_text(s_status_label, LV_SYMBOL_WIFI " Online");
-        lv_obj_set_style_text_color(s_status_label, lv_color_hex(0x4ECDC4), LV_PART_MAIN);
-        lvgl_port_unlock();
-    }
-    if (s_hint_label) {
-        lvgl_port_lock(5000);
-        lv_label_set_text(s_hint_label, "");
+        lv_obj_set_style_text_color(s_status_label, COLOR_ONLINE, 0);
         lvgl_port_unlock();
     }
     update_net_info();
@@ -130,7 +223,7 @@ static void update_ui_offline(void)
     if (s_status_label) {
         lvgl_port_lock(5000);
         lv_label_set_text(s_status_label, LV_SYMBOL_WARNING " Offline");
-        lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xFF6B6B), LV_PART_MAIN);
+        lv_obj_set_style_text_color(s_status_label, COLOR_OFFLINE, 0);
         lvgl_port_unlock();
     }
     update_net_info();
@@ -141,12 +234,7 @@ static void update_ui_ap_mode(void)
     if (s_status_label) {
         lvgl_port_lock(5000);
         lv_label_set_text(s_status_label, LV_SYMBOL_WIFI " AP Mode");
-        lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xFFD93D), LV_PART_MAIN);
-        lvgl_port_unlock();
-    }
-    if (s_hint_label) {
-        lvgl_port_lock(5000);
-        lv_label_set_text(s_hint_label, "Connect to LuomiNest-P4-* WiFi to configure");
+        lv_obj_set_style_text_color(s_status_label, COLOR_CONNECTING, 0);
         lvgl_port_unlock();
     }
     update_net_info();
@@ -176,6 +264,31 @@ static void on_mqtt_command(const char *topic, const char *data, int data_len)
         } else if (strstr(data, "stop")) {
             avatar_engine_stop();
         }
+    } else if (strcmp(topic, TOPIC_CHAT) == 0) {
+        if (!data || data_len <= 0) return;
+
+        chat_msg_role_t role = CHAT_MSG_ASSISTANT;
+        const char *text = data;
+        int text_len = data_len;
+
+        if (data_len > 2 && data[0] == 'U' && data[1] == ':') {
+            role = CHAT_MSG_USER;
+            text = data + 2;
+            text_len = data_len - 2;
+        } else if (data_len > 2 && data[0] == 'A' && data[1] == ':') {
+            role = CHAT_MSG_ASSISTANT;
+            text = data + 2;
+            text_len = data_len - 2;
+        }
+
+        char buf[CHAT_MSG_MAX_LEN];
+        int copy_len = text_len < (CHAT_MSG_MAX_LEN - 1) ? text_len : (CHAT_MSG_MAX_LEN - 1);
+        memcpy(buf, text, copy_len);
+        buf[copy_len] = '\0';
+
+        lvgl_port_lock(5000);
+        chat_ui_add_message(&s_chat, role, buf);
+        lvgl_port_unlock();
     }
 }
 
@@ -183,6 +296,8 @@ static void on_mqtt_stream(const char *topic, const uint8_t *data, int data_len)
 {
     if (strcmp(topic, TOPIC_STREAM) != 0) return;
     if (!s_frame_queue) return;
+
+    s_stream_bytes += data_len;
 
     frame_msg_t msg = {0};
     msg.len = data_len;
@@ -220,6 +335,7 @@ static void on_mqtt_connected(void)
     ESP_LOGI(TAG, "MQTT connected, subscribing...");
     app_mqtt_subscribe(TOPIC_CMD, 1);
     app_mqtt_subscribe(TOPIC_STREAM, 0);
+    app_mqtt_subscribe(TOPIC_CHAT, 1);
     update_ui_online();
 }
 
@@ -298,6 +414,7 @@ static void status_task(void *pvParameter)
             app_mqtt_publish(TOPIC_STATUS, status_buf, strlen(status_buf), 1);
         }
         update_net_info();
+        update_speed_display();
         vTaskDelay(pdMS_TO_TICKS(STATUS_INTERVAL_MS));
     }
 }
@@ -430,21 +547,27 @@ void app_main(void)
     }
 
     lvgl_port_lock(5000);
-    ESP_ERROR_CHECK(avatar_engine_init(lv_screen_active()));
+    create_ui();
     lvgl_port_unlock();
 
     lvgl_port_lock(5000);
-    create_ui();
+    ESP_ERROR_CHECK(avatar_engine_init(s_right_panel));
     lvgl_port_unlock();
+
+    lvgl_port_lock(5000);
+    chat_ui_add_demo_messages(&s_chat);
+    lvgl_port_unlock();
+
+    vTaskDelay(pdMS_TO_TICKS(100));
+    mipi_lcd_backlight_on();
+    ESP_LOGI(TAG, "Backlight on, UI visible");
+
+    xTaskCreatePinnedToCore(touch_init_task, "touch_init", 8192, NULL, 5, NULL, 0);
 
     init_sdcard();
 
     s_frame_queue = xQueueCreate(FRAME_QUEUE_LEN, sizeof(frame_msg_t));
-
     xTaskCreatePinnedToCore(frame_decode_task, "frame_dec", 8192, NULL, 4, NULL, 1);
-
-    vTaskDelay(pdMS_TO_TICKS(200));
-    mipi_lcd_backlight_on();
 
     wifi_mgr_register_connected_cb(on_wifi_connected);
     wifi_mgr_register_disconnected_cb(on_wifi_disconnected);
@@ -493,11 +616,6 @@ void app_main(void)
                 update_ui_ap_mode();
             } else {
                 update_ui_offline();
-                if (s_hint_label) {
-                    lvgl_port_lock(5000);
-                    lv_label_set_text(s_hint_label, "No network, running offline");
-                    lvgl_port_unlock();
-                }
             }
         }
     }
