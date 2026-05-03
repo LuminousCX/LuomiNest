@@ -13,6 +13,7 @@
 #include "pin_config.h"
 #include "mipi_lcd.h"
 #include "wifi_mgr.h"
+#include "eth_mgr.h"
 #include "app_mqtt.h"
 #include "avatar_engine.h"
 #include "web_config.h"
@@ -35,6 +36,7 @@ static const char *TAG = "main";
 static lv_display_t *s_disp = NULL;
 static ln_config_t s_device_config = {0};
 static lv_obj_t *s_status_label = NULL;
+static lv_obj_t *s_net_label = NULL;
 static lv_obj_t *s_hint_label = NULL;
 
 typedef struct {
@@ -55,13 +57,19 @@ static void create_ui(void)
     lv_label_set_text(title, "LuomiNest P4");
     lv_obj_set_style_text_color(title, lv_color_hex(0xE0E0FF), LV_PART_MAIN);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 10, 10);
 
     s_status_label = lv_label_create(scr);
     lv_label_set_text(s_status_label, "Connecting...");
     lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xFFD93D), LV_PART_MAIN);
     lv_obj_set_style_text_font(s_status_label, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_obj_align(s_status_label, LV_ALIGN_TOP_RIGHT, -10, 10);
+
+    s_net_label = lv_label_create(scr);
+    lv_label_set_text(s_net_label, "");
+    lv_obj_set_style_text_color(s_net_label, lv_color_hex(0x8899BB), LV_PART_MAIN);
+    lv_obj_set_style_text_font(s_net_label, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_align(s_net_label, LV_ALIGN_TOP_RIGHT, -10, 30);
 
     s_hint_label = lv_label_create(scr);
     lv_label_set_text(s_hint_label, "");
@@ -70,11 +78,42 @@ static void create_ui(void)
     lv_obj_align(s_hint_label, LV_ALIGN_BOTTOM_LEFT, 10, -10);
 }
 
+static void update_net_info(void)
+{
+    if (!s_net_label) return;
+
+    char buf[64] = {0};
+    bool eth_up = eth_mgr_is_connected();
+    bool wifi_up = wifi_mgr_is_connected();
+
+    if (eth_up) {
+        char ip[16] = {0};
+        eth_mgr_get_ip_str(ip, sizeof(ip));
+        snprintf(buf, sizeof(buf), LV_SYMBOL_DRIVE " ETH %s", ip);
+    } else if (wifi_up) {
+        char ip[16] = {0};
+        wifi_mgr_get_ip_str(ip, sizeof(ip));
+        int8_t rssi = wifi_mgr_get_rssi();
+        snprintf(buf, sizeof(buf), LV_SYMBOL_WIFI " WiFi %s  %ddBm", ip, rssi);
+    } else {
+        snprintf(buf, sizeof(buf), LV_SYMBOL_WARNING " No network");
+    }
+
+    lvgl_port_lock(5000);
+    lv_label_set_text(s_net_label, buf);
+    if (eth_up || wifi_up) {
+        lv_obj_set_style_text_color(s_net_label, lv_color_hex(0x88CCAA), LV_PART_MAIN);
+    } else {
+        lv_obj_set_style_text_color(s_net_label, lv_color_hex(0xFF6B6B), LV_PART_MAIN);
+    }
+    lvgl_port_unlock();
+}
+
 static void update_ui_online(void)
 {
     if (s_status_label) {
         lvgl_port_lock(5000);
-        lv_label_set_text(s_status_label, "Online");
+        lv_label_set_text(s_status_label, LV_SYMBOL_WIFI " Online");
         lv_obj_set_style_text_color(s_status_label, lv_color_hex(0x4ECDC4), LV_PART_MAIN);
         lvgl_port_unlock();
     }
@@ -83,23 +122,25 @@ static void update_ui_online(void)
         lv_label_set_text(s_hint_label, "");
         lvgl_port_unlock();
     }
+    update_net_info();
 }
 
 static void update_ui_offline(void)
 {
     if (s_status_label) {
         lvgl_port_lock(5000);
-        lv_label_set_text(s_status_label, "Offline");
+        lv_label_set_text(s_status_label, LV_SYMBOL_WARNING " Offline");
         lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xFF6B6B), LV_PART_MAIN);
         lvgl_port_unlock();
     }
+    update_net_info();
 }
 
 static void update_ui_ap_mode(void)
 {
     if (s_status_label) {
         lvgl_port_lock(5000);
-        lv_label_set_text(s_status_label, "AP Mode");
+        lv_label_set_text(s_status_label, LV_SYMBOL_WIFI " AP Mode");
         lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xFFD93D), LV_PART_MAIN);
         lvgl_port_unlock();
     }
@@ -108,6 +149,7 @@ static void update_ui_ap_mode(void)
         lv_label_set_text(s_hint_label, "Connect to LuomiNest-P4-* WiFi to configure");
         lvgl_port_unlock();
     }
+    update_net_info();
 }
 
 static void on_mqtt_command(const char *topic, const char *data, int data_len)
@@ -187,9 +229,13 @@ static void on_mqtt_disconnected(void)
     update_ui_offline();
 }
 
-static void on_wifi_connected(void)
+static bool s_mqtt_started = false;
+
+static void start_mqtt(void)
 {
-    ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
+    if (s_mqtt_started) return;
+    s_mqtt_started = true;
+
     const char *broker = s_device_config.mqtt_broker[0] ? s_device_config.mqtt_broker : DEFAULT_MQTT_BROKER;
     const char *client = s_device_config.mqtt_client[0] ? s_device_config.mqtt_client : DEFAULT_MQTT_CLIENT_ID;
     app_mqtt_init(broker, client);
@@ -199,10 +245,32 @@ static void on_wifi_connected(void)
     app_mqtt_register_disconnected_cb(on_mqtt_disconnected);
 }
 
+static void on_eth_connected(void)
+{
+    ESP_LOGI(TAG, "Ethernet connected, starting MQTT...");
+    start_mqtt();
+}
+
+static void on_eth_disconnected(void)
+{
+    ESP_LOGW(TAG, "Ethernet disconnected");
+    if (!wifi_mgr_is_connected()) {
+        update_ui_offline();
+    }
+}
+
+static void on_wifi_connected(void)
+{
+    ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
+    start_mqtt();
+}
+
 static void on_wifi_disconnected(void)
 {
-    ESP_LOGW(TAG, "WiFi disconnected, MQTT paused until reconnected");
-    update_ui_offline();
+    ESP_LOGW(TAG, "WiFi disconnected");
+    if (!eth_mgr_is_connected()) {
+        update_ui_offline();
+    }
 }
 
 static void status_task(void *pvParameter)
@@ -212,14 +280,15 @@ static void status_task(void *pvParameter)
         if (app_mqtt_is_connected()) {
             const avatar_stats_t *stats = avatar_engine_get_stats();
             int8_t rssi = wifi_mgr_get_rssi();
+            bool eth_up = eth_mgr_is_connected();
             uint32_t free_heap = esp_get_free_heap_size();
             uint32_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
             snprintf(status_buf, sizeof(status_buf),
-                     "{\"state\":\"online\",\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
+                     "{\"state\":\"online\",\"eth\":%s,\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
                      "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u},"
                      "\"decode_ms\":%u}",
-                     rssi, (unsigned)free_heap, (unsigned)free_psram,
+                     eth_up ? "true" : "false", rssi, (unsigned)free_heap, (unsigned)free_psram,
                      (unsigned)stats->frames_received,
                      (unsigned)stats->frames_displayed,
                      (unsigned)stats->frames_skipped_dedup,
@@ -228,6 +297,7 @@ static void status_task(void *pvParameter)
 
             app_mqtt_publish(TOPIC_STATUS, status_buf, strlen(status_buf), 1);
         }
+        update_net_info();
         vTaskDelay(pdMS_TO_TICKS(STATUS_INTERVAL_MS));
     }
 }
@@ -303,6 +373,10 @@ static void load_device_config(void)
 
 void app_main(void)
 {
+    esp_log_level_set("H_API", ESP_LOG_WARN);
+    esp_log_level_set("H_SDIO_DRV", ESP_LOG_WARN);
+    esp_log_level_set("lcd_panel", ESP_LOG_WARN);
+
     ESP_LOGI(TAG, "=== LuomiNest P4 Firmware ===");
     ESP_LOGI(TAG, "Free heap: %u, Free PSRAM: %u",
              (unsigned)esp_get_free_heap_size(),
@@ -326,8 +400,8 @@ void app_main(void)
         .io_handle = lcd.io,
         .panel_handle = lcd.dpi_panel,
         .control_handle = lcd.control,
-        .buffer_size = MIPI_LCD_WIDTH * 100,
-        .double_buffer = 0,
+        .buffer_size = MIPI_LCD_WIDTH * MIPI_LCD_HEIGHT,
+        .double_buffer = 1,
         .hres = MIPI_LCD_WIDTH,
         .vres = MIPI_LCD_HEIGHT,
         .monochrome = false,
@@ -340,12 +414,13 @@ void app_main(void)
         .flags = {
             .buff_dma = false,
             .buff_spiram = true,
-            .sw_rotate = true,
+            .sw_rotate = false,
+            .full_refresh = true,
         },
     };
     const lvgl_port_display_dsi_cfg_t dpi_cfg = {
         .flags = {
-            .avoid_tearing = false,
+            .avoid_tearing = true,
         },
     };
     s_disp = lvgl_port_add_disp_dsi(&disp_cfg, &dpi_cfg);
@@ -373,29 +448,62 @@ void app_main(void)
 
     wifi_mgr_register_connected_cb(on_wifi_connected);
     wifi_mgr_register_disconnected_cb(on_wifi_disconnected);
-    wifi_mgr_init();
+
+    eth_mgr_register_connected_cb(on_eth_connected);
+    eth_mgr_register_disconnected_cb(on_eth_disconnected);
 
     load_device_config();
 
-    ESP_LOGI(TAG, "WiFi SSID: %s", s_device_config.wifi_ssid);
+    ESP_LOGI(TAG, "Initializing Ethernet (EMAC + RMII)...");
+    esp_err_t eth_init_ret = eth_mgr_init();
+    bool eth_connected = false;
 
-    esp_err_t wifi_result = wifi_mgr_connect(s_device_config.wifi_ssid, s_device_config.wifi_pass);
-
-    if (wifi_result == ESP_OK) {
-        xTaskCreatePinnedToCore(status_task, "status", 4096, NULL, 2, NULL, 0);
-    } else {
-        ESP_LOGW(TAG, "WiFi connection failed, starting AP config portal...");
-        esp_err_t ap_result = web_config_start_ap();
-        if (ap_result == ESP_OK) {
-            update_ui_ap_mode();
-        } else {
-            update_ui_offline();
-            if (s_hint_label) {
-                lvgl_port_lock(5000);
-                lv_label_set_text(s_hint_label, "WiFi unavailable, running offline");
-                lvgl_port_unlock();
+    if (eth_init_ret == ESP_OK) {
+        eth_mgr_start();
+        ESP_LOGI(TAG, "Waiting for Ethernet connection (%dms)...", CONFIG_LN_ETH_CONNECT_TIMEOUT_MS);
+        int waited = 0;
+        while (waited < CONFIG_LN_ETH_CONNECT_TIMEOUT_MS) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+            waited += 500;
+            if (eth_mgr_is_connected()) {
+                eth_connected = true;
+                break;
             }
         }
+        if (eth_connected) {
+            ESP_LOGI(TAG, "Ethernet connected! (waited %dms)", waited);
+        } else {
+            ESP_LOGW(TAG, "Ethernet not connected after %dms, trying WiFi...", waited);
+        }
+    } else {
+        ESP_LOGW(TAG, "Ethernet init failed (0x%x), trying WiFi...", eth_init_ret);
+    }
+
+    if (!eth_connected) {
+        wifi_mgr_init();
+        ESP_LOGI(TAG, "WiFi SSID: %s", s_device_config.wifi_ssid);
+        esp_err_t wifi_result = wifi_mgr_connect(s_device_config.wifi_ssid, s_device_config.wifi_pass);
+
+        if (wifi_result == ESP_OK) {
+            ESP_LOGI(TAG, "WiFi connected");
+        } else {
+            ESP_LOGW(TAG, "WiFi connection failed, starting AP config portal...");
+            esp_err_t ap_result = web_config_start_ap();
+            if (ap_result == ESP_OK) {
+                update_ui_ap_mode();
+            } else {
+                update_ui_offline();
+                if (s_hint_label) {
+                    lvgl_port_lock(5000);
+                    lv_label_set_text(s_hint_label, "No network, running offline");
+                    lvgl_port_unlock();
+                }
+            }
+        }
+    }
+
+    if (s_mqtt_started || eth_connected || wifi_mgr_is_connected()) {
+        xTaskCreatePinnedToCore(status_task, "status", 4096, NULL, 2, NULL, 0);
     }
 
     ESP_LOGI(TAG, "LuomiNest P4 ready! Free heap: %u, Free PSRAM: %u",

@@ -49,4 +49,38 @@ menu "LuomiNest Configuration"
         default 10
         range 5 120
 
+    choice LN_ETH_PHY_TYPE
+        prompt "Ethernet PHY chip"
+        default LN_ETH_PHY_IP101
+        help
+            Select the PHY chip on your board.
+
+    config LN_ETH_PHY_IP101
+        bool "IP101"
+    config LN_ETH_PHY_LAN8720
+        bool "LAN8720/LAN87xx"
+    config LN_ETH_PHY_RTL8201
+        bool "RTL8201"
+    config LN_ETH_PHY_DP83848
+        bool "DP83848"
+    config LN_ETH_PHY_KSZ80XX
+        bool "KSZ80XX"
+    config LN_ETH_PHY_GENERIC
+        bool "Generic IEEE 802.3"
+    endchoice
+
+    config LN_ETH_PHY_ADDR
+        int "PHY address"
+        default 1
+        range 0 31
+        help
+            PHY address on the MDIO bus. Use -1 for auto-detect (not all PHYs support this).
+
+    config LN_ETH_CONNECT_TIMEOUT_MS
+        int "Ethernet connect timeout (ms)"
+        default 8000
+        range 2000 30000
+        help
+            How long to wait for Ethernet to get an IP before falling back to WiFi.
+
 endmenu

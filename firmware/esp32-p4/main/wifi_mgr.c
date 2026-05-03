@@ -29,6 +29,7 @@ static int s_backoff_ms = INITIAL_BACKOFF_MS;
 static bool s_connected = false;
 static bool s_initial_connect_done = false;
 static bool s_initialized = false;
+static char s_ip_str[16] = {0};
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                 int32_t event_id, void *event_data)
@@ -37,6 +38,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_connected = false;
+        s_ip_str[0] = '\0';
         if (s_disconnected_cb) s_disconnected_cb();
 
         wifi_event_sta_disconnected_t *disconn = (wifi_event_sta_disconnected_t *)event_data;
@@ -61,7 +63,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
+        snprintf(s_ip_str, sizeof(s_ip_str), IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "Got IP:%s", s_ip_str);
         s_retry_count = 0;
         s_backoff_ms = INITIAL_BACKOFF_MS;
         s_connected = true;
@@ -78,12 +81,25 @@ esp_err_t wifi_mgr_init(void)
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
-    ESP_ERROR_CHECK(ret);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "NVS init failed: 0x%x", ret);
+        return ret;
+    }
 
     s_wifi_event_group = xEventGroupCreate();
 
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ret = esp_netif_init();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Netif init failed: 0x%x", ret);
+        return ret;
+    }
+
+    ret = esp_event_loop_create_default();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Event loop create failed: 0x%x", ret);
+        return ret;
+    }
+
     esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -168,4 +184,10 @@ esp_err_t wifi_mgr_register_disconnected_cb(wifi_disconnected_cb_t cb)
 bool wifi_mgr_is_connected(void)
 {
     return s_connected;
+}
+
+void wifi_mgr_get_ip_str(char *buf, size_t buf_len)
+{
+    if (!buf || buf_len == 0) return;
+    snprintf(buf, buf_len, "%s", s_ip_str);
 }

@@ -23,4 +23,8 @@
 #define HOSTED_SDIO_D3      GPIO_NUM_8
 #define HOSTED_RESET_SLAVE  GPIO_NUM_54
 
+#define ETH_MDC_PIN         GPIO_NUM_31
+#define ETH_MDIO_PIN        GPIO_NUM_52
+#define ETH_PHY_RST_PIN     GPIO_NUM_51
+
 #endif

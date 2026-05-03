@@ -4,6 +4,7 @@ idf_component_register(
         "mipi_lcd.c"
         "avatar_engine.c"
         "wifi_mgr.c"
+        "eth_mgr.c"
         "app_mqtt.c"
         "web_config.c"
     INCLUDE_DIRS
@@ -19,6 +20,7 @@ idf_component_register(
         esp_http_server
         lwip
         json
+        esp_eth
     PRIV_REQUIRES
         esp_timer
         sdmmc

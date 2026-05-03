@@ -140,7 +140,7 @@ esp_err_t mipi_lcd_init(mipi_lcd_handle_t *handle)
         .dpi_clock_freq_mhz = MIPI_LCD_DPI_CLK_MHZ,
         .virtual_channel = 0,
         .pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB565,
-        .num_fbs = 1,
+        .num_fbs = 2,
         .video_timing = {
             .h_size = MIPI_LCD_WIDTH,
             .v_size = MIPI_LCD_HEIGHT,
