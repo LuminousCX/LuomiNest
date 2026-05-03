@@ -64,8 +64,8 @@ async def _inject_memory(messages: list[dict], agent_id: str | None = None, prov
                 context_window = getattr(provider, 'context_window', None) or 128000
                 existing_tokens = sum(len(m.get("content", "")) for m in messages) // 3
                 injector.set_token_budget(context_window, existing_tokens)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[Memory] Token budget setup skipped for provider '{provider_name}': {e}")
 
         return injector.inject_memory_to_messages(messages, memory_data, user_query)
     except Exception as e:
