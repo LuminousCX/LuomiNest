@@ -3,7 +3,6 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft,
-  User,
   Palette,
   Bell,
   Shield,
@@ -14,7 +13,6 @@ import {
   Moon
 } from 'lucide-vue-next'
 import { useThemeStore } from '../../stores/theme'
-import UserProfileEditor from '../../components/UserProfileEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,18 +20,7 @@ const themeStore = useThemeStore()
 
 const section = computed(() => route.params.section as string)
 
-const sectionMap: Record<string, { label: string; icon: typeof User; desc: string; items: { label: string; desc: string; type: string }[] }> = {
-  profile: {
-    label: '个人资料',
-    icon: User,
-    desc: '管理你的账户信息',
-    items: [
-      { label: '用户名', desc: '设置你的显示名称', type: 'input' },
-      { label: '头像', desc: '上传或更换头像', type: 'upload' },
-      { label: '个人简介', desc: '一段简短的自我介绍', type: 'textarea' },
-      { label: '语言偏好', desc: '界面显示语言', type: 'select' }
-    ]
-  },
+const sectionMap: Record<string, { label: string; icon: typeof Palette; desc: string; items: { label: string; desc: string; type: string }[] }> = {
   appearance: {
     label: '外观主题',
     icon: Palette,
@@ -122,10 +109,7 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
       </div>
 
       <div class="settings-body">
-        <div v-if="section === 'profile'" class="profile-section animate-slide-up">
-          <UserProfileEditor />
-        </div>
-        <div v-else class="setting-items-card animate-slide-up">
+        <div class="setting-items-card animate-slide-up">
           <div
             v-for="(item, idx) in currentSection.items"
             :key="item.label"
@@ -251,15 +235,6 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
   flex: 1;
   overflow-y: auto;
   padding: 24px 28px;
-}
-
-.profile-section {
-  max-width: 640px;
-}
-
-.profile-section :deep(.profile-editor) {
-  max-height: none;
-  border-radius: var(--radius-lg);
 }
 
 .setting-items-card {

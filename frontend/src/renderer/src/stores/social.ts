@@ -11,10 +11,8 @@ import type {
 } from '../types'
 import { useApi } from '../composables/useApi'
 
-const BACKEND_URL = 'http://127.0.0.1:18000/api/v1'
-
 export const useSocialStore = defineStore('social', () => {
-  const { apiGet, apiPost, apiDelete } = useApi()
+  const { apiGet, apiPost, apiDelete, apiSseStream } = useApi()
 
   const groups = ref<GroupInfo[]>([])
   const currentGroup = ref<GroupInfo | null>(null)
@@ -85,52 +83,13 @@ export const useSocialStore = defineStore('social', () => {
     respondingAgentNames.value = []
 
     try {
-      const resp = await fetch(`${BACKEND_URL}/social/groups/${groupId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content,
-          sender_id: 'user',
-        }),
-      })
-
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => null)
-        throw new Error(errData?.error?.message || `API error: ${resp.status}`)
-      }
-
-      const reader = resp.body?.getReader()
-      if (!reader) throw new Error('No readable stream')
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          const trimmed = line.trim()
-          if (!trimmed.startsWith('data: ')) continue
-          const dataStr = trimmed.slice(6)
-          if (!dataStr.trim()) continue
-
-          try {
-            const event = JSON.parse(dataStr)
-            _handleMessageEvent(event)
-          } catch (parseErr) {
-            console.warn(`[Social] Failed to parse SSE data (groupId: ${groupId}):`, parseErr, `raw: ${dataStr.slice(0, 120)}`)
-            continue
-          }
-        }
-      }
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e)
-      console.error('Failed to send message:', message)
+      await apiSseStream(
+        `/social/groups/${groupId}/messages`,
+        { content, sender_id: 'user' },
+        (event: { type?: string; data?: Record<string, unknown> }) => _handleMessageEvent(event as any),
+        async () => {},
+        (err: string) => console.error('Failed to send message:', err),
+      )
     } finally {
       agentsResponding.value = false
       respondingAgentNames.value = []
@@ -249,67 +208,32 @@ export const useSocialStore = defineStore('social', () => {
     collaborationTasks.value = []
     collaborationSessionId.value = null
 
-    const controller = new AbortController()
-
     try {
-      const resp = await fetch(`${BACKEND_URL}/social/groups/${groupId}/collaborate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content,
-          sender_id: 'user',
-          stream: true,
-        }),
-        signal: controller.signal,
-      })
+      await apiSseStream<CollaborationEvent>(
+        `/social/groups/${groupId}/collaborate`,
+        { content, sender_id: 'user', stream: true },
+        (event) => {
+          _handleCollaborationEvent(event)
+          onEvent(event)
 
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => null)
-        throw new Error(errData?.error?.message || `API error: ${resp.status}`)
-      }
-
-      const reader = resp.body?.getReader()
-      if (!reader) throw new Error('No readable stream')
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          const trimmed = line.trim()
-          if (!trimmed.startsWith('data: ')) continue
-          const dataStr = trimmed.slice(6)
-          if (!dataStr.trim()) continue
-
-          try {
-            const event: CollaborationEvent = JSON.parse(dataStr)
-            _handleCollaborationEvent(event)
-            onEvent(event)
-
-            if (event.type === 'session_end' || event.type === 'error') {
-              collaborationActive.value = false
-              if (event.type !== 'error') {
-                await fetchGroups()
-              }
-              onDone()
-              return
+          if (event.type === 'session_end' || event.type === 'error') {
+            collaborationActive.value = false
+            if (event.type !== 'error') {
+              fetchGroups()
             }
-          } catch {
-            continue
           }
-        }
-      }
-
-      collaborationActive.value = false
-      await fetchGroups()
-      onDone()
+        },
+        async () => {
+          collaborationActive.value = false
+          await fetchGroups()
+          onDone()
+        },
+        (err: string) => {
+          collaborationActive.value = false
+          collaborationPhase.value = 'failed'
+          onError(err)
+        },
+      )
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') {
         collaborationActive.value = false

@@ -1,13 +1,59 @@
 import time
+import json
+import os
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.runtime.provider.llm.adapter import llm_adapter, _create_provider_from_config
 from app.runtime.provider.llm.providers import PROVIDER_TEMPLATES
+from app.core.config import settings
 from app.core.exceptions import NotFoundError, ValidationError
 
 router = APIRouter(prefix="/models", tags=["models"])
+
+MODEL_CONFIG_FILE = os.path.join(settings.DATA_DIR, "model_config.json")
+
+
+def _load_model_config() -> dict:
+    if not os.path.exists(MODEL_CONFIG_FILE):
+        return {}
+    try:
+        with open(MODEL_CONFIG_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning(f"[ModelConfig] Failed to load: {e}")
+        return {}
+
+
+def _save_model_config(config: dict):
+    os.makedirs(os.path.dirname(MODEL_CONFIG_FILE), exist_ok=True)
+    try:
+        with open(MODEL_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        logger.success(f"[ModelConfig] Saved to {MODEL_CONFIG_FILE}")
+    except Exception as e:
+        logger.error(f"[ModelConfig] Failed to save: {e}")
+
+
+def _apply_model_config():
+    saved = _load_model_config()
+    if not saved:
+        return
+    if saved.get("default_provider"):
+        llm_adapter.default_provider = saved["default_provider"]
+    if saved.get("default_model"):
+        settings.LLM_DEFAULT_MODEL = saved["default_model"]
+    if saved.get("default_temperature") is not None:
+        settings.LLM_DEFAULT_TEMPERATURE = saved["default_temperature"]
+    if saved.get("default_max_tokens") is not None:
+        settings.LLM_DEFAULT_MAX_TOKENS = saved["default_max_tokens"]
+    if saved.get("default_top_p") is not None:
+        settings.LLM_DEFAULT_TOP_P = saved["default_top_p"]
+    logger.info(f"[ModelConfig] Applied saved config: provider={saved.get('default_provider')}, model={saved.get('default_model')}")
+
+
+_apply_model_config()
 
 
 class ProviderCreate(BaseModel):
@@ -265,7 +311,6 @@ async def list_all_models():
 @router.get("/config")
 async def get_model_config():
     logger.info("[API] GET /models/config - Getting model config")
-    from app.core.config import settings
     config = {
         "default_provider": llm_adapter.default_provider,
         "default_model": settings.LLM_DEFAULT_MODEL,
@@ -280,7 +325,6 @@ async def get_model_config():
 @router.patch("/config")
 async def update_model_config(request: ModelConfigUpdate):
     logger.info(f"[API] PATCH /models/config - Updating model config")
-    from app.core.config import settings
     updated_fields = []
 
     if request.provider is not None:
@@ -326,6 +370,14 @@ async def update_model_config(request: ModelConfigUpdate):
         updated_fields.append("stt_auto_send")
     if request.stt_auto_send_delay is not None:
         updated_fields.append("stt_auto_send_delay")
+
+    _save_model_config({
+        "default_provider": llm_adapter.default_provider,
+        "default_model": settings.LLM_DEFAULT_MODEL,
+        "default_temperature": settings.LLM_DEFAULT_TEMPERATURE,
+        "default_max_tokens": settings.LLM_DEFAULT_MAX_TOKENS,
+        "default_top_p": settings.LLM_DEFAULT_TOP_P,
+    })
 
     logger.success(f"[API] PATCH /models/config - Updated fields: {updated_fields}")
     return {

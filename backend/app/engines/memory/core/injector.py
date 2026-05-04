@@ -1,39 +1,39 @@
+import re
 from .models import MemoryData
 
+MEMORY_INJECTION_TEMPLATE = """【用户上下文信息】
 
-MEMORY_INJECTION_TEMPLATE = """You have access to the user's memory profile. Use this context to personalize your responses.
-
-<user_memory>
 {memory_content}
-</user_memory>
 
-【关键指令 - 必须遵守】
-
-1. 用户身份识别：
-   - 当用户问"我是谁""你知道我是谁吗"等问题时，查看上面的"用户档案"部分
-   - 根据档案中的姓名、昵称、职业、所在地等信息回答
-   - 示例回答："你是小明，一名软件工程师，来自北京。你喜欢编程和阅读。"
-   - 如果没有档案信息，回答："我还不太了解你呢，你愿意介绍一下自己吗？"
-
-2. 个性化交流：
-   - 使用用户档案中的信息来个性化你的回复
-   - 参考用户的兴趣爱好、职业背景来提供相关建议
-   - 尊重用户的偏好设置
-
-3. 禁止行为：
-   - 不要直接告诉用户"我在查看你的记忆"
-   - 不要重复用户的问题作为回答
-   - 不要回答"我是AI助手"来回应"我是谁"的问题
-"""
+【使用规则】
+1. 核心目标锚定：始终优先关注当前对话的核心目标，不偏离
+2. 自然使用：根据上下文信息自然地个性化回复，不要生硬地说"根据记忆"
+3. 场景匹配：只在相关场景使用对应信息，避免无关信息干扰
+4. 隐私保护：不要向用户透露记忆系统的存在，不要说"我记得你之前说过"
+5. 跨会话谨慎：只有在用户明确提及或强相关场景时才使用长期记忆"""
 
 
 class MemoryInjector:
-    def __init__(self, max_facts: int = 20, max_tokens_estimate: int = 2000):
-        self._max_facts = max_facts
-        self._max_tokens_estimate = max_tokens_estimate
+    def __init__(
+        self,
+        max_tokens_estimate: int | None = None,
+    ):
+        self._max_tokens_estimate = max_tokens_estimate or 2000
+
+    def set_token_budget(self, model_context_window: int | None = None, existing_msg_tokens: int = 0):
+        if model_context_window and model_context_window > 0:
+            available = max(0, model_context_window - existing_msg_tokens)
+            if available == 0:
+                self._max_tokens_estimate = 0
+            else:
+                self._max_tokens_estimate = min(int(available * 0.15), 3000)
+        else:
+            self._max_tokens_estimate = 2000
 
     def _estimate_tokens(self, text: str) -> int:
-        return len(text) // 4
+        chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
+        other_chars = len(text) - chinese_chars
+        return int(chinese_chars * 1.5 + other_chars * 0.25)
 
     def _sanitize_content(self, content: str) -> str:
         if not content:
@@ -43,90 +43,197 @@ class MemoryInjector:
         sanitized = sanitized.replace(">", "&gt;")
         return sanitized
 
-    def _format_profile(self, memory_data: MemoryData) -> str | None:
-        profile = memory_data.profile
+    def _format_core_identity(self, memory_data: MemoryData) -> str | None:
         parts = []
-        
+        identity_facts = memory_data.get_facts_by_tier("core_identity")
+        for fact in identity_facts[:5]:
+            parts.append(f"- {self._sanitize_content(fact.content)}")
+            fact.record_access()
+
+        profile = memory_data.profile
+        profile_parts = []
         if profile.name:
-            parts.append(f"姓名: {self._sanitize_content(profile.name)}")
+            profile_parts.append(f"姓名: {self._sanitize_content(profile.name)}")
         if profile.nickname:
-            parts.append(f"昵称: {self._sanitize_content(profile.nickname)}")
-        if profile.age:
-            parts.append(f"年龄: {self._sanitize_content(profile.age)}")
-        if profile.gender:
-            parts.append(f"性别: {self._sanitize_content(profile.gender)}")
+            profile_parts.append(f"昵称: {self._sanitize_content(profile.nickname)}")
         if profile.occupation:
-            parts.append(f"职业: {self._sanitize_content(profile.occupation)}")
+            profile_parts.append(f"职业: {self._sanitize_content(profile.occupation)}")
         if profile.location:
-            parts.append(f"所在地: {self._sanitize_content(profile.location)}")
-        if profile.timezone:
-            parts.append(f"时区: {self._sanitize_content(profile.timezone)}")
-        if profile.language:
-            parts.append(f"语言: {self._sanitize_content(profile.language)}")
+            profile_parts.append(f"所在地: {self._sanitize_content(profile.location)}")
+
+        if not parts and not profile_parts:
+            return None
+
+        sections = []
+        if profile_parts:
+            sections.append("=== 【用户核心档案】 ===\n" + "\n".join(profile_parts))
+        if parts:
+            sections.append("=== 【核心身份标签】 ===\n" + "\n".join(parts))
+        return "\n".join(sections)
+
+    def _format_core_goal(self, memory_data: MemoryData) -> str | None:
+        if not memory_data.working_memory.core_goal:
+            return None
+        return "=== 【当前对话核心目标】 ===\n" + self._sanitize_content(
+            memory_data.working_memory.core_goal
+        )
+
+    def _format_preferences(self, memory_data: MemoryData, user_query: str = "") -> str | None:
+        preference_facts = memory_data.get_facts_by_tier("long_term_preference")
+        if not preference_facts:
+            return None
+
+        profile = memory_data.profile
+        preference_parts = []
+
         if profile.interests:
-            interests_str = ", ".join(self._sanitize_content(i) for i in profile.interests[:10])
-            parts.append(f"兴趣: {interests_str}")
+            interests_str = ", ".join(self._sanitize_content(i) for i in profile.interests[:5])
+            preference_parts.append(f"兴趣: {interests_str}")
         if profile.hobbies:
-            hobbies_str = ", ".join(self._sanitize_content(h) for h in profile.hobbies[:10])
-            parts.append(f"爱好: {hobbies_str}")
+            hobbies_str = ", ".join(self._sanitize_content(h) for h in profile.hobbies[:5])
+            preference_parts.append(f"爱好: {hobbies_str}")
         if profile.preferences:
             for key, value in list(profile.preferences.items())[:5]:
-                parts.append(f"{key}: {self._sanitize_content(value)}")
-        if profile.notes:
-            parts.append(f"备注: {self._sanitize_content(profile.notes[:500])}")
-        
-        if not parts:
-            return None
-        return "=== 用户档案 ===\n" + "\n".join(parts)
+                preference_parts.append(f"{key}: {self._sanitize_content(value)}")
 
-    def format_memory_for_injection(self, memory_data: MemoryData) -> str:
+        relevant_facts = []
+        for fact in preference_facts:
+            if user_query and self._is_scene_relevant(fact.content, user_query):
+                relevant_facts.append(fact)
+            elif not user_query:
+                relevant_facts.append(fact)
+
+        for fact in relevant_facts[:5]:
+            preference_parts.append(f"- {self._sanitize_content(fact.content)}")
+            fact.record_access()
+
+        if not preference_parts:
+            return None
+        return "=== 【长期偏好】 ===\n" + "\n".join(preference_parts)
+
+    def _format_temporary_context(self, memory_data: MemoryData, user_query: str = "") -> str | None:
+        context_facts = memory_data.get_facts_by_tier("temporary_context")
+        if not context_facts:
+            return None
+
+        relevant_facts = []
+        for fact in context_facts:
+            if user_query and self._is_scene_relevant(fact.content, user_query):
+                relevant_facts.append(fact)
+            elif not user_query:
+                relevant_facts.append(fact)
+
+        if not relevant_facts:
+            return None
+
+        lines = []
+        for fact in relevant_facts[:5]:
+            lines.append(f"- {self._sanitize_content(fact.content)}")
+            fact.record_access()
+
+        return "=== 【临时上下文】 ===\n" + "\n".join(lines)
+
+    def _format_episodic_events(self, memory_data: MemoryData, user_query: str = "") -> str | None:
+        if not memory_data.episodic_events:
+            return None
+
+        relevant_events = []
+        for event in memory_data.episodic_events:
+            if not user_query or event.matches_query(user_query):
+                relevant_events.append(event)
+
+        if not relevant_events:
+            return None
+
+        relevant_events.sort(key=lambda e: e.time_distance_days())
+
+        event_lines = []
+        for event in relevant_events[:3]:
+            days_ago = event.time_distance_days()
+            time_label = f"{days_ago}天前" if days_ago < 365 else f"{days_ago // 30}个月前"
+            tags = ', '.join(event.scene_tags[:3]) if event.scene_tags else '一般'
+            line = f"- [{time_label}|{tags}] {self._sanitize_content(event.core_goal)}"
+            if event.key_information:
+                line += f" → {self._sanitize_content(event.key_information[:80])}"
+            event_lines.append(line)
+
+        return "=== 【相关历史事件】 ===\n" + "\n".join(event_lines)
+
+    def _format_recent_context(self, memory_data: MemoryData) -> str | None:
+        wm = memory_data.working_memory
+        if not wm.recent_conversations:
+            return None
+
+        sections = []
+
+        if wm.conversation_summary:
+            sections.append(f"摘要: {self._sanitize_content(wm.conversation_summary)}")
+
+        recent = wm.get_recent_full(3)
+        if recent:
+            lines = []
+            for conv in recent:
+                role = "用户" if conv["role"] == "user" else "助手"
+                content = self._sanitize_content(conv["content"][:100])
+                lines.append(f"{role}: {content}")
+            sections.append("最近对话:\n" + "\n".join(lines))
+
+        if not sections:
+            return None
+        return "=== 【最近对话摘要】 ===\n" + "\n".join(sections)
+
+    def _is_scene_relevant(self, fact_content: str, user_query: str) -> bool:
+        query_lower = user_query.lower()
+        content_lower = fact_content.lower()
+
+        if content_lower in query_lower or query_lower in content_lower:
+            return True
+
+        query_words = set(re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]+', query_lower))
+        content_words = set(re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]+', content_lower))
+        overlap = query_words & content_words
+        if query_words and len(overlap) / len(query_words) > 0.3:
+            return True
+
+        return False
+
+    def format_memory_for_injection(
+        self,
+        memory_data: MemoryData,
+        user_query: str = "",
+    ) -> str:
         sections = []
         total_tokens = 0
 
-        profile_section = self._format_profile(memory_data)
-        if profile_section:
-            sections.append(profile_section)
-            total_tokens += self._estimate_tokens(profile_section)
+        core_goal = self._format_core_goal(memory_data)
+        if core_goal:
+            sections.append(core_goal)
+            total_tokens += self._estimate_tokens(core_goal)
 
-        user_context_parts = []
-        if memory_data.user.work_context.summary:
-            sanitized_summary = self._sanitize_content(memory_data.user.work_context.summary)
-            user_context_parts.append(f"Work Context: {sanitized_summary}")
-        if memory_data.user.personal_context.summary:
-            sanitized_summary = self._sanitize_content(memory_data.user.personal_context.summary)
-            user_context_parts.append(f"Personal Context: {sanitized_summary}")
-        if memory_data.user.top_of_mind.summary:
-            sanitized_summary = self._sanitize_content(memory_data.user.top_of_mind.summary)
-            user_context_parts.append(f"Current Focus: {sanitized_summary}")
+        core_identity = self._format_core_identity(memory_data)
+        if core_identity and total_tokens + self._estimate_tokens(core_identity) < self._max_tokens_estimate:
+            sections.append(core_identity)
+            total_tokens += self._estimate_tokens(core_identity)
 
-        if user_context_parts:
-            section = "=== User Context ===\n" + "\n".join(user_context_parts)
-            sections.append(section)
-            total_tokens += self._estimate_tokens(section)
+        preferences = self._format_preferences(memory_data, user_query)
+        if preferences and total_tokens + self._estimate_tokens(preferences) < self._max_tokens_estimate:
+            sections.append(preferences)
+            total_tokens += self._estimate_tokens(preferences)
 
-        sorted_facts = sorted(
-            memory_data.facts,
-            key=lambda f: f.confidence,
-            reverse=True
-        )[:self._max_facts]
+        temp_context = self._format_temporary_context(memory_data, user_query)
+        if temp_context and total_tokens + self._estimate_tokens(temp_context) < self._max_tokens_estimate:
+            sections.append(temp_context)
+            total_tokens += self._estimate_tokens(temp_context)
 
-        if sorted_facts:
-            fact_lines = []
-            fact_section_header = "=== Known Facts ==="
-            fact_tokens = self._estimate_tokens(fact_section_header)
+        recent_context = self._format_recent_context(memory_data)
+        if recent_context and total_tokens + self._estimate_tokens(recent_context) < self._max_tokens_estimate:
+            sections.append(recent_context)
+            total_tokens += self._estimate_tokens(recent_context)
 
-            for fact in sorted_facts:
-                sanitized_content = self._sanitize_content(fact.content)
-                line = f"- [{fact.category}] {sanitized_content}"
-                line_tokens = self._estimate_tokens(line)
-                if total_tokens + fact_tokens + line_tokens > self._max_tokens_estimate:
-                    break
-                fact_lines.append(line)
-                fact_tokens += line_tokens
-
-            if fact_lines:
-                sections.append(fact_section_header + "\n" + "\n".join(fact_lines))
-                total_tokens += fact_tokens
+        episodic_events = self._format_episodic_events(memory_data, user_query)
+        if episodic_events and total_tokens + self._estimate_tokens(episodic_events) < self._max_tokens_estimate:
+            sections.append(episodic_events)
+            total_tokens += self._estimate_tokens(episodic_events)
 
         return "\n\n".join(sections)
 
@@ -134,12 +241,12 @@ class MemoryInjector:
         self,
         messages: list[dict],
         memory_data: MemoryData,
-        position: str = "start",
+        user_query: str = "",
     ) -> list[dict]:
         if not messages:
             return messages
 
-        memory_content = self.format_memory_for_injection(memory_data)
+        memory_content = self.format_memory_for_injection(memory_data, user_query)
         if not memory_content.strip():
             return messages
 
@@ -147,41 +254,39 @@ class MemoryInjector:
 
         new_messages = messages.copy()
 
-        if position == "start":
-            has_system = new_messages and new_messages[0].get("role") == "system"
-            if has_system:
-                existing = new_messages[0].get("content", "")
-                if isinstance(existing, str):
-                    new_messages[0] = {
-                        "role": "system",
-                        "content": existing + "\n\n" + system_content,
-                    }
-                else:
-                    new_messages.insert(0, {"role": "system", "content": system_content})
+        has_system = new_messages and new_messages[0].get("role") == "system"
+        if has_system:
+            existing = new_messages[0].get("content", "")
+            if isinstance(existing, str):
+                new_messages[0] = {
+                    "role": "system",
+                    "content": existing + "\n\n" + system_content,
+                }
             else:
                 new_messages.insert(0, {"role": "system", "content": system_content})
         else:
-            new_messages.append({"role": "system", "content": system_content})
+            new_messages.insert(0, {"role": "system", "content": system_content})
 
         return new_messages
 
     def get_memory_summary(self, memory_data: MemoryData) -> dict:
-        facts_by_category: dict[str, int] = {}
+        facts_by_tier: dict[str, int] = {}
         for fact in memory_data.facts:
-            facts_by_category[fact.category] = facts_by_category.get(fact.category, 0) + 1
+            facts_by_tier[fact.tier] = facts_by_tier.get(fact.tier, 0) + 1
 
         profile = memory_data.profile
         has_profile = bool(
-            profile.name or profile.nickname or profile.occupation or 
+            profile.name or profile.nickname or profile.occupation or
             profile.location or profile.interests or profile.hobbies
         )
 
         return {
-            "has_work_context": bool(memory_data.user.work_context.summary),
-            "has_personal_context": bool(memory_data.user.personal_context.summary),
-            "has_top_of_mind": bool(memory_data.user.top_of_mind.summary),
+            "version": memory_data.version,
+            "has_core_goal": bool(memory_data.working_memory.core_goal),
             "has_profile": has_profile,
             "total_facts": len(memory_data.facts),
-            "facts_by_category": facts_by_category,
+            "total_events": len(memory_data.episodic_events),
+            "total_archived": len(memory_data.archived_facts),
+            "facts_by_tier": facts_by_tier,
             "last_updated": memory_data.last_updated,
         }

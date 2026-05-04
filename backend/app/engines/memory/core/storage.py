@@ -80,7 +80,7 @@ class MemoryStorage:
                     mtime = file_path.stat().st_mtime
                 except OSError:
                     mtime = None
-                self._cache[agent_id] = (memory_data, mtime)
+                self._cache[agent_id] = (copy.deepcopy(memory_data), mtime)
                 logger.info(f"[Memory] Saved memory to {file_path}")
                 return True
             except Exception as e:
