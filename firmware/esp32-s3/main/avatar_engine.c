@@ -16,12 +16,18 @@ static avatar_state_t s_current_state = AVATAR_STATE_IDLE;
 static avatar_state_changed_cb_t s_state_cb = NULL;
 static SemaphoreHandle_t s_engine_mux = NULL;
 static lv_draw_buf_t *s_frame_buf = NULL;
+static st7735s_handle_t *s_lcd = NULL;
 static avatar_stats_t s_stats = {0};
+
+#define JPEG_BUF_COUNT 2
+static uint8_t *s_jpeg_outbuf[JPEG_BUF_COUNT] = {NULL, NULL};
+static uint8_t s_decode_idx = 0;
 
 #if CONFIG_LN_FRAME_DEDUP
 static uint32_t s_last_frame_hash = 0;
 static uint32_t s_last_frame_len = 0;
-#define DEDUP_SAMPLE_SIZE 128
+#define DEDUP_HEAD_SIZE  64
+#define DEDUP_TAIL_SIZE  64
 #endif
 
 static const char *state_names[AVATAR_STATE_MAX] = {
@@ -29,20 +35,14 @@ static const char *state_names[AVATAR_STATE_MAX] = {
     "wave", "nod", "think", "sleep", "talk", "custom", "streaming"
 };
 
-static uint32_t fnv1a_hash(const uint8_t *data, uint32_t len)
-{
-    uint32_t hash = 2166136261U;
-    for (uint32_t i = 0; i < len; i++) {
-        hash ^= data[i];
-        hash *= 16777619U;
-    }
-    return hash;
-}
-
-esp_err_t avatar_engine_init(lv_obj_t *parent)
+esp_err_t avatar_engine_init(lv_obj_t *parent, st7735s_handle_t *lcd)
 {
     s_engine_mux = xSemaphoreCreateMutex();
     if (!s_engine_mux) return ESP_ERR_NO_MEM;
+
+    s_lcd = lcd;
+
+    uint32_t buf_size = ST7735S_WIDTH * ST7735S_HEIGHT * 2;
 
     s_frame_buf = lv_draw_buf_create(ST7735S_WIDTH, ST7735S_HEIGHT,
                                       LV_COLOR_FORMAT_RGB565, 0);
@@ -50,8 +50,15 @@ esp_err_t avatar_engine_init(lv_obj_t *parent)
         ESP_LOGE(TAG, "Failed to create frame buffer");
         return ESP_ERR_NO_MEM;
     }
+    memset(s_frame_buf->data, 0, buf_size);
 
-    memset(s_frame_buf->data, 0, ST7735S_WIDTH * ST7735S_HEIGHT * 2);
+    for (int i = 0; i < JPEG_BUF_COUNT; i++) {
+        s_jpeg_outbuf[i] = heap_caps_malloc(buf_size, MALLOC_CAP_SPIRAM);
+        if (!s_jpeg_outbuf[i]) {
+            ESP_LOGE(TAG, "Failed to allocate JPEG output buffer %d", i);
+            return ESP_ERR_NO_MEM;
+        }
+    }
 
     s_avatar_img = lv_image_create(parent);
     lv_obj_center(s_avatar_img);
@@ -59,7 +66,7 @@ esp_err_t avatar_engine_init(lv_obj_t *parent)
 
     memset(&s_stats, 0, sizeof(s_stats));
 
-    ESP_LOGI(TAG, "Avatar engine initialized (stream mode, %d states, dedup=%s)",
+    ESP_LOGI(TAG, "Avatar engine initialized (direct-write, %d states, dedup=%s, double-buf)",
              AVATAR_STATE_MAX,
 #if CONFIG_LN_FRAME_DEDUP
              "on"
@@ -124,8 +131,19 @@ esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len
 
 #if CONFIG_LN_FRAME_DEDUP
     if (frame_len == s_last_frame_len && s_last_frame_len > 0) {
-        uint32_t tail_offset = frame_len > DEDUP_SAMPLE_SIZE ? frame_len - DEDUP_SAMPLE_SIZE : 0;
-        uint32_t hash = fnv1a_hash(frame_data + tail_offset, frame_len - tail_offset);
+        uint32_t hash = 2166136261U;
+        uint32_t head_len = frame_len > DEDUP_HEAD_SIZE ? DEDUP_HEAD_SIZE : frame_len;
+        for (uint32_t i = 0; i < head_len; i++) {
+            hash ^= frame_data[i];
+            hash *= 16777619U;
+        }
+        if (frame_len > DEDUP_HEAD_SIZE + DEDUP_TAIL_SIZE) {
+            uint32_t tail_offset = frame_len - DEDUP_TAIL_SIZE;
+            for (uint32_t i = tail_offset; i < frame_len; i++) {
+                hash ^= frame_data[i];
+                hash *= 16777619U;
+            }
+        }
         if (hash == s_last_frame_hash) {
             s_stats.frames_skipped_dedup++;
             return ESP_OK;
@@ -136,58 +154,61 @@ esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len
 #endif
 
     xSemaphoreTake(s_engine_mux, portMAX_DELAY);
-
     s_current_state = AVATAR_STATE_STREAMING;
+    xSemaphoreGive(s_engine_mux);
 
     uint32_t expected = ST7735S_WIDTH * ST7735S_HEIGHT * 2;
     bool displayed = false;
 
     if (frame_len != expected) {
-        uint8_t *outbuf = heap_caps_malloc(expected, MALLOC_CAP_SPIRAM);
-        if (outbuf) {
-            esp_jpeg_image_cfg_t jpeg_cfg = {
-                .indata = (uint8_t *)frame_data,
-                .indata_size = frame_len,
-                .outbuf = outbuf,
-                .outbuf_size = expected,
-                .out_format = JPEG_IMAGE_FORMAT_RGB565,
-                .out_scale = JPEG_IMAGE_SCALE_0,
-                .flags.swap_color_bytes = 0,
-            };
-            esp_jpeg_image_output_t jpeg_out = {0};
+        uint8_t decode_idx = s_decode_idx;
+        uint8_t *outbuf = s_jpeg_outbuf[decode_idx];
 
-            int64_t t0 = esp_timer_get_time();
-            esp_err_t ret = esp_jpeg_decode(&jpeg_cfg, &jpeg_out);
-            int64_t t1 = esp_timer_get_time();
+        esp_jpeg_image_cfg_t jpeg_cfg = {
+            .indata = (uint8_t *)frame_data,
+            .indata_size = frame_len,
+            .outbuf = outbuf,
+            .outbuf_size = expected,
+            .out_format = JPEG_IMAGE_FORMAT_RGB565,
+            .out_scale = JPEG_IMAGE_SCALE_0,
+            .flags.swap_color_bytes = 1,
+        };
+        esp_jpeg_image_output_t jpeg_out = {0};
 
-            if (ret == ESP_OK) {
-                s_stats.last_decode_ms = (uint32_t)((t1 - t0) / 1000);
-                memcpy(s_frame_buf->data, outbuf, expected);
-                lvgl_port_lock();
-                lv_image_set_src(s_avatar_img, s_frame_buf);
-                lv_obj_invalidate(s_avatar_img);
-                lvgl_port_unlock();
-                displayed = true;
-                s_stats.frames_displayed++;
-            } else {
-                s_stats.decode_errors++;
-                s_stats.frames_skipped_error++;
-                ESP_LOGW(TAG, "JPEG decode failed: %s (%u bytes input, errors=%u)",
-                         esp_err_to_name(ret), frame_len, s_stats.decode_errors);
-            }
-            free(outbuf);
+        int64_t t0 = esp_timer_get_time();
+        esp_err_t ret = esp_jpeg_decode(&jpeg_cfg, &jpeg_out);
+        int64_t t1 = esp_timer_get_time();
+
+        if (ret == ESP_OK) {
+            s_stats.last_decode_ms = (uint32_t)((t1 - t0) / 1000);
+
+            st7735s_draw_bitmap(s_lcd, 0, 0, ST7735S_WIDTH, ST7735S_HEIGHT,
+                                (uint16_t *)outbuf);
+
+            s_decode_idx = (decode_idx + 1) % JPEG_BUF_COUNT;
+
+            xSemaphoreTake(s_engine_mux, portMAX_DELAY);
+            memcpy(s_frame_buf->data, outbuf, expected);
+            xSemaphoreGive(s_engine_mux);
+
+            displayed = true;
+            s_stats.frames_displayed++;
         } else {
+            s_stats.decode_errors++;
             s_stats.frames_skipped_error++;
-            ESP_LOGW(TAG, "No PSRAM for JPEG output buffer");
+            ESP_LOGW(TAG, "JPEG decode failed: %s (%u bytes input, errors=%u)",
+                     esp_err_to_name(ret), frame_len, s_stats.decode_errors);
         }
     }
 
     if (!displayed && frame_len == expected) {
+        st7735s_draw_bitmap(s_lcd, 0, 0, ST7735S_WIDTH, ST7735S_HEIGHT,
+                            (const uint16_t *)frame_data);
+
+        xSemaphoreTake(s_engine_mux, portMAX_DELAY);
         memcpy(s_frame_buf->data, frame_data, expected);
-        lvgl_port_lock();
-        lv_image_set_src(s_avatar_img, s_frame_buf);
-        lv_obj_invalidate(s_avatar_img);
-        lvgl_port_unlock();
+        xSemaphoreGive(s_engine_mux);
+
         displayed = true;
         s_stats.frames_displayed++;
     }
@@ -196,7 +217,6 @@ esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len
         ESP_LOGD(TAG, "Frame skipped (%u bytes)", frame_len);
     }
 
-    xSemaphoreGive(s_engine_mux);
     return displayed ? ESP_OK : ESP_FAIL;
 }
 

@@ -14,7 +14,7 @@ static const char *TAG = "wifi_mgr";
 
 #define INITIAL_BACKOFF_MS  500
 #define MAX_BACKOFF_MS      CONFIG_LN_WIFI_RECONNECT_MAX_MS
-#define MAX_RETRY_INIT      10
+#define MAX_RETRY_INIT      5
 
 static EventGroupHandle_t s_wifi_event_group;
 static wifi_connected_cb_t s_connected_cb = NULL;

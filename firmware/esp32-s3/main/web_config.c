@@ -5,8 +5,10 @@
 #include "esp_netif.h"
 #include "esp_http_server.h"
 #include "esp_heap_caps.h"
+#include "esp_system.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lwip/sockets.h"
@@ -304,72 +306,46 @@ static esp_err_t handle_config(httpd_req_t *req)
     ln_config_t cfg = {0};
     web_config_load(&cfg);
 
-    char *p = NULL;
-
-    p = strstr(buf, "\"wifi_ssid\"");
-    if (p) {
-        p = strchr(p + 11, '"');
-        if (p) {
-            p++;
-            char *end = strchr(p, '"');
-            if (end) {
-                int len = end - p;
-                if (len >= LN_MAX_SSID_LEN) len = LN_MAX_SSID_LEN - 1;
-                memcpy(cfg.wifi_ssid, p, len);
-                cfg.wifi_ssid[len] = '\0';
-            }
-        }
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"ok\":false,\"error\":\"Invalid JSON\"}");
+        return ESP_OK;
     }
 
-    p = strstr(buf, "\"wifi_pass\"");
-    if (p) {
-        p = strchr(p + 11, '"');
-        if (p) {
-            p++;
-            char *end = strchr(p, '"');
-            if (end) {
-                int len = end - p;
-                if (len >= LN_MAX_PASS_LEN) len = LN_MAX_PASS_LEN - 1;
-                memcpy(cfg.wifi_pass, p, len);
-                cfg.wifi_pass[len] = '\0';
-            }
-        }
+    cJSON *wifi_ssid = cJSON_GetObjectItem(root, "wifi_ssid");
+    if (wifi_ssid && cJSON_IsString(wifi_ssid)) {
+        strncpy(cfg.wifi_ssid, wifi_ssid->valuestring, LN_MAX_SSID_LEN - 1);
+        cfg.wifi_ssid[LN_MAX_SSID_LEN - 1] = '\0';
     }
 
-    p = strstr(buf, "\"mqtt_broker\"");
-    if (p) {
-        p = strchr(p + 13, '"');
-        if (p) {
-            p++;
-            char *end = strchr(p, '"');
-            if (end) {
-                int len = end - p;
-                if (len >= LN_MAX_BROKER_LEN) len = LN_MAX_BROKER_LEN - 1;
-                memcpy(cfg.mqtt_broker, p, len);
-                cfg.mqtt_broker[len] = '\0';
-            }
-        }
+    cJSON *wifi_pass = cJSON_GetObjectItem(root, "wifi_pass");
+    if (wifi_pass && cJSON_IsString(wifi_pass)) {
+        strncpy(cfg.wifi_pass, wifi_pass->valuestring, LN_MAX_PASS_LEN - 1);
+        cfg.wifi_pass[LN_MAX_PASS_LEN - 1] = '\0';
     }
 
-    p = strstr(buf, "\"mqtt_client\"");
-    if (p) {
-        p = strchr(p + 13, '"');
-        if (p) {
-            p++;
-            char *end = strchr(p, '"');
-            if (end) {
-                int len = end - p;
-                if (len >= LN_MAX_CLIENT_LEN) len = LN_MAX_CLIENT_LEN - 1;
-                memcpy(cfg.mqtt_client, p, len);
-                cfg.mqtt_client[len] = '\0';
-            }
-        }
+    cJSON *mqtt_broker = cJSON_GetObjectItem(root, "mqtt_broker");
+    if (mqtt_broker && cJSON_IsString(mqtt_broker)) {
+        strncpy(cfg.mqtt_broker, mqtt_broker->valuestring, LN_MAX_BROKER_LEN - 1);
+        cfg.mqtt_broker[LN_MAX_BROKER_LEN - 1] = '\0';
     }
+
+    cJSON *mqtt_client = cJSON_GetObjectItem(root, "mqtt_client");
+    if (mqtt_client && cJSON_IsString(mqtt_client)) {
+        strncpy(cfg.mqtt_client, mqtt_client->valuestring, LN_MAX_CLIENT_LEN - 1);
+        cfg.mqtt_client[LN_MAX_CLIENT_LEN - 1] = '\0';
+    }
+
+    cJSON_Delete(root);
 
     esp_err_t err = web_config_save(&cfg);
     if (err == ESP_OK) {
         httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, "{\"ok\":true}");
+        ESP_LOGI(TAG, "Config saved, restarting in 2 seconds...");
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        esp_restart();
     } else {
         httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, "{\"ok\":false,\"error\":\"NVS write failed\"}");
@@ -612,7 +588,12 @@ esp_err_t web_config_start_ap(void)
     start_webserver();
 
     s_ap_active = true;
-    ESP_LOGI(TAG, "AP started: SSID=%s, Pass=%s, IP=%s", ap_ssid, AP_PASSWORD, AP_IP_ADDR);
+    ESP_LOGI(TAG, "========================================");
+    ESP_LOGI(TAG, "  WiFi config portal active!");
+    ESP_LOGI(TAG, "  Connect to WiFi: %s", ap_ssid);
+    ESP_LOGI(TAG, "  Password: %s", AP_PASSWORD);
+    ESP_LOGI(TAG, "  Then open: http://%s/", AP_IP_ADDR);
+    ESP_LOGI(TAG, "========================================");
     return ESP_OK;
 }
 

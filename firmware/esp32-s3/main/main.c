@@ -195,6 +195,7 @@ static void load_device_config(void)
         strncpy(s_device_config.wifi_pass, DEFAULT_WIFI_PASS, sizeof(s_device_config.wifi_pass) - 1);
         strncpy(s_device_config.mqtt_broker, DEFAULT_MQTT_BROKER, sizeof(s_device_config.mqtt_broker) - 1);
         strncpy(s_device_config.mqtt_client, DEFAULT_MQTT_CLIENT_ID, sizeof(s_device_config.mqtt_client) - 1);
+        web_config_save(&s_device_config);
     }
 }
 
@@ -226,16 +227,17 @@ void app_main(void)
         .spi_freq = ST7735S_SPI_FREQ,
         .x_offset = ST7735S_X_OFFSET,
         .y_offset = ST7735S_Y_OFFSET,
+        .madctl = ST7735S_MADCTL,
     };
 
     ESP_ERROR_CHECK(st7735s_init(&lcd_cfg, &s_lcd));
 
     ESP_ERROR_CHECK(lvgl_port_init(&s_lcd, &s_lvgl_port));
-    ESP_ERROR_CHECK(avatar_engine_init(s_lvgl_port.screen));
+    ESP_ERROR_CHECK(avatar_engine_init(s_lvgl_port.screen, &s_lcd));
 
     s_frame_queue = xQueueCreate(FRAME_QUEUE_LEN, sizeof(frame_msg_t));
 
-    xTaskCreatePinnedToCore(lvgl_task, "lvgl", 8192, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(lvgl_task, "lvgl", 8192, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(frame_decode_task, "frame_dec", 16384, NULL, 4, NULL, 1);
 
     wifi_mgr_register_connected_cb(on_wifi_connected);

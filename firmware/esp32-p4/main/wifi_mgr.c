@@ -29,6 +29,7 @@ static int s_backoff_ms = INITIAL_BACKOFF_MS;
 static bool s_connected = false;
 static bool s_initial_connect_done = false;
 static bool s_initialized = false;
+static bool s_auto_reconnect = true;
 static char s_ip_str[16] = {0};
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
@@ -42,9 +43,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         if (s_disconnected_cb) s_disconnected_cb();
 
         wifi_event_sta_disconnected_t *disconn = (wifi_event_sta_disconnected_t *)event_data;
-        ESP_LOGW(TAG, "WiFi disconnected (reason=%d, retry=%d)", disconn->reason, s_retry_count);
+        ESP_LOGW(TAG, "WiFi disconnected (reason=%d, retry=%d, auto=%d)", disconn->reason, s_retry_count, s_auto_reconnect);
 
-        if (!s_initial_connect_done) {
+        if (!s_auto_reconnect) {
+            ESP_LOGI(TAG, "Auto-reconnect disabled, not retrying");
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        } else if (!s_initial_connect_done) {
             if (s_retry_count < MAX_RETRY_INIT) {
                 s_retry_count++;
                 s_backoff_ms = INITIAL_BACKOFF_MS * (1 << (s_retry_count - 1));
@@ -158,6 +162,42 @@ esp_err_t wifi_mgr_connect(const char *ssid, const char *password)
         s_initial_connect_done = false;
         return ESP_FAIL;
     }
+}
+
+esp_err_t wifi_mgr_connect_async(const char *ssid, const char *password)
+{
+    if (!s_initialized) return ESP_ERR_INVALID_STATE;
+
+    s_retry_count = 0;
+    s_backoff_ms = INITIAL_BACKOFF_MS;
+    s_initial_connect_done = false;
+    s_connected = false;
+    s_auto_reconnect = true;
+
+    xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+
+    wifi_config_t wifi_config = {};
+    strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
+    strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
+    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "Async connecting to %s...", ssid);
+    return ESP_OK;
+}
+
+void wifi_mgr_disconnect(void)
+{
+    if (!s_initialized) return;
+    s_auto_reconnect = false;
+    s_connected = false;
+    s_ip_str[0] = '\0';
+    esp_wifi_disconnect();
+    esp_wifi_stop();
+    ESP_LOGI(TAG, "WiFi disconnected and stopped");
 }
 
 int8_t wifi_mgr_get_rssi(void)

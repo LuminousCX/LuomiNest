@@ -1,0 +1,11 @@
+config C6_WIFI_SSID
+    string "WiFi SSID"
+    default "YourWiFiSSID"
+
+config C6_WIFI_PASSWORD
+    string "WiFi Password"
+    default "YourWiFiPassword"
+
+config C6_MQTT_BROKER
+    string "MQTT Broker URI"
+    default "mqtt://192.168.1.222:1883"

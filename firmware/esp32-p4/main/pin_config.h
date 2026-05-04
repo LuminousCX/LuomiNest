@@ -32,4 +32,10 @@
 #define TOUCH_RST_PIN       GPIO_NUM_NC
 #define TOUCH_INT_PIN       GPIO_NUM_NC
 
+#define SPI_CLK_PIN         GPIO_NUM_2
+#define SPI_MOSI_PIN        GPIO_NUM_3
+#define SPI_MISO_PIN        GPIO_NUM_4
+#define SPI_CS_PIN          GPIO_NUM_5
+#define SPI_HANDSHAKE_PIN   GPIO_NUM_6
+
 #endif

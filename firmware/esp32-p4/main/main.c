@@ -20,6 +20,8 @@
 #include "touch_driver.h"
 #include "chat_ui.h"
 #include "settings_ui.h"
+#include "time_mgr.h"
+#include "spi_frame_rx.h"
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 
@@ -50,6 +52,7 @@ static ln_config_t s_device_config = {0};
 static lv_obj_t *s_status_label = NULL;
 static lv_obj_t *s_net_label = NULL;
 static lv_obj_t *s_speed_label = NULL;
+static lv_obj_t *s_time_label = NULL;
 static lv_obj_t *s_right_panel = NULL;
 static chat_ui_t s_chat = {0};
 static settings_ui_t s_settings = {0};
@@ -169,6 +172,15 @@ static void create_ui(void)
     lv_obj_t *sep3 = lv_label_create(status_bar);
     lv_label_set_text(sep3, "  ");
     lv_obj_set_style_text_font(sep3, &lv_font_montserrat_14, 0);
+
+    s_time_label = lv_label_create(status_bar);
+    lv_label_set_text(s_time_label, "--:--");
+    lv_obj_set_style_text_color(s_time_label, lv_color_hex(0xA0A0D0), 0);
+    lv_obj_set_style_text_font(s_time_label, &lv_font_montserrat_14, 0);
+
+    lv_obj_t *sep4 = lv_label_create(status_bar);
+    lv_label_set_text(sep4, " ");
+    lv_obj_set_style_text_font(sep4, &lv_font_montserrat_14, 0);
 
     lv_obj_t *gear_btn = lv_btn_create(status_bar);
     lv_obj_set_size(gear_btn, 20, 20);
@@ -401,6 +413,27 @@ static void on_mqtt_command(const char *topic, const char *data, int data_len)
     }
 }
 
+static void on_spi_frame(const uint8_t *data, uint32_t len)
+{
+    if (!s_frame_queue) return;
+
+    s_stream_bytes += len;
+
+    frame_msg_t msg = {0};
+    msg.len = len;
+    msg.data = heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
+    if (!msg.data) return;
+    memcpy(msg.data, data, len);
+
+    frame_msg_t discarded = {0};
+    if (xQueueSend(s_frame_queue, &msg, 0) != pdTRUE) {
+        if (xQueueReceive(s_frame_queue, &discarded, 0) == pdTRUE) {
+            free(discarded.data);
+        }
+        xQueueSend(s_frame_queue, &msg, 0);
+    }
+}
+
 static void on_mqtt_stream(const char *topic, const uint8_t *data, int data_len)
 {
     if (strcmp(topic, TOPIC_STREAM) != 0) return;
@@ -434,6 +467,7 @@ static void frame_decode_task(void *pvParameter)
             avatar_engine_show_frame(msg.data, msg.len);
             free(msg.data);
             msg.data = NULL;
+        } else {
             vTaskDelay(pdMS_TO_TICKS(1));
         }
     }
@@ -455,6 +489,14 @@ static void on_mqtt_disconnected(void)
 }
 
 static bool s_mqtt_started = false;
+static bool s_sntp_started = false;
+
+static void start_sntp(void)
+{
+    if (s_sntp_started) return;
+    s_sntp_started = true;
+    time_mgr_init();
+}
 
 static void start_mqtt(void)
 {
@@ -473,58 +515,102 @@ static void start_mqtt(void)
 static void on_eth_connected(void)
 {
     ESP_LOGI(TAG, "Ethernet connected, starting MQTT...");
+    if (wifi_mgr_is_connected()) {
+        ESP_LOGI(TAG, "WiFi also online, preferring ETH - stopping WiFi");
+        wifi_mgr_disconnect();
+    }
+    start_sntp();
     start_mqtt();
 }
 
 static void on_eth_disconnected(void)
 {
-    ESP_LOGW(TAG, "Ethernet disconnected");
+    ESP_LOGW(TAG, "Ethernet disconnected, falling back to WiFi...");
     if (!wifi_mgr_is_connected()) {
-        update_ui_offline();
+        if (s_device_config.wifi_ssid[0]) {
+            wifi_mgr_connect_async(s_device_config.wifi_ssid, s_device_config.wifi_pass);
+        } else {
+            update_ui_offline();
+        }
     }
 }
 
 static void on_wifi_connected(void)
 {
     ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
+    start_sntp();
     start_mqtt();
 }
 
 static void on_wifi_disconnected(void)
 {
     ESP_LOGW(TAG, "WiFi disconnected");
-    if (!eth_mgr_is_connected()) {
+    if (eth_mgr_is_connected()) {
+        ESP_LOGI(TAG, "ETH still online, ignoring WiFi disconnect");
+    } else {
         update_ui_offline();
     }
+}
+
+static void update_time_display(void)
+{
+    if (!s_time_label) return;
+
+    char buf[16];
+    time_mgr_get_local_time_str(buf, sizeof(buf));
+
+    lvgl_port_lock(5000);
+    lv_label_set_text(s_time_label, buf);
+    lvgl_port_unlock();
 }
 
 static void status_task(void *pvParameter)
 {
     char status_buf[256];
+    int tick = 0;
+    int speed_tick = 0;
+    int status_interval_ticks = STATUS_INTERVAL_MS / 1000;
+    if (status_interval_ticks < 1) status_interval_ticks = 1;
+    int speed_interval_ticks = 3;
+
     while (1) {
-        if (app_mqtt_is_connected()) {
-            const avatar_stats_t *stats = avatar_engine_get_stats();
-            int8_t rssi = wifi_mgr_get_rssi();
-            bool eth_up = eth_mgr_is_connected();
-            uint32_t free_heap = esp_get_free_heap_size();
-            uint32_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+        update_time_display();
 
-            snprintf(status_buf, sizeof(status_buf),
-                     "{\"state\":\"online\",\"eth\":%s,\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
-                     "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u},"
-                     "\"decode_ms\":%u}",
-                     eth_up ? "true" : "false", rssi, (unsigned)free_heap, (unsigned)free_psram,
-                     (unsigned)stats->frames_received,
-                     (unsigned)stats->frames_displayed,
-                     (unsigned)stats->frames_skipped_dedup,
-                     (unsigned)stats->frames_skipped_error,
-                     (unsigned)stats->last_decode_ms);
+        tick++;
+        speed_tick++;
 
-            app_mqtt_publish(TOPIC_STATUS, status_buf, strlen(status_buf), 1);
+        if (speed_tick >= speed_interval_ticks) {
+            speed_tick = 0;
+            update_net_info();
+            update_speed_display();
         }
-        update_net_info();
-        update_speed_display();
-        vTaskDelay(pdMS_TO_TICKS(STATUS_INTERVAL_MS));
+
+        if (tick >= status_interval_ticks) {
+            tick = 0;
+
+            if (app_mqtt_is_connected()) {
+                const avatar_stats_t *stats = avatar_engine_get_stats();
+                int8_t rssi = wifi_mgr_get_rssi();
+                bool eth_up = eth_mgr_is_connected();
+                uint32_t free_heap = esp_get_free_heap_size();
+                uint32_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+
+                snprintf(status_buf, sizeof(status_buf),
+                         "{\"state\":\"online\",\"eth\":%s,\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
+                         "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u},"
+                         "\"decode_ms\":%u}",
+                         eth_up ? "true" : "false", rssi, (unsigned)free_heap, (unsigned)free_psram,
+                         (unsigned)stats->frames_received,
+                         (unsigned)stats->frames_displayed,
+                         (unsigned)stats->frames_skipped_dedup,
+                         (unsigned)stats->frames_skipped_error,
+                         (unsigned)stats->last_decode_ms);
+
+                app_mqtt_publish(TOPIC_STATUS, status_buf, strlen(status_buf), 1);
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
@@ -735,10 +821,22 @@ void app_main(void)
                 update_ui_offline();
             }
         }
+    } else {
+        wifi_mgr_init();
+        ESP_LOGI(TAG, "WiFi manager pre-initialized for fallback (ETH is primary)");
     }
 
     if (s_mqtt_started || eth_connected || wifi_mgr_is_connected()) {
-        xTaskCreatePinnedToCore(status_task, "status", 4096, NULL, 2, NULL, 0);
+        xTaskCreatePinnedToCore(status_task, "status", 4096, NULL, 2, NULL, 1);
+    }
+
+    esp_err_t spi_ret = spi_frame_rx_init();
+    if (spi_ret == ESP_OK) {
+        spi_frame_rx_register_cb(on_spi_frame);
+        spi_frame_rx_start();
+        ESP_LOGI(TAG, "SPI frame receiver (C6 coordinator) initialized");
+    } else {
+        ESP_LOGW(TAG, "SPI frame receiver not available (0x%x), using MQTT only", spi_ret);
     }
 
     ESP_LOGI(TAG, "LuomiNest P4 ready! Free heap: %u, Free PSRAM: %u",

@@ -14,8 +14,9 @@
 
 #define ST7735S_WIDTH        128
 #define ST7735S_HEIGHT       160
-#define ST7735S_SPI_FREQ     15000000
+#define ST7735S_SPI_FREQ     20000000
 #define ST7735S_X_OFFSET     0
 #define ST7735S_Y_OFFSET     0
+#define ST7735S_MADCTL       CONFIG_LN_ST7735S_MADCTL
 
 #endif

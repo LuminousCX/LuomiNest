@@ -2,6 +2,7 @@
 #define AVATAR_ENGINE_H
 
 #include "lvgl.h"
+#include "st7735s.h"
 #include "esp_err.h"
 
 typedef enum {
@@ -38,7 +39,7 @@ typedef struct {
 
 typedef void (*avatar_state_changed_cb_t)(avatar_state_t new_state);
 
-esp_err_t avatar_engine_init(lv_obj_t *parent);
+esp_err_t avatar_engine_init(lv_obj_t *parent, st7735s_handle_t *lcd);
 esp_err_t avatar_engine_play_state(avatar_state_t state);
 esp_err_t avatar_engine_play_action(const char *action_name, uint16_t frame_count, uint16_t fps, bool loop);
 esp_err_t avatar_engine_stop(void);

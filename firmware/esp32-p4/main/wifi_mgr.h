@@ -9,6 +9,8 @@ typedef void (*wifi_disconnected_cb_t)(void);
 
 esp_err_t wifi_mgr_init(void);
 esp_err_t wifi_mgr_connect(const char *ssid, const char *password);
+esp_err_t wifi_mgr_connect_async(const char *ssid, const char *password);
+void wifi_mgr_disconnect(void);
 esp_err_t wifi_mgr_register_connected_cb(wifi_connected_cb_t cb);
 esp_err_t wifi_mgr_register_disconnected_cb(wifi_disconnected_cb_t cb);
 bool wifi_mgr_is_connected(void);

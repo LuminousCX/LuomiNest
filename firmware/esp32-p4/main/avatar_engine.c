@@ -14,7 +14,8 @@ static lv_obj_t *s_avatar_img = NULL;
 static avatar_state_t s_current_state = AVATAR_STATE_IDLE;
 static avatar_state_changed_cb_t s_state_cb = NULL;
 static SemaphoreHandle_t s_engine_mux = NULL;
-static lv_draw_buf_t *s_frame_buf = NULL;
+static lv_draw_buf_t *s_frame_bufs[2] = {NULL, NULL};
+static volatile int s_write_idx = 0;
 
 static jpeg_decoder_handle_t s_jpeg_decoder = NULL;
 static uint8_t *s_jpeg_out_buf = NULL;
@@ -67,14 +68,15 @@ esp_err_t avatar_engine_init(lv_obj_t *parent)
              AVATAR_WIDTH, AVATAR_HEIGHT_ALIGNED, (unsigned)aligned_raw,
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
-    s_frame_buf = lv_draw_buf_create(AVATAR_WIDTH, AVATAR_HEIGHT,
-                                      LV_COLOR_FORMAT_RGB565, 0);
-    if (!s_frame_buf) {
-        ESP_LOGE(TAG, "Failed to create frame buffer (%dx%d)", AVATAR_WIDTH, AVATAR_HEIGHT);
-        return ESP_ERR_NO_MEM;
+    for (int i = 0; i < 2; i++) {
+        s_frame_bufs[i] = lv_draw_buf_create(AVATAR_WIDTH, AVATAR_HEIGHT,
+                                               LV_COLOR_FORMAT_RGB565, 0);
+        if (!s_frame_bufs[i]) {
+            ESP_LOGE(TAG, "Failed to create frame buffer %d (%dx%d)", i, AVATAR_WIDTH, AVATAR_HEIGHT);
+            return ESP_ERR_NO_MEM;
+        }
+        memset(s_frame_bufs[i]->data, 0, expected_raw);
     }
-
-    memset(s_frame_buf->data, 0, expected_raw);
 
     s_avatar_img = lv_image_create(parent);
     if (!s_avatar_img) {
@@ -83,7 +85,7 @@ esp_err_t avatar_engine_init(lv_obj_t *parent)
     }
     lv_obj_set_size(s_avatar_img, AVATAR_WIDTH, AVATAR_HEIGHT);
     lv_obj_align(s_avatar_img, AVATAR_POS_ALIGN, AVATAR_POS_X_OFF, AVATAR_POS_Y_OFF);
-    lv_image_set_src(s_avatar_img, s_frame_buf);
+    lv_image_set_src(s_avatar_img, s_frame_bufs[0]);
 
     memset(&s_stats, 0, sizeof(s_stats));
 
@@ -111,23 +113,27 @@ esp_err_t avatar_engine_init(lv_obj_t *parent)
     ESP_LOGI(TAG, "HW JPEG decoder ready: out_buf=%p (%u alloc), free PSRAM=%u",
              s_jpeg_out_buf, (unsigned)allocated,
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
+    ESP_LOGI(TAG, "Double-buffered frame pipeline ready (2x %u bytes)", (unsigned)expected_raw);
     return ESP_OK;
 }
 
 esp_err_t avatar_engine_fill_test(uint16_t color565)
 {
-    if (!s_frame_buf || !s_avatar_img) return ESP_ERR_INVALID_STATE;
+    if (!s_frame_bufs[0] || !s_avatar_img) return ESP_ERR_INVALID_STATE;
 
     xSemaphoreTake(s_engine_mux, portMAX_DELAY);
 
-    uint32_t pixel_count = AVATAR_WIDTH * AVATAR_HEIGHT;
-    uint16_t *pixels = (uint16_t *)s_frame_buf->data;
-    for (uint32_t i = 0; i < pixel_count; i++) {
-        pixels[i] = color565;
+    for (int i = 0; i < 2; i++) {
+        uint32_t pixel_count = AVATAR_WIDTH * AVATAR_HEIGHT;
+        uint16_t *pixels = (uint16_t *)s_frame_bufs[i]->data;
+        for (uint32_t j = 0; j < pixel_count; j++) {
+            pixels[j] = color565;
+        }
     }
 
     lvgl_port_lock(5000);
-    lv_image_set_src(s_avatar_img, s_frame_buf);
+    lv_image_set_src(s_avatar_img, s_frame_bufs[s_write_idx]);
     lv_obj_invalidate(s_avatar_img);
     lvgl_port_unlock();
 
@@ -185,11 +191,26 @@ static void copy_aligned_to_framebuf(const uint8_t *src, uint8_t *dst,
                                       uint32_t src_stride, uint32_t dst_stride,
                                       uint32_t row_bytes, int rows)
 {
+    if (src_stride == dst_stride && src_stride == row_bytes) {
+        memcpy(dst, src, (size_t)row_bytes * rows);
+        return;
+    }
     for (int y = 0; y < rows; y++) {
         memcpy(dst, src, row_bytes);
         src += src_stride;
         dst += dst_stride;
     }
+}
+
+static void swap_and_present(void)
+{
+    int display_idx = s_write_idx;
+    s_write_idx = 1 - s_write_idx;
+
+    lvgl_port_lock(5000);
+    lv_image_set_src(s_avatar_img, s_frame_bufs[display_idx]);
+    lv_obj_invalidate(s_avatar_img);
+    lvgl_port_unlock();
 }
 
 esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len)
@@ -217,6 +238,7 @@ esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len
 
     uint32_t expected_raw = AVATAR_WIDTH * AVATAR_HEIGHT * 2;
     bool displayed = false;
+    lv_draw_buf_t *write_buf = s_frame_bufs[s_write_idx];
 
     if (frame_len != expected_raw) {
         if (!s_jpeg_decoder || !s_jpeg_out_buf) {
@@ -244,16 +266,13 @@ esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len
             s_stats.last_decode_ms = decode_ms;
 
             uint32_t src_stride = AVATAR_ALIGNED_ROW_BYTES;
-            uint32_t dst_stride = s_frame_buf->header.stride;
+            uint32_t dst_stride = write_buf->header.stride;
 
-            copy_aligned_to_framebuf(s_jpeg_out_buf, s_frame_buf->data,
+            copy_aligned_to_framebuf(s_jpeg_out_buf, write_buf->data,
                                       src_stride, dst_stride,
                                       AVATAR_ROW_BYTES, AVATAR_HEIGHT);
 
-            lvgl_port_lock(5000);
-            lv_image_set_src(s_avatar_img, s_frame_buf);
-            lv_obj_invalidate(s_avatar_img);
-            lvgl_port_unlock();
+            swap_and_present();
             displayed = true;
             s_stats.frames_displayed++;
         } else {
@@ -264,18 +283,15 @@ esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len
     }
 
     if (!displayed && frame_len == expected_raw) {
-        uint32_t stride = s_frame_buf->header.stride;
+        uint32_t stride = write_buf->header.stride;
         if (stride == AVATAR_ROW_BYTES) {
-            memcpy(s_frame_buf->data, frame_data, expected_raw);
+            memcpy(write_buf->data, frame_data, expected_raw);
         } else {
-            copy_aligned_to_framebuf(frame_data, s_frame_buf->data,
+            copy_aligned_to_framebuf(frame_data, write_buf->data,
                                       AVATAR_ROW_BYTES, stride,
                                       AVATAR_ROW_BYTES, AVATAR_HEIGHT);
         }
-        lvgl_port_lock(5000);
-        lv_image_set_src(s_avatar_img, s_frame_buf);
-        lv_obj_invalidate(s_avatar_img);
-        lvgl_port_unlock();
+        swap_and_present();
         displayed = true;
         s_stats.frames_displayed++;
     }

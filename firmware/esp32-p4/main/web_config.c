@@ -7,6 +7,7 @@
 #include "esp_http_server.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lwip/sockets.h"
@@ -194,17 +195,19 @@ static esp_err_t handle_status(httpd_req_t *req)
 {
     ln_config_t cfg = {0};
     web_config_load(&cfg);
-    char resp[512];
-    snprintf(resp, sizeof(resp),
-             "{\"device\":\"LuomiNest-P4\",\"wifi_ssid\":\"%s\","
-             "\"mqtt_broker\":\"%s\",\"mqtt_client\":\"%s\","
-             "\"free_heap\":%u,\"free_psram\":%u}",
-             cfg.wifi_ssid, cfg.mqtt_broker, cfg.mqtt_client,
-             (unsigned)esp_get_free_heap_size(),
-             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "device", "LuomiNest-P4");
+    cJSON_AddStringToObject(root, "wifi_ssid", cfg.wifi_ssid);
+    cJSON_AddStringToObject(root, "mqtt_broker", cfg.mqtt_broker);
+    cJSON_AddStringToObject(root, "mqtt_client", cfg.mqtt_client);
+    cJSON_AddNumberToObject(root, "free_heap", (double)esp_get_free_heap_size());
+    cJSON_AddNumberToObject(root, "free_psram", (double)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    char *resp = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_send(req, resp, strlen(resp));
+    cJSON_free(resp);
     return ESP_OK;
 }
 
@@ -219,20 +222,24 @@ static esp_err_t handle_scan(httpd_req_t *req)
     if (ap_count > 20) ap_count = 20;
     wifi_ap_record_t ap_records[20];
     esp_wifi_scan_get_ap_records(&ap_count, ap_records);
-    char *buf = malloc(ap_count * 128 + 32);
-    if (!buf) { httpd_resp_send_500(req); return ESP_FAIL; }
-    strcpy(buf, "{\"networks\":[");
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *networks = cJSON_CreateArray();
     for (int i = 0; i < ap_count; i++) {
-        char entry[128];
-        snprintf(entry, sizeof(entry), "%s{\"ssid\":\"%s\",\"rssi\":%d,\"auth\":%d}",
-                 i > 0 ? "," : "", ap_records[i].ssid, ap_records[i].rssi, ap_records[i].authmode);
-        strcat(buf, entry);
+        cJSON *net = cJSON_CreateObject();
+        cJSON_AddStringToObject(net, "ssid", (const char *)ap_records[i].ssid);
+        cJSON_AddNumberToObject(net, "rssi", ap_records[i].rssi);
+        cJSON_AddNumberToObject(net, "auth", ap_records[i].authmode);
+        cJSON_AddItemToArray(networks, net);
     }
-    strcat(buf, "]}");
+    cJSON_AddItemToObject(root, "networks", networks);
+    char *resp = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_send(req, buf, strlen(buf));
-    free(buf);
+    httpd_resp_send(req, resp, strlen(resp));
+    cJSON_free(resp);
     return ESP_OK;
 }
 
@@ -242,17 +249,41 @@ static esp_err_t handle_config(httpd_req_t *req)
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (ret <= 0) { httpd_resp_send_500(req); return ESP_FAIL; }
     buf[ret] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"ok\":false,\"error\":\"Invalid JSON\"}");
+        return ESP_FAIL;
+    }
+
     ln_config_t cfg = {0};
     web_config_load(&cfg);
-    char *p = NULL;
-    p = strstr(buf, "\"wifi_ssid\"");
-    if (p) { p = strchr(p + 11, '"'); if (p) { p++; char *end = strchr(p, '"'); if (end) { int len = end - p; if (len >= LN_MAX_SSID_LEN) len = LN_MAX_SSID_LEN - 1; memcpy(cfg.wifi_ssid, p, len); cfg.wifi_ssid[len] = '\0'; } } }
-    p = strstr(buf, "\"wifi_pass\"");
-    if (p) { p = strchr(p + 11, '"'); if (p) { p++; char *end = strchr(p, '"'); if (end) { int len = end - p; if (len >= LN_MAX_PASS_LEN) len = LN_MAX_PASS_LEN - 1; memcpy(cfg.wifi_pass, p, len); cfg.wifi_pass[len] = '\0'; } } }
-    p = strstr(buf, "\"mqtt_broker\"");
-    if (p) { p = strchr(p + 13, '"'); if (p) { p++; char *end = strchr(p, '"'); if (end) { int len = end - p; if (len >= LN_MAX_BROKER_LEN) len = LN_MAX_BROKER_LEN - 1; memcpy(cfg.mqtt_broker, p, len); cfg.mqtt_broker[len] = '\0'; } } }
-    p = strstr(buf, "\"mqtt_client\"");
-    if (p) { p = strchr(p + 13, '"'); if (p) { p++; char *end = strchr(p, '"'); if (end) { int len = end - p; if (len >= LN_MAX_CLIENT_LEN) len = LN_MAX_CLIENT_LEN - 1; memcpy(cfg.mqtt_client, p, len); cfg.mqtt_client[len] = '\0'; } } }
+
+    cJSON *item = NULL;
+    item = cJSON_GetObjectItem(root, "wifi_ssid");
+    if (item && cJSON_IsString(item)) {
+        strncpy(cfg.wifi_ssid, item->valuestring, LN_MAX_SSID_LEN - 1);
+        cfg.wifi_ssid[LN_MAX_SSID_LEN - 1] = '\0';
+    }
+    item = cJSON_GetObjectItem(root, "wifi_pass");
+    if (item && cJSON_IsString(item)) {
+        strncpy(cfg.wifi_pass, item->valuestring, LN_MAX_PASS_LEN - 1);
+        cfg.wifi_pass[LN_MAX_PASS_LEN - 1] = '\0';
+    }
+    item = cJSON_GetObjectItem(root, "mqtt_broker");
+    if (item && cJSON_IsString(item)) {
+        strncpy(cfg.mqtt_broker, item->valuestring, LN_MAX_BROKER_LEN - 1);
+        cfg.mqtt_broker[LN_MAX_BROKER_LEN - 1] = '\0';
+    }
+    item = cJSON_GetObjectItem(root, "mqtt_client");
+    if (item && cJSON_IsString(item)) {
+        strncpy(cfg.mqtt_client, item->valuestring, LN_MAX_CLIENT_LEN - 1);
+        cfg.mqtt_client[LN_MAX_CLIENT_LEN - 1] = '\0';
+    }
+
+    cJSON_Delete(root);
+
     esp_err_t err = web_config_save(&cfg);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, err == ESP_OK ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"NVS write failed\"}");

@@ -57,7 +57,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                             event->topic_len : (int)(sizeof(topic) - 1);
             memcpy(topic, event->topic, topic_len);
 
-            if (s_stream_cb && event->data_len > 256) {
+            if (s_stream_cb && strcmp(topic, "luominest/s3/stream") == 0) {
                 s_stream_cb(topic, (const uint8_t *)event->data, event->data_len);
             } else if (s_msg_cb) {
                 char *data = malloc(event->data_len + 1);
@@ -92,7 +92,7 @@ esp_err_t app_mqtt_init(const char *broker_uri, const char *client_id)
     esp_mqtt_client_config_t cfg = {
         .broker.address.uri = broker_uri,
         .credentials.client_id = client_id,
-        .buffer.size = 65536,
+        .buffer.size = 8192,
         .session.last_will = {
             .topic = s_status_topic,
             .msg = "{\"state\":\"offline\"}",

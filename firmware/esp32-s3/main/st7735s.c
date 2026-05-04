@@ -214,7 +214,7 @@ esp_err_t st7735s_init(const st7735s_config_t *config, st7735s_handle_t *handle)
     st7735s_cmd(handle, ST7735S_INVOFF);
 
     st7735s_cmd(handle, ST7735S_MADCTL);
-    uint8_t madctl[] = { 0x00 };
+    uint8_t madctl[] = { handle->cfg.madctl };
     st7735s_data(handle, madctl, 1);
 
     st7735s_cmd(handle, ST7735S_COLMOD);
@@ -266,17 +266,54 @@ esp_err_t st7735s_draw_bitmap(st7735s_handle_t *handle,
     if (!handle->initialized) return ESP_ERR_INVALID_STATE;
 
     uint32_t total_bytes = (uint32_t)w * h * 2;
-
-    st7735s_set_window(handle, x, y, x + w - 1, y + h - 1);
+    uint16_t x0 = x + handle->cfg.x_offset;
+    uint16_t x1 = x + w - 1 + handle->cfg.x_offset;
+    uint16_t y0 = y + handle->cfg.y_offset;
+    uint16_t y1 = y + h - 1 + handle->cfg.y_offset;
 
     cs_low(handle);
+
+    gpio_set_level(handle->cfg.dc_pin, 0);
+    uint8_t cmd_caset = ST7735S_CASET;
+    spi_transaction_t t1 = { .length = 8, .tx_buffer = &cmd_caset };
+    spi_device_polling_transmit(handle->spi_dev, &t1);
+
+    gpio_set_level(handle->cfg.dc_pin, 1);
+    uint8_t x_data[] = { x0 >> 8, x0 & 0xFF, x1 >> 8, x1 & 0xFF };
+    spi_transaction_t t2 = { .length = 32, .tx_buffer = x_data };
+    spi_device_polling_transmit(handle->spi_dev, &t2);
+
+    gpio_set_level(handle->cfg.dc_pin, 0);
+    uint8_t cmd_raset = ST7735S_RASET;
+    spi_transaction_t t3 = { .length = 8, .tx_buffer = &cmd_raset };
+    spi_device_polling_transmit(handle->spi_dev, &t3);
+
+    gpio_set_level(handle->cfg.dc_pin, 1);
+    uint8_t y_data[] = { y0 >> 8, y0 & 0xFF, y1 >> 8, y1 & 0xFF };
+    spi_transaction_t t4 = { .length = 32, .tx_buffer = y_data };
+    spi_device_polling_transmit(handle->spi_dev, &t4);
+
+    gpio_set_level(handle->cfg.dc_pin, 0);
+    uint8_t cmd_ramwr = ST7735S_RAMWR;
+    spi_transaction_t t5 = { .length = 8, .tx_buffer = &cmd_ramwr };
+    spi_device_polling_transmit(handle->spi_dev, &t5);
+
     gpio_set_level(handle->cfg.dc_pin, 1);
 
-    spi_transaction_t t = {
-        .length = total_bytes * 8,
-        .tx_buffer = color_data,
-    };
-    spi_device_polling_transmit(handle->spi_dev, &t);
+#define SPI_CHUNK_SIZE 4092
+    uint32_t remaining = total_bytes;
+    const uint8_t *ptr = (const uint8_t *)color_data;
+    while (remaining > 0) {
+        uint32_t chunk = remaining > SPI_CHUNK_SIZE ? SPI_CHUNK_SIZE : remaining;
+        spi_transaction_t t = {
+            .length = chunk * 8,
+            .tx_buffer = ptr,
+        };
+        spi_device_polling_transmit(handle->spi_dev, &t);
+        ptr += chunk;
+        remaining -= chunk;
+    }
+#undef SPI_CHUNK_SIZE
 
     cs_high(handle);
     return ESP_OK;

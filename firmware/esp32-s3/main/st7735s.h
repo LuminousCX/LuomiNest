@@ -17,6 +17,7 @@ typedef struct {
     int spi_freq;
     int x_offset;
     int y_offset;
+    uint8_t madctl;
 } st7735s_config_t;
 
 typedef struct {

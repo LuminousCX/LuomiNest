@@ -11,6 +11,7 @@ menu "LuomiNest Configuration"
         default "18033810300xyr"
         help
             Default WiFi network password (used when no NVS config saved).
+            Can be overridden via Web config portal.
 
     config LN_MQTT_BROKER
         string "MQTT Broker URI"
@@ -81,5 +82,19 @@ menu "LuomiNest Configuration"
         help
             Skip decoding JPEG frames that are identical to the previous frame.
             Saves CPU and reduces visual flicker on static scenes.
+
+    config LN_ST7735S_MADCTL
+        hex "ST7735S MADCTL register value"
+        default 0x00
+        help
+            Memory Data Access Control register (0x36).
+            Controls display orientation and color order.
+            Common values:
+              0x00 = Normal (top-to-bottom, left-to-right, RGB)
+              0x08 = BGR color order (fix red/blue swap)
+              0x40 = Horizontal mirror
+              0x80 = Vertical mirror
+              0xC0 = 180° rotation (both mirrors)
+              0xC8 = 180° rotation + BGR
 
 endmenu
