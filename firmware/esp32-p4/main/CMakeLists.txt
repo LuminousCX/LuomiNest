@@ -9,6 +9,7 @@ idf_component_register(
         "web_config.c"
         "touch_driver.c"
         "chat_ui.c"
+        "settings_ui.c"
     INCLUDE_DIRS
         "."
     REQUIRES

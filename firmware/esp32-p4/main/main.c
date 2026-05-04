@@ -19,6 +19,7 @@
 #include "web_config.h"
 #include "touch_driver.h"
 #include "chat_ui.h"
+#include "settings_ui.h"
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 
@@ -51,6 +52,9 @@ static lv_obj_t *s_net_label = NULL;
 static lv_obj_t *s_speed_label = NULL;
 static lv_obj_t *s_right_panel = NULL;
 static chat_ui_t s_chat = {0};
+static settings_ui_t s_settings = {0};
+static lv_obj_t *s_swipe_cont = NULL;
+static lv_obj_t *s_page_dots[2] = {NULL, NULL};
 
 typedef struct {
     uint8_t *data;
@@ -70,6 +74,45 @@ static float s_current_speed_kbps = 0;
 #define COLOR_ONLINE      lv_color_hex(0x4ECDC4)
 #define COLOR_OFFLINE     lv_color_hex(0xFF6B6B)
 #define COLOR_CONNECTING  lv_color_hex(0xFFD93D)
+
+static void update_page_dots(int page)
+{
+    for (int i = 0; i < 2; i++) {
+        if (!s_page_dots[i]) continue;
+        lv_obj_set_style_bg_color(s_page_dots[i],
+            i == page ? COLOR_ONLINE : lv_color_hex(0x3A3A5C), 0);
+        lv_obj_set_style_bg_opa(s_page_dots[i],
+            i == page ? LV_OPA_COVER : LV_OPA_50, 0);
+    }
+}
+
+static void swipe_scroll_cb(lv_event_t *e)
+{
+    lv_obj_t *cont = lv_event_get_target(e);
+    lv_coord_t scroll_x = lv_obj_get_scroll_x(cont);
+    int page = (scroll_x + SCREEN_W / 2) / SCREEN_W;
+    if (page < 0) page = 0;
+    if (page > 1) page = 1;
+    update_page_dots(page);
+
+    if (page != 0 && s_settings.kb_visible) {
+        settings_ui_hide_keyboard(&s_settings);
+    }
+}
+
+static void gear_click_cb(lv_event_t *e)
+{
+    if (!s_swipe_cont) return;
+    lv_obj_scroll_to_x(s_swipe_cont, SCREEN_W, LV_ANIM_ON);
+    update_page_dots(1);
+}
+
+static void settings_go_back(void)
+{
+    if (!s_swipe_cont) return;
+    lv_obj_scroll_to_x(s_swipe_cont, 0, LV_ANIM_ON);
+    update_page_dots(0);
+}
 
 static void create_ui(void)
 {
@@ -123,22 +166,88 @@ static void create_ui(void)
     lv_obj_set_style_text_color(s_speed_label, lv_color_hex(0x6688AA), 0);
     lv_obj_set_style_text_font(s_speed_label, &lv_font_montserrat_14, 0);
 
-    lv_obj_t *left_panel = lv_obj_create(scr);
+    lv_obj_t *sep3 = lv_label_create(status_bar);
+    lv_label_set_text(sep3, "  ");
+    lv_obj_set_style_text_font(sep3, &lv_font_montserrat_14, 0);
+
+    lv_obj_t *gear_btn = lv_btn_create(status_bar);
+    lv_obj_set_size(gear_btn, 20, 20);
+    lv_obj_set_style_bg_opa(gear_btn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(gear_btn, 0, 0);
+    lv_obj_set_style_shadow_width(gear_btn, 0, 0);
+    lv_obj_set_style_pad_all(gear_btn, 0, 0);
+    lv_obj_add_event_cb(gear_btn, gear_click_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *gear_lbl = lv_label_create(gear_btn);
+    lv_label_set_text(gear_lbl, LV_SYMBOL_SETTINGS);
+    lv_obj_set_style_text_color(gear_lbl, COLOR_STATUS_TEXT, 0);
+    lv_obj_set_style_text_font(gear_lbl, &lv_font_montserrat_14, 0);
+    lv_obj_center(gear_lbl);
+
+    s_swipe_cont = lv_obj_create(scr);
+    lv_obj_remove_style_all(s_swipe_cont);
+    lv_obj_set_size(s_swipe_cont, SCREEN_W, CONTENT_H);
+    lv_obj_set_pos(s_swipe_cont, 0, STATUS_BAR_H);
+    lv_obj_set_flex_flow(s_swipe_cont, LV_FLEX_FLOW_ROW);
+    lv_obj_set_scroll_snap_x(s_swipe_cont, LV_SCROLL_SNAP_CENTER);
+    lv_obj_set_scroll_dir(s_swipe_cont, LV_DIR_HOR);
+    lv_obj_set_scrollbar_mode(s_swipe_cont, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_bg_opa(s_swipe_cont, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_pad_all(s_swipe_cont, 0, 0);
+    lv_obj_set_style_pad_gap(s_swipe_cont, 0, 0);
+    lv_obj_add_event_cb(s_swipe_cont, swipe_scroll_cb, LV_EVENT_SCROLL, NULL);
+
+    lv_obj_t *page0 = lv_obj_create(s_swipe_cont);
+    lv_obj_remove_style_all(page0);
+    lv_obj_set_size(page0, SCREEN_W, CONTENT_H);
+    lv_obj_set_style_bg_opa(page0, LV_OPA_TRANSP, 0);
+    lv_obj_clear_flag(page0, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(page0, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(page0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    lv_obj_t *left_panel = lv_obj_create(page0);
     lv_obj_remove_style_all(left_panel);
     lv_obj_set_size(left_panel, LEFT_PANEL_W, CONTENT_H);
-    lv_obj_set_pos(left_panel, 0, STATUS_BAR_H);
     lv_obj_set_style_bg_opa(left_panel, LV_OPA_TRANSP, 0);
     lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_SCROLLABLE);
 
     chat_ui_init(&s_chat, left_panel, LEFT_PANEL_W, CONTENT_H);
 
-    s_right_panel = lv_obj_create(scr);
+    s_right_panel = lv_obj_create(page0);
     lv_obj_remove_style_all(s_right_panel);
     lv_obj_set_size(s_right_panel, RIGHT_PANEL_W, CONTENT_H);
-    lv_obj_set_pos(s_right_panel, LEFT_PANEL_W, STATUS_BAR_H);
     lv_obj_set_style_bg_color(s_right_panel, COLOR_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(s_right_panel, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_clear_flag(s_right_panel, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *page1 = lv_obj_create(s_swipe_cont);
+    lv_obj_remove_style_all(page1);
+    lv_obj_set_size(page1, SCREEN_W, CONTENT_H);
+    lv_obj_set_style_bg_color(page1, COLOR_BG, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(page1, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_clear_flag(page1, LV_OBJ_FLAG_SCROLLABLE);
+
+    settings_ui_init(&s_settings, page1, SCREEN_W, CONTENT_H);
+    settings_ui_set_back_cb(&s_settings, settings_go_back);
+
+    lv_obj_t *dots_cont = lv_obj_create(scr);
+    lv_obj_remove_style_all(dots_cont);
+    lv_obj_set_size(dots_cont, 40, 8);
+    lv_obj_align(dots_cont, LV_ALIGN_BOTTOM_MID, 0, -4);
+    lv_obj_set_flex_flow(dots_cont, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(dots_cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(dots_cont, 6, 0);
+    lv_obj_clear_flag(dots_cont, LV_OBJ_FLAG_SCROLLABLE);
+
+    for (int i = 0; i < 2; i++) {
+        s_page_dots[i] = lv_obj_create(dots_cont);
+        lv_obj_remove_style_all(s_page_dots[i]);
+        lv_obj_set_size(s_page_dots[i], i == 0 ? 16 : 6, 6);
+        lv_obj_set_style_bg_color(s_page_dots[i], i == 0 ? COLOR_ONLINE : lv_color_hex(0x3A3A5C), 0);
+        lv_obj_set_style_bg_opa(s_page_dots[i], i == 0 ? LV_OPA_COVER : LV_OPA_50, 0);
+        lv_obj_set_style_radius(s_page_dots[i], 3, 0);
+    }
+
+    lv_obj_scroll_to_x(s_swipe_cont, 0, LV_ANIM_OFF);
 }
 
 static void touch_init_task(void *pvParameter)
@@ -477,14 +586,17 @@ static esp_err_t init_sdcard(void)
 static void load_device_config(void)
 {
     if (web_config_load(&s_device_config) == ESP_OK && web_config_has_saved()) {
-        ESP_LOGI(TAG, "Loaded config from NVS: SSID=%s, Broker=%s",
-                 s_device_config.wifi_ssid, s_device_config.mqtt_broker);
+        ESP_LOGI(TAG, "Loaded config from NVS: SSID=%s, Broker=%s, Brightness=%d, Volume=%d",
+                 s_device_config.wifi_ssid, s_device_config.mqtt_broker,
+                 s_device_config.brightness, s_device_config.volume);
     } else {
         ESP_LOGI(TAG, "No saved config, using defaults from menuconfig");
         strncpy(s_device_config.wifi_ssid, DEFAULT_WIFI_SSID, sizeof(s_device_config.wifi_ssid) - 1);
         strncpy(s_device_config.wifi_pass, DEFAULT_WIFI_PASS, sizeof(s_device_config.wifi_pass) - 1);
         strncpy(s_device_config.mqtt_broker, DEFAULT_MQTT_BROKER, sizeof(s_device_config.mqtt_broker) - 1);
         strncpy(s_device_config.mqtt_client, DEFAULT_MQTT_CLIENT_ID, sizeof(s_device_config.mqtt_client) - 1);
+        s_device_config.brightness = 100;
+        s_device_config.volume = 50;
     }
 }
 
@@ -558,9 +670,12 @@ void app_main(void)
     chat_ui_add_demo_messages(&s_chat);
     lvgl_port_unlock();
 
+    load_device_config();
+
     vTaskDelay(pdMS_TO_TICKS(100));
-    mipi_lcd_backlight_on();
-    ESP_LOGI(TAG, "Backlight on, UI visible");
+    int init_brightness = s_device_config.brightness > 0 ? s_device_config.brightness : 100;
+    mipi_lcd_brightness_set(init_brightness);
+    ESP_LOGI(TAG, "Backlight on (brightness %d%%), UI visible", init_brightness);
 
     xTaskCreatePinnedToCore(touch_init_task, "touch_init", 8192, NULL, 5, NULL, 0);
 
@@ -575,7 +690,9 @@ void app_main(void)
     eth_mgr_register_connected_cb(on_eth_connected);
     eth_mgr_register_disconnected_cb(on_eth_disconnected);
 
-    load_device_config();
+    lvgl_port_lock(5000);
+    settings_ui_load_config(&s_settings, &s_device_config);
+    lvgl_port_unlock();
 
     ESP_LOGI(TAG, "Initializing Ethernet (EMAC + RMII)...");
     esp_err_t eth_init_ret = eth_mgr_init();

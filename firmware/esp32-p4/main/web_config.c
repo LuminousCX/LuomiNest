@@ -414,10 +414,13 @@ esp_err_t web_config_load(ln_config_t *cfg)
         return err;
     }
     size_t len;
+    int32_t val;
     len = sizeof(cfg->wifi_ssid); nvs_get_str(handle, LN_NVS_KEY_WIFI_SSID, cfg->wifi_ssid, &len);
     len = sizeof(cfg->wifi_pass); nvs_get_str(handle, LN_NVS_KEY_WIFI_PASS, cfg->wifi_pass, &len);
     len = sizeof(cfg->mqtt_broker); nvs_get_str(handle, LN_NVS_KEY_MQTT_BROKER, cfg->mqtt_broker, &len);
     len = sizeof(cfg->mqtt_client); nvs_get_str(handle, LN_NVS_KEY_MQTT_CLIENT, cfg->mqtt_client, &len);
+    if (nvs_get_i32(handle, LN_NVS_KEY_BRIGHTNESS, &val) == ESP_OK) cfg->brightness = val; else cfg->brightness = 80;
+    if (nvs_get_i32(handle, LN_NVS_KEY_VOLUME, &val) == ESP_OK) cfg->volume = val; else cfg->volume = 50;
     nvs_close(handle);
     return ESP_OK;
 }
@@ -431,6 +434,8 @@ esp_err_t web_config_save(const ln_config_t *cfg)
     if (cfg->wifi_pass[0]) nvs_set_str(handle, LN_NVS_KEY_WIFI_PASS, cfg->wifi_pass);
     if (cfg->mqtt_broker[0]) nvs_set_str(handle, LN_NVS_KEY_MQTT_BROKER, cfg->mqtt_broker);
     if (cfg->mqtt_client[0]) nvs_set_str(handle, LN_NVS_KEY_MQTT_CLIENT, cfg->mqtt_client);
+    nvs_set_i32(handle, LN_NVS_KEY_BRIGHTNESS, cfg->brightness);
+    nvs_set_i32(handle, LN_NVS_KEY_VOLUME, cfg->volume);
     nvs_commit(handle);
     nvs_close(handle);
     ESP_LOGI(TAG, "Config saved: SSID=%s, Broker=%s", cfg->wifi_ssid, cfg->mqtt_broker);

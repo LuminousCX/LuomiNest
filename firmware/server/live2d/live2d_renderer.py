@@ -24,7 +24,7 @@ DEVICE_PROFILES = {
         "crop_top": 0.0,
         "crop_bottom": 0.38,
         "saturation_boost": 1.70,
-        "jpeg_quality": 60,
+        "jpeg_quality": 70,
         "bg_color": (255, 245, 235),
     },
     "p4": {
@@ -36,7 +36,7 @@ DEVICE_PROFILES = {
         "crop_bottom": 0.55,
         "saturation_boost": 1.20,
         "jpeg_quality": 70,
-        "bg_color": (26, 26, 46),
+        "bg_color": (255, 245, 235),
     },
 }
 
