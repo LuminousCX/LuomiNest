@@ -169,8 +169,9 @@ class LLMAdapter:
         tools: list[dict] | None = None,
         stream: bool = False,
         provider_name: str | None = None,
+        return_raw: bool = False,
         **kwargs
-    ) -> str | AsyncIterator[str]:
+    ) -> str | dict | AsyncIterator[str]:
         provider = self.get_provider(provider_name)
         actual_provider = provider_name or self.default_provider
         model = kwargs.get("model") or provider.default_model
@@ -178,7 +179,7 @@ class LLMAdapter:
 
         start_time = time.time()
         try:
-            result = await provider.chat(messages, tools, stream, **kwargs)
+            result = await provider.chat(messages, tools, stream, return_raw=return_raw, **kwargs)
             elapsed = time.time() - start_time
             if isinstance(result, str):
                 logger.success(f"[LLM] Chat response: provider={actual_provider}, elapsed={elapsed:.2f}s, len={len(result)}")

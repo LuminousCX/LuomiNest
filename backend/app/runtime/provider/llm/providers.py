@@ -191,8 +191,17 @@ class OpenAICompatibleProvider(LLMProvider):
         messages: list[dict],
         tools: list[dict] | None = None,
         stream: bool = False,
+        return_raw: bool = False,
         **kwargs
-    ) -> str | AsyncIterator[str]:
+    ) -> str | dict | AsyncIterator[str]:
+        """调用大模型聊天接口
+
+        参数:
+            messages: 对话消息列表
+            tools: OpenAI Function Calling 格式工具定义列表
+            stream: 是否使用流式响应
+            return_raw: 是否返回完整 API 响应（含 tool_calls），默认 False 仅返回文本
+        """
         if stream:
             return self.chat_stream(messages, tools, **kwargs)
 
@@ -205,6 +214,14 @@ class OpenAICompatibleProvider(LLMProvider):
             )
             resp.raise_for_status()
             data = resp.json()
+            if return_raw:
+                message = data.get("choices", [{}])[0].get("message", {})
+                tool_calls = message.get("tool_calls", [])
+                return {
+                    "content": message.get("content", ""),
+                    "tool_calls": tool_calls,
+                    "role": message.get("role", "assistant"),
+                }
             return data["choices"][0]["message"]["content"]
 
     async def chat_stream(
