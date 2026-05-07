@@ -1,6 +1,7 @@
 #include "app_mqtt.h"
 #include "mqtt_client.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -16,9 +17,43 @@ static int s_backoff_ms = 1000;
 static int s_reconnect_count = 0;
 static char s_status_topic[128] = {0};
 
+static uint8_t *s_stream_buf = NULL;
+static uint32_t s_stream_buf_len = 0;
+static uint32_t s_stream_buf_cap = 0;
+static char s_stream_topic[128] = {0};
+#define STREAM_BUF_INITIAL_CAP (200 * 1024)
+
+static uint32_t s_stream_rx_count = 0;
+
+static void stream_buf_reset(void)
+{
+    s_stream_buf_len = 0;
+    s_stream_topic[0] = '\0';
+}
+
+static void stream_buf_ensure(uint32_t needed)
+{
+    if (s_stream_buf_cap >= needed) return;
+    uint32_t new_cap = s_stream_buf_cap == 0 ? STREAM_BUF_INITIAL_CAP : s_stream_buf_cap;
+    while (new_cap < needed) new_cap *= 2;
+    ESP_LOGI(TAG, "Stream buffer realloc: %u -> %u bytes (free PSRAM=%u)",
+             (unsigned)s_stream_buf_cap, (unsigned)new_cap,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    uint8_t *new_buf = heap_caps_realloc(s_stream_buf, new_cap, MALLOC_CAP_SPIRAM);
+    if (!new_buf) {
+        ESP_LOGE(TAG, "Stream buffer realloc FAILED (%u bytes)", new_cap);
+        stream_buf_reset();
+        free(s_stream_buf);
+        s_stream_buf = NULL;
+        s_stream_buf_cap = 0;
+        return;
+    }
+    s_stream_buf = new_buf;
+    s_stream_buf_cap = new_cap;
+}
+
 #define INITIAL_BACKOFF_MS  1000
 #define MAX_BACKOFF_MS      CONFIG_LN_MQTT_RECONNECT_MAX_MS
-#define MAX_RECONNECT_INF   -1
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                                 int32_t event_id, void *event_data)
@@ -33,6 +68,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         s_state = MQTT_STATE_CONNECTED;
         s_backoff_ms = INITIAL_BACKOFF_MS;
         s_reconnect_count = 0;
+        s_stream_rx_count = 0;
         if (s_conn_cb) s_conn_cb();
         break;
 
@@ -42,24 +78,49 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         s_state = MQTT_STATE_DISCONNECTED;
         if (s_disc_cb) s_disc_cb();
         s_reconnect_count++;
-        if (MAX_RECONNECT_INF < 0 || s_reconnect_count <= 100) {
-            s_backoff_ms = s_backoff_ms * 2;
-            if (s_backoff_ms > MAX_BACKOFF_MS) {
-                s_backoff_ms = MAX_BACKOFF_MS;
-            }
+        s_backoff_ms = s_backoff_ms * 2;
+        if (s_backoff_ms > MAX_BACKOFF_MS) {
+            s_backoff_ms = MAX_BACKOFF_MS;
         }
+        stream_buf_reset();
         break;
 
     case MQTT_EVENT_DATA:
-        if (event->data_len > 0) {
+    {
+        if (event->data_len <= 0) break;
+
+        bool is_stream = (s_stream_cb != NULL && event->total_data_len > 256);
+
+        if (is_stream) {
+            if (event->current_data_offset == 0) {
+                stream_buf_reset();
+                int topic_len = event->topic_len < (int)(sizeof(s_stream_topic) - 1) ?
+                                event->topic_len : (int)(sizeof(s_stream_topic) - 1);
+                memcpy(s_stream_topic, event->topic, topic_len);
+                s_stream_topic[topic_len] = '\0';
+            }
+
+            stream_buf_ensure(event->total_data_len);
+            if (!s_stream_buf) {
+                ESP_LOGE(TAG, "Stream buffer NULL, dropping chunk");
+                break;
+            }
+
+            memcpy(s_stream_buf + s_stream_buf_len, event->data, event->data_len);
+            s_stream_buf_len += event->data_len;
+
+            if (s_stream_buf_len >= event->total_data_len) {
+                s_stream_rx_count++;
+                s_stream_cb(s_stream_topic, s_stream_buf, s_stream_buf_len);
+                s_stream_buf_len = 0;
+            }
+        } else {
             char topic[128] = {0};
             int topic_len = event->topic_len < (int)(sizeof(topic) - 1) ?
                             event->topic_len : (int)(sizeof(topic) - 1);
             memcpy(topic, event->topic, topic_len);
 
-            if (s_stream_cb && strcmp(topic, "luominest/s3/stream") == 0) {
-                s_stream_cb(topic, (const uint8_t *)event->data, event->data_len);
-            } else if (s_msg_cb) {
+            if (s_msg_cb) {
                 char *data = malloc(event->data_len + 1);
                 if (data) {
                     memcpy(data, event->data, event->data_len);
@@ -70,9 +131,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
             }
         }
         break;
+    }
 
     case MQTT_EVENT_ERROR:
-        ESP_LOGE(TAG, "MQTT error: last errno=%d", event->error_handle->esp_tls_last_esp_err);
+        ESP_LOGE(TAG, "MQTT error: last errno=%d, err_type=%d",
+                 event->error_handle->esp_tls_last_esp_err,
+                 event->error_handle->error_type);
         break;
 
     case MQTT_EVENT_BEFORE_CONNECT:
@@ -89,10 +153,12 @@ esp_err_t app_mqtt_init(const char *broker_uri, const char *client_id)
 {
     snprintf(s_status_topic, sizeof(s_status_topic), "luominest/s3/status");
 
+    ESP_LOGI(TAG, "MQTT init: broker=%s, client_id=%s, buffer=131072", broker_uri, client_id);
+
     esp_mqtt_client_config_t cfg = {
         .broker.address.uri = broker_uri,
         .credentials.client_id = client_id,
-        .buffer.size = 8192,
+        .buffer.size = 131072,
         .session.last_will = {
             .topic = s_status_topic,
             .msg = "{\"state\":\"offline\"}",
@@ -118,7 +184,7 @@ esp_err_t app_mqtt_init(const char *broker_uri, const char *client_id)
     s_state = MQTT_STATE_CONNECTING;
     s_backoff_ms = INITIAL_BACKOFF_MS;
 
-    ESP_LOGI(TAG, "MQTT client started, connecting to %s (LWT enabled)", broker_uri);
+    ESP_LOGI(TAG, "MQTT client initialized (%s)", broker_uri);
     return ESP_OK;
 }
 
@@ -135,7 +201,6 @@ esp_err_t app_mqtt_publish(const char *topic, const char *data, int len, int qos
 {
     if (!s_client) return ESP_ERR_INVALID_STATE;
     if (s_state != MQTT_STATE_CONNECTED) {
-        ESP_LOGD(TAG, "Publish skipped: not connected");
         return ESP_ERR_INVALID_STATE;
     }
     int msg_id = esp_mqtt_client_publish(s_client, topic, data, len, qos, 0);

@@ -2,20 +2,20 @@ menu "LuomiNest Configuration"
 
     config LN_WIFI_SSID
         string "WiFi SSID"
-        default "Xiaomi_65DF"
+        default "辰汐的Xiaomi 17 Pro"
         help
             Default WiFi network name (used when no NVS config saved).
 
     config LN_WIFI_PASSWORD
         string "WiFi Password"
-        default "18033810300xyr"
+        default "la917angel"
         help
             Default WiFi network password (used when no NVS config saved).
             Can be overridden via Web config portal.
 
     config LN_MQTT_BROKER
         string "MQTT Broker URI"
-        default "mqtt://192.168.1.222:1883"
+        default "mqtt://10.152.66.213:1883"
         help
             Default MQTT broker address (used when no NVS config saved).
 
@@ -33,7 +33,7 @@ menu "LuomiNest Configuration"
 
     config LN_FRAME_QUEUE_SIZE
         int "Frame queue size"
-        default 2
+        default 3
         range 1 10
         help
             Number of JPEG frames to buffer before decoding.
@@ -83,18 +83,21 @@ menu "LuomiNest Configuration"
             Skip decoding JPEG frames that are identical to the previous frame.
             Saves CPU and reduces visual flicker on static scenes.
 
-    config LN_ST7735S_MADCTL
-        hex "ST7735S MADCTL register value"
-        default 0x00
+    config LN_AVATAR_MODE
+        int "Default avatar mode (0=stream, 1=local, 2=hybrid)"
+        default 2
+        range 0 2
         help
-            Memory Data Access Control register (0x36).
-            Controls display orientation and color order.
-            Common values:
-              0x00 = Normal (top-to-bottom, left-to-right, RGB)
-              0x08 = BGR color order (fix red/blue swap)
-              0x40 = Horizontal mirror
-              0x80 = Vertical mirror
-              0xC0 = 180° rotation (both mirrors)
-              0xC8 = 180° rotation + BGR
+            Default avatar display mode on startup:
+              0 = Stream mode (all frames from MQTT)
+              1 = Local mode (all frames from SD card)
+              2 = Hybrid mode (idle/sleep from SD, dynamic from MQTT)
+
+    config LN_LOCAL_FPS
+        int "Local playback FPS"
+        default 15
+        range 5 30
+        help
+            Frame rate for local SD card playback.
 
 endmenu

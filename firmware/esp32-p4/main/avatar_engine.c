@@ -12,6 +12,7 @@ static const char *TAG = "avatar";
 
 static lv_obj_t *s_avatar_img = NULL;
 static avatar_state_t s_current_state = AVATAR_STATE_IDLE;
+static avatar_render_mode_t s_render_mode = AVATAR_MODE_STREAM;
 static avatar_state_changed_cb_t s_state_cb = NULL;
 static SemaphoreHandle_t s_engine_mux = NULL;
 static lv_draw_buf_t *s_frame_bufs[2] = {NULL, NULL};
@@ -45,6 +46,12 @@ static const char *state_names[AVATAR_STATE_MAX] = {
     "think", "neutral", "talk", "custom", "streaming"
 };
 
+static const avatar_state_t s_local_states[] = {
+    AVATAR_STATE_IDLE,
+    AVATAR_STATE_NEUTRAL,
+};
+#define LOCAL_STATES_COUNT (sizeof(s_local_states) / sizeof(s_local_states[0]))
+
 static uint32_t fnv1a_hash(const uint8_t *data, uint32_t len)
 {
     uint32_t hash = 2166136261U;
@@ -53,6 +60,14 @@ static uint32_t fnv1a_hash(const uint8_t *data, uint32_t len)
         hash *= 16777619U;
     }
     return hash;
+}
+
+bool avatar_engine_is_local_state(avatar_state_t state)
+{
+    for (int i = 0; i < (int)LOCAL_STATES_COUNT; i++) {
+        if (s_local_states[i] == state) return true;
+    }
+    return false;
 }
 
 esp_err_t avatar_engine_init(lv_obj_t *parent)
@@ -114,7 +129,9 @@ esp_err_t avatar_engine_init(lv_obj_t *parent)
              s_jpeg_out_buf, (unsigned)allocated,
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
-    ESP_LOGI(TAG, "Double-buffered frame pipeline ready (2x %u bytes)", (unsigned)expected_raw);
+    ESP_LOGI(TAG, "Double-buffered frame pipeline ready (2x %u bytes), mode=%s",
+             (unsigned)expected_raw,
+             s_render_mode == AVATAR_MODE_STREAM ? "STREAM" : "LOCAL");
     return ESP_OK;
 }
 
@@ -151,7 +168,8 @@ esp_err_t avatar_engine_play_state(avatar_state_t state)
 
     if (s_state_cb) s_state_cb(state);
 
-    ESP_LOGI(TAG, "State: %s", state_names[state]);
+    ESP_LOGI(TAG, "State: %s (mode=%s)", state_names[state],
+             s_render_mode == AVATAR_MODE_STREAM ? "STREAM" : "LOCAL");
     return ESP_OK;
 }
 
@@ -213,29 +231,8 @@ static void swap_and_present(void)
     lvgl_port_unlock();
 }
 
-esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len)
+static esp_err_t _decode_and_show(const uint8_t *frame_data, uint32_t frame_len)
 {
-    if (!frame_data || frame_len == 0) return ESP_ERR_INVALID_ARG;
-
-    s_stats.frames_received++;
-
-#if CONFIG_LN_FRAME_DEDUP
-    if (frame_len == s_last_frame_len && s_last_frame_len > 0) {
-        uint32_t tail_offset = frame_len > DEDUP_SAMPLE_SIZE ? frame_len - DEDUP_SAMPLE_SIZE : 0;
-        uint32_t hash = fnv1a_hash(frame_data + tail_offset, frame_len - tail_offset);
-        if (hash == s_last_frame_hash) {
-            s_stats.frames_skipped_dedup++;
-            return ESP_OK;
-        }
-        s_last_frame_hash = hash;
-    }
-    s_last_frame_len = frame_len;
-#endif
-
-    xSemaphoreTake(s_engine_mux, portMAX_DELAY);
-
-    s_current_state = AVATAR_STATE_STREAMING;
-
     uint32_t expected_raw = AVATAR_WIDTH * AVATAR_HEIGHT * 2;
     bool displayed = false;
     lv_draw_buf_t *write_buf = s_frame_bufs[s_write_idx];
@@ -243,7 +240,6 @@ esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len
     if (frame_len != expected_raw) {
         if (!s_jpeg_decoder || !s_jpeg_out_buf) {
             s_stats.frames_skipped_error++;
-            xSemaphoreGive(s_engine_mux);
             return ESP_FAIL;
         }
 
@@ -296,22 +292,85 @@ esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len
         s_stats.frames_displayed++;
     }
 
-    if (!displayed) {
+    return displayed ? ESP_OK : ESP_FAIL;
+}
+
+esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len)
+{
+    if (!frame_data || frame_len == 0) return ESP_ERR_INVALID_ARG;
+
+    s_stats.frames_received++;
+
+#if CONFIG_LN_FRAME_DEDUP
+    if (frame_len == s_last_frame_len && s_last_frame_len > 0) {
+        uint32_t tail_offset = frame_len > DEDUP_SAMPLE_SIZE ? frame_len - DEDUP_SAMPLE_SIZE : 0;
+        uint32_t hash = fnv1a_hash(frame_data + tail_offset, frame_len - tail_offset);
+        if (hash == s_last_frame_hash) {
+            s_stats.frames_skipped_dedup++;
+            return ESP_OK;
+        }
+        s_last_frame_hash = hash;
+    }
+    s_last_frame_len = frame_len;
+#endif
+
+    xSemaphoreTake(s_engine_mux, portMAX_DELAY);
+
+    s_current_state = AVATAR_STATE_STREAMING;
+
+    esp_err_t result = _decode_and_show(frame_data, frame_len);
+
+    if (result != ESP_OK) {
         ESP_LOGW(TAG, "Frame NOT displayed (%u bytes)", (unsigned)frame_len);
     }
 
     xSemaphoreGive(s_engine_mux);
 
     if (s_stats.frames_displayed % STATS_LOG_INTERVAL == 0 && s_stats.frames_displayed > 0) {
-        ESP_LOGI(TAG, "Stats[%u]: decode=%ums, rx=%u show=%u err=%u",
+        ESP_LOGI(TAG, "Stats[%u]: decode=%ums, rx=%u show=%u err=%u local=%u",
                  (unsigned)s_stats.frames_displayed,
                  (unsigned)s_stats.last_decode_ms,
                  (unsigned)s_stats.frames_received,
                  (unsigned)s_stats.frames_displayed,
-                 (unsigned)s_stats.decode_errors);
+                 (unsigned)s_stats.decode_errors,
+                 (unsigned)s_stats.local_frames_played);
     }
 
-    return displayed ? ESP_OK : ESP_FAIL;
+    return result;
+}
+
+void avatar_engine_on_local_frame(const uint8_t *jpeg_data, uint32_t jpeg_len)
+{
+    if (!jpeg_data || jpeg_len == 0) return;
+
+    xSemaphoreTake(s_engine_mux, portMAX_DELAY);
+
+    esp_err_t result = _decode_and_show(jpeg_data, jpeg_len);
+    if (result == ESP_OK) {
+        s_stats.local_frames_played++;
+    }
+
+    xSemaphoreGive(s_engine_mux);
+}
+
+esp_err_t avatar_engine_set_render_mode(avatar_render_mode_t mode)
+{
+    xSemaphoreTake(s_engine_mux, portMAX_DELAY);
+    avatar_render_mode_t old = s_render_mode;
+    s_render_mode = mode;
+    xSemaphoreGive(s_engine_mux);
+
+    if (old != mode) {
+        ESP_LOGI(TAG, "Render mode: %s -> %s",
+                 old == AVATAR_MODE_STREAM ? "STREAM" : "LOCAL",
+                 mode == AVATAR_MODE_STREAM ? "STREAM" : "LOCAL");
+    }
+    return ESP_OK;
+}
+
+avatar_render_mode_t avatar_engine_get_render_mode(void)
+{
+    return s_render_mode;
 }
 
 esp_err_t avatar_engine_set_mouth_openness(uint8_t percent)

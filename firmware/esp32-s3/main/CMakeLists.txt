@@ -3,10 +3,12 @@ idf_component_register(
         "main.c"
         "wifi_mgr.c"
         "app_mqtt.c"
-        "st7735s.c"
+        "lcd_parallel.c"
         "lvgl_port.c"
         "avatar_engine.c"
         "web_config.c"
+        "sd_card.c"
+        "frame_player.c"
     INCLUDE_DIRS
         "."
 )

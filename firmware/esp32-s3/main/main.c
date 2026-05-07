@@ -7,12 +7,13 @@
 #include "freertos/queue.h"
 
 #include "pin_config.h"
-#include "st7735s.h"
+#include "lcd_parallel.h"
 #include "lvgl_port.h"
 #include "wifi_mgr.h"
 #include "app_mqtt.h"
 #include "avatar_engine.h"
 #include "web_config.h"
+#include "sd_card.h"
 #include "lvgl.h"
 
 static const char *TAG = "main";
@@ -29,7 +30,7 @@ static const char *TAG = "main";
 #define FRAME_QUEUE_LEN CONFIG_LN_FRAME_QUEUE_SIZE
 #define STATUS_INTERVAL_MS (CONFIG_LN_STATUS_INTERVAL_SEC * 1000)
 
-static st7735s_handle_t s_lcd = {0};
+static lcd_parallel_handle_t s_lcd = {0};
 static lvgl_port_t s_lvgl_port = {0};
 static ln_config_t s_device_config = {0};
 
@@ -42,7 +43,11 @@ static QueueHandle_t s_frame_queue = NULL;
 
 static void on_mqtt_command(const char *topic, const char *data, int data_len)
 {
-    ESP_LOGI(TAG, "MQTT [%s]: %.*s", topic, data_len, data);
+    if (data_len > 0 && data_len < 256) {
+        ESP_LOGI(TAG, "MQTT [%s]: %.*s", topic, data_len, data);
+    } else if (data_len >= 256) {
+        ESP_LOGI(TAG, "MQTT [%s]: <%d bytes>", topic, data_len);
+    }
 
     if (strcmp(topic, TOPIC_CMD) == 0) {
         if (strstr(data, "happy")) {
@@ -67,6 +72,12 @@ static void on_mqtt_command(const char *topic, const char *data, int data_len)
             avatar_engine_play_state(AVATAR_STATE_IDLE);
         } else if (strstr(data, "stop")) {
             avatar_engine_stop();
+        } else if (strstr(data, "mode:stream")) {
+            avatar_engine_set_mode(AVATAR_MODE_STREAM);
+        } else if (strstr(data, "mode:local")) {
+            avatar_engine_set_mode(AVATAR_MODE_LOCAL);
+        } else if (strstr(data, "mode:hybrid")) {
+            avatar_engine_set_mode(AVATAR_MODE_HYBRID);
         }
     }
 }
@@ -80,7 +91,6 @@ static void on_mqtt_stream(const char *topic, const uint8_t *data, int data_len)
     msg.len = data_len;
     msg.data = heap_caps_malloc(data_len, MALLOC_CAP_SPIRAM);
     if (!msg.data) {
-        ESP_LOGD(TAG, "No PSRAM for frame copy (%d bytes)", data_len);
         return;
     }
     memcpy(msg.data, data, data_len);
@@ -117,11 +127,13 @@ static void on_mqtt_connected(void)
     ESP_LOGI(TAG, "MQTT connected, subscribing...");
     app_mqtt_subscribe(TOPIC_CMD, 1);
     app_mqtt_subscribe(TOPIC_STREAM, 0);
+    avatar_engine_set_mqtt_online(true);
 }
 
 static void on_mqtt_disconnected(void)
 {
     ESP_LOGW(TAG, "MQTT disconnected, will auto-reconnect");
+    avatar_engine_set_mqtt_online(false);
 }
 
 static void on_wifi_connected(void)
@@ -139,6 +151,7 @@ static void on_wifi_connected(void)
 static void on_wifi_disconnected(void)
 {
     ESP_LOGW(TAG, "WiFi disconnected, MQTT paused until reconnected");
+    avatar_engine_set_mqtt_online(false);
 }
 
 static void lvgl_task(void *pvParameter)
@@ -159,7 +172,7 @@ static void lvgl_task(void *pvParameter)
 
 static void status_task(void *pvParameter)
 {
-    char status_buf[256];
+    char status_buf[384];
     while (1) {
         if (app_mqtt_is_connected()) {
             const avatar_stats_t *stats = avatar_engine_get_stats();
@@ -169,14 +182,17 @@ static void status_task(void *pvParameter)
 
             snprintf(status_buf, sizeof(status_buf),
                      "{\"state\":\"online\",\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
-                     "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u},"
-                     "\"decode_ms\":%u}",
+                     "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u,\"local\":%u},"
+                     "\"decode_ms\":%u,\"mode\":\"%s\"}",
                      rssi, (unsigned)free_heap, (unsigned)free_psram,
                      (unsigned)stats->frames_received,
                      (unsigned)stats->frames_displayed,
                      (unsigned)stats->frames_skipped_dedup,
                      (unsigned)stats->frames_skipped_error,
-                     (unsigned)stats->last_decode_ms);
+                     (unsigned)stats->local_frames_played,
+                     (unsigned)stats->last_decode_ms,
+                     avatar_engine_get_mode() == AVATAR_MODE_HYBRID ? "hybrid" :
+                     (avatar_engine_get_mode() == AVATAR_MODE_LOCAL ? "local" : "stream"));
 
             app_mqtt_publish(TOPIC_STATUS, status_buf, strlen(status_buf), 1);
         }
@@ -214,26 +230,45 @@ void app_main(void)
     ESP_LOGI(TAG, "Watchdog enabled (timeout=%ds)", CONFIG_LN_WATCHDOG_TIMEOUT_SEC);
 #endif
 
-    st7735s_config_t lcd_cfg = {
-        .spi_host = ST7735S_SPI_HOST,
-        .clk_pin = ST7735S_CLK_PIN,
-        .mosi_pin = ST7735S_MOSI_PIN,
-        .dc_pin = ST7735S_DC_PIN,
-        .rst_pin = ST7735S_RST_PIN,
-        .cs_pin = ST7735S_CS_PIN,
-        .bl_pin = ST7735S_BL_PIN,
-        .width = ST7735S_WIDTH,
-        .height = ST7735S_HEIGHT,
-        .spi_freq = ST7735S_SPI_FREQ,
-        .x_offset = ST7735S_X_OFFSET,
-        .y_offset = ST7735S_Y_OFFSET,
-        .madctl = ST7735S_MADCTL,
+    lcd_parallel_config_t lcd_cfg = {
+        .rst_pin = ILI9486_RST_PIN,
+        .cs_pin  = ILI9486_CS_PIN,
+        .rs_pin  = ILI9486_RS_PIN,
+        .wr_pin  = ILI9486_WR_PIN,
+        .rd_pin  = ILI9486_RD_PIN,
+        .d0_pin  = ILI9486_D0_PIN,
+        .d1_pin  = ILI9486_D1_PIN,
+        .d2_pin  = ILI9486_D2_PIN,
+        .d3_pin  = ILI9486_D3_PIN,
+        .d4_pin  = ILI9486_D4_PIN,
+        .d5_pin  = ILI9486_D5_PIN,
+        .d6_pin  = ILI9486_D6_PIN,
+        .d7_pin  = ILI9486_D7_PIN,
+        .width   = ILI9486_WIDTH,
+        .height  = ILI9486_HEIGHT,
+        .madctl  = ILI9486_MADCTL,
+        .pclk_hz = ILI9486_PCLK_HZ,
     };
 
-    ESP_ERROR_CHECK(st7735s_init(&lcd_cfg, &s_lcd));
+    ESP_ERROR_CHECK(lcd_parallel_init(&lcd_cfg, &s_lcd));
+
+    esp_err_t sd_ret = sd_card_init();
+    if (sd_ret == ESP_OK) {
+        ESP_LOGI(TAG, "SD card initialized, local frames available");
+        sd_card_info_t sd_info = {0};
+        sd_card_info(&sd_info);
+        ESP_LOGI(TAG, "SD card: total=%llu MB, free=%llu MB",
+                 sd_info.total_bytes / (1024 * 1024),
+                 sd_info.free_bytes / (1024 * 1024));
+    } else {
+        ESP_LOGW(TAG, "SD card not available, local playback disabled");
+    }
 
     ESP_ERROR_CHECK(lvgl_port_init(&s_lcd, &s_lvgl_port));
     ESP_ERROR_CHECK(avatar_engine_init(s_lvgl_port.screen, &s_lcd));
+
+    avatar_engine_set_mode(AVATAR_MODE_HYBRID);
+    avatar_engine_play_state(AVATAR_STATE_IDLE);
 
     s_frame_queue = xQueueCreate(FRAME_QUEUE_LEN, sizeof(frame_msg_t));
 
@@ -258,7 +293,8 @@ void app_main(void)
         xTaskCreatePinnedToCore(status_task, "status", 4096, NULL, 2, NULL, 0);
     }
 
-    ESP_LOGI(TAG, "LuomiNest ESP32-S3 ready! (heap=%u, psram=%u)",
+    ESP_LOGI(TAG, "LuomiNest ESP32-S3 ready! (heap=%u, psram=%u, sd=%s)",
              (unsigned)esp_get_free_heap_size(),
-             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+             sd_card_is_mounted() ? "ok" : "none");
 }

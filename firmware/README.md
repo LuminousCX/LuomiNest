@@ -559,7 +559,51 @@ python stream_server.py --broker 192.168.1.222 --fps 15 --device s3 --mode rgb56
 # 禁用帧去重
 python stream_server.py --broker 192.168.1.222 --fps 15 --device s3 --no-dedup
 ```
+###  使用流程
+1. PC 端预渲染 :
+   
+  ```
+  cd C:\Users\lumin\Projects\Project\LuomiNest\firmware\server
 
+  # 激活虚拟环境
+  .\venv\Scripts\Activate.ps1
+  
+  # 预渲染所有表情（320×480）
+  python prerender_server.py --device s3
+  
+  # 或者只渲染离线需要的表情
+  python prerender_server.py --device s3 --states idle,neutral,sleep
+   ```
+2. 复制到 SD 卡 :
+  将 server/frames/ 整个目录复制到 SD 卡的 /frames/ 目录
+3. 烧录固件 :
+  
+  ```
+  idf.py flash
+  ```
+4. 运行时行为 :
+  
+  - 开机 → SD 卡有帧 → 自动播放 idle 本地帧
+  - MQTT 连接 → 动态表情(happy/sad)走实时流，idle/neutral 继续本地播放
+  - MQTT 断开 → 自动回退到 SD 卡本地帧
+
+5. 实时流（MQTT 推流到 ESP32）
+  ```
+    cd C:\Users\lumin\Projects\Project\LuomiNest\firmware\server
+    .\venv\Scripts\Activate.ps1
+
+    # 基本启动（S3 设备，320×480）
+    python stream_server.py --device s3 --broker 192.168.1.222 --preview
+
+    # 调整帧率
+    python stream_server.py --device s3 --broker 192.168.1.222 --fps 10 --preview
+
+    # 如果屏幕颜色偏红/蓝，加 --bgr
+    python stream_server.py --device s3 --broker 192.168.1.222 --bgr --preview
+
+    # 如果画面上下颠倒
+    python stream_server.py --device s3 --broker 192.168.1.222 --flip-v --preview
+  ```
 ### 命令行参数
 
 | 参数 | 默认值 | 说明 |

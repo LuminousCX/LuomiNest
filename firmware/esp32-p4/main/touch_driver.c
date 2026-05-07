@@ -9,6 +9,11 @@ static const char *TAG = "touch";
 static i2c_master_bus_handle_t s_i2c_bus = NULL;
 static esp_lcd_touch_handle_t s_touch_handle = NULL;
 
+static bool _probe_i2c_device(i2c_master_bus_handle_t bus, uint16_t addr)
+{
+    return i2c_master_probe(bus, addr, 100) == ESP_OK;
+}
+
 esp_err_t touch_driver_init(lv_display_t *disp, lv_indev_t **out_indev)
 {
     if (!s_i2c_bus) {
@@ -28,9 +33,23 @@ esp_err_t touch_driver_init(lv_display_t *disp, lv_indev_t **out_indev)
         ESP_LOGI(TAG, "I2C bus initialized (SDA=%d, SCL=%d, port=1)", TOUCH_SDA_PIN, TOUCH_SCL_PIN);
     }
 
+    uint16_t gt911_addr = 0x5D;
+    if (_probe_i2c_device(s_i2c_bus, 0x5D)) {
+        gt911_addr = 0x5D;
+        ESP_LOGI(TAG, "GT911 detected at address 0x5D");
+    } else if (_probe_i2c_device(s_i2c_bus, 0x14)) {
+        gt911_addr = 0x14;
+        ESP_LOGI(TAG, "GT911 detected at address 0x14");
+    } else {
+        ESP_LOGW(TAG, "No GT911 found at 0x5D or 0x14, trying default 0x5D");
+    }
+
     esp_lcd_panel_io_handle_t tp_io = NULL;
     esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
     tp_io_config.scl_speed_hz = 400000;
+    if (gt911_addr == 0x14) {
+        tp_io_config.dev_addr = 0x14;
+    }
 
     esp_err_t ret = esp_lcd_new_panel_io_i2c(s_i2c_bus, &tp_io_config, &tp_io);
     if (ret != ESP_OK) {
@@ -54,12 +73,21 @@ esp_err_t touch_driver_init(lv_display_t *disp, lv_indev_t **out_indev)
         },
     };
 
-    ret = esp_lcd_touch_new_i2c_gt911(tp_io, &tp_config, &s_touch_handle);
+    for (int attempt = 0; attempt < 3; attempt++) {
+        ret = esp_lcd_touch_new_i2c_gt911(tp_io, &tp_config, &s_touch_handle);
+        if (ret == ESP_OK) {
+            break;
+        }
+        ESP_LOGW(TAG, "GT911 init attempt %d failed: %s", attempt + 1, esp_err_to_name(ret));
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "GT911 init failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "GT911 init failed after 3 attempts: %s", esp_err_to_name(ret));
+        esp_lcd_panel_io_del(tp_io);
         return ret;
     }
-    ESP_LOGI(TAG, "GT911 touch initialized");
+    ESP_LOGI(TAG, "GT911 touch initialized (addr=0x%02X)", gt911_addr);
 
     const lvgl_port_touch_cfg_t touch_cfg = {
         .disp = disp,

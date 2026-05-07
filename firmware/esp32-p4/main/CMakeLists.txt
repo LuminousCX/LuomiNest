@@ -3,6 +3,7 @@ idf_component_register(
         "main.c"
         "mipi_lcd.c"
         "avatar_engine.c"
+        "frame_player.c"
         "wifi_mgr.c"
         "eth_mgr.c"
         "app_mqtt.c"

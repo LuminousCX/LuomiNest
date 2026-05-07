@@ -16,6 +16,7 @@
 #include "eth_mgr.h"
 #include "app_mqtt.h"
 #include "avatar_engine.h"
+#include "frame_player.h"
 #include "web_config.h"
 #include "touch_driver.h"
 #include "chat_ui.h"
@@ -361,29 +362,67 @@ static void update_ui_ap_mode(void)
     update_net_info();
 }
 
+static void _apply_avatar_state(avatar_state_t state)
+{
+    avatar_engine_play_state(state);
+
+    if (frame_player_is_sd_available()) {
+        bool is_local = avatar_engine_is_local_state(state);
+        bool mqtt_online = app_mqtt_is_connected();
+
+        if (is_local || !mqtt_online) {
+            if (frame_player_has_state(state)) {
+                frame_player_start(state);
+                avatar_engine_set_render_mode(AVATAR_MODE_LOCAL);
+                ESP_LOGI(TAG, "Using LOCAL frames for state %d", state);
+            } else if (!mqtt_online) {
+                if (frame_player_has_state(AVATAR_STATE_IDLE)) {
+                    frame_player_start(AVATAR_STATE_IDLE);
+                    avatar_engine_set_render_mode(AVATAR_MODE_LOCAL);
+                }
+            }
+        } else {
+            frame_player_stop();
+            avatar_engine_set_render_mode(AVATAR_MODE_STREAM);
+            ESP_LOGI(TAG, "Using STREAM for state %d", state);
+        }
+    }
+}
+
 static void on_mqtt_command(const char *topic, const char *data, int data_len)
 {
     ESP_LOGI(TAG, "CMD [%s]: %.*s", topic, data_len, data);
 
     if (strcmp(topic, TOPIC_CMD) == 0) {
+        avatar_state_t target_state = AVATAR_STATE_IDLE;
+        bool matched = true;
+
         if (strstr(data, "happy")) {
-            avatar_engine_play_state(AVATAR_STATE_HAPPY);
+            target_state = AVATAR_STATE_HAPPY;
         } else if (strstr(data, "sad")) {
-            avatar_engine_play_state(AVATAR_STATE_SAD);
+            target_state = AVATAR_STATE_SAD;
         } else if (strstr(data, "angry")) {
-            avatar_engine_play_state(AVATAR_STATE_ANGRY);
+            target_state = AVATAR_STATE_ANGRY;
         } else if (strstr(data, "surprised")) {
-            avatar_engine_play_state(AVATAR_STATE_SURPRISED);
+            target_state = AVATAR_STATE_SURPRISED;
         } else if (strstr(data, "think")) {
-            avatar_engine_play_state(AVATAR_STATE_THINK);
+            target_state = AVATAR_STATE_THINK;
         } else if (strstr(data, "neutral")) {
-            avatar_engine_play_state(AVATAR_STATE_NEUTRAL);
+            target_state = AVATAR_STATE_NEUTRAL;
         } else if (strstr(data, "talk")) {
-            avatar_engine_play_state(AVATAR_STATE_TALK);
+            target_state = AVATAR_STATE_TALK;
         } else if (strstr(data, "idle")) {
-            avatar_engine_play_state(AVATAR_STATE_IDLE);
+            target_state = AVATAR_STATE_IDLE;
         } else if (strstr(data, "stop")) {
             avatar_engine_stop();
+            frame_player_stop();
+            return;
+        } else {
+            matched = false;
+        }
+
+        if (matched) {
+            _apply_avatar_state(target_state);
         }
     } else if (strcmp(topic, TOPIC_CHAT) == 0) {
         if (!data || data_len <= 0) return;
@@ -480,12 +519,34 @@ static void on_mqtt_connected(void)
     app_mqtt_subscribe(TOPIC_STREAM, 0);
     app_mqtt_subscribe(TOPIC_CHAT, 1);
     update_ui_online();
+
+    if (frame_player_is_sd_available()) {
+        avatar_state_t cur = avatar_engine_get_state();
+        if (avatar_engine_is_local_state(cur) && frame_player_has_state(cur)) {
+            ESP_LOGI(TAG, "MQTT online, keeping LOCAL mode for state %d", cur);
+        } else {
+            frame_player_stop();
+            avatar_engine_set_render_mode(AVATAR_MODE_STREAM);
+            ESP_LOGI(TAG, "MQTT online, switched to STREAM mode");
+        }
+    }
 }
 
 static void on_mqtt_disconnected(void)
 {
     ESP_LOGW(TAG, "MQTT disconnected, will auto-reconnect");
     update_ui_offline();
+
+    if (frame_player_is_sd_available()) {
+        avatar_state_t cur = avatar_engine_get_state();
+        if (frame_player_has_state(cur)) {
+            frame_player_start(cur);
+        } else if (frame_player_has_state(AVATAR_STATE_IDLE)) {
+            frame_player_start(AVATAR_STATE_IDLE);
+        }
+        avatar_engine_set_render_mode(AVATAR_MODE_LOCAL);
+        ESP_LOGI(TAG, "MQTT offline, fallback to LOCAL mode");
+    }
 }
 
 static bool s_mqtt_started = false;
@@ -597,14 +658,16 @@ static void status_task(void *pvParameter)
 
                 snprintf(status_buf, sizeof(status_buf),
                          "{\"state\":\"online\",\"eth\":%s,\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
-                         "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u},"
-                         "\"decode_ms\":%u}",
+                         "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u,\"local\":%u},"
+                         "\"decode_ms\":%u,\"mode\":\"%s\"}",
                          eth_up ? "true" : "false", rssi, (unsigned)free_heap, (unsigned)free_psram,
                          (unsigned)stats->frames_received,
                          (unsigned)stats->frames_displayed,
                          (unsigned)stats->frames_skipped_dedup,
                          (unsigned)stats->frames_skipped_error,
-                         (unsigned)stats->last_decode_ms);
+                         (unsigned)stats->local_frames_played,
+                         (unsigned)stats->last_decode_ms,
+                         avatar_engine_get_render_mode() == AVATAR_MODE_LOCAL ? "local" : "stream");
 
                 app_mqtt_publish(TOPIC_STATUS, status_buf, strlen(status_buf), 1);
             }
@@ -616,6 +679,12 @@ static void status_task(void *pvParameter)
 
 static esp_err_t init_sdcard(void)
 {
+    const esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 10,
+        .allocation_unit_size = 16 * 1024,
+    };
+
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     host.slot = SDMMC_HOST_SLOT_0;
     host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
@@ -625,14 +694,14 @@ static esp_err_t init_sdcard(void)
     };
     sd_pwr_ctrl_handle_t pwr_ctrl_handle = NULL;
     esp_err_t ret = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle);
-    if (ret == ESP_OK) {
-        host.pwr_ctrl_handle = pwr_ctrl_handle;
-        vTaskDelay(pdMS_TO_TICKS(200));
-    } else {
-        ESP_LOGW(TAG, "SD LDO power control init failed (0x%x), continuing without", ret);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create on-chip LDO power control (0x%x)", ret);
+        return ret;
     }
+    host.pwr_ctrl_handle = pwr_ctrl_handle;
+    ESP_LOGI(TAG, "SD LDO CH%d power control initialized", SD_LDO_CHAN);
 
-    sdmmc_slot_config_t slot_config = {
+    const sdmmc_slot_config_t slot_config = {
         .clk = SDMMC_CLK_PIN,
         .cmd = SDMMC_CMD_PIN,
         .d0 = SDMMC_D0_PIN,
@@ -647,12 +716,6 @@ static esp_err_t init_sdcard(void)
         .wp = SDMMC_SLOT_NO_WP,
         .width = 4,
         .flags = 0,
-    };
-
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
-        .max_files = 10,
-        .allocation_unit_size = 16 * 1024,
     };
 
     sdmmc_card_t *card = NULL;
@@ -766,6 +829,22 @@ void app_main(void)
     xTaskCreatePinnedToCore(touch_init_task, "touch_init", 8192, NULL, 5, NULL, 0);
 
     init_sdcard();
+
+    esp_err_t fp_ret = frame_player_init();
+    if (fp_ret == ESP_OK && frame_player_is_sd_available()) {
+        frame_player_register_frame_cb(avatar_engine_on_local_frame);
+        xTaskCreatePinnedToCore(frame_player_task, "frame_play", 8192, NULL, 3, NULL, 1);
+        ESP_LOGI(TAG, "Frame player started (SD card prerender available)");
+
+        if (!app_mqtt_is_connected()) {
+            if (frame_player_has_state(AVATAR_STATE_IDLE)) {
+                frame_player_start(AVATAR_STATE_IDLE);
+            }
+            avatar_engine_set_render_mode(AVATAR_MODE_LOCAL);
+        }
+    } else {
+        ESP_LOGI(TAG, "Frame player: no SD prerender, stream-only mode");
+    }
 
     s_frame_queue = xQueueCreate(FRAME_QUEUE_LEN, sizeof(frame_msg_t));
     xTaskCreatePinnedToCore(frame_decode_task, "frame_dec", 8192, NULL, 4, NULL, 1);

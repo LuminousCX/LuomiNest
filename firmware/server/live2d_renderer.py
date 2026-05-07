@@ -14,19 +14,20 @@ from OpenGL import GL
 
 DEVICE_PROFILES = {
     "s3": {
-        "width": 128,
-        "height": 160,
-        "render_width": 512,
-        "render_height": 1024,
+        "width": 320,
+        "height": 480,
+        "render_width": 640,
+        "render_height": 960,
         "crop_top": 0.0,
-        "crop_bottom": 0.38,
-        "saturation_boost": 1.70,
-        "jpeg_quality": 60,
+        "crop_bottom": 0.45,
+        "saturation_boost": 1.40,
+        "jpeg_quality": 75,
         "bg_color": (255, 245, 235),
         "flip_v": False,
         "flip_h": False,
         "rgb_order": "rgb",
         "gamma": 1.0,
+        "pre_bgr_swap": True,
     },
     "p4": {
         "width": 400,
@@ -42,23 +43,25 @@ DEVICE_PROFILES = {
         "flip_h": False,
         "rgb_order": "rgb",
         "gamma": 1.0,
+        "pre_bgr_swap": True,
     },
 }
 
 DEFAULT_DEVICE = "s3"
 
-WIDTH = 128
-HEIGHT = 160
-RENDER_WIDTH = 512
-RENDER_HEIGHT = 1024
+WIDTH = 320
+HEIGHT = 480
+RENDER_WIDTH = 640
+RENDER_HEIGHT = 960
 CROP_TOP_RATIO = 0.0
-CROP_BOTTOM_RATIO = 0.38
+CROP_BOTTOM_RATIO = 0.45
 BG_COLOR = (255, 245, 235)
-SATURATION_BOOST = 1.70
+SATURATION_BOOST = 1.40
 FLIP_V = False
 FLIP_H = False
 RGB_ORDER = "rgb"
 GAMMA = 1.0
+PRE_BGR_SWAP = False
 
 TRANSITION_SPEED = 0.08
 EXPRESSION_WEIGHT = 0.8
@@ -67,7 +70,7 @@ EXPRESSION_WEIGHT = 0.8
 def apply_device_profile(device: str):
     global WIDTH, HEIGHT, RENDER_WIDTH, RENDER_HEIGHT
     global CROP_TOP_RATIO, CROP_BOTTOM_RATIO, SATURATION_BOOST, BG_COLOR
-    global FLIP_V, FLIP_H, RGB_ORDER, GAMMA
+    global FLIP_V, FLIP_H, RGB_ORDER, GAMMA, PRE_BGR_SWAP
 
     profile = DEVICE_PROFILES.get(device, DEVICE_PROFILES[DEFAULT_DEVICE])
     WIDTH = profile["width"]
@@ -82,6 +85,7 @@ def apply_device_profile(device: str):
     FLIP_H = profile.get("flip_h", False)
     RGB_ORDER = profile.get("rgb_order", "rgb")
     GAMMA = profile.get("gamma", 1.0)
+    PRE_BGR_SWAP = profile.get("pre_bgr_swap", False)
 
 
 def _sine(t):
@@ -505,6 +509,9 @@ class Live2DRenderer:
         if GAMMA != 1.0:
             result = self._apply_gamma(result, GAMMA)
 
+        if PRE_BGR_SWAP:
+            result = self._swap_rb(result)
+
         return result
 
     @staticmethod
@@ -523,6 +530,13 @@ class Live2DRenderer:
         arr = np.array(img, dtype=np.float32) / 255.0
         arr = np.power(arr, 1.0 / gamma)
         arr = np.clip(arr * 255.0, 0, 255).astype(np.uint8)
+        return Image.fromarray(arr, "RGB")
+
+    @staticmethod
+    def _swap_rb(img: Image.Image) -> Image.Image:
+        import numpy as np
+        arr = np.array(img, dtype=np.uint8)
+        arr[:, :, [0, 2]] = arr[:, :, [2, 0]]
         return Image.fromarray(arr, "RGB")
 
     def _update_animation(self):
@@ -696,5 +710,5 @@ def rgb888_to_rgb565_be(img: Image.Image) -> bytes:
 def img_to_jpeg(img: Image.Image, quality: int = 75) -> bytes:
     import io
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=quality)
+    img.save(buf, format="JPEG", quality=quality, subsampling=0)
     return buf.getvalue()

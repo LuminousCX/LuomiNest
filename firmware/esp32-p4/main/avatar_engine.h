@@ -21,6 +21,11 @@ typedef enum {
     AVATAR_STATE_MAX
 } avatar_state_t;
 
+typedef enum {
+    AVATAR_MODE_STREAM = 0,
+    AVATAR_MODE_LOCAL,
+} avatar_render_mode_t;
+
 typedef struct {
     char name[32];
     uint16_t frame_count;
@@ -35,6 +40,7 @@ typedef struct {
     uint32_t frames_skipped_error;
     uint32_t decode_errors;
     uint32_t last_decode_ms;
+    uint32_t local_frames_played;
 } avatar_stats_t;
 
 typedef void (*avatar_state_changed_cb_t)(avatar_state_t new_state);
@@ -50,5 +56,11 @@ esp_err_t avatar_engine_show_frame(const uint8_t *frame_data, uint32_t frame_len
 esp_err_t avatar_engine_set_mouth_openness(uint8_t percent);
 const avatar_stats_t *avatar_engine_get_stats(void);
 void avatar_engine_reset_stats(void);
+
+esp_err_t avatar_engine_set_render_mode(avatar_render_mode_t mode);
+avatar_render_mode_t avatar_engine_get_render_mode(void);
+void avatar_engine_on_local_frame(const uint8_t *jpeg_data, uint32_t jpeg_len);
+
+bool avatar_engine_is_local_state(avatar_state_t state);
 
 #endif
