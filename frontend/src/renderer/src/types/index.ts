@@ -73,6 +73,7 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  reasoningContent?: string
   timestamp: number
   agentId?: string
   model?: string
@@ -109,6 +110,7 @@ export interface ChatResponse {
 export interface ChatStreamChunk {
   id: string
   content: string
+  reasoningContent?: string
   model: string
   provider: string
   done: boolean

@@ -59,7 +59,7 @@ def _create_provider_from_config(config: dict) -> OpenAICompatibleProvider:
         if not api_key:
             api_key = "ollama"
         if not default_model:
-            default_model = "qwen2.5:7b"
+            default_model = "qwen3-vl:8b"
         provider_name = "ollama"
     else:
         if not base_url:
@@ -171,7 +171,7 @@ class LLMAdapter:
         provider_name: str | None = None,
         return_raw: bool = False,
         **kwargs
-    ) -> str | dict | AsyncIterator[str]:
+    ) -> str | dict | AsyncIterator[dict]:
         provider = self.get_provider(provider_name)
         actual_provider = provider_name or self.default_provider
         model = kwargs.get("model") or provider.default_model
@@ -183,8 +183,11 @@ class LLMAdapter:
             elapsed = time.time() - start_time
             if isinstance(result, str):
                 logger.success(f"[LLM] Chat response: provider={actual_provider}, elapsed={elapsed:.2f}s, len={len(result)}")
-            else:
+            elif hasattr(result, '__aiter__'):
                 logger.info(f"[LLM] Chat stream started: provider={actual_provider}")
+            else:
+                reasoning_len = len(result.get("reasoning", "")) if isinstance(result, dict) else 0
+                logger.success(f"[LLM] Chat response: provider={actual_provider}, elapsed={elapsed:.2f}s, reasoning={reasoning_len}")
             return result
         except Exception as e:
             elapsed = time.time() - start_time
@@ -199,7 +202,7 @@ class LLMAdapter:
         tools: list[dict] | None = None,
         stream: bool = False,
         **kwargs
-    ) -> str | AsyncIterator[str]:
+    ) -> str | dict | AsyncIterator[dict]:
         logger.warning("[LLM] Starting fallback chat...")
         provider_names = list(self.providers.keys())
         if self.default_provider in self.providers:
@@ -230,7 +233,7 @@ class LLMAdapter:
         tools: list[dict] | None = None,
         provider_name: str | None = None,
         **kwargs
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict]:
         provider = self.get_provider(provider_name)
         actual_provider = provider_name or self.default_provider
         model = kwargs.get("model") or provider.default_model

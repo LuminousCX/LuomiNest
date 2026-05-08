@@ -15,6 +15,7 @@ export const useChatStore = defineStore('chat', () => {
   const convStreaming = ref<Record<string, boolean>>({})
   const convAbortControllers = ref<Record<string, AbortController>>({})
   const convStreamingContent = ref<Record<string, string>>({})
+  const convStreamingReasoning = ref<Record<string, string>>({})
   const convLoading = ref<Record<string, boolean>>({})
   const convData = ref<Record<string, Conversation>>({})
 
@@ -46,6 +47,16 @@ export const useChatStore = defineStore('chat', () => {
       const convId = currentConvId.value
       if (convId) {
         convStreamingContent.value = { ...convStreamingContent.value, [convId]: value }
+      }
+    }
+  })
+
+  const streamingReasoning = computed({
+    get: () => convStreamingReasoning.value[currentConvId.value] || '',
+    set: (value) => {
+      const convId = currentConvId.value
+      if (convId) {
+        convStreamingReasoning.value = { ...convStreamingReasoning.value, [convId]: value }
       }
     }
   })
@@ -154,6 +165,10 @@ export const useChatStore = defineStore('chat', () => {
     delete newStreamingContent[convId]
     convStreamingContent.value = newStreamingContent
 
+    const newStreamingReasoning = { ...convStreamingReasoning.value }
+    delete newStreamingReasoning[convId]
+    convStreamingReasoning.value = newStreamingReasoning
+
     const newData = { ...convData.value }
     delete newData[convId]
     convData.value = newData
@@ -195,6 +210,7 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
     convStreamingContent.value = { ...convStreamingContent.value, [targetConvId]: '' }
+    convStreamingReasoning.value = { ...convStreamingReasoning.value, [targetConvId]: '' }
   }
 
   const cancelCurrentRequest = (_agentId?: string) => {
@@ -249,6 +265,7 @@ export const useChatStore = defineStore('chat', () => {
       id: `assistant-${Date.now()}`,
       role: 'assistant',
       content: '',
+      reasoningContent: '',
       timestamp: Date.now(),
       done: false,
     }
@@ -259,6 +276,7 @@ export const useChatStore = defineStore('chat', () => {
 
     convStreaming.value = { ...convStreaming.value, [convId]: true }
     convStreamingContent.value = { ...convStreamingContent.value, [convId]: '' }
+    convStreamingReasoning.value = { ...convStreamingReasoning.value, [convId]: '' }
 
     const apiMessages: { role: string; content: string }[] = []
     for (const msg of convMessages.value[convId]) {
@@ -297,6 +315,10 @@ export const useChatStore = defineStore('chat', () => {
         const newContent = prevContent + chunk.content
         convStreamingContent.value = { ...convStreamingContent.value, [streamingConvId]: newContent }
 
+        const prevReasoning = convStreamingReasoning.value[streamingConvId] || ''
+        const newReasoning = prevReasoning + (chunk.reasoningContent || '')
+        convStreamingReasoning.value = { ...convStreamingReasoning.value, [streamingConvId]: newReasoning }
+
         const currentMsgList = convMessages.value[streamingConvId] || []
         const lastIndex = currentMsgList.length - 1
         if (lastIndex >= 0 && currentMsgList[lastIndex]?.role === 'assistant') {
@@ -304,7 +326,8 @@ export const useChatStore = defineStore('chat', () => {
             ...convMessages.value,
             [streamingConvId]: [...currentMsgList.slice(0, lastIndex), {
               ...currentMsgList[lastIndex],
-              content: newContent
+              content: newContent,
+              reasoningContent: newReasoning,
             }]
           }
         }
@@ -330,6 +353,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
         convStreamingContent.value = { ...convStreamingContent.value, [streamingConvId]: '' }
+        convStreamingReasoning.value = { ...convStreamingReasoning.value, [streamingConvId]: '' }
         await fetchConversations(targetAgentId)
       },
       (err: string) => {
@@ -353,6 +377,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
         convStreamingContent.value = { ...convStreamingContent.value, [streamingConvId]: '' }
+        convStreamingReasoning.value = { ...convStreamingReasoning.value, [streamingConvId]: '' }
         lastError.value = err
         fetchConversations(targetAgentId)
       },
@@ -383,6 +408,7 @@ export const useChatStore = defineStore('chat', () => {
     const newMessages = { ...convMessages.value }
     const newStreaming = { ...convStreaming.value }
     const newStreamingContent = { ...convStreamingContent.value }
+    const newStreamingReasoning = { ...convStreamingReasoning.value }
     const newData = { ...convData.value }
     const newLoading = { ...convLoading.value }
 
@@ -390,6 +416,7 @@ export const useChatStore = defineStore('chat', () => {
       delete newMessages[convId]
       delete newStreaming[convId]
       delete newStreamingContent[convId]
+      delete newStreamingReasoning[convId]
       delete newData[convId]
       delete newLoading[convId]
     }
@@ -397,6 +424,7 @@ export const useChatStore = defineStore('chat', () => {
     convMessages.value = newMessages
     convStreaming.value = newStreaming
     convStreamingContent.value = newStreamingContent
+    convStreamingReasoning.value = newStreamingReasoning
     convData.value = newData
     convLoading.value = newLoading
   }
@@ -437,6 +465,7 @@ export const useChatStore = defineStore('chat', () => {
     isBackendReady,
     isLoadingCurrentConversation,
     streamingContent,
+    streamingReasoning,
     lastError,
     lastUsage,
     activeAgentId,

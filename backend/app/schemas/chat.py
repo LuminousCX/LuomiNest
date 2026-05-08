@@ -29,6 +29,7 @@ class ChatResponse(BaseModel):
 class ChatStreamChunk(BaseModel):
     id: str
     content: str
+    reasoning_content: str = ""
     model: str
     provider: str
     done: bool = False

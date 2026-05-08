@@ -55,6 +55,9 @@ const showSearchPanel = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<any[]>([])
 const copiedId = ref<string | null>(null)
+const showReasoning = ref<Record<string, boolean>>({})
+const reasoningRefs = ref<Record<string, HTMLElement>>({})
+const reasoningScrollRefs = ref<any>(null)
 const isNearBottom = ref(true)
 const SCROLL_BOTTOM_THRESHOLD = 120
 const showScrollToBottomBtn = ref(false)
@@ -214,6 +217,46 @@ const contextPercent = computed(() => {
   if (!contextUsage.value?.totalTokens || !modelStore.modelConfig.defaultMaxTokens) return 0
   return Math.min(100, Math.round((contextUsage.value.totalTokens / modelStore.modelConfig.defaultMaxTokens) * 100))
 })
+
+const toggleReasoning = (msgId: string) => {
+  showReasoning.value = {
+    ...showReasoning.value,
+    [msgId]: !showReasoning.value[msgId]
+  }
+}
+
+const lastAssistantMsg = computed(() => {
+  const msgs = messages.value
+  if (msgs.length === 0) return null
+  const last = msgs[msgs.length - 1]
+  return last && last.role === 'assistant' ? last : null
+})
+
+const reasoningIsRunning = computed(() => {
+  const msg = lastAssistantMsg.value
+  if (!msg) return false
+  return !msg.done && (!msg.content || msg.content.length === 0) && (msg.reasoningContent !== undefined)
+})
+
+watch(() => messages.value, async (msgs) => {
+  for (const msg of msgs) {
+    if (msg.role !== 'assistant') continue
+    if (msg.content && msg.content.length > 0 && showReasoning.value[msg.id] === undefined) {
+      showReasoning.value = { ...showReasoning.value, [msg.id]: false }
+    }
+  }
+  await nextTick()
+  // 对所有正在推理的消息自动滚动到底部
+  const scrollEls = reasoningScrollRefs.value
+  if (scrollEls) {
+    const els = Array.isArray(scrollEls) ? scrollEls : [scrollEls]
+    for (const el of els) {
+      if (el && el.scrollHeight > el.clientHeight) {
+        el.scrollTop = el.scrollHeight
+      }
+    }
+  }
+}, { deep: false, immediate: true })
 
 const copyMessage = async (msgId: string, content: string) => {
   try {
@@ -403,12 +446,32 @@ onBeforeUnmount(() => {
                   </div>
                   <div class="message-body">
                     <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
+                    <div
+                      v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
+                      class="reasoning-section"
+                      :ref="el => { if (el && msg.id) reasoningRefs[msg.id] = el }"
+                    >
+                      <div class="reasoning-header" @click="toggleReasoning(msg.id)">
+                        <Loader2 v-if="!msg.done && !msg.content && !msg.reasoningContent" :size="12" class="spin-animation" />
+                        <Wand2 v-else :size="12" />
+                        <span>
+                          <template v-if="!msg.done && !msg.content && !msg.reasoningContent">等待模型中...</template>
+                          <template v-else-if="!msg.done && !msg.content && msg.reasoningContent">思考中...</template>
+                          <template v-else-if="msg.reasoningContent && msg.reasoningContent.length > 0">{{ showReasoning[msg.id] ? '思考过程' : '思考过程（已折叠）' }}</template>
+                          <template v-else>思考完成</template>
+                        </span>
+                        <ChevronDown :size="12" class="reasoning-chevron" :class="{ rotated: !showReasoning[msg.id] }" />
+                      </div>
+                      <div
+                        v-show="showReasoning[msg.id] !== false"
+                        class="reasoning-content"
+                        ref="reasoningScrollRefs"
+                      >
+                        {{ msg.reasoningContent || '...' }}
+                      </div>
+                    </div>
                     <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
                     <div v-else class="message-content user-message">{{ msg.content }}</div>
-                    <div v-if="msg.role === 'assistant' && !msg.done && !msg.content && msg.id === messages[messages.length - 1].id" class="loading-status">
-                      <Loader2 :size="16" class="spin-animation" />
-                      <span>正在分析问题...</span>
-                    </div>
                     <div v-if="msg.role === 'assistant' && !msg.done && msg.content" class="streaming-indicator">
                       <span class="streaming-dot"></span>
                     </div>
@@ -2041,6 +2104,51 @@ onBeforeUnmount(() => {
   font-size: 11px;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.reasoning-section {
+  margin-bottom: 10px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: var(--radius-md);
+  background: rgba(139, 92, 246, 0.04);
+  overflow: hidden;
+}
+
+.reasoning-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: #8b5cf6;
+  transition: background var(--transition-fast);
+}
+
+.reasoning-header:hover {
+  background: rgba(139, 92, 246, 0.08);
+}
+
+.reasoning-chevron {
+  margin-left: auto;
+  transition: transform 0.2s ease;
+}
+
+.reasoning-chevron.rotated {
+  transform: rotate(-90deg);
+}
+
+.reasoning-content {
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  border-top: 1px solid var(--divider-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .msg-appear-enter-active {

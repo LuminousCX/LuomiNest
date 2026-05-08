@@ -25,8 +25,11 @@ import re
 from loguru import logger
 
 from app.utils.intent_gateway import classify_request, RequestType, is_weather_query
-from app.utils.time_tool import get_time_reply
+from app.utils.time_tool import get_time_reply, TimeTool
 from app.utils.weather_tool import _weather_tool
+
+# 模块级时间工具单例 —— 保持多轮对话状态跨请求持久化
+_time_tool_instance = TimeTool(timezone="Asia/Shanghai")
 
 
 # =============================================================================
@@ -176,7 +179,14 @@ async def handle_local_tool_request(user_message: str) -> str | None:
 
         # 第二步：时间查询（LOCAL_TOOL）
         if request_type == RequestType.LOCAL_TOOL:
-            reply = get_time_reply(user_message)
+            # 使用模块级单例，保持多轮对话状态跨请求
+            # 走增强接口 get_reply_with_context，支持口语化/场景化/多轮对话
+            # 时间偏移查询（1小时后几点）→ 由 get_reply_with_context 内部识别处理
+            reply = _time_tool_instance.get_reply_with_context(
+                query_type="time",
+                user_message=user_message,
+                agent_type="通用",
+            )
             if reply:
                 return reply
             return None

@@ -138,7 +138,7 @@ PROVIDER_TEMPLATES = {
         "vendor": "ollama",
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
-        "default_model": "qwen2.5:7b",
+        "default_model": "qwen3-vl:8b",
         "description": "Local Ollama inference engine",
     },
     "lmstudio": {
@@ -193,14 +193,14 @@ class OpenAICompatibleProvider(LLMProvider):
         stream: bool = False,
         return_raw: bool = False,
         **kwargs
-    ) -> str | dict | AsyncIterator[str]:
+    ) -> str | dict | AsyncIterator[dict]:
         """调用大模型聊天接口
 
         参数:
             messages: 对话消息列表
             tools: OpenAI Function Calling 格式工具定义列表
             stream: 是否使用流式响应
-            return_raw: 是否返回完整 API 响应（含 tool_calls），默认 False 仅返回文本
+            return_raw: 是否返回完整 API 响应（含 tool_calls / reasoning），默认 False 仅返回文本
         """
         if stream:
             return self.chat_stream(messages, tools, **kwargs)
@@ -217,8 +217,10 @@ class OpenAICompatibleProvider(LLMProvider):
             if return_raw:
                 message = data.get("choices", [{}])[0].get("message", {})
                 tool_calls = message.get("tool_calls", [])
+                reasoning = message.get("reasoning", "") or message.get("reasoning_content", "")
                 return {
                     "content": message.get("content", ""),
+                    "reasoning": reasoning,
                     "tool_calls": tool_calls,
                     "role": message.get("role", "assistant"),
                 }
@@ -229,7 +231,7 @@ class OpenAICompatibleProvider(LLMProvider):
         messages: list[dict],
         tools: list[dict] | None = None,
         **kwargs
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict]:
         payload = self._build_payload(messages, tools, stream=True, **kwargs)
         async with httpx.AsyncClient(timeout=180.0) as client:
             async with client.stream(
@@ -247,10 +249,17 @@ class OpenAICompatibleProvider(LLMProvider):
                         break
                     try:
                         data = json.loads(data_str)
-                        delta = data.get("choices", [{}])[0].get("delta", {})
+                        choice = data.get("choices", [{}])[0]
+                        delta = choice.get("delta", {})
                         content = delta.get("content", "")
-                        if content:
-                            yield content
+                        reasoning = delta.get("reasoning", "") or delta.get("reasoning_content", "")
+                        # 收集 tool_calls（流式响应中可能分散在多个 chunk 中）
+                        tool_calls = delta.get("tool_calls")
+                        result = {"content": content, "reasoning": reasoning}
+                        if tool_calls:
+                            result["tool_calls"] = tool_calls
+                        if content or reasoning or tool_calls:
+                            yield result
                     except json.JSONDecodeError:
                         continue
 
