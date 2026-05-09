@@ -232,7 +232,6 @@ async def _execute_tool_call_loop_stream(
     import json as _json
 
     current_messages = [dict(m) for m in messages]
-    accumulated_reasoning = ""
 
     for iteration in range(max_iterations):
         # 所有轮次都尝试用流式调用，实时输出 reasoning 和 content
@@ -290,8 +289,6 @@ async def _execute_tool_call_loop_stream(
         if tool_calls_by_index:
             streaming_tool_calls = [tool_calls_by_index[i] for i in sorted(tool_calls_by_index.keys())]
 
-        accumulated_reasoning = full_reasoning
-
         # 如果流式调用中没有收集到 tool_calls，降级用非流式再试一次
         if not streaming_tool_calls and iteration == 0:
             response = await llm_adapter.chat(
@@ -312,7 +309,6 @@ async def _execute_tool_call_loop_stream(
                     yield {"type": "reasoning", "content": extra_reasoning}
                     await asyncio.sleep(0)
                     full_reasoning += extra_reasoning
-                accumulated_reasoning = full_reasoning
                 streaming_tool_calls = response.get("tool_calls", [])
                 full_content = response.get("content", "")
 

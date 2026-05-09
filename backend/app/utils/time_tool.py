@@ -1296,7 +1296,7 @@ class TimeTool:
                 h = now.hour
                 m = now.minute
                 display = h % 12 or 12
-                m_str = f"零{m}分" if m < 10 else f"{m}分" if m > 0 else "点整"
+                m_str = "点整" if m == 0 else f"零{m}分" if m < 10 else f"{m}分"
                 return f"现在是{display}点{m_str}"
 
     # ==================================================================

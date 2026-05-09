@@ -565,7 +565,6 @@ class WeatherTool:
         temp_max = day.get("temp_max", 0)
         wind_scale = day.get("wind_scale", "")
         wind_dir = day.get("wind_direction", "")
-        humidity = day.get("humidity", 0)
         precip_prob = day.get("precipitation_probability", 0)
         wmo_code = self._infer_wmo_code(day)
 
