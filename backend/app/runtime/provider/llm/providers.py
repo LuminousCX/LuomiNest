@@ -1,8 +1,67 @@
+import re
 from typing import AsyncIterator
 from app.runtime.provider.base import LLMProvider
 from loguru import logger
 import httpx
 import json
+
+
+def _clean_reasoning_content(raw_reasoning: str) -> str:
+    """清理推理内容，去除模型名称、重复文本等噪声
+
+    Ollama 等本地模型可能在 reasoning 字段中返回模型标识符或元数据，
+    此函数用于过滤这些非推理内容，确保只保留真正的思考过程。
+
+    处理的场景：
+      - 纯模型名重复：qwen3-vl:8bqwen3-vl:8bqwen3-vl:8b...
+      - 模型名片段：vl:8bqwen3-vl:8b...
+      - 行首/行尾的模型标识符
+    """
+    if not raw_reasoning:
+        return ""
+
+    text = raw_reasoning.strip()
+
+    # 场景1：检测连续重复的模型名称模式（最常见的问题）
+    # 匹配类似 "qwen3-vl:8b" 或 "llama-3.1-8b" 的模式重复
+    model_name_pattern = r'[a-zA-Z0-9]+(?:-[a-zA-Z0-9.]+)*:[a-zA-Z0-9._-]+'
+
+    # 检查是否整个文本主要由重复的模型名组成
+    matches = re.findall(model_name_pattern, text)
+    if matches:
+        # 计算模型名占总文本的比例
+        total_model_chars = sum(len(m) for m in matches)
+        ratio = total_model_chars / len(text) if text else 0
+
+        # 如果超过60%的字符都是模型名，认为是噪声
+        if ratio > 0.6 and len(text) > 10:
+            logger.debug(f"[Provider] Filtered reasoning noise: model_name_ratio={ratio:.2f}, "
+                        f"text='{text[:80]}...'")
+            return ""
+
+        # 如果有多个相同的模型名重复出现（>=3次），也是噪声
+        from collections import Counter
+        model_counts = Counter(matches)
+        most_common_model, count = model_counts.most_common(1)[0] if model_counts else ("", 0)
+        if count >= 3 and len(most_common_model) >= 5:
+            logger.debug(f"[Provider] Filtered repeated model name: '{most_common_model}' x{count}")
+            return ""
+
+    # 场景2：移除行首/行尾的模型名（保留中间的有效内容）
+    # 行首模型名
+    text = re.sub(r'^[a-zA-Z0-9_-]+:[a-zA-Z0-9._-]+\s*', '', text)
+    # 行尾模型名
+    text = re.sub(r'\s*[a-zA-Z0-9_-]+:[a-zA-Z0-9._-]+$', '', text)
+
+    # 场景3：移除孤立的模型名片段（如 "vl:8b" 前后没有其他有意义的内容）
+    # 如果清理后内容太短且看起来像片段，直接清空
+    if len(text.strip()) < 8:
+        # 检查是否还包含模型名特征
+        if re.search(r':[a-zA-Z0-9._-]', text):
+            logger.debug(f"[Provider] Filtered short fragment: '{text}'")
+            return ""
+
+    return text.strip()
 
 
 PROVIDER_TEMPLATES = {
@@ -217,7 +276,9 @@ class OpenAICompatibleProvider(LLMProvider):
             if return_raw:
                 message = data.get("choices", [{}])[0].get("message", {})
                 tool_calls = message.get("tool_calls", [])
-                reasoning = message.get("reasoning", "") or message.get("reasoning_content", "")
+                raw_reasoning = message.get("reasoning", "") or message.get("reasoning_content", "")
+                # 清理推理内容
+                reasoning = _clean_reasoning_content(raw_reasoning)
                 return {
                     "content": message.get("content", ""),
                     "reasoning": reasoning,
@@ -252,7 +313,11 @@ class OpenAICompatibleProvider(LLMProvider):
                         choice = data.get("choices", [{}])[0]
                         delta = choice.get("delta", {})
                         content = delta.get("content", "")
-                        reasoning = delta.get("reasoning", "") or delta.get("reasoning_content", "")
+                        raw_reasoning = delta.get("reasoning", "") or delta.get("reasoning_content", "")
+
+                        # 清理推理内容，去除模型名称等噪声
+                        reasoning = _clean_reasoning_content(raw_reasoning)
+
                         # 收集 tool_calls（流式响应中可能分散在多个 chunk 中）
                         tool_calls = delta.get("tool_calls")
                         result = {"content": content, "reasoning": reasoning}

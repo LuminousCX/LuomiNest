@@ -1358,123 +1358,127 @@ class TimeTool:
         return self.get_reply(query_type, user_message=user_message)
 
     def get_reply(self, query_type: str, user_message: str = "") -> str:
-        """基础回复入口（向后兼容，完全保留原有路由逻辑）
+        """统一回复入口
 
         参数:
-            query_type: 查询类型
+            query_type: 查询类型（time/date/date_offset/week/week_offset/lunar/holiday/timezone）
             user_message: 用户原始消息
 
         返回:
             自然语言回复字符串
         """
+        now = self._now()
+
         if query_type == "time":
-            return self._get_time_reply()
-        elif query_type == "date":
-            return self._get_date_reply(day_offset=0)
-        elif query_type == "week":
-            return self._get_week_reply(day_offset=0)
-        elif query_type == "date_offset":
-            offset = _extract_day_offset(user_message) if user_message else 0
-            return self._get_date_reply(day_offset=offset)
-        elif query_type == "week_offset":
-            offset = _extract_day_offset(user_message) if user_message else 0
-            return self._get_week_reply(day_offset=offset)
-        elif query_type == "lunar":
-            return self._get_lunar_reply()
-        elif query_type == "holiday":
-            return self._get_holiday_reply()
-        elif query_type == "timezone":
+            _, _, time_str = self._format_time_oral(now.hour, now.minute)
+            greeting = self._contextual_greeting(now.hour)
+            return f"{greeting}现在是{time_str}哦~"
+
+        if query_type in ("date", "date_offset"):
+            offset = _extract_day_offset(user_message) if (query_type == "date_offset" and user_message) else 0
+            target_date = now.date() + timedelta(days=offset)
+            target_dt = datetime.combine(target_date, now.time()).replace(tzinfo=self._timezone)
+            year, month, day = target_dt.year, target_dt.month, target_dt.day
+            weekday = _WEEKDAY_NAMES[target_dt.weekday()]
+
+            prefix_map = {-1: "昨天是", -2: "前天是", 1: "明天是", 2: "后天是"}
+            prefix = prefix_map.get(offset, "")
+            if not prefix:
+                if offset > 0:
+                    prefix = f"{offset}天后是"
+                elif offset < 0:
+                    prefix = f"{abs(offset)}天前是"
+                else:
+                    prefix = "今天是"
+
+            lunar_info = _solar_to_lunar(target_date)
+            holiday = _get_holiday_info(target_date, lunar_info)
+            holiday_text = ""
+            if holiday:
+                first = holiday.split("、")[0]
+                holiday_text = f"，{_get_holiday_message(first)}"
+
+            reply = f"{prefix}{year}年{month}月{day}日，{weekday}{holiday_text}"
+            if lunar_info.get("found"):
+                m_name = lunar_info["month_name"]
+                d_name = lunar_info["day_name"]
+                y_name = lunar_info["year_name"]
+                if m_name not in ("正月", "腊月") or d_name != "初一":
+                    reply += f"（农历{y_name}年{m_name}{d_name}）"
+            return reply
+
+        if query_type in ("week", "week_offset"):
+            offset = _extract_day_offset(user_message) if (query_type == "week_offset" and user_message) else 0
+            target_date = now.date() + timedelta(days=offset)
+            target_dt = datetime.combine(target_date, now.time()).replace(tzinfo=self._timezone)
+            weekday = _WEEKDAY_NAMES[target_dt.weekday()]
+            weekday_num = target_dt.weekday()
+
+            prefix_map = {1: "明天是", 2: "后天是", -1: "昨天是"}
+            prefix = prefix_map.get(offset, "")
+            if not prefix:
+                if offset > 0:
+                    prefix = f"{offset}天后是"
+                elif offset < 0:
+                    prefix = f"{abs(offset)}天前是"
+                else:
+                    prefix = "今天是"
+
+            if weekday_num in _WEEKEND_DAYS:
+                return f"{prefix}{weekday}呢，好好享受周末时光吧~"
+            elif weekday_num == 4:
+                return f"{prefix}{weekday}，马上就要周末啦，加油！"
+            return f"{prefix}{weekday}~"
+
+        if query_type == "lunar":
+            lunar_info = _solar_to_lunar(now.date())
+            if not lunar_info.get("found"):
+                return f"今天是{now.strftime('%Y-%m-%d')}，" \
+                       "很抱歉暂时没有该日期的农历数据哦~"
+            year_name = lunar_info["year_name"]
+            month_name = lunar_info["month_name"]
+            day_name = lunar_info["day_name"]
+            holiday_name = _get_holiday_info(now.date(), lunar_info)
+            holiday_text = ""
+            if holiday_name:
+                holiday_names = holiday_name.split("、")
+                holiday_text = "，" + _get_holiday_message(holiday_names[0])
+            reply = f"今天是农历{year_name}年{month_name}{day_name}{holiday_text}"
+            if lunar_info.get("spring_date"):
+                spring = lunar_info["spring_date"]
+                reply += f"（今年春节是{spring.year}年{spring.month}月{spring.day}日）"
+            return reply
+
+        if query_type == "holiday":
+            lunar_info = _solar_to_lunar(now.date())
+            holiday_name = _get_holiday_info(now.date(), lunar_info)
+            year, month, day = now.year, now.month, now.day
+            weekday = _WEEKDAY_NAMES[now.weekday()]
+            if holiday_name:
+                holiday_names = holiday_name.split("、")
+                first = holiday_names[0]
+                msg = _get_holiday_message(first)
+                reply = f"今天是{year}年{month}月{day}日{weekday}，{msg}"
+                if len(holiday_names) > 1:
+                    reply += f"同时还是{holiday_name}，今天可是个好日子！"
+                return reply
+            return f"今天是{year}年{month}月{day}日{weekday}，今天不是法定节假日哦~"
+
+        if query_type == "timezone":
             cleaned = _clean_input(user_message) if user_message else ""
             tz_name = self._detect_tz_city_name(cleaned)
             if tz_name:
-                return self._get_timezone_reply(tz_name)
-            return self._get_full_reply()
-        else:
-            return self._get_full_reply()
+                tz_id = (_CITY_TIMEZONE_MAP.get(tz_name) or
+                         _TIMEZONE_KEYWORDS.get(tz_name + "时间"))
+                if tz_id and tz_id in available_timezones():
+                    tz_tool = TimeTool(timezone=tz_id)
+                    tz_now = tz_tool._now()
+                    _, _, tz_time_str = tz_tool._format_time_oral(tz_now.hour, tz_now.minute)
+                    return f"{tz_name}现在是{tz_time_str}哦~"
+                return f"抱歉，暂时不支持查询「{tz_name}」的时区信息哦~"
+            query_type = "full"
 
-    # ------------------------------------------------------------------
-    # 基础回复方法（保留，向后兼容 + 新方法复用）
-    # ------------------------------------------------------------------
-
-    def _get_time_reply(self, timezone_name: str = "") -> str:
-        """生成自然语言时间回复（旧接口，保留兼容）"""
-        now = self._now()
-        _, _, time_str = self._format_time_oral(now.hour, now.minute)
-        if timezone_name:
-            return f"{timezone_name}现在是{time_str}哦~"
-        greeting = self._contextual_greeting(now.hour)
-        return f"{greeting}现在是{time_str}哦~"
-
-    def _contextual_greeting(self, hour: int) -> str:
-        """时段问候（旧接口，保留兼容）"""
-        for (start, end, _, _, greetings, _) in _PERIODS:
-            if start <= hour < end:
-                return greetings[0]
-        return ""
-
-    def _get_date_reply(self, day_offset: int = 0) -> str:
-        """日期回复（保留）"""
-        now = self._now()
-        target_date = now.date() + timedelta(days=day_offset)
-        target_dt = datetime.combine(target_date, now.time()
-                                     ).replace(tzinfo=self._timezone)
-        year, month, day = target_dt.year, target_dt.month, target_dt.day
-        weekday = _WEEKDAY_NAMES[target_dt.weekday()]
-
-        prefix_map = {-1: "昨天是", -2: "前天是", 1: "明天是", 2: "后天是"}
-        prefix = prefix_map.get(day_offset, "")
-        if not prefix:
-            if day_offset > 0:
-                prefix = f"{day_offset}天后是"
-            elif day_offset < 0:
-                prefix = f"{abs(day_offset)}天前是"
-            else:
-                prefix = "今天是"
-
-        lunar_info = _solar_to_lunar(target_date)
-        holiday = _get_holiday_info(target_date, lunar_info)
-        holiday_text = ""
-        if holiday:
-            first = holiday.split("、")[0]
-            holiday_text = f"，{_get_holiday_message(first)}"
-
-        reply = f"{prefix}{year}年{month}月{day}日，{weekday}{holiday_text}"
-        if lunar_info.get("found"):
-            m_name = lunar_info["month_name"]
-            d_name = lunar_info["day_name"]
-            y_name = lunar_info["year_name"]
-            if m_name not in ("正月", "腊月") or d_name != "初一":
-                reply += f"（农历{y_name}年{m_name}{d_name}）"
-        return reply
-
-    def _get_week_reply(self, day_offset: int = 0) -> str:
-        """星期回复（保留）"""
-        now = self._now()
-        target_date = now.date() + timedelta(days=day_offset)
-        target_dt = datetime.combine(target_date, now.time()
-                                     ).replace(tzinfo=self._timezone)
-        weekday = _WEEKDAY_NAMES[target_dt.weekday()]
-        weekday_num = target_dt.weekday()
-
-        prefix_map = {1: "明天是", 2: "后天是", -1: "昨天是"}
-        prefix = prefix_map.get(day_offset, "")
-        if not prefix:
-            if day_offset > 0:
-                prefix = f"{day_offset}天后是"
-            elif day_offset < 0:
-                prefix = f"{abs(day_offset)}天前是"
-            else:
-                prefix = "今天是"
-
-        if weekday_num in _WEEKEND_DAYS:
-            return f"{prefix}{weekday}呢，好好享受周末时光吧~"
-        elif weekday_num == 4:
-            return f"{prefix}{weekday}，马上就要周末啦，加油！"
-        return f"{prefix}{weekday}~"
-
-    def _get_full_reply(self) -> str:
-        """综合时间回复（旧接口，保留兼容）"""
-        now = self._now()
+        # 综合回复
         year, month, day = now.year, now.month, now.day
         hour, minute = now.hour, now.minute
         weekday = _WEEKDAY_NAMES[now.weekday()]
@@ -1497,52 +1501,12 @@ class TimeTool:
             base += "，明天就是周末啦，再坚持一下~"
         return base
 
-    def _get_lunar_reply(self) -> str:
-        """农历回复（保留）"""
-        now = self._now()
-        lunar_info = _solar_to_lunar(now.date())
-        if not lunar_info.get("found"):
-            return f"今天是{now.strftime('%Y-%m-%d')}，" \
-                   "很抱歉暂时没有该日期的农历数据哦~"
-        year_name = lunar_info["year_name"]
-        month_name = lunar_info["month_name"]
-        day_name = lunar_info["day_name"]
-        holiday_name = _get_holiday_info(now.date(), lunar_info)
-        holiday_text = ""
-        if holiday_name:
-            holiday_names = holiday_name.split("、")
-            holiday_text = "，" + _get_holiday_message(holiday_names[0])
-        reply = f"今天是农历{year_name}年{month_name}{day_name}{holiday_text}"
-        if lunar_info.get("spring_date"):
-            spring = lunar_info["spring_date"]
-            reply += f"（今年春节是{spring.year}年{spring.month}月{spring.day}日）"
-        return reply
-
-    def _get_holiday_reply(self) -> str:
-        """节假日回复（保留）"""
-        now = self._now()
-        lunar_info = _solar_to_lunar(now.date())
-        holiday_name = _get_holiday_info(now.date(), lunar_info)
-        year, month, day = now.year, now.month, now.day
-        weekday = _WEEKDAY_NAMES[now.weekday()]
-        if holiday_name:
-            holiday_names = holiday_name.split("、")
-            first = holiday_names[0]
-            msg = _get_holiday_message(first)
-            reply = f"今天是{year}年{month}月{day}日{weekday}，{msg}"
-            if len(holiday_names) > 1:
-                reply += f"同时还是{holiday_name}，今天可是个好日子！"
-            return reply
-        return f"今天是{year}年{month}月{day}日{weekday}，今天不是法定节假日哦~"
-
-    def _get_timezone_reply(self, tz_name: str) -> str:
-        """时区回复（保留）"""
-        tz_id = (_CITY_TIMEZONE_MAP.get(tz_name) or
-                 _TIMEZONE_KEYWORDS.get(tz_name + "时间"))
-        if not tz_id or tz_id not in available_timezones():
-            return f"抱歉，暂时不支持查询「{tz_name}」的时区信息哦~"
-        tz_tool = TimeTool(timezone=tz_id)
-        return tz_tool._get_time_reply(timezone_name=tz_name)
+    def _contextual_greeting(self, hour: int) -> str:
+        """时段问候"""
+        for (start, end, _, _, greetings, _) in _PERIODS:
+            if start <= hour < end:
+                return greetings[0]
+        return ""
 
     @staticmethod
     def _detect_tz_city_name(cleaned: str) -> str | None:
@@ -1576,45 +1540,6 @@ def _get_time_tool(timezone: str = "Asia/Shanghai",
         _time_tool_timezone = timezone
         _time_tool_agent_id = agent_id
     return _time_tool_instance
-
-
-def get_time_reply(user_message: str, timezone: str = "Asia/Shanghai",
-                   agent_id: str | None = None) -> str:
-    """对外暴露的极简接口，完全向后兼容
-
-    参数:
-        user_message: 用户原始消息文本
-        timezone:     时区标识符，默认东八区
-        agent_id:     用户标识，用于记忆系统个性化配置
-
-    返回:
-        自然语言时间回复，非时间类消息返回空字符串
-
-    用法:
-        reply = get_time_reply("现在几点了？")
-        # "现在是下午3点25分哦~"
-
-        reply = get_time_reply("明天几号")
-        # "明天是2026年5月8日，星期五"
-
-        reply = get_time_reply("明天天气几号", agent_id="user-001")
-    """
-    if not user_message:
-        return ""
-    cleaned = _clean_input(user_message)
-    if not cleaned:
-        return ""
-    query_type = _detect_query_type(cleaned)
-    tool = _get_time_tool(timezone=timezone, agent_id=agent_id)
-
-    if query_type != "timezone":
-        detected_tz = _detect_timezone_from_message(cleaned)
-        if detected_tz and detected_tz != timezone:
-            tool = _get_time_tool(timezone=detected_tz, agent_id=agent_id)
-
-    # 使用新入口，对新类型 query_type 走个性化回复
-    # 保持旧 query_type（date/week/lunar等）的完全兼容
-    return tool.get_reply(query_type, user_message=user_message)
 
 
 def get_time_reply_enhanced(user_message: str,
@@ -1685,21 +1610,21 @@ if __name__ == "__main__":
         return ""
 
     # ---- 基础时间查询 ----
-    test_one("基础-现在几点了", get_time_reply, "现在几点了")
-    test_one("基础-今天几号", get_time_reply, "今天几号")
-    test_one("基础-今天周几", get_time_reply, "今天星期几")
+    test_one("基础-现在几点了", get_time_reply_enhanced, "现在几点了")
+    test_one("基础-今天几号", get_time_reply_enhanced, "今天几号")
+    test_one("基础-今天周几", get_time_reply_enhanced, "今天星期几")
 
     # ---- 日期偏移 ----
-    test_one("偏移-明天几号", get_time_reply, "明天几号")
-    test_one("偏移-后天周几", get_time_reply, "后天是星期几")
-    test_one("偏移-下周一", get_time_reply, "下周一")
+    test_one("偏移-明天几号", get_time_reply_enhanced, "明天几号")
+    test_one("偏移-后天周几", get_time_reply_enhanced, "后天是星期几")
+    test_one("偏移-下周一", get_time_reply_enhanced, "下周一")
 
     # ---- 农历/节假日 ----
-    test_one("农历-今天", get_time_reply, "农历今天")
-    test_one("节假日-今天什么日子", get_time_reply, "今天是什么日子")
+    test_one("农历-今天", get_time_reply_enhanced, "农历今天")
+    test_one("节假日-今天什么日子", get_time_reply_enhanced, "今天是什么日子")
 
     # ---- 时区 ----
-    test_one("时区-东京时间", get_time_reply, "现在东京时间几点")
+    test_one("时区-东京时间", get_time_reply_enhanced, "现在东京时间几点")
 
     # ---- 多Agent风格对比（各自独立实例，避免多轮干扰）----
     print("\n" + "=" * 74)

@@ -3,6 +3,9 @@ import { ref, computed, watch } from 'vue'
 import type { ChatMessage, Conversation, ConversationListItem, ChatStreamChunk } from '../types'
 import { useApi } from '../composables/useApi'
 import { useAgentStore } from './agent'
+import { API_ENDPOINTS } from '../config/api'
+
+const BACKEND_URL = API_ENDPOINTS.V1
 
 export const useChatStore = defineStore('chat', () => {
   const { apiGet, apiPost, apiDelete, apiStream, checkHealth } = useApi()
@@ -71,7 +74,17 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       const query = `?agent_id=${targetAgentId}`
-      const convs = await apiGet<ConversationListItem[]>(`/chat/conversations${query}`)
+      const rawConvs = await apiGet<any[]>(`/chat/conversations${query}`)
+      const convs: ConversationListItem[] = rawConvs.map((conv: any) => ({
+        id: conv.id,
+        title: conv.title,
+        agentId: conv.agent_id,
+        model: conv.model,
+        provider: conv.provider,
+        lastMessage: conv.last_message,
+        createdAt: conv.created_at || conv.createdAt || '',
+        updatedAt: conv.updated_at || conv.updatedAt || '',
+      }))
       agentConversations.value = {
         ...agentConversations.value,
         [targetAgentId]: convs
@@ -102,13 +115,28 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
       convData.value = { ...convData.value, [convId]: conv }
-      const mappedMessages = (conv.messages || []).map((m: any) => ({
-        id: m.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp || Date.now(),
-        done: true,
-      }))
+      const mappedMessages: ChatMessage[] = []
+      for (const m of (conv.messages || [])) {
+        const msg: ChatMessage = {
+          id: m.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          role: m.role,
+          content: m.content || '',
+          timestamp: m.timestamp || Date.now(),
+          done: true,
+        }
+        if (m.reasoning_content) {
+          msg.reasoningContent = m.reasoning_content
+        }
+        if (m.interrupted || m.content === '[已中断]') {
+          msg.interrupted = true
+        }
+        if (m.files) {
+          msg.files = m.files
+        } else if (m.file_name) {
+          msg.files = [{ name: m.file_name, type: m.file_type }]
+        }
+        mappedMessages.push(msg)
+      }
       convMessages.value = { ...convMessages.value, [convId]: mappedMessages }
     } catch (error) {
       if (!convMessages.value[convId]) {
@@ -205,7 +233,8 @@ export const useChatStore = defineStore('chat', () => {
         [targetConvId]: [...currentMsgs.slice(0, lastIndex), {
           ...currentMsgs[lastIndex],
           done: true,
-          content: currentMsgs[lastIndex].content || '[已中断]'
+          content: currentMsgs[lastIndex].content || '[已中断]',
+          interrupted: true
         }]
       }
     }
@@ -226,6 +255,10 @@ export const useChatStore = defineStore('chat', () => {
       maxTokens?: number
       topP?: number
       agentId?: string
+      systemPrompt?: string
+      fileContent?: string
+      fileType?: string
+      fileName?: string
     }
   ) => {
     const targetAgentId = options?.agentId || activeAgentId.value
@@ -253,8 +286,9 @@ export const useChatStore = defineStore('chat', () => {
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content,
+      content: content,
       timestamp: Date.now(),
+      files: options?.fileContent && options?.fileName ? [{ name: options.fileName, type: options.fileType, content: options.fileContent }] : undefined,
     }
     convMessages.value = {
       ...convMessages.value,
@@ -300,6 +334,12 @@ export const useChatStore = defineStore('chat', () => {
 
     if (targetAgentId) {
       requestBody.agent_id = targetAgentId
+    }
+
+    if (options?.fileContent) {
+      requestBody.file_content = options.fileContent
+      if (options.fileName) requestBody.file_name = options.fileName
+      if (options.fileType) requestBody.file_type = options.fileType
     }
 
     const controller = new AbortController()

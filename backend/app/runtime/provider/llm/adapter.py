@@ -192,8 +192,6 @@ class LLMAdapter:
         except Exception as e:
             elapsed = time.time() - start_time
             logger.error(f"[LLM] Chat failed: provider={actual_provider}, elapsed={elapsed:.2f}s, error={e}")
-            if provider_name:
-                raise ProviderError(f"Provider [{provider_name}] failed: {e}", provider=provider_name)
             return await self._fallback_chat(messages, tools, stream, **kwargs)
 
     async def _fallback_chat(

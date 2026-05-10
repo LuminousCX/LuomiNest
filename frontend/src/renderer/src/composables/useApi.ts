@@ -1,9 +1,8 @@
 import { ref } from 'vue'
 import type { ChatStreamChunk } from '../types'
+import { API_ENDPOINTS, API_BASE_URL } from '../config/api'
 
-const BACKEND_URL = 'http://127.0.0.1:18000/api/v1'
-
-const getApiUrl = (path: string) => `${BACKEND_URL}${path}`
+const getApiUrl = (path: string) => `${API_ENDPOINTS.V1}${path}`
 
 const extractErrorMessage = (errData: any, status: number): string => {
   let errMsg = errData?.error?.message || errData?.detail || ''
@@ -265,7 +264,7 @@ export const useApi = () => {
 
   const checkHealth = async (): Promise<boolean> => {
     try {
-      const resp = await fetch('http://127.0.0.1:18000/health', {
+      const resp = await fetch(API_ENDPOINTS.HEALTH, {
         signal: AbortSignal.timeout(3000),
       })
       return resp.ok

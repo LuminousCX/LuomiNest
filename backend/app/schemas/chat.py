@@ -16,6 +16,10 @@ class ChatRequest(BaseModel):
     top_p: float | None = None
     stream: bool = False
     agent_id: str | None = None
+    timestamp: float | None = None
+    file_content: str | None = None
+    file_name: str | None = None
+    file_type: str | None = None
 
 
 class ChatResponse(BaseModel):

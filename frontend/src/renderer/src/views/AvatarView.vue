@@ -1,4 +1,4 @@
-﻿﻿<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   Palette, Sparkles, Heart, Eye, Smile, Frown, Meh, Zap,
@@ -405,11 +405,13 @@ onBeforeUnmount(() => {
                 <Palette :size="18" />
               </div>
               <div class="skin-info">
-                <span class="skin-name">{{ skin.name }}</span>
-                <span class="skin-type">{{ skin.type }}</span>
-              </div>
-              <div class="skin-tags">
-                <span v-for="tag in skin.tags" :key="tag" class="skin-tag">{{ tag }}</span>
+                <div class="skin-name-row">
+                  <span class="skin-name">{{ skin.name }}</span>
+                  <span class="skin-type">{{ skin.type }}</span>
+                </div>
+                <div class="skin-tags">
+                  <span v-for="tag in skin.tags" :key="tag" class="skin-tag">{{ tag }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -970,30 +972,33 @@ onBeforeUnmount(() => {
 .idle-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
 .idle-item {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 8px;
+  padding: 4px 0;
 }
 
 .idle-info {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 16px;
 }
 
 .idle-name {
   font-size: 11px;
   color: var(--text);
+  line-height: 1.2;
 }
 
 .idle-status {
-  font-size: 11px;
+  font-size: 10px;
   padding: 1px 6px;
   border-radius: 8px;
+  line-height: 1.4;
 }
 
 .idle-status.running {
@@ -1124,7 +1129,7 @@ onBeforeUnmount(() => {
 .skin-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   flex: 1;
   overflow-y: auto;
   margin-right: 2px;
@@ -1150,9 +1155,9 @@ onBeforeUnmount(() => {
 
 .skin-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
   cursor: pointer;
@@ -1184,34 +1189,41 @@ onBeforeUnmount(() => {
 .skin-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
   flex: 1;
   min-width: 0;
+}
+
+.skin-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .skin-name {
   font-size: 12px;
   font-weight: 500;
   color: var(--text);
+  line-height: 1.2;
 }
 
 .skin-type {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   opacity: 0.75;
+  line-height: 1.2;
 }
 
 .skin-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
-  margin-top: 4px;
 }
 
 .skin-tag {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 6px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
   background: var(--surface-hover);
   color: var(--text-muted);
   line-height: 1.4;

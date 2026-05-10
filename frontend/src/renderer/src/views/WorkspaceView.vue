@@ -25,12 +25,19 @@ import {
   PanelRightOpen,
   PanelRightClose,
   Square,
+  UploadCloud,
+  FileText,
+  Image,
+  File,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
 import { useSkillStore } from '../stores/skill'
+import FileUpload from '../components/FileUpload.vue'
+import FilePreview from '../components/FilePreview.vue'
+import { useFileUpload } from '../composables/useFileUpload'
 import { getProviderLogo } from '../config/provider-logos'
 import { marked } from 'marked'
 
@@ -44,6 +51,9 @@ const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const modelStore = useModelStore()
 const skillStore = useSkillStore()
+
+const { uploadingFile, isUploading, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
+const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
 
 const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
@@ -63,6 +73,27 @@ const SCROLL_BOTTOM_THRESHOLD = 120
 const showScrollToBottomBtn = ref(false)
 const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
 let resizeObserver: ResizeObserver | null = null
+
+const showGlobalDropOverlay = ref(false)
+let globalDragCounter = 0
+let dragLeaveTimer: ReturnType<typeof setTimeout> | null = null
+
+const showFilePreview = ref(false)
+const previewFile = ref<{ name: string; type?: string; content?: string } | null>(null)
+
+const toastMessage = ref('')
+const showToast = ref(false)
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+const displayToast = (msg: string) => {
+  if (toastTimer) clearTimeout(toastTimer)
+  toastMessage.value = msg
+  showToast.value = true
+  toastTimer = setTimeout(() => {
+    showToast.value = false
+    toastTimer = null
+  }, 3000)
+}
 
 const messages = computed(() => chatStore.messages)
 const isStreaming = computed(() => chatStore.isStreaming)
@@ -129,13 +160,28 @@ const selectModel = (providerId: string, modelId: string) => {
   showModelDropdown.value = false
 }
 
-const sendMessage = async () => {
-  if (!inputText.value.trim()) return
-  if (!isBackendReady.value) return
+const canSend = computed(() => {
+  if (!isBackendReady.value) return false
+  if (isUploading.value) return false
+  return inputText.value.trim().length > 0 || !!parsedContent.value
+})
 
-  const content = inputText.value
+const sendMessage = async () => {
+  if (!canSend.value) return
+
+  let content = inputText.value.trim()
+  const fileContent = parsedContent.value
+  const currentFileName = fileName.value
+  const currentFileType = fileType.value
+
+  if (!content && fileContent) {
+    content = '请帮我分析上传的文件'
+  }
+
   inputText.value = ''
   resetTextareaHeight()
+  clearUploadState()
+  fileUploadRef.value?.clearUploadState()
 
   const agent = agentStore.activeAgent
   const resolved = modelStore.resolveModel
@@ -149,6 +195,12 @@ const sendMessage = async () => {
   }
   if (agent?.systemPrompt) options.systemPrompt = agent.systemPrompt
   if (agent?.id) options.agentId = agent.id
+
+  if (fileContent) {
+    options.fileContent = fileContent
+    options.fileType = currentFileType
+    options.fileName = currentFileName
+  }
 
   isNearBottom.value = true
   await chatStore.sendMessage(content, options)
@@ -205,6 +257,22 @@ const autoResize = () => {
 const renderMarkdown = (text: string): string => {
   if (!text) return ''
   return marked.parse(text) as string
+}
+
+const getFileIcon = (fileType?: string) => {
+  if (!fileType) return File
+  if (fileType === 'image') return Image
+  return FileText
+}
+
+const openFilePreview = (file: { name: string; type?: string; content?: string }) => {
+  previewFile.value = { name: file.name, type: file.type, content: file.content }
+  showFilePreview.value = true
+}
+
+const closeFilePreview = () => {
+  showFilePreview.value = false
+  previewFile.value = null
 }
 
 const contextUsage = computed(() => {
@@ -266,19 +334,121 @@ const copyMessage = async (msgId: string, content: string) => {
   } catch {}
 }
 
+const handleGlobalDragEnter = (e: DragEvent) => {
+  if (e.dataTransfer?.types.includes('Files')) {
+    e.preventDefault()
+    if (dragLeaveTimer) {
+      clearTimeout(dragLeaveTimer)
+      dragLeaveTimer = null
+    }
+    globalDragCounter++
+    showGlobalDropOverlay.value = true
+  }
+}
+
+const handleGlobalDragOver = (e: DragEvent) => {
+  if (e.dataTransfer?.types.includes('Files')) {
+    e.preventDefault()
+    if (dragLeaveTimer) {
+      clearTimeout(dragLeaveTimer)
+      dragLeaveTimer = null
+    }
+    showGlobalDropOverlay.value = true
+  }
+}
+
+const handleGlobalDragLeave = (e: DragEvent) => {
+  if (e.dataTransfer?.types.includes('Files')) {
+    e.preventDefault()
+    globalDragCounter--
+    if (globalDragCounter <= 0) {
+      dragLeaveTimer = setTimeout(() => {
+        showGlobalDropOverlay.value = false
+        globalDragCounter = 0
+      }, 100)
+    }
+  }
+}
+
+const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.pdf', '.docx', '.doc', '.txt', '.md', '.csv', '.json', '.xml', '.html', '.css', '.js', '.py', '.java', '.cpp', '.c', '.h', '.go', '.rs', '.ts', '.sql', '.yaml', '.yml']
+
+const isFileAllowed = (fileName: string): boolean => {
+  const ext = fileName.toLowerCase().substring(fileName.lastIndexOf('.'))
+  return allowedExtensions.includes(ext)
+}
+
+const handleGlobalDrop = async (e: DragEvent) => {
+  e.preventDefault()
+  showGlobalDropOverlay.value = false
+  globalDragCounter = 0
+  if (dragLeaveTimer) {
+    clearTimeout(dragLeaveTimer)
+    dragLeaveTimer = null
+  }
+  const files = e.dataTransfer?.files
+  if (files && files.length > 0 && !isUploading.value) {
+    const file = files[0]
+    if (isFileAllowed(file.name)) {
+      await uploadAndForward(file)
+    } else {
+      displayToast(`不支持的文件类型: ${file.name}`)
+    }
+  }
+}
+
+const handlePaste = async (e: ClipboardEvent) => {
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].kind === 'file') {
+      const file = items[i].getAsFile()
+      if (file && !isUploading.value) {
+        if (isFileAllowed(file.name)) {
+          e.preventDefault()
+          await uploadAndForward(file)
+          return
+        } else {
+          displayToast(`不支持的文件类型: ${file.name}`)
+        }
+      }
+    }
+  }
+}
+
 const formatTime = (dateStr: string) => {
-  // 修复：历史记录实时更新 - 处理Invalid Date问题
   if (!dateStr || dateStr === 'undefined' || dateStr === 'null') {
     return '刚刚'
   }
   
   try {
-    const d = new Date(dateStr)
+    let d: Date
+    const numDate = Number(dateStr)
+    if (!isNaN(numDate)) {
+      d = new Date(numDate)
+    } else {
+      d = new Date(dateStr)
+    }
+    
     if (isNaN(d.getTime())) {
       return '刚刚'
     }
     
     const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+    
+    if (diffMins < 1) {
+      return '刚刚'
+    } else if (diffMins < 60) {
+      return `${diffMins}分钟前`
+    } else if (diffHours < 24) {
+      return `${diffHours}小时前`
+    } else if (diffDays < 7) {
+      return `${diffDays}天前`
+    }
+    
     const isToday = d.toDateString() === now.toDateString()
     
     if (isToday) {
@@ -360,12 +530,22 @@ onMounted(async () => {
     ])
   }
   document.addEventListener('click', handleClickOutsideModel)
+  document.addEventListener('dragenter', handleGlobalDragEnter)
+  document.addEventListener('dragover', handleGlobalDragOver)
+  document.addEventListener('dragleave', handleGlobalDragLeave)
+  document.addEventListener('drop', handleGlobalDrop)
+  document.addEventListener('paste', handlePaste)
   nextTick(() => setupResizeObserver())
 })
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   document.removeEventListener('click', handleClickOutsideModel)
+  document.removeEventListener('dragenter', handleGlobalDragEnter)
+  document.removeEventListener('dragover', handleGlobalDragOver)
+  document.removeEventListener('dragleave', handleGlobalDragLeave)
+  document.removeEventListener('drop', handleGlobalDrop)
+  document.removeEventListener('paste', handlePaste)
 })
 </script>
 
@@ -470,8 +650,30 @@ onBeforeUnmount(() => {
                         {{ msg.reasoningContent || '...' }}
                       </div>
                     </div>
-                    <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-                    <div v-else class="message-content user-message">{{ msg.content }}</div>
+                    <div v-if="msg.role === 'assistant' && msg.content && msg.content !== '[已中断]'" class="message-content markdown-body">
+                      <div v-html="renderMarkdown(msg.content)"></div>
+                      <span v-if="msg.interrupted" class="interrupted-inline">
+                        <AlertTriangle :size="12" /> 已中断
+                      </span>
+                    </div>
+                    <div v-else-if="(msg.interrupted || msg.content === '[已中断]') && msg.role === 'assistant'" class="interrupted-only">
+                      <AlertTriangle :size="12" /> 已中断
+                    </div>
+                    <div v-if="msg.role === 'user'" class="message-content user-message">
+                      {{ msg.content }}
+                      <div v-if="msg.files && msg.files.length > 0" class="message-files">
+                        <div
+                          v-for="(file, index) in msg.files"
+                          :key="index"
+                          class="message-file-item"
+                          @click="openFilePreview(file)"
+                        >
+                          <component :is="getFileIcon(file.type)" :size="16" />
+                          <span>{{ file.name }}</span>
+                          <Download :size="14" class="download-icon" />
+                        </div>
+                      </div>
+                    </div>
                     <div v-if="msg.role === 'assistant' && !msg.done && msg.content" class="streaming-indicator">
                       <span class="streaming-dot"></span>
                     </div>
@@ -518,6 +720,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="input-area">
+          <FileUpload ref="fileUploadRef" />
           <div class="input-wrapper">
             <textarea
               ref="textareaRef"
@@ -623,7 +826,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div class="toolbar-right">
-                <button class="tool-btn icon-only" title="附件">
+                <button class="tool-btn icon-only" title="附件" @click="fileUploadRef?.triggerFileSelect()">
                   <Paperclip :size="16" />
                 </button>
                 <button class="tool-btn icon-only" title="语音">
@@ -639,7 +842,7 @@ onBeforeUnmount(() => {
                 </button>
                 <button
                   v-else
-                  :class="['send-btn', { disabled: !inputText.trim() || !isBackendReady }]"
+                  :class="['send-btn', { disabled: !canSend }]"
                   title="发送"
                   @click="sendMessage"
                 >
@@ -663,6 +866,9 @@ onBeforeUnmount(() => {
 
     <Transition name="panel-slide">
       <div v-if="showHistoryPanel" class="right-panel">
+        <button class="panel-close-btn" @click="showHistoryPanel = false" title="关闭">
+          <PanelRightClose :size="16" />
+        </button>
         <div class="panel-tabs">
           <button
             :class="['panel-tab', { active: !showSearchPanel }]"
@@ -744,6 +950,43 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </Transition>
+
+    <Transition name="global-drop-fade">
+      <div v-if="showGlobalDropOverlay" class="global-drop-overlay" @dragover.prevent @drop.prevent>
+        <div class="drop-content">
+          <div class="drop-icon-wrapper">
+            <UploadCloud :size="64" class="drop-main-icon" />
+            <div class="drop-particles">
+              <span class="particle p1">📄</span>
+              <span class="particle p2">📊</span>
+              <span class="particle p3">📝</span>
+              <span class="particle p4">📕</span>
+              <span class="particle p5">🖼️</span>
+            </div>
+          </div>
+          <h3 class="drop-title">在此处拖放文件</h3>
+          <p class="drop-desc">
+            支持图片、文档、代码等常见格式
+          </p>
+          <p class="drop-hint">或按 Ctrl+V 粘贴文件</p>
+        </div>
+      </div>
+    </Transition>
+
+    <Transition name="toast-fade">
+      <div v-if="showToast" class="toast-notification">
+        <AlertTriangle :size="16" />
+        <span>{{ toastMessage }}</span>
+      </div>
+    </Transition>
+
+    <FilePreview
+      :visible="showFilePreview"
+      :file-name="previewFile?.name || ''"
+      :file-type="previewFile?.type"
+      :file-content="previewFile?.content"
+      @close="closeFilePreview"
+    />
 
   </div>
 </template>
@@ -1041,6 +1284,69 @@ onBeforeUnmount(() => {
   background: linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(20, 126, 188, 0.06));
 }
 
+.message-files {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.message-file-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--workspace-card);
+  border: 1px solid var(--divider-soft);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.message-file-item:hover {
+  background: var(--lumi-primary-bg);
+  border-color: var(--lumi-primary);
+  color: var(--lumi-primary);
+}
+
+.download-icon {
+  opacity: 0.6;
+}
+
+.message-file-item:hover .download-icon {
+  opacity: 1;
+}
+
+.interrupted-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 4px;
+  font-size: 11px;
+  color: #b45309;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.interrupted-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #b45309;
+  font-weight: 500;
+}
+
 .message-actions {
   display: flex;
   gap: 4px;
@@ -1258,6 +1564,27 @@ onBeforeUnmount(() => {
   flex-direction: column;
   overflow: hidden;
   border-left: 1px solid var(--divider-vertical);
+  position: relative;
+}
+
+.panel-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+  z-index: 10;
+}
+
+.panel-close-btn:hover {
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
 }
 
 .panel-tabs {
@@ -1585,6 +1912,9 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   position: relative;
   z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .input-wrapper {
@@ -2158,5 +2488,140 @@ onBeforeUnmount(() => {
 .msg-appear-enter-from {
   opacity: 0;
   transform: translateY(16px) scale(0.97);
+}
+
+.global-drop-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drop-content {
+  text-align: center;
+  padding: 60px 80px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px dashed rgba(20, 126, 188, 0.4);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 80px rgba(20, 126, 188, 0.1);
+  max-width: 560px;
+}
+
+.drop-icon-wrapper {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 24px;
+}
+
+.drop-main-icon {
+  color: var(--lumi-primary, #147ebc);
+  animation: drop-bounce 2s ease-in-out infinite;
+}
+
+.drop-particles {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 140px;
+  height: 140px;
+  pointer-events: none;
+}
+
+.particle {
+  position: absolute;
+  font-size: 22px;
+  animation: float-particle 3s ease-in-out infinite;
+  opacity: 0.7;
+}
+
+.p1 { top: -10px; left: 10px; animation-delay: 0s; }
+.p2 { top: 0; right: -5px; animation-delay: 0.4s; }
+.p3 { bottom: 5px; right: 0; animation-delay: 0.8s; }
+.p4 { bottom: -8px; left: 5px; animation-delay: 1.2s; }
+.p5 { top: 5px; left: -5px; animation-delay: 1.6s; }
+
+@keyframes drop-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes float-particle {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(6px, -8px) rotate(10deg); }
+  50% { transform: translate(-4px, -14px) rotate(-5deg); }
+  75% { transform: translate(8px, -4px) rotate(8deg); }
+}
+
+.drop-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 16px;
+  letter-spacing: 0.3px;
+}
+
+.drop-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 10px;
+  line-height: 1.7;
+  word-break: break-all;
+}
+
+.drop-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.global-drop-fade-enter-active,
+.global-drop-fade-leave-active {
+  transition: all 0.25s ease;
+}
+
+.global-drop-fade-enter-from,
+.global-drop-fade-leave-to {
+  opacity: 0;
+}
+
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.toast-notification {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--workspace-card);
+  border: 1px solid var(--divider-soft);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 14px;
+  z-index: 2000;
+}
+
+.toast-notification svg {
+  color: var(--lumi-primary);
 }
 </style>

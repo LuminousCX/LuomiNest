@@ -37,10 +37,12 @@ class Settings(BaseSettings):
     VRM_MODEL_PATH: str = "./models/vrm"
 
     DATA_DIR: str = "./data"
-    UPLOAD_DIR: str = "./data/uploads"
     AVATAR_DIR: str = "./data/avatars"
     PLUGIN_DIR: str = "./plugins"
     SKILL_DIR: str = "./skills"
+
+    EXTERNAL_PARSE_API_URL: str = ""
+    FILE_MAX_SIZE: int = 100 * 1024 * 1024
 
     class Config:
         env_file = ".env"

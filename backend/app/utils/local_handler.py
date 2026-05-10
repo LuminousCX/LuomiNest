@@ -25,7 +25,7 @@ import re
 from loguru import logger
 
 from app.utils.intent_gateway import classify_request, RequestType, is_weather_query
-from app.utils.time_tool import get_time_reply, TimeTool
+from app.utils.time_tool import TimeTool
 from app.utils.weather_tool import _weather_tool
 
 # 模块级时间工具单例 —— 保持多轮对话状态跨请求持久化

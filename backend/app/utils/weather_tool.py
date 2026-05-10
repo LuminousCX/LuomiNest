@@ -871,7 +871,7 @@ _weather_tool = WeatherTool(default_city="北京")
 
 
 def get_weather_reply(city: str | None = None, date_str: str = "") -> str:
-    """全局天气查询入口 —— 同步封装，与 get_time_reply 接口对齐
+    """全局天气查询入口 —— 同步封装，与 get_time_reply_enhanced 接口对齐
 
     内部自动处理异步调用（创建临时 event loop）。
 
