@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import type { ChatStreamChunk } from '../types'
-import { API_ENDPOINTS, API_BASE_URL } from '../config/api'
+import { API_ENDPOINTS } from '../config/api'
 
 const getApiUrl = (path: string) => `${API_ENDPOINTS.V1}${path}`
 

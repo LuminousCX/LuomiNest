@@ -3,9 +3,6 @@ import { ref, computed, watch } from 'vue'
 import type { ChatMessage, Conversation, ConversationListItem, ChatStreamChunk } from '../types'
 import { useApi } from '../composables/useApi'
 import { useAgentStore } from './agent'
-import { API_ENDPOINTS } from '../config/api'
-
-const BACKEND_URL = API_ENDPOINTS.V1
 
 export const useChatStore = defineStore('chat', () => {
   const { apiGet, apiPost, apiDelete, apiStream, checkHealth } = useApi()

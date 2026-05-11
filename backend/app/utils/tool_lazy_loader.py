@@ -269,8 +269,8 @@ if __name__ == "__main__":
             status = "FAIL"
             failed += 1
 
-        scene_status = "匹配" if scene_ok else f"不匹配"
-        tools_status = "匹配" if tools_ok else f"不匹配"
+        scene_status = "匹配" if scene_ok else "不匹配"
+        tools_status = "匹配" if tools_ok else "不匹配"
         print(f"  [{status}] {display:40}")
         if not scene_ok:
             print(f"         场景: 期望 {expected_scenes} 实际 {actual_scenes}")

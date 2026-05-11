@@ -667,7 +667,7 @@ _PERIODS = [
 # ---- 多轮对话阈值（秒）----
 _REPEAT_SAME_MINUTE = 60       # 1分钟内重复查询 → "还是XX时间哦"
 _REPEAT_NEAR_MINUTE = 120      # 2分钟内重复查询 → "距离上次才过了X分钟"
-_REPEAT_MAX_WINDOW = 120       # 超过2分钟视为正常查询
+_REPEAT_MAX_WINDOW = 180       # 超过3分钟视为正常查询（大于 NEAR 阈值）
 
 # ---- 工作日/周末场景化后缀 ----
 _WORKDAY_MOTIVATIONS = [
@@ -1476,7 +1476,6 @@ class TimeTool:
                     _, _, tz_time_str = tz_tool._format_time_oral(tz_now.hour, tz_now.minute)
                     return f"{tz_name}现在是{tz_time_str}哦~"
                 return f"抱歉，暂时不支持查询「{tz_name}」的时区信息哦~"
-            query_type = "full"
 
         # 综合回复
         year, month, day = now.year, now.month, now.day
