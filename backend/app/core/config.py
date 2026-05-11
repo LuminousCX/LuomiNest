@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     VRM_MODEL_PATH: str = "./models/vrm"
 
     DATA_DIR: str = "./data"
+    UPLOAD_DIR: str = "./data/uploads"
     AVATAR_DIR: str = "./data/avatars"
     PLUGIN_DIR: str = "./plugins"
     SKILL_DIR: str = "./skills"
