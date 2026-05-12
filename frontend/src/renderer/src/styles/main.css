@@ -15,10 +15,7 @@
 
   --lumi-warning: #eab308;
   --lumi-success: #22c55e;
-  --lumi-success-light: rgba(34, 197, 94, 0.10);
   --lumi-info: #3b82f6;
-  --lumi-star: #f59e0b;
-  --lumi-star-light: rgba(245, 158, 11, 0.10);
 
   --bg: #F5F8FB;
   --bg-secondary: #EDF2F7;
@@ -103,11 +100,6 @@
   --task-red: #ef4444;
   --task-red-soft: rgba(239, 68, 68, 0.10);
 
-  --overlay-backdrop: rgba(0, 0, 0, 0.5);
-  --surface-ghost: rgba(0, 0, 0, 0.03);
-  --surface-ghost-hover: rgba(0, 0, 0, 0.06);
-  --progress-shimmer: rgba(20, 126, 188, 0.25);
-
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -121,10 +113,6 @@
   --lumi-primary-light: rgba(58, 159, 212, 0.1);
   --lumi-primary-glow: rgba(58, 159, 212, 0.18);
   --lumi-primary-soft: #62A9C8;
-
-  --lumi-success-light: rgba(34, 197, 94, 0.12);
-  --lumi-star: #f59e0b;
-  --lumi-star-light: rgba(245, 158, 11, 0.12);
 
   --bg: #000000;
   --bg-secondary: #0A0A0A;
@@ -181,11 +169,6 @@
   --task-green-bg: rgba(34, 197, 94, 0.07);
   --task-red: #ef4444;
   --task-red-soft: rgba(239, 68, 68, 0.12);
-
-  --overlay-backdrop: rgba(0, 0, 0, 0.7);
-  --surface-ghost: rgba(255, 255, 255, 0.03);
-  --surface-ghost-hover: rgba(255, 255, 255, 0.08);
-  --progress-shimmer: rgba(58, 159, 212, 0.25);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -251,11 +234,6 @@
     --task-green-bg: rgba(34, 197, 94, 0.07);
     --task-red: #ef4444;
     --task-red-soft: rgba(239, 68, 68, 0.12);
-
-    --overlay-backdrop: rgba(0, 0, 0, 0.7);
-    --surface-ghost: rgba(255, 255, 255, 0.03);
-    --surface-ghost-hover: rgba(255, 255, 255, 0.08);
-    --progress-shimmer: rgba(58, 159, 212, 0.25);
   }
 }
 
