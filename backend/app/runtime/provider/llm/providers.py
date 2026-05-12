@@ -36,7 +36,7 @@ def _clean_reasoning_content(raw_reasoning: str) -> str:
         # 如果超过60%的字符都是模型名，认为是噪声
         if ratio > 0.6 and len(text) > 10:
             logger.debug(f"[Provider] Filtered reasoning noise: model_name_ratio={ratio:.2f}, "
-                        f"text='{text[:80]}...'")
+                        f"text_length={len(text)}")
             return ""
 
         # 如果有多个相同的模型名重复出现（>=3次），也是噪声
@@ -58,7 +58,7 @@ def _clean_reasoning_content(raw_reasoning: str) -> str:
     if len(text.strip()) < 8:
         # 检查是否还包含模型名特征
         if re.search(r':[a-zA-Z0-9._-]', text):
-            logger.debug(f"[Provider] Filtered short fragment: '{text}'")
+            logger.debug(f"[Provider] Filtered short fragment: length={len(text)}")
             return ""
 
     return text.strip()

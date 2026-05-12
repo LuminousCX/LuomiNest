@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Any
+from typing import Any, Literal
 
 
 class ChatMessageCreate(BaseModel):
@@ -17,9 +17,13 @@ class ChatRequest(BaseModel):
     stream: bool = False
     agent_id: str | None = None
     timestamp: float | None = None
-    file_content: str | None = None
-    file_name: str | None = None
-    file_type: str | None = None
+    file_content: str | None = Field(default=None, max_length=100_000_000)
+    file_name: str | None = Field(default=None, max_length=255)
+    file_type: Literal[
+        "text", "image",
+        "text/plain", "image/png", "image/jpeg", "image/gif", "image/webp",
+        "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ] | None = None
 
 
 class ChatResponse(BaseModel):

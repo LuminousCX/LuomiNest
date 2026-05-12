@@ -835,7 +835,6 @@ class WeatherTool:
 _weather_cache: dict[str, str] = {}
 
 
-@lru_cache(maxsize=100)
 def _cached_weather_fetch(city: str, cache_key: str, days: int) -> dict | None:
     """LRU 缓存查找天气数据
 
@@ -871,9 +870,10 @@ _weather_tool = WeatherTool(default_city="北京")
 
 
 def get_weather_reply(city: str | None = None, date_str: str = "") -> str:
-    """全局天气查询入口 —— 同步封装，与 get_time_reply_enhanced 接口对齐
+    """全局天气查询入口 —— 同步封装
 
-    内部自动处理异步调用（创建临时 event loop）。
+    仅在无运行事件循环时使用 asyncio.run()，
+    若已在异步上下文中则提示调用方使用异步 API。
 
     参数:
         city: 城市名称，None 时使用默认城市"北京"
@@ -883,13 +883,12 @@ def get_weather_reply(city: str | None = None, date_str: str = "") -> str:
         自然语言天气回复字符串
     """
     try:
-        # 优先获取当前事件循环
         try:
-            loop = asyncio.get_running_loop()
-            future = asyncio.ensure_future(_weather_tool.get_reply(city, date_str))
-            return loop.run_until_complete(future) if not loop.is_running() else "正在查询天气，请稍后..."
+            asyncio.get_running_loop()
+            return "天气查询需要在异步上下文中使用 await 调用，请使用异步 API"
         except RuntimeError:
-            return asyncio.run(_weather_tool.get_reply(city, date_str))
+            pass
+        return asyncio.run(_weather_tool.get_reply(city, date_str))
     except Exception as e:
         logger.warning(f"[WeatherTool] get_weather_reply 异常: {e}")
         return f"天气查询暂时不可用，稍后再试哦~"

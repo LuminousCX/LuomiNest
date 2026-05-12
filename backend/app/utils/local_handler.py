@@ -36,14 +36,18 @@ _time_tool_instance = TimeTool(timezone="Asia/Shanghai")
 # 城市名提取 —— 从用户消息中提取城市名称
 # =============================================================================
 
-# 中国主要城市名正则（支持简写如"京"、"沪"）
+# 中国主要城市名正则
 _CITY_PATTERN = re.compile(
     r"(北京|上海|广州|深圳|杭州|成都|武汉|西安|南京|重庆|天津|"
     r"苏州|长沙|郑州|济南|青岛|大连|厦门|福州|昆明|贵阳|南宁|"
     r"海口|三亚|哈尔滨|长春|沈阳|乌鲁木齐|拉萨|兰州|银川|西宁|"
     r"呼和浩特|太原|石家庄|合肥|南昌|东莞|佛山|无锡|宁波|温州|"
-    r"徐州|珠海|惠州|中山|烟台|威海|"
-    r"京|沪|穗|深|蓉|渝)"
+    r"徐州|珠海|惠州|中山|烟台|威海)"
+)
+
+# 城市别名正则 —— 单字别名仅在独立出现时匹配（前后无中文字符）
+_CITY_ALIAS_PATTERN = re.compile(
+    r"(?<![\u4e00-\u9fa5])(京|沪|穗|深|蓉|渝)(?![\u4e00-\u9fa5])"
 )
 
 # 城市别名映射 —— "京"→"北京"
@@ -57,7 +61,7 @@ def _extract_city(user_message: str) -> str | None:
     """从用户消息中提取城市名称
 
     在消息中搜索匹配的城市名，返回第一个匹配的城市（完整名称）。
-    支持城市别名自动映射（如"京"→"北京"）。
+    优先匹配完整城市名，再匹配独立出现的单字别名。
 
     参数:
         user_message: 用户输入的原始消息文本
@@ -66,10 +70,16 @@ def _extract_city(user_message: str) -> str | None:
         城市完整名称，未找到返回 None
     """
     matched = _CITY_PATTERN.findall(user_message)
-    if not matched:
-        return None
-    city = matched[0]
-    return _CITY_ALIAS.get(city, city)
+    if matched:
+        city = matched[0]
+        return _CITY_ALIAS.get(city, city)
+
+    alias_matched = _CITY_ALIAS_PATTERN.findall(user_message)
+    if alias_matched:
+        city = alias_matched[0]
+        return _CITY_ALIAS.get(city, city)
+
+    return None
 
 
 def _extract_date_from_message(user_message: str, city: str) -> str:

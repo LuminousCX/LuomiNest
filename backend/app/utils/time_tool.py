@@ -417,7 +417,7 @@ def _detect_query_type(cleaned: str) -> str:
     return "all"
 
 
-def _extract_day_offset(cleaned: str) -> int:
+def _extract_day_offset(cleaned: str, now: datetime | None = None) -> int:
     """从用户消息中提取日期偏移量
 
     支持格式：
@@ -427,6 +427,7 @@ def _extract_day_offset(cleaned: str) -> int:
 
     参数:
         cleaned: 清洗后的用户消息
+        now: 当前时间（时区感知），None 时使用 datetime.now()
 
     返回:
         距离今天的偏移天数，无法提取时返回 0
@@ -461,7 +462,7 @@ def _extract_day_offset(cleaned: str) -> int:
 
     for week_word, weekday_idx in _WEEKDAY_OFFSET_CN.items():
         if week_word in cleaned:
-            today_weekday = datetime.now().weekday()
+            today_weekday = (now or datetime.now()).weekday()
             days_until = (weekday_idx - today_weekday) % 7
             is_next = "下" in cleaned or "下周" in cleaned or "下礼拜" in cleaned
             if is_next and days_until == 0:
@@ -903,16 +904,17 @@ class TimeTool:
     # ------------------------------------------------------------------
 
     @staticmethod
-    @lru_cache(maxsize=1)
-    def _get_cached_now(minute_bucket: str) -> datetime:
-        """带缓存的时间获取方法"""
-        return datetime.now()
+    @lru_cache(maxsize=64)
+    def _get_cached_now(minute_bucket: str, tz_name: str) -> datetime:
+        """带缓存的时间获取方法（按时区隔离缓存）"""
+        from datetime import timezone as _tz
+        tz = ZoneInfo(tz_name)
+        return datetime.now(tz)
 
     def _now(self) -> datetime:
         """获取当前时间（带时区转换和1分钟缓存）"""
-        minute_bucket = datetime.now().strftime("%Y%m%d%H%M")
-        naive_now = self._get_cached_now(minute_bucket)
-        return naive_now.replace(tzinfo=self._timezone)
+        minute_bucket = datetime.now(self._timezone).strftime("%Y%m%d%H%M")
+        return self._get_cached_now(minute_bucket, self._timezone_name)
 
     # ==================================================================
     #  回复生成全链路（本次全面重写）
@@ -1375,7 +1377,7 @@ class TimeTool:
             return f"{greeting}现在是{time_str}哦~"
 
         if query_type in ("date", "date_offset"):
-            offset = _extract_day_offset(user_message) if (query_type == "date_offset" and user_message) else 0
+            offset = _extract_day_offset(user_message, now) if (query_type == "date_offset" and user_message) else 0
             target_date = now.date() + timedelta(days=offset)
             target_dt = datetime.combine(target_date, now.time()).replace(tzinfo=self._timezone)
             year, month, day = target_dt.year, target_dt.month, target_dt.day
@@ -1408,7 +1410,7 @@ class TimeTool:
             return reply
 
         if query_type in ("week", "week_offset"):
-            offset = _extract_day_offset(user_message) if (query_type == "week_offset" and user_message) else 0
+            offset = _extract_day_offset(user_message, now) if (query_type == "week_offset" and user_message) else 0
             target_date = now.date() + timedelta(days=offset)
             target_dt = datetime.combine(target_date, now.time()).replace(tzinfo=self._timezone)
             weekday = _WEEKDAY_NAMES[target_dt.weekday()]

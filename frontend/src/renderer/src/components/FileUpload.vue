@@ -33,15 +33,6 @@ defineExpose({ triggerFileSelect, clearUploadState })
       @remove="clearUploadState"
       @download="() => {}"
     />
-    <button
-      v-if="!uploadingFile"
-      class="upload-btn"
-      :disabled="isUploading"
-      @click="triggerFileSelect"
-    >
-      <Plus :size="16" />
-      <span>添加附件</span>
-    </button>
   </div>
 </template>
 

@@ -79,13 +79,19 @@ def _call_get_current_time(arguments: dict) -> str:
     try:
         from app.runtime.plugin.skill.registry import SkillRegistry
         import asyncio as _asyncio
-        loop = _asyncio.new_event_loop()
-        result = loop.run_until_complete(SkillRegistry._builtin_get_time())
-        data = result.data if hasattr(result, "data") else result
-        weekday = data.get("weekday", "")
-        date = data.get("date", "")
-        time = data.get("time", "")
-        return f"日期：{date} {weekday}，时间：{time}"
+        try:
+            loop = _asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            logger.debug("[MCP-Time] 已在运行的事件循环中，跳过 SkillRegistry 异步调用")
+        else:
+            result = _asyncio.run(SkillRegistry._builtin_get_time())
+            data = result.data if hasattr(result, "data") else result
+            weekday = data.get("weekday", "")
+            date = data.get("date", "")
+            time = data.get("time", "")
+            return f"日期：{date} {weekday}，时间：{time}"
     except Exception as e:
         logger.debug(f"[MCP-Time] SkillRegistry 不可用 ({e})，降级到纯 datetime")
 
@@ -198,24 +204,19 @@ def handle_request(request: dict) -> str | None:
 async def run_server():
     """MCP Server 主循环 —— 从 stdin 读取 JSON-RPC 请求，处理后写到 stdout
 
-    使用异步 I/O 避免阻塞，但在 Windows 上 stdin 不支持原生异步，
-    因此使用 run_in_executor 将阻塞读取放到线程池。
+    使用 run_in_executor 将阻塞读取放到线程池，
+    兼容 Windows 和所有平台。
     """
-    loop = asyncio.get_event_loop()
-    reader = asyncio.StreamReader()
-    protocol = asyncio.StreamReaderProtocol(reader)
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+    loop = asyncio.get_running_loop()
 
-    # 在 Windows 上，stdin 可能不支持原生异步 pipe
-    # 降级方案：使用 run_in_executor 做后台阻塞读取
     async def _read_line() -> str:
         try:
             line = await asyncio.wait_for(
                 loop.run_in_executor(None, sys.stdin.readline),
-                timeout=300,  # 5 分钟超时
+                timeout=300,
             )
             return line
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ""
 
     while True:

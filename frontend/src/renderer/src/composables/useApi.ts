@@ -143,12 +143,10 @@ export const useApi = () => {
             const chunk: ChatStreamChunk = {
               id: raw.id,
               content: raw.content || '',
-              reasoningContent: raw.reasoning_content || raw.reasoningContent || '',
+              reasoning_content: raw.reasoning_content || raw.reasoningContent || '',
               model: raw.model || '',
               provider: raw.provider || '',
               done: !!raw.done,
-              usage: raw.usage,
-              timestamp: raw.timestamp,
             }
             onChunk(chunk)
             if (chunk.done) {

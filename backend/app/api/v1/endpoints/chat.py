@@ -23,6 +23,7 @@ from app.utils.intent_gateway import classify_request, RequestType
 from app.utils.tool_lazy_loader import get_matched_tools
 from app.utils.tool_result_processor import process_tool_result
 from app.utils.local_handler import handle_local_tool_request
+from app.utils.tool_executor import execute_tool_chain, build_tool_summary, execute_single_tool
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -72,322 +73,6 @@ def _resolve_tools(user_message: str, request_type: RequestType) -> list[dict] |
     except Exception as e:
         logger.warning(f"[Chat] 工具懒加载异常，降级返回空列表（不注入工具）: {e}")
         return []
-
-
-async def _execute_tool_call_loop(
-    messages: list[dict],
-    tools: list[dict],
-    provider_name: str,
-    model: str,
-    temperature: float | None = None,
-    max_tokens: int | None = None,
-    top_p: float | None = None,
-    max_iterations: int = 3,
-) -> tuple[str, str]:
-    """工具调用循环 —— 处理 LLM 工具调用请求，执行工具并回传精简结果
-
-    完整流程（支持多轮工具调用）：
-      第一轮：发送 messages + tools → LLM 决定是否需要工具
-        ├─ 无 tool_calls → 直接返回文本内容
-        └─ 有 tool_calls → 遍历每个 tool_call:
-              1. SkillExecutor.execute(tool_name, args) → 原始结果
-              2. process_tool_result(tool_name, 原始结果) → 精简结果
-              3. 追加 tool result message
-            → 回到循环起点，下一轮 LLM 看到工具结果后生成最终回复
-
-    安全机制：
-      - max_iterations 限制最大轮次，防止死循环
-      - 任何环节异常均不中断对话，返回友好提示
-      - 工具执行失败时仍传递错误信息给 LLM，让其自行处理
-
-    参数:
-        messages: 对话消息列表（会被浅拷贝，不会修改原始列表）
-        tools: 工具定义列表
-        provider_name: LLM provider 名称
-        model: 模型名称
-        temperature: 温度参数
-        max_tokens: 最大 token 数
-        top_p: top_p 参数
-        max_iterations: 最大迭代次数，默认 3
-
-    返回:
-        (最终回复文本, 累积的推理内容) 元组
-    """
-    import json as _json
-
-    current_messages = [dict(m) for m in messages]
-    all_reasoning = ""
-
-    for iteration in range(max_iterations):
-        # 调用 LLM：第一轮传工具定义让 LLM 选择，后续轮次不传（避免重复调用）
-        response = await llm_adapter.chat(
-            messages=current_messages,
-            tools=tools if iteration == 0 else None,
-            provider_name=provider_name,
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            top_p=top_p,
-            return_raw=True,
-        )
-
-        # 累积推理内容（云服务用 reasoning_content，Ollama 用 reasoning 字段）
-        if isinstance(response, dict):
-            reasoning = response.get("reasoning", "") or response.get("reasoning_content", "")
-            if reasoning:
-                all_reasoning += reasoning
-
-        # 判断响应的类型：可能是 dict（raw 模式）或 str（降级）
-        if isinstance(response, str):
-            # 降级场景：LLM 直接返回了文本
-            return response, all_reasoning
-
-        tool_calls = response.get("tool_calls", []) if isinstance(response, dict) else []
-
-        # 无工具调用 → 这是最终文本回复
-        if not tool_calls:
-            content = response.get("content", "") if isinstance(response, dict) else ""
-            return content or "抱歉，我暂时无法处理这个请求。", all_reasoning
-
-        logger.info(
-            f"[Chat] 工具调用循环 第{iteration + 1}轮: "
-            f"检测到 {len(tool_calls)} 个工具调用 → "
-            f"{[tc.get('function', {}).get('name', '?') for tc in tool_calls]}"
-        )
-
-        # 追加 assistant 消息（含 tool_calls）
-        assistant_msg: dict = {
-            "role": "assistant",
-            "content": response.get("content") or None,
-        }
-        # 保留完整的 tool_calls 结构
-        assistant_msg["tool_calls"] = tool_calls
-        current_messages.append(assistant_msg)
-
-        # 执行每个工具调用
-        from app.runtime.plugin.skill.executor import SkillExecutor
-        executor = SkillExecutor()
-
-        for tool_call in tool_calls:
-            fn = tool_call.get("function", {})
-            tool_name = fn.get("name", "")
-            arguments_str = fn.get("arguments", "{}")
-
-            # 解析参数
-            try:
-                arguments = _json.loads(arguments_str) if isinstance(arguments_str, str) else arguments_str
-            except (_json.JSONDecodeError, TypeError):
-                arguments = {}
-
-            tool_call_id = tool_call.get("id", f"call_{iteration}_{tool_name}")
-
-            try:
-                # 步骤1：执行工具获取原始结果
-                raw_result = await executor.execute(tool_name, arguments, agent_id=None)
-                # 步骤2：结果处理器过滤聚合精简
-                processed_result = process_tool_result(tool_name, raw_result)
-                logger.info(
-                    f"[Chat] 工具 {tool_name} 执行完成: "
-                    f"原始 {len(raw_result)} 字符 → 精简 {len(processed_result)} 字符"
-                )
-            except Exception as e:
-                logger.warning(f"[Chat] 工具 {tool_name} 执行异常: {e}")
-                processed_result = f"工具执行出错: {e}"
-
-            # 追加 tool result 消息
-            current_messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call_id,
-                "name": tool_name,
-                "content": processed_result,
-            })
-
-    # 超过最大迭代次数
-    logger.warning(f"[Chat] 工具调用循环达到最大迭代次数 {max_iterations}，强制终止")
-    return "抱歉，处理您的请求需要多次工具调用，请尝试简化问题后再问我。", all_reasoning
-
-
-async def _execute_tool_call_loop_stream(
-    messages: list[dict],
-    tools: list[dict],
-    provider_name: str,
-    model: str,
-    temperature: float | None = None,
-    max_tokens: int | None = None,
-    top_p: float | None = None,
-    max_iterations: int = 3,
-) -> AsyncIterator[dict]:
-    """工具调用循环的流式版本 —— 实时 yield 推理和最终答案
-
-    核心改进：
-      - 第一轮 LLM 调用使用流式输出，实时 yield reasoning
-      - 在流式过程中同时收集 tool_calls，避免额外的非流式调用
-      - 每个 yield 后强制让出控制权，确保数据实时发送到前端
-      - 后续轮次仍使用非流式（工具结果回传后通常直接得到答案）
-
-    Yields:
-        {"type": "reasoning", "content": "..."}  推理内容
-        {"type": "content", "content": "..."}    最终回答内容
-    """
-    import json as _json
-
-    current_messages = [dict(m) for m in messages]
-
-    for iteration in range(max_iterations):
-        # 所有轮次都尝试用流式调用，实时输出 reasoning 和 content
-        full_content = ""
-        full_reasoning = ""
-        content_streamed = False
-        # 用于收集流式响应中的 tool_calls（可能分散在多个 chunk 中）
-        streaming_tool_calls: list[dict] = []
-        tool_calls_by_index: dict[int, dict] = {}
-
-        async for chunk in llm_adapter.chat_stream(
-            messages=current_messages,
-            tools=tools if iteration == 0 else None,
-            provider_name=provider_name,
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            top_p=top_p,
-        ):
-            content = chunk.get("content", "")
-            reasoning = chunk.get("reasoning", "")
-            chunk_tool_calls = chunk.get("tool_calls")
-
-            if reasoning:
-                full_reasoning += reasoning
-                yield {"type": "reasoning", "content": reasoning}
-                await asyncio.sleep(0)  # 强制让出控制权，确保实时发送
-
-            if content:
-                full_content += content
-                content_streamed = True
-                yield {"type": "content", "content": content}
-                await asyncio.sleep(0)  # 强制让出控制权，确保实时发送
-
-            # 收集流式 tool_calls
-            if chunk_tool_calls:
-                for tc in chunk_tool_calls:
-                    idx = tc.get("index", 0)
-                    if idx not in tool_calls_by_index:
-                        tool_calls_by_index[idx] = {
-                            "id": tc.get("id", ""),
-                            "type": tc.get("type", "function"),
-                            "function": {"name": "", "arguments": ""},
-                        }
-                    # 累积 function 字段
-                    fn = tc.get("function", {})
-                    if fn.get("name"):
-                        tool_calls_by_index[idx]["function"]["name"] += fn["name"]
-                    if fn.get("arguments"):
-                        tool_calls_by_index[idx]["function"]["arguments"] += fn["arguments"]
-                    if tc.get("id"):
-                        tool_calls_by_index[idx]["id"] = tc["id"]
-
-        # 重组 tool_calls
-        if tool_calls_by_index:
-            streaming_tool_calls = [tool_calls_by_index[i] for i in sorted(tool_calls_by_index.keys())]
-
-        # 如果流式调用中没有收集到 tool_calls，降级用非流式再试一次
-        if not streaming_tool_calls and iteration == 0:
-            response = await llm_adapter.chat(
-                messages=current_messages,
-                tools=tools,
-                provider_name=provider_name,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                top_p=top_p,
-                return_raw=True,
-            )
-
-            # 补充可能遗漏的推理内容
-            if isinstance(response, dict):
-                extra_reasoning = response.get("reasoning", "") or response.get("reasoning_content", "")
-                if extra_reasoning and extra_reasoning not in full_reasoning:
-                    yield {"type": "reasoning", "content": extra_reasoning}
-                    await asyncio.sleep(0)
-                    full_reasoning += extra_reasoning
-                streaming_tool_calls = response.get("tool_calls", [])
-                full_content = response.get("content", "")
-
-            if isinstance(response, str):
-                yield {"type": "content", "content": response}
-                return
-
-        tool_calls = streaming_tool_calls
-
-        if not tool_calls:
-            # 没有工具调用，返回答案（如已流式输出则跳过，否则一次性返回）
-            if content_streamed:
-                return
-            if full_content:
-                yield {"type": "content", "content": full_content}
-            else:
-                yield {"type": "content", "content": "抱歉，我暂时无法处理这个请求。"}
-            return
-
-        # 有 tool_calls，需要继续循环
-        assistant_msg = {
-            "role": "assistant",
-            "content": full_content or None,
-            "tool_calls": tool_calls,
-        }
-        current_messages.append(assistant_msg)
-
-        # 执行工具调用（所有轮次共用）
-        logger.info(
-            f"[Chat] 工具调用循环 第{iteration + 1}轮: "
-            f"检测到 {len(tool_calls)} 个工具调用 → "
-            f"{[tc.get('function', {}).get('name', '?') for tc in tool_calls]}"
-        )
-
-        # 通知前端正在执行工具，避免连接空闲超时
-        yield {"type": "reasoning", "content": f"\n[正在执行工具: {', '.join(tc.get('function', {}).get('name', '?') for tc in tool_calls)}...]\n"}
-        await asyncio.sleep(0)
-
-        from app.runtime.plugin.skill.executor import SkillExecutor
-        executor = SkillExecutor()
-
-        for tool_call in tool_calls:
-            fn = tool_call.get("function", {})
-            tool_name = fn.get("name", "")
-            arguments_str = fn.get("arguments", "{}")
-
-            try:
-                arguments = _json.loads(arguments_str) if isinstance(arguments_str, str) else arguments_str
-            except (_json.JSONDecodeError, TypeError):
-                arguments = {}
-
-            tool_call_id = tool_call.get("id", f"call_{iteration}_{tool_name}")
-
-            try:
-                raw_result = await executor.execute(tool_name, arguments, agent_id=None)
-                processed_result = process_tool_result(tool_name, raw_result)
-                logger.info(
-                    f"[Chat] 工具 {tool_name} 执行完成: "
-                    f"原始 {len(raw_result)} 字符 → 精简 {len(processed_result)} 字符"
-                )
-                # 通知前端工具执行完成
-                yield {"type": "reasoning", "content": f"[工具 {tool_name} 执行完成]\n"}
-                await asyncio.sleep(0)
-            except Exception as e:
-                logger.warning(f"[Chat] 工具 {tool_name} 执行异常: {e}")
-                processed_result = f"工具执行出错: {e}"
-                yield {"type": "reasoning", "content": f"[工具 {tool_name} 执行失败: {e}]\n"}
-                await asyncio.sleep(0)
-
-            current_messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call_id,
-                "name": tool_name,
-                "content": processed_result,
-            })
-
-    logger.warning(f"[Chat] 工具调用循环达到最大迭代次数 {max_iterations}，强制终止")
-    yield {"type": "content", "content": "抱歉，处理您的请求需要多次工具调用，请尝试简化问题后再问我。"}
-
 
 
 def _inject_system_prompt(messages: list[dict]) -> list[dict]:
@@ -592,30 +277,69 @@ async def chat_completions(request: ChatRequest):
             provider=resolved_provider,
         )
 
-    # TOOL_CALL 天气：本地工具直接处理
+    # TOOL_CALL：先走本地工具快速路径，未匹配则规则驱动执行工具链 → LLM 总结
     if request_type == RequestType.TOOL_CALL:
-        result = await handle_local_tool_request(user_query)
-        if result is not None:
+        local_result = await handle_local_tool_request(user_query)
+        if local_result is not None:
             elapsed = time.time() - start_time
-            logger.success(f"[API] POST /chat/completions [WEATHER local] - Success: elapsed={elapsed:.2f}s")
+            logger.success(f"[API] POST /chat/completions [TOOL local] - Success: elapsed={elapsed:.2f}s")
 
             if request.stream:
                 chat_id = str(uuid.uuid4())
-                data = ChatStreamChunk(id=chat_id, content=result, model=resolved_model, provider=resolved_provider)
+                data = ChatStreamChunk(id=chat_id, content=local_result, model=resolved_model, provider=resolved_provider)
                 done_data = ChatStreamChunk(id=chat_id, content="", model=resolved_model, provider=resolved_provider, done=True)
 
-                async def _weather_local_stream():
+                async def _tool_local_stream():
                     yield f"data: {data.model_dump_json()}\n\n"
                     yield f"data: {done_data.model_dump_json()}\n\n"
 
-                return StreamingResponse(_weather_local_stream(), media_type="text/event-stream")
+                return StreamingResponse(_tool_local_stream(), media_type="text/event-stream")
 
+            return ChatResponse(
+                id=str(uuid.uuid4()),
+                content=local_result,
+                model=resolved_model,
+                provider=resolved_provider,
+            )
+
+        # 本地未命中 → 规则驱动执行工具链 → LLM 总结
+        tool_results = await execute_tool_chain(user_query, agent_id=request.agent_id)
+        if tool_results:
+            summary_prompt = build_tool_summary(user_query, tool_results)
+            summary_messages = [{"role": "user", "content": summary_prompt}]
+
+            if request.stream:
+                async def _tool_chain_stream():
+                    chat_id = str(uuid.uuid4())
+                    yield f"data: {ChatStreamChunk(id=chat_id, content='', reasoning_content='正在查询所需信息…', model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                    async for chunk in llm_adapter.chat_stream(
+                        messages=summary_messages, provider_name=resolved_provider, model=resolved_model,
+                        temperature=request.temperature or 0.7,
+                        max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                    ):
+                        yield f"data: {ChatStreamChunk(id=chat_id, content=chunk.get('content', ''), model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                    yield f"data: {ChatStreamChunk(id=chat_id, content='', model=resolved_model, provider=resolved_provider, done=True).model_dump_json()}\n\n"
+
+                elapsed = time.time() - start_time
+                logger.success(f"[API] POST /chat/completions [TOOL chain stream] - Success: elapsed={elapsed:.2f}s")
+                return StreamingResponse(_tool_chain_stream(), media_type="text/event-stream")
+
+            raw = await llm_adapter.chat(
+                messages=summary_messages, provider_name=resolved_provider, model=resolved_model,
+                temperature=request.temperature or 0.7,
+                max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+            )
+            result = raw.get("content") if isinstance(raw, dict) else raw
+            elapsed = time.time() - start_time
+            logger.success(f"[API] POST /chat/completions [TOOL chain] - Success: elapsed={elapsed:.2f}s")
             return ChatResponse(
                 id=str(uuid.uuid4()),
                 content=result,
                 model=resolved_model,
                 provider=resolved_provider,
             )
+
+        # 无匹配工具 → 降级到通用对话
 
     if request.stream:
         logger.info(f"[API] POST /chat/completions - Starting stream response")
@@ -630,26 +354,14 @@ async def chat_completions(request: ChatRequest):
         )
 
     try:
-        # TOOL_CALL → 工具调用循环 | GENERAL_CHAT → LLM（LOCAL_TOOL 已在上面处理）
-        if tools:
-            result, _ = await _execute_tool_call_loop(
-                messages=messages,
-                tools=tools,
-                provider_name=resolved_provider,
-                model=resolved_model,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                top_p=request.top_p,
-            )
-        else:
-            result = await llm_adapter.chat(
-                messages=messages,
-                provider_name=resolved_provider,
-                model=resolved_model,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                top_p=request.top_p,
-            )
+        result = await llm_adapter.chat(
+            messages=messages,
+            provider_name=resolved_provider,
+            model=resolved_model,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            top_p=request.top_p,
+        )
 
         elapsed = time.time() - start_time
         logger.success(f"[API] POST /chat/completions - Success: elapsed={elapsed:.2f}s, response_len={len(result)}")
@@ -666,82 +378,25 @@ async def chat_completions(request: ChatRequest):
 
 
 async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str, model: str, tools: list[dict] | None = None):
-    # 当有工具定义时，使用流式工具调用循环实时输出推理和答案
-    if tools:
-        chat_id = str(uuid.uuid4())
-        final_reply = ""
-        async for item in _execute_tool_call_loop_stream(
-            messages=messages,
-            tools=tools,
-            provider_name=provider,
-            model=model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            top_p=request.top_p,
-        ):
-            if item["type"] == "reasoning":
-                data = ChatStreamChunk(
-                    id=chat_id, content="", reasoning_content=item["content"],
-                    model=model, provider=provider,
-                )
-                yield f"data: {data.model_dump_json()}\n\n"
-            elif item["type"] == "content":
-                final_reply = item["content"]
-                data = ChatStreamChunk(id=chat_id, content=final_reply, model=model, provider=provider)
-                yield f"data: {data.model_dump_json()}\n\n"
-
-        done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
-        yield f"data: {done_data.model_dump_json()}\n\n"
-        return
-
-    start_time = time.time()
     chat_id = str(uuid.uuid4())
-    chunk_count = 0
+    full_reply = ""
+    async for chunk in llm_adapter.chat_stream(
+        messages=messages,
+        provider_name=provider,
+        model=model,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+        top_p=request.top_p,
+    ):
+        content = chunk.get("content", "")
+        rc = chunk.get("reasoning", "")
+        if content:
+            full_reply += content
+        data = ChatStreamChunk(id=chat_id, content=content, reasoning_content=rc, model=model, provider=provider)
+        yield f"data: {data.model_dump_json()}\n\n"
 
-    logger.info(f"[STREAM] Starting stream: chat_id={chat_id}, provider={provider}, model={model}")
-
-    try:
-        async for chunk in llm_adapter.chat_stream(
-            messages=messages,
-            tools=tools,
-            provider_name=provider,
-            model=model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            top_p=request.top_p,
-        ):
-            chunk_count += 1
-            data = ChatStreamChunk(
-                id=chat_id,
-                content=chunk.get("content", ""),
-                reasoning_content=chunk.get("reasoning", ""),
-                model=model,
-                provider=provider,
-            )
-            yield f"data: {data.model_dump_json()}\n\n"
-
-        done_data = ChatStreamChunk(
-            id=chat_id,
-            content="",
-            model=model,
-            provider=provider,
-            done=True,
-        )
-        yield f"data: {done_data.model_dump_json()}\n\n"
-
-        elapsed = time.time() - start_time
-        logger.success(f"[STREAM] Stream completed: chat_id={chat_id}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
-    except Exception as e:
-        elapsed = time.time() - start_time
-        logger.error(f"[STREAM] Stream failed: chat_id={chat_id}, elapsed={elapsed:.2f}s, error={e}")
-        error_data = ChatStreamChunk(
-            id=chat_id,
-            content=f"[Error] {str(e)}",
-            model=model,
-            provider=provider,
-            done=True,
-        )
-        yield f"data: {error_data.model_dump_json()}\n\n"
+    done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
+    yield f"data: {done_data.model_dump_json()}\n\n"
 
 
 @router.get("/conversations", response_model=list[ConversationListResponse])
@@ -848,7 +503,7 @@ async def add_message(conv_id: str, request: ChatRequest):
     all_messages = await _inject_memory(all_messages, agent_id, resolved_provider)
 
     if request.file_content:
-        logger.info(f"[API] 文件内容注入: file_type={request.file_type}, content_length={len(request.file_content)}, content_start={request.file_content[:50]}...")
+        logger.info(f"[API] 文件内容注入: file_type={request.file_type}, content_length={len(request.file_content)}, is_image={request.file_type == 'image'}")
         all_messages = _inject_file_content(all_messages, request.file_content, request.file_type or "text")
 
     user_query = _get_user_query(all_messages)
@@ -869,7 +524,7 @@ async def add_message(conv_id: str, request: ChatRequest):
                                        agent_id, gen_state, start_time)
 
     await _NON_STREAM_GENERATE(gen_state, request_type, user_query, all_messages,
-                                 resolved_provider, resolved_model, tools)
+                                 resolved_provider, resolved_model, tools, agent_id)
 
     _PHASE_3_SAVE_ASSISTANT_MSG(conv, gen_state)
     _persist_conv(conv_id, conv)
@@ -919,7 +574,8 @@ def _PHASE_3_SAVE_ASSISTANT_MSG(conv: dict, state: dict) -> None:
 
 async def _NON_STREAM_GENERATE(state: dict, request_type: RequestType,
                                  user_query: str, all_messages: list[dict],
-                                 provider: str, model: str, tools: list | None) -> None:
+                                 provider: str, model: str, tools: list | None,
+                                 agent_id: str | None = None) -> None:
     try:
         if request_type == RequestType.LOCAL_TOOL:
             result = await handle_local_tool_request(user_query)
@@ -932,15 +588,27 @@ async def _NON_STREAM_GENERATE(state: dict, request_type: RequestType,
             state["content"] = result or ""
 
         elif request_type == RequestType.TOOL_CALL:
+            # 先走本地工具快速路径（时间/天气本地处理）
             local_result = await handle_local_tool_request(user_query)
             if local_result is not None:
                 state["content"] = local_result
+            else:
+                # 本地未命中 → 规则驱动执行工具链 → LLM 总结
+                tool_results = await execute_tool_chain(user_query, agent_id=agent_id)
+                if tool_results:
+                    summary_prompt = build_tool_summary(user_query, tool_results)
+                    summary_messages = [{"role": "user", "content": summary_prompt}]
+                    raw = await llm_adapter.chat(messages=summary_messages, provider_name=provider,
+                        model=model, temperature=0.7, max_tokens=4096, top_p=0.9)
+                    state["content"] = raw.get("content", "") if isinstance(raw, dict) else raw
+                else:
+                    # 无匹配工具 → 降级到通用对话
+                    raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                        model=model, temperature=0.7, max_tokens=4096, top_p=0.9)
+                    state["content"] = raw.get("content", "") if isinstance(raw, dict) else raw
 
-        elif tools:
-            raw, _ = await _execute_tool_call_loop(messages=all_messages, tools=tools,
-                provider_name=provider, model=model, temperature=0.7, max_tokens=4096, top_p=0.9)
-            state["content"] = raw
         else:
+            # GENERAL_CHAT 或兜底：直接调用 LLM
             raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
                 model=model, temperature=0.7, max_tokens=4096, top_p=0.9)
             if isinstance(raw, dict):
@@ -977,23 +645,45 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
                 yield _sse_done(chat_id, provider, model)
 
             elif request_type == RequestType.TOOL_CALL:
+                # 先走本地工具快速路径（时间/天气本地处理）
                 local_result = await handle_local_tool_request(user_query)
-                state["content"] = local_result or ""
-                yield _sse(chat_id, state["content"], provider, model)
-                yield _sse_done(chat_id, provider, model)
+                if local_result is not None:
+                    state["content"] = local_result
+                    yield _sse(chat_id, state["content"], provider, model)
+                else:
+                    # 本地未命中 → 通知前端正在查询
+                    yield _sse_reasoning(chat_id, "正在查询所需信息…", provider, model)
+                    tool_results = await execute_tool_chain(user_query, agent_id=agent_id)
+                    if tool_results:
+                        summary_prompt = build_tool_summary(user_query, tool_results)
+                        summary_messages = [{"role": "user", "content": summary_prompt}]
+                        async for chunk in llm_adapter.chat_stream(
+                            messages=summary_messages, provider_name=provider, model=model,
+                            temperature=request.temperature or 0.7,
+                            max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                        ):
+                            content = chunk.get("content", "")
+                            rc = chunk.get("reasoning", "")
+                            if content:
+                                state["content"] += content
+                            if rc:
+                                state["reasoning"] += rc
+                            yield _sse(chat_id, content, provider, model, rc)
+                    else:
+                        # 无匹配工具 → 降级到通用对话
+                        async for chunk in llm_adapter.chat_stream(
+                            messages=all_messages, provider_name=provider, model=model,
+                            temperature=request.temperature or 0.7,
+                            max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                        ):
+                            content = chunk.get("content", "")
+                            rc = chunk.get("reasoning", "")
+                            if content:
+                                state["content"] += content
+                            if rc:
+                                state["reasoning"] += rc
+                            yield _sse(chat_id, content, provider, model, rc)
 
-            elif tools:
-                async for item in _execute_tool_call_loop_stream(
-                    messages=all_messages, tools=tools, provider_name=provider, model=model,
-                    temperature=request.temperature or 0.7,
-                    max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
-                ):
-                    if item["type"] == "reasoning":
-                        state["reasoning"] += item.get("content", "")
-                        yield _sse_reasoning(chat_id, item["content"], provider, model)
-                    elif item["type"] == "content":
-                        state["content"] = item["content"]
-                        yield _sse(chat_id, state["content"], provider, model)
             else:
                 async for chunk in llm_adapter.chat_stream(
                     messages=all_messages, tools=tools, provider_name=provider, model=model,
@@ -1008,7 +698,9 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
 
         except Exception as e:
             state["aborted"] = True
+            state["content"] = f"[Error] {str(e)}"
             logger.error(f"[STREAM] Aborted: conv={conv_id}, error={e}")
+            yield _sse(chat_id, state["content"], provider, model)
 
         finally:
             _PHASE_3_SAVE_ASSISTANT_MSG(conv, state)

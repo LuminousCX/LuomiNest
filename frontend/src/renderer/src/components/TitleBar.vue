@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { Minus, Square, X, Maximize2 } from 'lucide-vue-next'
+import { Minus, Square, X, Minimize2 } from 'lucide-vue-next'
 
 const isMaximized = ref(false)
 
@@ -47,7 +47,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
       </button>
       <button class="ctrl-btn maximize" :aria-label="isMaximized ? '还原' : '最大化'" @click="handleMaximize">
         <Square v-if="!isMaximized" :size="11" />
-        <Maximize2 v-else :size="12" />
+        <Minimize2 v-else :size="13" />
       </button>
       <button class="ctrl-btn close" aria-label="关闭" @click="handleClose">
         <X :size="13" />

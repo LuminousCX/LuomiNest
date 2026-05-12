@@ -306,9 +306,14 @@ _TOOL_KEYWORDS_TRAVEL = {
     "周边游", "一日游", "几日游", "自由行", "签证",
 }
 
+_TOOL_KEYWORDS_COUNTDOWN = {
+    "距离", "还有几天", "还剩几天", "剩下几天", "还有多久",
+    "是哪天", "是几号", "考试时间", "什么时候考试", "什么时候报名",
+}
+
 
 def _is_tool_call_request(cleaned: str) -> bool:
-    """检查是否为工具调用请求（搜索/旅游/行程），使用关键词集合匹配
+    """检查是否为工具调用请求（搜索/旅游/行程/倒计时），使用关键词集合匹配
 
     注意：天气已由 IntentGateway._classify_weather() 接管，此处不再检查天气关键词。
     """
@@ -316,6 +321,9 @@ def _is_tool_call_request(cleaned: str) -> bool:
         if keyword in cleaned:
             return True
     for keyword in _TOOL_KEYWORDS_TRAVEL:
+        if keyword in cleaned:
+            return True
+    for keyword in _TOOL_KEYWORDS_COUNTDOWN:
         if keyword in cleaned:
             return True
     return False

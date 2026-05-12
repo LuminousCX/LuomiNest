@@ -353,7 +353,7 @@ export const useChatStore = defineStore('chat', () => {
         convStreamingContent.value = { ...convStreamingContent.value, [streamingConvId]: newContent }
 
         const prevReasoning = convStreamingReasoning.value[streamingConvId] || ''
-        const newReasoning = prevReasoning + (chunk.reasoningContent || '')
+        const newReasoning = prevReasoning + (chunk.reasoning_content || '')
         convStreamingReasoning.value = { ...convStreamingReasoning.value, [streamingConvId]: newReasoning }
 
         const currentMsgList = convMessages.value[streamingConvId] || []

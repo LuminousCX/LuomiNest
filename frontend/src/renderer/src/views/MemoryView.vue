@@ -1,5 +1,6 @@
-﻿<script setup lang="ts">
-import { ref, computed } from 'vue'
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   Brain,
   Database,
@@ -12,11 +13,33 @@ import {
   ArrowRight,
   Activity,
   TrendingUp,
-  Filter,
   RefreshCw,
   Zap,
-  Archive
+  Archive,
+  Trash2,
+  Edit3,
+  Plus,
+  MessageSquare,
+  Loader2,
+  X,
+  Save,
 } from 'lucide-vue-next'
+import { useMemoryStore } from '../stores/memory'
+import { useAgentStore } from '../stores/agent'
+
+const router = useRouter()
+const memoryStore = useMemoryStore()
+const agentStore = useAgentStore()
+
+interface LayerItem {
+  id: string
+  text: string
+  time: string
+  tag: string
+  category: string
+  confidence: number
+  raw: any
+}
 
 interface MemoryLayer {
   id: string
@@ -25,88 +48,286 @@ interface MemoryLayer {
   icon: typeof Brain
   color: string
   capacity: number
-  used: number
   unit: string
   desc: string
-  items: { text: string; time: string; tag: string }[]
+  items: LayerItem[]
 }
 
 const layers = ref<MemoryLayer[]>([
-  {
-    id: 'working',
-    name: '工作记忆',
-    sub: 'Working Memory',
-    icon: Cpu,
-    color: '#f59e0b',
-    capacity: 100,
-    used: 67,
-    unit: 'Token',
-    desc: '当前会话上下文 · 内存/Redis',
-    items: [
-      { text: '用户询问了 LuomiNest 的架构设计', time: '刚刚', tag: '对话' },
-      { text: '正在讨论皮套渲染方案', time: '2min', tag: '上下文' },
-      { text: '用户偏好：深色主题', time: '5min', tag: '偏好' }
-    ]
-  },
-  {
-    id: 'episodic',
-    name: '情景记忆',
-    sub: 'Episodic Memory',
-    icon: Clock,
-    color: '#22c55e',
-    capacity: 7,
-    used: 5.3,
-    unit: '天',
-    desc: '近期事件回忆 · SQLite + 向量索引',
-    items: [
-      { text: '昨天讨论了 MCP 工具域的实现方案', time: '1天前', tag: '技术' },
-      { text: '用户提到喜欢 ease-in-out 动画风格', time: '3天前', tag: '偏好' },
-      { text: '完成了桌面客户端 UI 布局规范文档', time: '4天前', tag: '工作' },
-      { text: '首次配置了后端连接', time: '5天前', tag: '系统' }
-    ]
-  },
-  {
-    id: 'semantic',
-    name: '语义记忆',
-    sub: 'Semantic Memory',
-    icon: Database,
-    color: '#8b5cf6',
-    capacity: 1000,
-    used: 342,
-    unit: '万 Token',
-    desc: '永久认知 · PGVector + 知识图谱',
-    items: [
-      { text: '用户是全栈开发者，擅长 Vue/Python', time: '长期', tag: '画像' },
-      { text: '项目代号：LuomiNest，分布式AI伴侣平台', time: '长期', tag: '知识' },
-      { text: '核心架构：统一后端 + 多端渲染 + 插件生态', time: '长期', tag: '知识' },
-      { text: '用户习惯夜间工作，偏好简洁界面', time: '长期', tag: '画像' }
-    ]
-  }
+  { id: 'working', name: '工作记忆', sub: 'Working Memory', icon: Cpu, color: '#f59e0b', capacity: 100, unit: '条记录', desc: '当前会话上下文 · 内存/Redis', items: [] },
+  { id: 'episodic', name: '情景记忆', sub: 'Episodic Memory', icon: Clock, color: '#22c55e', capacity: 50, unit: '条事件', desc: '近期事件回忆 · JSON + 向量检索', items: [] },
+  { id: 'semantic', name: '语义记忆', sub: 'Semantic Memory', icon: Database, color: '#8b5cf6', capacity: 500, unit: '条事实', desc: '永久认知 · PGVector + 知识图谱', items: [] },
 ])
 
-const activeLayer = ref(0)
-
-const activeLayerData = computed(() => layers.value[activeLayer.value])
-
-const userPortrait = ref({
-  tags: ['开发者', '夜猫子', '极客', 'Vue爱好者'],
-  interests: ['AI Agent', '嵌入式开发', '开源项目', '游戏化交互'],
-  interactionCount: 12847,
-  memoryHealth: 94
-})
+const activeLayerIdx = ref(0)
+const activeLayerData = computed(() => layers.value[activeLayerIdx.value])
+const activeUsedCount = computed(() => activeLayerData.value.items.length)
 
 const searchQuery = ref('')
 const isSearching = ref(false)
+const showSearchResults = ref(false)
+const searchMemoryResults = ref<Array<{ content: string; score: number; source: string }>>([])
+
+const showAddDialog = ref(false)
+const newFactContent = ref('')
+const newFactCategory = ref('context')
+const isAdding = ref(false)
+
+const editingFactId = ref<string | null>(null)
+const editingContent = ref('')
+
+const categoryOptions = [
+  { value: 'preference', label: '偏好' },
+  { value: 'knowledge', label: '知识' },
+  { value: 'context', label: '上下文' },
+  { value: 'behavior', label: '行为' },
+  { value: 'goal', label: '目标' },
+  { value: 'correction', label: '纠正' },
+]
+
+function getCategoryLabel(cat: string) {
+  return categoryOptions.find(c => c.value === cat)?.label || cat
+}
+
+function getTierLabel(tier: string) {
+  const map: Record<string, string> = {
+    core_identity: '核心身份',
+    long_term_preference: '长期偏好',
+    temporary_context: '临时上下文',
+  }
+  return map[tier] || tier
+}
+
+function getTierColor(tier: string) {
+  const map: Record<string, string> = {
+    core_identity: '#8b5cf6',
+    long_term_preference: '#22c55e',
+    temporary_context: '#f59e0b',
+  }
+  return map[tier] || '#888'
+}
+
+function formatTimeAgo(isoStr: string) {
+  if (!isoStr) return '未知'
+  try {
+    const d = new Date(isoStr)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+    if (diffMins < 1) return '刚刚'
+    if (diffMins < 60) return `${diffMins}分钟前`
+    if (diffHours < 24) return `${diffHours}小时前`
+    if (diffDays < 30) return `${diffDays}天前`
+    return '长期'
+  } catch {
+    return '未知'
+  }
+}
+
+function factToLayerItem(fact: any): LayerItem {
+  return {
+    id: fact.id,
+    text: fact.content,
+    time: formatTimeAgo(fact.created_at),
+    tag: getTierLabel(fact.tier),
+    category: fact.category,
+    confidence: fact.confidence,
+    raw: fact,
+  }
+}
+
+function eventToLayerItem(event: any): LayerItem {
+  return {
+    id: event.id,
+    text: event.key_information || event.core_goal,
+    time: formatTimeAgo(event.timestamp),
+    tag: event.scene_tags?.[0] || '事件',
+    category: 'context',
+    confidence: event.importance || 0.5,
+    raw: event,
+  }
+}
+
+function buildLayers() {
+  const data = memoryStore.memoryData
+  if (!data) return
+
+  const memory = data.memory
+
+  layers.value[0].items = [
+    ...memory.facts.filter(f => f.tier === 'temporary_context').map(factToLayerItem),
+    ...memory.working_memory.recent_conversations.slice(-5).map((c: any) => ({
+      id: `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      text: `${c.role === 'user' ? '用户' : '助手'}: ${(c.content || '').slice(0, 60)}`,
+      time: formatTimeAgo(c.timestamp),
+      tag: '对话',
+      category: 'context',
+      confidence: 0.6,
+      raw: c,
+    })),
+  ]
+
+  if (memory.working_memory.core_goal) {
+    layers.value[0].items.unshift({
+      id: 'core-goal',
+      text: memory.working_memory.core_goal,
+      time: formatTimeAgo(memory.working_memory.core_goal_extracted_at),
+      tag: '核心目标',
+      category: 'goal',
+      confidence: 1.0,
+      raw: { content: memory.working_memory.core_goal },
+    })
+  }
+
+  layers.value[1].items = memory.episodic_events.map(eventToLayerItem)
+
+  const semanticItems: LayerItem[] = []
+  for (const fact of memory.facts.filter(f => f.tier === 'core_identity' || f.tier === 'long_term_preference')) {
+    semanticItems.push(factToLayerItem(fact))
+  }
+  layers.value[2].items = semanticItems
+
+  for (const arch of memory.archived_facts) {
+    layers.value[2].items.push({
+      ...factToLayerItem(arch),
+      tag: '已归档',
+    })
+  }
+}
+
+watch(() => memoryStore.memoryData, () => {
+  if (memoryStore.memoryData) {
+    buildLayers()
+  }
+}, { immediate: true })
+
+const userPortrait = computed(() => {
+  const profile = memoryStore.memoryData?.memory.profile
+  if (!profile) return null
+
+  const tags: string[] = []
+  if (profile.occupation) tags.push(profile.occupation)
+  if (profile.language) tags.push(profile.language)
+  if (profile.gender) tags.push(profile.gender)
+  if (profile.name) tags.push(profile.name)
+
+  const interests = profile.interests || []
+  const hobbies = profile.hobbies || []
+
+  const totalFacts = memoryStore.memoryData?.summary.total_facts || 0
+  const totalEvents = memoryStore.memoryData?.memory.episodic_events?.length || 0
+
+  return {
+    tags: tags.length > 0 ? tags : ['暂无标签'],
+    interests: [...interests, ...hobbies],
+    interactionCount: totalFacts,
+    memoryHealth: Math.min(100, Math.round((totalFacts / Math.max(totalFacts + (memoryStore.memoryData?.summary.total_archived || 0), 1)) * 100)),
+  }
+})
+
+const hasProfile = computed(() => {
+  const p = memoryStore.memoryData?.memory.profile
+  if (!p) return false
+  return !!(p.name || p.nickname || p.occupation || p.location || (p.interests && p.interests.length > 0) || (p.hobbies && p.hobbies.length > 0))
+})
 
 function switchLayer(idx: number) {
-  activeLayer.value = idx
+  activeLayerIdx.value = idx
 }
 
-function handleSearch() {
+async function handleSearch() {
   if (!searchQuery.value.trim()) return
   isSearching.value = true
-  setTimeout(() => { isSearching.value = false }, 1200)
+  showSearchResults.value = true
+  try {
+    searchMemoryResults.value = await memoryStore.searchMemory(searchQuery.value, 10)
+  } catch {
+    searchMemoryResults.value = []
+  } finally {
+    isSearching.value = false
+  }
 }
+
+function clearSearch() {
+  searchQuery.value = ''
+  showSearchResults.value = false
+  searchMemoryResults.value = []
+}
+
+function chatAboutMemory(item: LayerItem) {
+  const event = new CustomEvent('luominest:memory-chat-trigger', {
+    detail: { text: item.text }
+  })
+  window.dispatchEvent(event)
+  router.push('/workspace')
+}
+
+async function handleAddFact() {
+  if (!newFactContent.value.trim()) return
+  isAdding.value = true
+  try {
+    await memoryStore.addFact(newFactContent.value.trim(), newFactCategory.value, 0.8, agentStore.activeAgent?.id)
+    newFactContent.value = ''
+    newFactCategory.value = 'context'
+    showAddDialog.value = false
+  } finally {
+    isAdding.value = false
+  }
+}
+
+function startEdit(fact: LayerItem) {
+  editingFactId.value = fact.id
+  editingContent.value = fact.text
+}
+
+function cancelEdit() {
+  editingFactId.value = null
+  editingContent.value = ''
+}
+
+async function saveEdit() {
+  if (!editingFactId.value || !editingContent.value.trim()) return
+  try {
+    await memoryStore.updateFact(editingFactId.value, editingContent.value.trim(), undefined, undefined, agentStore.activeAgent?.id)
+    editingFactId.value = null
+    editingContent.value = ''
+  } catch {
+  }
+}
+
+async function handleDeleteFact(fact: LayerItem) {
+  try {
+    await memoryStore.deleteFact(fact.id, agentStore.activeAgent?.id)
+  } catch {
+  }
+}
+
+function getTierCapacity(tier: string) {
+  switch (tier) {
+    case 'working': return 100
+    case 'episodic': return 50
+    case 'semantic': return 500
+    default: return 100
+  }
+}
+
+async function loadData() {
+  const agentId = agentStore.activeAgent?.id
+  await Promise.all([
+    memoryStore.fetchMemory(agentId),
+    memoryStore.fetchSummary(agentId),
+  ])
+}
+
+onMounted(() => {
+  loadData()
+})
+
+watch(() => agentStore.activeAgent?.id, () => {
+  loadData()
+})
 </script>
 
 <template>
@@ -118,27 +339,39 @@ function handleSearch() {
         <span class="header-badge">MaaS · 三层记忆架构</span>
       </div>
       <div class="header-actions">
-        <div class="search-bar">
+        <div class="search-bar" :class="{ 'search-expanded': showSearchResults }">
           <Search :size="14" class="search-icon" />
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="搜索记忆..."
-            @keydown.enter="handleSearch"
-          />
-          <RefreshCw :size="13" :class="{ spinning: isSearching }" class="search-refresh" />
+          <input v-model="searchQuery" type="text" placeholder="搜索记忆..."
+            @keydown.enter="handleSearch" />
+          <button v-if="showSearchResults" class="search-clear-btn" @click="clearSearch">
+            <X :size="12" />
+          </button>
+          <Loader2 v-if="isSearching" :size="13" class="search-refresh spinning" />
+          <button v-else class="search-trigger-btn" @click="handleSearch" :disabled="!searchQuery.trim()">
+            <Search :size="13" />
+          </button>
         </div>
-        <button class="h-btn"><Filter :size="15" /> 筛选</button>
+        <button class="h-btn primary" @click="showAddDialog = true">
+          <Plus :size="15" /> 添加事实
+        </button>
+        <button class="h-btn" @click="loadData">
+          <RefreshCw :size="15" :class="{ spinning: memoryStore.loading }" />
+        </button>
       </div>
     </div>
 
-    <div class="memory-body">
+    <div v-if="memoryStore.loading && !memoryStore.memoryData" class="memory-loading">
+      <Loader2 :size="24" class="spinning" />
+      <span>加载记忆数据...</span>
+    </div>
+
+    <div v-else class="memory-body">
       <div class="layer-stack animate-fade-up">
         <div class="stack-visual">
           <div
             v-for="(layer, idx) in layers"
             :key="layer.id"
-            :class="['layer-card', { active: activeLayer === idx }]"
+            :class="['layer-card', { active: activeLayerIdx === idx }]"
             :style="{ '--layer-color': layer.color, '--layer-delay': `${idx * 0.12}s` }"
             @click="switchLayer(idx)"
           >
@@ -157,10 +390,13 @@ function handleSearch() {
               <div class="layer-bar-track">
                 <div
                   class="layer-bar-fill"
-                  :style="{ width: (layer.used / layer.capacity * 100) + '%', background: layer.color }"
+                  :style="{
+                    width: Math.min(100, (layer.items.length / Math.max(layer.capacity, 1)) * 100) + '%',
+                    background: layer.color
+                  }"
                 ></div>
               </div>
-              <span class="layer-bar-label">{{ layer.used }} / {{ layer.capacity }} {{ layer.unit }}</span>
+              <span class="layer-bar-label">{{ layer.items.length }} / {{ layer.capacity }} {{ layer.unit }}</span>
             </div>
 
             <p class="layer-desc">{{ layer.desc }}</p>
@@ -183,30 +419,26 @@ function handleSearch() {
         <div class="detail-capacity">
           <div class="cap-ring">
             <svg viewBox="0 0 100 100" class="cap-svg">
-              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" stroke-width="8"/>
-              <circle
-                cx="50" cy="50" r="42" fill="none"
-                :stroke="activeLayerData.color"
-                stroke-width="8"
-                stroke-linecap="round"
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" stroke-width="8" />
+              <circle cx="50" cy="50" r="42" fill="none"
+                :stroke="activeLayerData.color" stroke-width="8" stroke-linecap="round"
                 :stroke-dasharray="264"
-                :stroke-dashoffset="264 - (264 * activeLayerData.used / activeLayerData.capacity)"
-                class="cap-progress"
-              />
+                :stroke-dashoffset="264 - (264 * Math.min(1, activeUsedCount / Math.max(activeLayerData.capacity, 1)))"
+                class="cap-progress" />
             </svg>
             <div class="cap-text">
-              <span class="cap-value">{{ Math.round(activeLayerData.used / activeLayerData.capacity * 100) }}%</span>
+              <span class="cap-value">{{ Math.round(Math.min(100, (activeUsedCount / Math.max(activeLayerData.capacity, 1)) * 100)) }}%</span>
               <span class="cap-unit">已用</span>
             </div>
           </div>
           <div class="cap-stats">
             <div class="stat-item">
               <Activity :size="14" />
-              <span>{{ activeLayerData.items.length }} 条记录</span>
+              <span>{{ activeUsedCount }} 条记录</span>
             </div>
             <div class="stat-item">
               <TrendingUp :size="14" />
-              <span>+{{ Math.floor(Math.random() * 20) + 5 }} 今日新增</span>
+              <span>实时统计</span>
             </div>
             <div class="stat-item">
               <Zap :size="14" />
@@ -215,52 +447,129 @@ function handleSearch() {
           </div>
         </div>
 
-        <div class="detail-list">
-          <div class="list-title">记忆片段</div>
+        <div v-if="showSearchResults && searchMemoryResults.length > 0" class="detail-list">
+          <div class="list-title">搜索结果 · {{ searchMemoryResults.length }}条</div>
           <TransitionGroup name="memo-list" tag="div" class="memo-items">
-            <div
-              v-for="(item, idx) in activeLayerData.items"
-              :key="idx"
-              class="memo-item"
-              :style="{ '--item-delay': `${idx * 0.08}s` }"
-            >
-              <div class="memo-dot" :style="{ background: activeLayerData.color }"></div>
+            <div v-for="(result, idx) in searchMemoryResults" :key="`search-${idx}`" class="memo-item"
+              :style="{ '--item-delay': `${idx * 0.06}s` }">
+              <div class="memo-dot" :style="{ background: '#8b5cf6' }"></div>
               <div class="memo-content">
-                <p class="memo-text">{{ item.text }}</p>
+                <p class="memo-text">{{ result.content }}</p>
                 <div class="memo-footer">
-                  <span class="memo-tag">{{ item.tag }}</span>
-                  <span class="memo-time">{{ item.time }}</span>
+                  <span class="memo-tag">{{ result.source || '知识库' }}</span>
+                  <span class="memo-time">相关度: {{ (result.score * 100).toFixed(1) }}%</span>
                 </div>
               </div>
             </div>
           </TransitionGroup>
         </div>
 
-        <div class="portrait-card">
+        <div class="detail-list">
+          <div class="list-title">{{ showSearchResults ? '搜索结果' : '记忆片段' }}</div>
+
+          <div v-if="activeLayerData.items.length === 0 && !memoryStore.loading" class="empty-layer">
+            <Archive :size="32" />
+            <p>暂无记忆数据</p>
+            <p class="empty-hint">进行对话后，AI 会自动提取并存储记忆</p>
+          </div>
+
+          <TransitionGroup v-else name="memo-list" tag="div" class="memo-items">
+            <div v-for="(item, idx) in activeLayerData.items" :key="item.id" class="memo-item"
+              :style="{ '--item-delay': `${idx * 0.06}s` }">
+              <div class="memo-dot" :style="{ background: activeLayerData.color }"></div>
+              <div class="memo-content">
+                <template v-if="editingFactId === item.id">
+                  <textarea v-model="editingContent" class="edit-textarea" rows="2"></textarea>
+                  <div class="edit-actions">
+                    <button class="edit-btn save" @click="saveEdit" :disabled="!editingContent.trim()">
+                      <Save :size="12" /> 保存
+                    </button>
+                    <button class="edit-btn cancel" @click="cancelEdit">
+                      <X :size="12" /> 取消
+                    </button>
+                  </div>
+                </template>
+                <template v-else>
+                  <p class="memo-text">{{ item.text }}</p>
+                  <div class="memo-footer">
+                    <span class="memo-tag">{{ item.tag }}</span>
+                    <span class="memo-tag category-tag">{{ getCategoryLabel(item.category) }}</span>
+                    <span class="memo-time">{{ item.time }}</span>
+                  </div>
+                </template>
+              </div>
+              <div v-if="editingFactId !== item.id" class="memo-actions">
+                <button class="memo-action-btn" title="就此对话" @click="chatAboutMemory(item)">
+                  <MessageSquare :size="13" />
+                </button>
+                <button class="memo-action-btn" title="编辑" @click="startEdit(item)">
+                  <Edit3 :size="13" />
+                </button>
+                <button class="memo-action-btn danger" title="删除" @click="handleDeleteFact(item)">
+                  <Trash2 :size="13" />
+                </button>
+              </div>
+            </div>
+          </TransitionGroup>
+        </div>
+
+        <div v-if="hasProfile" class="portrait-card">
           <div class="portrait-header">
             <User :size="15" />
             <span>用户画像</span>
           </div>
           <div class="portrait-tags">
-            <span v-for="tag in userPortrait.tags" :key="tag" class="p-tag">{{ tag }}</span>
+            <span v-for="tag in userPortrait?.tags" :key="tag" class="p-tag">{{ tag }}</span>
           </div>
-          <div class="portrait-interests">
+          <div v-if="userPortrait?.interests?.length" class="portrait-interests">
             <BookOpen :size="13" />
             <span v-for="int in userPortrait.interests" :key="int" class="i-tag">{{ int }}</span>
           </div>
           <div class="portrait-stats-row">
             <div class="ps-item">
               <Archive :size="13" />
-              <span>{{ userPortrait.interactionCount.toLocaleString() }} 次互动</span>
+              <span>{{ (userPortrait?.interactionCount || 0).toLocaleString() }} 条记忆</span>
             </div>
             <div class="ps-item">
               <Activity :size="13" />
-              <span>记忆健康 {{ userPortrait.memoryHealth }}%</span>
+              <span>记忆健康 {{ userPortrait?.memoryHealth || 0 }}%</span>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <Transition name="dialog-fade">
+      <div v-if="showAddDialog" class="dialog-overlay" @click.self="showAddDialog = false">
+        <div class="dialog-card">
+          <div class="dialog-header">
+            <Plus :size="16" />
+            <span>添加记忆事实</span>
+            <button class="dialog-close-btn" @click="showAddDialog = false">
+              <X :size="16" />
+            </button>
+          </div>
+          <div class="dialog-body">
+            <textarea v-model="newFactContent" placeholder="输入记忆内容，例如：用户喜欢 Vue 3 框架，偏好组合式 API..."
+              rows="4" class="dialog-textarea"></textarea>
+            <div class="dialog-category">
+              <span class="category-label">分类：</span>
+              <select v-model="newFactCategory" class="category-select">
+                <option v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="dialog-footer">
+            <button class="dialog-btn cancel" @click="showAddDialog = false">取消</button>
+            <button class="dialog-btn confirm" @click="handleAddFact" :disabled="isAdding || !newFactContent.trim()">
+              <Loader2 v-if="isAdding" :size="14" class="spinning" />
+              <Plus v-else :size="14" />
+              添加
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -272,6 +581,26 @@ function handleSearch() {
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
+}
+
+.memory-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .memory-header {
@@ -322,7 +651,8 @@ function handleSearch() {
   transition: all 300ms ease-in-out;
 }
 
-.search-bar:focus-within {
+.search-bar:focus-within,
+.search-bar.search-expanded {
   border-color: #8b5cf6;
   box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
 }
@@ -333,7 +663,7 @@ function handleSearch() {
 }
 
 .search-bar input {
-  width: 180px;
+  width: 140px;
   font-size: 13px;
   background: transparent;
   color: var(--text);
@@ -343,18 +673,32 @@ function handleSearch() {
   color: var(--text-muted);
 }
 
-.search-refresh {
+.search-clear-btn,
+.search-trigger-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: transform 300ms ease-in-out;
+  transition: all 200ms;
 }
 
-.search-refresh.spinning {
-  animation: spin 1s linear infinite;
+.search-clear-btn:hover,
+.search-trigger-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.search-trigger-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.search-refresh {
+  color: var(--text-muted);
 }
 
 .h-btn {
@@ -373,6 +717,16 @@ function handleSearch() {
 .h-btn:hover {
   background: var(--surface-hover);
   color: var(--text);
+}
+
+.h-btn.primary {
+  color: var(--text);
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.h-btn.primary:hover {
+  background: rgba(139, 92, 246, 0.18);
 }
 
 .memory-body {
@@ -410,8 +764,15 @@ function handleSearch() {
 }
 
 @keyframes card-enter {
-  from { opacity: 0; transform: translateX(-16px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .layer-card:hover {
@@ -616,6 +977,30 @@ function handleSearch() {
   color: var(--text);
 }
 
+.empty-layer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+
+.empty-layer svg {
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.empty-layer p {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.empty-hint {
+  font-size: 12px !important;
+  opacity: 0.7;
+}
+
 .memo-items {
   display: flex;
   flex-direction: column;
@@ -633,16 +1018,27 @@ function handleSearch() {
   opacity: 0;
   animation: memo-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: var(--item-delay);
+  position: relative;
 }
 
 @keyframes memo-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .memo-item:hover {
   border-color: var(--border);
-  transform: translateX(4px);
+}
+
+.memo-item:hover .memo-actions {
+  opacity: 1;
 }
 
 .memo-dot {
@@ -668,7 +1064,7 @@ function handleSearch() {
 .memo-footer {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .memo-tag {
@@ -680,9 +1076,102 @@ function handleSearch() {
   font-weight: 500;
 }
 
+.memo-tag.category-tag {
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+}
+
 .memo-time {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.memo-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 200ms;
+  flex-shrink: 0;
+}
+
+.memo-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 200ms;
+}
+
+.memo-action-btn:hover {
+  background: var(--surface-hover);
+  color: var(--lumi-primary);
+}
+
+.memo-action-btn.danger:hover {
+  background: rgba(244, 63, 94, 0.1);
+  color: #f43f5e;
+}
+
+.edit-textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  resize: vertical;
+  font-family: inherit;
+  outline: none;
+}
+
+.edit-textarea:focus {
+  border-color: #8b5cf6;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 200ms;
+}
+
+.edit-btn.save {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
+
+.edit-btn.save:hover {
+  background: rgba(139, 92, 246, 0.2);
+}
+
+.edit-btn.save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.edit-btn.cancel {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+
+.edit-btn.cancel:hover {
+  color: var(--text);
 }
 
 .portrait-card {
@@ -730,7 +1219,7 @@ function handleSearch() {
   margin-bottom: 14px;
 }
 
-.portrait-interests > svg {
+.portrait-interests>svg {
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -762,9 +1251,192 @@ function handleSearch() {
   color: var(--lumi-primary);
 }
 
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.dialog-card {
+  width: 460px;
+  max-width: 90vw;
+  background: var(--bg);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dialog-close-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.dialog-close-btn:hover {
+  background: var(--surface-hover);
+}
+
+.dialog-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dialog-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  resize: none;
+  font-family: inherit;
+  outline: none;
+}
+
+.dialog-textarea:focus {
+  border-color: #8b5cf6;
+}
+
+.dialog-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.dialog-category {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.category-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.category-select {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.dialog-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 200ms;
+}
+
+.dialog-btn.cancel {
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.dialog-btn.cancel:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.dialog-btn.confirm {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.dialog-btn.confirm:hover {
+  background: rgba(139, 92, 246, 0.2);
+}
+
+.dialog-btn.confirm:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dialog-fade-enter-active {
+  animation: fade-in 0.25s ease-out;
+}
+
+.dialog-fade-enter-active .dialog-card {
+  animation: scale-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dialog-fade-leave-active {
+  animation: fade-in 0.2s ease-out reverse;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @keyframes fade-up {
-  0% { opacity: 0; transform: translateY(16px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fade-up {
@@ -772,8 +1444,15 @@ function handleSearch() {
 }
 
 @keyframes slide-left {
-  0% { opacity: 0; transform: translateX(24px); }
-  100% { opacity: 1; transform: translateX(0); }
+  0% {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .animate-slide-left {
@@ -784,10 +1463,12 @@ function handleSearch() {
 .memo-list-leave-active {
   transition: all 300ms ease-in-out;
 }
+
 .memo-list-enter-from {
   opacity: 0;
   transform: translateY(8px);
 }
+
 .memo-list-leave-to {
   opacity: 0;
   transform: translateX(-12px);

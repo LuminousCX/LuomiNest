@@ -29,12 +29,15 @@ import {
   FileText,
   Image,
   File,
+  Brain,
+  Download,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
 import { useSkillStore } from '../stores/skill'
+import { useMemoryStore } from '../stores/memory'
 import FileUpload from '../components/FileUpload.vue'
 import FilePreview from '../components/FilePreview.vue'
 import { useFileUpload } from '../composables/useFileUpload'
@@ -51,6 +54,9 @@ const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const modelStore = useModelStore()
 const skillStore = useSkillStore()
+const memoryStore = useMemoryStore()
+
+const showMemoryInject = ref(false)
 
 const { uploadingFile, isUploading, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
 const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
@@ -517,6 +523,37 @@ const handleClickOutsideModel = (e: MouseEvent) => {
   }
 }
 
+async function injectMemoryToInput() {
+  showMemoryInject.value = true
+  try {
+    const result = await memoryStore.fetchInjectionContent(agentStore.activeAgent?.id)
+    if (result.has_memory && result.content) {
+      inputText.value = `\n\n---\n系统已注入以下用户记忆，请参考：\n${result.content}\n---\n\n${inputText.value}`
+    }
+  } finally {
+    showMemoryInject.value = false
+  }
+}
+
+function handleChatTrigger(event: CustomEvent) {
+  if (event.detail?.message) {
+    inputText.value = event.detail.message
+  }
+}
+
+function handleMemoryChatTrigger(event: CustomEvent) {
+  const text = event.detail?.text
+  if (text) {
+    inputText.value = `关于我之前提到的「${text.slice(0, 80)}」，请帮我进一步分析。`
+  }
+}
+
+function handleMemoryChatTriggerDirect(text: string) {
+  inputText.value = `关于我之前提到的「${text.slice(0, 80)}」，请帮我进一步分析。`
+}
+
+(window as any).__memoryChatTrigger = handleMemoryChatTriggerDirect
+
 onMounted(async () => {
   await chatStore.checkBackend()
   if (chatStore.isBackendReady) {
@@ -535,6 +572,8 @@ onMounted(async () => {
   document.addEventListener('dragleave', handleGlobalDragLeave)
   document.addEventListener('drop', handleGlobalDrop)
   document.addEventListener('paste', handlePaste)
+  window.addEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
+  window.addEventListener('luominest:memory-chat-trigger', handleMemoryChatTrigger as EventListener)
   nextTick(() => setupResizeObserver())
 })
 
@@ -546,6 +585,8 @@ onBeforeUnmount(() => {
   document.removeEventListener('dragleave', handleGlobalDragLeave)
   document.removeEventListener('drop', handleGlobalDrop)
   document.removeEventListener('paste', handlePaste)
+  window.removeEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
+  window.removeEventListener('luominest:memory-chat-trigger', handleMemoryChatTrigger as EventListener)
 })
 </script>
 
@@ -826,6 +867,15 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div class="toolbar-right">
+                <button
+                  class="tool-btn icon-only"
+                  title="注入记忆上下文"
+                  :disabled="showMemoryInject"
+                  @click="injectMemoryToInput"
+                >
+                  <Loader2 v-if="showMemoryInject" :size="16" class="spinning" />
+                  <Brain v-else :size="16" />
+                </button>
                 <button class="tool-btn icon-only" title="附件" @click="fileUploadRef?.triggerFileSelect()">
                   <Paperclip :size="16" />
                 </button>
@@ -908,10 +958,8 @@ onBeforeUnmount(() => {
               <MessageSquare :size="14" class="history-item-icon" />
               <div class="history-item-info">
                 <span class="history-item-title">{{ conv.title }}</span>
-                <span class="history-item-meta">
-                  <span class="history-item-time">{{ formatTime(conv.updatedAt) }}</span>
-                  <span v-if="conv.lastMessage" class="history-item-preview">{{ conv.lastMessage }}</span>
-                </span>
+                <span class="history-item-time">{{ formatTime(conv.updatedAt) }}</span>
+                <span v-if="conv.lastMessage" class="history-item-preview">{{ conv.lastMessage }}</span>
               </div>
               <Loader2 v-if="chatStore.isConversationStreaming(conv.id)" :size="12" class="history-streaming-icon spin-animation" />
               <button class="history-item-delete" title="删除" @click.stop="handleDeleteConversation(conv.id)">
@@ -1684,7 +1732,7 @@ onBeforeUnmount(() => {
 
 .history-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   width: 100%;
   padding: 10px 12px;
@@ -1693,6 +1741,7 @@ onBeforeUnmount(() => {
   transition: all 300ms ease-in-out;
   position: relative;
   cursor: pointer;
+  min-height: 56px;
 }
 
 .history-item::before {
@@ -1727,6 +1776,7 @@ onBeforeUnmount(() => {
 .history-item-icon {
   color: var(--text-muted);
   flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .history-item.active .history-item-icon {
@@ -1738,7 +1788,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .history-item-title {
@@ -1750,15 +1800,13 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 
-.history-item-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
 .history-item-time {
   font-size: 11px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
 }
 
 .history-item-preview {
@@ -1768,6 +1816,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   opacity: 0.7;
+  line-height: 1.4;
 }
 
 .history-item-delete {
