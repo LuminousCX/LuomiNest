@@ -60,6 +60,10 @@ const api = {
     clearData: () => ipcRenderer.invoke('tab:clearData')
   },
 
+  browserSearch: {
+    search: (query: string) => ipcRenderer.invoke('browser:search', query)
+  },
+
   avatar: {
     importModel: () => ipcRenderer.invoke('avatar:importModel'),
     listImportedModels: () => ipcRenderer.invoke('avatar:listImportedModels'),

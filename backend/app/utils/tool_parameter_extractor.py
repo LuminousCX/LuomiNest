@@ -102,11 +102,9 @@ class ToolParameterExtractor:
     # =========================================================================
 
     def extract_city(self, user_query: str) -> str | None:
-        """从查询中提取城市名"""
         matched = self.city_pattern.findall(user_query)
         if matched:
-            city = matched[0]
-            return self.city_alias.get(city, city)
+            return matched[0]
         alias_matched = self.city_alias_pattern.findall(user_query)
         if alias_matched:
             city = alias_matched[0]
@@ -172,7 +170,7 @@ class ToolParameterExtractor:
         return args
 
     def _extract_search_args(self, user_query: str) -> dict:
-        """提取搜索工具参数，自动清除查询前缀和倒计时词"""
+        """提取搜索工具参数，自动清除查询前缀和倒计时词，并添加时间上下文"""
         args: dict = {}
         # 去除"搜索"等前缀
         query = self.search_stop_words.sub("", user_query).strip()
@@ -182,5 +180,112 @@ class ToolParameterExtractor:
         query = re.sub(r"(还有几天|还剩几天|剩下几天|还有多久)$", "", query).strip()
         if not query:
             query = user_query.strip()
+        # 如果查询词太短（<=3字），补充"时间"后缀以获得更好的搜索结果
+        if len(query) <= 3:
+            query = query + " 时间"
+        # 添加时间上下文（年份+上半年/下半年推断）
+        query = self._enrich_search_query_with_time_context(query)
         args["query"] = query
         return args
+
+    def _enrich_search_query_with_time_context(self, query: str) -> str:
+        """为搜索查询添加时间上下文
+
+        当查询涉及周期性事件（考试/赛事等）且没有明确年份/上下半年时，
+        自动补充当前年份和合理的上下半年推断。
+
+        推断规则：
+          - 1-4月 → 搜索"上半年"（上半年考试通常5-6月举行）
+          - 5-8月 → 搜索"下半年"（上半年已过，下半年通常11月举行）
+          - 9-12月 → 搜索"下半年"（下半年考试通常11月举行）
+        """
+        has_year = bool(re.search(r"20\d{2}年", query))
+        has_half = bool(re.search(r"上半年|下半年", query))
+
+        if has_year and has_half:
+            return query
+
+        periodic_event_patterns = [
+            (re.compile(r"软考"), "考试"),
+            (re.compile(r"考研"), "考试"),
+            (re.compile(r"高考"), "考试"),
+            (re.compile(r"中考"), "考试"),
+            (re.compile(r"国考"), "考试"),
+            (re.compile(r"省考"), "考试"),
+            (re.compile(r"考公"), "考试"),
+            (re.compile(r"事业编"), "考试"),
+            (re.compile(r"教资|教师资格"), "考试"),
+            (re.compile(r"法考"), "考试"),
+            (re.compile(r"注会"), "考试"),
+            (re.compile(r"一建|二建"), "考试"),
+            (re.compile(r"公务员"), "考试"),
+            (re.compile(r"选调"), "考试"),
+            (re.compile(r"世界杯"), "赛事"),
+            (re.compile(r"奥运会"), "赛事"),
+            (re.compile(r"亚运会"), "赛事"),
+            (re.compile(r"欧冠"), "赛事"),
+            (re.compile(r"欧洲杯"), "赛事"),
+            (re.compile(r"亚洲杯"), "赛事"),
+            (re.compile(r"全运会"), "赛事"),
+            (re.compile(r"世博会"), "展会"),
+            (re.compile(r"进博会"), "展会"),
+            (re.compile(r"广交会"), "展会"),
+            (re.compile(r"双十一|618"), "购物节"),
+            (re.compile(r"春运"), "民生"),
+            (re.compile(r"秋招|春招"), "招聘"),
+            (re.compile(r"报名"), "报名"),
+            (re.compile(r"录取"), "录取"),
+            (re.compile(r"分数线"), "分数"),
+        ]
+
+        matched_event = None
+        for pattern, event_type in periodic_event_patterns:
+            if pattern.search(query):
+                matched_event = event_type
+                break
+
+        if not matched_event:
+            return query
+
+        # 清洗疑问词和冗余词，提取核心搜索词
+        core_query = query
+        core_query = re.sub(r"^今天|^现在|^当前|^目前|^今年", "", core_query)
+        core_query = re.sub(r"什么时候|几号|几时|哪天|哪一天|是哪天|是几号", "", core_query)
+        core_query = re.sub(r"还有几天|还剩几天|还有多久|还差几天$", "", core_query)
+        core_query = re.sub(r"多少|怎么样|好不好|有没有|是否", "", core_query)
+        core_query = core_query.strip()
+
+        if not core_query:
+            core_query = query
+
+        now = datetime.now()
+        year = now.year
+        month = now.month
+
+        enriched = core_query
+        if not has_year:
+            enriched = f"{year}年" + enriched
+
+        if not has_half and matched_event in ("考试", "报名", "录取", "分数", "招聘"):
+            # 高考/中考固定在6月举行，始终搜索上半年
+            first_half_only = bool(re.search(r"高考|中考", core_query))
+            if first_half_only:
+                enriched = enriched + "上半年"
+            elif month >= 5 and month <= 8:
+                enriched = enriched + "下半年"
+            elif month >= 9:
+                enriched = enriched + "下半年"
+            else:
+                enriched = enriched + "上半年"
+
+        if matched_event in ("考试", "报名", "录取", "分数") and "时间" not in enriched:
+            enriched = enriched + "时间"
+
+        # 优化顺序：将"下半年/上半年"移到事件名后面、时间前面
+        enriched = re.sub(
+            r"^(20\d{2}年)(.+?)(上半年|下半年)(时间)$",
+            r"\1\3\2\4",
+            enriched
+        )
+
+        return enriched

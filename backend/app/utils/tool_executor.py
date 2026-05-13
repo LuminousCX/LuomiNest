@@ -30,6 +30,7 @@ _extractor = ToolParameterExtractor()
 async def execute_tool_chain(
     user_query: str,
     agent_id: str | None = None,
+    external_search_results: str | None = None,
 ) -> list[dict]:
     """根据用户查询匹配工具并批量执行
 
@@ -69,10 +70,39 @@ async def execute_tool_chain(
         if name:
             tool_names.add(name)
 
-    # 3. 对每个工具提取参数并执行
+    # 3. 如果同时有时间工具和搜索工具，先执行时间工具获取当前日期
+    #    用于优化搜索查询词（如5月问软考→搜索"下半年"）
+    current_date_info: str | None = None
+    if "get_current_time" in tool_names and "web_search" in tool_names:
+        try:
+            time_args = _extractor.extract("get_current_time", user_query)
+            time_result = _time_tool_instance.get_reply(
+                query_type="date",
+                user_message=user_query,
+            )
+            if time_result:
+                current_date_info = time_result
+                logger.info(f"[ToolExecutor] 跨工具联动: 获取当前日期 → {current_date_info[:50]}")
+        except Exception as e:
+            logger.debug(f"[ToolExecutor] 跨工具联动时间获取失败: {e}")
+
+    # 4. 对每个工具提取参数并执行
     executor = SkillExecutor()
     for tool_name in sorted(tool_names):
         args = _extractor.extract(tool_name, user_query)
+
+        # 如果是搜索工具且有外部搜索结果，直接使用
+        if tool_name == "web_search" and external_search_results:
+            processed = process_tool_result(tool_name, external_search_results)
+            logger.info(f"[ToolExecutor] web_search (外部浏览器结果) → {len(processed)} 字符")
+            results.append({
+                "tool_name": tool_name,
+                "args": args,
+                "result": processed,
+                "success": True,
+            })
+            continue
+
         result = await execute_single_tool(tool_name, args, executor, agent_id, user_query)
         results.append(result)
 
@@ -131,10 +161,9 @@ async def execute_single_tool(
                         agent_type="通用",
                     )
                 else:
-                    raw = _time_tool_instance.get_reply_with_context(
-                        query_type="time",
+                    raw = _time_tool_instance.get_reply(
+                        query_type="date",
                         user_message=user_query,
-                        agent_type="通用",
                     )
             except Exception as e:
                 logger.warning(f"[ToolExecutor] 时间快速路径异常，降级到通用执行: {e}")
@@ -153,7 +182,7 @@ async def execute_single_tool(
             query = args.get("query", user_query)
             raw = await search_web(query)
             processed = process_tool_result(tool_name, raw)
-            logger.info(f"[ToolExecutor] web_search '{query[:30]}...' → {len(processed)} 字符")
+            logger.info(f"[ToolExecutor] web_search → {len(processed)} 字符")
             return {
                 "tool_name": tool_name,
                 "args": args,
@@ -217,5 +246,7 @@ def build_tool_summary(user_query: str, tool_results: list[dict]) -> str:
 
     parts.append("\n请根据以上信息，用自然、友好的语言总结回答用户的问题。")
     parts.append("如果信息不足或工具失败，告诉用户暂时无法获取完整信息。")
+    parts.append("注意区分「报名时间」和「考试时间」，用户问的是考试/事件日期时，不要用报名时间代替。")
+    parts.append("如果搜索结果中的日期已经过去，请说明该日期已过，并尝试告知下一次的时间（如有信息）。")
 
     return "\n".join(parts)

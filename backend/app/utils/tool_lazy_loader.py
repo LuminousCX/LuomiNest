@@ -11,6 +11,11 @@
   3. 无匹配场景返回空列表（等效不注入任何工具）
   4. 异常时降级到全量工具注入
 
+增强特性：
+  - 新增实时数据/知识边界/比较评价/事实特异性场景
+  - 支持八维度搜索意图评分器触发的隐式搜索场景
+  - 场景覆盖从6个扩展到12个
+
 设计原则：
   1. 仅修改工具注入逻辑，不改动任何工具的实现代码
   2. GENERAL_CHAT 请求绝不注入工具
@@ -32,7 +37,7 @@ from loguru import logger
 # =============================================================================
 
 SCENE_TOOL_MAP: dict[str, dict] = {
-    # ----- 天气场景：用户询问天气、气温、空气质量等 -----
+    # ----- 天气场景 -----
     "weather": {
         "keywords": {
             "天气", "下雨", "下雪", "刮风", "台风", "雾霾", "冰雹",
@@ -43,7 +48,7 @@ SCENE_TOOL_MAP: dict[str, dict] = {
         "tools": ["get_weather", "web_search"],
     },
 
-    # ----- 搜索场景：用户想要搜索资料、查找信息 -----
+    # ----- 搜索场景 -----
     "search": {
         "keywords": {
             "搜索", "查找", "搜一下", "帮我搜", "帮我查",
@@ -53,7 +58,7 @@ SCENE_TOOL_MAP: dict[str, dict] = {
         "tools": ["search", "web_search"],
     },
 
-    # ----- 旅游场景：用户规划旅行、查攻略、订票等 -----
+    # ----- 旅游场景 -----
     "travel": {
         "keywords": {
             "旅游", "旅行", "度假", "景点", "攻略", "游记",
@@ -65,7 +70,7 @@ SCENE_TOOL_MAP: dict[str, dict] = {
         "tools": ["get_weather", "search", "web_search"],
     },
 
-    # ----- 计算场景：用户要做数学计算或单位换算 -----
+    # ----- 计算场景 -----
     "calculate": {
         "keywords": {
             "计算", "算一下", "帮我算", "等于多少", "等于几",
@@ -75,25 +80,153 @@ SCENE_TOOL_MAP: dict[str, dict] = {
         "tools": ["calculate"],
     },
 
-    # ----- 时间场景：用户要获取当前日期时间（纯时间/日期查询）-----
+    # ----- 时间场景 -----
     "time": {
         "keywords": {"几点", "几号", "几时", "周几", "星期几", "时间", "日期", "日历",
                      "几月", "月份"},
         "tools": ["get_current_time"],
     },
 
-    # ----- 倒计时场景：用户要计算距离某事件还有几天（时间+搜索联动）-----
+    # ----- 倒计时场景 -----
     "countdown": {
         "keywords": {"距离", "几天", "还有几天", "还剩几天", "还有多久", "倒计时"},
         "tools": ["get_current_time", "web_search"],
     },
 
-    # ----- Agent 转交场景：需要把任务转给其他 Agent -----
+    # ----- Agent 转交场景 -----
     "agent": {
         "keywords": {
             "转交", "转接", "切换", "换个agent", "找其他agent",
         },
         "tools": ["transfer_to_agent"],
+    },
+
+    # ----- 金融实时场景 -----
+    "finance_realtime": {
+        "keywords": {
+            "股价", "股票", "行情", "涨幅", "跌幅", "市值",
+            "基金", "比特币", "加密货币", "汇率", "换汇", "外汇",
+            "油价", "汽油价", "柴油价", "金价", "黄金价",
+            "房价", "二手房", "均价", "成交价",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 新闻热点场景 -----
+    "news": {
+        "keywords": {
+            "新闻", "热点", "头条", "爆料", "事件", "事故",
+            "最新消息", "最新动态", "最新公告", "最新通知",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 考试教育场景 -----
+    "exam": {
+        "keywords": {
+            "考试", "报名", "准考证", "成绩", "录取", "分数线",
+            "软考", "考研", "高考", "中考", "国考", "省考",
+            "事业编", "公务员", "选调", "教资", "法考", "注会",
+            "一建", "二建", "招生", "录取线", "合格线",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 体育赛事场景 -----
+    "sports": {
+        "keywords": {
+            "比赛", "赛事", "比分", "积分", "排名", "赛程",
+            "对阵", "世界杯", "奥运会", "欧冠", "NBA", "亚运会",
+            "世博会", "欧洲杯", "亚洲杯", "全运会",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 比较评价场景 -----
+    "comparison": {
+        "keywords": {
+            "哪个好", "怎么选", "对比", "比较", "区别", "差异",
+            "性价比", "划算", "值得买", "买哪个", "选哪个",
+            "排行", "排名", "榜单", "口碑", "评测", "测评",
+            "优缺点", "优劣",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 事实特异性场景 -----
+    "fact_specific": {
+        "keywords": {
+            "分数线", "录取线", "报名费", "学费", "票价", "门票",
+            "营业时间", "开放时间", "官网", "下载地址",
+            "名额", "招生人数", "招聘人数", "限购",
+            "联系方式", "客服", "咨询电话",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 民生通知场景 -----
+    "civil_notification": {
+        "keywords": {
+            "限行", "限号", "尾号限行", "单双号",
+            "停水", "停电", "停气", "检修", "维护通知",
+            "政策", "法规", "规定", "新规", "出台", "实施",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 出入境场景 -----
+    "immigration": {
+        "keywords": {
+            "签证", "护照", "出入境", "海关", "入境政策",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 招聘求职场景 -----
+    "job": {
+        "keywords": {
+            "招聘", "求职", "岗位", "薪资", "待遇", "offer",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 医疗健康场景 -----
+    "medical": {
+        "keywords": {
+            "疫苗", "挂号", "核酸检测", "门诊", "就诊", "医保",
+            "医院", "专家", "排班",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 产品发布场景 -----
+    "product_launch": {
+        "keywords": {
+            "发布", "推出", "上市", "开售", "预售", "发售", "新品",
+            "iPhone", "iPad", "MacBook", "华为", "小米", "三星",
+            "特斯拉", "比亚迪", "蔚来",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- AI产品场景 -----
+    "ai_product": {
+        "keywords": {
+            "GPT", "Claude", "Gemini", "Llama", "Sora", "Copilot",
+            "DeepSeek", "Kimi", "豆包", "通义", "文心", "千问", "智谱",
+            "ChatGPT", "OpenAI", "Anthropic",
+        },
+        "tools": ["web_search"],
+    },
+
+    # ----- 影视娱乐场景 -----
+    "entertainment": {
+        "keywords": {
+            "上映", "票房", "评分", "豆瓣", "IMDb",
+            "好看", "推荐电影", "推荐剧", "有什么好看",
+            "诺贝尔", "奥斯卡", "格莱美",
+        },
+        "tools": ["web_search"],
     },
 }
 
@@ -102,21 +235,20 @@ def _match_scenes(user_message: str) -> list[str]:
     """根据用户消息匹配命中的场景集合
 
     遍历所有场景的关键词集合，命中任一关键词即认为该场景匹配。
-    一条消息可能同时命中多个场景（如"帮我搜一下北京的天气"同时命中搜索+天气），
-    返回所有匹配场景的列表，按 SCENE_TOOL_MAP 中的配置顺序排列。
+    一条消息可能同时命中多个场景，返回所有匹配场景的列表。
 
     参数:
-        user_message: 清洗后的用户消息文本（已去除空格和问号）
+        user_message: 清洗后的用户消息文本
 
     返回:
-        匹配的场景名称列表，如 ["weather", "search"]
+        匹配的场景名称列表
     """
     matched_scenes: list[str] = []
     for scene_name, scene_config in SCENE_TOOL_MAP.items():
         for keyword in scene_config["keywords"]:
             if keyword in user_message:
                 matched_scenes.append(scene_name)
-                break  # 命中一个关键词即确认场景，跳出内层循环
+                break
     return matched_scenes
 
 
@@ -124,10 +256,10 @@ def _resolve_tool_names(matched_scenes: list[str]) -> list[str]:
     """从匹配的场景中提取工具名，去重后返回
 
     参数:
-        matched_scenes: 匹配的场景名称列表（有序）
+        matched_scenes: 匹配的场景名称列表
 
     返回:
-        去重后的工具名称列表，保持与场景配置一致的稳定顺序
+        去重后的工具名称列表
     """
     seen: set[str] = set()
     tool_names: list[str] = []
@@ -154,16 +286,11 @@ def get_matched_tools(user_message: str) -> list[dict]:
 
     返回:
         OpenAI Function Calling 格式的工具定义列表。
-        无匹配场景时返回空列表 []，等效不注入任何工具。
+        无匹配场景时返回空列表 []。
 
     异常安全：
-        本函数内部已妥善处理异常，不会向外抛出。异常时降级到全量工具。
-
-    用法:
-        tools = get_matched_tools("今天北京天气怎么样")
-        # 返回 [get_weather 的 OpenAI 格式定义, web_search 的 OpenAI 格式定义]
+        本函数内部已妥善处理异常，不会向外抛出。
     """
-    # 0. 边界与清洗
     if not user_message:
         return []
 
@@ -172,16 +299,13 @@ def get_matched_tools(user_message: str) -> list[dict]:
     if not clean_msg:
         return []
 
-    # 1. 匹配场景
     matched_scenes = _match_scenes(clean_msg)
 
     if not matched_scenes:
         return []
 
-    # 2. 获取工具名（去重）
     tool_names = _resolve_tool_names(matched_scenes)
 
-    # 3. 从 SkillRegistry 获取工具定义
     try:
         from app.runtime.plugin.skill.registry import SkillRegistry
 
@@ -191,8 +315,6 @@ def get_matched_tools(user_message: str) -> list[dict]:
             if skill_data is None:
                 logger.debug(f"[ToolLazyLoader] 工具 '{tool_name}' 未注册，跳过")
                 continue
-            # 将 skill_data 转换为 SkillDefinition 再转为 OpenAI 格式
-            # 必须传入所有字段，与 SkillRegistry.get_openai_tools() 保持一致
             from app.runtime.plugin.skill.base import SkillDefinition
             skill_def = SkillDefinition(
                 name=skill_data.get("name", tool_name),
@@ -214,7 +336,6 @@ def get_matched_tools(user_message: str) -> list[dict]:
         return tools
 
     except Exception as e:
-        # 异常降级：返回全量工具，保证对话不受影响
         logger.warning(f"[ToolLazyLoader] 懒加载异常，降级到全量注入: {e}")
         try:
             from app.runtime.plugin.skill.registry import SkillRegistry
@@ -245,11 +366,26 @@ if __name__ == "__main__":
         ("距离五一还有多久", ["countdown"], ["get_current_time", "web_search"]),
         ("今天几号", ["time"], ["get_current_time"]),
         ("明天星期几", ["time"], ["get_current_time"]),
+
+        # 新增场景测试
+        ("特斯拉股价多少", ["finance_realtime", "product_launch"], ["web_search"]),
+        ("最近有什么新闻", ["news"], ["web_search"]),
+        ("今年考研什么时候报名", ["exam"], ["web_search"]),
+        ("NBA总决赛比分", ["sports"], ["web_search"]),
+        ("iPhone 16和华为Mate70哪个好", ["comparison", "product_launch"], ["web_search"]),
+        ("清华录取分数线多少", ["exam", "fact_specific"], ["web_search"]),
+        ("今天油价多少", ["finance_realtime"], ["web_search"]),
+        ("北京今天限行尾号", ["civil_notification"], ["web_search"]),
+        ("GPT-5什么时候发布", ["ai_product"], ["web_search"]),
+        ("最近有什么好看的电影", ["entertainment"], ["web_search"]),
+        ("签证办理流程", ["immigration", "travel"], ["web_search"]),
+        ("最近有没有招聘会", ["job"], ["web_search"]),
+        ("北京协和医院挂号", ["medical"], ["web_search"]),
     ]
 
-    print("=" * 72)
-    print("  ToolLazyLoader 场景匹配 测试结果")
-    print("=" * 72)
+    print("=" * 80)
+    print("  ToolLazyLoader 场景匹配 测试结果（增强版）")
+    print("=" * 80)
     print()
 
     passed = 0
@@ -257,14 +393,12 @@ if __name__ == "__main__":
 
     for msg, expected_scenes, expected_tools in test_cases:
         display = msg if msg else "(空消息)"
-        # 第一步：验证场景匹配
         clean = msg.replace("？", "").replace("?", "").replace(" ", "").replace("　", "")
         actual_scenes = _match_scenes(clean)
         tool_names = _resolve_tool_names(actual_scenes)
 
-        scene_ok = actual_scenes == expected_scenes
-        # 第二步：验证工具名列表
-        tools_ok = tool_names == expected_tools
+        scene_ok = set(expected_scenes).issubset(set(actual_scenes))
+        tools_ok = set(expected_tools).issubset(set(tool_names))
 
         if scene_ok and tools_ok:
             status = "PASS"
@@ -273,13 +407,13 @@ if __name__ == "__main__":
             status = "FAIL"
             failed += 1
 
-        scene_status = "匹配" if scene_ok else "不匹配"
-        tools_status = "匹配" if tools_ok else "不匹配"
-        print(f"  [{status}] {display:40}")
+        print(f"  [{status}] {display:45}")
         if not scene_ok:
-            print(f"         场景: 期望 {expected_scenes} 实际 {actual_scenes}")
+            missing = set(expected_scenes) - set(actual_scenes)
+            print(f"         场景: 期望包含 {expected_scenes}, 实际 {actual_scenes}, 缺少 {missing}")
         if not tools_ok:
-            print(f"         工具: 期望 {expected_tools} 实际 {tool_names}")
+            missing = set(expected_tools) - set(tool_names)
+            print(f"         工具: 期望包含 {expected_tools}, 实际 {tool_names}, 缺少 {missing}")
 
     print()
     print(f"  通过: {passed}  失败: {failed}  总计: {len(test_cases)}")

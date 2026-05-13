@@ -4,13 +4,19 @@
 功能：
   对用户输入消息进行轻量分类，将请求分为三类：
   - LOCAL_TOOL：本地可处理的请求（时间/日期/星期/计算）
-  - TOOL_CALL：需要调用外部工具的请求（天气/搜索/旅游/行程）
+  - TOOL_CALL：需要调用外部工具的请求（天气/搜索/旅游/行程/实时数据）
   - GENERAL_CHAT：通用对话，其余所有请求的默认分类
 
 三级分类流程（纯规则，零延迟，不用大模型）：
   第一层：关键词粗匹配 —— 正则快速抓出所有含时间/日期关键词的候选
   第二层：轻量级规则二次过滤 —— 否定词、句式结构、长度限制三重过滤
   第三层：边缘情况兜底 —— 拿不准的直接走外接 API，不影响体验
+
+增强特性：
+  - 集成八维度搜索意图评分器，识别隐式搜索需求
+  - 支持对话历史上下文感知
+  - 扩展工具调用关键词覆盖更多场景
+  - 新增实时数据/知识边界/实体识别等隐式搜索触发
 
 设计原则：
   1. 纯正则 + 规则树，零 IO、零网络、零大模型调用
@@ -27,7 +33,7 @@ from enum import Enum
 class RequestType(Enum):
     """请求类型枚举，对应三种分流目标"""
     LOCAL_TOOL = "local_tool"        # 本地工具：时间/日期/星期/计算
-    TOOL_CALL = "tool_call"          # 工具调用：天气/搜索/旅游/行程
+    TOOL_CALL = "tool_call"          # 工具调用：天气/搜索/旅游/行程/实时数据
     GENERAL_CHAT = "general_chat"    # 通用对话：其余所有请求
 
 
@@ -48,29 +54,25 @@ class IntentGateway:
         self.time_date_pattern = re.compile(
             r"几点|几时|几号|几月几|日期|周几|星期几|礼拜几|几月|哪一天|"
             r"什么时间|什么日期|当前时间|现在时间|看时间|报时|几月份|啥时候|"
-            # 新增：农历/节假日
             r"农历|阴历|初一|十五|"
             r"什么日子|什么节日|什么节|法定节假日|节假日|节日|过什么节|放不放假|"
-            # 新增：日期偏移（明天/后天/下周一等）
             r"今天几|明天几|后天几|昨天几|"
             r"下周|上周|下个礼拜|上个礼拜|"
             r"\d+天后|\d+天前|"
-            # 新增：时间偏移（X小时后/分钟前/天后）
             r"\d+[个]*(?:小时|分钟|天|钟头)[后前]|"
             r"[一二三四五六七八九十]+[个]*(?:小时|分钟|天|钟头)[后前]|"
             r"过\d+(?:小时|分钟|天)|"
-            # 新增：时区类
             r"时区|GMT|UTC|时差|"
             r"[的地]时间(?!点|分|钟|段|候|长|差)",
         )
 
         # 计算类正则：数字运算符 或 计算意图词
         self.calc_pattern = re.compile(
-            r"\d+\s*[\+\-\*×xX÷/]\s*\d+"          # 数字运算符数字，如 "3+5"
+            r"\d+\s*[\+\-\*×xX÷/]\s*\d+"
             r"|"
-            r"\d+\s*(?:加|減|减|乘|除|乘以|除以)\s*\d+"     # 数字中文运算符，如 "3加5"、"3乘以5"
+            r"\d+\s*(?:加|減|减|乘|除|乘以|除以)\s*\d+"
             r"|"
-            r"(计算|算一下|帮我算|等于多少|等于几|得多少|得几|是多少|答案是)"  # 计算意图词
+            r"(计算|算一下|帮我算|等于多少|等于几|得多少|得几|是多少|答案是)"
         )
 
         # 天气关键词正则（粗匹配，所有含天气关键词的候选）
@@ -101,7 +103,6 @@ class IntentGateway:
         }
 
         # 假查询动词（"几点+动词" 结构，无查询词 → 假查询）
-        # 如 "几点出门"、"几点开会"、"几点吃饭" 都不是在问 AI 时间
         self.fake_verbs = {
             "出门", "开会", "吃饭", "睡觉", "上班", "下班", "约会",
             "见面", "出发", "到达", "集合", "开始", "结束", "面试",
@@ -112,34 +113,55 @@ class IntentGateway:
 
         # ----- 天气专属规则配置 -----
 
-        # 天气明确查询词白名单 —— 有这些词，大概率是真心查天气
+        # 天气明确查询词白名单
         self.weather_query_whitelist: set[str] = {
             "请问", "帮我查", "查一下", "告诉我", "问一下", "怎么样",
             "如何", "多少", "帮我看", "麻烦", "请帮", "我想知道",
         }
 
-        # 天气非查询场景黑名单 —— 有这些词且无查询词，判定为非天气查询
-        #   "不好"/"不错"/"太热"/"太冷" → 在陈述感受，不是提问
-        #   "下雨了"/"下雪了" → 在描述事实，不是查未来天气
-        #   "上次"/"之前"/"的时候" → 聊过去，不是查天气
+        # 天气非查询场景黑名单
         self.weather_negation_blacklist: set[str] = {
             "不好", "不错", "太热", "太冷", "下雨了", "下雪了",
             "上次", "之前", "的时候", "受不了", "烦", "讨厌",
         }
 
-        # 天气陈述动词模式 —— "天气+动词/形容词" 且无查询词 → 非查询
+        # 天气陈述动词模式
         self.weather_statement_verbs: set[str] = {
             "不好", "不错", "热了", "变了", "冷了", "暖和",
             "太差", "影响", "耽误", "坏了",
         }
 
+        # ----- 事件日期检测关键词 -----
+        # 当消息同时包含时间关键词和这些事件关键词时，
+        # 本地时间工具无法回答，应走 TOOL_CALL（搜索工具）
+        self.event_date_keywords: set[str] = {
+            "软考", "考研", "高考", "中考", "国考", "省考",
+            "考公", "公务员", "事业编", "选调", "教资", "法考",
+            "注会", "一建", "二建", "复试", "笔试", "面试",
+            "报名", "准考证", "成绩", "录取", "分数线",
+            "世界杯", "奥运会", "亚运会", "世博会", "欧冠",
+            "NBA", "欧洲杯", "亚洲杯", "全运会",
+            "上映", "开售", "预售", "发售", "发布",
+            "开学", "放假", "开学季", "毕业",
+            "春运", "假期", "调休",
+            "发布会", "发布会", "直播",
+        }
+
         # ================================================================
-        # 工具调用关键词（仅搜索+旅游，天气已被 classify() 接管）
+        # 工具调用关键词（搜索+旅游+实时数据，天气已被 classify() 接管）
         # ================================================================
         self._tool_keywords_search = _TOOL_KEYWORDS_SEARCH
         self._tool_keywords_travel = _TOOL_KEYWORDS_TRAVEL
+        self._tool_keywords_realtime = _TOOL_KEYWORDS_REALTIME
+        self._tool_keywords_knowledge_boundary = _TOOL_KEYWORDS_KNOWLEDGE_BOUNDARY
+        self._tool_keywords_comparison = _TOOL_KEYWORDS_COMPARISON
+        self._tool_keywords_fact_specific = _TOOL_KEYWORDS_FACT_SPECIFIC
 
-    def classify(self, user_message: str) -> RequestType:
+    def classify(
+        self,
+        user_message: str,
+        conversation_history: list[dict] | None = None,
+    ) -> RequestType:
         """三层分类，返回 RequestType 枚举值
 
         支持返回 LOCAL_TOOL（本地工具直接处理）、TOOL_CALL（工具调用）、
@@ -149,6 +171,7 @@ class IntentGateway:
 
         参数:
             user_message: 用户原始消息文本
+            conversation_history: 对话历史（可选，用于上下文感知）
 
         返回:
             RequestType 枚举值
@@ -189,17 +212,9 @@ class IntentGateway:
 
         # ================================================================
         # 第二层：轻量级规则二次过滤（时间/日期，核心！过滤 99% 误判）
-        #
-        # 规则优先级从高到低，命中即返回，保证先过滤假查询再确认真查询：
-        #   R1: 否定词 → 假查询（最优先！否定语境下一切关键词失效）
-        #   R2: 明确查询词 → 真查询
-        #   R3: "几点+动词"结构 → 假查询（必须在短句规则之前！）
-        #   R4: 短句且时间词在首/尾 → 真查询
-        #   R5: 长句 → 假查询
         # ================================================================
 
-        # 规则一：否定词 → 假查询（最优先！否定语境下一切关键词失效）
-        #   如 "忘了今天是几号了" 中虽有 "今天是"，但 "忘了" 否定整体语义
+        # 规则一：否定词 → 假查询
         if any(word in original_msg for word in self.negation_words):
             return RequestType.GENERAL_CHAT
 
@@ -207,16 +222,20 @@ class IntentGateway:
         if any(word in original_msg for word in self.query_words):
             return RequestType.LOCAL_TOOL
 
+        # 规则二点五：事件日期检测 → TOOL_CALL
+        # 当消息同时包含时间关键词和特定事件/考试关键词时，
+        # 本地时间工具无法回答，应走搜索工具
+        # 如 "河北软考几号"、"考研什么时候"、"国考几号"
+        if any(kw in clean_msg for kw in self.event_date_keywords):
+            return RequestType.TOOL_CALL
+
         # 规则三："几点+动词" / "几号+动词" 结构 → 假查询
-        #   必须在短句规则之前！否则 "几点吃饭"（4字短句）会先被短句规则命中。
-        #   覆盖 "几点出门"、"几点开会"、"几点吃饭"、"明天几点集合" 等
         for verb in self.fake_verbs:
             test_str = clean_msg.lower()
             if f"几点{verb}" in test_str or f"几号{verb}" in test_str:
                 return RequestType.GENERAL_CHAT
 
         # 规则四：短句（≤10字）且时间词在首/尾 → 真查询
-        #   覆盖 "现在几点"、"今天几号"、"星期几"、"几点了" 等简洁口语提问
         if len(original_msg) <= 10:
             msg_start = original_msg[:5]
             msg_end = original_msg[-5:]
@@ -224,72 +243,56 @@ class IntentGateway:
                 return RequestType.LOCAL_TOOL
 
         # 规则五：长句（>20字）且非明确查询 → 假查询
-        #   长句通常是复杂陈述，不应被简单关键词判定为时间查询
         if len(original_msg) > 20:
             return RequestType.GENERAL_CHAT
 
         # ================================================================
-        # 第三层：边缘情况走 API 兜底（万无一失）
+        # 第三层：边缘情况走 API 兜底
         # ================================================================
-        # 实在拿不准的，返回 GENERAL_CHAT，让外接 API 处理
         return RequestType.GENERAL_CHAT
 
     # ------------------------------------------------------------------
-    # 天气分类子方法 —— 独立的规则树，与时间/日期规则完全解耦
+    # 天气分类子方法
     # ------------------------------------------------------------------
 
     def _classify_weather(self, original_msg: str, clean_msg: str) -> RequestType:
         """天气专用分类 —— 四层规则精准区分真查询 vs 假查询
 
-        规则优先级（命中即返回）：
-          R_W1: 天气明确查询词 → 真查询（最优先）
-          R_W2: 天气否定/陈述词 → 假查询
-          R_W3: "天气+陈述动词"模式 → 假查询
-          R_W4: 短句（≤10字）含天气词 → 真查询
-          R_W5: 长句（>25字）→ 假查询
-          兜底 → 真查询（含天气关键词但未被过滤）
-
         参数:
-            original_msg: 用户原始消息（用于规则匹配）
-            clean_msg: 清洗后的消息（用于关键词检测）
+            original_msg: 用户原始消息
+            clean_msg: 清洗后的消息
 
         返回:
-            TOOL_CALL：真实天气查询，应调用天气工具
-            GENERAL_CHAT：非天气查询，走通用对话
+            TOOL_CALL：真实天气查询
+            GENERAL_CHAT：非天气查询
         """
         # R_W1: 天气明确查询词 → 真查询
-        #   "帮我查明天天气"、"请问今天气温多少"、"北京天气怎么样"
         if any(word in original_msg for word in self.weather_query_whitelist):
             return RequestType.TOOL_CALL
 
         # R_W2: 天气否定/陈述词且无查询词 → 假查询
-        #   "今天天气不好不想出门"、"上次下雨的时候"、"今天太热了"
         if any(word in original_msg for word in self.weather_negation_blacklist):
             return RequestType.GENERAL_CHAT
 
         # R_W3: "天气+陈述动词"模式 → 假查询
-        #   "天气不好"、"天气热了"、"天气变了" → 在陈述，不是提问
         for verb in self.weather_statement_verbs:
             if f"天气{verb}" in clean_msg:
                 return RequestType.GENERAL_CHAT
 
         # R_W4: 短句（≤10字）含天气词 → 真查询
-        #   "今天天气"、"天气怎么样"、"明天温度"等简洁提问
         if len(original_msg) <= 10:
             return RequestType.TOOL_CALL
 
         # R_W5: 长句（>25字）且无明确查询词 → 假查询
-        #   长句通常是陈述、聊天，不应被简单关键词判定为天气查询
         if len(original_msg) > 25:
             return RequestType.GENERAL_CHAT
 
-        # 兜底：含天气关键词且未被以上规则过滤 → 真查询
-        #   "明天会下雨吗"、"这个周末适合出游吗天气如何" 等中等长度提问
+        # 兜底：含天气关键词且未被过滤 → 真查询
         return RequestType.TOOL_CALL
 
 
 # =============================================================================
-# 工具调用关键词集合 —— 覆盖搜索/旅游/行程类需求（天气已被 classify() 接管）
+# 工具调用关键词集合 —— 覆盖搜索/旅游/实时数据/知识边界/比较/事实特异性
 # =============================================================================
 
 _TOOL_KEYWORDS_SEARCH = {
@@ -311,22 +314,43 @@ _TOOL_KEYWORDS_COUNTDOWN = {
     "是哪天", "是几号", "考试时间", "什么时候考试", "什么时候报名",
 }
 
+_TOOL_KEYWORDS_REALTIME = {
+    "股价", "股票", "行情", "汇率", "油价", "金价", "房价",
+    "限行", "限号", "停水", "停电", "快递", "物流",
+    "招聘", "求职", "签证", "出入境", "入境政策",
+    "油价", "汽油价", "黄金价", "二手房", "均价",
+}
+
+_TOOL_KEYWORDS_KNOWLEDGE_BOUNDARY = {
+    "最新", "当前", "目前", "刚刚", "刚才",
+    "2025年", "2026年", "2027年", "2028年", "2029年",
+}
+
+_TOOL_KEYWORDS_COMPARISON = {
+    "哪个好", "怎么选", "对比", "比较", "区别", "差异",
+    "性价比", "划算", "值得买", "买哪个", "选哪个",
+    "排行", "排名", "榜单", "口碑", "评测", "测评",
+}
+
+_TOOL_KEYWORDS_FACT_SPECIFIC = {
+    "分数线", "录取线", "报名费", "学费", "票价", "门票",
+    "营业时间", "开放时间", "官网", "下载地址",
+    "名额", "招生人数", "招聘人数",
+}
+
 
 def _is_tool_call_request(cleaned: str) -> bool:
-    """检查是否为工具调用请求（搜索/旅游/行程/倒计时），使用关键词集合匹配
-
-    注意：天气已由 IntentGateway._classify_weather() 接管，此处不再检查天气关键词。
-    """
-    for keyword in _TOOL_KEYWORDS_SEARCH:
-        if keyword in cleaned:
-            return True
-    for keyword in _TOOL_KEYWORDS_TRAVEL:
-        if keyword in cleaned:
-            return True
-    for keyword in _TOOL_KEYWORDS_COUNTDOWN:
-        if keyword in cleaned:
-            return True
-    return False
+    """检查消息是否命中任一工具调用关键词集合"""
+    keyword_sets = [
+        _TOOL_KEYWORDS_SEARCH,
+        _TOOL_KEYWORDS_TRAVEL,
+        _TOOL_KEYWORDS_COUNTDOWN,
+        _TOOL_KEYWORDS_REALTIME,
+        _TOOL_KEYWORDS_KNOWLEDGE_BOUNDARY,
+        _TOOL_KEYWORDS_COMPARISON,
+        _TOOL_KEYWORDS_FACT_SPECIFIC,
+    ]
+    return any(keyword in cleaned for keyword_set in keyword_sets for keyword in keyword_set)
 
 
 # =============================================================================
@@ -336,22 +360,27 @@ def _is_tool_call_request(cleaned: str) -> bool:
 _gateway = IntentGateway()
 
 
-def classify_request(user_message: str) -> RequestType:
+def classify_request(
+    user_message: str,
+    conversation_history: list[dict] | None = None,
+) -> RequestType:
     """核心分类函数 —— 对用户消息进行毫秒级意图分类
 
-    三级分类流程：
+    四级分类流程：
       1. IntentGateway 判断 LOCAL_TOOL vs GENERAL_CHAT
-      2. 关键词集合判断 TOOL_CALL
-      3. 兜底 GENERAL_CHAT
+      2. 关键词集合判断 TOOL_CALL（扩展覆盖实时数据/知识边界/比较/事实特异性）
+      3. 搜索意图评分器判断隐式搜索需求（八维度评分）
+      4. 兜底 GENERAL_CHAT
 
     参数:
         user_message: 用户输入的原始消息文本
+        conversation_history: 对话历史（可选，用于上下文感知）
 
     返回:
         RequestType 枚举值，指示该请求的类型
     """
     # 第一步：本地工具 vs 通用对话（三级规则引擎）
-    result = _gateway.classify(user_message)
+    result = _gateway.classify(user_message, conversation_history)
 
     # 第二步：如果三级引擎判定为 GENERAL_CHAT，再检查是否为工具调用
     if result == RequestType.GENERAL_CHAT:
@@ -361,10 +390,16 @@ def classify_request(user_message: str) -> RequestType:
         )
         # 若消息中含有时间/日期关键词（被网关第二层规则过滤的），
         # 说明整体语境是闲聊陈述而非信息查询，不应当触发工具调用。
-        # 如 "今天天气不错，几点吃饭？" → 闲聊，不是天气查询
         if _gateway.time_date_pattern.search(clean_msg):
             return RequestType.GENERAL_CHAT
         if _is_tool_call_request(clean_msg):
+            return RequestType.TOOL_CALL
+
+        # 第三步：搜索意图评分器 —— 识别隐式搜索需求
+        # 八维度评分：问题模式/实体时效/话题类别/否定信号/
+        #            知识边界/实体识别/比较评价/事实特异性
+        from app.utils.search_intent import needs_search
+        if needs_search(user_message, conversation_history):
             return RequestType.TOOL_CALL
 
     return result
@@ -373,19 +408,12 @@ def classify_request(user_message: str) -> RequestType:
 def is_weather_query(user_message: str) -> bool:
     """辅助判断函数 —— 检查用户消息是否为真实天气查询
 
-    复用 IntentGateway._classify_weather 的完整规则体系，
-    仅返回布尔值，方便调用方做二选一分流。
-
     参数:
         user_message: 用户输入的原始消息文本
 
     返回:
-        True：真实天气查询，应调用天气工具
-        False：非天气查询，走通用对话或其他逻辑
-
-    用法:
-        if is_weather_query("今天北京天气怎么样"):
-            reply = get_weather_reply("北京")
+        True：真实天气查询
+        False：非天气查询
     """
     if not user_message or not user_message.strip():
         return False
@@ -443,6 +471,45 @@ if __name__ == "__main__":
         ("今天天气变化太大了烦死了", RequestType.GENERAL_CHAT),
         ("之前下雪的时候拍的", RequestType.GENERAL_CHAT),
 
+        # ===== 隐式搜索 → TOOL_CALL（八维度评分器触发）=====
+        ("2026年世界杯在哪举办", RequestType.TOOL_CALL),
+        ("iPhone 18什么时候出", RequestType.TOOL_CALL),
+        ("特斯拉股价多少", RequestType.TOOL_CALL),
+        ("最近有什么好看的电影", RequestType.TOOL_CALL),
+        ("河北软考几号", RequestType.TOOL_CALL),
+        ("今年考研什么时候报名", RequestType.TOOL_CALL),
+        ("NBA总决赛比分", RequestType.TOOL_CALL),
+        ("北京到上海的高铁时刻表", RequestType.TOOL_CALL),
+
+        # ===== 知识边界 → TOOL_CALL =====
+        ("2025年有什么新政策", RequestType.TOOL_CALL),
+        ("目前GPT-5出了吗", RequestType.TOOL_CALL),
+        ("最新版本的ChatGPT是什么", RequestType.TOOL_CALL),
+
+        # ===== 实体识别 → TOOL_CALL =====
+        ("GPT-5什么时候发布", RequestType.TOOL_CALL),
+        ("DeepSeek最新模型是什么", RequestType.TOOL_CALL),
+        ("Windows 12什么时候出", RequestType.TOOL_CALL),
+
+        # ===== 比较评价 → TOOL_CALL =====
+        ("iPhone 16和华为Mate70哪个好", RequestType.TOOL_CALL),
+        ("比亚迪和特斯拉怎么选", RequestType.TOOL_CALL),
+
+        # ===== 事实特异性 → TOOL_CALL =====
+        ("清华录取分数线多少", RequestType.TOOL_CALL),
+        ("北京故宫门票多少钱", RequestType.TOOL_CALL),
+        ("GPT-4官网下载地址", RequestType.TOOL_CALL),
+
+        # ===== 实时数据 → TOOL_CALL =====
+        ("今天油价多少", RequestType.TOOL_CALL),
+        ("黄金价格多少一克", RequestType.TOOL_CALL),
+        ("北京今天限行尾号", RequestType.TOOL_CALL),
+        ("美元汇率多少", RequestType.TOOL_CALL),
+
+        # ===== 否定覆盖 → TOOL_CALL =====
+        ("什么是GPT-5", RequestType.TOOL_CALL),
+        ("什么是2025年新规", RequestType.TOOL_CALL),
+
         # ===== 通用对话 → GENERAL_CHAT =====
         ("今天天气不错，几点吃饭？", RequestType.GENERAL_CHAT),
         ("现在几点？不对，等一下", RequestType.GENERAL_CHAT),
@@ -450,11 +517,16 @@ if __name__ == "__main__":
         ("你好，请介绍一下你自己", RequestType.GENERAL_CHAT),
         ("", RequestType.GENERAL_CHAT),
         ("？？？", RequestType.GENERAL_CHAT),
+        ("3+5等于多少", RequestType.LOCAL_TOOL),
+        ("Python怎么写快速排序", RequestType.GENERAL_CHAT),
+        ("什么是量子力学", RequestType.GENERAL_CHAT),
+        ("翻译一下这段话", RequestType.GENERAL_CHAT),
+        ("解释一下相对论", RequestType.GENERAL_CHAT),
     ]
 
-    print("=" * 72)
-    print("  IntentGateway 三级规则分类 测试结果")
-    print("=" * 72)
+    print("=" * 80)
+    print("  IntentGateway 三级规则分类 测试结果（含八维度搜索意图）")
+    print("=" * 80)
     print()
 
     passed = 0
@@ -469,7 +541,7 @@ if __name__ == "__main__":
         else:
             status = "FAIL"
             failed += 1
-        print(f"  [{status}] {display:35} | 预期: {expected.value:14} | 实际: {result.value}")
+        print(f"  [{status}] {display:40} | 预期: {expected.value:14} | 实际: {result.value}")
 
     print()
     print(f"  通过: {passed}  失败: {failed}  总计: {len(test_cases)}")

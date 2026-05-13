@@ -496,6 +496,11 @@ function registerIpcHandlers(): void {
     return clearBrowserData()
   })
 
+  ipcMain.handle('browser:search', async (_e, query: string) => {
+    const { browserSearch } = await import('./services/browser')
+    return await browserSearch(query, mainWindow)
+  })
+
   ipcMain.handle('avatar:importModel', async () => {
     try {
       const result = await dialog.showOpenDialog({
