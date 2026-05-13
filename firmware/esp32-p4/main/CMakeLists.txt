@@ -1,0 +1,34 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "mipi_lcd.c"
+        "avatar_engine.c"
+        "wifi_mgr.c"
+        "eth_mgr.c"
+        "app_mqtt.c"
+        "web_config.c"
+        "touch_driver.c"
+        "chat_ui.c"
+        "settings_ui.c"
+        "time_mgr.c"
+        "spi_frame_rx.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        driver
+        esp_lcd
+        esp_wifi
+        esp_netif
+        esp_event
+        nvs_flash
+        mqtt
+        esp_http_server
+        lwip
+        json
+        esp_eth
+    PRIV_REQUIRES
+        esp_timer
+        sdmmc
+        fatfs
+        esp_driver_jpeg
+)

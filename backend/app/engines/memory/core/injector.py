@@ -1,5 +1,5 @@
 import re
-from .models import MemoryData, MemoryTier
+from .models import MemoryData
 
 MEMORY_INJECTION_TEMPLATE = """【用户上下文信息】
 
