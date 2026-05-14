@@ -163,6 +163,13 @@ class LLMAdapter:
     def get_provider_config(self, name: str) -> dict | None:
         return self._provider_configs.get(name)
 
+    def supports_tool_calls(self, provider_name: str | None = None, model: str = "") -> bool:
+        try:
+            provider = self.get_provider(provider_name)
+            return provider.supports_tool_calls(model)
+        except ProviderError:
+            return False
+
     async def chat(
         self,
         messages: list[dict],
@@ -199,6 +206,7 @@ class LLMAdapter:
         messages: list[dict],
         tools: list[dict] | None = None,
         stream: bool = False,
+        return_raw: bool = False,
         **kwargs
     ) -> str | dict | AsyncIterator[dict]:
         logger.warning("[LLM] Starting fallback chat...")
@@ -213,7 +221,7 @@ class LLMAdapter:
             try:
                 provider = self.providers[name]
                 start_time = time.time()
-                result = await provider.chat(messages, tools, stream, **kwargs)
+                result = await provider.chat(messages, tools, stream, return_raw=return_raw, **kwargs)
                 elapsed = time.time() - start_time
                 logger.success(f"[LLM] Fallback success: provider={name}, elapsed={elapsed:.2f}s")
                 return result

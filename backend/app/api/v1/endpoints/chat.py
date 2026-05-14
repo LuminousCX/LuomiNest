@@ -76,28 +76,24 @@ def _resolve_tools(user_message: str, request_type: RequestType) -> list[dict] |
 
 
 def _inject_system_prompt(messages: list[dict]) -> list[dict]:
-    """注入系统提示词，告知模型当前日期和基本行为准则
-
-    如果消息列表中已有 system 消息，则在前面追加日期信息。
-    如果没有 system 消息，则插入一条新的 system 消息。
-    """
     from datetime import datetime
-    current_date = datetime.now().strftime("%Y年%m月%d日")
-    date_prompt = f"当前日期是 {current_date}。请基于这个日期回答用户的问题。"
+    now = datetime.now()
+    weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
+    current_date = now.strftime("%Y年%m月%d日")
+    current_weekday = weekday_names[now.weekday()]
+    current_time = now.strftime("%H:%M")
+    date_prompt = f"当前时间：{current_date} {current_weekday} {current_time} (Asia/Shanghai)。请基于这个时间回答用户的问题。当用户问「距离XX还有几天」时，你需要先用工具查询目标日期，然后用当前时间计算差值。"
 
-    # 检查是否已有 system 消息
     has_system = False
     for msg in messages:
         if msg.get("role") == "system":
             has_system = True
-            # 在现有 system 消息前追加日期信息
             existing = msg.get("content", "")
-            if date_prompt not in existing:
+            if "当前时间" not in existing:
                 msg["content"] = date_prompt + "\n\n" + existing
             break
 
     if not has_system:
-        # 插入新的 system 消息到最前面
         messages = [{"role": "system", "content": date_prompt}] + messages
 
     return messages
@@ -281,7 +277,7 @@ async def chat_completions(request: ChatRequest):
             provider=resolved_provider,
         )
 
-    # TOOL_CALL：先走本地工具快速路径，未匹配则规则驱动执行工具链 → LLM 总结
+    # TOOL_CALL：先走本地工具快速路径，未匹配则 Tool Loop / 规则驱动
     if request_type == RequestType.TOOL_CALL:
         local_result = await handle_local_tool_request(user_query)
         if local_result is not None:
@@ -308,7 +304,51 @@ async def chat_completions(request: ChatRequest):
                 provider=resolved_provider,
             )
 
-        # 本地未命中 → 规则驱动执行工具链 → LLM 总结
+        fc_supported = llm_adapter.supports_tool_calls(resolved_provider, resolved_model)
+        if fc_supported:
+            from app.core.agent.tool_loop import tool_loop, tool_loop_stream, get_all_tools_schema
+            fc_tools = get_all_tools_schema()
+            if fc_tools:
+                loop_kwargs = {}
+                if request.temperature is not None: loop_kwargs["temperature"] = request.temperature or 0.7
+                if request.max_tokens is not None: loop_kwargs["max_tokens"] = request.max_tokens or 4096
+                if request.top_p is not None: loop_kwargs["top_p"] = request.top_p or 0.9
+
+                if request.stream:
+                    async def _tool_loop_stream():
+                        chat_id = str(uuid.uuid4())
+                        async for event in tool_loop_stream(
+                            messages=messages, tools=fc_tools,
+                            provider_name=resolved_provider, model=resolved_model, **loop_kwargs,
+                        ):
+                            etype = event.get("type")
+                            if etype == "content":
+                                yield f"data: {ChatStreamChunk(id=chat_id, content=event.get('content', ''), model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                            elif etype == "reasoning":
+                                yield f"data: {ChatStreamChunk(id=chat_id, content='', reasoning_content=event.get('content', ''), model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                            elif etype == "done":
+                                c = event.get("content", "")
+                                if c:
+                                    yield f"data: {ChatStreamChunk(id=chat_id, content=c, model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                                yield f"data: {ChatStreamChunk(id=chat_id, content='', model=resolved_model, provider=resolved_provider, done=True).model_dump_json()}\n\n"
+
+                    elapsed = time.time() - start_time
+                    logger.success(f"[API] POST /chat/completions [TOOL loop stream] - elapsed={elapsed:.2f}s")
+                    return StreamingResponse(_tool_loop_stream(), media_type="text/event-stream")
+
+                result = await tool_loop(
+                    messages=messages, tools=fc_tools,
+                    provider_name=resolved_provider, model=resolved_model, **loop_kwargs,
+                )
+                elapsed = time.time() - start_time
+                logger.success(f"[API] POST /chat/completions [TOOL loop] - elapsed={elapsed:.2f}s")
+                return ChatResponse(
+                    id=str(uuid.uuid4()),
+                    content=result.get("content", ""),
+                    model=resolved_model,
+                    provider=resolved_provider,
+                )
+
         tool_results = await execute_tool_chain(
             user_query,
             agent_id=request.agent_id,
@@ -618,28 +658,73 @@ async def _NON_STREAM_GENERATE(state: dict, request_type: RequestType,
                 local_content = local_result.get("content") if isinstance(local_result, dict) else local_result
                 state["content"] = local_content
             else:
-                tool_results = await execute_tool_chain(user_query, agent_id=agent_id,
-                                                         external_search_results=search_results)
-                if tool_results:
-                    summary_prompt = build_tool_summary(user_query, tool_results)
-                    summary_messages = [{"role": "user", "content": summary_prompt}]
-                    raw = await llm_adapter.chat(messages=summary_messages, provider_name=provider,
-                        model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
-                    state["content"] = raw.get("content", "") if isinstance(raw, dict) else raw
+                fc_supported = llm_adapter.supports_tool_calls(provider, model)
+                if fc_supported:
+                    from app.core.agent.tool_loop import tool_loop, get_all_tools_schema
+                    fc_tools = get_all_tools_schema()
+                    if fc_tools:
+                        loop_kwargs = {}
+                        if temperature is not None: loop_kwargs["temperature"] = temperature
+                        if max_tokens is not None: loop_kwargs["max_tokens"] = max_tokens
+                        if top_p is not None: loop_kwargs["top_p"] = top_p
+                        result = await tool_loop(
+                            messages=all_messages, tools=fc_tools,
+                            provider_name=provider, model=model, **loop_kwargs,
+                        )
+                        state["content"] = result.get("content", "")
+                        state["reasoning"] = result.get("reasoning", "")
+                    else:
+                        raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                            model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+                        state["content"] = raw.get("content", "") if isinstance(raw, dict) else raw
+                else:
+                    tool_results = await execute_tool_chain(user_query, agent_id=agent_id,
+                                                             external_search_results=search_results)
+                    if tool_results:
+                        summary_prompt = build_tool_summary(user_query, tool_results)
+                        summary_messages = [{"role": "user", "content": summary_prompt}]
+                        raw = await llm_adapter.chat(messages=summary_messages, provider_name=provider,
+                            model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+                        state["content"] = raw.get("content", "") if isinstance(raw, dict) else raw
+                    else:
+                        raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                            model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+                        state["content"] = raw.get("content", "") if isinstance(raw, dict) else raw
+
+        else:
+            fc_supported = llm_adapter.supports_tool_calls(provider, model)
+            if fc_supported:
+                from app.core.agent.tool_loop import tool_loop, get_all_tools_schema
+                fc_tools = get_all_tools_schema()
+                if fc_tools:
+                    loop_kwargs = {}
+                    if temperature is not None: loop_kwargs["temperature"] = temperature
+                    if max_tokens is not None: loop_kwargs["max_tokens"] = max_tokens
+                    if top_p is not None: loop_kwargs["top_p"] = top_p
+                    result = await tool_loop(
+                        messages=all_messages, tools=fc_tools,
+                        provider_name=provider, model=model, **loop_kwargs,
+                    )
+                    state["content"] = result.get("content", "")
+                    state["reasoning"] = result.get("reasoning", "")
                 else:
                     raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
                         model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
-                    state["content"] = raw.get("content", "") if isinstance(raw, dict) else raw
-
-        else:
-            raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
-                model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
-            if isinstance(raw, dict):
-                state["content"] = raw.get("content", "")
-                if raw.get("reasoning"):
-                    state["reasoning"] = raw["reasoning"]
+                    if isinstance(raw, dict):
+                        state["content"] = raw.get("content", "")
+                        if raw.get("reasoning"):
+                            state["reasoning"] = raw["reasoning"]
+                    else:
+                        state["content"] = raw
             else:
-                state["content"] = raw
+                raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                    model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+                if isinstance(raw, dict):
+                    state["content"] = raw.get("content", "")
+                    if raw.get("reasoning"):
+                        state["reasoning"] = raw["reasoning"]
+                else:
+                    state["content"] = raw
     except Exception as e:
         logger.error(f"[API] Non-stream error: {e}")
         state["aborted"] = True
@@ -672,57 +757,143 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
                 yield _sse(chat_id, state["content"], provider, model)
 
             elif request_type == RequestType.TOOL_CALL:
-                # 先走本地工具快速路径（时间/天气本地处理）
                 local_result = await handle_local_tool_request(user_query)
                 if local_result is not None:
-                    state["content"] = local_result
+                    local_content = local_result.get("content") if isinstance(local_result, dict) else local_result
+                    if isinstance(local_result, dict) and local_result.get("reasoning"):
+                        state["reasoning"] = local_result["reasoning"]
+                    state["content"] = local_content or ""
                     yield _sse(chat_id, state["content"], provider, model)
                 else:
-                    # 本地未命中 → 通知前端正在查询
-                    yield _sse_reasoning(chat_id, "正在查询所需信息…", provider, model)
-                    tool_results = await execute_tool_chain(user_query, agent_id=agent_id,
-                                                             external_search_results=search_results)
-                    if tool_results:
-                        summary_prompt = build_tool_summary(user_query, tool_results)
-                        summary_messages = [{"role": "user", "content": summary_prompt}]
-                        async for chunk in llm_adapter.chat_stream(
-                            messages=summary_messages, provider_name=provider, model=model,
-                            temperature=request.temperature or 0.7,
-                            max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
-                        ):
-                            content = chunk.get("content", "")
-                            rc = chunk.get("reasoning", "")
-                            if content:
-                                state["content"] += content
-                            if rc:
-                                state["reasoning"] += rc
-                            yield _sse(chat_id, content, provider, model, rc)
+                    fc_supported = llm_adapter.supports_tool_calls(provider, model)
+                    if fc_supported:
+                        from app.core.agent.tool_loop import tool_loop_stream, get_all_tools_schema
+                        fc_tools = get_all_tools_schema()
+                        if fc_tools:
+                            loop_kwargs = {}
+                            if request.temperature is not None: loop_kwargs["temperature"] = request.temperature or 0.7
+                            if request.max_tokens is not None: loop_kwargs["max_tokens"] = request.max_tokens or 4096
+                            if request.top_p is not None: loop_kwargs["top_p"] = request.top_p or 0.9
+                            async for event in tool_loop_stream(
+                                messages=all_messages, tools=fc_tools,
+                                provider_name=provider, model=model, **loop_kwargs,
+                            ):
+                                etype = event.get("type")
+                                if etype == "content":
+                                    c = event.get("content", "")
+                                    state["content"] += c
+                                    yield _sse(chat_id, c, provider, model)
+                                elif etype == "reasoning":
+                                    rc = event.get("content", "")
+                                    state["reasoning"] += rc
+                                    yield _sse(chat_id, "", provider, model, rc)
+                                elif etype == "done":
+                                    c = event.get("content", "")
+                                    if c:
+                                        state["content"] += c
+                                        yield _sse(chat_id, c, provider, model)
+                                    rc = event.get("reasoning", "")
+                                    if rc:
+                                        state["reasoning"] += rc
+                        else:
+                            async for chunk in llm_adapter.chat_stream(
+                                messages=all_messages, provider_name=provider, model=model,
+                                temperature=request.temperature or 0.7,
+                                max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                            ):
+                                content = chunk.get("content", "")
+                                rc = chunk.get("reasoning", "")
+                                if content:
+                                    state["content"] += content
+                                if rc:
+                                    state["reasoning"] += rc
+                                yield _sse(chat_id, content, provider, model, rc)
                     else:
-                        # 无匹配工具 → 降级到通用对话
+                        yield _sse_reasoning(chat_id, "正在查询所需信息…", provider, model)
+                        tool_results = await execute_tool_chain(user_query, agent_id=agent_id,
+                                                                 external_search_results=search_results)
+                        if tool_results:
+                            summary_prompt = build_tool_summary(user_query, tool_results)
+                            summary_messages = [{"role": "user", "content": summary_prompt}]
+                            async for chunk in llm_adapter.chat_stream(
+                                messages=summary_messages, provider_name=provider, model=model,
+                                temperature=request.temperature or 0.7,
+                                max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                            ):
+                                content = chunk.get("content", "")
+                                rc = chunk.get("reasoning", "")
+                                if content:
+                                    state["content"] += content
+                                if rc:
+                                    state["reasoning"] += rc
+                                yield _sse(chat_id, content, provider, model, rc)
+                        else:
+                            async for chunk in llm_adapter.chat_stream(
+                                messages=all_messages, provider_name=provider, model=model,
+                                temperature=request.temperature or 0.7,
+                                max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                            ):
+                                content = chunk.get("content", "")
+                                rc = chunk.get("reasoning", "")
+                                if content:
+                                    state["content"] += content
+                                if rc:
+                                    state["reasoning"] += rc
+                                yield _sse(chat_id, content, provider, model, rc)
+
+            else:
+                fc_supported = llm_adapter.supports_tool_calls(provider, model)
+                if fc_supported:
+                    from app.core.agent.tool_loop import tool_loop_stream, get_all_tools_schema
+                    fc_tools = get_all_tools_schema()
+                    if fc_tools:
+                        loop_kwargs = {}
+                        if request.temperature is not None: loop_kwargs["temperature"] = request.temperature or 0.7
+                        if request.max_tokens is not None: loop_kwargs["max_tokens"] = request.max_tokens or 4096
+                        if request.top_p is not None: loop_kwargs["top_p"] = request.top_p or 0.9
+                        async for event in tool_loop_stream(
+                            messages=all_messages, tools=fc_tools,
+                            provider_name=provider, model=model, **loop_kwargs,
+                        ):
+                            etype = event.get("type")
+                            if etype == "content":
+                                c = event.get("content", "")
+                                state["content"] += c
+                                yield _sse(chat_id, c, provider, model)
+                            elif etype == "reasoning":
+                                rc = event.get("content", "")
+                                state["reasoning"] += rc
+                                yield _sse(chat_id, "", provider, model, rc)
+                            elif etype == "done":
+                                c = event.get("content", "")
+                                if c:
+                                    state["content"] += c
+                                    yield _sse(chat_id, c, provider, model)
+                                rc = event.get("reasoning", "")
+                                if rc:
+                                    state["reasoning"] += rc
+                    else:
                         async for chunk in llm_adapter.chat_stream(
                             messages=all_messages, provider_name=provider, model=model,
                             temperature=request.temperature or 0.7,
                             max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
                         ):
-                            content = chunk.get("content", "")
+                            state["content"] += chunk.get("content", "")
                             rc = chunk.get("reasoning", "")
-                            if content:
-                                state["content"] += content
                             if rc:
                                 state["reasoning"] += rc
-                            yield _sse(chat_id, content, provider, model, rc)
-
-            else:
-                async for chunk in llm_adapter.chat_stream(
-                    messages=all_messages, tools=tools, provider_name=provider, model=model,
-                    temperature=request.temperature or 0.7,
-                    max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
-                ):
-                    state["content"] += chunk.get("content", "")
-                    rc = chunk.get("reasoning", "")
-                    if rc:
-                        state["reasoning"] += rc
-                    yield _sse(chat_id, chunk.get("content", ""), provider, model, rc)
+                            yield _sse(chat_id, chunk.get("content", ""), provider, model, rc)
+                else:
+                    async for chunk in llm_adapter.chat_stream(
+                        messages=all_messages, tools=tools, provider_name=provider, model=model,
+                        temperature=request.temperature or 0.7,
+                        max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                    ):
+                        state["content"] += chunk.get("content", "")
+                        rc = chunk.get("reasoning", "")
+                        if rc:
+                            state["reasoning"] += rc
+                        yield _sse(chat_id, chunk.get("content", ""), provider, model, rc)
 
         except Exception as e:
             state["aborted"] = True

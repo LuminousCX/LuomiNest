@@ -230,6 +230,34 @@ PROVIDER_TEMPLATES = {
 }
 
 
+_MODEL_CAPABILITIES = {
+    "gpt-4o": {"tool_calls": True, "multimodal": True},
+    "gpt-4o-mini": {"tool_calls": True, "multimodal": True},
+    "gpt-4-turbo": {"tool_calls": True, "multimodal": True},
+    "gpt-4-": {"tool_calls": True, "multimodal": False},
+    "o1": {"tool_calls": True, "multimodal": True},
+    "o3-mini": {"tool_calls": True, "multimodal": False},
+    "o3": {"tool_calls": True, "multimodal": False},
+    "deepseek-chat": {"tool_calls": True, "multimodal": False},
+    "deepseek-reasoner": {"tool_calls": False, "multimodal": False},
+    "gemini": {"tool_calls": True, "multimodal": True},
+    "mistral": {"tool_calls": True, "multimodal": False},
+    "codestral": {"tool_calls": False, "multimodal": False},
+    "llama-3.3-70b": {"tool_calls": True, "multimodal": False},
+    "llama-3.1-": {"tool_calls": True, "multimodal": False},
+    "grok": {"tool_calls": True, "multimodal": False},
+    "moonshot-v1": {"tool_calls": True, "multimodal": False},
+    "glm-4": {"tool_calls": True, "multimodal": True},
+    "qwen-plus": {"tool_calls": True, "multimodal": False},
+    "qwen-turbo": {"tool_calls": True, "multimodal": False},
+    "qwen-max": {"tool_calls": True, "multimodal": False},
+    "qwen2.5": {"tool_calls": True, "multimodal": False},
+    "qwen3": {"tool_calls": True, "multimodal": False},
+    "qwen2-vl": {"tool_calls": True, "multimodal": True},
+    "qwen3-vl": {"tool_calls": True, "multimodal": True},
+}
+
+
 class OpenAICompatibleProvider(LLMProvider):
     provider_name = "openai_compatible"
 
@@ -239,11 +267,38 @@ class OpenAICompatibleProvider(LLMProvider):
         base_url: str = "https://api.openai.com/v1",
         default_model: str = "gpt-4o-mini",
         provider_name: str = "openai_compatible",
+        force_enable_tool_calls: bool | None = None,
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.default_model = default_model
         self.provider_name = provider_name
+        self.force_enable_tool_calls = force_enable_tool_calls
+
+    def _lookup_capability(self, model: str, cap_key: str) -> bool | None:
+        if not model:
+            return None
+        model_lower = model.lower()
+        for key, caps in _MODEL_CAPABILITIES.items():
+            if key in model_lower:
+                return caps.get(cap_key)
+        return None
+
+    def supports_tool_calls(self, model: str = "") -> bool:
+        if self.force_enable_tool_calls is not None:
+            return self.force_enable_tool_calls
+        result = self._lookup_capability(model or self.default_model, "tool_calls")
+        if result is not None:
+            return result
+        if self.provider_name == "ollama":
+            return False
+        return True
+
+    def supports_multimodal(self, model: str = "") -> bool:
+        result = self._lookup_capability(model or self.default_model, "multimodal")
+        if result is not None:
+            return result
+        return False
 
     async def chat(
         self,
@@ -294,6 +349,7 @@ class OpenAICompatibleProvider(LLMProvider):
         **kwargs
     ) -> AsyncIterator[dict]:
         payload = self._build_payload(messages, tools, stream=True, **kwargs)
+        collected_tool_calls: dict[int, dict] = {}
         async with httpx.AsyncClient(timeout=180.0) as client:
             async with client.stream(
                 "POST",
@@ -315,18 +371,41 @@ class OpenAICompatibleProvider(LLMProvider):
                         content = delta.get("content", "")
                         raw_reasoning = delta.get("reasoning", "") or delta.get("reasoning_content", "")
 
-                        # 清理推理内容，去除模型名称等噪声
                         reasoning = _clean_reasoning_content(raw_reasoning)
 
-                        # 收集 tool_calls（流式响应中可能分散在多个 chunk 中）
-                        tool_calls = delta.get("tool_calls")
+                        tool_calls_delta = delta.get("tool_calls")
+                        if tool_calls_delta:
+                            for tc in tool_calls_delta:
+                                idx = tc.get("index", 0)
+                                if idx not in collected_tool_calls:
+                                    collected_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+                                if tc.get("id"):
+                                    collected_tool_calls[idx]["id"] = tc["id"]
+                                fn = tc.get("function", {})
+                                if fn.get("name"):
+                                    collected_tool_calls[idx]["name"] = fn["name"]
+                                if fn.get("arguments"):
+                                    collected_tool_calls[idx]["arguments"] += fn["arguments"]
+
                         result = {"content": content, "reasoning": reasoning}
-                        if tool_calls:
-                            result["tool_calls"] = tool_calls
-                        if content or reasoning or tool_calls:
+                        if content or reasoning:
                             yield result
                     except json.JSONDecodeError:
                         continue
+
+        if collected_tool_calls:
+            merged = []
+            for idx in sorted(collected_tool_calls.keys()):
+                entry = collected_tool_calls[idx]
+                merged.append({
+                    "id": entry["id"] or f"call_{idx}",
+                    "type": "function",
+                    "function": {
+                        "name": entry["name"],
+                        "arguments": entry["arguments"],
+                    }
+                })
+            yield {"content": "", "reasoning": "", "tool_calls_complete": merged}
 
     async def embed(self, text: str) -> list[float]:
         async with httpx.AsyncClient(timeout=30.0) as client:

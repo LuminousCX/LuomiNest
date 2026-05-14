@@ -27,6 +27,81 @@ _time_tool_instance = TimeTool(timezone="Asia/Shanghai")
 _extractor = ToolParameterExtractor()
 
 
+async def execute_tool_by_name(tool_name: str, args: dict) -> str:
+    """Tool Loop 专用：按工具名+参数执行单个工具，返回结果文本
+
+    与 execute_single_tool 的区别：
+      - 返回纯文本字符串（不是 dict）
+      - 参数由 LLM 生成（不是正则提取）
+      - 自动处理工具不存在的情况
+    """
+    try:
+        if tool_name == "get_weather":
+            city = args.get("city", "")
+            date_str = args.get("date", args.get("date_str", ""))
+            if city:
+                try:
+                    raw = await _weather_tool.get_reply(city, date_str)
+                    return process_tool_result(tool_name, raw)
+                except Exception as e:
+                    logger.warning(f"[ToolExecutor] 天气工具异常: {e}")
+                    return f"获取天气信息失败: {e}"
+
+        if tool_name == "get_current_time":
+            try:
+                raw = _time_tool_instance.get_reply(query_type="date", user_message="")
+                return process_tool_result(tool_name, raw)
+            except Exception as e:
+                logger.warning(f"[ToolExecutor] 时间工具异常: {e}")
+                return f"获取时间信息失败: {e}"
+
+        if tool_name == "web_search":
+            query = args.get("query", "")
+            if query:
+                raw = await search_web(query)
+                return process_tool_result(tool_name, raw)
+            return "搜索查询为空"
+
+        if tool_name == "calculate":
+            expression = args.get("expression", "")
+            if expression:
+                try:
+                    allowed_names = {
+                        "abs": abs, "round": round, "min": min, "max": max,
+                        "sum": sum, "pow": pow, "len": len,
+                    }
+                    import math
+                    for name in dir(math):
+                        if not name.startswith("_"):
+                            allowed_names[name] = getattr(math, name)
+                    result = eval(expression, {"__builtins__": {}}, allowed_names)
+                    return f"{expression} = {result}"
+                except Exception as e:
+                    return f"计算错误: {e}"
+            return "计算表达式为空"
+
+        if tool_name == "search":
+            query = args.get("query", "")
+            if query:
+                try:
+                    from app.runtime.plugin.skill.executor import SkillExecutor
+                    executor = SkillExecutor()
+                    raw = await executor.execute(tool_name, args)
+                    return process_tool_result(tool_name, raw)
+                except Exception as e:
+                    return f"知识库搜索失败: {e}"
+            return "搜索查询为空"
+
+        executor = SkillExecutor()
+        raw = await executor.execute(tool_name, args)
+        processed = process_tool_result(tool_name, raw)
+        return processed
+
+    except Exception as e:
+        logger.warning(f"[ToolExecutor] execute_tool_by_name({tool_name}) 异常: {e}")
+        return f"工具 '{tool_name}' 执行出错: {e}"
+
+
 async def execute_tool_chain(
     user_query: str,
     agent_id: str | None = None,
