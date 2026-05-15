@@ -158,8 +158,8 @@ function buildLayers() {
 
   layers.value[0].items = [
     ...memory.facts.filter(f => f.tier === 'temporary_context').map(factToLayerItem),
-    ...memory.working_memory.recent_conversations.slice(-5).map((c: any) => ({
-      id: `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    ...memory.working_memory.recent_conversations.slice(-5).map((c: any, index: number) => ({
+      id: `conv-${index}-${c.role}-${c.timestamp}`,
       text: `${c.role === 'user' ? '用户' : '助手'}: ${(c.content || '').slice(0, 60)}`,
       time: formatTimeAgo(c.timestamp),
       tag: '对话',
