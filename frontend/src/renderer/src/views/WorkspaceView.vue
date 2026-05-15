@@ -958,8 +958,8 @@ onBeforeUnmount(() => {
               <MessageSquare :size="14" class="history-item-icon" />
               <div class="history-item-info">
                 <span class="history-item-title">{{ conv.title }}</span>
-                <span class="history-item-time">{{ formatTime(conv.updatedAt) }}</span>
-                <span v-if="conv.lastMessage" class="history-item-preview">{{ conv.lastMessage }}</span>
+                <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
+                <span v-if="conv.last_message" class="history-item-preview">{{ conv.last_message }}</span>
               </div>
               <Loader2 v-if="chatStore.isConversationStreaming(conv.id)" :size="12" class="history-streaming-icon spin-animation" />
               <button class="history-item-delete" title="删除" @click.stop="handleDeleteConversation(conv.id)">

@@ -319,12 +319,12 @@ export const useChatStore = defineStore('chat', () => {
       const convs: ConversationListItem[] = rawConvs.map((conv: any) => ({
         id: conv.id,
         title: conv.title,
-        agentId: conv.agent_id,
+        agent_id: conv.agent_id,
         model: conv.model,
         provider: conv.provider,
-        lastMessage: conv.last_message,
-        createdAt: conv.created_at || conv.createdAt || '',
-        updatedAt: conv.updated_at || conv.updatedAt || '',
+        last_message: conv.last_message,
+        created_at: conv.created_at || conv.createdAt || '',
+        updated_at: conv.updated_at || conv.updatedAt || '',
       }))
       agentConversations.value = {
         ...agentConversations.value,
