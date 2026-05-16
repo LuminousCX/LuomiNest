@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.exceptions import LuomiNestError
 from app.api.v1.router import api_router
+from app.api.attachment_api import router as attachment_router
 
 
 @asynccontextmanager
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(api_router, prefix="/api/v1")
+    app.include_router(attachment_router, prefix="/api")
 
     @app.get("/health")
     async def health_check():

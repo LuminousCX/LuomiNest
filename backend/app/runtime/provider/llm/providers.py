@@ -1,8 +1,67 @@
+import re
 from typing import AsyncIterator
 from app.runtime.provider.base import LLMProvider
 from loguru import logger
 import httpx
 import json
+
+
+def _clean_reasoning_content(raw_reasoning: str) -> str:
+    """清理推理内容，去除模型名称、重复文本等噪声
+
+    Ollama 等本地模型可能在 reasoning 字段中返回模型标识符或元数据，
+    此函数用于过滤这些非推理内容，确保只保留真正的思考过程。
+
+    处理的场景：
+      - 纯模型名重复：qwen3-vl:8bqwen3-vl:8bqwen3-vl:8b...
+      - 模型名片段：vl:8bqwen3-vl:8b...
+      - 行首/行尾的模型标识符
+    """
+    if not raw_reasoning:
+        return ""
+
+    text = raw_reasoning.strip()
+
+    # 场景1：检测连续重复的模型名称模式（最常见的问题）
+    # 匹配类似 "qwen3-vl:8b" 或 "llama-3.1-8b" 的模式重复
+    model_name_pattern = r'[a-zA-Z0-9]+(?:-[a-zA-Z0-9.]+)*:[a-zA-Z0-9._-]+'
+
+    # 检查是否整个文本主要由重复的模型名组成
+    matches = re.findall(model_name_pattern, text)
+    if matches:
+        # 计算模型名占总文本的比例
+        total_model_chars = sum(len(m) for m in matches)
+        ratio = total_model_chars / len(text) if text else 0
+
+        # 如果超过60%的字符都是模型名，认为是噪声
+        if ratio > 0.6 and len(text) > 10:
+            logger.debug(f"[Provider] Filtered reasoning noise: model_name_ratio={ratio:.2f}, "
+                        f"text_length={len(text)}")
+            return ""
+
+        # 如果有多个相同的模型名重复出现（>=3次），也是噪声
+        from collections import Counter
+        model_counts = Counter(matches)
+        most_common_model, count = model_counts.most_common(1)[0] if model_counts else ("", 0)
+        if count >= 3 and len(most_common_model) >= 5:
+            logger.debug(f"[Provider] Filtered repeated model name: '{most_common_model}' x{count}")
+            return ""
+
+    # 场景2：移除行首/行尾的模型名（保留中间的有效内容）
+    # 行首模型名
+    text = re.sub(r'^[a-zA-Z0-9_-]+:[a-zA-Z0-9._-]+\s*', '', text)
+    # 行尾模型名
+    text = re.sub(r'\s*[a-zA-Z0-9_-]+:[a-zA-Z0-9._-]+$', '', text)
+
+    # 场景3：移除孤立的模型名片段（如 "vl:8b" 前后没有其他有意义的内容）
+    # 如果清理后内容太短且看起来像片段，直接清空
+    if len(text.strip()) < 8:
+        # 检查是否还包含模型名特征
+        if re.search(r':[a-zA-Z0-9._-]', text):
+            logger.debug(f"[Provider] Filtered short fragment: length={len(text)}")
+            return ""
+
+    return text.strip()
 
 
 PROVIDER_TEMPLATES = {
@@ -138,7 +197,7 @@ PROVIDER_TEMPLATES = {
         "vendor": "ollama",
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
-        "default_model": "qwen2.5:7b",
+        "default_model": "qwen3-vl:8b",
         "description": "Local Ollama inference engine",
     },
     "lmstudio": {
@@ -171,6 +230,34 @@ PROVIDER_TEMPLATES = {
 }
 
 
+_MODEL_CAPABILITIES = {
+    "gpt-4o": {"tool_calls": True, "multimodal": True},
+    "gpt-4o-mini": {"tool_calls": True, "multimodal": True},
+    "gpt-4-turbo": {"tool_calls": True, "multimodal": True},
+    "gpt-4-": {"tool_calls": True, "multimodal": False},
+    "o1": {"tool_calls": True, "multimodal": True},
+    "o3-mini": {"tool_calls": True, "multimodal": False},
+    "o3": {"tool_calls": True, "multimodal": False},
+    "deepseek-chat": {"tool_calls": True, "multimodal": False},
+    "deepseek-reasoner": {"tool_calls": False, "multimodal": False},
+    "gemini": {"tool_calls": True, "multimodal": True},
+    "mistral": {"tool_calls": True, "multimodal": False},
+    "codestral": {"tool_calls": False, "multimodal": False},
+    "llama-3.3-70b": {"tool_calls": True, "multimodal": False},
+    "llama-3.1-": {"tool_calls": True, "multimodal": False},
+    "grok": {"tool_calls": True, "multimodal": False},
+    "moonshot-v1": {"tool_calls": True, "multimodal": False},
+    "glm-4": {"tool_calls": True, "multimodal": True},
+    "qwen-plus": {"tool_calls": True, "multimodal": False},
+    "qwen-turbo": {"tool_calls": True, "multimodal": False},
+    "qwen-max": {"tool_calls": True, "multimodal": False},
+    "qwen2.5": {"tool_calls": True, "multimodal": False},
+    "qwen3": {"tool_calls": True, "multimodal": False},
+    "qwen2-vl": {"tool_calls": True, "multimodal": True},
+    "qwen3-vl": {"tool_calls": True, "multimodal": True},
+}
+
+
 class OpenAICompatibleProvider(LLMProvider):
     provider_name = "openai_compatible"
 
@@ -180,19 +267,55 @@ class OpenAICompatibleProvider(LLMProvider):
         base_url: str = "https://api.openai.com/v1",
         default_model: str = "gpt-4o-mini",
         provider_name: str = "openai_compatible",
+        force_enable_tool_calls: bool | None = None,
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.default_model = default_model
         self.provider_name = provider_name
+        self.force_enable_tool_calls = force_enable_tool_calls
+
+    def _lookup_capability(self, model: str, cap_key: str) -> bool | None:
+        if not model:
+            return None
+        model_lower = model.lower()
+        for key, caps in _MODEL_CAPABILITIES.items():
+            if key in model_lower:
+                return caps.get(cap_key)
+        return None
+
+    def supports_tool_calls(self, model: str = "") -> bool:
+        if self.force_enable_tool_calls is not None:
+            return self.force_enable_tool_calls
+        result = self._lookup_capability(model or self.default_model, "tool_calls")
+        if result is not None:
+            return result
+        if self.provider_name == "ollama":
+            return False
+        return True
+
+    def supports_multimodal(self, model: str = "") -> bool:
+        result = self._lookup_capability(model or self.default_model, "multimodal")
+        if result is not None:
+            return result
+        return False
 
     async def chat(
         self,
         messages: list[dict],
         tools: list[dict] | None = None,
         stream: bool = False,
+        return_raw: bool = False,
         **kwargs
-    ) -> str | AsyncIterator[str]:
+    ) -> str | dict | AsyncIterator[dict]:
+        """调用大模型聊天接口
+
+        参数:
+            messages: 对话消息列表
+            tools: OpenAI Function Calling 格式工具定义列表
+            stream: 是否使用流式响应
+            return_raw: 是否返回完整 API 响应（含 tool_calls / reasoning），默认 False 仅返回文本
+        """
         if stream:
             return self.chat_stream(messages, tools, **kwargs)
 
@@ -205,6 +328,18 @@ class OpenAICompatibleProvider(LLMProvider):
             )
             resp.raise_for_status()
             data = resp.json()
+            if return_raw:
+                message = data.get("choices", [{}])[0].get("message", {})
+                tool_calls = message.get("tool_calls", [])
+                raw_reasoning = message.get("reasoning", "") or message.get("reasoning_content", "")
+                # 清理推理内容
+                reasoning = _clean_reasoning_content(raw_reasoning)
+                return {
+                    "content": message.get("content", ""),
+                    "reasoning": reasoning,
+                    "tool_calls": tool_calls,
+                    "role": message.get("role", "assistant"),
+                }
             return data["choices"][0]["message"]["content"]
 
     async def chat_stream(
@@ -212,8 +347,9 @@ class OpenAICompatibleProvider(LLMProvider):
         messages: list[dict],
         tools: list[dict] | None = None,
         **kwargs
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict]:
         payload = self._build_payload(messages, tools, stream=True, **kwargs)
+        collected_tool_calls: dict[int, dict] = {}
         async with httpx.AsyncClient(timeout=180.0) as client:
             async with client.stream(
                 "POST",
@@ -230,12 +366,46 @@ class OpenAICompatibleProvider(LLMProvider):
                         break
                     try:
                         data = json.loads(data_str)
-                        delta = data.get("choices", [{}])[0].get("delta", {})
+                        choice = data.get("choices", [{}])[0]
+                        delta = choice.get("delta", {})
                         content = delta.get("content", "")
-                        if content:
-                            yield content
+                        raw_reasoning = delta.get("reasoning", "") or delta.get("reasoning_content", "")
+
+                        reasoning = _clean_reasoning_content(raw_reasoning)
+
+                        tool_calls_delta = delta.get("tool_calls")
+                        if tool_calls_delta:
+                            for tc in tool_calls_delta:
+                                idx = tc.get("index", 0)
+                                if idx not in collected_tool_calls:
+                                    collected_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+                                if tc.get("id"):
+                                    collected_tool_calls[idx]["id"] = tc["id"]
+                                fn = tc.get("function", {})
+                                if fn.get("name"):
+                                    collected_tool_calls[idx]["name"] = fn["name"]
+                                if fn.get("arguments"):
+                                    collected_tool_calls[idx]["arguments"] += fn["arguments"]
+
+                        result = {"content": content, "reasoning": reasoning}
+                        if content or reasoning:
+                            yield result
                     except json.JSONDecodeError:
                         continue
+
+        if collected_tool_calls:
+            merged = []
+            for idx in sorted(collected_tool_calls.keys()):
+                entry = collected_tool_calls[idx]
+                merged.append({
+                    "id": entry["id"] or f"call_{idx}",
+                    "type": "function",
+                    "function": {
+                        "name": entry["name"],
+                        "arguments": entry["arguments"],
+                    }
+                })
+            yield {"content": "", "reasoning": "", "tool_calls_complete": merged}
 
     async def embed(self, text: str) -> list[float]:
         async with httpx.AsyncClient(timeout=30.0) as client:

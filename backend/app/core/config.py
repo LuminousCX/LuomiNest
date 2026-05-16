@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     PLUGIN_DIR: str = "./plugins"
     SKILL_DIR: str = "./skills"
 
+    EXTERNAL_PARSE_API_URL: str = ""
+    FILE_MAX_SIZE: int = 100 * 1024 * 1024
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

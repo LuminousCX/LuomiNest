@@ -32,6 +32,12 @@ class LLMProvider(ABC):
     async def list_models(self) -> list[dict]:
         pass
 
+    def supports_tool_calls(self, model: str = "") -> bool:
+        return False
+
+    def supports_multimodal(self, model: str = "") -> bool:
+        return False
+
 
 class STTProvider(ABC):
     provider_name: str = "base"

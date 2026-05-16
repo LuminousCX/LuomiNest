@@ -1,83 +1,35 @@
-export interface AgentProfile {
+export interface Agent {
   id: string
   name: string
   description: string
-  avatar?: string
-  color: string
-  systemPrompt: string
-  model: string
+  systemPrompt?: string
+  model?: string
   provider?: string
-  capabilities: string[]
-  isActive: boolean
-  isMain?: boolean
-  skills: string[]
-  mcpServers: string[]
-  createdAt?: string
-  updatedAt?: string
-}
-
-export interface MainAgentConfig {
-  provider: string
-  model: string
-  systemPrompt: string
-  temperature: number
-  maxTokens: number
-}
-
-export interface ProviderLogo {
-  id: string
-  name: string
   color: string
-  initials: string
+  avatar?: string
+  isBuiltin?: boolean
 }
 
-export interface WorkflowNode {
-  id: string
+export interface ChatFile {
+  id?: string
   name: string
-  type: 'agent' | 'tool' | 'condition' | 'output' | 'input'
-  agentId?: string
-  config: Record<string, any>
-  position: { x: number; y: number }
-}
-
-export interface WorkflowConnection {
-  id: string
-  sourceNodeId: string
-  targetNodeId: string
-  label?: string
-}
-
-export interface WorkflowDefinition {
-  id: string
-  name: string
-  description: string
-  nodes: WorkflowNode[]
-  connections: WorkflowConnection[]
-  createdAt: number
-  updatedAt: number
-}
-
-export interface ExecutionStep {
-  id: string
-  label: string
-}
-
-export interface ExecutionStatus {
-  currentStepIndex: number
-  steps: ExecutionStep[]
-  isSkipped?: boolean
-  isComplete?: boolean
+  size?: number
+  type?: string
+  content?: string
 }
 
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  reasoningContent?: string
   timestamp: number
   agentId?: string
   model?: string
   provider?: string
   done?: boolean
+  interrupted?: boolean
+  files?: ChatFile[]
   usage?: {
     promptTokens?: number
     completionTokens?: number
@@ -95,6 +47,7 @@ export interface ChatRequest {
   stream?: boolean
   agentId?: string
   timestamp?: number
+  fileContent?: string
 }
 
 export interface ChatResponse {
@@ -102,295 +55,68 @@ export interface ChatResponse {
   content: string | null
   model: string
   provider: string
-  usage?: Record<string, number>
-  timestamp?: number
 }
 
 export interface ChatStreamChunk {
   id: string
   content: string
+  reasoning_content: string
   model: string
   provider: string
   done: boolean
-  usage?: {
-    promptTokens?: number
-    completionTokens?: number
-    totalTokens?: number
-  }
-  timestamp?: number
 }
 
 export interface Conversation {
   id: string
   title: string
-  agentId?: string
+  agent_id?: string
   model?: string
   provider?: string
   messages: ChatMessage[]
-  createdAt: string
-  updatedAt: string
+  created_at: string
+  updated_at: string
 }
 
 export interface ConversationListItem {
   id: string
   title: string
-  agentId?: string
+  agent_id?: string
   model?: string
   provider?: string
-  lastMessage?: string
-  createdAt: string
-  updatedAt: string
+  last_message?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface ModelProvider {
   id: string
   name: string
-  vendor: string
-  baseUrl: string
-  apiKeySet: boolean
+  type: string
   defaultModel: string
-  isDefault: boolean
-  models: ModelInfo[]
-}
-
-export interface ModelInfo {
-  id: string
-  name: string
-  owned_by?: string
-  provider?: string
-  size?: number
-  modified_at?: string
-}
-
-export interface TTSConfig {
-  provider: string
-  model: string
-  voice: string
-  speed: number
-  baseUrl: string
-  apiKeySet: boolean
-}
-
-export interface STTConfig {
-  provider: string
-  model: string
-  language: string
-  autoSend: boolean
-  autoSendDelay: number
-  baseUrl: string
-  apiKeySet: boolean
+  models: { id: string; name: string }[]
 }
 
 export interface ModelConfig {
-  defaultProvider: string
-  defaultModel: string
   defaultTemperature: number
   defaultMaxTokens: number
   defaultTopP: number
-  fastProvider?: string
-  fastModel?: string
-  fastTemperature?: number
-  fastMaxTokens?: number
-  reasonerProvider?: string
-  reasonerModel?: string
-  reasonerTemperature?: number
-  reasonerMaxTokens?: number
-  visionProvider?: string
-  visionModel?: string
-  visionTemperature?: number
-  reasonerEffort?: string
-  ttsProvider?: string
-  ttsModel?: string
-  ttsVoice?: string
-  ttsSpeed?: number
-  sttProvider?: string
-  sttModel?: string
-  sttLanguage?: string
-  sttAutoSend?: boolean
-  sttAutoSendDelay?: number
 }
 
-export interface ProviderTemplate {
-  id: string
-  name: string
-  vendor: string
-  baseUrl: string
-  defaultModel: string
-  description: string
-  category: 'cloud' | 'local' | 'aggregator'
-  color: string
-  initials: string
-}
-
-export interface Tab {
-  id: string
-  title: string
-  url: string
-  favicon?: string
-  loading?: boolean
-  error?: TabError
-  active?: boolean
-  captchaDetected?: boolean
-  sleeping?: boolean
-}
-
-export interface TabError {
-  code: number
-  title: string
-  message: string
-}
-
-export interface Bookmark {
-  name: string
-  url: string
-}
-
-export interface ApiError {
-  code: string
-  message: string
-}
-
-export interface ApiResponse<T> {
-  data?: T
-  error?: ApiError
-}
-
-export interface SkillDefinition {
+export interface Skill {
   name: string
   description: string
   category: string
-  parameters: Record<string, SkillParameter>
   isActive: boolean
   isBuiltin: boolean
-  promptTemplate?: string
-  tags: string[]
 }
 
-export interface SkillParameter {
-  type: string
-  description: string
-  required: boolean
-  default?: any
-}
-
-export interface MCPServer {
+export interface McpServer {
   name: string
-  command: string
-  args: string[]
-  env?: Record<string, string>
-  transport: 'stdio' | 'sse' | 'http'
-  url?: string
-  description: string
-  isActive: boolean
+  transport: string
+  status?: string
 }
 
-export interface MCPTool {
-  name: string
-  description: string
-  parameters: Record<string, any>
-}
-
-export interface GroupInfo {
-  id: string
-  name: string
-  description: string
-  type: string
-  members: GroupMember[]
-  memberCount: number
-  aiCount: number
-  lastMessage?: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface GroupMember {
-  agentId: string
-  name: string
-  type: 'agent' | 'user'
-  role: string
-  color: string
-}
-
-export interface GroupMessage {
-  id: string
-  senderId: string
-  senderName?: string
-  senderType: 'user' | 'agent' | 'system'
-  content: string
-  timestamp: string
-  role?: string
-  collaboration?: CollaborationInfo
-}
-
-export interface CollaborationInfo {
-  sessionId: string
-  taskId?: string
-  taskDescription?: string
-  type?: 'task_result' | 'synthesis'
-}
-
-export type CollaborationPhase = 'analyzing' | 'dispatching' | 'executing' | 'synthesizing' | 'completed' | 'failed'
-
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed'
-
-export interface AgentRoleDefinition {
-  roleId: string
-  name: string
-  description: string
-  capabilities: string[]
-  executionMode: string
-  maxConcurrentTasks: number
-  timeoutSeconds: number
-  color: string
-}
-
-export interface CollaborationSubTask {
-  taskId: string
-  roleId: string
-  agentId: string | null
-  description: string
-  inputContent: string
-  dependsOn: string[]
-  status: TaskStatus
-  result: string | null
-  error: string | null
-  startedAt: string | null
-  completedAt: string | null
-}
-
-export interface CollaborationSession {
-  sessionId: string
-  groupId: string
-  userMessage: string
-  phase: CollaborationPhase
-  plan: string | null
-  subTasks: CollaborationSubTask[]
-  finalResult: string | null
-  coordinatorResponse: string | null
-  createdAt: string
-  completedAt: string | null
-}
-
-export type CollaborationEventType =
-  | 'session_start'
-  | 'phase_change'
-  | 'plan_created'
-  | 'tasks_started'
-  | 'task_started'
-  | 'task_agent_assigned'
-  | 'task_completed'
-  | 'task_failed'
-  | 'direct_response'
-  | 'final_result'
-  | 'session_end'
-  | 'error'
-
-export interface CollaborationEvent {
-  type: CollaborationEventType
-  data: Record<string, any>
-}
-
-export interface RAGSearchResult {
+export interface SearchResult {
   content: string
   source: string
   score: number
