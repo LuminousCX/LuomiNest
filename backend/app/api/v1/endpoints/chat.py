@@ -269,7 +269,7 @@ async def chat_completions(request: ChatRequest):
     logger.debug(f"[API] POST /chat/completions - Message count: {len(messages)}")
 
     if request.stream:
-        logger.info(f"[API] POST /chat/completions - Starting stream response")
+        logger.info("[API] POST /chat/completions - Starting stream response")
         return StreamingResponse(
             _stream_chat(messages, request, resolved_provider, resolved_model),
             media_type="text/event-stream",

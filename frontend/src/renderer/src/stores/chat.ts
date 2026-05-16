@@ -140,7 +140,17 @@ export const useChatStore = defineStore('chat', () => {
     
     try {
       const query = `?agent_id=${targetAgentId}`
-      const convs = await apiGet<ConversationListItem[]>(`/chat/conversations${query}`)
+      const rawConvs = await apiGet<any[]>(`/chat/conversations${query}`)
+      const convs: ConversationListItem[] = rawConvs.map((c: any) => ({
+        id: c.id,
+        title: c.title,
+        agentId: c.agent_id,
+        model: c.model,
+        provider: c.provider,
+        lastMessage: c.last_message,
+        createdAt: c.created_at || c.createdAt || '',
+        updatedAt: c.updated_at || c.updatedAt || '',
+      }))
       agentConversations.value = {
         ...agentConversations.value,
         [targetAgentId]: convs
@@ -178,19 +188,29 @@ export const useChatStore = defineStore('chat', () => {
   const loadConversation = async (convId: string) => {
     if (!activeAgentId.value) return
     
-    const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
+    const rawConv = await apiGet<any>(`/chat/conversations/${convId}`)
+    const conv: Conversation = {
+      id: rawConv.id,
+      title: rawConv.title,
+      agentId: rawConv.agent_id,
+      model: rawConv.model,
+      provider: rawConv.provider,
+      messages: (rawConv.messages || []).map((m: any) => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        role: m.role,
+        content: m.content,
+        timestamp: Date.now(),
+      })),
+      createdAt: rawConv.created_at || rawConv.createdAt || '',
+      updatedAt: rawConv.updated_at || rawConv.updatedAt || '',
+    }
     agentCurrentConversation.value = {
       ...agentCurrentConversation.value,
       [activeAgentId.value]: conv
     }
     agentMessages.value = {
       ...agentMessages.value,
-      [activeAgentId.value]: (conv.messages || []).map((m: any) => ({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        role: m.role,
-        content: m.content,
-        timestamp: Date.now(),
-      }))
+      [activeAgentId.value]: conv.messages
     }
   }
 
@@ -381,10 +401,10 @@ export const useChatStore = defineStore('chat', () => {
         const convId = agentCurrentConversation.value[targetAgentId]?.id
         if (convId) {
           try {
-            const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
+            const rawConv = await apiGet<any>(`/chat/conversations/${convId}`)
             agentMessages.value = {
               ...agentMessages.value,
-              [targetAgentId]: (conv.messages || []).map((m: any) => ({
+              [targetAgentId]: (rawConv.messages || []).map((m: any) => ({
                 id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
                 role: m.role,
                 content: m.content,
