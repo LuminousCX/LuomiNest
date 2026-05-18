@@ -15,6 +15,16 @@ from app.api.attachment_api import router as attachment_router
 async def lifespan(app: FastAPI):
     logger.info(f"[LuomiNest] Starting application...")
     logger.info(f"[LuomiNest] Environment: {'Development' if settings.DEBUG else 'Production'}")
+
+    try:
+        from app.infrastructure.database.conversation_store import conversation_store
+        from app.infrastructure.database.json_store import conversations_store
+        migrated = conversation_store.migrate_from_json_store(conversations_store)
+        if migrated > 0:
+            logger.success(f"[LuomiNest] Migrated {migrated} conversations to per-file storage")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Conversation migration skipped: {e}")
+
     yield
     logger.info(f"[LuomiNest] Shutting down application...")
 

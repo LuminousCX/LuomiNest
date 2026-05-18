@@ -177,8 +177,6 @@ async def tool_loop_stream(
                 })
                 continue
 
-            yield {"type": "reasoning", "content": f"正在查询 {tool_name}..."}
-
             try:
                 args = json.loads(args_str) if args_str else {}
             except json.JSONDecodeError:
