@@ -5,7 +5,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef void (*frame_player_frame_cb_t)(const uint8_t *jpeg_data, uint32_t jpeg_len);
+typedef enum {
+    FRAME_FORMAT_JPEG = 0,
+    FRAME_FORMAT_RGB565 = 1,
+} frame_format_t;
+
+typedef void (*frame_player_frame_cb_t)(const uint8_t *data, uint32_t len, frame_format_t format);
 typedef void (*frame_player_done_cb_t)(const char *sequence_name);
 
 esp_err_t frame_player_init(void);

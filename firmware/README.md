@@ -517,10 +517,37 @@ idf.py -p COM3 flash monitor
 ### ESP32-P4
 
 ```powershell
+# 1. 加载 ESP-IDF 环境
+. "C:\Espressif\tools\Microsoft.v5.5.3.PowerShell_profile.ps1"
+
+# 2. 进入项目目录
 cd C:\Users\lumin\Projects\Project\LuomiNest\firmware\esp32-p4
-idf.py set-target esp32p4   # 首次
+
+# 3. 清理编译文件（快速清理）
+rm -Recurse -Force .\build, .\sdkconfig
+
+# 4. 完全深度清理
+idf.py fullclean
+Remove-Item -Path build, sdkconfig, sdkconfig.old -Recurse -Force
+Remove-Item -Path "managed_components" -Recurse -Force
+
+# 5. 设置目标芯片
+idf.py set-target esp32p4
+
+# 6. 打开配置界面
+idf.py menuconfig
+
+# 7. 编译构建
 idf.py build
+
+# 8. 查看电脑可用串口
+mode
+
+# 9. 烧录并串口监控（根据实际端口修改 COM 号）
 idf.py -p COM4 flash monitor
+
+# 10. 仅烧录（不打开监控）
+idf.py -p COM4 flash
 ```
 
 ### 首次构建（完全清理）

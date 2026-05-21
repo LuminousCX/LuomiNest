@@ -42,7 +42,7 @@ menu "LuomiNest Configuration"
 
     config LN_FRAME_DEDUP
         bool "Enable frame deduplication"
-        default y
+        default n
 
     config LN_STATUS_INTERVAL_SEC
         int "Status report interval (seconds)"

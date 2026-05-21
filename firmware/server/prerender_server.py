@@ -12,6 +12,8 @@ from live2d_renderer import (
     apply_device_profile,
     DEVICE_PROFILES,
     img_to_jpeg,
+    rgb888_to_rgb565_be,
+    rgb888_to_bgr565_le,
 )
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -25,9 +27,14 @@ ALL_STATES = ["idle", "happy", "sad", "angry", "surprised", "think", "neutral", 
 
 LOCAL_STATES = ["idle", "neutral", "sleep"]
 
-DEFAULT_FPS = 15
+DEFAULT_FPS = 30
 DEFAULT_DURATION = 4.0
 DEFAULT_QUALITY = 80
+
+DEVICE_DEFAULTS = {
+    "s3": {"fps": 15, "format": "raw"},
+    "p4": {"fps": 30, "format": "bgr565"},
+}
 
 
 def prerender_sequences(args):
@@ -36,10 +43,13 @@ def prerender_sequences(args):
     output_dir = args.output
     os.makedirs(output_dir, exist_ok=True)
 
+    fmt = args.format
+
     print(f"[INFO] Loading Live2D model: {args.model}")
     print(f"[INFO] Character: {args.character}")
     print(f"[INFO] Output: {output_dir}")
     print(f"[INFO] Frame size: {lr.WIDTH}x{lr.HEIGHT}")
+    print(f"[INFO] Format: {fmt}")
     print(f"[INFO] FPS: {args.fps}, Duration: {args.duration}s, Quality: {args.quality}")
 
     renderer = Live2DRenderer(
@@ -52,7 +62,9 @@ def prerender_sequences(args):
     states = args.states.split(",") if args.states else ALL_STATES
     manifest = {"sequences": []}
 
+    ext = "raw" if fmt in ("raw", "bgr565") else "jpg"
     total_frames = 0
+
     for state_name in states:
         state_name = state_name.strip().lower()
         if state_name not in ALL_STATES:
@@ -72,19 +84,27 @@ def prerender_sequences(args):
 
         print(f"\n[RENDER] State: {state_name}")
         print(f"  Frames: {frame_count}, FPS: {fps}, Duration: {duration}s")
+        print(f"  Format: {fmt.upper()}")
         print(f"  Category: {'LOCAL (offline)' if is_local else 'STREAM (online)'}")
 
         for i in range(frame_count):
             img = renderer.render()
-            jpeg_data = img_to_jpeg(img, args.quality)
 
-            filename = f"{i+1:04d}.jpg"
+            filename = f"{i+1:04d}.{ext}"
             filepath = os.path.join(seq_dir, filename)
+
+            if fmt == "bgr565":
+                frame_data = rgb888_to_bgr565_le(img)
+            elif fmt == "raw":
+                frame_data = rgb888_to_rgb565_be(img)
+            else:
+                frame_data = img_to_jpeg(img, args.quality)
+
             with open(filepath, "wb") as f:
-                f.write(jpeg_data)
+                f.write(frame_data)
 
             if (i + 1) % fps == 0 or i == 0:
-                print(f"  [{i+1}/{frame_count}] {filename} ({len(jpeg_data)} bytes)")
+                print(f"  [{i+1}/{frame_count}] {filename} ({len(frame_data)} bytes)")
 
             interval = 1.0 / fps
             time.sleep(max(0, interval * 0.1))
@@ -94,6 +114,7 @@ def prerender_sequences(args):
             "path": f"/sdcard/frames/{state_name}",
             "frame_count": frame_count,
             "fps": fps,
+            "format": fmt,
             "loop": True,
         })
 
@@ -121,7 +142,7 @@ def prerender_sequences(args):
     print(f"  So the structure should be:")
     print(f"    /sdcard/frames/manifest.json")
     for seq in manifest["sequences"]:
-        print(f"    /sdcard/frames/{seq['name']}/0001.jpg ... {seq['frame_count']:04d}.jpg")
+        print(f"    /sdcard/frames/{seq['name']}/0001.{ext} ... {seq['frame_count']:04d}.{ext}")
 
     renderer.cleanup()
 
@@ -132,24 +153,29 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Prerender all states for S3 (320x480)
-  python prerender_server.py --device s3
+  # Prerender all states for P4 in BGR565 format (recommended for P4, no decode needed)
+  python prerender_server.py --device p4 --format bgr565
 
-  # Prerender only local states (for offline fallback)
-  python prerender_server.py --device s3 --states idle,neutral,sleep
+  # Prerender for P4 in JPEG format (smaller files, needs JPEG decode on device)
+  python prerender_server.py --device p4 --format jpg
 
-  # Prerender for P4 (400x540)
-  python prerender_server.py --device p4
+  # Prerender for S3 in RAW format (RGB565 big-endian)
+  python prerender_server.py --device s3 --format raw
 
-  # Custom output directory and quality
-  python prerender_server.py --device s3 --output frames --quality 60 --fps 30
+  # Prerender only local states
+  python prerender_server.py --device p4 --format bgr565 --states idle,neutral,sleep
+
+  # Prerender at 30 FPS for P4
+  python prerender_server.py --device p4 --format bgr565 --fps 30
 """)
-
     parser.add_argument(
-        "--device", choices=["s3", "p4"], default="s3",
+        "--device", choices=["s3", "p4"], default="p4",
         help="Target device (s3=ESP32-S3 320x480, p4=ESP32-P4 400x540)"
     )
-
+    parser.add_argument(
+        "--format", choices=["raw", "bgr565", "jpg"], default=None,
+        help="Output format: bgr565=BGR565 LE for P4 (no decode, fastest), raw=RGB565 BE for S3, jpg=JPEG (smaller, needs decode)"
+    )
     parser.add_argument(
         "--output", default=os.path.join(SCRIPT_DIR, "frames"),
         help="Output directory for frame sequences (default: server/frames/)"
@@ -171,8 +197,8 @@ Examples:
         help="Path to expression mapping JSON"
     )
     parser.add_argument(
-        "--fps", type=int, default=DEFAULT_FPS,
-        help="Frames per second (default: 15)"
+        "--fps", type=int, default=None,
+        help="Frames per second (default: 30 for P4, 15 for S3)"
     )
     parser.add_argument(
         "--duration", type=float, default=DEFAULT_DURATION,
@@ -180,10 +206,16 @@ Examples:
     )
     parser.add_argument(
         "--quality", type=int, default=DEFAULT_QUALITY,
-        help="JPEG quality 1-100 (default: 80)"
+        help="JPEG quality 1-100 (default: 80, only used with --format jpg)"
     )
 
     args = parser.parse_args()
+
+    dev_defaults = DEVICE_DEFAULTS.get(args.device, DEVICE_DEFAULTS["p4"])
+    if args.format is None:
+        args.format = dev_defaults["format"]
+    if args.fps is None:
+        args.fps = dev_defaults["fps"]
 
     if not os.path.exists(args.model):
         print(f"[ERROR] Model file not found: {args.model}")

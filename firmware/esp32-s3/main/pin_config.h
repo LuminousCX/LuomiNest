@@ -20,8 +20,8 @@
 
 #define ILI9486_WIDTH      320
 #define ILI9486_HEIGHT     480
-#define ILI9486_MADCTL     0x08
-#define ILI9486_PCLK_HZ    20000000
+#define ILI9486_MADCTL     0x00
+#define ILI9486_PCLK_HZ    10000000
 
 #define SD_SPI_HOST        SPI2_HOST
 #define SD_SS_PIN          GPIO_NUM_10

@@ -8,8 +8,14 @@
 
 #define FP_MAX_STATE_NAME  32
 #define FP_MAX_PATH        256
-#define FP_DEFAULT_FPS     15
+#define FP_DEFAULT_FPS     30
 #define FP_MANIFEST_FILE   "/sdcard/frames/manifest.json"
+
+typedef enum {
+    FP_FMT_AUTO = 0,
+    FP_FMT_JPEG,
+    FP_FMT_RAW,
+} fp_format_t;
 
 typedef enum {
     FP_MODE_IDLE = 0,
@@ -23,6 +29,7 @@ typedef struct {
     uint16_t frame_count;
     uint16_t fps;
     bool loop;
+    fp_format_t format;
 } fp_sequence_t;
 
 typedef struct {
@@ -32,7 +39,7 @@ typedef struct {
     fp_playback_mode_t mode;
 } fp_context_t;
 
-typedef void (*fp_frame_ready_cb_t)(const uint8_t *jpeg_data, uint32_t jpeg_len);
+typedef void (*fp_frame_ready_cb_t)(const uint8_t *frame_data, uint32_t frame_len);
 
 esp_err_t frame_player_init(void);
 esp_err_t frame_player_start(avatar_state_t state);

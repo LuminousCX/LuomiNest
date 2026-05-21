@@ -12,7 +12,7 @@ static const char *TAG = "avatar";
 
 static lv_obj_t *s_avatar_img = NULL;
 static avatar_state_t s_current_state = AVATAR_STATE_IDLE;
-static avatar_render_mode_t s_render_mode = AVATAR_MODE_STREAM;
+static avatar_render_mode_t s_render_mode = AVATAR_MODE_LOCAL;
 static avatar_state_changed_cb_t s_state_cb = NULL;
 static SemaphoreHandle_t s_engine_mux = NULL;
 static lv_draw_buf_t *s_frame_bufs[2] = {NULL, NULL};

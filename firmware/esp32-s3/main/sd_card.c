@@ -46,7 +46,7 @@ esp_err_t sd_card_init(void)
             .sclk_io_num = SD_SCK_PIN,
             .quadwp_io_num = -1,
             .quadhd_io_num = -1,
-            .max_transfer_sz = 32768,
+            .max_transfer_sz = 65536,
         };
         esp_err_t ret = spi_bus_initialize(SD_SPI_HOST, &bus_cfg, SDSPI_DEFAULT_DMA);
         if (ret != ESP_OK) {
@@ -57,7 +57,18 @@ esp_err_t sd_card_init(void)
         ESP_LOGI(TAG, "SPI bus initialized for SD card");
     }
 
-    esp_err_t ret = try_mount(SDMMC_FREQ_DEFAULT);
+    esp_err_t ret = try_mount(SDMMC_FREQ_HIGHSPEED);
+    if (ret == ESP_OK) {
+        s_mounted = true;
+        sdmmc_card_print_info(stdout, s_card);
+        ESP_LOGI(TAG, "SD card mounted at %s (40MHz)", SD_MOUNT_POINT);
+        return ESP_OK;
+    }
+
+    ESP_LOGW(TAG, "Mount at 40MHz failed (%s), trying 20MHz...", esp_err_to_name(ret));
+    esp_vfs_fat_sdcard_unmount(SD_MOUNT_POINT, s_card);
+
+    ret = try_mount(SDMMC_FREQ_DEFAULT);
     if (ret == ESP_OK) {
         s_mounted = true;
         sdmmc_card_print_info(stdout, s_card);
@@ -73,17 +84,6 @@ esp_err_t sd_card_init(void)
         s_mounted = true;
         sdmmc_card_print_info(stdout, s_card);
         ESP_LOGI(TAG, "SD card mounted at %s (10MHz)", SD_MOUNT_POINT);
-        return ESP_OK;
-    }
-
-    ESP_LOGW(TAG, "Mount at 10MHz failed (%s), trying probing speed...", esp_err_to_name(ret));
-    esp_vfs_fat_sdcard_unmount(SD_MOUNT_POINT, s_card);
-
-    ret = try_mount(SDMMC_FREQ_PROBING);
-    if (ret == ESP_OK) {
-        s_mounted = true;
-        sdmmc_card_print_info(stdout, s_card);
-        ESP_LOGI(TAG, "SD card mounted at %s (400kHz)", SD_MOUNT_POINT);
         return ESP_OK;
     }
 

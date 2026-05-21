@@ -4,7 +4,6 @@
 #include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"
 
 #include "pin_config.h"
 #include "lcd_parallel.h"
@@ -25,100 +24,41 @@ static const char *TAG = "main";
 
 #define TOPIC_CMD      "luominest/s3/cmd"
 #define TOPIC_STATUS   "luominest/s3/status"
-#define TOPIC_STREAM   "luominest/s3/stream"
 
-#define FRAME_QUEUE_LEN CONFIG_LN_FRAME_QUEUE_SIZE
 #define STATUS_INTERVAL_MS (CONFIG_LN_STATUS_INTERVAL_SEC * 1000)
 
 static lcd_parallel_handle_t s_lcd = {0};
 static lvgl_port_t s_lvgl_port = {0};
 static ln_config_t s_device_config = {0};
 
-typedef struct {
-    uint8_t *data;
-    uint32_t len;
-} frame_msg_t;
-
-static QueueHandle_t s_frame_queue = NULL;
-
 static void on_mqtt_command(const char *topic, const char *data, int data_len)
 {
-    if (data_len > 0 && data_len < 256) {
-        ESP_LOGI(TAG, "MQTT [%s]: %.*s", topic, data_len, data);
-    } else if (data_len >= 256) {
-        ESP_LOGI(TAG, "MQTT [%s]: <%d bytes>", topic, data_len);
-    }
+    if (strcmp(topic, TOPIC_CMD) != 0) return;
 
-    if (strcmp(topic, TOPIC_CMD) == 0) {
-        if (strstr(data, "happy")) {
-            avatar_engine_play_state(AVATAR_STATE_HAPPY);
-        } else if (strstr(data, "sad")) {
-            avatar_engine_play_state(AVATAR_STATE_SAD);
-        } else if (strstr(data, "angry")) {
-            avatar_engine_play_state(AVATAR_STATE_ANGRY);
-        } else if (strstr(data, "surprised")) {
-            avatar_engine_play_state(AVATAR_STATE_SURPRISED);
-        } else if (strstr(data, "wave")) {
-            avatar_engine_play_state(AVATAR_STATE_WAVE);
-        } else if (strstr(data, "nod")) {
-            avatar_engine_play_state(AVATAR_STATE_NOD);
-        } else if (strstr(data, "think")) {
-            avatar_engine_play_state(AVATAR_STATE_THINK);
-        } else if (strstr(data, "sleep")) {
-            avatar_engine_play_state(AVATAR_STATE_SLEEP);
-        } else if (strstr(data, "talk")) {
-            avatar_engine_play_state(AVATAR_STATE_TALK);
-        } else if (strstr(data, "idle")) {
-            avatar_engine_play_state(AVATAR_STATE_IDLE);
-        } else if (strstr(data, "stop")) {
-            avatar_engine_stop();
-        } else if (strstr(data, "mode:stream")) {
-            avatar_engine_set_mode(AVATAR_MODE_STREAM);
-        } else if (strstr(data, "mode:local")) {
-            avatar_engine_set_mode(AVATAR_MODE_LOCAL);
-        } else if (strstr(data, "mode:hybrid")) {
-            avatar_engine_set_mode(AVATAR_MODE_HYBRID);
-        }
-    }
-}
+    ESP_LOGI(TAG, "CMD: %.*s", data_len, data);
 
-static void on_mqtt_stream(const char *topic, const uint8_t *data, int data_len)
-{
-    if (strcmp(topic, TOPIC_STREAM) != 0) return;
-    if (!s_frame_queue) return;
-
-    frame_msg_t msg = {0};
-    msg.len = data_len;
-    msg.data = heap_caps_malloc(data_len, MALLOC_CAP_SPIRAM);
-    if (!msg.data) {
-        return;
-    }
-    memcpy(msg.data, data, data_len);
-
-    frame_msg_t discarded = {0};
-    if (xQueueSend(s_frame_queue, &msg, 0) != pdTRUE) {
-        if (xQueueReceive(s_frame_queue, &discarded, 0) == pdTRUE) {
-            free(discarded.data);
-        }
-        xQueueSend(s_frame_queue, &msg, 0);
-    }
-}
-
-static void frame_decode_task(void *pvParameter)
-{
-    frame_msg_t msg = {0};
-#if CONFIG_LN_ENABLE_WATCHDOG
-    esp_task_wdt_add(NULL);
-#endif
-    while (1) {
-#if CONFIG_LN_ENABLE_WATCHDOG
-        esp_task_wdt_reset();
-#endif
-        if (xQueueReceive(s_frame_queue, &msg, pdMS_TO_TICKS(1000)) == pdTRUE) {
-            avatar_engine_show_frame(msg.data, msg.len);
-            free(msg.data);
-            msg.data = NULL;
-        }
+    if (strstr(data, "happy")) {
+        avatar_engine_play_state(AVATAR_STATE_HAPPY);
+    } else if (strstr(data, "sad")) {
+        avatar_engine_play_state(AVATAR_STATE_SAD);
+    } else if (strstr(data, "angry")) {
+        avatar_engine_play_state(AVATAR_STATE_ANGRY);
+    } else if (strstr(data, "surprised")) {
+        avatar_engine_play_state(AVATAR_STATE_SURPRISED);
+    } else if (strstr(data, "wave")) {
+        avatar_engine_play_state(AVATAR_STATE_WAVE);
+    } else if (strstr(data, "nod")) {
+        avatar_engine_play_state(AVATAR_STATE_NOD);
+    } else if (strstr(data, "think")) {
+        avatar_engine_play_state(AVATAR_STATE_THINK);
+    } else if (strstr(data, "sleep")) {
+        avatar_engine_play_state(AVATAR_STATE_SLEEP);
+    } else if (strstr(data, "talk")) {
+        avatar_engine_play_state(AVATAR_STATE_TALK);
+    } else if (strstr(data, "idle")) {
+        avatar_engine_play_state(AVATAR_STATE_IDLE);
+    } else if (strstr(data, "stop")) {
+        avatar_engine_stop();
     }
 }
 
@@ -126,14 +66,11 @@ static void on_mqtt_connected(void)
 {
     ESP_LOGI(TAG, "MQTT connected, subscribing...");
     app_mqtt_subscribe(TOPIC_CMD, 1);
-    app_mqtt_subscribe(TOPIC_STREAM, 0);
-    avatar_engine_set_mqtt_online(true);
 }
 
 static void on_mqtt_disconnected(void)
 {
     ESP_LOGW(TAG, "MQTT disconnected, will auto-reconnect");
-    avatar_engine_set_mqtt_online(false);
 }
 
 static void on_wifi_connected(void)
@@ -143,15 +80,13 @@ static void on_wifi_connected(void)
     const char *client = s_device_config.mqtt_client[0] ? s_device_config.mqtt_client : DEFAULT_MQTT_CLIENT_ID;
     app_mqtt_init(broker, client);
     app_mqtt_register_message_cb(on_mqtt_command);
-    app_mqtt_register_stream_cb(on_mqtt_stream);
     app_mqtt_register_connected_cb(on_mqtt_connected);
     app_mqtt_register_disconnected_cb(on_mqtt_disconnected);
 }
 
 static void on_wifi_disconnected(void)
 {
-    ESP_LOGW(TAG, "WiFi disconnected, MQTT paused until reconnected");
-    avatar_engine_set_mqtt_online(false);
+    ESP_LOGW(TAG, "WiFi disconnected");
 }
 
 static void lvgl_task(void *pvParameter)
@@ -172,7 +107,7 @@ static void lvgl_task(void *pvParameter)
 
 static void status_task(void *pvParameter)
 {
-    char status_buf[384];
+    char status_buf[256];
     while (1) {
         if (app_mqtt_is_connected()) {
             const avatar_stats_t *stats = avatar_engine_get_stats();
@@ -181,18 +116,12 @@ static void status_task(void *pvParameter)
             uint32_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
             snprintf(status_buf, sizeof(status_buf),
-                     "{\"state\":\"online\",\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
-                     "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u,\"local\":%u},"
-                     "\"decode_ms\":%u,\"mode\":\"%s\"}",
+                     "{\"state\":\"%s\",\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
+                     "\"frames\":%u,\"frame_ms\":%u}",
+                     avatar_engine_state_name(avatar_engine_get_state()),
                      rssi, (unsigned)free_heap, (unsigned)free_psram,
-                     (unsigned)stats->frames_received,
-                     (unsigned)stats->frames_displayed,
-                     (unsigned)stats->frames_skipped_dedup,
-                     (unsigned)stats->frames_skipped_error,
                      (unsigned)stats->local_frames_played,
-                     (unsigned)stats->last_decode_ms,
-                     avatar_engine_get_mode() == AVATAR_MODE_HYBRID ? "hybrid" :
-                     (avatar_engine_get_mode() == AVATAR_MODE_LOCAL ? "local" : "stream"));
+                     (unsigned)stats->last_frame_ms);
 
             app_mqtt_publish(TOPIC_STATUS, status_buf, strlen(status_buf), 1);
         }
@@ -267,13 +196,9 @@ void app_main(void)
     ESP_ERROR_CHECK(lvgl_port_init(&s_lcd, &s_lvgl_port));
     ESP_ERROR_CHECK(avatar_engine_init(s_lvgl_port.screen, &s_lcd));
 
-    avatar_engine_set_mode(AVATAR_MODE_HYBRID);
     avatar_engine_play_state(AVATAR_STATE_IDLE);
 
-    s_frame_queue = xQueueCreate(FRAME_QUEUE_LEN, sizeof(frame_msg_t));
-
     xTaskCreatePinnedToCore(lvgl_task, "lvgl", 8192, NULL, 5, NULL, 0);
-    xTaskCreatePinnedToCore(frame_decode_task, "frame_dec", 16384, NULL, 4, NULL, 1);
 
     wifi_mgr_register_connected_cb(on_wifi_connected);
     wifi_mgr_register_disconnected_cb(on_wifi_disconnected);
@@ -282,7 +207,6 @@ void app_main(void)
     load_device_config();
 
     ESP_LOGI(TAG, "WiFi SSID: %s", s_device_config.wifi_ssid);
-    ESP_LOGI(TAG, "MQTT Broker: %s", s_device_config.mqtt_broker[0] ? s_device_config.mqtt_broker : DEFAULT_MQTT_BROKER);
 
     esp_err_t wifi_result = wifi_mgr_connect(s_device_config.wifi_ssid, s_device_config.wifi_pass);
 

@@ -1,4 +1,5 @@
 #include "frame_player.h"
+#include "avatar_engine.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
@@ -24,6 +25,12 @@ static const char *state_dir_names[AVATAR_STATE_MAX] = {
     "think", "neutral", "talk", "custom", "streaming"
 };
 
+static const char *fmt_exts[] = {
+    [FP_FMT_AUTO] = "jpg",
+    [FP_FMT_JPEG] = "jpg",
+    [FP_FMT_RAW]  = "raw",
+};
+
 static bool _check_file_exists(const char *path)
 {
     struct stat st;
@@ -43,17 +50,42 @@ static bool _check_dir_exists(const char *path)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 
-static int _count_frames_in_dir(const char *dir_path)
+static int _count_frames_in_dir(const char *dir_path, fp_format_t fmt)
 {
+    const char *ext = fmt_exts[fmt];
+    if (fmt == FP_FMT_AUTO) ext = "jpg";
     int count = 0;
     char filepath[FP_MAX_PATH];
     while (1) {
-        snprintf(filepath, sizeof(filepath), "%s/%04u.jpg", dir_path, (unsigned)(count + 1));
-        if (!_check_file_exists(filepath)) break;
+        snprintf(filepath, sizeof(filepath), "%s/%04u.%s", dir_path, (unsigned)(count + 1), ext);
+        if (!_check_file_exists(filepath)) {
+            if (fmt == FP_FMT_AUTO && count == 0) {
+                snprintf(filepath, sizeof(filepath), "%s/%04u.raw", dir_path, (unsigned)(count + 1));
+                if (_check_file_exists(filepath)) {
+                    ext = "raw";
+                    snprintf(filepath, sizeof(filepath), "%s/%04u.%s", dir_path, (unsigned)(count + 1), ext);
+                    if (_check_file_exists(filepath)) {
+                        count++;
+                        continue;
+                    }
+                }
+            }
+            break;
+        }
         count++;
         if (count >= 9999) break;
     }
     return count;
+}
+
+static fp_format_t _detect_format_from_dir(const char *dir_path)
+{
+    char filepath[FP_MAX_PATH];
+    snprintf(filepath, sizeof(filepath), "%s/0001.raw", dir_path);
+    if (_check_file_exists(filepath)) return FP_FMT_RAW;
+    snprintf(filepath, sizeof(filepath), "%s/0001.jpg", dir_path);
+    if (_check_file_exists(filepath)) return FP_FMT_JPEG;
+    return FP_FMT_AUTO;
 }
 
 static esp_err_t _auto_detect_sequences(void);
@@ -114,6 +146,7 @@ static esp_err_t _load_manifest(void)
         cJSON *frame_count = cJSON_GetObjectItem(seq, "frame_count");
         cJSON *fps_item = cJSON_GetObjectItem(seq, "fps");
         cJSON *loop_item = cJSON_GetObjectItem(seq, "loop");
+        cJSON *format_item = cJSON_GetObjectItem(seq, "format");
 
         if (!name_item || !cJSON_IsString(name_item)) continue;
 
@@ -134,13 +167,32 @@ static esp_err_t _load_manifest(void)
                   (uint16_t)fps_item->valueint : FP_DEFAULT_FPS;
         s->loop = (loop_item && cJSON_IsBool(loop_item)) ? cJSON_IsTrue(loop_item) : true;
 
+        if (format_item && cJSON_IsString(format_item)) {
+            if (strcmp(format_item->valuestring, "raw") == 0) {
+                s->format = FP_FMT_RAW;
+            } else if (strcmp(format_item->valuestring, "jpg") == 0 ||
+                       strcmp(format_item->valuestring, "jpeg") == 0) {
+                s->format = FP_FMT_JPEG;
+            } else {
+                s->format = FP_FMT_AUTO;
+            }
+        } else {
+            s->format = FP_FMT_AUTO;
+        }
+
+        if (s->format == FP_FMT_AUTO) {
+            s->format = _detect_format_from_dir(s->path);
+        }
+
         if (s->frame_count == 0) {
-            s->frame_count = _count_frames_in_dir(s->path);
+            s->frame_count = _count_frames_in_dir(s->path, s->format);
         }
 
         if (s->frame_count > 0) {
-            ESP_LOGI(TAG, "Sequence[%d]: %s, %d frames @ %d fps, loop=%d, path=%s",
-                     s_ctx.sequence_count, s->name, s->frame_count, s->fps, s->loop, s->path);
+            ESP_LOGI(TAG, "Sequence[%d]: %s, %d frames @ %d fps, fmt=%s, loop=%d, path=%s",
+                     s_ctx.sequence_count, s->name, s->frame_count, s->fps,
+                     s->format == FP_FMT_RAW ? "RAW" : "JPEG",
+                     s->loop, s->path);
             s_ctx.sequence_count++;
         }
     }
@@ -161,7 +213,10 @@ static esp_err_t _auto_detect_sequences(void)
 
         if (!_check_dir_exists(dir_path)) continue;
 
-        int count = _count_frames_in_dir(dir_path);
+        fp_format_t fmt = _detect_format_from_dir(dir_path);
+        if (fmt == FP_FMT_AUTO) continue;
+
+        int count = _count_frames_in_dir(dir_path, fmt);
         if (count <= 0) continue;
 
         fp_sequence_t *s = &s_ctx.sequences[s_ctx.sequence_count];
@@ -170,9 +225,11 @@ static esp_err_t _auto_detect_sequences(void)
         s->frame_count = count;
         s->fps = FP_DEFAULT_FPS;
         s->loop = true;
+        s->format = fmt;
 
-        ESP_LOGI(TAG, "Auto-detected: %s, %d frames, path=%s",
-                 s->name, s->frame_count, s->path);
+        ESP_LOGI(TAG, "Auto-detected: %s, %d frames, fmt=%s, path=%s",
+                 s->name, s->frame_count,
+                 s->format == FP_FMT_RAW ? "RAW" : "JPEG", s->path);
         s_ctx.sequence_count++;
     }
 
@@ -192,10 +249,11 @@ static fp_sequence_t *_find_sequence(avatar_state_t state)
 }
 
 static esp_err_t _read_frame_file(const char *dir_path, uint16_t frame_idx,
-                                   uint8_t **out_data, uint32_t *out_len)
+                                   fp_format_t fmt, uint8_t **out_data, uint32_t *out_len)
 {
+    const char *ext = (fmt == FP_FMT_RAW) ? "raw" : "jpg";
     char filepath[FP_MAX_PATH];
-    snprintf(filepath, sizeof(filepath), "%s/%04u.jpg", dir_path, (unsigned)(frame_idx + 1));
+    snprintf(filepath, sizeof(filepath), "%s/%04u.%s", dir_path, (unsigned)(frame_idx + 1), ext);
 
     FILE *f = fopen(filepath, "rb");
     if (!f) {
@@ -207,7 +265,7 @@ static esp_err_t _read_frame_file(const char *dir_path, uint16_t frame_idx,
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    if (fsize <= 0 || fsize > 512 * 1024) {
+    if (fsize <= 0 || fsize > 1024 * 1024) {
         fclose(f);
         ESP_LOGW(TAG, "Frame file invalid size: %ld", fsize);
         return ESP_FAIL;
@@ -276,8 +334,9 @@ esp_err_t frame_player_start(avatar_state_t state)
     s_ctx.mode = FP_MODE_PLAYING;
     xSemaphoreGive(s_player_mux);
 
-    ESP_LOGI(TAG, "Playing: %s (%d frames @ %d fps)",
-             seq->name, seq->frame_count, seq->fps);
+    ESP_LOGI(TAG, "Playing: %s (%d frames @ %d fps, %s)",
+             seq->name, seq->frame_count, seq->fps,
+             seq->format == FP_FMT_RAW ? "RAW" : "JPEG");
     return ESP_OK;
 }
 
@@ -361,7 +420,7 @@ void frame_player_task(void *pvParameter)
             continue;
         }
 
-        esp_err_t ret = _read_frame_file(seq->path, frame_idx, &frame_data, &frame_len);
+        esp_err_t ret = _read_frame_file(seq->path, frame_idx, seq->format, &frame_data, &frame_len);
         if (ret == ESP_OK && frame_data && s_frame_cb) {
             s_frame_cb(frame_data, frame_len);
             free(frame_data);
@@ -385,7 +444,7 @@ void frame_player_task(void *pvParameter)
         xSemaphoreGive(s_player_mux);
 
         uint32_t frame_delay_ms = 1000 / seq->fps;
-        if (frame_delay_ms < 16) frame_delay_ms = 16;
+        if (frame_delay_ms < 8) frame_delay_ms = 8;
         vTaskDelay(pdMS_TO_TICKS(frame_delay_ms));
     }
 

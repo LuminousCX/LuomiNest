@@ -31,14 +31,31 @@ static const char *TAG = "lcd_par";
 #define ILI9486_PWCTR3  0xC2
 #define ILI9486_VMCTR1  0xC5
 
+#define LCD_STRIP_MAX_BYTES 65536
+
 static bool on_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
                                  esp_lcd_panel_io_event_data_t *edata,
                                  void *user_ctx)
 {
     (void)panel_io;
     (void)edata;
-    (void)user_ctx;
+    lcd_parallel_handle_t *handle = (lcd_parallel_handle_t *)user_ctx;
+    if (handle && handle->trans_done_sem) {
+        BaseType_t high_task_wakeup = pdFALSE;
+        xSemaphoreGiveFromISR(handle->trans_done_sem, &high_task_wakeup);
+        return (high_task_wakeup == pdTRUE);
+    }
     return false;
+}
+
+static void lcd_set_window(esp_lcd_panel_io_handle_t io,
+                            uint16_t x0, uint16_t y0,
+                            uint16_t x1, uint16_t y1)
+{
+    uint8_t caset[] = {(x0 >> 8) & 0xFF, x0 & 0xFF, (x1 >> 8) & 0xFF, x1 & 0xFF};
+    esp_lcd_panel_io_tx_param(io, ILI9486_CASET, caset, 4);
+    uint8_t raset[] = {(y0 >> 8) & 0xFF, y0 & 0xFF, (y1 >> 8) & 0xFF, y1 & 0xFF};
+    esp_lcd_panel_io_tx_param(io, ILI9486_RASET, raset, 4);
 }
 
 static esp_err_t ili9486_init(esp_lcd_panel_io_handle_t io, int width, int height, uint8_t madctl)
@@ -89,8 +106,6 @@ static esp_err_t ili9486_init(esp_lcd_panel_io_handle_t io, int width, int heigh
     esp_lcd_panel_io_tx_param(io, ILI9486_NORON, NULL, 0);
     vTaskDelay(pdMS_TO_TICKS(20));
 
-    esp_lcd_panel_io_tx_param(io, ILI9486_DISPOFF, NULL, 0);
-
     esp_lcd_panel_io_tx_param(io, ILI9486_DISPON, NULL, 0);
     vTaskDelay(pdMS_TO_TICKS(100));
 
@@ -105,7 +120,13 @@ esp_err_t lcd_parallel_init(const lcd_parallel_config_t *config, lcd_parallel_ha
     handle->io = NULL;
     handle->initialized = false;
 
-    int pclk_hz = config->pclk_hz > 0 ? config->pclk_hz : 20000000;
+    handle->mutex = xSemaphoreCreateMutex();
+    if (!handle->mutex) return ESP_ERR_NO_MEM;
+
+    handle->trans_done_sem = xSemaphoreCreateBinary();
+    if (!handle->trans_done_sem) return ESP_ERR_NO_MEM;
+
+    int pclk_hz = config->pclk_hz > 0 ? config->pclk_hz : 10000000;
 
     esp_lcd_i80_bus_config_t bus_config = {
         .dc_gpio_num = config->rs_pin,
@@ -116,7 +137,7 @@ esp_err_t lcd_parallel_init(const lcd_parallel_config_t *config, lcd_parallel_ha
             config->d4_pin, config->d5_pin, config->d6_pin, config->d7_pin,
         },
         .bus_width = 8,
-        .max_transfer_bytes = (size_t)config->width * config->height * 2 + 1024,
+        .max_transfer_bytes = LCD_STRIP_MAX_BYTES,
         .dma_burst_size = 64,
         .sram_trans_align = 0,
     };
@@ -125,7 +146,7 @@ esp_err_t lcd_parallel_init(const lcd_parallel_config_t *config, lcd_parallel_ha
     esp_lcd_panel_io_i80_config_t io_config = {
         .cs_gpio_num = config->cs_pin,
         .pclk_hz = pclk_hz,
-        .trans_queue_depth = 10,
+        .trans_queue_depth = 2,
         .on_color_trans_done = on_color_trans_done,
         .user_ctx = handle,
         .lcd_cmd_bits = 8,
@@ -172,7 +193,8 @@ esp_err_t lcd_parallel_init(const lcd_parallel_config_t *config, lcd_parallel_ha
     ESP_ERROR_CHECK(ili9486_init(handle->io, config->width, config->height, config->madctl));
 
     handle->initialized = true;
-    ESP_LOGI(TAG, "I80 LCD+DMA initialized (%dx%d, pclk=%dHz)", config->width, config->height, pclk_hz);
+    ESP_LOGI(TAG, "I80 LCD+DMA initialized (%dx%d, pclk=%dHz, strip=%dKB)",
+             config->width, config->height, pclk_hz, LCD_STRIP_MAX_BYTES / 1024);
     return ESP_OK;
 }
 
@@ -183,23 +205,32 @@ esp_err_t lcd_parallel_draw_bitmap(lcd_parallel_handle_t *handle,
 {
     if (!handle->initialized || !handle->io) return ESP_ERR_INVALID_STATE;
 
-    uint8_t x0_hi = (x >> 8) & 0xFF;
-    uint8_t x0_lo = x & 0xFF;
-    uint8_t x1_hi = ((x + w - 1) >> 8) & 0xFF;
-    uint8_t x1_lo = (x + w - 1) & 0xFF;
-    uint8_t caset[] = {x0_hi, x0_lo, x1_hi, x1_lo};
-    esp_lcd_panel_io_tx_param(handle->io, ILI9486_CASET, caset, 4);
+    xSemaphoreTake(handle->mutex, portMAX_DELAY);
 
-    uint8_t y0_hi = (y >> 8) & 0xFF;
-    uint8_t y0_lo = y & 0xFF;
-    uint8_t y1_hi = ((y + h - 1) >> 8) & 0xFF;
-    uint8_t y1_lo = (y + h - 1) & 0xFF;
-    uint8_t raset[] = {y0_hi, y0_lo, y1_hi, y1_lo};
-    esp_lcd_panel_io_tx_param(handle->io, ILI9486_RASET, raset, 4);
+    uint32_t row_bytes = (uint32_t)w * 2;
+    uint32_t max_rows_per_strip = LCD_STRIP_MAX_BYTES / row_bytes;
+    if (max_rows_per_strip == 0) max_rows_per_strip = 1;
 
-    uint32_t total = (uint32_t)w * h * 2;
-    esp_lcd_panel_io_tx_color(handle->io, ILI9486_RAMWR, (const uint8_t *)color_data, total);
+    uint16_t remaining = h;
+    uint16_t cur_y = y;
+    const uint8_t *ptr = (const uint8_t *)color_data;
 
+    while (remaining > 0) {
+        uint16_t strip_h = remaining > max_rows_per_strip ? max_rows_per_strip : remaining;
+        uint32_t strip_bytes = (uint32_t)strip_h * row_bytes;
+
+        lcd_set_window(handle->io, x, cur_y, x + w - 1, cur_y + strip_h - 1);
+
+        esp_lcd_panel_io_tx_color(handle->io, ILI9486_RAMWR, ptr, strip_bytes);
+
+        xSemaphoreTake(handle->trans_done_sem, pdMS_TO_TICKS(500));
+
+        ptr += strip_bytes;
+        cur_y += strip_h;
+        remaining -= strip_h;
+    }
+
+    xSemaphoreGive(handle->mutex);
     return ESP_OK;
 }
 
@@ -210,46 +241,42 @@ esp_err_t lcd_parallel_fill_color(lcd_parallel_handle_t *handle,
 {
     if (!handle->initialized || !handle->io) return ESP_ERR_INVALID_STATE;
 
-    uint8_t x0_hi = (x >> 8) & 0xFF;
-    uint8_t x0_lo = x & 0xFF;
-    uint8_t x1_hi = ((x + w - 1) >> 8) & 0xFF;
-    uint8_t x1_lo = (x + w - 1) & 0xFF;
-    uint8_t caset[] = {x0_hi, x0_lo, x1_hi, x1_lo};
-    esp_lcd_panel_io_tx_param(handle->io, ILI9486_CASET, caset, 4);
+    xSemaphoreTake(handle->mutex, portMAX_DELAY);
 
-    uint8_t y0_hi = (y >> 8) & 0xFF;
-    uint8_t y0_lo = y & 0xFF;
-    uint8_t y1_hi = ((y + h - 1) >> 8) & 0xFF;
-    uint8_t y1_lo = (y + h - 1) & 0xFF;
-    uint8_t raset[] = {y0_hi, y0_lo, y1_hi, y1_lo};
-    esp_lcd_panel_io_tx_param(handle->io, ILI9486_RASET, raset, 4);
+    uint32_t row_bytes = (uint32_t)w * 2;
+    uint32_t max_rows_per_strip = LCD_STRIP_MAX_BYTES / row_bytes;
+    if (max_rows_per_strip == 0) max_rows_per_strip = 1;
 
-    uint32_t total_pixels = (uint32_t)w * h;
-    uint32_t total_bytes = total_pixels * 2;
-
-    uint16_t *fill_buf = heap_caps_malloc(total_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (fill_buf) {
-        for (uint32_t i = 0; i < total_pixels; i++) {
-            fill_buf[i] = color;
-        }
-        esp_lcd_panel_io_tx_color(handle->io, ILI9486_RAMWR, (const uint8_t *)fill_buf, total_bytes);
-        free(fill_buf);
-    } else {
-        uint32_t chunk_pixels = 4096;
-        uint32_t chunk_bytes = chunk_pixels * 2;
-        uint16_t *small_buf = heap_caps_malloc(chunk_bytes, MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
-        if (!small_buf) return ESP_ERR_NO_MEM;
-        for (uint32_t i = 0; i < chunk_pixels; i++) {
-            small_buf[i] = color;
-        }
-        uint32_t remaining = total_bytes;
-        while (remaining > 0) {
-            uint32_t send = remaining > chunk_bytes ? chunk_bytes : remaining;
-            esp_lcd_panel_io_tx_color(handle->io, ILI9486_RAMWR, (const uint8_t *)small_buf, send);
-            remaining -= send;
-        }
-        free(small_buf);
+    uint32_t strip_pixels = (uint32_t)w * max_rows_per_strip;
+    uint32_t strip_bytes = strip_pixels * 2;
+    uint16_t *fill_buf = heap_caps_malloc(strip_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!fill_buf) {
+        xSemaphoreGive(handle->mutex);
+        return ESP_ERR_NO_MEM;
     }
 
+    for (uint32_t i = 0; i < strip_pixels; i++) {
+        fill_buf[i] = color;
+    }
+
+    uint16_t remaining = h;
+    uint16_t cur_y = y;
+
+    while (remaining > 0) {
+        uint16_t strip_h = remaining > max_rows_per_strip ? max_rows_per_strip : remaining;
+        uint32_t send_bytes = (uint32_t)strip_h * row_bytes;
+
+        lcd_set_window(handle->io, x, cur_y, x + w - 1, cur_y + strip_h - 1);
+
+        esp_lcd_panel_io_tx_color(handle->io, ILI9486_RAMWR, (const uint8_t *)fill_buf, send_bytes);
+
+        xSemaphoreTake(handle->trans_done_sem, pdMS_TO_TICKS(500));
+
+        cur_y += strip_h;
+        remaining -= strip_h;
+    }
+
+    free(fill_buf);
+    xSemaphoreGive(handle->mutex);
     return ESP_OK;
 }

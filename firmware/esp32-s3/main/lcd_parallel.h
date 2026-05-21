@@ -4,6 +4,8 @@
 #include "esp_err.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_io_i80.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -31,6 +33,8 @@ typedef struct {
     lcd_parallel_config_t cfg;
     esp_lcd_i80_bus_handle_t bus;
     esp_lcd_panel_io_handle_t io;
+    SemaphoreHandle_t trans_done_sem;
+    SemaphoreHandle_t mutex;
     bool initialized;
 } lcd_parallel_handle_t;
 
@@ -43,5 +47,19 @@ esp_err_t lcd_parallel_fill_color(lcd_parallel_handle_t *handle,
                                   uint16_t x, uint16_t y,
                                   uint16_t w, uint16_t h,
                                   uint16_t color);
+
+static inline void lcd_parallel_lock(lcd_parallel_handle_t *handle)
+{
+    if (handle && handle->mutex) {
+        xSemaphoreTake(handle->mutex, portMAX_DELAY);
+    }
+}
+
+static inline void lcd_parallel_unlock(lcd_parallel_handle_t *handle)
+{
+    if (handle && handle->mutex) {
+        xSemaphoreGive(handle->mutex);
+    }
+}
 
 #endif

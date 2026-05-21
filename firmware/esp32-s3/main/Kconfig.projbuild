@@ -54,8 +54,8 @@ menu "LuomiNest Configuration"
 
     config LN_WATCHDOG_TIMEOUT_SEC
         int "Watchdog timeout (seconds)"
-        default 30
-        range 5 120
+        default 60
+        range 5 300
         depends on LN_ENABLE_WATCHDOG
         help
             Timeout before watchdog triggers a system reset.

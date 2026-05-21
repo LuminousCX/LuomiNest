@@ -12,7 +12,6 @@ idf_component_register(
         "chat_ui.c"
         "settings_ui.c"
         "time_mgr.c"
-        "spi_frame_rx.c"
     INCLUDE_DIRS
         "."
     REQUIRES
