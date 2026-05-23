@@ -197,9 +197,9 @@ async def tool_loop_stream(
             })
 
     messages.append({"role": "user", "content": "请根据已获取的信息总结回答用户的问题，不要再调用工具。"})
+    final_content = ""
     async for chunk in llm_adapter.chat_stream(
         messages=messages,
-        tools=None,
         provider_name=provider_name,
         model=model,
         **kwargs,
@@ -207,8 +207,9 @@ async def tool_loop_stream(
         content = chunk.get("content", "")
         rc = chunk.get("reasoning", "")
         if content:
+            final_content += content
             yield {"type": "content", "content": content}
         if rc:
             collected_reasoning += rc
 
-    yield {"type": "done", "content": "", "reasoning": collected_reasoning}
+    yield {"type": "done", "content": final_content, "reasoning": collected_reasoning}

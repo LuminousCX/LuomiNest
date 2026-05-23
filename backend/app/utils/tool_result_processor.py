@@ -15,6 +15,7 @@
 
 import json
 import re
+from collections.abc import Callable
 from loguru import logger
 
 
@@ -299,7 +300,7 @@ def _process_generic(raw: str) -> str:
 # 处理器注册表 —— 工具名 → 处理函数
 # =============================================================================
 
-TOOL_PROCESSORS: dict[str, callable] = {
+TOOL_PROCESSORS: dict[str, Callable] = {
     "get_weather": _process_weather_result,
     "get_current_time": _process_time_result,
     "search": _process_search_result,

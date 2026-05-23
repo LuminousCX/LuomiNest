@@ -348,4 +348,14 @@ async def search_rag(request: RAGSearchRequest):
 async def list_available_agents():
     logger.info("[API] GET /social/agents - Listing available agents for social")
     agents = agents_store.values()
-    return {"error": None, "data": list(agents)}
+    safe_agents = []
+    for a in agents:
+        safe_agents.append({
+            "id": a.get("id", ""),
+            "name": a.get("name", ""),
+            "description": a.get("description", ""),
+            "color": a.get("color", "#0d9488"),
+            "avatar": a.get("avatar"),
+            "is_main": a.get("is_main", False),
+        })
+    return {"error": None, "data": safe_agents}

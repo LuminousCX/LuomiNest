@@ -78,8 +78,8 @@ def _resolve_tools(user_message: str, request_type: RequestType) -> list[dict] |
 
 
 def _inject_system_prompt(messages: list[dict]) -> list[dict]:
-    from datetime import datetime
-    now = datetime.now()
+    from datetime import timedelta
+    now = datetime.now(timezone(timedelta(hours=8)))
     weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
     current_date = now.strftime("%Y年%m月%d日")
     current_weekday = weekday_names[now.weekday()]
@@ -374,6 +374,7 @@ async def chat_completions(request: ChatRequest):
         )
 
         result_content = result.get("content") if isinstance(result, dict) else result
+        result_content = result_content or ""
         elapsed = time.time() - start_time
         logger.success(f"[API] POST /chat/completions - Success: elapsed={elapsed:.2f}s, response_len={len(result_content)}")
         return ChatResponse(

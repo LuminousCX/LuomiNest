@@ -371,13 +371,25 @@ async def update_model_config(request: ModelConfigUpdate):
     if request.stt_auto_send_delay is not None:
         updated_fields.append("stt_auto_send_delay")
 
-    _save_model_config({
+    existing_config = _load_model_config()
+    config_to_save = {
         "default_provider": llm_adapter.default_provider,
         "default_model": settings.LLM_DEFAULT_MODEL,
         "default_temperature": settings.LLM_DEFAULT_TEMPERATURE,
         "default_max_tokens": settings.LLM_DEFAULT_MAX_TOKENS,
         "default_top_p": settings.LLM_DEFAULT_TOP_P,
-    })
+    }
+    # 保存扩展配置字段
+    for field in ["reasoner_provider", "reasoner_model", "reasoner_temperature",
+                   "reasoner_max_tokens", "reasoner_effort", "tts_provider",
+                   "tts_model", "tts_voice", "tts_speed", "stt_provider",
+                   "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay"]:
+        val = getattr(request, field, None)
+        if val is not None:
+            config_to_save[field] = val
+        elif field in existing_config:
+            config_to_save[field] = existing_config[field]
+    _save_model_config(config_to_save)
 
     logger.success(f"[API] PATCH /models/config - Updated fields: {updated_fields}")
     return {

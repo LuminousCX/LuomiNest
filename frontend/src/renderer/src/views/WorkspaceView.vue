@@ -42,6 +42,7 @@ import FileUpload from '../components/FileUpload.vue'
 import FilePreview from '../components/FilePreview.vue'
 import { useFileUpload } from '../composables/useFileUpload'
 import { getProviderLogo } from '../config/provider-logos'
+import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 
 marked.setOptions({
@@ -262,7 +263,8 @@ const autoResize = () => {
 
 const renderMarkdown = (text: string): string => {
   if (!text) return ''
-  return marked.parse(text) as string
+  const raw = marked.parse(text) as string
+  return DOMPurify.sanitize(raw)
 }
 
 const getFileIcon = (fileType?: string) => {
@@ -494,7 +496,7 @@ const handleSearch = async () => {
 }
 
 const insertSkillToInput = (skillName: string) => {
-  inputText.value += `<tool_call name="${skillName}">\n{}\n</tool_call`
+  inputText.value += `<tool_call name="${skillName}">\n{}\n</tool_call >`
   showSkillDropdown.value = false
   if (textareaRef.value) textareaRef.value.focus()
 }

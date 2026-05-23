@@ -408,11 +408,12 @@ class OpenAICompatibleProvider(LLMProvider):
             yield {"content": "", "reasoning": "", "tool_calls_complete": merged}
 
     async def embed(self, text: str) -> list[float]:
+        embed_model = self.default_model if "embed" in self.default_model.lower() else "text-embedding-3-small"
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{self.base_url}/embeddings",
                 headers=self._build_headers(),
-                json={"model": "text-embedding-3-small", "input": text},
+                json={"model": embed_model, "input": text},
             )
             resp.raise_for_status()
             return resp.json()["data"][0]["embedding"]

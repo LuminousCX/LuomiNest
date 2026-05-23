@@ -18,7 +18,7 @@ class PlatformResponse:
     content: str
     message_type: str = "text"
     reply_to: str = ""
-    extra: dict[str, Any] = None
+    extra: dict[str, Any] | None = None
 
 
 class BasePlatformAdapter(ABC):

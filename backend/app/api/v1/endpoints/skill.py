@@ -75,6 +75,13 @@ async def create_skill(request: SkillCreate):
     )
 
 
+@router.get("/tools/openai", include_in_schema=True)
+async def get_openai_tools():
+    logger.info("[API] GET /skills/tools/openai - Getting OpenAI format tools")
+    tools = SkillRegistry.get_openai_tools()
+    return {"error": None, "data": tools}
+
+
 @router.get("/{skill_name}", response_model=SkillResponse)
 async def get_skill(skill_name: str):
     logger.info(f"[API] GET /skills/{skill_name} - Fetching skill")
@@ -120,10 +127,3 @@ async def execute_skill(skill_name: str, arguments: dict = {}):
     executor = SkillExecutor()
     result = await executor.execute(skill_name, arguments)
     return {"error": None, "data": {"result": result}}
-
-
-@router.get("/tools/openai")
-async def get_openai_tools():
-    logger.info("[API] GET /skills/tools/openai - Getting OpenAI format tools")
-    tools = SkillRegistry.get_openai_tools()
-    return {"error": None, "data": tools}

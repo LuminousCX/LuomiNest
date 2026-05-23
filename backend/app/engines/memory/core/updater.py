@@ -208,6 +208,8 @@ class MemoryUpdater:
                 temperature=0.3,
                 max_tokens=1000,
             )
+            if isinstance(response, dict):
+                response = response.get("content", "")
         except Exception as e:
             logger.error(f"[Memory] LLM call failed: {e}")
             return {"updated": False, "reason": str(e)}

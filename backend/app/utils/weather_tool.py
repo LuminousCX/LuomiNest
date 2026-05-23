@@ -818,7 +818,7 @@ class WeatherTool:
         return "大风"
 
     @staticmethod
-    def _fallback(city: str, message: str = None) -> str:
+    def _fallback(city: str, message: str | None = None) -> str:
         """异常兜底话术"""
         if message:
             return message

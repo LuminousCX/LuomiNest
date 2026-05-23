@@ -64,6 +64,11 @@ export interface ChatStreamChunk {
   model: string
   provider: string
   done: boolean
+  usage?: {
+    promptTokens?: number
+    completionTokens?: number
+    totalTokens?: number
+  }
 }
 
 export interface Conversation {
@@ -92,14 +97,34 @@ export interface ModelProvider {
   id: string
   name: string
   type: string
+  vendor: string
+  baseUrl: string
+  apiKeySet: boolean
+  isDefault: boolean
   defaultModel: string
   models: { id: string; name: string }[]
 }
 
 export interface ModelConfig {
+  defaultProvider: string
+  defaultModel: string
   defaultTemperature: number
   defaultMaxTokens: number
   defaultTopP: number
+  reasonerProvider?: string
+  reasonerModel?: string
+  reasonerTemperature?: number
+  reasonerMaxTokens?: number
+  reasonerEffort?: string
+  ttsProvider?: string
+  ttsModel?: string
+  ttsVoice?: string
+  ttsSpeed?: number
+  sttProvider?: string
+  sttModel?: string
+  sttLanguage?: string
+  sttAutoSend?: boolean
+  sttAutoSendDelay?: number
 }
 
 export interface Skill {
@@ -121,6 +146,142 @@ export interface SearchResult {
   source: string
   score: number
   metadata: Record<string, any>
+}
+
+export interface AgentProfile {
+  id: string
+  name: string
+  description: string
+  systemPrompt?: string
+  model?: string
+  provider?: string
+  color: string
+  avatar?: string
+  isBuiltin?: boolean
+  isMain?: boolean
+}
+
+export interface MainAgentConfig {
+  provider: string
+  model: string
+  systemPrompt: string
+  temperature: number
+  maxTokens: number
+}
+
+export interface ModelInfo {
+  id: string
+  name: string
+  owned_by?: string
+  provider?: string
+}
+
+export interface ProviderTemplate {
+  id: string
+  name: string
+  vendor: string
+  baseUrl: string
+  defaultModel: string
+  description: string
+}
+
+export interface TTSConfig {
+  provider?: string
+  model?: string
+  voice?: string
+  speed?: number
+}
+
+export interface STTConfig {
+  provider?: string
+  model?: string
+  language?: string
+  autoSend?: boolean
+  autoSendDelay?: number
+}
+
+export interface SkillDefinition {
+  name: string
+  description: string
+  category: string
+  parameters: Record<string, any>
+  isActive: boolean
+  isBuiltin: boolean
+  promptTemplate?: string
+  tags: string[]
+}
+
+export interface MCPServer {
+  name: string
+  transport: string
+  status?: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+}
+
+export interface MCPTool {
+  name: string
+  description?: string
+  inputSchema?: Record<string, any>
+}
+
+export interface GroupInfo {
+  id: string
+  name: string
+  description: string
+  type: string
+  members: any[]
+  memberCount: number
+  aiCount: number
+  lastMessage?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GroupMessage {
+  id: string
+  groupId: string
+  senderId: string
+  senderType: string
+  content: string
+  timestamp: string
+}
+
+export interface AgentRoleDefinition {
+  roleId: string
+  name: string
+  description: string
+  capabilities: string[]
+  executionMode: string
+  maxConcurrentTasks: number
+  timeoutSeconds: number
+  color: string
+}
+
+export interface CollaborationPhase {
+  value: string
+}
+
+export interface CollaborationSubTask {
+  taskId: string
+  roleId: string
+  agentId?: string
+  description: string
+  status: string
+  result?: string
+  error?: string
+}
+
+export interface CollaborationEvent {
+  type: string
+  data: any
+}
+
+export interface ProviderLogo {
+  id: string
+  name: string
+  logo?: string
 }
 
 export {}
