@@ -166,21 +166,21 @@ def _build_system_prompt_with_tools(agent_id: str | None) -> str:
 
 <tool_call name="工具名">
 {"param1": "value1"}
-</tool_call
+</tool_call >
 
-注意：结束标签是 </tool_call（没有方括号）
+注意：结束标签是 </tool_call >（含空格和尖括号）
 
 如果工具不需要参数，可以使用空对象：
 <tool_call name="工具名">
 {}
-</tool_call
+</tool_call >
 
 ## 工具调用示例
 
 用户：明天去北京，天气怎么样？
 助手：<tool_call name="web_search">
 {"query": "北京明天天气"}
-</tool_call
+</tool_call >
 
 用户：我明天想去北京
 助手：明天去北京呀，提前祝你出行顺利~ 要是需要我帮你查天气、交通攻略、游玩推荐之类的，随时告诉我哦
@@ -193,7 +193,7 @@ def _build_system_prompt_with_tools(agent_id: str | None) -> str:
 
 def _parse_tool_calls(content: str) -> list[dict]:
     import re
-    pattern = r'<tool_call\s+name="([^"]+)">\s*(.*?)\s*</tool_call'
+    pattern = r'<tool_call\s+name="([^"]+)">\s*(.*?)\s*</tool_call\s*>'
     matches = re.findall(pattern, content, re.DOTALL)
     results = []
     for name, args_str in matches:

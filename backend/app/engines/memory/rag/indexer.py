@@ -227,6 +227,9 @@ class RAGIndexer:
         if len(text) <= chunk_size:
             return [text] if text.strip() else []
 
+        # Clamp overlap to [0, chunk_size-1] to prevent negative or forward-jump
+        overlap = max(0, min(overlap, chunk_size - 1))
+
         chunks = []
         start = 0
         while start < len(text):

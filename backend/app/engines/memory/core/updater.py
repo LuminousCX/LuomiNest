@@ -175,6 +175,17 @@ class MemoryUpdater:
             logger.error(f"[Memory] LLM call failed: {e}")
             return {"updated": False, "reason": str(e)}
 
+        # Normalize response to string for _parse_llm_response
+        if isinstance(response, dict):
+            response = response.get("content", "")
+        if not isinstance(response, str):
+            if response is None:
+                response = ""
+            elif isinstance(response, (list, dict)):
+                response = json.dumps(response, ensure_ascii=False)
+            else:
+                response = str(response)
+
         parsed = self._parse_llm_response(response)
         facts_added = 0
         facts_removed = 0
