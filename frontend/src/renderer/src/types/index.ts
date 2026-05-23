@@ -123,4 +123,26 @@ export interface SearchResult {
   metadata: Record<string, any>
 }
 
+export interface ToolCallResult {
+  tool: string
+  result: string
+  status: 'success' | 'error'
+}
+
+export interface UserProfile {
+  name: string
+  nickname: string
+  age: string
+  gender: string
+  occupation: string
+  location: string
+  timezone: string
+  language: string
+  interests: string[]
+  hobbies: string[]
+  preferences: Record<string, string>
+  notes: string
+  updated_at: string
+}
+
 export {}

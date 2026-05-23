@@ -19,7 +19,8 @@ import {
   Users,
   Package,
   Trash2,
-  Check
+  Check,
+  UserCircle
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 
@@ -39,6 +40,7 @@ const navItems = [
   { id: '/avatar', label: '皮套', icon: Palette },
   { id: '/memory', label: '记忆', icon: Brain },
   { id: '/market', label: '扩展', icon: Package },
+  { id: '/profile', label: '个人信息', icon: UserCircle },
   { id: '/social', label: '社交', icon: Users },
   { id: '/browser', label: '浏览器', icon: Globe }
 ]

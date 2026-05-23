@@ -17,7 +17,7 @@ class RAGIndexer:
         self._embedding_dim: int | None = None
 
     def _get_content_hash(self, content: str) -> str:
-        return hashlib.md5(content.strip().encode()).hexdigest()[:16]
+        return hashlib.sha256(content.strip().encode()).hexdigest()
 
     def _load_existing_chunks_sync(self) -> tuple[list[dict], set[str]]:
         index_file = os.path.join(self._index_dir, "chunks.json")
@@ -41,6 +41,40 @@ class RAGIndexer:
     async def _load_existing_chunks(self) -> tuple[list[dict], set[str]]:
         return await asyncio.to_thread(self._load_existing_chunks_sync)
 
+    def _update_chunks_atomic(self, callback) -> list[dict]:
+        with self._global_lock:
+            existing, existing_hashes = self._load_existing_chunks_sync()
+            result = callback(existing, existing_hashes)
+            index_file = os.path.join(self._index_dir, "chunks.json")
+            temp_file = index_file + ".tmp"
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(existing, f, ensure_ascii=False, indent=2)
+            os.replace(temp_file, index_file)
+            return result
+
+    def _save_chunks_sync(self, chunks: list[dict]) -> None:
+        with self._global_lock:
+            index_file = os.path.join(self._index_dir, "chunks.json")
+            temp_file = index_file + ".tmp"
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(chunks, f, ensure_ascii=False, indent=2)
+            os.replace(temp_file, index_file)
+
+    async def _save_chunks(self, chunks: list[dict]) -> None:
+        await asyncio.to_thread(self._save_chunks_sync, chunks)
+
+    def _validate_chunk_params(self, chunk_size: int, overlap: int) -> tuple[int, int]:
+        if chunk_size <= 0:
+            logger.error(f"[RAG] Invalid chunk_size={chunk_size}, must be > 0")
+            chunk_size = 500
+        if overlap < 0:
+            logger.error(f"[RAG] Invalid overlap={overlap}, must be >= 0")
+            overlap = 0
+        if overlap >= chunk_size:
+            logger.error(f"[RAG] overlap={overlap} >= chunk_size={chunk_size}, adjusting overlap to {chunk_size - 1}")
+            overlap = chunk_size - 1
+        return chunk_size, overlap
+
     async def index_text(
         self,
         content: str,
@@ -54,6 +88,8 @@ class RAGIndexer:
             logger.warning("[RAG] Empty content, skipping indexing")
             return 0
 
+        chunk_size, overlap = self._validate_chunk_params(chunk_size, overlap)
+
         content = content.strip()
         if len(content) > 10_000_000:
             logger.warning(f"[RAG] Content too large ({len(content)} chars), truncating to 10M chars")
@@ -62,7 +98,7 @@ class RAGIndexer:
         logger.info(f"[RAG] Indexing text from source: {source}, content_len={len(content)}")
         chunks = self._chunk_text(content, chunk_size, overlap)
 
-        existing, existing_hashes = await self._load_existing_chunks()
+        pre_existing, pre_existing_hashes = await self._load_existing_chunks()
         indexed = []
         skipped = 0
 
@@ -71,9 +107,14 @@ class RAGIndexer:
                 continue
 
             content_hash = self._get_content_hash(chunk)
-            if skip_duplicates and content_hash in existing_hashes:
-                skipped += 1
-                continue
+            if skip_duplicates and content_hash in pre_existing_hashes:
+                is_true_duplicate = any(
+                    c.get("content_hash") == content_hash and c.get("content") == chunk
+                    for c in pre_existing
+                )
+                if is_true_duplicate:
+                    skipped += 1
+                    continue
 
             try:
                 embedding = await llm_adapter.embed(chunk)
@@ -97,35 +138,29 @@ class RAGIndexer:
                 "embedding": embedding,
                 "metadata": metadata or {},
             })
-            existing_hashes.add(content_hash)
+            pre_existing_hashes.add(content_hash)
 
         if not indexed:
             logger.info(f"[RAG] No new chunks to index (skipped {skipped} duplicates)")
             return 0
 
-        existing.extend(indexed)
-        await self._save_chunks(existing)
+        def _atomic_append(existing: list[dict], existing_hashes: set[str]) -> list[dict]:
+            for item in indexed:
+                item_hash = item["content_hash"]
+                if skip_duplicates and item_hash in existing_hashes:
+                    if any(c.get("content_hash") == item_hash and c.get("content") == item["content"] for c in existing):
+                        continue
+                existing.append(item)
+                existing_hashes.add(item_hash)
+            return existing
+
+        await asyncio.to_thread(self._update_chunks_atomic, _atomic_append)
 
         logger.success(f"[RAG] Indexed {len(indexed)} chunks from {source} (skipped {skipped} duplicates)")
         return len(indexed)
 
-    def _save_chunks_sync(self, chunks: list[dict]) -> None:
-        with self._global_lock:
-            index_file = os.path.join(self._index_dir, "chunks.json")
-            temp_file = index_file + ".tmp"
-            with open(temp_file, "w", encoding="utf-8") as f:
-                json.dump(chunks, f, ensure_ascii=False, indent=2)
-            os.replace(temp_file, index_file)
-
-    def _read_file_sync(self, file_path: str) -> str:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-
-    async def _save_chunks(self, chunks: list[dict]) -> None:
-        await asyncio.to_thread(self._save_chunks_sync, chunks)
-
     async def index_file(self, file_path: str, metadata: dict | None = None, max_size_mb: int = 100) -> int:
-        logger.info(f"[RAG] Indexing file: {file_path}")
+        logger.info(f"[RAG] Indexing file: {os.path.basename(file_path)}")
         try:
             file_size = await asyncio.to_thread(os.path.getsize, file_path)
             max_size = max_size_mb * 1024 * 1024
@@ -133,10 +168,14 @@ class RAGIndexer:
                 logger.warning(f"[RAG] File too large ({file_size} bytes), skipping")
                 return 0
 
-            content = await asyncio.to_thread(self._read_file_sync, file_path)
+            def _read_file(path: str) -> str:
+                with open(path, "r", encoding="utf-8") as f:
+                    return f.read()
+
+            content = await asyncio.to_thread(_read_file, file_path)
             return await self.index_text(content, source=file_path, metadata=metadata)
         except Exception as e:
-            logger.error(f"[RAG] Failed to index file {file_path}: {e}")
+            logger.error(f"[RAG] Failed to index file {os.path.basename(file_path)}: {e}")
             return 0
 
     def clear_index_sync(self):
@@ -150,15 +189,23 @@ class RAGIndexer:
         await asyncio.to_thread(self.clear_index_sync)
 
     async def remove_by_source(self, source: str) -> int:
-        existing, _ = await self._load_existing_chunks()
-        original_count = len(existing)
-        filtered = [c for c in existing if c.get("source") != source]
-        removed = original_count - len(filtered)
+        def _atomic_remove(existing: list[dict], existing_hashes: set[str]) -> list[dict]:
+            original_count = len(existing)
+            to_remove_hashes = set()
+            filtered = []
+            for c in existing:
+                if c.get("source") == source:
+                    to_remove_hashes.add(c.get("content_hash"))
+                else:
+                    filtered.append(c)
+            existing_hashes.difference_update(to_remove_hashes)
+            existing.clear()
+            existing.extend(filtered)
+            return original_count - len(existing)
 
+        removed = await asyncio.to_thread(self._update_chunks_atomic, _atomic_remove)
         if removed > 0:
-            await self._save_chunks(filtered)
             logger.info(f"[RAG] Removed {removed} chunks from source: {source}")
-
         return removed
 
     async def get_stats(self) -> dict:
@@ -180,6 +227,9 @@ class RAGIndexer:
     def _chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
         if len(text) <= chunk_size:
             return [text] if text.strip() else []
+
+        # Clamp overlap to [0, chunk_size-1] to prevent negative or forward-jump
+        overlap = max(0, min(overlap, chunk_size - 1))
 
         chunks = []
         start = 0

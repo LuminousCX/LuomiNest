@@ -81,7 +81,7 @@ class MemoryStorage:
                 except OSError:
                     mtime = None
                 self._cache[agent_id] = (copy.deepcopy(memory_data), mtime)
-                logger.info(f"[Memory] Saved memory to {file_path}")
+                logger.info(f"[Memory] Saved memory (resource={file_path.name})")
                 return True
             except Exception as e:
                 logger.error(f"[Memory] Failed to save memory: {e}")

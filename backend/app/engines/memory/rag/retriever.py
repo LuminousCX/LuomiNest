@@ -46,22 +46,37 @@ class RAGRetriever:
     async def _load_chunks(self) -> list[dict]:
         return await asyncio.to_thread(self._load_chunks_sync)
 
+    def _set_expected_dim(self, dim: int) -> None:
+        with self._global_lock:
+            if self._expected_dim is None:
+                RAGRetriever._expected_dim = dim
+            elif self._expected_dim != dim:
+                logger.warning(
+                    f"[RAG] Embedding dimension mismatch: expected {self._expected_dim}, got {dim}"
+                )
+
+    def _get_expected_dim(self) -> int | None:
+        with self._global_lock:
+            return RAGRetriever._expected_dim
+
     async def search(self, query: str, top_k: int = 5) -> list[dict]:
         if not query or not query.strip():
             logger.warning("[RAG] Empty query, returning empty results")
             return []
 
-        logger.info(f"[RAG] Searching for: '{query}', top_k={top_k}")
+        query_len = len(query)
+        logger.info(f"[RAG] search query_len={query_len}, top_k={top_k}")
 
         query_embedding = None
         try:
             query_embedding = await llm_adapter.embed(query)
             if query_embedding:
-                if self._expected_dim is None:
-                    self._expected_dim = len(query_embedding)
-                elif len(query_embedding) != self._expected_dim:
+                expected = self._get_expected_dim()
+                if expected is None:
+                    self._set_expected_dim(len(query_embedding))
+                elif len(query_embedding) != expected:
                     logger.warning(
-                        f"[RAG] Query embedding dimension mismatch: expected {self._expected_dim}, got {len(query_embedding)}"
+                        f"[RAG] Query embedding dimension mismatch: expected {expected}, got {len(query_embedding)}"
                     )
                     query_embedding = None
         except Exception as e:
@@ -91,7 +106,7 @@ class RAGRetriever:
                 "metadata": chunk.get("metadata", {}),
             })
 
-        logger.success(f"[RAG] Found {len(results)} results for query: '{query}'")
+        logger.success(f"[RAG] search query_len={query_len}, top_k={top_k}, hits={len(results)}")
         return results
 
     async def hybrid_search(
@@ -102,6 +117,8 @@ class RAGRetriever:
     ) -> list[dict]:
         if not query or not query.strip():
             return []
+
+        vector_weight = max(0.0, min(1.0, vector_weight))
 
         query_embedding = None
         try:
@@ -116,6 +133,7 @@ class RAGRetriever:
         scored = []
         for chunk in chunks:
             vector_score = 0.0
+            keyword_score = 0.0
 
             embedding = chunk.get("embedding", [])
             if query_embedding and embedding and len(embedding) == len(query_embedding):
@@ -126,7 +144,7 @@ class RAGRetriever:
             scored.append((combined, chunk))
 
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [
+        results = [
             {
                 "content": c.get("content", ""),
                 "source": c.get("source", ""),
@@ -135,6 +153,10 @@ class RAGRetriever:
             }
             for s, c in scored[:top_k]
         ]
+
+        query_len = len(query)
+        logger.info(f"[RAG] hybrid_search query_len={query_len}, top_k={top_k}, vector_weight={vector_weight:.2f}, hits={len(results)}")
+        return results
 
     @staticmethod
     def _cosine_similarity(a: list[float], b: list[float]) -> float:

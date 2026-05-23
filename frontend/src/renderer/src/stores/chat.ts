@@ -652,6 +652,20 @@ export const useChatStore = defineStore('chat', () => {
         convStreamingContent.value = { ...convStreamingContent.value, [streamingConvId]: '' }
         convStreamingReasoning.value = { ...convStreamingReasoning.value, [streamingConvId]: '' }
         await fetchConversations(targetAgentId)
+        // 重新加载对话以确保消息同步
+        try {
+          const rawConv = await apiGet<any>(`/chat/conversations/${streamingConvId}`)
+          const syncedMessages: ChatMessage[] = (rawConv.messages || []).map((m: any) => ({
+            id: m.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            role: m.role,
+            content: m.content,
+            timestamp: Date.now(),
+            done: true,
+          }))
+          convMessages.value = { ...convMessages.value, [streamingConvId]: syncedMessages }
+        } catch (e) {
+          console.error('[ChatStore] Failed to reload conversation after streaming:', e)
+        }
       },
       (err: string) => {
         const newControllers = { ...convAbortControllers.value }
