@@ -1,4 +1,6 @@
 import { BrowserWindow, WebContentsView } from 'electron'
+import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { Tab, TabError, BoundsConfig, getErrorInfo, DEFAULT_BROWSER_CONFIG, NavigationState } from './types'
 import { initBrowserSession } from './session'
 import {
@@ -7,9 +9,11 @@ import {
   setViewBounds,
   attachView,
   detachView,
-  injectStealthScript,
   isViewDestroyed
 } from './view'
+
+const HOME_HTML_PATH = join(__dirname, 'home.html')
+const HOME_HTML_URL = pathToFileURL(HOME_HTML_PATH).href
 
 type TabUpdateCallback = (tabId: string, updates: Partial<Tab>) => void
 type TabEventCallback = (event: string, data: any) => void
@@ -39,6 +43,7 @@ class TabManager {
   private onTabUpdate: TabUpdateCallback | null = null
   private onTabEvent: TabEventCallback | null = null
   private sleepCheckInterval: ReturnType<typeof setInterval> | null = null
+  private hidden: boolean = false
 
   setWindow(window: BrowserWindow): void {
     this.window = window
@@ -69,7 +74,7 @@ class TabManager {
   }
 
   private updateActiveViewBounds(): void {
-    if (!this.window || !this.activeTabId) return
+    if (!this.window || !this.activeTabId || this.hidden) return
 
     const view = this.views.get(this.activeTabId)
     if (view) {
@@ -82,12 +87,19 @@ class TabManager {
     const webContents = view.webContents
 
     webContents.on('page-title-updated', (_e, title) => {
+      const tab = this.tabs.get(tabId)
+      if (tab?.isHome) return
       if (title && title !== 'about:blank') {
         this.notifyUpdate(tabId, { title })
       }
     })
 
     webContents.on('did-navigate', (_e, url) => {
+      const tab = this.tabs.get(tabId)
+      if (tab?.isHome) {
+        this.notifyUpdate(tabId, { loading: false })
+        return
+      }
       const captchaDetected = isCaptchaUrl(url)
       this.notifyUpdate(tabId, {
         url,
@@ -99,6 +111,8 @@ class TabManager {
     })
 
     webContents.on('did-navigate-in-page', (_e, url) => {
+      const tab = this.tabs.get(tabId)
+      if (tab?.isHome) return
       const captchaDetected = isCaptchaUrl(url)
       this.notifyUpdate(tabId, { url, captchaDetected })
       this.emitNavigationState(tabId)
@@ -115,9 +129,12 @@ class TabManager {
       return { action: 'deny' }
     })
 
-    webContents.on('did-finish-load', async () => {
+    webContents.on('did-finish-load', () => {
       this.notifyUpdate(tabId, { loading: false })
-      await injectStealthScript(view)
+      if (this.activeTabId === tabId && this.window && !this.hidden) {
+        const bounds = calculateBounds(this.window, this.boundsConfig)
+        setViewBounds(view, bounds)
+      }
       this.emitNavigationState(tabId)
     })
 
@@ -178,7 +195,7 @@ class TabManager {
     const sleepTimeout = DEFAULT_BROWSER_CONFIG.sleepTimeout
 
     this.tabs.forEach((tab, tabId) => {
-      if (tab.active || tab.sleeping || !tab.url) return
+      if (tab.active || tab.sleeping || !tab.url || tab.isHome) return
       if (tab.loading) return
 
       const idleTime = now - tab.lastActiveAt
@@ -218,8 +235,7 @@ class TabManager {
 
     if (this.window && tab.active) {
       attachView(this.window, view)
-      const bounds = calculateBounds(this.window, this.boundsConfig)
-      setViewBounds(view, bounds)
+      setViewBounds(view, { x: 0, y: 0, width: 0, height: 0 })
 
       try {
         view.webContents.setBackgroundThrottling(false)
@@ -238,11 +254,12 @@ class TabManager {
     console.info(`[INFO][LuomiNestBrowser] Tab "${tab.title}" has been awakened from sleep mode`)
   }
 
-  createTab(url: string = DEFAULT_BROWSER_CONFIG.defaultUrl): Tab {
+  createTab(url?: string): Tab {
     if (!this.window) {
       throw new Error('Window not initialized')
     }
 
+    const isHomeTab = !url
     const tabId = this.generateTabId()
 
     if (this.activeTabId) {
@@ -250,28 +267,28 @@ class TabManager {
       if (currentTab) {
         currentTab.active = false
         currentTab.lastActiveAt = Date.now()
-
-        const currentView = this.views.get(this.activeTabId)
-        if (currentView) {
-          detachView(this.window, currentView)
-          try {
-            currentView.webContents.setBackgroundThrottling(true)
-          } catch {}
-        }
+      }
+      const currentView = this.views.get(this.activeTabId)
+      if (currentView) {
+        setViewBounds(currentView, { x: 0, y: 0, width: 0, height: 0 })
+        try {
+          currentView.webContents.setBackgroundThrottling(true)
+        } catch {}
       }
     }
 
-    const view = createBrowserView()
+    const view = createBrowserView(isHomeTab)
     this.setupViewEvents(view, tabId)
 
     const tab: Tab = {
       id: tabId,
-      title: '加载中...',
-      url,
+      title: isHomeTab ? '新标签页' : '加载中...',
+      url: url || '',
       loading: true,
       active: true,
       createdAt: Date.now(),
-      lastActiveAt: Date.now()
+      lastActiveAt: Date.now(),
+      isHome: isHomeTab
     }
 
     this.tabs.set(tabId, tab)
@@ -279,10 +296,13 @@ class TabManager {
     this.activeTabId = tabId
 
     attachView(this.window, view)
-    const bounds = calculateBounds(this.window, this.boundsConfig)
-    setViewBounds(view, bounds)
+    setViewBounds(view, { x: 0, y: 0, width: 0, height: 0 })
 
-    view.webContents.loadURL(url).catch((err) => {
+    const loadUrl = isHomeTab
+      ? HOME_HTML_URL
+      : url
+
+    view.webContents.loadURL(loadUrl).catch((err) => {
       if (!err.message?.includes('ERR_ABORTED')) {
         const error = getErrorInfo(typeof err.code === 'number' ? err.code : -1)
         this.notifyUpdate(tabId, { loading: false, error, title: error.title })
@@ -306,7 +326,7 @@ class TabManager {
 
         const currentView = this.views.get(this.activeTabId)
         if (currentView) {
-          detachView(this.window, currentView)
+          setViewBounds(currentView, { x: 0, y: 0, width: 0, height: 0 })
           try {
             currentView.webContents.setBackgroundThrottling(true)
           } catch {}
@@ -328,9 +348,14 @@ class TabManager {
       try {
         targetView.webContents.setBackgroundThrottling(false)
       } catch {}
+      detachView(this.window, targetView)
       attachView(this.window, targetView)
-      const bounds = calculateBounds(this.window, this.boundsConfig)
-      setViewBounds(targetView, bounds)
+      if (this.hidden || targetTab.loading) {
+        setViewBounds(targetView, { x: 0, y: 0, width: 0, height: 0 })
+      } else {
+        const bounds = calculateBounds(this.window, this.boundsConfig)
+        setViewBounds(targetView, bounds)
+      }
     }
 
     this.onTabUpdate?.(tabId, { active: true })
@@ -339,7 +364,6 @@ class TabManager {
 
   closeTab(tabId: string): void {
     if (!this.window) return
-    if (this.tabs.size <= 1) return
 
     const tab = this.tabs.get(tabId)
     if (!tab) return
@@ -402,6 +426,29 @@ class TabManager {
     }
   }
 
+  navigateTab(tabId: string, url: string): void {
+    if (!this.window) return
+
+    const tab = this.tabs.get(tabId)
+    if (!tab) return
+
+    const view = this.views.get(tabId)
+    if (!view || isViewDestroyed(view)) return
+
+    tab.url = url
+    tab.loading = true
+    tab.error = undefined
+    tab.isHome = false
+    tab.title = '加载中...'
+
+    view.webContents.loadURL(url).catch((err) => {
+      if (!err.message?.includes('ERR_ABORTED')) {
+        const error = getErrorInfo(typeof err.code === 'number' ? err.code : -1)
+        this.notifyUpdate(tabId, { loading: false, error, title: error.title })
+      }
+    })
+  }
+
   getNavigationState(tabId?: string): NavigationState {
     const targetId = tabId || this.activeTabId
     if (!targetId) return { canGoBack: false, canGoForward: false }
@@ -418,16 +465,14 @@ class TabManager {
     }
   }
 
-  hideAll(): void {
-    if (!this.window) return
-
-    this.views.forEach((view) => {
-      detachView(this.window!, view)
-    })
-  }
-
   showActive(): void {
     if (!this.window || !this.activeTabId) return
+
+    this.hidden = false
+
+    this.views.forEach((view) => {
+      setViewBounds(view, { x: 0, y: 0, width: 0, height: 0 })
+    })
 
     const tab = this.tabs.get(this.activeTabId)
     if (!tab) return
@@ -442,10 +487,19 @@ class TabManager {
       try {
         view.webContents.setBackgroundThrottling(false)
       } catch {}
+      detachView(this.window, view)
       attachView(this.window, view)
       const bounds = calculateBounds(this.window, this.boundsConfig)
       setViewBounds(view, bounds)
     }
+  }
+
+  hideAll(): void {
+    if (!this.window) return
+    this.hidden = true
+    this.views.forEach((view) => {
+      setViewBounds(view, { x: 0, y: 0, width: 0, height: 0 })
+    })
   }
 
   getTab(tabId: string): Tab | undefined {
@@ -455,6 +509,11 @@ class TabManager {
   getActiveTab(): Tab | undefined {
     if (!this.activeTabId) return undefined
     return this.tabs.get(this.activeTabId)
+  }
+
+  navigateActiveTab(url: string): void {
+    if (!this.activeTabId) return
+    this.navigateTab(this.activeTabId, url)
   }
 
   getAllTabs(): Tab[] {

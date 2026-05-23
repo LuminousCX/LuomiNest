@@ -1,10 +1,34 @@
 import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
+import { copyFileSync, mkdirSync } from 'fs'
+
+function copyStaticFilesPlugin() {
+  return {
+    name: 'copy-static-files',
+    writeBundle(options: any) {
+      const outDir = options.dir || resolve(__dirname, 'out/main')
+      const staticFiles = [
+        'src/main/services/browser/stealth-preload.js',
+        'src/main/services/browser/home-preload.js',
+        'src/main/services/browser/home.html'
+      ]
+      for (const file of staticFiles) {
+        const src = resolve(__dirname, file)
+        const dest = resolve(outDir, file.split('/').pop()!)
+        try {
+          copyFileSync(src, dest)
+        } catch (err) {
+          console.warn(`[copy-static-files] Failed to copy ${src}:`, err)
+        }
+      }
+    }
+  }
+}
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), copyStaticFilesPlugin()],
     build: {
       rollupOptions: {
         input: {

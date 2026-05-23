@@ -15,11 +15,13 @@ if (platform() === 'win32') {
 
 setupNetworkConfig()
 
+app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
+
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let desktopPetWindow: BrowserWindow | null = null
 
-const isDev = !app.isPackaged
+const isDev = !app.isPackaged || !!process.env.ELECTRON_RENDERER_URL
 const isMac = platform() === 'darwin'
 
 if (isDev) {
@@ -466,6 +468,10 @@ function registerIpcHandlers(): void {
     return tabManager.goForward(tabId)
   })
 
+  ipcMain.handle('tab:navigate', async (_e, tabId: string, url: string) => {
+    return tabManager.navigateTab(tabId, url)
+  })
+
   ipcMain.handle('tab:getNavigationState', async (_e, tabId?: string) => {
     return tabManager.getNavigationState(tabId)
   })
@@ -499,6 +505,16 @@ function registerIpcHandlers(): void {
   ipcMain.handle('browser:search', async (_e, query: string) => {
     const { browserSearch } = await import('./services/browser')
     return await browserSearch(query, mainWindow)
+  })
+
+  ipcMain.handle('home:search', async (_e, url: string) => {
+    tabManager.navigateActiveTab(url)
+  })
+
+  ipcMain.handle('home:action', async (_e, action: string) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('home:action', action)
+    }
   })
 
   ipcMain.handle('avatar:importModel', async () => {
@@ -889,18 +905,19 @@ app.whenReady().then(async () => {
   console.info(`[INFO][LuomiNestAvatar]   isPackaged → ${app.isPackaged}`)
   console.info(`[INFO][LuomiNestAvatar]   resourcesPath → ${process.resourcesPath}`)
 
-  console.log('[Main] Starting backend service...')
-  const backendStarted = await startBackend()
-  if (!backendStarted) {
-    console.error('[Main] Failed to start backend service')
-  } else {
-    console.log('[Main] Backend service started at:', getBackendUrl())
-  }
-
   createWindow()
   createMenu()
   createTray()
   registerIpcHandlers()
+
+  console.log('[Main] Starting backend service...')
+  startBackend().then((backendStarted) => {
+    if (!backendStarted) {
+      console.error('[Main] Failed to start backend service')
+    } else {
+      console.log('[Main] Backend service started at:', getBackendUrl())
+    }
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

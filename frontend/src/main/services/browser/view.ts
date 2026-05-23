@@ -1,8 +1,11 @@
 import { WebContentsView, BrowserWindow, app } from 'electron'
+import { join } from 'path'
 import { DEFAULT_BROWSER_CONFIG, BROWSER_LAYOUT, BrowserBounds, BoundsConfig } from './types'
-import { getStealthScript } from './session'
 
-export function createBrowserView(): WebContentsView {
+const homePreloadPath = join(__dirname, 'home-preload.js')
+const stealthPreloadPath = join(__dirname, 'stealth-preload.js')
+
+export function createBrowserView(isHomeTab = false): WebContentsView {
   const view = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
@@ -16,11 +19,13 @@ export function createBrowserView(): WebContentsView {
       spellcheck: false,
       allowRunningInsecureContent: true,
       experimentalFeatures: false,
-      enablePreferredSizeMode: false
+      enablePreferredSizeMode: false,
+      preload: isHomeTab ? homePreloadPath : stealthPreloadPath
     }
   })
   
   view.webContents.setVisualZoomLevelLimits(1, 3)
+  view.setBackgroundColor('#fafaf9')
   
   return view
 }
@@ -63,13 +68,6 @@ export function detachView(
   }
 }
 
-export async function injectStealthScript(view: WebContentsView): Promise<void> {
-  try {
-    await view.webContents.executeJavaScript(getStealthScript())
-  } catch {
-  }
-}
-
 export function isViewDestroyed(view: WebContentsView): boolean {
   try {
     return view.webContents.isDestroyed()
@@ -79,11 +77,12 @@ export function isViewDestroyed(view: WebContentsView): boolean {
 }
 
 export function setupNetworkConfig(): void {
+  app.commandLine.appendSwitch('enable-features', 'PaintHolding,BackForwardCache')
   app.commandLine.appendSwitch('ignore-certificate-errors')
   app.commandLine.appendSwitch('ignore-certificate-errors-spki-list')
   app.commandLine.appendSwitch('disable-web-security')
   app.commandLine.appendSwitch('allow-running-insecure-content')
-  app.commandLine.appendSwitch('disable-features', 'IsolateOrigins,site-per-process,AutomationControlled')
+  app.commandLine.appendSwitch('disable-features', 'IsolateOrigins,site-per-process,AutomationControlled,LazyFrameLoading')
   app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
   app.commandLine.appendSwitch('excludeSwitches', 'enable-automation')
   app.commandLine.appendSwitch('disable-extensions-except', '')

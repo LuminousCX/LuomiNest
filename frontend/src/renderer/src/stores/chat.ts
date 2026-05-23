@@ -584,9 +584,9 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     // 搜索意图检测：如果用户消息需要联网搜索，先调用内置浏览器搜索
-    try {
-      const searchNeeded = await detectSearchIntent(content)
-      if (searchNeeded) {
+    const searchNeeded = detectSearchIntent(content)
+    if (searchNeeded) {
+      try {
         const searchQuery = extractSearchQuery(content)
         const searchResults = await window.api.browserSearch.search(searchQuery)
         if (searchResults && searchResults.length > 0) {
@@ -594,9 +594,9 @@ export const useChatStore = defineStore('chat', () => {
             `${r.title}: ${r.snippet}`
           ).join('\n')
         }
+      } catch (err) {
+        console.warn('[ChatStore] Browser search failed, continuing without search results:', err)
       }
-    } catch (err) {
-      console.warn('[ChatStore] Browser search failed, continuing without search results:', err)
     }
 
     const controller = new AbortController()

@@ -10,6 +10,7 @@ export interface TabInfo {
   error?: TabErrorInfo
   captchaDetected?: boolean
   sleeping?: boolean
+  isHome?: boolean
 }
 
 export interface TabErrorInfo {
@@ -109,6 +110,7 @@ export interface ElectronApi {
     reload: (tabId?: string) => Promise<void>
     goBack: (tabId?: string) => Promise<void>
     goForward: (tabId?: string) => Promise<void>
+    navigate: (tabId: string, url: string) => Promise<void>
     getNavigationState: (tabId?: string) => Promise<NavigationStateInfo>
     hideAll: () => Promise<void>
     showActive: () => Promise<void>

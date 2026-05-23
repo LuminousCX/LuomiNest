@@ -50,6 +50,7 @@ const api = {
     reload: (tabId?: string) => ipcRenderer.invoke('tab:reload', tabId),
     goBack: (tabId?: string) => ipcRenderer.invoke('tab:goBack', tabId),
     goForward: (tabId?: string) => ipcRenderer.invoke('tab:goForward', tabId),
+    navigate: (tabId: string, url: string) => ipcRenderer.invoke('tab:navigate', tabId, url),
     getNavigationState: (tabId?: string) => ipcRenderer.invoke('tab:getNavigationState', tabId),
     hideAll: () => ipcRenderer.invoke('tab:hideAll'),
     showActive: () => ipcRenderer.invoke('tab:showActive'),

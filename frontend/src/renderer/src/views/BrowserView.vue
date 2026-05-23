@@ -4,7 +4,6 @@ import type { TabInfo } from '../vite-env.d'
 import TabBar from '../components/browser/TabBar.vue'
 import NavBar from '../components/browser/NavBar.vue'
 import BookmarkBar from '../components/browser/BookmarkBar.vue'
-import HomePage from '../components/browser/HomePage.vue'
 import ErrorPage from '../components/browser/ErrorPage.vue'
 import DevPanel from '../components/browser/DevPanel.vue'
 
@@ -18,11 +17,11 @@ interface Tab {
   active?: boolean
   captchaDetected?: boolean
   sleeping?: boolean
+  isHome?: boolean
 }
 
 const tabs = ref<Tab[]>([])
 const addressBar = ref('')
-const showHomePage = ref(true)
 const showDevPanel = ref(false)
 const devOutput = ref('')
 const canGoBack = ref(false)
@@ -52,29 +51,33 @@ onMounted(async () => {
   await syncTabs()
 
   const active = tabs.value.find(t => t.active)
-  if (active?.url && !active.sleeping) {
-    try {
-      await window.api?.tab.showActive()
-    } catch (e) {
-      console.error('[ERROR][LuomiNestBrowser] Failed to restore active tab:', e)
-    }
-  } else if (active?.url && active.sleeping) {
-    try {
-      await window.api?.tab.activate(active.id)
-    } catch (e) {
-      console.error('[ERROR][LuomiNestBrowser] Failed to wake up tab:', e)
+  if (active) {
+    if (active.sleeping) {
+      try {
+        await window.api?.tab.activate(active.id)
+      } catch (e) {
+        console.error('[ERROR][LuomiNestBrowser] Failed to wake up tab:', e)
+      }
+    } else {
+      try {
+        await window.api?.tab.showActive()
+      } catch (e) {
+        console.error('[ERROR][LuomiNestBrowser] Failed to restore active tab:', e)
+      }
     }
   }
 
   window.electron?.ipcRenderer?.on('tab:updated', handleTabUpdated)
   window.electron?.ipcRenderer?.on('tab:new-tab-request', handleNewTabRequest)
   window.electron?.ipcRenderer?.on('tab:navigation-state', handleNavigationState)
+  window.electron?.ipcRenderer?.on('home:action', handleHomeAction)
 })
 
 onUnmounted(() => {
   window.electron?.ipcRenderer?.removeListener('tab:updated', handleTabUpdated)
   window.electron?.ipcRenderer?.removeListener('tab:new-tab-request', handleNewTabRequest)
   window.electron?.ipcRenderer?.removeListener('tab:navigation-state', handleNavigationState)
+  window.electron?.ipcRenderer?.removeListener('home:action', handleHomeAction)
 
   window.api?.tab.hideAll().catch(() => {})
   window.api?.tab.setBoundsConfig({ devPanelHeight: 0 }).catch(() => {})
@@ -105,6 +108,10 @@ function handleNavigationState(_event: any, data: { tabId: string; canGoBack: bo
   }
 }
 
+function handleHomeAction(_event: any, action: string) {
+  handleQuickAction(action)
+}
+
 async function syncNavigationState() {
   try {
     const state = await window.api?.tab.getNavigationState()
@@ -122,8 +129,17 @@ async function syncTabs() {
   try {
     const allTabs = await window.api?.tab.getAll() || []
     if (allTabs.length === 0) {
-      tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
-      showHomePage.value = true
+      const newTab = await window.api?.tab.create('')
+      if (newTab) {
+        tabs.value = [{
+          id: newTab.id,
+          title: newTab.title || '新标签页',
+          url: newTab.url,
+          active: true,
+          loading: newTab.loading,
+          isHome: newTab.isHome
+        }]
+      }
     } else {
       tabs.value = allTabs.map((t: TabInfo) => ({
         id: t.id,
@@ -134,37 +150,41 @@ async function syncTabs() {
         favicon: t.favicon,
         error: t.error,
         captchaDetected: t.captchaDetected,
-        sleeping: t.sleeping
+        sleeping: t.sleeping,
+        isHome: (t as any).isHome
       }))
       const active = tabs.value.find(t => t.active)
       if (active?.url) {
-        showHomePage.value = false
         addressBar.value = active.url
         if (!active.sleeping) {
           await syncNavigationState()
         }
+      } else {
+        addressBar.value = ''
+        canGoBack.value = false
+        canGoForward.value = false
       }
     }
   } catch (e) {
-    tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
+    const newTab = await window.api?.tab.create('')
+    if (newTab) {
+      tabs.value = [{
+        id: newTab.id,
+        title: newTab.title || '新标签页',
+        url: newTab.url,
+        active: true,
+        loading: newTab.loading,
+        isHome: newTab.isHome
+      }]
+    }
   }
 }
 
 async function createTab(url: string = '') {
   tabs.value.forEach(t => t.active = false)
-
-  if (!url) {
-    tabs.value.push({ id: `home-${Date.now()}`, title: '新标签页', url: '', active: true })
-    showHomePage.value = true
-    addressBar.value = ''
-    canGoBack.value = false
-    canGoForward.value = false
-    await window.api?.tab.hideAll()
-    return
-  }
-
-  showHomePage.value = false
   addressBar.value = url
+  canGoBack.value = false
+  canGoForward.value = false
 
   try {
     const newTab = await window.api?.tab.create(url)
@@ -177,7 +197,8 @@ async function createTab(url: string = '') {
         loading: newTab.loading,
         error: newTab.error,
         captchaDetected: newTab.captchaDetected,
-        sleeping: newTab.sleeping
+        sleeping: newTab.sleeping,
+        isHome: (newTab as any).isHome
       })
     }
   } catch (e: any) {
@@ -198,25 +219,16 @@ async function selectTab(tabId: string) {
 
   tabs.value.forEach(t => t.active = t.id === tabId)
 
-  if (tab.url) {
-    try {
-      if (tab.sleeping) {
-        tab.sleeping = false
-        tab.loading = true
-      }
-      await window.api?.tab.activate(tabId)
-      showHomePage.value = false
-      addressBar.value = tab.url
-      await syncNavigationState()
-    } catch (e) {
-      console.error('[ERROR][LuomiNestBrowser] Failed to switch tab:', e)
+  try {
+    if (tab.sleeping) {
+      tab.sleeping = false
+      tab.loading = true
     }
-  } else {
-    showHomePage.value = true
-    addressBar.value = ''
-    canGoBack.value = false
-    canGoForward.value = false
-    await window.api?.tab.hideAll()
+    await window.api?.tab.activate(tabId)
+    addressBar.value = tab.url || ''
+    await syncNavigationState()
+  } catch (e) {
+    console.error('[ERROR][LuomiNestBrowser] Failed to switch tab:', e)
   }
 }
 
@@ -226,26 +238,22 @@ async function closeTab(tabId: string) {
   const idx = tabs.value.findIndex(t => t.id === tabId)
   if (idx === -1) return
 
+  const wasActive = tabs.value.find(t => t.id === tabId)?.active
+
   try {
     await window.api?.tab.close(tabId)
   } catch (e) {
     console.error('[ERROR][LuomiNestBrowser] Failed to close tab:', e)
   }
 
-  tabs.value.splice(idx, 1)
+  tabs.value = tabs.value.filter(t => t.id !== tabId)
 
-  if (tabs.value.length > 0) {
+  if (wasActive && tabs.value.length > 0) {
     const newActiveIdx = Math.min(idx, tabs.value.length - 1)
     const newActiveTab = tabs.value[newActiveIdx]
     newActiveTab.active = true
-
-    if (newActiveTab.url) {
-      await selectTab(newActiveTab.id)
-    } else {
-      showHomePage.value = true
-      addressBar.value = ''
-      await window.api?.tab.hideAll()
-    }
+    addressBar.value = newActiveTab.url || ''
+    await syncNavigationState()
   }
 }
 
@@ -258,19 +266,21 @@ async function navigateToUrl(url: string) {
   }
 
   const tab = activeTab.value
-  if (tab && !tab.url) {
-    const idx = tabs.value.findIndex(t => t.id === tab.id)
-    if (idx !== -1) {
-      tabs.value.splice(idx, 1)
+  if (tab) {
+    tab.loading = true
+    tab.error = undefined
+    addressBar.value = normalizedUrl
+    try {
+      await window.api?.tab.navigate(tab.id, normalizedUrl)
+    } catch (e) {
+      console.error('[ERROR][LuomiNestBrowser] Failed to navigate:', e)
     }
   }
-
-  await createTab(normalizedUrl)
 }
 
 async function refreshTab() {
   const tab = activeTab.value
-  if (!tab?.url) return
+  if (!tab) return
 
   try {
     if (tab.sleeping) {
@@ -303,13 +313,9 @@ function handleBookmarkSelect(url: string) {
   navigateToUrl(url)
 }
 
-function handleSearch(url: string) {
-  navigateToUrl(url)
-}
-
 async function handleQuickAction(action: string) {
   const tab = activeTab.value
-  if (!tab?.url) {
+  if (!tab?.url && !tab?.isHome) {
     devOutput.value = '[提示] 请先打开一个网页'
     showDevPanel.value = true
     return
@@ -374,19 +380,13 @@ async function handleQuickAction(action: string) {
 
     <div class="browser-content" :class="{ 'with-panel': showDevPanel, 'with-captcha': showCaptchaBanner }">
       <ErrorPage
-        v-if="activeTab?.error && !activeTab?.loading"
+        v-if="activeTab?.error && !activeTab?.loading && !activeTab?.isHome"
         :code="activeTab.error.code"
         :title="activeTab.error.title"
         :message="activeTab.error.message"
         :url="activeTab.url"
         @retry="refreshTab"
         @new-tab="createTab()"
-      />
-
-      <HomePage
-        v-else-if="showHomePage"
-        @search="handleSearch"
-        @action="handleQuickAction"
       />
     </div>
 
