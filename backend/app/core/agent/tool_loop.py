@@ -109,10 +109,11 @@ async def tool_loop_stream(
 ):
     tool_steps = 0
     duplicate_counter: dict[str, int] = {}
+    collected_reasoning = ""
 
     for step in range(max_steps):
         collected_content = ""
-        collected_reasoning = ""
+        step_reasoning = ""
         collected_tool_calls: dict[int, dict] = {}
 
         async for chunk in llm_adapter.chat_stream(
@@ -130,7 +131,7 @@ async def tool_loop_stream(
                 collected_content += content
                 yield {"type": "content", "content": content}
             if reasoning:
-                collected_reasoning += reasoning
+                step_reasoning += reasoning
                 yield {"type": "reasoning", "content": reasoning}
 
             if tc_complete:
@@ -139,6 +140,7 @@ async def tool_loop_stream(
                     collected_tool_calls[idx] = tc
 
         if not collected_tool_calls:
+            collected_reasoning += step_reasoning
             yield {
                 "type": "done",
                 "content": collected_content,
@@ -196,20 +198,28 @@ async def tool_loop_stream(
                 "content": result,
             })
 
+        collected_reasoning += step_reasoning
+
+    # 最终汇总：不再调用工具，直接回答
     messages.append({"role": "user", "content": "请根据已获取的信息总结回答用户的问题，不要再调用工具。"})
     final_content = ""
-    async for chunk in llm_adapter.chat_stream(
-        messages=messages,
-        provider_name=provider_name,
-        model=model,
-        **kwargs,
-    ):
-        content = chunk.get("content", "")
-        rc = chunk.get("reasoning", "")
-        if content:
-            final_content += content
-            yield {"type": "content", "content": content}
-        if rc:
-            collected_reasoning += rc
+    try:
+        async for chunk in llm_adapter.chat_stream(
+            messages=messages,
+            provider_name=provider_name,
+            model=model,
+            **kwargs,
+        ):
+            content = chunk.get("content", "")
+            rc = chunk.get("reasoning", "")
+            if content:
+                final_content += content
+                yield {"type": "content", "content": content}
+            if rc:
+                collected_reasoning += rc
+    except Exception as e:
+        logger.error(f"[ToolLoop] Final summary stream error: {e}")
+        if not final_content and collected_content:
+            final_content = collected_content
 
     yield {"type": "done", "content": final_content, "reasoning": collected_reasoning}

@@ -19,9 +19,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.infrastructure.database.conversation_store import conversation_store
         from app.infrastructure.database.json_store import conversations_store
-        migrated = conversation_store.migrate_from_json_store(conversations_store)
-        if migrated > 0:
-            logger.success(f"[LuomiNest] Migrated {migrated} conversations to per-file storage")
+        conversation_store.migrate_from_json_store(conversations_store)
     except Exception as e:
         logger.warning(f"[LuomiNest] Conversation migration skipped: {e}")
 

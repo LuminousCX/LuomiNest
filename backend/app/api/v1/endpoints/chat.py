@@ -3,6 +3,7 @@ import uuid
 import time
 import asyncio
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from collections.abc import AsyncIterator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -78,8 +79,7 @@ def _resolve_tools(user_message: str, request_type: RequestType) -> list[dict] |
 
 
 def _inject_system_prompt(messages: list[dict]) -> list[dict]:
-    from datetime import timedelta
-    now = datetime.now(timezone(timedelta(hours=8)))
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
     weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
     current_date = now.strftime("%Y年%m月%d日")
     current_weekday = weekday_names[now.weekday()]
@@ -389,7 +389,7 @@ async def chat_completions(request: ChatRequest):
         raise
 
 
-async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str, model: str, tools: list[dict] | None = None):
+async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str, model: str):
     chat_id = str(uuid.uuid4())
     full_reply = ""
     async for chunk in llm_adapter.chat_stream(
@@ -417,8 +417,12 @@ async def list_conversations(agent_id: str | None = None):
     conv_list = conversation_store.list_conversations(agent_id)
     result = []
     for meta in conv_list:
+        conv_id = meta.get("id")
+        if not conv_id:
+            logger.warning("[API] Skipping conversation with missing id in index")
+            continue
         result.append(ConversationListResponse(
-            id=meta["id"],
+            id=conv_id,
             title=meta.get("title", "New Conversation"),
             agent_id=meta.get("agent_id"),
             model=meta.get("model"),

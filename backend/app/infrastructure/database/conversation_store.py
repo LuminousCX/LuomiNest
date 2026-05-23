@@ -43,8 +43,7 @@ class ConversationStore:
     def get(self, conv_id: str) -> dict | None:
         path = self._conv_path(conv_id)
         if not os.path.exists(path):
-            with self._lock:
-                return self._load_index().get(conv_id)
+            return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
