@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Any, Literal
 
 
@@ -37,11 +37,16 @@ class ChatResponse(BaseModel):
 
 class ChatStreamChunk(BaseModel):
     id: str
-    content: str
+    content: str = ""
     reasoning_content: str = ""
     model: str
     provider: str
     done: bool = False
+
+    @field_validator("content", "reasoning_content", mode="before")
+    @classmethod
+    def coerce_str(cls, v: str | None) -> str:
+        return v if isinstance(v, str) else ""
 
 
 class ConversationCreate(BaseModel):

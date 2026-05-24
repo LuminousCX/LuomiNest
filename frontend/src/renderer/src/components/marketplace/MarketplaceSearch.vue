@@ -83,8 +83,8 @@ const removeHistory = (text: string, e: Event) => {
     <Transition name="suggestions">
       <div v-if="store.showSearchSuggestions && store.searchSuggestions.length > 0" class="suggestions-dropdown">
         <div
-          v-for="(suggestion, idx) in store.searchSuggestions"
-          :key="idx"
+          v-for="suggestion in store.searchSuggestions"
+          :key="suggestion.type + '|' + suggestion.text"
           class="suggestion-item"
           @mousedown.prevent="selectSuggestion(suggestion.text)"
         >
@@ -131,12 +131,13 @@ const removeHistory = (text: string, e: Event) => {
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   border-radius: var(--radius-lg);
-  transition: all var(--transition-fast);
+  transition: all 0.25s ease-in-out;
+  backdrop-filter: blur(8px);
 }
 
 .search-input-wrap:focus-within {
   border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  box-shadow: 0 0 0 3px var(--lumi-primary-glow), var(--shadow-sm);
 }
 
 .search-icon {
@@ -183,6 +184,7 @@ const removeHistory = (text: string, e: Event) => {
   box-shadow: var(--shadow-lg);
   z-index: 50;
   overflow: hidden;
+  backdrop-filter: blur(12px);
 }
 
 .suggestion-item {

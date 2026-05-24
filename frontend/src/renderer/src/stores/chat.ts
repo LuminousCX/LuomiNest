@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import type { ChatMessage, Conversation, ConversationListItem, ChatStreamChunk } from '../types'
+import type { ChatMessage, ApiMessage, Conversation, ConversationListItem, ChatStreamChunk } from '../types'
 import { useApi } from '../composables/useApi'
 import { useAgentStore } from './agent'
 
@@ -357,7 +357,7 @@ export const useChatStore = defineStore('chat', () => {
       const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
       convData.value = { ...convData.value, [convId]: conv }
       const mappedMessages: ChatMessage[] = []
-      for (const m of (conv.messages || [])) {
+      for (const m of (conv.messages || []) as ApiMessage[]) {
         const msg: ChatMessage = {
           id: m.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
           role: m.role,

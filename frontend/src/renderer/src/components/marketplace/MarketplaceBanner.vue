@@ -2,7 +2,8 @@
 import { Star, Download, ArrowRight } from 'lucide-vue-next'
 import type { MarketplaceItem } from '../../types/marketplace'
 import { useRouter } from 'vue-router'
-import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
+import { ITEM_ICON_MAP, DEFAULT_ICON, getIconTheme } from '../../utils/marketplace-icons'
+import LumiCardIcon from '../common/LumiCardIcon.vue'
 
 const props = defineProps<{
   items: MarketplaceItem[]
@@ -38,9 +39,11 @@ function navigateToList() {
         class="banner-card"
         @click="navigateToDetail(item)"
       >
-        <div class="banner-card-icon">
-          <component :is="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON" :size="20" />
-        </div>
+        <LumiCardIcon
+          :icon="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON"
+          :size="20"
+          :theme="getIconTheme(item.icon)"
+        />
         <div class="banner-card-info">
           <h4>{{ item.name }}</h4>
           <p>{{ item.summary }}</p>
@@ -124,18 +127,6 @@ function navigateToList() {
   border-color: var(--lumi-primary);
   box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
-}
-
-.banner-card-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-md);
-  background: var(--workspace-panel);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--lumi-primary);
-  flex-shrink: 0;
 }
 
 .banner-card-info {

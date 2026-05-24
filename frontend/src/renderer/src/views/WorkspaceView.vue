@@ -603,7 +603,8 @@ onBeforeUnmount(() => {
               LuomiNest
             </span>
             <span class="header-stats">
-              <span class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+              <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
+              <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
                 {{ currentProviderLogo.initials }}
               </span>
               {{ currentModel }}
@@ -779,7 +780,8 @@ onBeforeUnmount(() => {
               <div class="toolbar-left">
                 <div class="model-dropdown-container">
                   <button class="tool-btn" title="选择模型" @click.stop="showModelDropdown = !showModelDropdown">
-                    <span class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+                    <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
+                    <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
                       {{ currentProviderLogo.initials }}
                     </span>
                     <span class="model-btn-text">{{ currentModel }}</span>
@@ -795,7 +797,8 @@ onBeforeUnmount(() => {
                           :class="['dropdown-item', { active: currentProvider === opt.providerId && currentModel === opt.modelId }]"
                           @click="selectModel(opt.providerId, opt.modelId)"
                         >
-                          <span class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
+                          <span v-if="opt.providerLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="opt.providerLogo.svgIcon"></span>
+                          <span v-else class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
                             {{ opt.providerLogo.initials }}
                           </span>
                           <div class="dropdown-item-info">
@@ -1119,6 +1122,15 @@ onBeforeUnmount(() => {
   font-weight: 700;
   color: white;
   flex-shrink: 0;
+}
+
+.provider-svg-mini {
+  background: transparent !important;
+}
+
+.provider-svg-mini :deep(svg) {
+  width: 16px;
+  height: 16px;
 }
 
 .header-right {

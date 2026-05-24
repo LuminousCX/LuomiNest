@@ -11,6 +11,8 @@ import {
   Cpu,
   ChevronRight
 } from 'lucide-vue-next'
+import LumiCardIcon from '../components/common/LumiCardIcon.vue'
+import LumiBrandStar from '../components/common/LumiBrandStar.vue'
 
 defineProps<{
   version?: string
@@ -22,23 +24,23 @@ const settingGroups = ref([
   {
     title: '偏好',
     items: [
-      { icon: Palette, label: '外观主题', desc: '自定义界面颜色与风格', route: '/settings/appearance' },
-      { icon: Bell, label: '通知设置', desc: '配置消息提醒方式', route: '/settings/notifications' }
+      { icon: Palette, label: '外观主题', desc: '自定义界面颜色与风格', route: '/settings/appearance', theme: 'Palette' },
+      { icon: Bell, label: '通知设置', desc: '配置消息提醒方式', route: '/settings/notifications', theme: 'Lightbulb' }
     ]
   },
   {
     title: '系统配置',
     items: [
-      { icon: Cpu, label: 'AI 模型', desc: '选择 LLM 推理引擎', route: '/settings/ai-model' },
-      { icon: Database, label: '记忆系统', desc: '三层记忆架构配置', route: '/settings/memory' },
-      { icon: Shield, label: '隐私安全', desc: '数据加密与访问控制', route: '/settings/privacy' }
+      { icon: Cpu, label: 'AI 模型', desc: '选择 LLM 推理引擎', route: '/settings/ai-model', theme: 'Cpu' },
+      { icon: Database, label: '记忆系统', desc: '三层记忆架构配置', route: '/settings/memory', theme: 'Brain' },
+      { icon: Shield, label: '隐私安全', desc: '数据加密与访问控制', route: '/settings/privacy', theme: 'Shield' }
     ]
   },
   {
     title: '连接与扩展',
     items: [
-      { icon: Globe, label: '消息平台', desc: 'QQ / 微信 / Discord 等', route: '/settings/platforms' },
-      { icon: Settings, label: 'MCP 工具', desc: '外部工具接入协议', route: '/settings/mcp' }
+      { icon: Globe, label: '消息平台', desc: 'QQ / 微信 / Discord 等', route: '/settings/platforms', theme: 'Globe' },
+      { icon: Settings, label: 'MCP 工具', desc: '外部工具接入协议', route: '/settings/mcp', theme: 'Wrench' }
     ]
   }
 ])
@@ -51,9 +53,7 @@ const navigateTo = (route: string) => {
 <template>
   <div class="settings-view">
     <div class="settings-header animate-fade-in">
-      <div class="header-icon">
-        <Settings :size="24" />
-      </div>
+      <LumiCardIcon :icon="Settings" :size="24" theme="Wrench" />
       <div>
         <h1 class="page-title">设置</h1>
         <p class="page-subtitle">自定义你的 LuomiNest 体验</p>
@@ -75,9 +75,12 @@ const navigateTo = (route: string) => {
             class="setting-item"
             @click="navigateTo(item.route)"
           >
-            <div class="item-icon-wrap">
-              <component :is="item.icon" :size="20" />
-            </div>
+            <LumiCardIcon
+              :icon="item.icon"
+              :size="20"
+              :theme="item.theme"
+              :animated="false"
+            />
             <div class="item-info">
               <span class="item-label">{{ item.label }}</span>
               <span class="item-desc">{{ item.desc }}</span>
@@ -89,7 +92,8 @@ const navigateTo = (route: string) => {
     </div>
 
     <div class="settings-footer">
-      <span v-if="version" class="version-text">LuomiNest v{{ version }} · 辰汐项目研发组</span>
+      <LumiBrandStar :size="14" :animated="false" />
+      <span v-if="version" class="version-text">LuomiNest v{{ version }} · LuminousChenXi</span>
     </div>
   </div>
 </template>
@@ -109,17 +113,6 @@ const navigateTo = (route: string) => {
   align-items: center;
   gap: 16px;
   margin-bottom: 32px;
-}
-
-.header-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.1));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--lumi-primary);
 }
 
 .page-title {
@@ -161,6 +154,7 @@ const navigateTo = (route: string) => {
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(8px);
 }
 
 .setting-item {
@@ -171,7 +165,7 @@ const navigateTo = (route: string) => {
   padding: 16px 18px;
   text-align: left;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.25s ease-in-out;
   position: relative;
 }
 
@@ -193,16 +187,16 @@ const navigateTo = (route: string) => {
   background: var(--workspace-hover);
 }
 
-.item-icon-wrap {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, rgba(20,126,188,0.06), rgba(98,169,200,0.04));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  flex-shrink: 0;
+.setting-item:hover::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--lumi-primary);
+  opacity: 0.6;
 }
 
 .item-info {
@@ -227,7 +221,7 @@ const navigateTo = (route: string) => {
 .item-arrow {
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: transform var(--transition-fast);
+  transition: transform 0.25s ease-in-out, color 0.25s ease-in-out;
 }
 
 .setting-item:hover .item-arrow {
@@ -238,7 +232,10 @@ const navigateTo = (route: string) => {
 .settings-footer {
   margin-top: auto;
   padding-top: 24px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .version-text {

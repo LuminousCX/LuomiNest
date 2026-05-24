@@ -22,6 +22,8 @@ import {
 } from 'lucide-vue-next'
 import { useApi } from '../composables/useApi'
 import { useModelStore } from '../stores/model'
+import LumiCardIcon from '../components/common/LumiCardIcon.vue'
+import LumiBrandStar from '../components/common/LumiBrandStar.vue'
 
 const router = useRouter()
 const { apiGet, apiPut } = useApi()
@@ -128,13 +130,14 @@ const agreed = ref(false)
 const features: Array<{
   icon: any
   color: string
+  theme: string
   key: 'featAgent' | 'featWorkflow' | 'featBrowser' | 'featAvatar'
   keyDesc: 'featAgentDesc' | 'featWorkflowDesc' | 'featBrowserDesc' | 'featAvatarDesc'
 }> = [
-  { icon: Bot, color: '#6366f1', key: 'featAgent', keyDesc: 'featAgentDesc' },
-  { icon: Zap, color: '#f59e0b', key: 'featWorkflow', keyDesc: 'featWorkflowDesc' },
-  { icon: Globe, color: '#3b82f6', key: 'featBrowser', keyDesc: 'featBrowserDesc' },
-  { icon: Palette, color: '#ec4899', key: 'featAvatar', keyDesc: 'featAvatarDesc' }
+  { icon: Bot, color: '#6366f1', theme: 'Bot', key: 'featAgent', keyDesc: 'featAgentDesc' },
+  { icon: Zap, color: '#f59e0b', theme: 'Zap', key: 'featWorkflow', keyDesc: 'featWorkflowDesc' },
+  { icon: Globe, color: '#3b82f6', theme: 'Globe', key: 'featBrowser', keyDesc: 'featBrowserDesc' },
+  { icon: Palette, color: '#ec4899', theme: 'Palette', key: 'featAvatar', keyDesc: 'featAvatarDesc' }
 ]
 
 function nextStep() {
@@ -253,10 +256,7 @@ onMounted(async () => {
         <div v-if="currentStep === 0" key="step-0" class="welcome-step step-lang">
           <div class="brand-hero animate-brand-enter">
             <div class="brand-icon-wrap">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
-                  fill="var(--lumi-primary)" stroke="var(--lumi-primary)" stroke-width="1.5"/>
-              </svg>
+              <LumiBrandStar :size="48" />
             </div>
             <h1 class="brand-title">
               <span class="brand-greeting">{{ i18n.title }}</span>
@@ -313,9 +313,11 @@ onMounted(async () => {
               class="feature-card"
               :style="{ '--feat-color': feat.color, animationDelay: `${idx * 100}ms` }"
             >
-              <div class="feat-icon-wrap">
-                <component :is="feat.icon" :size="24" />
-              </div>
+              <LumiCardIcon
+                :icon="feat.icon"
+                :size="24"
+                :theme="feat.theme"
+              />
               <span class="feat-name">{{ i18n[feat.key] }}</span>
               <span class="feat-desc">{{ i18n[feat.keyDesc] }}</span>
             </div>
@@ -433,10 +435,7 @@ onMounted(async () => {
         <div v-else-if="currentStep === 3" key="step-3" class="welcome-step step-ready">
           <div class="ready-hero animate-scale-in">
             <div class="ready-ring">
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
-                  fill="var(--lumi-primary)" stroke="var(--lumi-primary)" stroke-width="1"/>
-              </svg>
+              <LumiBrandStar :size="64" />
             </div>
             <Shield :size="28" class="ready-shield" />
           </div>
@@ -743,17 +742,6 @@ onMounted(async () => {
   border-color: var(--feat-color);
   box-shadow: 0 6px 24px color-mix(in srgb, var(--feat-color) 12%, transparent);
   transform: translateY(-3px);
-}
-
-.feat-icon-wrap {
-  width: 46px;
-  height: 46px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--feat-color) 10%, transparent);
-  color: var(--feat-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .feat-name {
