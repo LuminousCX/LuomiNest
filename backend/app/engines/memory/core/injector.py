@@ -77,7 +77,21 @@ class MemoryInjector:
         
         if not parts:
             return None
-        return "=== 用户档案 ===\n" + "\n".join(parts)
+        result = "=== 用户档案 ===\n" + "\n".join(parts)
+        estimated = self._estimate_tokens(result)
+        if estimated > self._max_tokens_estimate:
+            # Drop low-priority fields to fit within budget
+            priority_order = ["备注", "兴趣", "爱好"]
+            for keyword in priority_order:
+                if estimated <= self._max_tokens_estimate:
+                    break
+                parts = [p for p in parts if not p.startswith(keyword)]
+                result = "=== 用户档案 ===\n" + "\n".join(parts)
+                estimated = self._estimate_tokens(result)
+            if estimated > self._max_tokens_estimate:
+                max_chars = self._max_tokens_estimate * 4
+                result = result[:max_chars]
+        return result
 
     def format_memory_for_injection(self, memory_data: MemoryData) -> str:
         sections = []

@@ -160,15 +160,32 @@ class MemoryUpdater:
                 max_tokens=1000,
             )
         except Exception as e:
-            logger.error(f"[Memory] LLM call failed: {e}")
-            return {"updated": False, "reason": str(e)}
+            logger.error(f"[Memory] LLM call failed: error_type={type(e).__name__}")
+            return {"updated": False, "reason": "LLM call failed"}
 
         parsed = self._parse_llm_response(response)
         facts_added = 0
         facts_removed = 0
         updates_applied = {}
 
+        # Validate and normalize LLM response types
         facts_to_add = parsed.get("facts_to_add", [])
+        if isinstance(facts_to_add, dict):
+            facts_to_add = [facts_to_add]
+            logger.warning("[Memory] Coerced facts_to_add from dict to list")
+        if not isinstance(facts_to_add, list):
+            facts_to_add = []
+        facts_to_add = [f for f in facts_to_add if isinstance(f, dict)]
+
+        fact_ids_to_remove = parsed.get("fact_ids_to_remove", [])
+        if not isinstance(fact_ids_to_remove, list):
+            fact_ids_to_remove = [fact_ids_to_remove] if fact_ids_to_remove else []
+        fact_ids_to_remove = [str(fid) for fid in fact_ids_to_remove if fid is not None]
+
+        updates = parsed.get("updates", {})
+        if not isinstance(updates, dict):
+            updates = {}
+
         for fact_data in facts_to_add:
             content = fact_data.get("content", "").strip()
             if not content or len(content) < 5:
@@ -198,7 +215,6 @@ class MemoryUpdater:
             memory_data.facts.append(new_fact)
             facts_added += 1
 
-        fact_ids_to_remove = parsed.get("fact_ids_to_remove", [])
         if fact_ids_to_remove:
             original_count = len(memory_data.facts)
             memory_data.facts = [
@@ -206,7 +222,6 @@ class MemoryUpdater:
             ]
             facts_removed = original_count - len(memory_data.facts)
 
-        updates = parsed.get("updates", {})
         if updates.get("user_work_context"):
             memory_data.user.work_context.summary = updates["user_work_context"]
             memory_data.user.work_context.updated_at = utc_now_iso_z()
@@ -221,7 +236,10 @@ class MemoryUpdater:
             updates_applied["top_of_mind"] = updates["user_top_of_mind"]
 
         if facts_added > 0 or facts_removed > 0 or updates_applied:
-            self._storage.save(memory_data, agent_id)
+            saved = self._storage.save(memory_data, agent_id)
+            if not saved:
+                logger.error("[Memory] Failed to save memory updates")
+                return {"updated": False, "reason": "Save operation failed"}
             logger.info(
                 f"[Memory] Updated: +{facts_added} facts, -{facts_removed} facts, "
                 f"{len(updates_applied)} context updates"

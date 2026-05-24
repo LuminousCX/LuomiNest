@@ -146,6 +146,7 @@ async function syncTabs() {
       }
     }
   } catch (e) {
+    console.error('[ERROR][LuomiNestBrowser] Failed to initialize browser tabs:', e)
     tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
   }
 }

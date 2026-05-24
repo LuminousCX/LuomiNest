@@ -24,17 +24,23 @@ class JsonStore:
             with open(self._path, "r", encoding="utf-8") as f:
                 self._cache = json.load(f)
                 return self._cache
+        except json.JSONDecodeError as e:
+            logger.error(f"[Store] Corrupt store file (JSON parse error): {self._path}, error_type={type(e).__name__}")
+            self._cache = {}
+            return self._cache
         except Exception as e:
-            logger.warning(f"[Store] Failed to load {self._path}: {e}")
+            logger.error(f"[Store] Failed to load {self._path}: error_type={type(e).__name__}")
             self._cache = {}
             return self._cache
 
     def _save(self):
         try:
-            with open(self._path, "w", encoding="utf-8") as f:
+            temp_path = self._path + ".tmp"
+            with open(temp_path, "w", encoding="utf-8") as f:
                 json.dump(self._cache, f, ensure_ascii=False, indent=2)
+            os.replace(temp_path, self._path)
         except Exception as e:
-            logger.error(f"[Store] Failed to save {self._path}: {e}")
+            logger.error(f"[Store] Failed to save {self._path}: error_type={type(e).__name__}")
 
     def get(self, key: str, default=None):
         with self._lock:
@@ -86,7 +92,8 @@ class JsonStore:
                 self._save()
 
     def invalidate(self):
-        self._cache = None
+        with self._lock:
+            self._cache = None
 
 
 agents_store = JsonStore("agents.json")

@@ -2,6 +2,16 @@ from loguru import logger
 from app.runtime.plugin.skill.base import SkillDefinition, SkillHandler
 from app.infrastructure.database.json_store import skills_store
 
+# Safe math operators for the calculate skill
+_SAFE_MATH_OPS = {
+    "abs": abs, "round": round, "min": min, "max": max,
+    "sum": sum, "pow": pow, "len": len,
+}
+import math as _math
+for _name in dir(_math):
+    if not _name.startswith("_"):
+        _SAFE_MATH_OPS[_name] = getattr(_math, _name)
+
 
 class SkillRegistry:
     _handlers: dict[str, SkillHandler] = {}
@@ -187,7 +197,8 @@ class SkillRegistry:
             results = await retriever.search(query, top_k=top_k)
             return SkillResult(success=True, data=results)
         except Exception as e:
-            return SkillResult(success=False, error=f"Search failed: {e}")
+            logger.error(f"[SkillRegistry] Search failed: error_type={type(e).__name__}")
+            return SkillResult(success=False, error="搜索失败，请稍后再试")
 
     @classmethod
     async def _builtin_web_search(cls, **kwargs) -> 'SkillResult':
@@ -198,26 +209,31 @@ class SkillRegistry:
     @classmethod
     async def _builtin_calculate(cls, **kwargs) -> 'SkillResult':
         from app.runtime.plugin.skill.base import SkillResult
+        import ast
         expression = kwargs.get("expression", "")
         try:
-            allowed_names = {
-                "abs": abs, "round": round, "min": min, "max": max,
-                "sum": sum, "pow": pow, "len": len,
-            }
-            import math
-            for name in dir(math):
-                if not name.startswith("_"):
-                    allowed_names[name] = getattr(math, name)
-            result = eval(expression, {"__builtins__": {}}, allowed_names)
+            # Parse expression into AST and evaluate safely
+            tree = ast.parse(expression, mode='eval')
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Import, ast.ImportFrom, ast.Attribute)):
+                    raise ValueError("Unsupported expression")
+                if isinstance(node, ast.Name) and node.id not in _SAFE_MATH_OPS:
+                    raise ValueError(f"Unsupported name: {node.id}")
+                if isinstance(node, ast.Call):
+                    if not isinstance(node.func, ast.Name) or node.func.id not in _SAFE_MATH_OPS:
+                        raise ValueError("Unsupported function call")
+            code = compile(tree, '<calculate>', 'eval')
+            result = eval(code, {"__builtins__": {}}, _SAFE_MATH_OPS)
             return SkillResult(success=True, data={"expression": expression, "result": result})
         except Exception as e:
-            return SkillResult(success=False, error=f"Calculation error: {e}")
+            logger.error(f"[SkillRegistry] Calculate failed: error_type={type(e).__name__}")
+            return SkillResult(success=False, error="计算失败，请检查表达式格式")
 
     @classmethod
     async def _builtin_get_time(cls, **kwargs) -> 'SkillResult':
         from app.runtime.plugin.skill.base import SkillResult
-        from datetime import datetime
-        now = datetime.now()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
         weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
         return SkillResult(success=True, data={
             "datetime": now.strftime("%Y-%m-%d %H:%M:%S"),
@@ -230,6 +246,7 @@ class SkillRegistry:
             "hour": now.hour,
             "minute": now.minute,
             "second": now.second,
+            "tz": "UTC",
         })
 
     @classmethod
