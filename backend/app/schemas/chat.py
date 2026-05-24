@@ -37,11 +37,20 @@ class ChatResponse(BaseModel):
 
 class ChatStreamChunk(BaseModel):
     id: str
-    content: str
+    content: str = ""
     reasoning_content: str = ""
     model: str
     provider: str
     done: bool = False
+
+    @classmethod
+    def _coerce_str(cls, v: str | None) -> str:
+        return v if isinstance(v, str) else ""
+
+    def __init__(self, **data: Any) -> None:
+        data["content"] = self._coerce_str(data.get("content"))
+        data["reasoning_content"] = self._coerce_str(data.get("reasoning_content"))
+        super().__init__(**data)
 
 
 class ConversationCreate(BaseModel):

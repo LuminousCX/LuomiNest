@@ -368,8 +368,8 @@ class OpenAICompatibleProvider(LLMProvider):
                         data = json.loads(data_str)
                         choice = data.get("choices", [{}])[0]
                         delta = choice.get("delta", {})
-                        content = delta.get("content", "")
-                        raw_reasoning = delta.get("reasoning", "") or delta.get("reasoning_content", "")
+                        content = delta.get("content") or ""
+                        raw_reasoning = delta.get("reasoning") or delta.get("reasoning_content") or ""
 
                         reasoning = _clean_reasoning_content(raw_reasoning)
 

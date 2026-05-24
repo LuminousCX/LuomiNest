@@ -199,6 +199,11 @@ export interface ProviderTemplate {
   baseUrl: string
   defaultModel: string
   description: string
+  category?: 'cloud' | 'local' | 'aggregator'
+  color?: string
+  initials?: string
+  svgIcon?: string
+  defaultModels?: string[]
 }
 
 export interface TTSConfig {
@@ -297,6 +302,9 @@ export interface CollaborationEvent {
 export interface ProviderLogo {
   id: string
   name: string
+  color?: string
+  initials?: string
+  svgIcon?: string
   logo?: string
 }
 

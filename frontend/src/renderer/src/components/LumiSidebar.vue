@@ -34,13 +34,13 @@ const isBrowserMode = computed(() => hideAgentPanelRoutes.some(r => route.path.s
 
 const navItems = [
   { id: '/workspace', label: '对话', icon: MessageCircle },
+  { id: '/social', label: '社交', icon: Users },
   { id: '/workflow', label: '工作流', icon: GitBranch },
   { id: '/inspire', label: '灵感', icon: Lightbulb },
   { id: '/tasks', label: '任务', icon: CheckSquare },
   { id: '/avatar', label: '皮套', icon: Palette },
   { id: '/memory', label: '记忆', icon: Brain },
   { id: '/market', label: '扩展', icon: Package },
-  { id: '/social', label: '社交', icon: Users },
   { id: '/browser', label: '浏览器', icon: Globe }
 ]
 

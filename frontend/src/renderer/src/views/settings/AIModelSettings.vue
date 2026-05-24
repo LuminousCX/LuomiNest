@@ -57,7 +57,7 @@ const providers = computed(() => modelStore.providers)
 const showApiKey = ref<Record<string, boolean>>({ add: false })
 
 const showAddDialog = ref(false)
-const showProviderList = ref(false)
+const showProviderList = ref(true)
 const addProviderError = ref('')
 const addProviderLoading = ref(false)
 const selectedTemplate = ref<string>('')
@@ -92,6 +92,52 @@ const editProvider = ref({
   isDefault: false,
 })
 
+const addModelSelect = ref('')
+const editModelSelect = ref('')
+const shakingDialog = ref('')
+
+const currentTemplateDefaultModels = computed(() => {
+  const tmpl = modelStore.allTemplates.find(t => t.id === selectedTemplate.value)
+  return tmpl?.defaultModels || []
+})
+
+const selectedTmpl = computed(() => modelStore.allTemplates.find(t => t.id === selectedTemplate.value))
+
+const onAddModelSelectChange = () => {
+  if (addModelSelect.value && addModelSelect.value !== '__custom__') {
+    newProvider.value.defaultModel = addModelSelect.value
+  } else if (addModelSelect.value === '__custom__') {
+    newProvider.value.defaultModel = ''
+  }
+}
+
+const onEditModelSelectChange = () => {
+  if (editModelSelect.value && editModelSelect.value !== '__custom__') {
+    editProvider.value.defaultModel = editModelSelect.value
+  } else if (editModelSelect.value === '__custom__') {
+    editProvider.value.defaultModel = ''
+  }
+}
+
+const shakeDialog = (dialog: string) => {
+  shakingDialog.value = dialog
+  setTimeout(() => { shakingDialog.value = '' }, 500)
+}
+
+const isValidUrl = (url: string): boolean => {
+  try {
+    const u = new URL(url)
+    return ['http:', 'https:'].includes(u.protocol)
+  } catch {
+    return false
+  }
+}
+
+const getProviderIcon = (providerId: string): string => {
+  const tmpl = modelStore.allTemplates.find(t => t.id === providerId)
+  return tmpl?.svgIcon || ''
+}
+
 const handleTemplateSelect = (templateId: string) => {
   selectedTemplate.value = templateId
   const tmpl = modelStore.allTemplates.find(t => t.id === templateId)
@@ -108,6 +154,13 @@ const handleTemplateSelect = (templateId: string) => {
     } else {
       newProvider.value.apiKey = ''
     }
+    if (tmpl.defaultModel && tmpl.defaultModels?.includes(tmpl.defaultModel)) {
+      addModelSelect.value = tmpl.defaultModel
+    } else if (tmpl.defaultModel) {
+      addModelSelect.value = '__custom__'
+    } else {
+      addModelSelect.value = ''
+    }
   }
   addDialogStep.value = 'configure'
 }
@@ -117,6 +170,10 @@ const handleVendorChange = () => {
     newProvider.value.baseUrl = 'http://localhost:11434/v1'
     newProvider.value.apiKey = 'ollama'
     newProvider.value.defaultModel = 'qwen2.5:7b'
+  } else if (newProvider.value.vendor === 'anthropic') {
+    newProvider.value.baseUrl = 'https://api.anthropic.com/v1'
+    newProvider.value.apiKey = ''
+    newProvider.value.defaultModel = 'claude-sonnet-4-20250514'
   } else {
     newProvider.value.baseUrl = 'https://api.openai.com/v1'
     newProvider.value.apiKey = ''
@@ -163,13 +220,62 @@ const reasonerAvailableModels = computed(() =>
   modelStore.getProviderModels(reasonerModelConfig.value.selectedProvider)
 )
 
-const newProviderFormValid = computed(() =>
-  newProvider.value.id.trim() !== '' && newProvider.value.baseUrl.trim() !== ''
-)
+const newProviderValidation = computed(() => {
+  const errors: string[] = []
+  if (!newProvider.value.id.trim()) errors.push('标识 ID 不能为空')
+  if (!newProvider.value.baseUrl.trim()) errors.push('API 地址不能为空')
+  if (newProvider.value.baseUrl.trim() && !isValidUrl(newProvider.value.baseUrl)) errors.push('API 地址格式不正确')
+  if (newProvider.value.vendor !== 'ollama' && !newProvider.value.apiKey.trim()) errors.push('API Key 不能为空')
+  if (!newProvider.value.defaultModel.trim()) errors.push('请选择或输入默认模型')
+  return errors
+})
 
-const editProviderFormValid = computed(() =>
-  editProvider.value.name.trim() !== '' && editProvider.value.baseUrl.trim() !== ''
-)
+const newProviderFormValid = computed(() => newProviderValidation.value.length === 0)
+
+const editProviderValidation = computed(() => {
+  const errors: string[] = []
+  if (!editProvider.value.name.trim()) errors.push('显示名称不能为空')
+  if (!editProvider.value.baseUrl.trim()) errors.push('API 地址不能为空')
+  if (editProvider.value.baseUrl.trim() && !isValidUrl(editProvider.value.baseUrl)) errors.push('API 地址格式不正确')
+  return errors
+})
+
+const editProviderFormValid = computed(() => editProviderValidation.value.length === 0)
+
+const saveValidationErrors = reactive<Record<string, string>>({
+  main: '',
+  reasoner: '',
+})
+
+const mainConfigValid = computed(() => {
+  if (!mainModelConfig.value.selectedProvider) {
+    return { valid: false, error: '请选择供应商' }
+  }
+  if (!mainModelConfig.value.model) {
+    return { valid: false, error: '请选择模型' }
+  }
+  return { valid: true, error: '' }
+})
+
+const reasonerConfigValid = computed(() => {
+  if (!reasonerModelConfig.value.selectedProvider) {
+    return { valid: false, error: '请选择供应商' }
+  }
+  if (!reasonerModelConfig.value.model) {
+    return { valid: false, error: '请选择模型' }
+  }
+  return { valid: true, error: '' }
+})
+
+const onMainProviderChange = () => {
+  saveValidationErrors.main = ''
+  mainModelConfig.value.model = ''
+}
+
+const onReasonerProviderChange = () => {
+  saveValidationErrors.reasoner = ''
+  reasonerModelConfig.value.model = ''
+}
 
 const openAddDialog = () => {
   selectedTemplate.value = ''
@@ -179,13 +285,14 @@ const openAddDialog = () => {
     id: '', name: '', vendor: 'openai_compatible',
     baseUrl: '', apiKey: '', defaultModel: '', isDefault: false,
   }
+  addModelSelect.value = ''
   addProviderError.value = ''
   showAddDialog.value = true
 }
 
 const handleAddProvider = async () => {
   if (!newProviderFormValid.value) {
-    addProviderError.value = '请填写必填项（标识 ID 和 API 地址）'
+    addProviderError.value = newProviderValidation.value[0]
     return
   }
   addProviderError.value = ''
@@ -220,13 +327,21 @@ const openEditDialog = (providerId: string) => {
     defaultModel: p.defaultModel,
     isDefault: p.isDefault,
   }
+  const tmpl = modelStore.allTemplates.find(t => t.id === providerId)
+  if (p.defaultModel && tmpl?.defaultModels?.includes(p.defaultModel)) {
+    editModelSelect.value = p.defaultModel
+  } else if (p.defaultModel) {
+    editModelSelect.value = '__custom__'
+  } else {
+    editModelSelect.value = ''
+  }
   editProviderError.value = ''
   showEditDialog.value = true
 }
 
 const handleEditProvider = async () => {
   if (!editProviderFormValid.value) {
-    editProviderError.value = '请填写必填项'
+    editProviderError.value = editProviderValidation.value[0]
     return
   }
   editProviderError.value = ''
@@ -275,6 +390,13 @@ const saveStatus = reactive<Record<string, 'idle' | 'saving' | 'saved' | 'error'
 })
 
 const handleSaveMainConfig = async () => {
+  saveValidationErrors.main = ''
+  if (!mainConfigValid.value.valid) {
+    saveValidationErrors.main = mainConfigValid.value.error
+    saveStatus.main = 'error'
+    setTimeout(() => { saveStatus.main = 'idle' }, 3000)
+    return
+  }
   saveStatus.main = 'saving'
   try {
     await modelStore.updateModelConfig({
@@ -293,6 +415,13 @@ const handleSaveMainConfig = async () => {
 }
 
 const handleSaveReasonerConfig = async () => {
+  saveValidationErrors.reasoner = ''
+  if (!reasonerConfigValid.value.valid) {
+    saveValidationErrors.reasoner = reasonerConfigValid.value.error
+    saveStatus.reasoner = 'error'
+    setTimeout(() => { saveStatus.reasoner = 'idle' }, 3000)
+    return
+  }
   saveStatus.reasoner = 'saving'
   try {
     await modelStore.updateModelConfig({
@@ -425,10 +554,7 @@ onMounted(async () => {
         <div v-if="activeTile === 'main'" class="content-section">
           <div class="section-header">
             <div class="section-header-left">
-              <div class="section-icon-box main-icon">
-                <Zap :size="20" />
-              </div>
-              <div>
+              <div class="section-header-text">
                 <h3 class="section-title">主模型</h3>
                 <span class="section-tag">快速响应</span>
               </div>
@@ -454,13 +580,16 @@ onMounted(async () => {
                 <span class="required-mark">*</span>
               </label>
               <div class="form-select-wrap">
-                <select v-model="mainModelConfig.selectedProvider" class="form-select">
+                <select v-model="mainModelConfig.selectedProvider" class="form-select" :class="{ 'select-error': saveValidationErrors.main && !mainModelConfig.selectedProvider }" @change="onMainProviderChange">
                   <option value="">请选择供应商</option>
                   <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
                 <ChevronRight :size="14" class="select-icon" />
               </div>
-              <span v-if="providers.length === 0" class="form-hint hint-warn">
+              <span v-if="saveValidationErrors.main && !mainModelConfig.selectedProvider" class="form-hint hint-error">
+                {{ saveValidationErrors.main }}
+              </span>
+              <span v-else-if="providers.length === 0" class="form-hint hint-warn">
                 暂无供应商，请先点击左侧"添加供应商"
               </span>
             </div>
@@ -484,6 +613,9 @@ onMounted(async () => {
                   获取
                 </button>
               </div>
+              <span v-if="mainModelConfig.model && mainAvailableModels.length > 0 && !mainAvailableModels.find(m => m.id === mainModelConfig.model)" class="form-hint hint-warn">
+                当前供应商可能不支持此模型，请求时可能报错
+              </span>
             </div>
 
             <div class="form-group">
@@ -520,7 +652,7 @@ onMounted(async () => {
               <Check v-else-if="saveStatus.main === 'saved'" :size="16" />
               <AlertCircle v-else-if="saveStatus.main === 'error'" :size="16" />
               <Check v-else :size="16" />
-              {{ saveStatus.main === 'saving' ? '保存中...' : saveStatus.main === 'saved' ? '已保存' : saveStatus.main === 'error' ? '保存失败' : '保存配置' }}
+              {{ saveStatus.main === 'saving' ? '保存中...' : saveStatus.main === 'saved' ? '已保存' : saveStatus.main === 'error' ? (saveValidationErrors.main || '保存失败') : '保存配置' }}
             </button>
           </div>
 
@@ -538,7 +670,8 @@ onMounted(async () => {
                 <div v-for="provider in providers" :key="provider.id" class="provider-item">
                   <div class="provider-item-info">
                     <div class="provider-item-header">
-                      <Server :size="14" class="provider-item-icon" />
+                      <div v-if="getProviderIcon(provider.id)" class="provider-svg-icon" v-html="getProviderIcon(provider.id)"></div>
+                      <Server v-else :size="14" class="provider-item-icon" />
                       <span class="provider-item-name">{{ provider.name }}</span>
                       <span v-if="provider.isDefault" class="default-badge">默认</span>
                     </div>
@@ -576,10 +709,7 @@ onMounted(async () => {
         <div v-if="activeTile === 'reasoner'" class="content-section">
           <div class="section-header">
             <div class="section-header-left">
-              <div class="section-icon-box reasoner-icon">
-                <Atom :size="20" />
-              </div>
-              <div>
+              <div class="section-header-text">
                 <h3 class="section-title">推理模型</h3>
                 <span class="section-tag">复杂 Agent 任务</span>
               </div>
@@ -600,14 +730,20 @@ onMounted(async () => {
 
           <div class="config-form">
             <div class="form-group">
-              <label class="form-label">供应商</label>
+              <label class="form-label">
+                供应商
+                <span class="required-mark">*</span>
+              </label>
               <div class="form-select-wrap">
-                <select v-model="reasonerModelConfig.selectedProvider" class="form-select">
+                <select v-model="reasonerModelConfig.selectedProvider" class="form-select" :class="{ 'select-error': saveValidationErrors.reasoner && !reasonerModelConfig.selectedProvider }" @change="onReasonerProviderChange">
                   <option value="">请选择供应商</option>
                   <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
                 <ChevronRight :size="14" class="select-icon" />
               </div>
+              <span v-if="saveValidationErrors.reasoner && !reasonerModelConfig.selectedProvider" class="form-hint hint-error">
+                {{ saveValidationErrors.reasoner }}
+              </span>
             </div>
             <div class="form-group">
               <label class="form-label">模型</label>
@@ -625,6 +761,9 @@ onMounted(async () => {
                   获取
                 </button>
               </div>
+              <span v-if="reasonerModelConfig.model && reasonerAvailableModels.length > 0 && !reasonerAvailableModels.find(m => m.id === reasonerModelConfig.model)" class="form-hint hint-warn">
+                当前供应商可能不支持此模型，请求时可能报错
+              </span>
             </div>
             <div class="form-group">
               <div class="form-label-row">
@@ -664,7 +803,7 @@ onMounted(async () => {
               <Check v-else-if="saveStatus.reasoner === 'saved'" :size="16" />
               <AlertCircle v-else-if="saveStatus.reasoner === 'error'" :size="16" />
               <Check v-else :size="16" />
-              {{ saveStatus.reasoner === 'saving' ? '保存中...' : saveStatus.reasoner === 'saved' ? '已保存' : saveStatus.reasoner === 'error' ? '保存失败' : '保存配置' }}
+              {{ saveStatus.reasoner === 'saving' ? '保存中...' : saveStatus.reasoner === 'saved' ? '已保存' : saveStatus.reasoner === 'error' ? (saveValidationErrors.reasoner || '保存失败') : '保存配置' }}
             </button>
           </div>
         </div>
@@ -673,10 +812,7 @@ onMounted(async () => {
         <div v-if="activeTile === 'tts'" class="content-section">
           <div class="section-header">
             <div class="section-header-left">
-              <div class="section-icon-box tts-icon">
-                <Volume2 :size="20" />
-              </div>
-              <div>
+              <div class="section-header-text">
                 <h3 class="section-title">语音合成</h3>
                 <span class="section-tag">TTS</span>
               </div>
@@ -754,10 +890,7 @@ onMounted(async () => {
         <div v-if="activeTile === 'stt'" class="content-section">
           <div class="section-header">
             <div class="section-header-left">
-              <div class="section-icon-box stt-icon">
-                <Mic :size="20" />
-              </div>
-              <div>
+              <div class="section-header-text">
                 <h3 class="section-title">语音识别</h3>
                 <span class="section-tag">STT</span>
               </div>
@@ -849,8 +982,8 @@ onMounted(async () => {
 
     <!-- Add Provider Dialog -->
     <Transition name="dialog-fade">
-      <div v-if="showAddDialog" class="dialog-overlay" @click.self="showAddDialog = false">
-        <div class="dialog add-dialog">
+      <div v-if="showAddDialog" class="dialog-overlay" @click.self="shakeDialog('add')">
+        <div :class="['dialog', 'add-dialog', { 'shake-animation': shakingDialog === 'add' }]">
           <div class="dialog-header">
             <div class="dialog-header-left">
               <div class="dialog-header-icon">
@@ -891,8 +1024,9 @@ onMounted(async () => {
                 class="template-card"
                 @click="handleTemplateSelect(tmpl.id)"
               >
-                <div class="template-card-logo" :style="{ background: tmpl.color }">
-                  <span class="template-initials">{{ tmpl.initials }}</span>
+                <div class="template-card-logo" :style="tmpl.svgIcon ? {} : { background: tmpl.color || '#6b7280' }">
+                  <div v-if="tmpl.svgIcon" class="template-svg-icon" v-html="tmpl.svgIcon"></div>
+                  <span v-else class="template-initials">{{ tmpl.initials || tmpl.name.slice(0, 2).toUpperCase() }}</span>
                 </div>
                 <div class="template-card-info">
                   <span class="template-card-name">{{ tmpl.name }}</span>
@@ -911,10 +1045,11 @@ onMounted(async () => {
             </button>
 
             <div v-if="selectedTemplate" class="selected-template-badge">
-              <div class="template-card-logo small" :style="{ background: modelStore.allTemplates.find(t => t.id === selectedTemplate)?.color || '#6b7280' }">
-                <span class="template-initials">{{ modelStore.allTemplates.find(t => t.id === selectedTemplate)?.initials || 'CU' }}</span>
+              <div class="template-card-logo small" :style="selectedTmpl?.svgIcon ? {} : { background: selectedTmpl?.color || '#6b7280' }">
+                <div v-if="selectedTmpl?.svgIcon" class="template-svg-icon small" v-html="selectedTmpl.svgIcon"></div>
+                <span v-else class="template-initials">{{ selectedTmpl?.initials || 'CU' }}</span>
               </div>
-              <span class="selected-template-name">{{ modelStore.allTemplates.find(t => t.id === selectedTemplate)?.name || 'Custom' }}</span>
+              <span class="selected-template-name">{{ selectedTmpl?.name || 'Custom' }}</span>
             </div>
 
             <div class="config-form-compact">
@@ -923,7 +1058,7 @@ onMounted(async () => {
                   标识 ID
                   <span class="required-mark">*</span>
                 </label>
-                <input v-model="newProvider.id" type="text" class="form-input" placeholder="如: my-ollama" />
+                <input v-model="newProvider.id" type="text" class="form-input" :class="{ 'input-error': !newProvider.id.trim() && addProviderError }" placeholder="如: my-ollama" />
                 <span class="form-hint">唯一标识，不可与已有供应商重复</span>
               </div>
               <div class="form-group">
@@ -936,6 +1071,7 @@ onMounted(async () => {
                   <select v-model="newProvider.vendor" class="form-select" @change="handleVendorChange">
                     <option value="openai_compatible">OpenAI 兼容</option>
                     <option value="ollama">Ollama</option>
+                    <option value="anthropic">Anthropic</option>
                   </select>
                   <ChevronRight :size="14" class="select-icon" />
                 </div>
@@ -945,13 +1081,13 @@ onMounted(async () => {
                   API 地址
                   <span class="required-mark">*</span>
                 </label>
-                <input v-model="newProvider.baseUrl" type="text" class="form-input" placeholder="http://localhost:11434/v1" />
+                <input v-model="newProvider.baseUrl" type="text" class="form-input" :class="{ 'input-error': !newProvider.baseUrl.trim() && addProviderError }" placeholder="http://localhost:11434/v1" />
                 <span class="form-hint">Ollama: http://localhost:11434/v1 | 其他: 含 /v1 后缀</span>
               </div>
               <div class="form-group">
                 <label class="form-label">API Key</label>
                 <div class="api-key-row">
-                  <input v-model="newProvider.apiKey" :type="showApiKey.add ? 'text' : 'password'" class="form-input" placeholder="sk-..." />
+                  <input v-model="newProvider.apiKey" :type="showApiKey.add ? 'text' : 'password'" class="form-input" :class="{ 'input-error': newProvider.vendor !== 'ollama' && !newProvider.apiKey.trim() && addProviderError }" placeholder="sk-..." />
                   <button class="eye-btn" @click="showApiKey.add = !showApiKey.add">
                     <Eye v-if="!showApiKey.add" :size="14" />
                     <EyeOff v-else :size="14" />
@@ -961,7 +1097,15 @@ onMounted(async () => {
               </div>
               <div class="form-group">
                 <label class="form-label">默认模型</label>
-                <input v-model="newProvider.defaultModel" type="text" class="form-input" placeholder="如: qwen2.5:7b" />
+                <div class="form-select-wrap">
+                  <select v-model="addModelSelect" class="form-select" @change="onAddModelSelectChange">
+                    <option value="">请选择模型</option>
+                    <option v-for="m in currentTemplateDefaultModels" :key="m" :value="m">{{ m }}</option>
+                    <option value="__custom__">自定义模型...</option>
+                  </select>
+                  <ChevronRight :size="14" class="select-icon" />
+                </div>
+                <input v-if="addModelSelect === '__custom__'" v-model="newProvider.defaultModel" type="text" class="form-input" placeholder="输入自定义模型名称" style="margin-top: 8px;" />
                 <span class="form-hint">添加后可点击搜索图标获取可用模型列表</span>
               </div>
               <div class="form-group">
@@ -996,8 +1140,8 @@ onMounted(async () => {
 
     <!-- Edit Provider Dialog -->
     <Transition name="dialog-fade">
-      <div v-if="showEditDialog" class="dialog-overlay" @click.self="showEditDialog = false">
-        <div class="dialog">
+      <div v-if="showEditDialog" class="dialog-overlay" @click.self="shakeDialog('edit')">
+        <div :class="['dialog', { 'shake-animation': shakingDialog === 'edit' }]">
           <div class="dialog-header">
             <h3>编辑供应商 - {{ editProvider.name }}</h3>
             <button class="dialog-close" @click="showEditDialog = false">
@@ -1020,6 +1164,7 @@ onMounted(async () => {
               <select v-model="editProvider.vendor" class="form-select">
                 <option value="openai_compatible">OpenAI 兼容</option>
                 <option value="ollama">Ollama</option>
+                <option value="anthropic">Anthropic</option>
               </select>
               <ChevronRight :size="14" class="select-icon" />
             </div>
@@ -1035,7 +1180,15 @@ onMounted(async () => {
           </div>
           <div class="form-group">
             <label class="form-label">默认模型</label>
-            <input v-model="editProvider.defaultModel" type="text" class="form-input" placeholder="默认模型" />
+            <div class="form-select-wrap">
+              <select v-model="editModelSelect" class="form-select" @change="onEditModelSelectChange">
+                <option value="">请选择模型</option>
+                <option v-for="m in currentTemplateDefaultModels" :key="m" :value="m">{{ m }}</option>
+                <option value="__custom__">自定义模型...</option>
+              </select>
+              <ChevronRight :size="14" class="select-icon" />
+            </div>
+            <input v-if="editModelSelect === '__custom__'" v-model="editProvider.defaultModel" type="text" class="form-input" placeholder="输入自定义模型名称" style="margin-top: 8px;" />
           </div>
           <div class="form-group">
             <div class="toggle-row">
@@ -1232,7 +1385,7 @@ export default { name: 'AIModelSettings' }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 14px 20px;
   background: var(--workspace-card);
   border-radius: var(--radius-lg);
   border: 1px solid var(--workspace-border);
@@ -1245,38 +1398,14 @@ export default { name: 'AIModelSettings' }
   gap: 14px;
 }
 
-.section-icon-box {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
+.section-header-text {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.main-icon {
-  background: linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(20, 126, 188, 0.04));
-  color: var(--lumi-primary);
-}
-
-.reasoner-icon {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(139, 92, 246, 0.04));
-  color: #8b5cf6;
-}
-
-.tts-icon {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04));
-  color: #f59e0b;
-}
-
-.stt-icon {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.04));
-  color: #3b82f6;
+  align-items: baseline;
+  gap: 10px;
 }
 
 .section-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
 }
@@ -1286,6 +1415,9 @@ export default { name: 'AIModelSettings' }
   font-weight: 500;
   color: var(--text-muted);
   letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--workspace-panel);
 }
 
 .info-btn {
@@ -1391,6 +1523,16 @@ export default { name: 'AIModelSettings' }
 
 .hint-warn {
   color: #f59e0b;
+}
+
+.hint-error {
+  color: var(--lumi-accent);
+  font-weight: 500;
+}
+
+.select-error {
+  border-color: var(--lumi-accent) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
 }
 
 .fetch-models-row {
@@ -2198,5 +2340,55 @@ export default { name: 'AIModelSettings' }
     opacity: 1;
     max-height: 600px;
   }
+}
+
+.template-svg-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.template-svg-icon :deep(svg) {
+  width: 22px;
+  height: 22px;
+}
+.template-svg-icon.small {
+  width: 18px;
+  height: 18px;
+}
+.template-svg-icon.small :deep(svg) {
+  width: 16px;
+  height: 16px;
+}
+
+.provider-svg-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.provider-svg-icon :deep(svg) {
+  width: 16px;
+  height: 16px;
+}
+
+.input-error {
+  border-color: var(--lumi-accent) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+@keyframes dialog-shake {
+  0%, 100% { transform: scale(1); }
+  20% { transform: scale(1.02); }
+  40% { transform: scale(0.98); }
+  60% { transform: scale(1.01); }
+  80% { transform: scale(0.99); }
+}
+
+.shake-animation {
+  animation: dialog-shake 0.4s ease-in-out;
 }
 </style>

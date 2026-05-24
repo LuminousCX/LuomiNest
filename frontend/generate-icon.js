@@ -12,6 +12,11 @@ const tmpDir = os.tmpdir();
 const sizes = [256, 48, 32, 16];
 
 async function generateIcon() {
+  if (!fs.existsSync(svgPath)) {
+    console.error(`Error: SVG file not found at ${svgPath}`);
+    process.exit(1);
+  }
+
   // Generate icon.png (256x256 for tray and window icon)
   await sharp(svgPath)
     .resize(256, 256)

@@ -341,15 +341,20 @@ async def chat_completions(request: ChatRequest):
             if request.stream:
                 async def _tool_chain_stream():
                     chat_id = str(uuid.uuid4())
-                    yield f"data: {ChatStreamChunk(id=chat_id, content='', reasoning_content='正在查询所需信息…', model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
-                    async with _llm_semaphore:
-                        async for chunk in llm_adapter.chat_stream(
-                            messages=summary_messages, provider_name=resolved_provider, model=resolved_model,
-                            temperature=request.temperature or 0.7,
-                            max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
-                        ):
-                            yield f"data: {ChatStreamChunk(id=chat_id, content=chunk.get('content', ''), reasoning_content=chunk.get('reasoning', ''), model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
-                    yield f"data: {ChatStreamChunk(id=chat_id, content='', model=resolved_model, provider=resolved_provider, done=True).model_dump_json()}\n\n"
+                    try:
+                        yield f"data: {ChatStreamChunk(id=chat_id, content='', reasoning_content='正在查询所需信息…', model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                        async with _llm_semaphore:
+                            async for chunk in llm_adapter.chat_stream(
+                                messages=summary_messages, provider_name=resolved_provider, model=resolved_model,
+                                temperature=request.temperature or 0.7,
+                                max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                            ):
+                                yield f"data: {ChatStreamChunk(id=chat_id, content=chunk.get('content', ''), reasoning_content=chunk.get('reasoning', ''), model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                    except Exception as e:
+                        logger.error(f"[STREAM] Tool chain stream error: {e}")
+                        yield f"data: {ChatStreamChunk(id=chat_id, content=f'[Error] {str(e)}', model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                    finally:
+                        yield f"data: {ChatStreamChunk(id=chat_id, content='', model=resolved_model, provider=resolved_provider, done=True).model_dump_json()}\n\n"
 
                 elapsed = time.time() - start_time
                 logger.success(f"[API] POST /chat/completions [TOOL chain stream] - Success: elapsed={elapsed:.2f}s")
@@ -415,24 +420,28 @@ async def chat_completions(request: ChatRequest):
 async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str, model: str):
     chat_id = str(uuid.uuid4())
     full_reply = ""
-    async with _llm_semaphore:
-        async for chunk in llm_adapter.chat_stream(
-            messages=messages,
-            provider_name=provider,
-            model=model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            top_p=request.top_p,
-        ):
-            content = chunk.get("content", "")
-            rc = chunk.get("reasoning", "")
-            if content:
-                full_reply += content
-            data = ChatStreamChunk(id=chat_id, content=content, reasoning_content=rc, model=model, provider=provider)
-            yield f"data: {data.model_dump_json()}\n\n"
-
-    done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
-    yield f"data: {done_data.model_dump_json()}\n\n"
+    try:
+        async with _llm_semaphore:
+            async for chunk in llm_adapter.chat_stream(
+                messages=messages,
+                provider_name=provider,
+                model=model,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                top_p=request.top_p,
+            ):
+                content = chunk.get("content", "")
+                rc = chunk.get("reasoning", "")
+                if content:
+                    full_reply += content
+                data = ChatStreamChunk(id=chat_id, content=content, reasoning_content=rc, model=model, provider=provider)
+                yield f"data: {data.model_dump_json()}\n\n"
+    except Exception as e:
+        logger.error(f"[STREAM] _stream_chat error: {e}")
+        yield f"data: {ChatStreamChunk(id=chat_id, content=f'[Error] {str(e)}', model=model, provider=provider).model_dump_json()}\n\n"
+    finally:
+        done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
+        yield f"data: {done_data.model_dump_json()}\n\n"
 
 
 @router.get("/conversations", response_model=list[ConversationListResponse])
@@ -758,13 +767,16 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
 
         except Exception as e:
             state["aborted"] = True
-            state["content"] = f"[Error] {str(e)}"
             logger.error(f"[STREAM] Aborted: conv={conv_id}, error={e}")
-            yield _sse(chat_id, state["content"], provider, model)
+            yield _sse(chat_id, f"[Error] {str(e)}", provider, model)
 
         finally:
             try:
-                _PHASE_3_SAVE_ASSISTANT_MSG(conv, state)
+                # 持久化时使用原始内容，不写入错误占位符
+                persist_state = dict(state)
+                if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
+                    persist_state["content"] = ""
+                _PHASE_3_SAVE_ASSISTANT_MSG(conv, persist_state)
                 _persist_conv(conv_id, conv)
             except Exception as persist_err:
                 logger.error(f"[STREAM] Persist failed: conv={conv_id}, error={persist_err}")

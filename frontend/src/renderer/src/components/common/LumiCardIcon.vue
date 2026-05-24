@@ -41,7 +41,7 @@ const themeMap: Record<string, {
     gradient: 'linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.04))',
     glow: '0 4px 16px rgba(59, 130, 246, 0.15)',
     iconColor: '#3b82f6',
-    animClass: 'anim-rotate-slow',
+    animClass: 'anim-float',
   },
   Palette: {
     gradient: 'linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(244, 114, 182, 0.06))',
@@ -89,7 +89,7 @@ const themeMap: Record<string, {
     gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(139, 92, 246, 0.04))',
     glow: '0 4px 16px rgba(139, 92, 246, 0.15)',
     iconColor: '#8b5cf6',
-    animClass: 'anim-rotate-slow',
+    animClass: 'anim-shimmer',
   },
   Shield: {
     gradient: 'linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.04))',
@@ -149,13 +149,13 @@ const themeMap: Record<string, {
     gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))',
     glow: '0 4px 16px rgba(245, 158, 11, 0.15)',
     iconColor: '#f59e0b',
-    animClass: 'anim-rotate-slow',
+    animClass: 'anim-shimmer',
   },
   Wrench: {
     gradient: 'linear-gradient(135deg, rgba(107, 114, 128, 0.12), rgba(107, 114, 128, 0.04))',
     glow: '0 4px 16px rgba(107, 114, 128, 0.15)',
     iconColor: '#6b7280',
-    animClass: 'anim-rotate-slow',
+    animClass: 'anim-shimmer',
   },
   Package: {
     gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))',
@@ -197,7 +197,7 @@ const themeMap: Record<string, {
     gradient: 'linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.04))',
     glow: '0 4px 16px rgba(34, 197, 94, 0.15)',
     iconColor: '#22c55e',
-    animClass: 'anim-rotate-slow',
+    animClass: 'anim-pulse',
   },
   Scale: {
     gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(139, 92, 246, 0.04))',
@@ -299,10 +299,6 @@ const borderRadius = computed(() => `${Math.round((props.size + 24) * 0.25)}px`)
 
 .anim-shimmer {
   animation: lumi-shimmer 3s ease-in-out infinite;
-}
-
-.anim-rotate-slow {
-  animation: lumi-float 3s ease-in-out infinite;
 }
 
 .anim-glow {

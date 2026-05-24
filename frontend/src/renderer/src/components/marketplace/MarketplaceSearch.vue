@@ -83,8 +83,8 @@ const removeHistory = (text: string, e: Event) => {
     <Transition name="suggestions">
       <div v-if="store.showSearchSuggestions && store.searchSuggestions.length > 0" class="suggestions-dropdown">
         <div
-          v-for="(suggestion, idx) in store.searchSuggestions"
-          :key="idx"
+          v-for="suggestion in store.searchSuggestions"
+          :key="suggestion.type + '|' + suggestion.text"
           class="suggestion-item"
           @mousedown.prevent="selectSuggestion(suggestion.text)"
         >
