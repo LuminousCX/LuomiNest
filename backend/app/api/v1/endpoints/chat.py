@@ -579,7 +579,12 @@ async def add_message(conv_id: str, request: ChatRequest):
                                  top_p=request.top_p,
                                  search_results=request.search_results)
 
-    _PHASE_3_SAVE_ASSISTANT_MSG(conv, gen_state)
+    # 非流式路径：错误时不持久化 [Error] 占位符到对话历史
+    persist_state = dict(gen_state)
+    if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
+        persist_state["content"] = ""
+
+    _PHASE_3_SAVE_ASSISTANT_MSG(conv, persist_state)
     _persist_conv(conv_id, conv)
     _schedule_memory_update(conv["messages"], conv_id, agent_id, provider_name=resolved_provider)
 

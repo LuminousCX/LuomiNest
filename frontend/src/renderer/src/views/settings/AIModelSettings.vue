@@ -101,6 +101,11 @@ const currentTemplateDefaultModels = computed(() => {
   return tmpl?.defaultModels || []
 })
 
+const editTemplateDefaultModels = computed(() => {
+  const tmpl = modelStore.allTemplates.find(t => t.id === editingProviderId.value)
+  return tmpl?.defaultModels || []
+})
+
 const selectedTmpl = computed(() => modelStore.allTemplates.find(t => t.id === selectedTemplate.value))
 
 const onAddModelSelectChange = () => {
@@ -1183,7 +1188,7 @@ onMounted(async () => {
             <div class="form-select-wrap">
               <select v-model="editModelSelect" class="form-select" @change="onEditModelSelectChange">
                 <option value="">请选择模型</option>
-                <option v-for="m in currentTemplateDefaultModels" :key="m" :value="m">{{ m }}</option>
+                <option v-for="m in editTemplateDefaultModels" :key="m" :value="m">{{ m }}</option>
                 <option value="__custom__">自定义模型...</option>
               </select>
               <ChevronRight :size="14" class="select-icon" />
