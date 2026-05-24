@@ -129,22 +129,36 @@ async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | 
     return {"status": "success", "total_facts": len(memory.facts)}
 
 
+_memory_locks: dict[str | None, asyncio.Lock] = {}
+
+
+def _get_memory_lock(agent_id: str | None) -> asyncio.Lock:
+    key = agent_id or "__global__"
+    if key not in _memory_locks:
+        _memory_locks[key] = asyncio.Lock()
+    return _memory_locks[key]
+
+
 @router.put("/context")
 async def update_context(request: UpdateContextRequest, agent_id: str | None = Query(None)):
     from app.engines.memory.core.models import utc_now_iso_z
     storage = _get_storage()
-    memory = await asyncio.to_thread(storage.load, agent_id)
-    now = utc_now_iso_z()
-    if request.work_context is not None:
-        memory.user.work_context.summary = request.work_context
-        memory.user.work_context.updated_at = now
-    if request.personal_context is not None:
-        memory.user.personal_context.summary = request.personal_context
-        memory.user.personal_context.updated_at = now
-    if request.top_of_mind is not None:
-        memory.user.top_of_mind.summary = request.top_of_mind
-        memory.user.top_of_mind.updated_at = now
-    await asyncio.to_thread(storage.save, memory, agent_id)
+    lock = _get_memory_lock(agent_id)
+    async with lock:
+        memory = await asyncio.to_thread(storage.load, agent_id)
+        now = utc_now_iso_z()
+        if request.work_context is not None:
+            memory.user.work_context.summary = request.work_context
+            memory.user.work_context.updated_at = now
+        if request.personal_context is not None:
+            memory.user.personal_context.summary = request.personal_context
+            memory.user.personal_context.updated_at = now
+        if request.top_of_mind is not None:
+            memory.user.top_of_mind.summary = request.top_of_mind
+            memory.user.top_of_mind.updated_at = now
+        saved = await asyncio.to_thread(storage.save, memory, agent_id)
+        if not saved:
+            raise RuntimeError("Failed to save context updates")
     return {"status": "success"}
 
 
@@ -159,36 +173,40 @@ async def get_profile(agent_id: str | None = Query(None, description="Agent ID f
 async def update_profile(request: UpdateProfileRequest, agent_id: str | None = Query(None)):
     from app.engines.memory.core.models import utc_now_iso_z
     storage = _get_storage()
-    memory = await asyncio.to_thread(storage.load, agent_id)
-    now = utc_now_iso_z()
+    lock = _get_memory_lock(agent_id)
+    async with lock:
+        memory = await asyncio.to_thread(storage.load, agent_id)
+        now = utc_now_iso_z()
 
-    if request.name is not None:
-        memory.profile.name = request.name
-    if request.nickname is not None:
-        memory.profile.nickname = request.nickname
-    if request.age is not None:
-        memory.profile.age = request.age
-    if request.gender is not None:
-        memory.profile.gender = request.gender
-    if request.occupation is not None:
-        memory.profile.occupation = request.occupation
-    if request.location is not None:
-        memory.profile.location = request.location
-    if request.timezone is not None:
-        memory.profile.timezone = request.timezone
-    if request.language is not None:
-        memory.profile.language = request.language
-    if request.interests is not None:
-        memory.profile.interests = request.interests
-    if request.hobbies is not None:
-        memory.profile.hobbies = request.hobbies
-    if request.preferences is not None:
-        memory.profile.preferences = request.preferences
-    if request.notes is not None:
-        memory.profile.notes = request.notes
+        if request.name is not None:
+            memory.profile.name = request.name
+        if request.nickname is not None:
+            memory.profile.nickname = request.nickname
+        if request.age is not None:
+            memory.profile.age = request.age
+        if request.gender is not None:
+            memory.profile.gender = request.gender
+        if request.occupation is not None:
+            memory.profile.occupation = request.occupation
+        if request.location is not None:
+            memory.profile.location = request.location
+        if request.timezone is not None:
+            memory.profile.timezone = request.timezone
+        if request.language is not None:
+            memory.profile.language = request.language
+        if request.interests is not None:
+            memory.profile.interests = request.interests
+        if request.hobbies is not None:
+            memory.profile.hobbies = request.hobbies
+        if request.preferences is not None:
+            memory.profile.preferences = request.preferences
+        if request.notes is not None:
+            memory.profile.notes = request.notes
 
-    memory.profile.updated_at = now
-    await asyncio.to_thread(storage.save, memory, agent_id)
+        memory.profile.updated_at = now
+        saved = await asyncio.to_thread(storage.save, memory, agent_id)
+        if not saved:
+            raise RuntimeError("Failed to save profile updates")
     return {"status": "success", "profile": memory.profile.model_dump()}
 
 
@@ -196,9 +214,13 @@ async def update_profile(request: UpdateProfileRequest, agent_id: str | None = Q
 async def clear_profile(agent_id: str | None = Query(None)):
     from app.engines.memory.core.models import UserProfile
     storage = _get_storage()
-    memory = await asyncio.to_thread(storage.load, agent_id)
-    memory.profile = UserProfile()
-    await asyncio.to_thread(storage.save, memory, agent_id)
+    lock = _get_memory_lock(agent_id)
+    async with lock:
+        memory = await asyncio.to_thread(storage.load, agent_id)
+        memory.profile = UserProfile()
+        saved = await asyncio.to_thread(storage.save, memory, agent_id)
+        if not saved:
+            raise RuntimeError("Failed to clear profile")
     return {"status": "success", "message": "Profile cleared"}
 
 

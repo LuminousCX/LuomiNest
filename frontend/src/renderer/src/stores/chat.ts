@@ -339,12 +339,13 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  const loadConversation = async (convId: string) => {
-    if (!activeAgentId.value) return
+  const loadConversation = async (convId: string, agentId?: string) => {
+    const targetAgentId = agentId || activeAgentId.value
+    if (!targetAgentId) return
 
     agentCurrentConvId.value = {
       ...agentCurrentConvId.value,
-      [activeAgentId.value]: convId
+      [targetAgentId]: convId
     }
 
     if (convMessages.value[convId] && convMessages.value[convId].length > 0) {

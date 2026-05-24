@@ -162,7 +162,6 @@ export const useApi = () => {
       await onDone()
     } catch (e: any) {
       if (e.name === 'AbortError') {
-        await onDone()
         return
       }
       onError(e.message)

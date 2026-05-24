@@ -893,6 +893,7 @@ onBeforeUnmount(() => {
                 <button
                   v-else
                   :class="['send-btn', { disabled: !canSend }]"
+                  :disabled="!canSend"
                   title="发送"
                   @click="sendMessage"
                 >

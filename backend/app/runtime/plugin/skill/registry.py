@@ -242,11 +242,11 @@ class SkillRegistry:
     @classmethod
     async def _builtin_get_time(cls, **kwargs) -> 'SkillResult':
         from app.runtime.plugin.skill.base import SkillResult
-        from datetime import datetime
-        now = datetime.now()
+        from datetime import datetime, timezone
+        now = datetime.now(tz=timezone.utc)
         weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
         return SkillResult(success=True, data={
-            "datetime": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "datetime": now.isoformat(),
             "date": now.strftime("%Y-%m-%d"),
             "time": now.strftime("%H:%M:%S"),
             "weekday": weekday_names[now.weekday()],
@@ -256,6 +256,7 @@ class SkillRegistry:
             "hour": now.hour,
             "minute": now.minute,
             "second": now.second,
+            "tz": "UTC",
         })
 
     @classmethod

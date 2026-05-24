@@ -195,6 +195,24 @@ class MemoryUpdater:
         fact_ids_to_remove = parsed.get("fact_ids_to_remove", [])
         updates = parsed.get("updates", {})
 
+        # Validate and normalize LLM response types
+        if isinstance(facts_to_add, dict):
+            facts_to_add = [facts_to_add]
+            logger.warning("[Memory] Coerced facts_to_add from dict to list")
+        if not isinstance(facts_to_add, list):
+            facts_to_add = []
+            logger.warning(f"[Memory] Invalid facts_to_add type: {type(facts_to_add).__name__}, reset to []")
+        facts_to_add = [f for f in facts_to_add if isinstance(f, dict)]
+
+        if not isinstance(fact_ids_to_remove, list):
+            fact_ids_to_remove = [fact_ids_to_remove] if fact_ids_to_remove else []
+            logger.warning(f"[Memory] Coerced fact_ids_to_remove to list")
+        fact_ids_to_remove = [str(fid) for fid in fact_ids_to_remove if fid is not None]
+
+        if not isinstance(updates, dict):
+            logger.warning(f"[Memory] Invalid updates type: {type(updates).__name__}, reset to {{}}")
+            updates = {}
+
         agent_lock = self._get_agent_lock(agent_id)
         with agent_lock:
             fresh_memory = self._storage.load(agent_id)
@@ -249,7 +267,10 @@ class MemoryUpdater:
                 updates_applied["top_of_mind"] = updates["user_top_of_mind"]
 
             if facts_added > 0 or facts_removed > 0 or updates_applied:
-                self._storage.save(fresh_memory, agent_id)
+                saved = self._storage.save(fresh_memory, agent_id)
+                if not saved:
+                    logger.error("[Memory] Failed to save memory updates")
+                    return {"updated": False, "reason": "Save operation failed"}
                 logger.info(
                     f"[Memory] Updated: +{facts_added} facts, -{facts_removed} facts, "
                     f"{len(updates_applied)} context updates"

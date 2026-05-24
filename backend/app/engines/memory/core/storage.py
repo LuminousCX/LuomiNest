@@ -21,10 +21,17 @@ class MemoryStorage:
         self._cache: dict[str | None, tuple[MemoryData, float | None]] = {}
         self._lock = threading.RLock()
 
+    @staticmethod
+    def _normalize_agent_id(agent_id: str | None) -> str | None:
+        """Normalize agent_id into a canonical key for consistent cache and file access."""
+        if not agent_id:
+            return None
+        return "".join(c if c.isalnum() or c in "-_" else "_" for c in agent_id)
+
     def _get_memory_file(self, agent_id: str | None = None) -> Path:
-        if agent_id:
-            safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in agent_id)
-            return self._storage_path / f"memory_{safe_id}.json"
+        normalized = self._normalize_agent_id(agent_id)
+        if normalized:
+            return self._storage_path / f"memory_{normalized}.json"
         return self._storage_path / "memory.json"
 
     def _load_from_file(self, agent_id: str | None = None) -> MemoryData:
@@ -35,39 +42,45 @@ class MemoryStorage:
             with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
             return MemoryData.from_dict(data)
+        except json.JSONDecodeError as e:
+            logger.error(f"[Memory] Corrupt memory file (JSON parse error): {file_path}, error_type={type(e).__name__}")
+            raise
         except Exception as e:
-            logger.warning(f"[Memory] Failed to load memory file: {e}")
-            return create_empty_memory()
+            logger.error(f"[Memory] Failed to load memory file: {file_path}, error_type={type(e).__name__}")
+            raise
 
     def load(self, agent_id: str | None = None) -> MemoryData:
         with self._lock:
+            normalized_key = self._normalize_agent_id(agent_id)
             file_path = self._get_memory_file(agent_id)
             try:
                 current_mtime = file_path.stat().st_mtime if file_path.exists() else None
             except OSError:
                 current_mtime = None
 
-            cached = self._cache.get(agent_id)
+            cached = self._cache.get(normalized_key)
             if cached is not None and cached[1] == current_mtime:
                 return copy.deepcopy(cached[0])
 
             memory_data = self._load_from_file(agent_id)
-            self._cache[agent_id] = (copy.deepcopy(memory_data), current_mtime)
+            self._cache[normalized_key] = (copy.deepcopy(memory_data), current_mtime)
             return memory_data
 
     def reload(self, agent_id: str | None = None) -> MemoryData:
         with self._lock:
+            normalized_key = self._normalize_agent_id(agent_id)
             memory_data = self._load_from_file(agent_id)
             file_path = self._get_memory_file(agent_id)
             try:
                 mtime = file_path.stat().st_mtime if file_path.exists() else None
             except OSError:
                 mtime = None
-            self._cache[agent_id] = (copy.deepcopy(memory_data), mtime)
+            self._cache[normalized_key] = (copy.deepcopy(memory_data), mtime)
             return memory_data
 
     def save(self, memory_data: MemoryData, agent_id: str | None = None) -> bool:
         with self._lock:
+            normalized_key = self._normalize_agent_id(agent_id)
             file_path = self._get_memory_file(agent_id)
             try:
                 file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -80,7 +93,7 @@ class MemoryStorage:
                     mtime = file_path.stat().st_mtime
                 except OSError:
                     mtime = None
-                self._cache[agent_id] = (copy.deepcopy(memory_data), mtime)
+                self._cache[normalized_key] = (copy.deepcopy(memory_data), mtime)
                 logger.info(f"[Memory] Saved memory (resource={file_path.name})")
                 return True
             except Exception as e:

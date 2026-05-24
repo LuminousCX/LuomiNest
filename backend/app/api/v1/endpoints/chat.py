@@ -241,12 +241,10 @@ async def _execute_tool_calls(tool_calls: list[dict], agent_id: str | None = Non
                 "status": "success",
             })
         except Exception as e:
-            logger.error(f"[ToolExecutor] Tool execution failed: {tool_name}, error: {e}", exc_info=True)
-            error_msg = (
-                f"功能执行遇到问题：{str(e)}"
-                if settings.DEBUG
-                else "功能执行遇到问题，请稍后再试，或尝试用其他方式描述您的需求。"
-            )
+            logger.error(f"[ToolExecutor] Tool execution failed: tool={tool_name}, error_type={type(e).__name__}")
+            error_msg = "功能执行遇到问题，请稍后再试，或尝试用其他方式描述您的需求。"
+            if settings.DEBUG:
+                logger.debug(f"[ToolExecutor] Full exception for tool={tool_name}", exc_info=True)
             results.append({
                 "tool": tool_name,
                 "result": error_msg,
@@ -354,6 +352,13 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
         ):
             tool_draft += chunk
             chunk_count += 1
+            data = ChatStreamChunk(
+                id=chat_id,
+                content=chunk,
+                model=model,
+                provider=provider,
+            )
+            yield f"data: {data.model_dump_json()}\n\n"
 
         tool_calls = _parse_tool_calls(tool_draft)
         if tool_calls:
@@ -383,15 +388,6 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
                 yield f"data: {data.model_dump_json()}\n\n"
         else:
             final_answer = tool_draft
-            for i in range(0, len(final_answer), 10):
-                chunk = final_answer[i:i+10]
-                data = ChatStreamChunk(
-                    id=chat_id,
-                    content=chunk,
-                    model=model,
-                    provider=provider,
-                )
-                yield f"data: {data.model_dump_json()}\n\n"
 
         done_data = ChatStreamChunk(
             id=chat_id,
@@ -411,10 +407,10 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
         logger.success(f"[STREAM] Stream completed: chat_id={chat_id}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
     except Exception as e:
         elapsed = time.time() - start_time
-        logger.error(f"[STREAM] Stream failed: chat_id={chat_id}, elapsed={elapsed:.2f}s, error={e}")
+        logger.error(f"[STREAM] Stream failed: chat_id={chat_id}, elapsed={elapsed:.2f}s, error_type={type(e).__name__}")
         error_data = ChatStreamChunk(
             id=chat_id,
-            content=f"[Error] {str(e)}",
+            content="[Error] An internal error occurred. Please try again.",
             model=model,
             provider=provider,
             done=True,
@@ -550,6 +546,13 @@ async def add_message(conv_id: str, request: ChatRequest):
                 ):
                     tool_draft += chunk
                     chunk_count += 1
+                    data = ChatStreamChunk(
+                        id=chat_id,
+                        content=chunk,
+                        model=resolved_model,
+                        provider=resolved_provider,
+                    )
+                    yield f"data: {data.model_dump_json()}\n\n"
 
                 tool_calls = _parse_tool_calls(tool_draft)
                 if tool_calls:
@@ -579,15 +582,6 @@ async def add_message(conv_id: str, request: ChatRequest):
                         yield f"data: {data.model_dump_json()}\n\n"
                 else:
                     final_answer = tool_draft
-                    for i in range(0, len(final_answer), 10):
-                        chunk = final_answer[i:i+10]
-                        data = ChatStreamChunk(
-                            id=chat_id,
-                            content=chunk,
-                            model=resolved_model,
-                            provider=resolved_provider,
-                        )
-                        yield f"data: {data.model_dump_json()}\n\n"
 
                 done_data = ChatStreamChunk(
                     id=chat_id,
@@ -615,10 +609,10 @@ async def add_message(conv_id: str, request: ChatRequest):
                 logger.success(f"[STREAM] Stream completed & saved: conv={conv_id}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
             except Exception as e:
                 elapsed = time.time() - start_time
-                logger.error(f"[STREAM] Stream failed: conv={conv_id}, elapsed={elapsed:.2f}s, error={e}")
+                logger.error(f"[STREAM] Stream failed: conv={conv_id}, elapsed={elapsed:.2f}s, error_type={type(e).__name__}")
                 error_data = ChatStreamChunk(
                     id=chat_id,
-                    content=f"[Error] {str(e)}",
+                    content="[Error] An internal error occurred. Please try again.",
                     model=resolved_model,
                     provider=resolved_provider,
                     done=True,
