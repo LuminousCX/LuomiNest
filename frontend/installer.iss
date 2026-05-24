@@ -1,5 +1,5 @@
 #define MyAppName "LuomiNest"
-#define MyAppVersion "0.3.0"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "LuminousCX R&D Team"
 #define MyAppExeName "LuomiNest.exe"
 #define MyAppId "com.luominest.desktop"
@@ -41,22 +41,6 @@ ShowLanguageDialog=no
 UsePreviousLanguage=no
 MinVersion=6.1sp1
 InternalCompressLevel=ultra
-LZMAUseSeparateProcess=yes
-LZMABlockSize=8192
-LZMANumFastBytes=256
-LZMADictionarySize=196608
-
-; Ollama-style UI settings
-WizardImageFile=
-WizardSmallImageFile=
-WindowVisible=yes
-WindowResizable=no
-WindowShowCaption=yes
-WindowStartMaximized=no
-BackColor=$FFFFFF
-BackColor2=$F5F5F5
-BackColorDirection=gdVertical
-FlatComponentsList=True
 ShowComponentSizes=False
 ShowTasksTreeLines=False
 DisableWelcomePage=False
@@ -71,7 +55,6 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.i
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
-; Chinese Simplified
 chinesesimplified.WelcomeTitle=欢迎使用 {#MyAppName}
 chinesesimplified.WelcomeSubTitle=准备安装 {#MyAppName} {#MyAppVersion} 到您的电脑
 chinesesimplified.WelcomeDesc1=本向导将引导您完成 {#MyAppName} 的安装过程。
@@ -101,7 +84,6 @@ chinesesimplified.FinishedRunLabel=启动 {#MyAppName}
 chinesesimplified.FinishedLabel=点击"完成"关闭此向导。
 chinesesimplified.AlreadyInstalledMsg={#MyAppName} 已经安装在您的电脑上。%n%n是否要先卸载之前的版本？
 
-; English
 english.WelcomeTitle=Welcome to {#MyAppName}
 english.WelcomeSubTitle=Preparing to install {#MyAppName} {#MyAppVersion} on your computer
 english.WelcomeDesc1=This wizard will guide you through the installation of {#MyAppName}.
@@ -123,8 +105,8 @@ english.AutoLaunchShortcut=Launch at startup
 english.AutoLaunchShortcutDesc=Automatically start {#MyAppName} when you log in
 english.LicenseAgreement=License Agreement
 english.LicenseAgreementDesc=Please read the following license agreement
-english.InstallTitle=Installing
-english.InstallSubtitle=Please wait while Setup installs {#MyAppName} on your computer.
+english.InstallingTitle=Installing
+english.InstallingSubtitle=Please wait while Setup installs {#MyAppName} on your computer.
 english.FinishedTitle=Installation Complete
 english.FinishedSubTitle={#MyAppName} has been successfully installed on your computer.
 english.FinishedRunLabel=Launch {#MyAppName}
@@ -161,9 +143,17 @@ var
   DesktopCheck, StartMenuCheck, AutoLaunchCheck: TCheckBox;
   IsAdmin: Boolean;
 
+function BoolToStr(Value: Boolean): String;
+begin
+  if Value then
+    Result := 'True'
+  else
+    Result := 'False';
+end;
+
 function IsAdminUser: Boolean;
 begin
-  Result := IsAdminLoggedOn or IsPowerUserLoggedOn;
+  Result := IsAdminInstallMode;
 end;
 
 procedure InitializeWizard;
@@ -175,22 +165,18 @@ begin
   WizardForm.ClientHeight := ScaleY(500);
   WizardForm.Font.Name := 'Segoe UI';
   WizardForm.Font.Size := 9;
-  WizardForm.Color := TColor($FFFFFF);
-  WizardForm.OuterNotebook.Color := TColor($FFFFFF);
-  WizardForm.InnerNotebook.Color := TColor($FFFFFF);
+  WizardForm.Color := $FFFFFF;
 
-  ; Customize welcome page labels
   WizardForm.WelcomeLabel1.Font.Size := 16;
   WizardForm.WelcomeLabel1.Font.Style := [fsBold];
-  WizardForm.WelcomeLabel1.Font.Color := TColor($333333);
+  WizardForm.WelcomeLabel1.Font.Color := $333333;
   WizardForm.WelcomeLabel1.Top := ScaleY(50);
 
   WizardForm.WelcomeLabel2.Font.Size := 10;
-  WizardForm.WelcomeLabel2.Font.Color := TColor($666666);
+  WizardForm.WelcomeLabel2.Font.Color := $666666;
   WizardForm.WelcomeLabel2.WordWrap := True;
   WizardForm.WelcomeLabel2.Top := ScaleY(100);
 
-  ; Create install mode page
   InstallModePage := CreateInputOptionPage(
     wpLicense,
     ExpandConstant('{cm:InstallModeTitle}'),
@@ -213,7 +199,6 @@ begin
     InstallModePage.Values[1] := True;
   end;
 
-  ; Create shortcuts page
   ShortcutsPage := CreateCustomPage(
     InstallModePage.ID,
     ExpandConstant('{cm:ShortcutsTitle}'),
@@ -247,14 +232,10 @@ begin
   AutoLaunchCheck.Height := ScaleY(24);
   AutoLaunchCheck.Checked := False;
 
-  ; Style the main buttons
   WizardForm.NextButton.Font.Style := [fsBold];
   WizardForm.BackButton.Font.Style := [];
   WizardForm.CancelButton.Font.Style := [];
 
-  ; Set button colors and styles
-  WizardForm.NextButton.ParentColor := False;
-  WizardForm.NextButton.Color := TColor($0078D4);
   WizardForm.NextButton.Font.Color := clWhite;
 end;
 
@@ -274,21 +255,15 @@ begin
   begin
     WizardForm.PageNameLabel.Caption := ExpandConstant('{cm:InstallingTitle}');
     WizardForm.PageDescriptionLabel.Caption := ExpandConstant('{cm:InstallingSubtitle}');
-    WizardForm.FileNameLabel.Font.Color := TColor($666666);
-    WizardForm.ProgressGauge.ForeColor := $0078D4;
-    WizardForm.ProgressGauge.BackColor := $E5E5E5;
   end
   else if CurPageID = wpFinished then
   begin
     WizardForm.PageNameLabel.Caption := ExpandConstant('{cm:FinishedTitle}');
     WizardForm.PageDescriptionLabel.Caption := ExpandConstant('{cm:FinishedSubTitle}');
-    WizardForm.RunLabel.Font.Color := TColor($0078D4);
   end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
-var
-  ResultCode: Integer;
 begin
   Result := True;
 
@@ -298,7 +273,7 @@ begin
     begin
       if not IsAdmin then
       begin
-        if MsgBox(ExpandConstant('{cm:InstallModeAllUsersNoAdminDesc}'), mbConfirmation, MB_YESNO) = IDNO then
+        if MsgBox('Installing for all users requires administrator privileges. Continue anyway?', mbConfirmation, MB_YESNO) = IDNO then
         begin
           Result := False;
           Exit;
@@ -338,7 +313,6 @@ var
 begin
   Result := True;
 
-  ; Check for existing installation
   if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1',
     'UninstallString', OldUninstallString) or
      RegQueryStringValue(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1',
@@ -360,21 +334,17 @@ begin
     begin
       RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'InstallMode', 'machine');
       RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'InstallPath', ExpandConstant('{app}'));
-      RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'DesktopShortcut', BoolToStr(DesktopCheck.Checked, True));
-      RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'StartMenuShortcut', BoolToStr(StartMenuCheck.Checked, True));
-      RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'AutoLaunch', BoolToStr(AutoLaunchCheck.Checked, True));
+      RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'DesktopShortcut', BoolToStr(DesktopCheck.Checked));
+      RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'StartMenuShortcut', BoolToStr(StartMenuCheck.Checked));
+      RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'AutoLaunch', BoolToStr(AutoLaunchCheck.Checked));
     end
     else
     begin
       RegWriteStringValue(HKCU, 'SOFTWARE\{#MyAppName}', 'InstallMode', 'user');
       RegWriteStringValue(HKCU, 'SOFTWARE\{#MyAppName}', 'InstallPath', ExpandConstant('{app}'));
-      RegWriteStringValue(HKCU, 'SOFTWARE\{#MyAppName}', 'DesktopShortcut', BoolToStr(DesktopCheck.Checked, True));
-      RegWriteStringValue(HKCU, 'SOFTWARE\{#MyAppName}', 'StartMenuShortcut', BoolToStr(StartMenuCheck.Checked, True));
-      RegWriteStringValue(HKCU, 'SOFTWARE\{#MyAppName}', 'AutoLaunch', BoolToStr(AutoLaunchCheck.Checked, True));
+      RegWriteStringValue(HKCU, 'SOFTWARE\{#MyAppName}', 'DesktopShortcut', BoolToStr(DesktopCheck.Checked));
+      RegWriteStringValue(HKCU, 'SOFTWARE\{#MyAppName}', 'StartMenuShortcut', BoolToStr(StartMenuCheck.Checked));
+      RegWriteStringValue(HKCU, 'SOFTWARE\{#MyAppName}', 'AutoLaunch', BoolToStr(AutoLaunchCheck.Checked));
     end;
   end;
-end;
-
-procedure DeInitializeSetup();
-begin
 end;

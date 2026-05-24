@@ -8,9 +8,11 @@ elseif ($IsLinux) { $Platform = "linux" }
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " LuomiNest Unified Build Script" -ForegroundColor Cyan
 Write-Host " Host Platform: $Platform" -ForegroundColor Cyan
-Write-Host " Targets: Win64 (NSIS+Portable) + Linux (AppImage+deb+rpm)" -ForegroundColor Cyan
-if ($Platform -eq "mac") {
-    Write-Host "         + macOS (DMG+zip)" -ForegroundColor Cyan
+Write-Host " Targets:" -ForegroundColor Cyan
+if ($Platform -eq "win") {
+    Write-Host "   Win64 (Inno Setup Installer + Portable)" -ForegroundColor Cyan
+} else {
+    Write-Host "   Current platform packages" -ForegroundColor Cyan
 }
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
@@ -21,17 +23,27 @@ $BackendDir = Join-Path $ProjectRoot "backend"
 $DistDir = Join-Path $ProjectRoot "dist"
 $ResourcesBackend = Join-Path $FrontendDir "resources\backend"
 $ReleaseDir = Join-Path $FrontendDir "release\dist"
+$InstallerDir = Join-Path $FrontendDir "release\installer"
 
 if ($Platform -eq "win") {
     $BackendExe = Join-Path $BackendDir "dist\luominest-backend.exe"
 } else {
-    $BackendExe = Join-Path $BackendDir "dist\luominest-backend"
+    $BackendExe = Join-Path $BackendDir "dist/luominest-backend"
 }
 
 $env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
 $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://npmmirror.com/mirrors/electron-builder-binaries/"
 
 $startTime = Get-Date
+
+if ($Platform -eq "win") {
+    Write-Host "Pre-check: Stopping leftover LuomiNest processes..." -ForegroundColor Gray
+    Stop-Process -Name "LuomiNest" -Force -ErrorAction SilentlyContinue
+    Stop-Process -Name "electron" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+    Write-Host "Pre-check: Cleaning old release directory..." -ForegroundColor Gray
+    Remove-Item -Recurse -Force (Join-Path $FrontendDir "release") -ErrorAction SilentlyContinue
+}
 
 # ============================================================
 # Step 1: Build backend
@@ -79,29 +91,26 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Frontend build complete" -ForegroundColor Green
 
 # ============================================================
-# Step 4: Package for current platform
+# Step 4: Create portable package (electron-builder)
 # ============================================================
 Write-Host ""
-Write-Host "[Step 4/6] Creating installer packages for current platform..." -ForegroundColor Yellow
+Write-Host "[Step 4/6] Creating portable package..." -ForegroundColor Yellow
 switch ($Platform) {
     "mac" {
-        Write-Host "Building macOS packages..." -ForegroundColor Yellow
         & pnpm exec electron-builder --mac
     }
     "linux" {
-        Write-Host "Building Linux packages..." -ForegroundColor Yellow
         & pnpm exec electron-builder --linux AppImage deb rpm
     }
     default {
-        Write-Host "Building Windows packages..." -ForegroundColor Yellow
         & pnpm exec electron-builder --win
     }
 }
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "[ERROR] Current platform packaging failed" -ForegroundColor Red
+    Write-Host "[ERROR] Portable package creation failed" -ForegroundColor Red
     exit 1
 }
-Write-Host "Current platform packages created" -ForegroundColor Green
+Write-Host "Portable package created" -ForegroundColor Green
 
 # ============================================================
 # Step 5: Cross-platform Linux build via WSL (Windows only)
@@ -193,42 +202,34 @@ echo "WSL_LINUX_BUILD_DONE"
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "Linux packages built via WSL" -ForegroundColor Green
             } else {
-                Write-Host "[WARNING] WSL Linux build failed, Windows packages are ready" -ForegroundColor Yellow
+                Write-Host "[WARNING] WSL Linux build failed" -ForegroundColor Yellow
             }
 
             Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
         }
     } else {
         Write-Host "WSL not available, skipping Linux cross-build" -ForegroundColor Gray
-        Write-Host "To build Linux packages, install WSL with Ubuntu" -ForegroundColor Gray
     }
 } elseif ($Platform -eq "linux") {
-    Write-Host "Building Windows packages via cross-compilation..." -ForegroundColor Yellow
+    Write-Host "Building Windows portable via cross-compilation..." -ForegroundColor Yellow
     & pnpm exec electron-builder --win
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "Windows packages built via cross-compilation" -ForegroundColor Green
+        Write-Host "Windows portable built via cross-compilation" -ForegroundColor Green
     } else {
         Write-Host "[WARNING] Windows cross-build failed" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "Building Linux + Windows packages via cross-compilation..." -ForegroundColor Yellow
-    & pnpm exec electron-builder --linux AppImage deb rpm --win
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Linux + Windows packages built" -ForegroundColor Green
-    } else {
-        Write-Host "[WARNING] Cross-platform build partially failed" -ForegroundColor Yellow
     }
 }
 
 # ============================================================
-# Step 6: Inno Setup (Windows only, optional)
+# Step 6: Inno Setup installer (Windows only)
 # ============================================================
 Write-Host ""
-Write-Host "[Step 6/6] Checking for Inno Setup (Windows only)..." -ForegroundColor Yellow
+Write-Host "[Step 6/6] Creating Inno Setup installer..." -ForegroundColor Yellow
 if ($Platform -eq "win") {
     $innoSetupPath = Get-Command "iscc" -ErrorAction SilentlyContinue
     if (-not $innoSetupPath) {
         $defaultPaths = @(
+            "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe",
             "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
             "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
         )
@@ -241,16 +242,22 @@ if ($Platform -eq "win") {
     }
 
     if ($innoSetupPath) {
-        Write-Host "Inno Setup found, creating Ollama-style installer..." -ForegroundColor Yellow
+        Set-Location $FrontendDir
         & $innoSetupPath "installer.iss"
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "Inno Setup installer created" -ForegroundColor Green
+            Write-Host "Inno Setup installer created successfully!" -ForegroundColor Green
         } else {
-            Write-Host "[WARNING] Inno Setup build failed, NSIS packages are ready" -ForegroundColor Yellow
+            Write-Host "[ERROR] Inno Setup build failed" -ForegroundColor Red
+            exit 1
         }
     } else {
-        Write-Host "Inno Setup not found, skipping" -ForegroundColor Gray
+        Write-Host "[ERROR] Inno Setup not found! Please install Inno Setup 6 from https://jrsoftware.org/isdl.php" -ForegroundColor Red
+        exit 1
     }
+} elseif ($Platform -eq "mac") {
+    Write-Host "Skipping Inno Setup (not available on macOS)" -ForegroundColor Gray
+} else {
+    Write-Host "Skipping Inno Setup (not available on Linux)" -ForegroundColor Gray
 }
 
 $endTime = Get-Date
@@ -259,18 +266,28 @@ $duration = $endTime - $startTime
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host " Build completed!" -ForegroundColor Green
-Write-Host " Host Platform: $Platform" -ForegroundColor Green
+Write-Host " Platform: $Platform" -ForegroundColor Green
 Write-Host " Duration: $($duration.ToString('mm\:ss'))" -ForegroundColor Green
-Write-Host " Output: $ReleaseDir" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
 Write-Host "Generated packages:" -ForegroundColor Magenta
+Write-Host "" -ForegroundColor White
+Write-Host "  [Installer] Inno Setup (.exe):" -ForegroundColor Cyan
+Get-ChildItem "$InstallerDir\*" -ErrorAction SilentlyContinue | Where-Object {
+    $_.Extension -match '\.(exe)$'
+} | ForEach-Object {
+    $size = [math]::Round($_.Length / 1MB, 2)
+    Write-Host "    $($_.Name) ($size MB)" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "  [Portable] Electron Builder:" -ForegroundColor Cyan
 Get-ChildItem "$ReleaseDir\*" -ErrorAction SilentlyContinue | Where-Object {
     $_.Extension -match '\.(exe|AppImage|deb|rpm|dmg|zip)$'
 } | ForEach-Object {
     $size = [math]::Round($_.Length / 1MB, 2)
-    Write-Host "  $($_.Name) ($size MB)" -ForegroundColor Green
+    Write-Host "    $($_.Name) ($size MB)" -ForegroundColor Green
 }
 
 Set-Location $ProjectRoot

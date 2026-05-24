@@ -8,7 +8,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/main/index.ts')
+          index: resolve(__dirname, 'src/main/index.ts'),
+          installer: resolve(__dirname, 'src/main/installer/index.ts')
         }
       }
     }
@@ -18,7 +19,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/preload/index.ts')
+          index: resolve(__dirname, 'src/preload/index.ts'),
+          installer: resolve(__dirname, 'src/preload/installer.ts')
         }
       }
     }
@@ -28,25 +30,16 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html')
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          installer: resolve(__dirname, 'src/renderer/installer/index.html')
         },
         output: {
           manualChunks(id) {
-            if (id.includes('lucide-vue-next')) {
-              return 'lucide-vendor'
-            }
-            if (id.includes('node_modules/vue/') || id.includes('node_modules/vue-router/') || id.includes('node_modules/pinia')) {
-              return 'vue-vendor'
-            }
-            if (id.includes('node_modules/pixi.js') || id.includes('node_modules/@pixi')) {
-              return 'pixi-vendor'
-            }
-            if (id.includes('node_modules/pixi-live2d-display')) {
-              return 'live2d-vendor'
-            }
-            if (id.includes('node_modules/marked')) {
-              return 'marked-vendor'
-            }
+            if (id.includes('lucide-vue-next')) return 'lucide-vendor'
+            if (id.includes('node_modules/vue/') || id.includes('node_modules/vue-router/') || id.includes('node_modules/pinia')) return 'vue-vendor'
+            if (id.includes('node_modules/pixi.js') || id.includes('node_modules/@pixi')) return 'pixi-vendor'
+            if (id.includes('node_modules/pixi-live2d-display')) return 'live2d-vendor'
+            if (id.includes('node_modules/marked')) return 'marked-vendor'
           }
         }
       }
@@ -58,11 +51,9 @@ export default defineConfig({
       }
     },
     server: {
+      port: 5173,
       fs: {
-        allow: [
-          resolve(__dirname, 'resources'),
-          resolve(__dirname, 'src')
-        ]
+        allow: [resolve(__dirname, 'resources'), resolve(__dirname, 'src')]
       }
     }
   }

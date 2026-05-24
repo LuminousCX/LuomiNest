@@ -399,5 +399,5 @@ def rgb888_to_rgb565_be(img: Image.Image) -> bytes:
 def img_to_jpeg(img: Image.Image, quality: int = 75) -> bytes:
     import io
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=quality)
+    img.save(buf, format="JPEG", quality=quality, subsampling=0)
     return buf.getvalue()

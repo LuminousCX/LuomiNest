@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import os
+import socket
 import sys
 import time
 import threading
@@ -31,7 +32,17 @@ DEFAULT_MODEL = os.path.join(
 )
 DEFAULT_EXP_MAP = os.path.join(SCRIPT_DIR, "exp_map.json")
 
-MQTT_BROKER = os.environ.get("MQTT_BROKER", "192.168.1.222")
+def _detect_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+MQTT_BROKER = os.environ.get("MQTT_BROKER", _detect_local_ip())
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 
 FRAME_DEDUP = True

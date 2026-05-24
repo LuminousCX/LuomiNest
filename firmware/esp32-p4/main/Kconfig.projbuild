@@ -2,19 +2,19 @@ menu "LuomiNest Configuration"
 
     config LN_WIFI_SSID
         string "WiFi SSID"
-        default "Xiaomi_65DF"
+        default "辰汐的Xiaomi 17 Pro"
         help
             Default WiFi network name (used when no NVS config saved).
 
     config LN_WIFI_PASSWORD
         string "WiFi Password"
-        default "18033810300xyr"
+        default "la917angel"
         help
             Default WiFi network password (used when no NVS config saved).
 
     config LN_AP_PASSWORD
         string "AP mode password"
-        default "18033810300xyr"
+        default "12345678"
         help
             Password for the configuration AP hotspot.
 
@@ -42,7 +42,7 @@ menu "LuomiNest Configuration"
 
     config LN_FRAME_DEDUP
         bool "Enable frame deduplication"
-        default y
+        default n
 
     config LN_STATUS_INTERVAL_SEC
         int "Status report interval (seconds)"

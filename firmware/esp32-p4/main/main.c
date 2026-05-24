@@ -16,12 +16,12 @@
 #include "eth_mgr.h"
 #include "app_mqtt.h"
 #include "avatar_engine.h"
+#include "frame_player.h"
 #include "web_config.h"
 #include "touch_driver.h"
 #include "chat_ui.h"
 #include "settings_ui.h"
 #include "time_mgr.h"
-#include "spi_frame_rx.h"
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 
@@ -34,7 +34,6 @@ static const char *TAG = "main";
 
 #define TOPIC_CMD      "luominest/p4/cmd"
 #define TOPIC_STATUS   "luominest/p4/status"
-#define TOPIC_STREAM   "luominest/p4/stream"
 #define TOPIC_CHAT     "luominest/p4/chat"
 
 #define STATUS_INTERVAL_MS (CONFIG_LN_STATUS_INTERVAL_SEC * 1000)
@@ -51,25 +50,12 @@ static lv_indev_t *s_touch_indev = NULL;
 static ln_config_t s_device_config = {0};
 static lv_obj_t *s_status_label = NULL;
 static lv_obj_t *s_net_label = NULL;
-static lv_obj_t *s_speed_label = NULL;
 static lv_obj_t *s_time_label = NULL;
 static lv_obj_t *s_right_panel = NULL;
 static chat_ui_t s_chat = {0};
 static settings_ui_t s_settings = {0};
 static lv_obj_t *s_swipe_cont = NULL;
 static lv_obj_t *s_page_dots[2] = {NULL, NULL};
-
-typedef struct {
-    uint8_t *data;
-    uint32_t len;
-} frame_msg_t;
-
-#define FRAME_QUEUE_LEN 2
-static QueueHandle_t s_frame_queue = NULL;
-
-static volatile uint32_t s_stream_bytes = 0;
-static uint32_t s_last_stream_bytes = 0;
-static float s_current_speed_kbps = 0;
 
 #define COLOR_BG          lv_color_hex(0x0F0F1A)
 #define COLOR_STATUS_BG   lv_color_hex(0x161628)
@@ -163,15 +149,6 @@ static void create_ui(void)
     lv_obj_remove_style_all(spacer);
     lv_obj_set_flex_grow(spacer, 1);
     lv_obj_set_size(spacer, 0, 0);
-
-    s_speed_label = lv_label_create(status_bar);
-    lv_label_set_text(s_speed_label, "");
-    lv_obj_set_style_text_color(s_speed_label, lv_color_hex(0x6688AA), 0);
-    lv_obj_set_style_text_font(s_speed_label, &lv_font_montserrat_14, 0);
-
-    lv_obj_t *sep3 = lv_label_create(status_bar);
-    lv_label_set_text(sep3, "  ");
-    lv_obj_set_style_text_font(sep3, &lv_font_montserrat_14, 0);
 
     s_time_label = lv_label_create(status_bar);
     lv_label_set_text(s_time_label, "--:--");
@@ -305,29 +282,6 @@ static void update_net_info(void)
     lvgl_port_unlock();
 }
 
-static void update_speed_display(void)
-{
-    if (!s_speed_label) return;
-
-    uint32_t current = s_stream_bytes;
-    uint32_t delta = current - s_last_stream_bytes;
-    s_last_stream_bytes = current;
-    s_current_speed_kbps = (float)(delta) / 1024.0f;
-
-    char buf[32] = {0};
-    if (s_current_speed_kbps > 1024.0f) {
-        snprintf(buf, sizeof(buf), "%.1f MB/s", s_current_speed_kbps / 1024.0f);
-    } else if (s_current_speed_kbps > 0.1f) {
-        snprintf(buf, sizeof(buf), "%.0f KB/s", s_current_speed_kbps);
-    } else {
-        buf[0] = '\0';
-    }
-
-    lvgl_port_lock(5000);
-    lv_label_set_text(s_speed_label, buf);
-    lvgl_port_unlock();
-}
-
 static void update_ui_online(void)
 {
     if (s_status_label) {
@@ -361,29 +315,57 @@ static void update_ui_ap_mode(void)
     update_net_info();
 }
 
+static void _apply_avatar_state(avatar_state_t state)
+{
+    avatar_engine_play_state(state);
+
+    if (frame_player_is_sd_available()) {
+        if (frame_player_has_state(state)) {
+            frame_player_start(state);
+            avatar_engine_set_render_mode(AVATAR_MODE_LOCAL);
+            ESP_LOGI(TAG, "Playing LOCAL frames for state %d", state);
+        } else if (frame_player_has_state(AVATAR_STATE_IDLE)) {
+            frame_player_start(AVATAR_STATE_IDLE);
+            avatar_engine_set_render_mode(AVATAR_MODE_LOCAL);
+            ESP_LOGI(TAG, "Fallback to IDLE frames");
+        }
+    }
+}
+
 static void on_mqtt_command(const char *topic, const char *data, int data_len)
 {
     ESP_LOGI(TAG, "CMD [%s]: %.*s", topic, data_len, data);
 
     if (strcmp(topic, TOPIC_CMD) == 0) {
+        avatar_state_t target_state = AVATAR_STATE_IDLE;
+        bool matched = true;
+
         if (strstr(data, "happy")) {
-            avatar_engine_play_state(AVATAR_STATE_HAPPY);
+            target_state = AVATAR_STATE_HAPPY;
         } else if (strstr(data, "sad")) {
-            avatar_engine_play_state(AVATAR_STATE_SAD);
+            target_state = AVATAR_STATE_SAD;
         } else if (strstr(data, "angry")) {
-            avatar_engine_play_state(AVATAR_STATE_ANGRY);
+            target_state = AVATAR_STATE_ANGRY;
         } else if (strstr(data, "surprised")) {
-            avatar_engine_play_state(AVATAR_STATE_SURPRISED);
+            target_state = AVATAR_STATE_SURPRISED;
         } else if (strstr(data, "think")) {
-            avatar_engine_play_state(AVATAR_STATE_THINK);
+            target_state = AVATAR_STATE_THINK;
         } else if (strstr(data, "neutral")) {
-            avatar_engine_play_state(AVATAR_STATE_NEUTRAL);
+            target_state = AVATAR_STATE_NEUTRAL;
         } else if (strstr(data, "talk")) {
-            avatar_engine_play_state(AVATAR_STATE_TALK);
+            target_state = AVATAR_STATE_TALK;
         } else if (strstr(data, "idle")) {
-            avatar_engine_play_state(AVATAR_STATE_IDLE);
+            target_state = AVATAR_STATE_IDLE;
         } else if (strstr(data, "stop")) {
             avatar_engine_stop();
+            frame_player_stop();
+            return;
+        } else {
+            matched = false;
+        }
+
+        if (matched) {
+            _apply_avatar_state(target_state);
         }
     } else if (strcmp(topic, TOPIC_CHAT) == 0) {
         if (!data || data_len <= 0) return;
@@ -413,71 +395,10 @@ static void on_mqtt_command(const char *topic, const char *data, int data_len)
     }
 }
 
-static void on_spi_frame(const uint8_t *data, uint32_t len)
-{
-    if (!s_frame_queue) return;
-
-    s_stream_bytes += len;
-
-    frame_msg_t msg = {0};
-    msg.len = len;
-    msg.data = heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
-    if (!msg.data) return;
-    memcpy(msg.data, data, len);
-
-    frame_msg_t discarded = {0};
-    if (xQueueSend(s_frame_queue, &msg, 0) != pdTRUE) {
-        if (xQueueReceive(s_frame_queue, &discarded, 0) == pdTRUE) {
-            free(discarded.data);
-        }
-        xQueueSend(s_frame_queue, &msg, 0);
-    }
-}
-
-static void on_mqtt_stream(const char *topic, const uint8_t *data, int data_len)
-{
-    if (strcmp(topic, TOPIC_STREAM) != 0) return;
-    if (!s_frame_queue) return;
-
-    s_stream_bytes += data_len;
-
-    frame_msg_t msg = {0};
-    msg.len = data_len;
-    msg.data = heap_caps_malloc(data_len, MALLOC_CAP_SPIRAM);
-    if (!msg.data) {
-        ESP_LOGE(TAG, "No PSRAM for frame (%d bytes)", data_len);
-        return;
-    }
-    memcpy(msg.data, data, data_len);
-
-    frame_msg_t discarded = {0};
-    if (xQueueSend(s_frame_queue, &msg, 0) != pdTRUE) {
-        if (xQueueReceive(s_frame_queue, &discarded, 0) == pdTRUE) {
-            free(discarded.data);
-        }
-        xQueueSend(s_frame_queue, &msg, 0);
-    }
-}
-
-static void frame_decode_task(void *pvParameter)
-{
-    frame_msg_t msg = {0};
-    while (1) {
-        if (xQueueReceive(s_frame_queue, &msg, pdMS_TO_TICKS(1000)) == pdTRUE) {
-            avatar_engine_show_frame(msg.data, msg.len);
-            free(msg.data);
-            msg.data = NULL;
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(1));
-        }
-    }
-}
-
 static void on_mqtt_connected(void)
 {
     ESP_LOGI(TAG, "MQTT connected, subscribing...");
     app_mqtt_subscribe(TOPIC_CMD, 1);
-    app_mqtt_subscribe(TOPIC_STREAM, 0);
     app_mqtt_subscribe(TOPIC_CHAT, 1);
     update_ui_online();
 }
@@ -507,7 +428,6 @@ static void start_mqtt(void)
     const char *client = s_device_config.mqtt_client[0] ? s_device_config.mqtt_client : DEFAULT_MQTT_CLIENT_ID;
     app_mqtt_init(broker, client);
     app_mqtt_register_message_cb(on_mqtt_command);
-    app_mqtt_register_stream_cb(on_mqtt_stream);
     app_mqtt_register_connected_cb(on_mqtt_connected);
     app_mqtt_register_disconnected_cb(on_mqtt_disconnected);
 }
@@ -568,24 +488,13 @@ static void status_task(void *pvParameter)
 {
     char status_buf[256];
     int tick = 0;
-    int speed_tick = 0;
-    int status_interval_ticks = STATUS_INTERVAL_MS / 1000;
-    if (status_interval_ticks < 1) status_interval_ticks = 1;
-    int speed_interval_ticks = 3;
 
     while (1) {
         update_time_display();
 
         tick++;
-        speed_tick++;
 
-        if (speed_tick >= speed_interval_ticks) {
-            speed_tick = 0;
-            update_net_info();
-            update_speed_display();
-        }
-
-        if (tick >= status_interval_ticks) {
+        if (tick >= STATUS_INTERVAL_MS / 1000) {
             tick = 0;
 
             if (app_mqtt_is_connected()) {
@@ -597,13 +506,14 @@ static void status_task(void *pvParameter)
 
                 snprintf(status_buf, sizeof(status_buf),
                          "{\"state\":\"online\",\"eth\":%s,\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
-                         "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u},"
-                         "\"decode_ms\":%u}",
+                         "\"frames\":{\"rx\":%u,\"show\":%u,\"dedup\":%u,\"err\":%u,\"local\":%u},"
+                         "\"decode_ms\":%u,\"mode\":\"local\"}",
                          eth_up ? "true" : "false", rssi, (unsigned)free_heap, (unsigned)free_psram,
                          (unsigned)stats->frames_received,
                          (unsigned)stats->frames_displayed,
                          (unsigned)stats->frames_skipped_dedup,
                          (unsigned)stats->frames_skipped_error,
+                         (unsigned)stats->local_frames_played,
                          (unsigned)stats->last_decode_ms);
 
                 app_mqtt_publish(TOPIC_STATUS, status_buf, strlen(status_buf), 1);
@@ -614,25 +524,41 @@ static void status_task(void *pvParameter)
     }
 }
 
+static esp_err_t _try_sdmmc_mount(sdmmc_host_t *host, const sdmmc_slot_config_t *slot_config,
+                                    const esp_vfs_fat_sdmmc_mount_config_t *mount_config,
+                                    sdmmc_card_t **card, uint32_t freq_khz)
+{
+    host->max_freq_khz = freq_khz;
+    esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", host, slot_config, mount_config, card);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "SD mount @ %lu kHz failed (0x%x: %s)", freq_khz, ret, esp_err_to_name(ret));
+        esp_vfs_fat_sdcard_unmount("/sdcard", *card);
+    }
+    return ret;
+}
+
 static esp_err_t init_sdcard(void)
 {
+    const esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 12,
+        .allocation_unit_size = 16 * 1024,
+    };
+
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     host.slot = SDMMC_HOST_SLOT_0;
-    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
 
-    sd_pwr_ctrl_ldo_config_t ldo_config = {
-        .ldo_chan_id = SD_LDO_CHAN,
-    };
-    sd_pwr_ctrl_handle_t pwr_ctrl_handle = NULL;
-    esp_err_t ret = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle);
-    if (ret == ESP_OK) {
-        host.pwr_ctrl_handle = pwr_ctrl_handle;
-        vTaskDelay(pdMS_TO_TICKS(200));
-    } else {
-        ESP_LOGW(TAG, "SD LDO power control init failed (0x%x), continuing without", ret);
-    }
+    host.pwr_ctrl_handle = NULL;
 
-    sdmmc_slot_config_t slot_config = {
+    ESP_LOGI(TAG, "=== SD Card Init ===");
+    ESP_LOGI(TAG, "SD pins: CLK=%d CMD=%d D0=%d D1=%d D2=%d D3=%d",
+             SDMMC_CLK_PIN, SDMMC_CMD_PIN, SDMMC_D0_PIN, SDMMC_D1_PIN,
+             SDMMC_D2_PIN, SDMMC_D3_PIN);
+    ESP_LOGI(TAG, "LDO power control DISABLED (P-MOSFET Q1 stays ON via R13 pull-down)");
+
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    const sdmmc_slot_config_t slot_config_4bit = {
         .clk = SDMMC_CLK_PIN,
         .cmd = SDMMC_CMD_PIN,
         .d0 = SDMMC_D0_PIN,
@@ -646,27 +572,49 @@ static esp_err_t init_sdcard(void)
         .cd = SDMMC_SLOT_NO_CD,
         .wp = SDMMC_SLOT_NO_WP,
         .width = 4,
-        .flags = 0,
+        .flags = SDMMC_SLOT_FLAG_INTERNAL_PULLUP,
     };
 
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
-        .max_files = 10,
-        .allocation_unit_size = 16 * 1024,
+    const sdmmc_slot_config_t slot_config_1bit = {
+        .clk = SDMMC_CLK_PIN,
+        .cmd = SDMMC_CMD_PIN,
+        .d0 = SDMMC_D0_PIN,
+        .d1 = GPIO_NUM_NC,
+        .d2 = GPIO_NUM_NC,
+        .d3 = GPIO_NUM_NC,
+        .d4 = GPIO_NUM_NC,
+        .d5 = GPIO_NUM_NC,
+        .d6 = GPIO_NUM_NC,
+        .d7 = GPIO_NUM_NC,
+        .cd = SDMMC_SLOT_NO_CD,
+        .wp = SDMMC_SLOT_NO_WP,
+        .width = 1,
+        .flags = SDMMC_SLOT_FLAG_INTERNAL_PULLUP,
     };
 
     sdmmc_card_t *card = NULL;
-    ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config,
-                                           &mount_config, &card);
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "SD card mount failed (0x%x), continuing without SD", ret);
-        ESP_LOGW(TAG, "Hint: ensure SD card is FAT32 formatted and properly inserted");
-        return ret;
+
+    static const uint32_t freq_table[] = {40000, 20000, 10000, 400};
+    static const char *freq_names[] = {"40", "20", "10", "0.4"};
+
+    for (int width = 4; width >= 1; width -= 3) {
+        const sdmmc_slot_config_t *slot_cfg = (width == 4) ? &slot_config_4bit : &slot_config_1bit;
+        ESP_LOGI(TAG, "--- Trying %d-bit mode ---", width);
+
+        for (int i = 0; i < 4; i++) {
+            ESP_LOGI(TAG, "Trying SD card @ %s MHz (%d-bit)...", freq_names[i], width);
+            esp_err_t ret = _try_sdmmc_mount(&host, slot_cfg, &mount_config, &card, freq_table[i]);
+            if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "SD card mounted @ %s MHz %d-bit!", freq_names[i], width);
+                sdmmc_card_print_info(stdout, card);
+                return ESP_OK;
+            }
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
     }
 
-    ESP_LOGI(TAG, "SD card mounted successfully");
-    sdmmc_card_print_info(stdout, card);
-    return ESP_OK;
+    ESP_LOGW(TAG, "SD card mount failed at all frequencies/modes");
+    return ESP_FAIL;
 }
 
 static void load_device_config(void)
@@ -767,8 +715,19 @@ void app_main(void)
 
     init_sdcard();
 
-    s_frame_queue = xQueueCreate(FRAME_QUEUE_LEN, sizeof(frame_msg_t));
-    xTaskCreatePinnedToCore(frame_decode_task, "frame_dec", 8192, NULL, 4, NULL, 1);
+    esp_err_t fp_ret = frame_player_init();
+    if (fp_ret == ESP_OK && frame_player_is_sd_available()) {
+        frame_player_register_frame_cb(avatar_engine_on_local_frame);
+        xTaskCreatePinnedToCore(frame_player_task, "frame_play", 8192, NULL, 4, NULL, 1);
+        ESP_LOGI(TAG, "Frame player started (SD card prerender available)");
+
+        if (frame_player_has_state(AVATAR_STATE_IDLE)) {
+            frame_player_start(AVATAR_STATE_IDLE);
+        }
+        avatar_engine_set_render_mode(AVATAR_MODE_LOCAL);
+    } else {
+        ESP_LOGW(TAG, "Frame player: no SD prerender, avatar display unavailable");
+    }
 
     wifi_mgr_register_connected_cb(on_wifi_connected);
     wifi_mgr_register_disconnected_cb(on_wifi_disconnected);
@@ -828,15 +787,6 @@ void app_main(void)
 
     if (s_mqtt_started || eth_connected || wifi_mgr_is_connected()) {
         xTaskCreatePinnedToCore(status_task, "status", 4096, NULL, 2, NULL, 1);
-    }
-
-    esp_err_t spi_ret = spi_frame_rx_init();
-    if (spi_ret == ESP_OK) {
-        spi_frame_rx_register_cb(on_spi_frame);
-        spi_frame_rx_start();
-        ESP_LOGI(TAG, "SPI frame receiver (C6 coordinator) initialized");
-    } else {
-        ESP_LOGW(TAG, "SPI frame receiver not available (0x%x), using MQTT only", spi_ret);
     }
 
     ESP_LOGI(TAG, "LuomiNest P4 ready! Free heap: %u, Free PSRAM: %u",

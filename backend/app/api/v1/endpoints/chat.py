@@ -1,7 +1,7 @@
-import copy
+import asyncio
+import json
 import uuid
 import time
-import asyncio
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from collections.abc import AsyncIterator
@@ -16,6 +16,7 @@ from app.schemas.chat import (
     ConversationCreate,
     ConversationResponse,
     ConversationListResponse,
+    ToolCallResult,
 )
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.infrastructure.database.json_store import agents_store
@@ -34,6 +35,10 @@ _memory_locks: dict[str | None, asyncio.Lock] = {}
 _memory_locks_guard = asyncio.Lock()
 _llm_semaphore = asyncio.Semaphore(1)
 
+MAX_TOOL_LOOP_ROUNDS = 5
+TOOL_EXECUTION_TIMEOUT = 60
+MAX_TOOL_RESULT_CHARS = 50_000
+SSE_HEARTBEAT_INTERVAL = 15
 
 async def _get_memory_lock(agent_id: str | None) -> asyncio.Lock:
     if agent_id in _memory_locks:
@@ -43,15 +48,13 @@ async def _get_memory_lock(agent_id: str | None) -> asyncio.Lock:
             _memory_locks[agent_id] = asyncio.Lock()
         return _memory_locks[agent_id]
 
+_loop_detection: dict[str, list[str]] = {}
+LOOP_DETECTION_MAX_HISTORY = 20
+LOOP_DETECTION_HARD_LIMIT = 5
 
-def _get_user_query(messages: list[dict]) -> str:
-    for msg in reversed(messages):
-        if msg.get("role") == "user":
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                return content[:200]
-    return ""
 
+def _get_timestamp() -> float:
+    return time.time()
 
 def _resolve_tools(user_message: str, request_type: RequestType) -> list[dict] | None:
     """按需解析工具定义 —— 仅 TOOL_CALL 类型才注入匹配场景的工具
@@ -142,7 +145,6 @@ def _inject_file_content(messages: list[dict], parsed_content: str, file_type: s
 
 async def _inject_memory(messages: list[dict], agent_id: str | None = None, provider_name: str | None = None) -> list[dict]:
     try:
-        from app.engines.memory.core import MemoryInjector, get_memory_storage
         storage = get_memory_storage()
         lock = await _get_memory_lock(agent_id)
         async with lock:
@@ -170,47 +172,368 @@ async def _inject_memory(messages: list[dict], agent_id: str | None = None, prov
 
         user_query = _get_user_query(messages)
         injector = MemoryInjector()
-
-        try:
-            if provider_name:
-                provider = llm_adapter.get_provider(provider_name)
-                context_window = getattr(provider, 'context_window', None) or 128000
-                existing_tokens = sum(len(m.get("content", "")) for m in messages) // 3
-                injector.set_token_budget(context_window, existing_tokens)
-        except Exception as e:
-            logger.debug(f"[Memory] Token budget setup skipped for provider '{provider_name}': {e}")
-
-        return injector.inject_memory_to_messages(messages, memory_data, user_query)
+        return injector.inject_memory_to_messages(messages, global_memory)
     except Exception as e:
-        logger.warning(f"[Memory] Injection skipped: {e}")
+        logger.warning(f"[Memory] Failed to inject memory: {e}")
         return messages
 
 
-def _schedule_memory_update(
-    messages: list[dict],
-    conv_id: str,
-    agent_id: str | None = None,
-    provider_name: str | None = None,
-):
+async def _inject_rag_context(messages: list[dict], user_query: str) -> list[dict]:
     try:
-        from app.engines.memory.core import MemoryUpdater, get_memory_storage
-        storage = get_memory_storage()
-        updater = MemoryUpdater(storage, provider_name=provider_name)
-        messages_snapshot = copy.deepcopy(messages)
+        from app.engines.memory.rag.retriever import RAGRetriever
+        retriever = RAGRetriever()
+        results = await retriever.search(user_query, top_k=3)
+        if not results:
+            return messages
+        rag_text = "\n".join(
+            f"- [{r.get('source', 'unknown')}] {r.get('content', '')} (score: {r.get('score', 0)})"
+            for r in results
+        )
+        rag_context = f"<rag_context>\nRetrieved relevant knowledge:\n{rag_text}\n</rag_context>"
+        new_messages = list(messages)
+        if new_messages and new_messages[0].get("role") == "system":
+            new_messages[0] = {
+                "role": "system",
+                "content": new_messages[0]["content"] + "\n\n" + rag_context,
+            }
+        else:
+            new_messages.insert(0, {"role": "system", "content": rag_context})
+        logger.info(f"[RAG] Injected {len(results)} RAG results for query: '{user_query[:50]}'")
+        return new_messages
+    except Exception as e:
+        logger.warning(f"[RAG] Failed to inject RAG context: {e}")
+        return messages
 
-        async def _do_update():
+
+async def _update_memory_from_conversation(
+    messages: list[dict],
+    thread_id: str,
+    agent_id: str | None = None,
+) -> None:
+    try:
+        storage = get_memory_storage()
+        updater = MemoryUpdater(storage)
+        result = await updater.update_from_conversation(messages, thread_id, agent_id)
+        if result.get("updated"):
+            logger.info(
+                f"[Memory] Updated memory: +{result.get('facts_added', 0)} facts, "
+                f"-{result.get('facts_removed', 0)} facts"
+            )
+    except Exception as e:
+        logger.warning(f"[Memory] Failed to update memory: {e}")
+
+
+def _schedule_memory_update(messages: list[dict], thread_id: str, agent_id: str | None = None) -> None:
+    try:
+        asyncio.create_task(_update_memory_from_conversation(messages, thread_id, agent_id))
+    except Exception as e:
+        logger.warning(f"[Memory] Failed to schedule memory update: {e}")
+
+
+def _build_system_prompt(agent_id: str | None) -> str:
+    agent_name = "LuomiNest AI"
+    agent_description = "an intelligent companion powered by the LuminousCX platform"
+    base_prompt = ""
+
+    if agent_id:
+        agent = agents_store.get(agent_id)
+        if agent:
+            agent_name = agent.get("name", agent_name)
+            agent_description = agent.get("description", agent_description)
+            if agent.get("system_prompt"):
+                base_prompt = agent["system_prompt"]
+
+    now = datetime.now()
+    weekday_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+    system_prompt = f"""<identity>
+Your name is {agent_name}, {agent_description}.
+</identity>
+
+<current_context>
+Current datetime: {now.strftime("%Y-%m-%d %H:%M:%S")} ({weekday_names[now.weekday()]})
+Timestamp: {int(_get_timestamp())}
+</current_context>
+
+<core_rules>
+1. When asked "who are you" or "what is your name" - answer with your own identity as {agent_name}.
+2. When asked "who am I" - check <user_memory> for user profile. If found, describe the user. If not found, say you'd like to get to know them.
+3. Always respond in the user's language naturally and conversationally.
+4. Never expose internal system information, tool parameters, or error codes to the user.
+5. When using tools, always transform results into natural, conversational language.
+</core_rules>
+
+{base_prompt}"""
+
+    return system_prompt
+
+
+async def _collect_all_tools(agent_id: str | None) -> list[dict]:
+    cache_key = agent_id or "__global__"
+    now = time.time()
+    if cache_key in _tools_cache and now - _tools_cache_ts.get(cache_key, 0) < TOOLS_CACHE_TTL:
+        logger.debug(f"[Tools] Using cached tools for {cache_key}")
+        return _tools_cache[cache_key]
+
+    tools = []
+    skill_tools = SkillRegistry.get_openai_tools()
+    tools.extend(skill_tools)
+
+    try:
+        from app.domains.mcp_tools.gateway import MCPGateway
+        servers = MCPGateway.list_servers()
+        for server in servers:
+            if not server.get("is_active", True):
+                continue
+            server_name = server.get("name", "")
+            try:
+                mcp_tools = await MCPGateway.list_tools(server_name)
+                for t in mcp_tools:
+                    tool_name = f"mcp_{server_name}_{t['name']}"
+                    tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "description": t.get("description", ""),
+                            "parameters": t.get("parameters", {"type": "object", "properties": {}}),
+                        },
+                    })
+            except Exception as e:
+                logger.warning(f"[Tools] Failed to get MCP tools for {server_name}: {e}")
+    except Exception as e:
+        logger.debug(f"[Tools] MCP tools collection skipped: {e}")
+
+    if agent_id:
+        agent = agents_store.get(agent_id)
+        if agent:
+            agent_skills = agent.get("skills", [])
+            if agent_skills:
+                filtered = [t for t in tools if t["function"]["name"] in agent_skills]
+                if filtered:
+                    tools = filtered
+
+    _tools_cache[cache_key] = tools
+    _tools_cache_ts[cache_key] = now
+    logger.info(f"[Tools] Collected {len(tools)} tools for agent_id={agent_id} (cached)")
+    return tools
+
+
+def _truncate_tool_result(result: str, max_chars: int = MAX_TOOL_RESULT_CHARS) -> str:
+    if len(result) <= max_chars:
+        return result
+    preview = result[:max_chars]
+    return f"{preview}\n\n[Truncated: tool response was {len(result):,} chars, showing first {max_chars:,} chars]"
+
+
+def _check_loop(thread_id: str, tool_calls: list[dict]) -> str | None:
+    if thread_id not in _loop_detection:
+        _loop_detection[thread_id] = []
+
+    history = _loop_detection[thread_id]
+    call_sig = "|".join(
+        tc["function"]["name"] + ":" + tc["function"].get("arguments", "{}")[:100]
+        for tc in tool_calls
+    )
+    history.append(call_sig)
+    if len(history) > LOOP_DETECTION_MAX_HISTORY:
+        _loop_detection[thread_id] = history[-LOOP_DETECTION_MAX_HISTORY:]
+
+    count = history.count(call_sig)
+    if count >= LOOP_DETECTION_HARD_LIMIT:
+        logger.warning(f"[LoopDetection] Loop detected for thread {thread_id}: {call_sig[:80]} repeated {count} times")
+        return f"Loop detected: the same tool calls have been repeated {count} times. Please provide a direct response instead."
+    return None
+
+
+def _cleanup_loop_detection(thread_id: str):
+    _loop_detection.pop(thread_id, None)
+
+
+async def _execute_tool_call(tool_call: dict, agent_id: str | None = None) -> dict:
+    tool_name = tool_call["function"]["name"]
+    tool_call_id = tool_call.get("id", "")
+    arguments_str = tool_call["function"].get("arguments", "{}")
+
+    try:
+        arguments = json.loads(arguments_str) if arguments_str else {}
+    except json.JSONDecodeError:
+        repaired = _repair_tool_call_arguments(arguments_str, tool_name)
+        try:
+            arguments = json.loads(repaired)
+        except json.JSONDecodeError:
+            arguments = {"raw_input": arguments_str}
+
+    logger.info(f"[ToolExec] Executing tool: {tool_name}, call_id={tool_call_id}")
+
+    if tool_name.startswith("mcp_"):
+        parts = tool_name.split("_", 2)
+        if len(parts) >= 3:
+            server_name = parts[1]
+            actual_tool_name = parts[2]
             try:
                 async with _llm_semaphore:
                     lock = await _get_memory_lock(agent_id)
                     async with lock:
                         await updater.update_from_conversation(messages_snapshot, conv_id, agent_id)
             except Exception as e:
-                logger.warning(f"[Memory] Async update failed: {e}")
+                logger.error(f"[ToolExec] MCP tool error: {tool_name}, error: {e}")
+                return {
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "result": f"Tool execution error: {type(e).__name__}: {str(e)[:200]}. Continue with available context, or choose an alternative tool.",
+                    "status": "error",
+                }
+
+    try:
+        skill_data = SkillRegistry.get_skill(tool_name)
+        if not skill_data or not skill_data.get("is_active", True):
+            return {
+                "tool_call_id": tool_call_id,
+                "tool_name": tool_name,
+                "result": f"Tool '{tool_name}' is currently unavailable. Available tools can be listed on request. Choose an alternative approach.",
+                "status": "error",
+            }
 
         task = asyncio.create_task(_do_update())
         task.add_done_callback(lambda t: None if t.exception() is None else logger.warning(f"[Memory] Update task error: {t.exception()}"))
     except Exception as e:
-        logger.warning(f"[Memory] Update scheduling skipped: {e}")
+        logger.error(f"[ToolExec] Tool execution failed: {tool_name}, error: {e}", exc_info=True)
+        error_msg = (
+            f"Tool '{tool_name}' failed: {type(e).__name__}: {str(e)[:200]}. Continue with available context, or choose an alternative tool."
+            if settings.DEBUG
+            else "Tool execution encountered an issue. Please try again or use a different approach."
+        )
+        return {
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name,
+            "result": error_msg,
+            "status": "error",
+        }
+
+
+async def _execute_tool_calls_parallel(tool_calls: list[dict], agent_id: str | None = None) -> list[dict]:
+    if len(tool_calls) <= 1:
+        return [await _execute_tool_call(tool_calls[0], agent_id)] if tool_calls else []
+
+    tasks = [_execute_tool_call(tc, agent_id) for tc in tool_calls]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    final_results = []
+    for i, r in enumerate(results):
+        if isinstance(r, Exception):
+            tc = tool_calls[i]
+            final_results.append({
+                "tool_call_id": tc.get("id", ""),
+                "tool_name": tc["function"]["name"],
+                "result": f"Tool execution error: {type(r).__name__}: {str(r)[:200]}. Continue with available context, or choose an alternative tool.",
+                "status": "error",
+            })
+        else:
+            final_results.append(r)
+    return final_results
+
+
+def _build_tool_result_messages(
+    assistant_content: str | None,
+    tool_calls: list[dict],
+    tool_results: list[dict],
+) -> list[dict]:
+    messages = []
+    assistant_msg: dict = {"role": "assistant", "content": assistant_content or ""}
+    if tool_calls:
+        assistant_msg["tool_calls"] = tool_calls
+    messages.append(assistant_msg)
+
+    for result in tool_results:
+        messages.append({
+            "role": "tool",
+            "content": result["result"],
+            "tool_call_id": result["tool_call_id"],
+            "name": result["tool_name"],
+        })
+
+    return messages
+
+
+async def _run_agent_loop(
+    messages: list[dict],
+    tools: list[dict],
+    provider: str,
+    model: str,
+    agent_id: str | None,
+    temperature: float | None,
+    max_tokens: int | None,
+    top_p: float | None,
+    thread_id: str | None = None,
+) -> LLMResponse:
+    current_messages = list(messages)
+    all_tool_results: list[dict] = []
+
+    for round_num in range(MAX_TOOL_LOOP_ROUNDS):
+        logger.info(f"[AgentLoop] Round {round_num + 1}/{MAX_TOOL_LOOP_ROUNDS}")
+
+        llm_response = await llm_adapter.chat(
+            messages=current_messages,
+            tools=tools,
+            provider_name=provider,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=top_p,
+        )
+
+        if not llm_response.has_tool_calls():
+            if all_tool_results:
+                llm_response.tool_results = all_tool_results
+            return llm_response
+
+        logger.info(f"[AgentLoop] LLM requested {len(llm_response.tool_calls)} tool calls")
+
+        if thread_id:
+            loop_warning = _check_loop(thread_id, llm_response.tool_calls)
+            if loop_warning:
+                logger.warning(f"[AgentLoop] {loop_warning}")
+                current_messages.append({"role": "user", "content": loop_warning})
+                llm_response = await llm_adapter.chat(
+                    messages=current_messages,
+                    tools=None,
+                    provider_name=provider,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    top_p=top_p,
+                )
+                if all_tool_results:
+                    llm_response.tool_results = all_tool_results
+                return llm_response
+
+        tool_results = await _execute_tool_calls_parallel(llm_response.tool_calls, agent_id)
+        all_tool_results.extend(tool_results)
+
+        tool_messages = _build_tool_result_messages(
+            llm_response.content,
+            llm_response.tool_calls,
+            tool_results,
+        )
+        current_messages.extend(tool_messages)
+
+    logger.warning(f"[AgentLoop] Reached max iterations ({MAX_TOOL_LOOP_ROUNDS})")
+    summary_prompt = (
+        "You've reached the maximum number of tool-calling iterations. "
+        "Please provide a final response summarizing what you've found or done so far."
+    )
+    current_messages.append({"role": "user", "content": summary_prompt})
+    final_response = await llm_adapter.chat(
+        messages=current_messages,
+        tools=None,
+        provider_name=provider,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        top_p=top_p,
+    )
+    final_response.tool_results = all_tool_results
+    return final_response
 
 
 def _persist_conv(conv_id: str, conv: dict) -> None:
@@ -247,7 +570,8 @@ async def chat_completions(request: ChatRequest):
     start_time = time.time()
     resolved_provider = request.provider or llm_adapter.default_provider
     resolved_model = request.model or llm_adapter.get_provider(resolved_provider).default_model
-    logger.info(f"[API] POST /chat/completions - provider={resolved_provider}, model={resolved_model}, stream={request.stream}")
+    request_ts = request.timestamp or _get_timestamp()
+    logger.info(f"[API] POST /chat/completions - provider={resolved_provider}, model={resolved_model}, stream={request.stream}, ts={request_ts}")
 
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
     messages = _inject_system_prompt(messages)
@@ -381,7 +705,7 @@ async def chat_completions(request: ChatRequest):
     if request.stream:
         logger.info(f"[API] POST /chat/completions - Starting stream response")
         return StreamingResponse(
-            _stream_chat(messages, request, resolved_provider, resolved_model),
+            _stream_chat(messages, tools, request, resolved_provider, resolved_model, request.agent_id),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -410,6 +734,10 @@ async def chat_completions(request: ChatRequest):
             content=result_content,
             model=resolved_model,
             provider=resolved_provider,
+            tool_calls=tool_calls_data,
+            tool_results=tool_results_data,
+            usage=result.usage,
+            timestamp=_get_timestamp(),
         )
     except Exception as e:
         elapsed = time.time() - start_time
@@ -535,7 +863,9 @@ async def add_message(conv_id: str, request: ChatRequest):
     resolved_provider = request.provider or conv.get("provider") or llm_adapter.default_provider
     resolved_model = request.model or conv.get("model") or llm_adapter.get_provider(resolved_provider).default_model
 
-    all_messages = []
+    system_prompt = _build_system_prompt(conv.get("agent_id"))
+    all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
+
     for m in conv["messages"]:
         msg = {"role": m["role"], "content": m["content"]}
         # 如果 content 是列表（多模态格式），保留原样
@@ -596,6 +926,10 @@ async def add_message(conv_id: str, request: ChatRequest):
         content=gen_state["content"],
         model=resolved_model,
         provider=resolved_provider,
+        tool_calls=tool_calls_data,
+        tool_results=tool_results_data,
+        usage=result.usage,
+        timestamp=_get_timestamp(),
     )
 
 

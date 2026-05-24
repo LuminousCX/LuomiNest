@@ -3,6 +3,7 @@ idf_component_register(
         "main.c"
         "mipi_lcd.c"
         "avatar_engine.c"
+        "frame_player.c"
         "wifi_mgr.c"
         "eth_mgr.c"
         "app_mqtt.c"
@@ -11,7 +12,6 @@ idf_component_register(
         "chat_ui.c"
         "settings_ui.c"
         "time_mgr.c"
-        "spi_frame_rx.c"
     INCLUDE_DIRS
         "."
     REQUIRES
