@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import re
-import threading
 from loguru import logger
 from app.core.config import settings
 from app.runtime.provider.llm.adapter import llm_adapter
@@ -25,12 +24,11 @@ def tokenize(text: str) -> set[str]:
 
 
 class RAGRetriever:
-    _global_lock = threading.Lock()
-    _expected_dim: int | None = None
 
     def __init__(self):
         self._index_dir = os.path.join(settings.DATA_DIR, "rag", "index")
         os.makedirs(self._index_dir, exist_ok=True)
+        self._expected_dim: int | None = None
 
     def _load_chunks_sync(self) -> list[dict]:
         index_file = os.path.join(self._index_dir, "chunks.json")

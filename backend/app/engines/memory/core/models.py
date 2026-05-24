@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Literal
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def utc_now_iso_z() -> str:
@@ -39,6 +39,8 @@ TIER_DEFAULT_CONFIDENCE: dict[MemoryTier, float] = {
 
 
 class MemoryFact(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
+
     id: str = Field(default_factory=lambda: f"fact_{uuid.uuid4().hex[:8]}")
     content: str
     category: FactCategory = "context"
@@ -275,9 +277,9 @@ class MemoryData(BaseModel):
         new_has_neg = MemoryData._has_negation(new_words)
         existing_has_neg = MemoryData._has_negation(existing_words)
         if new_has_neg != existing_has_neg:
-            logger.debug(f"[Memory] Conflict rejected: negation mismatch "
+            logger.debug(f"[Memory] Conflict detected: negation mismatch "
                          f"existing={existing_has_neg} new={new_has_neg}")
-            return False
+            return True
 
         new_values = MemoryData._get_value_words(new_lower)
         existing_values = MemoryData._get_value_words(existing_lower)

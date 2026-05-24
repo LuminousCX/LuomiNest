@@ -8,12 +8,21 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.exceptions import LuomiNestError
 from app.api.v1.router import api_router
+from app.api.attachment_api import router as attachment_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"[LuomiNest] Starting application...")
     logger.info(f"[LuomiNest] Environment: {'Development' if settings.DEBUG else 'Production'}")
+
+    try:
+        from app.infrastructure.database.conversation_store import conversation_store
+        from app.infrastructure.database.json_store import conversations_store
+        conversation_store.migrate_from_json_store(conversations_store)
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Conversation migration skipped: {e}")
+
     yield
     logger.info(f"[LuomiNest] Shutting down application...")
 
@@ -89,6 +98,7 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(api_router, prefix="/api/v1")
+    app.include_router(attachment_router, prefix="/api")
 
     @app.get("/health")
     async def health_check():

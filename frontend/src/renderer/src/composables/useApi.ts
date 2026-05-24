@@ -1,9 +1,8 @@
 import { ref } from 'vue'
 import type { ChatStreamChunk } from '../types'
+import { API_ENDPOINTS } from '../config/api'
 
-const BACKEND_URL = 'http://127.0.0.1:18000/api/v1'
-
-const getApiUrl = (path: string) => `${BACKEND_URL}${path}`
+const getApiUrl = (path: string) => `${API_ENDPOINTS.V1}${path}`
 
 const extractErrorMessage = (errData: any, status: number): string => {
   let errMsg = errData?.error?.message || errData?.detail || ''
@@ -140,7 +139,15 @@ export const useApi = () => {
           }
 
           try {
-            const chunk: ChatStreamChunk = JSON.parse(dataStr)
+            const raw = JSON.parse(dataStr)
+            const chunk: ChatStreamChunk = {
+              id: raw.id,
+              content: raw.content || '',
+              reasoning_content: raw.reasoning_content || raw.reasoningContent || '',
+              model: raw.model || '',
+              provider: raw.provider || '',
+              done: !!raw.done,
+            }
             onChunk(chunk)
             if (chunk.done) {
               await onDone()
@@ -155,7 +162,6 @@ export const useApi = () => {
       await onDone()
     } catch (e: any) {
       if (e.name === 'AbortError') {
-        await onDone()
         return
       }
       onError(e.message)
@@ -255,7 +261,7 @@ export const useApi = () => {
 
   const checkHealth = async (): Promise<boolean> => {
     try {
-      const resp = await fetch('http://127.0.0.1:18000/health', {
+      const resp = await fetch(API_ENDPOINTS.HEALTH, {
         signal: AbortSignal.timeout(3000),
       })
       return resp.ok

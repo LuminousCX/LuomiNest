@@ -5,7 +5,8 @@ import { Star, Download, Heart, Check, Loader2 } from 'lucide-vue-next'
 import type { MarketplaceItem, InstallProgress } from '../../types/marketplace'
 import { useMarketplaceStore } from '../../stores/marketplace'
 import { formatDownloadCount } from '../../utils/format'
-import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
+import { ITEM_ICON_MAP, DEFAULT_ICON, getIconTheme } from '../../utils/marketplace-icons'
+import LumiCardIcon from '../common/LumiCardIcon.vue'
 
 const props = defineProps<{
   item: MarketplaceItem
@@ -59,9 +60,11 @@ function handleFavorite(e: Event) {
 <template>
   <div class="market-card" @click="navigateToDetail">
     <div class="card-header">
-      <div class="card-icon">
-        <component :is="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON" :size="24" />
-      </div>
+      <LumiCardIcon
+        :icon="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON"
+        :size="24"
+        :theme="getIconTheme(item.icon)"
+      />
       <div class="card-badge-area">
         <span v-if="item.featured" class="badge badge-featured">推荐</span>
         <span v-if="item.installStatus === 'installed'" class="badge badge-installed">已安装</span>
@@ -151,17 +154,6 @@ function handleFavorite(e: Event) {
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 14px;
-}
-
-.card-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
-  background: var(--workspace-panel);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--lumi-primary);
 }
 
 .card-badge-area {

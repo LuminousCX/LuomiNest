@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { Minus, Square, X, Maximize2 } from 'lucide-vue-next'
+import { Minus, Square, X, Minimize2 } from 'lucide-vue-next'
+import LumiBrandStar from './common/LumiBrandStar.vue'
 
 const isMaximized = ref(false)
 
@@ -35,9 +36,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   <header class="lumi-title-bar">
     <div class="title-drag-region">
       <div class="brand-mark">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="var(--lumi-primary)" stroke="var(--lumi-primary)" stroke-width="1.5"/>
-        </svg>
+        <LumiBrandStar :size="16" :animated="false" />
         <span class="brand-text">LuomiNest</span>
       </div>
     </div>
@@ -47,7 +46,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
       </button>
       <button class="ctrl-btn maximize" :aria-label="isMaximized ? '还原' : '最大化'" @click="handleMaximize">
         <Square v-if="!isMaximized" :size="11" />
-        <Maximize2 v-else :size="12" />
+        <Minimize2 v-else :size="13" />
       </button>
       <button class="ctrl-btn close" aria-label="关闭" @click="handleClose">
         <X :size="13" />

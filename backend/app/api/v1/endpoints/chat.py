@@ -3,6 +3,8 @@ import json
 import uuid
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+from collections.abc import AsyncIterator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from loguru import logger
@@ -17,29 +19,34 @@ from app.schemas.chat import (
     ToolCallResult,
 )
 from app.runtime.provider.llm.adapter import llm_adapter
-from app.runtime.provider.llm.providers import LLMResponse, _repair_tool_call_arguments
-from app.infrastructure.database.json_store import conversations_store, agents_store
-from app.runtime.plugin.skill.executor import SkillExecutor
-from app.runtime.plugin.skill.registry import SkillRegistry
-from app.engines.memory.core import (
-    get_memory_storage,
-    MemoryUpdater,
-    MemoryInjector,
-)
+from app.infrastructure.database.json_store import agents_store
+from app.infrastructure.database.conversation_store import conversation_store
 from app.core.config import settings
+from app.utils.intent_gateway import classify_request, RequestType
+from app.utils.tool_lazy_loader import get_matched_tools
+from app.utils.tool_result_processor import process_tool_result
+from app.utils.local_handler import handle_local_tool_request
+from app.utils.tool_executor import execute_tool_chain, build_tool_summary, execute_single_tool
+from app.core.context import get_context_manager
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-_skill_executor = SkillExecutor()
+_memory_locks: dict[str | None, asyncio.Lock] = {}
+_memory_locks_guard = asyncio.Lock()
+_llm_semaphore = asyncio.Semaphore(1)
 
 MAX_TOOL_LOOP_ROUNDS = 5
 TOOL_EXECUTION_TIMEOUT = 60
 MAX_TOOL_RESULT_CHARS = 50_000
 SSE_HEARTBEAT_INTERVAL = 15
 
-_tools_cache: dict[str, list[dict]] = {}
-_tools_cache_ts: dict[str, float] = {}
-TOOLS_CACHE_TTL = 300
+async def _get_memory_lock(agent_id: str | None) -> asyncio.Lock:
+    if agent_id in _memory_locks:
+        return _memory_locks[agent_id]
+    async with _memory_locks_guard:
+        if agent_id not in _memory_locks:
+            _memory_locks[agent_id] = asyncio.Lock()
+        return _memory_locks[agent_id]
 
 _loop_detection: dict[str, list[str]] = {}
 LOOP_DETECTION_MAX_HISTORY = 20
@@ -49,17 +56,121 @@ LOOP_DETECTION_HARD_LIMIT = 5
 def _get_timestamp() -> float:
     return time.time()
 
+def _resolve_tools(user_message: str, request_type: RequestType) -> list[dict] | None:
+    """按需解析工具定义 —— 仅 TOOL_CALL 类型才注入匹配场景的工具
 
-def _inject_memory_to_messages(messages: list[dict], agent_id: str | None) -> list[dict]:
+    GENERAL_CHAT 和 LOCAL_TOOL 请求绝不注入任何工具，从根源杜绝工具乱触发。
+
+    异常安全：
+        懒加载异常时返回空列表 []（不注入任何工具），避免全量注入导致工具乱触发。
+        GENERAL_CHAT 和 LOCAL_TOOL 请求始终返回 None。
+
+    参数:
+        user_message: 用户原始消息文本
+        request_type: classify_request 返回的请求类型
+
+    返回:
+        - TOOL_CALL 且命中场景：OpenAI Function Calling 格式工具列表
+        - TOOL_CALL 但无匹配场景：空列表 []（等效不注入工具）
+        - 其他类型：None（不注入工具）
+        - 异常：空列表 []（安全降级，不注入工具）
+    """
+    if request_type != RequestType.TOOL_CALL:
+        return None
+
+    try:
+        tools = get_matched_tools(user_message)
+        return tools if tools else []
+    except Exception as e:
+        logger.warning(f"[Chat] 工具懒加载异常，降级返回空列表（不注入工具）: {e}")
+        return []
+
+
+def _inject_system_prompt(messages: list[dict]) -> list[dict]:
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
+    current_date = now.strftime("%Y年%m月%d日")
+    current_weekday = weekday_names[now.weekday()]
+    current_time = now.strftime("%H:%M")
+    date_prompt = f"当前时间：{current_date} {current_weekday} {current_time} (Asia/Shanghai)。请基于这个时间回答用户的问题。当用户问「距离XX还有几天」时，你需要先用工具查询目标日期，然后用当前时间计算差值。"
+
+    has_system = False
+    for msg in messages:
+        if msg.get("role") == "system":
+            has_system = True
+            existing = msg.get("content", "")
+            if "当前时间" not in existing:
+                msg["content"] = date_prompt + "\n\n" + existing
+            break
+
+    if not has_system:
+        messages = [{"role": "system", "content": date_prompt}] + messages
+
+    return messages
+
+
+def _inject_file_content(messages: list[dict], parsed_content: str, file_type: str = "text") -> list[dict]:
+    if not parsed_content or not parsed_content.strip():
+        return messages
+
+    # 根据文件类型判断是否是图片
+    is_image = file_type == "image" or parsed_content.startswith("data:image")
+    
+    if is_image:
+        # 找到最后一条用户消息，将图片内容附加到该消息
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i]["role"] == "user":
+                # 提取文字内容和图片
+                text_content = messages[i]["content"]
+                # 移除 [图片附件] 标记后的内容
+                if "[图片附件]" in text_content:
+                    text_content = text_content.split("[图片附件]")[0].strip()
+
+                # 构建多模态消息格式
+                messages[i]["content"] = [
+                    {"type": "text", "text": text_content or "请分析这张图片"},
+                    {"type": "image_url", "image_url": {"url": parsed_content}},
+                ]
+                return messages
+        return messages
+
+    # 普通文本内容
+    context_text = (
+        "[用户上传文件内容] 以下是与当前对话相关的文件内容，请参考这些内容回答用户的问题。"
+        "如果用户的问题与文件内容无关，请正常回答用户问题，不需要强行关联文件。\n\n"
+        + parsed_content
+    )
+    return [{"role": "user", "content": context_text}] + messages
+
+
+async def _inject_memory(messages: list[dict], agent_id: str | None = None, provider_name: str | None = None) -> list[dict]:
     try:
         storage = get_memory_storage()
-        global_memory = storage.load(None)
-        if agent_id:
-            agent_memory = storage.load(agent_id)
-            if not global_memory.profile.name and agent_memory.profile.name:
-                global_memory.profile = agent_memory.profile
-            if not global_memory.facts:
-                global_memory.facts = agent_memory.facts
+        lock = await _get_memory_lock(agent_id)
+        async with lock:
+            memory_data = await asyncio.to_thread(storage.load, agent_id)
+
+        has_facts = bool(memory_data.facts)
+        has_profile = bool(
+            memory_data.profile.name or memory_data.profile.nickname
+            or memory_data.profile.occupation or memory_data.profile.location
+        )
+        has_working_goal = False
+        try:
+            has_working_goal = bool(memory_data.working_memory.core_goal)
+        except AttributeError:
+            pass
+        has_events = False
+        try:
+            has_events = bool(memory_data.episodic_events)
+        except AttributeError:
+            pass
+
+        if not has_facts and not has_working_goal and not has_events:
+            if not has_profile:
+                return messages
+
+        user_query = _get_user_query(messages)
         injector = MemoryInjector()
         return injector.inject_memory_to_messages(messages, global_memory)
     except Exception as e:
@@ -260,30 +371,10 @@ async def _execute_tool_call(tool_call: dict, agent_id: str | None = None) -> di
             server_name = parts[1]
             actual_tool_name = parts[2]
             try:
-                from app.domains.mcp_tools.tool_executor import MCPToolExecutor
-                mcp_executor = MCPToolExecutor()
-                result = await asyncio.wait_for(
-                    mcp_executor.execute(
-                        server_name=server_name,
-                        tool_name=actual_tool_name,
-                        arguments=arguments,
-                    ),
-                    timeout=TOOL_EXECUTION_TIMEOUT,
-                )
-                return {
-                    "tool_call_id": tool_call_id,
-                    "tool_name": tool_name,
-                    "result": _truncate_tool_result(str(result)),
-                    "status": "success",
-                }
-            except asyncio.TimeoutError:
-                logger.error(f"[ToolExec] MCP tool timeout: {tool_name} ({TOOL_EXECUTION_TIMEOUT}s)")
-                return {
-                    "tool_call_id": tool_call_id,
-                    "tool_name": tool_name,
-                    "result": f"Tool execution timed out after {TOOL_EXECUTION_TIMEOUT}s. Please try a different approach.",
-                    "status": "error",
-                }
+                async with _llm_semaphore:
+                    lock = await _get_memory_lock(agent_id)
+                    async with lock:
+                        await updater.update_from_conversation(messages_snapshot, conv_id, agent_id)
             except Exception as e:
                 logger.error(f"[ToolExec] MCP tool error: {tool_name}, error: {e}")
                 return {
@@ -303,28 +394,8 @@ async def _execute_tool_call(tool_call: dict, agent_id: str | None = None) -> di
                 "status": "error",
             }
 
-        result = await asyncio.wait_for(
-            _skill_executor.execute(
-                skill_name=tool_name,
-                arguments=arguments,
-                agent_id=agent_id,
-            ),
-            timeout=TOOL_EXECUTION_TIMEOUT,
-        )
-        return {
-            "tool_call_id": tool_call_id,
-            "tool_name": tool_name,
-            "result": _truncate_tool_result(str(result)),
-            "status": "success",
-        }
-    except asyncio.TimeoutError:
-        logger.error(f"[ToolExec] Tool timeout: {tool_name} ({TOOL_EXECUTION_TIMEOUT}s)")
-        return {
-            "tool_call_id": tool_call_id,
-            "tool_name": tool_name,
-            "result": f"Tool execution timed out after {TOOL_EXECUTION_TIMEOUT}s. Please try a different approach.",
-            "status": "error",
-        }
+        task = asyncio.create_task(_do_update())
+        task.add_done_callback(lambda t: None if t.exception() is None else logger.warning(f"[Memory] Update task error: {t.exception()}"))
     except Exception as e:
         logger.error(f"[ToolExec] Tool execution failed: {tool_name}, error: {e}", exc_info=True)
         error_msg = (
@@ -465,6 +536,35 @@ async def _run_agent_loop(
     return final_response
 
 
+def _persist_conv(conv_id: str, conv: dict) -> None:
+    conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+    conversation_store.set(conv_id, conv)
+
+
+def _append_user_msg(conv: dict, content: str, file_content: str | None = None) -> dict:
+    entry: dict = {"role": "user", "content": content}
+    if file_content:
+        entry["file_content"] = file_content
+    last = conv["messages"][-1] if conv["messages"] else None
+    if not last or last != entry:
+        conv["messages"].append(entry)
+        return entry
+    return last
+
+
+def _append_assistant_msg(conv: dict, content: str, reasoning: str | None = None, interrupted: bool = False) -> dict:
+    entry: dict = {"role": "assistant", "content": content}
+    if reasoning:
+        entry["reasoning_content"] = reasoning
+    if interrupted:
+        entry["interrupted"] = True
+    last = conv["messages"][-1] if conv["messages"] else None
+    if not last or last.get("content") != content or (reasoning and last.get("reasoning_content") != reasoning):
+        conv["messages"].append(entry)
+        return entry
+    return last
+
+
 @router.post("/completions")
 async def chat_completions(request: ChatRequest):
     start_time = time.time()
@@ -473,35 +573,134 @@ async def chat_completions(request: ChatRequest):
     request_ts = request.timestamp or _get_timestamp()
     logger.info(f"[API] POST /chat/completions - provider={resolved_provider}, model={resolved_model}, stream={request.stream}, ts={request_ts}")
 
-    system_prompt = _build_system_prompt(request.agent_id)
-    messages = [{"role": "system", "content": system_prompt}]
+    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    messages = _inject_system_prompt(messages)
+    messages = await _inject_memory(messages, request.agent_id, resolved_provider)
 
-    for m in request.messages:
-        if m.role == "system":
-            continue
-        msg_dict: dict = {"role": m.role, "content": m.content}
-        if m.tool_calls:
-            msg_dict["tool_calls"] = m.tool_calls
-        if m.tool_call_id:
-            msg_dict["tool_call_id"] = m.tool_call_id
-        if m.name:
-            msg_dict["name"] = m.name
-        messages.append(msg_dict)
+    ctx_mgr = get_context_manager(resolved_provider, resolved_model)
+    messages = await ctx_mgr.process(messages)
 
-    messages = _inject_memory_to_messages(messages, request.agent_id)
+    # 意图分类 + 按需工具加载（仅 TOOL_CALL 类型注入匹配场景的工具）
+    user_query = _get_user_query(messages)
+    request_type = classify_request(user_query)
+    tools = _resolve_tools(user_query, request_type)
+    tools_count = len(tools) if tools else 0
+    logger.info(f"[API] 意图分类: type={request_type.value}, tools_injected={tools_count}")
 
-    user_query = ""
-    for m in reversed(messages):
-        if m.get("role") == "user":
-            content = m.get("content", "")
-            user_query = content if isinstance(content, str) else str(content)
-            break
-    if user_query:
-        messages = await _inject_rag_context(messages, user_query)
+    # LOCAL_TOOL：本地工具直接处理，不走 LLM
+    if request_type == RequestType.LOCAL_TOOL:
+        result = await handle_local_tool_request(user_query)
+        if result is None:
+            async with _llm_semaphore:
+                raw = await llm_adapter.chat(
+                    messages=messages,
+                    provider_name=resolved_provider,
+                    model=resolved_model,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                    top_p=request.top_p,
+                )
+            result_content = raw.get("content") if isinstance(raw, dict) else raw
+            result_reasoning = raw.get("reasoning") if isinstance(raw, dict) else None
+        else:
+            result_content = result.get("content") if isinstance(result, dict) else result
+            result_reasoning = result.get("reasoning") if isinstance(result, dict) else None
+        elapsed = time.time() - start_time
+        logger.success(f"[API] POST /chat/completions [LOCAL_TOOL] - Success: elapsed={elapsed:.2f}s")
 
-    tools = await _collect_all_tools(request.agent_id)
-    if not tools:
-        tools = None
+        if request.stream:
+            chat_id = str(uuid.uuid4())
+            data = ChatStreamChunk(id=chat_id, content=result_content, reasoning_content=result_reasoning or "", model=resolved_model, provider=resolved_provider)
+            done_data = ChatStreamChunk(id=chat_id, content="", model=resolved_model, provider=resolved_provider, done=True)
+
+            async def _local_tool_stream():
+                yield f"data: {data.model_dump_json()}\n\n"
+                yield f"data: {done_data.model_dump_json()}\n\n"
+
+            return StreamingResponse(_local_tool_stream(), media_type="text/event-stream")
+
+        return ChatResponse(
+            id=str(uuid.uuid4()),
+            content=result_content,
+            model=resolved_model,
+            provider=resolved_provider,
+        )
+
+    # TOOL_CALL：先走本地工具快速路径，未匹配则 Tool Loop / 规则驱动
+    if request_type == RequestType.TOOL_CALL:
+        local_result = await handle_local_tool_request(user_query)
+        if local_result is not None:
+            local_result_content = local_result.get("content") if isinstance(local_result, dict) else local_result
+            local_result_reasoning = local_result.get("reasoning") if isinstance(local_result, dict) else None
+            elapsed = time.time() - start_time
+            logger.success(f"[API] POST /chat/completions [TOOL local] - Success: elapsed={elapsed:.2f}s")
+
+            if request.stream:
+                chat_id = str(uuid.uuid4())
+                data = ChatStreamChunk(id=chat_id, content=local_result_content, reasoning_content=local_result_reasoning or "", model=resolved_model, provider=resolved_provider)
+                done_data = ChatStreamChunk(id=chat_id, content="", model=resolved_model, provider=resolved_provider, done=True)
+
+                async def _tool_local_stream():
+                    yield f"data: {data.model_dump_json()}\n\n"
+                    yield f"data: {done_data.model_dump_json()}\n\n"
+
+                return StreamingResponse(_tool_local_stream(), media_type="text/event-stream")
+
+            return ChatResponse(
+                id=str(uuid.uuid4()),
+                content=local_result_content,
+                model=resolved_model,
+                provider=resolved_provider,
+            )
+
+        tool_results = await execute_tool_chain(
+            user_query,
+            agent_id=request.agent_id,
+            external_search_results=request.search_results,
+        )
+        if tool_results:
+            summary_prompt = build_tool_summary(user_query, tool_results)
+            summary_messages = [{"role": "user", "content": summary_prompt}]
+
+            if request.stream:
+                async def _tool_chain_stream():
+                    chat_id = str(uuid.uuid4())
+                    try:
+                        yield f"data: {ChatStreamChunk(id=chat_id, content='', reasoning_content='正在查询所需信息…', model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                        async with _llm_semaphore:
+                            async for chunk in llm_adapter.chat_stream(
+                                messages=summary_messages, provider_name=resolved_provider, model=resolved_model,
+                                temperature=request.temperature or 0.7,
+                                max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                            ):
+                                yield f"data: {ChatStreamChunk(id=chat_id, content=chunk.get('content', ''), reasoning_content=chunk.get('reasoning', ''), model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                    except Exception as e:
+                        logger.error(f"[STREAM] Tool chain stream error: {e}")
+                        yield f"data: {ChatStreamChunk(id=chat_id, content=f'[Error] {str(e)}', model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                    finally:
+                        yield f"data: {ChatStreamChunk(id=chat_id, content='', model=resolved_model, provider=resolved_provider, done=True).model_dump_json()}\n\n"
+
+                elapsed = time.time() - start_time
+                logger.success(f"[API] POST /chat/completions [TOOL chain stream] - Success: elapsed={elapsed:.2f}s")
+                return StreamingResponse(_tool_chain_stream(), media_type="text/event-stream")
+
+            async with _llm_semaphore:
+                raw = await llm_adapter.chat(
+                    messages=summary_messages, provider_name=resolved_provider, model=resolved_model,
+                    temperature=request.temperature or 0.7,
+                    max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                )
+            result = raw.get("content") if isinstance(raw, dict) else raw
+            elapsed = time.time() - start_time
+            logger.success(f"[API] POST /chat/completions [TOOL chain] - Success: elapsed={elapsed:.2f}s")
+            return ChatResponse(
+                id=str(uuid.uuid4()),
+                content=result,
+                model=resolved_model,
+                provider=resolved_provider,
+            )
+
+        # 无匹配工具 → 降级到通用对话
 
     if request.stream:
         logger.info(f"[API] POST /chat/completions - Starting stream response")
@@ -516,44 +715,23 @@ async def chat_completions(request: ChatRequest):
         )
 
     try:
-        result = await _run_agent_loop(
-            messages=messages,
-            tools=tools,
-            provider=resolved_provider,
-            model=resolved_model,
-            agent_id=request.agent_id,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            top_p=request.top_p,
-        )
+        async with _llm_semaphore:
+            result = await llm_adapter.chat(
+                messages=messages,
+                provider_name=resolved_provider,
+                model=resolved_model,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                top_p=request.top_p,
+            )
 
-        thread_id = str(uuid.uuid4())
-        conversation_messages = [
-            {"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)}
-            for m in request.messages
-        ] + [{"role": "assistant", "content": result.content}]
-        _schedule_memory_update(conversation_messages, thread_id, request.agent_id)
-
+        result_content = result.get("content") if isinstance(result, dict) else result
+        result_content = result_content or ""
         elapsed = time.time() - start_time
-        logger.success(f"[API] POST /chat/completions - Success: elapsed={elapsed:.2f}s, response_len={len(result.content)}")
-
-        tool_calls_data = None
-        if result.tool_calls:
-            tool_calls_data = [
-                {"id": tc["id"], "type": tc.get("type", "function"), "function": tc["function"]}
-                for tc in result.tool_calls
-            ]
-
-        tool_results_data = None
-        if result.tool_results:
-            tool_results_data = [
-                {"tool_call_id": r["tool_call_id"], "tool_name": r["tool_name"], "result": r["result"], "status": r["status"]}
-                for r in result.tool_results
-            ]
-
+        logger.success(f"[API] POST /chat/completions - Success: elapsed={elapsed:.2f}s, response_len={len(result_content)}")
         return ChatResponse(
             id=str(uuid.uuid4()),
-            content=result.content,
+            content=result_content,
             model=resolved_model,
             provider=resolved_provider,
             tool_calls=tool_calls_data,
@@ -567,195 +745,53 @@ async def chat_completions(request: ChatRequest):
         raise
 
 
-async def _stream_chat(
-    messages: list[dict],
-    tools: list[dict] | None,
-    request: ChatRequest,
-    provider: str,
-    model: str,
-    agent_id: str | None,
-):
-    start_time = time.time()
+async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str, model: str):
     chat_id = str(uuid.uuid4())
-    chunk_count = 0
-
-    logger.info(f"[STREAM] Starting stream: chat_id={chat_id}, provider={provider}, model={model}")
-
+    full_reply = ""
     try:
-        current_messages = list(messages)
-        all_tool_results: list[dict] = []
-        final_answer = ""
-
-        for round_num in range(MAX_TOOL_LOOP_ROUNDS):
-            tool_calls_map: dict[int, dict] = {}
-            tool_name_first_seen: dict[int, str] = {}
-            content_parts: list[str] = []
-            last_chunk_time = time.time()
-
-            async for event in llm_adapter.chat_stream(
-                messages=current_messages,
-                tools=tools,
+        async with _llm_semaphore:
+            async for chunk in llm_adapter.chat_stream(
+                messages=messages,
                 provider_name=provider,
                 model=model,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
                 top_p=request.top_p,
             ):
-                if event.type == "content":
-                    content_parts.append(event.data.get("content", ""))
-                    chunk_count += 1
-                    data = ChatStreamChunk(
-                        id=chat_id,
-                        content=event.data.get("content", ""),
-                        model=model,
-                        provider=provider,
-                        timestamp=_get_timestamp(),
-                    )
-                    yield f"data: {data.model_dump_json()}\n\n"
-                    last_chunk_time = time.time()
-
-                elif event.type == "tool_call_delta":
-                    idx = event.data.get("index", 0)
-                    if idx not in tool_calls_map:
-                        tool_calls_map[idx] = {
-                            "id": "",
-                            "type": "function",
-                            "function": {"name": "", "arguments": ""},
-                        }
-                    tc = tool_calls_map[idx]
-                    if event.data.get("tool_call_id"):
-                        tc["id"] = event.data["tool_call_id"]
-                    fn = tc["function"]
-                    if event.data.get("function_name"):
-                        fn_name = event.data["function_name"]
-                        if idx not in tool_name_first_seen:
-                            tool_name_first_seen[idx] = fn_name
-                            fn["name"] = fn_name
-                        else:
-                            if fn_name != tool_name_first_seen[idx]:
-                                fn["name"] = fn_name
-                            if not fn["name"]:
-                                fn["name"] = fn_name
-                    if event.data.get("function_arguments"):
-                        fn["arguments"] += event.data["function_arguments"]
-
-                elif event.type == "usage":
-                    pass
-
-                elif event.type == "done":
-                    break
-
-            accumulated_content = "".join(content_parts)
-            tool_calls_list = list(tool_calls_map.values()) if tool_calls_map else None
-
-            if tool_calls_list:
-                for idx in tool_calls_map:
-                    tc = tool_calls_map[idx]
-                    args = tc["function"]["arguments"]
-                    if args:
-                        try:
-                            json.loads(args)
-                        except json.JSONDecodeError:
-                            tc["function"]["arguments"] = _repair_tool_call_arguments(
-                                args, tc["function"]["name"] or "unknown"
-                            )
-
-            if not tool_calls_list:
-                final_answer = accumulated_content
-                break
-
-            logger.info(f"[STREAM] Round {round_num + 1}: LLM requested {len(tool_calls_list)} tool calls")
-
-            tool_results = await _execute_tool_calls_parallel(tool_calls_list, agent_id)
-            all_tool_results.extend(tool_results)
-
-            for r in tool_results:
-                tr_data = ChatStreamChunk(
-                    id=chat_id,
-                    content="",
-                    model=model,
-                    provider=provider,
-                    tool_results=[ToolCallResult(
-                        tool_call_id=r["tool_call_id"],
-                        tool_name=r["tool_name"],
-                        result=r["result"],
-                        status=r["status"],
-                    )],
-                    timestamp=_get_timestamp(),
-                )
-                yield f"data: {tr_data.model_dump_json()}\n\n"
-
-            tool_messages = _build_tool_result_messages(
-                accumulated_content,
-                tool_calls_list,
-                tool_results,
-            )
-            current_messages.extend(tool_messages)
-        else:
-            final_answer = accumulated_content
-
-        done_data = ChatStreamChunk(
-            id=chat_id,
-            content="",
-            model=model,
-            provider=provider,
-            done=True,
-            timestamp=_get_timestamp(),
-        )
-        if all_tool_results:
-            done_data.tool_results = [
-                ToolCallResult(
-                    tool_call_id=r["tool_call_id"],
-                    tool_name=r["tool_name"],
-                    result=r["result"],
-                    status=r["status"],
-                )
-                for r in all_tool_results
-            ]
-        yield f"data: {done_data.model_dump_json()}\n\n"
-
-        conversation_messages = [
-            {"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)}
-            for m in request.messages
-        ] + [{"role": "assistant", "content": final_answer}]
-        _schedule_memory_update(conversation_messages, chat_id, agent_id)
-
-        elapsed = time.time() - start_time
-        logger.success(f"[STREAM] Stream completed: chat_id={chat_id}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
+                content = chunk.get("content", "")
+                rc = chunk.get("reasoning", "")
+                if content:
+                    full_reply += content
+                data = ChatStreamChunk(id=chat_id, content=content, reasoning_content=rc, model=model, provider=provider)
+                yield f"data: {data.model_dump_json()}\n\n"
     except Exception as e:
-        elapsed = time.time() - start_time
-        logger.error(f"[STREAM] Stream failed: chat_id={chat_id}, elapsed={elapsed:.2f}s, error={e}")
-        error_data = ChatStreamChunk(
-            id=chat_id,
-            content=f"[Error] {str(e)}",
-            model=model,
-            provider=provider,
-            done=True,
-            timestamp=_get_timestamp(),
-        )
-        yield f"data: {error_data.model_dump_json()}\n\n"
+        logger.error(f"[STREAM] _stream_chat error: {e}")
+        yield f"data: {ChatStreamChunk(id=chat_id, content=f'[Error] {str(e)}', model=model, provider=provider).model_dump_json()}\n\n"
+    finally:
+        done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
+        yield f"data: {done_data.model_dump_json()}\n\n"
 
 
 @router.get("/conversations", response_model=list[ConversationListResponse])
 async def list_conversations(agent_id: str | None = None):
     logger.info(f"[API] GET /chat/conversations - Listing conversations, agent_id={agent_id}")
+    conv_list = conversation_store.list_conversations(agent_id)
     result = []
-    for conv_id, conv in conversations_store.items():
-        if agent_id and conv.get("agent_id") != agent_id:
+    for meta in conv_list:
+        conv_id = meta.get("id")
+        if not conv_id:
+            logger.warning("[API] Skipping conversation with missing id in index")
             continue
-        messages = conv.get("messages", [])
-        last_msg = messages[-1]["content"][:50] if messages else None
         result.append(ConversationListResponse(
             id=conv_id,
-            title=conv.get("title", "New Conversation"),
-            agent_id=conv.get("agent_id"),
-            model=conv.get("model"),
-            provider=conv.get("provider"),
-            last_message=last_msg,
-            created_at=conv.get("created_at", ""),
-            updated_at=conv.get("updated_at", ""),
+            title=meta.get("title", "New Conversation"),
+            agent_id=meta.get("agent_id"),
+            model=meta.get("model"),
+            provider=meta.get("provider"),
+            last_message=meta.get("last_message"),
+            created_at=meta.get("created_at", ""),
+            updated_at=meta.get("updated_at", ""),
         ))
-    result.sort(key=lambda x: x.updated_at, reverse=True)
     logger.success(f"[API] GET /chat/conversations - Success: returned {len(result)} conversations")
     return result
 
@@ -775,7 +811,7 @@ async def create_conversation(request: ConversationCreate):
         "created_at": now,
         "updated_at": now,
     }
-    conversations_store.set(conv_id, conv)
+    conversation_store.set(conv_id, conv)
     logger.success(f"[API] POST /chat/conversations - Conversation created: id={conv_id}")
     return ConversationResponse(**conv)
 
@@ -783,7 +819,7 @@ async def create_conversation(request: ConversationCreate):
 @router.get("/conversations/{conv_id}", response_model=ConversationResponse)
 async def get_conversation(conv_id: str):
     logger.info(f"[API] GET /chat/conversations/{conv_id} - Fetching conversation")
-    conv = conversations_store.get(conv_id)
+    conv = conversation_store.get(conv_id)
     if not conv:
         logger.error(f"[API] GET /chat/conversations/{conv_id} - Conversation not found")
         from app.core.exceptions import NotFoundError
@@ -795,11 +831,10 @@ async def get_conversation(conv_id: str):
 @router.delete("/conversations/{conv_id}")
 async def delete_conversation(conv_id: str):
     logger.info(f"[API] DELETE /chat/conversations/{conv_id} - Deleting conversation")
-    conv = conversations_store.get(conv_id)
+    conv = conversation_store.get(conv_id)
     if conv:
         conv_title = conv.get("title", "unknown")
-        conversations_store.delete(conv_id)
-        _cleanup_loop_detection(conv_id)
+        conversation_store.delete(conv_id)
         logger.success(f"[API] DELETE /chat/conversations/{conv_id} - Conversation deleted: title={conv_title}")
     else:
         logger.warning(f"[API] DELETE /chat/conversations/{conv_id} - Conversation not found")
@@ -809,26 +844,21 @@ async def delete_conversation(conv_id: str):
 @router.post("/conversations/{conv_id}/messages")
 async def add_message(conv_id: str, request: ChatRequest):
     start_time = time.time()
-    request_ts = request.timestamp or _get_timestamp()
-    logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Adding message, ts={request_ts}")
-    conv = conversations_store.get(conv_id)
+    logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Adding message")
+
+    conv = conversation_store.get(conv_id)
     if not conv:
-        logger.error(f"[API] POST /chat/conversations/{conv_id}/messages - Conversation not found")
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
 
-    last_user_msg = None
+    last_user_content = ""
     for m in reversed(request.messages):
         if m.role == "user":
-            last_user_msg = m
+            last_user_content = m.content
             break
 
-    if last_user_msg:
-        msg_entry = {"role": "user", "content": last_user_msg.content, "timestamp": request_ts}
-        if not conv["messages"] or conv["messages"][-1] != msg_entry:
-            conv["messages"].append(msg_entry)
-
-    conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _phase_1_save_user_msg(conv, last_user_content, request.file_content, request.file_name, request.file_type)
+    _persist_conv(conv_id, conv)
 
     resolved_provider = request.provider or conv.get("provider") or llm_adapter.default_provider
     resolved_model = request.model or conv.get("model") or llm_adapter.get_provider(resolved_provider).default_model
@@ -837,229 +867,63 @@ async def add_message(conv_id: str, request: ChatRequest):
     all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
 
     for m in conv["messages"]:
-        all_messages.append({"role": m["role"], "content": m["content"]})
+        msg = {"role": m["role"], "content": m["content"]}
+        # 如果 content 是列表（多模态格式），保留原样
+        if isinstance(m.get("content"), list):
+            msg["content"] = m["content"]
+        all_messages.append(msg)
 
-    all_messages = _inject_memory_to_messages(all_messages, conv.get("agent_id"))
+    all_messages = _inject_system_prompt(all_messages)
+    agent_id = request.agent_id or conv.get("agent_id")
+    all_messages = await _inject_memory(all_messages, agent_id, resolved_provider)
 
-    user_query = ""
-    for m in reversed(all_messages):
-        if m.get("role") == "user":
-            content = m.get("content", "")
-            user_query = content if isinstance(content, str) else str(content)
-            break
-    if user_query:
-        all_messages = await _inject_rag_context(all_messages, user_query)
+    if request.file_content:
+        logger.info(f"[API] 文件内容注入: file_type={request.file_type}, content_length={len(request.file_content)}, is_image={request.file_type == 'image'}")
+        all_messages = _inject_file_content(all_messages, request.file_content, request.file_type or "text")
 
-    tools = await _collect_all_tools(conv.get("agent_id"))
-    if not tools:
-        tools = None
+    ctx_mgr = get_context_manager(resolved_provider, resolved_model)
+    all_messages = await ctx_mgr.process(all_messages)
+
+    user_query = _get_user_query(all_messages)
+    request_type = classify_request(user_query)
+    tools = _resolve_tools(user_query, request_type)
+    logger.info(f"[API] Intent={request_type.value}, tools={len(tools) if tools else 0}")
+
+    gen_state: dict = {
+        "content": "",
+        "reasoning": "",
+        "aborted": False,
+        "started": True,
+    }
 
     if request.stream:
-        logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Starting stream response")
+        return await _STREAM_RESPONSE(conv_id, conv, request, all_messages, user_query,
+                                       request_type, tools, resolved_provider, resolved_model,
+                                       agent_id, gen_state, start_time,
+                                       search_results=request.search_results)
 
-        async def stream_with_save():
-            chat_id = str(uuid.uuid4())
-            chunk_count = 0
-            current_messages = list(all_messages)
-            all_tool_results: list[dict] = []
-            final_answer = ""
+    await _NON_STREAM_GENERATE(gen_state, request_type, user_query, all_messages,
+                                 resolved_provider, resolved_model, tools, agent_id,
+                                 temperature=request.temperature,
+                                 max_tokens=request.max_tokens,
+                                 top_p=request.top_p,
+                                 search_results=request.search_results)
 
-            try:
-                for round_num in range(MAX_TOOL_LOOP_ROUNDS):
-                    tool_calls_map: dict[int, dict] = {}
-                    tool_name_first_seen: dict[int, str] = {}
-                    content_parts: list[str] = []
+    # 非流式路径：错误时不持久化 [Error] 占位符到对话历史
+    persist_state = dict(gen_state)
+    if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
+        persist_state["content"] = ""
 
-                    async for event in llm_adapter.chat_stream(
-                        messages=current_messages,
-                        tools=tools,
-                        provider_name=resolved_provider,
-                        model=resolved_model,
-                        temperature=request.temperature,
-                        max_tokens=request.max_tokens,
-                        top_p=request.top_p,
-                    ):
-                        if event.type == "content":
-                            content_parts.append(event.data.get("content", ""))
-                            chunk_count += 1
-                            data = ChatStreamChunk(
-                                id=chat_id,
-                                content=event.data.get("content", ""),
-                                model=resolved_model,
-                                provider=resolved_provider,
-                                timestamp=_get_timestamp(),
-                            )
-                            yield f"data: {data.model_dump_json()}\n\n"
-
-                        elif event.type == "tool_call_delta":
-                            idx = event.data.get("index", 0)
-                            if idx not in tool_calls_map:
-                                tool_calls_map[idx] = {
-                                    "id": "",
-                                    "type": "function",
-                                    "function": {"name": "", "arguments": ""},
-                                }
-                            tc = tool_calls_map[idx]
-                            if event.data.get("tool_call_id"):
-                                tc["id"] = event.data["tool_call_id"]
-                            fn = tc["function"]
-                            if event.data.get("function_name"):
-                                fn_name = event.data["function_name"]
-                                if idx not in tool_name_first_seen:
-                                    tool_name_first_seen[idx] = fn_name
-                                    fn["name"] = fn_name
-                                else:
-                                    if fn_name != tool_name_first_seen[idx]:
-                                        fn["name"] = fn_name
-                                    if not fn["name"]:
-                                        fn["name"] = fn_name
-                            if event.data.get("function_arguments"):
-                                fn["arguments"] += event.data["function_arguments"]
-
-                        elif event.type == "done":
-                            break
-
-                    accumulated_content = "".join(content_parts)
-                    tool_calls_list = list(tool_calls_map.values()) if tool_calls_map else None
-
-                    if tool_calls_list:
-                        for idx in tool_calls_map:
-                            tc = tool_calls_map[idx]
-                            args = tc["function"]["arguments"]
-                            if args:
-                                try:
-                                    json.loads(args)
-                                except json.JSONDecodeError:
-                                    tc["function"]["arguments"] = _repair_tool_call_arguments(
-                                        args, tc["function"]["name"] or "unknown"
-                                    )
-
-                    if not tool_calls_list:
-                        final_answer = accumulated_content
-                        break
-
-                    logger.info(f"[STREAM] Round {round_num + 1}: LLM requested {len(tool_calls_list)} tool calls")
-                    tool_results = await _execute_tool_calls_parallel(tool_calls_list, conv.get("agent_id"))
-                    all_tool_results.extend(tool_results)
-
-                    for r in tool_results:
-                        tr_data = ChatStreamChunk(
-                            id=chat_id,
-                            content="",
-                            model=resolved_model,
-                            provider=resolved_provider,
-                            tool_results=[ToolCallResult(
-                                tool_call_id=r["tool_call_id"],
-                                tool_name=r["tool_name"],
-                                result=r["result"],
-                                status=r["status"],
-                            )],
-                            timestamp=_get_timestamp(),
-                        )
-                        yield f"data: {tr_data.model_dump_json()}\n\n"
-
-                    tool_messages = _build_tool_result_messages(
-                        accumulated_content,
-                        tool_calls_list,
-                        tool_results,
-                    )
-                    current_messages.extend(tool_messages)
-                else:
-                    final_answer = accumulated_content
-
-                done_data = ChatStreamChunk(
-                    id=chat_id,
-                    content="",
-                    model=resolved_model,
-                    provider=resolved_provider,
-                    done=True,
-                    timestamp=_get_timestamp(),
-                )
-                if all_tool_results:
-                    done_data.tool_results = [
-                        ToolCallResult(
-                            tool_call_id=r["tool_call_id"],
-                            tool_name=r["tool_name"],
-                            result=r["result"],
-                            status=r["status"],
-                        )
-                        for r in all_tool_results
-                    ]
-                yield f"data: {done_data.model_dump_json()}\n\n"
-
-                assistant_msg = {"role": "assistant", "content": final_answer}
-                if not conv["messages"] or conv["messages"][-1] != assistant_msg:
-                    conv["messages"].append(assistant_msg)
-                    conv["updated_at"] = datetime.now(timezone.utc).isoformat()
-                    conversations_store.set(conv_id, conv)
-
-                _schedule_memory_update(conv["messages"], conv_id, conv.get("agent_id"))
-
-                elapsed = time.time() - start_time
-                logger.success(f"[STREAM] Stream completed & saved: conv={conv_id}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
-            except Exception as e:
-                elapsed = time.time() - start_time
-                logger.error(f"[STREAM] Stream failed: conv={conv_id}, elapsed={elapsed:.2f}s, error={e}")
-                error_data = ChatStreamChunk(
-                    id=chat_id,
-                    content=f"[Error] {str(e)}",
-                    model=resolved_model,
-                    provider=resolved_provider,
-                    done=True,
-                    timestamp=_get_timestamp(),
-                )
-                yield f"data: {error_data.model_dump_json()}\n\n"
-
-        return StreamingResponse(
-            stream_with_save(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
-        )
-
-    result = await _run_agent_loop(
-        messages=all_messages,
-        tools=tools,
-        provider=resolved_provider,
-        model=resolved_model,
-        agent_id=conv.get("agent_id"),
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-        top_p=request.top_p,
-        thread_id=conv_id,
-    )
-
-    assistant_msg = {"role": "assistant", "content": result.content}
-    if not conv["messages"] or conv["messages"][-1] != assistant_msg:
-        conv["messages"].append(assistant_msg)
-        conv["updated_at"] = datetime.now(timezone.utc).isoformat()
-        conversations_store.set(conv_id, conv)
-
-    _schedule_memory_update(conv["messages"], conv_id, conv.get("agent_id"))
+    _PHASE_3_SAVE_ASSISTANT_MSG(conv, persist_state)
+    _persist_conv(conv_id, conv)
+    _schedule_memory_update(conv["messages"], conv_id, agent_id, provider_name=resolved_provider)
 
     elapsed = time.time() - start_time
-    logger.success(f"[API] POST /chat/conversations/{conv_id}/messages - Success: elapsed={elapsed:.2f}s, response_len={len(result.content)}")
-
-    tool_calls_data = None
-    if result.tool_calls:
-        tool_calls_data = [
-            {"id": tc["id"], "type": tc.get("type", "function"), "function": tc["function"]}
-            for tc in result.tool_calls
-        ]
-
-    tool_results_data = None
-    if result.tool_results:
-        tool_results_data = [
-            {"tool_call_id": r["tool_call_id"], "tool_name": r["tool_name"], "result": r["result"], "status": r["status"]}
-            for r in result.tool_results
-        ]
+    logger.success(f"[API] Done: conv={conv_id}, elapsed={elapsed:.2f}s, len={len(gen_state['content'])}, aborted={gen_state['aborted']}")
 
     return ChatResponse(
         id=str(uuid.uuid4()),
-        content=result.content,
+        content=gen_state["content"],
         model=resolved_model,
         provider=resolved_provider,
         tool_calls=tool_calls_data,
@@ -1067,3 +931,213 @@ async def add_message(conv_id: str, request: ChatRequest):
         usage=result.usage,
         timestamp=_get_timestamp(),
     )
+
+
+def _phase_1_save_user_msg(conv: dict, content: str, file_content: str | None = None, file_name: str | None = None, file_type: str | None = None) -> None:
+    if not content:
+        return
+    entry: dict = {"role": "user", "content": content}
+    if file_content:
+        entry["file_content"] = file_content
+    if file_name:
+        entry["file_name"] = file_name
+    if file_type:
+        entry["file_type"] = file_type
+    if file_content and file_name:
+        entry["files"] = [{"name": file_name, "type": file_type, "content": file_content}]
+    last = conv["messages"][-1] if conv["messages"] else None
+    if not last or last != entry:
+        conv["messages"].append(entry)
+
+
+def _PHASE_3_SAVE_ASSISTANT_MSG(conv: dict, state: dict) -> None:
+    content = state["content"] or "[已中断]"
+    reasoning = state["reasoning"] or None
+    interrupted = state["aborted"]
+    entry: dict = {"role": "assistant", "content": content}
+    if reasoning:
+        entry["reasoning_content"] = reasoning
+    if interrupted:
+        entry["interrupted"] = True
+    last = conv["messages"][-1] if conv["messages"] else None
+    if not last or last.get("content") != content:
+        conv["messages"].append(entry)
+
+
+async def _NON_STREAM_GENERATE(state: dict, request_type: RequestType,
+                                 user_query: str, all_messages: list[dict],
+                                 provider: str, model: str, tools: list | None,
+                                 agent_id: str | None = None,
+                                 temperature: float | None = None,
+                                 max_tokens: int | None = None,
+                                 top_p: float | None = None,
+                                 search_results: str | None = None) -> None:
+    try:
+        if request_type == RequestType.LOCAL_TOOL:
+            result = await handle_local_tool_request(user_query)
+            if result is None:
+                async with _llm_semaphore:
+                    raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                        model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+                result = raw.get("content") if isinstance(raw, dict) else raw
+                if isinstance(raw, dict) and raw.get("reasoning"):
+                    state["reasoning"] = raw["reasoning"]
+            else:
+                result_content = result.get("content") if isinstance(result, dict) else result
+                if isinstance(result, dict) and result.get("reasoning"):
+                    state["reasoning"] = result["reasoning"]
+                result = result_content
+            state["content"] = result or ""
+
+        elif request_type == RequestType.TOOL_CALL:
+            local_result = await handle_local_tool_request(user_query)
+            if local_result is not None:
+                local_content = local_result.get("content") if isinstance(local_result, dict) else local_result
+                if isinstance(local_result, dict) and local_result.get("reasoning"):
+                    state["reasoning"] = local_result["reasoning"]
+                state["content"] = local_content or ""
+            else:
+                tool_results = await execute_tool_chain(user_query, agent_id=agent_id,
+                                                         external_search_results=search_results)
+                if tool_results:
+                    summary_prompt = build_tool_summary(user_query, tool_results)
+                    summary_messages = [{"role": "user", "content": summary_prompt}]
+                    async with _llm_semaphore:
+                        raw = await llm_adapter.chat(messages=summary_messages, provider_name=provider,
+                            model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+                else:
+                    async with _llm_semaphore:
+                        raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                            model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+                if isinstance(raw, dict):
+                    state["content"] = raw.get("content", "")
+                    if raw.get("reasoning"):
+                        state["reasoning"] = raw["reasoning"]
+                else:
+                    state["content"] = raw
+
+        else:
+            async with _llm_semaphore:
+                raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                    model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+            if isinstance(raw, dict):
+                state["content"] = raw.get("content", "")
+                if raw.get("reasoning"):
+                    state["reasoning"] = raw["reasoning"]
+            else:
+                state["content"] = raw
+    except Exception as e:
+        logger.error(f"[API] Non-stream error: {e}")
+        state["aborted"] = True
+        state["content"] = f"[Error] {str(e)}"
+
+
+async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
+                            all_messages: list, user_query: str, request_type: RequestType,
+                            tools: list | None, provider: str, model: str,
+                            agent_id: str | None, state: dict, start_time: float,
+                            search_results: str | None = None):
+    chat_id = str(uuid.uuid4())
+
+    async def generator():
+        try:
+            if request_type == RequestType.LOCAL_TOOL:
+                result = await handle_local_tool_request(user_query)
+                if result is None:
+                    async with _llm_semaphore:
+                        raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                            model=model, temperature=request.temperature or 0.7,
+                            max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9)
+                    result_content = raw.get("content") if isinstance(raw, dict) else raw
+                    if isinstance(raw, dict) and raw.get("reasoning"):
+                        state["reasoning"] = raw["reasoning"]
+                else:
+                    result_content = result.get("content") if isinstance(result, dict) else result
+                    if isinstance(result, dict) and result.get("reasoning"):
+                        state["reasoning"] = result["reasoning"]
+                state["content"] = result_content or ""
+                yield _sse(chat_id, state["content"], provider, model)
+
+            elif request_type == RequestType.TOOL_CALL:
+                local_result = await handle_local_tool_request(user_query)
+                if local_result is not None:
+                    local_content = local_result.get("content") if isinstance(local_result, dict) else local_result
+                    if isinstance(local_result, dict) and local_result.get("reasoning"):
+                        state["reasoning"] = local_result["reasoning"]
+                    state["content"] = local_content or ""
+                    yield _sse(chat_id, state["content"], provider, model)
+                else:
+                    yield _sse_reasoning(chat_id, "正在查询所需信息…", provider, model)
+                    tool_results = await execute_tool_chain(user_query, agent_id=agent_id,
+                                                             external_search_results=search_results)
+                    if tool_results:
+                        summary_prompt = build_tool_summary(user_query, tool_results)
+                        summary_messages = [{"role": "user", "content": summary_prompt}]
+                    else:
+                        summary_messages = all_messages
+                    async with _llm_semaphore:
+                        async for chunk in llm_adapter.chat_stream(
+                            messages=summary_messages, provider_name=provider, model=model,
+                            temperature=request.temperature or 0.7,
+                            max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                        ):
+                            content = chunk.get("content", "")
+                            rc = chunk.get("reasoning", "")
+                            if content:
+                                state["content"] += content
+                            if rc:
+                                state["reasoning"] += rc
+                            yield _sse(chat_id, content, provider, model, rc)
+
+            else:
+                async with _llm_semaphore:
+                    async for chunk in llm_adapter.chat_stream(
+                        messages=all_messages, provider_name=provider, model=model,
+                        temperature=request.temperature or 0.7,
+                        max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                    ):
+                        content = chunk.get("content", "")
+                        rc = chunk.get("reasoning", "")
+                        if content:
+                            state["content"] += content
+                        if rc:
+                            state["reasoning"] += rc
+                        yield _sse(chat_id, content, provider, model, rc)
+
+        except Exception as e:
+            state["aborted"] = True
+            logger.error(f"[STREAM] Aborted: conv={conv_id}, error={e}")
+            yield _sse(chat_id, f"[Error] {str(e)}", provider, model)
+
+        finally:
+            try:
+                # 持久化时使用原始内容，不写入错误占位符
+                persist_state = dict(state)
+                if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
+                    persist_state["content"] = ""
+                _PHASE_3_SAVE_ASSISTANT_MSG(conv, persist_state)
+                _persist_conv(conv_id, conv)
+            except Exception as persist_err:
+                logger.error(f"[STREAM] Persist failed: conv={conv_id}, error={persist_err}")
+            try:
+                yield _sse_done(chat_id, provider, model)
+            except Exception as done_err:
+                logger.debug(f"[STREAM] Done event send failed (client may have disconnected): {done_err}")
+            try:
+                _schedule_memory_update(conv["messages"], conv_id, agent_id, provider_name=provider)
+            except Exception as schedule_err:
+                logger.warning(f"[STREAM] Memory update scheduling failed: {schedule_err}")
+
+    return StreamingResponse(generator(), media_type="text/event-stream",
+                           headers={"Cache-Control": "no-cache", "Connection": "keep-alive",
+                                   "X-Accel-Buffering": "no"})
+
+
+def _sse(cid: str, content: str, provider: str, model: str, reasoning: str = "") -> str:
+    return f"data: {ChatStreamChunk(id=cid, content=content, reasoning_content=reasoning, model=model, provider=provider).model_dump_json()}\n\n"
+
+def _sse_reasoning(cid: str, reasoning: str, provider: str, model: str) -> str:
+    return f"data: {ChatStreamChunk(id=cid, content='', reasoning_content=reasoning, model=model, provider=provider).model_dump_json()}\n\n"
+
+def _sse_done(cid: str, provider: str, model: str) -> str:
+    return f"data: {ChatStreamChunk(id=cid, content='', model=model, provider=provider, done=True).model_dump_json()}\n\n"

@@ -181,6 +181,9 @@ class RAGIndexer:
         if len(text) <= chunk_size:
             return [text] if text.strip() else []
 
+        # 防止 overlap >= chunk_size 导致无限循环，且 overlap 不能为负
+        overlap = max(0, min(overlap, chunk_size - 1))
+
         chunks = []
         start = 0
         while start < len(text):
@@ -197,6 +200,10 @@ class RAGIndexer:
                     end = start + split_at + 1
 
             chunks.append(chunk.strip())
-            start = end - overlap
+            next_start = end - overlap
+            # 确保 start 始终前进
+            if next_start <= start:
+                next_start = start + 1
+            start = next_start
 
         return [c for c in chunks if c]

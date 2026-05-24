@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import Any
+from pydantic import BaseModel, Field, field_validator
+from typing import Any, Literal
 
 
 class ChatMessageCreate(BaseModel):
@@ -16,6 +16,15 @@ class ChatRequest(BaseModel):
     top_p: float | None = None
     stream: bool = False
     agent_id: str | None = None
+    timestamp: float | None = None
+    file_content: str | None = Field(default=None, max_length=100_000_000)
+    file_name: str | None = Field(default=None, max_length=255)
+    file_type: Literal[
+        "text", "image",
+        "text/plain", "image/png", "image/jpeg", "image/gif", "image/webp",
+        "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ] | None = None
+    search_results: str | None = Field(default=None, max_length=100_000)
 
 
 class ChatResponse(BaseModel):
@@ -28,10 +37,16 @@ class ChatResponse(BaseModel):
 
 class ChatStreamChunk(BaseModel):
     id: str
-    content: str
+    content: str = ""
+    reasoning_content: str = ""
     model: str
     provider: str
     done: bool = False
+
+    @field_validator("content", "reasoning_content", mode="before")
+    @classmethod
+    def coerce_str(cls, v: str | None) -> str:
+        return v if isinstance(v, str) else ""
 
 
 class ConversationCreate(BaseModel):

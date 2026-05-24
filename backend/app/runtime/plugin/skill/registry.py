@@ -95,6 +95,32 @@ class SkillRegistry:
             handler=cls._builtin_get_time,
         )
 
+        # 天气工具：对接 app/runtime/plugin/skill/builtin/weather.py 的 get_weather
+        cls.register(
+            SkillDefinition(
+                name="get_weather",
+                description="获取指定城市的天气信息，包含温度、天气状况、风力、出行建议。当用户明确询问天气、气温、穿什么衣服、是否会下雨时使用。",
+                category="utility",
+                parameters={
+                    "city": {
+                        "type": "string",
+                        "description": "城市名称，如：北京、上海、广州",
+                        "required": True,
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "日期，如：今天、明天、后天、2026-05-06，可选，默认今天",
+                        "required": False,
+                    },
+                },
+                is_active=True,
+                is_builtin=True,
+                handler_name="get_weather",
+                tags=["weather", "天气", "utility"],
+            ),
+            handler=cls._builtin_get_weather,
+        )
+
         cls.register(
             SkillDefinition(
                 name="transfer_to_agent",
@@ -246,3 +272,55 @@ class SkillRegistry:
                     metadata={"transfer": True, "target_agent_id": agent["id"]},
                 )
         return SkillResult(success=False, error=f"Agent '{agent_name}' not found")
+
+    @classmethod
+    async def _builtin_get_weather(cls, **kwargs) -> 'SkillResult':
+        """内置天气工具 handler —— 对接 weather_tool.py 的完整 API + 缓存 + 日期解析
+
+        流程：
+          1. 提取调用参数中的城市名和日期
+          2. 若城市名为空，返回引导用户补充的提示
+          3. 若日期为空，默认查询今天
+          4. 调用 weather_tool 的天气工具获取数据
+          5. 全链路异常捕获，返回友好兜底，绝不暴露技术细节
+
+        参数:
+            city: 城市名称（必填，LLM 从用户消息中提取）
+            date: 日期（可选，如"明天"、"5.1号"、"下周一"，默认今天）
+
+        返回:
+            SkillResult，成功时 data 含 formatted 自然语言回复，
+            失败时 error 为友好兜底话术。
+        """
+        from app.runtime.plugin.skill.base import SkillResult
+
+        city_raw = kwargs.get("city", "")
+        date_raw = kwargs.get("date", "")
+
+        # 城市名校验与清洗
+        city = city_raw.strip() if city_raw else ""
+        # 去掉"市"后缀，如"北京市"→"北京"
+        if city.endswith("市") and len(city) > 1:
+            city = city[:-1]
+
+        if not city:
+            return SkillResult(
+                success=False,
+                error="请告诉我你想查询哪个城市的天气，比如'北京天气怎么样'。"
+            )
+
+        # 日期清洗
+        date_str = date_raw.strip() if date_raw else ""
+
+        try:
+            # 调用 weather_tool 的核心接口（含日期解析 + 缓存 + 口语化回复）
+            from app.utils.weather_tool import _weather_tool
+            reply = await _weather_tool.get_reply(city=city, date_str=date_str)
+            return SkillResult(success=True, data={"formatted": reply})
+        except Exception as e:
+            logger.warning(f"[SkillRegistry] _builtin_get_weather 异常: {e}")
+            return SkillResult(
+                success=False,
+                error=f"很抱歉，暂时无法为你获取「{city}」的实时天气数据。"
+                      f"你可以打开手机自带的天气APP，或通过搜索引擎输入「{city} 今日天气」快速查询~"
+            )
