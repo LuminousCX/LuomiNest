@@ -16,9 +16,9 @@ from app.schemas.chat import (
     ConversationCreate,
     ConversationResponse,
     ConversationListResponse,
-    ToolCallResult,
 )
 from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.providers import LLMResponse, _repair_tool_call_arguments
 from app.infrastructure.database.json_store import agents_store
 from app.infrastructure.database.conversation_store import conversation_store
 from app.core.config import settings
@@ -28,6 +28,10 @@ from app.utils.tool_result_processor import process_tool_result
 from app.utils.local_handler import handle_local_tool_request
 from app.utils.tool_executor import execute_tool_chain, build_tool_summary, execute_single_tool
 from app.core.context import get_context_manager
+from app.engines.memory.core.storage import get_memory_storage
+from app.engines.memory.core.injector import MemoryInjector
+from app.engines.memory.core.updater import MemoryUpdater
+from app.runtime.plugin.skill.registry import SkillRegistry
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -35,6 +39,9 @@ _memory_locks: dict[str | None, asyncio.Lock] = {}
 _memory_locks_guard = asyncio.Lock()
 _llm_semaphore = asyncio.Semaphore(1)
 
+_tools_cache: dict[str, list[dict]] = {}
+_tools_cache_ts: dict[str, float] = {}
+TOOLS_CACHE_TTL = 300  # 5 minutes
 MAX_TOOL_LOOP_ROUNDS = 5
 TOOL_EXECUTION_TIMEOUT = 60
 MAX_TOOL_RESULT_CHARS = 50_000
@@ -49,6 +56,19 @@ async def _get_memory_lock(agent_id: str | None) -> asyncio.Lock:
         return _memory_locks[agent_id]
 
 _loop_detection: dict[str, list[str]] = {}
+
+
+def _get_user_query(messages: list[dict]) -> str:
+    """Extract the last user message content from the message list."""
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+                return " ".join(parts)
+    return ""
 LOOP_DETECTION_MAX_HISTORY = 20
 LOOP_DETECTION_HARD_LIMIT = 5
 
@@ -172,7 +192,7 @@ async def _inject_memory(messages: list[dict], agent_id: str | None = None, prov
 
         user_query = _get_user_query(messages)
         injector = MemoryInjector()
-        return injector.inject_memory_to_messages(messages, global_memory)
+        return injector.inject_memory_to_messages(messages, memory_data, user_query)
     except Exception as e:
         logger.warning(f"[Memory] Failed to inject memory: {e}")
         return messages
@@ -371,10 +391,15 @@ async def _execute_tool_call(tool_call: dict, agent_id: str | None = None) -> di
             server_name = parts[1]
             actual_tool_name = parts[2]
             try:
-                async with _llm_semaphore:
-                    lock = await _get_memory_lock(agent_id)
-                    async with lock:
-                        await updater.update_from_conversation(messages_snapshot, conv_id, agent_id)
+                from app.domains.mcp_tools.gateway import MCPGateway
+                result = await MCPGateway.call_tool(server_name, actual_tool_name, arguments)
+                result_str = json.dumps(result, ensure_ascii=False) if not isinstance(result, str) else result
+                return {
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "result": _truncate_tool_result(result_str),
+                    "status": "success",
+                }
             except Exception as e:
                 logger.error(f"[ToolExec] MCP tool error: {tool_name}, error: {e}")
                 return {
@@ -385,17 +410,14 @@ async def _execute_tool_call(tool_call: dict, agent_id: str | None = None) -> di
                 }
 
     try:
-        skill_data = SkillRegistry.get_skill(tool_name)
-        if not skill_data or not skill_data.get("is_active", True):
-            return {
-                "tool_call_id": tool_call_id,
-                "tool_name": tool_name,
-                "result": f"Tool '{tool_name}' is currently unavailable. Available tools can be listed on request. Choose an alternative approach.",
-                "status": "error",
-            }
-
-        task = asyncio.create_task(_do_update())
-        task.add_done_callback(lambda t: None if t.exception() is None else logger.warning(f"[Memory] Update task error: {t.exception()}"))
+        result = await execute_single_tool(tool_name, arguments, agent_id=agent_id)
+        result_str = process_tool_result(result, tool_name)
+        return {
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name,
+            "result": _truncate_tool_result(result_str),
+            "status": "success",
+        }
     except Exception as e:
         logger.error(f"[ToolExec] Tool execution failed: {tool_name}, error: {e}", exc_info=True)
         error_msg = (
@@ -472,7 +494,7 @@ async def _run_agent_loop(
     for round_num in range(MAX_TOOL_LOOP_ROUNDS):
         logger.info(f"[AgentLoop] Round {round_num + 1}/{MAX_TOOL_LOOP_ROUNDS}")
 
-        llm_response = await llm_adapter.chat(
+        raw = await llm_adapter.chat(
             messages=current_messages,
             tools=tools,
             provider_name=provider,
@@ -480,7 +502,18 @@ async def _run_agent_loop(
             temperature=temperature,
             max_tokens=max_tokens,
             top_p=top_p,
+            return_raw=True,
         )
+
+        # Convert dict response to LLMResponse
+        if isinstance(raw, dict):
+            llm_response = LLMResponse(
+                content=raw.get("content", ""),
+                tool_calls=raw.get("tool_calls"),
+                finish_reason="stop",
+            )
+        else:
+            llm_response = LLMResponse(content=str(raw), finish_reason="stop")
 
         if not llm_response.has_tool_calls():
             if all_tool_results:
@@ -494,7 +527,7 @@ async def _run_agent_loop(
             if loop_warning:
                 logger.warning(f"[AgentLoop] {loop_warning}")
                 current_messages.append({"role": "user", "content": loop_warning})
-                llm_response = await llm_adapter.chat(
+                raw2 = await llm_adapter.chat(
                     messages=current_messages,
                     tools=None,
                     provider_name=provider,
@@ -502,7 +535,16 @@ async def _run_agent_loop(
                     temperature=temperature,
                     max_tokens=max_tokens,
                     top_p=top_p,
+                    return_raw=True,
                 )
+                if isinstance(raw2, dict):
+                    llm_response = LLMResponse(
+                        content=raw2.get("content", ""),
+                        tool_calls=raw2.get("tool_calls"),
+                        finish_reason="stop",
+                    )
+                else:
+                    llm_response = LLMResponse(content=str(raw2), finish_reason="stop")
                 if all_tool_results:
                     llm_response.tool_results = all_tool_results
                 return llm_response
@@ -523,7 +565,7 @@ async def _run_agent_loop(
         "Please provide a final response summarizing what you've found or done so far."
     )
     current_messages.append({"role": "user", "content": summary_prompt})
-    final_response = await llm_adapter.chat(
+    raw_final = await llm_adapter.chat(
         messages=current_messages,
         tools=None,
         provider_name=provider,
@@ -531,7 +573,16 @@ async def _run_agent_loop(
         temperature=temperature,
         max_tokens=max_tokens,
         top_p=top_p,
+        return_raw=True,
     )
+    if isinstance(raw_final, dict):
+        final_response = LLMResponse(
+            content=raw_final.get("content", ""),
+            tool_calls=raw_final.get("tool_calls"),
+            finish_reason="stop",
+        )
+    else:
+        final_response = LLMResponse(content=str(raw_final), finish_reason="stop")
     final_response.tool_results = all_tool_results
     return final_response
 
@@ -673,7 +724,7 @@ async def chat_completions(request: ChatRequest):
                                 temperature=request.temperature or 0.7,
                                 max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
                             ):
-                                yield f"data: {ChatStreamChunk(id=chat_id, content=chunk.get('content', ''), reasoning_content=chunk.get('reasoning', ''), model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                                yield f"data: {ChatStreamChunk(id=chat_id, content=chunk.data.get('content', ''), reasoning_content=chunk.data.get('reasoning', ''), model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
                     except Exception as e:
                         logger.error(f"[STREAM] Tool chain stream error: {e}")
                         yield f"data: {ChatStreamChunk(id=chat_id, content=f'[Error] {str(e)}', model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
@@ -705,7 +756,7 @@ async def chat_completions(request: ChatRequest):
     if request.stream:
         logger.info(f"[API] POST /chat/completions - Starting stream response")
         return StreamingResponse(
-            _stream_chat(messages, tools, request, resolved_provider, resolved_model, request.agent_id),
+            _stream_chat(messages, request, resolved_provider, resolved_model),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -725,7 +776,7 @@ async def chat_completions(request: ChatRequest):
                 top_p=request.top_p,
             )
 
-        result_content = result.get("content") if isinstance(result, dict) else result
+        result_content = result.content if isinstance(result, LLMResponse) else (result.get("content") if isinstance(result, dict) else str(result))
         result_content = result_content or ""
         elapsed = time.time() - start_time
         logger.success(f"[API] POST /chat/completions - Success: elapsed={elapsed:.2f}s, response_len={len(result_content)}")
@@ -734,10 +785,6 @@ async def chat_completions(request: ChatRequest):
             content=result_content,
             model=resolved_model,
             provider=resolved_provider,
-            tool_calls=tool_calls_data,
-            tool_results=tool_results_data,
-            usage=result.usage,
-            timestamp=_get_timestamp(),
         )
     except Exception as e:
         elapsed = time.time() - start_time
@@ -745,7 +792,7 @@ async def chat_completions(request: ChatRequest):
         raise
 
 
-async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str, model: str):
+async def _stream_chat(messages: list[dict], tools: list[dict] | None, request: ChatRequest, provider: str, model: str, agent_id: str | None = None):
     chat_id = str(uuid.uuid4())
     full_reply = ""
     try:
@@ -758,8 +805,8 @@ async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str
                 max_tokens=request.max_tokens,
                 top_p=request.top_p,
             ):
-                content = chunk.get("content", "")
-                rc = chunk.get("reasoning", "")
+                content = chunk.data.get("content", "")
+                rc = chunk.data.get("reasoning", "")
                 if content:
                     full_reply += content
                 data = ChatStreamChunk(id=chat_id, content=content, reasoning_content=rc, model=model, provider=provider)
@@ -916,7 +963,7 @@ async def add_message(conv_id: str, request: ChatRequest):
 
     _PHASE_3_SAVE_ASSISTANT_MSG(conv, persist_state)
     _persist_conv(conv_id, conv)
-    _schedule_memory_update(conv["messages"], conv_id, agent_id, provider_name=resolved_provider)
+    _schedule_memory_update([dict(m) for m in conv["messages"]], conv_id, agent_id)
 
     elapsed = time.time() - start_time
     logger.success(f"[API] Done: conv={conv_id}, elapsed={elapsed:.2f}s, len={len(gen_state['content'])}, aborted={gen_state['aborted']}")
@@ -926,10 +973,6 @@ async def add_message(conv_id: str, request: ChatRequest):
         content=gen_state["content"],
         model=resolved_model,
         provider=resolved_provider,
-        tool_calls=tool_calls_data,
-        tool_results=tool_results_data,
-        usage=result.usage,
-        timestamp=_get_timestamp(),
     )
 
 
@@ -1081,8 +1124,8 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
                             temperature=request.temperature or 0.7,
                             max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
                         ):
-                            content = chunk.get("content", "")
-                            rc = chunk.get("reasoning", "")
+                            content = chunk.data.get("content", "")
+                            rc = chunk.data.get("reasoning", "")
                             if content:
                                 state["content"] += content
                             if rc:
@@ -1096,8 +1139,8 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
                         temperature=request.temperature or 0.7,
                         max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
                     ):
-                        content = chunk.get("content", "")
-                        rc = chunk.get("reasoning", "")
+                        content = chunk.data.get("content", "")
+                        rc = chunk.data.get("reasoning", "")
                         if content:
                             state["content"] += content
                         if rc:
@@ -1124,7 +1167,7 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
             except Exception as done_err:
                 logger.debug(f"[STREAM] Done event send failed (client may have disconnected): {done_err}")
             try:
-                _schedule_memory_update(conv["messages"], conv_id, agent_id, provider_name=provider)
+                _schedule_memory_update([dict(m) for m in conv["messages"]], conv_id, agent_id)
             except Exception as schedule_err:
                 logger.warning(f"[STREAM] Memory update scheduling failed: {schedule_err}")
 

@@ -3,6 +3,7 @@ import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TitleBar from './components/TitleBar.vue'
 import LumiSidebar from './components/LumiSidebar.vue'
+import ToastContainer from './components/common/ToastContainer.vue'
 
 const route = useRoute()
 
@@ -29,6 +30,7 @@ watch(isDesktopPetPage, (val) => {
       </main>
     </div>
     <router-view v-else />
+    <ToastContainer />
     <div v-if="!isDesktopPetPage" class="resize-handle resize-n"></div>
     <div v-if="!isDesktopPetPage" class="resize-handle resize-s"></div>
     <div v-if="!isDesktopPetPage" class="resize-handle resize-e"></div>

@@ -28,9 +28,11 @@ import {
   Network,
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
+import { useToast } from '../../composables/useToast'
 
 const router = useRouter()
 const modelStore = useModelStore()
+const toast = useToast()
 
 const activeTile = ref('main')
 
@@ -298,6 +300,7 @@ const openAddDialog = () => {
 const handleAddProvider = async () => {
   if (!newProviderFormValid.value) {
     addProviderError.value = newProviderValidation.value[0]
+    toast.warning(newProviderValidation.value[0])
     return
   }
   addProviderError.value = ''
@@ -313,8 +316,10 @@ const handleAddProvider = async () => {
       isDefault: newProvider.value.isDefault,
     })
     showAddDialog.value = false
+    toast.success(`供应商「${newProvider.value.name.trim() || newProvider.value.id.trim()}」添加成功`)
   } catch (e: any) {
     addProviderError.value = e.message || '添加失败'
+    toast.error(`添加供应商失败：${e.message || '未知错误'}`)
   } finally {
     addProviderLoading.value = false
   }
@@ -347,6 +352,7 @@ const openEditDialog = (providerId: string) => {
 const handleEditProvider = async () => {
   if (!editProviderFormValid.value) {
     editProviderError.value = editProviderValidation.value[0]
+    toast.warning(editProviderValidation.value[0])
     return
   }
   editProviderError.value = ''
@@ -364,8 +370,10 @@ const handleEditProvider = async () => {
     }
     await modelStore.updateProvider(editingProviderId.value, updates)
     showEditDialog.value = false
+    toast.success(`供应商「${editProvider.value.name}」已更新`)
   } catch (e: any) {
     editProviderError.value = e.message || '更新失败'
+    toast.error(`更新供应商失败：${e.message || '未知错误'}`)
   } finally {
     editProviderLoading.value = false
   }
@@ -373,17 +381,22 @@ const handleEditProvider = async () => {
 
 const handleRemoveProvider = async (providerId: string) => {
   try {
+    const p = providers.value.find(pr => pr.id === providerId)
     await modelStore.removeProvider(providerId)
+    toast.success(`供应商「${p?.name || providerId}」已删除`)
   } catch (e: any) {
     console.error('Failed to remove provider:', e)
+    toast.error(`删除供应商失败：${e.message || '未知错误'}`)
   }
 }
 
 const handleFetchModels = async (providerId: string) => {
   try {
     await modelStore.fetchProviderModels(providerId)
+    toast.info('模型列表已刷新')
   } catch (e: any) {
     console.error('Failed to fetch models:', e)
+    toast.error(`获取模型列表失败：${e.message || '未知错误'}`)
   }
 }
 
@@ -399,6 +412,7 @@ const handleSaveMainConfig = async () => {
   if (!mainConfigValid.value.valid) {
     saveValidationErrors.main = mainConfigValid.value.error
     saveStatus.main = 'error'
+    toast.warning(mainConfigValid.value.error)
     setTimeout(() => { saveStatus.main = 'idle' }, 3000)
     return
   }
@@ -412,9 +426,11 @@ const handleSaveMainConfig = async () => {
       defaultTopP: mainModelConfig.value.topP,
     })
     saveStatus.main = 'saved'
+    toast.success('主模型配置已保存')
     setTimeout(() => { saveStatus.main = 'idle' }, 2000)
   } catch {
     saveStatus.main = 'error'
+    toast.error('主模型配置保存失败')
     setTimeout(() => { saveStatus.main = 'idle' }, 3000)
   }
 }
@@ -424,6 +440,7 @@ const handleSaveReasonerConfig = async () => {
   if (!reasonerConfigValid.value.valid) {
     saveValidationErrors.reasoner = reasonerConfigValid.value.error
     saveStatus.reasoner = 'error'
+    toast.warning(reasonerConfigValid.value.error)
     setTimeout(() => { saveStatus.reasoner = 'idle' }, 3000)
     return
   }
@@ -437,9 +454,11 @@ const handleSaveReasonerConfig = async () => {
       reasonerEffort: reasonerModelConfig.value.reasoningEffort,
     })
     saveStatus.reasoner = 'saved'
+    toast.success('推理模型配置已保存')
     setTimeout(() => { saveStatus.reasoner = 'idle' }, 2000)
   } catch {
     saveStatus.reasoner = 'error'
+    toast.error('推理模型配置保存失败')
     setTimeout(() => { saveStatus.reasoner = 'idle' }, 3000)
   }
 }

@@ -236,7 +236,7 @@ _TOOL_CALL_ARGUMENTS_MAX_LEN = 100_000
 
 
 class LLMResponse:
-    __slots__ = ("content", "tool_calls", "finish_reason", "usage")
+    __slots__ = ("content", "tool_calls", "finish_reason", "usage", "tool_results")
 
     def __init__(
         self,
@@ -244,11 +244,13 @@ class LLMResponse:
         tool_calls: list[dict] | None = None,
         finish_reason: str = "stop",
         usage: dict | None = None,
+        tool_results: list[dict] | None = None,
     ):
         self.content = content or ""
         self.tool_calls = tool_calls
         self.finish_reason = finish_reason
         self.usage = usage
+        self.tool_results = tool_results
 
     def has_tool_calls(self) -> bool:
         return bool(self.tool_calls)
@@ -485,84 +487,7 @@ class OpenAICompatibleProvider(LLMProvider):
                         if content or reasoning:
                             yield result
                     except json.JSONDecodeError:
-                        tc["function"]["arguments"] = _repair_tool_call_arguments(
-                            args, tc["function"]["name"] or "unknown"
-                        )
-            tool_calls = list(tool_calls_map.values())
-
-        return LLMResponse(content=content, tool_calls=tool_calls, finish_reason="stop")
-
-    async def chat_stream(
-        self,
-        messages: list[dict],
-        tools: list[dict] | None = None,
-        **kwargs
-    ) -> AsyncIterator[StreamEvent]:
-        payload = self._build_payload(messages, tools, stream=True, **kwargs)
-        client = self._get_client()
-
-        last_error = None
-        for attempt in range(_MAX_RETRIES + 1):
-            try:
-                async with client.stream(
-                    "POST",
-                    f"{self.base_url}/chat/completions",
-                    json=payload,
-                ) as resp:
-                    resp.raise_for_status()
-                    tool_name_first_seen: dict[int, str] = {}
-
-                    async for line in resp.aiter_lines():
-                        if not line.startswith("data: "):
-                            continue
-                        data_str = line[6:]
-                        if data_str.strip() == "[DONE]":
-                            yield StreamEvent("done")
-                            return
-                        try:
-                            data = json.loads(data_str)
-                            choice = data.get("choices", [{}])[0]
-                            delta = choice.get("delta", {})
-                            finish_reason = choice.get("finish_reason")
-
-                            content = delta.get("content", "")
-                            if content:
-                                yield StreamEvent("content", {"content": content})
-
-                            tc_deltas = delta.get("tool_calls")
-                            if tc_deltas:
-                                for tc_delta in tc_deltas:
-                                    idx = tc_delta.get("index", 0)
-                                    event_data: dict = {"index": idx}
-                                    if tc_delta.get("id"):
-                                        event_data["tool_call_id"] = tc_delta["id"]
-                                    fn = tc_delta.get("function", {})
-                                    if fn.get("name"):
-                                        event_data["function_name"] = fn["name"]
-                                    if fn.get("arguments"):
-                                        event_data["function_arguments"] = fn["arguments"]
-                                    yield StreamEvent("tool_call_delta", event_data)
-
-                            if finish_reason:
-                                yield StreamEvent("finish_reason", {"finish_reason": finish_reason})
-
-                            usage = data.get("usage")
-                            if usage:
-                                yield StreamEvent("usage", {"usage": usage})
-                        except json.JSONDecodeError:
-                            continue
-                return
-            except Exception as e:
-                last_error = e
-                retriable, reason = _classify_error(e)
-                if not retriable or attempt >= _MAX_RETRIES:
-                    break
-                import asyncio
-                delay = _RETRY_BASE_DELAY * (2 ** attempt)
-                logger.warning(f"[Provider] Stream retry ({reason}): attempt {attempt + 1}/{_MAX_RETRIES}, delay={delay}s")
-                await asyncio.sleep(delay)
-
-        raise last_error
+                        continue
 
         if collected_tool_calls:
             merged = []
@@ -578,6 +503,78 @@ class OpenAICompatibleProvider(LLMProvider):
                 })
             yield {"content": "", "reasoning": "", "tool_calls_complete": merged}
 
+    async def chat_stream(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        **kwargs
+    ) -> AsyncIterator[StreamEvent]:
+        payload = self._build_payload(messages, tools, stream=True, **kwargs)
+
+        last_error = None
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    async with client.stream(
+                        "POST",
+                        f"{self.base_url}/chat/completions",
+                        headers=self._build_headers(),
+                        json=payload,
+                    ) as resp:
+                        resp.raise_for_status()
+
+                        async for line in resp.aiter_lines():
+                            if not line.startswith("data: "):
+                                continue
+                            data_str = line[6:]
+                            if data_str.strip() == "[DONE]":
+                                yield StreamEvent("done")
+                                return
+                            try:
+                                data = json.loads(data_str)
+                                choice = data.get("choices", [{}])[0]
+                                delta = choice.get("delta", {})
+                                finish_reason = choice.get("finish_reason")
+
+                                content = delta.get("content") or ""
+                                if content:
+                                    yield StreamEvent("content", {"content": content})
+
+                                tc_deltas = delta.get("tool_calls")
+                                if tc_deltas:
+                                    for tc_delta in tc_deltas:
+                                        idx = tc_delta.get("index", 0)
+                                        event_data: dict = {"index": idx}
+                                        if tc_delta.get("id"):
+                                            event_data["tool_call_id"] = tc_delta["id"]
+                                        fn = tc_delta.get("function", {})
+                                        if fn.get("name"):
+                                            event_data["function_name"] = fn["name"]
+                                        if fn.get("arguments"):
+                                            event_data["function_arguments"] = fn["arguments"]
+                                        yield StreamEvent("tool_call_delta", event_data)
+
+                                if finish_reason:
+                                    yield StreamEvent("finish_reason", {"finish_reason": finish_reason})
+
+                                usage = data.get("usage")
+                                if usage:
+                                    yield StreamEvent("usage", {"usage": usage})
+                            except json.JSONDecodeError:
+                                continue
+                return
+            except Exception as e:
+                last_error = e
+                retriable, reason = _classify_error(e)
+                if not retriable or attempt >= _MAX_RETRIES:
+                    break
+                import asyncio
+                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning(f"[Provider] Stream retry ({reason}): attempt {attempt + 1}/{_MAX_RETRIES}, delay={delay}s")
+                await asyncio.sleep(delay)
+
+        raise last_error
+
     async def embed(self, text: str) -> list[float]:
         embed_model = self.default_model if "embed" in self.default_model.lower() else "text-embedding-3-small"
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -591,18 +588,21 @@ class OpenAICompatibleProvider(LLMProvider):
 
     async def list_models(self) -> list[dict]:
         try:
-            client = self._get_client()
-            resp = await client.get(f"{self.base_url}/models")
-            resp.raise_for_status()
-            data = resp.json()
-            return [
-                {
-                    "id": m.get("id", ""),
-                    "name": m.get("id", ""),
-                    "owned_by": m.get("owned_by", ""),
-                }
-                for m in data.get("data", [])
-            ]
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(
+                    f"{self.base_url}/models",
+                    headers=self._build_headers(),
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return [
+                    {
+                        "id": m.get("id", ""),
+                        "name": m.get("id", ""),
+                        "owned_by": m.get("owned_by", ""),
+                    }
+                    for m in data.get("data", [])
+                ]
         except Exception as e:
             logger.warning(f"Failed to list models from {self.provider_name}: {e}")
             return []
