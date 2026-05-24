@@ -341,8 +341,10 @@ def get_context_manager(provider_name: str | None = None, model: str = "") -> Co
     try:
         provider = llm_adapter.get_provider(provider_name)
         context_window = getattr(provider, "context_window", 0) or 0
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(
+            f"[Compressor] Failed to resolve context window for provider={provider_name}, model={model}: {e}"
+        )
 
     if context_window <= 0:
         context_window = 128000
