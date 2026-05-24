@@ -219,8 +219,20 @@ class MemoryUpdater:
         facts_removed = 0
         updates_applied = {}
 
+        # 防御性校验 LLM 返回的字段类型
         facts_to_add = parsed.get("facts_to_add", [])
+        if not isinstance(facts_to_add, list):
+            facts_to_add = []
+        fact_ids_to_remove = parsed.get("fact_ids_to_remove", [])
+        if not isinstance(fact_ids_to_remove, list):
+            fact_ids_to_remove = []
+        updates = parsed.get("updates", {})
+        if not isinstance(updates, dict):
+            updates = {}
+
         for fact_data in facts_to_add:
+            if not isinstance(fact_data, dict):
+                continue
             content = fact_data.get("content", "").strip()
             if not content or len(content) < 5:
                 continue
@@ -260,7 +272,6 @@ class MemoryUpdater:
             memory_data.facts.append(new_fact)
             facts_added += 1
 
-        fact_ids_to_remove = parsed.get("fact_ids_to_remove", [])
         if fact_ids_to_remove:
             original_count = len(memory_data.facts)
             memory_data.facts = [

@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Literal
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def utc_now_iso_z() -> str:
@@ -39,6 +39,8 @@ TIER_DEFAULT_CONFIDENCE: dict[MemoryTier, float] = {
 
 
 class MemoryFact(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
+
     id: str = Field(default_factory=lambda: f"fact_{uuid.uuid4().hex[:8]}")
     content: str
     category: FactCategory = "context"
