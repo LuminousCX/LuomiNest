@@ -31,12 +31,17 @@ from app.core.context import get_context_manager
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 _memory_locks: dict[str | None, asyncio.Lock] = {}
+_memory_locks_guard = asyncio.Lock()
+_llm_semaphore = asyncio.Semaphore(1)
 
 
-def _get_memory_lock(agent_id: str | None) -> asyncio.Lock:
-    if agent_id not in _memory_locks:
-        _memory_locks[agent_id] = asyncio.Lock()
-    return _memory_locks[agent_id]
+async def _get_memory_lock(agent_id: str | None) -> asyncio.Lock:
+    if agent_id in _memory_locks:
+        return _memory_locks[agent_id]
+    async with _memory_locks_guard:
+        if agent_id not in _memory_locks:
+            _memory_locks[agent_id] = asyncio.Lock()
+        return _memory_locks[agent_id]
 
 
 def _get_user_query(messages: list[dict]) -> str:
@@ -139,15 +144,27 @@ async def _inject_memory(messages: list[dict], agent_id: str | None = None, prov
     try:
         from app.engines.memory.core import MemoryInjector, get_memory_storage
         storage = get_memory_storage()
-        lock = _get_memory_lock(agent_id)
+        lock = await _get_memory_lock(agent_id)
         async with lock:
             memory_data = await asyncio.to_thread(storage.load, agent_id)
 
-        if not memory_data.facts and not memory_data.working_memory.core_goal and not memory_data.episodic_events:
-            has_profile = bool(
-                memory_data.profile.name or memory_data.profile.nickname
-                or memory_data.profile.occupation or memory_data.profile.location
-            )
+        has_facts = bool(memory_data.facts)
+        has_profile = bool(
+            memory_data.profile.name or memory_data.profile.nickname
+            or memory_data.profile.occupation or memory_data.profile.location
+        )
+        has_working_goal = False
+        try:
+            has_working_goal = bool(memory_data.working_memory.core_goal)
+        except AttributeError:
+            pass
+        has_events = False
+        try:
+            has_events = bool(memory_data.episodic_events)
+        except AttributeError:
+            pass
+
+        if not has_facts and not has_working_goal and not has_events:
             if not has_profile:
                 return messages
 
@@ -183,13 +200,15 @@ def _schedule_memory_update(
 
         async def _do_update():
             try:
-                lock = _get_memory_lock(agent_id)
-                async with lock:
-                    await updater.update_from_conversation(messages_snapshot, conv_id, agent_id)
+                async with _llm_semaphore:
+                    lock = await _get_memory_lock(agent_id)
+                    async with lock:
+                        await updater.update_from_conversation(messages_snapshot, conv_id, agent_id)
             except Exception as e:
                 logger.warning(f"[Memory] Async update failed: {e}")
 
-        asyncio.create_task(_do_update())
+        task = asyncio.create_task(_do_update())
+        task.add_done_callback(lambda t: None if t.exception() is None else logger.warning(f"[Memory] Update task error: {t.exception()}"))
     except Exception as e:
         logger.warning(f"[Memory] Update scheduling skipped: {e}")
 
@@ -248,14 +267,15 @@ async def chat_completions(request: ChatRequest):
     if request_type == RequestType.LOCAL_TOOL:
         result = await handle_local_tool_request(user_query)
         if result is None:
-            raw = await llm_adapter.chat(
-                messages=messages,
-                provider_name=resolved_provider,
-                model=resolved_model,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                top_p=request.top_p,
-            )
+            async with _llm_semaphore:
+                raw = await llm_adapter.chat(
+                    messages=messages,
+                    provider_name=resolved_provider,
+                    model=resolved_model,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                    top_p=request.top_p,
+                )
             result_content = raw.get("content") if isinstance(raw, dict) else raw
             result_reasoning = raw.get("reasoning") if isinstance(raw, dict) else None
         else:
@@ -322,23 +342,25 @@ async def chat_completions(request: ChatRequest):
                 async def _tool_chain_stream():
                     chat_id = str(uuid.uuid4())
                     yield f"data: {ChatStreamChunk(id=chat_id, content='', reasoning_content='正在查询所需信息…', model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
-                    async for chunk in llm_adapter.chat_stream(
-                        messages=summary_messages, provider_name=resolved_provider, model=resolved_model,
-                        temperature=request.temperature or 0.7,
-                        max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
-                    ):
-                        yield f"data: {ChatStreamChunk(id=chat_id, content=chunk.get('content', ''), reasoning_content=chunk.get('reasoning', ''), model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
+                    async with _llm_semaphore:
+                        async for chunk in llm_adapter.chat_stream(
+                            messages=summary_messages, provider_name=resolved_provider, model=resolved_model,
+                            temperature=request.temperature or 0.7,
+                            max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                        ):
+                            yield f"data: {ChatStreamChunk(id=chat_id, content=chunk.get('content', ''), reasoning_content=chunk.get('reasoning', ''), model=resolved_model, provider=resolved_provider).model_dump_json()}\n\n"
                     yield f"data: {ChatStreamChunk(id=chat_id, content='', model=resolved_model, provider=resolved_provider, done=True).model_dump_json()}\n\n"
 
                 elapsed = time.time() - start_time
                 logger.success(f"[API] POST /chat/completions [TOOL chain stream] - Success: elapsed={elapsed:.2f}s")
                 return StreamingResponse(_tool_chain_stream(), media_type="text/event-stream")
 
-            raw = await llm_adapter.chat(
-                messages=summary_messages, provider_name=resolved_provider, model=resolved_model,
-                temperature=request.temperature or 0.7,
-                max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
-            )
+            async with _llm_semaphore:
+                raw = await llm_adapter.chat(
+                    messages=summary_messages, provider_name=resolved_provider, model=resolved_model,
+                    temperature=request.temperature or 0.7,
+                    max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                )
             result = raw.get("content") if isinstance(raw, dict) else raw
             elapsed = time.time() - start_time
             logger.success(f"[API] POST /chat/completions [TOOL chain] - Success: elapsed={elapsed:.2f}s")
@@ -364,14 +386,15 @@ async def chat_completions(request: ChatRequest):
         )
 
     try:
-        result = await llm_adapter.chat(
-            messages=messages,
-            provider_name=resolved_provider,
-            model=resolved_model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            top_p=request.top_p,
-        )
+        async with _llm_semaphore:
+            result = await llm_adapter.chat(
+                messages=messages,
+                provider_name=resolved_provider,
+                model=resolved_model,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                top_p=request.top_p,
+            )
 
         result_content = result.get("content") if isinstance(result, dict) else result
         result_content = result_content or ""
@@ -392,20 +415,21 @@ async def chat_completions(request: ChatRequest):
 async def _stream_chat(messages: list[dict], request: ChatRequest, provider: str, model: str):
     chat_id = str(uuid.uuid4())
     full_reply = ""
-    async for chunk in llm_adapter.chat_stream(
-        messages=messages,
-        provider_name=provider,
-        model=model,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-        top_p=request.top_p,
-    ):
-        content = chunk.get("content", "")
-        rc = chunk.get("reasoning", "")
-        if content:
-            full_reply += content
-        data = ChatStreamChunk(id=chat_id, content=content, reasoning_content=rc, model=model, provider=provider)
-        yield f"data: {data.model_dump_json()}\n\n"
+    async with _llm_semaphore:
+        async for chunk in llm_adapter.chat_stream(
+            messages=messages,
+            provider_name=provider,
+            model=model,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            top_p=request.top_p,
+        ):
+            content = chunk.get("content", "")
+            rc = chunk.get("reasoning", "")
+            if content:
+                full_reply += content
+            data = ChatStreamChunk(id=chat_id, content=content, reasoning_content=rc, model=model, provider=provider)
+            yield f"data: {data.model_dump_json()}\n\n"
 
     done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
     yield f"data: {done_data.model_dump_json()}\n\n"
@@ -604,8 +628,9 @@ async def _NON_STREAM_GENERATE(state: dict, request_type: RequestType,
         if request_type == RequestType.LOCAL_TOOL:
             result = await handle_local_tool_request(user_query)
             if result is None:
-                raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
-                    model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+                async with _llm_semaphore:
+                    raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                        model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
                 result = raw.get("content") if isinstance(raw, dict) else raw
                 if isinstance(raw, dict) and raw.get("reasoning"):
                     state["reasoning"] = raw["reasoning"]
@@ -629,11 +654,13 @@ async def _NON_STREAM_GENERATE(state: dict, request_type: RequestType,
                 if tool_results:
                     summary_prompt = build_tool_summary(user_query, tool_results)
                     summary_messages = [{"role": "user", "content": summary_prompt}]
-                    raw = await llm_adapter.chat(messages=summary_messages, provider_name=provider,
-                        model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+                    async with _llm_semaphore:
+                        raw = await llm_adapter.chat(messages=summary_messages, provider_name=provider,
+                            model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
                 else:
-                    raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
-                        model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+                    async with _llm_semaphore:
+                        raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                            model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
                 if isinstance(raw, dict):
                     state["content"] = raw.get("content", "")
                     if raw.get("reasoning"):
@@ -642,8 +669,9 @@ async def _NON_STREAM_GENERATE(state: dict, request_type: RequestType,
                     state["content"] = raw
 
         else:
-            raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
-                model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
+            async with _llm_semaphore:
+                raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                    model=model, temperature=temperature, max_tokens=max_tokens, top_p=top_p)
             if isinstance(raw, dict):
                 state["content"] = raw.get("content", "")
                 if raw.get("reasoning"):
@@ -668,9 +696,10 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
             if request_type == RequestType.LOCAL_TOOL:
                 result = await handle_local_tool_request(user_query)
                 if result is None:
-                    raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
-                        model=model, temperature=request.temperature or 0.7,
-                        max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9)
+                    async with _llm_semaphore:
+                        raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
+                            model=model, temperature=request.temperature or 0.7,
+                            max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9)
                     result_content = raw.get("content") if isinstance(raw, dict) else raw
                     if isinstance(raw, dict) and raw.get("reasoning"):
                         state["reasoning"] = raw["reasoning"]
@@ -698,8 +727,24 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
                         summary_messages = [{"role": "user", "content": summary_prompt}]
                     else:
                         summary_messages = all_messages
+                    async with _llm_semaphore:
+                        async for chunk in llm_adapter.chat_stream(
+                            messages=summary_messages, provider_name=provider, model=model,
+                            temperature=request.temperature or 0.7,
+                            max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
+                        ):
+                            content = chunk.get("content", "")
+                            rc = chunk.get("reasoning", "")
+                            if content:
+                                state["content"] += content
+                            if rc:
+                                state["reasoning"] += rc
+                            yield _sse(chat_id, content, provider, model, rc)
+
+            else:
+                async with _llm_semaphore:
                     async for chunk in llm_adapter.chat_stream(
-                        messages=summary_messages, provider_name=provider, model=model,
+                        messages=all_messages, provider_name=provider, model=model,
                         temperature=request.temperature or 0.7,
                         max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
                     ):
@@ -711,20 +756,6 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
                             state["reasoning"] += rc
                         yield _sse(chat_id, content, provider, model, rc)
 
-            else:
-                async for chunk in llm_adapter.chat_stream(
-                    messages=all_messages, provider_name=provider, model=model,
-                    temperature=request.temperature or 0.7,
-                    max_tokens=request.max_tokens or 4096, top_p=request.top_p or 0.9,
-                ):
-                    content = chunk.get("content", "")
-                    rc = chunk.get("reasoning", "")
-                    if content:
-                        state["content"] += content
-                    if rc:
-                        state["reasoning"] += rc
-                    yield _sse(chat_id, content, provider, model, rc)
-
         except Exception as e:
             state["aborted"] = True
             state["content"] = f"[Error] {str(e)}"
@@ -732,14 +763,19 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
             yield _sse(chat_id, state["content"], provider, model)
 
         finally:
-            _PHASE_3_SAVE_ASSISTANT_MSG(conv, state)
-            _persist_conv(conv_id, conv)
-            logger.info(f"[STREAM] Persisted: conv={conv_id}, "
-                       f"content_len={len(state['content'])}, "
-                       f"reasoning_len={len(state['reasoning'])}, "
-                       f"aborted={state['aborted']}")
-            yield _sse_done(chat_id, provider, model)
-            _schedule_memory_update(conv["messages"], conv_id, agent_id, provider_name=provider)
+            try:
+                _PHASE_3_SAVE_ASSISTANT_MSG(conv, state)
+                _persist_conv(conv_id, conv)
+            except Exception as persist_err:
+                logger.error(f"[STREAM] Persist failed: conv={conv_id}, error={persist_err}")
+            try:
+                yield _sse_done(chat_id, provider, model)
+            except Exception as done_err:
+                logger.debug(f"[STREAM] Done event send failed (client may have disconnected): {done_err}")
+            try:
+                _schedule_memory_update(conv["messages"], conv_id, agent_id, provider_name=provider)
+            except Exception as schedule_err:
+                logger.warning(f"[STREAM] Memory update scheduling failed: {schedule_err}")
 
     return StreamingResponse(generator(), media_type="text/event-stream",
                            headers={"Cache-Control": "no-cache", "Connection": "keep-alive",

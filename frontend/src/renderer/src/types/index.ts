@@ -37,6 +37,22 @@ export interface ChatMessage {
   }
 }
 
+/** Raw message shape returned by the backend API (snake_case) */
+export interface ApiMessage {
+  id?: string
+  role: 'user' | 'assistant' | 'system'
+  content?: string
+  reasoning_content?: string
+  timestamp?: number
+  agent_id?: string
+  model?: string
+  provider?: string
+  file_name?: string
+  file_type?: string
+  files?: ChatFile[]
+  interrupted?: boolean
+}
+
 export interface ChatRequest {
   messages: { role: ChatMessage['role']; content: string }[]
   model?: string
@@ -77,7 +93,7 @@ export interface Conversation {
   agent_id?: string
   model?: string
   provider?: string
-  messages: ChatMessage[]
+  messages: ApiMessage[]
   created_at: string
   updated_at: string
 }

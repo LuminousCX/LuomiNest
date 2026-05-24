@@ -1,4 +1,4 @@
-﻿﻿<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Puzzle, Sparkles, SlidersHorizontal, X, Package, Bot } from 'lucide-vue-next'
@@ -8,6 +8,7 @@ import MarketplaceCategories from '../components/marketplace/MarketplaceCategori
 import MarketplaceFilters from '../components/marketplace/MarketplaceFilters.vue'
 import MarketplaceCard from '../components/marketplace/MarketplaceCard.vue'
 import MarketplaceBanner from '../components/marketplace/MarketplaceBanner.vue'
+import LumiCardIcon from '../components/common/LumiCardIcon.vue'
 import type { MarketplaceFilter, MarketplaceType } from '../types/marketplace'
 
 const route = useRoute()
@@ -103,9 +104,7 @@ function toggleFilters() {
   <div class="market-view">
     <div class="market-header animate-fade-in">
       <div class="header-left">
-        <div class="header-icon-wrap">
-          <Package :size="24" />
-        </div>
+        <LumiCardIcon :icon="Package" :size="24" theme="Package" />
         <div class="header-text">
           <h1 class="page-title">扩展</h1>
           <p class="page-subtitle">插件、技能与智能体，一站式管理</p>
@@ -228,17 +227,6 @@ function toggleFilters() {
   gap: 16px;
 }
 
-.header-icon-wrap {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-lg);
-  background: var(--gradient-hero-soft);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--lumi-primary);
-}
-
 .page-title {
   font-size: 24px;
   font-weight: 700;
@@ -258,6 +246,7 @@ function toggleFilters() {
   background: var(--workspace-panel);
   border-radius: var(--radius-lg);
   border: 1px solid var(--workspace-border);
+  backdrop-filter: blur(8px);
 }
 
 .switch-btn {
@@ -270,6 +259,7 @@ function toggleFilters() {
   font-weight: 500;
   color: var(--text-muted);
   transition: all 0.25s ease-in-out;
+  position: relative;
 }
 
 .switch-btn:hover {
@@ -279,7 +269,7 @@ function toggleFilters() {
 .switch-btn.active {
   background: var(--workspace-card);
   color: var(--lumi-primary);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-xs), 0 0 0 1px var(--lumi-primary-glow);
 }
 
 .market-toolbar {
@@ -310,6 +300,7 @@ function toggleFilters() {
   gap: 12px;
   background: var(--workspace-sidebar);
   border-right: 1px solid var(--workspace-border);
+  backdrop-filter: blur(12px);
 }
 
 .sidebar-filter-toggle {
@@ -414,6 +405,22 @@ function toggleFilters() {
   gap: 16px;
 }
 
+.items-grid > * {
+  animation: lumi-card-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.items-grid > *:nth-child(1) { animation-delay: 0ms; }
+.items-grid > *:nth-child(2) { animation-delay: 60ms; }
+.items-grid > *:nth-child(3) { animation-delay: 120ms; }
+.items-grid > *:nth-child(4) { animation-delay: 180ms; }
+.items-grid > *:nth-child(5) { animation-delay: 240ms; }
+.items-grid > *:nth-child(6) { animation-delay: 300ms; }
+
+@keyframes lumi-card-enter {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -421,6 +428,7 @@ function toggleFilters() {
   gap: 12px;
   padding: 60px 0;
   color: var(--text-muted);
+  animation: lumi-card-enter 0.5s ease-out both;
 }
 
 .empty-state p {

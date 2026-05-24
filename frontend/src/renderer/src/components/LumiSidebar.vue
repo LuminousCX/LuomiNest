@@ -22,6 +22,7 @@ import {
   Check
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
+import LumiBrandStar from './common/LumiBrandStar.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -147,9 +148,7 @@ onMounted(async () => {
       <div class="rail-top">
         <button class="avatar-btn" aria-label="LuminousChenXi 账户">
           <div class="avatar-ring">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white" stroke="white" stroke-width="1"/>
-            </svg>
+            <LumiBrandStar :size="20" :animated="false" />
           </div>
         </button>
         <nav class="icon-nav">
@@ -227,9 +226,7 @@ onMounted(async () => {
 
         <div class="panel-footer">
           <div class="update-notice">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="var(--lumi-primary)" stroke="var(--lumi-primary)" stroke-width="1.5"/>
-            </svg>
+            <LumiBrandStar :size="14" :animated="false" />
             <div class="footer-brand">
               <span class="footer-name">LuomiNest</span>
               <span class="footer-sub">LuminousChenXi v0.1.0</span>

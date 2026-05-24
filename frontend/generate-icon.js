@@ -6,20 +6,29 @@ const os = require('os');
 
 const svgPath = path.join(__dirname, 'resources', 'icon.svg');
 const icoPath = path.join(__dirname, 'resources', 'icon.ico');
+const pngPath = path.join(__dirname, 'resources', 'icon.png');
 const tmpDir = os.tmpdir();
 
 const sizes = [256, 48, 32, 16];
 
 async function generateIcon() {
+  // Generate icon.png (256x256 for tray and window icon)
+  await sharp(svgPath)
+    .resize(256, 256)
+    .ensureAlpha()
+    .png()
+    .toFile(pngPath);
+  console.log('icon.png generated (256x256)');
+
   const pngPaths = await Promise.all(
     sizes.map(async (size) => {
-      const pngPath = path.join(tmpDir, `icon-${size}.png`);
+      const tmpPngPath = path.join(tmpDir, `icon-${size}.png`);
       await sharp(svgPath)
         .resize(size, size)
         .ensureAlpha()
         .png()
-        .toFile(pngPath);
-      return pngPath;
+        .toFile(tmpPngPath);
+      return tmpPngPath;
     })
   );
 
@@ -27,7 +36,7 @@ async function generateIcon() {
   fs.writeFileSync(icoPath, icoBuffer);
 
   pngPaths.forEach(p => fs.unlinkSync(p));
-  console.log(`✅ icon.ico generated with sizes: ${sizes.join(', ')}px`);
+  console.log(`icon.ico generated with sizes: ${sizes.join(', ')}px`);
 }
 
 generateIcon().catch(console.error);

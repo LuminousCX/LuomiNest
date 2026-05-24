@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, NativeImage, MenuItemConstructorOptions, dialog, protocol, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, MenuItemConstructorOptions, dialog, protocol, screen } from 'electron'
 import { join, dirname, basename, resolve, sep } from 'path'
 import { platform } from 'os'
 import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs'
@@ -96,6 +96,8 @@ const CSP_PET_WINDOW = isDev ? CSP_DEV : CSP_PROD
 const createWindow = (): void => {
   const savedState = configStore.getWindowState()
 
+  const appIcon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
+
   mainWindow = new BrowserWindow({
     width: savedState.width || 1280,
     height: savedState.height || 820,
@@ -110,6 +112,7 @@ const createWindow = (): void => {
     backgroundColor: '#F5F8FB',
     show: false,
     autoHideMenuBar: true,
+    icon: appIcon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -179,12 +182,7 @@ const createWindow = (): void => {
 
 const createTray = (): void => {
   const iconPath = join(__dirname, '../../resources/icon.png')
-  let icon: NativeImage
-  try {
-    icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
-  } catch {
-    icon = nativeImage.createFromBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAADCSURBVDiNY/j//z8DAwMDw38GKjAwjDgIYNIBA6xMLUAYTYJRBhBHNoDH8PqgFQJYRn+BKAoYAhWcGjAySDB8PxQbBBhBGJgM5AwhOZiYmBkYGJiYoBiYkDUD+Vwg0KpAMkxBaALMBDRANaA0UA0QzIAwmBjIGBgZGBiYgGJiQNQP5XCDQqkAzEFlgLwwDQDdANCBsQYGRiZ/wxgjI2Pwf2BgYGLi/+DIyPg/AwMDw38Gi4DA8P8AAmk4ZunS0qsAAAAASUVORK5CYII=', 'base64'))
-  }
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   tray = new Tray(icon)
   const contextMenu = Menu.buildFromTemplate([
     { label: '显示窗口', click: () => { mainWindow?.show(); mainWindow?.focus() } },

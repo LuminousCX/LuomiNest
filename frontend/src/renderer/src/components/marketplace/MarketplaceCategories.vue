@@ -65,8 +65,9 @@ const emit = defineEmits<{
   border-radius: var(--radius-md);
   font-size: 13px;
   color: var(--text-secondary);
-  transition: all var(--transition-fast);
+  transition: all 0.25s ease-in-out;
   text-align: left;
+  position: relative;
 }
 
 .category-btn:hover {
@@ -78,6 +79,17 @@ const emit = defineEmits<{
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
   font-weight: 500;
+}
+
+.category-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--lumi-primary);
 }
 
 .cat-icon {
