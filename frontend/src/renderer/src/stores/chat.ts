@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import type { ChatMessage, ApiMessage, Conversation, ConversationListItem, ChatStreamChunk } from '../types'
+import type { ChatMessage, ApiMessage, Conversation, ConversationListItem, ConversationSearchResult, ChatStreamChunk } from '../types'
 import { useApi } from '../composables/useApi'
 import { useAgentStore } from './agent'
 
@@ -263,6 +263,10 @@ export const useChatStore = defineStore('chat', () => {
   const convLoading = ref<Record<string, boolean>>({})
   const convData = ref<Record<string, Conversation>>({})
 
+  // 搜索跳转：点击搜索结果时暂存关键词，加载完对话后滚动到匹配消息
+  const pendingSearchKeyword = ref('')
+  const searchScrollTarget = ref<{ convId: string; keyword: string } | null>(null)
+
   const isBackendReady = ref(false)
   const lastError = ref<string | null>(null)
   const lastUsage = ref<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | null>(null)
@@ -400,7 +404,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!targetAgentId) return null
 
     const conv = await apiPost<Conversation>('/chat/conversations', {
-      title: title || 'New Conversation',
+      title: title || '新对话',
       agent_id: targetAgentId,
       model,
       provider,
@@ -485,6 +489,19 @@ export const useChatStore = defineStore('chat', () => {
 
   const cancelCurrentRequest = (_agentId?: string) => {
     cancelConversationRequest()
+  }
+
+  const searchConversations = async (keyword: string, agentId?: string): Promise<ConversationSearchResult[]> => {
+    if (!keyword.trim()) return []
+    const targetAgentId = agentId || activeAgentId.value
+    try {
+      let query = `?keyword=${encodeURIComponent(keyword.trim())}`
+      if (targetAgentId) query += `&agent_id=${targetAgentId}`
+      return await apiGet<ConversationSearchResult[]>(`/chat/conversations/search${query}`)
+    } catch (error) {
+      console.warn('[ChatStore] Search failed:', error)
+      return []
+    }
   }
 
   const sendMessage = async (
@@ -778,5 +795,8 @@ export const useChatStore = defineStore('chat', () => {
     cancelCurrentRequest,
     cancelConversationRequest,
     isConversationStreaming,
+    searchConversations,
+    pendingSearchKeyword,
+    searchScrollTarget,
   }
 })

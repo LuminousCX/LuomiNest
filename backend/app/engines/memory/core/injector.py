@@ -71,12 +71,11 @@ class MemoryInjector:
             sections.append("=== 【核心身份标签】 ===\n" + "\n".join(parts))
         return "\n".join(sections)
 
-    def _format_core_goal(self, memory_data: MemoryData) -> str | None:
-        if not memory_data.working_memory.core_goal:
+    def _format_core_goal(self, memory_data: MemoryData, thread_id: str = "") -> str | None:
+        goal = memory_data.working_memory.get_core_goal_for(thread_id) if thread_id else memory_data.working_memory.core_goal
+        if not goal:
             return None
-        return "=== 【当前对话核心目标】 ===\n" + self._sanitize_content(
-            memory_data.working_memory.core_goal
-        )
+        return "=== 【当前对话核心目标】 ===\n" + self._sanitize_content(goal)
 
     def _format_preferences(self, memory_data: MemoryData, user_query: str = "") -> str | None:
         preference_facts = memory_data.get_facts_by_tier("long_term_preference")
@@ -159,17 +158,23 @@ class MemoryInjector:
 
         return "=== 【相关历史事件】 ===\n" + "\n".join(event_lines)
 
-    def _format_recent_context(self, memory_data: MemoryData) -> str | None:
+    def _format_recent_context(self, memory_data: MemoryData, thread_id: str = "") -> str | None:
         wm = memory_data.working_memory
-        if not wm.recent_conversations:
+        recent_convs = wm.get_conversations_for(thread_id) if thread_id else wm.recent_conversations
+        if not recent_convs:
             return None
 
         sections = []
 
-        if wm.conversation_summary:
+        # 有 thread_id 时使用线程级摘要，避免跨会话上下文泄露
+        if thread_id:
+            thread_summary = wm.get_core_goal_for(thread_id)
+            if thread_summary:
+                sections.append(f"摘要: {self._sanitize_content(thread_summary)}")
+        elif wm.conversation_summary:
             sections.append(f"摘要: {self._sanitize_content(wm.conversation_summary)}")
 
-        recent = wm.get_recent_full(3)
+        recent = recent_convs[-3:]
         if recent:
             lines = []
             for conv in recent:
@@ -201,11 +206,12 @@ class MemoryInjector:
         self,
         memory_data: MemoryData,
         user_query: str = "",
+        thread_id: str = "",
     ) -> str:
         sections = []
         total_tokens = 0
 
-        core_goal = self._format_core_goal(memory_data)
+        core_goal = self._format_core_goal(memory_data, thread_id)
         if core_goal:
             sections.append(core_goal)
             total_tokens += self._estimate_tokens(core_goal)
@@ -225,7 +231,7 @@ class MemoryInjector:
             sections.append(temp_context)
             total_tokens += self._estimate_tokens(temp_context)
 
-        recent_context = self._format_recent_context(memory_data)
+        recent_context = self._format_recent_context(memory_data, thread_id)
         if recent_context and total_tokens + self._estimate_tokens(recent_context) < self._max_tokens_estimate:
             sections.append(recent_context)
             total_tokens += self._estimate_tokens(recent_context)
@@ -242,11 +248,12 @@ class MemoryInjector:
         messages: list[dict],
         memory_data: MemoryData,
         user_query: str = "",
+        thread_id: str = "",
     ) -> list[dict]:
         if not messages:
             return messages
 
-        memory_content = self.format_memory_for_injection(memory_data, user_query)
+        memory_content = self.format_memory_for_injection(memory_data, user_query, thread_id)
         if not memory_content.strip():
             return messages
 

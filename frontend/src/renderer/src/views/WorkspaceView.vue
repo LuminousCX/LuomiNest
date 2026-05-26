@@ -6,38 +6,33 @@ import {
   Mic,
   Wand2,
   ChevronDown,
-  Sparkles,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Bot,
   Link2,
   Loader2,
-  Settings,
   AlertTriangle,
   RotateCcw,
-  Clock,
-  MessageSquare,
-  Trash2,
-  Plus,
   Copy,
   Check,
   Search,
   Zap,
   Server,
-  PanelRightOpen,
-  PanelRightClose,
   Square,
   UploadCloud,
   FileText,
   Image,
   File,
-  Brain,
   Download,
+  Plus,
+  Sparkles,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
 import { useSkillStore } from '../stores/skill'
-import { useMemoryStore } from '../stores/memory'
 import FileUpload from '../components/FileUpload.vue'
 import FilePreview from '../components/FilePreview.vue'
 import { useFileUpload } from '../composables/useFileUpload'
@@ -55,22 +50,20 @@ const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const modelStore = useModelStore()
 const skillStore = useSkillStore()
-const memoryStore = useMemoryStore()
 
-const showMemoryInject = ref(false)
-
-const { uploadingFile, isUploading, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
+const { isUploading, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
 const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
 
 const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const showModelDropdown = ref(false)
-const showHistoryPanel = ref(false)
 const showSkillDropdown = ref(false)
-const showSearchPanel = ref(false)
-const searchQuery = ref('')
-const searchResults = ref<any[]>([])
+const agentsCollapsed = ref(false)
+
+const toggleAgents = () => {
+  agentsCollapsed.value = !agentsCollapsed.value
+}
 const copiedId = ref<string | null>(null)
 const showReasoning = ref<Record<string, boolean>>({})
 const reasoningRefs = ref<Record<string, HTMLElement>>({})
@@ -87,6 +80,80 @@ let dragLeaveTimer: ReturnType<typeof setTimeout> | null = null
 
 const showFilePreview = ref(false)
 const previewFile = ref<{ name: string; type?: string; content?: string } | null>(null)
+
+const showCreateDialog = ref(false)
+const newAgentForm = ref({
+  name: '',
+  description: '',
+  systemPrompt: '',
+  color: '#147EBC',
+})
+const agentColors = ['#147EBC', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
+
+const handleCreateAgent = async () => {
+  if (!newAgentForm.value.name.trim()) return
+  try {
+    await agentStore.createAgent({
+      name: newAgentForm.value.name.trim(),
+      description: newAgentForm.value.description.trim(),
+      systemPrompt: newAgentForm.value.systemPrompt.trim(),
+      color: newAgentForm.value.color,
+    })
+    showCreateDialog.value = false
+    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#147EBC' }
+  } catch (e: any) {
+    displayToast(e?.message || '创建 Agent 失败')
+  }
+}
+
+// 编辑 Agent
+const showEditDialog = ref(false)
+const editingAgentId = ref<string | null>(null)
+const editAgentForm = ref({
+  name: '',
+  description: '',
+  systemPrompt: '',
+  color: '#147EBC',
+})
+
+const openEditDialog = (agent: any, e?: Event) => {
+  if (e) e.stopPropagation()
+  editingAgentId.value = agent.id
+  editAgentForm.value = {
+    name: agent.name || '',
+    description: agent.description || '',
+    systemPrompt: agent.systemPrompt || '',
+    color: agent.color || '#147EBC',
+  }
+  showEditDialog.value = true
+}
+
+const handleUpdateAgent = async () => {
+  if (!editingAgentId.value || !editAgentForm.value.name.trim()) return
+  try {
+    await agentStore.updateAgent(editingAgentId.value, {
+      name: editAgentForm.value.name.trim(),
+      description: editAgentForm.value.description.trim(),
+      systemPrompt: editAgentForm.value.systemPrompt.trim(),
+      color: editAgentForm.value.color,
+    })
+    showEditDialog.value = false
+    editingAgentId.value = null
+  } catch (e: any) {
+    displayToast(e?.message || '更新 Agent 失败')
+  }
+}
+
+const handleDeleteAgent = async () => {
+  if (!editingAgentId.value) return
+  try {
+    await agentStore.deleteAgent(editingAgentId.value)
+    showEditDialog.value = false
+    editingAgentId.value = null
+  } catch (e: any) {
+    displayToast(e?.message || '删除 Agent 失败')
+  }
+}
 
 const toastMessage = ref('')
 const showToast = ref(false)
@@ -149,10 +216,6 @@ const availableModelOptions = computed(() => {
     }
   }
   return options
-})
-
-const agentConversations = computed(() => {
-  return chatStore.conversations
 })
 
 const activeSkills = computed(() => skillStore.skills.filter(s => s.isActive))
@@ -267,6 +330,70 @@ const renderMarkdown = (text: string): string => {
   return DOMPurify.sanitize(raw)
 }
 
+// 智能美化思考过程：将连续文本按语义合并为段落
+const beautifyThinking = (text: string): string => {
+  if (!text || text.length < 20) return text || ''
+
+  let result = text
+
+  // 如果模型已经输出了【】标题，确保标题前后有空行
+  if (/【[^】]+】/.test(result)) {
+    result = result.replace(/\s*【/g, '\n\n【')
+    result = result.replace(/】\s*/g, '】\n')
+    result = result.replace(/\n{3,}/g, '\n\n')
+    return result.trim()
+  }
+
+  // 如果已经有空行分段，直接返回
+  if (/\n\n/.test(result)) return result
+
+  // 兜底：按句号拆分成句子，每2-3句合并为一段落
+  const parts = result.split(/([。！？])/)
+  const sentences: string[] = []
+  let current = ''
+
+  for (const part of parts) {
+    current += part
+    if (/^[。！？]$/.test(part)) {
+      sentences.push(current.trim())
+      current = ''
+    }
+  }
+  if (current.trim()) {
+    sentences.push(current.trim())
+  }
+
+  // 每2-3句合并为一段（根据句子长度动态调整）
+  const paragraphs: string[] = []
+  let para = ''
+  let count = 0
+
+  for (const s of sentences) {
+    if (para) para += ' '
+    para += s
+    count++
+
+    // 短句（<30字）攒3句，长句攒2句，超长段落直接分段
+    const threshold = para.length > 150 ? 1 : (s.length < 30 ? 3 : 2)
+    if (count >= threshold) {
+      paragraphs.push(para)
+      para = ''
+      count = 0
+    }
+  }
+  if (para) paragraphs.push(para)
+
+  return paragraphs.join('\n\n')
+}
+
+// 渲染思考过程的 markdown
+const renderReasoningMarkdown = (text: string): string => {
+  if (!text) return ''
+  const beautified = beautifyThinking(text)
+  const raw = marked.parse(beautified) as string
+  return DOMPurify.sanitize(raw)
+}
+
 const getFileIcon = (fileType?: string) => {
   if (!fileType) return File
   if (fileType === 'image') return Image
@@ -300,19 +427,6 @@ const toggleReasoning = (msgId: string) => {
     [msgId]: !showReasoning.value[msgId]
   }
 }
-
-const lastAssistantMsg = computed(() => {
-  const msgs = messages.value
-  if (msgs.length === 0) return null
-  const last = msgs[msgs.length - 1]
-  return last && last.role === 'assistant' ? last : null
-})
-
-const reasoningIsRunning = computed(() => {
-  const msg = lastAssistantMsg.value
-  if (!msg) return false
-  return !msg.done && (!msg.content || msg.content.length === 0) && (msg.reasoningContent !== undefined)
-})
 
 watch(() => messages.value, async (msgs) => {
   for (const msg of msgs) {
@@ -423,78 +537,6 @@ const handlePaste = async (e: ClipboardEvent) => {
   }
 }
 
-const formatTime = (dateStr: string) => {
-  if (!dateStr || dateStr === 'undefined' || dateStr === 'null') {
-    return '刚刚'
-  }
-  
-  try {
-    let d: Date
-    const numDate = Number(dateStr)
-    if (!isNaN(numDate)) {
-      d = new Date(numDate)
-    } else {
-      d = new Date(dateStr)
-    }
-    
-    if (isNaN(d.getTime())) {
-      return '刚刚'
-    }
-    
-    const now = new Date()
-    const diffMs = now.getTime() - d.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-    
-    if (diffMins < 1) {
-      return '刚刚'
-    } else if (diffMins < 60) {
-      return `${diffMins}分钟前`
-    } else if (diffHours < 24) {
-      return `${diffHours}小时前`
-    } else if (diffDays < 7) {
-      return `${diffDays}天前`
-    }
-    
-    const isToday = d.toDateString() === now.toDateString()
-    
-    if (isToday) {
-      return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    }
-    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  } catch (error) {
-    return '刚刚'
-  }
-}
-
-const handleLoadConversation = async (convId: string) => {
-  if (chatStore.currentConvId === convId) return
-
-  await chatStore.loadConversation(convId)
-  await nextTick()
-  scrollToBottom(true)
-}
-
-const handleDeleteConversation = async (convId: string) => {
-  await chatStore.deleteConversation(convId, agentStore.activeAgent?.id)
-}
-
-const startNewConversation = () => {
-  chatStore.cleanupUnusedConversations()
-  chatStore.clearMessages()
-}
-
-const handleSearch = async () => {
-  if (!searchQuery.value.trim()) return
-  try {
-    const result = await skillStore.executeSkill('search', { query: searchQuery.value })
-    searchResults.value = Array.isArray(result) ? result : []
-  } catch {
-    searchResults.value = []
-  }
-}
-
 const insertSkillToInput = (skillName: string) => {
   inputText.value += `<tool_call name="${skillName}">\n{}\n</tool_call >`
   showSkillDropdown.value = false
@@ -511,9 +553,46 @@ watch(isLoadingCurrentConv, (loading) => {
   if (loading) {
     isNearBottom.value = true
   } else {
-    nextTick(() => scrollToBottom(true))
+    // 搜索跳转：如果有待搜索的关键词，滚动到匹配的消息
+    const keyword = chatStore.pendingSearchKeyword
+    if (keyword) {
+      chatStore.pendingSearchKeyword = ''
+      nextTick(() => {
+        scrollToSearchResult(keyword)
+      })
+    } else {
+      nextTick(() => scrollToBottom(true))
+    }
   }
 })
+
+// 搜索跳转：对话已缓存时，isLoadingCurrentConv 不会触发，直接监听 pendingSearchKeyword
+watch(() => chatStore.pendingSearchKeyword, (keyword) => {
+  if (keyword && !chatStore.isLoadingCurrentConversation && messages.value.length > 0) {
+    chatStore.pendingSearchKeyword = ''
+    nextTick(() => {
+      scrollToSearchResult(keyword)
+    })
+  }
+})
+
+const scrollToSearchResult = (keyword: string) => {
+  if (!messagesContainer.value) return
+  const q = keyword.toLowerCase()
+  const msgElements = messagesContainer.value.querySelectorAll('.message-row')
+  for (const el of msgElements) {
+    const text = el.textContent?.toLowerCase() || ''
+    if (text.includes(q)) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // 临时高亮
+      el.classList.add('search-highlight')
+      setTimeout(() => el.classList.remove('search-highlight'), 2000)
+      return
+    }
+  }
+  // 没找到匹配消息，滚动到底部
+  scrollToBottom(true)
+}
 
 const handleClickOutsideModel = (e: MouseEvent) => {
   const target = e.target as HTMLElement
@@ -522,18 +601,6 @@ const handleClickOutsideModel = (e: MouseEvent) => {
   }
   if (!target.closest('.skill-dropdown-container')) {
     showSkillDropdown.value = false
-  }
-}
-
-async function injectMemoryToInput() {
-  showMemoryInject.value = true
-  try {
-    const result = await memoryStore.fetchInjectionContent(agentStore.activeAgent?.id)
-    if (result.has_memory && result.content) {
-      inputText.value = `\n\n---\n系统已注入以下用户记忆，请参考：\n${result.content}\n---\n\n${inputText.value}`
-    }
-  } finally {
-    showMemoryInject.value = false
   }
 }
 
@@ -548,6 +615,12 @@ function handleMemoryChatTrigger(event: CustomEvent) {
   if (text) {
     inputText.value = `关于我之前提到的「${text.slice(0, 80)}」，请帮我进一步分析。`
   }
+}
+
+// Agent列表横向滚动：鼠标滚轮转横向滚动
+function onAgentListWheel(e: WheelEvent) {
+  const el = (e.currentTarget as HTMLElement)
+  el.scrollLeft += e.deltaY
 }
 
 function handleMemoryChatTriggerDirect(text: string) {
@@ -596,36 +669,59 @@ onBeforeUnmount(() => {
   <div class="workspace-layout">
     <div class="workspace-main">
       <div class="workspace-view">
-        <div class="workspace-header">
+        <!-- 展开状态：顶栏显示 Agent 列表 -->
+        <div v-if="!agentsCollapsed" class="workspace-header">
           <div class="header-left">
-            <span class="header-badge">
-              <Sparkles :size="14" />
-              LuomiNest
-            </span>
-            <span class="header-stats">
-              <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
-              <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
-                {{ currentProviderLogo.initials }}
-              </span>
-              {{ currentModel }}
-            </span>
+            <div class="agent-list" @wheel.prevent.stop="onAgentListWheel">
+              <!-- 新建 Agent -->
+              <button class="agent-new-btn" @click="showCreateDialog = true">
+                <div class="agent-new-icon">
+                  <Sparkles :size="22" />
+                </div>
+                <div class="agent-new-info">
+                  <span class="agent-new-title">自定义</span>
+                  <span class="agent-new-desc">创建全新 Agent</span>
+                </div>
+              </button>
+
+              <!-- Agent 列表 -->
+              <button
+                v-for="agent in agentStore.agents"
+                :key="agent.id"
+                :class="['agent-card', { active: agentStore.activeAgent?.id === agent.id }]"
+                @click="agentStore.setActiveAgent(agent)"
+              >
+                <span v-if="agentStore.activeAgent?.id === agent.id" class="active-dot"></span>
+                <div class="agent-card-icon" :style="{ background: agent.color + '18', color: agent.color }">
+                  <Bot :size="22" />
+                </div>
+                <div class="agent-card-info">
+                  <span class="agent-card-name">{{ agent.name }}</span>
+                  <span class="agent-card-desc">{{ agent.description || '智能AI' }}</span>
+                </div>
+                <div class="agent-card-arrow" @click.stop="openEditDialog(agent, $event)">
+                  <span class="arrow-icon">›</span>
+                </div>
+              </button>
+            </div>
           </div>
           <div class="header-right">
             <button v-if="!isBackendReady" class="header-icon-btn warning" title="后端未连接" @click="chatStore.checkBackend()">
               <AlertTriangle :size="18" />
             </button>
-            <button class="header-icon-btn" :class="{ active: showSearchPanel }" title="搜索知识库" @click="showSearchPanel = !showSearchPanel">
-              <Search :size="18" />
-            </button>
-            <button class="header-icon-btn" :class="{ active: showHistoryPanel }" title="历史记录" @click="showHistoryPanel = !showHistoryPanel">
-              <PanelRightOpen v-if="!showHistoryPanel" :size="18" />
-              <PanelRightClose v-else :size="18" />
-            </button>
-            <button class="header-icon-btn" title="设置" @click="router.push('/settings/ai-model')">
-              <Settings :size="18" />
+            <!-- 收起按钮 -->
+            <button class="toggle-agent-btn" title="收起Agent列表" @click="toggleAgents">
+              <ChevronRight :size="18" />
             </button>
           </div>
         </div>
+
+        <!-- 收起状态：展开按钮（固定在右上角） -->
+        <Transition name="agent-list-fade">
+          <button v-if="agentsCollapsed" class="toggle-agent-btn floating" title="展开Agent列表" @click="toggleAgents">
+            <ChevronLeft :size="18" />
+          </button>
+        </Transition>
 
         <div v-if="!isBackendReady" class="backend-warning">
           <div class="warning-content">
@@ -673,7 +769,7 @@ onBeforeUnmount(() => {
                     <div
                       v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
                       class="reasoning-section"
-                      :ref="el => { if (el && msg.id) reasoningRefs[msg.id] = el }"
+                      :ref="el => { if (el && msg.id) { reasoningRefs[msg.id] = el as any } }"
                     >
                       <div class="reasoning-header" @click="toggleReasoning(msg.id)">
                         <Loader2 v-if="!msg.done && !msg.content && !msg.reasoningContent" :size="12" class="spin-animation" />
@@ -688,10 +784,10 @@ onBeforeUnmount(() => {
                       </div>
                       <div
                         v-show="showReasoning[msg.id] !== false"
-                        class="reasoning-content"
+                        class="reasoning-content reasoning-markdown"
                         ref="reasoningScrollRefs"
                       >
-                        {{ msg.reasoningContent || '...' }}
+                        <div v-html="renderReasoningMarkdown(msg.reasoningContent || '')"></div>
                       </div>
                     </div>
                     <div v-if="msg.role === 'assistant' && msg.content && msg.content !== '[已中断]'" class="message-content markdown-body">
@@ -872,15 +968,6 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div class="toolbar-right">
-                <button
-                  class="tool-btn icon-only"
-                  title="注入记忆上下文"
-                  :disabled="showMemoryInject"
-                  @click="injectMemoryToInput"
-                >
-                  <Loader2 v-if="showMemoryInject" :size="16" class="spinning" />
-                  <Brain v-else :size="16" />
-                </button>
                 <button class="tool-btn icon-only" title="附件" @click="fileUploadRef?.triggerFileSelect()">
                   <Paperclip :size="16" />
                 </button>
@@ -913,96 +1000,11 @@ onBeforeUnmount(() => {
               </div>
               <span class="context-text">{{ contextUsage.totalTokens?.toLocaleString() || 0 }} tokens · {{ contextPercent }}%</span>
             </div>
-            <span v-else>内容由AI生成，请仔细核对</span>
+            <span v-else></span>
           </div>
         </div>
       </div>
     </div>
-
-    <Transition name="panel-slide">
-      <div v-if="showHistoryPanel" class="right-panel">
-        <button class="panel-close-btn" @click="showHistoryPanel = false" title="关闭">
-          <PanelRightClose :size="16" />
-        </button>
-        <div class="panel-tabs">
-          <button
-            :class="['panel-tab', { active: !showSearchPanel }]"
-            @click="showSearchPanel = false"
-          >
-            <Clock :size="14" />
-            历史
-          </button>
-          <button
-            :class="['panel-tab', { active: showSearchPanel }]"
-            @click="showSearchPanel = true"
-          >
-            <Search :size="14" />
-            搜索
-          </button>
-        </div>
-
-        <div v-if="!showSearchPanel" class="panel-content">
-          <div class="panel-header-bar">
-            <div class="panel-header-info">
-              <span v-if="agentStore.activeAgent" class="panel-agent-tag" :style="{ background: agentStore.activeAgent.color + '14', color: agentStore.activeAgent.color }">
-                {{ agentStore.activeAgent.name }}
-              </span>
-              <span class="panel-count">{{ agentConversations.length }} 个对话</span>
-            </div>
-            <button class="panel-action-btn" title="新建对话" @click="startNewConversation">
-              <Plus :size="16" />
-            </button>
-          </div>
-          <div class="history-list">
-            <div
-              v-for="conv in agentConversations"
-              :key="conv.id"
-              :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
-              @click="handleLoadConversation(conv.id)"
-            >
-              <MessageSquare :size="14" class="history-item-icon" />
-              <div class="history-item-info">
-                <span class="history-item-title">{{ conv.title }}</span>
-                <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
-                <span v-if="conv.last_message" class="history-item-preview">{{ conv.last_message }}</span>
-              </div>
-              <Loader2 v-if="chatStore.isConversationStreaming(conv.id)" :size="12" class="history-streaming-icon spin-animation" />
-              <button class="history-item-delete" title="删除" @click.stop="handleDeleteConversation(conv.id)">
-                <Trash2 :size="12" />
-              </button>
-            </div>
-            <div v-if="agentConversations.length === 0" class="history-empty">
-              <Clock :size="24" />
-              <p>暂无对话记录</p>
-            </div>
-          </div>
-        </div>
-
-        <div v-else class="panel-content">
-          <div class="search-box">
-            <Search :size="16" class="search-icon" />
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="搜索知识库..."
-              class="search-input"
-              @keydown.enter="handleSearch"
-            />
-          </div>
-          <div class="search-results">
-            <div v-for="(result, idx) in searchResults" :key="idx" class="search-result-item">
-              <div class="search-result-source">{{ result.source }}</div>
-              <div class="search-result-content">{{ result.content }}</div>
-              <div class="search-result-score">相关度: {{ (result.score * 100).toFixed(1) }}%</div>
-            </div>
-            <div v-if="searchResults.length === 0 && searchQuery" class="history-empty">
-              <Search :size="24" />
-              <p>输入关键词搜索知识库</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Transition>
 
     <Transition name="global-drop-fade">
       <div v-if="showGlobalDropOverlay" class="global-drop-overlay" @dragover.prevent @drop.prevent>
@@ -1012,7 +1014,7 @@ onBeforeUnmount(() => {
             <div class="drop-particles">
               <span class="particle p1">📄</span>
               <span class="particle p2">📊</span>
-              <span class="particle p3">📝</span>
+              <span class="particle p3"></span>
               <span class="particle p4">📕</span>
               <span class="particle p5">🖼️</span>
             </div>
@@ -1041,6 +1043,111 @@ onBeforeUnmount(() => {
       @close="closeFilePreview"
     />
 
+    <Transition name="dialog-fade">
+      <div v-if="showCreateDialog" class="create-dialog-overlay" @click.self="showCreateDialog = false">
+        <div class="create-dialog">
+          <h3>创建自定义 Agent</h3>
+          <div class="form-group">
+            <label class="form-label">
+              名称
+              <span class="required-mark">*</span>
+            </label>
+            <input v-model="newAgentForm.name" type="text" class="form-input" placeholder="如: 小助手" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <input v-model="newAgentForm.description" type="text" class="form-input" placeholder="如: 通用对话助手" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">系统提示词</label>
+            <textarea
+              v-model="newAgentForm.systemPrompt"
+              class="form-input form-textarea"
+              placeholder="定义 Agent 的角色和行为..."
+              rows="4"
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">颜色</label>
+            <div class="color-picker">
+              <button
+                v-for="color in agentColors"
+                :key="color"
+                :class="['color-dot', { active: newAgentForm.color === color }]"
+                :style="{ background: color }"
+                @click="newAgentForm.color = color"
+              ></button>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button class="dialog-btn cancel" @click="showCreateDialog = false">取消</button>
+            <button
+              :class="['dialog-btn confirm', { disabled: !newAgentForm.name.trim() }]"
+              :disabled="!newAgentForm.name.trim()"
+              @click="handleCreateAgent"
+            >
+              创建
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 编辑 Agent 对话框 -->
+    <Transition name="dialog-fade">
+      <div v-if="showEditDialog" class="create-dialog-overlay" @click.self="showEditDialog = false">
+        <div class="create-dialog">
+          <h3>编辑 Agent</h3>
+          <div class="form-group">
+            <label class="form-label">
+              名称
+              <span class="required-mark">*</span>
+            </label>
+            <input v-model="editAgentForm.name" type="text" class="form-input" placeholder="如: 小助手" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <input v-model="editAgentForm.description" type="text" class="form-input" placeholder="如: 通用对话助手" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">系统提示词</label>
+            <textarea
+              v-model="editAgentForm.systemPrompt"
+              class="form-input form-textarea"
+              placeholder="定义 Agent 的角色和行为..."
+              rows="4"
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">颜色</label>
+            <div class="color-picker">
+              <button
+                v-for="color in agentColors"
+                :key="color"
+                :class="['color-dot', { active: editAgentForm.color === color }]"
+                :style="{ background: color }"
+                @click="editAgentForm.color = color"
+              ></button>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button class="dialog-btn delete" @click="handleDeleteAgent">
+              删除
+            </button>
+            <div style="flex:1"></div>
+            <button class="dialog-btn cancel" @click="showEditDialog = false">取消</button>
+            <button
+              :class="['dialog-btn confirm', { disabled: !editAgentForm.name.trim() }]"
+              :disabled="!editAgentForm.name.trim()"
+              @click="handleUpdateAgent"
+            >
+              保存
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
   </div>
 </template>
 
@@ -1064,15 +1171,17 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  position: relative;
 }
 
 .workspace-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
+  padding: 8px 24px;
   flex-shrink: 0;
   position: relative;
+  min-height: 68px;
 }
 
 .workspace-header::after {
@@ -1080,7 +1189,7 @@ onBeforeUnmount(() => {
   position: absolute;
   bottom: 0;
   left: 24px;
-  right: 24px;
+  right: 64px;
   height: 1px;
   background: var(--divider-soft);
 }
@@ -1089,26 +1198,231 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.header-badge {
-  display: inline-flex;
+.header-right {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 500;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.toggle-agent-btn {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: var(--workspace-card);
+  border: 1px solid var(--divider-soft);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.toggle-agent-btn:hover {
+  color: var(--text-primary);
+  background: var(--workspace-hover);
+  border-color: var(--lumi-primary);
+}
+
+/* 收起状态：悬浮展开按钮，位置与 header-right 中收起按钮对齐 */
+.toggle-agent-btn.floating {
+  position: absolute;
+  top: calc(8px + (68px / 2));
+  transform: translateY(-50%);
+  right: 24px;
+  z-index: 100;
+  box-shadow: var(--shadow-sm);
+}
+
+.agent-list-fade-enter-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.agent-list-fade-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.agent-list-fade-enter-from {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+.agent-list-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+
+.agent-list {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 6px 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 横向滚动条样式 */
+.agent-list::-webkit-scrollbar {
+  height: 4px;
+}
+
+.agent-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agent-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+.agent-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.agent-new-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  background: transparent;
+  border: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.agent-new-btn:hover {
+  background: #f3f4f6;
+}
+
+.agent-new-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(236, 72, 153, 0.12);
+  color: #ec4899;
+}
+
+.agent-new-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.agent-new-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.agent-new-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  background: transparent;
+  border: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.agent-card:hover {
+  background: #f3f4f6;
+}
+
+.agent-card.active {
+  background: #e8f4fb;
+}
+
+.agent-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.agent-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.agent-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.agent-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-card-arrow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.arrow-icon {
+  font-size: 18px;
+  color: var(--text-muted);
+  line-height: 1;
+  transition: all 200ms ease;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.arrow-icon:hover {
   color: var(--lumi-primary);
   background: var(--lumi-primary-light);
 }
 
-.header-stats {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-muted);
+.active-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lumi-primary);
+  flex-shrink: 0;
+  margin-right: 2px;
 }
 
 .provider-icon-mini {
@@ -1131,11 +1445,6 @@ onBeforeUnmount(() => {
 .provider-svg-mini :deep(svg) {
   width: 16px;
   height: 16px;
-}
-
-.header-right {
-  display: flex;
-  gap: 4px;
 }
 
 .header-icon-btn {
@@ -1616,358 +1925,6 @@ onBeforeUnmount(() => {
   background: var(--lumi-primary-light);
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
-}
-
-.right-panel {
-  width: 300px;
-  flex-shrink: 0;
-  background: var(--workspace-card);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-left: 1px solid var(--divider-vertical);
-  position: relative;
-}
-
-.panel-close-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-  z-index: 10;
-}
-
-.panel-close-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--text-secondary);
-}
-
-.panel-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--divider-soft);
-  flex-shrink: 0;
-}
-
-.panel-tab {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 12px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-  position: relative;
-}
-
-.panel-tab:hover {
-  color: var(--text-secondary);
-  background: var(--workspace-hover);
-}
-
-.panel-tab.active {
-  color: var(--lumi-primary);
-}
-
-.panel-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 20%;
-  right: 20%;
-  height: 2px;
-  background: var(--lumi-primary);
-  border-radius: 2px 2px 0 0;
-}
-
-.panel-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.panel-header-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  flex-shrink: 0;
-}
-
-.panel-header-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.panel-agent-tag {
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.panel-count {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.panel-action-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.panel-action-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--text-secondary);
-}
-
-.history-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 8px;
-}
-
-.history-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  text-align: left;
-  transition: all 300ms ease-in-out;
-  position: relative;
-  cursor: pointer;
-  min-height: 56px;
-}
-
-.history-item::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%) scaleY(0);
-  width: 3px;
-  height: 60%;
-  border-radius: 0 3px 3px 0;
-  background: var(--lumi-primary);
-  transition: transform 300ms ease-in-out;
-}
-
-.history-item:hover {
-  background: var(--workspace-hover);
-}
-
-.history-item:hover::before {
-  transform: translateY(-50%) scaleY(1);
-}
-
-.history-item.active {
-  background: var(--lumi-primary-light);
-}
-
-.history-item.active::before {
-  transform: translateY(-50%) scaleY(1);
-}
-
-.history-item-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.history-item.active .history-item-icon {
-  color: var(--lumi-primary);
-}
-
-.history-item-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.history-item-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.history-item-time {
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.4;
-}
-
-.history-item-preview {
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: 0.7;
-  line-height: 1.4;
-}
-
-.history-item-delete {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  opacity: 0;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.history-item:hover .history-item-delete {
-  opacity: 1;
-}
-
-.history-item-delete:hover {
-  background: var(--lumi-accent-light);
-  color: var(--lumi-accent);
-}
-
-.history-streaming-icon {
-  color: var(--lumi-primary);
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.history-item.active .history-streaming-icon,
-.history-item:hover .history-streaming-icon {
-  opacity: 1;
-}
-
-.history-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  color: var(--text-muted);
-  gap: 8px;
-}
-
-.history-empty p {
-  font-size: 13px;
-}
-
-.panel-slide-enter-active {
-  animation: panel-slide-in 0.3s ease-out;
-}
-
-.panel-slide-leave-active {
-  animation: panel-slide-in 0.2s ease-out reverse;
-}
-
-@keyframes panel-slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.search-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--divider-soft);
-}
-
-.search-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.search-input {
-  flex: 1;
-  background: var(--workspace-panel);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  font-size: 13px;
-  color: var(--text-primary);
-}
-
-.search-input::placeholder {
-  color: var(--text-muted);
-}
-
-.search-results {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.search-result-item {
-  padding: 12px;
-  border-radius: var(--radius-md);
-  background: var(--workspace-panel);
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-}
-
-.search-result-item:hover {
-  background: var(--workspace-hover);
-}
-
-.search-result-source {
-  font-size: 11px;
-  color: var(--lumi-primary);
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-.search-result-content {
-  font-size: 13px;
-  color: var(--text-primary);
-  line-height: 1.6;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.search-result-score {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 4px;
 }
 
 .input-area {
@@ -2533,15 +2490,63 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-content {
-  padding: 10px 14px;
-  font-size: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--text-muted);
   border-top: 1px solid var(--divider-soft);
-  white-space: pre-wrap;
+  border-left: 4px solid rgba(139, 92, 246, 0.3);
+  border-radius: 0 4px 4px 0;
+  background: rgba(139, 92, 246, 0.03);
   word-break: break-word;
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
+}
+
+/* 思考过程 markdown 渲染样式 */
+.reasoning-markdown :deep(p) {
+  margin: 0 0 10px;
+  line-height: 1.8;
+}
+
+.reasoning-markdown :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+/* 【】标题样式 - 关键：让段落标题醒目 */
+.reasoning-markdown :deep(p) {
+  position: relative;
+}
+
+.reasoning-markdown :deep(strong) {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.reasoning-markdown :deep(em) {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.reasoning-markdown :deep(code) {
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+  background: rgba(139, 92, 246, 0.08);
+  color: #8b5cf6;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* 列表样式 */
+.reasoning-markdown :deep(ul),
+.reasoning-markdown :deep(ol) {
+  margin: 4px 0 10px;
+  padding-left: 20px;
+}
+
+.reasoning-markdown :deep(li) {
+  margin: 2px 0;
+  line-height: 1.7;
 }
 
 .msg-appear-enter-active {
@@ -2686,5 +2691,173 @@ onBeforeUnmount(() => {
 
 .toast-notification svg {
   color: var(--lumi-primary);
+}
+
+/* Create Agent Dialog */
+.create-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.create-dialog {
+  background: var(--workspace-card);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.create-dialog h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.required-mark {
+  color: var(--lumi-accent);
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--workspace-panel);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.form-input:focus {
+  border-color: var(--lumi-primary);
+  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.color-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.color-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 2px solid transparent;
+}
+
+.color-dot:hover {
+  transform: scale(1.15);
+}
+
+.color-dot.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.dialog-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dialog-btn.cancel {
+  color: var(--text-muted);
+  background: var(--workspace-panel);
+}
+
+.dialog-btn.cancel:hover {
+  background: var(--workspace-hover);
+}
+
+.dialog-btn.confirm {
+  color: white;
+  background: var(--lumi-primary);
+}
+
+.dialog-btn.confirm:hover {
+  background: var(--lumi-primary-hover);
+}
+
+.dialog-btn.confirm.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-btn.delete {
+  color: var(--lumi-accent, #ef4444);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.dialog-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.dialog-fade-enter-active,
+.dialog-fade-leave-active {
+  transition: all 0.25s ease;
+}
+
+.dialog-fade-enter-from,
+.dialog-fade-leave-to {
+  opacity: 0;
+}
+
+.search-highlight {
+  animation: search-highlight-pulse 0.6s ease-out;
+}
+
+@keyframes search-highlight-pulse {
+  0% { background: rgba(20, 126, 188, 0.2); }
+  100% { background: transparent; }
 }
 </style>

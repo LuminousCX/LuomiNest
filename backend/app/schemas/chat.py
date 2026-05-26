@@ -76,3 +76,10 @@ class ConversationListResponse(BaseModel):
     last_message: str | None = None
     created_at: str
     updated_at: str
+
+
+class ConversationSearchResult(BaseModel):
+    id: str
+    title: str
+    snippet: str
+    updated_at: str

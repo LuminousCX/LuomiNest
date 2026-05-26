@@ -38,6 +38,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
       <div class="brand-mark">
         <LumiBrandStar :size="16" :animated="false" />
         <span class="brand-text">LuomiNest</span>
+        <span class="brand-sub">LuminousChenXi v0.1.0</span>
       </div>
     </div>
     <div class="win-controls">
@@ -103,6 +104,14 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   -webkit-text-fill-color: transparent;
   background-clip: text;
   white-space: nowrap;
+}
+
+.brand-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: 4px;
 }
 
 .win-controls {

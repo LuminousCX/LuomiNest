@@ -146,6 +146,26 @@ class SkillRegistry:
             handler=cls._builtin_transfer_agent,
         )
 
+        cls.register(
+            SkillDefinition(
+                name="delegate_task",
+                description="将子任务委托给子代理独立执行。当任务可以拆分为独立的子任务并行处理时使用，子代理拥有独立的上下文，不会污染当前对话。适用于：信息收集、数据分析、内容生成等可独立完成的子任务。",
+                category="agent",
+                parameters={
+                    "task_description": {
+                        "type": "string",
+                        "description": "子任务的详细描述，子代理将独立完成此任务并返回结果",
+                        "required": True,
+                    },
+                },
+                is_active=True,
+                is_builtin=True,
+                handler_name="delegate_task",
+                tags=["agent", "delegate", "sub-agent", "parallel"],
+            ),
+            handler=cls._builtin_delegate_task,
+        )
+
         logger.success(f"[SkillRegistry] Registered {len(cls._handlers)} builtin skills")
 
     @classmethod
@@ -272,6 +292,30 @@ class SkillRegistry:
                     metadata={"transfer": True, "target_agent_id": agent["id"]},
                 )
         return SkillResult(success=False, error=f"Agent '{agent_name}' not found")
+
+    @classmethod
+    async def _builtin_delegate_task(cls, **kwargs) -> 'SkillResult':
+        """内置子代理委托 handler —— 启动独立子代理执行子任务
+
+        子代理拥有独立的 messages 上下文，不会污染主对话。
+        可用的工具与主代理相同，但 max_steps 限制为 3 轮。
+        """
+        from app.runtime.plugin.skill.base import SkillResult
+        task_description = kwargs.get("task_description", "").strip()
+        if not task_description:
+            return SkillResult(success=False, error="任务描述不能为空")
+
+        try:
+            from app.core.agent.tool_loop import delegate_sub_task
+            result = await delegate_sub_task(
+                task_description=task_description,
+                provider_name=kwargs.get("_provider_name", ""),
+                model=kwargs.get("_model", ""),
+            )
+            return SkillResult(success=True, data={"result": result})
+        except Exception as e:
+            logger.warning(f"[SkillRegistry] _builtin_delegate_task 异常: {e}")
+            return SkillResult(success=False, error="处理任务时发生错误")
 
     @classmethod
     async def _builtin_get_weather(cls, **kwargs) -> 'SkillResult':

@@ -13,6 +13,7 @@ class ConversationStore:
         self._index_path = os.path.join(self._dir, "_index.json")
         self._lock = threading.Lock()
         self._index_cache: dict | None = None
+        self._migrate_search_text()
 
     def _load_index(self) -> dict:
         if self._index_cache is not None:
@@ -60,6 +61,14 @@ class ConversationStore:
             logger.error(f"[ConvStore] Failed to save conv {conv_id}: {e}")
             return
 
+        # 构建 search_text：拼接所有消息的 content
+        search_parts = []
+        for msg in conv.get("messages", []):
+            content = msg.get("content", "")
+            if isinstance(content, str) and content:
+                search_parts.append(content)
+        search_text = " ".join(search_parts)
+
         with self._lock:
             index = self._load_index()
             index[conv_id] = {
@@ -70,6 +79,7 @@ class ConversationStore:
                 "provider": conv.get("provider"),
                 "last_message": (conv.get("messages", [{}])[-1].get("content", "")[:50]
                                  if conv.get("messages") else None),
+                "search_text": search_text,
                 "created_at": conv.get("created_at", ""),
                 "updated_at": conv.get("updated_at", ""),
             }
@@ -111,6 +121,70 @@ class ConversationStore:
             result.append(meta)
         result.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
         return result
+
+    def search_conversations(self, keyword: str, agent_id: str | None = None) -> list[dict]:
+        """搜索对话：匹配标题和消息内容，返回匹配结果及关键词片段"""
+        if not keyword or not keyword.strip():
+            return []
+        q = keyword.strip().lower()
+        with self._lock:
+            index = self._load_index()
+        results = []
+        for conv_id, meta in index.items():
+            if agent_id and meta.get("agent_id") != agent_id:
+                continue
+            title = meta.get("title", "")
+            search_text = meta.get("search_text", "")
+            combined = (title + " " + search_text).lower()
+            if q not in combined:
+                continue
+            # 提取匹配片段：在 search_text 中找到关键词，取前后 30 字
+            snippet = ""
+            src = search_text or title
+            src_lower = src.lower()
+            pos = src_lower.find(q)
+            if pos >= 0:
+                start = max(0, pos - 30)
+                end = min(len(src), pos + len(q) + 30)
+                snippet = src[start:end]
+                if start > 0:
+                    snippet = "..." + snippet
+                if end < len(src):
+                    snippet = snippet + "..."
+            else:
+                snippet = title
+            results.append({
+                "id": conv_id,
+                "title": title,
+                "snippet": snippet,
+                "updated_at": meta.get("updated_at", ""),
+            })
+        results.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+        return results
+
+    def _migrate_search_text(self):
+        """为索引中缺少 search_text 的对话补全搜索文本"""
+        with self._lock:
+            index = self._load_index()
+        needs_update = False
+        for conv_id, meta in index.items():
+            if "search_text" in meta and meta["search_text"]:
+                continue
+            # 从对话文件中读取消息，构建 search_text
+            conv = self.get(conv_id)
+            if not conv:
+                continue
+            search_parts = []
+            for msg in conv.get("messages", []):
+                content = msg.get("content", "")
+                if isinstance(content, str) and content:
+                    search_parts.append(content)
+            meta["search_text"] = " ".join(search_parts)
+            needs_update = True
+        if needs_update:
+            with self._lock:
+                self._save_index()
+            logger.info("[ConvStore] Migrated search_text for existing conversations")
 
     def migrate_from_json_store(self, old_store):
         old_data = old_store.list_all()

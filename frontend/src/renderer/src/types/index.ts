@@ -109,6 +109,13 @@ export interface ConversationListItem {
   updated_at: string
 }
 
+export interface ConversationSearchResult {
+  id: string
+  title: string
+  snippet: string
+  updated_at: string
+}
+
 export interface ModelProvider {
   id: string
   name: string
