@@ -86,6 +86,9 @@ export const useApi = () => {
   const apiDelete = <T = void>(path: string): Promise<T | void> =>
     request<T>(path, { method: 'DELETE' })
 
+  const truncateMessages = (convId: string, keepCount: number): Promise<void> =>
+    apiPatch(`/chat/conversations/${convId}/messages`, { keep_count: keepCount })
+
   const apiStream = async (
     path: string,
     body: any,
@@ -147,6 +150,7 @@ export const useApi = () => {
               model: raw.model || '',
               provider: raw.provider || '',
               done: !!raw.done,
+              suggested_questions: raw.suggested_questions || undefined,
             }
             onChunk(chunk)
             if (chunk.done) {
@@ -282,6 +286,7 @@ export const useApi = () => {
     apiDelete,
     apiStream,
     apiSseStream,
+    truncateMessages,
     checkHealth,
   }
 }

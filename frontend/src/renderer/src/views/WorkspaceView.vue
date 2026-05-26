@@ -14,6 +14,7 @@ import {
   Loader2,
   AlertTriangle,
   RotateCcw,
+  Undo2,
   Copy,
   Check,
   Search,
@@ -27,6 +28,8 @@ import {
   Download,
   Plus,
   Sparkles,
+  Pencil,
+  Trash2,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
@@ -35,7 +38,9 @@ import { useModelStore } from '../stores/model'
 import { useSkillStore } from '../stores/skill'
 import FileUpload from '../components/FileUpload.vue'
 import FilePreview from '../components/FilePreview.vue'
+import SuggestedQuestions from '../components/SuggestedQuestions.vue'
 import { useFileUpload } from '../composables/useFileUpload'
+import { useApi } from '../composables/useApi'
 import { getProviderLogo } from '../config/provider-logos'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
@@ -52,6 +57,7 @@ const modelStore = useModelStore()
 const skillStore = useSkillStore()
 
 const { isUploading, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
+const { truncateMessages } = useApi()
 const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
 
 const inputText = ref('')
@@ -415,6 +421,134 @@ const contextUsage = computed(() => {
   const lastAssistantMsg = messages.value.findLast(m => m.role === 'assistant' && m.done)
   return lastAssistantMsg?.usage || chatStore.lastUsage || null
 })
+
+// 推荐问题：当前显示推荐的消息ID
+const currentSuggestionMessageId = computed(() => chatStore.currentSuggestionMessageId)
+
+// 判断当前消息是否是最后一条AI消息（用于重写按钮显示）
+const isLastAssistantMessage = (msgId: string) => {
+  const msgs = messages.value
+  // 如果有流式消息，不显示任何重写按钮，避免竞态
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'assistant' && !msgs[i].done) return false
+  }
+  // 无流式消息时，找最后一条AI消息
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'assistant') {
+      return msgs[i].id === msgId
+    }
+  }
+  return false
+}
+
+// 点击推荐问题，填入输入框并发送
+const handleSuggestionClick = (question: string) => {
+  inputText.value = question
+  nextTick(() => sendMessage())
+}
+
+// 重新生成：删除当前AI消息及对应的用户消息，重新发送
+const handleRegenerate = async (messageId: string) => {
+  const convId = chatStore.currentConvId
+  if (!convId) return
+  const msgs = chatStore.convMessages[convId]
+  if (!msgs) return
+
+  const aiIndex = msgs.findIndex(m => m.id === messageId)
+  if (aiIndex === -1) return
+
+  // 找到这条AI消息之前的最后一条用户消息的位置
+  let userIndex = -1
+  for (let i = aiIndex - 1; i >= 0; i--) {
+    if (msgs[i].role === 'user') {
+      userIndex = i
+      break
+    }
+  }
+  if (userIndex === -1) return
+  const userContent = msgs[userIndex].content
+
+  // 删除从用户消息开始到末尾的所有消息
+  const keepCount = userIndex
+  chatStore.convMessages[convId] = msgs.slice(0, keepCount)
+
+  // 同步删除后端消息
+  await truncateMessages(convId, keepCount)
+
+  // 清除推荐
+  chatStore.currentSuggestionMessageId = null
+
+  // 重新发送用户消息
+  await chatStore.sendMessage(userContent)
+  await nextTick()
+  scrollToBottom(true)
+}
+
+// 删除消息：删除用户消息时连同其后的AI回复一起删除
+const handleDeleteMessage = async (messageId: string) => {
+  const convId = chatStore.currentConvId
+  if (!convId) return
+  const msgs = chatStore.convMessages[convId]
+  if (!msgs) return
+
+  const index = msgs.findIndex((m: any) => m.id === messageId)
+  if (index !== -1) {
+    const targetMsg = msgs[index]
+    if (targetMsg.role === 'user') {
+      // 找到该用户消息之后连续的AI消息，一并删除
+      let deleteCount = 1
+      for (let i = index + 1; i < msgs.length; i++) {
+        if (msgs[i].role === 'assistant') {
+          deleteCount++
+        } else {
+          break
+        }
+      }
+      const newMsgs = msgs.slice(0, index).concat(msgs.slice(index + deleteCount))
+      chatStore.convMessages[convId] = newMsgs
+      await truncateMessages(convId, newMsgs.length)
+    } else {
+      // 仅删除这条AI消息
+      const newMsgs = msgs.filter((_: any, i: number) => i !== index)
+      chatStore.convMessages[convId] = newMsgs
+      await truncateMessages(convId, newMsgs.length)
+    }
+  }
+
+  // 如果删除的是当前推荐消息，清除推荐
+  if (chatStore.currentSuggestionMessageId === messageId) {
+    chatStore.currentSuggestionMessageId = null
+  }
+}
+
+// 回退用户消息到输入框：恢复文字，清除附件状态，然后删除该消息及之后所有消息
+const handleGoBackToStart = async (msg: any) => {
+  const convId = chatStore.currentConvId
+  if (!convId) return
+  const msgs = chatStore.convMessages[convId]
+  if (!msgs) return
+
+  // 恢复文字内容到输入框
+  inputText.value = msg.content || ''
+
+  // 清除附件状态（文件内容无法从前端消息对象中恢复，需要用户重新上传）
+  clearUploadState()
+  fileUploadRef.value?.clearUploadState()
+
+  // 删除该消息及之后的所有消息
+  const index = msgs.findIndex((m: any) => m.id === msg.id)
+  if (index !== -1) {
+    const keepCount = index
+    chatStore.convMessages[convId] = msgs.slice(0, keepCount)
+    chatStore.currentSuggestionMessageId = null
+    await truncateMessages(convId, keepCount)
+  }
+
+  nextTick(() => {
+    if (textareaRef.value) textareaRef.value.focus()
+    autoResize()
+  })
+}
 
 const contextPercent = computed(() => {
   if (!contextUsage.value?.totalTokens || !modelStore.modelConfig.defaultMaxTokens) return 0
@@ -790,6 +924,8 @@ onBeforeUnmount(() => {
                         <div v-html="renderReasoningMarkdown(msg.reasoningContent || '')"></div>
                       </div>
                     </div>
+
+                    <!-- AI消息内容 -->
                     <div v-if="msg.role === 'assistant' && msg.content && msg.content !== '[已中断]'" class="message-content markdown-body">
                       <div v-html="renderMarkdown(msg.content)"></div>
                       <span v-if="msg.interrupted" class="interrupted-inline">
@@ -799,30 +935,69 @@ onBeforeUnmount(() => {
                     <div v-else-if="(msg.interrupted || msg.content === '[已中断]') && msg.role === 'assistant'" class="interrupted-only">
                       <AlertTriangle :size="12" /> 已中断
                     </div>
-                    <div v-if="msg.role === 'user'" class="message-content user-message">
-                      {{ msg.content }}
-                      <div v-if="msg.files && msg.files.length > 0" class="message-files">
-                        <div
-                          v-for="(file, index) in msg.files"
-                          :key="index"
-                          class="message-file-item"
-                          @click="openFilePreview(file)"
-                        >
-                          <component :is="getFileIcon(file.type)" :size="16" />
-                          <span>{{ file.name }}</span>
-                          <Download :size="14" class="download-icon" />
-                        </div>
-                      </div>
-                    </div>
                     <div v-if="msg.role === 'assistant' && !msg.done && msg.content" class="streaming-indicator">
                       <span class="streaming-dot"></span>
                     </div>
-                    <div v-if="msg.role === 'assistant' && msg.done" class="message-actions">
-                      <button class="msg-action-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
-                        <Check v-if="copiedId === msg.id" :size="13" />
-                        <Copy v-else :size="13" />
-                        <span>{{ copiedId === msg.id ? '已复制' : '复制' }}</span>
+
+                    <!-- AI消息操作栏：右下角，始终显示 -->
+                    <div v-if="msg.role === 'assistant' && msg.done" class="assistant-msg-actions">
+                      <button class="u-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
+                        <Check v-if="copiedId === msg.id" :size="14" />
+                        <Copy v-else :size="14" />
                       </button>
+                      <button
+                        v-if="isLastAssistantMessage(msg.id)"
+                        class="u-btn"
+                        title="重新生成"
+                        @click="handleRegenerate(msg.id)"
+                      >
+                        <RotateCcw :size="14" />
+                      </button>
+                      <button class="u-btn u-btn-danger" title="删除" @click="handleDeleteMessage(msg.id)">
+                        <Trash2 :size="14" />
+                      </button>
+                    </div>
+
+                    <!-- 推荐问题：在操作栏下方 -->
+                    <SuggestedQuestions
+                      v-if="msg.role === 'assistant' && msg.id === currentSuggestionMessageId && msg.suggestedQuestions && msg.suggestedQuestions.length > 0"
+                      :questions="msg.suggestedQuestions"
+                      @select="handleSuggestionClick"
+                    />
+
+                    <!-- 用户消息：[复制][删除][回退] ← [气泡] -->
+                    <div v-if="msg.role === 'user'" class="user-msg-layout">
+                      <div class="user-msg-btns">
+                        <button class="u-btn u-btn-hover" title="复制" @click="copyMessage(msg.id, msg.content)">
+                          <Check v-if="copiedId === msg.id" :size="14" />
+                          <Copy v-else :size="14" />
+                        </button>
+                        <button class="u-btn u-btn-hover u-btn-danger" title="删除" @click="handleDeleteMessage(msg.id)">
+                          <Trash2 :size="14" />
+                        </button>
+                        <button
+                          class="u-btn"
+                          title="回退到本轮对话发起前"
+                          @click="handleGoBackToStart(msg)"
+                        >
+                          <Undo2 :size="14" />
+                        </button>
+                      </div>
+                      <div class="message-content user-message">
+                        {{ msg.content }}
+                        <div v-if="msg.files && msg.files.length > 0" class="message-files">
+                          <div
+                            v-for="(file, index) in msg.files"
+                            :key="index"
+                            class="message-file-item"
+                            @click="openFilePreview(file)"
+                          >
+                            <component :is="getFileIcon(file.type)" :size="16" />
+                            <span>{{ file.name }}</span>
+                            <Download :size="14" class="download-icon" />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1634,6 +1809,8 @@ onBeforeUnmount(() => {
 
 .message-row.user {
   justify-content: flex-end;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .message-row.user .message-body {
@@ -1718,32 +1895,63 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 
-.message-actions {
+/* ====== 用户消息按钮 ====== */
+.user-msg-layout {
   display: flex;
-  gap: 4px;
-  margin-top: 6px;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
+  align-items: flex-start;
+  gap: 6px;
 }
 
-.message-row:hover .message-actions {
-  opacity: 1;
+.user-msg-btns {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  padding-top: 10px;
 }
 
-.msg-action-btn {
+.u-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--text-muted);
+  cursor: pointer;
   transition: all var(--transition-fast);
+  padding: 0;
 }
 
-.msg-action-btn:hover {
+.u-btn:hover {
   background: var(--workspace-hover);
   color: var(--text-secondary);
+  border-color: var(--workspace-border);
+}
+
+.u-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+/* 复制/删除：默认隐藏，hover该行时显示 */
+.u-btn-hover {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.user-msg-layout:hover .u-btn-hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* AI消息操作栏：右下角，始终显示 */
+.assistant-msg-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
 }
 
 .streaming-cursor {

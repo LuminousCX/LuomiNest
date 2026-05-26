@@ -35,6 +35,7 @@ export interface ChatMessage {
     completionTokens?: number
     totalTokens?: number
   }
+  suggestedQuestions?: string[]
 }
 
 /** Raw message shape returned by the backend API (snake_case) */
@@ -51,6 +52,7 @@ export interface ApiMessage {
   file_type?: string
   files?: ChatFile[]
   interrupted?: boolean
+  suggested_questions?: string[]
 }
 
 export interface ChatRequest {
@@ -85,6 +87,7 @@ export interface ChatStreamChunk {
     completionTokens?: number
     totalTokens?: number
   }
+  suggested_questions?: string[]
 }
 
 export interface Conversation {
