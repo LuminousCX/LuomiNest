@@ -540,6 +540,12 @@ class OpenAICompatibleProvider(LLMProvider):
                                 if content:
                                     yield StreamEvent("content", {"content": content})
 
+                                raw_reasoning = delta.get("reasoning") or delta.get("reasoning_content") or ""
+                                if raw_reasoning:
+                                    reasoning = _clean_reasoning_content(raw_reasoning)
+                                    if reasoning:
+                                        yield StreamEvent("reasoning", {"reasoning": reasoning})
+
                                 tc_deltas = delta.get("tool_calls")
                                 if tc_deltas:
                                     for tc_delta in tc_deltas:

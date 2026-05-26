@@ -298,15 +298,17 @@ class MemoryUpdater:
 
         core_goal = parsed.get("core_goal", "")
         if core_goal and core_goal.strip():
-            memory_data.working_memory.set_core_goal(core_goal.strip()[:200])
+            # 按 conversation_id 隔离工作记忆的目标
+            memory_data.working_memory.set_core_goal_by_conversation(core_goal.strip()[:200], thread_id)
 
         memory_data.episodic_events = [
             e for e in memory_data.episodic_events
             if e.time_distance_days() < 180 or e.importance >= 0.8
         ]
 
-        existing_recent = memory_data.working_memory.recent_conversations
-        last_existing = existing_recent[-1] if existing_recent else None
+        # 工作记忆按 conversation_id 隔离，不再跨对话共享
+        existing_for_conv = memory_data.working_memory.get_conversations_for(thread_id)
+        last_existing = existing_for_conv[-1] if existing_for_conv else None
 
         for msg in messages:
             role = msg.get("role", "unknown")
@@ -321,7 +323,7 @@ class MemoryUpdater:
                 continue
             if last_existing and last_existing.get("role") == role and last_existing.get("content") == content:
                 continue
-            memory_data.working_memory.add_conversation(role, content)
+            memory_data.working_memory.add_conversation_for_thread(role, content, thread_id)
             last_existing = {"role": role, "content": content}
 
         updates = parsed.get("updates", {})

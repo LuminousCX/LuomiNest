@@ -119,6 +119,21 @@ class WorkingMemory(BaseModel):
     current_state: str = "idle"
     last_updated: str = Field(default_factory=utc_now_iso_z)
 
+    # Thread-isolated working memory (per conversation_id)
+    thread_conversations: dict[str, list[dict]] = Field(default_factory=dict)
+    thread_core_goals: dict[str, str] = Field(default_factory=dict)
+    _MAX_THREADS: int = 50
+
+    def _evict_oldest_thread(self):
+        """当线程数超过限制时，淘汰最早的线程条目"""
+        while len(self.thread_conversations) > self._MAX_THREADS:
+            oldest_key = next(iter(self.thread_conversations), None)
+            if oldest_key:
+                self.thread_conversations.pop(oldest_key, None)
+                self.thread_core_goals.pop(oldest_key, None)
+            else:
+                break
+
     def add_conversation(self, role: str, content: str):
         self.recent_conversations.append({
             "role": role,
@@ -127,6 +142,40 @@ class WorkingMemory(BaseModel):
         })
         self.recent_conversations = self.recent_conversations[-20:]
         self.last_updated = utc_now_iso_z()
+
+    # --- Thread-isolated methods ---
+
+    def add_conversation_for_thread(self, role: str, content: str, thread_id: str):
+        """Add conversation message to a specific thread's working memory."""
+        if thread_id not in self.thread_conversations:
+            self.thread_conversations[thread_id] = []
+            self._evict_oldest_thread()
+        self.thread_conversations[thread_id].append({
+            "role": role,
+            "content": content,
+            "timestamp": utc_now_iso_z()
+        })
+        # Keep max 20 per thread
+        self.thread_conversations[thread_id] = self.thread_conversations[thread_id][-20:]
+        self.last_updated = utc_now_iso_z()
+
+    def get_conversations_for(self, thread_id: str) -> list[dict]:
+        """Get recent conversations for a specific thread."""
+        return self.thread_conversations.get(thread_id, [])
+
+    def set_core_goal_by_conversation(self, goal: str, thread_id: str):
+        """Set core goal for a specific conversation thread."""
+        if thread_id not in self.thread_core_goals:
+            self._evict_oldest_thread()
+        self.thread_core_goals[thread_id] = goal
+        self.core_goal_extracted_at = utc_now_iso_z()
+        self.last_updated = utc_now_iso_z()
+
+    def get_core_goal_for(self, thread_id: str) -> str:
+        """Get core goal for a specific conversation thread."""
+        return self.thread_core_goals.get(thread_id, "")
+
+    # --- Legacy methods (kept for backward compatibility) ---
 
     def set_core_goal(self, goal: str):
         self.core_goal = goal

@@ -27,7 +27,7 @@ _time_tool_instance = TimeTool(timezone="Asia/Shanghai")
 _extractor = ToolParameterExtractor()
 
 
-async def execute_tool_by_name(tool_name: str, args: dict) -> str:
+async def execute_tool_by_name(tool_name: str, args: dict, **kwargs) -> str:
     """Tool Loop 专用：按工具名+参数执行单个工具，返回结果文本
 
     与 execute_single_tool 的区别：
@@ -36,6 +36,22 @@ async def execute_tool_by_name(tool_name: str, args: dict) -> str:
       - 自动处理工具不存在的情况
     """
     try:
+        if tool_name == "delegate_task":
+            task_description = args.get("task_description", "").strip()
+            if task_description:
+                try:
+                    from app.core.agent.tool_loop import delegate_sub_task
+                    result = await delegate_sub_task(
+                        task_description=task_description,
+                        provider_name=kwargs.get("provider_name", ""),
+                        model=kwargs.get("model", ""),
+                    )
+                    return result if result else "子代理未返回结果"
+                except Exception as e:
+                    logger.warning(f"[ToolExecutor] delegate_task 异常: {e}")
+                    return "子代理执行失败"
+            return "任务描述为空"
+
         if tool_name == "get_weather":
             city = args.get("city", "")
             date_str = args.get("date", args.get("date_str", ""))
