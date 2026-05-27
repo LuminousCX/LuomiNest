@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import uuid
 import time
 from datetime import datetime, timezone
@@ -7,6 +8,7 @@ from zoneinfo import ZoneInfo
 from collections.abc import AsyncIterator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from loguru import logger
 
 from app.schemas.chat import (
@@ -52,6 +54,117 @@ async def _get_memory_lock(agent_id: str | None) -> asyncio.Lock:
         return _memory_locks[agent_id]
 
 _loop_detection: dict[str, list[str]] = {}
+
+# 推荐问题异步任务跟踪：每个对话只保留最新的推荐生成任务
+_pending_suggestion_tasks: dict[str, asyncio.Task] = {}
+
+SUGGESTED_QUESTIONS_PROMPT = """基于以下对话内容，生成3个用户可能想问的后续问题。
+
+要求：
+1. 问题要具体、有针对性，与对话内容紧密相关
+2. 问题要简洁明了，每个不超过30个字
+3. 问题应该引导用户深入探讨对话中的话题
+4. 只返回问题列表，每行一个，不要编号，不要其他内容
+
+对话内容：
+{conversation}"""
+
+
+async def _generate_suggested_questions(
+    messages: list[dict],
+    agent_id: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+) -> list[str]:
+    """调用 LLM 生成推荐问题，永不持久化"""
+    try:
+        # 构建对话摘要（取最近的消息，避免过长）
+        recent_messages = messages[-6:]  # 最近6条消息
+        conversation_text = ""
+        for msg in recent_messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                # 多模态消息，只取文本部分
+                text_parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+                content = " ".join(text_parts)
+            if role == "user":
+                conversation_text += f"用户: {content}\n"
+            elif role == "assistant":
+                # 截断过长的助手回复
+                if len(content) > 500:
+                    content = content[:500] + "..."
+                conversation_text += f"助手: {content}\n"
+
+        if not conversation_text.strip():
+            return []
+
+        prompt = SUGGESTED_QUESTIONS_PROMPT.format(conversation=conversation_text)
+
+        resolved_provider = provider or llm_adapter.default_provider
+        resolved_model = model or llm_adapter.get_provider(resolved_provider).default_model
+
+        result = await llm_adapter.chat(
+            messages=[{"role": "user", "content": prompt}],
+            provider_name=resolved_provider,
+            model=resolved_model,
+            temperature=0.7,
+            max_tokens=200,
+        )
+
+        if isinstance(result, dict):
+            text = result.get("content", "")
+        else:
+            text = str(result)
+
+        # 解析 LLM 返回的问题列表
+        questions: list[str] = []
+        for line in text.strip().split("\n"):
+            line = line.strip()
+            # 去掉可能的编号前缀（1. 2. 1) 2) 等）
+            line = re.sub(r'^[\d]+[.、)\]]\s*', '', line)
+            if line and len(line) <= 50:
+                questions.append(line)
+
+        return questions[:3]  # 最多3个
+
+    except Exception as e:
+        logger.warning(f"[SuggestedQuestions] Failed to generate: {e}")
+        return []
+
+
+async def _generate_suggestions_for_conv(
+    conv_id: str,
+    messages: list[dict],
+    agent_id: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+) -> list[str]:
+    """为指定对话生成推荐问题，带任务取消机制"""
+    # 取消该对话之前未完成的推荐生成任务
+    old_task = _pending_suggestion_tasks.get(conv_id)
+    if old_task and not old_task.done():
+        old_task.cancel()
+        logger.debug(f"[SuggestedQuestions] Cancelled previous task for conv={conv_id}")
+
+    # 创建新任务
+    task = asyncio.create_task(
+        _generate_suggested_questions(messages, agent_id, provider, model)
+    )
+    _pending_suggestion_tasks[conv_id] = task
+
+    try:
+        result = await task
+        return result
+    except asyncio.CancelledError:
+        logger.debug(f"[SuggestedQuestions] Task cancelled for conv={conv_id}")
+        return []
+    except Exception as e:
+        logger.warning(f"[SuggestedQuestions] Task failed for conv={conv_id}: {e}")
+        return []
+    finally:
+        if _pending_suggestion_tasks.get(conv_id) is task:
+            del _pending_suggestion_tasks[conv_id]
 
 
 def _get_user_query(messages: list[dict]) -> str:
@@ -779,6 +892,54 @@ async def delete_conversation(conv_id: str):
     return {"error": None, "data": {"deleted": True}}
 
 
+class TruncateMessagesRequest(BaseModel):
+    keep_count: int = Field(..., ge=0)
+
+
+class DeleteMessageRequest(BaseModel):
+    message_id: str
+
+
+@router.patch("/conversations/{conv_id}/messages")
+async def truncate_messages(conv_id: str, request: TruncateMessagesRequest):
+    logger.info(f"[API] PATCH /chat/conversations/{conv_id}/messages - Truncating to {request.keep_count}")
+    conv = conversation_store.get(conv_id)
+    if not conv:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Conversation {conv_id} not found")
+    conv["messages"] = conv["messages"][:request.keep_count]
+    _persist_conv(conv_id, conv)
+
+    # Also clear thread-isolated working memory for this conversation
+    agent_id = conv.get("agent_id")
+    try:
+        storage = get_memory_storage()
+        storage.clear_thread(conv_id, agent_id)
+        logger.info(f"[Memory] Cleared thread memory for conv={conv_id}")
+    except Exception as e:
+        logger.warning(f"[Memory] Failed to clear thread memory: {e}")
+
+    logger.success(f"[API] PATCH /chat/conversations/{conv_id}/messages - Truncated to {request.keep_count} messages")
+    return {"error": None, "data": {"truncated": True, "keep_count": request.keep_count}}
+
+
+@router.delete("/conversations/{conv_id}/messages/{message_id}")
+async def delete_message(conv_id: str, message_id: str):
+    logger.info(f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Deleting message")
+    conv = conversation_store.get(conv_id)
+    if not conv:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Conversation {conv_id} not found")
+    original_len = len(conv["messages"])
+    conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
+    if len(conv["messages"]) == original_len:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Message {message_id} not found in conversation {conv_id}")
+    _persist_conv(conv_id, conv)
+    logger.success(f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Message deleted")
+    return {"error": None, "data": {"deleted": True}}
+
+
 @router.post("/conversations/{conv_id}/messages")
 async def add_message(conv_id: str, request: ChatRequest):
     start_time = time.time()
@@ -934,6 +1095,7 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
     chat_id = str(uuid.uuid4())
 
     async def generator():
+        suggested_questions: list[str] = []
         try:
             async with _llm_semaphore:
                 async for chunk in llm_adapter.chat_stream(
@@ -963,8 +1125,22 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
                 _persist_conv(conv_id, conv)
             except Exception as persist_err:
                 logger.error(f"[STREAM] Persist failed: conv={conv_id}, error={persist_err}")
+
+            # 异步生成推荐问题（不持久化，只在 SSE 中推送）
+            if not state["aborted"] and state["content"]:
+                try:
+                    suggested_questions = await _generate_suggestions_for_conv(
+                        conv_id=conv_id,
+                        messages=[dict(m) for m in conv["messages"]],
+                        agent_id=agent_id,
+                        provider=provider,
+                        model=model,
+                    )
+                except Exception as sq_err:
+                    logger.warning(f"[STREAM] Suggested questions failed: conv={conv_id}, error={sq_err}")
+
             try:
-                yield _sse_done(chat_id, provider, model)
+                yield _sse_done(chat_id, provider, model, suggested_questions or None)
             except Exception as done_err:
                 logger.debug(f"[STREAM] Done event send failed (client may have disconnected): {done_err}")
             try:
@@ -980,5 +1156,5 @@ async def _STREAM_RESPONSE(conv_id: str, conv: dict, request: ChatRequest,
 def _sse(cid: str, content: str, provider: str, model: str, reasoning: str = "") -> str:
     return f"data: {ChatStreamChunk(id=cid, content=content, reasoning_content=reasoning, model=model, provider=provider).model_dump_json()}\n\n"
 
-def _sse_done(cid: str, provider: str, model: str) -> str:
-    return f"data: {ChatStreamChunk(id=cid, content='', model=model, provider=provider, done=True).model_dump_json()}\n\n"
+def _sse_done(cid: str, provider: str, model: str, suggested_questions: list[str] | None = None) -> str:
+    return f"data: {ChatStreamChunk(id=cid, content='', model=model, provider=provider, done=True, suggested_questions=suggested_questions).model_dump_json()}\n\n"

@@ -94,6 +94,16 @@ class MemoryStorage:
                 raise RuntimeError("Failed to clear memory: save operation failed")
             return empty
 
+    def clear_thread(self, thread_id: str, agent_id: str | None = None) -> MemoryData:
+        """Clear working memory data for a specific conversation thread."""
+        with self._lock:
+            memory_data = self.load(agent_id)
+            memory_data.working_memory.thread_conversations.pop(thread_id, None)
+            memory_data.working_memory.thread_core_goals.pop(thread_id, None)
+            if not self.save(memory_data, agent_id):
+                raise RuntimeError("Failed to clear thread memory: save operation failed")
+            return memory_data
+
     def add_fact(
         self,
         content: str,

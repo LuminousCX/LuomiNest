@@ -267,6 +267,9 @@ export const useChatStore = defineStore('chat', () => {
   const pendingSearchKeyword = ref('')
   const searchScrollTarget = ref<{ convId: string; keyword: string } | null>(null)
 
+  // 推荐问题：当前显示推荐的消息ID，只有最后一条AI消息才显示推荐
+  const currentSuggestionMessageId = ref<string | null>(null)
+
   const isBackendReady = ref(false)
   const lastError = ref<string | null>(null)
   const lastUsage = ref<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | null>(null)
@@ -345,6 +348,9 @@ export const useChatStore = defineStore('chat', () => {
 
   const loadConversation = async (convId: string) => {
     if (!activeAgentId.value) return
+
+    // 加载对话时清除推荐
+    currentSuggestionMessageId.value = null
 
     agentCurrentConvId.value = {
       ...agentCurrentConvId.value,
@@ -522,6 +528,9 @@ export const useChatStore = defineStore('chat', () => {
     const targetAgentId = options?.agentId || activeAgentId.value
     if (!targetAgentId) return
 
+    // 发送消息时立即清除推荐
+    currentSuggestionMessageId.value = null
+
     let convId = agentCurrentConvId.value[targetAgentId]
 
     if (!convId) {
@@ -636,13 +645,18 @@ export const useChatStore = defineStore('chat', () => {
         const currentMsgList = convMessages.value[streamingConvId] || []
         const lastIndex = currentMsgList.length - 1
         if (lastIndex >= 0 && currentMsgList[lastIndex]?.role === 'assistant') {
+          const updatedMsg: ChatMessage = {
+            ...currentMsgList[lastIndex],
+            content: newContent,
+            reasoningContent: newReasoning,
+          }
+          // 如果 done 事件中携带了推荐问题，写入消息
+          if (chunk.done && chunk.suggested_questions && chunk.suggested_questions.length > 0) {
+            updatedMsg.suggestedQuestions = chunk.suggested_questions
+          }
           convMessages.value = {
             ...convMessages.value,
-            [streamingConvId]: [...currentMsgList.slice(0, lastIndex), {
-              ...currentMsgList[lastIndex],
-              content: newContent,
-              reasoningContent: newReasoning,
-            }]
+            [streamingConvId]: [...currentMsgList.slice(0, lastIndex), updatedMsg]
           }
         }
         if (chunk.usage) {
@@ -657,12 +671,17 @@ export const useChatStore = defineStore('chat', () => {
         const completeMsgList = convMessages.value[streamingConvId] || []
         const completeLastIndex = completeMsgList.length - 1
         if (completeLastIndex >= 0 && completeMsgList[completeLastIndex]?.role === 'assistant') {
+          const completedMsg: ChatMessage = {
+            ...completeMsgList[completeLastIndex],
+            done: true
+          }
           convMessages.value = {
             ...convMessages.value,
-            [streamingConvId]: [...completeMsgList.slice(0, completeLastIndex), {
-              ...completeMsgList[completeLastIndex],
-              done: true
-            }]
+            [streamingConvId]: [...completeMsgList.slice(0, completeLastIndex), completedMsg]
+          }
+          // 只有这条消息有推荐问题时，才设置当前推荐消息ID
+          if (completedMsg.suggestedQuestions && completedMsg.suggestedQuestions.length > 0) {
+            currentSuggestionMessageId.value = completedMsg.id
           }
         }
         convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
@@ -784,6 +803,8 @@ export const useChatStore = defineStore('chat', () => {
     lastUsage,
     activeAgentId,
     convStreaming,
+    convMessages,
+    currentSuggestionMessageId,
     checkBackend,
     fetchConversations,
     createConversation,

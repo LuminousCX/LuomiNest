@@ -42,6 +42,7 @@ class ChatStreamChunk(BaseModel):
     model: str
     provider: str
     done: bool = False
+    suggested_questions: list[str] | None = None
 
     @field_validator("content", "reasoning_content", mode="before")
     @classmethod
