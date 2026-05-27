@@ -57,7 +57,7 @@ const modelStore = useModelStore()
 const skillStore = useSkillStore()
 
 const { isUploading, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
-const { truncateMessages } = useApi()
+const { truncateMessages, deleteMessage } = useApi()
 const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
 
 const inputText = ref('')
@@ -470,10 +470,10 @@ const handleRegenerate = async (messageId: string) => {
 
   // 删除从用户消息开始到末尾的所有消息
   const keepCount = userIndex
-  chatStore.convMessages[convId] = msgs.slice(0, keepCount)
 
-  // 同步删除后端消息
+  // 先同步删除后端消息，成功后再更新前端状态
   await truncateMessages(convId, keepCount)
+  chatStore.convMessages[convId] = msgs.slice(0, keepCount)
 
   // 清除推荐
   chatStore.currentSuggestionMessageId = null
@@ -492,26 +492,43 @@ const handleDeleteMessage = async (messageId: string) => {
   if (!msgs) return
 
   const index = msgs.findIndex((m: any) => m.id === messageId)
-  if (index !== -1) {
-    const targetMsg = msgs[index]
-    if (targetMsg.role === 'user') {
-      // 找到该用户消息之后连续的AI消息，一并删除
-      let deleteCount = 1
-      for (let i = index + 1; i < msgs.length; i++) {
-        if (msgs[i].role === 'assistant') {
-          deleteCount++
-        } else {
-          break
-        }
+  if (index === -1) return
+
+  const targetMsg = msgs[index]
+  if (targetMsg.role === 'user') {
+    // 找到该用户消息之后连续的AI消息，一并删除
+    let deleteCount = 1
+    for (let i = index + 1; i < msgs.length; i++) {
+      if (msgs[i].role === 'assistant') {
+        deleteCount++
+      } else {
+        break
       }
-      const newMsgs = msgs.slice(0, index).concat(msgs.slice(index + deleteCount))
-      chatStore.convMessages[convId] = newMsgs
-      await truncateMessages(convId, newMsgs.length)
+    }
+    // 判断是否为尾部删除
+    if (index + deleteCount === msgs.length) {
+      // 尾部截断：使用 truncateMessages
+      await truncateMessages(convId, index)
+      chatStore.convMessages[convId] = msgs.slice(0, index)
     } else {
-      // 仅删除这条AI消息
-      const newMsgs = msgs.filter((_: any, i: number) => i !== index)
-      chatStore.convMessages[convId] = newMsgs
-      await truncateMessages(convId, newMsgs.length)
+      // 中间删除：逐条调用 deleteMessage
+      const idsToDelete = msgs.slice(index, index + deleteCount).map((m: any) => m.id)
+      for (const id of idsToDelete) {
+        await deleteMessage(convId, id)
+      }
+      chatStore.convMessages[convId] = msgs.slice(0, index).concat(msgs.slice(index + deleteCount))
+    }
+  } else {
+    // 仅删除这条AI消息
+    // 判断是否为尾部删除
+    if (index === msgs.length - 1) {
+      // 尾部截断：使用 truncateMessages
+      await truncateMessages(convId, index)
+      chatStore.convMessages[convId] = msgs.slice(0, index)
+    } else {
+      // 中间删除：调用 deleteMessage
+      await deleteMessage(convId, messageId)
+      chatStore.convMessages[convId] = msgs.filter((_: any, i: number) => i !== index)
     }
   }
 
@@ -539,9 +556,10 @@ const handleGoBackToStart = async (msg: any) => {
   const index = msgs.findIndex((m: any) => m.id === msg.id)
   if (index !== -1) {
     const keepCount = index
+    // 先同步删除后端消息，成功后再更新前端状态
+    await truncateMessages(convId, keepCount)
     chatStore.convMessages[convId] = msgs.slice(0, keepCount)
     chatStore.currentSuggestionMessageId = null
-    await truncateMessages(convId, keepCount)
   }
 
   nextTick(() => {

@@ -89,6 +89,9 @@ export const useApi = () => {
   const truncateMessages = (convId: string, keepCount: number): Promise<void> =>
     apiPatch(`/chat/conversations/${convId}/messages`, { keep_count: keepCount })
 
+  const deleteMessage = (convId: string, messageId: string): Promise<void> =>
+    apiDelete(`/chat/conversations/${convId}/messages/${messageId}`)
+
   const apiStream = async (
     path: string,
     body: any,
@@ -287,6 +290,7 @@ export const useApi = () => {
     apiStream,
     apiSseStream,
     truncateMessages,
+    deleteMessage,
     checkHealth,
   }
 }

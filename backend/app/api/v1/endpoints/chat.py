@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from collections.abc import AsyncIterator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from loguru import logger
 
 from app.schemas.chat import (
@@ -893,7 +893,11 @@ async def delete_conversation(conv_id: str):
 
 
 class TruncateMessagesRequest(BaseModel):
-    keep_count: int
+    keep_count: int = Field(..., ge=0)
+
+
+class DeleteMessageRequest(BaseModel):
+    message_id: str
 
 
 @router.patch("/conversations/{conv_id}/messages")
@@ -903,8 +907,6 @@ async def truncate_messages(conv_id: str, request: TruncateMessagesRequest):
     if not conv:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
-    if request.keep_count < 0:
-        request.keep_count = 0
     conv["messages"] = conv["messages"][:request.keep_count]
     _persist_conv(conv_id, conv)
 
@@ -919,6 +921,23 @@ async def truncate_messages(conv_id: str, request: TruncateMessagesRequest):
 
     logger.success(f"[API] PATCH /chat/conversations/{conv_id}/messages - Truncated to {request.keep_count} messages")
     return {"error": None, "data": {"truncated": True, "keep_count": request.keep_count}}
+
+
+@router.delete("/conversations/{conv_id}/messages/{message_id}")
+async def delete_message(conv_id: str, message_id: str):
+    logger.info(f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Deleting message")
+    conv = conversation_store.get(conv_id)
+    if not conv:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Conversation {conv_id} not found")
+    original_len = len(conv["messages"])
+    conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
+    if len(conv["messages"]) == original_len:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Message {message_id} not found in conversation {conv_id}")
+    _persist_conv(conv_id, conv)
+    logger.success(f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Message deleted")
+    return {"error": None, "data": {"deleted": True}}
 
 
 @router.post("/conversations/{conv_id}/messages")
