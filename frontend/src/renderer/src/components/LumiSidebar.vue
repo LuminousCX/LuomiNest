@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   MessageCircle,
@@ -18,7 +18,12 @@ import {
   MessageSquare,
   Clock,
   Loader2,
-  Plus
+  Plus,
+  Undo2,
+  ArrowLeft,
+  SquareCheck,
+  X,
+  AlertTriangle,
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
@@ -36,7 +41,6 @@ const isSearching = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let searchSeq = 0
 
-// 搜索防抖：输入后 300ms 触发搜索，带竞态检查
 watch(searchQuery, (q) => {
   if (searchTimer) clearTimeout(searchTimer)
   if (!q.trim()) {
@@ -70,7 +74,6 @@ const navItems = [
   { id: '/browser', label: '浏览器', icon: Globe }
 ]
 
-// 时间分组逻辑
 interface TimeGroup {
   label: string
   items: ConversationListItem[]
@@ -79,52 +82,47 @@ interface TimeGroup {
 const timeGroups = computed<TimeGroup[]>(() => {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterday = new Date(today.getTime() - 86400000)
-  const weekAgo = new Date(today.getTime() - 7 * 86400000)
 
   const groups: TimeGroup[] = [
     { label: '今天', items: [] },
     { label: '昨天', items: [] },
-    { label: '上周', items: [] },
+    { label: '近7天', items: [] },
     { label: '更早', items: [] }
   ]
 
-  const convs = chatStore.conversations
+  for (const conv of chatStore.conversations) {
+    const d = new Date(conv.updated_at)
+    const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
 
-  for (const conv of convs) {
-    const updatedAt = new Date(conv.updated_at)
-    if (updatedAt >= today) {
-      groups[0].items.push(conv)
-    } else if (updatedAt >= yesterday) {
-      groups[1].items.push(conv)
-    } else if (updatedAt >= weekAgo) {
-      groups[2].items.push(conv)
-    } else {
-      groups[3].items.push(conv)
-    }
+    if (diffDays <= 0) groups[0].items.push(conv)
+    else if (diffDays === 1) groups[1].items.push(conv)
+    else if (diffDays <= 7) groups[2].items.push(conv)
+    else groups[3].items.push(conv)
   }
 
   return groups.filter(g => g.items.length > 0)
 })
+
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 const formatTime = (dateStr: string) => {
   const d = new Date(dateStr)
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
+  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 
-  if (target.getTime() === today.getTime()) {
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  }
-  if (target.getTime() === today.getTime() - 86400000) {
-    return '昨天'
-  }
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  if (diffDays <= 0) return time
+  if (diffDays === 1) return `昨天 ${time}`
+  if (diffDays <= 7) return `${WEEKDAYS[d.getDay()]} ${time}`
+  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
 const highlightSnippet = (snippet: string): string => {
   if (!snippet) return ''
-  // 先转义 HTML 特殊字符，防止 XSS
   const escaped = snippet
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -157,7 +155,6 @@ const handleDeleteConversation = async (convId: string) => {
   }
 }
 
-// 保留创建 Agent 对话框
 const showCreateDialog = ref(false)
 const newAgentForm = ref({
   name: '',
@@ -196,14 +193,175 @@ const handleNewConversation = async () => {
   }
 }
 
+const showTrash = ref(false)
+const batchMode = ref(false)
+const selectedIds = ref<Set<string>>(new Set())
+const trashBatchMode = ref(false)
+const trashSelectedIds = ref<Set<string>>(new Set())
+
+const trashCount = computed(() => chatStore.trashItems.length)
+
+const openTrash = async () => {
+  showTrash.value = true
+  trashBatchMode.value = false
+  trashSelectedIds.value = new Set()
+  await chatStore.fetchTrash(agentStore.activeAgent?.id)
+}
+
+const closeTrash = () => {
+  showTrash.value = false
+  trashBatchMode.value = false
+  trashSelectedIds.value = new Set()
+}
+
+const toggleBatchMode = () => {
+  batchMode.value = !batchMode.value
+  if (!batchMode.value) {
+    selectedIds.value = new Set()
+  }
+}
+
+const toggleSelect = (convId: string) => {
+  const next = new Set(selectedIds.value)
+  if (next.has(convId)) {
+    next.delete(convId)
+  } else {
+    next.add(convId)
+  }
+  selectedIds.value = next
+}
+
+const selectAll = () => {
+  const allIds = chatStore.conversations.map(c => c.id)
+  if (selectedIds.value.size === allIds.length) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(allIds)
+  }
+}
+
+const handleBatchDelete = async () => {
+  if (selectedIds.value.size === 0) return
+  try {
+    await chatStore.batchSoftDelete(Array.from(selectedIds.value), agentStore.activeAgent?.id)
+    selectedIds.value = new Set()
+    batchMode.value = false
+  } catch (e: any) {
+    console.error('Failed to batch delete:', e)
+  }
+}
+
+const toggleTrashBatchMode = () => {
+  trashBatchMode.value = !trashBatchMode.value
+  if (!trashBatchMode.value) {
+    trashSelectedIds.value = new Set()
+  }
+}
+
+const toggleTrashSelect = (convId: string) => {
+  const next = new Set(trashSelectedIds.value)
+  if (next.has(convId)) {
+    next.delete(convId)
+  } else {
+    next.add(convId)
+  }
+  trashSelectedIds.value = next
+}
+
+const selectAllTrash = () => {
+  const allIds = chatStore.trashItems.map(t => t.id)
+  if (trashSelectedIds.value.size === allIds.length) {
+    trashSelectedIds.value = new Set()
+  } else {
+    trashSelectedIds.value = new Set(allIds)
+  }
+}
+
+const clearTrashSelection = () => {
+  trashSelectedIds.value = new Set()
+}
+
+const handleBatchRestore = async () => {
+  if (trashSelectedIds.value.size === 0) return
+  try {
+    await chatStore.batchRestore(Array.from(trashSelectedIds.value), agentStore.activeAgent?.id)
+    trashSelectedIds.value = new Set()
+    trashBatchMode.value = false
+  } catch (e: any) {
+    console.error('Failed to batch restore:', e)
+  }
+}
+
+const handleBatchPermanentDelete = async () => {
+  if (trashSelectedIds.value.size === 0) return
+  showTrashConfirm.value = true
+  trashConfirmAction.value = 'batch-permanent-delete'
+}
+
+const handleRestoreItem = async (convId: string) => {
+  try {
+    await chatStore.restoreConversation(convId, agentStore.activeAgent?.id)
+  } catch (e: any) {
+    console.error('Failed to restore:', e)
+  }
+}
+
+const handlePermanentDeleteItem = async (convId: string) => {
+  showTrashConfirm.value = true
+  trashConfirmAction.value = 'permanent-delete'
+  trashConfirmTargetId.value = convId
+}
+
+const handleEmptyTrash = () => {
+  showTrashConfirm.value = true
+  trashConfirmAction.value = 'empty-trash'
+}
+
+const showTrashConfirm = ref(false)
+const trashConfirmAction = ref('')
+const trashConfirmTargetId = ref('')
+
+const trashConfirmMessage = computed(() => {
+  if (trashConfirmAction.value === 'empty-trash') return '确定要清空回收站吗？所有对话将被永久删除，无法恢复。'
+  if (trashConfirmAction.value === 'batch-permanent-delete') return `确定要永久删除选中的 ${trashSelectedIds.value.size} 个对话吗？此操作无法撤销。`
+  if (trashConfirmAction.value === 'permanent-delete') return '确定要永久删除这个对话吗？此操作无法撤销。'
+  return ''
+})
+
+const handleTrashConfirm = async () => {
+  try {
+    if (trashConfirmAction.value === 'empty-trash') {
+      await chatStore.emptyTrash(agentStore.activeAgent?.id)
+    } else if (trashConfirmAction.value === 'batch-permanent-delete') {
+      await chatStore.batchPermanentDelete(Array.from(trashSelectedIds.value), agentStore.activeAgent?.id)
+      trashSelectedIds.value = new Set()
+      trashBatchMode.value = false
+    } else if (trashConfirmAction.value === 'permanent-delete') {
+      await chatStore.permanentDeleteConversation(trashConfirmTargetId.value, agentStore.activeAgent?.id)
+    }
+  } catch (e: any) {
+    console.error('Failed to execute trash action:', e)
+  }
+  showTrashConfirm.value = false
+  trashConfirmAction.value = ''
+  trashConfirmTargetId.value = ''
+}
+
+const formatDeleteTime = (dateStr: string) => {
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
 onMounted(async () => {
   await agentStore.fetchAgents()
+  if (agentStore.activeAgent?.id) {
+    chatStore.fetchTrash(agentStore.activeAgent.id)
+  }
 })
 </script>
 
 <template>
   <div class="lumi-sidebar">
-    <!-- 60px icon bar -->
     <div class="sidebar-icon-rail">
       <div class="rail-top">
         <button class="avatar-btn" aria-label="LuminousChenXi 账户">
@@ -230,86 +388,190 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 220px 历史记录面板，只在聊天页面显示 -->
     <div v-if="route.path === '/workspace'" class="sidebar-history-panel">
-      <!-- 搜索框 -->
-      <div class="panel-header">
-        <div class="search-box">
-          <Search :size="15" class="search-icon" />
-          <input v-model="searchQuery" type="text" placeholder="搜索历史记录..." class="search-input" />
-        </div>
-        <button class="new-conv-btn" @click="handleNewConversation">
-          <Plus :size="15" />
-          <span>创建新对话</span>
-        </button>
-      </div>
-
-      <!-- 历史记录列表 -->
-      <div class="history-list">
-        <!-- 搜索模式：显示搜索结果 -->
-        <template v-if="isSearchMode">
-          <div v-if="isSearching" class="history-empty">
-            <Loader2 :size="20" class="spin-animation" />
-            <span>搜索中...</span>
+      <template v-if="!showTrash">
+        <div class="panel-header">
+          <div class="search-box">
+            <Search :size="15" class="search-icon" />
+            <input v-model="searchQuery" type="text" placeholder="搜索历史记录..." class="search-input" />
           </div>
-          <template v-else>
-            <div
-              v-for="result in searchResults"
-              :key="result.id"
-              :class="['history-item', { active: chatStore.currentConvId === result.id }]"
-              @click="selectConversation(result.id, searchQuery.trim())"
+          <div class="panel-header-actions">
+            <button class="new-conv-btn" @click="handleNewConversation">
+              <Plus :size="15" />
+              <span>创建新对话</span>
+            </button>
+            <button
+              :class="['batch-toggle-btn', { active: batchMode }]"
+              title="批量操作"
+              @click="toggleBatchMode"
             >
-              <div class="history-item-indicator" />
-              <MessageSquare :size="14" class="history-item-icon" />
-              <div class="history-item-content">
-                <span class="history-item-title">{{ result.title }}</span>
-                <span class="history-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
-              </div>
-            </div>
-            <div v-if="searchResults.length === 0" class="history-empty">
-              <MessageSquare :size="24" />
-              <span>未找到匹配的会话</span>
-            </div>
-          </template>
-        </template>
+              <SquareCheck :size="15" />
+            </button>
+          </div>
+        </div>
 
-        <!-- 正常模式：时间分组列表 -->
-        <template v-else>
-          <template v-for="group in timeGroups" :key="group.label">
-            <div class="time-group">
-              <div class="time-group-label">
-                <Clock :size="12" />
-                <span>{{ group.label }}</span>
-              </div>
+        <div v-if="batchMode" class="batch-toolbar">
+          <button class="batch-action-btn" @click="selectAll">全选</button>
+          <span class="batch-count">已选 {{ selectedIds.size }} 项</span>
+          <button
+            :class="['batch-delete-btn', { disabled: selectedIds.size === 0 }]"
+            :disabled="selectedIds.size === 0"
+            @click="handleBatchDelete"
+          >
+            <Trash2 :size="13" />
+            删除
+          </button>
+        </div>
+
+        <div class="history-list">
+          <template v-if="isSearchMode">
+            <div v-if="isSearching" class="history-empty">
+              <Loader2 :size="20" class="spin-animation" />
+              <span>搜索中...</span>
+            </div>
+            <template v-else>
               <div
-                v-for="conv in group.items"
-                :key="conv.id"
-                :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
-                @click="selectConversation(conv.id)"
+                v-for="result in searchResults"
+                :key="result.id"
+                :class="['history-item', { active: chatStore.currentConvId === result.id }]"
+                @click="selectConversation(result.id, searchQuery.trim())"
               >
                 <div class="history-item-indicator" />
                 <MessageSquare :size="14" class="history-item-icon" />
                 <div class="history-item-content">
-                  <span class="history-item-title">{{ conv.title }}</span>
-                  <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
+                  <span class="history-item-title">{{ result.title }}</span>
+                  <span class="history-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
                 </div>
-                <button class="history-item-delete" @click.stop="handleDeleteConversation(conv.id)">
-                  <Trash2 :size="13" />
-                </button>
               </div>
-            </div>
+              <div v-if="searchResults.length === 0" class="history-empty">
+                <MessageSquare :size="24" />
+                <span>未找到匹配的会话</span>
+              </div>
+            </template>
           </template>
 
-          <div v-if="timeGroups.length === 0" class="history-empty">
-            <MessageSquare :size="24" />
-            <span>暂无历史记录</span>
-          </div>
-        </template>
-      </div>
+          <template v-else>
+            <template v-for="group in timeGroups" :key="group.label">
+              <div class="time-group">
+                <div class="time-group-label">
+                  <Clock :size="12" />
+                  <span>{{ group.label }}</span>
+                </div>
+                <div
+                  v-for="conv in group.items"
+                  :key="conv.id"
+                  :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
+                  @click="batchMode ? toggleSelect(conv.id) : selectConversation(conv.id)"
+                >
+                  <div v-if="batchMode" class="history-item-checkbox" @click.stop="toggleSelect(conv.id)">
+                    <div :class="['checkbox-box', { checked: selectedIds.has(conv.id) }]">
+                      <Check v-if="selectedIds.has(conv.id)" :size="10" />
+                    </div>
+                  </div>
+                  <div class="history-item-indicator" />
+                  <MessageSquare :size="14" class="history-item-icon" />
+                  <div class="history-item-content">
+                    <span class="history-item-title">{{ conv.title }}</span>
+                    <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
+                  </div>
+                  <button v-if="!batchMode" class="history-item-delete" @click.stop="handleDeleteConversation(conv.id)">
+                    <Trash2 :size="13" />
+                  </button>
+                </div>
+              </div>
+            </template>
 
+            <div v-if="timeGroups.length === 0" class="history-empty">
+              <MessageSquare :size="24" />
+              <span>暂无历史记录</span>
+            </div>
+          </template>
+        </div>
+
+        <button class="trash-entry-btn" @click="openTrash">
+          <Trash2 :size="14" />
+          <span>回收站</span>
+          <span v-if="trashCount > 0" class="trash-badge">{{ trashCount }}</span>
+        </button>
+      </template>
+
+      <template v-else>
+        <div class="trash-header">
+          <button class="trash-back-btn" @click="closeTrash">
+            <ArrowLeft :size="16" />
+          </button>
+          <span class="trash-title">回收站</span>
+          <button
+            :class="['batch-toggle-btn', { active: trashBatchMode }]"
+            title="批量操作"
+            @click="toggleTrashBatchMode"
+          >
+            <SquareCheck :size="15" />
+          </button>
+        </div>
+
+        <div v-if="trashBatchMode" class="batch-toolbar">
+          <button class="batch-action-btn" @click="selectAllTrash">全选</button>
+          <span class="batch-count">已选 {{ trashSelectedIds.size }} 项</span>
+          <button
+            :class="['batch-restore-btn', { disabled: trashSelectedIds.size === 0 }]"
+            :disabled="trashSelectedIds.size === 0"
+            @click="handleBatchRestore"
+          >
+            <Undo2 :size="13" />
+            恢复
+          </button>
+          <button
+            :class="['batch-delete-btn', { disabled: trashSelectedIds.size === 0 }]"
+            :disabled="trashSelectedIds.size === 0"
+            @click="handleBatchPermanentDelete"
+          >
+            <Trash2 :size="13" />
+            删除
+          </button>
+        </div>
+
+        <div class="trash-toolbar" v-if="!trashBatchMode && chatStore.trashItems.length > 0">
+          <button class="empty-trash-btn" @click="handleEmptyTrash">
+            <Trash2 :size="12" />
+            清空回收站
+          </button>
+        </div>
+
+        <div class="trash-list">
+          <div v-if="chatStore.trashItems.length === 0" class="history-empty">
+            <Trash2 :size="24" />
+            <span>回收站为空</span>
+          </div>
+          <div
+            v-for="item in chatStore.trashItems"
+            :key="item.id"
+            :class="['trash-item']"
+            @click="trashBatchMode ? toggleTrashSelect(item.id) : undefined"
+          >
+            <div v-if="trashBatchMode" class="history-item-checkbox" @click.stop="toggleTrashSelect(item.id)">
+              <div :class="['checkbox-box', { checked: trashSelectedIds.has(item.id) }]">
+                <Check v-if="trashSelectedIds.has(item.id)" :size="10" />
+              </div>
+            </div>
+            <MessageSquare :size="14" class="history-item-icon" />
+            <div class="trash-item-content">
+              <span class="history-item-title">{{ item.title }}</span>
+              <span class="trash-item-deleted-time">{{ formatDeleteTime(item.deleted_at) }}</span>
+            </div>
+            <div v-if="!trashBatchMode" class="trash-item-actions">
+              <button class="trash-action-btn restore" title="恢复" @click.stop="handleRestoreItem(item.id)">
+                <Undo2 :size="13" />
+              </button>
+              <button class="trash-action-btn delete" title="永久删除" @click.stop="handlePermanentDeleteItem(item.id)">
+                <Trash2 :size="13" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
     </div>
 
-    <!-- 保留创建 Agent 对话框 -->
     <Transition name="selection-fade">
       <div v-if="showCreateDialog" class="create-dialog-overlay" @click.self="showCreateDialog = false">
         <div class="create-dialog">
@@ -360,6 +622,21 @@ onMounted(async () => {
         </div>
       </div>
     </Transition>
+
+    <Transition name="selection-fade">
+      <div v-if="showTrashConfirm" class="create-dialog-overlay" @click.self="showTrashConfirm = false">
+        <div class="confirm-dialog">
+          <div class="confirm-dialog-icon">
+            <AlertTriangle :size="24" />
+          </div>
+          <p class="confirm-dialog-message">{{ trashConfirmMessage }}</p>
+          <div class="confirm-dialog-actions">
+            <button class="dialog-btn danger" @click="handleTrashConfirm">删除</button>
+            <button class="dialog-btn cancel" @click="showTrashConfirm = false">取消</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -372,7 +649,6 @@ onMounted(async () => {
   transition: all var(--transition-normal);
 }
 
-/* ===== 60px icon bar ===== */
 .sidebar-icon-rail {
   display: flex;
   flex-direction: column;
@@ -476,7 +752,6 @@ onMounted(async () => {
   background: var(--lumi-primary);
 }
 
-/* ===== 220px 历史记录面板 ===== */
 .sidebar-history-panel {
   width: 220px;
   height: 100%;
@@ -489,6 +764,16 @@ onMounted(async () => {
 
 .panel-header {
   padding: 12px 14px 8px;
+}
+
+.panel-header-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.panel-header-actions .new-conv-btn {
+  flex: 1;
 }
 
 .search-box {
@@ -532,7 +817,6 @@ onMounted(async () => {
   gap: 6px;
   width: 100%;
   padding: 7px 0;
-  margin-top: 8px;
   background: var(--lumi-primary);
   color: white;
   border-radius: var(--radius-md);
@@ -546,7 +830,121 @@ onMounted(async () => {
   background: var(--lumi-primary-hover);
 }
 
-/* 历史记录列表 */
+.batch-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  background: #ffffff;
+  border: 1px solid var(--workspace-border, #e5e7eb);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.batch-toggle-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+.batch-toggle-btn.active {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  border-color: var(--lumi-primary);
+}
+
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #f0f4f8;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.batch-action-btn {
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.batch-action-btn:hover {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  border-color: var(--lumi-primary);
+}
+
+.batch-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.batch-delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.batch-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.batch-delete-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.batch-restore-btn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
+  border: 1px solid rgba(20, 126, 188, 0.2);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.batch-restore-btn:hover {
+  background: rgba(20, 126, 188, 0.15);
+}
+
+.batch-restore-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .history-list {
   flex: 1;
   overflow-y: auto;
@@ -678,7 +1076,31 @@ onMounted(async () => {
   color: var(--lumi-accent);
 }
 
-/* 空状态 */
+.history-item-checkbox {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkbox-box {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  background: #ffffff;
+}
+
+.checkbox-box.checked {
+  background: var(--lumi-primary);
+  border-color: var(--lumi-primary);
+  color: white;
+}
+
 .history-empty {
   display: flex;
   flex-direction: column;
@@ -690,7 +1112,168 @@ onMounted(async () => {
   font-size: 13px;
 }
 
-/* 创建 Agent 对话框 */
+.trash-entry-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  margin: 0 10px 10px;
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.trash-entry-btn:hover {
+  background: #f3f4f6;
+  color: var(--text-secondary);
+  border-color: #d1d5db;
+}
+
+.trash-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--lumi-accent, #ef4444);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+}
+
+.trash-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.trash-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.trash-back-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+.trash-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.trash-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.empty-trash-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.empty-trash-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.trash-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px;
+}
+
+.trash-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  cursor: default;
+  transition: all var(--transition-fast);
+}
+
+.trash-item:hover {
+  background: #f3f4f6;
+}
+
+.trash-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trash-item-deleted-time {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.trash-item-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.trash-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.trash-action-btn.restore {
+  color: var(--lumi-primary);
+}
+
+.trash-action-btn.restore:hover {
+  background: var(--lumi-primary-light);
+}
+
+.trash-action-btn.delete {
+  color: var(--text-muted);
+}
+
+.trash-action-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+}
+
 .create-dialog-overlay {
   position: fixed;
   inset: 0;
@@ -698,7 +1281,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 200;
 }
 
 .create-dialog {
@@ -716,6 +1299,52 @@ onMounted(async () => {
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 20px;
+}
+
+.confirm-dialog {
+  background: var(--workspace-card);
+  border-radius: var(--radius-xl);
+  padding: 32px 28px 24px;
+  width: 340px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.confirm-dialog-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  margin-bottom: 16px;
+}
+
+.confirm-dialog-message {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin: 0 0 24px;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.confirm-dialog-actions .dialog-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 10px 20px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .form-group {
@@ -828,6 +1457,15 @@ onMounted(async () => {
 .dialog-btn.confirm.disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.dialog-btn.danger {
+  color: white;
+  background: #ef4444;
+}
+
+.dialog-btn.danger:hover {
+  background: #dc2626;
 }
 
 .selection-fade-enter-active {

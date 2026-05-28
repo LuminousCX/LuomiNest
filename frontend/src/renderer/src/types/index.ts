@@ -36,6 +36,19 @@ export interface ChatMessage {
     totalTokens?: number
   }
   suggestedQuestions?: string[]
+  quote?: {
+    id: string
+    role: 'user' | 'assistant'
+    content: string
+  }
+  versions?: {
+    content: string
+    reasoningContent?: string
+    model?: string
+    provider?: string
+    timestamp: number
+  }[]
+  activeVersion?: number
 }
 
 /** Raw message shape returned by the backend API (snake_case) */
@@ -117,6 +130,13 @@ export interface ConversationSearchResult {
   title: string
   snippet: string
   updated_at: string
+}
+
+export interface TrashListItem {
+  id: string
+  title: string
+  deleted_at: string
+  agent_id?: string
 }
 
 export interface ModelProvider {
@@ -229,32 +249,6 @@ export interface STTConfig {
   language?: string
   autoSend?: boolean
   autoSendDelay?: number
-}
-
-export interface SkillDefinition {
-  name: string
-  description: string
-  category: string
-  parameters: Record<string, any>
-  isActive: boolean
-  isBuiltin: boolean
-  promptTemplate?: string
-  tags: string[]
-}
-
-export interface MCPServer {
-  name: string
-  transport: string
-  status?: string
-  command?: string
-  args?: string[]
-  env?: Record<string, string>
-}
-
-export interface MCPTool {
-  name: string
-  description?: string
-  inputSchema?: Record<string, any>
 }
 
 export interface GroupInfo {

@@ -84,3 +84,19 @@ class ConversationSearchResult(BaseModel):
     title: str
     snippet: str
     updated_at: str
+
+
+class TrashListItemResponse(BaseModel):
+    id: str
+    title: str
+    agent_id: str | None = None
+    model: str | None = None
+    provider: str | None = None
+    last_message: str | None = None
+    created_at: str
+    updated_at: str
+    deleted_at: str
+
+
+class BatchIdsRequest(BaseModel):
+    ids: list[str] = Field(..., min_length=1)

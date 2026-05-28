@@ -90,10 +90,6 @@ const routes: RouteRecordRaw[] = [
     redirect: '/market?tab=plugin'
   },
   {
-    path: '/market/skills',
-    redirect: '/market?tab=skill'
-  },
-  {
     path: '/market/agents',
     redirect: '/market?tab=agent'
   },

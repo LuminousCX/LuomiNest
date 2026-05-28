@@ -38,7 +38,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
       <div class="brand-mark">
         <LumiBrandStar :size="16" :animated="false" />
         <span class="brand-text">LuomiNest</span>
-        <span class="brand-sub">LuminousChenXi v0.1.0</span>
+        <span class="brand-sub">LuminousChenXi v0.2.0</span>
       </div>
     </div>
     <div class="win-controls">

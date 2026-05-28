@@ -1,4 +1,4 @@
-﻿import { defineStore } from 'pinia'
+import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { AgentProfile, MainAgentConfig } from '../types'
 import { useApi } from '../composables/useApi'
@@ -37,8 +37,6 @@ export const useAgentStore = defineStore('agent', () => {
           capabilities: a.capabilities || [],
           isActive: a.is_active ?? true,
           isMain: a.is_main ?? false,
-          skills: a.skills || [],
-          mcpServers: a.mcp_servers || a.mcpServers || [],
           createdAt: a.created_at,
           updatedAt: a.updated_at,
         }))
@@ -60,8 +58,6 @@ export const useAgentStore = defineStore('agent', () => {
     provider?: string
     color?: string
     capabilities?: string[]
-    skills?: string[]
-    mcpServers?: string[]
   }) => {
     const result = await apiPost<any>('/agents', {
       name: agent.name,
@@ -71,8 +67,6 @@ export const useAgentStore = defineStore('agent', () => {
       provider: agent.provider,
       color: agent.color || '#147EBC',
       capabilities: agent.capabilities || ['chat'],
-      skills: agent.skills || [],
-      mcp_servers: agent.mcpServers || [],
     })
     await fetchAgents()
     const created = agents.value.find(a => a.id === result.id)
@@ -92,8 +86,6 @@ export const useAgentStore = defineStore('agent', () => {
     if (updates.color !== undefined) body.color = updates.color
     if (updates.capabilities !== undefined) body.capabilities = updates.capabilities
     if (updates.isActive !== undefined) body.is_active = updates.isActive
-    if (updates.skills !== undefined) body.skills = updates.skills
-    if (updates.mcpServers !== undefined) body.mcp_servers = updates.mcpServers
 
     await apiPatch(`/agents/${agentId}`, body)
     await fetchAgents()
