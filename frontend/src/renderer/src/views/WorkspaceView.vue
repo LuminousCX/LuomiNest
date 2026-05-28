@@ -104,7 +104,7 @@ const confirmDialogIsDanger = ref(false)
 const openConfirmDialog = (message: string, callback: () => void, isDanger = false) => {
   confirmDialogMessage.value = message
   confirmDialogCallback.value = callback
-  confirmDialogIsDanger.value = true
+  confirmDialogIsDanger.value = isDanger
   showConfirmDialog.value = true
 }
 

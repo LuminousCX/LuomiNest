@@ -1,4 +1,4 @@
-import { app, dialog, protocol } from 'electron'
+import { app, dialog, protocol, IpcMainInvokeEvent } from 'electron'
 import { join, dirname, basename, resolve, sep } from 'path'
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, statSync, copyFileSync } from 'fs'
 import { PATHS } from './paths'
@@ -233,9 +233,12 @@ export function registerAvatarIpc(): void {
     return loadImportedModels()
   })
 
-  ipcMain.handle('avatar:deleteModel', async (_e, modelName: string) => {
+  ipcMain.handle('avatar:deleteModel', async (_e: IpcMainInvokeEvent, modelName: string) => {
     try {
-      const destDir = join(PATHS.live2d, modelName)
+      const destDir = resolve(PATHS.live2d, modelName)
+      if (!destDir.startsWith(resolve(PATHS.live2d) + sep)) {
+        return { success: false, error: 'Invalid model name' }
+      }
       if (existsSync(destDir)) {
         rmSync(destDir, { recursive: true, force: true })
       }

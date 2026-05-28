@@ -5,6 +5,14 @@ import { API_ENDPOINTS } from '../config/api'
 const isSpeaking = ref(false)
 const speakingMessageId = ref<string | null>(null)
 let currentAudio: HTMLAudioElement | null = null
+let currentAudioUrl: string | null = null
+
+function revokeCurrentAudioUrl() {
+  if (currentAudioUrl) {
+    URL.revokeObjectURL(currentAudioUrl)
+    currentAudioUrl = null
+  }
+}
 
 function cleanTextForTTS(text: string): string {
   return text
@@ -45,17 +53,25 @@ async function speakWithEdgeTTS(text: string, messageId: string): Promise<boolea
   const ttsConfig = modelStore.ttsConfig
   const voice = ttsConfig.voice || 'zh-CN-XiaoxiaoNeural'
 
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30000)
+
   try {
     const response = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, voice }),
+      signal: controller.signal,
     })
 
     if (!response.ok) throw new Error('TTS request failed')
 
     const audioBlob = await response.blob()
+    clearTimeout(timeoutId)
+
+    revokeCurrentAudioUrl()
     const audioUrl = URL.createObjectURL(audioBlob)
+    currentAudioUrl = audioUrl
 
     currentAudio = new Audio(audioUrl)
     currentAudio.onplay = () => {
@@ -67,7 +83,12 @@ async function speakWithEdgeTTS(text: string, messageId: string): Promise<boolea
     await currentAudio.play()
     return true
   } catch (e) {
-    console.warn('[TTS] Edge TTS failed, falling back to Web Speech API:', e)
+    clearTimeout(timeoutId)
+    if (controller.signal.aborted) {
+      console.warn('[TTS] Edge TTS request timed out, falling back to Web Speech API')
+    } else {
+      console.warn('[TTS] Edge TTS failed, falling back to Web Speech API:', e)
+    }
     return false
   }
 }
@@ -100,6 +121,7 @@ function stopSpeaking() {
     currentAudio.currentTime = 0
     currentAudio = null
   }
+  revokeCurrentAudioUrl()
   window.speechSynthesis?.cancel()
   isSpeaking.value = false
   speakingMessageId.value = null

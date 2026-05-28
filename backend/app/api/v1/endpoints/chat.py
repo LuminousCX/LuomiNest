@@ -430,6 +430,6 @@ async def tts_synthesize(request: TTSRequest):
         provider = EdgeTTSProvider()
         audio_bytes = await provider.synthesize(request.text, request.voice)
         return Response(content=audio_bytes, media_type="audio/mpeg")
-    except Exception as e:
-        logger.error(f"[TTS] Synthesis failed: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+    except Exception:
+        logger.exception("[TTS] Synthesis failed")
+        return JSONResponse({"error": "TTS synthesis failed"}, status_code=500)

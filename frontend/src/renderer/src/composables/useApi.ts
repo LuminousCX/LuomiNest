@@ -87,10 +87,10 @@ export const useApi = () => {
     request<T>(path, { method: 'DELETE' })
 
   const truncateMessages = (convId: string, keepCount: number): Promise<void> =>
-    apiPatch(`/chat/conversations/${convId}/messages`, { keep_count: keepCount })
+    apiPatch(`/chat/conversations/${encodeURIComponent(convId)}/messages`, { keep_count: keepCount })
 
   const deleteMessage = (convId: string, messageId: string): Promise<void> =>
-    apiDelete(`/chat/conversations/${convId}/messages/${messageId}`)
+    apiDelete(`/chat/conversations/${encodeURIComponent(convId)}/messages/${encodeURIComponent(messageId)}`)
 
   const apiStream = async (
     path: string,

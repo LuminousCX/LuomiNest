@@ -33,7 +33,7 @@ class ChatService:
         file_name: str | None = None,
         file_type: str | None = None,
     ) -> None:
-        if not content:
+        if not content and not file_content and not file_name:
             return
         entry: dict = {"role": "user", "content": content}
         if file_content:
@@ -102,9 +102,9 @@ class ChatService:
             else:
                 state["content"] = raw
         except Exception as e:
-            logger.error(f"[API] Non-stream error: {e}")
+            logger.error(f"[API] Non-stream error: {e}", exc_info=True)
             state["aborted"] = True
-            state["content"] = f"[Error] {str(e)}"
+            state["content"] = "[Error] An internal error occurred"
 
     async def stream_chat(
         self,
@@ -132,9 +132,9 @@ class ChatService:
                     )
                     yield f"data: {data.model_dump_json()}\n\n"
         except Exception as e:
-            logger.error(f"[STREAM] stream_chat error: {e}")
+            logger.error(f"[STREAM] stream_chat error: {e}", exc_info=True)
             yield (
-                f"data: {ChatStreamChunk(id=chat_id, content=f'[Error] {str(e)}', model=model, provider=provider).model_dump_json()}\n\n"
+                f"data: {ChatStreamChunk(id=chat_id, content='[Error] An internal error occurred', model=model, provider=provider).model_dump_json()}\n\n"
             )
         finally:
             done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
@@ -176,8 +176,8 @@ class ChatService:
 
             except Exception as e:
                 state["aborted"] = True
-                logger.error(f"[STREAM] Aborted: conv={conv_id}, error={e}")
-                yield self._sse(chat_id, f"[Error] {str(e)}", provider, model)
+                logger.error(f"[STREAM] Aborted: conv={conv_id}, error={e}", exc_info=True)
+                yield self._sse(chat_id, "[Error] An internal error occurred", provider, model)
 
             finally:
                 try:

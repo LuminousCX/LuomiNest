@@ -277,10 +277,6 @@ const selectAllTrash = () => {
   }
 }
 
-const clearTrashSelection = () => {
-  trashSelectedIds.value = new Set()
-}
-
 const handleBatchRestore = async () => {
   if (trashSelectedIds.value.size === 0) return
   try {

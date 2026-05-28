@@ -197,7 +197,7 @@ class ConversationStore:
                 self._save_index()
             return True
 
-    def permanent_delete(self, conv_id: str):
+    def permanent_delete(self, conv_id: str) -> bool:
         path = self._conv_path(conv_id)
         if os.path.exists(path):
             try:
@@ -209,13 +209,15 @@ class ConversationStore:
             if conv_id in index:
                 del index[conv_id]
                 self._save_index()
+                return True
+        return False
 
     def empty_trash(self, agent_id: str | None = None):
         trash_items = self.list_trash(agent_id)
         deleted_count = 0
         for item in trash_items:
-            self.permanent_delete(item["id"])
-            deleted_count += 1
+            if self.permanent_delete(item["id"]):
+                deleted_count += 1
         return deleted_count
 
     def batch_restore(self, conv_ids: list[str]):
@@ -228,8 +230,8 @@ class ConversationStore:
     def batch_permanent_delete(self, conv_ids: list[str]):
         deleted = 0
         for conv_id in conv_ids:
-            self.permanent_delete(conv_id)
-            deleted += 1
+            if self.permanent_delete(conv_id):
+                deleted += 1
         return deleted
 
     def batch_soft_delete(self, conv_ids: list[str]):

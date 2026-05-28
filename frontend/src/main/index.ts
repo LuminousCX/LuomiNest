@@ -136,13 +136,12 @@ const createTray = (): void => {
   const iconPath = join(__dirname, '../../resources/icon.png')
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   tray = new Tray(icon)
-  const desktopPet = getDesktopPetWindow()
   const contextMenu = Menu.buildFromTemplate([
     { label: '显示窗口', click: () => { mainWindow?.show(); mainWindow?.focus() } },
     { label: '隐藏窗口', click: () => mainWindow?.hide() },
     { type: 'separator' },
     { label: '显示桌面宠物', click: () => { createDesktopPet(mainWindow) } },
-    { label: '隐藏桌面宠物', click: () => { if (desktopPet && !desktopPet.isDestroyed()) desktopPet.hide() } },
+    { label: '隐藏桌面宠物', click: () => { const pet = getDesktopPetWindow(); if (pet && !pet.isDestroyed()) pet.hide() } },
     { type: 'separator' },
     { label: '退出', click: () => { tray?.destroy(); app.quit() } }
   ])
@@ -222,7 +221,7 @@ app.whenReady().then(async () => {
   createTray()
 
   registerIpcHandlers(mainWindow)
-  registerDesktopPetIpc()
+  registerDesktopPetIpc(mainWindow)
   registerAvatarIpc()
 
   app.on('activate', () => {

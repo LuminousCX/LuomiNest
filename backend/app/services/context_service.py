@@ -212,7 +212,7 @@ When thinking/reasoning, you MUST strictly follow this format:
                 }
             else:
                 new_messages.insert(0, {"role": "system", "content": rag_context})
-            logger.info(f"[RAG] Injected {len(results)} RAG results for query: '{user_query[:50]}'")
+            logger.info(f"[RAG] Injected {len(results)} RAG results for query (len={len(user_query)})")
             return new_messages
         except Exception as e:
             logger.warning(f"[RAG] Failed to inject RAG context: {e}")

@@ -1,5 +1,7 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+from loguru import logger
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -53,7 +55,11 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    if s.LLM_MAX_CONCURRENT_REQUESTS < 1:
+        logger.warning(f"LLM_MAX_CONCURRENT_REQUESTS={s.LLM_MAX_CONCURRENT_REQUESTS} is invalid, clamping to 1")
+        s.LLM_MAX_CONCURRENT_REQUESTS = 1
+    return s
 
 
 settings = get_settings()

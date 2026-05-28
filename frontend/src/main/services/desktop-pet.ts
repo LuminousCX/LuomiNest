@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, Menu, screen } from 'electron'
+import { BrowserWindow, ipcMain, Menu, screen, IpcMainInvokeEvent } from 'electron'
 import { join } from 'path'
 import { platform } from 'os'
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs'
@@ -153,6 +153,7 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     }
   })
 
+  ipcMain.removeAllListeners('desktop-pet:show-context-menu')
   ipcMain.on('desktop-pet:show-context-menu', () => {
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       petContextMenu.popup({ window: desktopPetWindow })
@@ -204,30 +205,40 @@ export const sendToDesktopPet = (channel: string, ...args: any[]): boolean => {
   return false
 }
 
-export function registerDesktopPetIpc(): void {
-  const { ipcMain } = require('electron')
+export function registerDesktopPetIpc(mainWindow: BrowserWindow | null): void {
+  const assertTrustedSender = (event: IpcMainInvokeEvent): boolean => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+      return false
+    }
+    return true
+  }
 
-  ipcMain.handle('desktop-pet:open', async (_e, modelInfo?: ImportedModelRecord) => {
+  ipcMain.handle('desktop-pet:open', async (event: IpcMainInvokeEvent, modelInfo?: ImportedModelRecord) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     createDesktopPet(null, modelInfo)
     return { success: true }
   })
 
-  ipcMain.handle('desktop-pet:close', async () => {
+  ipcMain.handle('desktop-pet:close', async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     closeDesktopPet()
     return { success: true }
   })
 
-  ipcMain.handle('desktop-pet:isRunning', async () => {
+  ipcMain.handle('desktop-pet:isRunning', async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     return isDesktopPetRunning()
   })
 
-  ipcMain.handle('desktop-pet:loadModel', async (_e, modelInfo: ImportedModelRecord) => {
+  ipcMain.handle('desktop-pet:loadModel', async (event: IpcMainInvokeEvent, modelInfo: ImportedModelRecord) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     return sendToDesktopPet('desktop-pet:load-model', modelInfo)
       ? { success: true }
       : { success: false, error: 'Desktop pet window not running' }
   })
 
-  ipcMain.handle('desktop-pet:show', async () => {
+  ipcMain.handle('desktop-pet:show', async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       desktopPetWindow.show()
       desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
@@ -235,26 +246,30 @@ export function registerDesktopPetIpc(): void {
     return { success: true }
   })
 
-  ipcMain.handle('desktop-pet:hide', async () => {
+  ipcMain.handle('desktop-pet:hide', async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       desktopPetWindow.hide()
     }
     return { success: true }
   })
 
-  ipcMain.handle('desktop-pet:triggerMotion', async (_e, group: string, index: number) => {
+  ipcMain.handle('desktop-pet:triggerMotion', async (event: IpcMainInvokeEvent, group: string, index: number) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     return sendToDesktopPet('desktop-pet:trigger-motion', group, index)
       ? { success: true }
       : { success: false }
   })
 
-  ipcMain.handle('desktop-pet:triggerExpression', async (_e, name: string) => {
+  ipcMain.handle('desktop-pet:triggerExpression', async (event: IpcMainInvokeEvent, name: string) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     return sendToDesktopPet('desktop-pet:trigger-expression', name)
       ? { success: true }
       : { success: false }
   })
 
-  ipcMain.handle('desktop-pet:setPosition', async (_e, x: number, y: number) => {
+  ipcMain.handle('desktop-pet:setPosition', async (event: IpcMainInvokeEvent, x: number, y: number) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return { success: false, error: 'Invalid position: x and y must be finite numbers' }
     }
@@ -265,7 +280,8 @@ export function registerDesktopPetIpc(): void {
       : { success: false, error: 'Desktop pet window not running' }
   })
 
-  ipcMain.handle('desktop-pet:setScale', async (_e, scale: number) => {
+  ipcMain.handle('desktop-pet:setScale', async (event: IpcMainInvokeEvent, scale: number) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     if (!Number.isFinite(scale)) {
       return { success: false, error: 'Invalid scale: must be a finite number' }
     }
@@ -275,7 +291,8 @@ export function registerDesktopPetIpc(): void {
       : { success: false, error: 'Desktop pet window not running' }
   })
 
-  ipcMain.handle('desktop-pet:driveLipSync', async (_e, value: number) => {
+  ipcMain.handle('desktop-pet:driveLipSync', async (event: IpcMainInvokeEvent, value: number) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     if (!Number.isFinite(value)) {
       return { success: false, error: 'Invalid lip-sync value: must be a finite number' }
     }
@@ -285,7 +302,8 @@ export function registerDesktopPetIpc(): void {
       : { success: false, error: 'Desktop pet window not running' }
   })
 
-  ipcMain.handle('desktop-pet:drivePadEmotion', async (_e, pleasure: number, arousal: number, dominance: number) => {
+  ipcMain.handle('desktop-pet:drivePadEmotion', async (event: IpcMainInvokeEvent, pleasure: number, arousal: number, dominance: number) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     if (!Number.isFinite(pleasure) || !Number.isFinite(arousal) || !Number.isFinite(dominance)) {
       return { success: false, error: 'Invalid PAD values: all must be finite numbers' }
     }
@@ -297,7 +315,8 @@ export function registerDesktopPetIpc(): void {
       : { success: false, error: 'Desktop pet window not running' }
   })
 
-  ipcMain.handle('desktop-pet:setCoreParam', async (_e, paramId: string, value: number) => {
+  ipcMain.handle('desktop-pet:setCoreParam', async (event: IpcMainInvokeEvent, paramId: string, value: number) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     const ALLOWED_PARAMS = new Set([
       'ParamAngleX', 'ParamAngleY', 'ParamAngleZ',
       'ParamEyeLOpen', 'ParamEyeROpen',
@@ -321,7 +340,8 @@ export function registerDesktopPetIpc(): void {
       : { success: false, error: 'Desktop pet window not running' }
   })
 
-  ipcMain.handle('desktop-pet:getModelCapabilities', async () => {
+  ipcMain.handle('desktop-pet:getModelCapabilities', async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       return new Promise((resolve) => {
         const requestId = `cap-${Date.now()}`
