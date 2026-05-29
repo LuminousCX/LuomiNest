@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: LuomiNest Documentation
+    url: "https://github.com/LuminousCX/LuomiNest/tree/main/docs"
+    about: "Check project documentation for more information"
+  - name: Discussions
+    url: "https://github.com/LuminousCX/LuomiNest/discussions"
+    about: "Join the community to ask questions or share ideas"
+  - name: Security Issue
+    url: "https://github.com/LuminousCX/LuomiNest/security/policy"
+    about: "Report security vulnerabilities through the security policy, do not report in public Issues"

@@ -1,0 +1,54 @@
+# NOTICE
+
+LuomiNest - Distributed AI Companion Platform
+Copyright (C) 2026 LuminousCX R&D Team
+
+This project uses third-party libraries and components.
+Please see the following acknowledgments:
+
+---
+
+## Third-Party Libraries
+
+### Backend (Python)
+
+- FastAPI - MIT License
+- Pydantic - MIT License
+- SQLAlchemy - MIT License
+- LiteLLM - MIT License
+- OpenAI SDK - MIT License
+- Anthropic SDK - MIT License
+- Redis - MIT License
+- Paho-MQTT - MIT License
+- Loguru - MIT License
+
+### Frontend (TypeScript/Vue)
+
+- Vue.js - MIT License
+- Electron - MIT License
+- PixiJS - MIT License
+- pixi-live2d-display - MIT License
+- Pinia - MIT License
+- Lucide Icons - ISC License
+
+### Firmware (ESP32)
+
+- ESP-IDF - Apache 2.0 License
+- LVGL - MIT License
+
+### Live2D Models
+
+Live2D Cubism SDK and sample models are provided by Live2D Inc.
+Please refer to Live2D's license terms for usage restrictions.
+
+---
+
+## License
+
+This project is licensed under GNU AGPL v3.
+See [LICENSE](LICENSE) for full license text.
+
+---
+
+For questions about licensing, please contact:
+license@luminouscx.com
