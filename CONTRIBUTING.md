@@ -360,7 +360,7 @@ Keep PRs focused. Smaller PRs review faster.
 **Do not report security vulnerabilities in public Issues!**
 
 Please report privately via email:
-- Email: `security@luminouscx.com`
+- Email: `luminouschenxi@outlook.com`
 - Subject: `LuomiNest Security Report`
 
 See: [Security Policy](SECURITY.md)

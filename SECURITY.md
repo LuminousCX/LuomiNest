@@ -15,7 +15,7 @@ Security fixes are applied to the latest code on the `main` branch.
 
 Please report privately via email:
 
-- Email: `security@luminouscx.com`
+- Email: `luminouschenxi@outlook.com`
 - Subject: `LuomiNest Security Report`
 
 ### What to Include
