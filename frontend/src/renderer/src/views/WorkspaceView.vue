@@ -10,7 +10,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Bot,
-  Link2,
   Loader2,
   AlertTriangle,
   RotateCcw,
@@ -18,8 +17,6 @@ import {
   Copy,
   Check,
   Search,
-  Zap,
-  Server,
   Square,
   UploadCloud,
   FileText,
@@ -35,7 +32,7 @@ import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
-import { useSkillStore } from '../stores/skill'
+import { useTTS } from '../composables/useTTS'
 import FileUpload from '../components/FileUpload.vue'
 import FilePreview from '../components/FilePreview.vue'
 import SuggestedQuestions from '../components/SuggestedQuestions.vue'
@@ -54,7 +51,7 @@ const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const modelStore = useModelStore()
-const skillStore = useSkillStore()
+const tts = useTTS()
 
 const { isUploading, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
 const { truncateMessages, deleteMessage } = useApi()
@@ -64,7 +61,6 @@ const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const showModelDropdown = ref(false)
-const showSkillDropdown = ref(false)
 const agentsCollapsed = ref(false)
 
 const toggleAgents = () => {
@@ -95,6 +91,32 @@ const newAgentForm = ref({
   color: '#147EBC',
 })
 const agentColors = ['#147EBC', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
+
+// 确认对话框状态
+const showConfirmDialog = ref(false)
+const confirmDialogMessage = ref('')
+const confirmDialogCallback = ref<(() => void) | null>(null)
+const confirmDialogIsDanger = ref(false)
+
+const openConfirmDialog = (message: string, callback: () => void, isDanger = false) => {
+  confirmDialogMessage.value = message
+  confirmDialogCallback.value = callback
+  confirmDialogIsDanger.value = isDanger
+  showConfirmDialog.value = true
+}
+
+const handleConfirmDialogConfirm = () => {
+  if (confirmDialogCallback.value) {
+    confirmDialogCallback.value()
+  }
+  showConfirmDialog.value = false
+  confirmDialogCallback.value = null
+}
+
+const handleConfirmDialogCancel = () => {
+  showConfirmDialog.value = false
+  confirmDialogCallback.value = null
+}
 
 const handleCreateAgent = async () => {
   if (!newAgentForm.value.name.trim()) return
@@ -224,8 +246,6 @@ const availableModelOptions = computed(() => {
   return options
 })
 
-const activeSkills = computed(() => skillStore.skills.filter(s => s.isActive))
-
 const selectModel = (providerId: string, modelId: string) => {
   if (agentStore.activeAgent) {
     agentStore.updateAgent(agentStore.activeAgent.id, {
@@ -239,7 +259,7 @@ const selectModel = (providerId: string, modelId: string) => {
 const canSend = computed(() => {
   if (!isBackendReady.value) return false
   if (isUploading.value) return false
-  return inputText.value.trim().length > 0 || !!parsedContent.value
+  return inputText.value.trim().length > 0 || !!parsedContent.value || !!chatStore.quotedMessage
 })
 
 const sendMessage = async () => {
@@ -252,6 +272,9 @@ const sendMessage = async () => {
 
   if (!content && fileContent) {
     content = '请帮我分析上传的文件'
+  }
+  if (!content && chatStore.quotedMessage) {
+    content = '请看上面的引用内容'
   }
 
   inputText.value = ''
@@ -598,7 +621,7 @@ watch(() => messages.value, async (msgs) => {
       }
     }
   }
-}, { deep: false, immediate: true })
+}, { deep: true, immediate: true })
 
 const copyMessage = async (msgId: string, content: string) => {
   try {
@@ -689,12 +712,6 @@ const handlePaste = async (e: ClipboardEvent) => {
   }
 }
 
-const insertSkillToInput = (skillName: string) => {
-  inputText.value += `<tool_call name="${skillName}">\n{}\n</tool_call >`
-  showSkillDropdown.value = false
-  if (textareaRef.value) textareaRef.value.focus()
-}
-
 watch(messages, () => {
   if (isStreaming.value && isNearBottom.value) {
     nextTick(() => scrollToBottom())
@@ -751,9 +768,6 @@ const handleClickOutsideModel = (e: MouseEvent) => {
   if (!target.closest('.model-dropdown-container')) {
     showModelDropdown.value = false
   }
-  if (!target.closest('.skill-dropdown-container')) {
-    showSkillDropdown.value = false
-  }
 }
 
 function handleChatTrigger(event: CustomEvent) {
@@ -789,8 +803,6 @@ onMounted(async () => {
       modelStore.fetchProviders(),
       modelStore.fetchModelConfig(),
       chatStore.fetchConversations(),
-      skillStore.fetchSkills(),
-      skillStore.fetchMcpServers(),
     ])
   }
   document.addEventListener('click', handleClickOutsideModel)
@@ -814,6 +826,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('paste', handlePaste)
   window.removeEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
   window.removeEventListener('luominest:memory-chat-trigger', handleMemoryChatTrigger as EventListener)
+  tts.stopSpeaking()
 })
 </script>
 
@@ -1017,6 +1030,61 @@ onBeforeUnmount(() => {
                         </div>
                       </div>
                     </div>
+
+                    <!-- 推荐问题：在操作栏下方 -->
+                    <SuggestedQuestions
+                      v-if="msg.role === 'assistant' && msg.id === currentSuggestionMessageId && msg.suggestedQuestions && msg.suggestedQuestions.length > 0"
+                      :questions="msg.suggestedQuestions"
+                      @select="handleSuggestionClick"
+                    />
+
+                    <!-- 用户消息：[复制][引用][删除][回退] ← [气泡] -->
+                    <div v-if="msg.role === 'user'" class="user-msg-layout">
+                      <div class="user-msg-btns">
+                        <button class="u-btn u-btn-hover" title="复制" @click="copyMessage(msg.id, msg.content)">
+                          <Check v-if="copiedId === msg.id" :size="14" />
+                          <Copy v-else :size="14" />
+                        </button>
+                        <button class="u-btn u-btn-hover" title="引用" @click="handleQuoteMessage(msg)">
+                          <Quote :size="14" />
+                        </button>
+                        <button class="u-btn u-btn-hover u-btn-danger" title="删除" @click="handleDeleteMessage(msg.id)">
+                          <Trash2 :size="14" />
+                        </button>
+                        <button
+                          class="u-btn"
+                          title="回退到本轮对话发起前"
+                          @click="handleGoBackToStart(msg)"
+                        >
+                          <Undo2 :size="14" />
+                        </button>
+                      </div>
+                      <div class="message-content user-message">
+                        <div v-if="msg.quote && (msg.quote.content || (msg.quote.id))" class="message-quote-block" :class="msg.quote.role">
+                          <Quote :size="12" class="quote-block-icon" />
+                          <div class="quote-block-content">
+                            <span class="quote-block-label">{{ msg.quote.role === 'assistant' ? '助手' : '用户' }}</span>
+                            <span class="quote-block-text">
+                              <span v-if="msg.quote.content">{{ msg.quote.content.slice(0, 150) }}{{ msg.quote.content.length > 150 ? '...' : '' }}</span>
+                              <span v-else class="quote-block-empty">（该消息无文字内容）</span>
+                            </span>
+                          </div>
+                        </div>
+                        {{ msg.content }}
+                        <div v-if="msg.files && msg.files.length > 0" class="message-files">
+                          <div
+                            v-for="(file, index) in msg.files"
+                            :key="index"
+                            class="message-file-item"
+                            @click="openFilePreview(file)"
+                          >
+                            <component :is="getFileIcon(file.type)" :size="16" />
+                            <span>{{ file.name }}</span>
+                            <Download :size="14" class="download-icon" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </TransitionGroup>
@@ -1055,6 +1123,16 @@ onBeforeUnmount(() => {
         <div class="input-area">
           <FileUpload ref="fileUploadRef" />
           <div class="input-wrapper">
+            <div v-if="chatStore.quotedMessage" class="quote-preview">
+              <Quote :size="14" class="quote-preview-icon" />
+              <div class="quote-preview-content">
+                <span class="quote-preview-label">{{ chatStore.quotedMessage.role === 'assistant' ? '助手' : '用户' }}</span>
+                <span class="quote-preview-text">{{ chatStore.quotedMessage.content.slice(0, 80) }}{{ chatStore.quotedMessage.content.length > 80 ? '...' : '' }}</span>
+              </div>
+              <button class="quote-preview-cancel" @click="chatStore.quotedMessage = null">
+                <X :size="14" />
+              </button>
+            </div>
             <textarea
               ref="textareaRef"
               v-model="inputText"
@@ -1097,63 +1175,6 @@ onBeforeUnmount(() => {
                         </button>
                         <div v-if="availableModelOptions.length === 0" class="dropdown-empty">
                           暂无可用模型，请先配置供应商
-                        </div>
-                      </div>
-                    </div>
-                  </Transition>
-                </div>
-                <div class="skill-dropdown-container">
-                  <button class="tool-btn" title="技能与工具" @click.stop="showSkillDropdown = !showSkillDropdown">
-                    <Zap :size="16" />
-                    <span>技能</span>
-                    <ChevronDown :size="14" />
-                  </button>
-                  <Transition name="dropdown-fade">
-                    <div v-if="showSkillDropdown" class="skill-dropdown">
-                      <div class="dropdown-header">
-                        <Zap :size="14" />
-                        可用技能
-                      </div>
-                      <div class="dropdown-list">
-                        <button
-                          v-for="skill in activeSkills"
-                          :key="skill.name"
-                          class="dropdown-item"
-                          @click="insertSkillToInput(skill.name)"
-                        >
-                          <div class="skill-icon-badge" :class="skill.category">
-                            <Zap v-if="skill.category === 'utility'" :size="14" />
-                            <Search v-else-if="skill.category === 'knowledge'" :size="14" />
-                            <Bot v-else-if="skill.category === 'agent'" :size="14" />
-                            <Link2 v-else :size="14" />
-                          </div>
-                          <div class="dropdown-item-info">
-                            <span class="dropdown-item-model">{{ skill.name }}</span>
-                            <span class="dropdown-item-provider">{{ skill.description }}</span>
-                          </div>
-                          <span v-if="skill.isBuiltin" class="skill-badge builtin">内置</span>
-                          <span v-else class="skill-badge custom">自定义</span>
-                        </button>
-                        <div v-if="skillStore.mcpServers.length > 0" class="dropdown-section">
-                          <div class="dropdown-section-title">
-                            <Server :size="12" />
-                            MCP 服务器
-                          </div>
-                          <div
-                            v-for="server in skillStore.mcpServers"
-                            :key="server.name"
-                            class="dropdown-item mcp-server-item"
-                          >
-                            <Server :size="14" class="mcp-icon" />
-                            <div class="dropdown-item-info">
-                              <span class="dropdown-item-model">{{ server.name }}</span>
-                              <span class="dropdown-item-provider">{{ server.transport }}</span>
-                            </div>
-                            <span class="skill-badge mcp">MCP</span>
-                          </div>
-                        </div>
-                        <div v-if="activeSkills.length === 0 && skillStore.mcpServers.length === 0" class="dropdown-empty">
-                          暂无可用技能
                         </div>
                       </div>
                     </div>
@@ -1336,6 +1357,23 @@ onBeforeUnmount(() => {
             >
               保存
             </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <Transition name="dialog-fade">
+      <div v-if="showConfirmDialog" class="confirm-dialog-overlay" @click.self="handleConfirmDialogCancel">
+        <div class="confirm-dialog">
+          <div class="confirm-dialog-icon">
+            <AlertTriangle :size="24" />
+          </div>
+          <p class="confirm-dialog-message">{{ confirmDialogMessage }}</p>
+          <div class="confirm-dialog-actions">
+            <button class="dialog-btn confirm" @click="handleConfirmDialogConfirm">
+              确定
+            </button>
+            <button class="dialog-btn cancel" @click="handleConfirmDialogCancel">取消</button>
           </div>
         </div>
       </div>
@@ -1885,6 +1923,114 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
+/* 消息中的引用块 */
+.message-quote-block {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-left: 3px solid #147ebc;
+  border-radius: 6px;
+  background: rgba(20, 126, 188, 0.08);
+}
+
+.message-quote-block.assistant {
+  border-left-color: #147ebc;
+}
+
+.message-quote-block.user {
+  border-left-color: #10b981;
+}
+
+.quote-block-icon {
+  color: rgba(20, 126, 188, 0.5);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.quote-block-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quote-block-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #147ebc;
+}
+
+.quote-block-text {
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.quote-block-empty {
+  color: rgba(0, 0, 0, 0.35);
+  font-style: italic;
+}
+
+/* 输入框引用预览条 */
+.quote-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(20, 126, 188, 0.04);
+}
+
+.quote-preview-icon {
+  color: rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+}
+
+.quote-preview-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quote-preview-label {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.quote-preview-text {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quote-preview-cancel {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.quote-preview-cancel:hover {
+  color: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.06);
+}
+
 .interrupted-inline {
   display: inline-flex;
   align-items: center;
@@ -2248,13 +2394,11 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 
-.model-dropdown-container,
-.skill-dropdown-container {
+.model-dropdown-container {
   position: relative;
 }
 
-.model-dropdown,
-.skill-dropdown {
+.model-dropdown {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
@@ -2363,67 +2507,6 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-}
-
-.skill-icon-badge {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.skill-icon-badge.knowledge {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-}
-
-.skill-icon-badge.utility {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
-}
-
-.skill-icon-badge.agent {
-  background: rgba(139, 92, 246, 0.1);
-  color: #8b5cf6;
-}
-
-.skill-icon-badge.general {
-  background: rgba(20, 126, 188, 0.1);
-  color: var(--lumi-primary);
-}
-
-.skill-badge {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: var(--radius-full);
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
-.skill-badge.builtin {
-  background: rgba(20, 126, 188, 0.1);
-  color: var(--lumi-primary);
-}
-
-.skill-badge.custom {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
-}
-
-.skill-badge.mcp {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-}
-
-.mcp-icon {
-  color: #3b82f6;
-}
-
-.mcp-server-item {
-  cursor: default;
 }
 
 .dropdown-fade-enter-active {
@@ -3085,5 +3168,72 @@ onBeforeUnmount(() => {
 @keyframes search-highlight-pulse {
   0% { background: rgba(20, 126, 188, 0.2); }
   100% { background: transparent; }
+}
+
+/* Confirm Dialog */
+.confirm-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.confirm-dialog {
+  background: var(--workspace-card);
+  border-radius: var(--radius-xl);
+  padding: 32px 28px 24px;
+  width: 360px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.confirm-dialog-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  margin-bottom: 16px;
+}
+
+.confirm-dialog-message {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin: 0 0 24px;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.confirm-dialog-actions .dialog-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 10px 20px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dialog-btn.confirm {
+  color: white;
+  background: #ef4444;
+  border: none;
+}
+
+.dialog-btn.confirm:hover {
+  background: #dc2626;
 }
 </style>

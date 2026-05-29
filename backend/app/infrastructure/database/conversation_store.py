@@ -116,6 +116,8 @@ class ConversationStore:
             index = self._load_index()
         result = []
         for conv_id, meta in index.items():
+            if meta.get("deleted_at"):
+                continue
             if agent_id and meta.get("agent_id") != agent_id:
                 continue
             result.append(meta)
@@ -123,7 +125,6 @@ class ConversationStore:
         return result
 
     def search_conversations(self, keyword: str, agent_id: str | None = None) -> list[dict]:
-        """搜索对话：匹配标题和消息内容，返回匹配结果及关键词片段"""
         if not keyword or not keyword.strip():
             return []
         q = keyword.strip().lower()
@@ -131,6 +132,8 @@ class ConversationStore:
             index = self._load_index()
         results = []
         for conv_id, meta in index.items():
+            if meta.get("deleted_at"):
+                continue
             if agent_id and meta.get("agent_id") != agent_id:
                 continue
             title = meta.get("title", "")
@@ -161,6 +164,82 @@ class ConversationStore:
             })
         results.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
         return results
+
+    def soft_delete(self, conv_id: str):
+        with self._lock:
+            index = self._load_index()
+            if conv_id not in index:
+                return False
+            index[conv_id]["deleted_at"] = datetime.now(timezone.utc).isoformat()
+            self._save_index()
+            return True
+
+    def list_trash(self, agent_id: str | None = None) -> list[dict]:
+        with self._lock:
+            index = self._load_index()
+        result = []
+        for conv_id, meta in index.items():
+            if not meta.get("deleted_at"):
+                continue
+            if agent_id and meta.get("agent_id") != agent_id:
+                continue
+            result.append(meta)
+        result.sort(key=lambda x: x.get("deleted_at", ""), reverse=True)
+        return result
+
+    def restore(self, conv_id: str):
+        with self._lock:
+            index = self._load_index()
+            if conv_id not in index:
+                return False
+            if "deleted_at" in index[conv_id]:
+                del index[conv_id]["deleted_at"]
+                self._save_index()
+            return True
+
+    def permanent_delete(self, conv_id: str) -> bool:
+        path = self._conv_path(conv_id)
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception as e:
+                logger.error(f"[ConvStore] Failed to permanently delete conv file {conv_id}: {e}")
+        with self._lock:
+            index = self._load_index()
+            if conv_id in index:
+                del index[conv_id]
+                self._save_index()
+                return True
+        return False
+
+    def empty_trash(self, agent_id: str | None = None):
+        trash_items = self.list_trash(agent_id)
+        deleted_count = 0
+        for item in trash_items:
+            if self.permanent_delete(item["id"]):
+                deleted_count += 1
+        return deleted_count
+
+    def batch_restore(self, conv_ids: list[str]):
+        restored = 0
+        for conv_id in conv_ids:
+            if self.restore(conv_id):
+                restored += 1
+        return restored
+
+    def batch_permanent_delete(self, conv_ids: list[str]):
+        deleted = 0
+        for conv_id in conv_ids:
+            if self.permanent_delete(conv_id):
+                deleted += 1
+        return deleted
+
+    def batch_soft_delete(self, conv_ids: list[str]):
+        deleted = 0
+        for conv_id in conv_ids:
+            if self.soft_delete(conv_id):
+                deleted += 1
+        return deleted
 
     def _migrate_search_text(self):
         """为索引中缺少 search_text 的对话补全搜索文本"""

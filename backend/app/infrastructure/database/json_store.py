@@ -92,5 +92,3 @@ class JsonStore:
 agents_store = JsonStore("agents.json")
 conversations_store = JsonStore("conversations.json")
 groups_store = JsonStore("groups.json")
-skills_store = JsonStore("skills.json")
-mcp_servers_store = JsonStore("mcp_servers.json")

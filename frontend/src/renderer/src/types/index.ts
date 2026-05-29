@@ -119,6 +119,13 @@ export interface ConversationSearchResult {
   updated_at: string
 }
 
+export interface TrashListItem {
+  id: string
+  title: string
+  deleted_at: string
+  agent_id?: string
+}
+
 export interface ModelProvider {
   id: string
   name: string
@@ -229,32 +236,6 @@ export interface STTConfig {
   language?: string
   autoSend?: boolean
   autoSendDelay?: number
-}
-
-export interface SkillDefinition {
-  name: string
-  description: string
-  category: string
-  parameters: Record<string, any>
-  isActive: boolean
-  isBuiltin: boolean
-  promptTemplate?: string
-  tags: string[]
-}
-
-export interface MCPServer {
-  name: string
-  transport: string
-  status?: string
-  command?: string
-  args?: string[]
-  env?: Record<string, string>
-}
-
-export interface MCPTool {
-  name: string
-  description?: string
-  inputSchema?: Record<string, any>
 }
 
 export interface GroupInfo {

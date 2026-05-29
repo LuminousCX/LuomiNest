@@ -39,8 +39,7 @@ const settingGroups = ref([
   {
     title: '连接与扩展',
     items: [
-      { icon: Globe, label: '消息平台', desc: 'QQ / 微信 / Discord 等', route: '/settings/platforms', theme: 'Globe' },
-      { icon: Settings, label: 'MCP 工具', desc: '外部工具接入协议', route: '/settings/mcp', theme: 'Wrench' }
+      { icon: Globe, label: '消息平台', desc: 'QQ / 微信 / Discord 等', route: '/settings/platforms', theme: 'Globe' }
     ]
   }
 ])

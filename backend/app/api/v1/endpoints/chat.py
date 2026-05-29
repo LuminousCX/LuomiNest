@@ -3,9 +3,8 @@ import json
 import re
 import uuid
 import time
+import uuid
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
-from collections.abc import AsyncIterator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -19,17 +18,15 @@ from app.schemas.chat import (
     ConversationResponse,
     ConversationListResponse,
     ConversationSearchResult,
+    TrashListItemResponse,
+    BatchIdsRequest,
 )
 from app.runtime.provider.llm.adapter import llm_adapter
-from app.runtime.provider.llm.providers import LLMResponse, _repair_tool_call_arguments
-from app.infrastructure.database.json_store import agents_store
 from app.infrastructure.database.conversation_store import conversation_store
-from app.core.config import settings
 from app.core.context import get_context_manager
-from app.engines.memory.core.storage import get_memory_storage
-from app.engines.memory.core.injector import MemoryInjector
-from app.engines.memory.core.updater import MemoryUpdater
-from app.runtime.plugin.skill.registry import SkillRegistry
+from app.services.context_service import context_service
+from app.services.suggestion_service import suggestion_service
+from app.services.chat_service import ChatService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -723,22 +720,25 @@ async def chat_completions(request: ChatRequest):
     start_time = time.time()
     resolved_provider = request.provider or llm_adapter.default_provider
     resolved_model = request.model or llm_adapter.get_provider(resolved_provider).default_model
-    request_ts = request.timestamp or _get_timestamp()
-    logger.info(f"[API] POST /chat/completions - provider={resolved_provider}, model={resolved_model}, stream={request.stream}, ts={request_ts}")
+    request_ts = request.timestamp or time.time()
+    logger.info(
+        f"[API] POST /chat/completions - "
+        f"provider={resolved_provider}, model={resolved_model}, "
+        f"stream={request.stream}, ts={request_ts}"
+    )
 
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
-    messages = _inject_system_prompt(messages)
-    messages = await _inject_memory(messages, request.agent_id, resolved_provider)
+    messages = context_service.inject_timestamp_prompt(messages)
+    messages = await context_service.inject_memory(messages, request.agent_id, resolved_provider)
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
     messages = await ctx_mgr.process(messages)
 
-    # 直接走 LLM 原生输出，不经过意图分类和工具链
     if request.stream:
-        logger.info(f"[API] POST /chat/completions - Starting stream response")
-        tools = await _collect_all_tools(request.agent_id)
+        logger.info("[API] POST /chat/completions - Starting stream response")
+        from fastapi.responses import StreamingResponse
         return StreamingResponse(
-            _stream_chat(messages, tools, request, resolved_provider, resolved_model, request.agent_id),
+            _chat_service.stream_chat(messages, request, resolved_provider, resolved_model),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -747,58 +747,30 @@ async def chat_completions(request: ChatRequest):
             },
         )
 
-    try:
-        async with _llm_semaphore:
-            result = await llm_adapter.chat(
-                messages=messages,
-                provider_name=resolved_provider,
-                model=resolved_model,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                top_p=request.top_p,
-            )
+    gen_state: dict = {"content": "", "reasoning": "", "aborted": False, "started": True}
+    await _chat_service.non_stream_generate(
+        gen_state, messages,
+        resolved_provider, resolved_model,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+        top_p=request.top_p,
+    )
 
-        result_content = result.content if isinstance(result, LLMResponse) else (result.get("content") if isinstance(result, dict) else str(result))
-        result_content = result_content or ""
-        elapsed = time.time() - start_time
-        logger.success(f"[API] POST /chat/completions - Success: elapsed={elapsed:.2f}s, response_len={len(result_content)}")
-        return ChatResponse(
-            id=str(uuid.uuid4()),
-            content=result_content,
-            model=resolved_model,
-            provider=resolved_provider,
-        )
-    except Exception as e:
-        elapsed = time.time() - start_time
-        logger.error(f"[API] POST /chat/completions - Failed: elapsed={elapsed:.2f}s, error={e}")
-        raise
+    if gen_state["aborted"]:
+        raise Exception(gen_state["content"].removeprefix("[Error] "))
 
-
-async def _stream_chat(messages: list[dict], tools: list[dict] | None, request: ChatRequest, provider: str, model: str, agent_id: str | None = None):
-    chat_id = str(uuid.uuid4())
-    full_reply = ""
-    try:
-        async with _llm_semaphore:
-            async for chunk in llm_adapter.chat_stream(
-                messages=messages,
-                provider_name=provider,
-                model=model,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                top_p=request.top_p,
-            ):
-                content = chunk.data.get("content", "")
-                rc = chunk.data.get("reasoning", "")
-                if content:
-                    full_reply += content
-                data = ChatStreamChunk(id=chat_id, content=content, reasoning_content=rc, model=model, provider=provider)
-                yield f"data: {data.model_dump_json()}\n\n"
-    except Exception as e:
-        logger.error(f"[STREAM] _stream_chat error: {e}")
-        yield f"data: {ChatStreamChunk(id=chat_id, content=f'[Error] {str(e)}', model=model, provider=provider).model_dump_json()}\n\n"
-    finally:
-        done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
-        yield f"data: {done_data.model_dump_json()}\n\n"
+    result_content = gen_state["content"] or ""
+    elapsed = time.time() - start_time
+    logger.success(
+        f"[API] POST /chat/completions - "
+        f"Success: elapsed={elapsed:.2f}s, response_len={len(result_content)}"
+    )
+    return ChatResponse(
+        id=str(uuid.uuid4()),
+        content=result_content,
+        model=resolved_model,
+        provider=resolved_provider,
+    )
 
 
 @router.get("/conversations", response_model=list[ConversationListResponse])
@@ -843,13 +815,18 @@ async def search_conversations(keyword: str, agent_id: str | None = None):
         )
         for r in results
     ]
-    logger.success(f"[API] GET /chat/conversations/search - req_id={req_id}, found {len(response)} results")
+    logger.success(
+        f"[API] GET /chat/conversations/search - req_id={req_id}, found {len(response)} results"
+    )
     return response
 
 
 @router.post("/conversations", response_model=ConversationResponse)
 async def create_conversation(request: ConversationCreate):
-    logger.info(f"[API] POST /chat/conversations - Creating conversation: title={request.title}, agent_id={request.agent_id}")
+    logger.info(
+        f"[API] POST /chat/conversations - "
+        f"Creating conversation: title={request.title}, agent_id={request.agent_id}"
+    )
     conv_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     conv = {
@@ -875,20 +852,76 @@ async def get_conversation(conv_id: str):
         logger.error(f"[API] GET /chat/conversations/{conv_id} - Conversation not found")
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
-    logger.success(f"[API] GET /chat/conversations/{conv_id} - Success: title={conv['title']}, messages={len(conv.get('messages', []))}")
+    logger.success(
+        f"[API] GET /chat/conversations/{conv_id} - "
+        f"Success: title={conv['title']}, messages={len(conv.get('messages', []))}"
+    )
     return ConversationResponse(**conv)
 
 
 @router.delete("/conversations/{conv_id}")
 async def delete_conversation(conv_id: str):
-    logger.info(f"[API] DELETE /chat/conversations/{conv_id} - Deleting conversation")
+    logger.info(f"[API] DELETE /chat/conversations/{conv_id} - Moving to trash")
+    conversation_store.soft_delete(conv_id)
+    logger.success(f"[API] DELETE /chat/conversations/{conv_id} - Moved to trash")
+    return {"error": None, "data": {"deleted": True}}
+
+
+class TruncateMessagesRequest(BaseModel):
+    keep_count: int = Field(..., ge=0)
+
+
+class DeleteMessageRequest(BaseModel):
+    message_id: str
+
+
+@router.patch("/conversations/{conv_id}/messages")
+async def truncate_messages(conv_id: str, request: TruncateMessagesRequest):
+    logger.info(
+        f"[API] PATCH /chat/conversations/{conv_id}/messages - "
+        f"Truncating to {request.keep_count}"
+    )
     conv = conversation_store.get(conv_id)
-    if conv:
-        conv_title = conv.get("title", "unknown")
-        conversation_store.delete(conv_id)
-        logger.success(f"[API] DELETE /chat/conversations/{conv_id} - Conversation deleted: title={conv_title}")
-    else:
-        logger.warning(f"[API] DELETE /chat/conversations/{conv_id} - Conversation not found")
+    if not conv:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Conversation {conv_id} not found")
+    conv["messages"] = conv["messages"][:request.keep_count]
+    _chat_service.persist_conv(conv_id, conv)
+
+    agent_id = conv.get("agent_id")
+    try:
+        from app.engines.memory.core.storage import get_memory_storage
+        storage = get_memory_storage()
+        storage.clear_thread(conv_id, agent_id)
+        logger.info(f"[Memory] Cleared thread memory for conv={conv_id}")
+    except Exception as e:
+        logger.warning(f"[Memory] Failed to clear thread memory: {e}")
+
+    logger.success(
+        f"[API] PATCH /chat/conversations/{conv_id}/messages - "
+        f"Truncated to {request.keep_count} messages"
+    )
+    return {"error": None, "data": {"truncated": True, "keep_count": request.keep_count}}
+
+
+@router.delete("/conversations/{conv_id}/messages/{message_id}")
+async def delete_message(conv_id: str, message_id: str):
+    logger.info(
+        f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Deleting message"
+    )
+    conv = conversation_store.get(conv_id)
+    if not conv:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Conversation {conv_id} not found")
+    original_len = len(conv["messages"])
+    conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
+    if len(conv["messages"]) == original_len:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Message {message_id} not found in conversation {conv_id}")
+    _chat_service.persist_conv(conv_id, conv)
+    logger.success(
+        f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Message deleted"
+    )
     return {"error": None, "data": {"deleted": True}}
 
 
@@ -956,29 +989,43 @@ async def add_message(conv_id: str, request: ChatRequest):
             last_user_content = m.content
             break
 
-    _phase_1_save_user_msg(conv, last_user_content, request.file_content, request.file_name, request.file_type)
-    _persist_conv(conv_id, conv)
+    _chat_service.save_user_message(
+        conv, last_user_content, request.file_content, request.file_name, request.file_type,
+    )
+    _chat_service.persist_conv(conv_id, conv)
 
-    resolved_provider = request.provider or conv.get("provider") or llm_adapter.default_provider
-    resolved_model = request.model or conv.get("model") or llm_adapter.get_provider(resolved_provider).default_model
+    resolved_provider = (
+        request.provider or conv.get("provider") or llm_adapter.default_provider
+    )
+    resolved_model = (
+        request.model or conv.get("model")
+        or llm_adapter.get_provider(resolved_provider).default_model
+    )
 
-    system_prompt = _build_system_prompt(conv.get("agent_id"))
+    system_prompt = context_service.build_system_prompt(conv.get("agent_id"))
     all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
 
     for m in conv["messages"]:
         msg = {"role": m["role"], "content": m["content"]}
-        # 如果 content 是列表（多模态格式），保留原样
         if isinstance(m.get("content"), list):
             msg["content"] = m["content"]
         all_messages.append(msg)
 
-    all_messages = _inject_system_prompt(all_messages)
+    all_messages = context_service.inject_timestamp_prompt(all_messages)
     agent_id = request.agent_id or conv.get("agent_id")
-    all_messages = await _inject_memory(all_messages, agent_id, resolved_provider, conv_id)
+    all_messages = await context_service.inject_memory(
+        all_messages, agent_id, resolved_provider, conv_id,
+    )
 
     if request.file_content:
-        logger.info(f"[API] 文件内容注入: file_type={request.file_type}, content_length={len(request.file_content)}, is_image={request.file_type == 'image'}")
-        all_messages = _inject_file_content(all_messages, request.file_content, request.file_type or "text")
+        logger.info(
+            f"[API] 文件内容注入: file_type={request.file_type}, "
+            f"content_length={len(request.file_content)}, "
+            f"is_image={request.file_type == 'image'}"
+        )
+        all_messages = context_service.inject_file_content(
+            all_messages, request.file_content, request.file_type or "text",
+        )
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
     all_messages = await ctx_mgr.process(all_messages)
@@ -991,27 +1038,35 @@ async def add_message(conv_id: str, request: ChatRequest):
     }
 
     if request.stream:
-        return await _STREAM_RESPONSE(conv_id, conv, request, all_messages,
-                                       resolved_provider, resolved_model,
-                                       agent_id, gen_state, start_time)
+        return await _chat_service.stream_response(
+            conv_id, conv, request, all_messages,
+            resolved_provider, resolved_model,
+            agent_id, gen_state, start_time,
+        )
 
-    await _NON_STREAM_GENERATE(gen_state, all_messages,
-                                 resolved_provider, resolved_model,
-                                 temperature=request.temperature,
-                                 max_tokens=request.max_tokens,
-                                 top_p=request.top_p)
+    await _chat_service.non_stream_generate(
+        gen_state, all_messages,
+        resolved_provider, resolved_model,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+        top_p=request.top_p,
+    )
 
-    # 非流式路径：错误时不持久化 [Error] 占位符到对话历史
     persist_state = dict(gen_state)
     if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
         persist_state["content"] = ""
 
-    _PHASE_3_SAVE_ASSISTANT_MSG(conv, persist_state)
-    _persist_conv(conv_id, conv)
-    _schedule_memory_update([dict(m) for m in conv["messages"]], conv_id, agent_id)
+    _chat_service.save_assistant_message(conv, persist_state)
+    _chat_service.persist_conv(conv_id, conv)
+    context_service.schedule_memory_update(
+        [dict(m) for m in conv["messages"]], conv_id, agent_id,
+    )
 
     elapsed = time.time() - start_time
-    logger.success(f"[API] Done: conv={conv_id}, elapsed={elapsed:.2f}s, len={len(gen_state['content'])}, aborted={gen_state['aborted']}")
+    logger.success(
+        f"[API] Done: conv={conv_id}, elapsed={elapsed:.2f}s, "
+        f"len={len(gen_state['content'])}, aborted={gen_state['aborted']}"
+    )
 
     return ChatResponse(
         id=str(uuid.uuid4()),
@@ -1021,58 +1076,89 @@ async def add_message(conv_id: str, request: ChatRequest):
     )
 
 
-def _phase_1_save_user_msg(conv: dict, content: str, file_content: str | None = None, file_name: str | None = None, file_type: str | None = None) -> None:
-    if not content:
-        return
-    entry: dict = {"role": "user", "content": content}
-    if file_content:
-        entry["file_content"] = file_content
-    if file_name:
-        entry["file_name"] = file_name
-    if file_type:
-        entry["file_type"] = file_type
-    if file_content and file_name:
-        entry["files"] = [{"name": file_name, "type": file_type, "content": file_content}]
-    last = conv["messages"][-1] if conv["messages"] else None
-    if not last or last != entry:
-        conv["messages"].append(entry)
+# ── 回收站 ──────────────────────────────────────────────────
+
+@router.get("/trash", response_model=list[TrashListItemResponse])
+async def list_trash(agent_id: str | None = None):
+    logger.info(f"[API] GET /chat/trash - Listing trash, agent_id={agent_id}")
+    items = conversation_store.list_trash(agent_id)
+    result = []
+    for meta in items:
+        result.append(TrashListItemResponse(
+            id=meta["id"],
+            title=meta.get("title", "New Conversation"),
+            agent_id=meta.get("agent_id"),
+            model=meta.get("model"),
+            provider=meta.get("provider"),
+            last_message=meta.get("last_message"),
+            created_at=meta.get("created_at", ""),
+            updated_at=meta.get("updated_at", ""),
+            deleted_at=meta.get("deleted_at", ""),
+        ))
+    logger.success(f"[API] GET /chat/trash - Success: returned {len(result)} items")
+    return result
 
 
-def _PHASE_3_SAVE_ASSISTANT_MSG(conv: dict, state: dict) -> None:
-    content = state["content"] or "[已中断]"
-    reasoning = state["reasoning"] or None
-    interrupted = state["aborted"]
-    entry: dict = {"role": "assistant", "content": content}
-    if reasoning:
-        entry["reasoning_content"] = reasoning
-    if interrupted:
-        entry["interrupted"] = True
-    last = conv["messages"][-1] if conv["messages"] else None
-    if not last or last.get("content") != content:
-        conv["messages"].append(entry)
-    
-    # Auto-update title after first assistant response if title is default
-    # Use first 30 characters of user's first message as title if available
-    _default_titles = {"新对话", "New Conversation"}
-    if conv.get("title") in _default_titles and len(conv["messages"]) >= 2:
-        first_user_message = None
-        for msg in conv["messages"]:
-            if msg.get("role") == "user":
-                first_user_message = msg.get("content", "")
-                break
-        
-        if first_user_message:
-            # Truncate to 30 characters and use as title
-            conv["title"] = first_user_message[:30].strip()
-            if len(first_user_message) > 30:
-                conv["title"] += "..."
+@router.post("/trash/{conv_id}/restore")
+async def restore_conversation(conv_id: str):
+    logger.info(f"[API] POST /chat/trash/{conv_id}/restore - Restoring conversation")
+    conversation_store.restore(conv_id)
+    logger.success(f"[API] POST /chat/trash/{conv_id}/restore - Restored")
+    return {"error": None, "data": {"restored": True}}
 
 
-async def _NON_STREAM_GENERATE(state: dict, all_messages: list[dict],
-                                 provider: str, model: str,
-                                 temperature: float | None = None,
-                                 max_tokens: int | None = None,
-                                 top_p: float | None = None) -> None:
+@router.delete("/trash/{conv_id}")
+async def permanent_delete_conversation(conv_id: str):
+    logger.info(f"[API] DELETE /chat/trash/{conv_id} - Permanent deleting conversation")
+    conversation_store.permanent_delete(conv_id)
+    logger.success(f"[API] DELETE /chat/trash/{conv_id} - Permanently deleted")
+    return {"error": None, "data": {"deleted": True}}
+
+
+@router.delete("/trash")
+async def empty_trash(agent_id: str | None = None):
+    logger.info(f"[API] DELETE /chat/trash - Emptying trash, agent_id={agent_id}")
+    count = conversation_store.empty_trash(agent_id)
+    logger.success(f"[API] DELETE /chat/trash - Emptied {count} items")
+    return {"error": None, "data": {"deleted_count": count}}
+
+
+@router.post("/trash/batch-restore")
+async def batch_restore(request: BatchIdsRequest):
+    logger.info(f"[API] POST /chat/trash/batch-restore - Restoring {len(request.ids)} items")
+    count = conversation_store.batch_restore(request.ids)
+    logger.success(f"[API] POST /chat/trash/batch-restore - Restored {count} items")
+    return {"error": None, "data": {"restored_count": count}}
+
+
+@router.post("/trash/batch-delete")
+async def batch_permanent_delete(request: BatchIdsRequest):
+    logger.info(f"[API] POST /chat/trash/batch-delete - Deleting {len(request.ids)} items")
+    count = conversation_store.batch_permanent_delete(request.ids)
+    logger.success(f"[API] POST /chat/trash/batch-delete - Deleted {count} items")
+    return {"error": None, "data": {"deleted_count": count}}
+
+
+@router.post("/conversations/batch-delete")
+async def batch_soft_delete(request: BatchIdsRequest):
+    logger.info(f"[API] POST /chat/conversations/batch-delete - Moving {len(request.ids)} to trash")
+    count = conversation_store.batch_soft_delete(request.ids)
+    logger.success(f"[API] POST /chat/conversations/batch-delete - Moved {count} to trash")
+    return {"error": None, "data": {"deleted_count": count}}
+
+
+# ── TTS 语音合成 ──────────────────────────────────────────────
+
+class TTSRequest(BaseModel):
+    text: str = Field(..., max_length=2000)
+    voice: str = Field(default="default")
+
+
+@router.post("/tts/synthesize")
+async def tts_synthesize(request: TTSRequest):
+    if not request.text.strip():
+        return JSONResponse({"error": "text is required"}, status_code=400)
+
     try:
         async with _llm_semaphore:
             raw = await llm_adapter.chat(messages=all_messages, provider_name=provider,
