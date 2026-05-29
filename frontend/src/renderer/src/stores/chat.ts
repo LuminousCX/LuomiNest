@@ -28,6 +28,8 @@ export const useChatStore = defineStore('chat', () => {
   const isBackendReady = ref(false)
   const lastError = ref<string | null>(null)
   const lastUsage = ref<{ promptTokens?: number; completionTokens?: number; totalTokens?: number } | null>(null)
+  const quotedMessage = ref<ChatMessage | null>(null)
+  const trashItems = ref<TrashListItem[]>([])
 
   const activeAgentId = computed(() => agentStore.activeAgent?.id || '')
 
@@ -592,6 +594,7 @@ export const useChatStore = defineStore('chat', () => {
     pendingSearchKeyword,
     searchScrollTarget,
     quotedMessage,
+    trashItems,
     switchVersion,
     fetchTrash,
     batchSoftDelete,

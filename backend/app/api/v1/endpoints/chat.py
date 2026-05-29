@@ -3,7 +3,6 @@ import json
 import re
 import uuid
 import time
-import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -22,6 +21,7 @@ from app.schemas.chat import (
     BatchIdsRequest,
 )
 from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.providers import LLMResponse
 from app.infrastructure.database.conversation_store import conversation_store
 from app.core.context import get_context_manager
 from app.services.context_service import context_service
