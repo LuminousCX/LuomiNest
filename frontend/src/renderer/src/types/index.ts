@@ -18,6 +18,14 @@ export interface ChatFile {
   content?: string
 }
 
+export interface MessageVersion {
+  content: string
+  reasoningContent?: string
+  model?: string
+  provider?: string
+  suggestedQuestions?: string[]
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -30,6 +38,13 @@ export interface ChatMessage {
   done?: boolean
   interrupted?: boolean
   files?: ChatFile[]
+  quote?: {
+    id: string
+    role: 'user' | 'assistant'
+    content: string
+  }
+  versions?: MessageVersion[]
+  currentVersion?: number
   usage?: {
     promptTokens?: number
     completionTokens?: number

@@ -25,6 +25,7 @@ class ChatRequest(BaseModel):
         "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ] | None = None
     search_results: str | None = Field(default=None, max_length=100_000)
+    versions: list[dict[str, Any]] | None = None
 
 
 class ChatResponse(BaseModel):

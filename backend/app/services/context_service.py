@@ -119,32 +119,59 @@ When thinking/reasoning, you MUST strictly follow this format:
 {base_prompt}"""
 
     @staticmethod
-    def inject_file_content(messages: list[dict], parsed_content: str, file_type: str = "text") -> list[dict]:
+    def build_content_with_file(
+        content: str | list, file_content: str, file_type: str = "text",
+        supports_vision: bool = True, file_name: str | None = None,
+    ) -> str | list:
+        if not file_content:
+            return content
+
+        is_image = file_type == "image" or file_type.startswith("image/") or file_content.startswith("data:image")
+
+        if is_image:
+            if isinstance(content, list):
+                text_parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+                text = " ".join(text_parts)
+            else:
+                text = str(content) if content else ""
+
+            if not supports_vision:
+                name_hint = f"（文件名：{file_name}）" if file_name else ""
+                return (text + f"\n\n[用户上传了一张图片{name_hint}，但当前模型不支持图片识别，无法查看图片内容。]").strip()
+
+            return [
+                {"type": "text", "text": text or "请分析这张图片"},
+                {"type": "image_url", "image_url": {"url": file_content}},
+            ]
+
+        file_context = (
+            "\n\n[用户上传文件内容] 以下是与当前对话相关的文件内容，请参考这些内容回答用户的问题。"
+            "如果用户的问题与文件内容无关，请正常回答用户问题，不需要强行关联文件。\n\n"
+            + file_content
+        )
+
+        if isinstance(content, list):
+            return content + [{"type": "text", "text": file_context}]
+
+        return (str(content) if content else "") + file_context
+
+    @staticmethod
+    def inject_file_content(
+        messages: list[dict], parsed_content: str, file_type: str = "text",
+        supports_vision: bool = True, file_name: str | None = None,
+    ) -> list[dict]:
         if not parsed_content or not parsed_content.strip():
             return messages
 
-        is_image = file_type == "image" or parsed_content.startswith("data:image")
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i]["role"] == "user":
+                messages[i]["content"] = ContextService.build_content_with_file(
+                    messages[i]["content"], parsed_content, file_type,
+                    supports_vision=supports_vision, file_name=file_name,
+                )
+                return messages
 
-        if is_image:
-            for i in range(len(messages) - 1, -1, -1):
-                if messages[i]["role"] == "user":
-                    text_content = messages[i]["content"]
-                    if "[图片附件]" in text_content:
-                        text_content = text_content.split("[图片附件]")[0].strip()
-
-                    messages[i]["content"] = [
-                        {"type": "text", "text": text_content or "请分析这张图片"},
-                        {"type": "image_url", "image_url": {"url": parsed_content}},
-                    ]
-                    return messages
-            return messages
-
-        context_text = (
-            "[用户上传文件内容] 以下是与当前对话相关的文件内容，请参考这些内容回答用户的问题。"
-            "如果用户的问题与文件内容无关，请正常回答用户问题，不需要强行关联文件。\n\n"
-            + parsed_content
-        )
-        return [{"role": "user", "content": context_text}] + messages
+        return messages
 
     async def inject_memory(
         self,
