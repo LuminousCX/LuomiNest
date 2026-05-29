@@ -36,19 +36,6 @@ export interface ChatMessage {
     totalTokens?: number
   }
   suggestedQuestions?: string[]
-  quote?: {
-    id: string
-    role: 'user' | 'assistant'
-    content: string
-  }
-  versions?: {
-    content: string
-    reasoningContent?: string
-    model?: string
-    provider?: string
-    timestamp: number
-  }[]
-  activeVersion?: number
 }
 
 /** Raw message shape returned by the backend API (snake_case) */

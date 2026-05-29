@@ -27,9 +27,6 @@ import {
   Sparkles,
   Pencil,
   Trash2,
-  Quote,
-  X,
-  Volume2,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
@@ -474,13 +471,6 @@ const handleSuggestionClick = (question: string) => {
 }
 
 // 重新生成：删除当前AI消息及对应的用户消息，重新发送
-const handleQuoteMessage = (msg: any) => {
-  if (msg.role === 'assistant' && !msg.done) return
-  if (msg.role === 'assistant' && (!msg.content || msg.content === '[已中断]')) return
-  chatStore.quotedMessage = msg
-  textareaRef.value?.focus()
-}
-
 const handleRegenerate = async (messageId: string) => {
   const convId = chatStore.currentConvId
   if (!convId) return
@@ -490,6 +480,7 @@ const handleRegenerate = async (messageId: string) => {
   const aiIndex = msgs.findIndex(m => m.id === messageId)
   if (aiIndex === -1) return
 
+  // 找到这条AI消息之前的最后一条用户消息的位置
   let userIndex = -1
   for (let i = aiIndex - 1; i >= 0; i--) {
     if (msgs[i].role === 'user') {
@@ -500,106 +491,103 @@ const handleRegenerate = async (messageId: string) => {
   if (userIndex === -1) return
   const userContent = msgs[userIndex].content
 
-  // 保留旧AI回复的版本记录
-  const oldAiMsg = msgs[aiIndex]
-  const oldVersions = oldAiMsg.versions || [{
-    content: oldAiMsg.content,
-    reasoningContent: oldAiMsg.reasoningContent || undefined,
-    model: oldAiMsg.model || undefined,
-    provider: oldAiMsg.provider || undefined,
-    timestamp: oldAiMsg.timestamp,
-  }]
-
   // 删除从用户消息开始到末尾的所有消息
   const keepCount = userIndex
+
+  // 先同步删除后端消息，成功后再更新前端状态
   await truncateMessages(convId, keepCount)
   chatStore.convMessages[convId] = msgs.slice(0, keepCount)
 
+  // 清除推荐
   chatStore.currentSuggestionMessageId = null
 
-  // 重新发送用户消息，传入旧版本记录
-  await chatStore.sendMessage(userContent, { _preserveVersions: oldVersions } as any)
+  // 重新发送用户消息
+  await chatStore.sendMessage(userContent)
   await nextTick()
   scrollToBottom(true)
 }
 
-// 删除消息：问答对整体删除
+// 删除消息：删除用户消息时连同其后的AI回复一起删除
 const handleDeleteMessage = async (messageId: string) => {
-  openConfirmDialog('确定要删除这条消息吗？此操作不可撤销。', async () => {
-    const convId = chatStore.currentConvId
-    if (!convId) return
-    const msgs = chatStore.convMessages[convId]
-    if (!msgs) return
+  const convId = chatStore.currentConvId
+  if (!convId) return
+  const msgs = chatStore.convMessages[convId]
+  if (!msgs) return
 
-    const index = msgs.findIndex((m: any) => m.id === messageId)
-    if (index === -1) return
+  const index = msgs.findIndex((m: any) => m.id === messageId)
+  if (index === -1) return
 
-    const targetMsg = msgs[index]
-    let deleteStart = index
-    let deleteEnd = index + 1  // 不包含
-
-    if (targetMsg.role === 'user') {
-      // 删除用户消息 + 后面紧邻的AI回复
-      if (index + 1 < msgs.length && msgs[index + 1].role === 'assistant') {
-        deleteEnd = index + 2
-      }
-    } else {
-      // 删除AI回复 + 前面紧邻的用户提问
-      if (index - 1 >= 0 && msgs[index - 1].role === 'user') {
-        deleteStart = index - 1
+  const targetMsg = msgs[index]
+  if (targetMsg.role === 'user') {
+    // 找到该用户消息之后连续的AI消息，一并删除
+    let deleteCount = 1
+    for (let i = index + 1; i < msgs.length; i++) {
+      if (msgs[i].role === 'assistant') {
+        deleteCount++
+      } else {
+        break
       }
     }
-
-    const deleteCount = deleteEnd - deleteStart
-    const isTailDelete = deleteEnd === msgs.length
-
-    if (isTailDelete) {
-      await truncateMessages(convId, deleteStart)
-      chatStore.convMessages[convId] = msgs.slice(0, deleteStart)
+    // 判断是否为尾部删除
+    if (index + deleteCount === msgs.length) {
+      // 尾部截断：使用 truncateMessages
+      await truncateMessages(convId, index)
+      chatStore.convMessages[convId] = msgs.slice(0, index)
     } else {
-      const idsToDelete = msgs.slice(deleteStart, deleteEnd).map((m: any) => m.id)
+      // 中间删除：逐条调用 deleteMessage
+      const idsToDelete = msgs.slice(index, index + deleteCount).map((m: any) => m.id)
       for (const id of idsToDelete) {
         await deleteMessage(convId, id)
       }
-      chatStore.convMessages[convId] = msgs.slice(0, deleteStart).concat(msgs.slice(deleteEnd))
+      chatStore.convMessages[convId] = msgs.slice(0, index).concat(msgs.slice(index + deleteCount))
     }
+  } else {
+    // 仅删除这条AI消息
+    // 判断是否为尾部删除
+    if (index === msgs.length - 1) {
+      // 尾部截断：使用 truncateMessages
+      await truncateMessages(convId, index)
+      chatStore.convMessages[convId] = msgs.slice(0, index)
+    } else {
+      // 中间删除：调用 deleteMessage
+      await deleteMessage(convId, messageId)
+      chatStore.convMessages[convId] = msgs.filter((_: any, i: number) => i !== index)
+    }
+  }
 
-    // 如果删除的是当前推荐消息，清除推荐
-    if (chatStore.currentSuggestionMessageId === messageId) {
-      chatStore.currentSuggestionMessageId = null
-    }
-  }, true)
+  // 如果删除的是当前推荐消息，清除推荐
+  if (chatStore.currentSuggestionMessageId === messageId) {
+    chatStore.currentSuggestionMessageId = null
+  }
 }
 
 // 回退用户消息到输入框：恢复文字，清除附件状态，然后删除该消息及之后所有消息
 const handleGoBackToStart = async (msg: any) => {
-  openConfirmDialog('确定要回退到这条消息吗？该消息及之后的所有消息将被删除。', async () => {
-    const convId = chatStore.currentConvId
-    if (!convId) return
-    const msgs = chatStore.convMessages[convId]
-    if (!msgs) return
+  const convId = chatStore.currentConvId
+  if (!convId) return
+  const msgs = chatStore.convMessages[convId]
+  if (!msgs) return
 
-    // 恢复文字内容到输入框
-    inputText.value = msg.content || ''
+  // 恢复文字内容到输入框
+  inputText.value = msg.content || ''
 
-    // 清除附件状态（文件内容无法从前端消息对象中恢复，需要用户重新上传）
-    clearUploadState()
-    fileUploadRef.value?.clearUploadState()
+  // 清除附件状态（文件内容无法从前端消息对象中恢复，需要用户重新上传）
+  clearUploadState()
+  fileUploadRef.value?.clearUploadState()
 
-    // 删除该消息及之后的所有消息
-    const index = msgs.findIndex((m: any) => m.id === msg.id)
-    if (index !== -1) {
-      const keepCount = index
-      // 先同步删除后端消息，成功后再更新前端状态
-      await truncateMessages(convId, keepCount)
-      chatStore.convMessages[convId] = msgs.slice(0, keepCount)
-      chatStore.currentSuggestionMessageId = null
-    }
+  // 删除该消息及之后的所有消息
+  const index = msgs.findIndex((m: any) => m.id === msg.id)
+  if (index !== -1) {
+    const keepCount = index
+    // 先同步删除后端消息，成功后再更新前端状态
+    await truncateMessages(convId, keepCount)
+    chatStore.convMessages[convId] = msgs.slice(0, keepCount)
+    chatStore.currentSuggestionMessageId = null
+  }
 
-    nextTick(() => {
-      if (textareaRef.value) textareaRef.value.focus()
-      autoResize()
-    })
+  nextTick(() => {
+    if (textareaRef.value) textareaRef.value.focus()
+    autoResize()
   })
 }
 
@@ -968,19 +956,6 @@ onBeforeUnmount(() => {
                       </div>
                     </div>
 
-                    <!-- 版本切换标签 -->
-                    <div v-if="msg.role === 'assistant' && msg.versions && msg.versions.length > 1" class="version-switcher">
-                      <button
-                        v-for="(_, vi) in msg.versions"
-                        :key="vi"
-                        class="version-tab"
-                        :class="{ active: (msg.activeVersion ?? 0) === vi }"
-                        @click="chatStore.switchVersion(chatStore.currentConvId!, msg.id, vi)"
-                      >
-                        {{ vi + 1 }}
-                      </button>
-                    </div>
-
                     <!-- AI消息内容 -->
                     <div v-if="msg.role === 'assistant' && msg.content && msg.content !== '[已中断]'" class="message-content markdown-body">
                       <div v-html="renderMarkdown(msg.content)"></div>
@@ -995,23 +970,11 @@ onBeforeUnmount(() => {
                       <span class="streaming-dot"></span>
                     </div>
 
-                    <!-- AI消息操作栏：[复制][引用][朗读][重新生成][删除] -->
+                    <!-- AI消息操作栏：右下角，始终显示 -->
                     <div v-if="msg.role === 'assistant' && msg.done" class="assistant-msg-actions">
                       <button class="u-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
                         <Check v-if="copiedId === msg.id" :size="14" />
                         <Copy v-else :size="14" />
-                      </button>
-                      <button class="u-btn" title="引用" @click="handleQuoteMessage(msg)">
-                        <Quote :size="14" />
-                      </button>
-                      <button
-                        class="u-btn"
-                        :class="{ 'u-btn-active': tts.isSpeaking.value && tts.speakingMessageId.value === msg.id }"
-                        :title="tts.isSpeaking.value && tts.speakingMessageId.value === msg.id ? '停止朗读' : '朗读'"
-                        @click="tts.speak(msg.content, msg.id)"
-                      >
-                        <Square v-if="tts.isSpeaking.value && tts.speakingMessageId.value === msg.id" :size="14" />
-                        <Volume2 v-else :size="14" />
                       </button>
                       <button
                         v-if="isLastAssistantMessage(msg.id)"
@@ -1024,6 +987,48 @@ onBeforeUnmount(() => {
                       <button class="u-btn u-btn-danger" title="删除" @click="handleDeleteMessage(msg.id)">
                         <Trash2 :size="14" />
                       </button>
+                    </div>
+
+                    <!-- 推荐问题：在操作栏下方 -->
+                    <SuggestedQuestions
+                      v-if="msg.role === 'assistant' && msg.id === currentSuggestionMessageId && msg.suggestedQuestions && msg.suggestedQuestions.length > 0"
+                      :questions="msg.suggestedQuestions"
+                      @select="handleSuggestionClick"
+                    />
+
+                    <!-- 用户消息：[复制][删除][回退] ← [气泡] -->
+                    <div v-if="msg.role === 'user'" class="user-msg-layout">
+                      <div class="user-msg-btns">
+                        <button class="u-btn u-btn-hover" title="复制" @click="copyMessage(msg.id, msg.content)">
+                          <Check v-if="copiedId === msg.id" :size="14" />
+                          <Copy v-else :size="14" />
+                        </button>
+                        <button class="u-btn u-btn-hover u-btn-danger" title="删除" @click="handleDeleteMessage(msg.id)">
+                          <Trash2 :size="14" />
+                        </button>
+                        <button
+                          class="u-btn"
+                          title="回退到本轮对话发起前"
+                          @click="handleGoBackToStart(msg)"
+                        >
+                          <Undo2 :size="14" />
+                        </button>
+                      </div>
+                      <div class="message-content user-message">
+                        {{ msg.content }}
+                        <div v-if="msg.files && msg.files.length > 0" class="message-files">
+                          <div
+                            v-for="(file, index) in msg.files"
+                            :key="index"
+                            class="message-file-item"
+                            @click="openFilePreview(file)"
+                          >
+                            <component :is="getFileIcon(file.type)" :size="16" />
+                            <span>{{ file.name }}</span>
+                            <Download :size="14" class="download-icon" />
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <!-- 推荐问题：在操作栏下方 -->
@@ -2095,12 +2100,6 @@ onBeforeUnmount(() => {
   border-color: rgba(239, 68, 68, 0.2);
 }
 
-.u-btn-active {
-  color: #147ebc !important;
-  background: rgba(20, 126, 188, 0.08);
-  border-color: rgba(20, 126, 188, 0.2);
-}
-
 /* 复制/删除：默认隐藏，hover该行时显示 */
 .u-btn-hover {
   opacity: 0;
@@ -2113,40 +2112,6 @@ onBeforeUnmount(() => {
 }
 
 /* AI消息操作栏：右下角，始终显示 */
-.version-switcher {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-
-.version-tab {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(0, 0, 0, 0.03);
-  color: rgba(0, 0, 0, 0.45);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-
-.version-tab:hover {
-  background: rgba(20, 126, 188, 0.08);
-  border-color: rgba(20, 126, 188, 0.2);
-  color: #147ebc;
-}
-
-.version-tab.active {
-  background: #147ebc;
-  border-color: #147ebc;
-  color: white;
-}
-
 .assistant-msg-actions {
   display: flex;
   gap: 2px;

@@ -22,12 +22,8 @@ export const useChatStore = defineStore('chat', () => {
   const pendingSearchKeyword = ref('')
   const searchScrollTarget = ref<{ convId: string; keyword: string } | null>(null)
 
-  const trashItems = ref<TrashListItem[]>([])
-
+  // 推荐问题：当前显示推荐的消息ID，只有最后一条AI消息才显示推荐
   const currentSuggestionMessageId = ref<string | null>(null)
-
-  // 消息引用：当前被引用的消息
-  const quotedMessage = ref<ChatMessage | null>(null)
 
   const isBackendReady = ref(false)
   const lastError = ref<string | null>(null)
@@ -385,15 +381,20 @@ export const useChatStore = defineStore('chat', () => {
         const currentMsgList = convMessages.value[streamingConvId]
         if (!currentMsgList) return
         const lastIndex = currentMsgList.length - 1
-        const lastMsg = lastIndex >= 0 ? currentMsgList[lastIndex] : null
-        if (!lastMsg || lastMsg.role !== 'assistant') return
-
-        lastMsg.content += chunk.content
-        if (chunk.reasoning_content) {
-          lastMsg.reasoningContent = (lastMsg.reasoningContent || '') + chunk.reasoning_content
-        }
-        if (chunk.done && chunk.suggested_questions && chunk.suggested_questions.length > 0) {
-          lastMsg.suggestedQuestions = chunk.suggested_questions
+        if (lastIndex >= 0 && currentMsgList[lastIndex]?.role === 'assistant') {
+          const updatedMsg: ChatMessage = {
+            ...currentMsgList[lastIndex],
+            content: newContent,
+            reasoningContent: newReasoning,
+          }
+          // 如果 done 事件中携带了推荐问题，写入消息
+          if (chunk.done && chunk.suggested_questions && chunk.suggested_questions.length > 0) {
+            updatedMsg.suggestedQuestions = chunk.suggested_questions
+          }
+          convMessages.value = {
+            ...convMessages.value,
+            [streamingConvId]: [...currentMsgList.slice(0, lastIndex), updatedMsg]
+          }
         }
         if (chunk.usage) {
           lastUsage.value = chunk.usage
@@ -404,26 +405,20 @@ export const useChatStore = defineStore('chat', () => {
         delete newControllers[streamingConvId]
         convAbortControllers.value = newControllers
 
-        const completeMsgList = convMessages.value[streamingConvId]
-        if (completeMsgList) {
-          const completeLastIndex = completeMsgList.length - 1
-          if (completeLastIndex >= 0 && completeMsgList[completeLastIndex]?.role === 'assistant') {
-            const prev = completeMsgList[completeLastIndex]
-            const newVersion = {
-              content: prev.content,
-              reasoningContent: prev.reasoningContent || undefined,
-              model: prev.model || undefined,
-              provider: prev.provider || undefined,
-              timestamp: prev.timestamp,
-            }
-            const existingVersions = prev.versions && prev.versions.length > 0 ? prev.versions : []
-            const allVersions = [...existingVersions, newVersion]
-            prev.done = true
-            prev.versions = allVersions
-            prev.activeVersion = allVersions.length - 1
-            if (prev.suggestedQuestions && prev.suggestedQuestions.length > 0) {
-              currentSuggestionMessageId.value = prev.id
-            }
+        const completeMsgList = convMessages.value[streamingConvId] || []
+        const completeLastIndex = completeMsgList.length - 1
+        if (completeLastIndex >= 0 && completeMsgList[completeLastIndex]?.role === 'assistant') {
+          const completedMsg: ChatMessage = {
+            ...completeMsgList[completeLastIndex],
+            done: true
+          }
+          convMessages.value = {
+            ...convMessages.value,
+            [streamingConvId]: [...completeMsgList.slice(0, completeLastIndex), completedMsg]
+          }
+          // 只有这条消息有推荐问题时，才设置当前推荐消息ID
+          if (completedMsg.suggestedQuestions && completedMsg.suggestedQuestions.length > 0) {
+            currentSuggestionMessageId.value = completedMsg.id
           }
         }
         convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
@@ -582,7 +577,6 @@ export const useChatStore = defineStore('chat', () => {
     convStreaming,
     convMessages,
     currentSuggestionMessageId,
-    trashItems,
     checkBackend,
     fetchConversations,
     createConversation,
