@@ -25,6 +25,12 @@ MemoryTier = Literal[
     "temporary_context",
 ]
 
+MemoryLayer = Literal[
+    "user",
+    "agent",
+    "working",
+]
+
 TIER_DECAY_DAYS: dict[MemoryTier, int] = {
     "core_identity": 0,
     "long_term_preference": 365,
@@ -37,6 +43,12 @@ TIER_DEFAULT_CONFIDENCE: dict[MemoryTier, float] = {
     "temporary_context": 0.5,
 }
 
+TIER_SEARCH_WEIGHT: dict[MemoryTier, float] = {
+    "core_identity": 1.5,
+    "long_term_preference": 1.0,
+    "temporary_context": 0.7,
+}
+
 
 class MemoryFact(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
@@ -45,13 +57,16 @@ class MemoryFact(BaseModel):
     content: str
     category: FactCategory = "context"
     tier: MemoryTier = "temporary_context"
+    layer: MemoryLayer = "user"
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     last_accessed_at: str = Field(default_factory=utc_now_iso_z)
     access_count: int = 0
     decay_days: int = 0
     created_at: str = Field(default_factory=utc_now_iso_z)
     source: str = "unknown"
-    source_error: str | None = None
+    source_agent_id: str = ""
+    previous_version_id: str | None = None
+    correction_reason: str | None = None
 
     def model_post_init(self, __context: Any) -> None:
         if self.decay_days == 0:
@@ -111,6 +126,14 @@ class UserProfile(BaseModel):
     updated_at: str = ""
 
 
+class DistilledSection(BaseModel):
+    core_identity: str = ""
+    long_term: str = ""
+    temporary: str = ""
+    events_timeline: str = ""
+    updated_at: str = ""
+
+
 class WorkingMemory(BaseModel):
     core_goal: str = ""
     core_goal_extracted_at: str = ""
@@ -118,14 +141,11 @@ class WorkingMemory(BaseModel):
     conversation_summary: str = ""
     current_state: str = "idle"
     last_updated: str = Field(default_factory=utc_now_iso_z)
-
-    # Thread-isolated working memory (per conversation_id)
     thread_conversations: dict[str, list[dict]] = Field(default_factory=dict)
     thread_core_goals: dict[str, str] = Field(default_factory=dict)
     _MAX_THREADS: int = 50
 
     def _evict_oldest_thread(self):
-        """当线程数超过限制时，淘汰最早的线程条目"""
         while len(self.thread_conversations) > self._MAX_THREADS:
             oldest_key = next(iter(self.thread_conversations), None)
             if oldest_key:
@@ -143,10 +163,7 @@ class WorkingMemory(BaseModel):
         self.recent_conversations = self.recent_conversations[-20:]
         self.last_updated = utc_now_iso_z()
 
-    # --- Thread-isolated methods ---
-
     def add_conversation_for_thread(self, role: str, content: str, thread_id: str):
-        """Add conversation message to a specific thread's working memory."""
         if thread_id not in self.thread_conversations:
             self.thread_conversations[thread_id] = []
             self._evict_oldest_thread()
@@ -155,16 +172,13 @@ class WorkingMemory(BaseModel):
             "content": content,
             "timestamp": utc_now_iso_z()
         })
-        # Keep max 20 per thread
         self.thread_conversations[thread_id] = self.thread_conversations[thread_id][-20:]
         self.last_updated = utc_now_iso_z()
 
     def get_conversations_for(self, thread_id: str) -> list[dict]:
-        """Get recent conversations for a specific thread."""
         return self.thread_conversations.get(thread_id, [])
 
     def set_core_goal_by_conversation(self, goal: str, thread_id: str):
-        """Set core goal for a specific conversation thread."""
         if thread_id not in self.thread_core_goals:
             self._evict_oldest_thread()
         self.thread_core_goals[thread_id] = goal
@@ -172,10 +186,7 @@ class WorkingMemory(BaseModel):
         self.last_updated = utc_now_iso_z()
 
     def get_core_goal_for(self, thread_id: str) -> str:
-        """Get core goal for a specific conversation thread."""
         return self.thread_core_goals.get(thread_id, "")
-
-    # --- Legacy methods (kept for backward compatibility) ---
 
     def set_core_goal(self, goal: str):
         self.core_goal = goal
@@ -224,34 +235,34 @@ class EpisodicEvent(BaseModel):
             return 9999
 
 
-class MemoryData(BaseModel):
-    version: str = "2.0"
+class UserSpace(BaseModel):
+    version: str = "3.0"
     last_updated: str = Field(default_factory=utc_now_iso_z)
+    profile: UserProfile = Field(default_factory=UserProfile)
+    facts: list[MemoryFact] = Field(default_factory=list)
+    episodic_events: list[EpisodicEvent] = Field(default_factory=list)
     user: UserContext = Field(default_factory=UserContext)
     history: History = Field(default_factory=History)
-    facts: list[MemoryFact] = Field(default_factory=list)
-    profile: UserProfile = Field(default_factory=UserProfile)
-    working_memory: WorkingMemory = Field(default_factory=WorkingMemory)
-    episodic_events: list[EpisodicEvent] = Field(default_factory=list)
     archived_facts: list[MemoryFact] = Field(default_factory=list)
+    distilled: DistilledSection = Field(default_factory=DistilledSection)
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump()
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "MemoryData":
+    def from_dict(cls, data: dict[str, Any]) -> "UserSpace":
         if "profile" not in data:
             data["profile"] = {}
-        if "working_memory" not in data:
-            data["working_memory"] = {}
         if "episodic_events" not in data:
             data["episodic_events"] = []
         if "archived_facts" not in data:
             data["archived_facts"] = []
+        if "distilled" not in data:
+            data["distilled"] = {}
         return cls.model_validate(data)
 
     def get_facts_by_tier(self, tier: MemoryTier) -> list[MemoryFact]:
-        return [f for f in self.facts if f.tier == tier]
+        return [f for f in self.facts if f.tier == tier and f.layer == "user"]
 
     def archive_expired_facts(self):
         current_time = utc_now_iso_z()
@@ -317,53 +328,135 @@ class MemoryData(BaseModel):
     @staticmethod
     def _facts_conflict(existing: str, new_lower: str) -> bool:
         existing_lower = existing.lower()
-        new_words = MemoryData._tokenize(new_lower)
-        existing_words = MemoryData._tokenize(existing_lower)
+        new_words = UserSpace._tokenize(new_lower)
+        existing_words = UserSpace._tokenize(existing_lower)
 
         if not new_words or not existing_words:
             return False
 
-        new_has_neg = MemoryData._has_negation(new_words)
-        existing_has_neg = MemoryData._has_negation(existing_words)
+        new_has_neg = UserSpace._has_negation(new_words)
+        existing_has_neg = UserSpace._has_negation(existing_words)
         if new_has_neg != existing_has_neg:
-            logger.debug(f"[Memory] Conflict detected: negation mismatch "
-                         f"existing={existing_has_neg} new={new_has_neg}")
             return True
 
-        new_values = MemoryData._get_value_words(new_lower)
-        existing_values = MemoryData._get_value_words(existing_lower)
+        new_values = UserSpace._get_value_words(new_lower)
+        existing_values = UserSpace._get_value_words(existing_lower)
 
         if new_values and existing_values:
             only_in_new = new_values - existing_values
             only_in_existing = existing_values - new_values
             if only_in_new and only_in_existing:
-                logger.debug(f"[Memory] Conflict rejected: different value words "
-                             f"new_only={only_in_new} existing_only={only_in_existing}")
                 return False
 
         new_in_existing = len(new_words & existing_words) / len(new_words)
         existing_in_new = len(new_words & existing_words) / len(existing_words)
 
         if new_in_existing > 0.7 and existing_in_new > 0.5:
-            logger.debug(f"[Memory] Conflict detected: bidirectional overlap "
-                         f"new→exist={new_in_existing:.2f} exist→new={existing_in_new:.2f}")
             return True
-
         if new_in_existing > 0.85:
-            logger.debug(f"[Memory] Conflict detected: high one-directional overlap "
-                         f"new→exist={new_in_existing:.2f}")
             return True
 
         if new_values and existing_values:
             new_val_in_exist = len(new_values & existing_values) / len(new_values)
             exist_val_in_new = len(new_values & existing_values) / len(existing_values)
             if new_val_in_exist >= 0.65 and exist_val_in_new > 0.5:
-                logger.debug(f"[Memory] Conflict detected: value-level bidirectional overlap "
-                             f"new→exist={new_val_in_exist:.2f} exist→new={exist_val_in_new:.2f}")
                 return True
 
         return False
 
 
+class AgentMemory(BaseModel):
+    version: str = "3.0"
+    last_updated: str = Field(default_factory=utc_now_iso_z)
+    agent_id: str = ""
+    agent_facts: list[MemoryFact] = Field(default_factory=list)
+    agent_events: list[EpisodicEvent] = Field(default_factory=list)
+    working_memory: WorkingMemory = Field(default_factory=WorkingMemory)
+    domain_summary: str = ""
+    agent_preferences: dict[str, str] = Field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.model_dump()
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AgentMemory":
+        if "working_memory" not in data:
+            data["working_memory"] = {}
+        if "agent_facts" not in data:
+            data["agent_facts"] = []
+        if "agent_events" not in data:
+            data["agent_events"] = []
+        return cls.model_validate(data)
+
+    def get_facts_by_tier(self, tier: MemoryTier) -> list[MemoryFact]:
+        return [f for f in self.agent_facts if f.tier == tier and f.layer == "agent"]
+
+
+class MemoryData(BaseModel):
+    version: str = "2.0"
+    last_updated: str = Field(default_factory=utc_now_iso_z)
+    user: UserContext = Field(default_factory=UserContext)
+    history: History = Field(default_factory=History)
+    facts: list[MemoryFact] = Field(default_factory=list)
+    profile: UserProfile = Field(default_factory=UserProfile)
+    working_memory: WorkingMemory = Field(default_factory=WorkingMemory)
+    episodic_events: list[EpisodicEvent] = Field(default_factory=list)
+    archived_facts: list[MemoryFact] = Field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.model_dump()
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "MemoryData":
+        if "profile" not in data:
+            data["profile"] = {}
+        if "working_memory" not in data:
+            data["working_memory"] = {}
+        if "episodic_events" not in data:
+            data["episodic_events"] = []
+        if "archived_facts" not in data:
+            data["archived_facts"] = []
+        return cls.model_validate(data)
+
+    def get_facts_by_tier(self, tier: MemoryTier) -> list[MemoryFact]:
+        return [f for f in self.facts if f.tier == tier]
+
+    def archive_expired_facts(self):
+        current_time = utc_now_iso_z()
+        active_facts = []
+        for fact in self.facts:
+            if fact.should_archive(current_time):
+                self.archived_facts.append(fact)
+            else:
+                active_facts.append(fact)
+        self.facts = active_facts
+
+    def resolve_conflicts(self, new_fact: MemoryFact) -> list[str]:
+        removed_ids = []
+        if new_fact.category != "correction":
+            return removed_ids
+        new_lower = new_fact.content.lower()
+        surviving = []
+        for existing in self.facts:
+            if existing.id == new_fact.id:
+                surviving.append(existing)
+                continue
+            if existing.tier == new_fact.tier and UserSpace._facts_conflict(existing.content, new_lower):
+                self.archived_facts.append(existing)
+                removed_ids.append(existing.id)
+            else:
+                surviving.append(existing)
+        self.facts = surviving
+        return removed_ids
+
+
 def create_empty_memory() -> MemoryData:
     return MemoryData()
+
+
+def create_empty_user_space() -> UserSpace:
+    return UserSpace()
+
+
+def create_empty_agent_memory(agent_id: str = "") -> AgentMemory:
+    return AgentMemory(agent_id=agent_id)

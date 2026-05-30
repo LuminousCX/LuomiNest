@@ -23,7 +23,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Conversation migration skipped: {e}")
 
+    try:
+        from app.engines.memory import init_memory
+        await init_memory()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Memory engine init skipped: {e}")
+
     yield
+
+    try:
+        from app.engines.memory import shutdown_memory
+        await shutdown_memory()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Memory engine shutdown skipped: {e}")
+
     logger.info(f"[LuomiNest] Shutting down application...")
 
 

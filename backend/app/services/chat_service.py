@@ -21,6 +21,11 @@ class ChatService:
         self._suggestions = suggestions
 
     @staticmethod
+    def _get_llm_adapter():
+        from app.runtime.provider.llm.adapter import llm_adapter
+        return llm_adapter
+
+    @staticmethod
     def persist_conv(conv_id: str, conv: dict) -> None:
         conv["updated_at"] = datetime.now(timezone.utc).isoformat()
         conversation_store.set(conv_id, conv)
@@ -230,6 +235,7 @@ class ChatService:
                 try:
                     self._context.schedule_memory_update(
                         [dict(m) for m in conv["messages"]], conv_id, agent_id,
+                        llm_adapter=self._get_llm_adapter(),
                     )
                 except Exception as schedule_err:
                     logger.warning(f"[STREAM] Memory update scheduling failed: {schedule_err}")

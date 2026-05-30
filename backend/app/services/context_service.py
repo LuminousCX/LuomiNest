@@ -6,6 +6,8 @@ from loguru import logger
 
 from app.infrastructure.database.json_store import agents_store
 from app.engines.memory.core.storage import get_memory_storage
+from app.engines.memory.core.models import UserSpace, AgentMemory
+from app.engines.memory.core.memory_engine import MemoryEngine
 from app.engines.memory.core.injector import MemoryInjector
 from app.engines.memory.core.updater import MemoryUpdater
 
@@ -14,6 +16,11 @@ class ContextService:
     def __init__(self):
         self._memory_locks: dict[str | None, asyncio.Lock] = {}
         self._memory_locks_guard = asyncio.Lock()
+
+    @staticmethod
+    def _get_llm_adapter(provider_name: str | None = None):
+        from app.runtime.provider.llm.adapter import llm_adapter
+        return llm_adapter
 
     async def _get_memory_lock(self, agent_id: str | None) -> asyncio.Lock:
         if agent_id in self._memory_locks:
@@ -182,6 +189,37 @@ When thinking/reasoning, you MUST strictly follow this format:
     ) -> list[dict]:
         try:
             storage = get_memory_storage()
+            user_space = await asyncio.to_thread(storage.load_user_space)
+
+            has_any_data = bool(
+                user_space.facts
+                or user_space.episodic_events
+                or user_space.distilled.core_identity
+                or user_space.distilled.long_term
+                or user_space.distilled.temporary
+                or user_space.distilled.events_timeline
+                or user_space.profile.name
+                or user_space.profile.nickname
+                or user_space.profile.occupation
+                or user_space.profile.location
+                or user_space.profile.age
+                or user_space.profile.gender
+                or user_space.profile.interests
+                or user_space.profile.hobbies
+                or user_space.user.work_context.summary
+                or user_space.user.personal_context.summary
+                or user_space.user.top_of_mind.summary
+            )
+
+            if has_any_data:
+                effective_agent_id = agent_id or "default"
+                agent_memory = await asyncio.to_thread(storage.load_agent_memory, effective_agent_id)
+                user_query = self.get_user_query(messages)
+                injector = MemoryInjector()
+                return injector.inject_v3_memory_to_messages(
+                    messages, user_space, agent_memory, user_query, thread_id,
+                )
+
             lock = await self._get_memory_lock(agent_id)
             async with lock:
                 memory_data = await asyncio.to_thread(storage.load, agent_id)
@@ -250,8 +288,31 @@ When thinking/reasoning, you MUST strictly follow this format:
         messages: list[dict],
         thread_id: str,
         agent_id: str | None = None,
+        llm_adapter=None,
     ) -> None:
         try:
+            if llm_adapter:
+                effective_agent_id = agent_id or "default"
+                try:
+                    from app.engines.memory import get_memory_engine
+                    try:
+                        engine = get_memory_engine()
+                    except RuntimeError:
+                        engine = MemoryEngine()
+                    result = await engine.update_from_conversation(
+                        messages, thread_id, effective_agent_id, llm_adapter,
+                    )
+                    if result.get("updated"):
+                        logger.info(
+                            f"[Memory] Updated memory (v3): "
+                            f"+{result.get('global_facts_added', 0)} global, "
+                            f"+{result.get('agent_facts_added', 0)} agent, "
+                            f"-{result.get('facts_removed', 0)} removed"
+                        )
+                    return
+                except Exception as e:
+                    logger.warning(f"[Memory] v3 update failed, falling back to legacy: {e}")
+
             storage = get_memory_storage()
             updater = MemoryUpdater(storage)
             result = await updater.update_from_conversation(messages, thread_id, agent_id)
@@ -270,10 +331,13 @@ When thinking/reasoning, you MUST strictly follow this format:
         messages: list[dict],
         thread_id: str,
         agent_id: str | None = None,
+        llm_adapter=None,
     ) -> None:
         try:
             task = asyncio.create_task(
-                ContextService.update_memory_from_conversation(messages, thread_id, agent_id)
+                ContextService.update_memory_from_conversation(
+                    messages, thread_id, agent_id, llm_adapter,
+                )
             )
             ContextService._background_tasks.add(task)
             task.add_done_callback(lambda t: (
