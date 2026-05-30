@@ -1048,58 +1048,6 @@ onBeforeUnmount(() => {
                       @select="handleSuggestionClick"
                     />
 
-                    <!-- 用户消息：[复制][删除][回退] ← [气泡] -->
-                    <div v-if="msg.role === 'user'" class="user-msg-layout">
-                      <div class="user-msg-btns">
-                        <button class="u-btn u-btn-hover" title="复制" @click="copyMessage(msg.id, msg.content)">
-                          <Check v-if="copiedId === msg.id" :size="14" />
-                          <Copy v-else :size="14" />
-                        </button>
-                        <button class="u-btn u-btn-hover u-btn-danger" title="删除" @click="handleDeleteMessage(msg.id)">
-                          <Trash2 :size="14" />
-                        </button>
-                        <button
-                          class="u-btn"
-                          title="回退到本轮对话发起前"
-                          @click="handleGoBackToStart(msg)"
-                        >
-                          <Undo2 :size="14" />
-                        </button>
-                      </div>
-                      <div class="message-content user-message">
-                        <div v-if="msg.quote && (msg.quote.content || (msg.quote.id))" class="message-quote-block" :class="msg.quote.role">
-                          <Quote :size="12" class="quote-block-icon" />
-                          <div class="quote-block-content">
-                            <span class="quote-block-label">{{ msg.quote.role === 'assistant' ? '助手' : '用户' }}</span>
-                            <span class="quote-block-text">
-                              <span v-if="msg.quote.content">{{ msg.quote.content.slice(0, 150) }}{{ msg.quote.content.length > 150 ? '...' : '' }}</span>
-                              <span v-else class="quote-block-empty">（该消息无文字内容）</span>
-                            </span>
-                          </div>
-                        </div>
-                        {{ msg.content }}
-                        <div v-if="msg.files && msg.files.length > 0" class="message-files">
-                          <div
-                            v-for="(file, index) in msg.files"
-                            :key="index"
-                            class="message-file-item"
-                            @click="openFilePreview(file)"
-                          >
-                            <component :is="getFileIcon(file.type)" :size="16" />
-                            <span>{{ file.name }}</span>
-                            <Download :size="14" class="download-icon" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 推荐问题：在操作栏下方 -->
-                    <SuggestedQuestions
-                      v-if="msg.role === 'assistant' && msg.id === currentSuggestionMessageId && msg.suggestedQuestions && msg.suggestedQuestions.length > 0"
-                      :questions="msg.suggestedQuestions"
-                      @select="handleSuggestionClick"
-                    />
-
                     <!-- 用户消息：[复制][引用][删除][回退] ← [气泡] -->
                     <div v-if="msg.role === 'user'" class="user-msg-layout">
                       <div class="user-msg-btns">
