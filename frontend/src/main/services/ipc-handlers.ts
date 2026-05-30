@@ -1,12 +1,25 @@
-import { ipcMain, BrowserWindow, IpcMainInvokeEvent } from 'electron'
+import { ipcMain, BrowserWindow, IpcMainInvokeEvent, app } from 'electron'
 import { PATHS } from './paths'
 import { configStore } from './config-store'
 import { cacheManager } from './cache-manager'
 import { tabManager } from './browser'
 
+let _mainWindow: BrowserWindow | null = null
+
+export function setMainWindow(win: BrowserWindow | null): void {
+  _mainWindow = win
+}
+
+function getMainWindow(): BrowserWindow | null {
+  return _mainWindow
+}
+
 export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
+  setMainWindow(mainWindow)
+
   const assertTrustedSender = (event: IpcMainInvokeEvent): boolean => {
-    if (!mainWindow || event.sender !== mainWindow.webContents) {
+    const win = getMainWindow()
+    if (!win || event.sender !== win.webContents) {
       return false
     }
     return true
@@ -14,56 +27,84 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
 
   ipcMain.handle('window:minimize', (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
-    mainWindow?.minimize()
+    getMainWindow()?.minimize()
   })
   ipcMain.handle('window:maximize', (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
-    if (mainWindow?.isMaximized()) {
-      mainWindow.unmaximize()
+    const win = getMainWindow()
+    if (win?.isMaximized()) {
+      win.unmaximize()
     } else {
-      mainWindow?.maximize()
+      win?.maximize()
     }
   })
   ipcMain.handle('window:close', (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
-    mainWindow?.close()
+    getMainWindow()?.close()
   })
   ipcMain.handle('window:isMaximized', (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return false
-    return mainWindow?.isMaximized() ?? false
+    return getMainWindow()?.isMaximized() ?? false
   })
 
-  ipcMain.handle('app:getVersion', () => require('electron').app.getVersion())
-  ipcMain.handle('app:getName', () => require('electron').app.getName())
+  ipcMain.handle('app:getVersion', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return app.getVersion()
+  })
+  ipcMain.handle('app:getName', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return app.getName()
+  })
 
-  ipcMain.handle('app:getPaths', () => ({
-    userData: PATHS.userData,
-    cache: PATHS.cache,
-    data: PATHS.data,
-    config: PATHS.config,
-    logs: PATHS.logs,
-    live2d: PATHS.live2d,
-  }))
+  ipcMain.handle('app:getPaths', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return {
+      userData: PATHS.userData,
+      cache: PATHS.cache,
+      data: PATHS.data,
+      config: PATHS.config,
+      logs: PATHS.logs,
+      live2d: PATHS.live2d,
+    }
+  })
 
-  ipcMain.handle('config:getTheme', () => configStore.getTheme())
+  ipcMain.handle('config:getTheme', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return configStore.getTheme()
+  })
   ipcMain.handle('config:setTheme', (event: IpcMainInvokeEvent, theme: 'light' | 'dark' | 'system') => {
     if (!assertTrustedSender(event)) return
     configStore.setTheme(theme)
   })
-  ipcMain.handle('config:getTTS', () => configStore.getTTSConfig())
+  ipcMain.handle('config:getTTS', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return configStore.getTTSConfig()
+  })
   ipcMain.handle('config:setTTS', (event: IpcMainInvokeEvent, updates: any) => {
     if (!assertTrustedSender(event)) return
     configStore.setTTSConfig(updates)
   })
-  ipcMain.handle('config:getSTT', () => configStore.getSTTConfig())
+  ipcMain.handle('config:getSTT', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return configStore.getSTTConfig()
+  })
   ipcMain.handle('config:setSTT', (event: IpcMainInvokeEvent, updates: any) => {
     if (!assertTrustedSender(event)) return
     configStore.setSTTConfig(updates)
   })
-  ipcMain.handle('config:getAll', () => configStore.getAll())
+  ipcMain.handle('config:getAll', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return configStore.getAll()
+  })
 
-  ipcMain.handle('cache:getSize', () => cacheManager.getCacheSizeMB())
-  ipcMain.handle('cache:getBreakdown', () => cacheManager.getCacheBreakdown())
+  ipcMain.handle('cache:getSize', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return cacheManager.getCacheSizeMB()
+  })
+  ipcMain.handle('cache:getBreakdown', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return cacheManager.getCacheBreakdown()
+  })
   ipcMain.handle('cache:clearAll', (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return false
     cacheManager.clearAllCache()
@@ -89,10 +130,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (typeof tabId !== 'string' || !tabId.trim()) return
     return tabManager.closeTab(tabId)
   })
-  ipcMain.handle('tab:getAll', async () => {
+  ipcMain.handle('tab:getAll', async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
     return tabManager.getAllTabs()
   })
-  ipcMain.handle('tab:getActive', async () => {
+  ipcMain.handle('tab:getActive', async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
     return tabManager.getActiveTab()
   })
   ipcMain.handle('tab:reload', async (event: IpcMainInvokeEvent, tabId?: string) => {
@@ -142,6 +185,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (!assertTrustedSender(event)) return
     if (typeof query !== 'string' || !query.trim()) return
     const { browserSearch } = await import('./browser')
-    return await browserSearch(query, mainWindow)
+    return await browserSearch(query, getMainWindow())
   })
 }

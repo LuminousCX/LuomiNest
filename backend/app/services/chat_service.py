@@ -45,21 +45,40 @@ class ChatService:
         if file_content and file_name:
             entry["files"] = [{"name": file_name, "type": file_type, "content": file_content}]
         last = conv["messages"][-1] if conv["messages"] else None
-        if not last or last != entry:
+        if last and last.get("role") == "user":
+            for key in ("file_content", "file_name", "file_type", "files"):
+                if key in entry:
+                    last[key] = entry[key]
+            if not last.get("content"):
+                last["content"] = content
+        else:
             conv["messages"].append(entry)
 
     @staticmethod
-    def save_assistant_message(conv: dict, state: dict) -> None:
+    def save_assistant_message(conv: dict, state: dict, versions: list[dict] | None = None) -> None:
         content = state["content"] or "[已中断]"
         reasoning = state["reasoning"] or None
         interrupted = state["aborted"]
-        entry: dict = {"role": "assistant", "content": content}
+        entry: dict = {"role": "assistant", "content": content, "id": str(uuid.uuid4())}
         if reasoning:
             entry["reasoning_content"] = reasoning
         if interrupted:
             entry["interrupted"] = True
+        if versions:
+            new_version: dict = {"content": content, "id": str(uuid.uuid4())}
+            if reasoning:
+                new_version["reasoning_content"] = reasoning
+            if state.get("model"):
+                new_version["model"] = state["model"]
+            if state.get("provider"):
+                new_version["provider"] = state["provider"]
+            if state.get("suggested_questions"):
+                new_version["suggested_questions"] = state["suggested_questions"]
+            all_versions = list(versions) + [new_version]
+            entry["versions"] = all_versions
+            entry["current_version"] = len(all_versions) - 1
         last = conv["messages"][-1] if conv["messages"] else None
-        if not last or last.get("content") != content:
+        if not last or last.get("id") != entry.get("id"):
             conv["messages"].append(entry)
 
         default_titles = {"新对话", "New Conversation"}
@@ -151,6 +170,7 @@ class ChatService:
         agent_id: str | None,
         state: dict,
         start_time: float,
+        versions: list[dict] | None = None,
     ):
         chat_id = str(uuid.uuid4())
 
@@ -181,25 +201,26 @@ class ChatService:
 
             finally:
                 try:
+                    if not state["aborted"] and state["content"]:
+                        try:
+                            suggested_questions = await self._suggestions.generate_suggestions_for_conv(
+                                conv_id=conv_id,
+                                messages=[dict(m) for m in conv["messages"]],
+                                agent_id=agent_id,
+                                provider=provider,
+                                model=model,
+                            )
+                        except Exception as sq_err:
+                            logger.warning(f"[STREAM] Suggested questions failed: conv={conv_id}, error={sq_err}")
+                        state["suggested_questions"] = suggested_questions if suggested_questions else None
+
                     persist_state = dict(state)
                     if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
                         persist_state["content"] = ""
-                    self.save_assistant_message(conv, persist_state)
+                    self.save_assistant_message(conv, persist_state, versions=versions)
                     self.persist_conv(conv_id, conv)
                 except Exception as persist_err:
                     logger.error(f"[STREAM] Persist failed: conv={conv_id}, error={persist_err}")
-
-                if not state["aborted"] and state["content"]:
-                    try:
-                        suggested_questions = await self._suggestions.generate_suggestions_for_conv(
-                            conv_id=conv_id,
-                            messages=[dict(m) for m in conv["messages"]],
-                            agent_id=agent_id,
-                            provider=provider,
-                            model=model,
-                        )
-                    except Exception as sq_err:
-                        logger.warning(f"[STREAM] Suggested questions failed: conv={conv_id}, error={sq_err}")
 
                 try:
                     yield self._sse_done(chat_id, provider, model, suggested_questions or None)

@@ -29,7 +29,7 @@ const router = useRouter()
 const { apiGet, apiPut } = useApi()
 const modelStore = useModelStore()
 
-const VERSION = '0.2.0'
+const VERSION = ref('')
 
 const currentStep = ref(0)
 const TOTAL_STEPS = 4
@@ -42,7 +42,7 @@ const i18n = computed(() => {
       title: 'Welcome to',
       appName: 'LuomiNest',
       subtitle: 'LuminousChenXi AI Companion Platform',
-      version: `Version ${VERSION}`,
+      version: `Version ${VERSION.value}`,
       langTitle: 'Select Language',
       langZh: '中文',
       langEn: 'English',
@@ -85,7 +85,7 @@ const i18n = computed(() => {
     title: '欢迎来到',
     appName: 'LuomiNest',
     subtitle: 'LuminousChenXi 辰汐 AI 伴侣平台',
-    version: `版本 ${VERSION}`,
+    version: `版本 ${VERSION.value}`,
     langTitle: '选择语言',
     langZh: '中文',
     langEn: 'English',
@@ -232,6 +232,9 @@ const addProviderAndNext = async () => {
 }
 
 onMounted(async () => {
+  try {
+    VERSION.value = await window.ipcRenderer.invoke('app:getVersion') || ''
+  } catch {}
   modelStore.fetchProviders().catch(() => {})
   modelStore.fetchTemplates().catch(() => {})
   modelStore.fetchModelConfig().catch(() => {})

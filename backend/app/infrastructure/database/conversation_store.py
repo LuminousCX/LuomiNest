@@ -199,18 +199,21 @@ class ConversationStore:
 
     def permanent_delete(self, conv_id: str) -> bool:
         path = self._conv_path(conv_id)
+        file_removed = False
         if os.path.exists(path):
             try:
                 os.remove(path)
+                file_removed = True
             except Exception as e:
                 logger.error(f"[ConvStore] Failed to permanently delete conv file {conv_id}: {e}")
+                return False
         with self._lock:
             index = self._load_index()
             if conv_id in index:
                 del index[conv_id]
                 self._save_index()
                 return True
-        return False
+        return file_removed
 
     def empty_trash(self, agent_id: str | None = None):
         trash_items = self.list_trash(agent_id)

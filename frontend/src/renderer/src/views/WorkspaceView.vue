@@ -27,6 +27,10 @@ import {
   Sparkles,
   Pencil,
   Trash2,
+  Quote,
+  X,
+  Volume2,
+  VolumeX,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
@@ -51,9 +55,9 @@ const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const modelStore = useModelStore()
-const tts = useTTS()
+const { isSpeaking: isTTSSpeaking, speakingMessageId: ttsSpeakingMsgId, speak: ttsSpeak, stopSpeaking: ttsStopSpeaking } = useTTS()
 
-const { isUploading, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
+const { isUploading, uploadingFile, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
 const { truncateMessages, deleteMessage } = useApi()
 const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
 
@@ -451,17 +455,26 @@ const currentSuggestionMessageId = computed(() => chatStore.currentSuggestionMes
 // 判断当前消息是否是最后一条AI消息（用于重写按钮显示）
 const isLastAssistantMessage = (msgId: string) => {
   const msgs = messages.value
-  // 如果有流式消息，不显示任何重写按钮，避免竞态
   for (let i = msgs.length - 1; i >= 0; i--) {
     if (msgs[i].role === 'assistant' && !msgs[i].done) return false
   }
-  // 无流式消息时，找最后一条AI消息
   for (let i = msgs.length - 1; i >= 0; i--) {
     if (msgs[i].role === 'assistant') {
       return msgs[i].id === msgId
     }
   }
   return false
+}
+
+const getVersionIndex = (msg: any): number => {
+  if (!msg.versions || msg.versions.length === 0) return 0
+  return msg.currentVersion ?? 0
+}
+
+const handleSwitchVersion = (messageId: string, versionIndex: number) => {
+  const convId = chatStore.currentConvId
+  if (!convId) return
+  chatStore.switchVersion(convId, messageId, versionIndex)
 }
 
 // 点击推荐问题，填入输入框并发送
@@ -472,123 +485,127 @@ const handleSuggestionClick = (question: string) => {
 
 // 重新生成：删除当前AI消息及对应的用户消息，重新发送
 const handleRegenerate = async (messageId: string) => {
-  const convId = chatStore.currentConvId
-  if (!convId) return
-  const msgs = chatStore.convMessages[convId]
-  if (!msgs) return
-
-  const aiIndex = msgs.findIndex(m => m.id === messageId)
-  if (aiIndex === -1) return
-
-  // 找到这条AI消息之前的最后一条用户消息的位置
-  let userIndex = -1
-  for (let i = aiIndex - 1; i >= 0; i--) {
-    if (msgs[i].role === 'user') {
-      userIndex = i
-      break
-    }
-  }
-  if (userIndex === -1) return
-  const userContent = msgs[userIndex].content
-
-  // 删除从用户消息开始到末尾的所有消息
-  const keepCount = userIndex
-
-  // 先同步删除后端消息，成功后再更新前端状态
-  await truncateMessages(convId, keepCount)
-  chatStore.convMessages[convId] = msgs.slice(0, keepCount)
-
-  // 清除推荐
-  chatStore.currentSuggestionMessageId = null
-
-  // 重新发送用户消息
-  await chatStore.sendMessage(userContent)
+  await chatStore.regenerateMessage(messageId)
   await nextTick()
   scrollToBottom(true)
 }
 
 // 删除消息：删除用户消息时连同其后的AI回复一起删除
-const handleDeleteMessage = async (messageId: string) => {
-  const convId = chatStore.currentConvId
-  if (!convId) return
-  const msgs = chatStore.convMessages[convId]
-  if (!msgs) return
-
+function computeDeleteRange(msgs: any[], messageId: string): { startIndex: number; deleteCount: number } {
   const index = msgs.findIndex((m: any) => m.id === messageId)
-  if (index === -1) return
+  if (index === -1) return { startIndex: -1, deleteCount: 0 }
 
-  const targetMsg = msgs[index]
-  if (targetMsg.role === 'user') {
-    // 找到该用户消息之后连续的AI消息，一并删除
-    let deleteCount = 1
-    for (let i = index + 1; i < msgs.length; i++) {
+  let startIndex = index
+  if (msgs[startIndex].role === 'assistant') {
+    for (let i = startIndex - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') {
+        startIndex = i
+        break
+      }
+    }
+  }
+
+  let deleteCount = 1
+  if (msgs[startIndex].role === 'user') {
+    for (let i = startIndex + 1; i < msgs.length; i++) {
       if (msgs[i].role === 'assistant') {
         deleteCount++
       } else {
         break
       }
     }
-    // 判断是否为尾部删除
-    if (index + deleteCount === msgs.length) {
-      // 尾部截断：使用 truncateMessages
-      await truncateMessages(convId, index)
-      chatStore.convMessages[convId] = msgs.slice(0, index)
-    } else {
-      // 中间删除：逐条调用 deleteMessage
-      const idsToDelete = msgs.slice(index, index + deleteCount).map((m: any) => m.id)
-      for (const id of idsToDelete) {
-        await deleteMessage(convId, id)
-      }
-      chatStore.convMessages[convId] = msgs.slice(0, index).concat(msgs.slice(index + deleteCount))
-    }
-  } else {
-    // 仅删除这条AI消息
-    // 判断是否为尾部删除
-    if (index === msgs.length - 1) {
-      // 尾部截断：使用 truncateMessages
-      await truncateMessages(convId, index)
-      chatStore.convMessages[convId] = msgs.slice(0, index)
-    } else {
-      // 中间删除：调用 deleteMessage
-      await deleteMessage(convId, messageId)
-      chatStore.convMessages[convId] = msgs.filter((_: any, i: number) => i !== index)
-    }
   }
 
-  // 如果删除的是当前推荐消息，清除推荐
-  if (chatStore.currentSuggestionMessageId === messageId) {
-    chatStore.currentSuggestionMessageId = null
-  }
+  return { startIndex, deleteCount }
 }
 
-// 回退用户消息到输入框：恢复文字，清除附件状态，然后删除该消息及之后所有消息
-const handleGoBackToStart = async (msg: any) => {
+const handleDeleteMessage = (messageId: string) => {
   const convId = chatStore.currentConvId
   if (!convId) return
   const msgs = chatStore.convMessages[convId]
   if (!msgs) return
 
-  // 恢复文字内容到输入框
-  inputText.value = msg.content || ''
+  const { startIndex, deleteCount } = computeDeleteRange(msgs, messageId)
+  if (startIndex === -1) return
 
-  // 清除附件状态（文件内容无法从前端消息对象中恢复，需要用户重新上传）
-  clearUploadState()
-  fileUploadRef.value?.clearUploadState()
+  openConfirmDialog(
+    '确定删除这条消息及其关联回复？此操作不可撤销。',
+    async () => {
+      const currentConvId = chatStore.currentConvId
+      if (!currentConvId) return
+      const currentMsgs = chatStore.convMessages[currentConvId]
+      if (!currentMsgs) return
 
-  // 删除该消息及之后的所有消息
-  const index = msgs.findIndex((m: any) => m.id === msg.id)
-  if (index !== -1) {
-    const keepCount = index
-    // 先同步删除后端消息，成功后再更新前端状态
-    await truncateMessages(convId, keepCount)
-    chatStore.convMessages[convId] = msgs.slice(0, keepCount)
-    chatStore.currentSuggestionMessageId = null
-  }
+      const { startIndex: reStart, deleteCount: reCount } = computeDeleteRange(currentMsgs, messageId)
+      if (reStart === -1) return
 
-  nextTick(() => {
-    if (textareaRef.value) textareaRef.value.focus()
-    autoResize()
-  })
+      if (reStart + reCount === currentMsgs.length) {
+        await truncateMessages(currentConvId, reStart)
+        chatStore.convMessages[currentConvId] = currentMsgs.slice(0, reStart)
+      } else {
+        const idsToDelete = currentMsgs.slice(reStart, reStart + reCount).map((m: any) => m.id)
+        for (const id of idsToDelete) {
+          await deleteMessage(currentConvId, id)
+        }
+        chatStore.convMessages[currentConvId] = currentMsgs.slice(0, reStart).concat(currentMsgs.slice(reStart + reCount))
+      }
+
+      if (chatStore.currentSuggestionMessageId === messageId) {
+        chatStore.currentSuggestionMessageId = null
+      }
+    },
+    true,
+  )
+}
+
+// 回退用户消息到输入框：恢复文字，清除附件状态，然后删除该消息及之后所有消息
+const handleGoBackToStart = (msg: any) => {
+  openConfirmDialog(
+    '确定回退这条消息？该消息及之后的所有消息将被删除，内容将恢复到输入框。',
+    async () => {
+      const convId = chatStore.currentConvId
+      if (!convId) return
+      const msgs = chatStore.convMessages[convId]
+      if (!msgs) return
+
+      inputText.value = msg.content || ''
+
+      if (msg.files && msg.files.length > 0) {
+        const file = msg.files[0]
+        parsedContent.value = file.content || ''
+        fileName.value = file.name || ''
+        fileType.value = file.type || 'text'
+        uploadingFile.value = {
+          name: file.name || 'file',
+          status: 'success',
+          type: file.type,
+          result: file.content,
+        }
+        isUploading.value = false
+      } else {
+        clearUploadState()
+        fileUploadRef.value?.clearUploadState()
+      }
+
+      const index = msgs.findIndex((m: any) => m.id === msg.id)
+      if (index !== -1) {
+        const keepCount = index
+        await truncateMessages(convId, keepCount)
+        chatStore.convMessages[convId] = msgs.slice(0, keepCount)
+        chatStore.currentSuggestionMessageId = null
+      }
+
+      nextTick(() => {
+        if (textareaRef.value) textareaRef.value.focus()
+        autoResize()
+      })
+    },
+    true,
+  )
+}
+
+const handleQuoteMessage = (msg: any) => {
+  chatStore.quotedMessage = msg
 }
 
 const contextPercent = computed(() => {
@@ -826,7 +843,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('paste', handlePaste)
   window.removeEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
   window.removeEventListener('luominest:memory-chat-trigger', handleMemoryChatTrigger as EventListener)
-  tts.stopSpeaking()
+  ttsStopSpeaking()
 })
 </script>
 
@@ -972,9 +989,44 @@ onBeforeUnmount(() => {
 
                     <!-- AI消息操作栏：右下角，始终显示 -->
                     <div v-if="msg.role === 'assistant' && msg.done" class="assistant-msg-actions">
+                      <div v-if="msg.versions && msg.versions.length > 1" class="version-nav">
+                        <button
+                          class="v-btn"
+                          :disabled="getVersionIndex(msg) <= 0"
+                          @click="handleSwitchVersion(msg.id, getVersionIndex(msg) - 1)"
+                          title="上一版本"
+                        >
+                          <ChevronLeft :size="14" />
+                        </button>
+                        <span class="v-label">{{ getVersionIndex(msg) + 1 }} / {{ msg.versions.length }}</span>
+                        <button
+                          class="v-btn"
+                          :disabled="getVersionIndex(msg) >= msg.versions.length - 1"
+                          @click="handleSwitchVersion(msg.id, getVersionIndex(msg) + 1)"
+                          title="下一版本"
+                        >
+                          <ChevronRight :size="14" />
+                        </button>
+                      </div>
                       <button class="u-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
                         <Check v-if="copiedId === msg.id" :size="14" />
                         <Copy v-else :size="14" />
+                      </button>
+                      <button class="u-btn" title="引用" @click="handleQuoteMessage(msg)">
+                        <Quote :size="14" />
+                      </button>
+                      <button
+                        class="u-btn"
+                        :title="isTTSSpeaking && ttsSpeakingMsgId === msg.id ? '停止朗读' : '朗读'"
+                        @click="ttsSpeak(msg.content, msg.id)"
+                      >
+                        <div v-if="isTTSSpeaking && ttsSpeakingMsgId === msg.id" class="tts-bars">
+                          <span class="tts-bar" style="--h: 8px; --d: 0s"></span>
+                          <span class="tts-bar" style="--h: 14px; --d: 0.15s"></span>
+                          <span class="tts-bar" style="--h: 10px; --d: 0.3s"></span>
+                          <span class="tts-bar" style="--h: 6px; --d: 0.45s"></span>
+                        </div>
+                        <Volume2 v-else :size="14" />
                       </button>
                       <button
                         v-if="isLastAssistantMessage(msg.id)"
@@ -1015,6 +1067,16 @@ onBeforeUnmount(() => {
                         </button>
                       </div>
                       <div class="message-content user-message">
+                        <div v-if="msg.quote && (msg.quote.content || (msg.quote.id))" class="message-quote-block" :class="msg.quote.role">
+                          <Quote :size="12" class="quote-block-icon" />
+                          <div class="quote-block-content">
+                            <span class="quote-block-label">{{ msg.quote.role === 'assistant' ? '助手' : '用户' }}</span>
+                            <span class="quote-block-text">
+                              <span v-if="msg.quote.content">{{ msg.quote.content.slice(0, 150) }}{{ msg.quote.content.length > 150 ? '...' : '' }}</span>
+                              <span v-else class="quote-block-empty">（该消息无文字内容）</span>
+                            </span>
+                          </div>
+                        </div>
                         {{ msg.content }}
                         <div v-if="msg.files && msg.files.length > 0" class="message-files">
                           <div
@@ -2100,6 +2162,28 @@ onBeforeUnmount(() => {
   border-color: rgba(239, 68, 68, 0.2);
 }
 
+.tts-bars {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 16px;
+  height: 16px;
+}
+
+.tts-bar {
+  width: 3px;
+  border-radius: 1.5px;
+  background: var(--accent, #6366f1);
+  animation: tts-bar-bounce 0.8s ease-in-out infinite alternate;
+  animation-delay: var(--d);
+}
+
+@keyframes tts-bar-bounce {
+  0% { height: 4px; }
+  100% { height: var(--h); }
+}
+
 /* 复制/删除：默认隐藏，hover该行时显示 */
 .u-btn-hover {
   opacity: 0;
@@ -2116,6 +2200,51 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 2px;
   margin-top: 4px;
+  align-items: center;
+}
+
+.version-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  background: var(--workspace-hover);
+  border: 1px solid var(--workspace-border);
+}
+
+.v-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: all var(--transition-fast);
+}
+
+.v-btn:hover:not(:disabled) {
+  background: var(--workspace-border);
+  color: var(--text-secondary);
+}
+
+.v-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.v-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 32px;
+  text-align: center;
+  user-select: none;
 }
 
 .streaming-cursor {

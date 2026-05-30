@@ -13,10 +13,7 @@ class EdgeTTSProvider(TTSProvider):
 
     async def synthesize(self, text: str, voice: str = "default") -> bytes:
         if voice == "default" or not voice:
-            try:
-                voice = self.DEFAULT_VOICES.get("zh", "zh-CN-XiaoxiaoNeural")
-            except Exception as e:
-                raise RuntimeError(f"Failed to select default voice: {e}") from e
+            voice = self.DEFAULT_VOICES.get("zh", "zh-CN-XiaoxiaoNeural")
 
         try:
             communicate = edge_tts.Communicate(text, voice)

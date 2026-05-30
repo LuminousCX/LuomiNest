@@ -6,6 +6,7 @@ const isSpeaking = ref(false)
 const speakingMessageId = ref<string | null>(null)
 let currentAudio: HTMLAudioElement | null = null
 let currentAudioUrl: string | null = null
+let currentAbortController: AbortController | null = null
 
 function revokeCurrentAudioUrl() {
   if (currentAudioUrl) {
@@ -53,7 +54,11 @@ async function speakWithEdgeTTS(text: string, messageId: string): Promise<boolea
   const ttsConfig = modelStore.ttsConfig
   const voice = ttsConfig.voice || 'zh-CN-XiaoxiaoNeural'
 
+  if (currentAbortController) {
+    currentAbortController.abort()
+  }
   const controller = new AbortController()
+  currentAbortController = controller
   const timeoutId = setTimeout(() => controller.abort(), 30000)
 
   try {
@@ -84,12 +89,16 @@ async function speakWithEdgeTTS(text: string, messageId: string): Promise<boolea
     return true
   } catch (e) {
     clearTimeout(timeoutId)
-    if (controller.signal.aborted) {
-      console.warn('[TTS] Edge TTS request timed out, falling back to Web Speech API')
+    if (controller.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) {
+      console.warn('[TTS] Edge TTS request aborted')
     } else {
       console.warn('[TTS] Edge TTS failed, falling back to Web Speech API:', e)
     }
     return false
+  } finally {
+    if (currentAbortController === controller) {
+      currentAbortController = null
+    }
   }
 }
 
@@ -116,6 +125,10 @@ async function speak(rawText: string, messageId: string) {
 }
 
 function stopSpeaking() {
+  if (currentAbortController) {
+    currentAbortController.abort()
+    currentAbortController = null
+  }
   if (currentAudio) {
     currentAudio.pause()
     currentAudio.currentTime = 0
