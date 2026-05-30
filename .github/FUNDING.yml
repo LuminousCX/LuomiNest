@@ -1,13 +1,7 @@
 # Funding Configuration / 赞助配置
 
-# GitHub Sponsors
-github: LuminousCX
-
-# Custom sponsorship links
+# Custom sponsorship links (up to 4)
 custom:
   - "https://afdian.com/a/luminous_chenxi"
   - "https://ko-fi.com/luminouscx"
   - "https://patreon.com/luminouscx"
-
-# Open Collective
-open_collective: luminouscx
