@@ -556,9 +556,11 @@ export const useChatStore = defineStore('chat', () => {
       versions: existingVersions,
       currentVersion: existingVersions.length,
     }
+    const newMsgs = [...updatedMsgs]
+    newMsgs.splice(aiIndex, 0, assistantMessage)
     convMessages.value = {
       ...convMessages.value,
-      [convId]: [...updatedMsgs, assistantMessage]
+      [convId]: newMsgs
     }
 
     convStreaming.value = { ...convStreaming.value, [convId]: true }
@@ -697,6 +699,7 @@ export const useChatStore = defineStore('chat', () => {
         agent_id: targetAgentId,
       })
       await fetchConversations(targetAgentId)
+      await fetchTrash(targetAgentId)
     } catch (error) {
       console.warn('[ChatStore] Batch soft delete failed:', error)
     }

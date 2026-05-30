@@ -491,20 +491,13 @@ const handleRegenerate = async (messageId: string) => {
 }
 
 // 删除消息：删除用户消息时连同其后的AI回复一起删除
-const handleDeleteMessage = (messageId: string) => {
-  const convId = chatStore.currentConvId
-  if (!convId) return
-  const msgs = chatStore.convMessages[convId]
-  if (!msgs) return
-
+function computeDeleteRange(msgs: any[], messageId: string): { startIndex: number; deleteCount: number } {
   const index = msgs.findIndex((m: any) => m.id === messageId)
-  if (index === -1) return
-
-  const targetMsg = msgs[index]
+  if (index === -1) return { startIndex: -1, deleteCount: 0 }
 
   let startIndex = index
-  if (targetMsg.role === 'assistant') {
-    for (let i = index - 1; i >= 0; i--) {
+  if (msgs[startIndex].role === 'assistant') {
+    for (let i = startIndex - 1; i >= 0; i--) {
       if (msgs[i].role === 'user') {
         startIndex = i
         break
@@ -523,6 +516,18 @@ const handleDeleteMessage = (messageId: string) => {
     }
   }
 
+  return { startIndex, deleteCount }
+}
+
+const handleDeleteMessage = (messageId: string) => {
+  const convId = chatStore.currentConvId
+  if (!convId) return
+  const msgs = chatStore.convMessages[convId]
+  if (!msgs) return
+
+  const { startIndex, deleteCount } = computeDeleteRange(msgs, messageId)
+  if (startIndex === -1) return
+
   openConfirmDialog(
     '确定删除这条消息及其关联回复？此操作不可撤销。',
     async () => {
@@ -531,29 +536,8 @@ const handleDeleteMessage = (messageId: string) => {
       const currentMsgs = chatStore.convMessages[currentConvId]
       if (!currentMsgs) return
 
-      const reindex = currentMsgs.findIndex((m: any) => m.id === messageId)
-      if (reindex === -1) return
-
-      let reStart = reindex
-      if (currentMsgs[reStart].role === 'assistant') {
-        for (let i = reStart - 1; i >= 0; i--) {
-          if (currentMsgs[i].role === 'user') {
-            reStart = i
-            break
-          }
-        }
-      }
-
-      let reCount = 1
-      if (currentMsgs[reStart].role === 'user') {
-        for (let i = reStart + 1; i < currentMsgs.length; i++) {
-          if (currentMsgs[i].role === 'assistant') {
-            reCount++
-          } else {
-            break
-          }
-        }
-      }
+      const { startIndex: reStart, deleteCount: reCount } = computeDeleteRange(currentMsgs, messageId)
+      if (reStart === -1) return
 
       if (reStart + reCount === currentMsgs.length) {
         await truncateMessages(currentConvId, reStart)

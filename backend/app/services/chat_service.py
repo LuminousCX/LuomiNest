@@ -59,13 +59,13 @@ class ChatService:
         content = state["content"] or "[已中断]"
         reasoning = state["reasoning"] or None
         interrupted = state["aborted"]
-        entry: dict = {"role": "assistant", "content": content}
+        entry: dict = {"role": "assistant", "content": content, "id": str(uuid.uuid4())}
         if reasoning:
             entry["reasoning_content"] = reasoning
         if interrupted:
             entry["interrupted"] = True
         if versions:
-            new_version: dict = {"content": content}
+            new_version: dict = {"content": content, "id": str(uuid.uuid4())}
             if reasoning:
                 new_version["reasoning_content"] = reasoning
             if state.get("model"):
@@ -78,7 +78,7 @@ class ChatService:
             entry["versions"] = all_versions
             entry["current_version"] = len(all_versions) - 1
         last = conv["messages"][-1] if conv["messages"] else None
-        if not last or last.get("content") != content:
+        if not last or last.get("id") != entry.get("id"):
             conv["messages"].append(entry)
 
         default_titles = {"新对话", "New Conversation"}

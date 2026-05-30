@@ -75,7 +75,7 @@ class ContextService:
                 if agent.get("system_prompt"):
                     base_prompt = agent["system_prompt"]
 
-        now = datetime.now()
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
         weekday_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
         return f"""<identity>
@@ -263,6 +263,8 @@ When thinking/reasoning, you MUST strictly follow this format:
         except Exception as e:
             logger.warning(f"[Memory] Failed to update memory: {e}")
 
+    _background_tasks: set = set()
+
     @staticmethod
     def schedule_memory_update(
         messages: list[dict],
@@ -270,9 +272,14 @@ When thinking/reasoning, you MUST strictly follow this format:
         agent_id: str | None = None,
     ) -> None:
         try:
-            asyncio.create_task(
+            task = asyncio.create_task(
                 ContextService.update_memory_from_conversation(messages, thread_id, agent_id)
             )
+            ContextService._background_tasks.add(task)
+            task.add_done_callback(lambda t: (
+                ContextService._background_tasks.discard(t),
+                logger.warning(f"[Memory] Background task failed: {t.exception()}") if t.exception() else None,
+            ))
         except Exception as e:
             logger.warning(f"[Memory] Failed to schedule memory update: {e}")
 

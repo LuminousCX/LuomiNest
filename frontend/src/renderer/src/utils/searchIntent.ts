@@ -91,6 +91,9 @@ const PURE_TIME_PATTERNS = /^(今天|现在|当前)(几号|几点|几时|星期�
 const SEARCH_THRESHOLD = 4
 
 const PERIODIC_EVENT_PATTERNS: Array<{ pattern: RegExp; type: string }> = [
+  { pattern: /报名/, type: '报名' },
+  { pattern: /录取/, type: '录取' },
+  { pattern: /分数线/, type: '分数' },
   { pattern: /软考/, type: '考试' },
   { pattern: /考研/, type: '考试' },
   { pattern: /高考/, type: '考试' },
@@ -116,9 +119,6 @@ const PERIODIC_EVENT_PATTERNS: Array<{ pattern: RegExp; type: string }> = [
   { pattern: /双十一|618/, type: '购物节' },
   { pattern: /春运/, type: '民生' },
   { pattern: /秋招|春招/, type: '招聘' },
-  { pattern: /报名/, type: '报名' },
-  { pattern: /录取/, type: '录取' },
-  { pattern: /分数线/, type: '分数' },
 ]
 
 export function detectSearchIntent(message: string): boolean {

@@ -1,10 +1,10 @@
-import { BrowserWindow, ipcMain, Menu, screen, IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, ipcMain, Menu, screen, IpcMainInvokeEvent, app } from 'electron'
 import { join } from 'path'
 import { platform } from 'os'
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs'
 import { PATHS } from './paths'
 
-const isDev = !require('electron').app.isPackaged
+const isDev = !app.isPackaged
 const isMac = platform() === 'darwin'
 
 const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
@@ -135,15 +135,14 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     { type: 'separator' },
     { label: 'Close Desktop Pet', click: () => { desktopPetWindow?.close(); desktopPetWindow = null } },
     { type: 'separator' },
-    { label: 'Quit', click: () => { require('electron').app.quit() } }
+    { label: 'Quit', click: () => { app.quit() } }
   ])
 
   desktopPetWindow.webContents.on('context-menu', () => {
     petContextMenu.popup()
   })
 
-  ipcMain.removeAllListeners('desktop-pet:set-ignore-mouse-events')
-  ipcMain.on('desktop-pet:set-ignore-mouse-events', (_event, ignore: boolean) => {
+  const handleSetIgnoreMouseEvents = (_event: any, ignore: boolean) => {
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       if (isMac) {
         desktopPetWindow.setIgnoreMouseEvents(ignore)
@@ -151,14 +150,16 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
         desktopPetWindow.setIgnoreMouseEvents(ignore, { forward: true })
       }
     }
-  })
+  }
 
-  ipcMain.removeAllListeners('desktop-pet:show-context-menu')
-  ipcMain.on('desktop-pet:show-context-menu', () => {
+  const handleShowContextMenu = () => {
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       petContextMenu.popup({ window: desktopPetWindow })
     }
-  })
+  }
+
+  ipcMain.on('desktop-pet:set-ignore-mouse-events', handleSetIgnoreMouseEvents)
+  ipcMain.on('desktop-pet:show-context-menu', handleShowContextMenu)
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     desktopPetWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '#/desktop-pet')
@@ -167,6 +168,8 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   }
 
   desktopPetWindow.on('closed', () => {
+    ipcMain.removeListener('desktop-pet:set-ignore-mouse-events', handleSetIgnoreMouseEvents)
+    ipcMain.removeListener('desktop-pet:show-context-menu', handleShowContextMenu)
     desktopPetWindow = null
   })
 

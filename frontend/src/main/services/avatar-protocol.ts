@@ -1,4 +1,4 @@
-import { app, dialog, protocol, IpcMainInvokeEvent } from 'electron'
+import { app, dialog, protocol, IpcMainInvokeEvent, ipcMain } from 'electron'
 import { join, dirname, basename, resolve, sep } from 'path'
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, statSync, copyFileSync } from 'fs'
 import { PATHS } from './paths'
@@ -148,8 +148,6 @@ export function verifyAvatarResources(): void {
 }
 
 export function registerAvatarIpc(): void {
-  const { ipcMain } = require('electron')
-
   ipcMain.handle('avatar:importModel', async () => {
     try {
       const result = await dialog.showOpenDialog({

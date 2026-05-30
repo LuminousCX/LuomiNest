@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timezone
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import HTTPException
 from typing import Any
 from pydantic import BaseModel, Field
 from loguru import logger
@@ -77,7 +78,7 @@ async def chat_completions(request: ChatRequest):
     )
 
     if gen_state["aborted"]:
-        raise Exception(gen_state["content"].removeprefix("[Error] "))
+        raise HTTPException(status_code=400, detail=gen_state["content"].removeprefix("[Error] "))
 
     result_content = gen_state["content"] or ""
     elapsed = time.time() - start_time
@@ -344,8 +345,8 @@ async def update_message_version(conv_id: str, request: UpdateMessageVersionRequ
         if msg.get("id") == request.message_id:
             versions = msg.get("versions", [])
             if not versions or request.current_version < 0 or request.current_version >= len(versions):
-                from app.core.exceptions import NotFoundError
-                raise NotFoundError(f"Invalid version index {request.current_version}")
+                from app.core.exceptions import ValidationError
+                raise ValidationError(f"Invalid version index {request.current_version}")
             msg["current_version"] = request.current_version
             v = versions[request.current_version]
             msg["content"] = v.get("content", "")
@@ -513,7 +514,10 @@ async def list_trash(agent_id: str | None = None):
 @router.post("/trash/{conv_id}/restore")
 async def restore_conversation(conv_id: str):
     logger.info(f"[API] POST /chat/trash/{conv_id}/restore - Restoring conversation")
-    conversation_store.restore(conv_id)
+    restored = conversation_store.restore(conv_id)
+    if not restored:
+        logger.warning(f"[API] POST /chat/trash/{conv_id}/restore - Restore failed, not found")
+        return {"error": "not found", "data": {"restored": False}}
     logger.success(f"[API] POST /chat/trash/{conv_id}/restore - Restored")
     return {"error": None, "data": {"restored": True}}
 
@@ -521,7 +525,10 @@ async def restore_conversation(conv_id: str):
 @router.delete("/trash/{conv_id}")
 async def permanent_delete_conversation(conv_id: str):
     logger.info(f"[API] DELETE /chat/trash/{conv_id} - Permanent deleting conversation")
-    conversation_store.permanent_delete(conv_id)
+    deleted = conversation_store.permanent_delete(conv_id)
+    if not deleted:
+        logger.warning(f"[API] DELETE /chat/trash/{conv_id} - Delete failed, not found")
+        return {"error": "not found", "data": {"deleted": False}}
     logger.success(f"[API] DELETE /chat/trash/{conv_id} - Permanently deleted")
     return {"error": None, "data": {"deleted": True}}
 

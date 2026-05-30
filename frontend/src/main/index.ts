@@ -6,7 +6,7 @@ import { setupNetworkConfig } from './services/browser/view'
 import { startBackend, stopBackend, getBackendUrl } from './services/backend'
 import { PATHS, initAppPaths } from './services/paths'
 import { configStore } from './services/config-store'
-import { registerIpcHandlers } from './services/ipc-handlers'
+import { registerIpcHandlers, setMainWindow } from './services/ipc-handlers'
 import { createDesktopPet, getDesktopPetWindow, registerDesktopPetIpc } from './services/desktop-pet'
 import { registerAvatarProtocol, verifyAvatarResources, registerAvatarIpc } from './services/avatar-protocol'
 
@@ -129,6 +129,7 @@ const createWindow = (): void => {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+    setMainWindow(null)
   })
 }
 
@@ -225,7 +226,10 @@ app.whenReady().then(async () => {
   registerAvatarIpc()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+      setMainWindow(mainWindow)
+    }
   })
 })
 
