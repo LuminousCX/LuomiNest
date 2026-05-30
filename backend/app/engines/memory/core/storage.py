@@ -262,14 +262,14 @@ class MemoryStorage:
                     f for f in agent_memory.agent_facts if f.id != fact_id
                 ]
                 if len(agent_memory.agent_facts) == original_count:
-                    raise ValueError(f"Fact with id '{fact_id}' not found")
+                    return False
                 return self.save_agent_memory(agent_memory, agent_id)
             else:
                 user_space = self.load_user_space()
                 original_count = len(user_space.facts)
                 user_space.facts = [f for f in user_space.facts if f.id != fact_id]
                 if len(user_space.facts) == original_count:
-                    raise ValueError(f"Fact with id '{fact_id}' not found")
+                    return False
                 return self.save_user_space(user_space)
 
     def update_fact(
@@ -296,7 +296,7 @@ class MemoryStorage:
                         agent_memory.agent_facts[i] = fact
                         break
                 if not found:
-                    raise ValueError(f"Fact with id '{fact_id}' not found")
+                    return False
                 return self.save_agent_memory(agent_memory, agent_id)
             else:
                 user_space = self.load_user_space()
@@ -313,7 +313,7 @@ class MemoryStorage:
                         user_space.facts[i] = fact
                         break
                 if not found:
-                    raise ValueError(f"Fact with id '{fact_id}' not found")
+                    return False
                 return self.save_user_space(user_space)
 
     def load_shared_memory(self, agent_id: str | None = None) -> MemoryData:
@@ -322,6 +322,12 @@ class MemoryStorage:
             "use load_user_space / load_agent_memory instead"
         )
         return self.load(agent_id)
+
+    def list_agents(self) -> list[str]:
+        agents_dir = self._storage_path / "agents"
+        if not agents_dir.exists():
+            return []
+        return [f.stem for f in agents_dir.glob("*.json")]
 
 
 _storage_instance: MemoryStorage | None = None

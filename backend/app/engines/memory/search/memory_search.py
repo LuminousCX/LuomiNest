@@ -28,11 +28,9 @@ class MemorySearchEngine:
             agent_memory = self._storage.load_agent_memory(agent_id)
             all_facts.extend(agent_memory.agent_facts)
         else:
-            agents_dir = self._storage._storage_path / "agents"
-            if agents_dir.exists():
-                for f in agents_dir.glob("*.json"):
-                    am = self._storage.load_agent_memory(f.stem)
-                    all_facts.extend(am.agent_facts)
+            for aid in self._storage.list_agents():
+                am = self._storage.load_agent_memory(aid)
+                all_facts.extend(am.agent_facts)
 
         self._index = EmbeddingIndex()
         await self._index.rebuild_index(all_facts)

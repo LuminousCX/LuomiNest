@@ -121,6 +121,8 @@ _MEMORY_INJECTION_TEMPLATE = """【用户上下文信息】
 
 
 class MemoryEngine:
+    USER_SPACE_DISTILL_THRESHOLD = 15
+    AGENT_MEMORY_DISTILL_THRESHOLD = 10
 
     def __init__(self, storage=None, distiller=None, event_bus=None):
         self._storage: MemoryStorage = storage or get_memory_storage()
@@ -418,7 +420,7 @@ class MemoryEngine:
 
         total_facts_added = global_facts_added + agent_facts_added
 
-        if len(user_space.facts) >= 15:
+        if len(user_space.facts) >= self.USER_SPACE_DISTILL_THRESHOLD:
             try:
                 distilled = await self._distiller.distill_user_space(user_space, llm_adapter)
                 user_space.distilled = distilled
@@ -426,7 +428,7 @@ class MemoryEngine:
             except Exception as e:
                 logger.warning(f"[MemoryEngine] User space distillation failed: {e}")
 
-        if len(agent_memory.agent_facts) >= 10:
+        if len(agent_memory.agent_facts) >= self.AGENT_MEMORY_DISTILL_THRESHOLD:
             try:
                 domain_summary = await self._distiller.distill_agent_memory(agent_memory, llm_adapter)
                 agent_memory.domain_summary = domain_summary

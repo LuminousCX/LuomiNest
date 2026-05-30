@@ -217,6 +217,8 @@ class MemoryUpdater:
 
         parsed = self._parse_llm_response(response)
         facts_added = 0
+        global_facts_added = 0
+        agent_facts_added = 0
         facts_removed = 0
         updates_applied = {}
 
@@ -273,6 +275,10 @@ class MemoryUpdater:
 
             memory_data.facts.append(new_fact)
             facts_added += 1
+            if new_fact.layer == "user":
+                global_facts_added += 1
+            else:
+                agent_facts_added += 1
 
         if fact_ids_to_remove:
             original_count = len(memory_data.facts)
@@ -375,9 +381,10 @@ class MemoryUpdater:
             return {
                 "updated": True,
                 "facts_added": facts_added,
+                "global_facts_added": global_facts_added,
+                "agent_facts_added": agent_facts_added,
                 "facts_removed": facts_removed,
                 "updates_applied": updates_applied,
-                "should_be_global": True,
             }
 
         return {"updated": False, "reason": "No changes needed"}

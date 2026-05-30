@@ -18,50 +18,40 @@ from .models import (
 from .storage import get_memory_storage
 
 
-def _count_profile_fields(profile: UserProfile) -> int:
-    count = sum(1 for f in [
-        profile.name, profile.nickname, profile.age, profile.gender,
-        profile.occupation, profile.location, profile.timezone,
-        profile.language, profile.notes,
-    ] if f)
-    if profile.interests:
-        count += 1
-    if profile.hobbies:
-        count += 1
-    if profile.preferences:
-        count += 1
-    return count
-
-
-def _count_context_fields(ctx: UserContext) -> int:
-    return sum(
-        1 for s in [ctx.work_context, ctx.personal_context, ctx.top_of_mind]
-        if s.summary
-    )
-
-
-def _count_history_fields(history: History) -> int:
-    return sum(
-        1 for s in [history.recent_months, history.earlier_context, history.long_term_background]
-        if s.summary
-    )
-
-
 def _merge_profiles(base: UserProfile, incoming: UserProfile) -> UserProfile:
-    if _count_profile_fields(incoming) > _count_profile_fields(base):
-        return incoming
+    for field in ["name", "nickname", "age", "gender", "occupation", "location", "timezone", "language", "notes"]:
+        val = getattr(incoming, field, "")
+        if val and not getattr(base, field, ""):
+            setattr(base, field, val)
+    for lst_field in ["interests", "hobbies"]:
+        existing = set(getattr(base, lst_field, []))
+        for item in getattr(incoming, lst_field, []):
+            if item and item not in existing:
+                getattr(base, lst_field).append(item)
+                existing.add(item)
+    for k, v in incoming.preferences.items():
+        if k not in base.preferences:
+            base.preferences[k] = v
     return base
 
 
 def _merge_user_context(base: UserContext, incoming: UserContext) -> UserContext:
-    if _count_context_fields(incoming) > _count_context_fields(base):
-        return incoming
+    for section in ["work_context", "personal_context", "top_of_mind"]:
+        inc_section = getattr(incoming, section, None)
+        base_section = getattr(base, section, None)
+        if inc_section and inc_section.summary and base_section and not base_section.summary:
+            base_section.summary = inc_section.summary
+            base_section.updated_at = inc_section.updated_at
     return base
 
 
 def _merge_history(base: History, incoming: History) -> History:
-    if _count_history_fields(incoming) > _count_history_fields(base):
-        return incoming
+    for section in ["recent_months", "earlier_context", "long_term_background"]:
+        inc_section = getattr(incoming, section, None)
+        base_section = getattr(base, section, None)
+        if inc_section and inc_section.summary and base_section and not base_section.summary:
+            base_section.summary = inc_section.summary
+            base_section.updated_at = inc_section.updated_at
     return base
 
 

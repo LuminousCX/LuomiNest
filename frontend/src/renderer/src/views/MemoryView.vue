@@ -41,6 +41,15 @@ interface LayerTab {
   desc: string
 }
 
+interface SearchMemoryResult {
+  id: string
+  content: string
+  category: string
+  tier: string
+  layer: string
+  confidence: number
+}
+
 const layerTabs = ref<LayerTab[]>([
   { id: 'user-space', name: '用户空间', sub: 'UserSpace', icon: Globe, color: '#8b5cf6', desc: '全局共享 · 所有Agent可见' },
   { id: 'agent-memory', name: 'Agent记忆', sub: 'AgentMemory', icon: Bot, color: '#0ea5e9', desc: 'Agent私有 · 仅当前Agent可见' },
@@ -53,7 +62,7 @@ const activeTabData = computed(() => layerTabs.value.find(t => t.id === activeTa
 const searchQuery = ref('')
 const isSearching = ref(false)
 const showSearchResults = ref(false)
-const searchMemoryResults = ref<any[]>([])
+const searchMemoryResults = ref<SearchMemoryResult[]>([])
 
 const showAddDialog = ref(false)
 const newFactContent = ref('')
@@ -236,13 +245,17 @@ async function saveEdit() {
     await memoryStore.updateFact(editingFactId.value, editingContent.value.trim(), undefined, undefined, agentStore.activeAgent?.id)
     editingFactId.value = null
     editingContent.value = ''
-  } catch {}
+  } catch (e) {
+    console.error('[MemoryView] 保存失败:', e)
+  }
 }
 
 async function handleDeleteFact(factId: string) {
   try {
     await memoryStore.deleteFact(factId, agentStore.activeAgent?.id)
-  } catch {}
+  } catch (e) {
+    console.error('[MemoryView] 删除失败:', e)
+  }
 }
 
 async function loadData() {

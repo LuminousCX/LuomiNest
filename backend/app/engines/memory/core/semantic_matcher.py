@@ -34,7 +34,7 @@ class SemanticMatcher:
     def _load_cache(self):
         if self._cache_path.exists():
             try:
-                with open(self._cache_path, "r", encoding="utf-8") as f:
+                with open(self._cache_path, encoding="utf-8") as f:
                     self._embeddings = json.load(f)
                 logger.info(f"[SemanticMatcher] Loaded {len(self._embeddings)} cached embeddings")
             except Exception as e:
@@ -58,6 +58,10 @@ class SemanticMatcher:
             if embedding:
                 with self._lock:
                     self._embeddings[fact.id] = embedding
+                try:
+                    self._save_cache()
+                except Exception as e:
+                    logger.warning(f"[SemanticMatcher] Failed to persist embedding cache: {e}")
                 return embedding
         except Exception as e:
             logger.debug(f"[SemanticMatcher] Embedding failed for {fact.id}: {e}")
@@ -129,10 +133,15 @@ class SemanticMatcher:
 
 
 _semantic_matcher_instance: SemanticMatcher | None = None
+_semantic_matcher_lock = threading.Lock()
 
 
 def get_semantic_matcher() -> SemanticMatcher:
     global _semantic_matcher_instance
-    if _semantic_matcher_instance is None:
+    if _semantic_matcher_instance is not None:
+        return _semantic_matcher_instance
+    with _semantic_matcher_lock:
+        if _semantic_matcher_instance is not None:
+            return _semantic_matcher_instance
         _semantic_matcher_instance = SemanticMatcher()
-    return _semantic_matcher_instance
+        return _semantic_matcher_instance

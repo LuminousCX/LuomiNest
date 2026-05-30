@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from loguru import logger
 
 from .models import (
     UserSpace,
     AgentMemory,
-    MemoryTier,
-    TIER_SEARCH_WEIGHT,
     utc_now_iso_z,
     DistilledSection,
 )
+
+if TYPE_CHECKING:
+    from app.runtime.provider.llm.adapter import LLMAdapter
 
 
 _LONG_TERM_DISTILL_PROMPT = """你是一个记忆蒸馏器。请将以下用户的长期偏好事实提炼为一段精炼摘要。
@@ -76,7 +79,7 @@ _AGENT_DISTILL_PROMPT = """你是一个记忆蒸馏器。请将以下Agent的领
 
 class MemoryDistiller:
 
-    async def distill_user_space(self, user_space: UserSpace, llm_adapter) -> DistilledSection:
+    async def distill_user_space(self, user_space: UserSpace, llm_adapter: LLMAdapter) -> DistilledSection:
         if len(user_space.facts) < 15:
             return user_space.distilled
 
@@ -150,7 +153,7 @@ class MemoryDistiller:
 
         return distilled
 
-    async def distill_agent_memory(self, agent_memory: AgentMemory, llm_adapter) -> str:
+    async def distill_agent_memory(self, agent_memory: AgentMemory, llm_adapter: LLMAdapter) -> str:
         if len(agent_memory.agent_facts) < 10:
             return agent_memory.domain_summary
 

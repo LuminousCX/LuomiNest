@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Any
 import asyncio
@@ -202,14 +202,16 @@ async def add_fact(request: AddFactRequest):
 @router.delete("/facts/{fact_id}")
 async def delete_fact(fact_id: str, agent_id: str | None = Query(None)):
     storage = get_memory_storage()
-    await asyncio.to_thread(storage.delete_fact, fact_id, agent_id)
+    result = await asyncio.to_thread(storage.delete_fact, fact_id, agent_id)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Fact with id '{fact_id}' not found")
     return {"status": "success"}
 
 
 @router.patch("/facts/{fact_id}")
 async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | None = Query(None)):
     storage = get_memory_storage()
-    await asyncio.to_thread(
+    result = await asyncio.to_thread(
         storage.update_fact,
         fact_id=fact_id,
         content=request.content,
@@ -217,6 +219,8 @@ async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | 
         confidence=request.confidence,
         agent_id=agent_id,
     )
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Fact with id '{fact_id}' not found")
     return {"status": "success"}
 
 

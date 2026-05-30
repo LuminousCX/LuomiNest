@@ -49,11 +49,9 @@ class EmbeddingIndex:
             weighted_score = score * weight
             if weighted_score >= min_score:
                 results.append((fact, weighted_score))
-            if len(results) >= top_k:
-                break
 
         results.sort(key=lambda x: x[1], reverse=True)
-        return results
+        return results[:top_k]
 
     @staticmethod
     def _passes_filter(

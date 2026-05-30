@@ -178,7 +178,7 @@ class UserSpace:
         for section in ["work_context", "personal_context", "top_of_mind"]:
             agent_section = getattr(agent_memory.user, section, None)
             user_section = getattr(user.user_context, section, None)
-            if agent_section and agent_section.summary and not user_section.summary:
+            if agent_section and agent_section.summary and user_section and not user_section.summary:
                 user_section.summary = agent_section.summary
                 user_section.updated_at = agent_section.updated_at
 

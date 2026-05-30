@@ -132,12 +132,9 @@ class MemoryInjector:
 
         return "=== 【临时上下文】 ===\n" + "\n".join(lines)
 
-    def _format_episodic_events(self, memory_data: MemoryData, user_query: str = "") -> str | None:
-        if not memory_data.episodic_events:
-            return None
-
+    def _format_event_lines(self, events: list, user_query: str = "") -> str | None:
         relevant_events = []
-        for event in memory_data.episodic_events:
+        for event in events:
             if not user_query or event.matches_query(user_query):
                 relevant_events.append(event)
 
@@ -157,6 +154,11 @@ class MemoryInjector:
             event_lines.append(line)
 
         return "=== 【相关历史事件】 ===\n" + "\n".join(event_lines)
+
+    def _format_episodic_events(self, memory_data: MemoryData, user_query: str = "") -> str | None:
+        if not memory_data.episodic_events:
+            return None
+        return self._format_event_lines(memory_data.episodic_events, user_query)
 
     def _format_recent_context(self, memory_data: MemoryData | AgentMemory, thread_id: str = "") -> str | None:
         wm = memory_data.working_memory
@@ -230,28 +232,7 @@ class MemoryInjector:
         all_events = user_space.episodic_events + agent_memory.agent_events
         if not all_events:
             return None
-
-        relevant_events = []
-        for event in all_events:
-            if not user_query or event.matches_query(user_query):
-                relevant_events.append(event)
-
-        if not relevant_events:
-            return None
-
-        relevant_events.sort(key=lambda e: e.time_distance_days())
-
-        event_lines = []
-        for event in relevant_events[:3]:
-            days_ago = event.time_distance_days()
-            time_label = f"{days_ago}天前" if days_ago < 365 else f"{days_ago // 30}个月前"
-            tags = ', '.join(event.scene_tags[:3]) if event.scene_tags else '一般'
-            line = f"- [{time_label}|{tags}] {self._sanitize_content(event.core_goal)}"
-            if event.key_information:
-                line += f" → {self._sanitize_content(event.key_information[:80])}"
-            event_lines.append(line)
-
-        return "=== 【相关历史事件】 ===\n" + "\n".join(event_lines)
+        return self._format_event_lines(all_events, user_query)
 
     def _is_scene_relevant(self, fact_content: str, user_query: str) -> bool:
         query_lower = user_query.lower()

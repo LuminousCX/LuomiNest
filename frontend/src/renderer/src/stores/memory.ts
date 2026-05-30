@@ -105,6 +105,23 @@ export interface MemoryData {
   agent_memory: AgentMemory
 }
 
+export interface MemoryApiResponse {
+  version: string
+  user_space?: UserSpace
+  agent_memory?: AgentMemory
+  memory?: {
+    version: string
+    last_updated: string
+    profile: MemoryProfile
+    facts: MemoryFact[]
+    episodic_events: EpisodicEvent[]
+    user: UserSpace['user']
+    history: Record<string, any>
+    archived_facts: MemoryFact[]
+    working_memory: AgentMemory['working_memory']
+  }
+}
+
 export const useMemoryStore = defineStore('memory', () => {
   const { apiGet, apiPost, apiPatch, apiDelete, apiPut } = useApi()
 
@@ -118,13 +135,22 @@ export const useMemoryStore = defineStore('memory', () => {
     loading.value = true
     try {
       const query = agentId ? `?agent_id=${agentId}` : ''
-      const raw = await apiGet<any>(`/memory/${query}`)
+      const raw = await apiGet<MemoryApiResponse>(`/memory/${query}`)
 
       if (raw.version === '3.0' && raw.user_space) {
         memoryData.value = {
           version: '3.0',
           user_space: raw.user_space,
-          agent_memory: raw.agent_memory || { agent_facts: [], agent_events: [], working_memory: { recent_conversations: [], thread_conversations: {}, thread_core_goals: {} } } as any,
+          agent_memory: raw.agent_memory || {
+            version: '3.0',
+            last_updated: '',
+            agent_id: agentId || '',
+            agent_facts: [],
+            agent_events: [],
+            working_memory: { core_goal: '', core_goal_extracted_at: '', conversation_summary: '', recent_conversations: [], current_state: '', thread_conversations: {}, thread_core_goals: {} },
+            domain_summary: '',
+            agent_preferences: {},
+          },
         }
       } else if (raw.memory) {
         const mem = raw.memory
@@ -133,22 +159,24 @@ export const useMemoryStore = defineStore('memory', () => {
           user_space: {
             version: mem.version || '2.0',
             last_updated: mem.last_updated || '',
-            profile: mem.profile || {},
+            profile: mem.profile || { name: '', nickname: '', age: '', gender: '', occupation: '', location: '', language: '', interests: [], hobbies: [], preferences: {}, notes: '', updated_at: '' },
             facts: mem.facts || [],
             episodic_events: mem.episodic_events || [],
-            user: mem.user || { work_context: { summary: '' }, personal_context: { summary: '' }, top_of_mind: { summary: '' } },
+            user: mem.user || { work_context: { summary: '', updated_at: '' }, personal_context: { summary: '', updated_at: '' }, top_of_mind: { summary: '', updated_at: '' } },
             history: mem.history || {},
             archived_facts: mem.archived_facts || [],
             distilled: { core_identity: '', long_term: '', temporary: '', events_timeline: '', updated_at: '' },
           },
           agent_memory: {
+            version: '3.0',
+            last_updated: '',
             agent_id: agentId || '',
             agent_facts: [],
             agent_events: [],
-            working_memory: mem.working_memory || { recent_conversations: [], thread_conversations: {}, thread_core_goals: {} },
+            working_memory: mem.working_memory || { core_goal: '', core_goal_extracted_at: '', conversation_summary: '', recent_conversations: [], current_state: '', thread_conversations: {}, thread_core_goals: {} },
             domain_summary: '',
             agent_preferences: {},
-          } as any,
+          },
         }
       }
     } catch {

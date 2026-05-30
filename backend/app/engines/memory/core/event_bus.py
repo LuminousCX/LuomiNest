@@ -61,12 +61,15 @@ class MemoryEventBus:
             source_agent_id=agent_id,
             data=data,
         )
+        matched = False
         for subscriber_id, sources in self._subscribers.items():
             if agent_id in sources:
                 if subscriber_id not in self._pending:
                     self._pending[subscriber_id] = []
                 self._pending[subscriber_id].append(event)
-                await self._queue.put(event)
+                matched = True
+        if matched:
+            await self._queue.put(event)
 
     def get_pending(self, agent_id: str) -> list[MemoryEvent]:
         events = self._pending.get(agent_id, []).copy()

@@ -18,7 +18,7 @@ class ContextService:
         self._memory_locks_guard = asyncio.Lock()
 
     @staticmethod
-    def _get_llm_adapter(provider_name: str | None = None):
+    def _get_llm_adapter():
         from app.runtime.provider.llm.adapter import llm_adapter
         return llm_adapter
 

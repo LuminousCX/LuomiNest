@@ -3,9 +3,8 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from loguru import logger
-
 from app.engines.memory.core.models import (
+    EpisodicEvent,
     MemoryFact,
     MemoryTier,
     UserSpace,
@@ -34,6 +33,8 @@ class MarkdownParser:
         "长期偏好": "long_term_preference",
         "临时上下文": "temporary_context",
     }
+
+    VALID_TIERS = {"core_identity", "long_term_preference", "temporary_context"}
 
     def parse_and_update(self, md: str, user_space: UserSpace, agent_id: str | None = None) -> dict:
         stats = {"facts_imported": 0, "events_imported": 0, "agent_facts_imported": 0}
@@ -129,7 +130,6 @@ class MarkdownParser:
             content = stripped[bracket_end + 1:].strip()
             if not content or content.casefold() in existing_goals:
                 continue
-            from app.engines.memory.core.models import EpisodicEvent
             event = EpisodicEvent(core_goal=content[:200])
             us.episodic_events.append(event)
             existing_goals.add(content.casefold())
@@ -156,10 +156,11 @@ class MarkdownParser:
             if content.casefold() in existing_contents:
                 continue
             category = self._extract_category(stripped)
+            tier = self._extract_tier(stripped) or "long_term_preference"
             fact = MemoryFact(
                 content=content,
                 category=category,
-                tier="long_term_preference",
+                tier=tier,
                 layer="agent",
                 confidence=1.0,
                 source="import",
@@ -187,3 +188,12 @@ class MarkdownParser:
             if cat in ["preference", "knowledge", "context", "behavior", "goal", "correction"]:
                 return cat
         return "context"
+
+    @staticmethod
+    def _extract_tier(line: str) -> str:
+        m = re.search(r"\btier[=:]\s*(\w+)", line, re.IGNORECASE)
+        if m:
+            tier = m.group(1).strip()
+            if tier in MarkdownParser.VALID_TIERS:
+                return tier
+        return ""

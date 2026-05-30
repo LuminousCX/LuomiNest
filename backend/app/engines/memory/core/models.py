@@ -284,7 +284,7 @@ class UserSpace(BaseModel):
             if existing.id == new_fact.id:
                 surviving.append(existing)
                 continue
-            if existing.tier == new_fact.tier and self._facts_conflict(existing.content, new_lower):
+            if existing.tier == new_fact.tier and facts_conflict(existing.content, new_lower):
                 self.archived_facts.append(existing)
                 removed_ids.append(existing.id)
             else:
@@ -292,77 +292,76 @@ class UserSpace(BaseModel):
         self.facts = surviving
         return removed_ids
 
-    @staticmethod
-    def _tokenize(text: str) -> set[str]:
-        return set(re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]{2,}', text.lower()))
+def facts_conflict(existing: str, new_lower: str) -> bool:
+    existing_lower = existing.lower()
+    new_words = _tokenize(new_lower)
+    existing_words = _tokenize(existing_lower)
 
-    @staticmethod
-    def _has_negation(words: set[str]) -> bool:
-        negation_words = {
-            "not", "no", "never", "neither", "nor", "nobody", "nothing",
-            "nowhere", "hardly", "barely", "scarcely",
-            "不", "没", "没有", "非", "无", "未", "别", "莫", "勿",
-            "dislike", "hate", "avoid", "refuse", "reject",
-            "不喜欢", "讨厌", "拒绝",
-        }
-        return bool(words & negation_words)
+    if not new_words or not existing_words:
+        return False
 
-    @staticmethod
-    def _get_value_words(text: str) -> set[str]:
-        stop_words = {
-            "user", "the", "a", "an", "is", "are", "was", "were", "be",
-            "been", "being", "has", "have", "had", "do", "does", "did",
-            "will", "would", "shall", "should", "may", "might", "can",
-            "could", "must", "of", "in", "on", "at", "to", "for", "with",
-            "by", "from", "as", "into", "about", "also", "and",
-            "but", "or", "not", "no", "very", "just", "than", "that",
-            "this", "these", "those", "it", "its", "he", "she", "they",
-            "we", "you", "me", "him", "her", "them", "us",
-            "的", "了", "在", "是", "我", "他", "她", "它", "们",
-            "有", "和", "与", "也", "都", "就", "而", "及",
-            "name",
-        }
-        words = set(re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]{2,}', text.lower()))
-        return words - stop_words
+    new_has_neg = _has_negation(new_words)
+    existing_has_neg = _has_negation(existing_words)
+    if new_has_neg != existing_has_neg:
+        return True
 
-    @staticmethod
-    def _facts_conflict(existing: str, new_lower: str) -> bool:
-        existing_lower = existing.lower()
-        new_words = UserSpace._tokenize(new_lower)
-        existing_words = UserSpace._tokenize(existing_lower)
+    new_values = _get_value_words(new_lower)
+    existing_values = _get_value_words(existing_lower)
 
-        if not new_words or not existing_words:
+    if new_values and existing_values:
+        only_in_new = new_values - existing_values
+        only_in_existing = existing_values - new_values
+        if only_in_new and only_in_existing:
             return False
 
-        new_has_neg = UserSpace._has_negation(new_words)
-        existing_has_neg = UserSpace._has_negation(existing_words)
-        if new_has_neg != existing_has_neg:
+    new_in_existing = len(new_words & existing_words) / len(new_words)
+    existing_in_new = len(new_words & existing_words) / len(existing_words)
+
+    if new_in_existing > 0.7 and existing_in_new > 0.5:
+        return True
+    if new_in_existing > 0.85:
+        return True
+
+    if new_values and existing_values:
+        new_val_in_exist = len(new_values & existing_values) / len(new_values)
+        exist_val_in_new = len(new_values & existing_values) / len(existing_values)
+        if new_val_in_exist >= 0.65 and exist_val_in_new > 0.5:
             return True
 
-        new_values = UserSpace._get_value_words(new_lower)
-        existing_values = UserSpace._get_value_words(existing_lower)
+    return False
 
-        if new_values and existing_values:
-            only_in_new = new_values - existing_values
-            only_in_existing = existing_values - new_values
-            if only_in_new and only_in_existing:
-                return False
 
-        new_in_existing = len(new_words & existing_words) / len(new_words)
-        existing_in_new = len(new_words & existing_words) / len(existing_words)
+def _tokenize(text: str) -> set[str]:
+    return set(re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]{2,}', text.lower()))
 
-        if new_in_existing > 0.7 and existing_in_new > 0.5:
-            return True
-        if new_in_existing > 0.85:
-            return True
 
-        if new_values and existing_values:
-            new_val_in_exist = len(new_values & existing_values) / len(new_values)
-            exist_val_in_new = len(new_values & existing_values) / len(existing_values)
-            if new_val_in_exist >= 0.65 and exist_val_in_new > 0.5:
-                return True
+def _has_negation(words: set[str]) -> bool:
+    negation_words = {
+        "not", "no", "never", "neither", "nor", "nobody", "nothing",
+        "nowhere", "hardly", "barely", "scarcely",
+        "不", "没", "没有", "非", "无", "未", "别", "莫", "勿",
+        "dislike", "hate", "avoid", "refuse", "reject",
+        "不喜欢", "讨厌", "拒绝",
+    }
+    return bool(words & negation_words)
 
-        return False
+
+def _get_value_words(text: str) -> set[str]:
+    stop_words = {
+        "user", "the", "a", "an", "is", "are", "was", "were", "be",
+        "been", "being", "has", "have", "had", "do", "does", "did",
+        "will", "would", "shall", "should", "may", "might", "can",
+        "could", "must", "of", "in", "on", "at", "to", "for", "with",
+        "by", "from", "as", "into", "about", "also", "and",
+        "but", "or", "not", "no", "very", "just", "than", "that",
+        "this", "these", "those", "it", "its", "he", "she", "they",
+        "we", "you", "me", "him", "her", "them", "us",
+        "的", "了", "在", "是", "我", "他", "她", "它", "们",
+        "有", "和", "与", "也", "都", "就", "而", "及",
+        "name",
+    }
+    words = set(re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]{2,}', text.lower()))
+    return words - stop_words
 
 
 class AgentMemory(BaseModel):
@@ -441,7 +440,7 @@ class MemoryData(BaseModel):
             if existing.id == new_fact.id:
                 surviving.append(existing)
                 continue
-            if existing.tier == new_fact.tier and UserSpace._facts_conflict(existing.content, new_lower):
+            if existing.tier == new_fact.tier and facts_conflict(existing.content, new_lower):
                 self.archived_facts.append(existing)
                 removed_ids.append(existing.id)
             else:
