@@ -196,16 +196,7 @@ export interface SearchResult {
   metadata: Record<string, any>
 }
 
-export interface AgentProfile {
-  id: string
-  name: string
-  description: string
-  systemPrompt?: string
-  model?: string
-  provider?: string
-  color: string
-  avatar?: string
-  isBuiltin?: boolean
+export interface AgentProfile extends Agent {
   isMain?: boolean
 }
 

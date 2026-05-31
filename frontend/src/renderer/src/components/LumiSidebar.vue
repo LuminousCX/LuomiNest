@@ -3,19 +3,24 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   MessageCircle,
-  GitBranch,
-  Lightbulb,
-  CheckSquare,
+  MessageSquare,
+  Users,
   Globe,
+  Wifi,
+  Cat,
+  Settings2,
+  Cpu,
+  Palette,
+  BarChart3,
+  Terminal,
+  CheckSquare,
+  CalendarDays,
+  Home,
+  GitBranch,
   Search,
   Settings,
-  Users,
-  Palette,
-  Brain,
-  Package,
   Trash2,
   Check,
-  MessageSquare,
   Clock,
   Loader2,
   Plus,
@@ -24,7 +29,8 @@ import {
   SquareCheck,
   X,
   AlertTriangle,
-  LayoutDashboard,
+  ChevronRight,
+  Bell,
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
@@ -35,6 +41,116 @@ const route = useRoute()
 const router = useRouter()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
+
+const expandedCategory = ref<string | null>(null)
+
+interface NavChild {
+  id: string
+  label: string
+  icon: any
+}
+
+interface NavCategory {
+  id: string
+  label: string
+  icon: any
+  children: NavChild[]
+}
+
+interface NavStandalone {
+  id: string
+  label: string
+  icon: any
+  route: string
+}
+
+const navCategories: NavCategory[] = [
+  {
+    id: 'chat',
+    label: '聊天',
+    icon: MessageCircle,
+    children: [
+      { id: '/workspace', label: '对话', icon: MessageSquare },
+      { id: '/social', label: '群组Agent', icon: Users },
+      { id: '/chat/platform', label: '平台接入', icon: Globe },
+      { id: '/chat/devices', label: '设备与群组', icon: Wifi },
+      { id: '/desktop-pet', label: '桌宠模式', icon: Cat },
+    ],
+  },
+  {
+    id: 'panel',
+    label: '控制面板',
+    icon: Settings2,
+    children: [
+      { id: '/settings/ai-model', label: '模型配置', icon: Cpu },
+      { id: '/avatar', label: '皮套工坊', icon: Palette },
+      { id: '/panel/usage', label: '用量统计', icon: BarChart3 },
+      { id: '/panel/console', label: '控制台', icon: Terminal },
+    ],
+  },
+  {
+    id: 'plan',
+    label: '计划任务',
+    icon: CheckSquare,
+    children: [
+      { id: '/tasks', label: '计划视图', icon: CalendarDays },
+      { id: '/plan/smart-home', label: '智能家居', icon: Home },
+      { id: '/workflow', label: '工作流', icon: GitBranch },
+    ],
+  },
+]
+
+const navStandalones: NavStandalone[] = [
+  { id: 'browser', label: '浏览器', icon: Globe, route: '/browser' },
+  { id: 'settings', label: '设置', icon: Settings, route: '/settings' },
+]
+
+const allChildRoutes = computed(() => {
+  const routes: string[] = []
+  for (const cat of navCategories) {
+    for (const child of cat.children) {
+      routes.push(child.id)
+    }
+  }
+  return routes
+})
+
+const activeCategory = computed(() => {
+  for (const cat of navCategories) {
+    for (const child of cat.children) {
+      if (route.path === child.id || route.path.startsWith(child.id + '/')) {
+        return cat.id
+      }
+    }
+  }
+  return null
+})
+
+const isStandaloneActive = (item: NavStandalone) => {
+  return route.path === item.route || route.path.startsWith(item.route + '/')
+}
+
+const toggleCategory = (catId: string) => {
+  if (expandedCategory.value === catId) {
+    expandedCategory.value = null
+  } else {
+    expandedCategory.value = catId
+  }
+}
+
+watch(activeCategory, (catId) => {
+  if (catId && expandedCategory.value !== catId) {
+    expandedCategory.value = catId
+  }
+}, { immediate: true })
+
+const isChildActive = (childId: string) => {
+  return route.path === childId || route.path.startsWith(childId + '/')
+}
+
+const handleChildClick = (childId: string) => {
+  router.push(childId)
+}
 
 const searchQuery = ref('')
 const searchResults = ref<ConversationSearchResult[]>([])
@@ -62,19 +178,6 @@ watch(searchQuery, (q) => {
 })
 
 const isSearchMode = computed(() => searchQuery.value.trim().length > 0)
-
-const navItems = [
-  { id: '/dashboard', label: '控制台', icon: LayoutDashboard },
-  { id: '/workspace', label: '对话', icon: MessageCircle },
-  { id: '/social', label: '社交', icon: Users },
-  { id: '/workflow', label: '工作流', icon: GitBranch },
-  { id: '/inspire', label: '灵感', icon: Lightbulb },
-  { id: '/tasks', label: '任务', icon: CheckSquare },
-  { id: '/avatar', label: '皮套', icon: Palette },
-  { id: '/memory', label: '记忆', icon: Brain },
-  { id: '/market', label: '扩展', icon: Package },
-  { id: '/browser', label: '浏览器', icon: Globe }
-]
 
 interface TimeGroup {
   label: string
@@ -350,6 +453,10 @@ const formatDeleteTime = (dateStr: string) => {
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
+const showHistoryPanel = computed(() => {
+  return route.path === '/workspace' || route.path === '/social'
+})
+
 onMounted(async () => {
   await agentStore.fetchAgents()
   if (agentStore.activeAgent?.id) {
@@ -362,213 +469,251 @@ onMounted(async () => {
   <div class="lumi-sidebar">
     <div class="sidebar-icon-rail">
       <div class="rail-top">
-        <button class="avatar-btn" aria-label="LuminousChenXi 账户">
+        <button class="avatar-btn" aria-label="LuminousChenXi">
           <div class="avatar-ring">
             <LumiBrandStar :size="20" :animated="false" />
           </div>
         </button>
         <nav class="icon-nav">
+          <div
+            v-for="cat in navCategories"
+            :key="cat.id"
+            :class="['icon-btn category-btn', { active: activeCategory === cat.id, expanded: expandedCategory === cat.id }]"
+            :aria-label="cat.label"
+            @click="toggleCategory(cat.id)"
+          >
+            <component :is="cat.icon" :size="20" />
+            <ChevronRight :size="12" class="expand-indicator" />
+          </div>
+
+          <div class="nav-divider"></div>
+
           <button
-            v-for="item in navItems"
+            v-for="item in navStandalones"
             :key="item.id"
-            :class="['icon-btn', { active: route.path === item.id || route.path.startsWith(item.id + '/') }]"
+            :class="['icon-btn', { active: isStandaloneActive(item) }]"
             :aria-label="item.label"
-            @click="router.push(item.id)"
+            @click="router.push(item.route)"
           >
             <component :is="item.icon" :size="20" />
           </button>
         </nav>
       </div>
       <div class="rail-bottom">
-        <button class="icon-btn" aria-label="设置" @click="router.push('/settings')">
-          <Settings :size="20" />
+        <button class="icon-btn notification-btn" aria-label="消息公告">
+          <Bell :size="20" />
+          <span class="notification-dot"></span>
         </button>
       </div>
     </div>
 
-    <div v-if="route.path === '/workspace'" class="sidebar-history-panel">
-      <template v-if="!showTrash">
-        <div class="panel-header">
-          <div class="search-box">
-            <Search :size="15" class="search-icon" />
-            <input v-model="searchQuery" type="text" placeholder="搜索历史记录..." class="search-input" />
+    <Transition name="sub-panel">
+      <div v-if="expandedCategory" class="sidebar-sub-panel">
+        <div class="sub-panel-header">
+          <span class="sub-panel-title">
+            {{ navCategories.find(c => c.id === expandedCategory)?.label }}
+          </span>
+        </div>
+        <div class="sub-panel-list">
+          <button
+            v-for="child in navCategories.find(c => c.id === expandedCategory)?.children"
+            :key="child.id"
+            :class="['sub-panel-item', { active: isChildActive(child.id) }]"
+            @click="handleChildClick(child.id)"
+          >
+            <component :is="child.icon" :size="16" class="sub-item-icon" />
+            <span class="sub-item-label">{{ child.label }}</span>
+            <ChevronRight v-if="isChildActive(child.id)" :size="14" class="sub-item-arrow" />
+          </button>
+        </div>
+      </div>
+    </Transition>
+
+    <Transition name="history-slide">
+      <div v-if="showHistoryPanel" class="sidebar-history-panel">
+        <template v-if="!showTrash">
+          <div class="panel-header">
+            <div class="search-box">
+              <Search :size="15" class="search-icon" />
+              <input v-model="searchQuery" type="text" placeholder="搜索历史记录..." class="search-input" />
+            </div>
+            <div class="panel-header-actions">
+              <button class="new-conv-btn" @click="handleNewConversation">
+                <Plus :size="15" />
+                <span>创建新对话</span>
+              </button>
+              <button
+                :class="['batch-toggle-btn', { active: batchMode }]"
+                title="批量操作"
+                @click="toggleBatchMode"
+              >
+                <SquareCheck :size="15" />
+              </button>
+            </div>
           </div>
-          <div class="panel-header-actions">
-            <button class="new-conv-btn" @click="handleNewConversation">
-              <Plus :size="15" />
-              <span>创建新对话</span>
-            </button>
+
+          <div v-if="batchMode" class="batch-toolbar">
+            <button class="batch-action-btn" @click="selectAll">全选</button>
+            <span class="batch-count">已选 {{ selectedIds.size }} 项</span>
             <button
-              :class="['batch-toggle-btn', { active: batchMode }]"
+              :class="['batch-delete-btn', { disabled: selectedIds.size === 0 }]"
+              :disabled="selectedIds.size === 0"
+              @click="handleBatchDelete"
+            >
+              <Trash2 :size="13" />
+              删除
+            </button>
+          </div>
+
+          <div class="history-list">
+            <template v-if="isSearchMode">
+              <div v-if="isSearching" class="history-empty">
+                <Loader2 :size="20" class="spin-animation" />
+                <span>搜索中...</span>
+              </div>
+              <template v-else>
+                <div
+                  v-for="result in searchResults"
+                  :key="result.id"
+                  :class="['history-item', { active: chatStore.currentConvId === result.id }]"
+                  @click="selectConversation(result.id, searchQuery.trim())"
+                >
+                  <div class="history-item-indicator" />
+                  <MessageSquare :size="14" class="history-item-icon" />
+                  <div class="history-item-content">
+                    <span class="history-item-title">{{ result.title }}</span>
+                    <span class="history-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
+                  </div>
+                </div>
+                <div v-if="searchResults.length === 0" class="history-empty">
+                  <MessageSquare :size="24" />
+                  <span>未找到匹配的会话</span>
+                </div>
+              </template>
+            </template>
+
+            <template v-else>
+              <template v-for="group in timeGroups" :key="group.label">
+                <div class="time-group">
+                  <div class="time-group-label">
+                    <Clock :size="12" />
+                    <span>{{ group.label }}</span>
+                  </div>
+                  <div
+                    v-for="conv in group.items"
+                    :key="conv.id"
+                    :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
+                    @click="batchMode ? toggleSelect(conv.id) : selectConversation(conv.id)"
+                  >
+                    <div v-if="batchMode" class="history-item-checkbox" @click.stop="toggleSelect(conv.id)">
+                      <div :class="['checkbox-box', { checked: selectedIds.has(conv.id) }]">
+                        <Check v-if="selectedIds.has(conv.id)" :size="10" />
+                      </div>
+                    </div>
+                    <div class="history-item-indicator" />
+                    <MessageSquare :size="14" class="history-item-icon" />
+                    <div class="history-item-content">
+                      <span class="history-item-title">{{ conv.title }}</span>
+                      <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
+                    </div>
+                    <button v-if="!batchMode" class="history-item-delete" @click.stop="handleDeleteConversation(conv.id)">
+                      <Trash2 :size="13" />
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <div v-if="timeGroups.length === 0" class="history-empty">
+                <MessageSquare :size="24" />
+                <span>暂无历史记录</span>
+              </div>
+            </template>
+          </div>
+
+          <button class="trash-entry-btn" @click="openTrash">
+            <Trash2 :size="14" />
+            <span>回收站</span>
+            <span v-if="trashCount > 0" class="trash-badge">{{ trashCount }}</span>
+          </button>
+        </template>
+
+        <template v-else>
+          <div class="trash-header">
+            <button class="trash-back-btn" @click="closeTrash">
+              <ArrowLeft :size="16" />
+            </button>
+            <span class="trash-title">回收站</span>
+            <button
+              :class="['batch-toggle-btn', { active: trashBatchMode }]"
               title="批量操作"
-              @click="toggleBatchMode"
+              @click="toggleTrashBatchMode"
             >
               <SquareCheck :size="15" />
             </button>
           </div>
-        </div>
 
-        <div v-if="batchMode" class="batch-toolbar">
-          <button class="batch-action-btn" @click="selectAll">全选</button>
-          <span class="batch-count">已选 {{ selectedIds.size }} 项</span>
-          <button
-            :class="['batch-delete-btn', { disabled: selectedIds.size === 0 }]"
-            :disabled="selectedIds.size === 0"
-            @click="handleBatchDelete"
-          >
-            <Trash2 :size="13" />
-            删除
-          </button>
-        </div>
-
-        <div class="history-list">
-          <template v-if="isSearchMode">
-            <div v-if="isSearching" class="history-empty">
-              <Loader2 :size="20" class="spin-animation" />
-              <span>搜索中...</span>
-            </div>
-            <template v-else>
-              <div
-                v-for="result in searchResults"
-                :key="result.id"
-                :class="['history-item', { active: chatStore.currentConvId === result.id }]"
-                @click="selectConversation(result.id, searchQuery.trim())"
-              >
-                <div class="history-item-indicator" />
-                <MessageSquare :size="14" class="history-item-icon" />
-                <div class="history-item-content">
-                  <span class="history-item-title">{{ result.title }}</span>
-                  <span class="history-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
-                </div>
-              </div>
-              <div v-if="searchResults.length === 0" class="history-empty">
-                <MessageSquare :size="24" />
-                <span>未找到匹配的会话</span>
-              </div>
-            </template>
-          </template>
-
-          <template v-else>
-            <template v-for="group in timeGroups" :key="group.label">
-              <div class="time-group">
-                <div class="time-group-label">
-                  <Clock :size="12" />
-                  <span>{{ group.label }}</span>
-                </div>
-                <div
-                  v-for="conv in group.items"
-                  :key="conv.id"
-                  :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
-                  @click="batchMode ? toggleSelect(conv.id) : selectConversation(conv.id)"
-                >
-                  <div v-if="batchMode" class="history-item-checkbox" @click.stop="toggleSelect(conv.id)">
-                    <div :class="['checkbox-box', { checked: selectedIds.has(conv.id) }]">
-                      <Check v-if="selectedIds.has(conv.id)" :size="10" />
-                    </div>
-                  </div>
-                  <div class="history-item-indicator" />
-                  <MessageSquare :size="14" class="history-item-icon" />
-                  <div class="history-item-content">
-                    <span class="history-item-title">{{ conv.title }}</span>
-                    <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
-                  </div>
-                  <button v-if="!batchMode" class="history-item-delete" @click.stop="handleDeleteConversation(conv.id)">
-                    <Trash2 :size="13" />
-                  </button>
-                </div>
-              </div>
-            </template>
-
-            <div v-if="timeGroups.length === 0" class="history-empty">
-              <MessageSquare :size="24" />
-              <span>暂无历史记录</span>
-            </div>
-          </template>
-        </div>
-
-        <button class="trash-entry-btn" @click="openTrash">
-          <Trash2 :size="14" />
-          <span>回收站</span>
-          <span v-if="trashCount > 0" class="trash-badge">{{ trashCount }}</span>
-        </button>
-      </template>
-
-      <template v-else>
-        <div class="trash-header">
-          <button class="trash-back-btn" @click="closeTrash">
-            <ArrowLeft :size="16" />
-          </button>
-          <span class="trash-title">回收站</span>
-          <button
-            :class="['batch-toggle-btn', { active: trashBatchMode }]"
-            title="批量操作"
-            @click="toggleTrashBatchMode"
-          >
-            <SquareCheck :size="15" />
-          </button>
-        </div>
-
-        <div v-if="trashBatchMode" class="batch-toolbar">
-          <button class="batch-action-btn" @click="selectAllTrash">全选</button>
-          <span class="batch-count">已选 {{ trashSelectedIds.size }} 项</span>
-          <button
-            :class="['batch-restore-btn', { disabled: trashSelectedIds.size === 0 }]"
-            :disabled="trashSelectedIds.size === 0"
-            @click="handleBatchRestore"
-          >
-            <Undo2 :size="13" />
-            恢复
-          </button>
-          <button
-            :class="['batch-delete-btn', { disabled: trashSelectedIds.size === 0 }]"
-            :disabled="trashSelectedIds.size === 0"
-            @click="handleBatchPermanentDelete"
-          >
-            <Trash2 :size="13" />
-            删除
-          </button>
-        </div>
-
-        <div class="trash-toolbar" v-if="!trashBatchMode && chatStore.trashItems.length > 0">
-          <button class="empty-trash-btn" @click="handleEmptyTrash">
-            <Trash2 :size="12" />
-            清空回收站
-          </button>
-        </div>
-
-        <div class="trash-list">
-          <div v-if="chatStore.trashItems.length === 0" class="history-empty">
-            <Trash2 :size="24" />
-            <span>回收站为空</span>
+          <div v-if="trashBatchMode" class="batch-toolbar">
+            <button class="batch-action-btn" @click="selectAllTrash">全选</button>
+            <span class="batch-count">已选 {{ trashSelectedIds.size }} 项</span>
+            <button
+              :class="['batch-restore-btn', { disabled: trashSelectedIds.size === 0 }]"
+              :disabled="trashSelectedIds.size === 0"
+              @click="handleBatchRestore"
+            >
+              <Undo2 :size="13" />
+              恢复
+            </button>
+            <button
+              :class="['batch-delete-btn', { disabled: trashSelectedIds.size === 0 }]"
+              :disabled="trashSelectedIds.size === 0"
+              @click="handleBatchPermanentDelete"
+            >
+              <Trash2 :size="13" />
+              删除
+            </button>
           </div>
-          <div
-            v-for="item in chatStore.trashItems"
-            :key="item.id"
-            :class="['trash-item']"
-            @click="trashBatchMode ? toggleTrashSelect(item.id) : undefined"
-          >
-            <div v-if="trashBatchMode" class="history-item-checkbox" @click.stop="toggleTrashSelect(item.id)">
-              <div :class="['checkbox-box', { checked: trashSelectedIds.has(item.id) }]">
-                <Check v-if="trashSelectedIds.has(item.id)" :size="10" />
+
+          <div class="trash-toolbar" v-if="!trashBatchMode && chatStore.trashItems.length > 0">
+            <button class="empty-trash-btn" @click="handleEmptyTrash">
+              <Trash2 :size="12" />
+              清空回收站
+            </button>
+          </div>
+
+          <div class="trash-list">
+            <div v-if="chatStore.trashItems.length === 0" class="history-empty">
+              <Trash2 :size="24" />
+              <span>回收站为空</span>
+            </div>
+            <div
+              v-for="item in chatStore.trashItems"
+              :key="item.id"
+              :class="['trash-item']"
+              @click="trashBatchMode ? toggleTrashSelect(item.id) : undefined"
+            >
+              <div v-if="trashBatchMode" class="history-item-checkbox" @click.stop="toggleTrashSelect(item.id)">
+                <div :class="['checkbox-box', { checked: trashSelectedIds.has(item.id) }]">
+                  <Check v-if="trashSelectedIds.has(item.id)" :size="10" />
+                </div>
               </div>
-            </div>
-            <MessageSquare :size="14" class="history-item-icon" />
-            <div class="trash-item-content">
-              <span class="history-item-title">{{ item.title }}</span>
-              <span class="trash-item-deleted-time">{{ formatDeleteTime(item.deleted_at) }}</span>
-            </div>
-            <div v-if="!trashBatchMode" class="trash-item-actions">
-              <button class="trash-action-btn restore" title="恢复" @click.stop="handleRestoreItem(item.id)">
-                <Undo2 :size="13" />
-              </button>
-              <button class="trash-action-btn delete" title="永久删除" @click.stop="handlePermanentDeleteItem(item.id)">
-                <Trash2 :size="13" />
-              </button>
+              <MessageSquare :size="14" class="history-item-icon" />
+              <div class="trash-item-content">
+                <span class="history-item-title">{{ item.title }}</span>
+                <span class="trash-item-deleted-time">{{ formatDeleteTime(item.deleted_at) }}</span>
+              </div>
+              <div v-if="!trashBatchMode" class="trash-item-actions">
+                <button class="trash-action-btn restore" title="恢复" @click.stop="handleRestoreItem(item.id)">
+                  <Undo2 :size="13" />
+                </button>
+                <button class="trash-action-btn delete" title="永久删除" @click.stop="handlePermanentDeleteItem(item.id)">
+                  <Trash2 :size="13" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </template>
-    </div>
+        </template>
+      </div>
+    </Transition>
 
     <Transition name="selection-fade">
       <div v-if="showCreateDialog" class="create-dialog-overlay" @click.self="showCreateDialog = false">
@@ -715,6 +860,12 @@ onMounted(async () => {
   padding: 0 8px;
 }
 
+.nav-divider {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--divider-soft);
+}
+
 .icon-btn {
   display: flex;
   align-items: center;
@@ -750,12 +901,143 @@ onMounted(async () => {
   background: var(--lumi-primary);
 }
 
+.category-btn {
+  position: relative;
+}
+
+.expand-indicator {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  opacity: 0;
+  transform: rotate(0deg);
+  transition: all var(--transition-fast);
+  color: var(--text-muted);
+}
+
+.category-btn:hover .expand-indicator {
+  opacity: 0.6;
+}
+
+.category-btn.expanded .expand-indicator {
+  opacity: 1;
+  transform: rotate(90deg);
+  color: var(--lumi-primary);
+}
+
+.notification-btn {
+  position: relative;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lumi-accent);
+  border: 1.5px solid var(--surface);
+}
+
+.sidebar-sub-panel {
+  width: 180px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--border-light);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.sub-panel-header {
+  padding: 16px 16px 8px;
+  flex-shrink: 0;
+}
+
+.sub-panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.sub-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sub-panel-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+  text-align: left;
+  position: relative;
+}
+
+.sub-panel-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 0;
+  border-radius: 1px;
+  background: var(--lumi-primary);
+  transition: height var(--transition-fast);
+}
+
+.sub-panel-item.active::before {
+  height: 16px;
+}
+
+.sub-panel-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.sub-panel-item.active {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.sub-item-icon {
+  flex-shrink: 0;
+}
+
+.sub-item-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sub-item-arrow {
+  flex-shrink: 0;
+  color: var(--lumi-primary);
+}
+
 .sidebar-history-panel {
   width: 220px;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f9fafb;
+  background: var(--bg-secondary);
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -780,7 +1062,7 @@ onMounted(async () => {
   gap: 8px;
   padding: 8px 12px;
   height: 48px;
-  background: #ffffff;
+  background: var(--surface);
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   transition: all var(--transition-fast);
@@ -836,8 +1118,8 @@ onMounted(async () => {
   height: 32px;
   border-radius: var(--radius-md);
   color: var(--text-muted);
-  background: #ffffff;
-  border: 1px solid var(--workspace-border, #e5e7eb);
+  background: var(--surface);
+  border: 1px solid var(--workspace-border, var(--border));
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
@@ -859,8 +1141,8 @@ onMounted(async () => {
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  background: #f0f4f8;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
   flex-wrap: nowrap;
   overflow: hidden;
@@ -871,8 +1153,8 @@ onMounted(async () => {
   border-radius: 4px;
   font-size: 11px;
   color: var(--text-secondary);
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -900,9 +1182,9 @@ onMounted(async () => {
   padding: 3px 6px;
   border-radius: 4px;
   font-size: 11px;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--lumi-accent);
+  background: var(--lumi-accent-light);
+  border: 1px solid rgba(244, 63, 94, 0.2);
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -910,7 +1192,7 @@ onMounted(async () => {
 }
 
 .batch-delete-btn:hover {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(244, 63, 94, 0.15);
 }
 
 .batch-delete-btn.disabled {
@@ -977,11 +1259,11 @@ onMounted(async () => {
 }
 
 .history-item:hover {
-  background: #f3f4f6;
+  background: var(--surface-hover);
 }
 
 .history-item.active {
-  background: #eff6ff;
+  background: var(--lumi-primary-light);
 }
 
 .history-item-indicator {
@@ -1085,12 +1367,12 @@ onMounted(async () => {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  border: 1.5px solid #d1d5db;
+  border: 1.5px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all var(--transition-fast);
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .checkbox-box.checked {
@@ -1117,8 +1399,8 @@ onMounted(async () => {
   padding: 10px 14px;
   margin: 0 10px 10px;
   border-radius: var(--radius-md);
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
@@ -1127,9 +1409,9 @@ onMounted(async () => {
 }
 
 .trash-entry-btn:hover {
-  background: #f3f4f6;
+  background: var(--surface-hover);
   color: var(--text-secondary);
-  border-color: #d1d5db;
+  border-color: var(--border);
 }
 
 .trash-badge {
@@ -1137,7 +1419,7 @@ onMounted(async () => {
   min-width: 18px;
   height: 18px;
   border-radius: 9px;
-  background: var(--lumi-accent, #ef4444);
+  background: var(--lumi-accent);
   color: white;
   font-size: 10px;
   font-weight: 600;
@@ -1152,7 +1434,7 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   padding: 12px 14px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
 
@@ -1184,7 +1466,7 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   padding: 6px 14px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
 
@@ -1195,14 +1477,14 @@ onMounted(async () => {
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 11px;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.06);
+  color: var(--lumi-accent);
+  background: var(--lumi-accent-light);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .empty-trash-btn:hover {
-  background: rgba(239, 68, 68, 0.12);
+  background: rgba(244, 63, 94, 0.12);
 }
 
 .trash-list {
@@ -1222,7 +1504,7 @@ onMounted(async () => {
 }
 
 .trash-item:hover {
-  background: #f3f4f6;
+  background: var(--surface-hover);
 }
 
 .trash-item-content {
@@ -1268,202 +1550,53 @@ onMounted(async () => {
 }
 
 .trash-action-btn.delete:hover {
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
-}
-
-.create-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
-
-.create-dialog {
-  background: var(--workspace-card);
-  border-radius: var(--radius-xl);
-  padding: 28px;
-  width: 400px;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: var(--shadow-lg);
-}
-
-.create-dialog h3 {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 20px;
-}
-
-.confirm-dialog {
-  background: var(--workspace-card);
-  border-radius: var(--radius-xl);
-  padding: 32px 28px 24px;
-  width: 340px;
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-.confirm-dialog-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  margin-bottom: 16px;
-}
-
-.confirm-dialog-message {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text-primary);
-  margin: 0 0 24px;
-}
-
-.confirm-dialog-actions {
-  display: flex;
-  gap: 12px;
-  width: 100%;
-}
-
-.confirm-dialog-actions .dialog-btn {
-  flex: 1;
-  justify-content: center;
-  padding: 10px 20px;
-  border-radius: var(--radius-lg);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.form-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.required-mark {
+  background: var(--lumi-accent-light);
   color: var(--lumi-accent);
-  font-weight: 700;
-  margin-left: 2px;
 }
 
-.form-input {
-  width: 100%;
-  padding: 10px 14px;
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  color: var(--text-primary);
-  transition: all var(--transition-fast);
+.sub-panel-enter-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.form-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+.sub-panel-leave-active {
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.form-input::placeholder {
-  color: var(--text-muted);
+.sub-panel-enter-from,
+.sub-panel-leave-to {
+  opacity: 0;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
+.sub-panel-enter-to,
+.sub-panel-leave-from {
+  opacity: 1;
+  width: 180px;
 }
 
-.color-picker {
-  display: flex;
-  gap: 8px;
+.history-slide-enter-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.color-dot {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: 2px solid transparent;
+.history-slide-leave-active {
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.color-dot:hover {
-  transform: scale(1.15);
+.history-slide-enter-from,
+.history-slide-leave-to {
+  opacity: 0;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.color-dot.active {
-  border-color: var(--text-primary);
-  box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
-}
-
-.dialog-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.dialog-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 20px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.dialog-btn.cancel {
-  color: var(--text-muted);
-  background: var(--workspace-panel);
-}
-
-.dialog-btn.cancel:hover {
-  background: var(--workspace-hover);
-}
-
-.dialog-btn.confirm {
-  color: white;
-  background: var(--lumi-primary);
-}
-
-.dialog-btn.confirm:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.dialog-btn.confirm.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.dialog-btn.danger {
-  color: white;
-  background: #ef4444;
-}
-
-.dialog-btn.danger:hover {
-  background: #dc2626;
+.history-slide-enter-to,
+.history-slide-leave-from {
+  opacity: 1;
+  width: 220px;
 }
 
 .selection-fade-enter-active {
@@ -1474,12 +1607,8 @@ onMounted(async () => {
   animation: lumi-fade-in 0.2s ease-out reverse;
 }
 
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+@keyframes lumi-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

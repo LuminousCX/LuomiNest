@@ -47,9 +47,6 @@
   --browser-input-border: var(--border);
 
   --text-primary: var(--text);
-  --text-secondary: var(--text-secondary);
-  --text-muted: var(--text-muted);
-  --text-inverse: var(--text-inverse);
 
   --shadow-xs: 0 1px 2px rgba(20, 126, 188, 0.04);
   --shadow-sm: 0 2px 8px rgba(20, 126, 188, 0.06);
@@ -171,71 +168,6 @@
   --task-red-soft: rgba(239, 68, 68, 0.12);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --lumi-primary: #3A9FD4;
-    --lumi-primary-hover: #5BB5E0;
-    --lumi-primary-light: rgba(58, 159, 212, 0.1);
-    --lumi-primary-glow: rgba(58, 159, 212, 0.18);
-    --lumi-primary-soft: #62A9C8;
-
-    --bg: #000000;
-    --bg-secondary: #0A0A0A;
-    --surface: #111111;
-    --surface-hover: #1A1A1A;
-    --surface-elevated: #1A1A1A;
-    --border: #2A2A2A;
-    --border-light: #1A1A1A;
-
-    --text: #E0E0E0;
-    --text-secondary: #999999;
-    --text-muted: #666666;
-    --text-inverse: #000000;
-
-    --workspace-bg: var(--bg);
-    --workspace-sidebar: var(--surface);
-    --workspace-panel: var(--bg-secondary);
-    --workspace-card: var(--surface);
-    --workspace-border: var(--border);
-    --workspace-hover: var(--surface-hover);
-
-    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.5);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.55);
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
-    --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.65);
-
-    --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.4);
-    --shadow-glow-sm: 0 0 12px rgba(58,159,212,0.15);
-    --shadow-glow-md: 0 0 24px rgba(58,159,212,0.2);
-
-    --glass-bg: rgba(17, 17, 17, 0.72);
-    --glass-border: rgba(42, 42, 42, 0.5);
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    --glass-blur: blur(16px);
-
-    --gradient-hero-soft: linear-gradient(135deg, rgba(58,159,212,0.1) 0%, rgba(98,169,200,0.06) 40%, rgba(20,126,188,0.04) 100%);
-
-    /* Task palette colors - dark (prefers) */
-    --task-pink: #ec4899;
-    --task-pink-soft: rgba(236, 72, 153, 0.12);
-    --task-pink-bg: rgba(236, 72, 153, 0.08);
-    --task-yellow: #eab308;
-    --task-yellow-soft: rgba(234, 179, 8, 0.12);
-    --task-yellow-bg: rgba(234, 179, 8, 0.07);
-    --task-blue: #3b82f6;
-    --task-blue-soft: rgba(59, 130, 246, 0.12);
-    --task-blue-bg: rgba(59, 130, 246, 0.07);
-    --task-purple: #a78bfa;
-    --task-purple-soft: rgba(167, 139, 250, 0.12);
-    --task-purple-bg: rgba(139, 92, 246, 0.07);
-    --task-green: #22c55e;
-    --task-green-soft: rgba(34, 197, 94, 0.12);
-    --task-green-bg: rgba(34, 197, 94, 0.07);
-    --task-red: #ef4444;
-    --task-red-soft: rgba(239, 68, 68, 0.12);
-  }
-}
 
 * {
   margin: 0;
@@ -340,6 +272,229 @@ img {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+.create-dialog-overlay,
+.confirm-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.create-dialog {
+  background: var(--workspace-card);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.create-dialog h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.confirm-dialog {
+  background: var(--workspace-card);
+  border-radius: var(--radius-xl);
+  padding: 32px 28px 24px;
+  width: 360px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.confirm-dialog-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--lumi-danger, #ef4444);
+  margin-bottom: 16px;
+}
+
+.confirm-dialog-message {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin: 0 0 24px;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.confirm-dialog-actions .dialog-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 10px 20px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.confirm-dialog .dialog-btn.confirm {
+  color: white;
+  background: var(--lumi-danger, #ef4444);
+  border: none;
+}
+
+.confirm-dialog .dialog-btn.confirm:hover {
+  background: var(--lumi-danger-hover, #dc2626);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.required-mark {
+  color: var(--lumi-accent);
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--workspace-panel);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.form-input:focus {
+  border-color: var(--lumi-primary);
+  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.color-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.color-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 2px solid transparent;
+}
+
+.color-dot:hover {
+  transform: scale(1.15);
+}
+
+.color-dot.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.dialog-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dialog-btn.cancel {
+  color: var(--text-muted);
+  background: var(--workspace-panel);
+}
+
+.dialog-btn.cancel:hover {
+  background: var(--workspace-hover);
+}
+
+.dialog-btn.confirm {
+  color: white;
+  background: var(--lumi-primary);
+}
+
+.dialog-btn.confirm:hover {
+  background: var(--lumi-primary-hover);
+}
+
+.dialog-btn.confirm.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-btn.delete {
+  color: var(--lumi-accent, #ef4444);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.dialog-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.dialog-btn.danger {
+  color: white;
+  background: var(--lumi-danger, #ef4444);
+}
+
+.dialog-btn.danger:hover {
+  background: var(--lumi-danger-hover, #dc2626);
 }
 
 @keyframes lumi-fade-in {
