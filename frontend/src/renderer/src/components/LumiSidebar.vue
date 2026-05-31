@@ -31,6 +31,8 @@ import {
   Bell,
   Sparkles,
   Package,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
@@ -43,6 +45,7 @@ const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
 const expandedGroups = ref<Set<string>>(new Set(['chat']))
+const isNavCollapsed = ref(false)
 
 interface NavChild {
   id: string
@@ -127,6 +130,11 @@ const isChildActive = (childId: string) => {
 }
 
 const toggleGroup = (groupId: string) => {
+  if (isNavCollapsed.value) {
+    isNavCollapsed.value = false
+    expandedGroups.value = new Set([groupId])
+    return
+  }
   const next = new Set(expandedGroups.value)
   if (next.has(groupId)) {
     next.delete(groupId)
@@ -135,6 +143,12 @@ const toggleGroup = (groupId: string) => {
   }
   expandedGroups.value = next
 }
+
+watch(isNavCollapsed, (collapsed) => {
+  if (collapsed) {
+    expandedGroups.value = new Set()
+  }
+})
 
 watch(activeGroup, (groupId) => {
   if (groupId && !expandedGroups.value.has(groupId)) {
@@ -461,18 +475,18 @@ onMounted(async () => {
 
 <template>
   <div class="lumi-sidebar">
-    <div class="sidebar-nav-panel">
+    <div :class="['sidebar-nav-panel', { collapsed: isNavCollapsed }]">
       <div class="nav-header">
         <div class="brand">
           <div class="brand-avatar">
             <LumiBrandStar :size="22" :animated="false" />
           </div>
-          <div class="brand-info">
+          <div v-if="!isNavCollapsed" class="brand-info">
             <span class="brand-name">LuomiNest</span>
             <span class="brand-tag">LuminousCX</span>
           </div>
         </div>
-        <div class="header-actions">
+        <div v-if="!isNavCollapsed" class="header-actions">
           <button class="header-action-btn" aria-label="消息公告">
             <Bell :size="16" />
             <span class="header-action-dot"></span>
@@ -481,9 +495,13 @@ onMounted(async () => {
             <Plus :size="16" />
           </button>
         </div>
+        <button class="collapse-toggle-btn" :aria-label="isNavCollapsed ? '展开侧栏' : '收起侧栏'" @click="isNavCollapsed = !isNavCollapsed">
+          <PanelLeftOpen v-if="isNavCollapsed" :size="18" />
+          <PanelLeftClose v-else :size="18" />
+        </button>
       </div>
 
-      <div class="nav-search">
+      <div v-if="!isNavCollapsed" class="nav-search">
         <Search :size="14" class="nav-search-icon" />
         <input
           type="text"
@@ -497,7 +515,7 @@ onMounted(async () => {
 
       <div class="nav-content">
         <div class="nav-section">
-          <div class="section-label">导航</div>
+          <div v-if="!isNavCollapsed" class="section-label">导航</div>
 
           <div v-for="group in navGroups" :key="group.id" class="nav-group">
             <button
@@ -506,16 +524,17 @@ onMounted(async () => {
             >
               <div class="group-header-left">
                 <component :is="group.icon" :size="17" class="group-icon" />
-                <span class="group-label">{{ group.label }}</span>
+                <span v-if="!isNavCollapsed" class="group-label">{{ group.label }}</span>
               </div>
               <ChevronRight
+                v-if="!isNavCollapsed"
                 :size="14"
                 :class="['group-chevron', { rotated: expandedGroups.has(group.id) }]"
               />
             </button>
 
             <Transition name="tree-expand">
-              <div v-if="expandedGroups.has(group.id)" class="group-children">
+              <div v-if="!isNavCollapsed && expandedGroups.has(group.id)" class="group-children">
                 <div
                   v-for="(child, idx) in group.children"
                   :key="child.id"
@@ -534,7 +553,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="nav-section">
+        <div v-if="!isNavCollapsed" class="nav-section">
           <div class="section-label">工具</div>
           <div class="nav-items">
             <button
@@ -554,7 +573,7 @@ onMounted(async () => {
       <div class="nav-footer">
         <button class="footer-btn" @click="router.push('/settings')">
           <Settings :size="15" />
-          <span>设置</span>
+          <span v-if="!isNavCollapsed">设置</span>
         </button>
       </div>
     </div>
@@ -830,6 +849,11 @@ onMounted(async () => {
   flex-shrink: 0;
   overflow: hidden;
   position: relative;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-nav-panel.collapsed {
+  width: 52px;
 }
 
 .sidebar-nav-panel::after {
@@ -842,12 +866,24 @@ onMounted(async () => {
   background: var(--divider-vertical);
 }
 
+.sidebar-nav-panel.collapsed::after {
+  display: none;
+}
+
 .nav-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px 10px;
   flex-shrink: 0;
+}
+
+.sidebar-nav-panel.collapsed .nav-header {
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 8px 10px;
+  align-items: center;
+  justify-content: center;
 }
 
 .brand {
@@ -921,6 +957,29 @@ onMounted(async () => {
   border: 1.5px solid var(--surface);
 }
 
+.collapse-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.collapse-toggle-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+.sidebar-nav-panel.collapsed .collapse-toggle-btn {
+  width: 36px;
+  height: 36px;
+}
+
 .nav-search {
   display: flex;
   align-items: center;
@@ -971,6 +1030,11 @@ onMounted(async () => {
   gap: 16px;
 }
 
+.sidebar-nav-panel.collapsed .nav-content {
+  padding: 0 6px 10px;
+  align-items: center;
+}
+
 .nav-section {
   display: flex;
   flex-direction: column;
@@ -1004,6 +1068,11 @@ onMounted(async () => {
   text-align: left;
   position: relative;
   overflow: hidden;
+}
+
+.sidebar-nav-panel.collapsed .group-header {
+  justify-content: center;
+  padding: 9px;
 }
 
 .group-header::after {
@@ -1226,6 +1295,10 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
+.sidebar-nav-panel.collapsed .nav-footer {
+  padding: 10px 6px;
+}
+
 .footer-btn {
   display: flex;
   align-items: center;
@@ -1238,6 +1311,11 @@ onMounted(async () => {
   cursor: pointer;
   transition: all var(--transition-fast);
   width: 100%;
+}
+
+.sidebar-nav-panel.collapsed .footer-btn {
+  justify-content: center;
+  padding: 8px;
 }
 
 .footer-btn:hover {
