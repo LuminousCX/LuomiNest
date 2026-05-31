@@ -248,8 +248,8 @@ class ChatService:
                             )
                         except Exception as ut_err:
                             logger.warning(f"[STREAM] Usage tracking failed: {ut_err}")
-                except Exception:
-                    pass
+                except Exception as finalize_err:
+                    logger.warning(f"[STREAM] Finalization pre-persist block failed: {finalize_err}")
                 try:
                     if not state["aborted"] and state["content"]:
                         try:
