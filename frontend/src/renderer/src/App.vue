@@ -76,7 +76,7 @@ watch(isDesktopPetPage, (val) => {
 .lumi-body {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  overflow: visible;
   min-height: 0;
 }
 

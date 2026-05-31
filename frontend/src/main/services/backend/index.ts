@@ -192,13 +192,24 @@ export const startBackend = async (): Promise<boolean> => {
 export const stopBackend = (): void => {
   if (backendProcess) {
     console.log('[BackendService] Stopping backend...')
-    
+
     if (platform() === 'win32') {
-      spawn('taskkill', ['/pid', String(backendProcess.pid), '/f', '/t'])
+      try {
+        const tk = spawn('taskkill', ['/pid', String(backendProcess.pid), '/f', '/t'])
+        tk.on('error', (err) => {
+          console.error('[BackendService] taskkill failed:', err.message)
+          if (backendProcess) {
+            backendProcess.kill('SIGKILL')
+          }
+        })
+      } catch (err) {
+        console.error('[BackendService] taskkill spawn failed:', err)
+        backendProcess.kill('SIGKILL')
+      }
     } else {
       backendProcess.kill('SIGTERM')
     }
-    
+
     backendProcess = null
     backendReady = false
   }
