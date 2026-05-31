@@ -6,7 +6,13 @@ import { validateLuomiNestModelUrl } from '@/config/luominest-models'
 
 const EXPRESSION_BLOCKLIST = ['水印', 'watermark', 'copyright', 'credit', 'logo']
 
-const patchIsInteractive = (obj: any) => {
+interface InteractiveObject {
+  eventMode?: string
+  children?: InteractiveObject[]
+  isInteractive?: () => boolean
+}
+
+const patchIsInteractive = (obj: InteractiveObject) => {
   if (!obj) return
   if (typeof obj.isInteractive !== 'function') {
     obj.isInteractive = function () {
@@ -214,7 +220,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       setupFocus(model)
       setupWheel(model)
 
-      patchIsInteractive(model)
+      patchIsInteractive(model as any)
 
       app.stage.addChild(model)
       currentModel = model
