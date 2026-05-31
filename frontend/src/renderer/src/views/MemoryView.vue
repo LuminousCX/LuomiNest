@@ -5,24 +5,25 @@ import {
   Brain,
   Database,
   Search,
-  Layers,
+  User,
+  Bot,
+  MessageSquare,
   Clock,
   BookOpen,
-  User,
-  Cpu,
-  ArrowRight,
+  Sparkles,
   Activity,
-  TrendingUp,
   RefreshCw,
-  Zap,
   Archive,
   Trash2,
   Edit3,
   Plus,
-  MessageSquare,
   Loader2,
   X,
   Save,
+  Globe,
+  Lock,
+  Flame,
+  Tag,
 } from 'lucide-vue-next'
 import { useMemoryStore } from '../stores/memory'
 import { useAgentStore } from '../stores/agent'
@@ -31,46 +32,42 @@ const router = useRouter()
 const memoryStore = useMemoryStore()
 const agentStore = useAgentStore()
 
-interface LayerItem {
-  id: string
-  text: string
-  time: string
-  tag: string
-  category: string
-  confidence: number
-  raw: any
-}
-
-interface MemoryLayer {
+interface LayerTab {
   id: string
   name: string
   sub: string
   icon: typeof Brain
   color: string
-  capacity: number
-  unit: string
   desc: string
-  items: LayerItem[]
 }
 
-const layers = ref<MemoryLayer[]>([
-  { id: 'working', name: '工作记忆', sub: 'Working Memory', icon: Cpu, color: '#f59e0b', capacity: 100, unit: '条记录', desc: '当前会话上下文 · 内存/Redis', items: [] },
-  { id: 'episodic', name: '情景记忆', sub: 'Episodic Memory', icon: Clock, color: '#22c55e', capacity: 50, unit: '条事件', desc: '近期事件回忆 · JSON + 向量检索', items: [] },
-  { id: 'semantic', name: '语义记忆', sub: 'Semantic Memory', icon: Database, color: '#8b5cf6', capacity: 500, unit: '条事实', desc: '永久认知 · PGVector + 知识图谱', items: [] },
+interface SearchMemoryResult {
+  id: string
+  content: string
+  category: string
+  tier: string
+  layer: string
+  confidence: number
+}
+
+const layerTabs = ref<LayerTab[]>([
+  { id: 'user-space', name: '用户空间', sub: 'UserSpace', icon: Globe, color: '#8b5cf6', desc: '全局共享 · 所有Agent可见' },
+  { id: 'agent-memory', name: 'Agent记忆', sub: 'AgentMemory', icon: Bot, color: '#0ea5e9', desc: 'Agent私有 · 仅当前Agent可见' },
+  { id: 'thread-memory', name: '对话记忆', sub: 'ThreadMemory', icon: MessageSquare, color: '#f59e0b', desc: '当前对话上下文 · 短期' },
 ])
 
-const activeLayerIdx = ref(0)
-const activeLayerData = computed(() => layers.value[activeLayerIdx.value])
-const activeUsedCount = computed(() => activeLayerData.value.items.length)
+const activeTab = ref('user-space')
+const activeTabData = computed(() => layerTabs.value.find(t => t.id === activeTab.value)!)
 
 const searchQuery = ref('')
 const isSearching = ref(false)
 const showSearchResults = ref(false)
-const searchMemoryResults = ref<Array<{ content: string; score: number; source: string }>>([])
+const searchMemoryResults = ref<SearchMemoryResult[]>([])
 
 const showAddDialog = ref(false)
 const newFactContent = ref('')
 const newFactCategory = ref('context')
+const newFactLayer = ref('user')
 const isAdding = ref(false)
 
 const editingFactId = ref<string | null>(null)
@@ -85,26 +82,22 @@ const categoryOptions = [
   { value: 'correction', label: '纠正' },
 ]
 
+const tierOptions = [
+  { value: 'core_identity', label: '核心身份', color: '#8b5cf6' },
+  { value: 'long_term_preference', label: '长期偏好', color: '#22c55e' },
+  { value: 'temporary_context', label: '临时上下文', color: '#f59e0b' },
+]
+
 function getCategoryLabel(cat: string) {
   return categoryOptions.find(c => c.value === cat)?.label || cat
 }
 
 function getTierLabel(tier: string) {
-  const map: Record<string, string> = {
-    core_identity: '核心身份',
-    long_term_preference: '长期偏好',
-    temporary_context: '临时上下文',
-  }
-  return map[tier] || tier
+  return tierOptions.find(t => t.value === tier)?.label || tier
 }
 
 function getTierColor(tier: string) {
-  const map: Record<string, string> = {
-    core_identity: '#8b5cf6',
-    long_term_preference: '#22c55e',
-    temporary_context: '#f59e0b',
-  }
-  return map[tier] || '#888'
+  return tierOptions.find(t => t.value === tier)?.color || '#888'
 }
 
 function formatTimeAgo(isoStr: string) {
@@ -126,115 +119,69 @@ function formatTimeAgo(isoStr: string) {
   }
 }
 
-function factToLayerItem(fact: any): LayerItem {
-  return {
-    id: fact.id,
-    text: fact.content,
-    time: formatTimeAgo(fact.created_at),
-    tag: getTierLabel(fact.tier),
-    category: fact.category,
-    confidence: fact.confidence,
-    raw: fact,
+const userSpaceFacts = computed(() => {
+  const facts = memoryStore.memoryData?.user_space?.facts || []
+  return facts
+})
+
+const userSpaceFactsByTier = computed(() => {
+  const groups: Record<string, typeof userSpaceFacts.value> = {}
+  for (const fact of userSpaceFacts.value) {
+    if (!groups[fact.tier]) groups[fact.tier] = []
+    groups[fact.tier].push(fact)
   }
-}
+  return groups
+})
 
-function eventToLayerItem(event: any): LayerItem {
-  return {
-    id: event.id,
-    text: event.key_information || event.core_goal,
-    time: formatTimeAgo(event.timestamp),
-    tag: event.scene_tags?.[0] || '事件',
-    category: 'context',
-    confidence: event.importance || 0.5,
-    raw: event,
-  }
-}
+const agentFacts = computed(() => {
+  return memoryStore.memoryData?.agent_memory?.agent_facts || []
+})
 
-function buildLayers() {
-  const data = memoryStore.memoryData
-  if (!data) return
+const agentEvents = computed(() => {
+  return memoryStore.memoryData?.agent_memory?.agent_events || []
+})
 
-  const memory = data.memory
+const episodicEvents = computed(() => {
+  return memoryStore.memoryData?.user_space?.episodic_events || []
+})
 
-  layers.value[0].items = [
-    ...memory.facts.filter(f => f.tier === 'temporary_context').map(factToLayerItem),
-    ...memory.working_memory.recent_conversations.slice(-5).map((c: any, index: number) => ({
-      id: `conv-${index}-${c.role}-${c.timestamp}`,
-      text: `${c.role === 'user' ? '用户' : '助手'}: ${(c.content || '').slice(0, 60)}`,
-      time: formatTimeAgo(c.timestamp),
-      tag: '对话',
-      category: 'context',
-      confidence: 0.6,
-      raw: c,
-    })),
-  ]
+const distilled = computed(() => {
+  return memoryStore.memoryData?.user_space?.distilled || null
+})
 
-  if (memory.working_memory.core_goal) {
-    layers.value[0].items.unshift({
-      id: 'core-goal',
-      text: memory.working_memory.core_goal,
-      time: formatTimeAgo(memory.working_memory.core_goal_extracted_at),
-      tag: '核心目标',
-      category: 'goal',
-      confidence: 1.0,
-      raw: { content: memory.working_memory.core_goal },
-    })
-  }
+const hasDistilled = computed(() => {
+  const d = distilled.value
+  return d && (d.core_identity || d.long_term || d.temporary || d.events_timeline)
+})
 
-  layers.value[1].items = memory.episodic_events.map(eventToLayerItem)
+const workingMemory = computed(() => {
+  return memoryStore.memoryData?.agent_memory?.working_memory || null
+})
 
-  const semanticItems: LayerItem[] = []
-  for (const fact of memory.facts.filter(f => f.tier === 'core_identity' || f.tier === 'long_term_preference')) {
-    semanticItems.push(factToLayerItem(fact))
-  }
-  layers.value[2].items = semanticItems
-
-  for (const arch of memory.archived_facts) {
-    layers.value[2].items.push({
-      ...factToLayerItem(arch),
-      tag: '已归档',
-    })
-  }
-}
-
-watch(() => memoryStore.memoryData, () => {
-  if (memoryStore.memoryData) {
-    buildLayers()
-  }
-}, { immediate: true })
-
-const userPortrait = computed(() => {
-  const profile = memoryStore.memoryData?.memory.profile
-  if (!profile) return null
-
-  const tags: string[] = []
-  if (profile.occupation) tags.push(profile.occupation)
-  if (profile.language) tags.push(profile.language)
-  if (profile.gender) tags.push(profile.gender)
-  if (profile.name) tags.push(profile.name)
-
-  const interests = profile.interests || []
-  const hobbies = profile.hobbies || []
-
-  const totalFacts = memoryStore.memoryData?.summary.total_facts || 0
-  const totalEvents = memoryStore.memoryData?.memory.episodic_events?.length || 0
-
-  return {
-    tags: tags.length > 0 ? tags : ['暂无标签'],
-    interests: [...interests, ...hobbies],
-    interactionCount: totalFacts,
-    memoryHealth: Math.min(100, Math.round((totalFacts / Math.max(totalFacts + (memoryStore.memoryData?.summary.total_archived || 0), 1)) * 100)),
-  }
+const profile = computed(() => {
+  return memoryStore.memoryData?.user_space?.profile || null
 })
 
 const hasProfile = computed(() => {
-  const p = memoryStore.memoryData?.memory.profile
+  const p = profile.value
   if (!p) return false
   return !!(p.name || p.nickname || p.occupation || p.location || (p.interests && p.interests.length > 0) || (p.hobbies && p.hobbies.length > 0))
 })
 
-function switchLayer(idx: number) {
-  activeLayerIdx.value = idx
+const userContext = computed(() => {
+  return memoryStore.memoryData?.user_space?.user || null
+})
+
+const domainSummary = computed(() => {
+  return memoryStore.memoryData?.agent_memory?.domain_summary || ''
+})
+
+const totalUserFacts = computed(() => userSpaceFacts.value.length)
+const totalAgentFacts = computed(() => agentFacts.value.length)
+const totalEvents = computed(() => episodicEvents.value.length + agentEvents.value.length)
+
+function switchTab(tabId: string) {
+  activeTab.value = tabId
 }
 
 async function handleSearch() {
@@ -256,10 +203,8 @@ function clearSearch() {
   searchMemoryResults.value = []
 }
 
-function chatAboutMemory(item: LayerItem) {
-  const event = new CustomEvent('luominest:memory-chat-trigger', {
-    detail: { text: item.text }
-  })
+function chatAboutMemory(text: string) {
+  const event = new CustomEvent('luominest:memory-chat-trigger', { detail: { text } })
   window.dispatchEvent(event)
   router.push('/workspace')
 }
@@ -268,7 +213,14 @@ async function handleAddFact() {
   if (!newFactContent.value.trim()) return
   isAdding.value = true
   try {
-    await memoryStore.addFact(newFactContent.value.trim(), newFactCategory.value, 0.8, agentStore.activeAgent?.id)
+    await memoryStore.addFact(
+      newFactContent.value.trim(),
+      newFactCategory.value,
+      0.8,
+      agentStore.activeAgent?.id,
+      'manual',
+      newFactLayer.value,
+    )
     newFactContent.value = ''
     newFactCategory.value = 'context'
     showAddDialog.value = false
@@ -277,9 +229,9 @@ async function handleAddFact() {
   }
 }
 
-function startEdit(fact: LayerItem) {
-  editingFactId.value = fact.id
-  editingContent.value = fact.text
+function startEdit(factId: string, content: string) {
+  editingFactId.value = factId
+  editingContent.value = content
 }
 
 function cancelEdit() {
@@ -293,23 +245,16 @@ async function saveEdit() {
     await memoryStore.updateFact(editingFactId.value, editingContent.value.trim(), undefined, undefined, agentStore.activeAgent?.id)
     editingFactId.value = null
     editingContent.value = ''
-  } catch {
+  } catch (e) {
+    console.error('[MemoryView] 保存失败:', e)
   }
 }
 
-async function handleDeleteFact(fact: LayerItem) {
+async function handleDeleteFact(factId: string) {
   try {
-    await memoryStore.deleteFact(fact.id, agentStore.activeAgent?.id)
-  } catch {
-  }
-}
-
-function getTierCapacity(tier: string) {
-  switch (tier) {
-    case 'working': return 100
-    case 'episodic': return 50
-    case 'semantic': return 500
-    default: return 100
+    await memoryStore.deleteFact(factId, agentStore.activeAgent?.id)
+  } catch (e) {
+    console.error('[MemoryView] 删除失败:', e)
   }
 }
 
@@ -321,13 +266,8 @@ async function loadData() {
   ])
 }
 
-onMounted(() => {
-  loadData()
-})
-
-watch(() => agentStore.activeAgent?.id, () => {
-  loadData()
-})
+onMounted(() => { loadData() })
+watch(() => agentStore.activeAgent?.id, () => { loadData() })
 </script>
 
 <template>
@@ -336,23 +276,18 @@ watch(() => agentStore.activeAgent?.id, () => {
       <div class="header-left">
         <Brain :size="20" />
         <h2>记忆中枢</h2>
-        <span class="header-badge">MaaS · 三层记忆架构</span>
+        <span class="header-badge">v3 · 三层记忆架构</span>
       </div>
       <div class="header-actions">
         <div class="search-bar" :class="{ 'search-expanded': showSearchResults }">
           <Search :size="14" class="search-icon" />
-          <input v-model="searchQuery" type="text" placeholder="搜索记忆..."
-            @keydown.enter="handleSearch" />
-          <button v-if="showSearchResults" class="search-clear-btn" @click="clearSearch">
-            <X :size="12" />
-          </button>
-          <Loader2 v-if="isSearching" :size="13" class="search-refresh spinning" />
-          <button v-else class="search-trigger-btn" @click="handleSearch" :disabled="!searchQuery.trim()">
-            <Search :size="13" />
-          </button>
+          <input v-model="searchQuery" type="text" placeholder="搜索记忆..." @keydown.enter="handleSearch" />
+          <button v-if="showSearchResults" class="search-clear-btn" @click="clearSearch"><X :size="12" /></button>
+          <Loader2 v-if="isSearching" :size="13" class="spinning" />
+          <button v-else class="search-trigger-btn" @click="handleSearch" :disabled="!searchQuery.trim()"><Search :size="13" /></button>
         </div>
         <button class="h-btn primary" @click="showAddDialog = true">
-          <Plus :size="15" /> 添加事实
+          <Plus :size="15" /> 添加记忆
         </button>
         <button class="h-btn" @click="loadData">
           <RefreshCw :size="15" :class="{ spinning: memoryStore.loading }" />
@@ -366,176 +301,291 @@ watch(() => agentStore.activeAgent?.id, () => {
     </div>
 
     <div v-else class="memory-body">
-      <div class="layer-stack animate-fade-up">
-        <div class="stack-visual">
-          <div
-            v-for="(layer, idx) in layers"
-            :key="layer.id"
-            :class="['layer-card', { active: activeLayerIdx === idx }]"
-            :style="{ '--layer-color': layer.color, '--layer-delay': `${idx * 0.12}s` }"
-            @click="switchLayer(idx)"
-          >
-            <div class="layer-top">
-              <div class="layer-icon-wrap" :style="{ background: layer.color + '18' }">
-                <component :is="layer.icon" :size="20" :style="{ color: layer.color }" />
-              </div>
-              <div class="layer-meta">
-                <span class="layer-name">{{ layer.name }}</span>
-                <span class="layer-sub">{{ layer.sub }}</span>
-              </div>
-              <Layers :size="14" class="layer-indicator" />
+      <div class="layer-nav animate-fade-up">
+        <div
+          v-for="tab in layerTabs"
+          :key="tab.id"
+          :class="['nav-card', { active: activeTab === tab.id }]"
+          :style="{ '--tab-color': tab.color, '--tab-delay': `${layerTabs.indexOf(tab) * 0.1}s` }"
+          @click="switchTab(tab.id)"
+        >
+          <div class="nav-top">
+            <div class="nav-icon-wrap" :style="{ background: tab.color + '18' }">
+              <component :is="tab.icon" :size="20" :style="{ color: tab.color }" />
             </div>
-
-            <div class="layer-bar-wrap">
-              <div class="layer-bar-track">
-                <div
-                  class="layer-bar-fill"
-                  :style="{
-                    width: Math.min(100, (layer.items.length / Math.max(layer.capacity, 1)) * 100) + '%',
-                    background: layer.color
-                  }"
-                ></div>
-              </div>
-              <span class="layer-bar-label">{{ layer.items.length }} / {{ layer.capacity }} {{ layer.unit }}</span>
+            <div class="nav-meta">
+              <span class="nav-name">{{ tab.name }}</span>
+              <span class="nav-sub">{{ tab.sub }}</span>
             </div>
-
-            <p class="layer-desc">{{ layer.desc }}</p>
           </div>
-
-          <div class="flow-arrow">
-            <ArrowRight :size="16" />
-            <span>MemCell 提取 → 分类 → 压缩 → 检索</span>
+          <p class="nav-desc">{{ tab.desc }}</p>
+          <div class="nav-stats">
+            <span v-if="tab.id === 'user-space'" class="nav-stat">{{ totalUserFacts }} 条事实 · {{ totalEvents }} 条事件</span>
+            <span v-else-if="tab.id === 'agent-memory'" class="nav-stat">{{ totalAgentFacts }} 条事实</span>
+            <span v-else class="nav-stat">{{ workingMemory?.recent_conversations?.length || 0 }} 条对话</span>
           </div>
+        </div>
+
+        <div class="nav-flow">
+          <div class="flow-step"><Globe :size="12" /> 全局</div>
+          <div class="flow-arrow-line"></div>
+          <div class="flow-step"><Lock :size="12" /> 私有</div>
+          <div class="flow-arrow-line"></div>
+          <div class="flow-step"><MessageSquare :size="12" /> 临时</div>
         </div>
       </div>
 
       <div class="memory-detail animate-slide-left">
-        <div class="detail-header">
-          <component :is="activeLayerData.icon" :size="22" :style="{ color: activeLayerData.color }" />
-          <h3>{{ activeLayerData.name }}</h3>
-          <span class="detail-sub">{{ activeLayerData.sub }}</span>
-        </div>
-
-        <div class="detail-capacity">
-          <div class="cap-ring">
-            <svg viewBox="0 0 100 100" class="cap-svg">
-              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" stroke-width="8" />
-              <circle cx="50" cy="50" r="42" fill="none"
-                :stroke="activeLayerData.color" stroke-width="8" stroke-linecap="round"
-                :stroke-dasharray="264"
-                :stroke-dashoffset="264 - (264 * Math.min(1, activeUsedCount / Math.max(activeLayerData.capacity, 1)))"
-                class="cap-progress" />
-            </svg>
-            <div class="cap-text">
-              <span class="cap-value">{{ Math.round(Math.min(100, (activeUsedCount / Math.max(activeLayerData.capacity, 1)) * 100)) }}%</span>
-              <span class="cap-unit">已用</span>
-            </div>
-          </div>
-          <div class="cap-stats">
-            <div class="stat-item">
-              <Activity :size="14" />
-              <span>{{ activeUsedCount }} 条记录</span>
-            </div>
-            <div class="stat-item">
-              <TrendingUp :size="14" />
-              <span>实时统计</span>
-            </div>
-            <div class="stat-item">
-              <Zap :size="14" />
-              <span>RAG 就绪</span>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="showSearchResults && searchMemoryResults.length > 0" class="detail-list">
-          <div class="list-title">搜索结果 · {{ searchMemoryResults.length }}条</div>
-          <TransitionGroup name="memo-list" tag="div" class="memo-items">
-            <div v-for="(result, idx) in searchMemoryResults" :key="`search-${idx}`" class="memo-item"
-              :style="{ '--item-delay': `${idx * 0.06}s` }">
-              <div class="memo-dot" :style="{ background: '#8b5cf6' }"></div>
+        <div v-if="showSearchResults && searchMemoryResults.length > 0" class="search-results-section">
+          <div class="section-title">搜索结果 · {{ searchMemoryResults.length }}条</div>
+          <div class="memo-items">
+            <div v-for="(result, idx) in searchMemoryResults" :key="`search-${idx}`" class="memo-item" :style="{ '--item-delay': `${idx * 0.05}s` }">
+              <div class="memo-dot" :style="{ background: getTierColor(result.tier) }"></div>
               <div class="memo-content">
                 <p class="memo-text">{{ result.content }}</p>
                 <div class="memo-footer">
-                  <span class="memo-tag">{{ result.source || '知识库' }}</span>
-                  <span class="memo-time">相关度: {{ (result.score * 100).toFixed(1) }}%</span>
+                  <span class="memo-tag" :style="{ background: getTierColor(result.tier) + '18', color: getTierColor(result.tier) }">{{ getTierLabel(result.tier) }}</span>
+                  <span class="memo-tag layer-tag">{{ result.layer === 'user' ? '全局' : '私有' }}</span>
                 </div>
               </div>
             </div>
-          </TransitionGroup>
+          </div>
         </div>
 
-        <div class="detail-list">
-          <div class="list-title">{{ showSearchResults ? '搜索结果' : '记忆片段' }}</div>
-
-          <div v-if="activeLayerData.items.length === 0 && !memoryStore.loading" class="empty-layer">
-            <Archive :size="32" />
-            <p>暂无记忆数据</p>
-            <p class="empty-hint">进行对话后，AI 会自动提取并存储记忆</p>
+        <template v-if="activeTab === 'user-space'">
+          <div class="detail-header">
+            <Globe :size="22" :style="{ color: '#8b5cf6' }" />
+            <h3>用户空间</h3>
+            <span class="detail-sub">UserSpace · 所有Agent共享</span>
           </div>
 
-          <TransitionGroup v-else name="memo-list" tag="div" class="memo-items">
-            <div v-for="(item, idx) in activeLayerData.items" :key="item.id" class="memo-item"
-              :style="{ '--item-delay': `${idx * 0.06}s` }">
-              <div class="memo-dot" :style="{ background: activeLayerData.color }"></div>
-              <div class="memo-content">
-                <template v-if="editingFactId === item.id">
-                  <textarea v-model="editingContent" class="edit-textarea" rows="2"></textarea>
-                  <div class="edit-actions">
-                    <button class="edit-btn save" @click="saveEdit" :disabled="!editingContent.trim()">
-                      <Save :size="12" /> 保存
-                    </button>
-                    <button class="edit-btn cancel" @click="cancelEdit">
-                      <X :size="12" /> 取消
-                    </button>
+          <div v-if="hasProfile" class="profile-card">
+            <div class="profile-top">
+              <div class="profile-avatar">{{ profile?.name?.[0] || '?' }}</div>
+              <div class="profile-info">
+                <span class="profile-name">{{ profile?.name || '未知用户' }}</span>
+                <span v-if="profile?.occupation" class="profile-occ">{{ profile.occupation }}</span>
+              </div>
+            </div>
+            <div class="profile-tags">
+              <span v-if="profile?.location" class="p-tag"><Tag :size="10" /> {{ profile.location }}</span>
+              <span v-if="profile?.gender" class="p-tag"><Tag :size="10" /> {{ profile.gender }}</span>
+              <span v-if="profile?.age" class="p-tag"><Tag :size="10" /> {{ profile.age }}</span>
+            </div>
+            <div v-if="profile?.interests?.length || profile?.hobbies?.length" class="profile-interests">
+              <BookOpen :size="12" />
+              <span v-for="i in [...(profile?.interests || []), ...(profile?.hobbies || [])]" :key="i" class="i-tag">{{ i }}</span>
+            </div>
+          </div>
+
+          <div v-if="userContext && (userContext.work_context?.summary || userContext.personal_context?.summary || userContext.top_of_mind?.summary)" class="context-card">
+            <div class="context-title"><Activity :size="14" /> 当前上下文</div>
+            <div v-if="userContext.work_context?.summary" class="context-row">
+              <span class="context-label">工作</span>
+              <span class="context-value">{{ userContext.work_context.summary }}</span>
+            </div>
+            <div v-if="userContext.personal_context?.summary" class="context-row">
+              <span class="context-label">个人</span>
+              <span class="context-value">{{ userContext.personal_context.summary }}</span>
+            </div>
+            <div v-if="userContext.top_of_mind?.summary" class="context-row">
+              <span class="context-label">关注</span>
+              <span class="context-value">{{ userContext.top_of_mind.summary }}</span>
+            </div>
+          </div>
+
+          <div v-if="hasDistilled" class="distilled-card">
+            <div class="distilled-title"><Sparkles :size="14" /> 蒸馏摘要</div>
+            <div v-if="distilled?.core_identity" class="distilled-section">
+              <span class="distilled-label" :style="{ color: '#8b5cf6' }">核心身份</span>
+              <p class="distilled-text">{{ distilled.core_identity }}</p>
+            </div>
+            <div v-if="distilled?.long_term" class="distilled-section">
+              <span class="distilled-label" :style="{ color: '#22c55e' }">长期偏好</span>
+              <p class="distilled-text">{{ distilled.long_term }}</p>
+            </div>
+            <div v-if="distilled?.temporary" class="distilled-section">
+              <span class="distilled-label" :style="{ color: '#f59e0b' }">临时上下文</span>
+              <p class="distilled-text">{{ distilled.temporary }}</p>
+            </div>
+            <div v-if="distilled?.events_timeline" class="distilled-section">
+              <span class="distilled-label" :style="{ color: '#0ea5e9' }">事件时间线</span>
+              <p class="distilled-text">{{ distilled.events_timeline }}</p>
+            </div>
+          </div>
+
+          <div class="facts-section">
+            <div class="section-title">事实记忆 · {{ totalUserFacts }}条</div>
+            <div v-if="totalUserFacts === 0" class="empty-section">
+              <Archive :size="28" />
+              <p>暂无事实记忆</p>
+              <p class="empty-hint">对话后AI会自动提取并存储</p>
+            </div>
+            <template v-else>
+              <div v-for="tier in tierOptions" :key="tier.value">
+                <div v-if="userSpaceFactsByTier[tier.value]?.length" class="tier-group">
+                  <div class="tier-header" :style="{ color: tier.color }">
+                    <div class="tier-dot" :style="{ background: tier.color }"></div>
+                    {{ tier.label }} · {{ userSpaceFactsByTier[tier.value].length }}条
                   </div>
-                </template>
-                <template v-else>
-                  <p class="memo-text">{{ item.text }}</p>
+                  <div class="memo-items">
+                    <div v-for="(fact, idx) in userSpaceFactsByTier[tier.value]" :key="fact.id" class="memo-item" :style="{ '--item-delay': `${idx * 0.04}s` }">
+                      <div class="memo-dot" :style="{ background: tier.color }"></div>
+                      <div class="memo-content">
+                        <template v-if="editingFactId === fact.id">
+                          <textarea v-model="editingContent" class="edit-textarea" rows="2"></textarea>
+                          <div class="edit-actions">
+                            <button class="edit-btn save" @click="saveEdit" :disabled="!editingContent.trim()"><Save :size="12" /> 保存</button>
+                            <button class="edit-btn cancel" @click="cancelEdit"><X :size="12" /> 取消</button>
+                          </div>
+                        </template>
+                        <template v-else>
+                          <p class="memo-text">{{ fact.content }}</p>
+                          <div class="memo-footer">
+                            <span class="memo-tag" :style="{ background: tier.color + '18', color: tier.color }">{{ tier.label }}</span>
+                            <span class="memo-tag category-tag">{{ getCategoryLabel(fact.category) }}</span>
+                            <span class="memo-time">{{ formatTimeAgo(fact.created_at) }}</span>
+                          </div>
+                        </template>
+                      </div>
+                      <div v-if="editingFactId !== fact.id" class="memo-actions">
+                        <button class="memo-action-btn" title="就此对话" @click="chatAboutMemory(fact.content)"><MessageSquare :size="13" /></button>
+                        <button class="memo-action-btn" title="编辑" @click="startEdit(fact.id, fact.content)"><Edit3 :size="13" /></button>
+                        <button class="memo-action-btn danger" title="删除" @click="handleDeleteFact(fact.id)"><Trash2 :size="13" /></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div v-if="episodicEvents.length > 0" class="events-section">
+            <div class="section-title">情景事件 · {{ episodicEvents.length }}条</div>
+            <div class="memo-items">
+              <div v-for="(event, idx) in episodicEvents.slice(0, 15)" :key="event.id" class="memo-item event-item" :style="{ '--item-delay': `${idx * 0.04}s` }">
+                <div class="memo-dot" :style="{ background: '#0ea5e9' }"></div>
+                <div class="memo-content">
+                  <p class="memo-text">{{ event.core_goal }}</p>
                   <div class="memo-footer">
-                    <span class="memo-tag">{{ item.tag }}</span>
-                    <span class="memo-tag category-tag">{{ getCategoryLabel(item.category) }}</span>
-                    <span class="memo-time">{{ item.time }}</span>
+                    <span v-if="event.key_information" class="memo-info">{{ event.key_information }}</span>
+                    <span class="memo-time">{{ formatTimeAgo(event.timestamp) }}</span>
+                    <span v-for="tag in (event.scene_tags || []).slice(0, 2)" :key="tag" class="memo-tag scene-tag">{{ tag }}</span>
                   </div>
-                </template>
-              </div>
-              <div v-if="editingFactId !== item.id" class="memo-actions">
-                <button class="memo-action-btn" title="就此对话" @click="chatAboutMemory(item)">
-                  <MessageSquare :size="13" />
-                </button>
-                <button class="memo-action-btn" title="编辑" @click="startEdit(item)">
-                  <Edit3 :size="13" />
-                </button>
-                <button class="memo-action-btn danger" title="删除" @click="handleDeleteFact(item)">
-                  <Trash2 :size="13" />
-                </button>
+                </div>
               </div>
             </div>
-          </TransitionGroup>
-        </div>
+          </div>
+        </template>
 
-        <div v-if="hasProfile" class="portrait-card">
-          <div class="portrait-header">
-            <User :size="15" />
-            <span>用户画像</span>
+        <template v-if="activeTab === 'agent-memory'">
+          <div class="detail-header">
+            <Bot :size="22" :style="{ color: '#0ea5e9' }" />
+            <h3>Agent记忆</h3>
+            <span class="detail-sub">AgentMemory · {{ agentStore.activeAgent?.name || '未选择' }}</span>
           </div>
-          <div class="portrait-tags">
-            <span v-for="tag in userPortrait?.tags" :key="tag" class="p-tag">{{ tag }}</span>
+
+          <div v-if="domainSummary" class="distilled-card">
+            <div class="distilled-title"><Sparkles :size="14" /> 领域经验摘要</div>
+            <p class="distilled-text">{{ domainSummary }}</p>
           </div>
-          <div v-if="userPortrait?.interests?.length" class="portrait-interests">
-            <BookOpen :size="13" />
-            <span v-for="int in userPortrait.interests" :key="int" class="i-tag">{{ int }}</span>
-          </div>
-          <div class="portrait-stats-row">
-            <div class="ps-item">
-              <Archive :size="13" />
-              <span>{{ (userPortrait?.interactionCount || 0).toLocaleString() }} 条记忆</span>
+
+          <div class="facts-section">
+            <div class="section-title">Agent专属事实 · {{ totalAgentFacts }}条</div>
+            <div v-if="totalAgentFacts === 0" class="empty-section">
+              <Archive :size="28" />
+              <p>暂无Agent专属记忆</p>
+              <p class="empty-hint">对话中提取的Agent特有知识会存放在这里</p>
             </div>
-            <div class="ps-item">
-              <Activity :size="13" />
-              <span>记忆健康 {{ userPortrait?.memoryHealth || 0 }}%</span>
+            <div v-else class="memo-items">
+              <div v-for="(fact, idx) in agentFacts" :key="fact.id" class="memo-item" :style="{ '--item-delay': `${idx * 0.04}s` }">
+                <div class="memo-dot" :style="{ background: '#0ea5e9' }"></div>
+                <div class="memo-content">
+                  <template v-if="editingFactId === fact.id">
+                    <textarea v-model="editingContent" class="edit-textarea" rows="2"></textarea>
+                    <div class="edit-actions">
+                      <button class="edit-btn save" @click="saveEdit" :disabled="!editingContent.trim()"><Save :size="12" /> 保存</button>
+                      <button class="edit-btn cancel" @click="cancelEdit"><X :size="12" /> 取消</button>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <p class="memo-text">{{ fact.content }}</p>
+                    <div class="memo-footer">
+                      <span class="memo-tag" :style="{ background: '#0ea5e918', color: '#0ea5e9' }">{{ getTierLabel(fact.tier) }}</span>
+                      <span class="memo-tag category-tag">{{ getCategoryLabel(fact.category) }}</span>
+                      <span class="memo-time">{{ formatTimeAgo(fact.created_at) }}</span>
+                    </div>
+                  </template>
+                </div>
+                <div v-if="editingFactId !== fact.id" class="memo-actions">
+                  <button class="memo-action-btn" title="就此对话" @click="chatAboutMemory(fact.content)"><MessageSquare :size="13" /></button>
+                  <button class="memo-action-btn" title="编辑" @click="startEdit(fact.id, fact.content)"><Edit3 :size="13" /></button>
+                  <button class="memo-action-btn danger" title="删除" @click="handleDeleteFact(fact.id)"><Trash2 :size="13" /></button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+
+          <div v-if="agentEvents.length > 0" class="events-section">
+            <div class="section-title">Agent情景事件 · {{ agentEvents.length }}条</div>
+            <div class="memo-items">
+              <div v-for="(event, idx) in agentEvents.slice(0, 10)" :key="event.id" class="memo-item event-item" :style="{ '--item-delay': `${idx * 0.04}s` }">
+                <div class="memo-dot" :style="{ background: '#0ea5e9' }"></div>
+                <div class="memo-content">
+                  <p class="memo-text">{{ event.core_goal }}</p>
+                  <div class="memo-footer">
+                    <span v-if="event.key_information" class="memo-info">{{ event.key_information }}</span>
+                    <span class="memo-time">{{ formatTimeAgo(event.timestamp) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <template v-if="activeTab === 'thread-memory'">
+          <div class="detail-header">
+            <MessageSquare :size="22" :style="{ color: '#f59e0b' }" />
+            <h3>对话记忆</h3>
+            <span class="detail-sub">ThreadMemory · 当前对话上下文</span>
+          </div>
+
+          <div v-if="workingMemory?.core_goal" class="context-card">
+            <div class="context-title"><Flame :size="14" /> 核心目标</div>
+            <p class="context-value">{{ workingMemory.core_goal }}</p>
+          </div>
+
+          <div v-if="workingMemory?.conversation_summary" class="context-card">
+            <div class="context-title"><BookOpen :size="14" /> 对话摘要</div>
+            <p class="context-value">{{ workingMemory.conversation_summary }}</p>
+          </div>
+
+          <div v-if="workingMemory?.current_state" class="context-card">
+            <div class="context-title"><Activity :size="14" /> 当前状态</div>
+            <p class="context-value">{{ workingMemory.current_state }}</p>
+          </div>
+
+          <div v-if="workingMemory?.recent_conversations?.length" class="facts-section">
+            <div class="section-title">近期对话 · {{ workingMemory.recent_conversations.length }}条</div>
+            <div class="memo-items">
+              <div v-for="(msg, idx) in workingMemory.recent_conversations.slice(-10)" :key="`conv-${idx}`" class="memo-item" :style="{ '--item-delay': `${idx * 0.04}s` }">
+                <div class="memo-dot" :style="{ background: msg.role === 'user' ? '#8b5cf6' : '#0ea5e9' }"></div>
+                <div class="memo-content">
+                  <p class="memo-text">{{ msg.role === 'user' ? '用户' : '助手' }}: {{ msg.content }}</p>
+                  <div class="memo-footer">
+                    <span class="memo-time">{{ formatTimeAgo(msg.timestamp) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="!workingMemory?.core_goal && !workingMemory?.recent_conversations?.length" class="empty-section">
+            <Archive :size="28" />
+            <p>暂无对话记忆</p>
+            <p class="empty-hint">开始对话后，工作记忆会自动记录</p>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -544,19 +594,25 @@ watch(() => agentStore.activeAgent?.id, () => {
         <div class="dialog-card">
           <div class="dialog-header">
             <Plus :size="16" />
-            <span>添加记忆事实</span>
-            <button class="dialog-close-btn" @click="showAddDialog = false">
-              <X :size="16" />
-            </button>
+            <span>添加记忆</span>
+            <button class="dialog-close-btn" @click="showAddDialog = false"><X :size="16" /></button>
           </div>
           <div class="dialog-body">
-            <textarea v-model="newFactContent" placeholder="输入记忆内容，例如：用户喜欢 Vue 3 框架，偏好组合式 API..."
-              rows="4" class="dialog-textarea"></textarea>
-            <div class="dialog-category">
-              <span class="category-label">分类：</span>
-              <select v-model="newFactCategory" class="category-select">
-                <option v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
+            <textarea v-model="newFactContent" placeholder="输入记忆内容..." rows="3" class="dialog-textarea"></textarea>
+            <div class="dialog-row">
+              <div class="dialog-field">
+                <span class="field-label">分类</span>
+                <select v-model="newFactCategory" class="field-select">
+                  <option v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </div>
+              <div class="dialog-field">
+                <span class="field-label">层级</span>
+                <select v-model="newFactLayer" class="field-select">
+                  <option value="user">用户空间（全局共享）</option>
+                  <option value="agent">Agent记忆（私有）</option>
+                </select>
+              </div>
             </div>
           </div>
           <div class="dialog-footer">
@@ -598,9 +654,7 @@ watch(() => agentStore.activeAgent?.id, () => {
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
 .memory-header {
@@ -657,10 +711,7 @@ watch(() => agentStore.activeAgent?.id, () => {
   box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
 }
 
-.search-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
+.search-icon { color: var(--text-muted); flex-shrink: 0; }
 
 .search-bar input {
   width: 140px;
@@ -669,9 +720,7 @@ watch(() => agentStore.activeAgent?.id, () => {
   color: var(--text);
 }
 
-.search-bar input::placeholder {
-  color: var(--text-muted);
-}
+.search-bar input::placeholder { color: var(--text-muted); }
 
 .search-clear-btn,
 .search-trigger-btn {
@@ -692,14 +741,7 @@ watch(() => agentStore.activeAgent?.id, () => {
   color: var(--text);
 }
 
-.search-trigger-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.search-refresh {
-  color: var(--text-muted);
-}
+.search-trigger-btn:disabled { opacity: 0.4; cursor: default; }
 
 .h-btn {
   display: flex;
@@ -714,10 +756,7 @@ watch(() => agentStore.activeAgent?.id, () => {
   white-space: nowrap;
 }
 
-.h-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
+.h-btn:hover { background: var(--surface-hover); color: var(--text); }
 
 .h-btn.primary {
   color: var(--text);
@@ -725,9 +764,7 @@ watch(() => agentStore.activeAgent?.id, () => {
   border: 1px solid rgba(139, 92, 246, 0.2);
 }
 
-.h-btn.primary:hover {
-  background: rgba(139, 92, 246, 0.18);
-}
+.h-btn.primary:hover { background: rgba(139, 92, 246, 0.18); }
 
 .memory-body {
   display: flex;
@@ -736,22 +773,19 @@ watch(() => agentStore.activeAgent?.id, () => {
   overflow: hidden;
 }
 
-.layer-stack {
-  width: 340px;
+.layer-nav {
+  width: 300px;
   padding: 20px;
   border-right: 1px solid var(--border);
   overflow-y: auto;
   flex-shrink: 0;
   background: var(--surface);
-}
-
-.stack-visual {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
-.layer-card {
+.nav-card {
   padding: 16px;
   border-radius: 14px;
   border: 1px solid var(--border);
@@ -760,39 +794,32 @@ watch(() => agentStore.activeAgent?.id, () => {
   transition: all 300ms ease-in-out;
   opacity: 0;
   animation: card-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: var(--layer-delay);
+  animation-delay: var(--tab-delay);
 }
 
 @keyframes card-enter {
-  from {
-    opacity: 0;
-    transform: translateX(-16px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
-.layer-card:hover {
-  border-color: var(--layer-color);
-  box-shadow: 0 4px 20px color-mix(in srgb, var(--layer-color) 10%, transparent);
+.nav-card:hover {
+  border-color: var(--tab-color);
+  box-shadow: 0 4px 20px color-mix(in srgb, var(--tab-color) 10%, transparent);
 }
 
-.layer-card.active {
-  border-color: var(--layer-color);
-  background: color-mix(in srgb, var(--layer-color) 4%, transparent);
+.nav-card.active {
+  border-color: var(--tab-color);
+  background: color-mix(in srgb, var(--tab-color) 4%, transparent);
 }
 
-.layer-top {
+.nav-top {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
-.layer-icon-wrap {
+.nav-icon-wrap {
   width: 40px;
   height: 40px;
   border-radius: 10px;
@@ -802,75 +829,64 @@ watch(() => agentStore.activeAgent?.id, () => {
   flex-shrink: 0;
 }
 
-.layer-meta {
-  flex: 1;
-  min-width: 0;
-}
+.nav-meta { flex: 1; min-width: 0; }
 
-.layer-name {
+.nav-name {
   display: block;
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
 }
 
-.layer-sub {
+.nav-sub {
   display: block;
   font-size: 11px;
   color: var(--text-muted);
 }
 
-.layer-indicator {
-  color: var(--text-muted);
-  opacity: 0.4;
-}
-
-.layer-bar-wrap {
-  margin-bottom: 8px;
-}
-
-.layer-bar-track {
-  height: 5px;
-  background: var(--border);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.layer-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 800ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.layer-bar-label {
-  display: block;
-  text-align: right;
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 4px;
-  font-family: monospace;
-}
-
-.layer-desc {
+.nav-desc {
   font-size: 11px;
   color: var(--text-muted);
   line-height: 1.5;
+  margin-bottom: 8px;
 }
 
-.flow-arrow {
+.nav-stats {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.nav-stat {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.nav-flow {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
   border-radius: 10px;
   background: rgba(139, 92, 246, 0.06);
-  font-size: 11px;
-  color: var(--text-muted);
+  margin-top: 4px;
 }
 
-.flow-arrow svg {
-  color: #8b5cf6;
-  flex-shrink: 0;
+.flow-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.flow-arrow-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
 .memory-detail {
@@ -900,84 +916,165 @@ watch(() => agentStore.activeAgent?.id, () => {
   color: var(--text-muted);
 }
 
-.detail-capacity {
+.profile-card {
+  padding: 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(14, 165, 233, 0.04));
+  border: 1px solid var(--border);
+}
+
+.profile-top {
   display: flex;
   align-items: center;
-  gap: 28px;
-  padding: 20px;
-  border-radius: 14px;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.profile-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.profile-info { display: flex; flex-direction: column; }
+
+.profile-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.profile-occ {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.profile-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.p-tag {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: rgba(139, 92, 246, 0.1);
+  color: #a78bfa;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.profile-interests {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.profile-interests > svg { color: var(--text-muted); flex-shrink: 0; }
+
+.i-tag {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.context-card {
+  padding: 16px;
+  border-radius: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
 }
 
-.cap-ring {
-  position: relative;
-  width: 90px;
-  height: 90px;
-  flex-shrink: 0;
-}
-
-.cap-svg {
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-
-.cap-progress {
-  transition: stroke-dashoffset 1s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.cap-text {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.cap-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.cap-unit {
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.cap-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1;
-}
-
-.stat-item {
+.context-title {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.context-title svg { color: #8b5cf6; }
+
+.context-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.context-label {
   color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 32px;
 }
 
-.stat-item svg {
-  color: #8b5cf6;
+.context-value {
+  color: var(--text);
+  line-height: 1.5;
 }
 
-.detail-list {
-  flex: 1;
+.distilled-card {
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 
-.list-title {
+.distilled-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.distilled-title svg { color: #f59e0b; }
+
+.distilled-section {
+  margin-bottom: 10px;
+}
+
+.distilled-label {
+  font-size: 12px;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.distilled-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.section-title {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 12px;
   color: var(--text);
 }
 
-.empty-layer {
+.empty-section {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -986,60 +1083,56 @@ watch(() => agentStore.activeAgent?.id, () => {
   color: var(--text-muted);
 }
 
-.empty-layer svg {
-  margin-bottom: 12px;
-  opacity: 0.5;
+.empty-section svg { margin-bottom: 12px; opacity: 0.5; }
+.empty-section p { font-size: 14px; margin-bottom: 4px; }
+.empty-hint { font-size: 12px !important; opacity: 0.7; }
+
+.tier-group {
+  margin-bottom: 16px;
 }
 
-.empty-layer p {
-  font-size: 14px;
-  margin-bottom: 4px;
+.tier-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
-.empty-hint {
-  font-size: 12px !important;
-  opacity: 0.7;
+.tier-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .memo-items {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .memo-item {
   display: flex;
   gap: 12px;
-  padding: 14px 16px;
-  border-radius: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
   background: var(--surface);
   border: 1px solid transparent;
   transition: all 300ms ease-in-out;
   opacity: 0;
   animation: memo-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: var(--item-delay);
-  position: relative;
 }
 
 @keyframes memo-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.memo-item:hover {
-  border-color: var(--border);
-}
-
-.memo-item:hover .memo-actions {
-  opacity: 1;
-}
+.memo-item:hover { border-color: var(--border); }
+.memo-item:hover .memo-actions { opacity: 1; }
 
 .memo-dot {
   width: 4px;
@@ -1049,22 +1142,20 @@ watch(() => agentStore.activeAgent?.id, () => {
   flex-shrink: 0;
 }
 
-.memo-content {
-  flex: 1;
-  min-width: 0;
-}
+.memo-content { flex: 1; min-width: 0; }
 
 .memo-text {
   font-size: 13px;
   color: var(--text);
   line-height: 1.5;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .memo-footer {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .memo-tag {
@@ -1079,6 +1170,25 @@ watch(() => agentStore.activeAgent?.id, () => {
 .memo-tag.category-tag {
   background: rgba(245, 158, 11, 0.1);
   color: #b45309;
+}
+
+.memo-tag.layer-tag {
+  background: rgba(14, 165, 233, 0.1);
+  color: #0ea5e9;
+}
+
+.memo-tag.scene-tag {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+.memo-info {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .memo-time {
@@ -1107,15 +1217,8 @@ watch(() => agentStore.activeAgent?.id, () => {
   transition: all 200ms;
 }
 
-.memo-action-btn:hover {
-  background: var(--surface-hover);
-  color: var(--lumi-primary);
-}
-
-.memo-action-btn.danger:hover {
-  background: rgba(244, 63, 94, 0.1);
-  color: #f43f5e;
-}
+.memo-action-btn:hover { background: var(--surface-hover); color: var(--lumi-primary); }
+.memo-action-btn.danger:hover { background: rgba(244, 63, 94, 0.1); color: #f43f5e; }
 
 .edit-textarea {
   width: 100%;
@@ -1130,15 +1233,9 @@ watch(() => agentStore.activeAgent?.id, () => {
   outline: none;
 }
 
-.edit-textarea:focus {
-  border-color: #8b5cf6;
-}
+.edit-textarea:focus { border-color: #8b5cf6; }
 
-.edit-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
+.edit-actions { display: flex; gap: 8px; margin-top: 8px; }
 
 .edit-btn {
   display: flex;
@@ -1151,105 +1248,11 @@ watch(() => agentStore.activeAgent?.id, () => {
   transition: all 200ms;
 }
 
-.edit-btn.save {
-  background: rgba(139, 92, 246, 0.1);
-  color: #8b5cf6;
-}
-
-.edit-btn.save:hover {
-  background: rgba(139, 92, 246, 0.2);
-}
-
-.edit-btn.save:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.edit-btn.cancel {
-  background: var(--surface-hover);
-  color: var(--text-muted);
-}
-
-.edit-btn.cancel:hover {
-  color: var(--text);
-}
-
-.portrait-card {
-  padding: 18px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(20, 126, 188, 0.04));
-  border: 1px solid var(--border);
-}
-
-.portrait-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 14px;
-  color: var(--text);
-}
-
-.portrait-header svg {
-  color: #8b5cf6;
-}
-
-.portrait-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.p-tag {
-  font-size: 12px;
-  padding: 4px 12px;
-  border-radius: 20px;
-  background: rgba(139, 92, 246, 0.1);
-  color: #a78bfa;
-  font-weight: 500;
-}
-
-.portrait-interests {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
-.portrait-interests>svg {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.i-tag {
-  font-size: 11px;
-  padding: 3px 10px;
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text-muted);
-}
-
-.portrait-stats-row {
-  display: flex;
-  gap: 20px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.ps-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.ps-item svg {
-  color: var(--lumi-primary);
-}
+.edit-btn.save { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
+.edit-btn.save:hover { background: rgba(139, 92, 246, 0.2); }
+.edit-btn.save:disabled { opacity: 0.5; cursor: default; }
+.edit-btn.cancel { background: var(--surface-hover); color: var(--text-muted); }
+.edit-btn.cancel:hover { color: var(--text); }
 
 .dialog-overlay {
   position: fixed;
@@ -1262,7 +1265,7 @@ watch(() => agentStore.activeAgent?.id, () => {
 }
 
 .dialog-card {
-  width: 460px;
+  width: 480px;
   max-width: 90vw;
   background: var(--bg);
   border-radius: 16px;
@@ -1293,9 +1296,7 @@ watch(() => agentStore.activeAgent?.id, () => {
   cursor: pointer;
 }
 
-.dialog-close-btn:hover {
-  background: var(--surface-hover);
-}
+.dialog-close-btn:hover { background: var(--surface-hover); }
 
 .dialog-body {
   padding: 20px;
@@ -1317,28 +1318,27 @@ watch(() => agentStore.activeAgent?.id, () => {
   outline: none;
 }
 
-.dialog-textarea:focus {
-  border-color: #8b5cf6;
-}
+.dialog-textarea:focus { border-color: #8b5cf6; }
+.dialog-textarea::placeholder { color: var(--text-muted); }
 
-.dialog-textarea::placeholder {
-  color: var(--text-muted);
-}
-
-.dialog-category {
+.dialog-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
-.category-label {
-  font-size: 13px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.category-select {
+.dialog-field {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.field-select {
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1368,15 +1368,8 @@ watch(() => agentStore.activeAgent?.id, () => {
   transition: all 200ms;
 }
 
-.dialog-btn.cancel {
-  background: var(--surface);
-  color: var(--text-muted);
-}
-
-.dialog-btn.cancel:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
+.dialog-btn.cancel { background: var(--surface); color: var(--text-muted); }
+.dialog-btn.cancel:hover { background: var(--surface-hover); color: var(--text); }
 
 .dialog-btn.confirm {
   background: rgba(139, 92, 246, 0.1);
@@ -1384,93 +1377,19 @@ watch(() => agentStore.activeAgent?.id, () => {
   border: 1px solid rgba(139, 92, 246, 0.2);
 }
 
-.dialog-btn.confirm:hover {
-  background: rgba(139, 92, 246, 0.2);
-}
+.dialog-btn.confirm:hover { background: rgba(139, 92, 246, 0.2); }
+.dialog-btn.confirm:disabled { opacity: 0.5; cursor: default; }
 
-.dialog-btn.confirm:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
+.dialog-fade-enter-active { animation: fade-in 0.25s ease-out; }
+.dialog-fade-enter-active .dialog-card { animation: scale-in 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+.dialog-fade-leave-active { animation: fade-in 0.2s ease-out reverse; }
 
-.dialog-fade-enter-active {
-  animation: fade-in 0.25s ease-out;
-}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scale-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
 
-.dialog-fade-enter-active .dialog-card {
-  animation: scale-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-}
+.animate-fade-up { animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 
-.dialog-fade-leave-active {
-  animation: fade-in 0.2s ease-out reverse;
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes scale-in {
-  from {
-    opacity: 0;
-    transform: scale(0.92);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes fade-up {
-  0% {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-up {
-  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes slide-left {
-  0% {
-    opacity: 0;
-    transform: translateX(24px);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.animate-slide-left {
-  animation: slide-left 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.memo-list-enter-active,
-.memo-list-leave-active {
-  transition: all 300ms ease-in-out;
-}
-
-.memo-list-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.memo-list-leave-to {
-  opacity: 0;
-  transform: translateX(-12px);
-}
+.animate-slide-left { animation: slide-left 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes slide-left { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
 </style>

@@ -230,6 +230,7 @@ class ChatService:
                 try:
                     self._context.schedule_memory_update(
                         [dict(m) for m in conv["messages"]], conv_id, agent_id,
+                        llm_adapter=llm_adapter,
                     )
                 except Exception as schedule_err:
                     logger.warning(f"[STREAM] Memory update scheduling failed: {schedule_err}")

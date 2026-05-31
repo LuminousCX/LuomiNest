@@ -51,12 +51,13 @@ MEMORY_UPDATE_PROMPT = """You are a memory management system. Analyze the conver
 5. Ignore information about other people (focus on the user)
 6. Also extract an episodic event if the conversation has a clear topic and outcome
 7. DO NOT extract sensitive information (ID numbers, phone numbers, bank cards, passwords)
+8. For each fact, determine if it should be globally shared across all agents (should_be_global: true) or kept private to this agent (should_be_global: false). General user info (name, preferences, habits) should be global. Agent-specific context (current task, domain-specific preferences) should be private.
 </instructions>
 
 Output ONLY a JSON object:
 {{
   "facts_to_add": [
-    {{"content": "...", "category": "...", "tier": "...", "confidence": 0.8}}
+    {{"content": "...", "category": "...", "tier": "...", "confidence": 0.8, "should_be_global": true/false}}
   ],
   "fact_ids_to_remove": ["fact_xxx"],
   "episodic_event": {{
@@ -216,6 +217,8 @@ class MemoryUpdater:
 
         parsed = self._parse_llm_response(response)
         facts_added = 0
+        global_facts_added = 0
+        agent_facts_added = 0
         facts_removed = 0
         updates_applied = {}
 
@@ -262,6 +265,7 @@ class MemoryUpdater:
                 content=content,
                 category=category,
                 tier=tier,
+                layer="user" if bool(fact_data.get("should_be_global", True)) else "agent",
                 confidence=confidence,
                 source=thread_id,
             )
@@ -271,6 +275,10 @@ class MemoryUpdater:
 
             memory_data.facts.append(new_fact)
             facts_added += 1
+            if new_fact.layer == "user":
+                global_facts_added += 1
+            else:
+                agent_facts_added += 1
 
         if fact_ids_to_remove:
             original_count = len(memory_data.facts)
@@ -373,6 +381,8 @@ class MemoryUpdater:
             return {
                 "updated": True,
                 "facts_added": facts_added,
+                "global_facts_added": global_facts_added,
+                "agent_facts_added": agent_facts_added,
                 "facts_removed": facts_removed,
                 "updates_applied": updates_applied,
             }
