@@ -94,7 +94,7 @@ const handleDownload = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -220,7 +220,7 @@ const handleDownload = () => {
   margin-top: 16px;
   padding: 10px 20px;
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
   border: none;
   border-radius: var(--radius-md);
   font-size: 14px;

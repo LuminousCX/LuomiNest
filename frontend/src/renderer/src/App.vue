@@ -26,10 +26,18 @@ watch(isDesktopPetPage, (val) => {
     <div class="lumi-body" v-if="!isMinimalLayout">
       <LumiSidebar />
       <main class="lumi-main">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <Transition name="page-switch" mode="out-in">
+            <component :is="Component" :key="route.path" />
+          </Transition>
+        </router-view>
       </main>
     </div>
-    <router-view v-else />
+    <router-view v-else v-slot="{ Component }">
+      <Transition name="page-fade" mode="out-in">
+        <component :is="Component" :key="route.path" />
+      </Transition>
+    </router-view>
     <ToastContainer />
     <div v-if="!isDesktopPetPage" class="resize-handle resize-n"></div>
     <div v-if="!isDesktopPetPage" class="resize-handle resize-s"></div>
@@ -121,5 +129,41 @@ watch(isDesktopPetPage, (val) => {
 .resize-handle:hover {
   background: var(--lumi-primary);
   opacity: 0.3;
+}
+
+.page-switch-enter-active {
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-switch-leave-active {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-switch-enter-from {
+  opacity: 0;
+  transform: translateY(16px) scale(0.985);
+}
+
+.page-switch-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.99);
+}
+
+.page-fade-enter-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-fade-leave-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: scale(1.01);
 }
 </style>

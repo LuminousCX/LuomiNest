@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Wifi, Bluetooth, Users, Home, Cpu, Monitor, Smartphone, Plus, Search, Settings2, ChevronRight, Activity, MessageSquare, Clock } from 'lucide-vue-next'
+import { Wifi, Users, Home, Cpu, Plus, Search, Settings2, ChevronRight, Activity, MessageSquare, Clock } from 'lucide-vue-next'
 
 const searchQuery = ref('')
 const activeTab = ref<'devices' | 'groups'>('devices')
@@ -389,7 +389,7 @@ const recentChats = ref([
 }
 
 .group-type-badge.hybrid {
-  background: rgba(234, 179, 8, 0.1);
+  background: var(--task-yellow-soft);
   color: var(--lumi-warning);
 }
 

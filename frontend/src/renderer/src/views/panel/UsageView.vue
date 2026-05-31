@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { BarChart3, TrendingUp, TrendingDown, Cpu, Database, Brain, Clock, Zap, Activity, ArrowUpRight, ArrowDownRight, Calendar } from 'lucide-vue-next'
+import { BarChart3, TrendingUp, TrendingDown, Database, Brain, Clock, Zap, Activity, ArrowUpRight, ArrowDownRight, Calendar } from 'lucide-vue-next'
 
 const period = ref<'day' | 'week' | 'month'>('week')
 
@@ -50,7 +50,7 @@ const recentActivity = ref([
     </div>
 
     <div class="stats-row">
-      <div class="stat-card">
+      <div class="stat-card" style="animation-delay: 0.04s">
         <div class="stat-icon-wrap tokens"><Zap :size="18" /></div>
         <div class="stat-body">
           <span class="stat-label">Token 消耗</span>
@@ -58,7 +58,7 @@ const recentActivity = ref([
         </div>
         <div class="stat-trend up"><ArrowUpRight :size="14" /> 12%</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" style="animation-delay: 0.08s">
         <div class="stat-icon-wrap requests"><Activity :size="18" /></div>
         <div class="stat-body">
           <span class="stat-label">请求次数</span>
@@ -66,7 +66,7 @@ const recentActivity = ref([
         </div>
         <div class="stat-trend up"><ArrowUpRight :size="14" /> 8%</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" style="animation-delay: 0.12s">
         <div class="stat-icon-wrap cost"><BarChart3 :size="18" /></div>
         <div class="stat-body">
           <span class="stat-label">费用 (CNY)</span>
@@ -74,7 +74,7 @@ const recentActivity = ref([
         </div>
         <div class="stat-trend down"><ArrowDownRight :size="14" /> 3%</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" style="animation-delay: 0.16s">
         <div class="stat-icon-wrap memory"><Brain :size="18" /></div>
         <div class="stat-body">
           <span class="stat-label">记忆条目</span>
@@ -86,13 +86,13 @@ const recentActivity = ref([
 
     <div class="usage-content">
       <div class="left-col">
-        <div class="section-card">
+        <div class="section-card" style="animation-delay: 0.10s">
           <div class="section-header">
             <span class="section-title">供应商用量</span>
             <Calendar :size="14" class="section-icon" />
           </div>
           <div class="provider-list">
-            <div v-for="p in apiProviders" :key="p.name" class="provider-row">
+            <div v-for="(p, idx) in apiProviders" :key="p.name" class="provider-row" :style="{ animationDelay: (0.14 + idx * 0.03) + 's' }">
               <div class="provider-name">{{ p.name }}</div>
               <div class="provider-stats">
                 <span class="provider-requests">{{ p.requests }} 次</span>
@@ -109,13 +109,13 @@ const recentActivity = ref([
       </div>
 
       <div class="right-col">
-        <div class="section-card">
+        <div class="section-card" style="animation-delay: 0.12s">
           <div class="section-header">
             <span class="section-title">记忆与上下文</span>
             <Database :size="14" class="section-icon" />
           </div>
           <div class="memory-bars">
-            <div v-for="m in memoryUsage" :key="m.type" class="memory-item">
+            <div v-for="(m, idx) in memoryUsage" :key="m.type" class="memory-item" :style="{ animationDelay: (0.16 + idx * 0.03) + 's' }">
               <div class="memory-label-row">
                 <span class="memory-type">{{ m.type }}</span>
                 <span class="memory-value">{{ m.used }} / {{ m.total }} {{ m.unit }}</span>
@@ -127,13 +127,13 @@ const recentActivity = ref([
           </div>
         </div>
 
-        <div class="section-card">
+        <div class="section-card" style="animation-delay: 0.18s">
           <div class="section-header">
             <span class="section-title">最近活动</span>
             <Clock :size="14" class="section-icon" />
           </div>
           <div class="activity-list">
-            <div v-for="a in recentActivity" :key="a.time + a.action" class="activity-item">
+            <div v-for="(a, idx) in recentActivity" :key="a.time + a.action" class="activity-item" :style="{ animationDelay: (0.22 + idx * 0.03) + 's' }">
               <span class="activity-time">{{ a.time }}</span>
               <span :class="['activity-badge', a.type]">{{ a.action }}</span>
               <span class="activity-detail">{{ a.detail }}</span>
@@ -211,6 +211,7 @@ const recentActivity = ref([
   background: var(--surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-light);
+  animation: content-fade-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .stat-icon-wrap {
@@ -228,17 +229,17 @@ const recentActivity = ref([
 }
 
 .stat-icon-wrap.requests {
-  background: rgba(34, 197, 94, 0.1);
+  background: var(--task-green-soft);
   color: var(--lumi-success);
 }
 
 .stat-icon-wrap.cost {
-  background: rgba(234, 179, 8, 0.1);
+  background: var(--task-yellow-soft);
   color: var(--lumi-warning);
 }
 
 .stat-icon-wrap.memory {
-  background: rgba(139, 92, 246, 0.1);
+  background: var(--task-purple-soft);
   color: var(--task-purple);
 }
 
@@ -303,6 +304,7 @@ const recentActivity = ref([
   border: 1px solid var(--border-light);
   padding: 18px;
   flex: 1;
+  animation: content-fade-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .section-header {
@@ -334,6 +336,7 @@ const recentActivity = ref([
   gap: 12px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border-light);
+  animation: content-fade-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .provider-row:last-child {
@@ -389,6 +392,7 @@ const recentActivity = ref([
   display: flex;
   flex-direction: column;
   gap: 6px;
+  animation: content-fade-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .memory-label-row {
@@ -429,6 +433,7 @@ const recentActivity = ref([
 
 .activity-item {
   display: flex;
+  animation: content-fade-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
   align-items: center;
   gap: 8px;
   padding: 6px 0;
@@ -462,7 +467,7 @@ const recentActivity = ref([
 }
 
 .activity-badge.context {
-  background: rgba(234, 179, 8, 0.1);
+  background: var(--task-yellow-soft);
   color: var(--lumi-warning);
 }
 
@@ -472,5 +477,16 @@ const recentActivity = ref([
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@keyframes content-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 </style>

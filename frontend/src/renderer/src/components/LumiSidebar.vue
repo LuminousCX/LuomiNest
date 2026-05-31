@@ -7,7 +7,6 @@ import {
   Users,
   Globe,
   Wifi,
-  Cat,
   Settings2,
   Cpu,
   Palette,
@@ -27,12 +26,11 @@ import {
   Undo2,
   ArrowLeft,
   SquareCheck,
-  X,
   AlertTriangle,
   ChevronRight,
-  ChevronDown,
   Bell,
   Sparkles,
+  Package,
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
@@ -78,7 +76,6 @@ const navGroups: NavGroup[] = [
       { id: '/social', label: '群组Agent', icon: Users },
       { id: '/chat/platform', label: '平台接入', icon: Globe },
       { id: '/chat/devices', label: '设备与群组', icon: Wifi },
-      { id: '/desktop-pet', label: '桌宠模式', icon: Cat },
     ],
   },
   {
@@ -88,7 +85,8 @@ const navGroups: NavGroup[] = [
     children: [
       { id: '/settings/ai-model', label: '模型配置', icon: Cpu },
       { id: '/avatar', label: '皮套工坊', icon: Palette },
-      { id: '/panel/usage', label: '用量统计', icon: BarChart3 },
+      { id: '/panel/data-stats', label: '数据统计', icon: BarChart3 },
+      { id: '/market', label: '扩展市场', icon: Package },
       { id: '/panel/console', label: '控制台', icon: Terminal },
     ],
   },
@@ -866,8 +864,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 3px 10px rgba(20, 126, 188, 0.25);
-  color: white;
+  box-shadow: 0 3px 10px var(--lumi-primary-border);
+  color: var(--text-inverse);
 }
 
 .brand-info {
@@ -1004,11 +1002,30 @@ onMounted(async () => {
   transition: all var(--transition-fast);
   width: 100%;
   text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.group-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, var(--lumi-primary-glow) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.4s ease-out;
+  pointer-events: none;
 }
 
 .group-header:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
+}
+
+.group-header:active::after {
+  opacity: 1;
+  transform: scale(2);
+  transition: all 0.2s ease-out;
 }
 
 .group-header.active {
@@ -1063,11 +1080,20 @@ onMounted(async () => {
   transition: all var(--transition-fast);
   position: relative;
   margin-left: 14px;
+  animation: nav-item-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
+
+.tree-child:nth-child(1) { animation-delay: 0.02s; }
+.tree-child:nth-child(2) { animation-delay: 0.04s; }
+.tree-child:nth-child(3) { animation-delay: 0.06s; }
+.tree-child:nth-child(4) { animation-delay: 0.08s; }
+.tree-child:nth-child(5) { animation-delay: 0.10s; }
+.tree-child:nth-child(6) { animation-delay: 0.12s; }
 
 .tree-child:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
+  transform: translateX(3px);
 }
 
 .tree-child.active {
@@ -1144,11 +1170,30 @@ onMounted(async () => {
   width: 100%;
   text-align: left;
   position: relative;
+  overflow: hidden;
+}
+
+.nav-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, var(--lumi-primary-glow) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.4s ease-out;
+  pointer-events: none;
 }
 
 .nav-item:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
+  transform: translateX(2px);
+}
+
+.nav-item:active::after {
+  opacity: 1;
+  transform: scale(2);
+  transition: all 0.2s ease-out;
 }
 
 .nav-item.active {
@@ -1266,7 +1311,7 @@ onMounted(async () => {
   width: 100%;
   padding: 7px 0;
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
   border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 500;
@@ -1352,7 +1397,7 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--lumi-accent);
   background: var(--lumi-accent-light);
-  border: 1px solid rgba(244, 63, 94, 0.2);
+  border: 1px solid var(--lumi-accent-border);
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -1360,7 +1405,7 @@ onMounted(async () => {
 }
 
 .batch-delete-btn:hover {
-  background: rgba(244, 63, 94, 0.15);
+  background: var(--lumi-accent-glow);
 }
 
 .batch-delete-btn.disabled {
@@ -1377,7 +1422,7 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--lumi-primary);
   background: var(--lumi-primary-light);
-  border: 1px solid rgba(20, 126, 188, 0.2);
+  border: 1px solid var(--lumi-primary-border);
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -1385,7 +1430,7 @@ onMounted(async () => {
 }
 
 .batch-restore-btn:hover {
-  background: rgba(20, 126, 188, 0.15);
+  background: var(--lumi-primary-glow);
 }
 
 .batch-restore-btn.disabled {
@@ -1494,11 +1539,12 @@ onMounted(async () => {
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
 .history-item-snippet :deep(mark) {
-  background: rgba(20, 126, 188, 0.2);
+  background: var(--lumi-primary-border);
   color: var(--lumi-primary);
   border-radius: 2px;
   padding: 0 1px;
@@ -1546,7 +1592,7 @@ onMounted(async () => {
 .checkbox-box.checked {
   background: var(--lumi-primary);
   border-color: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
 }
 
 .history-empty {
@@ -1588,7 +1634,7 @@ onMounted(async () => {
   height: 18px;
   border-radius: 9px;
   background: var(--lumi-accent);
-  color: white;
+  color: var(--text-inverse);
   font-size: 10px;
   font-weight: 600;
   display: flex;
@@ -1652,7 +1698,7 @@ onMounted(async () => {
 }
 
 .empty-trash-btn:hover {
-  background: rgba(244, 63, 94, 0.12);
+  background: var(--lumi-accent-glow);
 }
 
 .trash-list {
@@ -1777,5 +1823,27 @@ onMounted(async () => {
 @keyframes lumi-fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes nav-item-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes nav-ripple {
+  from {
+    opacity: 0.6;
+    transform: scale(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.5);
+  }
 }
 </style>

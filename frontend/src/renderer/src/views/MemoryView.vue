@@ -3,12 +3,9 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Brain,
-  Database,
   Search,
-  User,
   Bot,
   MessageSquare,
-  Clock,
   BookOpen,
   Sparkles,
   Activity,
@@ -57,7 +54,6 @@ const layerTabs = ref<LayerTab[]>([
 ])
 
 const activeTab = ref('user-space')
-const activeTabData = computed(() => layerTabs.value.find(t => t.id === activeTab.value)!)
 
 const searchQuery = ref('')
 const isSearching = ref(false)
@@ -683,8 +679,8 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
   font-size: 11px;
   padding: 3px 10px;
   border-radius: 20px;
-  background: rgba(139, 92, 246, 0.1);
-  color: #8b5cf6;
+  background: var(--task-purple-soft);
+  color: var(--task-purple);
   font-weight: 500;
 }
 
@@ -707,8 +703,8 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
 
 .search-bar:focus-within,
 .search-bar.search-expanded {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
+  border-color: var(--task-purple);
+  box-shadow: 0 0 0 2px var(--task-purple-soft);
 }
 
 .search-icon { color: var(--text-muted); flex-shrink: 0; }
@@ -760,11 +756,11 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
 
 .h-btn.primary {
   color: var(--text);
-  background: rgba(139, 92, 246, 0.1);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  background: var(--task-purple-soft);
+  border: 1px solid var(--task-purple-border);
 }
 
-.h-btn.primary:hover { background: rgba(139, 92, 246, 0.18); }
+.h-btn.primary:hover { background: var(--task-purple-soft); }
 
 .memory-body {
   display: flex;
@@ -870,7 +866,7 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
   gap: 8px;
   padding: 10px 14px;
   border-radius: 10px;
-  background: rgba(139, 92, 246, 0.06);
+  background: var(--task-purple-soft);
   margin-top: 4px;
 }
 
@@ -919,7 +915,7 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
 .profile-card {
   padding: 18px;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(14, 165, 233, 0.04));
+  background: linear-gradient(135deg, var(--task-purple-soft), var(--lumi-sky-soft));
   border: 1px solid var(--border);
 }
 
@@ -934,8 +930,8 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: rgba(139, 92, 246, 0.15);
-  color: #8b5cf6;
+  background: var(--lumi-accent-glow);
+  color: var(--task-purple);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -968,8 +964,8 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
   font-size: 11px;
   padding: 3px 10px;
   border-radius: 8px;
-  background: rgba(139, 92, 246, 0.1);
-  color: #a78bfa;
+  background: var(--task-purple-soft);
+  color: var(--task-purple-light);
   font-weight: 500;
   display: flex;
   align-items: center;
@@ -1010,7 +1006,7 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
   margin-bottom: 10px;
 }
 
-.context-title svg { color: #8b5cf6; }
+.context-title svg { color: var(--task-purple); }
 
 .context-row {
   display: flex;
@@ -1047,7 +1043,7 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
   margin-bottom: 12px;
 }
 
-.distilled-title svg { color: #f59e0b; }
+.distilled-title svg { color: var(--lumi-amber); }
 
 .distilled-section {
   margin-bottom: 10px;
@@ -1162,24 +1158,24 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 8px;
-  background: rgba(139, 92, 246, 0.1);
-  color: #8b5cf6;
+  background: var(--task-purple-soft);
+  color: var(--task-purple);
   font-weight: 500;
 }
 
 .memo-tag.category-tag {
-  background: rgba(245, 158, 11, 0.1);
-  color: #b45309;
+  background: var(--lumi-amber-soft);
+  color: var(--lumi-amber-dark);
 }
 
 .memo-tag.layer-tag {
-  background: rgba(14, 165, 233, 0.1);
-  color: #0ea5e9;
+  background: var(--lumi-sky-soft);
+  color: var(--lumi-sky);
 }
 
 .memo-tag.scene-tag {
-  background: rgba(34, 197, 94, 0.1);
-  color: #16a34a;
+  background: var(--task-green-soft);
+  color: var(--lumi-success-dark);
 }
 
 .memo-info {
@@ -1218,7 +1214,7 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
 }
 
 .memo-action-btn:hover { background: var(--surface-hover); color: var(--lumi-primary); }
-.memo-action-btn.danger:hover { background: rgba(244, 63, 94, 0.1); color: #f43f5e; }
+.memo-action-btn.danger:hover { background: var(--lumi-accent-light); color: var(--lumi-accent); }
 
 .edit-textarea {
   width: 100%;
@@ -1233,7 +1229,7 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
   outline: none;
 }
 
-.edit-textarea:focus { border-color: #8b5cf6; }
+.edit-textarea:focus { border-color: var(--task-purple); }
 
 .edit-actions { display: flex; gap: 8px; margin-top: 8px; }
 
@@ -1248,8 +1244,8 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
   transition: all 200ms;
 }
 
-.edit-btn.save { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
-.edit-btn.save:hover { background: rgba(139, 92, 246, 0.2); }
+.edit-btn.save { background: var(--task-purple-soft); color: var(--task-purple); }
+.edit-btn.save:hover { background: var(--task-purple-border); }
 .edit-btn.save:disabled { opacity: 0.5; cursor: default; }
 .edit-btn.cancel { background: var(--surface-hover); color: var(--text-muted); }
 .edit-btn.cancel:hover { color: var(--text); }
@@ -1257,7 +1253,7 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1318,7 +1314,7 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
   outline: none;
 }
 
-.dialog-textarea:focus { border-color: #8b5cf6; }
+.dialog-textarea:focus { border-color: var(--task-purple); }
 .dialog-textarea::placeholder { color: var(--text-muted); }
 
 .dialog-row {
@@ -1372,12 +1368,12 @@ watch(() => agentStore.activeAgent?.id, () => { loadData() })
 .dialog-btn.cancel:hover { background: var(--surface-hover); color: var(--text); }
 
 .dialog-btn.confirm {
-  background: rgba(139, 92, 246, 0.1);
-  color: #8b5cf6;
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  background: var(--task-purple-soft);
+  color: var(--task-purple);
+  border: 1px solid var(--task-purple-border);
 }
 
-.dialog-btn.confirm:hover { background: rgba(139, 92, 246, 0.2); }
+.dialog-btn.confirm:hover { background: var(--task-purple-border); }
 .dialog-btn.confirm:disabled { opacity: 0.5; cursor: default; }
 
 .dialog-fade-enter-active { animation: fade-in 0.25s ease-out; }

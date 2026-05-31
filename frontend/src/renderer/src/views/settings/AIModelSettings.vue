@@ -519,17 +519,17 @@ onMounted(async () => {
   }
 
   const tts = modelStore.ttsConfig
-  ttsConfigForm.value.provider = tts.provider
-  ttsConfigForm.value.model = tts.model
-  ttsConfigForm.value.voice = tts.voice
-  ttsConfigForm.value.speed = tts.speed
+  ttsConfigForm.value.provider = tts.provider || ''
+  ttsConfigForm.value.model = tts.model || 'tts-1'
+  ttsConfigForm.value.voice = tts.voice || 'alloy'
+  ttsConfigForm.value.speed = tts.speed ?? 1.0
 
   const stt = modelStore.sttConfig
-  sttConfigForm.value.provider = stt.provider
-  sttConfigForm.value.model = stt.model
-  sttConfigForm.value.language = stt.language
-  sttConfigForm.value.autoSend = stt.autoSend
-  sttConfigForm.value.autoSendDelay = stt.autoSendDelay
+  sttConfigForm.value.provider = stt.provider || ''
+  sttConfigForm.value.model = stt.model || 'whisper-1'
+  sttConfigForm.value.language = stt.language || 'zh-CN'
+  sttConfigForm.value.autoSend = stt.autoSend ?? false
+  sttConfigForm.value.autoSendDelay = stt.autoSendDelay ?? 2000
 })
 </script>
 
@@ -1285,7 +1285,7 @@ export default { name: 'AIModelSettings' }
   width: 44px;
   height: 44px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.06));
+  background: var(--lumi-primary-gradient-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1546,7 +1546,7 @@ export default { name: 'AIModelSettings' }
 }
 
 .hint-warn {
-  color: #f59e0b;
+  color: var(--lumi-amber);
 }
 
 .hint-error {
@@ -1556,7 +1556,7 @@ export default { name: 'AIModelSettings' }
 
 .select-error {
   border-color: var(--lumi-accent) !important;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+  box-shadow: 0 0 0 3px var(--task-red-soft) !important;
 }
 
 .fetch-models-row {
@@ -1580,7 +1580,7 @@ export default { name: 'AIModelSettings' }
 
 .fetch-btn:hover {
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
 }
 
 .form-error-banner {
@@ -1677,7 +1677,7 @@ export default { name: 'AIModelSettings' }
   border-radius: 50%;
   background: var(--lumi-primary);
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(20, 126, 188, 0.3);
+  box-shadow: 0 2px 6px var(--lumi-primary-border);
   transition: transform 250ms ease-in-out;
 }
 
@@ -1721,9 +1721,9 @@ export default { name: 'AIModelSettings' }
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: white;
+  background: var(--text-inverse);
   transition: transform 250ms ease-in-out;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-xs);
 }
 
 .toggle-switch.active .toggle-thumb {
@@ -1891,7 +1891,7 @@ export default { name: 'AIModelSettings' }
   padding: 1px 6px;
   border-radius: var(--radius-full);
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
   font-weight: 500;
 }
 
@@ -1966,7 +1966,7 @@ export default { name: 'AIModelSettings' }
 
 .add-inline-btn:hover {
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
 }
 
 .template-grid {
@@ -1990,7 +1990,7 @@ export default { name: 'AIModelSettings' }
   width: 32px;
   height: 32px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(20, 126, 188, 0.04));
+  background: var(--lumi-primary-gradient-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2089,7 +2089,7 @@ export default { name: 'AIModelSettings' }
 .template-initials {
   font-size: 11px;
   font-weight: 700;
-  color: white;
+  color: var(--text-inverse);
   letter-spacing: 0.5px;
 }
 
@@ -2200,7 +2200,7 @@ export default { name: 'AIModelSettings' }
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2215,7 +2215,7 @@ export default { name: 'AIModelSettings' }
   width: 480px;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-xl);
 }
 
 .dialog-header {
@@ -2276,7 +2276,7 @@ export default { name: 'AIModelSettings' }
 }
 
 .dialog-btn.confirm {
-  color: white;
+  color: var(--text-inverse);
   background: var(--lumi-primary);
 }
 
@@ -2297,7 +2297,7 @@ export default { name: 'AIModelSettings' }
   border-radius: var(--radius-md);
   font-size: 14px;
   font-weight: 600;
-  color: white;
+  color: var(--text-inverse);
   background: var(--lumi-primary);
   cursor: pointer;
   transition: all 250ms ease-in-out;
@@ -2314,7 +2314,7 @@ export default { name: 'AIModelSettings' }
 }
 
 .save-btn.saved {
-  background: #10b981;
+  background: var(--lumi-emerald);
 }
 
 .save-btn.error {
@@ -2401,7 +2401,7 @@ export default { name: 'AIModelSettings' }
 
 .input-error {
   border-color: var(--lumi-accent) !important;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+  box-shadow: 0 0 0 3px var(--task-red-soft) !important;
 }
 
 @keyframes dialog-shake {

@@ -46,7 +46,7 @@ const routes: RouteRecordRaw[] = [
     path: '/desktop-pet',
     name: 'DesktopPet',
     component: () => import('../views/DesktopPetView.vue'),
-    meta: { title: 'LuomiNest Desktop Pet', icon: 'Palette' }
+    meta: { title: 'LuomiNest Desktop Pet' }
   },
   {
     path: '/settings/ai-model',
@@ -62,9 +62,13 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/panel/usage',
-    name: 'PanelUsage',
-    component: () => import('../views/panel/UsageView.vue'),
-    meta: { title: '用量统计 - LuomiNest', icon: 'BarChart3' }
+    redirect: '/panel/data-stats'
+  },
+  {
+    path: '/panel/data-stats',
+    name: 'PanelDataStats',
+    component: () => import('../views/panel/DataStatsView.vue'),
+    meta: { title: '数据统计 - LuomiNest', icon: 'BarChart3' }
   },
   {
     path: '/panel/console',

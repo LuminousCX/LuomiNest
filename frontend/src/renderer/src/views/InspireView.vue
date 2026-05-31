@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref } from 'vue'
 import {
   Lightbulb,
@@ -79,11 +79,11 @@ const ideas = ref([
   width: 52px;
   height: 52px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  background: var(--lumi-amber-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #d97706;
+  color: var(--lumi-amber-dark);
 }
 
 .page-title {

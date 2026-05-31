@@ -38,7 +38,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
       <div class="brand-mark">
         <LumiBrandStar :size="16" :animated="false" />
         <span class="brand-text lumi-gradient-text">LuomiNest</span>
-        <span class="brand-sub">LuminousChenXi v0.2.0</span>
+        <span class="brand-sub">LuminousChenXi v0.5.0</span>
       </div>
     </div>
     <div class="win-controls">
@@ -133,8 +133,8 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
 }
 
 .ctrl-btn.close:hover {
-  background: #e5484d;
-  color: #ffffff;
+  background: var(--lumi-danger);
+  color: var(--text-inverse);
 }
 
 .ctrl-btn:active {

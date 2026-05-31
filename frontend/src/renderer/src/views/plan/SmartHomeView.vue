@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Home, Lightbulb, Thermometer, Droplets, Lock, Wifi, Power, Settings2, Sun, Moon, Wind, Eye, Plus, ChevronRight, Activity } from 'lucide-vue-next'
+import { Home, Lightbulb, Thermometer, Droplets, Lock, Wifi, Power, Settings2, Sun, Moon, Wind, Eye, Plus, Activity } from 'lucide-vue-next'
 
 const rooms = ref([
   { id: 'r1', name: '客厅', devices: 6, active: 4, icon: Home },
@@ -351,7 +351,7 @@ const toggleScene = (sceneId: string) => {
 }
 
 .scene-card.active .scene-icon-wrap {
-  background: rgba(20, 126, 188, 0.15);
+  background: var(--lumi-primary-glow);
   color: var(--lumi-primary);
 }
 

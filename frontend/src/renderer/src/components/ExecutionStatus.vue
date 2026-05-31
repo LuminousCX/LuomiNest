@@ -89,11 +89,11 @@ const getStepIcon = (index: number) => {
 }
 
 .execution-step.completed {
-  background: rgba(13, 148, 136, 0.08);
+  background: var(--lumi-teal-soft);
 }
 
 .execution-step.in_progress {
-  background: rgba(13, 148, 136, 0.12);
+  background: var(--lumi-teal-soft);
 }
 
 .execution-step.skipped {
@@ -113,7 +113,7 @@ const getStepIcon = (index: number) => {
 
 .execution-step.completed .step-icon {
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
 }
 
 .execution-step.in_progress .step-icon {
@@ -133,7 +133,7 @@ const getStepIcon = (index: number) => {
 }
 
 .icon-check {
-  color: white;
+  color: var(--text-inverse);
 }
 
 .icon-arrow {

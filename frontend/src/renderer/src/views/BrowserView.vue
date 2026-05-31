@@ -402,12 +402,12 @@ async function handleQuickAction(action: string) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #fafaf9;
+  background: var(--surface);
 }
 
 .captcha-banner {
   height: 36px;
-  background: linear-gradient(90deg, rgba(254,243,199,0.9), rgba(254,243,199,0.7));
+  background: var(--lumi-amber-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -430,7 +430,7 @@ async function handleQuickAction(action: string) {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #92400e;
+  color: var(--lumi-amber-dark);
 }
 
 .captcha-icon {

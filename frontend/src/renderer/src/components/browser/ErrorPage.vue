@@ -99,7 +99,7 @@ const displayUrl = computed(() => {
   align-items: center;
   justify-content: flex-start;
   padding: 80px 40px 40px;
-  background: #ffffff;
+  background: var(--surface);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow-y: auto;
 }
@@ -110,33 +110,33 @@ const displayUrl = computed(() => {
 }
 
 .error-icon {
-  color: #5f6368;
+  color: var(--text-muted);
   margin-bottom: 24px;
 }
 
 .error-heading {
   font-size: 20px;
   font-weight: 400;
-  color: #202124;
+  color: var(--text);
   margin: 0 0 12px;
   line-height: 1.4;
 }
 
 .error-url {
   font-size: 14px;
-  color: #5f6368;
+  color: var(--text-muted);
   margin: 0 0 16px;
   line-height: 1.5;
 }
 
 .error-url span {
-  color: #202124;
+  color: var(--text);
   font-weight: 500;
 }
 
 .error-suggestion {
   font-size: 14px;
-  color: #5f6368;
+  color: var(--text-muted);
   margin: 0 0 20px;
   line-height: 1.5;
 }
@@ -150,7 +150,7 @@ const displayUrl = computed(() => {
 }
 
 .error-details summary {
-  color: #1a73e8;
+  color: var(--lumi-primary);
   cursor: pointer;
   font-size: 14px;
   padding: 4px 0;
@@ -176,7 +176,7 @@ const displayUrl = computed(() => {
 
 .details-content {
   padding: 12px 0 0 18px;
-  color: #5f6368;
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.8;
 }
@@ -194,8 +194,8 @@ const displayUrl = computed(() => {
   align-items: center;
   gap: 8px;
   padding: 8px 24px;
-  background: #1a73e8;
-  color: #ffffff;
+  background: var(--lumi-primary);
+  color: var(--text-inverse);
   border: none;
   border-radius: 4px;
   font-size: 14px;
@@ -205,22 +205,22 @@ const displayUrl = computed(() => {
 }
 
 .btn-reload:hover {
-  background: #1765cc;
+  background: var(--lumi-primary-hover);
 }
 
 .btn-reload:active {
-  background: #1558b0;
+  background: var(--lumi-primary-hover);
 }
 
 .error-suggestions {
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--border);
   padding-top: 20px;
 }
 
 .error-suggestions h3 {
   font-size: 14px;
   font-weight: 500;
-  color: #202124;
+  color: var(--text);
   margin: 0 0 12px;
 }
 
@@ -232,7 +232,7 @@ const displayUrl = computed(() => {
 
 .error-suggestions li {
   font-size: 14px;
-  color: #5f6368;
+  color: var(--text-muted);
   padding: 4px 0;
   padding-left: 16px;
   position: relative;
@@ -243,13 +243,13 @@ const displayUrl = computed(() => {
   content: '•';
   position: absolute;
   left: 0;
-  color: #5f6368;
+  color: var(--text-muted);
 }
 
 .btn-link {
   background: none;
   border: none;
-  color: #1a73e8;
+  color: var(--lumi-primary);
   font-size: 14px;
   cursor: pointer;
   padding: 0;
@@ -257,6 +257,6 @@ const displayUrl = computed(() => {
 }
 
 .btn-link:hover {
-  color: #1765cc;
+  color: var(--lumi-primary-hover);
 }
 </style>

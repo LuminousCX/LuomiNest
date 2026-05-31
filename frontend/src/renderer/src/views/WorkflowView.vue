@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref } from 'vue'
 import {
   Bot,
@@ -409,12 +409,12 @@ function getNodePos(nodeId: string): { x: number; y: number } {
 }
 
 .action-btn.danger {
-  background: #ef4444;
+  background: var(--lumi-danger);
   color: white;
 }
 
 .action-btn.danger:hover {
-  background: #dc2626;
+  background: var(--lumi-danger-hover);
 }
 
 .action-btn.secondary {
@@ -595,7 +595,7 @@ function getNodePos(nodeId: string): { x: number; y: number } {
 
 .workflow-node.selected {
   border-color: var(--lumi-primary);
-  box-shadow: 0 4px 20px rgba(20, 126, 188, 0.15);
+  box-shadow: 0 4px 20px var(--lumi-primary-glow);
 }
 
 .workflow-node.running .node-icon-wrap {
@@ -603,8 +603,8 @@ function getNodePos(nodeId: string): { x: number; y: number } {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(20, 126, 188, 0.3); }
-  50% { box-shadow: 0 0 0 8px rgba(20, 126, 188, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-primary-border); }
+  50% { box-shadow: 0 0 0 8px transparent; }
 }
 
 .node-drag-handle {
@@ -668,8 +668,8 @@ function getNodePos(nodeId: string): { x: number; y: number } {
 }
 
 .node-remove-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: var(--task-red-soft);
+  color: var(--lumi-danger);
 }
 
 .node-port {

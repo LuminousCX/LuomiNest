@@ -130,6 +130,7 @@ export const useSocialStore = defineStore('social', () => {
         if (event.data?.message) {
           groupMessages.value.push({
             id: `info-${Date.now()}`,
+            groupId: currentGroup.value?.id || '',
             senderId: 'system',
             senderName: '系统',
             senderType: 'system',
@@ -160,6 +161,7 @@ export const useSocialStore = defineStore('social', () => {
   const _normalizeMessage = (msg: any): GroupMessage => {
     return {
       id: msg.id || msg.message_id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      groupId: msg.groupId || msg.group_id || currentGroup.value?.id || '',
       senderId: msg.senderId || msg.sender_id || '',
       senderName: msg.senderName || msg.sender_name || '',
       senderType: msg.senderType || msg.sender_type || 'user',
@@ -255,7 +257,7 @@ export const useSocialStore = defineStore('social', () => {
         break
 
       case 'phase_change':
-        collaborationPhase.value = event.data.phase || null
+        collaborationPhase.value = (event.data.phase as CollaborationPhase) || null
         break
 
       case 'plan_created':
@@ -274,15 +276,14 @@ export const useSocialStore = defineStore('social', () => {
           collaborationTasks.value.push({
             taskId: event.data.task_id,
             roleId: event.data.role_id || '',
-            agentId: event.data.agent_id || null,
+            agentId: event.data.agent_id || undefined,
             description: event.data.description || '',
             inputContent: '',
             dependsOn: [],
             status: 'running',
-            result: null,
-            error: null,
+            result: undefined,
+            error: undefined,
             startedAt: new Date().toISOString(),
-            completedAt: null,
           })
         }
         break
@@ -315,6 +316,7 @@ export const useSocialStore = defineStore('social', () => {
 
         groupMessages.value.push({
           id: `collab-${event.data.task_id}-${Date.now()}`,
+          groupId: currentGroup.value?.id || '',
           senderId: event.data.agent_id || 'agent',
           senderName: agentName,
           senderType: 'agent',
@@ -347,6 +349,7 @@ export const useSocialStore = defineStore('social', () => {
       case 'direct_response': {
         groupMessages.value.push({
           id: `direct-${Date.now()}`,
+          groupId: currentGroup.value?.id || '',
           senderId: event.data.agent_id || 'agent',
           senderName: event.data.agent_name || 'Agent',
           senderType: 'agent',
@@ -360,6 +363,7 @@ export const useSocialStore = defineStore('social', () => {
       case 'final_result': {
         groupMessages.value.push({
           id: `synthesis-${Date.now()}`,
+          groupId: currentGroup.value?.id || '',
           senderId: event.data.agent_id || 'coordinator',
           senderName: event.data.agent_name || '调度员',
           senderType: 'agent',

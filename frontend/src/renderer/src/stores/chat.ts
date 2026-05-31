@@ -126,7 +126,7 @@ export const useChatStore = defineStore('chat', () => {
             provider: v.provider || undefined,
             suggestedQuestions: v.suggested_questions || v.suggestedQuestions || undefined,
           }))
-          msg.currentVersion = (m as any).current_version ?? m.versions.length - 1
+          msg.currentVersion = m.current_version ?? m.versions.length - 1
         }
         if (m.files) {
           msg.files = m.files
@@ -301,7 +301,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         return {
           id: qm.id,
-          role: qm.role,
+          role: (qm.role === 'user' || qm.role === 'assistant' ? qm.role : 'user') as 'user' | 'assistant',
           content: quoteText.slice(0, 500),
         }
       })() : undefined,
@@ -320,7 +320,7 @@ export const useChatStore = defineStore('chat', () => {
       timestamp: Date.now(),
       done: false,
       versions: options?._preserveVersions || undefined,
-      activeVersion: options?._preserveVersions ? options._preserveVersions.length : undefined,
+      currentVersion: options?._preserveVersions ? options._preserveVersions.length : undefined,
     }
     convMessages.value = {
       ...convMessages.value,
@@ -713,7 +713,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!targetAgentId) return
 
     try {
-      await apiPost(`/chat/trash/${convId}/restore`)
+      await apiPost(`/chat/trash/${convId}/restore`, {})
       await fetchConversations(targetAgentId)
       await fetchTrash(targetAgentId)
     } catch (error) {

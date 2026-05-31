@@ -66,7 +66,7 @@ function handleKeydown(e: KeyboardEvent) {
 <style scoped>
 .nav-bar {
   height: 52px;
-  background: #ffffff;
+  background: var(--surface);
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -81,7 +81,7 @@ function handleKeydown(e: KeyboardEvent) {
   left: 12px;
   right: 12px;
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, #e7e5e4 15%, #e7e5e4 85%, transparent 100%);
+  background: var(--divider-soft);
 }
 
 .nav-buttons {
@@ -99,13 +99,13 @@ function handleKeydown(e: KeyboardEvent) {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #78716c;
+  color: var(--text-muted);
   transition: all 0.15s ease-in-out;
 }
 
 .nav-btn:hover:not(:disabled) {
-  background: #f5f5f4;
-  color: #44403c;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
 }
 
 .nav-btn:disabled {
@@ -114,8 +114,8 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .nav-btn.dev-toggle.active {
-  background: #e7e5e4;
-  color: #44403c;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
 }
 
 .address-bar {
@@ -123,19 +123,19 @@ function handleKeydown(e: KeyboardEvent) {
   display: flex;
   align-items: center;
   height: 34px;
-  background: #f5f5f4;
+  background: var(--bg-secondary);
   border-radius: var(--radius-xl);
   padding: 0 12px;
   gap: 8px;
 }
 
 .address-bar:focus-within {
-  background: #ffffff;
-  box-shadow: 0 0 0 2px #d6d3d1;
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--border);
 }
 
 .addr-icon {
-  color: #a8a29e;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
@@ -144,12 +144,12 @@ function handleKeydown(e: KeyboardEvent) {
   border: none;
   background: transparent;
   font-size: 13px;
-  color: #44403c;
+  color: var(--text-secondary);
   outline: none;
 }
 
 .addr-input::placeholder {
-  color: #a8a29e;
+  color: var(--text-muted);
 }
 
 .nav-right {

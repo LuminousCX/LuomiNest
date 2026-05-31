@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref } from 'vue'
 import {
   Send,
@@ -184,7 +184,7 @@ function handleKeydown(e: KeyboardEvent) {
   justify-content: center;
   padding: 40px;
   gap: 32px;
-  background: linear-gradient(180deg, #fafaf9 0%, rgba(20,126,188,0.02) 50%, #f5f5f4 100%);
+  background: linear-gradient(180deg, var(--bg) 0%, var(--lumi-primary-subtle) 50%, var(--bg-secondary) 100%);
 }
 
 .brand-area {
@@ -199,17 +199,17 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .brand-lumi {
-  color: #1c1917;
+  color: var(--text);
 }
 
 .brand-sub {
-  color: #78716c;
+  color: var(--text-muted);
 }
 
 .brand-tagline {
   margin-top: 8px;
   font-size: 14px;
-  color: #a8a29e;
+  color: var(--text-muted);
 }
 
 .search-section {
@@ -218,17 +218,17 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .search-box {
-  background: #ffffff;
+  background: var(--surface);
   border-radius: var(--radius-xl);
-  border: 1px solid rgba(231,229,228,0.6);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-sm), var(--shadow-inset);
   overflow: hidden;
   transition: all 0.25s ease-in-out;
 }
 
 .search-box:focus-within {
-  border-color: rgba(20,126,188,0.3);
-  box-shadow: var(--shadow-md), 0 0 0 3px rgba(20,126,188,0.08);
+  border-color: var(--lumi-primary-border);
+  box-shadow: var(--shadow-md), 0 0 0 3px var(--lumi-primary-light);
 }
 
 .engine-bar {
@@ -243,7 +243,7 @@ function handleKeydown(e: KeyboardEvent) {
   left: 16px;
   right: 16px;
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, #f5f5f4 15%, #f5f5f4 85%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, var(--bg-secondary) 15%, var(--bg-secondary) 85%, transparent 100%);
 }
 
 .engine-selector {
@@ -252,23 +252,23 @@ function handleKeydown(e: KeyboardEvent) {
   gap: 8px;
   padding: 6px 12px;
   border-radius: var(--radius-md);
-  background: #f5f5f4;
+  background: var(--bg-secondary);
   border: none;
   cursor: pointer;
   transition: all 0.2s ease-in-out;
 }
 
 .engine-selector:hover {
-  background: #e7e5e4;
+  background: var(--border);
 }
 
 .engine-name {
   font-size: 13px;
-  color: #44403c;
+  color: var(--text-secondary);
 }
 
 .engine-arrow {
-  color: #78716c;
+  color: var(--text-muted);
   transition: transform 0.2s ease;
 }
 
@@ -281,9 +281,9 @@ function handleKeydown(e: KeyboardEvent) {
   top: 100%;
   left: 12px;
   margin-top: 4px;
-  background: #ffffff;
+  background: var(--surface);
   border-radius: var(--radius-lg);
-  border: 1px solid rgba(231,229,228,0.6);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-md);
   overflow: hidden;
   z-index: 100;
@@ -299,16 +299,16 @@ function handleKeydown(e: KeyboardEvent) {
   border: none;
   cursor: pointer;
   font-size: 13px;
-  color: #44403c;
+  color: var(--text-secondary);
   transition: background 0.15s ease;
 }
 
 .engine-option:hover {
-  background: #f5f5f4;
+  background: var(--bg-secondary);
 }
 
 .engine-option.active {
-  background: #fafaf9;
+  background: var(--bg);
 }
 
 .search-textarea {
@@ -317,13 +317,13 @@ function handleKeydown(e: KeyboardEvent) {
   padding: 16px;
   border: none;
   font-size: 15px;
-  color: #1c1917;
+  color: var(--text);
   resize: none;
   outline: none;
 }
 
 .search-textarea::placeholder {
-  color: #a8a29e;
+  color: var(--text-muted);
 }
 
 .search-actions {
@@ -341,7 +341,7 @@ function handleKeydown(e: KeyboardEvent) {
   left: 16px;
   right: 16px;
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, #f5f5f4 15%, #f5f5f4 85%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, var(--bg-secondary) 15%, var(--bg-secondary) 85%, transparent 100%);
 }
 
 .actions-left,
@@ -361,13 +361,13 @@ function handleKeydown(e: KeyboardEvent) {
   border: none;
   cursor: pointer;
   font-size: 13px;
-  color: #78716c;
+  color: var(--text-muted);
   transition: all 0.2s ease-in-out;
 }
 
 .tool-btn:hover {
-  background: #f5f5f4;
-  color: #44403c;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
 }
 
 .tool-btn.icon-only {
@@ -381,15 +381,15 @@ function handleKeydown(e: KeyboardEvent) {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #1c1917, #44403c);
+  background: linear-gradient(135deg, var(--text), var(--text-secondary));
   border: none;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--text-inverse);
   transition: all 0.2s ease-in-out;
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #44403c;
+  background: var(--text-secondary);
 }
 
 .send-btn:disabled {
@@ -400,8 +400,8 @@ function handleKeydown(e: KeyboardEvent) {
 .loading-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #ffffff;
+  border: 2px solid color-mix(in srgb, var(--text-inverse) 30%, transparent);
+  border-top-color: var(--text-inverse);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -424,15 +424,15 @@ function handleKeydown(e: KeyboardEvent) {
   gap: 8px;
   padding: 16px 20px;
   border-radius: var(--radius-lg);
-  background: #ffffff;
-  border: 1px solid rgba(231,229,228,0.6);
+  background: var(--surface);
+  border: 1px solid var(--border);
   cursor: pointer;
   transition: all 0.2s ease-in-out;
 }
 
 .qa-card:hover {
   border-color: var(--qa-color);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 0 0 1px rgba(20,126,188,0.05);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--lumi-primary-subtle);
   transform: translateY(-2px);
 }
 
@@ -443,13 +443,13 @@ function handleKeydown(e: KeyboardEvent) {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--qa-color), color-mix(in srgb, var(--qa-color) 70%, white));
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--qa-color), color-mix(in srgb, var(--qa-color) 70%, var(--text-inverse)));
+  color: var(--text-inverse);
 }
 
 .qa-label {
   font-size: 12px;
-  color: #57534e;
+  color: var(--text-secondary);
 }
 
 .dropdown-enter-active,

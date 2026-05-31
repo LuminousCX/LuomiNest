@@ -20,13 +20,11 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-vue-next'
-import { useApi } from '../composables/useApi'
 import { useModelStore } from '../stores/model'
 import LumiCardIcon from '../components/common/LumiCardIcon.vue'
 import LumiBrandStar from '../components/common/LumiBrandStar.vue'
 
 const router = useRouter()
-const { apiGet, apiPut } = useApi()
 const modelStore = useModelStore()
 
 const VERSION = ref('')
@@ -233,7 +231,7 @@ const addProviderAndNext = async () => {
 
 onMounted(async () => {
   try {
-    VERSION.value = await window.ipcRenderer.invoke('app:getVersion') || ''
+    VERSION.value = await window.api?.app?.getVersion() || ''
   } catch {}
   modelStore.fetchProviders().catch(() => {})
   modelStore.fetchTemplates().catch(() => {})
@@ -500,8 +498,8 @@ onMounted(async () => {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(20, 126, 188, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(20, 126, 188, 0.03) 1px, transparent 1px);
+    linear-gradient(var(--lumi-primary-subtle) 1px, transparent 1px),
+    linear-gradient(90deg, var(--lumi-primary-subtle) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
@@ -516,7 +514,7 @@ onMounted(async () => {
 .bg-orb-1 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, rgba(20, 126, 188, 0.15), transparent 70%);
+  background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
   top: -100px;
   right: -80px;
   animation-delay: 0s;
@@ -525,7 +523,7 @@ onMounted(async () => {
 .bg-orb-2 {
   width: 320px;
   height: 320px;
-  background: radial-gradient(circle, rgba(98, 169, 200, 0.12), transparent 70%);
+  background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
   bottom: -60px;
   left: -60px;
   animation-delay: -6s;
@@ -581,11 +579,11 @@ onMounted(async () => {
   width: 72px;
   height: 72px;
   border-radius: 20px;
-  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.08));
+  background: var(--lumi-primary-gradient-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 32px rgba(20, 126, 188, 0.15);
+  box-shadow: 0 8px 32px var(--lumi-primary-glow);
 }
 
 .brand-title {
@@ -662,15 +660,15 @@ onMounted(async () => {
 }
 
 .lang-card:hover {
-  border-color: rgba(20, 126, 188, 0.4);
+  border-color: var(--lumi-primary-border);
   box-shadow: var(--shadow-sm);
   transform: translateY(-2px);
 }
 
 .lang-card.active {
   border-color: var(--lumi-primary);
-  background: rgba(20, 126, 188, 0.04);
-  box-shadow: 0 4px 16px rgba(20, 126, 188, 0.1);
+  background: var(--lumi-primary-subtle);
+  box-shadow: 0 4px 16px var(--lumi-primary-light);
 }
 
 .lang-flag {
@@ -774,8 +772,8 @@ onMounted(async () => {
 }
 
 .ai-hero-icon {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.04));
-  color: #8b5cf6;
+  background: linear-gradient(135deg, var(--task-purple-soft), color-mix(in srgb, var(--task-purple) 4%, transparent));
+  color: var(--task-purple);
 }
 
 .step-hero-title {
@@ -805,8 +803,8 @@ onMounted(async () => {
   gap: 6px;
   padding: 8px 12px;
   border-radius: var(--radius-md);
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
+  background: var(--task-red-soft);
+  color: var(--lumi-danger);
   font-size: 12px;
   font-weight: 500;
 }
@@ -868,12 +866,12 @@ onMounted(async () => {
 
 .template-card:hover {
   border-color: var(--lumi-primary);
-  box-shadow: 0 1px 4px rgba(20, 126, 188, 0.1);
+  box-shadow: 0 1px 4px var(--lumi-primary-light);
 }
 
 .template-card.selected {
   border-color: var(--lumi-primary);
-  background: rgba(20, 126, 188, 0.04);
+  background: var(--lumi-primary-subtle);
 }
 
 .template-card-logo {
@@ -889,7 +887,7 @@ onMounted(async () => {
 .template-initials {
   font-size: 10px;
   font-weight: 700;
-  color: white;
+  color: var(--text-inverse);
   letter-spacing: 0.5px;
 }
 
@@ -953,7 +951,7 @@ onMounted(async () => {
 .api-key-row input:focus {
   outline: none;
   border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px rgba(20, 126, 188, 0.1);
+  box-shadow: 0 0 0 3px var(--lumi-primary-light);
 }
 
 .eye-btn {
@@ -985,7 +983,7 @@ onMounted(async () => {
   width: 96px;
   height: 96px;
   border-radius: 28px;
-  background: linear-gradient(135deg, rgba(20, 126, 188, 0.08), rgba(98, 169, 200, 0.06));
+  background: var(--lumi-primary-gradient-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -993,8 +991,8 @@ onMounted(async () => {
 }
 
 @keyframes ring-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(20, 126, 188, 0.2); }
-  50% { box-shadow: 0 0 0 12px rgba(20, 126, 188, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-primary-border); }
+  50% { box-shadow: 0 0 0 12px transparent; }
 }
 
 .ready-shield {
@@ -1005,7 +1003,7 @@ onMounted(async () => {
   height: 28px;
   border-radius: 50%;
   background: var(--lumi-success);
-  color: white;
+  color: var(--text-inverse);
   padding: 5px;
   animation: shield-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both;
 }
@@ -1049,7 +1047,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--text-inverse);
   background: var(--workspace-card);
   transition: all 300ms ease-in-out;
   flex-shrink: 0;
@@ -1087,7 +1085,7 @@ onMounted(async () => {
   font-size: 14px;
   font-weight: 600;
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
   cursor: pointer;
   transition: all 300ms ease-in-out;
 }
@@ -1095,7 +1093,7 @@ onMounted(async () => {
 .primary-btn:hover:not(:disabled) {
   background: var(--lumi-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(20, 126, 188, 0.25);
+  box-shadow: 0 6px 20px var(--lumi-primary-border);
 }
 
 .primary-btn:active:not(:disabled) {
@@ -1112,7 +1110,7 @@ onMounted(async () => {
 }
 
 .launch-btn:hover:not(:disabled) {
-  box-shadow: 0 8px 28px rgba(20, 126, 188, 0.35);
+  box-shadow: 0 8px 28px var(--lumi-primary-border);
 }
 
 .ghost-btn {

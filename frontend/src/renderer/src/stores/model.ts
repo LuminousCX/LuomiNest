@@ -358,6 +358,7 @@ export const useModelStore = defineStore('model', () => {
       providers.value = raw.map(p => ({
         id: p.id,
         name: p.name,
+        type: p.type || p.vendor || 'openai_compatible',
         vendor: p.vendor,
         baseUrl: p.baseUrl || p.base_url || '',
         apiKeySet: p.apiKeySet || p.api_key_set || false,
