@@ -2,7 +2,7 @@
 import { Star, Download, ArrowRight } from 'lucide-vue-next'
 import type { MarketplaceItem } from '../../types/marketplace'
 import { useRouter } from 'vue-router'
-import { ITEM_ICON_MAP, DEFAULT_ICON, getIconTheme } from '../../utils/marketplace-icons'
+import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
 import LumiCardIcon from '../common/LumiCardIcon.vue'
 
 const props = defineProps<{
@@ -42,7 +42,7 @@ function navigateToList() {
         <LumiCardIcon
           :icon="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON"
           :size="20"
-          :theme="getIconTheme(item.icon)"
+          :theme="item.icon"
         />
         <div class="banner-card-info">
           <h4>{{ item.name }}</h4>

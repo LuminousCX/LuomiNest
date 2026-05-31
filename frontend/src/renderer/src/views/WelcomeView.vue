@@ -263,7 +263,7 @@ onMounted(async () => {
             </div>
             <h1 class="brand-title">
               <span class="brand-greeting">{{ i18n.title }}</span>
-              <span class="brand-name">{{ i18n.appName }}</span>
+              <span class="brand-name lumi-gradient-text">{{ i18n.appName }}</span>
             </h1>
             <p class="brand-subtitle">{{ i18n.subtitle }}</p>
             <span class="version-badge">{{ i18n.version }}</span>
@@ -604,10 +604,6 @@ onMounted(async () => {
 
 .brand-name {
   display: block;
-  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft), #A8D1E1);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .brand-subtitle {

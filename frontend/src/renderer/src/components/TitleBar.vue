@@ -37,7 +37,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
     <div class="title-drag-region">
       <div class="brand-mark">
         <LumiBrandStar :size="16" :animated="false" />
-        <span class="brand-text">LuomiNest</span>
+        <span class="brand-text lumi-gradient-text">LuomiNest</span>
         <span class="brand-sub">LuminousChenXi v0.2.0</span>
       </div>
     </div>
@@ -99,10 +99,6 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: -0.2px;
-  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
   white-space: nowrap;
 }
 

@@ -30,7 +30,9 @@ import {
   X,
   AlertTriangle,
   ChevronRight,
+  ChevronDown,
   Bell,
+  Sparkles,
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
@@ -42,29 +44,31 @@ const router = useRouter()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
-const expandedCategory = ref<string | null>(null)
+const expandedGroups = ref<Set<string>>(new Set(['chat']))
 
 interface NavChild {
   id: string
   label: string
   icon: any
+  badge?: string
 }
 
-interface NavCategory {
+interface NavGroup {
   id: string
   label: string
   icon: any
   children: NavChild[]
 }
 
-interface NavStandalone {
+interface NavItem {
   id: string
   label: string
   icon: any
   route: string
+  badge?: string
 }
 
-const navCategories: NavCategory[] = [
+const navGroups: NavGroup[] = [
   {
     id: 'chat',
     label: '聊天',
@@ -100,56 +104,48 @@ const navCategories: NavCategory[] = [
   },
 ]
 
-const navStandalones: NavStandalone[] = [
+const navItems: NavItem[] = [
   { id: 'browser', label: '浏览器', icon: Globe, route: '/browser' },
   { id: 'settings', label: '设置', icon: Settings, route: '/settings' },
 ]
 
-const allChildRoutes = computed(() => {
-  const routes: string[] = []
-  for (const cat of navCategories) {
-    for (const child of cat.children) {
-      routes.push(child.id)
-    }
-  }
-  return routes
-})
-
-const activeCategory = computed(() => {
-  for (const cat of navCategories) {
-    for (const child of cat.children) {
+const activeGroup = computed(() => {
+  for (const group of navGroups) {
+    for (const child of group.children) {
       if (route.path === child.id || route.path.startsWith(child.id + '/')) {
-        return cat.id
+        return group.id
       }
     }
   }
   return null
 })
 
-const isStandaloneActive = (item: NavStandalone) => {
+const isItemActive = (item: NavItem) => {
   return route.path === item.route || route.path.startsWith(item.route + '/')
 }
-
-const toggleCategory = (catId: string) => {
-  if (expandedCategory.value === catId) {
-    expandedCategory.value = null
-  } else {
-    expandedCategory.value = catId
-  }
-}
-
-watch(activeCategory, (catId) => {
-  if (catId && expandedCategory.value !== catId) {
-    expandedCategory.value = catId
-  }
-}, { immediate: true })
 
 const isChildActive = (childId: string) => {
   return route.path === childId || route.path.startsWith(childId + '/')
 }
 
-const handleChildClick = (childId: string) => {
-  router.push(childId)
+const toggleGroup = (groupId: string) => {
+  const next = new Set(expandedGroups.value)
+  if (next.has(groupId)) {
+    next.delete(groupId)
+  } else {
+    next.add(groupId)
+  }
+  expandedGroups.value = next
+}
+
+watch(activeGroup, (groupId) => {
+  if (groupId && !expandedGroups.value.has(groupId)) {
+    expandedGroups.value = new Set([...expandedGroups.value, groupId])
+  }
+}, { immediate: true })
+
+const handleNavigate = (path: string) => {
+  router.push(path)
 }
 
 const searchQuery = ref('')
@@ -467,67 +463,103 @@ onMounted(async () => {
 
 <template>
   <div class="lumi-sidebar">
-    <div class="sidebar-icon-rail">
-      <div class="rail-top">
-        <button class="avatar-btn" aria-label="LuminousChenXi">
-          <div class="avatar-ring">
-            <LumiBrandStar :size="20" :animated="false" />
+    <div class="sidebar-nav-panel">
+      <div class="nav-header">
+        <div class="brand">
+          <div class="brand-avatar">
+            <LumiBrandStar :size="22" :animated="false" />
           </div>
-        </button>
-        <nav class="icon-nav">
-          <div
-            v-for="cat in navCategories"
-            :key="cat.id"
-            :class="['icon-btn category-btn', { active: activeCategory === cat.id, expanded: expandedCategory === cat.id }]"
-            :aria-label="cat.label"
-            @click="toggleCategory(cat.id)"
-          >
-            <component :is="cat.icon" :size="20" />
-            <ChevronRight :size="12" class="expand-indicator" />
+          <div class="brand-info">
+            <span class="brand-name">LuomiNest</span>
+            <span class="brand-tag">LuminousCX</span>
           </div>
-
-          <div class="nav-divider"></div>
-
-          <button
-            v-for="item in navStandalones"
-            :key="item.id"
-            :class="['icon-btn', { active: isStandaloneActive(item) }]"
-            :aria-label="item.label"
-            @click="router.push(item.route)"
-          >
-            <component :is="item.icon" :size="20" />
+        </div>
+        <div class="header-actions">
+          <button class="header-action-btn" aria-label="消息公告">
+            <Bell :size="16" />
+            <span class="header-action-dot"></span>
           </button>
-        </nav>
+          <button class="header-action-btn" aria-label="新建" @click="showCreateDialog = true">
+            <Plus :size="16" />
+          </button>
+        </div>
       </div>
-      <div class="rail-bottom">
-        <button class="icon-btn notification-btn" aria-label="消息公告">
-          <Bell :size="20" />
-          <span class="notification-dot"></span>
+
+      <div class="nav-search">
+        <Search :size="14" class="nav-search-icon" />
+        <input
+          type="text"
+          placeholder="搜索..."
+          class="nav-search-input"
+          readonly
+          @click="router.push('/workspace')"
+        />
+        <Sparkles :size="14" class="nav-search-sparkle" />
+      </div>
+
+      <div class="nav-content">
+        <div class="nav-section">
+          <div class="section-label">导航</div>
+
+          <div v-for="group in navGroups" :key="group.id" class="nav-group">
+            <button
+              :class="['group-header', { active: activeGroup === group.id, expanded: expandedGroups.has(group.id) }]"
+              @click="toggleGroup(group.id)"
+            >
+              <div class="group-header-left">
+                <component :is="group.icon" :size="17" class="group-icon" />
+                <span class="group-label">{{ group.label }}</span>
+              </div>
+              <ChevronRight
+                :size="14"
+                :class="['group-chevron', { rotated: expandedGroups.has(group.id) }]"
+              />
+            </button>
+
+            <Transition name="tree-expand">
+              <div v-if="expandedGroups.has(group.id)" class="group-children">
+                <div
+                  v-for="(child, idx) in group.children"
+                  :key="child.id"
+                  :class="['tree-child', { active: isChildActive(child.id), last: idx === group.children.length - 1 }]"
+                  @click="handleNavigate(child.id)"
+                >
+                  <div class="tree-line">
+                    <div class="tree-branch"></div>
+                    <div class="tree-node"></div>
+                  </div>
+                  <component :is="child.icon" :size="14" class="child-icon" />
+                  <span class="child-label">{{ child.label }}</span>
+                </div>
+              </div>
+            </Transition>
+          </div>
+        </div>
+
+        <div class="nav-section">
+          <div class="section-label">工具</div>
+          <div class="nav-items">
+            <button
+              v-for="item in navItems"
+              :key="item.id"
+              :class="['nav-item', { active: isItemActive(item) }]"
+              @click="router.push(item.route)"
+            >
+              <component :is="item.icon" :size="17" class="nav-item-icon" />
+              <span class="nav-item-label">{{ item.label }}</span>
+              <span v-if="item.badge" class="nav-item-badge">{{ item.badge }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-footer">
+        <button class="footer-btn" @click="router.push('/settings')">
+          <Settings :size="15" />
+          <span>设置</span>
         </button>
       </div>
     </div>
-
-    <Transition name="sub-panel">
-      <div v-if="expandedCategory" class="sidebar-sub-panel">
-        <div class="sub-panel-header">
-          <span class="sub-panel-title">
-            {{ navCategories.find(c => c.id === expandedCategory)?.label }}
-          </span>
-        </div>
-        <div class="sub-panel-list">
-          <button
-            v-for="child in navCategories.find(c => c.id === expandedCategory)?.children"
-            :key="child.id"
-            :class="['sub-panel-item', { active: isChildActive(child.id) }]"
-            @click="handleChildClick(child.id)"
-          >
-            <component :is="child.icon" :size="16" class="sub-item-icon" />
-            <span class="sub-item-label">{{ child.label }}</span>
-            <ChevronRight v-if="isChildActive(child.id)" :size="14" class="sub-item-arrow" />
-          </button>
-        </div>
-      </div>
-    </Transition>
 
     <Transition name="history-slide">
       <div v-if="showHistoryPanel" class="sidebar-history-panel">
@@ -789,22 +821,20 @@ onMounted(async () => {
   height: 100%;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  transition: all var(--transition-normal);
 }
 
-.sidebar-icon-rail {
+.sidebar-nav-panel {
+  width: 240px;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  width: 60px;
-  height: 100%;
-  padding: 12px 0;
-  flex-shrink: 0;
-  position: relative;
   background: var(--surface);
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
 }
 
-.sidebar-icon-rail::after {
+.sidebar-nav-panel::after {
   content: '';
   position: absolute;
   top: 12px;
@@ -814,64 +844,62 @@ onMounted(async () => {
   background: var(--divider-vertical);
 }
 
-.rail-top {
+.nav-header {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  flex-shrink: 0;
 }
 
-.rail-bottom {
+.brand {
   display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: 10px;
 }
 
-.avatar-btn {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: transform var(--transition-fast);
-}
-
-.avatar-btn:hover {
-  transform: scale(1.05);
-}
-
-.avatar-ring {
-  width: 40px;
-  height: 40px;
+.brand-avatar {
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(20, 126, 188, 0.3);
+  box-shadow: 0 3px 10px rgba(20, 126, 188, 0.25);
+  color: white;
 }
 
-.icon-nav {
+.brand-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 8px;
-  width: 100%;
-  padding: 0 8px;
 }
 
-.nav-divider {
-  height: 1px;
-  margin: 6px 8px;
-  background: var(--divider-soft);
+.brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
 }
 
-.icon-btn {
+.brand-tag {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.header-action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-md);
   color: var(--text-muted);
   cursor: pointer;
@@ -879,105 +907,236 @@ onMounted(async () => {
   position: relative;
 }
 
-.icon-btn:hover {
+.header-action-btn:hover {
   background: var(--surface-hover);
   color: var(--text-secondary);
 }
 
-.icon-btn.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.icon-btn.active::before {
-  content: '';
+.header-action-dot {
   position: absolute;
-  left: -8px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  border-radius: 2px;
-  background: var(--lumi-primary);
-}
-
-.category-btn {
-  position: relative;
-}
-
-.expand-indicator {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  opacity: 0;
-  transform: rotate(0deg);
-  transition: all var(--transition-fast);
-  color: var(--text-muted);
-}
-
-.category-btn:hover .expand-indicator {
-  opacity: 0.6;
-}
-
-.category-btn.expanded .expand-indicator {
-  opacity: 1;
-  transform: rotate(90deg);
-  color: var(--lumi-primary);
-}
-
-.notification-btn {
-  position: relative;
-}
-
-.notification-dot {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 7px;
-  height: 7px;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--lumi-accent);
   border: 1.5px solid var(--surface);
 }
 
-.sidebar-sub-panel {
-  width: 180px;
-  height: 100%;
+.nav-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px 10px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.nav-search:focus-within {
+  border-color: var(--lumi-primary);
+  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+}
+
+.nav-search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.nav-search-input {
+  flex: 1;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.nav-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.nav-search-sparkle {
+  color: var(--lumi-warning);
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.nav-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 10px;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border-right: 1px solid var(--border-light);
-  flex-shrink: 0;
-  overflow: hidden;
+  gap: 16px;
 }
 
-.sub-panel-header {
-  padding: 16px 16px 8px;
-  flex-shrink: 0;
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.sub-panel-title {
-  font-size: 12px;
+.section-label {
+  padding: 4px 8px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 1px;
 }
 
-.sub-panel-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 8px;
+.nav-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+  text-align: left;
+}
+
+.group-header:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.group-header.active {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.group-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.group-icon {
+  flex-shrink: 0;
+}
+
+.group-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.group-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.group-header.active .group-chevron {
+  color: var(--lumi-primary);
+}
+
+.group-chevron.rotated {
+  transform: rotate(90deg);
+}
+
+.group-children {
+  display: flex;
+  flex-direction: column;
+  padding-left: 8px;
+  overflow: hidden;
+}
+
+.tree-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 0;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  margin-left: 14px;
+}
+
+.tree-child:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.tree-child.active {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.tree-line {
+  position: absolute;
+  left: -14px;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.tree-branch {
+  position: absolute;
+  left: 6px;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: var(--border-light);
+}
+
+.tree-child.last .tree-branch {
+  height: 50%;
+}
+
+.tree-node {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: var(--border-light);
+  transform: translateY(-50%);
+}
+
+.tree-child.last .tree-node {
+  border-bottom-left-radius: 2px;
+}
+
+.child-icon {
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.child-label {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-items {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.sub-panel-item {
+.nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 9px 10px;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   cursor: pointer;
@@ -987,49 +1146,58 @@ onMounted(async () => {
   position: relative;
 }
 
-.sub-panel-item::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 2px;
-  height: 0;
-  border-radius: 1px;
-  background: var(--lumi-primary);
-  transition: height var(--transition-fast);
-}
-
-.sub-panel-item.active::before {
-  height: 16px;
-}
-
-.sub-panel-item:hover {
+.nav-item:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
 
-.sub-panel-item.active {
+.nav-item.active {
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
 }
 
-.sub-item-icon {
+.nav-item-icon {
   flex-shrink: 0;
 }
 
-.sub-item-label {
+.nav-item-label {
   flex: 1;
   font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 600;
 }
 
-.sub-item-arrow {
-  flex-shrink: 0;
+.nav-item-badge {
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--lumi-primary-light);
   color: var(--lumi-primary);
+}
+
+.nav-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+}
+
+.footer-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
 }
 
 .sidebar-history-panel {
@@ -1554,27 +1722,26 @@ onMounted(async () => {
   color: var(--lumi-accent);
 }
 
-.sub-panel-enter-active {
+.tree-expand-enter-active {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.sub-panel-leave-active {
+.tree-expand-leave-active {
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.sub-panel-enter-from,
-.sub-panel-leave-to {
+.tree-expand-enter-from,
+.tree-expand-leave-to {
   opacity: 0;
-  width: 0;
-  min-width: 0;
-  padding: 0;
-  overflow: hidden;
+  max-height: 0;
+  transform: translateY(-4px);
 }
 
-.sub-panel-enter-to,
-.sub-panel-leave-from {
+.tree-expand-enter-to,
+.tree-expand-leave-from {
   opacity: 1;
-  width: 180px;
+  max-height: 300px;
+  transform: translateY(0);
 }
 
 .history-slide-enter-active {
