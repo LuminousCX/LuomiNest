@@ -1,11 +1,6 @@
-export interface LuomiNestModelInfo {
-  id: string
-  name: string
-  url: string
-  scale: number
-  type: 'live2d' | 'vrm' | 'pixel'
-  tags: string[]
-}
+import type { PetModelInfo } from '@/stores/avatar-control'
+
+export type LuomiNestModelInfo = PetModelInfo
 
 export const LUOMINEST_BUILTIN_MODELS: LuomiNestModelInfo[] = [
   {

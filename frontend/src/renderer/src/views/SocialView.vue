@@ -114,6 +114,7 @@ const sendMessage = async () => {
     if (collaborationMode.value) {
       socialStore.groupMessages.push({
         id: `user-${Date.now()}`,
+        groupId: selectedGroupId.value,
         senderId: 'user',
         senderType: 'user',
         content: userContent,

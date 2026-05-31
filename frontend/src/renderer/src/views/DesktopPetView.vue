@@ -1,12 +1,12 @@
-﻿﻿﻿﻿<script setup lang="ts">
+﻿<script setup lang="ts">
 import '@pixi/unsafe-eval'
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Application, Ticker } from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'
 import { LUOMINEST_BUILTIN_MODELS } from '@/config/luominest-models'
 import {
-  Settings2, RotateCcw, Eye, EyeOff, X,
-  ChevronUp, Minimize, Pin, PinOff, ArrowLeftRight
+  RotateCcw, Eye, EyeOff, X,
+  ChevronUp, Minimize, Pin, PinOff
 } from 'lucide-vue-next'
 
 interface PetModelInfo {
@@ -30,6 +30,8 @@ const isAlwaysOnTop = ref(true)
 const isMousePassthrough = ref(true)
 const availableMotions = ref<string[]>([])
 const availableExpressions = ref<string[]>([])
+const fadeOnHoverEnabled = ref(true)
+const shouldFadeUI = ref(false)
 
 let pixiApp: Application | null = null
 let currentModel: Live2DModel | null = null
@@ -47,16 +49,19 @@ let focusMouseLeaveHandler: (() => void) | null = null
 let ipcLoadModelHandler: ((event: any, modelInfo: PetModelInfo) => void) | null = null
 let ipcTriggerMotionHandler: ((event: any, group: string, index: number) => void) | null = null
 let ipcTriggerExpressionHandler: ((event: any, name: string) => void) | null = null
-let ipcSetPositionHandler: ((event: any, x: number, y: number) => void) | null = null
-let ipcSetScaleHandler: ((event: any, scale: number) => void) | null = null
-let ipcLipSyncHandler: ((event: any, value: number) => void) | null = null
-let ipcPadEmotionHandler: ((event: any, pad: { pleasure: number; arousal: number; dominance: number }) => void) | null = null
-let ipcSetCoreParamHandler: ((event: any, paramId: string, value: number) => void) | null = null
-let ipcGetModelCapabilitiesHandler: ((event: any, requestId: string) => void) | null = null
+let ipcSetPositionHandler: ((event: any, x: number, y: number) => void | null) | null = null
+let ipcSetScaleHandler: ((event: any, scale: number) => void | null) | null = null
+let ipcLipSyncHandler: ((event: any, value: number) => void | null) | null = null
+let ipcPadEmotionHandler: ((event: any, pad: { pleasure: number; arousal: number; dominance: number }) => void | null) | null = null
+let ipcSetCoreParamHandler: ((event: any, paramId: string, value: number) => void | null) | null = null
+let ipcGetModelCapabilitiesHandler: ((event: any, requestId: string) => void | null) | null = null
 let contextMenuHandler: ((e: MouseEvent) => void) | null = null
 let retryCount = 0
 let retryTimerId: ReturnType<typeof setTimeout> | null = null
 let currentLoadToken = 0
+let transparencyCheckTimer: ReturnType<typeof setInterval> | null = null
+let lastMouseX = 0
+let lastMouseY = 0
 const MAX_RETRIES = 3
 
 const mapPADtoEmotion = (pleasure: number, arousal: number, dominance: number): string => {
@@ -90,6 +95,83 @@ const cleanupFocus = () => {
 const setIgnoreMouseEvents = (ignore: boolean) => {
   isMousePassthrough.value = ignore
   window.electron?.ipcRenderer.send('desktop-pet:set-ignore-mouse-events', ignore)
+}
+
+const isCanvasRegionTransparent = (
+  gl: WebGL2RenderingContext | WebGLRenderingContext,
+  clientX: number,
+  clientY: number,
+  canvasEl: HTMLCanvasElement,
+  radius: number = 20,
+  threshold: number = 10
+): boolean => {
+  const rect = canvasEl.getBoundingClientRect()
+  const { left, top, width, height } = rect
+
+  if (!width || !height) return true
+  if (gl.drawingBufferWidth <= 0 || gl.drawingBufferHeight <= 0) return true
+
+  const xIn = clientX - left
+  const yIn = clientY - top
+  if (xIn < 0 || yIn < 0 || xIn >= width || yIn >= height) return true
+
+  const scaleX = gl.drawingBufferWidth / width
+  const scaleY = gl.drawingBufferHeight / height
+  if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY)) return true
+
+  const centerX = Math.floor(xIn * scaleX)
+  const centerY = Math.floor(gl.drawingBufferHeight - 1 - yIn * scaleY)
+  const radiusX = Math.ceil(radius * scaleX)
+  const radiusY = Math.ceil(radius * scaleY)
+
+  const startX = Math.max(0, centerX - radiusX)
+  const endX = Math.min(gl.drawingBufferWidth - 1, centerX + radiusX)
+  const startY = Math.max(0, centerY - radiusY)
+  const endY = Math.min(gl.drawingBufferHeight - 1, centerY + radiusY)
+
+  const readWidth = endX - startX + 1
+  const readHeight = endY - startY + 1
+  if (readWidth <= 0 || readHeight <= 0) return true
+
+  const data = new Uint8Array(readWidth * readHeight * 4)
+  try {
+    gl.readPixels(startX, startY, readWidth, readHeight, gl.RGBA, gl.UNSIGNED_BYTE, data)
+  } catch {
+    return true
+  }
+
+  const radiusSq = radius * radius
+  for (let y = 0; y < readHeight; y++) {
+    const gy = startY + y
+    const dy = (gy - centerY) / scaleY
+    const dySq = dy * dy
+    for (let x = 0; x < readWidth; x++) {
+      const gx = startX + x
+      const dx = (gx - centerX) / scaleX
+      if (dx * dx + dySq > radiusSq) continue
+      const index = (y * readWidth + x) * 4
+      if (data[index + 3] >= threshold) return false
+    }
+  }
+
+  return true
+}
+
+const checkTransparencyAndUpdateMouseEvents = () => {
+  if (!canvasRef.value || !fadeOnHoverEnabled.value || isDragging) return
+
+  const gl = canvasRef.value.getContext('webgl2') || canvasRef.value.getContext('webgl') as WebGL2RenderingContext | WebGLRenderingContext | null
+  if (!gl) return
+
+  const isTransparent = isCanvasRegionTransparent(gl, lastMouseX, lastMouseY, canvasRef.value, 20, 10)
+
+  if (isTransparent) {
+    setIgnoreMouseEvents(true)
+    shouldFadeUI.value = false
+  } else {
+    setIgnoreMouseEvents(false)
+    shouldFadeUI.value = true
+  }
 }
 
 const setCoreParam = (paramId: string, value: number) => {
@@ -151,6 +233,7 @@ const loadModel = async (url: string, scale: number) => {
         autoStart: true,
         backgroundAlpha: 0,
         antialias: true,
+        preserveDrawingBuffer: true,
         resizeTo: window,
         resolution: Math.min(window.devicePixelRatio || 1, 2),
         autoDensity: true
@@ -185,8 +268,8 @@ const loadModel = async (url: string, scale: number) => {
     const clampedScale = Math.max(0.05, Math.min(2.0, scale))
     model.scale.set(clampedScale)
     model.anchor.set(0.5, 0.5)
-    model.x = window.innerWidth * 0.75
-    model.y = window.innerHeight * 0.55
+    model.x = window.innerWidth / 2
+    model.y = window.innerHeight / 2
 
     try {
       const internalModel = model.internalModel as any
@@ -203,16 +286,6 @@ const loadModel = async (url: string, scale: number) => {
     model.on('hit', (hitAreas: string[]) => {
       if (hitAreas.includes('body') || hitAreas.includes('head')) {
         model.motion('TapBody', 0)
-      }
-    })
-
-    model.on('pointerover', () => {
-      setIgnoreMouseEvents(false)
-    })
-
-    model.on('pointerout', () => {
-      if (!isDragging) {
-        setIgnoreMouseEvents(true)
       }
     })
 
@@ -309,6 +382,8 @@ const setupFocus = (_model: Live2DModel) => {
   const onMouseMove = (e: MouseEvent) => {
     focusTargetX = (e.clientX / window.innerWidth) * 2 - 1
     focusTargetY = -((e.clientY / window.innerHeight) * 2 - 1)
+    lastMouseX = e.clientX
+    lastMouseY = e.clientY
   }
 
   const onMouseLeave = () => {
@@ -402,6 +477,15 @@ const handleResetPose = async () => {
 
 const handleToggleAlwaysOnTop = () => {
   isAlwaysOnTop.value = !isAlwaysOnTop.value
+  resetIslandTimer()
+}
+
+const handleToggleFadeOnHover = () => {
+  fadeOnHoverEnabled.value = !fadeOnHoverEnabled.value
+  if (!fadeOnHoverEnabled.value) {
+    shouldFadeUI.value = false
+    setIgnoreMouseEvents(true)
+  }
   resetIslandTimer()
 }
 
@@ -521,6 +605,8 @@ onMounted(async () => {
     setTimeout(() => setIgnoreMouseEvents(true), 1000)
   }
   window.addEventListener('contextmenu', contextMenuHandler)
+
+  transparencyCheckTimer = setInterval(checkTransparencyAndUpdateMouseEvents, 50)
 })
 
 onBeforeUnmount(() => {
@@ -530,6 +616,10 @@ onBeforeUnmount(() => {
   }
   currentLoadToken++
   if (islandHideTimer) clearTimeout(islandHideTimer)
+  if (transparencyCheckTimer) {
+    clearInterval(transparencyCheckTimer)
+    transparencyCheckTimer = null
+  }
   cleanupFocus()
 
   if (ipcLoadModelHandler) {
@@ -604,6 +694,7 @@ onBeforeUnmount(() => {
 
     <div
       class="controls-island"
+      :class="{ 'fade-out': shouldFadeUI && fadeOnHoverEnabled }"
       @mouseenter="handleIslandMouseEnter"
       @mouseleave="handleIslandMouseLeave"
     >
@@ -618,9 +709,6 @@ onBeforeUnmount(() => {
             <button class="island-btn" title="Reset Pose" @click="handleResetPose">
               <RotateCcw :size="16" />
             </button>
-            <button class="island-btn" title="Switch Model (Coming Soon)" disabled aria-disabled="true">
-              <ArrowLeftRight :size="16" />
-            </button>
             <button
               class="island-btn"
               :class="{ active: isAlwaysOnTop }"
@@ -629,16 +717,13 @@ onBeforeUnmount(() => {
             >
               <component :is="isAlwaysOnTop ? Pin : PinOff" :size="16" />
             </button>
-            <button class="island-btn" title="Settings">
-              <Settings2 :size="16" />
-            </button>
             <button
               class="island-btn"
-              :class="{ active: !isMousePassthrough }"
-              :title="isMousePassthrough ? 'Disable Passthrough' : 'Enable Passthrough'"
-              @click="setIgnoreMouseEvents(!isMousePassthrough); resetIslandTimer()"
+              :class="{ active: fadeOnHoverEnabled }"
+              :title="fadeOnHoverEnabled ? 'Disable Fade on Hover' : 'Enable Fade on Hover'"
+              @click="handleToggleFadeOnHover"
             >
-              <component :is="isMousePassthrough ? EyeOff : Eye" :size="16" />
+              <component :is="fadeOnHoverEnabled ? Eye : EyeOff" :size="16" />
             </button>
             <button class="island-btn danger" title="Close Pet" @click="handleClose">
               <X :size="16" />
@@ -693,8 +778,8 @@ onBeforeUnmount(() => {
 .pet-loading-spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(20, 126, 188, 0.3);
-  border-top-color: #147EBC;
+  border: 2px solid var(--lumi-primary-border);
+  border-top-color: var(--lumi-primary);
   border-radius: 50%;
   animation: pet-spin 0.8s linear infinite;
 }
@@ -710,8 +795,8 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   padding: 4px 12px;
   border-radius: 8px;
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: var(--task-red-soft);
+  color: var(--lumi-danger);
   font-size: 11px;
   z-index: 10;
   white-space: nowrap;
@@ -727,6 +812,12 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
+  transition: opacity 250ms ease-in-out;
+}
+
+.controls-island.fade-out {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .island-panel {
@@ -735,11 +826,11 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 10px;
   border-radius: 16px;
-  background: rgba(30, 30, 30, 0.75);
+  background: var(--overlay-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-lg);
 }
 
 .island-grid {
@@ -755,37 +846,37 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--surface) 6%, transparent);
+  color: var(--text-inverse);
   cursor: pointer;
   transition: all 200ms ease-in-out;
 }
 
 .island-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.95);
+  background: color-mix(in srgb, var(--surface) 12%, transparent);
+  color: var(--text-inverse);
   transform: scale(1.05);
 }
 
 .island-btn.active {
-  background: rgba(20, 126, 188, 0.2);
-  border-color: rgba(20, 126, 188, 0.4);
-  color: #147EBC;
+  background: var(--lumi-primary-border);
+  border-color: var(--lumi-primary-border);
+  color: var(--lumi-primary);
 }
 
 .island-btn.danger:hover {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #ef4444;
+  background: var(--task-red-border);
+  border-color: var(--task-red-border);
+  color: var(--lumi-danger);
 }
 
 .island-model-name {
   text-align: center;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
   padding-top: 2px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border-light);
 }
 
 .island-toggle {
@@ -795,19 +886,19 @@ onBeforeUnmount(() => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(30, 30, 30, 0.6);
+  border: 1px solid var(--border-light);
+  background: var(--overlay-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-inverse);
   cursor: pointer;
   transition: all 200ms ease-in-out;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-md);
 }
 
 .island-toggle:hover {
-  background: rgba(30, 30, 30, 0.8);
-  color: rgba(255, 255, 255, 0.9);
+  background: var(--overlay-bg);
+  color: var(--text-inverse);
   transform: scale(1.1);
 }
 

@@ -41,7 +41,7 @@ export interface PetModelInfo {
   name: string
   url: string
   scale: number
-  type: string
+  type: 'live2d' | 'vrm' | 'pixel'
   tags: string[]
 }
 

@@ -5,7 +5,7 @@ import { Star, Download, Heart, Check, Loader2 } from 'lucide-vue-next'
 import type { MarketplaceItem, InstallProgress } from '../../types/marketplace'
 import { useMarketplaceStore } from '../../stores/marketplace'
 import { formatDownloadCount } from '../../utils/format'
-import { ITEM_ICON_MAP, DEFAULT_ICON, getIconTheme } from '../../utils/marketplace-icons'
+import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
 import LumiCardIcon from '../common/LumiCardIcon.vue'
 
 const props = defineProps<{
@@ -63,7 +63,7 @@ function handleFavorite(e: Event) {
       <LumiCardIcon
         :icon="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON"
         :size="24"
-        :theme="getIconTheme(item.icon)"
+        :theme="item.icon"
       />
       <div class="card-badge-area">
         <span v-if="item.featured" class="badge badge-featured">推荐</span>

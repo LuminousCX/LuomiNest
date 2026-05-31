@@ -72,8 +72,8 @@ const formatSize = (bytes: number): string => {
 }
 
 .file-card.status-failed {
-  border-color: #fca5a5;
-  background: #fef2f2;
+  border-color: var(--lumi-danger-light);
+  background: var(--lumi-danger-light);
 }
 
 .file-icon-wrapper {
@@ -110,11 +110,11 @@ const formatSize = (bytes: number): string => {
 }
 
 .file-status.success {
-  color: #16a34a;
+  color: var(--lumi-success-dark);
 }
 
 .file-status.failed {
-  color: #dc2626;
+  color: var(--lumi-danger-hover);
 }
 
 .file-size {

@@ -1,0 +1,77 @@
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes lumi-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes lumi-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes lumi-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes lumi-pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes lumi-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes lumi-slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes lumi-bounce-subtle {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+.lumi-gradient-text {
+  background: linear-gradient(135deg, var(--lumi-primary) 0%, var(--lumi-primary-soft) 50%, #A8D1E1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.lumi-gradient-accent {
+  background: linear-gradient(135deg, var(--lumi-accent) 0%, #fb7185 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+.animate-fade-in {
+  animation: lumi-fade-in 0.4s ease-out both;
+}
+
+.animate-slide-up {
+  animation: lumi-slide-up 0.5s ease-out both;
+}
+
+.animate-scale-in {
+  animation: lumi-scale-in 0.3s ease-out both;
+}
+
+.animate-slide-in-right {
+  animation: lumi-slide-in-right 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.wizard-backdrop {
+  animation: lumi-fade-in 0.25s ease-out both;
+}

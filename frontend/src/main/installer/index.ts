@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { join } from 'path'
 import { readFileSync, existsSync, mkdirSync, copyFileSync, readdirSync, statSync, rmSync } from 'fs'
-import { execFile, spawn } from 'child_process'
+import { spawn } from 'child_process'
 
 let installerWindow: BrowserWindow | null = null
 
@@ -232,8 +232,8 @@ ipcMain.handle('installer:start-installation', async (
                   description: 'LuomiNest - Distributed AI Companion Platform',
                   icon: join(installPath, 'resources', 'icon.ico'),
                   iconIndex: 0,
-                  workingDirectory: installPath
-                })
+                  workingDirectory: installPath,
+                } as Electron.ShortcutDetails)
               } catch {
                 // shortcut creation is non-critical
               }
@@ -241,8 +241,8 @@ ipcMain.handle('installer:start-installation', async (
           })
 
           await doStep(4, '正在保存用户配置...', async () => {
-            const configStore = await import('../services/config-store').then(m => m.default)
-            configStore.set('telemetry.enabled', allowTelemetry)
+            const { configStore } = await import('../services/config-store')
+            configStore.set('telemetry', { enabled: allowTelemetry })
             configStore.set('autoLaunch', autoLaunch)
             configStore.set('installPath', installPath)
             configStore.set('installed', true)
@@ -275,7 +275,7 @@ ipcMain.handle('installer:launch-app', async () => {
 
   try {
     if (process.platform === 'win32') {
-      execFile(exePath, [], { detached: true }, () => {})
+      spawn(exePath, [], { detached: true, stdio: 'ignore' }).unref()
     } else {
       spawn(exePath, [], { detached: true, stdio: 'ignore' }).unref()
     }

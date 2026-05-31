@@ -68,6 +68,8 @@ export interface ApiMessage {
   files?: ChatFile[]
   interrupted?: boolean
   suggested_questions?: string[]
+  versions?: MessageVersion[]
+  current_version?: number
 }
 
 export interface ChatRequest {
@@ -196,17 +198,22 @@ export interface SearchResult {
   metadata: Record<string, any>
 }
 
-export interface AgentProfile {
+export interface ExecutionStep {
   id: string
-  name: string
-  description: string
-  systemPrompt?: string
-  model?: string
-  provider?: string
-  color: string
-  avatar?: string
-  isBuiltin?: boolean
+  label: string
+}
+
+export interface ExecutionStatus {
+  steps: ExecutionStep[]
+  currentStepIndex: number
+  isSkipped: boolean
+  isComplete: boolean
+}
+
+export interface AgentProfile extends Agent {
   isMain?: boolean
+  capabilities?: string[]
+  isActive?: boolean
 }
 
 export interface MainAgentConfig {
@@ -243,6 +250,8 @@ export interface TTSConfig {
   model?: string
   voice?: string
   speed?: number
+  baseUrl?: string
+  apiKeySet?: boolean
 }
 
 export interface STTConfig {
@@ -251,6 +260,8 @@ export interface STTConfig {
   language?: string
   autoSend?: boolean
   autoSendDelay?: number
+  baseUrl?: string
+  apiKeySet?: boolean
 }
 
 export interface GroupInfo {
@@ -266,13 +277,23 @@ export interface GroupInfo {
   updatedAt: string
 }
 
+export interface MessageCollaboration {
+  sessionId?: string
+  taskId?: string
+  taskDescription?: string
+  type?: string
+}
+
 export interface GroupMessage {
   id: string
   groupId: string
   senderId: string
+  senderName?: string
   senderType: string
   content: string
   timestamp: string
+  role?: string
+  collaboration?: MessageCollaboration
 }
 
 export interface AgentRoleDefinition {
@@ -286,18 +307,20 @@ export interface AgentRoleDefinition {
   color: string
 }
 
-export interface CollaborationPhase {
-  value: string
-}
+export type CollaborationPhase = 'analyzing' | 'dispatching' | 'executing' | 'synthesizing' | 'completed' | 'failed'
 
 export interface CollaborationSubTask {
   taskId: string
   roleId: string
-  agentId?: string
+  agentId?: string | null
   description: string
+  inputContent?: string
+  dependsOn?: string[]
   status: string
   result?: string
   error?: string
+  startedAt?: string
+  completedAt?: string
 }
 
 export interface CollaborationEvent {
@@ -312,6 +335,110 @@ export interface ProviderLogo {
   initials?: string
   svgIcon?: string
   logo?: string
+}
+
+export interface CommandRecord {
+  id: string
+  command: string
+  description: string
+  status: 'success' | 'failed' | 'running'
+  exit_code: number | null
+  executed_by: string
+  started_at: string
+  finished_at: string | null
+  duration_ms: number | null
+  output: string | null
+  error: string | null
+  rollback_command: string | null
+}
+
+export interface SystemLogEntry {
+  id: string
+  timestamp: string
+  level: 'info' | 'warn' | 'error' | 'success'
+  source: 'frontend' | 'backend'
+  message: string
+  module: string | null
+  extra: Record<string, unknown> | null
+}
+
+export interface LogUploadRequest {
+  logs: SystemLogEntry[]
+  uploaded_by: string
+  session_id: string | null
+}
+
+export interface LogUploadResponse {
+  upload_id: string
+  received_count: number
+  status: string
+}
+
+export interface PlatformAdapterType {
+  name: string
+  displayName: string
+  description: string
+  icon: string
+  category: string
+  configTemplate: Record<string, any>
+  configMetadata: Record<string, any>
+  supportStreaming: boolean
+  supportProactive: boolean
+}
+
+export interface PlatformInstance {
+  id: string
+  adapterType: string
+  name: string
+  config: Record<string, any>
+  status: 'pending' | 'running' | 'stopped' | 'error'
+  enable: boolean
+  messageCount: number
+  lastSync: string
+  errorMessage: string
+  icon: string
+  category: string
+  displayName: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PlatformConversation {
+  id: string
+  platformInstanceId: string
+  platformName: string
+  title: string
+  preview: string
+  time: string
+  messageCount: number
+}
+
+export interface PlatformStats {
+  totalPlatforms: number
+  activeConnections: number
+  totalMessages: number
+}
+
+export interface PlatformLogEntry {
+  id: string
+  timestamp: string
+  level: 'info' | 'success' | 'warning' | 'error'
+  event: string
+  message: string
+  instanceId: string
+  adapterType: string
+  details: Record<string, any>
+}
+
+export interface PlatformLogResult {
+  entries: PlatformLogEntry[]
+  total: number
+}
+
+export interface PlatformLogSummary {
+  totalEntries: number
+  totalInstances: number
+  byLevel: Record<string, number>
 }
 
 export {}

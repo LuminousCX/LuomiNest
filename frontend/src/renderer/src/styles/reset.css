@@ -1,0 +1,43 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--workspace-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+html.desktop-pet, html.desktop-pet body {
+  background: transparent !important;
+  min-width: unset !important;
+  min-height: unset !important;
+}
+
+html.desktop-pet #app {
+  min-width: unset !important;
+  min-height: unset !important;
+  background: transparent !important;
+}
+
+#app {
+  height: 100%;
+  min-width: 960px;
+  min-height: 640px;
+}
+
+@media (max-width: 1024px) {
+  html { font-size: 13px; }
+}
+
+@media (max-width: 960px) {
+  html { font-size: 12px; }
+}

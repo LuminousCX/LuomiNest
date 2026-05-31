@@ -93,7 +93,7 @@ export interface MarketplaceFilter {
   installStatus?: InstallStatus | 'all'
 }
 
-export interface SearchResult {
+export interface MarketplaceSearchResult {
   items: MarketplaceItem[]
   total: number
   query: string

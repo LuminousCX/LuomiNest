@@ -94,6 +94,7 @@ declare global {
       getLicense: () => Promise<string>
       getDefaultPath: () => Promise<string>
       browseDirectory: (defaultPath?: string) => Promise<string | null>
+      getDiskSpace: (path: string) => Promise<{ free: number; total: number }>
       validatePath: (targetPath: string) => Promise<{ valid: boolean; errors: string[] }>
       startInstallation: (options: {
         installPath: string
@@ -111,7 +112,7 @@ declare global {
   }
 }
 
-const version = '0.2.0'
+const version = '0.5.0'
 
 const currentStep = ref(0)
 

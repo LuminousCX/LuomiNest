@@ -1,4 +1,4 @@
-﻿﻿<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -513,7 +513,7 @@ const handleCreateAgent = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--overlay-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   padding: 24px;
@@ -856,7 +856,7 @@ const handleCreateAgent = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 16px var(--overlay-subtle);
 }
 
 .preview-avatar-emoji {
@@ -991,7 +991,7 @@ const handleCreateAgent = async () => {
   height: 20px;
   border-radius: 50%;
   background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 3px var(--overlay-subtle);
   transition: all var(--transition-normal);
 }
 
@@ -1059,7 +1059,7 @@ const handleCreateAgent = async () => {
   border-radius: 50%;
   background: var(--lumi-primary);
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(20, 126, 188, 0.3);
+  box-shadow: 0 2px 6px var(--lumi-primary-border);
   transition: transform var(--transition-fast);
 }
 
@@ -1114,7 +1114,7 @@ const handleCreateAgent = async () => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 16px var(--overlay-subtle);
 }
 
 .confirm-avatar-emoji {
@@ -1240,7 +1240,7 @@ const handleCreateAgent = async () => {
 .next-btn:hover:not(.disabled) {
   background: var(--lumi-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(20, 126, 188, 0.25);
+  box-shadow: 0 4px 12px var(--lumi-primary-border);
 }
 
 .footer-btn.disabled {

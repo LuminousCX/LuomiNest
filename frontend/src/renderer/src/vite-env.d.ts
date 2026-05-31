@@ -127,6 +127,9 @@ export interface ElectronApi {
     deleteModel: (modelName: string) => Promise<{ success: boolean; error?: string }>
     getImportedModelsPath: () => Promise<string>
   }
+  browserSearch: {
+    search: (query: string) => Promise<any[]>
+  }
   desktopPet: {
     open: (modelInfo?: PetModelInfo) => Promise<{ success: boolean }>
     close: () => Promise<{ success: boolean }>

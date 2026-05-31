@@ -69,8 +69,8 @@ function handleExecute() {
 <style scoped>
 .dev-panel {
   height: 220px;
-  background: #1c1917;
-  border-top: 1px solid #292524;
+  background: var(--text);
+  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
 }
@@ -80,7 +80,7 @@ function handleExecute() {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  border-bottom: 1px solid #292524;
+  border-bottom: 1px solid var(--border);
 }
 
 .dev-tabs {
@@ -93,19 +93,19 @@ function handleExecute() {
   border-radius: 4px;
   background: transparent;
   border: none;
-  color: #a8a29e;
+  color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .dev-tab:hover {
-  color: #d6d3d1;
+  color: var(--text-secondary);
 }
 
 .dev-tab.active {
-  background: #292524;
-  color: #fafaf9;
+  background: var(--border);
+  color: var(--text-inverse);
 }
 
 .dev-close {
@@ -117,14 +117,14 @@ function handleExecute() {
   border-radius: 4px;
   background: transparent;
   border: none;
-  color: #78716c;
+  color: var(--text-muted);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .dev-close:hover {
-  background: #292524;
-  color: #d6d3d1;
+  background: var(--border);
+  color: var(--text-secondary);
 }
 
 .dev-content {
@@ -138,7 +138,7 @@ function handleExecute() {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #292524;
+  background: var(--border);
 }
 
 .dev-input {
@@ -146,7 +146,7 @@ function handleExecute() {
   padding: 12px;
   background: transparent;
   border: none;
-  color: #fafaf9;
+  color: var(--text-inverse);
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;
   resize: none;
@@ -154,7 +154,7 @@ function handleExecute() {
 }
 
 .dev-input::placeholder {
-  color: #57534e;
+  color: var(--text-muted);
 }
 
 .dev-execute {
@@ -165,16 +165,16 @@ function handleExecute() {
   padding: 8px 16px;
   margin: 8px;
   border-radius: 6px;
-  background: #3b82f6;
+  background: var(--lumi-info);
   border: none;
-  color: #ffffff;
+  color: var(--text-inverse);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .dev-execute:hover:not(:disabled) {
-  background: #2563eb;
+  background: var(--lumi-primary);
 }
 
 .dev-execute:disabled {
@@ -184,14 +184,14 @@ function handleExecute() {
 
 .dev-output {
   flex: 1;
-  background: #292524;
+  background: var(--border);
   padding: 12px;
   overflow: auto;
 }
 
 .dev-output pre {
   margin: 0;
-  color: #a8a29e;
+  color: var(--text-muted);
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;
   white-space: pre-wrap;
@@ -199,7 +199,7 @@ function handleExecute() {
 }
 
 .output-placeholder {
-  color: #57534e;
+  color: var(--text-muted);
   font-size: 12px;
 }
 </style>

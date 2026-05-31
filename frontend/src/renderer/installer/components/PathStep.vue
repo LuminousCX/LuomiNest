@@ -71,7 +71,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   defaultPath: string
   installOptions: { installPath: string; [key: string]: unknown }
 }>()
@@ -86,7 +86,7 @@ const validationErrors = ref<string[]>([])
 const validated = ref(false)
 
 const validatePath = async () => {
-  const path = (installOptions as unknown as { installPath: string }).installPath
+  const path = props.installOptions.installPath
   if (!path) {
     validationErrors.value = []
     return
@@ -104,10 +104,10 @@ const validatePath = async () => {
 const browseDirectory = async () => {
   try {
     const result = await window.installerAPI.browseDirectory(
-      (installOptions as unknown as { installPath: string }).installPath
+      props.installOptions.installPath
     )
     if (result) {
-      ;(installOptions as unknown as { installPath: string }).installPath = result
+      props.installOptions.installPath = result
       await validatePath()
     }
   } catch {

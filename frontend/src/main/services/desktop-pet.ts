@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, Menu, screen, IpcMainInvokeEvent, app } from 'electron'
 import { join } from 'path'
 import { platform } from 'os'
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { PATHS } from './paths'
 
 const isDev = !app.isPackaged
@@ -48,7 +48,6 @@ export const getDesktopPetWindow = (): BrowserWindow | null => desktopPetWindow
 export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: ImportedModelRecord): void => {
   if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
     desktopPetWindow.show()
-    desktopPetWindow.setFocusable(true)
     desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
     if (modelInfo) {
       setTimeout(() => {
@@ -61,20 +60,27 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   const display = screen.getPrimaryDisplay()
   const { width: screenWidth, height: screenHeight } = display.workAreaSize
 
-  desktopPetWindow = new BrowserWindow({
-    width: screenWidth,
-    height: screenHeight,
-    x: 0,
-    y: 0,
-    transparent: true,
+  const petWidth = 420
+  const petHeight = 560
+  const petX = screenWidth - petWidth - 60
+  const petY = screenHeight - petHeight - 60
+
+  const windowConfig: Electron.BrowserWindowConstructorOptions = {
+    width: petWidth,
+    height: petHeight,
+    x: petX,
+    y: petY,
+    show: false,
     frame: false,
-    resizable: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    hasShadow: false,
-    show: false,
-    focusable: false,
-    backgroundColor: '#00000000',
+    minWidth: 200,
+    minHeight: 280,
+    maxWidth: 800,
+    maxHeight: 1000,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -83,10 +89,22 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
       backgroundThrottling: false,
       partition: 'persist:desktop-pet'
     }
-  })
+  }
 
-  desktopPetWindow.setVisibleOnAllWorkspaces(true)
+  if (isMac) {
+    windowConfig.titleBarStyle = 'hidden'
+    ;(windowConfig as any).type = 'panel'
+  }
+
+  desktopPetWindow = new BrowserWindow(windowConfig)
+
+  desktopPetWindow.setVisibleOnAllWorkspaces(true, { makeKey: false } as Electron.VisibleOnAllWorkspacesOptions)
   desktopPetWindow.setAlwaysOnTop(true, 'screen-saver')
+  desktopPetWindow.setFullScreenable(false)
+
+  if (isMac) {
+    desktopPetWindow.setWindowButtonVisibility(false)
+  }
 
   const CSP_PET_WINDOW = isDev ? CSP_DEV : CSP_PROD
   desktopPetWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -161,11 +179,27 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   ipcMain.on('desktop-pet:set-ignore-mouse-events', handleSetIgnoreMouseEvents)
   ipcMain.on('desktop-pet:show-context-menu', handleShowContextMenu)
 
-  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    desktopPetWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '#/desktop-pet')
-  } else {
-    desktopPetWindow.loadFile(join(__dirname, '../renderer/index.html'), { hash: '/desktop-pet' })
+  const loadPetWindow = async () => {
+    if (isDev && process.env['ELECTRON_RENDERER_URL']) {
+      const baseUrl = process.env['ELECTRON_RENDERER_URL']
+      const url = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+      try {
+        await desktopPetWindow!.loadURL(`${url}/#/desktop-pet`)
+      } catch (err: unknown) {
+        const error = err instanceof Error ? err : new Error(String(err))
+        if ('code' in error && (error as any).code === 'ERR_ABORTED') {
+          console.warn('[DesktopPet] Navigation aborted, hash route may have loaded correctly')
+        } else {
+          console.error('[DesktopPet] Failed to load URL:', error)
+        }
+      }
+    } else {
+      const indexPath = join(__dirname, '../renderer/index.html')
+      await desktopPetWindow!.loadFile(indexPath, { hash: '/desktop-pet' })
+    }
   }
+
+  loadPetWindow()
 
   desktopPetWindow.on('closed', () => {
     ipcMain.removeListener('desktop-pet:set-ignore-mouse-events', handleSetIgnoreMouseEvents)
@@ -218,7 +252,7 @@ export function registerDesktopPetIpc(mainWindow: BrowserWindow | null): void {
 
   ipcMain.handle('desktop-pet:open', async (event: IpcMainInvokeEvent, modelInfo?: ImportedModelRecord) => {
     if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
-    createDesktopPet(null, modelInfo)
+    createDesktopPet(mainWindow, modelInfo)
     return { success: true }
   })
 

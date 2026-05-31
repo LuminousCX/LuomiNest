@@ -22,25 +22,77 @@ const routes: RouteRecordRaw[] = [
     path: '/workspace',
     name: 'Workspace',
     component: () => import('../views/WorkspaceView.vue'),
-    meta: { title: '工作台 - LuomiNest', icon: 'MessageCircle' }
+    meta: { title: '对话 - LuomiNest', icon: 'MessageCircle' }
   },
   {
-    path: '/workflow',
-    name: 'Workflow',
-    component: () => import('../views/WorkflowView.vue'),
-    meta: { title: '工作流画布 - LuomiNest', icon: 'GitBranch' }
+    path: '/social',
+    name: 'Social',
+    component: () => import('../views/SocialView.vue'),
+    meta: { title: '群组Agent - LuomiNest', icon: 'Users' }
   },
   {
-    path: '/inspire',
-    name: 'Inspire',
-    component: () => import('../views/InspireView.vue'),
-    meta: { title: '灵感 - LuomiNest', icon: 'Lightbulb' }
+    path: '/chat/platform',
+    name: 'ChatPlatform',
+    component: () => import('../views/chat/PlatformView.vue'),
+    meta: { title: '平台接入 - LuomiNest', icon: 'Globe' }
+  },
+  {
+    path: '/chat/devices',
+    name: 'ChatDevices',
+    component: () => import('../views/chat/DevicesView.vue'),
+    meta: { title: '设备与群组 - LuomiNest', icon: 'Wifi' }
+  },
+  {
+    path: '/desktop-pet',
+    name: 'DesktopPet',
+    component: () => import('../views/DesktopPetView.vue'),
+    meta: { title: 'LuomiNest Desktop Pet' }
+  },
+  {
+    path: '/settings/ai-model',
+    name: 'SettingsAIModel',
+    component: () => import('../views/settings/AIModelSettings.vue'),
+    meta: { title: '模型配置 - LuomiNest', icon: 'Cpu' }
+  },
+  {
+    path: '/avatar',
+    name: 'Avatar',
+    component: () => import('../views/AvatarView.vue'),
+    meta: { title: '皮套工坊 - LuomiNest', icon: 'Palette' }
+  },
+  {
+    path: '/panel/usage',
+    redirect: '/panel/data-stats'
+  },
+  {
+    path: '/panel/data-stats',
+    name: 'PanelDataStats',
+    component: () => import('../views/panel/DataStatsView.vue'),
+    meta: { title: '数据统计 - LuomiNest', icon: 'BarChart3' }
+  },
+  {
+    path: '/panel/console',
+    name: 'PanelConsole',
+    component: () => import('../views/panel/ConsoleView.vue'),
+    meta: { title: '控制台 - LuomiNest', icon: 'Terminal' }
   },
   {
     path: '/tasks',
     name: 'Tasks',
     component: () => import('../views/TasksView.vue'),
-    meta: { title: '任务 - LuomiNest', icon: 'CheckSquare' }
+    meta: { title: '计划视图 - LuomiNest', icon: 'CheckSquare' }
+  },
+  {
+    path: '/plan/smart-home',
+    name: 'PlanSmartHome',
+    component: () => import('../views/plan/SmartHomeView.vue'),
+    meta: { title: '智能家居 - LuomiNest', icon: 'Home' }
+  },
+  {
+    path: '/workflow',
+    name: 'Workflow',
+    component: () => import('../views/WorkflowView.vue'),
+    meta: { title: '工作流 - LuomiNest', icon: 'GitBranch' }
   },
   {
     path: '/browser',
@@ -55,35 +107,16 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '设置 - LuomiNest', icon: 'Settings' }
   },
   {
-    path: '/settings/ai-model',
-    name: 'SettingsAIModel',
-    component: () => import('../views/settings/AIModelSettings.vue'),
-    meta: { title: 'AI 模型设置 - LuomiNest', icon: 'Cpu' }
-  },
-  {
     path: '/settings/:section',
     name: 'SettingsDetail',
     component: () => import('../views/settings/SettingsDetailView.vue'),
     meta: { title: '设置 - LuomiNest', icon: 'Settings' }
   },
   {
-    path: '/avatar',
-    name: 'Avatar',
-    component: () => import('../views/AvatarView.vue'),
-    meta: { title: '皮套工坊 - LuomiNest', icon: 'Palette' }
-  },
-  {
     path: '/memory',
     name: 'Memory',
     component: () => import('../views/MemoryView.vue'),
     meta: { title: '记忆中枢 - LuomiNest', icon: 'Brain' }
-  },
-
-  {
-    path: '/social',
-    name: 'Social',
-    component: () => import('../views/SocialView.vue'),
-    meta: { title: 'AI社交 - LuomiNest', icon: 'Users' }
   },
   {
     path: '/market',
@@ -106,16 +139,16 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '市场详情 - LuomiNest', icon: 'Package' }
   },
   {
-    path: '/desktop-pet',
-    name: 'DesktopPet',
-    component: () => import('../views/DesktopPetView.vue'),
-    meta: { title: 'LuomiNest Desktop Pet', icon: 'Palette' }
-  },
-  {
     path: '/agent/create',
     name: 'AgentCreate',
     component: () => import('../views/AgentCreateView.vue'),
     meta: { title: '创建智能体 - LuomiNest', icon: 'Sparkles' }
+  },
+  {
+    path: '/inspire',
+    name: 'Inspire',
+    component: () => import('../views/InspireView.vue'),
+    meta: { title: '灵感 - LuomiNest', icon: 'Lightbulb' }
   }
 ]
 

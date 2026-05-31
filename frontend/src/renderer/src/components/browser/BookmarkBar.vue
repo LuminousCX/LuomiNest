@@ -35,7 +35,7 @@ const emit = defineEmits<{
 <style scoped>
 .bookmark-bar {
   height: 34px;
-  background: #fafaf9;
+  background: var(--bg);
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -52,7 +52,7 @@ const emit = defineEmits<{
   left: 12px;
   right: 12px;
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, #e7e5e4 15%, #e7e5e4 85%, transparent 100%);
+  background: var(--divider-soft);
 }
 
 .bookmark-bar::-webkit-scrollbar {
@@ -73,17 +73,17 @@ const emit = defineEmits<{
 }
 
 .bookmark-item:hover {
-  background: #e7e5e4;
+  background: var(--surface-hover);
 }
 
 .bm-icon {
-  color: #78716c;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .bm-name {
   font-size: 12px;
-  color: #57534e;
+  color: var(--text-secondary);
 }
 
 .bookmark-more {
@@ -96,12 +96,12 @@ const emit = defineEmits<{
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #a8a29e;
+  color: var(--text-muted);
   transition: all 0.2s ease-in-out;
 }
 
 .bookmark-more:hover {
-  background: #e7e5e4;
-  color: #78716c;
+  background: var(--surface-hover);
+  color: var(--text-muted);
 }
 </style>

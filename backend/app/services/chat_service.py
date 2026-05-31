@@ -10,6 +10,7 @@ from app.infrastructure.database.conversation_store import conversation_store
 from app.schemas.chat import ChatStreamChunk
 from app.services.context_service import ContextService
 from app.services.suggestion_service import SuggestionService
+from app.services.usage_tracker import usage_tracker
 
 from fastapi.responses import StreamingResponse
 
@@ -103,6 +104,8 @@ class ChatService:
         temperature: float | None = None,
         max_tokens: int | None = None,
         top_p: float | None = None,
+        agent_id: str | None = None,
+        conv_id: str | None = None,
     ) -> None:
         try:
             async with self._llm_semaphore:
@@ -118,8 +121,31 @@ class ChatService:
                 state["content"] = raw.get("content", "")
                 if raw.get("reasoning"):
                     state["reasoning"] = raw["reasoning"]
+                if raw.get("usage"):
+                    try:
+                        usage_tracker.record_usage(
+                            provider=provider, model=model,
+                            usage=raw["usage"], agent_id=agent_id, conv_id=conv_id,
+                        )
+                    except Exception as ut_err:
+                        logger.warning(f"[ChatService] Usage tracking failed: {ut_err}")
+            elif isinstance(raw, LLMResponse) and raw.usage:
+                try:
+                    usage_tracker.record_usage(
+                        provider=provider, model=model,
+                        usage=raw.usage, agent_id=agent_id, conv_id=conv_id,
+                    )
+                except Exception as ut_err:
+                    logger.warning(f"[ChatService] Usage tracking failed: {ut_err}")
             else:
                 state["content"] = raw
+                try:
+                    usage_tracker.record_usage(
+                        provider=provider, model=model,
+                        agent_id=agent_id, conv_id=conv_id,
+                    )
+                except Exception as ut_err:
+                    logger.warning(f"[ChatService] Usage tracking failed: {ut_err}")
         except Exception as e:
             logger.error(f"[API] Non-stream error: {e}", exc_info=True)
             state["aborted"] = True
@@ -176,6 +202,7 @@ class ChatService:
 
         async def generator():
             suggested_questions: list[str] = []
+            stream_usage: dict | None = None
             try:
                 async with self._llm_semaphore:
                     async for chunk in llm_adapter.chat_stream(
@@ -188,6 +215,9 @@ class ChatService:
                     ):
                         content = chunk.data.get("content", "")
                         rc = chunk.data.get("reasoning", "")
+                        if chunk.type == "usage":
+                            stream_usage = chunk.data.get("usage")
+                            continue
                         if content:
                             state["content"] += content
                         if rc:
@@ -200,6 +230,26 @@ class ChatService:
                 yield self._sse(chat_id, "[Error] An internal error occurred", provider, model)
 
             finally:
+                try:
+                    if stream_usage:
+                        try:
+                            usage_tracker.record_usage(
+                                provider=provider, model=model,
+                                usage=stream_usage, agent_id=agent_id, conv_id=conv_id,
+                                is_stream=True,
+                            )
+                        except Exception as ut_err:
+                            logger.warning(f"[STREAM] Usage tracking failed: {ut_err}")
+                    else:
+                        try:
+                            usage_tracker.record_usage(
+                                provider=provider, model=model,
+                                agent_id=agent_id, conv_id=conv_id, is_stream=True,
+                            )
+                        except Exception as ut_err:
+                            logger.warning(f"[STREAM] Usage tracking failed: {ut_err}")
+                except Exception as finalize_err:
+                    logger.warning(f"[STREAM] Finalization pre-persist block failed: {finalize_err}")
                 try:
                     if not state["aborted"] and state["content"]:
                         try:

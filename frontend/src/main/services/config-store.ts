@@ -30,6 +30,13 @@ interface AppConfig {
   sidebarCollapsed: boolean
   lastActiveRoute: string
   cacheMaxSizeMB: number
+  telemetry: {
+    enabled: boolean
+  }
+  autoLaunch: boolean
+  installPath: string
+  installed: boolean
+  installDate: string
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -57,6 +64,13 @@ const DEFAULT_CONFIG: AppConfig = {
   sidebarCollapsed: false,
   lastActiveRoute: '/welcome',
   cacheMaxSizeMB: 5120,
+  telemetry: {
+    enabled: false,
+  },
+  autoLaunch: false,
+  installPath: '',
+  installed: false,
+  installDate: '',
 }
 
 let cachedConfig: AppConfig | null = null

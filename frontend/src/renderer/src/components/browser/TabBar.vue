@@ -59,7 +59,7 @@ function getTabTooltip(tab: Tab): string {
 <style scoped>
 .tab-bar {
   height: 38px;
-  background: #f5f5f4;
+  background: var(--bg-secondary);
   display: flex;
   align-items: center;
   padding: 0 8px;
@@ -73,7 +73,7 @@ function getTabTooltip(tab: Tab): string {
   left: 8px;
   right: 8px;
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, #e7e5e4 15%, #e7e5e4 85%, transparent 100%);
+  background: var(--divider-soft);
 }
 
 .tab-list {
@@ -96,18 +96,18 @@ function getTabTooltip(tab: Tab): string {
   min-width: 120px;
   max-width: 200px;
   height: 30px;
-  background: #e7e5e4;
+  background: var(--border-light);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background 0.15s ease-in-out, transform 0.15s ease-in-out;
 }
 
 .tab-item:hover {
-  background: #d6d3d1;
+  background: var(--surface-hover);
 }
 
 .tab-item.active {
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .tab-item.sleeping {
@@ -119,7 +119,7 @@ function getTabTooltip(tab: Tab): string {
 }
 
 .tab-item.error .tab-title {
-  color: #dc2626;
+  color: var(--lumi-danger);
 }
 
 .tab-favicon {
@@ -131,12 +131,12 @@ function getTabTooltip(tab: Tab): string {
 
 .tab-icon {
   flex-shrink: 0;
-  color: #78716c;
+  color: var(--text-muted);
 }
 
 .tab-sleep-icon {
   flex-shrink: 0;
-  color: #a8a29e;
+  color: var(--text-muted);
   animation: pulse-sleep 2s ease-in-out infinite;
 }
 
@@ -148,7 +148,7 @@ function getTabTooltip(tab: Tab): string {
 .tab-spinner {
   flex-shrink: 0;
   animation: spin 1s linear infinite;
-  color: #78716c;
+  color: var(--text-muted);
 }
 
 @keyframes spin {
@@ -162,11 +162,11 @@ function getTabTooltip(tab: Tab): string {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  color: #44403c;
+  color: var(--text-secondary);
 }
 
 .tab-title-sleeping {
-  color: #a8a29e;
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -180,14 +180,14 @@ function getTabTooltip(tab: Tab): string {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #78716c;
+  color: var(--text-muted);
   flex-shrink: 0;
   transition: all 0.15s ease-in-out;
 }
 
 .tab-close:hover {
-  background: rgba(0, 0, 0, 0.1);
-  color: #44403c;
+  background: var(--overlay-subtle);
+  color: var(--text-secondary);
 }
 
 .tab-add {
@@ -200,13 +200,13 @@ function getTabTooltip(tab: Tab): string {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #78716c;
+  color: var(--text-muted);
   font-size: 16px;
   transition: all 0.2s ease-in-out;
 }
 
 .tab-add:hover {
-  background: #d6d3d1;
-  color: #44403c;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
 }
 </style>

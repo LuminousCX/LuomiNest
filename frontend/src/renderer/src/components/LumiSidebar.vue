@@ -3,28 +3,34 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   MessageCircle,
-  GitBranch,
-  Lightbulb,
-  CheckSquare,
+  MessageSquare,
+  Users,
   Globe,
+  Wifi,
+  Settings2,
+  Cpu,
+  Palette,
+  BarChart3,
+  Terminal,
+  CheckSquare,
+  CalendarDays,
+  Home,
+  GitBranch,
   Search,
   Settings,
-  Users,
-  Palette,
-  Brain,
-  Package,
   Trash2,
   Check,
-  MessageSquare,
   Clock,
   Loader2,
   Plus,
   Undo2,
   ArrowLeft,
   SquareCheck,
-  X,
   AlertTriangle,
-  LayoutDashboard,
+  ChevronRight,
+  Bell,
+  Sparkles,
+  Package,
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
@@ -35,6 +41,110 @@ const route = useRoute()
 const router = useRouter()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
+
+const expandedGroups = ref<Set<string>>(new Set(['chat']))
+
+interface NavChild {
+  id: string
+  label: string
+  icon: any
+  badge?: string
+}
+
+interface NavGroup {
+  id: string
+  label: string
+  icon: any
+  children: NavChild[]
+}
+
+interface NavItem {
+  id: string
+  label: string
+  icon: any
+  route: string
+  badge?: string
+}
+
+const navGroups: NavGroup[] = [
+  {
+    id: 'chat',
+    label: '聊天',
+    icon: MessageCircle,
+    children: [
+      { id: '/workspace', label: '对话', icon: MessageSquare },
+      { id: '/social', label: '群组Agent', icon: Users },
+      { id: '/chat/platform', label: '平台接入', icon: Globe },
+      { id: '/chat/devices', label: '设备与群组', icon: Wifi },
+    ],
+  },
+  {
+    id: 'panel',
+    label: '控制面板',
+    icon: Settings2,
+    children: [
+      { id: '/settings/ai-model', label: '模型配置', icon: Cpu },
+      { id: '/avatar', label: '皮套工坊', icon: Palette },
+      { id: '/panel/data-stats', label: '数据统计', icon: BarChart3 },
+      { id: '/market', label: '扩展市场', icon: Package },
+      { id: '/panel/console', label: '控制台', icon: Terminal },
+    ],
+  },
+  {
+    id: 'plan',
+    label: '计划任务',
+    icon: CheckSquare,
+    children: [
+      { id: '/tasks', label: '计划视图', icon: CalendarDays },
+      { id: '/plan/smart-home', label: '智能家居', icon: Home },
+      { id: '/workflow', label: '工作流', icon: GitBranch },
+    ],
+  },
+]
+
+const navItems: NavItem[] = [
+  { id: 'browser', label: '浏览器', icon: Globe, route: '/browser' },
+  { id: 'settings', label: '设置', icon: Settings, route: '/settings' },
+]
+
+const activeGroup = computed(() => {
+  for (const group of navGroups) {
+    for (const child of group.children) {
+      if (route.path === child.id || route.path.startsWith(child.id + '/')) {
+        return group.id
+      }
+    }
+  }
+  return null
+})
+
+const isItemActive = (item: NavItem) => {
+  return route.path === item.route || route.path.startsWith(item.route + '/')
+}
+
+const isChildActive = (childId: string) => {
+  return route.path === childId || route.path.startsWith(childId + '/')
+}
+
+const toggleGroup = (groupId: string) => {
+  const next = new Set(expandedGroups.value)
+  if (next.has(groupId)) {
+    next.delete(groupId)
+  } else {
+    next.add(groupId)
+  }
+  expandedGroups.value = next
+}
+
+watch(activeGroup, (groupId) => {
+  if (groupId && !expandedGroups.value.has(groupId)) {
+    expandedGroups.value = new Set([...expandedGroups.value, groupId])
+  }
+}, { immediate: true })
+
+const handleNavigate = (path: string) => {
+  router.push(path)
+}
 
 const searchQuery = ref('')
 const searchResults = ref<ConversationSearchResult[]>([])
@@ -62,19 +172,6 @@ watch(searchQuery, (q) => {
 })
 
 const isSearchMode = computed(() => searchQuery.value.trim().length > 0)
-
-const navItems = [
-  { id: '/dashboard', label: '控制台', icon: LayoutDashboard },
-  { id: '/workspace', label: '对话', icon: MessageCircle },
-  { id: '/social', label: '社交', icon: Users },
-  { id: '/workflow', label: '工作流', icon: GitBranch },
-  { id: '/inspire', label: '灵感', icon: Lightbulb },
-  { id: '/tasks', label: '任务', icon: CheckSquare },
-  { id: '/avatar', label: '皮套', icon: Palette },
-  { id: '/memory', label: '记忆', icon: Brain },
-  { id: '/market', label: '扩展', icon: Package },
-  { id: '/browser', label: '浏览器', icon: Globe }
-]
 
 interface TimeGroup {
   label: string
@@ -350,6 +447,10 @@ const formatDeleteTime = (dateStr: string) => {
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
+const showHistoryPanel = computed(() => {
+  return route.path === '/workspace' || route.path === '/social'
+})
+
 onMounted(async () => {
   await agentStore.fetchAgents()
   if (agentStore.activeAgent?.id) {
@@ -360,215 +461,289 @@ onMounted(async () => {
 
 <template>
   <div class="lumi-sidebar">
-    <div class="sidebar-icon-rail">
-      <div class="rail-top">
-        <button class="avatar-btn" aria-label="LuminousChenXi 账户">
-          <div class="avatar-ring">
-            <LumiBrandStar :size="20" :animated="false" />
+    <div class="sidebar-nav-panel">
+      <div class="nav-header">
+        <div class="brand">
+          <div class="brand-avatar">
+            <LumiBrandStar :size="22" :animated="false" />
           </div>
-        </button>
-        <nav class="icon-nav">
-          <button
-            v-for="item in navItems"
-            :key="item.id"
-            :class="['icon-btn', { active: route.path === item.id || route.path.startsWith(item.id + '/') }]"
-            :aria-label="item.label"
-            @click="router.push(item.id)"
-          >
-            <component :is="item.icon" :size="20" />
+          <div class="brand-info">
+            <span class="brand-name">LuomiNest</span>
+            <span class="brand-tag">LuminousCX</span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="header-action-btn" aria-label="消息公告">
+            <Bell :size="16" />
+            <span class="header-action-dot"></span>
           </button>
-        </nav>
+          <button class="header-action-btn" aria-label="新建" @click="showCreateDialog = true">
+            <Plus :size="16" />
+          </button>
+        </div>
       </div>
-      <div class="rail-bottom">
-        <button class="icon-btn" aria-label="设置" @click="router.push('/settings')">
-          <Settings :size="20" />
+
+      <div class="nav-search">
+        <Search :size="14" class="nav-search-icon" />
+        <input
+          type="text"
+          placeholder="搜索..."
+          class="nav-search-input"
+          readonly
+          @click="router.push('/workspace')"
+        />
+        <Sparkles :size="14" class="nav-search-sparkle" />
+      </div>
+
+      <div class="nav-content">
+        <div class="nav-section">
+          <div class="section-label">导航</div>
+
+          <div v-for="group in navGroups" :key="group.id" class="nav-group">
+            <button
+              :class="['group-header', { active: activeGroup === group.id, expanded: expandedGroups.has(group.id) }]"
+              @click="toggleGroup(group.id)"
+            >
+              <div class="group-header-left">
+                <component :is="group.icon" :size="17" class="group-icon" />
+                <span class="group-label">{{ group.label }}</span>
+              </div>
+              <ChevronRight
+                :size="14"
+                :class="['group-chevron', { rotated: expandedGroups.has(group.id) }]"
+              />
+            </button>
+
+            <Transition name="tree-expand">
+              <div v-if="expandedGroups.has(group.id)" class="group-children">
+                <div
+                  v-for="(child, idx) in group.children"
+                  :key="child.id"
+                  :class="['tree-child', { active: isChildActive(child.id), last: idx === group.children.length - 1 }]"
+                  @click="handleNavigate(child.id)"
+                >
+                  <div class="tree-line">
+                    <div class="tree-branch"></div>
+                    <div class="tree-node"></div>
+                  </div>
+                  <component :is="child.icon" :size="14" class="child-icon" />
+                  <span class="child-label">{{ child.label }}</span>
+                </div>
+              </div>
+            </Transition>
+          </div>
+        </div>
+
+        <div class="nav-section">
+          <div class="section-label">工具</div>
+          <div class="nav-items">
+            <button
+              v-for="item in navItems"
+              :key="item.id"
+              :class="['nav-item', { active: isItemActive(item) }]"
+              @click="router.push(item.route)"
+            >
+              <component :is="item.icon" :size="17" class="nav-item-icon" />
+              <span class="nav-item-label">{{ item.label }}</span>
+              <span v-if="item.badge" class="nav-item-badge">{{ item.badge }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-footer">
+        <button class="footer-btn" @click="router.push('/settings')">
+          <Settings :size="15" />
+          <span>设置</span>
         </button>
       </div>
     </div>
 
-    <div v-if="route.path === '/workspace'" class="sidebar-history-panel">
-      <template v-if="!showTrash">
-        <div class="panel-header">
-          <div class="search-box">
-            <Search :size="15" class="search-icon" />
-            <input v-model="searchQuery" type="text" placeholder="搜索历史记录..." class="search-input" />
+    <Transition name="history-slide">
+      <div v-if="showHistoryPanel" class="sidebar-history-panel">
+        <template v-if="!showTrash">
+          <div class="panel-header">
+            <div class="search-box">
+              <Search :size="15" class="search-icon" />
+              <input v-model="searchQuery" type="text" placeholder="搜索历史记录..." class="search-input" />
+            </div>
+            <div class="panel-header-actions">
+              <button class="new-conv-btn" @click="handleNewConversation">
+                <Plus :size="15" />
+                <span>创建新对话</span>
+              </button>
+              <button
+                :class="['batch-toggle-btn', { active: batchMode }]"
+                title="批量操作"
+                @click="toggleBatchMode"
+              >
+                <SquareCheck :size="15" />
+              </button>
+            </div>
           </div>
-          <div class="panel-header-actions">
-            <button class="new-conv-btn" @click="handleNewConversation">
-              <Plus :size="15" />
-              <span>创建新对话</span>
-            </button>
+
+          <div v-if="batchMode" class="batch-toolbar">
+            <button class="batch-action-btn" @click="selectAll">全选</button>
+            <span class="batch-count">已选 {{ selectedIds.size }} 项</span>
             <button
-              :class="['batch-toggle-btn', { active: batchMode }]"
+              :class="['batch-delete-btn', { disabled: selectedIds.size === 0 }]"
+              :disabled="selectedIds.size === 0"
+              @click="handleBatchDelete"
+            >
+              <Trash2 :size="13" />
+              删除
+            </button>
+          </div>
+
+          <div class="history-list">
+            <template v-if="isSearchMode">
+              <div v-if="isSearching" class="history-empty">
+                <Loader2 :size="20" class="spin-animation" />
+                <span>搜索中...</span>
+              </div>
+              <template v-else>
+                <div
+                  v-for="result in searchResults"
+                  :key="result.id"
+                  :class="['history-item', { active: chatStore.currentConvId === result.id }]"
+                  @click="selectConversation(result.id, searchQuery.trim())"
+                >
+                  <div class="history-item-indicator" />
+                  <MessageSquare :size="14" class="history-item-icon" />
+                  <div class="history-item-content">
+                    <span class="history-item-title">{{ result.title }}</span>
+                    <span class="history-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
+                  </div>
+                </div>
+                <div v-if="searchResults.length === 0" class="history-empty">
+                  <MessageSquare :size="24" />
+                  <span>未找到匹配的会话</span>
+                </div>
+              </template>
+            </template>
+
+            <template v-else>
+              <template v-for="group in timeGroups" :key="group.label">
+                <div class="time-group">
+                  <div class="time-group-label">
+                    <Clock :size="12" />
+                    <span>{{ group.label }}</span>
+                  </div>
+                  <div
+                    v-for="conv in group.items"
+                    :key="conv.id"
+                    :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
+                    @click="batchMode ? toggleSelect(conv.id) : selectConversation(conv.id)"
+                  >
+                    <div v-if="batchMode" class="history-item-checkbox" @click.stop="toggleSelect(conv.id)">
+                      <div :class="['checkbox-box', { checked: selectedIds.has(conv.id) }]">
+                        <Check v-if="selectedIds.has(conv.id)" :size="10" />
+                      </div>
+                    </div>
+                    <div class="history-item-indicator" />
+                    <MessageSquare :size="14" class="history-item-icon" />
+                    <div class="history-item-content">
+                      <span class="history-item-title">{{ conv.title }}</span>
+                      <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
+                    </div>
+                    <button v-if="!batchMode" class="history-item-delete" @click.stop="handleDeleteConversation(conv.id)">
+                      <Trash2 :size="13" />
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <div v-if="timeGroups.length === 0" class="history-empty">
+                <MessageSquare :size="24" />
+                <span>暂无历史记录</span>
+              </div>
+            </template>
+          </div>
+
+          <button class="trash-entry-btn" @click="openTrash">
+            <Trash2 :size="14" />
+            <span>回收站</span>
+            <span v-if="trashCount > 0" class="trash-badge">{{ trashCount }}</span>
+          </button>
+        </template>
+
+        <template v-else>
+          <div class="trash-header">
+            <button class="trash-back-btn" @click="closeTrash">
+              <ArrowLeft :size="16" />
+            </button>
+            <span class="trash-title">回收站</span>
+            <button
+              :class="['batch-toggle-btn', { active: trashBatchMode }]"
               title="批量操作"
-              @click="toggleBatchMode"
+              @click="toggleTrashBatchMode"
             >
               <SquareCheck :size="15" />
             </button>
           </div>
-        </div>
 
-        <div v-if="batchMode" class="batch-toolbar">
-          <button class="batch-action-btn" @click="selectAll">全选</button>
-          <span class="batch-count">已选 {{ selectedIds.size }} 项</span>
-          <button
-            :class="['batch-delete-btn', { disabled: selectedIds.size === 0 }]"
-            :disabled="selectedIds.size === 0"
-            @click="handleBatchDelete"
-          >
-            <Trash2 :size="13" />
-            删除
-          </button>
-        </div>
-
-        <div class="history-list">
-          <template v-if="isSearchMode">
-            <div v-if="isSearching" class="history-empty">
-              <Loader2 :size="20" class="spin-animation" />
-              <span>搜索中...</span>
-            </div>
-            <template v-else>
-              <div
-                v-for="result in searchResults"
-                :key="result.id"
-                :class="['history-item', { active: chatStore.currentConvId === result.id }]"
-                @click="selectConversation(result.id, searchQuery.trim())"
-              >
-                <div class="history-item-indicator" />
-                <MessageSquare :size="14" class="history-item-icon" />
-                <div class="history-item-content">
-                  <span class="history-item-title">{{ result.title }}</span>
-                  <span class="history-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
-                </div>
-              </div>
-              <div v-if="searchResults.length === 0" class="history-empty">
-                <MessageSquare :size="24" />
-                <span>未找到匹配的会话</span>
-              </div>
-            </template>
-          </template>
-
-          <template v-else>
-            <template v-for="group in timeGroups" :key="group.label">
-              <div class="time-group">
-                <div class="time-group-label">
-                  <Clock :size="12" />
-                  <span>{{ group.label }}</span>
-                </div>
-                <div
-                  v-for="conv in group.items"
-                  :key="conv.id"
-                  :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
-                  @click="batchMode ? toggleSelect(conv.id) : selectConversation(conv.id)"
-                >
-                  <div v-if="batchMode" class="history-item-checkbox" @click.stop="toggleSelect(conv.id)">
-                    <div :class="['checkbox-box', { checked: selectedIds.has(conv.id) }]">
-                      <Check v-if="selectedIds.has(conv.id)" :size="10" />
-                    </div>
-                  </div>
-                  <div class="history-item-indicator" />
-                  <MessageSquare :size="14" class="history-item-icon" />
-                  <div class="history-item-content">
-                    <span class="history-item-title">{{ conv.title }}</span>
-                    <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
-                  </div>
-                  <button v-if="!batchMode" class="history-item-delete" @click.stop="handleDeleteConversation(conv.id)">
-                    <Trash2 :size="13" />
-                  </button>
-                </div>
-              </div>
-            </template>
-
-            <div v-if="timeGroups.length === 0" class="history-empty">
-              <MessageSquare :size="24" />
-              <span>暂无历史记录</span>
-            </div>
-          </template>
-        </div>
-
-        <button class="trash-entry-btn" @click="openTrash">
-          <Trash2 :size="14" />
-          <span>回收站</span>
-          <span v-if="trashCount > 0" class="trash-badge">{{ trashCount }}</span>
-        </button>
-      </template>
-
-      <template v-else>
-        <div class="trash-header">
-          <button class="trash-back-btn" @click="closeTrash">
-            <ArrowLeft :size="16" />
-          </button>
-          <span class="trash-title">回收站</span>
-          <button
-            :class="['batch-toggle-btn', { active: trashBatchMode }]"
-            title="批量操作"
-            @click="toggleTrashBatchMode"
-          >
-            <SquareCheck :size="15" />
-          </button>
-        </div>
-
-        <div v-if="trashBatchMode" class="batch-toolbar">
-          <button class="batch-action-btn" @click="selectAllTrash">全选</button>
-          <span class="batch-count">已选 {{ trashSelectedIds.size }} 项</span>
-          <button
-            :class="['batch-restore-btn', { disabled: trashSelectedIds.size === 0 }]"
-            :disabled="trashSelectedIds.size === 0"
-            @click="handleBatchRestore"
-          >
-            <Undo2 :size="13" />
-            恢复
-          </button>
-          <button
-            :class="['batch-delete-btn', { disabled: trashSelectedIds.size === 0 }]"
-            :disabled="trashSelectedIds.size === 0"
-            @click="handleBatchPermanentDelete"
-          >
-            <Trash2 :size="13" />
-            删除
-          </button>
-        </div>
-
-        <div class="trash-toolbar" v-if="!trashBatchMode && chatStore.trashItems.length > 0">
-          <button class="empty-trash-btn" @click="handleEmptyTrash">
-            <Trash2 :size="12" />
-            清空回收站
-          </button>
-        </div>
-
-        <div class="trash-list">
-          <div v-if="chatStore.trashItems.length === 0" class="history-empty">
-            <Trash2 :size="24" />
-            <span>回收站为空</span>
+          <div v-if="trashBatchMode" class="batch-toolbar">
+            <button class="batch-action-btn" @click="selectAllTrash">全选</button>
+            <span class="batch-count">已选 {{ trashSelectedIds.size }} 项</span>
+            <button
+              :class="['batch-restore-btn', { disabled: trashSelectedIds.size === 0 }]"
+              :disabled="trashSelectedIds.size === 0"
+              @click="handleBatchRestore"
+            >
+              <Undo2 :size="13" />
+              恢复
+            </button>
+            <button
+              :class="['batch-delete-btn', { disabled: trashSelectedIds.size === 0 }]"
+              :disabled="trashSelectedIds.size === 0"
+              @click="handleBatchPermanentDelete"
+            >
+              <Trash2 :size="13" />
+              删除
+            </button>
           </div>
-          <div
-            v-for="item in chatStore.trashItems"
-            :key="item.id"
-            :class="['trash-item']"
-            @click="trashBatchMode ? toggleTrashSelect(item.id) : undefined"
-          >
-            <div v-if="trashBatchMode" class="history-item-checkbox" @click.stop="toggleTrashSelect(item.id)">
-              <div :class="['checkbox-box', { checked: trashSelectedIds.has(item.id) }]">
-                <Check v-if="trashSelectedIds.has(item.id)" :size="10" />
+
+          <div class="trash-toolbar" v-if="!trashBatchMode && chatStore.trashItems.length > 0">
+            <button class="empty-trash-btn" @click="handleEmptyTrash">
+              <Trash2 :size="12" />
+              清空回收站
+            </button>
+          </div>
+
+          <div class="trash-list">
+            <div v-if="chatStore.trashItems.length === 0" class="history-empty">
+              <Trash2 :size="24" />
+              <span>回收站为空</span>
+            </div>
+            <div
+              v-for="item in chatStore.trashItems"
+              :key="item.id"
+              :class="['trash-item']"
+              @click="trashBatchMode ? toggleTrashSelect(item.id) : undefined"
+            >
+              <div v-if="trashBatchMode" class="history-item-checkbox" @click.stop="toggleTrashSelect(item.id)">
+                <div :class="['checkbox-box', { checked: trashSelectedIds.has(item.id) }]">
+                  <Check v-if="trashSelectedIds.has(item.id)" :size="10" />
+                </div>
               </div>
-            </div>
-            <MessageSquare :size="14" class="history-item-icon" />
-            <div class="trash-item-content">
-              <span class="history-item-title">{{ item.title }}</span>
-              <span class="trash-item-deleted-time">{{ formatDeleteTime(item.deleted_at) }}</span>
-            </div>
-            <div v-if="!trashBatchMode" class="trash-item-actions">
-              <button class="trash-action-btn restore" title="恢复" @click.stop="handleRestoreItem(item.id)">
-                <Undo2 :size="13" />
-              </button>
-              <button class="trash-action-btn delete" title="永久删除" @click.stop="handlePermanentDeleteItem(item.id)">
-                <Trash2 :size="13" />
-              </button>
+              <MessageSquare :size="14" class="history-item-icon" />
+              <div class="trash-item-content">
+                <span class="history-item-title">{{ item.title }}</span>
+                <span class="trash-item-deleted-time">{{ formatDeleteTime(item.deleted_at) }}</span>
+              </div>
+              <div v-if="!trashBatchMode" class="trash-item-actions">
+                <button class="trash-action-btn restore" title="恢复" @click.stop="handleRestoreItem(item.id)">
+                  <Undo2 :size="13" />
+                </button>
+                <button class="trash-action-btn delete" title="永久删除" @click.stop="handlePermanentDeleteItem(item.id)">
+                  <Trash2 :size="13" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </template>
-    </div>
+        </template>
+      </div>
+    </Transition>
 
     <Transition name="selection-fade">
       <div v-if="showCreateDialog" class="create-dialog-overlay" @click.self="showCreateDialog = false">
@@ -644,22 +819,20 @@ onMounted(async () => {
   height: 100%;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  transition: all var(--transition-normal);
 }
 
-.sidebar-icon-rail {
+.sidebar-nav-panel {
+  width: 240px;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  width: 60px;
-  height: 100%;
-  padding: 12px 0;
-  flex-shrink: 0;
-  position: relative;
   background: var(--surface);
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
 }
 
-.sidebar-icon-rail::after {
+.sidebar-nav-panel::after {
   content: '';
   position: absolute;
   top: 12px;
@@ -669,58 +842,62 @@ onMounted(async () => {
   background: var(--divider-vertical);
 }
 
-.rail-top {
+.nav-header {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  flex-shrink: 0;
 }
 
-.rail-bottom {
+.brand {
   display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: 10px;
 }
 
-.avatar-btn {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: transform var(--transition-fast);
-}
-
-.avatar-btn:hover {
-  transform: scale(1.05);
-}
-
-.avatar-ring {
-  width: 40px;
-  height: 40px;
+.brand-avatar {
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(20, 126, 188, 0.3);
+  box-shadow: 0 3px 10px var(--lumi-primary-border);
+  color: var(--text-inverse);
 }
 
-.icon-nav {
+.brand-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 8px;
-  width: 100%;
-  padding: 0 8px;
 }
 
-.icon-btn {
+.brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.brand-tag {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.header-action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-md);
   color: var(--text-muted);
   cursor: pointer;
@@ -728,26 +905,344 @@ onMounted(async () => {
   position: relative;
 }
 
-.icon-btn:hover {
+.header-action-btn:hover {
   background: var(--surface-hover);
   color: var(--text-secondary);
 }
 
-.icon-btn.active {
+.header-action-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lumi-accent);
+  border: 1.5px solid var(--surface);
+}
+
+.nav-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px 10px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.nav-search:focus-within {
+  border-color: var(--lumi-primary);
+  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+}
+
+.nav-search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.nav-search-input {
+  flex: 1;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.nav-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.nav-search-sparkle {
+  color: var(--lumi-warning);
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.nav-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.section-label {
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.group-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, var(--lumi-primary-glow) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.4s ease-out;
+  pointer-events: none;
+}
+
+.group-header:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.group-header:active::after {
+  opacity: 1;
+  transform: scale(2);
+  transition: all 0.2s ease-out;
+}
+
+.group-header.active {
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
 }
 
-.icon-btn.active::before {
+.group-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.group-icon {
+  flex-shrink: 0;
+}
+
+.group-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.group-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.group-header.active .group-chevron {
+  color: var(--lumi-primary);
+}
+
+.group-chevron.rotated {
+  transform: rotate(90deg);
+}
+
+.group-children {
+  display: flex;
+  flex-direction: column;
+  padding-left: 8px;
+  overflow: hidden;
+}
+
+.tree-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 0;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  margin-left: 14px;
+  animation: nav-item-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.tree-child:nth-child(1) { animation-delay: 0.02s; }
+.tree-child:nth-child(2) { animation-delay: 0.04s; }
+.tree-child:nth-child(3) { animation-delay: 0.06s; }
+.tree-child:nth-child(4) { animation-delay: 0.08s; }
+.tree-child:nth-child(5) { animation-delay: 0.10s; }
+.tree-child:nth-child(6) { animation-delay: 0.12s; }
+
+.tree-child:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  transform: translateX(3px);
+}
+
+.tree-child.active {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.tree-line {
+  position: absolute;
+  left: -14px;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.tree-branch {
+  position: absolute;
+  left: 6px;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: var(--border-light);
+}
+
+.tree-child.last .tree-branch {
+  height: 50%;
+}
+
+.tree-node {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: var(--border-light);
+  transform: translateY(-50%);
+}
+
+.tree-child.last .tree-node {
+  border-bottom-left-radius: 2px;
+}
+
+.child-icon {
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.child-label {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-item::after {
   content: '';
   position: absolute;
-  left: -8px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  border-radius: 2px;
-  background: var(--lumi-primary);
+  inset: 0;
+  background: radial-gradient(circle at center, var(--lumi-primary-glow) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.4s ease-out;
+  pointer-events: none;
+}
+
+.nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  transform: translateX(2px);
+}
+
+.nav-item:active::after {
+  opacity: 1;
+  transform: scale(2);
+  transition: all 0.2s ease-out;
+}
+
+.nav-item.active {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.nav-item-icon {
+  flex-shrink: 0;
+}
+
+.nav-item-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nav-item-badge {
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.nav-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+}
+
+.footer-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
 }
 
 .sidebar-history-panel {
@@ -755,7 +1250,7 @@ onMounted(async () => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f9fafb;
+  background: var(--bg-secondary);
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -780,7 +1275,7 @@ onMounted(async () => {
   gap: 8px;
   padding: 8px 12px;
   height: 48px;
-  background: #ffffff;
+  background: var(--surface);
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   transition: all var(--transition-fast);
@@ -816,7 +1311,7 @@ onMounted(async () => {
   width: 100%;
   padding: 7px 0;
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
   border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 500;
@@ -836,8 +1331,8 @@ onMounted(async () => {
   height: 32px;
   border-radius: var(--radius-md);
   color: var(--text-muted);
-  background: #ffffff;
-  border: 1px solid var(--workspace-border, #e5e7eb);
+  background: var(--surface);
+  border: 1px solid var(--workspace-border, var(--border));
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
@@ -859,8 +1354,8 @@ onMounted(async () => {
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  background: #f0f4f8;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
   flex-wrap: nowrap;
   overflow: hidden;
@@ -871,8 +1366,8 @@ onMounted(async () => {
   border-radius: 4px;
   font-size: 11px;
   color: var(--text-secondary);
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -900,9 +1395,9 @@ onMounted(async () => {
   padding: 3px 6px;
   border-radius: 4px;
   font-size: 11px;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--lumi-accent);
+  background: var(--lumi-accent-light);
+  border: 1px solid var(--lumi-accent-border);
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -910,7 +1405,7 @@ onMounted(async () => {
 }
 
 .batch-delete-btn:hover {
-  background: rgba(239, 68, 68, 0.15);
+  background: var(--lumi-accent-glow);
 }
 
 .batch-delete-btn.disabled {
@@ -927,7 +1422,7 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--lumi-primary);
   background: var(--lumi-primary-light);
-  border: 1px solid rgba(20, 126, 188, 0.2);
+  border: 1px solid var(--lumi-primary-border);
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -935,7 +1430,7 @@ onMounted(async () => {
 }
 
 .batch-restore-btn:hover {
-  background: rgba(20, 126, 188, 0.15);
+  background: var(--lumi-primary-glow);
 }
 
 .batch-restore-btn.disabled {
@@ -977,11 +1472,11 @@ onMounted(async () => {
 }
 
 .history-item:hover {
-  background: #f3f4f6;
+  background: var(--surface-hover);
 }
 
 .history-item.active {
-  background: #eff6ff;
+  background: var(--lumi-primary-light);
 }
 
 .history-item-indicator {
@@ -1044,11 +1539,12 @@ onMounted(async () => {
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
 .history-item-snippet :deep(mark) {
-  background: rgba(20, 126, 188, 0.2);
+  background: var(--lumi-primary-border);
   color: var(--lumi-primary);
   border-radius: 2px;
   padding: 0 1px;
@@ -1085,18 +1581,18 @@ onMounted(async () => {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  border: 1.5px solid #d1d5db;
+  border: 1.5px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all var(--transition-fast);
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .checkbox-box.checked {
   background: var(--lumi-primary);
   border-color: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
 }
 
 .history-empty {
@@ -1117,8 +1613,8 @@ onMounted(async () => {
   padding: 10px 14px;
   margin: 0 10px 10px;
   border-radius: var(--radius-md);
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
@@ -1127,9 +1623,9 @@ onMounted(async () => {
 }
 
 .trash-entry-btn:hover {
-  background: #f3f4f6;
+  background: var(--surface-hover);
   color: var(--text-secondary);
-  border-color: #d1d5db;
+  border-color: var(--border);
 }
 
 .trash-badge {
@@ -1137,8 +1633,8 @@ onMounted(async () => {
   min-width: 18px;
   height: 18px;
   border-radius: 9px;
-  background: var(--lumi-accent, #ef4444);
-  color: white;
+  background: var(--lumi-accent);
+  color: var(--text-inverse);
   font-size: 10px;
   font-weight: 600;
   display: flex;
@@ -1152,7 +1648,7 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   padding: 12px 14px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
 
@@ -1184,7 +1680,7 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   padding: 6px 14px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
 
@@ -1195,14 +1691,14 @@ onMounted(async () => {
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 11px;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.06);
+  color: var(--lumi-accent);
+  background: var(--lumi-accent-light);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .empty-trash-btn:hover {
-  background: rgba(239, 68, 68, 0.12);
+  background: var(--lumi-accent-glow);
 }
 
 .trash-list {
@@ -1222,7 +1718,7 @@ onMounted(async () => {
 }
 
 .trash-item:hover {
-  background: #f3f4f6;
+  background: var(--surface-hover);
 }
 
 .trash-item-content {
@@ -1268,202 +1764,52 @@ onMounted(async () => {
 }
 
 .trash-action-btn.delete:hover {
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
-}
-
-.create-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
-
-.create-dialog {
-  background: var(--workspace-card);
-  border-radius: var(--radius-xl);
-  padding: 28px;
-  width: 400px;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: var(--shadow-lg);
-}
-
-.create-dialog h3 {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 20px;
-}
-
-.confirm-dialog {
-  background: var(--workspace-card);
-  border-radius: var(--radius-xl);
-  padding: 32px 28px 24px;
-  width: 340px;
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-.confirm-dialog-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  margin-bottom: 16px;
-}
-
-.confirm-dialog-message {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text-primary);
-  margin: 0 0 24px;
-}
-
-.confirm-dialog-actions {
-  display: flex;
-  gap: 12px;
-  width: 100%;
-}
-
-.confirm-dialog-actions .dialog-btn {
-  flex: 1;
-  justify-content: center;
-  padding: 10px 20px;
-  border-radius: var(--radius-lg);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.form-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.required-mark {
+  background: var(--lumi-accent-light);
   color: var(--lumi-accent);
-  font-weight: 700;
-  margin-left: 2px;
 }
 
-.form-input {
-  width: 100%;
-  padding: 10px 14px;
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  color: var(--text-primary);
-  transition: all var(--transition-fast);
+.tree-expand-enter-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.form-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+.tree-expand-leave-active {
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.form-input::placeholder {
-  color: var(--text-muted);
+.tree-expand-enter-from,
+.tree-expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-4px);
 }
 
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
+.tree-expand-enter-to,
+.tree-expand-leave-from {
+  opacity: 1;
+  max-height: 300px;
+  transform: translateY(0);
 }
 
-.color-picker {
-  display: flex;
-  gap: 8px;
+.history-slide-enter-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.color-dot {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: 2px solid transparent;
+.history-slide-leave-active {
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.color-dot:hover {
-  transform: scale(1.15);
+.history-slide-enter-from,
+.history-slide-leave-to {
+  opacity: 0;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.color-dot.active {
-  border-color: var(--text-primary);
-  box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
-}
-
-.dialog-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.dialog-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 20px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.dialog-btn.cancel {
-  color: var(--text-muted);
-  background: var(--workspace-panel);
-}
-
-.dialog-btn.cancel:hover {
-  background: var(--workspace-hover);
-}
-
-.dialog-btn.confirm {
-  color: white;
-  background: var(--lumi-primary);
-}
-
-.dialog-btn.confirm:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.dialog-btn.confirm.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.dialog-btn.danger {
-  color: white;
-  background: #ef4444;
-}
-
-.dialog-btn.danger:hover {
-  background: #dc2626;
+.history-slide-enter-to,
+.history-slide-leave-from {
+  opacity: 1;
+  width: 220px;
 }
 
 .selection-fade-enter-active {
@@ -1474,12 +1820,30 @@ onMounted(async () => {
   animation: lumi-fade-in 0.2s ease-out reverse;
 }
 
-.spin-animation {
-  animation: spin 1s linear infinite;
+@keyframes lumi-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+@keyframes nav-item-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes nav-ripple {
+  from {
+    opacity: 0.6;
+    transform: scale(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.5);
+  }
 }
 </style>

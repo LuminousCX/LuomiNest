@@ -46,7 +46,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="LuomiNest API",
         description="LuomiNest - AI Agent Platform Backend API",
-        version="0.1.0",
+        version="0.5.0",
         docs_url="/docs" if settings.DEBUG else None,
         redoc_url="/redoc" if settings.DEBUG else None,
         lifespan=lifespan,
@@ -121,7 +121,7 @@ def create_app() -> FastAPI:
     async def root():
         return {
             "name": "LuomiNest",
-            "version": "0.1.0",
+            "version": "0.5.0",
             "docs": "/docs" if settings.DEBUG else "disabled",
         }
 

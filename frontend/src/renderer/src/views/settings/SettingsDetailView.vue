@@ -307,7 +307,7 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
   height: 18px;
   border-radius: 50%;
   background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px var(--overlay-subtle);
   transition: all var(--transition-fast);
 }
 
