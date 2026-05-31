@@ -1527,57 +1527,7 @@ onBeforeUnmount(() => {
   background: rgba(0, 0, 0, 0.3);
 }
 
-.agent-new-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 200ms ease;
-  background: transparent;
-  border: none;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.agent-new-btn:hover {
-  background: #f3f4f6;
-}
-
-.agent-new-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: rgba(236, 72, 153, 0.12);
-  color: #ec4899;
-}
-
-.agent-new-info {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.agent-new-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.agent-new-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  max-width: 100px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
+.agent-new-btn,
 .agent-card {
   display: flex;
   align-items: center;
@@ -1592,14 +1542,12 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+.agent-new-btn:hover,
 .agent-card:hover {
-  background: #f3f4f6;
+  background: var(--workspace-hover, #f3f4f6);
 }
 
-.agent-card.active {
-  background: #e8f4fb;
-}
-
+.agent-new-icon,
 .agent-card-icon {
   width: 36px;
   height: 36px;
@@ -1610,18 +1558,26 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
+.agent-new-icon {
+  background: rgba(236, 72, 153, 0.12);
+  color: #ec4899;
+}
+
+.agent-new-info,
 .agent-card-info {
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
+.agent-new-title,
 .agent-card-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
+.agent-new-desc,
 .agent-card-desc {
   font-size: 11px;
   color: var(--text-muted);
@@ -1629,6 +1585,10 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.agent-card.active {
+  background: var(--workspace-active, #e8f4fb);
 }
 
 .agent-card-arrow {
@@ -2209,10 +2169,6 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 
-.loading-status .spin-animation {
-  animation: spin 1s linear infinite;
-}
-
 .streaming-indicator {
   display: inline-flex;
   align-items: center;
@@ -2646,11 +2602,6 @@ onBeforeUnmount(() => {
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 .input-footer {
   text-align: center;
   margin-top: 8px;
@@ -2893,15 +2844,11 @@ onBeforeUnmount(() => {
 .reasoning-markdown :deep(p) {
   margin: 0 0 10px;
   line-height: 1.8;
+  position: relative;
 }
 
 .reasoning-markdown :deep(p:last-child) {
   margin-bottom: 0;
-}
-
-/* 【】标题样式 - 关键：让段落标题醒目 */
-.reasoning-markdown :deep(p) {
-  position: relative;
 }
 
 .reasoning-markdown :deep(strong) {
@@ -3080,7 +3027,8 @@ onBeforeUnmount(() => {
 }
 
 /* Create Agent Dialog */
-.create-dialog-overlay {
+.create-dialog-overlay,
+.confirm-dialog-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
@@ -3248,16 +3196,6 @@ onBeforeUnmount(() => {
 }
 
 /* Confirm Dialog */
-.confirm-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
 .confirm-dialog {
   background: var(--workspace-card);
   border-radius: var(--radius-xl);
@@ -3304,13 +3242,13 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 
-.dialog-btn.confirm {
+.confirm-dialog .dialog-btn.confirm {
   color: white;
-  background: #ef4444;
+  background: var(--lumi-danger, #ef4444);
   border: none;
 }
 
-.dialog-btn.confirm:hover {
-  background: #dc2626;
+.confirm-dialog .dialog-btn.confirm:hover {
+  background: var(--lumi-danger-hover, #dc2626);
 }
 </style>

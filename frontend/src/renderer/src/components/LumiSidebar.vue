@@ -24,6 +24,7 @@ import {
   SquareCheck,
   X,
   AlertTriangle,
+  LayoutDashboard,
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
@@ -63,6 +64,7 @@ watch(searchQuery, (q) => {
 const isSearchMode = computed(() => searchQuery.value.trim().length > 0)
 
 const navItems = [
+  { id: '/dashboard', label: '控制台', icon: LayoutDashboard },
   { id: '/workspace', label: '对话', icon: MessageCircle },
   { id: '/social', label: '社交', icon: Users },
   { id: '/workflow', label: '工作流', icon: GitBranch },

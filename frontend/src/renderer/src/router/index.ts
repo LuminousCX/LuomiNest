@@ -13,6 +13,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Welcome - LuomiNest', icon: 'Sparkles' }
   },
   {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: () => import('../views/DashboardView.vue'),
+    meta: { title: '控制台 - LuomiNest', icon: 'LayoutDashboard' }
+  },
+  {
     path: '/workspace',
     name: 'Workspace',
     component: () => import('../views/WorkspaceView.vue'),
