@@ -6,6 +6,20 @@ import { validateLuomiNestModelUrl } from '@/config/luominest-models'
 
 const EXPRESSION_BLOCKLIST = ['水印', 'watermark', 'copyright', 'credit', 'logo']
 
+const patchIsInteractive = (obj: any) => {
+  if (!obj) return
+  if (typeof obj.isInteractive !== 'function') {
+    obj.isInteractive = function () {
+      return this.eventMode === 'static' || this.eventMode === 'dynamic'
+    }
+  }
+  if (Array.isArray(obj.children)) {
+    for (const child of obj.children) {
+      patchIsInteractive(child)
+    }
+  }
+}
+
 export interface LuomiNestLive2DState {
   isReady: boolean
   isLoading: boolean
@@ -199,6 +213,8 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       setupInteraction(model)
       setupFocus(model)
       setupWheel(model)
+
+      patchIsInteractive(model)
 
       app.stage.addChild(model)
       currentModel = model
