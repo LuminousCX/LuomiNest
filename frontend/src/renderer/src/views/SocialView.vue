@@ -30,7 +30,6 @@ import type { GroupInfo, CollaborationPhase } from '../types'
 const socialStore = useSocialStore()
 const agentStore = useAgentStore()
 
-const activeTab = ref<'friends' | 'groups'>('groups')
 const selectedGroupId = ref<string | null>(null)
 const chatInput = ref('')
 const searchQuery = ref('')
@@ -92,11 +91,6 @@ const phaseIcon = computed(() => {
   }
   return collaborationPhase.value ? icons[collaborationPhase.value] : null
 })
-
-const selectTab = (tab: typeof activeTab.value) => {
-  activeTab.value = tab
-  selectedGroupId.value = null
-}
 
 const openGroupChat = (group: GroupInfo) => {
   selectedGroupId.value = group.id
@@ -255,56 +249,23 @@ onMounted(async () => {
 
     <div class="social-body">
       <div class="social-sidebar">
-        <div class="sidebar-tabs">
-          <button
-            :class="['tab-btn', { active: activeTab === 'friends' }]"
-            @click="selectTab('friends')"
-          >
-            <Bot :size="14" />
-            <span>AI Agents</span>
-            <span class="tab-count">{{ agentStore.agents.length }}</span>
-          </button>
-          <button
-            :class="['tab-btn', { active: activeTab === 'groups' }]"
-            @click="selectTab('groups')"
-          >
-            <Users :size="14" />
-            <span>群组</span>
-            <span class="tab-count">{{ socialStore.groups.length }}</span>
+        <div class="sidebar-header">
+          <div class="sidebar-title-row">
+            <Hash :size="14" class="sidebar-title-icon" />
+            <span class="sidebar-title">群组</span>
+            <span class="sidebar-count">{{ socialStore.groups.length }}</span>
+          </div>
+          <button class="sidebar-add-btn" title="新建群组" @click="showCreateGroupDialog = true">
+            <Plus :size="14" />
           </button>
         </div>
 
         <div class="sidebar-search">
           <Search :size="14" class="search-icon" />
-          <input v-model="searchQuery" type="text" placeholder="搜索..." />
+          <input v-model="searchQuery" type="text" placeholder="搜索群组..." />
         </div>
 
-        <div v-if="activeTab === 'friends'" class="friend-list">
-          <div
-            v-for="agent in agentStore.agents"
-            :key="agent.id"
-            class="friend-item"
-          >
-            <div class="friend-avatar-wrap">
-              <span class="friend-avatar" :style="{ background: agent.color + '14', color: agent.color }">
-                <Bot :size="18" />
-              </span>
-              <span class="status-indicator online"></span>
-            </div>
-            <div class="friend-info">
-              <div class="friend-top-row">
-                <span class="friend-name">{{ agent.name }}</span>
-              </div>
-              <span class="friend-personality">{{ agent.description || '暂无描述' }}</span>
-            </div>
-          </div>
-          <div v-if="agentStore.agents.length === 0" class="list-empty">
-            <Bot :size="24" />
-            <p>暂无 Agent，请先在聊天页面创建</p>
-          </div>
-        </div>
-
-        <div v-else class="group-list">
+        <div class="group-list">
           <div
             v-for="group in filteredGroups"
             :key="group.id"
@@ -661,47 +622,54 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-.sidebar-tabs {
+.sidebar-header {
   display: flex;
-  padding: 8px;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--divider-soft);
   flex-shrink: 0;
 }
 
-.tab-btn {
-  flex: 1;
+.sidebar-title-row {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  padding: 8px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
 }
 
-.tab-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--text-secondary);
-}
-
-.tab-btn.active {
-  background: var(--lumi-primary-light);
+.sidebar-title-icon {
   color: var(--lumi-primary);
 }
 
-.tab-count {
+.sidebar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sidebar-count {
   font-size: 11px;
   padding: 1px 6px;
   border-radius: var(--radius-full);
-  background: var(--workspace-panel);
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  font-weight: 500;
 }
 
-.tab-btn.active .tab-count {
-  background: rgba(20, 126, 188, 0.15);
+.sidebar-add-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all 300ms ease-in-out;
+}
+
+.sidebar-add-btn:hover {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
 }
 
 .sidebar-search {
@@ -730,82 +698,10 @@ onMounted(async () => {
   color: var(--text-muted);
 }
 
-.friend-list,
 .group-list {
   flex: 1;
   overflow-y: auto;
   padding: 4px 8px;
-}
-
-.friend-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-}
-
-.friend-item:hover {
-  background: var(--workspace-hover);
-}
-
-.friend-avatar-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.friend-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.status-indicator {
-  position: absolute;
-  bottom: -1px;
-  right: -1px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 2px solid var(--workspace-bg);
-  background: var(--status-color, #78716c);
-}
-
-.status-indicator.online {
-  --status-color: #22c55e;
-}
-
-.friend-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.friend-top-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.friend-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.friend-personality {
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: block;
 }
 
 .group-item {

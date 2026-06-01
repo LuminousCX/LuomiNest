@@ -28,6 +28,7 @@ import {
   SquareCheck,
   AlertTriangle,
   ChevronRight,
+  ChevronLeft,
   Bell,
   Sparkles,
   Package,
@@ -45,7 +46,8 @@ const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
 const expandedGroups = ref<Set<string>>(new Set(['chat']))
-const isNavCollapsed = ref(false)
+const isNavCollapsed = ref(true)
+const isHistoryCollapsed = ref(false)
 
 interface NavChild {
   id: string
@@ -462,7 +464,7 @@ const formatDeleteTime = (dateStr: string) => {
 }
 
 const showHistoryPanel = computed(() => {
-  return route.path === '/workspace' || route.path === '/social'
+  return route.path === '/workspace'
 })
 
 onMounted(async () => {
@@ -578,28 +580,29 @@ onMounted(async () => {
       </div>
     </div>
 
-    <Transition name="history-slide">
-      <div v-if="showHistoryPanel" class="sidebar-history-panel">
-        <template v-if="!showTrash">
-          <div class="panel-header">
-            <div class="search-box">
-              <Search :size="15" class="search-icon" />
-              <input v-model="searchQuery" type="text" placeholder="搜索历史记录..." class="search-input" />
+    <div class="history-panel-wrapper">
+      <Transition name="history-slide">
+        <div v-if="showHistoryPanel && !isHistoryCollapsed" class="sidebar-history-panel">
+          <template v-if="!showTrash">
+            <div class="panel-header">
+              <div class="search-box">
+                <Search :size="15" class="search-icon" />
+                <input v-model="searchQuery" type="text" placeholder="搜索历史记录..." class="search-input" />
+              </div>
+              <div class="panel-header-actions">
+                <button class="new-conv-btn" @click="handleNewConversation">
+                  <Plus :size="15" />
+                  <span>创建新对话</span>
+                </button>
+                <button
+                  :class="['batch-toggle-btn', { active: batchMode }]"
+                  title="批量操作"
+                  @click="toggleBatchMode"
+                >
+                  <SquareCheck :size="15" />
+                </button>
+              </div>
             </div>
-            <div class="panel-header-actions">
-              <button class="new-conv-btn" @click="handleNewConversation">
-                <Plus :size="15" />
-                <span>创建新对话</span>
-              </button>
-              <button
-                :class="['batch-toggle-btn', { active: batchMode }]"
-                title="批量操作"
-                @click="toggleBatchMode"
-              >
-                <SquareCheck :size="15" />
-              </button>
-            </div>
-          </div>
 
           <div v-if="batchMode" class="batch-toolbar">
             <button class="batch-action-btn" @click="selectAll">全选</button>
@@ -762,7 +765,27 @@ onMounted(async () => {
           </div>
         </template>
       </div>
-    </Transition>
+      </Transition>
+
+    </div>
+
+    <button
+      v-if="showHistoryPanel && !isHistoryCollapsed"
+      class="collapse-history-btn"
+      title="收起历史记录"
+      @click="isHistoryCollapsed = true"
+    >
+      <ChevronLeft :size="14" />
+    </button>
+
+    <button
+      v-if="showHistoryPanel && isHistoryCollapsed"
+      class="history-expand-toggle"
+      title="展开历史记录"
+      @click="isHistoryCollapsed = false"
+    >
+      <ChevronRight :size="14" />
+    </button>
 
     <Transition name="selection-fade">
       <div v-if="showCreateDialog" class="create-dialog-overlay" @click.self="showCreateDialog = false">
@@ -838,6 +861,9 @@ onMounted(async () => {
   height: 100%;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: visible;
+  z-index: 1;
 }
 
 .sidebar-nav-panel {
@@ -1331,6 +1357,66 @@ onMounted(async () => {
   background: var(--bg-secondary);
   overflow: hidden;
   flex-shrink: 0;
+  position: relative;
+}
+
+.history-panel-wrapper {
+  display: flex;
+  height: 100%;
+  align-items: stretch;
+  position: relative;
+}
+
+.collapse-history-btn {
+  width: 16px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 6px 6px 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: var(--surface);
+  border: none;
+  border-left: 1px solid var(--divider-soft);
+  transition: all var(--transition-fast);
+  position: absolute;
+  right: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  padding: 0;
+}
+
+.collapse-history-btn:hover {
+  color: var(--lumi-primary);
+  background: var(--surface-hover);
+}
+
+.history-expand-toggle {
+  width: 16px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 6px 6px 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: var(--surface);
+  border: none;
+  border-left: 1px solid var(--divider-soft);
+  transition: all var(--transition-fast);
+  position: absolute;
+  right: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  padding: 0;
+}
+
+.history-expand-toggle:hover {
+  color: var(--lumi-primary);
+  background: var(--surface-hover);
 }
 
 .panel-header {

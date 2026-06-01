@@ -190,15 +190,45 @@ export const startBackend = async (): Promise<boolean> => {
 }
 
 export const stopBackend = (): void => {
-  if (backendProcess) {
-    console.log('[BackendService] Stopping backend...')
-    
-    if (platform() === 'win32') {
-      spawn('taskkill', ['/pid', String(backendProcess.pid), '/f', '/t'])
-    } else {
-      backendProcess.kill('SIGTERM')
+  if (!backendProcess) {
+    return
+  }
+
+  console.log('[BackendService] Stopping backend...')
+
+  if (platform() === 'win32') {
+    if (backendProcess.pid === undefined) {
+      backendProcess.kill('SIGKILL')
+      backendProcess = null
+      backendReady = false
+      return
     }
-    
+
+    const pid = backendProcess.pid
+    try {
+      const tk = spawn('taskkill', ['/pid', String(pid), '/f', '/t'])
+      tk.on('error', (err) => {
+        console.error('[BackendService] taskkill failed:', err.message)
+        try { process.kill(pid) } catch {}
+        backendProcess = null
+        backendReady = false
+      })
+      tk.on('close', (exitCode) => {
+        if (exitCode !== 0) {
+          console.error('[BackendService] taskkill exited with code:', exitCode)
+          try { process.kill(pid) } catch {}
+        }
+        backendProcess = null
+        backendReady = false
+      })
+    } catch (err) {
+      console.error('[BackendService] taskkill spawn failed:', err)
+      try { process.kill(pid) } catch {}
+      backendProcess = null
+      backendReady = false
+    }
+  } else {
+    backendProcess.kill('SIGTERM')
     backendProcess = null
     backendReady = false
   }

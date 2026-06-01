@@ -61,7 +61,7 @@ const createWindow = (): void => {
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
     trafficLightPosition: { x: 12, y: 10 },
-    backgroundColor: '#F5F8FB',
+    backgroundColor: '#ffffffff',
     show: false,
     autoHideMenuBar: true,
     icon: appIcon,

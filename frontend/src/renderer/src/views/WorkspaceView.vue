@@ -6,6 +6,7 @@ import {
   Mic,
   Wand2,
   ChevronDown,
+  ChevronUp,
   ChevronLeft,
   ChevronRight,
   Bot,
@@ -847,57 +848,61 @@ onBeforeUnmount(() => {
     <div class="workspace-main">
       <div class="workspace-view">
         <!-- 展开状态：顶栏显示 Agent 列表 -->
-        <div v-if="!agentsCollapsed" class="workspace-header">
-          <div class="header-left">
-            <div class="agent-list" @wheel.prevent.stop="onAgentListWheel">
-              <!-- 新建 Agent -->
-              <button class="agent-new-btn" @click="showCreateDialog = true">
-                <div class="agent-new-icon">
-                  <Sparkles :size="22" />
-                </div>
-                <div class="agent-new-info">
-                  <span class="agent-new-title">自定义</span>
-                  <span class="agent-new-desc">创建全新 Agent</span>
-                </div>
-              </button>
+        <Transition name="agent-panel-slide">
+          <div v-if="!agentsCollapsed" class="workspace-header">
+            <div class="header-left">
+              <div class="agent-list" @wheel.prevent.stop="onAgentListWheel">
+                <!-- 新建 Agent -->
+                <button class="agent-new-btn" @click="showCreateDialog = true">
+                  <div class="agent-new-icon">
+                    <Sparkles :size="22" />
+                  </div>
+                  <div class="agent-new-info">
+                    <span class="agent-new-title">自定义</span>
+                    <span class="agent-new-desc">创建全新 Agent</span>
+                  </div>
+                </button>
 
-              <!-- Agent 列表 -->
-              <button
-                v-for="agent in agentStore.agents"
-                :key="agent.id"
-                :class="['agent-card', { active: agentStore.activeAgent?.id === agent.id }]"
-                @click="agentStore.setActiveAgent(agent)"
-              >
-                <span v-if="agentStore.activeAgent?.id === agent.id" class="active-dot"></span>
-                <div class="agent-card-icon" :style="{ background: agent.color + '18', color: agent.color }">
-                  <Bot :size="22" />
-                </div>
-                <div class="agent-card-info">
-                  <span class="agent-card-name">{{ agent.name }}</span>
-                  <span class="agent-card-desc">{{ agent.description || '智能AI' }}</span>
-                </div>
-                <div class="agent-card-arrow" @click.stop="openEditDialog(agent, $event)">
-                  <span class="arrow-icon">›</span>
-                </div>
+                <!-- Agent 列表 -->
+                <button
+                  v-for="agent in agentStore.agents"
+                  :key="agent.id"
+                  :class="['agent-card', { active: agentStore.activeAgent?.id === agent.id }]"
+                  @click="agentStore.setActiveAgent(agent)"
+                >
+                  <span v-if="agentStore.activeAgent?.id === agent.id" class="active-dot"></span>
+                  <div class="agent-card-icon" :style="{ background: agent.color + '18', color: agent.color }">
+                    <Bot :size="22" />
+                  </div>
+                  <div class="agent-card-info">
+                    <span class="agent-card-name">{{ agent.name }}</span>
+                    <span class="agent-card-desc">{{ agent.description || '智能AI' }}</span>
+                  </div>
+                  <div class="agent-card-arrow" @click.stop="openEditDialog(agent, $event)">
+                    <span class="arrow-icon">›</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+            <div class="header-right">
+              <button v-if="!isBackendReady" class="header-icon-btn warning" title="后端未连接" @click="chatStore.checkBackend()">
+                <AlertTriangle :size="18" />
+              </button>
+              <!-- 收起按钮 -->
+              <button class="agent-toggle-btn" title="收起Agent列表" @click="toggleAgents">
+                <ChevronUp :size="16" />
               </button>
             </div>
           </div>
-          <div class="header-right">
-            <button v-if="!isBackendReady" class="header-icon-btn warning" title="后端未连接" @click="chatStore.checkBackend()">
-              <AlertTriangle :size="18" />
-            </button>
-            <!-- 收起按钮 -->
-            <button class="toggle-agent-btn" title="收起Agent列表" @click="toggleAgents">
-              <ChevronRight :size="18" />
+        </Transition>
+
+        <!-- 收起状态：展开按钮 -->
+        <Transition name="agent-list-fade">
+          <div v-if="agentsCollapsed" class="agent-expand-wrapper">
+            <button class="agent-toggle-btn" title="展开Agent列表" @click="toggleAgents">
+              <ChevronDown :size="16" />
             </button>
           </div>
-        </div>
-
-        <!-- 收起状态：展开按钮（固定在右上角） -->
-        <Transition name="agent-list-fade">
-          <button v-if="agentsCollapsed" class="toggle-agent-btn floating" title="展开Agent列表" @click="toggleAgents">
-            <ChevronLeft :size="18" />
-          </button>
         </Transition>
 
         <div v-if="!isBackendReady" class="backend-warning">
@@ -1350,7 +1355,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="dialog-actions">
-            <button class="dialog-btn delete" @click="handleDeleteAgent">
+            <button class="dialog-btn delete" @click="openConfirmDialog('确定要删除该 Agent 吗？此操作无法撤销。', handleDeleteAgent, true)">
               删除
             </button>
             <div style="flex:1"></div>
@@ -1413,11 +1418,12 @@ onBeforeUnmount(() => {
 .workspace-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 24px;
+  padding: 8px 24px 8px 24px;
   flex-shrink: 0;
   position: relative;
   min-height: 68px;
+  z-index: 10;
+  overflow: visible;
 }
 
 .workspace-header::after {
@@ -1425,7 +1431,7 @@ onBeforeUnmount(() => {
   position: absolute;
   bottom: 0;
   left: 24px;
-  right: 64px;
+  right: 24px;
   height: 1px;
   background: var(--divider-soft);
 }
@@ -1447,50 +1453,93 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 
-.toggle-agent-btn {
-  width: 52px;
-  height: 52px;
+.agent-toggle-btn {
+  width: 24px;
+  height: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 6px;
   color: var(--text-muted);
   cursor: pointer;
-  background: var(--workspace-card);
+  background: var(--surface);
   border: 1px solid var(--divider-soft);
   transition: all var(--transition-fast);
   flex-shrink: 0;
+  padding: 0;
 }
 
-.toggle-agent-btn:hover {
-  color: var(--text-primary);
-  background: var(--workspace-hover);
+.agent-toggle-btn:hover {
+  color: var(--lumi-primary);
+  background: var(--surface-hover);
   border-color: var(--lumi-primary);
 }
 
-/* 收起状态：悬浮展开按钮，位置与 header-right 中收起按钮对齐 */
-.toggle-agent-btn.floating {
+.agent-expand-wrapper {
   position: absolute;
-  top: calc(8px + (68px / 2));
-  transform: translateY(-50%);
+  top: 8px;
   right: 24px;
-  z-index: 100;
-  box-shadow: var(--shadow-sm);
+  z-index: 20;
+}
+
+.agent-panel-slide-enter-active {
+  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.agent-panel-slide-leave-active {
+  transition: opacity 0.2s cubic-bezier(0.55, 0, 1, 0.45), transform 0.2s cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+.agent-panel-slide-enter-from {
+  opacity: 0;
+  transform: scaleY(0);
+}
+
+.agent-panel-slide-enter-to {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.agent-panel-slide-leave-from {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.agent-panel-slide-leave-to {
+  opacity: 0;
+  transform: scaleY(0);
+}
+
+.workspace-header {
+  transform-origin: top center;
 }
 
 .agent-list-fade-enter-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
 .agent-list-fade-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.2s cubic-bezier(0.55, 0, 1, 0.45), transform 0.2s cubic-bezier(0.55, 0, 1, 0.45);
 }
+
 .agent-list-fade-enter-from {
   opacity: 0;
-  transform: translateX(-12px);
+  transform: translateX(8px);
 }
+
+.agent-list-fade-enter-to {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.agent-list-fade-leave-from {
+  opacity: 1;
+  transform: translateX(0);
+}
+
 .agent-list-fade-leave-to {
   opacity: 0;
-  transform: translateX(-12px);
+  transform: translateX(8px);
 }
 
 .agent-list {
