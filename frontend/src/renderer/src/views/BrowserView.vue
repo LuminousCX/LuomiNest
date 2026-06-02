@@ -24,6 +24,8 @@ const tabs = ref<Tab[]>([])
 const addressBar = ref('')
 const showHomePage = ref(true)
 const showDevPanel = ref(false)
+const browserViewRef = ref<HTMLElement | null>(null)
+let resizeObserver: ResizeObserver | null = null
 const devOutput = ref('')
 const canGoBack = ref(false)
 const canGoForward = ref(false)
@@ -48,8 +50,26 @@ watch(showDevPanel, async (show) => {
   }
 })
 
+function updateSidebarWidth(): Promise<void> {
+  if (!browserViewRef.value) return Promise.resolve()
+  const rect = browserViewRef.value.getBoundingClientRect()
+  const sidebarWidth = Math.round(rect.left)
+  if (sidebarWidth > 0) {
+    return window.api?.tab.setBoundsConfig({ sidebarWidth }) ?? Promise.resolve()
+  }
+  return Promise.resolve()
+}
+
 onMounted(async () => {
   await syncTabs()
+
+  if (browserViewRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      updateSidebarWidth()
+    })
+    resizeObserver.observe(browserViewRef.value)
+  }
+  await updateSidebarWidth()
 
   const active = tabs.value.find(t => t.active)
   if (active?.url && !active.sleeping) {
@@ -72,6 +92,11 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
+
   window.electron?.ipcRenderer?.removeListener('tab:updated', handleTabUpdated)
   window.electron?.ipcRenderer?.removeListener('tab:new-tab-request', handleNewTabRequest)
   window.electron?.ipcRenderer?.removeListener('tab:navigation-state', handleNavigationState)
@@ -340,7 +365,7 @@ async function handleQuickAction(action: string) {
 </script>
 
 <template>
-  <div class="browser-view">
+  <div ref="browserViewRef" class="browser-view">
     <TabBar
       :tabs="tabs"
       @select="selectTab"

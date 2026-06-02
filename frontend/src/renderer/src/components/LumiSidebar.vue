@@ -30,7 +30,6 @@ import {
   ChevronRight,
   ChevronLeft,
   Bell,
-  Sparkles,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
@@ -512,7 +511,7 @@ onMounted(async () => {
           readonly
           @click="router.push('/workspace')"
         />
-        <Sparkles :size="14" class="nav-search-sparkle" />
+
       </div>
 
       <div class="nav-content">
@@ -1041,11 +1040,7 @@ onMounted(async () => {
   color: var(--text-muted);
 }
 
-.nav-search-sparkle {
-  color: var(--lumi-warning);
-  flex-shrink: 0;
-  opacity: 0.6;
-}
+
 
 .nav-content {
   flex: 1;
