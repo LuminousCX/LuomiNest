@@ -34,6 +34,7 @@ import {
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  Brain,
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
@@ -91,6 +92,7 @@ const navGroups: NavGroup[] = [
       { id: '/settings/ai-model', label: '模型配置', icon: Cpu },
       { id: '/avatar', label: '皮套工坊', icon: Palette },
       { id: '/panel/data-stats', label: '数据统计', icon: BarChart3 },
+      { id: '/memory', label: '记忆中枢', icon: Brain },
       { id: '/market', label: '扩展市场', icon: Package },
       { id: '/panel/console', label: '控制台', icon: Terminal },
     ],

@@ -2,7 +2,7 @@ import uuid
 import os
 import json
 from datetime import datetime, timezone
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
@@ -170,6 +170,11 @@ async def list_agents():
 @router.post("", response_model=AgentResponse)
 async def create_agent(request: AgentCreate):
     logger.info(f"[API] POST /agents - Creating agent: name={request.name}")
+    
+    agents = agents_store.all()
+    if len(agents) >= 10:
+        raise HTTPException(status_code=400, detail="最多只能创建 10 个 Agent")
+    
     agent_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     agent = {

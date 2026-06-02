@@ -55,15 +55,7 @@ class AIChatRequest(BaseModel):
     rounds: int = 3
 
 
-class RAGIndexRequest(BaseModel):
-    content: str
-    source: str
-    metadata: dict | None = None
 
-
-class RAGSearchRequest(BaseModel):
-    query: str
-    top_k: int = 5
 
 
 @router.get("/groups")
@@ -322,26 +314,7 @@ async def ai_to_ai_chat(request: AIChatRequest):
     return {"error": None, "data": results}
 
 
-@router.post("/rag/index")
-async def index_rag_content(request: RAGIndexRequest):
-    logger.info(f"[API] POST /social/rag/index - Indexing content")
-    from app.engines.memory.rag.indexer import RAGIndexer
-    indexer = RAGIndexer()
-    count = await indexer.index_text(
-        content=request.content,
-        source=request.source,
-        metadata=request.metadata,
-    )
-    return {"error": None, "data": {"indexed_chunks": count}}
 
-
-@router.post("/rag/search")
-async def search_rag(request: RAGSearchRequest):
-    logger.info(f"[API] POST /social/rag/search - Searching: {request.query}")
-    from app.engines.memory.rag.retriever import RAGRetriever
-    retriever = RAGRetriever()
-    results = await retriever.search(request.query, top_k=request.top_k)
-    return {"error": None, "data": results}
 
 
 @router.get("/agents")

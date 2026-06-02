@@ -43,8 +43,10 @@ async def chat_completions(request: ChatRequest):
     )
 
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    system_prompt = context_service.build_system_prompt(request.agent_id)
+    messages = [{"role": "system", "content": system_prompt}] + messages
     messages = context_service.inject_timestamp_prompt(messages)
-    messages = await context_service.inject_memory(messages, request.agent_id, resolved_provider)
+    messages = await context_service.inject_memory(messages, request.agent_id, resolved_provider, llm_adapter=llm_adapter)
 
     if request.file_content:
         supports_vision = llm_adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
@@ -210,13 +212,7 @@ async def truncate_messages(conv_id: str, request: TruncateMessagesRequest):
     _chat_service.persist_conv(conv_id, conv)
 
     agent_id = conv.get("agent_id")
-    try:
-        from app.engines.memory.core.storage import get_memory_storage
-        storage = get_memory_storage()
-        storage.clear_thread(conv_id, agent_id)
-        logger.info(f"[Memory] Cleared thread memory for conv={conv_id}")
-    except Exception as e:
-        logger.warning(f"[Memory] Failed to clear thread memory: {e}")
+    logger.info(f"[Chat] Truncated conv={conv_id}, thread memory not applicable in new system")
 
     logger.success(
         f"[API] PATCH /chat/conversations/{conv_id}/messages - "
@@ -282,6 +278,7 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
     agent_id = request.agent_id or conv.get("agent_id")
     all_messages = await context_service.inject_memory(
         all_messages, agent_id, resolved_provider, conv_id,
+        llm_adapter=llm_adapter,
     )
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
@@ -436,6 +433,7 @@ async def add_message(conv_id: str, request: ChatRequest):
     agent_id = request.agent_id or conv.get("agent_id")
     all_messages = await context_service.inject_memory(
         all_messages, agent_id, resolved_provider, conv_id,
+        llm_adapter=llm_adapter,
     )
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)

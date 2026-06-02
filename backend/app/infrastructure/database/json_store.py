@@ -57,6 +57,10 @@ class JsonStore:
         with self._lock:
             return dict(self._load())
 
+    def all(self) -> list:
+        with self._lock:
+            return list(self._load().values())
+
     def values(self) -> list:
         with self._lock:
             return list(self._load().values())

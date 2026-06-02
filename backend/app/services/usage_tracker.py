@@ -2,7 +2,6 @@ from loguru import logger
 from app.infrastructure.database.usage_store import usage_store
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.json_store import agents_store
-from app.engines.memory.core.storage import get_memory_storage
 
 
 class UsageTracker:
@@ -51,25 +50,21 @@ class UsageTracker:
 
         memory_stats: dict = {}
         try:
-            storage = get_memory_storage()
-            mem_data = storage.load(agent_id)
-            if mem_data:
-                user_facts = len(mem_data.get("user_space", {}).get("facts", []))
-                agent_facts = len(mem_data.get("agent_memory", {}).get("agent_facts", []))
-                episodic = len(mem_data.get("user_space", {}).get("episodic_events", []))
-                memory_stats = {
-                    "user_facts": user_facts,
-                    "agent_facts": agent_facts,
-                    "episodic_events": episodic,
-                    "total_memory_records": user_facts + agent_facts + episodic,
-                }
+            from app.engines.memory import get_memory_engine
+            engine = get_memory_engine()
+            data = engine.load_data()
+            dailies = engine.list_dailies()
+            memory_stats = {
+                "has_memory": bool(data.profile.name or data.facts),
+                "fact_count": len(data.facts),
+                "daily_count": len(dailies),
+            }
         except Exception as e:
             logger.warning(f"[UsageTracker] Failed to get memory stats: {e}")
             memory_stats = {
-                "user_facts": 0,
-                "agent_facts": 0,
-                "episodic_events": 0,
-                "total_memory_records": 0,
+                "has_memory": False,
+                "fact_count": 0,
+                "daily_count": 0,
             }
 
         return {
