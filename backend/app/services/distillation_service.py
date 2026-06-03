@@ -1,0 +1,292 @@
+import asyncio
+import hashlib
+from datetime import datetime, timezone
+from loguru import logger
+
+from app.engines.memory import get_memory_engine
+from app.engines.memory.prompts import _DISTILL_PROMPT_ROUND, _MERGE_SUMMARY_PROMPT
+
+
+class DistillationService:
+    """
+    5轮滚动合并蒸馏服务
+    
+    核心流程:
+    1. 每5轮(用户+AI) → 蒸馏最近5轮
+    2. 新蒸馏结果 + 旧摘要 → LLM合并
+    3. 合并产物覆盖写入 SUMMARY
+    
+    存储：每个conversation_id最多1条SUMMARY
+    """
+
+    DROPLET_THRESHOLD = 5
+    
+    STOP_WORDS = {
+        '好', '嗯', '哦', '行', 'ok', 'OK', '好的', '嗯嗯', '嗯嗯嗯',
+        '知道了', '明白', '收到', '呵呵', '哈哈', '对的',
+        '是的', '没错', '可以', '👌', '👍', '👌🏻',
+        '好滴', '好哒', '好呢', '好呀', '好哦',
+        'okk', 'okok', 'ok啦', '好啦', '好咯',
+        '嗯嗯好', '好的呢', '好的呀',
+    }
+    
+    FORCE_ALLOW_KEYWORDS = {'什么', '怎么', '为什么', '谁', '哪', '哪', '?', '？'}
+    
+    PUNCTUATION = set('，。！？、；：""''（）(){}[]【】<>《》·…—–—_一')
+    EMOJI_RANGES = [
+        (0x1F600, 0x1F64F),  # 表情符号
+        (0x1F300, 0x1F5FF),  # 杂项符号
+        (0x1F680, 0x1F6FF),  # 交通工具
+        (0x2600, 0x26FF),    # 杂项符号
+        (0x2700, 0x27BF),    # 装饰符号
+    ]
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def _is_emoji(char: str) -> bool:
+        """判断字符是否为表情符号"""
+        code = ord(char)
+        for start, end in DistillationService.EMOJI_RANGES:
+            if start <= code <= end:
+                return True
+        return False
+
+    @staticmethod
+    def should_record_daily(content: str) -> bool:
+        """多信号打分器判断是否记录每日对话
+        
+        四个零成本信号综合判断：
+        1. 去标点后 ≤1 字 → 噪音
+        2. 命中黑名单（含变体） → 噪音
+        3. 纯表情/纯标点 → 噪音
+        4. 含"什么/怎么/为什么/谁/哪/?/？" → 强制放行
+        """
+        stripped = content.strip()
+        
+        # 空内容直接返回 False
+        if not stripped:
+            return False
+        
+        # 信号1：去标点后 ≤1 字 → 噪音
+        content_without_punc = ''.join(c for c in stripped if c not in DistillationService.PUNCTUATION)
+        if len(content_without_punc) <= 1:
+            return False
+        
+        # 信号2：命中黑名单（含变体） → 噪音
+        if stripped in DistillationService.STOP_WORDS:
+            return False
+        
+        # 信号3：纯表情/纯标点 → 噪音
+        has_meaningful_char = False
+        for char in content_without_punc:
+            if not DistillationService._is_emoji(char):
+                has_meaningful_char = True
+                break
+        if not has_meaningful_char:
+            return False
+        
+        # 信号4：含疑问词 → 强制放行
+        for keyword in DistillationService.FORCE_ALLOW_KEYWORDS:
+            if keyword in stripped:
+                return True
+        
+        # 默认：长度≥2且不在黑名单的内容都记录
+        return len(stripped) >= 2
+
+    @staticmethod
+    def count_full_turns(messages: list) -> int:
+        """统计完整轮次（用户+AI）"""
+        turns = 0
+        i = 0
+        while i < len(messages):
+            if messages[i].get("role") == "user":
+                if i + 1 < len(messages) and messages[i + 1].get("role") == "assistant":
+                    turns += 1
+                    i += 2
+                else:
+                    i += 1
+            else:
+                i += 1
+        return turns
+
+    @staticmethod
+    def get_last_n_turns(messages: list, n: int) -> list:
+        """获取最近n轮对话（用户+AI对）"""
+        result = []
+        i = len(messages) - 1
+        
+        while i >= 0 and n > 0:
+            if messages[i].get("role") == "assistant":
+                if i - 1 >= 0 and messages[i - 1].get("role") == "user":
+                    result.insert(0, messages[i - 1])
+                    result.insert(1, messages[i])
+                    n -= 1
+                    i -= 2
+                else:
+                    i -= 1
+            else:
+                i -= 1
+        
+        return result
+
+    @staticmethod
+    def _generate_summary_hash(agent_id: str, conversation_id: str) -> str:
+        """生成摘要的唯一哈希值"""
+        return hashlib.md5(f"{agent_id}:{conversation_id}".encode()).hexdigest()
+
+    @staticmethod
+    async def maybe_distill(agent_id: str, conversation_id: str, messages: list, llm_adapter=None) -> bool:
+        """检查是否达到5轮，是则触发蒸馏合并"""
+        full_turns = DistillationService.count_full_turns(messages)
+        
+        if full_turns < DistillationService.DROPLET_THRESHOLD:
+            logger.info(f"[Distill] Skip: {full_turns} turns < {DistillationService.DROPLET_THRESHOLD}")
+            return False
+        
+        if full_turns % DistillationService.DROPLET_THRESHOLD != 0:
+            logger.info(f"[Distill] Skip: {full_turns} turns not divisible by {DistillationService.DROPLET_THRESHOLD}")
+            return False
+
+        logger.info(f"[Distill] Triggered: {full_turns} turns reached")
+        await DistillationService.distill_and_merge(agent_id, conversation_id, messages, llm_adapter)
+        return True
+
+    @staticmethod
+    async def distill_rounds(messages: list, llm_adapter=None) -> str | None:
+        """蒸馏最近5轮 → 新观察"""
+        if llm_adapter is None:
+            try:
+                from app.runtime.provider.llm.adapter import llm_adapter as default_adapter
+                llm_adapter = default_adapter
+            except Exception as e:
+                logger.warning(f"[Distill] No LLM adapter available: {e}")
+                return None
+
+        last_5_turns = DistillationService.get_last_n_turns(messages, 5)
+        if not last_5_turns:
+            logger.warning("[Distill] No messages to distill")
+            return None
+
+        conv_summary = ""
+        for msg in last_5_turns:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if isinstance(content, str) and content:
+                conv_summary += f"[{role}] {content[:300]}\n"
+
+        prompt = _DISTILL_PROMPT_ROUND.format(messages=conv_summary.strip())
+
+        try:
+            result = await llm_adapter.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=500,
+            )
+            response_text = (
+                result.strip() if isinstance(result, str) else str(result).strip()
+            )
+            logger.info(f"[Distill] Round distillation result: {response_text[:200]}")
+            return response_text
+
+        except Exception as e:
+            logger.warning(f"[Distill] Round distillation failed: {e}")
+            return None
+
+    @staticmethod
+    async def merge_summaries(old_summary: str, new_obs: str, llm_adapter=None) -> str | None:
+        """旧摘要 + 新观察 → 统一摘要"""
+        if llm_adapter is None:
+            try:
+                from app.runtime.provider.llm.adapter import llm_adapter as default_adapter
+                llm_adapter = default_adapter
+            except Exception as e:
+                logger.warning(f"[Distill] No LLM adapter available: {e}")
+                return None
+
+        prompt = _MERGE_SUMMARY_PROMPT.format(
+            old_summary=old_summary,
+            new_summary=new_obs,
+        )
+
+        try:
+            result = await llm_adapter.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=800,
+            )
+            response_text = (
+                result.strip() if isinstance(result, str) else str(result).strip()
+            )
+            logger.info(f"[Distill] Merge result: {response_text[:200]}")
+            
+            if len(response_text) > 300:
+                response_text = response_text[:297] + "..."
+                logger.info(f"[Distill] Trimmed summary to 300 chars")
+            
+            return response_text
+
+        except Exception as e:
+            logger.warning(f"[Distill] Summary merge failed: {e}")
+            return None
+
+    @staticmethod
+    async def distill_and_merge(agent_id: str, conversation_id: str, messages: list, llm_adapter=None):
+        """执行蒸馏并合并"""
+        try:
+            new_observation = await DistillationService.distill_rounds(messages, llm_adapter)
+            if not new_observation:
+                logger.warning("[Distill] No new observation from distillation")
+                return
+
+            engine = get_memory_engine(agent_id)
+            current_summary = engine.load_summary()
+
+            if current_summary and current_summary.strip():
+                logger.info(f"[Distill] Merging with existing summary")
+                merged = await DistillationService.merge_summaries(current_summary, new_observation, llm_adapter)
+                if merged:
+                    engine.save_summary(merged)
+                    logger.info(f"[Distill] Merged summary saved")
+                else:
+                    logger.warning("[Distill] Merge failed, keeping original")
+            else:
+                engine.save_summary(new_observation)
+                logger.info(f"[Distill] New summary saved as initial version")
+
+        except Exception as e:
+            logger.error(f"[Distill] distill_and_merge failed: {e}")
+
+    @staticmethod
+    async def final_distill(agent_id: str, conversation_id: str, messages: list, llm_adapter=None):
+        """对话结束触发最终蒸馏"""
+        full_turns = DistillationService.count_full_turns(messages)
+        
+        if full_turns < 2:
+            logger.info(f"[Distill] Skip final: {full_turns} < 2 turns")
+            return
+
+        logger.info(f"[Distill] Final distill triggered: {full_turns} turns")
+        
+        if full_turns % DistillationService.DROPLET_THRESHOLD == 0:
+            await DistillationService.distill_and_merge(agent_id, conversation_id, messages, llm_adapter)
+        else:
+            new_observation = await DistillationService.distill_rounds(messages, llm_adapter)
+            if new_observation:
+                engine = get_memory_engine(agent_id)
+                current_summary = engine.load_summary()
+                
+                if current_summary and current_summary.strip():
+                    merged = await DistillationService.merge_summaries(current_summary, new_observation, llm_adapter)
+                    if merged:
+                        engine.save_summary(merged)
+                        logger.info(f"[Distill] Final merged summary saved")
+                    else:
+                        logger.warning("[Distill] Final merge failed")
+                else:
+                    engine.save_summary(new_observation)
+                    logger.info(f"[Distill] Final summary saved")
+
+
+distillation_service = DistillationService()

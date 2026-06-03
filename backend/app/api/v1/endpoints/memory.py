@@ -216,6 +216,8 @@ async def list_memory_agents():
         for d in sorted(agents_dir.iterdir()):
             if not d.is_dir():
                 continue
+            if d.name == "_default":
+                continue
             if not (d / "memory.json").exists():
                 continue
             agent = agents_store.get(d.name)
@@ -295,9 +297,15 @@ async def clear_summary(agent_id: str | None = None):
 
 @router.delete("/reset-all")
 async def reset_all_memory(agent_id: str | None = None):
-    """重置全部记忆到出厂状态"""
+    """重置全部记忆到出厂状态（同时删除该 Agent 的所有对话记录）"""
+    # 删除记忆数据
     engine = get_memory_engine(agent_id)
     engine.reset_all()
+    
+    # 删除该 Agent 的所有对话记录
+    from app.infrastructure.database.conversation_store import conversation_store
+    conversation_store.delete_by_agent_id(agent_id or "_default")
+    
     # 清除缓存
     key = agent_id or "_default"
     _engines.pop(key, None)

@@ -11,6 +11,7 @@ from app.schemas.chat import ChatStreamChunk
 from app.services.context_service import ContextService
 from app.services.suggestion_service import SuggestionService
 from app.services.usage_tracker import usage_tracker
+from app.services.distillation_service import distillation_service
 
 from fastapi.responses import StreamingResponse
 
@@ -278,12 +279,17 @@ class ChatService:
                     logger.debug(f"[STREAM] Done event send failed (client may have disconnected): {done_err}")
 
                 try:
-                    self._context.schedule_memory_update(
+                    await self._context.schedule_memory_update(
                         [dict(m) for m in conv["messages"]], conv_id, agent_id,
                         llm_adapter=llm_adapter,
                     )
                 except Exception as schedule_err:
                     logger.warning(f"[STREAM] Memory update scheduling failed: {schedule_err}")
+
+                try:
+                    await distillation_service.maybe_distill(agent_id, conv_id, conv["messages"], llm_adapter)
+                except Exception as distill_err:
+                    logger.warning(f"[STREAM] Distillation failed: {distill_err}")
 
         return StreamingResponse(
             generator(),

@@ -15,6 +15,7 @@ from app.engines.memory.memory_engine import (
     _REINFORCEMENT_PATTERNS_EN,
     _REINFORCEMENT_PATTERNS_ZH,
 )
+from app.services.distillation_service import distillation_service
 
 
 class ContextService:
@@ -314,25 +315,39 @@ When thinking/reasoning, you MUST strictly follow this format:
                 except Exception as pe:
                     logger.warning(f"[Memory] Background profile update failed: {pe}")
 
-            if len(str(content)) > 10:
+            if distillation_service.should_record_daily(str(content)):
                 daily_lines = []
-                for i in range(len(messages) - 1):
-                    if messages[i].get("role") == "user" and messages[i+1].get("role") == "assistant":
-                        user_content = str(ContextService._extract_user_text(messages[i]))[:200]
-                        assistant_content = str(messages[i+1].get("content", ""))[:300]
-                        if user_content:
+                for i in range(len(messages) - 1, max(-1, len(messages) - 3), -1):
+                    if messages[i].get("role") == "assistant" and i > 0 and messages[i-1].get("role") == "user":
+                        user_content = str(ContextService._extract_user_text(messages[i-1]))[:200]
+                        assistant_content = str(messages[i].get("content", ""))[:500]
+                        assistant_content = assistant_content.replace("\n", " ").replace("\r", "")
+                        if user_content and distillation_service.should_record_daily(user_content):
                             daily_lines.append(f"[用户] {user_content}")
-                        if assistant_content:
+                        if assistant_content and distillation_service.should_record_daily(assistant_content):
                             daily_lines.append(f"[助手] {assistant_content}")
+                        break
                 if daily_lines:
                     engine.append_daily("\n".join(daily_lines))
 
-            if len(user_msgs) >= 2 and llm_adapter:
-                logger.info(f"[Memory] Starting summary: user_msgs={len(user_msgs)}")
+            if len(user_msgs) >= 5 and len(user_msgs) % 5 == 0 and llm_adapter:
+                logger.info(f"[Memory] Starting summary: user_msgs={len(user_msgs)} (triggered by 5-message cycle)")
                 try:
-                    result = await engine.distill_conversation(messages, llm_adapter, hint)
+                    result = await engine.distill_conversation(messages[-10:], llm_adapter, hint)
                     if result:
                         logger.info(f"[Memory] Distillation produced {len(result)} chars")
+                        current_summary = engine.load_summary()
+                        if current_summary and current_summary.strip():
+                            logger.info(f"[Memory] Merging with existing summary ({len(current_summary)} chars)")
+                            merged = await engine.merge_summary(current_summary, result, llm_adapter)
+                            if merged:
+                                engine.save_summary(merged)
+                                logger.info(f"[Memory] Summary merged and saved ({len(merged)} chars)")
+                            else:
+                                logger.warning("[Memory] Merge returned None, keeping original")
+                        else:
+                            engine.save_summary(result)
+                            logger.info(f"[Memory] New summary saved as initial version")
                     else:
                         logger.warning("[Memory] Distillation returned None")
                 except Exception as de:
@@ -343,7 +358,7 @@ When thinking/reasoning, you MUST strictly follow this format:
     _background_tasks: set = set()
 
     @staticmethod
-    def schedule_memory_update(
+    async def schedule_memory_update(
         messages: list[dict],
         thread_id: str,
         agent_id: str | None = None,
@@ -352,18 +367,12 @@ When thinking/reasoning, you MUST strictly follow this format:
         user_count = sum(1 for m in messages if m.get("role") == "user")
         logger.info(f"[Memory] schedule_memory_update: thread={thread_id}, user_msgs={user_count}, has_adapter={llm_adapter is not None}")
         try:
-            task = asyncio.create_task(
-                ContextService.update_memory_from_conversation(
-                    messages, thread_id, agent_id, llm_adapter,
-                )
+            await ContextService.update_memory_from_conversation(
+                messages, thread_id, agent_id, llm_adapter,
             )
-            ContextService._background_tasks.add(task)
-            task.add_done_callback(lambda t: (
-                ContextService._background_tasks.discard(t),
-                logger.warning(f"[Memory] Background task failed: {t.exception()}") if t.exception() else logger.info(f"[Memory] Background task completed"),
-            ))
+            logger.info(f"[Memory] Background task completed")
         except Exception as e:
-            logger.warning(f"[Memory] Failed to schedule memory update: {e}")
+            logger.warning(f"[Memory] Failed to update memory: {e}")
 
 
 context_service = ContextService()

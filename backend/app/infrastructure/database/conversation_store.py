@@ -244,6 +244,15 @@ class ConversationStore:
                 deleted += 1
         return deleted
 
+    def delete_by_agent_id(self, agent_id: str) -> int:
+        """删除指定 Agent 的所有对话记录"""
+        convs = self.list_conversations(agent_id)
+        deleted = 0
+        for conv in convs:
+            if self.permanent_delete(conv["id"]):
+                deleted += 1
+        return deleted
+
     def _migrate_search_text(self):
         """为索引中缺少 search_text 的对话补全搜索文本"""
         with self._lock:

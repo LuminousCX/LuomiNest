@@ -288,7 +288,12 @@ const toggleMenu = (event: MouseEvent) => {
     showMenu.value = false
   } else {
     const rect = (event.target as HTMLElement).getBoundingClientRect()
-    menuPosition.value = { x: rect.left, y: rect.bottom + 8 }
+    const menuWidth = 240
+    let menuX = rect.left
+    if (menuX + menuWidth > window.innerWidth) {
+      menuX = window.innerWidth - menuWidth - 16
+    }
+    menuPosition.value = { x: menuX, y: rect.bottom + 8 }
     showMenu.value = true
   }
 }
@@ -705,27 +710,25 @@ window.addEventListener('click', closeMenu)
             <textarea v-model="editSummaryContent" class="memory-editor" placeholder="编辑 AI 总结内容..."></textarea>
           </div>
           <template v-else>
-            <div v-if="!hasSummary" class="empty-section">
-              <Sparkles :size="28" />
-              <p>暂无AI总结</p>
-              <p class="empty-hint">对话积累后AI会自动提炼关键信息</p>
-            </div>
-            <template v-else>
-              <div
-                v-for="sectionName in summarySectionNames"
-                :key="sectionName"
-              >
-                <div v-if="memoryStore.summarySections[sectionName]" class="distilled-section-card" :style="{ '--section-color': summarySectionColors[sectionName] }">
-                  <div class="distilled-section-header">
-                    <div class="section-dot" :style="{ background: summarySectionColors[sectionName] }"></div>
-                    <span class="section-title-text">{{ sectionName }}</span>
-                  </div>
-                  <div class="distilled-section-body">
-                    <p v-for="(line, idx) in memoryStore.summarySections[sectionName].split('\n').filter((l: string) => l.trim())" :key="idx" class="distilled-line">{{ line.replace(/^-\s*/, '') }}</p>
-                  </div>
-                </div>
+            <div
+              v-for="sectionName in summarySectionNames"
+              :key="sectionName"
+              class="distilled-section-card"
+              :style="{ '--section-color': summarySectionColors[sectionName] }"
+            >
+              <div class="distilled-section-header">
+                <div class="section-dot" :style="{ background: summarySectionColors[sectionName] }"></div>
+                <span class="section-title-text">{{ sectionName }}</span>
               </div>
-            </template>
+              <div class="distilled-section-body">
+                <template v-if="memoryStore.summarySections[sectionName] && memoryStore.summarySections[sectionName].trim()">
+                  <p v-for="(line, idx) in memoryStore.summarySections[sectionName].split('\n').filter((l: string) => l.trim())" :key="idx" class="distilled-line">{{ line.replace(/^-\s*/, '') }}</p>
+                </template>
+                <template v-else>
+                  <p class="empty-hint">暂无内容</p>
+                </template>
+              </div>
+            </div>
           </template>
         </template>
 

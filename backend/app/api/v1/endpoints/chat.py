@@ -470,7 +470,7 @@ async def add_message(conv_id: str, request: ChatRequest):
 
     _chat_service.save_assistant_message(conv, persist_state, versions=request.versions)
     _chat_service.persist_conv(conv_id, conv)
-    context_service.schedule_memory_update(
+    await context_service.schedule_memory_update(
         [dict(m) for m in conv["messages"]], conv_id, agent_id,
         llm_adapter=llm_adapter,
     )

@@ -175,6 +175,10 @@ async def create_agent(request: AgentCreate):
     if len(agents) >= 10:
         raise HTTPException(status_code=400, detail="最多只能创建 10 个 Agent")
     
+    for agent in agents:
+        if agent.get("name") == request.name:
+            raise HTTPException(status_code=400, detail=f"Agent 名称 '{request.name}' 已存在")
+    
     agent_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     agent = {
@@ -219,6 +223,13 @@ async def update_agent(agent_id: str, request: AgentUpdate):
         raise NotFoundError(f"Agent {agent_id} not found")
 
     update_data = request.model_dump(exclude_unset=True)
+    
+    if "name" in update_data:
+        new_name = update_data["name"]
+        all_agents = agents_store.all()
+        for ag in all_agents:
+            if ag.get("id") != agent_id and ag.get("name") == new_name:
+                raise HTTPException(status_code=400, detail=f"Agent 名称 '{new_name}' 已存在")
     updated_fields = list(update_data.keys())
     agent.update(update_data)
     agent["updated_at"] = datetime.now(timezone.utc).isoformat()
