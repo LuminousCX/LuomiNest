@@ -25,6 +25,7 @@ from .prompts import (
     _REINFORCEMENT_HINT,
     _REINFORCEMENT_PATTERNS_EN,
     _REINFORCEMENT_PATTERNS_ZH,
+    _SUMMARY_EXTRACT_PROMPT,
 )
 from .store import MemoryStore
 from .fact_manager import FactManager
@@ -124,6 +125,7 @@ class MemoryEngine:
         return summaries_to_markdown(data)
 
     def save_summary(self, content: str) -> None:
+        """保存摘要内容。"""
         data = self._store.load_data()
         self._markdown_to_summaries(data, content)
         self._store.save_data(data)
@@ -141,6 +143,14 @@ class MemoryEngine:
     async def merge_summary(self, old_summary: str, new_summary: str, llm_adapter=None) -> str | None:
         return await self._extractor.merge_summary(old_summary, new_summary, llm_adapter)
 
+    async def extract_summary_sections(self, content: str, llm_adapter=None) -> dict | None:
+        """使用LLM从摘要内容中提取五个部分。"""
+        return await self._extractor.extract_summary_sections(content, llm_adapter)
+
+    async def extract_knowledge(self, conversation: str, llm_adapter=None) -> str | None:
+        """使用LLM从对话中提取知识点。"""
+        return await self._extractor.extract_knowledge(conversation, llm_adapter)
+
     def clear_summaries(self) -> None:
         data = self._store.load_data()
         data.summaries = SummaryData()
@@ -148,34 +158,42 @@ class MemoryEngine:
 
     # --- 每日记录 ---
 
-    def load_daily(self, date: str | None = None) -> str:
-        return self._store.load_daily(date)
+    def load_daily(self, date: str | None = None, conversation_id: str | None = None) -> str:
+        return self._store.load_daily(date, conversation_id)
 
-    def append_daily(self, content: str, date: str | None = None) -> None:
-        self._store.append_daily(content, date)
+    def append_daily(self, content: str, date: str | None = None, conversation_id: str | None = None) -> None:
+        self._store.append_daily(content, date, conversation_id)
 
-    def list_dailies(self) -> list[str]:
-        return self._store.list_dailies()
+    def list_dailies(self, conversation_id: str | None = None) -> list[str]:
+        return self._store.list_dailies(conversation_id)
+
+    def list_conversation_dailies(self) -> list[str]:
+        return self._store.list_conversation_dailies()
 
     def clear_dailies(self) -> None:
         self._store.clear_dailies()
 
     # --- 上下文 ---
 
-    def build_context(self, max_chars: int | None = None) -> str:
-        return self._context_builder.build_context(max_chars)
+    def build_context(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
+        conv_store = None
+        if conversation_id:
+            from .memory_engine import get_conversation_store
+            agent_id = getattr(self, '_agent_id', None)
+            conv_store = get_conversation_store(agent_id, conversation_id)
+        return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store)
 
     # --- LLM 驱动的更新 ---
 
     async def extract_facts(
-        self, message: str, llm_adapter=None, correction_hint: str = ""
+        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = ""
     ) -> tuple[str, list[FactItem]]:
-        return await self._extractor.extract_facts(message, llm_adapter, correction_hint)
+        return await self._extractor.extract_facts(message, llm_adapter, correction_hint, context_messages)
 
     async def update_profile_from_message(
-        self, message: str, llm_adapter=None, correction_hint: str = ""
+        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = ""
     ) -> dict[str, str]:
-        return await self._extractor.update_profile_from_message(message, llm_adapter, correction_hint)
+        return await self._extractor.update_profile_from_message(message, llm_adapter, correction_hint, context_messages)
 
     async def distill_conversation(
         self,
@@ -263,6 +281,32 @@ def _migrate_legacy() -> None:
     if old_daily.exists() and old_daily.is_dir():
         shutil.move(str(old_daily), str(target / "daily"))
     logger.info("[Memory] Legacy migration completed")
+
+
+_conversation_stores: dict[str, MemoryStore] = {}
+
+
+def get_conversation_store(agent_id: str | None, conversation_id: str) -> MemoryStore:
+    """返回对话级 MemoryStore，隔离 summaries/daily/dynamic_context。
+    
+    Args:
+        agent_id: Agent ID，如果为None则使用默认Agent
+        conversation_id: 对话ID
+    
+    Returns:
+        对话级MemoryStore实例
+    """
+    key = f"{agent_id or '_default'}:{conversation_id}"
+    if key in _conversation_stores:
+        return _conversation_stores[key]
+    with _engine_lock:
+        if key in _conversation_stores:
+            return _conversation_stores[key]
+        agent_key = agent_id or "_default"
+        path = Path(settings.DATA_DIR) / "memory" / "agents" / agent_key / "conversations" / conversation_id
+        store = MemoryStore(path)
+        _conversation_stores[key] = store
+        return store
 
 
 def get_memory_engine(agent_id: str | None = None) -> MemoryEngine:

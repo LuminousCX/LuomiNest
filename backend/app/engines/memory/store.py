@@ -4,6 +4,7 @@ import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from loguru import logger
 
@@ -28,9 +29,11 @@ class MemoryStore:
     def _knowledge_file(self) -> Path:
         return self._path / "knowledge.md"
 
-    def _daily_file(self, date: str | None = None) -> Path:
+    def _daily_file(self, date: str | None = None, conversation_id: str | None = None) -> Path:
         if date is None:
-            date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+        if conversation_id:
+            return self._path / "daily" / conversation_id / f"{date}.md"
         return self._path / "daily" / f"{date}.md"
 
     def _read(self, path: Path) -> str:
@@ -175,27 +178,58 @@ class MemoryStore:
 
     # --- 每日记录 ---
 
-    def load_daily(self, date: str | None = None) -> str:
+    def load_daily(self, date: str | None = None, conversation_id: str | None = None) -> str:
         with self._lock:
-            return self._read(self._daily_file(date))
+            if conversation_id:
+                return self._read(self._daily_file(date, conversation_id))
+            # 不指定对话时，合并根目录和所有子目录中对应日期的内容
+            if date is None:
+                date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+            parts: list[str] = []
+            root_file = self._path / "daily" / f"{date}.md"
+            root_content = self._read(root_file)
+            if root_content:
+                parts.append(root_content)
+            daily_dir = self._path / "daily"
+            if daily_dir.exists():
+                for sub in sorted(daily_dir.iterdir()):
+                    if sub.is_dir():
+                        sub_file = sub / f"{date}.md"
+                        sub_content = self._read(sub_file)
+                        if sub_content:
+                            parts.append(sub_content)
+            return "\n".join(parts)
 
-    def append_daily(self, content: str, date: str | None = None) -> None:
+    def append_daily(self, content: str, date: str | None = None, conversation_id: str | None = None) -> None:
         with self._lock:
-            actual_date = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            path = self._daily_file(actual_date)
+            actual_date = date or datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+            path = self._daily_file(actual_date, conversation_id)
             existing = self._read(path)
-            now = datetime.now(timezone.utc).strftime("%H:%M")
+            now = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%H:%M")
             if not existing:
                 existing = f"# {actual_date}\n\n"
             entry = f"- [{now}] {content}\n"
             self._write(path, existing + entry)
 
-    def list_dailies(self) -> list[str]:
+    def list_dailies(self, conversation_id: str | None = None) -> list[str]:
+        daily_dir = self._path / "daily"
+        if conversation_id:
+            daily_dir = daily_dir / conversation_id
+        if not daily_dir.exists():
+            return []
+        if conversation_id:
+            files = sorted(daily_dir.glob("*.md"))
+        else:
+            # 不指定对话时，搜索根目录和所有子目录中的 .md 文件
+            files = sorted(daily_dir.glob("**/*.md"))
+        return sorted(set(f.stem for f in files))
+
+    def list_conversation_dailies(self) -> list[str]:
+        """列出所有有 daily 记录的 conversation_id。"""
         daily_dir = self._path / "daily"
         if not daily_dir.exists():
             return []
-        files = sorted(daily_dir.glob("*.md"))
-        return [f.stem for f in files]
+        return [d.name for d in daily_dir.iterdir() if d.is_dir()]
 
     # --- 清空操作 ---
 

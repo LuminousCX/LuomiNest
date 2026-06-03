@@ -6,7 +6,7 @@ from .models import (
     SummarySection,
     FACT_CATEGORIES,
 )
-from .memory_engine import MemoryEngine, get_memory_engine
+from .memory_engine import MemoryEngine, get_memory_engine, get_conversation_store
 
 __all__ = [
     "MemoryEngine",
@@ -17,4 +17,5 @@ __all__ = [
     "SummarySection",
     "FACT_CATEGORIES",
     "get_memory_engine",
+    "get_conversation_store",
 ]

@@ -89,6 +89,63 @@ class ContextService:
         return ""
 
     @staticmethod
+    def detect_memory_action(text: str) -> dict | None:
+        """检测自然语言记忆操作指令（忘掉/你记错了/你记住了什么）。"""
+        text_lower = text.strip().casefold()
+
+        # 忘掉/删除记忆
+        forget_patterns = [
+            r"忘掉(.+)", r"忘记(.+)", r"不要记(.+)", r"删掉关于(.+)的记忆",
+            r"forget\s+(.+)", r"stop\s+remembering\s+(.+)",
+        ]
+        for pattern in forget_patterns:
+            m = re.search(pattern, text_lower)
+            if m:
+                return {"action": "forget", "target": m.group(1).strip()}
+
+        # 你记错了
+        mistake_patterns = [
+            r"你记错了", r"记错了", r"不是这样的", r"不对，",
+            r"you\s+remembered\s+wrong", r"that'?s?\s+wrong",
+        ]
+        for pattern in mistake_patterns:
+            if re.search(pattern, text_lower):
+                return {"action": "correct", "hint": text.strip()}
+
+        # 你记住了什么
+        recall_patterns = [
+            r"你记住了什么", r"你记住我什么", r"你知道我什么",
+            r"你了解我什么", r"我的记忆", r"你记得我",
+            r"what\s+do\s+you\s+remember", r"what\s+do\s+you\s+know\s+about\s+me",
+        ]
+        for pattern in recall_patterns:
+            if re.search(pattern, text_lower):
+                return {"action": "recall"}
+
+        return None
+
+    @staticmethod
+    def execute_memory_action(engine, action: dict) -> None:
+        """执行自然语言记忆操作。"""
+        if action["action"] == "forget":
+            target = action["target"]
+            data = engine.load_data()
+            removed = 0
+            for fact in list(data.facts):
+                if target in fact.content.casefold() and fact.is_latest:
+                    fact.is_latest = False
+                    fact.confidence = 0.1
+                    removed += 1
+            if removed > 0:
+                engine._store.save_data(data)
+                logger.info(f"[Memory] Forgot {removed} facts matching '{target}'")
+
+        elif action["action"] == "correct":
+            # 纠正操作：降低最近一条相关事实的置信度
+            # 实际纠正由 LLM 提取的 correction 类型事实完成
+            logger.info(f"[Memory] Correction detected, will be handled by fact extraction")
+
+    @staticmethod
     def inject_timestamp_prompt(messages: list[dict]) -> list[dict]:
         now = datetime.now(ZoneInfo("Asia/Shanghai"))
         weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
@@ -264,7 +321,9 @@ When thinking/reasoning, you MUST strictly follow this format:
     ) -> list[dict]:
         try:
             engine = get_memory_engine(agent_id)
-            memory_ctx = engine.build_context()
+            # query-aware：用用户最新消息作为 query 优化事实检索
+            query = self.get_user_query(messages)
+            memory_ctx = engine.build_context(query=query, conversation_id=thread_id)
 
             if not memory_ctx:
                 logger.info(f"[Memory] No memory context to inject, thread={thread_id}")
@@ -307,9 +366,20 @@ When thinking/reasoning, you MUST strictly follow this format:
             engine = get_memory_engine(agent_id)
             hint = ContextService.build_correction_hint(messages)
 
+            # 自然语言记忆操作检测
+            memory_action = ContextService.detect_memory_action(str(content))
+            if memory_action:
+                ContextService.execute_memory_action(engine, memory_action)
+                logger.info(f"[Memory] Natural language action: {memory_action}")
+
             if llm_adapter:
                 try:
-                    profile_result = await engine.update_profile_from_message(str(content), llm_adapter, hint)
+                    # 传入最近3条用户消息作为上下文，避免"换一个"等指代不明
+                    recent_user_msgs = [ContextService._extract_user_text(m) for m in user_msgs[-3:]]
+                    context_msg = "\n".join(f"[用户]: {m}" for m in recent_user_msgs[:-1]) if len(recent_user_msgs) > 1 else ""
+                    profile_result = await engine.update_profile_from_message(
+                        str(content), llm_adapter, hint, context_messages=context_msg,
+                    )
                     if profile_result:
                         logger.info(f"[Memory] Background profile update: {profile_result}")
                 except Exception as pe:
@@ -328,30 +398,9 @@ When thinking/reasoning, you MUST strictly follow this format:
                             daily_lines.append(f"[助手] {assistant_content}")
                         break
                 if daily_lines:
-                    engine.append_daily("\n".join(daily_lines))
+                    engine.append_daily("\n".join(daily_lines), conversation_id=thread_id)
 
-            if len(user_msgs) >= 5 and len(user_msgs) % 5 == 0 and llm_adapter:
-                logger.info(f"[Memory] Starting summary: user_msgs={len(user_msgs)} (triggered by 5-message cycle)")
-                try:
-                    result = await engine.distill_conversation(messages[-10:], llm_adapter, hint)
-                    if result:
-                        logger.info(f"[Memory] Distillation produced {len(result)} chars")
-                        current_summary = engine.load_summary()
-                        if current_summary and current_summary.strip():
-                            logger.info(f"[Memory] Merging with existing summary ({len(current_summary)} chars)")
-                            merged = await engine.merge_summary(current_summary, result, llm_adapter)
-                            if merged:
-                                engine.save_summary(merged)
-                                logger.info(f"[Memory] Summary merged and saved ({len(merged)} chars)")
-                            else:
-                                logger.warning("[Memory] Merge returned None, keeping original")
-                        else:
-                            engine.save_summary(result)
-                            logger.info(f"[Memory] New summary saved as initial version")
-                    else:
-                        logger.warning("[Memory] Distillation returned None")
-                except Exception as de:
-                    logger.warning(f"[Memory] Distillation failed: {de}")
+            # 蒸馏统一由 distillation_service 处理，此处不再内嵌蒸馏
         except Exception as e:
             logger.warning(f"[Memory] Failed to update memory from conversation: {e}")
 

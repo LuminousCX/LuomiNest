@@ -472,6 +472,7 @@ const showHistoryPanel = computed(() => {
 onMounted(async () => {
   await agentStore.fetchAgents()
   if (agentStore.activeAgent?.id) {
+    await chatStore.fetchConversations(agentStore.activeAgent.id)
     chatStore.fetchTrash(agentStore.activeAgent.id)
   }
 })

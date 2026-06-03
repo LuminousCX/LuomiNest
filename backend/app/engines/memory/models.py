@@ -18,6 +18,10 @@ _SUMMARY_SECTION_MAP = {
 class ProfileData(BaseModel):
     name: str = ""
     updated_at: str = ""
+    # Static: 长期稳定的事实（很少变化，如职业、技能、偏好）
+    static_facts: list[str] = Field(default_factory=list)
+    # Dynamic: 近期上下文和临时状态（频繁更新，如正在做的项目、短期计划）
+    dynamic_context: list[str] = Field(default_factory=list)
 
 
 class FactItem(BaseModel):
@@ -28,6 +32,12 @@ class FactItem(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     source: str = "conversation"
     source_error: str = ""
+    # 时间衰减：可选的过期时间，None = 永不过期
+    expires_at: str | None = None
+    # 关系图谱：是否是最新版本
+    is_latest: bool = True
+    # 关系图谱：替代了哪个 fact ID（用于矛盾追踪）
+    supersedes_id: str | None = None
 
 
 class SummarySection(BaseModel):

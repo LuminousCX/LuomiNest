@@ -16,6 +16,7 @@ router = APIRouter(prefix="/memory", tags=["Memory"])
 class AppendRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=5000)
     date: str | None = None
+    conversation_id: str | None = None
 
 
 class UpdateContentRequest(BaseModel):
@@ -145,28 +146,62 @@ async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | 
 
 
 @router.get("/daily")
-async def get_daily(date: str | None = None, agent_id: str | None = None):
+async def get_daily(date: str | None = None, agent_id: str | None = None, conversation_id: str | None = None):
     engine = get_memory_engine(agent_id)
-    return {"date": date or "today", "content": engine.load_daily(date)}
+    return {"date": date or "today", "content": engine.load_daily(date, conversation_id)}
 
 
 @router.post("/daily")
 async def append_daily(request: AppendRequest, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
-    engine.append_daily(request.content, request.date)
+    engine.append_daily(request.content, request.date, conversation_id=request.conversation_id)
     return {"status": "success"}
 
 
 @router.get("/dailies")
-async def list_dailies(agent_id: str | None = None):
+async def list_dailies(agent_id: str | None = None, conversation_id: str | None = None):
     engine = get_memory_engine(agent_id)
-    return {"dailies": engine.list_dailies()}
+    return {"dailies": engine.list_dailies(conversation_id)}
+
+
+@router.get("/conversation-dailies")
+async def list_conversation_dailies(agent_id: str | None = None):
+    """列出所有有 daily 记录的 conversation_id 及其标题。"""
+    engine = get_memory_engine(agent_id)
+    conv_ids = engine.list_conversation_dailies()
+    
+    from app.infrastructure.database.conversation_store import conversation_store
+    result = []
+    for conv_id in conv_ids:
+        conv = conversation_store.get(conv_id)
+        title = conv.get("title", "New Conversation") if conv else "Unknown"
+        result.append({"id": conv_id, "title": title})
+    
+    return {"conversations": result}
+
+
+@router.get("/recent-facts")
+async def get_recent_facts(agent_id: str | None = None, since: float = 30):
+    """获取最近 N 秒内新增的事实（用于聊天中展示记忆提取结果）。"""
+    from datetime import datetime, timezone, timedelta
+    engine = get_memory_engine(agent_id)
+    data = engine.load_data()
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=since)
+    recent = []
+    for f in data.facts:
+        try:
+            created = datetime.fromisoformat(f.created_at.replace("Z", "+00:00"))
+            if created >= cutoff:
+                recent.append(f.model_dump())
+        except (ValueError, TypeError):
+            pass
+    return {"facts": recent}
 
 
 @router.get("/inject")
-async def get_injection_content(agent_id: str | None = None):
+async def get_injection_content(agent_id: str | None = None, conversation_id: str | None = None):
     engine = get_memory_engine(agent_id)
-    content = engine.build_context()
+    content = engine.build_context(conversation_id=conversation_id)
     return {"content": content, "has_memory": bool(content.strip())}
 
 

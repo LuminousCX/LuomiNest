@@ -4,6 +4,9 @@ import { useApi } from '../composables/useApi'
 
 export interface MemoryProfile {
   name: string
+  updated_at: string
+  static_facts: string[]
+  dynamic_context: string[]
 }
 
 export interface FactItem {
@@ -14,6 +17,9 @@ export interface FactItem {
   created_at: string
   source: string
   source_error: string
+  expires_at: string | null
+  is_latest: boolean
+  supersedes_id: string | null
 }
 
 export interface KnowledgeSection {
@@ -78,6 +84,7 @@ export const useMemoryStore = defineStore('memory', () => {
   const loading = ref(false)
   const saving = ref(false)
   const distilling = ref(false)
+  const recentFacts = ref<FactItem[]>([])
 
   const memoryAgents = ref<MemoryAgent[]>([])
   const currentAgentId = ref<string | null>(null)
@@ -187,11 +194,12 @@ export const useMemoryStore = defineStore('memory', () => {
     }
   }
 
-  const fetchDaily = async (date?: string, agentId?: string | null) => {
+  const fetchDaily = async (date?: string, agentId?: string | null, conversationId?: string | null) => {
     try {
       const params: string[] = []
       if (date) params.push(`date=${date}`)
       if (agentId) params.push(`agent_id=${agentId}`)
+      if (conversationId) params.push(`conversation_id=${conversationId}`)
       const query = params.length > 0 ? `?${params.join('&')}` : ''
       const result = await apiGet<{ date: string; content: string }>(`/memory/daily${query}`)
       dailyContent.value = result.content || ''
@@ -201,27 +209,46 @@ export const useMemoryStore = defineStore('memory', () => {
     }
   }
 
-  const appendDaily = async (content: string, date?: string, agentId?: string | null) => {
+  const appendDaily = async (content: string, date?: string, agentId?: string | null, conversationId?: string | null) => {
     saving.value = true
     try {
-      await apiPost(`/memory/daily${agentQuery(agentId)}`, { content, date: date || null })
+      await apiPost(`/memory/daily${agentQuery(agentId)}`, { content, date: date || null, conversation_id: conversationId || null })
       await Promise.all([
-        fetchDaily(date, agentId),
-        fetchDailies(agentId),
+        fetchDaily(date, agentId, conversationId),
+        fetchDailies(agentId, conversationId),
       ])
     } finally {
       saving.value = false
     }
   }
 
-  const fetchDailies = async (agentId?: string | null) => {
+  const fetchDailies = async (agentId?: string | null, conversationId?: string | null) => {
     try {
-      const result = await apiGet<{ dailies: string[] }>(`/memory/dailies${agentQuery(agentId)}`)
+      const params: string[] = []
+      if (agentId) params.push(`agent_id=${agentId}`)
+      if (conversationId) params.push(`conversation_id=${conversationId}`)
+      const query = params.length > 0 ? `?${params.join('&')}` : ''
+      const result = await apiGet<{ dailies: string[] }>(`/memory/dailies${query}`)
       dailies.value = result.dailies || []
     } catch {
       dailies.value = []
     }
   }
+
+  interface ConversationInfo {
+  id: string
+  title: string
+}
+
+const conversationDailies = ref<ConversationInfo[]>([])
+const fetchConversationDailies = async (agentId?: string | null) => {
+  try {
+    const result = await apiGet<{ conversations: ConversationInfo[] }>(`/memory/conversation-dailies${agentQuery(agentId)}`)
+    conversationDailies.value = result.conversations || []
+  } catch {
+    conversationDailies.value = []
+  }
+}
 
   const fetchInjectionContent = async (agentId?: string | null) => {
     try {
@@ -238,7 +265,19 @@ export const useMemoryStore = defineStore('memory', () => {
     try {
       profile.value = await apiGet<MemoryProfile>(`/memory/profile${agentQuery(agentId)}`)
     } catch {
-      profile.value = { name: '' }
+      profile.value = { name: '', updated_at: '', static_facts: [], dynamic_context: [] }
+    }
+  }
+
+  const fetchRecentFacts = async (agentId?: string | null, since: number = 30) => {
+    try {
+      const query = agentId ? `?agent_id=${agentId}&since=${since}` : `?since=${since}`
+      const result = await apiGet<{ facts: FactItem[] }>(`/memory/recent-facts${query}`)
+      recentFacts.value = result.facts || []
+      return result.facts || []
+    } catch {
+      recentFacts.value = []
+      return []
     }
   }
 
@@ -258,6 +297,7 @@ export const useMemoryStore = defineStore('memory', () => {
             fetchKnowledge(agentId),
             fetchDailies(agentId),
             fetchSummary(agentId),
+            fetchFacts(undefined, agentId),
         ])
     }
 
@@ -320,8 +360,12 @@ export const useMemoryStore = defineStore('memory', () => {
         fetchDaily,
         appendDaily,
         fetchDailies,
+        fetchConversationDailies,
+        conversationDailies,
         fetchInjectionContent,
         fetchProfile,
+        fetchRecentFacts,
+        recentFacts,
         fetchMemoryAgents,
         switchAgent,
         clearFacts,

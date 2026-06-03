@@ -158,6 +158,7 @@ class ChatService:
         request,
         provider: str,
         model: str,
+        agent_id: str | None = None,
     ):
         chat_id = str(uuid.uuid4())
         try:
@@ -185,6 +186,17 @@ class ChatService:
         finally:
             done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
             yield f"data: {done_data.model_dump_json()}\n\n"
+
+            # /chat/completions 流式模式写入记忆
+            try:
+                user_msgs = [m for m in messages if m.get("role") == "user"]
+                if user_msgs:
+                    await self._context.schedule_memory_update(
+                        messages, f"completions-{chat_id[:8]}", agent_id,
+                        llm_adapter=llm_adapter,
+                    )
+            except Exception as mem_err:
+                logger.warning(f"[STREAM] /chat/completions memory update failed: {mem_err}")
 
     async def stream_response(
         self,

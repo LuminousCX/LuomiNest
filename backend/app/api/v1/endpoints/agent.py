@@ -1,12 +1,15 @@
 import uuid
 import os
 import json
+import shutil
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.infrastructure.database.json_store import agents_store
+from app.core.config import settings
+
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "data")
@@ -249,4 +252,13 @@ async def delete_agent(agent_id: str):
         logger.success(f"[API] DELETE /agents/{agent_id} - Agent deleted: name={agent_name}")
     else:
         logger.warning(f"[API] DELETE /agents/{agent_id} - Agent not found (already deleted)")
+    
+    from app.infrastructure.database.conversation_store import conversation_store
+    conversation_store.delete_by_agent_id(agent_id)
+    
+    agent_memory_dir = os.path.join(settings.DATA_DIR, "memory", "agents", agent_id)
+    if os.path.exists(agent_memory_dir):
+        shutil.rmtree(agent_memory_dir)
+        logger.info(f"[API] DELETE /agents/{agent_id} - Memory directory removed")
+    
     return {"error": None, "data": {"deleted": True}}

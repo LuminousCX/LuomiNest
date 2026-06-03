@@ -32,6 +32,7 @@ import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
+
 import { useTTS } from '../composables/useTTS'
 import FileUpload from '../components/FileUpload.vue'
 import FilePreview from '../components/FilePreview.vue'
@@ -2820,6 +2821,7 @@ onBeforeUnmount(() => {
   border-radius: 2px;
   background: var(--workspace-panel);
   overflow: hidden;
+  position: relative;
 }
 
 .context-bar-fill {
@@ -3152,4 +3154,5 @@ onBeforeUnmount(() => {
   opacity: 0;
   transform: translateY(-10px) scale(0.95);
 }
+
 </style>

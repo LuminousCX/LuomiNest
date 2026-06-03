@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from loguru import logger
 
 from .models import MemoryData, FactItem, FACT_CATEGORIES, _SUMMARY_SECTION_MAP, summaries_to_markdown
-from .prompts import _FACT_EXTRACT_PROMPT, _DISTILL_PROMPT, _MERGE_SUMMARY_PROMPT
+from .prompts import _FACT_EXTRACT_PROMPT, _DISTILL_PROMPT, _MERGE_SUMMARY_PROMPT, _SUMMARY_EXTRACT_PROMPT, _KNOWLEDGE_EXTRACT_PROMPT
 from .store import MemoryStore
 from .fact_manager import FactManager
 
@@ -29,7 +29,7 @@ class MemoryExtractor:
     # --- 事实提取 ---
 
     async def extract_facts(
-        self, message: str, llm_adapter=None, correction_hint: str = ""
+        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = ""
     ) -> tuple[str, list[FactItem]]:
         stripped = message.strip()
         if not stripped:
@@ -46,6 +46,8 @@ class MemoryExtractor:
             prompt = _FACT_EXTRACT_PROMPT.format(message=stripped)
             if correction_hint:
                 prompt += "\n\n" + correction_hint
+            if context_messages:
+                prompt += f"\n\n对话上下文（最近几条消息）：\n{context_messages}"
 
             result = await llm_adapter.chat(
                 messages=[{"role": "user", "content": prompt}],
@@ -73,9 +75,9 @@ class MemoryExtractor:
     # --- 档案更新（LLM 调用 + 数据写入，异步锁保护写入段） ---
 
     async def update_profile_from_message(
-        self, message: str, llm_adapter=None, correction_hint: str = ""
+        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = ""
     ) -> dict[str, str]:
-        profile_name, facts = await self.extract_facts(message, llm_adapter, correction_hint)
+        profile_name, facts = await self.extract_facts(message, llm_adapter, correction_hint, context_messages)
 
         updates = {}
         async with self._async_lock:
@@ -173,14 +175,14 @@ class MemoryExtractor:
             profile_name = parsed.get("profile_name", "").strip()
             valid_facts = self._parse_facts_from_raw(parsed.get("facts", []), source="distill")
             raw_summary = parsed.get("summary", {})
+            static_facts = parsed.get("static_facts", [])
+            dynamic_context = parsed.get("dynamic_context", [])
 
             async with self._async_lock:
                 data = self._store.load_data()
 
-                if profile_name and len(profile_name) <= 20:
-                    data.profile.name = profile_name
-                    data.profile.updated_at = now
-                    logger.info(f"[Memory] Distill updated profile name: {profile_name}")
+                # 蒸馏只更新 Summary 和 Facts，不更新 Profile
+                # Profile（name、static_facts、dynamic_context）由事实提取单独维护
 
                 self._fact_manager.merge_facts(data, valid_facts)
 
@@ -236,6 +238,70 @@ class MemoryExtractor:
             logger.warning(f"[Memory] Summary merge failed: {e}")
             return None
 
+    async def extract_summary_sections(
+        self, content: str, llm_adapter=None
+    ) -> dict | None:
+        """使用LLM从摘要内容中提取五个部分：用户画像、偏好设置、兴趣目标、近期状态、事件时间线。"""
+        if llm_adapter is None:
+            try:
+                llm_adapter = self._get_llm_adapter()
+            except Exception as e:
+                logger.warning(f"[Memory] No LLM adapter available: {e}")
+                return None
+
+        try:
+            prompt = _SUMMARY_EXTRACT_PROMPT.format(content=content)
+
+            result = await llm_adapter.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=1000,
+            )
+            response_text = (
+                result.strip() if isinstance(result, str) else str(result).strip()
+            )
+            logger.info(f"[Memory] Summary sections extract response: {response_text[:300]}")
+
+            parsed = self._parse_llm_json(response_text)
+            if parsed is None:
+                return None
+
+            return parsed
+
+        except Exception as e:
+            logger.warning(f"[Memory] Summary sections extract failed: {e}")
+            return None
+
+    async def extract_knowledge(
+        self, conversation: str, llm_adapter=None
+    ) -> str | None:
+        """使用LLM从对话中提取知识点。"""
+        if llm_adapter is None:
+            try:
+                llm_adapter = self._get_llm_adapter()
+            except Exception as e:
+                logger.warning(f"[Memory] No LLM adapter available: {e}")
+                return None
+
+        try:
+            prompt = _KNOWLEDGE_EXTRACT_PROMPT.format(conversation=conversation)
+
+            result = await llm_adapter.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=1500,
+            )
+            response_text = (
+                result.strip() if isinstance(result, str) else str(result).strip()
+            )
+            logger.info(f"[Memory] Knowledge extract response: {response_text[:300]}")
+
+            return response_text
+
+        except Exception as e:
+            logger.warning(f"[Memory] Knowledge extract failed: {e}")
+            return None
+
     # --- 公共解析方法（消除 extract_facts 和 distill_conversation 的重复代码） ---
 
     @staticmethod
@@ -270,6 +336,8 @@ class MemoryExtractor:
             category = raw.get("category", "context")
             confidence = raw.get("confidence", 0.8)
             source_error = raw.get("source_error", "")
+            expires_at = raw.get("expires_at", "") or None
+            supersedes = raw.get("supersedes", "") or None
 
             if not content:
                 continue
@@ -289,7 +357,14 @@ class MemoryExtractor:
                     confidence=confidence,
                     source_error=source_error,
                     source=source,
+                    expires_at=expires_at,
                 )
             )
+
+            # 处理 LLM 标记的 supersedes：降低被替代事实的置信度
+            if supersedes:
+                data = self._store.load_data()
+                self._fact_manager.apply_supersedes(data, supersedes, content)
+                self._store.save_data(data)
 
         return facts
