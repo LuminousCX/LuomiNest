@@ -195,7 +195,6 @@ class MemoryEngine:
     def build_context(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
         conv_store = None
         if conversation_id:
-            from .memory_engine import get_conversation_store
             agent_id = getattr(self, '_agent_id', None)
             conv_store = get_conversation_store(agent_id, conversation_id)
         return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store)
