@@ -36,7 +36,15 @@ from .context_builder import ContextBuilder
 class MemoryEngine:
     """记忆引擎门面：组合存储、事实管理、LLM 提取、上下文组装等组件。"""
 
-    def __init__(self, storage_path: Path | str | None = None, agent_id: str | None = None):
+    def __init__(self, storage_path: Path | str | None = None, agent_id: str | None = None) -> None:
+        """初始化记忆引擎。
+
+        Args:
+            storage_path: 存储根路径。若提供则直接使用，否则按 agent_id 构建
+                ``settings.DATA_DIR / "memory" / "agents" / agent_id``。
+            agent_id: Agent 标识，用于隔离不同 Agent 的存储。仅在 storage_path
+                为 None 时参与路径构建；默认 "_default"。
+        """
         self._agent_id = agent_id or "_default"
 
         if storage_path:
@@ -161,10 +169,19 @@ class MemoryEngine:
     # --- 每日记录 ---
 
     def load_daily(self, date: str | None = None, conversation_id: str | None = None) -> str:
-        return self._store.load_daily(date, conversation_id)
+        if conversation_id:
+            from .memory_engine import get_conversation_store
+            conv_store = get_conversation_store(self._agent_id, conversation_id)
+            return conv_store.load_daily(date)
+        return self._store.load_daily(date)
 
     def append_daily(self, content: str, date: str | None = None, conversation_id: str | None = None) -> None:
-        self._store.append_daily(content, date, conversation_id)
+        if conversation_id:
+            from .memory_engine import get_conversation_store
+            conv_store = get_conversation_store(self._agent_id, conversation_id)
+            conv_store.append_daily(content, date)
+        else:
+            self._store.append_daily(content, date)
 
     def list_dailies(self, conversation_id: str | None = None) -> list[str]:
         return self._store.list_dailies(conversation_id)
