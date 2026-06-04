@@ -36,11 +36,13 @@ from .context_builder import ContextBuilder
 class MemoryEngine:
     """记忆引擎门面：组合存储、事实管理、LLM 提取、上下文组装等组件。"""
 
-    def __init__(self, storage_path: Path | str | None = None):
+    def __init__(self, storage_path: Path | str | None = None, agent_id: str | None = None):
+        self._agent_id = agent_id or "_default"
+
         if storage_path:
             path = Path(storage_path)
         else:
-            path = Path(settings.DATA_DIR) / "memory"
+            path = Path(settings.DATA_DIR) / "memory" / "agents" / self._agent_id
 
         self._store = MemoryStore(path)
         self._fact_manager = FactManager(self._store)
@@ -318,6 +320,6 @@ def get_memory_engine(agent_id: str | None = None) -> MemoryEngine:
             return _engines[key]
         _migrate_legacy()
         path = Path(settings.DATA_DIR) / "memory" / "agents" / key
-        engine = MemoryEngine(storage_path=path)
+        engine = MemoryEngine(storage_path=path, agent_id=key)
         _engines[key] = engine
         return engine
