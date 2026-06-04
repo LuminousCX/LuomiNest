@@ -170,14 +170,12 @@ class MemoryEngine:
 
     def load_daily(self, date: str | None = None, conversation_id: str | None = None) -> str:
         if conversation_id:
-            from .memory_engine import get_conversation_store
             conv_store = get_conversation_store(self._agent_id, conversation_id)
             return conv_store.load_daily(date)
         return self._store.load_daily(date)
 
     def append_daily(self, content: str, date: str | None = None, conversation_id: str | None = None) -> None:
         if conversation_id:
-            from .memory_engine import get_conversation_store
             conv_store = get_conversation_store(self._agent_id, conversation_id)
             conv_store.append_daily(content, date)
         else:
