@@ -1,12 +1,15 @@
 import uuid
 import os
 import json
+import shutil
 from datetime import datetime, timezone
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.infrastructure.database.json_store import agents_store
+from app.core.config import settings
+
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "data")
@@ -170,6 +173,15 @@ async def list_agents():
 @router.post("", response_model=AgentResponse)
 async def create_agent(request: AgentCreate):
     logger.info(f"[API] POST /agents - Creating agent: name={request.name}")
+    
+    agents = agents_store.all()
+    if len(agents) >= 10:
+        raise HTTPException(status_code=400, detail="最多只能创建 10 个 Agent")
+    
+    for agent in agents:
+        if agent.get("name") == request.name:
+            raise HTTPException(status_code=400, detail=f"Agent 名称 '{request.name}' 已存在")
+    
     agent_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     agent = {
@@ -214,6 +226,13 @@ async def update_agent(agent_id: str, request: AgentUpdate):
         raise NotFoundError(f"Agent {agent_id} not found")
 
     update_data = request.model_dump(exclude_unset=True)
+    
+    if "name" in update_data:
+        new_name = update_data["name"]
+        all_agents = agents_store.all()
+        for ag in all_agents:
+            if ag.get("id") != agent_id and ag.get("name") == new_name:
+                raise HTTPException(status_code=400, detail=f"Agent 名称 '{new_name}' 已存在")
     updated_fields = list(update_data.keys())
     agent.update(update_data)
     agent["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -233,4 +252,13 @@ async def delete_agent(agent_id: str):
         logger.success(f"[API] DELETE /agents/{agent_id} - Agent deleted: name={agent_name}")
     else:
         logger.warning(f"[API] DELETE /agents/{agent_id} - Agent not found (already deleted)")
+    
+    from app.infrastructure.database.conversation_store import conversation_store
+    conversation_store.delete_by_agent_id(agent_id)
+    
+    agent_memory_dir = os.path.join(settings.DATA_DIR, "memory", "agents", agent_id)
+    if os.path.exists(agent_memory_dir):
+        shutil.rmtree(agent_memory_dir)
+        logger.info(f"[API] DELETE /agents/{agent_id} - Memory directory removed")
+    
     return {"error": None, "data": {"deleted": True}}

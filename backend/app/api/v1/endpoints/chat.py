@@ -43,8 +43,10 @@ async def chat_completions(request: ChatRequest):
     )
 
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    system_prompt = context_service.build_system_prompt(request.agent_id)
+    messages = [{"role": "system", "content": system_prompt}] + messages
     messages = context_service.inject_timestamp_prompt(messages)
-    messages = await context_service.inject_memory(messages, request.agent_id, resolved_provider)
+    messages = await context_service.inject_memory(messages, request.agent_id, resolved_provider, llm_adapter=llm_adapter)
 
     if request.file_content:
         supports_vision = llm_adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
@@ -59,7 +61,7 @@ async def chat_completions(request: ChatRequest):
     if request.stream:
         logger.info("[API] POST /chat/completions - Starting stream response")
         return StreamingResponse(
-            _chat_service.stream_chat(messages, request, resolved_provider, resolved_model),
+            _chat_service.stream_chat(messages, request, resolved_provider, resolved_model, agent_id=request.agent_id),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -81,6 +83,18 @@ async def chat_completions(request: ChatRequest):
         raise HTTPException(status_code=400, detail=gen_state["content"].removeprefix("[Error] "))
 
     result_content = gen_state["content"] or ""
+
+    # 非流式 /chat/completions 写入记忆
+    try:
+        user_msgs = [m for m in messages if m.get("role") == "user"]
+        if user_msgs:
+            await context_service.schedule_memory_update(
+                messages, f"completions-{uuid.uuid4().hex[:8]}", request.agent_id,
+                llm_adapter=llm_adapter,
+            )
+    except Exception as mem_err:
+        logger.warning(f"[API] /chat/completions memory update failed: {mem_err}")
+
     elapsed = time.time() - start_time
     logger.success(
         f"[API] POST /chat/completions - "
@@ -183,6 +197,18 @@ async def get_conversation(conv_id: str):
 @router.delete("/conversations/{conv_id}")
 async def delete_conversation(conv_id: str):
     logger.info(f"[API] DELETE /chat/conversations/{conv_id} - Moving to trash")
+    # 对话移到回收站前触发最终蒸馏
+    try:
+        conv = conversation_store.get(conv_id)
+        if conv and conv.get("messages"):
+            from app.services.distillation_service import distillation_service
+            agent_id = conv.get("agent_id")
+            await distillation_service.final_distill(
+                agent_id, conv_id, conv["messages"], llm_adapter,
+            )
+    except Exception as distill_err:
+        logger.warning(f"[API] Final distill on delete failed: {distill_err}")
+
     conversation_store.soft_delete(conv_id)
     logger.success(f"[API] DELETE /chat/conversations/{conv_id} - Moved to trash")
     return {"error": None, "data": {"deleted": True}}
@@ -210,13 +236,7 @@ async def truncate_messages(conv_id: str, request: TruncateMessagesRequest):
     _chat_service.persist_conv(conv_id, conv)
 
     agent_id = conv.get("agent_id")
-    try:
-        from app.engines.memory.core.storage import get_memory_storage
-        storage = get_memory_storage()
-        storage.clear_thread(conv_id, agent_id)
-        logger.info(f"[Memory] Cleared thread memory for conv={conv_id}")
-    except Exception as e:
-        logger.warning(f"[Memory] Failed to clear thread memory: {e}")
+    logger.info(f"[Chat] Truncated conv={conv_id}, thread memory not applicable in new system")
 
     logger.success(
         f"[API] PATCH /chat/conversations/{conv_id}/messages - "
@@ -282,6 +302,7 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
     agent_id = request.agent_id or conv.get("agent_id")
     all_messages = await context_service.inject_memory(
         all_messages, agent_id, resolved_provider, conv_id,
+        llm_adapter=llm_adapter,
     )
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
@@ -318,6 +339,20 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
 
     _chat_service.save_assistant_message(conv, persist_state, versions=request.versions)
     _chat_service.persist_conv(conv_id, conv)
+
+    try:
+        await context_service.schedule_memory_update(
+            [dict(m) for m in conv["messages"]], conv_id, agent_id,
+            llm_adapter=llm_adapter,
+        )
+    except Exception as mem_err:
+        logger.warning(f"[API] Regenerate memory update failed: {mem_err}")
+
+    try:
+        from app.services.distillation_service import distillation_service
+        await distillation_service.maybe_distill(agent_id, conv_id, conv["messages"], llm_adapter)
+    except Exception as distill_err:
+        logger.warning(f"[API] Regenerate distillation failed: {distill_err}")
 
     elapsed = time.time() - start_time
     logger.success(f"[API] Regenerate done: conv={conv_id}, elapsed={elapsed:.2f}s")
@@ -436,6 +471,7 @@ async def add_message(conv_id: str, request: ChatRequest):
     agent_id = request.agent_id or conv.get("agent_id")
     all_messages = await context_service.inject_memory(
         all_messages, agent_id, resolved_provider, conv_id,
+        llm_adapter=llm_adapter,
     )
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
@@ -472,10 +508,16 @@ async def add_message(conv_id: str, request: ChatRequest):
 
     _chat_service.save_assistant_message(conv, persist_state, versions=request.versions)
     _chat_service.persist_conv(conv_id, conv)
-    context_service.schedule_memory_update(
+    await context_service.schedule_memory_update(
         [dict(m) for m in conv["messages"]], conv_id, agent_id,
         llm_adapter=llm_adapter,
     )
+
+    try:
+        from app.services.distillation_service import distillation_service
+        await distillation_service.maybe_distill(agent_id, conv_id, conv["messages"], llm_adapter)
+    except Exception as distill_err:
+        logger.warning(f"[API] Distillation failed: {distill_err}")
 
     elapsed = time.time() - start_time
     logger.success(

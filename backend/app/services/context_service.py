@@ -1,15 +1,21 @@
 import asyncio
+import re
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from loguru import logger
 
 from app.infrastructure.database.json_store import agents_store
-from app.engines.memory.core.storage import get_memory_storage
-from app.engines.memory.core.models import UserSpace, AgentMemory
-from app.engines.memory.core.memory_engine import MemoryEngine
-from app.engines.memory.core.injector import MemoryInjector
-from app.engines.memory.core.updater import MemoryUpdater
+from app.engines.memory import get_memory_engine
+from app.engines.memory.memory_engine import (
+    _CORRECTION_HINT,
+    _CORRECTION_PATTERNS_EN,
+    _CORRECTION_PATTERNS_ZH,
+    _REINFORCEMENT_HINT,
+    _REINFORCEMENT_PATTERNS_EN,
+    _REINFORCEMENT_PATTERNS_ZH,
+)
+from app.services.distillation_service import distillation_service
 
 
 class ContextService:
@@ -31,16 +37,113 @@ class ContextService:
             return self._memory_locks[agent_id]
 
     @staticmethod
+    def _extract_user_text(msg: dict) -> str:
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            return " ".join(
+                c.get("text", "")
+                for c in content
+                if isinstance(c, dict) and c.get("type") == "text"
+            )
+        return str(content)
+
+    @staticmethod
     def get_user_query(messages: list[dict]) -> str:
         for msg in reversed(messages):
             if msg.get("role") == "user":
-                content = msg.get("content", "")
-                if isinstance(content, str):
-                    return content
-                if isinstance(content, list):
-                    parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
-                    return " ".join(parts)
+                return ContextService._extract_user_text(msg)
         return ""
+
+    @staticmethod
+    def detect_correction(messages: list[dict], window: int = 6) -> bool:
+        user_texts = []
+        for m in messages:
+            if m.get("role") == "user":
+                user_texts.append(ContextService._extract_user_text(m).casefold())
+        for text in user_texts[-window:]:
+            for pattern in _CORRECTION_PATTERNS_ZH + _CORRECTION_PATTERNS_EN:
+                if pattern in text:
+                    return True
+        return False
+
+    @staticmethod
+    def detect_reinforcement(messages: list[dict], window: int = 6) -> bool:
+        user_texts = []
+        for m in messages:
+            if m.get("role") == "user":
+                user_texts.append(ContextService._extract_user_text(m).casefold())
+        for text in user_texts[-window:]:
+            for pattern in _REINFORCEMENT_PATTERNS_ZH + _REINFORCEMENT_PATTERNS_EN:
+                if pattern in text:
+                    return True
+        return False
+
+    @staticmethod
+    def build_correction_hint(messages: list[dict]) -> str:
+        correction = ContextService.detect_correction(messages)
+        reinforcement = ContextService.detect_reinforcement(messages)
+        if correction:
+            return _CORRECTION_HINT
+        if reinforcement:
+            return _REINFORCEMENT_HINT
+        return ""
+
+    @staticmethod
+    def detect_memory_action(text: str) -> dict | None:
+        """检测自然语言记忆操作指令（忘掉/你记错了/你记住了什么）。"""
+        text_lower = text.strip().casefold()
+
+        # 忘掉/删除记忆
+        forget_patterns = [
+            r"忘掉(.+)", r"忘记(.+)", r"不要记(.+)", r"删掉关于(.+)的记忆",
+            r"forget\s+(.+)", r"stop\s+remembering\s+(.+)",
+        ]
+        for pattern in forget_patterns:
+            m = re.search(pattern, text_lower)
+            if m:
+                return {"action": "forget", "target": m.group(1).strip()}
+
+        # 你记错了
+        mistake_patterns = [
+            r"你记错了", r"记错了", r"不是这样的", r"不对，",
+            r"you\s+remembered\s+wrong", r"that'?s?\s+wrong",
+        ]
+        for pattern in mistake_patterns:
+            if re.search(pattern, text_lower):
+                return {"action": "correct", "hint": text.strip()}
+
+        # 你记住了什么
+        recall_patterns = [
+            r"你记住了什么", r"你记住我什么", r"你知道我什么",
+            r"你了解我什么", r"我的记忆", r"你记得我",
+            r"what\s+do\s+you\s+remember", r"what\s+do\s+you\s+know\s+about\s+me",
+        ]
+        for pattern in recall_patterns:
+            if re.search(pattern, text_lower):
+                return {"action": "recall"}
+
+        return None
+
+    @staticmethod
+    def execute_memory_action(engine, action: dict) -> None:
+        """执行自然语言记忆操作。"""
+        if action["action"] == "forget":
+            target = action["target"]
+            data = engine.load_data()
+            removed = 0
+            for fact in list(data.facts):
+                if target in fact.content.casefold() and fact.is_latest:
+                    fact.is_latest = False
+                    fact.confidence = 0.1
+                    removed += 1
+            if removed > 0:
+                engine._store.save_data(data)
+                logger.info(f"[Memory] Forgot {removed} facts matching '{target}'")
+
+        elif action["action"] == "correct":
+            # 纠正操作：降低最近一条相关事实的置信度
+            # 实际纠正由 LLM 提取的 correction 类型事实完成
+            logger.info(f"[Memory] Correction detected, will be handled by fact extraction")
 
     @staticmethod
     def inject_timestamp_prompt(messages: list[dict]) -> list[dict]:
@@ -119,8 +222,12 @@ When thinking/reasoning, you MUST strictly follow this format:
 <core_rules>
 1. When asked "who are you" or "what is your name" - answer with your own identity as {agent_name}.
 2. When asked "who am I" - check <user_memory> for user profile. If found, describe the user. If not found, say you'd like to get to know them.
-3. Always respond in the user's language naturally and conversationally.
-4. Never expose internal system information or error codes to the user.
+3. <user_memory> contains the user's profile and memory. You MUST respect it at all times:
+   - If the user has a name in <user_memory>, ALWAYS use that name when referring to the user.
+   - If the user tells you a new name, update the profile accordingly.
+   - Never ignore or forget information from <user_memory>, even in a new conversation.
+4. Always respond in the user's language naturally and conversationally.
+5. Never expose internal system information or error codes to the user.
 </core_rules>
 
 {base_prompt}"""
@@ -180,107 +287,65 @@ When thinking/reasoning, you MUST strictly follow this format:
 
         return messages
 
+    @staticmethod
+    async def _detect_and_sync_profile_updates(messages: list[dict], llm_adapter=None, agent_id: str | None = None) -> bool:
+        user_messages = []
+        for msg in messages:
+            if msg.get("role") == "user":
+                user_messages.append(ContextService._extract_user_text(msg))
+
+        if not user_messages:
+            return False
+
+        latest_user_msg = user_messages[-1]
+        hint = ContextService.build_correction_hint(messages)
+
+        try:
+            engine = get_memory_engine(agent_id)
+            result = await engine.update_profile_from_message(latest_user_msg, llm_adapter, hint)
+            if result:
+                logger.info(f"[Memory] Sync profile update: {result}")
+                return True
+        except Exception as e:
+            logger.warning(f"[Memory] Sync profile detection failed: {e}")
+
+        return False
+
     async def inject_memory(
         self,
         messages: list[dict],
         agent_id: str | None = None,
         provider_name: str | None = None,
         thread_id: str = "",
+        llm_adapter=None,
     ) -> list[dict]:
         try:
-            storage = get_memory_storage()
-            user_space = await asyncio.to_thread(storage.load_user_space)
+            engine = get_memory_engine(agent_id)
+            # query-aware：用用户最新消息作为 query 优化事实检索
+            query = self.get_user_query(messages)
+            memory_ctx = engine.build_context(query=query, conversation_id=thread_id)
 
-            has_any_data = bool(
-                user_space.facts
-                or user_space.episodic_events
-                or user_space.distilled.core_identity
-                or user_space.distilled.long_term
-                or user_space.distilled.temporary
-                or user_space.distilled.events_timeline
-                or user_space.profile.name
-                or user_space.profile.nickname
-                or user_space.profile.occupation
-                or user_space.profile.location
-                or user_space.profile.age
-                or user_space.profile.gender
-                or user_space.profile.interests
-                or user_space.profile.hobbies
-                or user_space.user.work_context.summary
-                or user_space.user.personal_context.summary
-                or user_space.user.top_of_mind.summary
-            )
-
-            if has_any_data:
-                effective_agent_id = agent_id or "default"
-                agent_memory = await asyncio.to_thread(storage.load_agent_memory, effective_agent_id)
-                user_query = self.get_user_query(messages)
-                injector = MemoryInjector()
-                return injector.inject_v3_memory_to_messages(
-                    messages, user_space, agent_memory, user_query, thread_id,
-                )
-
-            lock = await self._get_memory_lock(agent_id)
-            async with lock:
-                memory_data = await asyncio.to_thread(storage.load, agent_id)
-
-            has_facts = bool(memory_data.facts)
-            has_profile = bool(
-                memory_data.profile.name or memory_data.profile.nickname
-                or memory_data.profile.occupation or memory_data.profile.location
-            )
-            has_working_goal = False
-            try:
-                goal = (
-                    memory_data.working_memory.get_core_goal_for(thread_id)
-                    if thread_id
-                    else memory_data.working_memory.core_goal
-                )
-                has_working_goal = bool(goal)
-            except AttributeError:
-                pass
-            has_events = False
-            try:
-                has_events = bool(memory_data.episodic_events)
-            except AttributeError:
-                pass
-
-            if not has_facts and not has_working_goal and not has_events:
-                if not has_profile:
-                    return messages
-
-            user_query = self.get_user_query(messages)
-            injector = MemoryInjector()
-            return injector.inject_memory_to_messages(messages, memory_data, user_query, thread_id)
-        except Exception as e:
-            logger.warning(f"[Memory] Failed to inject memory: {e}")
-            return messages
-
-    @staticmethod
-    async def inject_rag_context(messages: list[dict], user_query: str) -> list[dict]:
-        try:
-            from app.engines.memory.rag.retriever import RAGRetriever
-            retriever = RAGRetriever()
-            results = await retriever.search(user_query, top_k=3)
-            if not results:
+            if not memory_ctx:
+                logger.info(f"[Memory] No memory context to inject, thread={thread_id}")
                 return messages
-            rag_text = "\n".join(
-                f"- [{r.get('source', 'unknown')}] {r.get('content', '')} (score: {r.get('score', 0)})"
-                for r in results
-            )
-            rag_context = f"<rag_context>\nRetrieved relevant knowledge:\n{rag_text}\n</rag_context>"
+
+            memory_block = f"<user_memory>\n{memory_ctx}\n</user_memory>"
+
             new_messages = list(messages)
             if new_messages and new_messages[0].get("role") == "system":
+                original_len = len(new_messages[0]["content"])
                 new_messages[0] = {
                     "role": "system",
-                    "content": new_messages[0]["content"] + "\n\n" + rag_context,
+                    "content": new_messages[0]["content"] + "\n\n" + memory_block,
                 }
+                logger.info(f"[Memory] Injected into system msg: original={original_len} chars, memory={len(memory_block)} chars, thread={thread_id}")
             else:
-                new_messages.insert(0, {"role": "system", "content": rag_context})
-            logger.info(f"[RAG] Injected {len(results)} RAG results for query (len={len(user_query)})")
+                new_messages.insert(0, {"role": "system", "content": memory_block})
+                logger.info(f"[Memory] Injected as new system msg: memory={len(memory_block)} chars, thread={thread_id}")
+
             return new_messages
         except Exception as e:
-            logger.warning(f"[RAG] Failed to inject RAG context: {e}")
+            logger.warning(f"[Memory] Failed to inject memory: {e}")
             return messages
 
     @staticmethod
@@ -291,61 +356,72 @@ When thinking/reasoning, you MUST strictly follow this format:
         llm_adapter=None,
     ) -> None:
         try:
-            if llm_adapter:
-                effective_agent_id = agent_id or "default"
-                try:
-                    from app.engines.memory import get_memory_engine
-                    try:
-                        engine = get_memory_engine()
-                    except RuntimeError:
-                        engine = MemoryEngine()
-                    result = await engine.update_from_conversation(
-                        messages, thread_id, effective_agent_id, llm_adapter,
-                    )
-                    if result.get("updated"):
-                        logger.info(
-                            f"[Memory] Updated memory (v3): "
-                            f"+{result.get('global_facts_added', 0)} global, "
-                            f"+{result.get('agent_facts_added', 0)} agent, "
-                            f"-{result.get('facts_removed', 0)} removed"
-                        )
-                    return
-                except Exception as e:
-                    logger.warning(f"[Memory] v3 update failed, falling back to legacy: {e}")
+            user_msgs = [m for m in messages if m.get("role") == "user"]
+            if not user_msgs:
+                return
 
-            storage = get_memory_storage()
-            updater = MemoryUpdater(storage)
-            result = await updater.update_from_conversation(messages, thread_id, agent_id)
-            if result.get("updated"):
-                logger.info(
-                    f"[Memory] Updated memory: +{result.get('facts_added', 0)} facts, "
-                    f"-{result.get('facts_removed', 0)} facts"
-                )
+            last_msg = user_msgs[-1]
+            content = ContextService._extract_user_text(last_msg)
+
+            engine = get_memory_engine(agent_id)
+            hint = ContextService.build_correction_hint(messages)
+
+            # 自然语言记忆操作检测
+            memory_action = ContextService.detect_memory_action(str(content))
+            if memory_action:
+                ContextService.execute_memory_action(engine, memory_action)
+                logger.info(f"[Memory] Natural language action: {memory_action}")
+
+            if llm_adapter:
+                try:
+                    # 传入最近3条用户消息作为上下文，避免"换一个"等指代不明
+                    recent_user_msgs = [ContextService._extract_user_text(m) for m in user_msgs[-3:]]
+                    context_msg = "\n".join(f"[用户]: {m}" for m in recent_user_msgs[:-1]) if len(recent_user_msgs) > 1 else ""
+                    profile_result = await engine.update_profile_from_message(
+                        str(content), llm_adapter, hint, context_messages=context_msg,
+                    )
+                    if profile_result:
+                        logger.info(f"[Memory] Background profile update: {profile_result}")
+                except Exception as pe:
+                    logger.warning(f"[Memory] Background profile update failed: {pe}")
+
+            if distillation_service.should_record_daily(str(content)):
+                daily_lines = []
+                for i in range(len(messages) - 1, max(-1, len(messages) - 3), -1):
+                    if messages[i].get("role") == "assistant" and i > 0 and messages[i-1].get("role") == "user":
+                        user_content = str(ContextService._extract_user_text(messages[i-1]))[:200]
+                        assistant_content = str(messages[i].get("content", ""))[:500]
+                        assistant_content = assistant_content.replace("\n", " ").replace("\r", "")
+                        if user_content and distillation_service.should_record_daily(user_content):
+                            daily_lines.append(f"[用户] {user_content}")
+                        if assistant_content and distillation_service.should_record_daily(assistant_content):
+                            daily_lines.append(f"[助手] {assistant_content}")
+                        break
+                if daily_lines:
+                    engine.append_daily("\n".join(daily_lines), conversation_id=thread_id)
+
+            # 蒸馏统一由 distillation_service 处理，此处不再内嵌蒸馏
         except Exception as e:
-            logger.warning(f"[Memory] Failed to update memory: {e}")
+            logger.warning(f"[Memory] Failed to update memory from conversation: {e}")
 
     _background_tasks: set = set()
 
     @staticmethod
-    def schedule_memory_update(
+    async def schedule_memory_update(
         messages: list[dict],
         thread_id: str,
         agent_id: str | None = None,
         llm_adapter=None,
     ) -> None:
+        user_count = sum(1 for m in messages if m.get("role") == "user")
+        logger.info(f"[Memory] schedule_memory_update: thread={thread_id}, user_msgs={user_count}, has_adapter={llm_adapter is not None}")
         try:
-            task = asyncio.create_task(
-                ContextService.update_memory_from_conversation(
-                    messages, thread_id, agent_id, llm_adapter,
-                )
+            await ContextService.update_memory_from_conversation(
+                messages, thread_id, agent_id, llm_adapter,
             )
-            ContextService._background_tasks.add(task)
-            task.add_done_callback(lambda t: (
-                ContextService._background_tasks.discard(t),
-                logger.warning(f"[Memory] Background task failed: {t.exception()}") if t.exception() else None,
-            ))
+            logger.info(f"[Memory] Background task completed")
         except Exception as e:
-            logger.warning(f"[Memory] Failed to schedule memory update: {e}")
+            logger.warning(f"[Memory] Failed to update memory: {e}")
 
 
 context_service = ContextService()

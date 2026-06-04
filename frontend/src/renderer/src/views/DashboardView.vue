@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useMemoryStore } from '../stores/memory'
 import {
   LayoutDashboard,
   Cpu,
@@ -56,6 +57,7 @@ const formattedDate = computed(() => {
 
 onMounted(() => {
   timeInterval = setInterval(() => { currentTime.value = new Date() }, 1000)
+  refreshMemoryMetrics()
 })
 
 onUnmounted(() => {
@@ -113,12 +115,34 @@ const apiUsageMetrics = ref<UsageMetric[]>([
   { label: '成功率', value: 99.7, unit: '%', change: 0.3, trend: 'up', color: '#8b5cf6' },
 ])
 
+const memoryStore = useMemoryStore()
+
 const memoryMetrics = ref<UsageMetric[]>([
-  { label: '工作记忆', value: 67, unit: '/100', change: 3.1, trend: 'up', color: '#f59e0b' },
-  { label: '情景记忆', value: 34, unit: '/50', change: -2.0, trend: 'down', color: '#22c55e' },
-  { label: '语义记忆', value: 428, unit: '/500', change: 15.6, trend: 'up', color: '#8b5cf6' },
-  { label: '记忆健康度', value: 94, unit: '%', change: 1.2, trend: 'up', color: 'var(--lumi-primary)' },
+  { label: '工作记忆', value: 0, unit: '/100', change: 0, trend: 'up', color: '#f59e0b' },
+  { label: '情景记忆', value: 0, unit: '/50', change: 0, trend: 'up', color: '#22c55e' },
+  { label: '语义记忆', value: 0, unit: '/500', change: 0, trend: 'up', color: '#8b5cf6' },
+  { label: '记忆健康度', value: 0, unit: '%', change: 0, trend: 'up', color: 'var(--lumi-primary)' },
 ])
+
+const refreshMemoryMetrics = async () => {
+  try {
+    await memoryStore.fetchMemory()
+    const factCount = memoryStore.facts.length
+    const latestFacts = memoryStore.facts.filter(f => f.is_latest !== false).length
+    const profileName = memoryStore.profile.name
+    // 工作记忆：当前有效事实数 / 100
+    memoryMetrics.value[0].value = Math.min(latestFacts, 100)
+    // 情景记忆：有名字=50，没名字=按事实比例
+    memoryMetrics.value[1].value = profileName ? 50 : Math.min(latestFacts, 50)
+    // 语义记忆：总事实数 / 500
+    memoryMetrics.value[2].value = Math.min(factCount, 500)
+    // 记忆健康度：基于有效事实占比
+    const health = factCount > 0 ? Math.round((latestFacts / factCount) * 100) : 0
+    memoryMetrics.value[3].value = factCount > 0 ? Math.max(health, 50) : 0
+  } catch {
+    // 保持默认值
+  }
+}
 
 const contextMetrics = ref<UsageMetric[]>([
   { label: '当前上下文', value: 8192, unit: 'tokens', change: 12.0, trend: 'up', color: 'var(--lumi-primary)' },

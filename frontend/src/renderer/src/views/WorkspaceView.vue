@@ -32,6 +32,7 @@ import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
+
 import { useTTS } from '../composables/useTTS'
 import FileUpload from '../components/FileUpload.vue'
 import FilePreview from '../components/FilePreview.vue'
@@ -90,6 +91,7 @@ const newAgentForm = ref({
   systemPrompt: '',
   color: '#147EBC',
 })
+const createDialogError = ref('')
 const agentColors = ['#147EBC', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
 
 // 确认对话框状态
@@ -120,6 +122,7 @@ const handleConfirmDialogCancel = () => {
 
 const handleCreateAgent = async () => {
   if (!newAgentForm.value.name.trim()) return
+  createDialogError.value = ''
   try {
     await agentStore.createAgent({
       name: newAgentForm.value.name.trim(),
@@ -130,7 +133,7 @@ const handleCreateAgent = async () => {
     showCreateDialog.value = false
     newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#147EBC' }
   } catch (e: any) {
-    displayToast(e?.message || '创建 Agent 失败')
+    createDialogError.value = e.response?.data?.detail || e.message || '创建 Agent 失败'
   }
 }
 
@@ -1271,6 +1274,22 @@ onBeforeUnmount(() => {
       <div v-if="showCreateDialog" class="create-dialog-overlay" @click.self="showCreateDialog = false">
         <div class="create-dialog">
           <h3>创建自定义 Agent</h3>
+          <Transition name="toast-slide">
+            <div v-if="createDialogError" class="dialog-error">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/>
+                <line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
+              <span>{{ createDialogError }}</span>
+              <button class="error-close" @click="createDialogError = ''">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          </Transition>
           <div class="form-group">
             <label class="form-label">
               名称
@@ -2802,6 +2821,7 @@ onBeforeUnmount(() => {
   border-radius: 2px;
   background: var(--workspace-panel);
   overflow: hidden;
+  position: relative;
 }
 
 .context-bar-fill {
@@ -3076,4 +3096,63 @@ onBeforeUnmount(() => {
   0% { background: var(--lumi-primary-border); }
   100% { background: transparent; }
 }
+
+.dialog-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--task-red-soft);
+  border: 1px solid var(--task-red-border);
+  border-radius: var(--radius-md);
+  color: var(--lumi-danger);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px var(--overlay-subtle);
+}
+
+.dialog-error svg {
+  flex-shrink: 0;
+}
+
+.error-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 4px;
+  color: var(--lumi-danger);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: auto;
+}
+
+.error-close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  transform: rotate(90deg);
+}
+
+.toast-slide-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.toast-slide-leave-active {
+  transition: all 0.2s ease-in;
+}
+
+.toast-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
 </style>

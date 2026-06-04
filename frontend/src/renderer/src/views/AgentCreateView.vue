@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -197,7 +197,10 @@ const handleClose = () => {
   router.push('/workspace')
 }
 
+const errorMessage = ref('')
+
 const handleCreateAgent = async () => {
+  errorMessage.value = ''
   try {
     const capabilities = Object.entries(formData.skills)
       .filter(([, enabled]) => enabled)
@@ -212,8 +215,9 @@ const handleCreateAgent = async () => {
       capabilities: capabilities.length > 0 ? capabilities : ['chat']
     })
     router.push('/workspace')
-  } catch (err) {
+  } catch (err: any) {
     console.error('Failed to create agent:', err)
+    errorMessage.value = err.response?.data?.detail || err.message || '创建失败'
   }
 }
 </script>
@@ -426,6 +430,24 @@ const handleCreateAgent = async () => {
 
           <!-- Step 4: Confirm -->
           <div v-else-if="currentStep === 3" key="step-4" class="step-content step-layout-full">
+            <Transition name="toast-slide">
+              <div v-if="errorMessage" class="error-notification">
+                <div class="notification-icon error">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" y1="9" x2="9" y2="15"/>
+                    <line x1="9" y1="9" x2="15" y2="15"/>
+                  </svg>
+                </div>
+                <span class="notification-message">{{ errorMessage }}</span>
+                <button class="notification-close" @click="errorMessage = ''">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </Transition>
             <div class="confirm-grid">
               <div class="confirm-card main-confirm">
                 <div class="confirm-header-row">
@@ -1287,5 +1309,73 @@ const handleCreateAgent = async () => {
   .wizard-container {
     max-height: 92vh;
   }
+}
+
+.error-notification {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--task-red-soft);
+  border: 1px solid var(--task-red-border);
+  border-radius: var(--radius-lg, 10px);
+  color: var(--lumi-danger);
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px var(--overlay-subtle);
+}
+
+.notification-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.notification-icon.error {
+  color: var(--lumi-danger);
+}
+
+.notification-message {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.notification-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 6px;
+  color: var(--lumi-danger);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.notification-close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  transform: rotate(90deg);
+}
+
+.toast-slide-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.toast-slide-leave-active {
+  transition: all 0.2s ease-in;
+}
+
+.toast-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
 }
 </style>

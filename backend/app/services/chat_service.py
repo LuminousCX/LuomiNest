@@ -11,6 +11,7 @@ from app.schemas.chat import ChatStreamChunk
 from app.services.context_service import ContextService
 from app.services.suggestion_service import SuggestionService
 from app.services.usage_tracker import usage_tracker
+from app.services.distillation_service import distillation_service
 
 from fastapi.responses import StreamingResponse
 
@@ -157,6 +158,7 @@ class ChatService:
         request,
         provider: str,
         model: str,
+        agent_id: str | None = None,
     ):
         chat_id = str(uuid.uuid4())
         try:
@@ -184,6 +186,17 @@ class ChatService:
         finally:
             done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
             yield f"data: {done_data.model_dump_json()}\n\n"
+
+            # /chat/completions 流式模式写入记忆
+            try:
+                user_msgs = [m for m in messages if m.get("role") == "user"]
+                if user_msgs:
+                    await self._context.schedule_memory_update(
+                        messages, f"completions-{chat_id[:8]}", agent_id,
+                        llm_adapter=llm_adapter,
+                    )
+            except Exception as mem_err:
+                logger.warning(f"[STREAM] /chat/completions memory update failed: {mem_err}")
 
     async def stream_response(
         self,
@@ -278,12 +291,17 @@ class ChatService:
                     logger.debug(f"[STREAM] Done event send failed (client may have disconnected): {done_err}")
 
                 try:
-                    self._context.schedule_memory_update(
+                    await self._context.schedule_memory_update(
                         [dict(m) for m in conv["messages"]], conv_id, agent_id,
                         llm_adapter=llm_adapter,
                     )
                 except Exception as schedule_err:
                     logger.warning(f"[STREAM] Memory update scheduling failed: {schedule_err}")
+
+                try:
+                    await distillation_service.maybe_distill(agent_id, conv_id, conv["messages"], llm_adapter)
+                except Exception as distill_err:
+                    logger.warning(f"[STREAM] Distillation failed: {distill_err}")
 
         return StreamingResponse(
             generator(),
