@@ -16,8 +16,9 @@ class MemoryExtractor:
 
     FACT_CONFIDENCE_THRESHOLD = 0.7
 
-    def __init__(self, store: MemoryStore, fact_manager: FactManager, async_lock: asyncio.Lock):
+    def __init__(self, store: MemoryStore, fact_manager: FactManager, async_lock: asyncio.Lock, agent_id: str | None = None):
         self._store = store
+        self._agent_id = agent_id
         self._fact_manager = fact_manager
         self._async_lock = async_lock
 
@@ -75,9 +76,16 @@ class MemoryExtractor:
     # --- 档案更新（LLM 调用 + 数据写入，异步锁保护写入段） ---
 
     async def update_profile_from_message(
-        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = ""
+        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = "", conversation_id: str | None = None
     ) -> dict[str, str]:
         profile_name, facts = await self.extract_facts(message, llm_adapter, correction_hint, context_messages)
+
+        # 给facts添加溯源信息
+        for f in facts:
+            if conversation_id and not f.source_conversation_id:
+                f.source_conversation_id = conversation_id
+            if message and not f.source_message:
+                f.source_message = message[:200]
 
         updates = {}
         async with self._async_lock:
@@ -92,11 +100,18 @@ class MemoryExtractor:
                 if old_name and old_name != profile_name:
                     self._fact_manager.deprecate_old_name_facts(data, old_name, profile_name)
 
-            self._fact_manager.merge_facts(data, facts)
+            # 只合并Agent级共享的facts（preference/knowledge/correction）
+            from .models import FACT_SCOPE_AGENT
+            agent_facts = [f for f in facts if f.category in FACT_SCOPE_AGENT]
+            self._fact_manager.merge_facts(data, agent_facts)
             self._store.save_data(data)
 
-        if updates:
-            logger.info(f"[Memory] Profile updated: {updates}")
+        # 返回提取到的所有facts，由MemoryEngine层决定对话级facts的写入
+        updates["facts"] = facts
+        if updates.get("name"):
+            logger.info(f"[Memory] Profile updated: name={updates['name']}")
+        if facts:
+            logger.info(f"[Memory] Extracted {len(facts)} facts ({len(agent_facts)} agent-scoped, {len(facts) - len(agent_facts)} conversation-scoped)")
 
         return updates
 
@@ -107,6 +122,7 @@ class MemoryExtractor:
         messages: list[dict],
         llm_adapter=None,
         correction_hint: str = "",
+        conversation_id: str | None = None,
     ) -> str | None:
         user_msgs = []
         for m in messages:
@@ -173,7 +189,7 @@ class MemoryExtractor:
             now = datetime.now(timezone.utc).isoformat()
 
             profile_name = parsed.get("profile_name", "").strip()
-            valid_facts = self._parse_facts_from_raw(parsed.get("facts", []), source="distill")
+            valid_facts = self._parse_facts_from_raw(parsed.get("facts", []), source="distill", conversation_id=conversation_id)
             raw_summary = parsed.get("summary", {})
             static_facts = parsed.get("static_facts", [])
             dynamic_context = parsed.get("dynamic_context", [])
@@ -181,10 +197,11 @@ class MemoryExtractor:
             async with self._async_lock:
                 data = self._store.load_data()
 
-                # 蒸馏只更新 Summary 和 Facts，不更新 Profile
-                # Profile（name、static_facts、dynamic_context）由事实提取单独维护
-
-                self._fact_manager.merge_facts(data, valid_facts)
+                # 只合并Agent级共享的facts
+                from .models import FACT_SCOPE_AGENT, FACT_SCOPE_CONVERSATION
+                agent_facts = [f for f in valid_facts if f.category in FACT_SCOPE_AGENT]
+                conv_facts = [f for f in valid_facts if f.category in FACT_SCOPE_CONVERSATION]
+                self._fact_manager.merge_facts(data, agent_facts)
 
                 if isinstance(raw_summary, dict):
                     for cn_name, attr_name in _SUMMARY_SECTION_MAP.items():
@@ -194,7 +211,31 @@ class MemoryExtractor:
                             section.summary = text
                             section.updated_at = now
 
+                if isinstance(static_facts, list) and static_facts:
+                    data.profile.static_facts = [str(f)[:200] for f in static_facts if isinstance(f, str) and f.strip()]
+                    data.profile.updated_at = now
+
                 self._store.save_data(data)
+
+                # 对话级数据写入conversation store
+                if conversation_id and (conv_facts or dynamic_context):
+                    from .memory_engine import get_conversation_store
+                    conv_store = get_conversation_store(self._agent_id, conversation_id)
+                    conv_data = conv_store.load_data()
+
+                    if conv_facts:
+                        self._fact_manager.merge_facts(conv_data, conv_facts)
+
+                    if isinstance(dynamic_context, list) and dynamic_context:
+                        conv_data.profile.dynamic_context = [str(c)[:200] for c in dynamic_context if isinstance(c, str) and c.strip()]
+                        conv_data.profile.updated_at = now
+
+                    conv_store.save_data(conv_data)
+                elif isinstance(dynamic_context, list) and dynamic_context:
+                    # 无conversation_id时，dynamic_context写入Agent级（兼容旧逻辑）
+                    data.profile.dynamic_context = [str(c)[:200] for c in dynamic_context if isinstance(c, str) and c.strip()]
+                    data.profile.updated_at = now
+                    self._store.save_data(data)
 
             logger.info(
                 f"[Memory] Distill completed: name={data.profile.name}, facts={len(data.facts)}"
@@ -324,7 +365,7 @@ class MemoryExtractor:
             return None
 
     def _parse_facts_from_raw(
-        self, raw_facts: list, source: str = "conversation"
+        self, raw_facts: list, source: str = "conversation", conversation_id: str | None = None, original_message: str = ""
     ) -> list[FactItem]:
         """从 LLM 返回的原始事实列表中解析出有效的 FactItem。"""
         if not isinstance(raw_facts, list):
@@ -358,6 +399,8 @@ class MemoryExtractor:
                     source_error=source_error,
                     source=source,
                     expires_at=expires_at,
+                    source_conversation_id=conversation_id or "",
+                    source_message=original_message[:200] if original_message else "",
                 )
             )
 

@@ -88,8 +88,9 @@ async def chat_completions(request: ChatRequest):
     try:
         user_msgs = [m for m in messages if m.get("role") == "user"]
         if user_msgs:
+            thread_id = request.conversation_id or f"completions-{uuid.uuid4().hex[:8]}"
             await context_service.schedule_memory_update(
-                messages, f"completions-{uuid.uuid4().hex[:8]}", request.agent_id,
+                messages, thread_id, request.agent_id,
                 llm_adapter=llm_adapter,
             )
     except Exception as mem_err:
@@ -194,6 +195,23 @@ async def get_conversation(conv_id: str):
     return ConversationResponse(**conv)
 
 
+@router.post("/conversations/{conv_id}/leave")
+async def leave_conversation(conv_id: str):
+    """用户离开/切换对话时触发最终蒸馏"""
+    logger.info(f"[API] POST /chat/conversations/{conv_id}/leave")
+    try:
+        conv = conversation_store.get(conv_id)
+        if conv and conv.get("messages"):
+            from app.services.distillation_service import distillation_service
+            agent_id = conv.get("agent_id")
+            await distillation_service.final_distill(
+                agent_id, conv_id, conv["messages"], llm_adapter,
+            )
+    except Exception as distill_err:
+        logger.warning(f"[API] Final distill on leave failed: {distill_err}")
+    return {"error": None, "data": {"left": True}}
+
+
 @router.delete("/conversations/{conv_id}")
 async def delete_conversation(conv_id: str):
     logger.info(f"[API] DELETE /chat/conversations/{conv_id} - Moving to trash")
@@ -212,6 +230,21 @@ async def delete_conversation(conv_id: str):
     conversation_store.soft_delete(conv_id)
     logger.success(f"[API] DELETE /chat/conversations/{conv_id} - Moved to trash")
     return {"error": None, "data": {"deleted": True}}
+
+
+class RenameConversationRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+
+
+@router.patch("/conversations/{conv_id}/rename")
+async def rename_conversation(conv_id: str, request: RenameConversationRequest):
+    logger.info(f"[API] PATCH /chat/conversations/{conv_id}/rename - Renaming to '{request.title}'")
+    success = conversation_store.rename(conv_id, request.title)
+    if not success:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Conversation {conv_id} not found")
+    logger.success(f"[API] PATCH /chat/conversations/{conv_id}/rename - Renamed")
+    return {"error": None, "data": {"renamed": True, "title": request.title}}
 
 
 class TruncateMessagesRequest(BaseModel):
@@ -235,8 +268,23 @@ async def truncate_messages(conv_id: str, request: TruncateMessagesRequest):
     conv["messages"] = conv["messages"][:request.keep_count]
     _chat_service.persist_conv(conv_id, conv)
 
+    # 截断的是尾部，重建对话级记忆
     agent_id = conv.get("agent_id")
-    logger.info(f"[Chat] Truncated conv={conv_id}, thread memory not applicable in new system")
+    if agent_id:
+        try:
+            from app.engines.memory import get_memory_engine
+            from app.services.distillation_service import distillation_service as ds
+            engine = get_memory_engine(agent_id)
+            engine.clear_conversation_data(conv_id)
+            ds.reset_distill_state(conv_id)
+            await context_service.schedule_memory_update(
+                conv["messages"], conv_id, agent_id, llm_adapter=llm_adapter,
+            )
+            await ds.maybe_distill(
+                agent_id, conv_id, conv["messages"], llm_adapter,
+            )
+        except Exception as mem_err:
+            logger.warning(f"[Memory] Rebuild after truncate failed: {mem_err}")
 
     logger.success(
         f"[API] PATCH /chat/conversations/{conv_id}/messages - "
@@ -299,7 +347,16 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
         all_messages.append(msg)
 
     all_messages = context_service.inject_timestamp_prompt(all_messages)
-    agent_id = request.agent_id or conv.get("agent_id")
+    # 始终以对话存储的 agent_id 为准，确保记忆读写一致
+    agent_id = conv.get("agent_id") or request.agent_id
+    if not agent_id:
+        from app.infrastructure.database.json_store import agents_store
+        all_agents = agents_store.all()
+        if all_agents:
+            agent_id = all_agents[0].get("id")
+    # 回写到对话中，确保后续使用一致
+    if agent_id and not conv.get("agent_id"):
+        conv["agent_id"] = agent_id
     all_messages = await context_service.inject_memory(
         all_messages, agent_id, resolved_provider, conv_id,
         llm_adapter=llm_adapter,
@@ -411,12 +468,48 @@ async def delete_message(conv_id: str, message_id: str):
     if not conv:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
-    original_len = len(conv["messages"])
-    conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
-    if len(conv["messages"]) == original_len:
+
+    # 找到被删消息在原始列表中的位置
+    deleted_idx = None
+    for i, m in enumerate(conv["messages"]):
+        if m.get("id") == message_id:
+            deleted_idx = i
+            break
+
+    if deleted_idx is None:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Message {message_id} not found in conversation {conv_id}")
+
+    # 找到最后一条用户消息的位置（用于尾部判断）
+    last_user_idx = -1
+    for i, m in enumerate(conv["messages"]):
+        if m.get("role") == "user":
+            last_user_idx = i
+
+    conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
     _chat_service.persist_conv(conv_id, conv)
+
+    # 尾部判断：只有删的是尾部消息才重建对话级记忆
+    agent_id = conv.get("agent_id")
+    if agent_id and conv["messages"]:
+        if deleted_idx >= last_user_idx:
+            try:
+                from app.engines.memory import get_memory_engine
+                from app.services.distillation_service import distillation_service as ds
+                engine = get_memory_engine(agent_id)
+                engine.clear_conversation_data(conv_id)
+                ds.reset_distill_state(conv_id)
+                await context_service.schedule_memory_update(
+                    conv["messages"], conv_id, agent_id, llm_adapter=llm_adapter,
+                )
+                await ds.maybe_distill(
+                    agent_id, conv_id, conv["messages"], llm_adapter,
+                )
+            except Exception as mem_err:
+                logger.warning(f"[Memory] Rebuild after delete failed: {mem_err}")
+        else:
+            logger.info("[Memory] Middle message deleted, tail unchanged — skip rebuild")
+
     logger.success(
         f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Message deleted"
     )
@@ -468,7 +561,16 @@ async def add_message(conv_id: str, request: ChatRequest):
         all_messages.append(msg)
 
     all_messages = context_service.inject_timestamp_prompt(all_messages)
-    agent_id = request.agent_id or conv.get("agent_id")
+    # 始终以对话存储的 agent_id 为准，确保记忆读写一致
+    agent_id = conv.get("agent_id") or request.agent_id
+    if not agent_id:
+        from app.infrastructure.database.json_store import agents_store
+        all_agents = agents_store.all()
+        if all_agents:
+            agent_id = all_agents[0].get("id")
+    # 回写到对话中，确保后续使用一致
+    if agent_id and not conv.get("agent_id"):
+        conv["agent_id"] = agent_id
     all_messages = await context_service.inject_memory(
         all_messages, agent_id, resolved_provider, conv_id,
         llm_adapter=llm_adapter,
@@ -603,6 +705,20 @@ async def batch_permanent_delete(request: BatchIdsRequest):
 @router.post("/conversations/batch-delete")
 async def batch_soft_delete(request: BatchIdsRequest):
     logger.info(f"[API] POST /chat/conversations/batch-delete - Moving {len(request.ids)} to trash")
+
+    # 为每个对话触发最终蒸馏（与单个删除行为对齐）
+    for conv_id in request.ids:
+        try:
+            conv = conversation_store.get(conv_id)
+            if conv and conv.get("messages"):
+                from app.services.distillation_service import distillation_service as ds
+                agent_id = conv.get("agent_id")
+                await ds.final_distill(
+                    agent_id, conv_id, conv["messages"], llm_adapter,
+                )
+        except Exception as distill_err:
+            logger.warning(f"[Memory] Final distill on batch delete failed for {conv_id}: {distill_err}")
+
     count = conversation_store.batch_soft_delete(request.ids)
     logger.success(f"[API] POST /chat/conversations/batch-delete - Moved {count} to trash")
     return {"error": None, "data": {"deleted_count": count}}

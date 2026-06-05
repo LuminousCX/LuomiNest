@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     top_p: float | None = None
     stream: bool = False
     agent_id: str | None = None
+    conversation_id: str | None = None
     timestamp: float | None = None
     file_content: str | None = Field(default=None, max_length=100_000_000)
     file_name: str | None = Field(default=None, max_length=255)

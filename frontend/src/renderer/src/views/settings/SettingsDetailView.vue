@@ -6,7 +6,6 @@ import {
   Palette,
   Bell,
   Shield,
-  Database,
   Globe,
   Settings,
   Sun,
@@ -41,17 +40,6 @@ const sectionMap: Record<string, { label: string; icon: typeof Palette; desc: st
       { label: '声音提醒', desc: '收到消息时播放提示音', type: 'toggle' },
       { label: '免打扰模式', desc: '设定免打扰时段', type: 'time' },
       { label: '消息预览', desc: '在通知中显示消息内容', type: 'toggle' }
-    ]
-  },
-  memory: {
-    label: '记忆系统',
-    icon: Database,
-    desc: '三层记忆架构配置',
-    items: [
-      { label: '工作记忆容量', desc: '短期对话上下文窗口大小', type: 'slider' },
-      { label: '情景记忆', desc: '自动保存对话场景', type: 'toggle' },
-      { label: '语义记忆', desc: '长期知识图谱构建', type: 'toggle' },
-      { label: '记忆检索', desc: '相关记忆自动召回', type: 'toggle' }
     ]
   },
   privacy: {

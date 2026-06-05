@@ -244,6 +244,16 @@ class ConversationStore:
                 deleted += 1
         return deleted
 
+    def rename(self, conv_id: str, new_title: str) -> bool:
+        """重命名对话标题，同时更新对话文件和索引"""
+        conv = self.get(conv_id)
+        if not conv:
+            return False
+        conv["title"] = new_title
+        conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self.set(conv_id, conv)
+        return True
+
     def delete_by_agent_id(self, agent_id: str) -> int:
         """删除指定 Agent 的所有对话记录"""
         convs = self.list_conversations(agent_id)

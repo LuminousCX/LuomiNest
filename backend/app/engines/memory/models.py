@@ -6,6 +6,10 @@ from pydantic import BaseModel, Field
 
 FACT_CATEGORIES = ("preference", "knowledge", "context", "behavior", "goal", "correction")
 
+# 事实作用域：Agent级共享 vs 对话级隔离
+FACT_SCOPE_AGENT = {"preference", "knowledge", "correction"}
+FACT_SCOPE_CONVERSATION = {"context", "behavior", "goal"}
+
 _SUMMARY_SECTION_MAP = {
     "用户画像": "user_profile",
     "偏好设置": "preferences",
@@ -24,6 +28,15 @@ class ProfileData(BaseModel):
     dynamic_context: list[str] = Field(default_factory=list)
 
 
+class ArchivedFact(BaseModel):
+    """归档的事实版本，记录变更历史。"""
+    content: str
+    category: str = ""
+    confidence: float = 0.0
+    archived_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    reason: str = ""  # 归档原因：superseded / conflict / expired / manual
+
+
 class FactItem(BaseModel):
     id: str = Field(default_factory=lambda: f"fact_{uuid4().hex[:8]}")
     content: str
@@ -38,6 +51,11 @@ class FactItem(BaseModel):
     is_latest: bool = True
     # 关系图谱：替代了哪个 fact ID（用于矛盾追踪）
     supersedes_id: str | None = None
+    # 溯源：来源对话ID和原始消息
+    source_conversation_id: str = ""
+    source_message: str = ""
+    # 版本归档：历史版本列表
+    history: list[ArchivedFact] = Field(default_factory=list)
 
 
 class SummarySection(BaseModel):

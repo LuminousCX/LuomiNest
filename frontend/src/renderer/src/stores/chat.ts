@@ -86,6 +86,12 @@ export const useChatStore = defineStore('chat', () => {
   const loadConversation = async (convId: string) => {
     if (!activeAgentId.value) return
 
+    // 切换对话前，通知后端对当前对话执行最终蒸馏
+    const prevConvId = agentCurrentConvId.value[activeAgentId.value]
+    if (prevConvId && prevConvId !== convId) {
+      apiPost(`/chat/conversations/${prevConvId}/leave`).catch(() => {})
+    }
+
     // 加载对话时清除推荐
     currentSuggestionMessageId.value = null
 
@@ -201,6 +207,26 @@ export const useChatStore = defineStore('chat', () => {
 
     await fetchConversations(targetAgentId)
     fetchTrash(targetAgentId)
+  }
+
+  const renameConversation = async (convId: string, newTitle: string, agentId?: string) => {
+    const targetAgentId = agentId || activeAgentId.value
+    try {
+      await apiPatch(`/chat/conversations/${convId}/rename`, { title: newTitle })
+      // 更新本地缓存的对话数据
+      if (convData.value[convId]) {
+        convData.value = {
+          ...convData.value,
+          [convId]: { ...convData.value[convId], title: newTitle }
+        }
+      }
+      // 刷新对话列表以更新标题
+      if (targetAgentId) {
+        await fetchConversations(targetAgentId)
+      }
+    } catch (error) {
+      console.warn('[ChatStore] Failed to rename conversation:', error)
+    }
   }
 
   const cancelConversationRequest = (convId?: string) => {
@@ -861,6 +887,7 @@ export const useChatStore = defineStore('chat', () => {
     createConversation,
     loadConversation,
     deleteConversation,
+    renameConversation,
     sendMessage,
     clearMessages,
     cleanupUnusedConversations,

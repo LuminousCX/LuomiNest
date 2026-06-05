@@ -379,6 +379,7 @@ When thinking/reasoning, you MUST strictly follow this format:
                     context_msg = "\n".join(f"[用户]: {m}" for m in recent_user_msgs[:-1]) if len(recent_user_msgs) > 1 else ""
                     profile_result = await engine.update_profile_from_message(
                         str(content), llm_adapter, hint, context_messages=context_msg,
+                        conversation_id=thread_id,
                     )
                     if profile_result:
                         logger.info(f"[Memory] Background profile update: {profile_result}")

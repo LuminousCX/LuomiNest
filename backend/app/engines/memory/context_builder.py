@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from .models import FactItem, MemoryData, summaries_to_markdown
+from .models import FactItem, MemoryData, FACT_SCOPE_AGENT, FACT_SCOPE_CONVERSATION, summaries_to_markdown
 from .store import MemoryStore
 from .fact_manager import _extract_content_words
 
@@ -12,8 +12,9 @@ class ContextBuilder:
 
     def __init__(self, store: MemoryStore):
         self._store = store
+        self._relevant_fact_ids: set[str] = set()
 
-    def build_context(self, max_chars: int | None = None, query: str = "", conversation_store=None) -> str:
+    def build_context(self, max_chars: int | None = None, query: str = "", conversation_store=None, conversation_id: str | None = None) -> str:
         budget = max_chars or self.MAX_INJECTION_CHARS
         sections = []
         used_chars = 0
@@ -47,23 +48,44 @@ class ContextBuilder:
                 sections.append(section)
                 used_chars += len(section) + 20
 
-        # 3. 记忆事实（query-aware：优先注入与当前问题相关的事实）- 始终从Agent级store读取
-        facts = sorted(data.facts, key=lambda f: f.confidence, reverse=True)
-        valid_facts = []
-        for fact in facts:
-            if not fact.is_latest:
-                continue
-            if fact.expires_at:
-                try:
-                    exp_time = datetime.fromisoformat(fact.expires_at.replace("Z", "+00:00"))
-                    if exp_time <= datetime.now(timezone.utc):
-                        continue
-                except (ValueError, TypeError):
-                    pass
-            valid_facts.append(fact)
+        # 3. 记忆事实（query-aware：优先注入与当前问题相关的事实）
+        # Agent级共享facts + 对话级隔离facts
+        all_facts = []
+        # Agent级：只取共享作用域的facts
+        for f in data.facts:
+            if f.is_latest and f.category in FACT_SCOPE_AGENT:
+                if f.expires_at:
+                    try:
+                        exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
+                        if exp_time <= datetime.now(timezone.utc):
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+                all_facts.append(f)
+        # 对话级：取对话作用域的facts
+        if conversation_store:
+            conv_data = conversation_store.load_data()
+            for f in conv_data.facts:
+                if f.is_latest and f.category in FACT_SCOPE_CONVERSATION:
+                    if f.expires_at:
+                        try:
+                            exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
+                            if exp_time <= datetime.now(timezone.utc):
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+                    all_facts.append(f)
 
-        # query-aware 排序：与 query 相关的事实优先
-        if query:
+        # query-aware 排序：优先使用向量召回结果，再用关键词匹配
+        if self._relevant_fact_ids:
+            # 使用向量召回的结果排序
+            def vector_relevance(f: FactItem) -> float:
+                if f.id in self._relevant_fact_ids:
+                    return 1.0 + f.confidence * 0.1
+                return f.confidence * 0.1
+            all_facts.sort(key=vector_relevance, reverse=True)
+        elif query:
+            # 回退到关键词匹配
             query_words = _extract_content_words(query.casefold())
             if query_words:
                 def fact_relevance(f: FactItem) -> float:
@@ -71,21 +93,31 @@ class ContextBuilder:
                     if not fact_words:
                         return 0.0
                     overlap = len(query_words & fact_words) / max(len(query_words | fact_words), 1)
-                    return overlap + f.confidence * 0.1  # 相关性 + 少量置信度加权
-                valid_facts.sort(key=fact_relevance, reverse=True)
+                    return overlap + f.confidence * 0.1
+                all_facts.sort(key=fact_relevance, reverse=True)
+        else:
+            all_facts.sort(key=lambda f: f.confidence, reverse=True)
+        
+        # 重置相关fact ID集合
+        self._relevant_fact_ids = set()
 
-        if valid_facts:
+        if all_facts:
             fact_lines = []
-            for fact in valid_facts:
+            truncated = False
+            for fact in all_facts:
                 line = f"- [{fact.category}|{fact.confidence:.1f}] {fact.content}"
                 if fact.source_error:
                     line += f" (避免: {fact.source_error})"
                 if used_chars + len(line) + 20 > budget:
+                    truncated = True
                     break
                 fact_lines.append(line)
                 used_chars += len(line) + 1
             if fact_lines:
-                sections.append("=== [记忆事实] ===\n" + "\n".join(fact_lines))
+                header = "=== [记忆事实] ==="
+                if truncated:
+                    header += f" (共{len(all_facts)}条，按置信度截断显示前{len(fact_lines)}条)"
+                sections.append(header + "\n" + "\n".join(fact_lines))
 
         # 4. 知识记忆 - 始终从Agent级store读取
         knowledge = self._store.load_knowledge()
@@ -93,11 +125,11 @@ class ContextBuilder:
             sections.append("=== [知识记忆] ===\n" + knowledge.strip())
             used_chars += len(knowledge) + 30
 
-        # 5. 每日记录 - 优先从对话级store读取
+        # 5. 每日记录 - 按conversation_id隔离读取
         daily_content = ""
-        if conversation_store:
-            daily_content = conversation_store.load_daily()
-        if not daily_content.strip():
+        if conversation_id:
+            daily_content = self._store.load_daily(conversation_id=conversation_id)
+        else:
             daily_content = self._store.load_daily()
         
         if daily_content.strip() and used_chars + len(daily_content) + 30 <= budget:
