@@ -273,7 +273,16 @@ const handleDeleteConversation = async (convId: string) => {
   }
 }
 
-const handleNewConversation = () => {
+const handleNewConversation = async () => {
+  // 先通知后端对当前对话执行最终蒸馏
+  const prevConvId = chatStore.currentConvId
+  if (prevConvId) {
+    try {
+      await chatStore.leaveCurrentConversation(prevConvId)
+    } catch {
+      // leave 失败不阻塞新建对话
+    }
+  }
   chatStore.clearMessages()
   if (route.path !== '/workspace') {
     router.push('/workspace')
@@ -309,9 +318,14 @@ const confirmRename = async () => {
     renamingConvId.value = null
     return
   }
-  await chatStore.renameConversation(renamingConvId.value, newTitle, agentStore.activeAgent?.id)
-  renamingConvId.value = null
-  renamingTitle.value = ''
+  if (newTitle.length > 200) {
+    return
+  }
+  const success = await chatStore.renameConversation(renamingConvId.value, newTitle, agentStore.activeAgent?.id)
+  if (success) {
+    renamingConvId.value = null
+    renamingTitle.value = ''
+  }
 }
 
 const cancelRename = () => {
@@ -673,6 +687,7 @@ onMounted(async () => {
                         <input
                           v-model="renamingTitle"
                           class="history-item-rename-input"
+                          maxlength="200"
                           @keydown.enter="confirmRename"
                           @keydown.escape="cancelRename"
                           @blur="confirmRename"
@@ -1707,7 +1722,9 @@ onMounted(async () => {
 }
 
 .history-item-rename {
-  display: none;
+  opacity: 0;
+  transform: translateX(4px);
+  display: flex;
   align-items: center;
   justify-content: center;
   padding: 4px;
@@ -1717,8 +1734,11 @@ onMounted(async () => {
   transition: all var(--transition-fast);
 }
 
-.history-item:hover .history-item-rename {
-  display: flex;
+.history-item:hover .history-item-rename,
+.history-item:focus-within .history-item-rename,
+.history-item-rename:focus {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .history-item-rename:hover {

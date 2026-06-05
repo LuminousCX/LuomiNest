@@ -209,7 +209,7 @@ export const useChatStore = defineStore('chat', () => {
     fetchTrash(targetAgentId)
   }
 
-  const renameConversation = async (convId: string, newTitle: string, agentId?: string) => {
+  const renameConversation = async (convId: string, newTitle: string, agentId?: string): Promise<boolean> => {
     const targetAgentId = agentId || activeAgentId.value
     try {
       await apiPatch(`/chat/conversations/${convId}/rename`, { title: newTitle })
@@ -224,8 +224,10 @@ export const useChatStore = defineStore('chat', () => {
       if (targetAgentId) {
         await fetchConversations(targetAgentId)
       }
+      return true
     } catch (error) {
       console.warn('[ChatStore] Failed to rename conversation:', error)
+      return false
     }
   }
 
@@ -808,6 +810,14 @@ export const useChatStore = defineStore('chat', () => {
     lastError.value = null
   }
 
+  const leaveCurrentConversation = async (convId: string) => {
+    try {
+      await apiPost(`/chat/conversations/${convId}/leave`)
+    } catch (error) {
+      console.warn('[ChatStore] Failed to leave conversation:', error)
+    }
+  }
+
   const cleanupUnusedConversations = () => {
     const currentId = currentConvId.value
     const keysToDelete: string[] = []
@@ -890,6 +900,7 @@ export const useChatStore = defineStore('chat', () => {
     renameConversation,
     sendMessage,
     clearMessages,
+    leaveCurrentConversation,
     cleanupUnusedConversations,
     cancelCurrentRequest,
     cancelConversationRequest,

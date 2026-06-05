@@ -195,6 +195,19 @@ async def get_conversation(conv_id: str):
     return ConversationResponse(**conv)
 
 
+def _resolve_agent_id(conv: dict, request_agent_id: str | None = None) -> str | None:
+    """解析并回填 agent_id：优先 conv 存储，其次 request，最后 agents_store 兜底。"""
+    agent_id = conv.get("agent_id") or request_agent_id
+    if not agent_id:
+        from app.infrastructure.database.json_store import agents_store
+        all_agents = agents_store.all()
+        if all_agents:
+            agent_id = all_agents[0].get("id")
+    if agent_id and not conv.get("agent_id"):
+        conv["agent_id"] = agent_id
+    return agent_id
+
+
 @router.post("/conversations/{conv_id}/leave")
 async def leave_conversation(conv_id: str):
     """用户离开/切换对话时触发最终蒸馏"""
@@ -203,7 +216,7 @@ async def leave_conversation(conv_id: str):
         conv = conversation_store.get(conv_id)
         if conv and conv.get("messages"):
             from app.services.distillation_service import distillation_service
-            agent_id = conv.get("agent_id")
+            agent_id = _resolve_agent_id(conv)
             await distillation_service.final_distill(
                 agent_id, conv_id, conv["messages"], llm_adapter,
             )
@@ -220,7 +233,7 @@ async def delete_conversation(conv_id: str):
         conv = conversation_store.get(conv_id)
         if conv and conv.get("messages"):
             from app.services.distillation_service import distillation_service
-            agent_id = conv.get("agent_id")
+            agent_id = _resolve_agent_id(conv)
             await distillation_service.final_distill(
                 agent_id, conv_id, conv["messages"], llm_adapter,
             )
@@ -238,7 +251,7 @@ class RenameConversationRequest(BaseModel):
 
 @router.patch("/conversations/{conv_id}/rename")
 async def rename_conversation(conv_id: str, request: RenameConversationRequest):
-    logger.info(f"[API] PATCH /chat/conversations/{conv_id}/rename - Renaming to '{request.title}'")
+    logger.info(f"[API] PATCH /chat/conversations/{conv_id}/rename - title_len={len(request.title)}")
     success = conversation_store.rename(conv_id, request.title)
     if not success:
         from app.core.exceptions import NotFoundError
@@ -269,7 +282,7 @@ async def truncate_messages(conv_id: str, request: TruncateMessagesRequest):
     _chat_service.persist_conv(conv_id, conv)
 
     # 截断的是尾部，重建对话级记忆
-    agent_id = conv.get("agent_id")
+    agent_id = _resolve_agent_id(conv)
     if agent_id:
         try:
             from app.engines.memory import get_memory_engine
@@ -471,9 +484,11 @@ async def delete_message(conv_id: str, message_id: str):
 
     # 找到被删消息在原始列表中的位置
     deleted_idx = None
+    deleted_role = None
     for i, m in enumerate(conv["messages"]):
         if m.get("id") == message_id:
             deleted_idx = i
+            deleted_role = m.get("role")
             break
 
     if deleted_idx is None:
@@ -489,10 +504,10 @@ async def delete_message(conv_id: str, message_id: str):
     conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
     _chat_service.persist_conv(conv_id, conv)
 
-    # 尾部判断：只有删的是尾部消息才重建对话级记忆
-    agent_id = conv.get("agent_id")
+    # 删除用户消息时始终重建记忆，删除中间AI消息则跳过
+    agent_id = _resolve_agent_id(conv)
     if agent_id and conv["messages"]:
-        if deleted_idx >= last_user_idx:
+        if deleted_role == "user" or deleted_idx >= last_user_idx:
             try:
                 from app.engines.memory import get_memory_engine
                 from app.services.distillation_service import distillation_service as ds
@@ -712,7 +727,7 @@ async def batch_soft_delete(request: BatchIdsRequest):
             conv = conversation_store.get(conv_id)
             if conv and conv.get("messages"):
                 from app.services.distillation_service import distillation_service as ds
-                agent_id = conv.get("agent_id")
+                agent_id = _resolve_agent_id(conv)
                 await ds.final_distill(
                     agent_id, conv_id, conv["messages"], llm_adapter,
                 )

@@ -373,6 +373,9 @@ class MemoryExtractor:
 
         facts = []
         for raw in raw_facts:
+            if not isinstance(raw, dict):
+                logger.warning(f"[Memory] Skipping non-dict fact entry: {type(raw)}")
+                continue
             content = raw.get("content", "").strip()
             category = raw.get("category", "context")
             confidence = raw.get("confidence", 0.8)
@@ -404,10 +407,14 @@ class MemoryExtractor:
                 )
             )
 
-            # 处理 LLM 标记的 supersedes：降低被替代事实的置信度
+            # 处理 LLM 标记的 supersedes：按作用域分别应用
             if supersedes:
                 data = self._store.load_data()
-                self._fact_manager.apply_supersedes(data, supersedes, content)
-                self._store.save_data(data)
+                if category in FACT_SCOPE_AGENT:
+                    self._fact_manager.apply_supersedes(data, supersedes, content)
+                    self._store.save_data(data)
+                else:
+                    # 对话级 supersedes 不写入 Agent 级 store
+                    logger.debug(f"[Memory] Skipping conversation-scoped supersedes for agent store: {supersedes[:30]}")
 
         return facts

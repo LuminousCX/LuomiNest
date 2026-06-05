@@ -180,7 +180,7 @@ class FactManager:
 
     def _merge_fact(self, data: MemoryData, fact: FactItem) -> None:
         """合并单条事实：存在相似则检测矛盾，否则追加。归档旧版本到history。"""
-        existing = self._find_similar_fact(data, fact.content)
+        existing = self._find_similar_fact(data, fact)
         if existing:
             if self._is_contradiction(existing, fact):
                 # 矛盾检测到：归档旧版本，新事实替代
@@ -256,23 +256,23 @@ class FactManager:
             data.facts = data.facts[: self.MAX_FACTS]
 
     @staticmethod
-    def _find_similar_fact(data: MemoryData, content: str) -> FactItem | None:
+    def _find_similar_fact(data: MemoryData, fact: FactItem) -> FactItem | None:
         """查找语义相似或矛盾的事实：先精确匹配，再关键词子集匹配，最后同类别矛盾匹配。"""
-        normalized = content.strip().casefold()
+        normalized = fact.content.strip().casefold()
         # 1. 精确匹配
-        for fact in data.facts:
-            if not fact.is_latest:
+        for existing in data.facts:
+            if not existing.is_latest:
                 continue
-            if fact.content.strip().casefold() == normalized:
-                return fact
+            if existing.content.strip().casefold() == normalized:
+                return existing
         # 2. 关键词子集匹配：如果新事实的核心词全部出现在已有事实中（或反之），视为相似
         content_words = _extract_content_words(normalized)
         if not content_words:
             return None
-        for fact in data.facts:
-            if not fact.is_latest:
+        for existing in data.facts:
+            if not existing.is_latest:
                 continue
-            fact_words = _extract_content_words(fact.content.strip().casefold())
+            fact_words = _extract_content_words(existing.content.strip().casefold())
             if not fact_words:
                 continue
             # 至少需要 2 个非停用词重叠才有比较意义
@@ -282,17 +282,17 @@ class FactManager:
             # 计算 Jaccard 相似度
             overlap = len(common) / max(len(content_words | fact_words), 1)
             if overlap >= 0.8:
-                return fact
+                return existing
         # 3. 同类别矛盾匹配：同 category 且共享至少1个核心词，且包含矛盾关键词对
-        for fact in data.facts:
-            if not fact.is_latest:
+        for existing in data.facts:
+            if not existing.is_latest:
                 continue
-            fact_words = _extract_content_words(fact.content.strip().casefold())
+            fact_words = _extract_content_words(existing.content.strip().casefold())
             common = content_words & fact_words
             if not common:
                 continue
-            if FactManager._is_contradiction(fact, FactItem(content=content, category=fact.category)):
-                return fact
+            if FactManager._is_contradiction(existing, fact):
+                return existing
         return None
 
     @staticmethod

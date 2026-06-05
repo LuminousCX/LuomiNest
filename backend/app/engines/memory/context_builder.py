@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from .models import FactItem, MemoryData, FACT_SCOPE_AGENT, FACT_SCOPE_CONVERSATION, summaries_to_markdown
 from .store import MemoryStore
@@ -12,6 +12,7 @@ class ContextBuilder:
 
     def __init__(self, store: MemoryStore):
         self._store = store
+        # 向量召回返回的 fact ID 集合，用于下游相关性排序/聚合
         self._relevant_fact_ids: set[str] = set()
 
     def build_context(self, max_chars: int | None = None, query: str = "", conversation_store=None, conversation_id: str | None = None) -> str:
@@ -57,7 +58,7 @@ class ContextBuilder:
                 if f.expires_at:
                     try:
                         exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
-                        if exp_time <= datetime.now(timezone.utc):
+                        if exp_time <= datetime.now(datetime.UTC):
                             continue
                     except (ValueError, TypeError):
                         pass
@@ -70,7 +71,7 @@ class ContextBuilder:
                     if f.expires_at:
                         try:
                             exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
-                            if exp_time <= datetime.now(timezone.utc):
+                            if exp_time <= datetime.now(datetime.UTC):
                                 continue
                         except (ValueError, TypeError):
                             pass

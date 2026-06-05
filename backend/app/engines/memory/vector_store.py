@@ -33,10 +33,23 @@ class EmbeddingProvider(Protocol):
 
 
 class LLMEmbeddingProvider:
-    def __init__(self, provider, model: str = "text-embedding-3-small"):
+    """基于 LLM API 的嵌入提供器，通过 OpenAI 兼容接口获取文本向量。"""
+
+    # 已知模型的维度映射
+    _KNOWN_DIMS: dict[str, int] = {
+        "text-embedding-3-small": 1536,
+        "text-embedding-3-large": 3072,
+        "text-embedding-ada-002": 1536,
+    }
+
+    def __init__(self, provider: Any, model: str = "text-embedding-3-small") -> None:
         self._provider = provider
         self._model = model
-        self._dim = 1536 if "large" not in model else 3072
+        if model in self._KNOWN_DIMS:
+            self._dim = self._KNOWN_DIMS[model]
+        else:
+            self._dim = 1536
+            logger.warning(f"[VectorStore] Unknown embedding model '{model}', defaulting to dim={self._dim}")
 
     @property
     def dim(self) -> int:
@@ -45,10 +58,12 @@ class LLMEmbeddingProvider:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        
+
         base_url = getattr(self._provider, "base_url", "https://api.openai.com/v1")
-        api_key = getattr(self._provider, "api_key", "")
-        
+        api_key = getattr(self._provider, "api_key", None)
+        if not api_key:
+            raise ValueError("Embedding provider api_key is missing or empty")
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{base_url}/embeddings",
@@ -200,7 +215,7 @@ class VectorStore:
             return
         
         try:
-            data = np.load(path, allow_pickle=True)
+            data = np.load(path, allow_pickle=False)
             ids = [str(x) for x in data["ids"]]
             vectors = data["vectors"]
             

@@ -245,14 +245,35 @@ class ConversationStore:
         return deleted
 
     def rename(self, conv_id: str, new_title: str) -> bool:
-        """重命名对话标题，同时更新对话文件和索引"""
-        conv = self.get(conv_id)
-        if not conv:
-            return False
-        conv["title"] = new_title
-        conv["updated_at"] = datetime.now(timezone.utc).isoformat()
-        self.set(conv_id, conv)
-        return True
+        """重命名对话标题，只更新 title 和 updated_at 字段"""
+        with self._lock:
+            path = self._conv_path(conv_id)
+            if not os.path.exists(path):
+                return False
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    conv = json.load(f)
+            except Exception as e:
+                logger.warning(f"[ConvStore] Failed to load conv for rename {conv_id}: {e}")
+                return False
+
+            conv["title"] = new_title
+            conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(conv, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"[ConvStore] Failed to save renamed conv {conv_id}: {e}")
+                return False
+
+            # 更新索引
+            index = self._load_index()
+            if conv_id in index:
+                index[conv_id]["title"] = new_title
+                index[conv_id]["updated_at"] = conv["updated_at"]
+                self._save_index()
+            return True
 
     def delete_by_agent_id(self, agent_id: str) -> int:
         """删除指定 Agent 的所有对话记录"""

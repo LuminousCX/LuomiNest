@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import re
 import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
@@ -33,6 +36,9 @@ from .store import MemoryStore
 from .fact_manager import FactManager
 from .extractor import MemoryExtractor
 from .context_builder import ContextBuilder
+
+if TYPE_CHECKING:
+    from .vector_manager import VectorSearchManager
 
 
 class MemoryEngine:
@@ -134,7 +140,6 @@ class MemoryEngine:
     def save_summary(self, content: str, conversation_id: str | None = None) -> None:
         """保存摘要内容。如果提供 conversation_id，只写入对话级store；否则写入Agent级store。"""
         if conversation_id:
-            from .memory_engine import get_conversation_store
             conv_store = get_conversation_store(self._agent_id, conversation_id)
             conv_data = conv_store.load_data()
             self._markdown_to_summaries(conv_data, content)
@@ -193,11 +198,10 @@ class MemoryEngine:
 
     def clear_conversation_data(self, conversation_id: str) -> None:
         """清除对话级store的所有数据（facts + summary + dynamic_context + daily）"""
-        from .memory_engine import get_conversation_store
         conv_store = get_conversation_store(self._agent_id, conversation_id)
         conv_store.save_data(MemoryData())
         self._store.clear_daily(conversation_id)
-        
+
         # 清除向量索引中该对话的数据
         self.vector_delete_conversation(conversation_id)
 
@@ -209,13 +213,19 @@ class MemoryEngine:
             if self._embedding_provider is None:
                 try:
                     from app.runtime.provider.llm.adapter import llm_adapter
-                    self._embedding_provider = getattr(llm_adapter, "_provider", None)
-                except Exception:
-                    pass
-            
+                    if hasattr(llm_adapter, "_provider"):
+                        self._embedding_provider = llm_adapter._provider
+                    else:
+                        logger.warning("[Memory] llm_adapter has no _provider attribute")
+                except Exception as e:
+                    logger.warning(f"[Memory] Failed to access llm_adapter for embedding provider: {e}")
+
             if self._embedding_provider is None:
-                raise RuntimeError("Embedding provider not available")
-            
+                raise RuntimeError(
+                    "Embedding provider not available. "
+                    "Ensure llm_adapter is configured with a provider that has embedding support."
+                )
+
             from .vector_manager import VectorSearchManager
             self._vector_manager = VectorSearchManager(self._agent_id, self._embedding_provider)
         return self._vector_manager
@@ -241,7 +251,6 @@ class MemoryEngine:
                 facts.append(f)
         
         if conversation_id:
-            from .memory_engine import get_conversation_store
             conv_store = get_conversation_store(self._agent_id, conversation_id)
             conv_data = conv_store.load_data()
             for f in conv_data.facts:
@@ -250,11 +259,10 @@ class MemoryEngine:
         
         return await vm.rebuild(facts, conversation_id)
 
-    def vector_delete_conversation(self, conversation_id: str) -> int:
+    async def vector_delete_conversation(self, conversation_id: str) -> int:
         """删除对话相关向量"""
         if self._vector_manager:
-            import asyncio
-            return asyncio.run(self._vector_manager.delete_conversation(conversation_id))
+            return await self._vector_manager.delete_conversation(conversation_id)
         return 0
 
     def vector_save(self) -> None:
@@ -264,24 +272,39 @@ class MemoryEngine:
 
     # --- 上下文 ---
 
-    def build_context(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
+    async def build_context_async(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
         conv_store = None
         if conversation_id:
-            from .memory_engine import get_conversation_store
             agent_id = getattr(self, '_agent_id', None)
             conv_store = get_conversation_store(agent_id, conversation_id)
-        
+
         # 如果有查询，尝试向量召回增强
         if query:
             try:
-                retrieved = asyncio.run(self.vector_retrieve(query, k=10))
+                retrieved = await self.vector_retrieve(query, k=10)
                 if retrieved:
                     retrieved_ids = {r.fact_id for r in retrieved}
                     self._context_builder._relevant_fact_ids = retrieved_ids
             except Exception as e:
                 logger.warning(f"[Memory] Vector retrieve failed: {e}")
-        
+
         return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id)
+
+    def build_context(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
+        """同步包装器：检测是否在事件循环中运行，选择合适的调用方式。"""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            # 已在事件循环中，无法用 asyncio.run，使用同步回退
+            conv_store = None
+            if conversation_id:
+                conv_store = get_conversation_store(self._agent_id, conversation_id)
+            return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id)
+
+        return asyncio.run(self.build_context_async(max_chars, query, conversation_id))
 
     # --- LLM 驱动的更新 ---
 
@@ -299,7 +322,6 @@ class MemoryEngine:
         if conversation_id and result.get("facts"):
             conv_facts = [f for f in result["facts"] if f.category in FACT_SCOPE_CONVERSATION]
             if conv_facts:
-                from .memory_engine import get_conversation_store
                 conv_store = get_conversation_store(self._agent_id, conversation_id)
                 conv_data = conv_store.load_data()
                 self._fact_manager.merge_facts(conv_data, conv_facts)
