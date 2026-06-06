@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from loguru import logger
 
-from .models import MemoryData, FactItem
+from .models import MemoryData, FactItem, ArchivedFact
 from .store import MemoryStore
 
 # 中文停用词（用于关键词提取时过滤无意义词）
@@ -179,22 +179,41 @@ class FactManager:
                 fact.confidence = min(fact.confidence, 0.3)
 
     def _merge_fact(self, data: MemoryData, fact: FactItem) -> None:
-        """合并单条事实：存在相似则检测矛盾，否则追加。"""
-        existing = self._find_similar_fact(data, fact.content)
+        """合并单条事实：存在相似则检测矛盾，否则追加。归档旧版本到history。"""
+        existing = self._find_similar_fact(data, fact)
         if existing:
             if self._is_contradiction(existing, fact):
-                # 矛盾检测到：新事实替代旧事实（Supermemory 关系图谱模式）
+                # 矛盾检测到：归档旧版本，新事实替代
+                existing.history.append(ArchivedFact(
+                    content=existing.content,
+                    category=existing.category,
+                    confidence=existing.confidence,
+                    reason="conflict",
+                ))
                 existing.is_latest = False
                 fact.supersedes_id = existing.id
                 fact.is_latest = True
+                # 继承旧版本的history
+                fact.history = existing.history.copy()
                 data.facts.append(fact)
                 logger.info(f"[Memory] Contradiction detected, new fact supersedes old: {existing.content[:30]} -> {fact.content[:30]}")
             elif fact.confidence > existing.confidence:
+                # 更高置信度：归档旧版本，更新内容
+                existing.history.append(ArchivedFact(
+                    content=existing.content,
+                    category=existing.category,
+                    confidence=existing.confidence,
+                    reason="superseded",
+                ))
                 existing.content = fact.content
                 existing.confidence = fact.confidence
                 existing.category = fact.category
                 existing.source_error = fact.source_error
                 existing.expires_at = fact.expires_at
+                if fact.source_conversation_id:
+                    existing.source_conversation_id = fact.source_conversation_id
+                if fact.source_message:
+                    existing.source_message = fact.source_message
         else:
             data.facts.append(fact)
 
@@ -203,14 +222,20 @@ class FactManager:
         """检测新旧事实是否矛盾（同类别但内容相斥）。"""
         if existing.category != new_fact.category:
             return False
+        # correction 类别始终视为矛盾（替代旧信息）
+        if new_fact.category == "correction":
+            return True
         # 相同类别的关键词矛盾检测
-        # 注意：这是一个简化实现，更可靠的方式应该用 LLM 判断
         contradiction_indicators = [
             # 工作/状态变化
             (["在...工作", "就职于", "是...的"], ["离开", "辞职", "quit", "left", "不再"]),
-            (["住在", "位于", "在..."], ["搬到", "搬到", "moved to", "relocated"]),
-            (["喜欢", "prefer", "love"], ["讨厌", "不喜欢", "dislike", "hate"]),
-            (["使用", "用", "用...技术", "用...工具"], ["不用", "不再用", "停止使用", "停止使用", "stop using"]),
+            (["住在", "位于", "在..."], ["搬到", "moved to", "relocated"]),
+            # 喜好矛盾
+            (["喜欢", "爱", "偏好", "prefer", "love"], ["讨厌", "不喜欢", "反感", "dislike", "hate"]),
+            # 使用矛盾
+            (["使用", "用", "用...技术", "用...工具"], ["不用", "不再用", "停止使用", "stop using"]),
+            # 状态矛盾
+            (["是", "在"], ["不是", "不在", "不再"]),
         ]
         existing_lower = existing.content.lower()
         new_lower = new_fact.content.lower()
@@ -231,19 +256,23 @@ class FactManager:
             data.facts = data.facts[: self.MAX_FACTS]
 
     @staticmethod
-    def _find_similar_fact(data: MemoryData, content: str) -> FactItem | None:
-        """查找语义相似的事实：先精确匹配，再关键词子集匹配。"""
-        normalized = content.strip().casefold()
+    def _find_similar_fact(data: MemoryData, fact: FactItem) -> FactItem | None:
+        """查找语义相似或矛盾的事实：先精确匹配，再关键词子集匹配，最后同类别矛盾匹配。"""
+        normalized = fact.content.strip().casefold()
         # 1. 精确匹配
-        for fact in data.facts:
-            if fact.content.strip().casefold() == normalized:
-                return fact
+        for existing in data.facts:
+            if not existing.is_latest:
+                continue
+            if existing.content.strip().casefold() == normalized:
+                return existing
         # 2. 关键词子集匹配：如果新事实的核心词全部出现在已有事实中（或反之），视为相似
         content_words = _extract_content_words(normalized)
         if not content_words:
             return None
-        for fact in data.facts:
-            fact_words = _extract_content_words(fact.content.strip().casefold())
+        for existing in data.facts:
+            if not existing.is_latest:
+                continue
+            fact_words = _extract_content_words(existing.content.strip().casefold())
             if not fact_words:
                 continue
             # 至少需要 2 个非停用词重叠才有比较意义
@@ -253,7 +282,17 @@ class FactManager:
             # 计算 Jaccard 相似度
             overlap = len(common) / max(len(content_words | fact_words), 1)
             if overlap >= 0.8:
-                return fact
+                return existing
+        # 3. 同类别矛盾匹配：同 category 且共享至少1个核心词，且包含矛盾关键词对
+        for existing in data.facts:
+            if not existing.is_latest:
+                continue
+            fact_words = _extract_content_words(existing.content.strip().casefold())
+            common = content_words & fact_words
+            if not common:
+                continue
+            if FactManager._is_contradiction(existing, fact):
+                return existing
         return None
 
     @staticmethod
@@ -266,15 +305,20 @@ class FactManager:
                 fact.confidence = min(fact.confidence, 0.3)
 
     def apply_supersedes(self, data: MemoryData, supersedes_text: str, new_content: str) -> None:
-        """LLM 标记的矛盾处理：降低被替代事实的置信度，标记为非最新。"""
+        """LLM 标记的矛盾处理：归档被替代的事实，标记为非最新。"""
         if not supersedes_text:
             return
         supersedes_lower = supersedes_text.strip().casefold()
         for fact in data.facts:
             if not fact.is_latest:
                 continue
-            # 被替代的事实：内容包含 supersedes 关键词，且不是新事实本身
             if supersedes_lower in fact.content.casefold() and fact.content.strip().casefold() != new_content.strip().casefold():
+                fact.history.append(ArchivedFact(
+                    content=fact.content,
+                    category=fact.category,
+                    confidence=fact.confidence,
+                    reason="conflict",
+                ))
                 fact.is_latest = False
                 fact.confidence = min(fact.confidence, 0.3)
                 logger.info(f"[Memory] LLM supersedes: '{new_content[:30]}' replaces '{fact.content[:30]}'")

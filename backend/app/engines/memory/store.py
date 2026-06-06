@@ -30,10 +30,18 @@ class MemoryStore:
         return self._path / "knowledge.md"
 
     def _daily_file(self, date: str | None = None, conversation_id: str | None = None) -> Path:
-        if date is None:
+        if date is not None:
+            # 验证日期格式 YYYY-MM-DD
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+                raise ValueError(f"Invalid date format: {date!r}, expected YYYY-MM-DD")
+        else:
             date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
         if conversation_id:
-            return self._path / "daily" / conversation_id / f"{date}.md"
+            # 验证 conversation_id 不含路径遍历字符
+            safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in conversation_id)
+            if safe_id != conversation_id:
+                raise ValueError(f"Invalid conversation_id: {conversation_id!r}")
+            return self._path / "daily" / safe_id / f"{date}.md"
         return self._path / "daily" / f"{date}.md"
 
     def _read(self, path: Path) -> str:
@@ -46,11 +54,16 @@ class MemoryStore:
             return ""
 
     def _write(self, path: Path, content: str) -> None:
+        """原子写入：先写临时文件，再 rename 替换，防止写入中断导致数据损坏。"""
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(content, encoding="utf-8")
-        tmp.replace(path)
-        logger.info(f"[Memory] Written {path}")
+        try:
+            tmp.write_text(content, encoding="utf-8")
+            tmp.replace(path)
+        except Exception:
+            if tmp.exists():
+                tmp.unlink()
+            raise
 
     # --- 格式迁移 ---
 
@@ -237,6 +250,24 @@ class MemoryStore:
         with self._lock:
             if self._knowledge_file().exists():
                 self._knowledge_file().unlink()
+
+    def clear_daily(self, conversation_id: str, date: str | None = None) -> None:
+        """清除指定对话的daily记录。指定date只清当天，否则清全部。"""
+        # 验证 conversation_id 不含路径遍历字符
+        safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in conversation_id)
+        if safe_id != conversation_id:
+            raise ValueError(f"Invalid conversation_id: {conversation_id!r}")
+        with self._lock:
+            if date:
+                daily_file = self._daily_file(date, conversation_id)
+                if daily_file.exists():
+                    daily_file.unlink()
+            else:
+                daily_dir = self._path / "daily" / conversation_id
+                if daily_dir.exists() and daily_dir.is_dir():
+                    # 确保解析后的路径仍在 daily 目录下
+                    daily_dir.resolve().relative_to((self._path / "daily").resolve())
+                    shutil.rmtree(daily_dir)
 
     def clear_dailies(self) -> None:
         with self._lock:

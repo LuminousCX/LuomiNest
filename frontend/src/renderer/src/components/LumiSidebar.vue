@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   MessageCircle,
@@ -35,6 +35,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Brain,
+  Pencil,
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
@@ -272,41 +273,19 @@ const handleDeleteConversation = async (convId: string) => {
   }
 }
 
-const showCreateDialog = ref(false)
-const newAgentForm = ref({
-  name: '',
-  description: '',
-  systemPrompt: '',
-  color: '#147EBC'
-})
-const agentColors = ['#147EBC', '#6366f1', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899']
-
-const handleCreateAgent = async () => {
-  if (!newAgentForm.value.name.trim()) return
-  try {
-    await agentStore.createAgent({
-      name: newAgentForm.value.name.trim(),
-      description: newAgentForm.value.description.trim(),
-      systemPrompt: newAgentForm.value.systemPrompt.trim(),
-      color: newAgentForm.value.color,
-      capabilities: ['chat'],
-    })
-    showCreateDialog.value = false
-    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: '#147EBC' }
-    router.push('/workspace')
-  } catch (e: any) {
-    console.error('Failed to create agent:', e)
-  }
-}
-
 const handleNewConversation = async () => {
-  try {
-    await chatStore.createConversation()
-    if (route.path !== '/workspace') {
-      router.push('/workspace')
+  // 先通知后端对当前对话执行最终蒸馏
+  const prevConvId = chatStore.currentConvId
+  if (prevConvId) {
+    try {
+      await chatStore.leaveCurrentConversation(prevConvId)
+    } catch {
+      // leave 失败不阻塞新建对话
     }
-  } catch (e: any) {
-    console.error('Failed to create conversation:', e)
+  }
+  chatStore.clearMessages()
+  if (route.path !== '/workspace') {
+    router.push('/workspace')
   }
 }
 
@@ -314,7 +293,45 @@ const showTrash = ref(false)
 const batchMode = ref(false)
 const selectedIds = ref<Set<string>>(new Set())
 const trashBatchMode = ref(false)
+
+// 重命名相关状态
+const renamingConvId = ref<string | null>(null)
+const renamingTitle = ref('')
 const trashSelectedIds = ref<Set<string>>(new Set())
+
+const startRename = (convId: string, currentTitle: string) => {
+  renamingConvId.value = convId
+  renamingTitle.value = currentTitle
+  nextTick(() => {
+    const input = document.querySelector('.history-item-rename-input') as HTMLInputElement
+    if (input) {
+      input.focus()
+      input.select()
+    }
+  })
+}
+
+const confirmRename = async () => {
+  if (!renamingConvId.value) return
+  const newTitle = renamingTitle.value.trim()
+  if (!newTitle) {
+    renamingConvId.value = null
+    return
+  }
+  if (newTitle.length > 200) {
+    return
+  }
+  const success = await chatStore.renameConversation(renamingConvId.value, newTitle, agentStore.activeAgent?.id)
+  if (success) {
+    renamingConvId.value = null
+    renamingTitle.value = ''
+  }
+}
+
+const cancelRename = () => {
+  renamingConvId.value = null
+  renamingTitle.value = ''
+}
 
 const trashCount = computed(() => chatStore.trashItems.length)
 
@@ -492,15 +509,12 @@ onMounted(async () => {
           </div>
         </div>
         <div v-if="!isNavCollapsed" class="header-actions">
-          <button class="header-action-btn" aria-label="消息公告">
+          <button class="header-action-btn" aria-label="消息公告" title="消息公告">
             <Bell :size="16" />
             <span class="header-action-dot"></span>
           </button>
-          <button class="header-action-btn" aria-label="新建" @click="showCreateDialog = true">
-            <Plus :size="16" />
-          </button>
         </div>
-        <button class="collapse-toggle-btn" :aria-label="isNavCollapsed ? '展开侧栏' : '收起侧栏'" @click="isNavCollapsed = !isNavCollapsed">
+        <button class="collapse-toggle-btn" :aria-label="isNavCollapsed ? '展开侧栏' : '收起侧栏'" :title="isNavCollapsed ? '展开侧栏' : '收起侧栏'" @click="isNavCollapsed = !isNavCollapsed">
           <PanelLeftOpen v-if="isNavCollapsed" :size="18" />
           <PanelLeftClose v-else :size="18" />
         </button>
@@ -576,7 +590,7 @@ onMounted(async () => {
       </div>
 
       <div class="nav-footer">
-        <button class="footer-btn" @click="router.push('/settings')">
+        <button class="footer-btn" title="设置" @click="router.push('/settings')">
           <Settings :size="15" />
           <span v-if="!isNavCollapsed">设置</span>
         </button>
@@ -593,7 +607,7 @@ onMounted(async () => {
                 <input v-model="searchQuery" type="text" placeholder="搜索历史记录..." class="search-input" />
               </div>
               <div class="panel-header-actions">
-                <button class="new-conv-btn" @click="handleNewConversation">
+                <button class="new-conv-btn" title="创建新对话" @click="handleNewConversation">
                   <Plus :size="15" />
                   <span>创建新对话</span>
                 </button>
@@ -613,6 +627,7 @@ onMounted(async () => {
             <button
               :class="['batch-delete-btn', { disabled: selectedIds.size === 0 }]"
               :disabled="selectedIds.size === 0"
+              title="批量删除"
               @click="handleBatchDelete"
             >
               <Trash2 :size="13" />
@@ -668,12 +683,30 @@ onMounted(async () => {
                     <div class="history-item-indicator" />
                     <MessageSquare :size="14" class="history-item-icon" />
                     <div class="history-item-content">
-                      <span class="history-item-title">{{ conv.title }}</span>
-                      <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
+                      <template v-if="renamingConvId === conv.id">
+                        <input
+                          v-model="renamingTitle"
+                          class="history-item-rename-input"
+                          maxlength="200"
+                          @keydown.enter="confirmRename"
+                          @keydown.escape="cancelRename"
+                          @blur="confirmRename"
+                          @click.stop
+                        />
+                      </template>
+                      <template v-else>
+                        <span class="history-item-title">{{ conv.title }}</span>
+                        <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
+                      </template>
                     </div>
-                    <button v-if="!batchMode" class="history-item-delete" @click.stop="handleDeleteConversation(conv.id)">
-                      <Trash2 :size="13" />
-                    </button>
+                    <template v-if="!batchMode">
+                      <button v-if="renamingConvId !== conv.id" class="history-item-rename" title="重命名" @click.stop="startRename(conv.id, conv.title)">
+                        <Pencil :size="13" />
+                      </button>
+                      <button class="history-item-delete" title="删除对话" @click.stop="handleDeleteConversation(conv.id)">
+                        <Trash2 :size="13" />
+                      </button>
+                    </template>
                   </div>
                 </div>
               </template>
@@ -685,7 +718,7 @@ onMounted(async () => {
             </template>
           </div>
 
-          <button class="trash-entry-btn" @click="openTrash">
+          <button class="trash-entry-btn" title="回收站" @click="openTrash">
             <Trash2 :size="14" />
             <span>回收站</span>
             <span v-if="trashCount > 0" class="trash-badge">{{ trashCount }}</span>
@@ -694,7 +727,7 @@ onMounted(async () => {
 
         <template v-else>
           <div class="trash-header">
-            <button class="trash-back-btn" @click="closeTrash">
+            <button class="trash-back-btn" title="返回" @click="closeTrash">
               <ArrowLeft :size="16" />
             </button>
             <span class="trash-title">回收站</span>
@@ -713,6 +746,7 @@ onMounted(async () => {
             <button
               :class="['batch-restore-btn', { disabled: trashSelectedIds.size === 0 }]"
               :disabled="trashSelectedIds.size === 0"
+              title="批量恢复"
               @click="handleBatchRestore"
             >
               <Undo2 :size="13" />
@@ -721,6 +755,7 @@ onMounted(async () => {
             <button
               :class="['batch-delete-btn', { disabled: trashSelectedIds.size === 0 }]"
               :disabled="trashSelectedIds.size === 0"
+              title="批量永久删除"
               @click="handleBatchPermanentDelete"
             >
               <Trash2 :size="13" />
@@ -729,7 +764,7 @@ onMounted(async () => {
           </div>
 
           <div class="trash-toolbar" v-if="!trashBatchMode && chatStore.trashItems.length > 0">
-            <button class="empty-trash-btn" @click="handleEmptyTrash">
+            <button class="empty-trash-btn" title="清空回收站" @click="handleEmptyTrash">
               <Trash2 :size="12" />
               清空回收站
             </button>
@@ -789,57 +824,6 @@ onMounted(async () => {
     >
       <ChevronRight :size="14" />
     </button>
-
-    <Transition name="selection-fade">
-      <div v-if="showCreateDialog" class="create-dialog-overlay" @click.self="showCreateDialog = false">
-        <div class="create-dialog">
-          <h3>创建自定义 Agent</h3>
-          <div class="form-group">
-            <label class="form-label">
-              名称
-              <span class="required-mark">*</span>
-            </label>
-            <input v-model="newAgentForm.name" type="text" class="form-input" placeholder="如: 小助手" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">描述</label>
-            <input v-model="newAgentForm.description" type="text" class="form-input" placeholder="如: 通用对话助手" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">系统提示词</label>
-            <textarea
-              v-model="newAgentForm.systemPrompt"
-              class="form-input form-textarea"
-              placeholder="定义 Agent 的角色和行为..."
-              rows="4"
-            ></textarea>
-          </div>
-          <div class="form-group">
-            <label class="form-label">颜色</label>
-            <div class="color-picker">
-              <button
-                v-for="color in agentColors"
-                :key="color"
-                :class="['color-dot', { active: newAgentForm.color === color }]"
-                :style="{ background: color }"
-                @click="newAgentForm.color = color"
-              ></button>
-            </div>
-          </div>
-          <div class="dialog-actions">
-            <button class="dialog-btn cancel" @click="showCreateDialog = false">取消</button>
-            <button
-              :class="['dialog-btn confirm', { disabled: !newAgentForm.name.trim() }]"
-              :disabled="!newAgentForm.name.trim()"
-              @click="handleCreateAgent"
-            >
-              <Check :size="16" />
-              创建
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
 
     <Transition name="selection-fade">
       <div v-if="showTrashConfirm" class="create-dialog-overlay" @click.self="showTrashConfirm = false">
@@ -1735,6 +1719,44 @@ onMounted(async () => {
 .history-item-delete:hover {
   background: var(--lumi-accent-light);
   color: var(--lumi-accent);
+}
+
+.history-item-rename {
+  opacity: 0;
+  transform: translateX(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.history-item:hover .history-item-rename,
+.history-item:focus-within .history-item-rename,
+.history-item-rename:focus {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.history-item-rename:hover {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.history-item-rename-input {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--surface-base);
+  border: 1px solid var(--lumi-primary);
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  font-family: inherit;
 }
 
 .history-item-checkbox {

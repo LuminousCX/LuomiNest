@@ -6,7 +6,6 @@ import {
   Palette,
   Bell,
   Shield,
-  Database,
   Globe,
   Cpu,
   ChevronRight
@@ -32,7 +31,6 @@ const settingGroups = ref([
     title: '系统配置',
     items: [
       { icon: Cpu, label: 'AI 模型', desc: '选择 LLM 推理引擎', route: '/settings/ai-model', theme: 'Cpu' },
-      { icon: Database, label: '记忆系统', desc: '三层记忆架构配置', route: '/settings/memory', theme: 'Brain' },
       { icon: Shield, label: '隐私安全', desc: '数据加密与访问控制', route: '/settings/privacy', theme: 'Shield' }
     ]
   },

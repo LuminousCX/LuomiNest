@@ -2,7 +2,7 @@ import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
@@ -105,10 +105,50 @@ async def distill_conversation(request: DistillRequest, agent_id: str | None = N
 
 
 @router.get("/facts")
-async def get_facts(category: str | None = None, agent_id: str | None = None):
+async def get_facts(
+    category: str | None = None,
+    agent_id: str | None = None,
+    conversation_id: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
     engine = get_memory_engine(agent_id)
     facts = engine.get_facts(category)
-    return {"facts": [f.model_dump() for f in facts]}
+
+    # 合并对话级facts
+    if conversation_id:
+        from app.engines.memory.memory_engine import get_conversation_store
+        conv_store = get_conversation_store(agent_id, conversation_id)
+        conv_data = conv_store.load_data()
+        conv_facts = conv_data.facts or []
+        if category:
+            conv_facts = [f for f in conv_facts if f.category == category]
+        facts.extend(conv_facts)
+    else:
+        # 无指定对话时，只合并有 facts 的对话（限制扫描量）
+        conv_ids = engine.list_conversation_dailies()
+        for cid in conv_ids[offset:offset + limit]:
+            from app.engines.memory.memory_engine import get_conversation_store
+            conv_store = get_conversation_store(agent_id, cid)
+            conv_data = conv_store.load_data()
+            conv_facts = conv_data.facts or []
+            if category:
+                conv_facts = [f for f in conv_facts if f.category == category]
+            facts.extend(conv_facts)
+
+    # 去重（按id）
+    seen = set()
+    unique_facts = []
+    for f in facts:
+        if f.id not in seen:
+            seen.add(f.id)
+            unique_facts.append(f)
+
+    # 分页
+    total = len(unique_facts)
+    unique_facts = unique_facts[offset:offset + limit]
+
+    return {"facts": [f.model_dump() for f in unique_facts], "total": total, "limit": limit, "offset": offset}
 
 
 @router.post("/facts")
@@ -199,9 +239,9 @@ async def get_recent_facts(agent_id: str | None = None, since: float = 30):
 
 
 @router.get("/inject")
-async def get_injection_content(agent_id: str | None = None, conversation_id: str | None = None):
+async def get_injection_content(agent_id: str | None = None, conversation_id: str | None = None, query: str | None = None):
     engine = get_memory_engine(agent_id)
-    content = engine.build_context(conversation_id=conversation_id)
+    content = engine.build_context(query=query or "", conversation_id=conversation_id)
     return {"content": content, "has_memory": bool(content.strip())}
 
 
