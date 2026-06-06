@@ -74,6 +74,7 @@ class ContextBuilder:
                             if exp_time <= datetime.now(datetime.UTC):
                                 continue
                         except (ValueError, TypeError):
+                            # 容错：expires_at 格式或类型异常时，按“不过期”处理，避免因脏数据中断上下文构建。
                             pass
                     all_facts.append(f)
 
