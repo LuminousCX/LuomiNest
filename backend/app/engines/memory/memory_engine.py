@@ -178,10 +178,17 @@ class MemoryEngine:
     # --- 每日记录 ---
 
     def load_daily(self, date: str | None = None, conversation_id: str | None = None) -> str:
-        return self._store.load_daily(date, conversation_id)
+        if conversation_id:
+            conv_store = get_conversation_store(self._agent_id, conversation_id)
+            return conv_store.load_daily(date)
+        return self._store.load_daily(date)
 
     def append_daily(self, content: str, date: str | None = None, conversation_id: str | None = None) -> None:
-        self._store.append_daily(content, date, conversation_id)
+        if conversation_id:
+            conv_store = get_conversation_store(self._agent_id, conversation_id)
+            conv_store.append_daily(content, date)
+        else:
+            self._store.append_daily(content, date)
 
     def list_dailies(self, conversation_id: str | None = None) -> list[str]:
         return self._store.list_dailies(conversation_id)
