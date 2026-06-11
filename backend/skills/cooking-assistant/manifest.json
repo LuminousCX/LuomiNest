@@ -1,0 +1,60 @@
+{
+  "id": "cooking-assistant",
+  "type": "skill",
+  "name": "烹饪助手",
+  "description": "菜谱推荐（根据冰箱食材）、步骤指导、营养分析，是全屋场景下厨房交互的核心技能。",
+  "summary": "智能菜谱推荐与烹饪指导技能",
+  "icon": "ChefHat",
+  "category": "lifestyle",
+  "tags": ["community", "free"],
+  "version": "1.0.0",
+  "author": "LuminousCX",
+  "license": "MIT",
+  "minAppVersion": "0.1.0",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "操作类型：recommend/guide/nutrition",
+      "required": true
+    },
+    "ingredients": {
+      "type": "array",
+      "description": "可用食材列表",
+      "required": false
+    },
+    "cuisine": {
+      "type": "string",
+      "description": "菜系偏好，如：川菜、粤菜、日料",
+      "required": false
+    }
+  },
+  "capabilities": [
+    "ingredient_based_recommendation",
+    "step_by_step_guidance",
+    "nutrition_analysis",
+    "dietary_restriction"
+  ],
+  "sources": {
+    "recipe_api_chinese": {
+      "name": "下厨房数据 / 美食杰 API",
+      "url": "https://www.xiachufang.com/",
+      "description": "中文菜谱数据源，提供食材、步骤、营养信息，需自行封装 API"
+    },
+    "recipe_api_international": {
+      "name": "Spoonacular API",
+      "url": "https://spoonacular.com/food-api",
+      "description": "国际菜谱 API，支持食材搜索、营养分析、菜谱推荐，免费额度 150 请求/天"
+    },
+    "nutrition_db": {
+      "name": "USDA FoodData Central",
+      "url": "https://fdc.nal.usda.gov/",
+      "description": "美国农业部食品营养数据库，提供详细的营养成分数据，有免费 API"
+    },
+    "recipe_scraper": {
+      "name": "recipe-scrapers",
+      "url": "https://github.com/hhursev/recipe-scrapers",
+      "description": "Python 菜谱网站爬虫库，支持 50+ 网站的菜谱结构化提取"
+    },
+    "integration_note": "与 IoT 联动：智能冰箱食材清单→菜谱推荐；烹饪步骤可通过 TTS 语音播报；ESP32 厨房屏显示当前步骤"
+  }
+}

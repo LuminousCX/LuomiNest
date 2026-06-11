@@ -2,6 +2,31 @@ export type MarketplaceType = 'plugin' | 'skill' | 'agent'
 
 export type InstallStatus = 'none' | 'downloading' | 'installing' | 'installed' | 'updating' | 'error'
 
+export type RepoSourceType = 'github' | 'cloud' | 'cdn' | 'custom'
+
+export interface RepoSubMarket {
+  id: string
+  name: string
+  type: MarketplaceType
+  url: string
+  description?: string
+  linked: boolean
+}
+
+export interface RepoSource {
+  id: string
+  type: RepoSourceType
+  name: string
+  icon?: string
+  url?: string
+  description?: string
+  enabled: boolean
+  subMarkets?: RepoSubMarket[]
+  lastSyncedAt?: string
+  status: 'idle' | 'loading' | 'loaded' | 'error'
+  errorMessage?: string
+}
+
 export interface MarketplaceCategory {
   id: string
   name: string
@@ -53,8 +78,10 @@ export interface MarketplaceItem {
   ratingCount: number
   downloadCount: number
   installedCount: number
+  likeCount: number
   installStatus: InstallStatus
   isFavorite: boolean
+  isLiked?: boolean
   featured?: boolean
   homepage?: string
   repository?: string
@@ -110,4 +137,23 @@ export interface InstallProgress {
   progress: number
   message?: string
   error?: string
+  speed?: number       // 下载速度 (bytes/s)
+  eta?: number         // 预计剩余时间 (秒)
+  downloadedBytes?: number
+  totalBytes?: number
+}
+
+export interface ItemStats {
+  itemId: string
+  downloadCount: number
+  likeCount: number
+  isLiked: boolean
+}
+
+export interface LeaderboardItem {
+  itemId: string
+  downloadCount: number
+  likeCount: number
+  type: MarketplaceType
+  score: number
 }

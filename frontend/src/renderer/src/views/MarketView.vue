@@ -1,23 +1,33 @@
-﻿﻿<script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Puzzle, Sparkles, SlidersHorizontal, X, Package, Bot } from 'lucide-vue-next'
+import { Puzzle, Sparkles, SlidersHorizontal, X, Package, Bot, Database, CloudOff } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
+import { useRepoSourceStore } from '../stores/repo-source'
 import MarketplaceSearch from '../components/marketplace/MarketplaceSearch.vue'
 import MarketplaceCategories from '../components/marketplace/MarketplaceCategories.vue'
 import MarketplaceFilters from '../components/marketplace/MarketplaceFilters.vue'
 import MarketplaceCard from '../components/marketplace/MarketplaceCard.vue'
 import MarketplaceBanner from '../components/marketplace/MarketplaceBanner.vue'
+import RepoSourcePanel from '../components/marketplace/RepoSourcePanel.vue'
 import LumiCardIcon from '../components/common/LumiCardIcon.vue'
-import type { MarketplaceFilter, MarketplaceType } from '../types/marketplace'
+import type { MarketplaceFilter, MarketplaceItem, MarketplaceType } from '../types/marketplace'
 
 const route = useRoute()
 const router = useRouter()
 const store = useMarketplaceStore()
+const repoSourceStore = useRepoSourceStore()
 
 const VALID_TABS: MarketplaceType[] = ['plugin', 'skill', 'agent']
 const activeTab = ref<MarketplaceType>('plugin')
 const showFilters = ref(false)
+const showRepoSource = ref(false)
+
+// 是否使用远程仓库来源的数据
+const useRemoteData = computed(() => {
+  const active = repoSourceStore.activeSource
+  return active && active.enabled && active.status === 'loaded'
+})
 
 watch(() => route.query.tab, (tab) => {
   const t = typeof tab === 'string' ? tab : ''
@@ -25,6 +35,20 @@ watch(() => route.query.tab, (tab) => {
     activeTab.value = t as MarketplaceType
   }
 }, { immediate: true })
+
+// 初始化时加载仓库来源数据
+onMounted(async () => {
+  await repoSourceStore.fetchSources()
+  // 加载当前活跃来源的缓存条目
+  const activeId = repoSourceStore.activeSourceId
+  if (activeId) {
+    await repoSourceStore.fetchSourceItems(activeId)
+  }
+  // 从后端同步安装状态
+  await store.syncInstallStatus()
+  // 从后端同步统计数据（下载计数、喜欢计数、排行榜）
+  store.syncAllStats()
+})
 
 const categories = computed(() => store.getCategories(activeTab.value))
 const filter = computed(() => {
@@ -37,13 +61,26 @@ const activeCategory = computed({
   set: (val: string) => store.setFilter(activeTab.value, { category: val === 'all' ? undefined : val })
 })
 
+// 远程仓库来源的条目（按当前 tab 过滤）
+const remoteItems = computed<MarketplaceItem[]>(() => {
+  const items = repoSourceStore.activeSourceItems
+  return items.filter(i => i.type === activeTab.value)
+})
+
+// 合并后的条目列表：如果使用远程数据则显示远程条目，否则显示本地 mock 数据
 const filteredItems = computed(() => {
+  if (useRemoteData.value && remoteItems.value.length > 0) {
+    return remoteItems.value
+  }
   if (activeTab.value === 'plugin') return store.filteredPluginItems
   if (activeTab.value === 'skill') return store.filteredSkillItems
   return store.filteredAgentItems
 })
 
 const featuredItems = computed(() => {
+  if (useRemoteData.value && remoteItems.value.length > 0) {
+    return remoteItems.value.filter(i => i.featured).sort((a, b) => b.rating - a.rating)
+  }
   if (activeTab.value === 'plugin') return store.featuredPlugins
   if (activeTab.value === 'skill') return store.featuredSkills
   return store.featuredAgents
@@ -152,7 +189,17 @@ function toggleFilters() {
             <SlidersHorizontal :size="14" />
             <span>筛选</span>
           </button>
+          <button :class="['filter-toggle-btn', { active: showRepoSource }]" @click="showRepoSource = !showRepoSource">
+            <Database :size="14" />
+            <span>来源</span>
+          </button>
         </div>
+
+        <Transition name="filter-slide">
+          <div v-if="showRepoSource" class="sidebar-repo-source">
+            <RepoSourcePanel />
+          </div>
+        </Transition>
 
         <Transition name="filter-slide">
           <div v-if="showFilters" class="sidebar-filters">
@@ -168,6 +215,19 @@ function toggleFilters() {
       </aside>
 
       <main class="market-main">
+        <!-- 远程数据源指示器 -->
+        <div v-if="useRemoteData" class="remote-source-indicator">
+          <Database :size="13" />
+          <span>数据来源: {{ repoSourceStore.activeSource?.name || '远程仓库' }}</span>
+          <span v-if="repoSourceStore.activeSource?.lastSyncedAt" class="indicator-sync-time">
+            同步于 {{ new Date(repoSourceStore.activeSource.lastSyncedAt).toLocaleString('zh-CN') }}
+          </span>
+        </div>
+        <div v-else-if="repoSourceStore.activeSource?.status === 'loading'" class="remote-source-indicator loading">
+          <Database :size="13" class="spin-animation" />
+          <span>正在同步 {{ repoSourceStore.activeSource?.name || '远程仓库' }}...</span>
+        </div>
+
         <MarketplaceBanner
           v-if="featuredItems.length > 0 && activeCategory === 'all' && !store.searchQuery"
           :items="featuredItems"
@@ -306,14 +366,17 @@ function toggleFilters() {
 .sidebar-filter-toggle {
   padding-top: 4px;
   border-top: 1px solid var(--workspace-border);
+  display: flex;
+  gap: 6px;
 }
 
 .filter-toggle-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 10px 14px;
+  gap: 6px;
+  flex: 1;
+  justify-content: center;
+  padding: 10px 10px;
   border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 500;
@@ -337,6 +400,12 @@ function toggleFilters() {
 
 .sidebar-filters {
   padding-top: 8px;
+}
+
+.sidebar-repo-source {
+  padding-top: 8px;
+  border-top: 1px solid var(--workspace-border);
+  margin-top: 4px;
 }
 
 .filters-header {
@@ -375,6 +444,32 @@ function toggleFilters() {
   overflow-y: auto;
   padding: 0 28px 28px 16px;
   min-width: 0;
+}
+
+/* 远程数据源指示器 */
+.remote-source-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
+  border: 1px solid rgba(var(--lumi-primary-rgb, 20, 126, 188), 0.15);
+}
+
+.remote-source-indicator.loading {
+  color: var(--text-muted);
+  background: var(--workspace-panel);
+  border-color: var(--workspace-border);
+}
+
+.indicator-sync-time {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.7;
 }
 
 .items-section {

@@ -123,7 +123,7 @@ export const MOCK_PLUGINS: MarketplaceItem[] = [
       { version: '1.1.0', changelog: '优化流式输出性能', releasedAt: '2026-03-20', size: 1980 },
       { version: '1.0.0', changelog: '初始版本', releasedAt: '2026-02-01', size: 1856 },
     ], screenshots: [], rating: 4.8, ratingCount: 256, downloadCount: 15200, installedCount: 8900,
-    installStatus: 'none', isFavorite: false, featured: true, homepage: 'https://deepseek.com',
+    likeCount: 3200, installStatus: 'none', isFavorite: false, featured: true, homepage: 'https://deepseek.com',
     license: 'MIT', minAppVersion: '0.1.0', createdAt: '2026-02-01', updatedAt: '2026-04-15', size: 2048,
   },
   {
@@ -133,7 +133,7 @@ export const MOCK_PLUGINS: MarketplaceItem[] = [
       { version: '2.0.1', changelog: '修复设备同步问题', releasedAt: '2026-04-10', size: 4096 },
       { version: '2.0.0', changelog: '全新架构重写', releasedAt: '2026-03-15', size: 3800 },
     ], screenshots: [], rating: 4.5, ratingCount: 128, downloadCount: 6800, installedCount: 4200,
-    installStatus: 'installed', isFavorite: true, featured: true, license: 'Apache-2.0',
+    likeCount: 1800, installStatus: 'installed', isFavorite: true, featured: true, license: 'Apache-2.0',
     createdAt: '2026-01-15', updatedAt: '2026-04-10', size: 4096,
   },
   {
@@ -142,7 +142,7 @@ export const MOCK_PLUGINS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[2]], version: '1.0.3', versions: [
       { version: '1.0.3', changelog: '支持斜杠命令', releasedAt: '2026-04-05', size: 1536 },
     ], screenshots: [], rating: 4.2, ratingCount: 89, downloadCount: 3200, installedCount: 1800,
-    installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-03-01', updatedAt: '2026-04-05', size: 1536,
+    likeCount: 680, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-03-01', updatedAt: '2026-04-05', size: 1536,
   },
   {
     id: 'p4', type: 'plugin', name: '网页搜索工具', description: '集成主流搜索引擎，为 AI 提供实时网页搜索能力，支持结果摘要和引用追踪。',
@@ -150,7 +150,7 @@ export const MOCK_PLUGINS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[4], COMMON_TAGS[2]], version: '1.5.0', versions: [
       { version: '1.5.0', changelog: '新增图片搜索', releasedAt: '2026-04-18', size: 3072 },
     ], screenshots: [], rating: 4.6, ratingCount: 312, downloadCount: 18900, installedCount: 11200,
-    installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
+    likeCount: 4500, installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
     createdAt: '2025-12-01', updatedAt: '2026-04-18', size: 3072,
   },
   {
@@ -159,7 +159,7 @@ export const MOCK_PLUGINS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[0], COMMON_TAGS[2]], version: '1.1.0', versions: [
       { version: '1.1.0', changelog: '新增情感控制', releasedAt: '2026-04-12', size: 5120 },
     ], screenshots: [], rating: 4.4, ratingCount: 167, downloadCount: 9500, installedCount: 5800,
-    installStatus: 'installed', isFavorite: false, license: 'MIT', createdAt: '2026-01-20', updatedAt: '2026-04-12', size: 5120,
+    likeCount: 2100, installStatus: 'installed', isFavorite: false, license: 'MIT', createdAt: '2026-01-20', updatedAt: '2026-04-12', size: 5120,
   },
   {
     id: 'p6', type: 'plugin', name: '代码执行沙箱', description: '安全的代码执行环境，支持 Python、JavaScript 等语言，为 AI 提供代码运行能力。',
@@ -167,7 +167,7 @@ export const MOCK_PLUGINS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[6], COMMON_TAGS[2]], version: '0.9.0', versions: [
       { version: '0.9.0', changelog: 'Beta 版本发布', releasedAt: '2026-04-01', size: 8192 },
     ], screenshots: [], rating: 3.9, ratingCount: 45, downloadCount: 2100, installedCount: 980,
-    installStatus: 'none', isFavorite: false, license: 'Apache-2.0', createdAt: '2026-03-15', updatedAt: '2026-04-01', size: 8192,
+    likeCount: 320, installStatus: 'none', isFavorite: false, license: 'Apache-2.0', createdAt: '2026-03-15', updatedAt: '2026-04-01', size: 8192,
   },
   {
     id: 'p7', type: 'plugin', name: 'VRM 模型加载器', description: '加载和渲染 VRM 格式的 3D 虚拟形象，支持表情控制和动作播放。',
@@ -175,7 +175,7 @@ export const MOCK_PLUGINS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[5], COMMON_TAGS[6]], version: '0.5.0', versions: [
       { version: '0.5.0', changelog: '初始 Alpha 版本', releasedAt: '2026-04-20', size: 6144 },
     ], screenshots: [], rating: 3.5, ratingCount: 22, downloadCount: 890, installedCount: 340,
-    installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-04-20', updatedAt: '2026-04-20', size: 6144,
+    likeCount: 120, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-04-20', updatedAt: '2026-04-20', size: 6144,
   },
   {
     id: 'p8', type: 'plugin', name: '自动化工作流', description: '可视化工作流编排引擎，支持条件分支、循环、并行执行等高级流程控制。',
@@ -183,7 +183,7 @@ export const MOCK_PLUGINS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[0], COMMON_TAGS[3], COMMON_TAGS[7]], version: '1.3.0', versions: [
       { version: '1.3.0', changelog: '新增并行执行节点', releasedAt: '2026-04-08', size: 3584 },
     ], screenshots: [], rating: 4.7, ratingCount: 198, downloadCount: 12300, installedCount: 7600,
-    installStatus: 'none', isFavorite: true, featured: true, license: 'MIT',
+    likeCount: 3800, installStatus: 'none', isFavorite: true, featured: true, license: 'MIT',
     createdAt: '2025-11-15', updatedAt: '2026-04-08', size: 3584,
   },
 ]
@@ -196,7 +196,7 @@ export const MOCK_SKILLS: MarketplaceItem[] = [
       { version: '2.1.0', changelog: '新增方言支持', releasedAt: '2026-04-16', size: 1024 },
       { version: '2.0.0', changelog: '全新翻译引擎', releasedAt: '2026-03-10', size: 980 },
     ], screenshots: [], rating: 4.9, ratingCount: 456, downloadCount: 28500, installedCount: 19200,
-    installStatus: 'installed', isFavorite: true, featured: true, license: 'MIT',
+    likeCount: 6800, installStatus: 'installed', isFavorite: true, featured: true, license: 'MIT',
     createdAt: '2025-10-01', updatedAt: '2026-04-16', size: 1024,
   },
   {
@@ -205,7 +205,7 @@ export const MOCK_SKILLS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[4]], version: '1.8.0', versions: [
       { version: '1.8.0', changelog: '新增 Rust 支持', releasedAt: '2026-04-14', size: 2048 },
     ], screenshots: [], rating: 4.7, ratingCount: 389, downloadCount: 22100, installedCount: 14800,
-    installStatus: 'installed', isFavorite: false, featured: true, license: 'MIT',
+    likeCount: 5200, installStatus: 'installed', isFavorite: false, featured: true, license: 'MIT',
     createdAt: '2025-11-01', updatedAt: '2026-04-14', size: 2048,
   },
   {
@@ -214,7 +214,7 @@ export const MOCK_SKILLS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[2], COMMON_TAGS[5]], version: '1.4.0', versions: [
       { version: '1.4.0', changelog: '新增剧本模式', releasedAt: '2026-04-11', size: 1536 },
     ], screenshots: [], rating: 4.5, ratingCount: 234, downloadCount: 14200, installedCount: 8900,
-    installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-01-10', updatedAt: '2026-04-11', size: 1536,
+    likeCount: 3100, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-01-10', updatedAt: '2026-04-11', size: 1536,
   },
   {
     id: 's4', type: 'skill', name: '学术研究', description: '深度学术研究技能，支持文献检索、论文分析、研究方法指导和学术写作辅助。',
@@ -222,7 +222,7 @@ export const MOCK_SKILLS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[2]], version: '1.2.0', versions: [
       { version: '1.2.0', changelog: '新增引用格式支持', releasedAt: '2026-04-06', size: 1280 },
     ], screenshots: [], rating: 4.3, ratingCount: 156, downloadCount: 8700, installedCount: 5200,
-    installStatus: 'none', isFavorite: true, license: 'Apache-2.0', createdAt: '2026-02-15', updatedAt: '2026-04-06', size: 1280,
+    likeCount: 1900, installStatus: 'none', isFavorite: true, license: 'Apache-2.0', createdAt: '2026-02-15', updatedAt: '2026-04-06', size: 1280,
   },
   {
     id: 's5', type: 'skill', name: '图片生成', description: 'AI 图片生成技能，支持文生图、图生图、风格迁移等，集成 Stable Diffusion 和 DALL-E。',
@@ -230,7 +230,7 @@ export const MOCK_SKILLS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[0], COMMON_TAGS[3], COMMON_TAGS[4]], version: '1.6.0', versions: [
       { version: '1.6.0', changelog: '新增 ControlNet 支持', releasedAt: '2026-04-19', size: 2560 },
     ], screenshots: [], rating: 4.6, ratingCount: 278, downloadCount: 16800, installedCount: 10400,
-    installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
+    likeCount: 4200, installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
     createdAt: '2025-12-20', updatedAt: '2026-04-19', size: 2560,
   },
   {
@@ -239,7 +239,7 @@ export const MOCK_SKILLS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[2], COMMON_TAGS[6]], version: '0.8.0', versions: [
       { version: '0.8.0', changelog: 'Beta 版本', releasedAt: '2026-04-02', size: 1792 },
     ], screenshots: [], rating: 3.8, ratingCount: 67, downloadCount: 3400, installedCount: 1800,
-    installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-03-20', updatedAt: '2026-04-02', size: 1792,
+    likeCount: 560, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-03-20', updatedAt: '2026-04-02', size: 1792,
   },
   {
     id: 's7', type: 'skill', name: '角色扮演大师', description: '沉浸式角色扮演技能，内置数百个角色模板，支持自定义角色设定和多角色互动。',
@@ -247,7 +247,7 @@ export const MOCK_SKILLS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[4], COMMON_TAGS[5]], version: '1.3.0', versions: [
       { version: '1.3.0', changelog: '新增多人模式', releasedAt: '2026-04-13', size: 2048 },
     ], screenshots: [], rating: 4.4, ratingCount: 201, downloadCount: 11600, installedCount: 7200,
-    installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-01-05', updatedAt: '2026-04-13', size: 2048,
+    likeCount: 2800, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-01-05', updatedAt: '2026-04-13', size: 2048,
   },
   {
     id: 's8', type: 'skill', name: '数据分析师', description: '专业的数据分析技能，支持数据清洗、统计分析、可视化图表生成和报告撰写。',
@@ -255,7 +255,7 @@ export const MOCK_SKILLS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[0], COMMON_TAGS[2]], version: '1.1.0', versions: [
       { version: '1.1.0', changelog: '新增图表类型', releasedAt: '2026-04-09', size: 1536 },
     ], screenshots: [], rating: 4.2, ratingCount: 134, downloadCount: 7800, installedCount: 4600,
-    installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-02-28', updatedAt: '2026-04-09', size: 1536,
+    likeCount: 1600, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-02-28', updatedAt: '2026-04-09', size: 1536,
   },
 ]
 
@@ -267,7 +267,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
       { version: '2.0.0', changelog: '新增多轮对话管理', releasedAt: '2026-04-18', size: 3072 },
       { version: '1.5.0', changelog: '优化意图识别', releasedAt: '2026-03-10', size: 2800 },
     ], screenshots: [], rating: 4.8, ratingCount: 342, downloadCount: 19800, installedCount: 12400,
-    installStatus: 'installed', isFavorite: true, featured: true, license: 'MIT',
+    likeCount: 5600, installStatus: 'installed', isFavorite: true, featured: true, license: 'MIT',
     createdAt: '2025-09-15', updatedAt: '2026-04-18', size: 3072,
   },
   {
@@ -276,7 +276,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[4]], version: '1.5.0', versions: [
       { version: '1.5.0', changelog: '新增异常检测', releasedAt: '2026-04-14', size: 2560 },
     ], screenshots: [], rating: 4.6, ratingCount: 215, downloadCount: 14200, installedCount: 8900,
-    installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
+    likeCount: 3400, installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
     createdAt: '2025-11-20', updatedAt: '2026-04-14', size: 2560,
   },
   {
@@ -285,7 +285,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[4]], version: '1.3.0', versions: [
       { version: '1.3.0', changelog: '新增微服务架构模板', releasedAt: '2026-04-12', size: 2048 },
     ], screenshots: [], rating: 4.5, ratingCount: 189, downloadCount: 11600, installedCount: 7200,
-    installStatus: 'none', isFavorite: false, license: 'MIT',
+    likeCount: 2600, installStatus: 'none', isFavorite: false, license: 'MIT',
     createdAt: '2026-01-08', updatedAt: '2026-04-12', size: 2048,
   },
   {
@@ -294,7 +294,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[3], COMMON_TAGS[5]], version: '1.1.0', versions: [
       { version: '1.1.0', changelog: '新增品牌配色方案', releasedAt: '2026-04-08', size: 1792 },
     ], screenshots: [], rating: 4.3, ratingCount: 134, downloadCount: 8400, installedCount: 5100,
-    installStatus: 'none', isFavorite: true, license: 'Apache-2.0',
+    likeCount: 1800, installStatus: 'none', isFavorite: true, license: 'Apache-2.0',
     createdAt: '2026-02-20', updatedAt: '2026-04-08', size: 1792,
   },
   {
@@ -303,7 +303,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[2]], version: '1.0.0', versions: [
       { version: '1.0.0', changelog: '正式版发布', releasedAt: '2026-04-05', size: 1536 },
     ], screenshots: [], rating: 4.4, ratingCount: 98, downloadCount: 6200, installedCount: 3800,
-    installStatus: 'none', isFavorite: false, license: 'MIT',
+    likeCount: 1200, installStatus: 'none', isFavorite: false, license: 'MIT',
     createdAt: '2026-03-01', updatedAt: '2026-04-05', size: 1536,
   },
   {
@@ -312,7 +312,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[0], COMMON_TAGS[3]], version: '0.9.0', versions: [
       { version: '0.9.0', changelog: 'Beta 版本', releasedAt: '2026-04-01', size: 1280 },
     ], screenshots: [], rating: 4.0, ratingCount: 56, downloadCount: 3800, installedCount: 2100,
-    installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
+    likeCount: 680, installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
     createdAt: '2026-03-15', updatedAt: '2026-04-01', size: 1280,
   },
   {
@@ -321,7 +321,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[0], COMMON_TAGS[7], COMMON_TAGS[2]], version: '1.2.0', versions: [
       { version: '1.2.0', changelog: '新增自动修复策略', releasedAt: '2026-04-10', size: 2048 },
     ], screenshots: [], rating: 4.2, ratingCount: 87, downloadCount: 5600, installedCount: 3400,
-    installStatus: 'installed', isFavorite: false, license: 'MIT',
+    likeCount: 1100, installStatus: 'installed', isFavorite: false, license: 'MIT',
     createdAt: '2026-01-25', updatedAt: '2026-04-10', size: 2048,
   },
   {
@@ -330,7 +330,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
     tags: [COMMON_TAGS[1], COMMON_TAGS[3], COMMON_TAGS[6]], version: '0.8.0', versions: [
       { version: '0.8.0', changelog: 'Beta 版本', releasedAt: '2026-04-03', size: 1536 },
     ], screenshots: [], rating: 3.9, ratingCount: 42, downloadCount: 2800, installedCount: 1500,
-    installStatus: 'none', isFavorite: false, license: 'Apache-2.0',
+    likeCount: 420, installStatus: 'none', isFavorite: false, license: 'Apache-2.0',
     createdAt: '2026-03-20', updatedAt: '2026-04-03', size: 1536,
   },
 ]

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { Star, Download, Heart, Check, Loader2 } from 'lucide-vue-next'
 import type { MarketplaceItem, InstallProgress } from '../../types/marketplace'
 import { useMarketplaceStore } from '../../stores/marketplace'
+import { useApi } from '../../composables/useApi'
 import { formatDownloadCount } from '../../utils/format'
 import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
 import LumiCardIcon from '../common/LumiCardIcon.vue'
@@ -14,6 +15,7 @@ const props = defineProps<{
 
 const router = useRouter()
 const store = useMarketplaceStore()
+const api = useApi()
 
 const installProgress = computed<InstallProgress | undefined>(() =>
   store.getInstallProgress(props.item.id)
@@ -48,13 +50,35 @@ function navigateToDetail() {
 
 function handleInstall(e: Event) {
   e.stopPropagation()
-  store.startInstall(props.item.id)
+  // 调用真实后端安装接口
+  api.apiPost<InstallProgress>('/marketplace/install', {
+    itemId: props.item.id,
+    itemType: props.item.type,
+    itemName: props.item.name,
+    version: props.item.version,
+    downloadUrl: props.item.versions?.[0]?.downloadUrl || '',
+  }).then(result => {
+    store.setInstallProgress(props.item.id, result)
+    // 启动轮询
+    store.startProgressPolling(props.item.id)
+    // 同时直接更新当前 item 的状态（可能来自 repoSourceStore）
+    props.item.installStatus = 'installing'
+  }).catch(() => {
+    // 安装请求失败，忽略
+  })
 }
 
 function handleFavorite(e: Event) {
   e.stopPropagation()
   store.toggleFavorite(props.item.id)
 }
+
+function handleLike(e: Event) {
+  e.stopPropagation()
+  store.toggleLike(props.item.id, props.item.type)
+}
+
+const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0))
 </script>
 
 <template>
@@ -99,15 +123,19 @@ function handleFavorite(e: Event) {
           <Download :size="13" class="stat-icon" />
           <span>{{ downloadDisplay }}</span>
         </div>
+        <div class="stat">
+          <Heart :size="13" class="stat-icon like" :fill="item.isLiked ? 'currentColor' : 'none'" />
+          <span>{{ likeDisplay }}</span>
+        </div>
       </div>
 
       <div class="card-actions">
         <button
-          :class="['fav-btn', { active: item.isFavorite }]"
-          aria-label="收藏"
-          @click="handleFavorite"
+          :class="['fav-btn', { active: item.isLiked }]"
+          aria-label="喜欢"
+          @click="handleLike"
         >
-          <Heart :size="15" />
+          <Heart :size="15" :fill="item.isLiked ? 'currentColor' : 'none'" />
         </button>
 
         <button
@@ -257,6 +285,10 @@ function handleFavorite(e: Event) {
 
 .stat-icon.star {
   color: var(--lumi-star);
+}
+
+.stat-icon.like {
+  color: var(--lumi-accent);
 }
 
 .card-actions {

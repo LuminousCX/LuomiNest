@@ -9,6 +9,8 @@ import type {
   MarketplaceReviewReply,
   SearchSuggestion,
   InstallProgress,
+  ItemStats,
+  LeaderboardItem,
 } from '../types/marketplace'
 import {
   PLUGIN_CATEGORIES,
@@ -306,6 +308,68 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     installProgress.value = { ...installProgress.value, [itemId]: progress }
   }
 
+  const setInstallProgress = (itemId: string, progress: InstallProgress) => {
+    setProgress(itemId, progress)
+  }
+
+  // 轮询后端下载进度
+  const _progressTimers: Record<string, ReturnType<typeof setInterval>> = {}
+
+  const startProgressPolling = (itemId: string) => {
+    stopProgressPolling(itemId)
+    // 延迟导入避免循环依赖
+    import('../composables/useApi').then(({ useApi }) => {
+      const api = useApi()
+      _progressTimers[itemId] = setInterval(async () => {
+        try {
+          const result = await api.apiGet<InstallProgress>(`/marketplace/download-progress/${itemId}`)
+          setProgress(itemId, result)
+          if (result.status === 'installed' || result.status === 'error') {
+            stopProgressPolling(itemId)
+            if (result.status === 'installed') {
+              const updateInstalledItem = (items: MarketplaceItem[]) => {
+                const item = items.find(i => i.id === itemId)
+                if (item) {
+                  item.installStatus = 'installed'
+                  item.installedCount += 1
+                  item.downloadCount += 1
+                }
+              }
+              updateInstalledItem(pluginItems.value)
+              updateInstalledItem(skillItems.value)
+              updateInstalledItem(agentItems.value)
+              // 同步 repoSourceStore 中对应条目的状态
+              import('../stores/repo-source').then(({ useRepoSourceStore }) => {
+                const repoStore = useRepoSourceStore()
+                for (const items of Object.values(repoStore.syncedItems)) {
+                  const ri = (items as MarketplaceItem[]).find(i => i.id === itemId)
+                  if (ri) {
+                    ri.installStatus = 'installed'
+                    ri.downloadCount += 1
+                  }
+                }
+              })
+              // 同步后端统计数据 + 排行榜
+              syncAllStats()
+              setTimeout(() => {
+                removeProgress(itemId)
+              }, 2000)
+            }
+          }
+        } catch {
+          stopProgressPolling(itemId)
+        }
+      }, 500)
+    })
+  }
+
+  const stopProgressPolling = (itemId: string) => {
+    if (_progressTimers[itemId]) {
+      clearInterval(_progressTimers[itemId])
+      delete _progressTimers[itemId]
+    }
+  }
+
   const removeProgress = (itemId: string) => {
     const { [itemId]: _, ...rest } = installProgress.value
     installProgress.value = rest
@@ -380,11 +444,14 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           if (item) {
             item.installStatus = 'installed'
             item.installedCount += 1
+            item.downloadCount += 1
           }
         }
         updateInstalledItem(pluginItems.value)
         updateInstalledItem(skillItems.value)
         updateInstalledItem(agentItems.value)
+        // 同步后端统计数据 + 排行榜
+        syncAllStats()
         setTimeout(() => {
           removeProgress(itemId)
         }, 2000)
@@ -420,6 +487,16 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     updateUninstalledItem(pluginItems.value)
     updateUninstalledItem(skillItems.value)
     updateUninstalledItem(agentItems.value)
+    // 同步 repoSourceStore 中对应条目的状态
+    import('../stores/repo-source').then(({ useRepoSourceStore }) => {
+      const repoStore = useRepoSourceStore()
+      for (const items of Object.values(repoStore.syncedItems)) {
+        const ri = (items as MarketplaceItem[]).find(i => i.id === itemId)
+        if (ri) {
+          ri.installStatus = 'none'
+        }
+      }
+    })
   }
 
   const updateItem = (itemId: string) => {
@@ -520,12 +597,205 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     })
   }
 
+  const syncInstallStatus = async () => {
+    try {
+      const { useApi } = await import('../composables/useApi')
+      const api = useApi()
+      const result = await api.apiGet<{ items: Array<{ id: string; type: string; status: string }> }>('/marketplace/installed')
+      const installedItems = result.items || []
+
+      const updateStatus = (items: MarketplaceItem[]) => {
+        for (const item of items) {
+          const installed = installedItems.find((i: any) => i.id === item.id)
+          item.installStatus = installed ? 'installed' : 'none'
+        }
+      }
+
+      updateStatus(pluginItems.value)
+      updateStatus(skillItems.value)
+      updateStatus(agentItems.value)
+
+      // 同步 repoSourceStore 中的安装状态
+      import('../stores/repo-source').then(({ useRepoSourceStore }) => {
+        const repoStore = useRepoSourceStore()
+        for (const items of Object.values(repoStore.syncedItems)) {
+          updateStatus(items as MarketplaceItem[])
+        }
+      })
+    } catch {
+      // 忽略同步失败
+    }
+  }
+
   const cleanup = () => {
     for (const intervalId of activeIntervals) {
       clearInterval(intervalId)
     }
     activeIntervals.clear()
   }
+
+  // ─── 统计功能 ───────────────────────────────────────────
+
+  const leaderboard = ref<LeaderboardItem[]>([])
+  const itemStatsMap = ref<Record<string, ItemStats>>({})
+  const currentLeaderboardType = ref<MarketplaceType | undefined>(undefined)
+  const currentLeaderboardSortBy = ref('composite')
+
+  // 统一同步：刷新所有统计数据 + 排行榜
+  const syncAllStats = async (type?: MarketplaceType) => {
+    await Promise.all([
+      fetchAllStats(type),
+      fetchLeaderboard(currentLeaderboardType.value, currentLeaderboardSortBy.value),
+    ])
+  }
+
+  // 从后端同步单个条目的统计数据
+  const fetchItemStats = async (itemId: string) => {
+    try {
+      const { useApi } = await import('../composables/useApi')
+      const api = useApi()
+      const result = await api.apiGet<ItemStats>(`/marketplace/stats/${itemId}`)
+      itemStatsMap.value = { ...itemStatsMap.value, [itemId]: result }
+
+      // 同步到本地 item
+      const updateItemStats = (items: MarketplaceItem[]) => {
+        const item = items.find(i => i.id === itemId)
+        if (item) {
+          item.downloadCount = result.downloadCount
+          item.likeCount = result.likeCount
+          item.isLiked = result.isLiked
+        }
+      }
+      updateItemStats(pluginItems.value)
+      updateItemStats(skillItems.value)
+      updateItemStats(agentItems.value)
+    } catch {
+      // 忽略
+    }
+  }
+
+  // 批量同步所有统计数据
+  const fetchAllStats = async (type?: MarketplaceType) => {
+    try {
+      const { useApi } = await import('../composables/useApi')
+      const api = useApi()
+      const query = type ? `?type=${type}` : ''
+      const result = await api.apiGet<{ stats: ItemStats[] }>(`/marketplace/stats${query}`)
+      const statsList = result.stats || []
+      const newMap: Record<string, ItemStats> = {}
+      for (const s of statsList) {
+        newMap[s.itemId] = s
+      }
+      itemStatsMap.value = newMap
+
+      // 同步到本地 items
+      const syncStats = (items: MarketplaceItem[]) => {
+        for (const item of items) {
+          const stats = newMap[item.id]
+          if (stats) {
+            item.downloadCount = stats.downloadCount
+            item.likeCount = stats.likeCount
+            item.isLiked = stats.isLiked
+          }
+        }
+      }
+      syncStats(pluginItems.value)
+      syncStats(skillItems.value)
+      syncStats(agentItems.value)
+
+      // 同步 repoSourceStore 中的统计数据
+      import('../stores/repo-source').then(({ useRepoSourceStore }) => {
+        const repoStore = useRepoSourceStore()
+        for (const items of Object.values(repoStore.syncedItems)) {
+          syncStats(items as MarketplaceItem[])
+        }
+      })
+    } catch {
+      // 忽略
+    }
+  }
+
+  // 切换喜欢状态
+  const toggleLike = async (itemId: string, itemType: MarketplaceType = 'plugin') => {
+    try {
+      const { useApi } = await import('../composables/useApi')
+      const api = useApi()
+      const result = await api.apiPost<{ itemId: string; isLiked: boolean; likeCount: number }>(
+        '/marketplace/stats/like',
+        { itemId, itemType }
+      )
+
+      // 更新本地状态
+      const updateLike = (items: MarketplaceItem[]) => {
+        const item = items.find(i => i.id === itemId)
+        if (item) {
+          item.isLiked = result.isLiked
+          item.likeCount = result.likeCount
+        }
+      }
+      updateLike(pluginItems.value)
+      updateLike(skillItems.value)
+      updateLike(agentItems.value)
+
+      // 同步 repoSourceStore 中对应条目的状态
+      import('../stores/repo-source').then(({ useRepoSourceStore }) => {
+        const repoStore = useRepoSourceStore()
+        for (const items of Object.values(repoStore.syncedItems)) {
+          updateLike(items as MarketplaceItem[])
+        }
+      })
+
+      // 更新 statsMap
+      if (itemStatsMap.value[itemId]) {
+        itemStatsMap.value[itemId].isLiked = result.isLiked
+        itemStatsMap.value[itemId].likeCount = result.likeCount
+      }
+
+      // 同步排行榜数据
+      fetchLeaderboard(currentLeaderboardType.value, currentLeaderboardSortBy.value)
+
+      return result
+    } catch {
+      return null
+    }
+  }
+
+  // 获取排行榜
+  const fetchLeaderboard = async (type?: MarketplaceType, sortBy: string = 'composite', limit: number = 20) => {
+    try {
+      currentLeaderboardType.value = type
+      currentLeaderboardSortBy.value = sortBy
+      const { useApi } = await import('../composables/useApi')
+      const api = useApi()
+      const params = new URLSearchParams()
+      if (type) params.set('type', type)
+      params.set('sort_by', sortBy)
+      params.set('limit', String(limit))
+      const result = await api.apiGet<{ leaderboard: LeaderboardItem[]; total: number }>(
+        `/marketplace/leaderboard?${params.toString()}`
+      )
+      leaderboard.value = result.leaderboard || []
+      return leaderboard.value
+    } catch {
+      leaderboard.value = []
+      return []
+    }
+  }
+
+  // 排行榜 computed：将排行榜数据与本地 item 信息合并
+  const leaderboardItems = computed(() => {
+    return leaderboard.value.map(entry => {
+      const item = allItems.value.find(i => i.id === entry.itemId)
+      return {
+        ...entry,
+        name: item?.name || entry.itemId,
+        icon: item?.icon || 'Package',
+        summary: item?.summary || '',
+        rating: item?.rating || 0,
+        author: item?.author,
+      }
+    })
+  })
 
   return {
     pluginItems,
@@ -569,9 +839,21 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     uninstallItem,
     updateItem,
     getInstallProgress,
+    setInstallProgress,
+    startProgressPolling,
+    stopProgressPolling,
     getItemReviews,
     addReview,
     addReviewReply,
+    syncInstallStatus,
+    fetchItemStats,
+    fetchAllStats,
+    syncAllStats,
+    toggleLike,
+    fetchLeaderboard,
+    leaderboard,
+    leaderboardItems,
+    itemStatsMap,
     cleanup,
   }
 })
