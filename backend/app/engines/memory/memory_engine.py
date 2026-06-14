@@ -140,6 +140,14 @@ class MemoryEngine:
             # 如果指定了fact_ids，只提升指定的
             if fact_ids is not None and fact.id not in fact_ids:
                 continue
+            # 跳过已过期的事实
+            if fact.expires_at:
+                try:
+                    exp_time = datetime.fromisoformat(fact.expires_at.replace("Z", "+00:00"))
+                    if exp_time <= datetime.now(timezone.utc):
+                        continue
+                except (ValueError, TypeError):
+                    pass
             # 清除source_conversation_id，使其成为Agent级全局可见
             fact.source_conversation_id = ""
             # 写入Agent级store
