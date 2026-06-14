@@ -187,4 +187,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     const { browserSearch } = await import('./browser')
     return await browserSearch(query, getMainWindow())
   })
+
+  ipcMain.handle('browser:fetchUrl', async (event: IpcMainInvokeEvent, url: string) => {
+    if (!assertTrustedSender(event)) return
+    if (typeof url !== 'string' || !url.trim()) return
+    const { fetchUrl } = await import('./browser')
+    return await fetchUrl(url, getMainWindow())
+  })
 }

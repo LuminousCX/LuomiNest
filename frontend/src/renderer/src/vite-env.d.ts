@@ -129,6 +129,7 @@ export interface ElectronApi {
   }
   browserSearch: {
     search: (query: string) => Promise<any[]>
+    fetchUrl: (url: string) => Promise<string>
   }
   desktopPet: {
     open: (modelInfo?: PetModelInfo) => Promise<{ success: boolean }>

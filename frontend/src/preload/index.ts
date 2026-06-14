@@ -61,7 +61,8 @@ const api = {
   },
 
   browserSearch: {
-    search: (query: string) => ipcRenderer.invoke('browser:search', query)
+    search: (query: string) => ipcRenderer.invoke('browser:search', query),
+    fetchUrl: (url: string) => ipcRenderer.invoke('browser:fetchUrl', url)
   },
 
   avatar: {

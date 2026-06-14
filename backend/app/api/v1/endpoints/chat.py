@@ -55,6 +55,12 @@ async def chat_completions(request: ChatRequest):
             supports_vision=supports_vision, file_name=request.file_name,
         )
 
+    if request.search_results:
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i]["role"] == "user":
+                messages[i]["content"] += f"\n\n[搜索结果]\n{request.search_results}"
+                break
+
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
     messages = await ctx_mgr.process(messages)
 
@@ -590,6 +596,12 @@ async def add_message(conv_id: str, request: ChatRequest):
         all_messages, agent_id, resolved_provider, conv_id,
         llm_adapter=llm_adapter,
     )
+
+    if request.search_results:
+        for i in range(len(all_messages) - 1, -1, -1):
+            if all_messages[i]["role"] == "user":
+                all_messages[i]["content"] += f"\n\n[搜索结果]\n{request.search_results}"
+                break
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
     all_messages = await ctx_mgr.process(all_messages)

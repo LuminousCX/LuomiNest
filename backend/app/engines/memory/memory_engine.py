@@ -117,6 +117,56 @@ class MemoryEngine:
     def clear_facts(self) -> None:
         self._fact_manager.clear_facts()
 
+    def promote_conversation_facts(self, conversation_id: str, fact_ids: list[str] | None = None) -> int:
+        """方案A：将对话级facts提升到Agent级。
+
+        提升后从对话级store中删除已提升的facts，避免注入时重复。
+
+        Args:
+            conversation_id: 来源对话ID
+            fact_ids: 指定要提升的fact ID列表。为None时提升所有符合条件的facts。
+
+        Returns:
+            提升的fact数量
+        """
+        conv_store = get_conversation_store(self._agent_id, conversation_id)
+        conv_data = conv_store.load_data()
+        agent_data = self._store.load_data()
+
+        promoted_ids = set()
+        for fact in conv_data.facts:
+            if not fact.is_latest:
+                continue
+            # 如果指定了fact_ids，只提升指定的
+            if fact_ids is not None and fact.id not in fact_ids:
+                continue
+            # 跳过已过期的事实
+            if fact.expires_at:
+                try:
+                    exp_time = datetime.fromisoformat(fact.expires_at.replace("Z", "+00:00"))
+                    if exp_time <= datetime.now(timezone.utc):
+                        continue
+                except (ValueError, TypeError):
+                    # 保持兼容：当 expires_at 非法时，按“无有效过期时间”处理，不阻止提升。
+                    logger.warning(
+                        f"[Memory] Invalid expires_at for fact {fact.id}: {fact.expires_at!r}; "
+                        "treating as non-expired during promotion."
+                    )
+            # 清除source_conversation_id，使其成为Agent级全局可见
+            fact.source_conversation_id = ""
+            # 写入Agent级store
+            self._fact_manager.merge_facts(agent_data, [fact])
+            promoted_ids.add(fact.id)
+            logger.info(f"[Memory] Fact promoted to agent level: {fact.content[:50]}")
+
+        if promoted_ids:
+            self._store.save_data(agent_data)
+            # 从对话级store中删除已提升的facts，避免注入时重复
+            conv_data.facts = [f for f in conv_data.facts if f.id not in promoted_ids]
+            conv_store.save_data(conv_data)
+
+        return len(promoted_ids)
+
     # --- 知识 ---
 
     def load_knowledge(self) -> str:

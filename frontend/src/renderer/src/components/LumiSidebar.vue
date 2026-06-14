@@ -273,15 +273,11 @@ const handleDeleteConversation = async (convId: string) => {
   }
 }
 
-const handleNewConversation = async () => {
-  // 先通知后端对当前对话执行最终蒸馏
+const handleNewConversation = () => {
+  // 后台通知后端执行蒸馏，不阻塞新建对话
   const prevConvId = chatStore.currentConvId
   if (prevConvId) {
-    try {
-      await chatStore.leaveCurrentConversation(prevConvId)
-    } catch {
-      // leave 失败不阻塞新建对话
-    }
+    chatStore.leaveCurrentConversation(prevConvId).catch(() => {})
   }
   chatStore.clearMessages()
   if (route.path !== '/workspace') {
