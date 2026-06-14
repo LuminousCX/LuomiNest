@@ -147,7 +147,11 @@ class MemoryEngine:
                     if exp_time <= datetime.now(timezone.utc):
                         continue
                 except (ValueError, TypeError):
-                    pass
+                    # 保持兼容：当 expires_at 非法时，按“无有效过期时间”处理，不阻止提升。
+                    logger.warning(
+                        f"[Memory] Invalid expires_at for fact {fact.id}: {fact.expires_at!r}; "
+                        "treating as non-expired during promotion."
+                    )
             # 清除source_conversation_id，使其成为Agent级全局可见
             fact.source_conversation_id = ""
             # 写入Agent级store
