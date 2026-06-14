@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     PLUGIN_DIR: str = "./plugins"
     SKILL_DIR: str = "./skills"
 
+    GITHUB_TOKEN: str = ""
     EXTERNAL_PARSE_API_URL: str = ""
     FILE_MAX_SIZE: int = 100 * 1024 * 1024
 

@@ -1,24 +1,37 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft, Star, Download, Users, Tag,
   ExternalLink, Check, FileText, ChevronDown,
-  ChevronRight,
+  ChevronRight, AlertCircle, RefreshCw, Trash2,
+  Loader2, Image, X, Heart,
 } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
-import MarketplaceInstallBtn from '../components/marketplace/MarketplaceInstallBtn.vue'
+import { useRepoSourceStore } from '../stores/repo-source'
+import { useApi } from '../composables/useApi'
 import MarketplaceReviews from '../components/marketplace/MarketplaceReviews.vue'
-import type { MarketplaceType } from '../types/marketplace'
+import type { MarketplaceType, MarketplaceItem, InstallProgress } from '../types/marketplace'
 import { formatDateRelative, formatFileSize, formatDownloadCount } from '../utils/format'
 import { ITEM_ICON_MAP, DEFAULT_ICON } from '../utils/marketplace-icons'
 
 const route = useRoute()
 const router = useRouter()
 const store = useMarketplaceStore()
+const repoSourceStore = useRepoSourceStore()
+const api = useApi()
 
 const activeTab = ref<'info' | 'versions' | 'reviews'>('info')
 const expandedVersion = ref<string | null>(null)
+const screenshotModal = ref<number | null>(null)
+
+// 安装/下载状态
+const installLoading = ref(false)
+const uninstallLoading = ref(false)
+const installError = ref<string | null>(null)
+const errorType = ref<'install' | 'uninstall'>('install')
+const downloadProgress = ref<InstallProgress | null>(null)
+let progressTimer: ReturnType<typeof setInterval> | null = null
 
 const VALID_TYPES: MarketplaceType[] = ['plugin', 'skill', 'agent']
 
@@ -29,13 +42,48 @@ const itemType = computed<MarketplaceType>(() => {
 
 const itemId = computed(() => route.params.id as string)
 
-const item = computed(() => store.getItemByTypeAndId(itemType.value, itemId.value))
+// 优先从远程数据中查找，否则从本地 mock 数据查找
+const item = computed<MarketplaceItem | undefined>(() => {
+  // 先从远程数据中查找
+  const remoteItems = repoSourceStore.activeSourceItems
+  const remoteItem = remoteItems.find(i => i.id === itemId.value && i.type === itemType.value)
+  if (remoteItem) return remoteItem
+
+  // 回退到本地数据
+  return store.getItemByTypeAndId(itemType.value, itemId.value)
+})
 
 const itemReviews = computed(() => store.getItemReviews(itemId.value))
 
 const downloadDisplay = computed(() => {
   if (!item.value) return ''
   return formatDownloadCount(item.value.downloadCount)
+})
+
+// 格式化下载速度
+const formatSpeed = (bytesPerSec: number): string => {
+  if (bytesPerSec <= 0) return ''
+  if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`
+  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`
+  return `${(bytesPerSec / 1024 / 1024).toFixed(1)} MB/s`
+}
+
+// 格式化剩余时间
+const formatEta = (seconds: number): string => {
+  if (seconds <= 0) return ''
+  if (seconds < 60) return `${Math.round(seconds)}秒`
+  if (seconds < 3600) return `${Math.round(seconds / 60)}分钟`
+  return `${Math.round(seconds / 3600)}小时`
+}
+
+// 安装状态
+const installStatus = computed(() => {
+  if (downloadProgress.value) {
+    const s = downloadProgress.value.status
+    if (s === 'downloading' || s === 'installing' || s === 'updating') return s
+    if (s === 'error') return 'error'
+  }
+  return item.value?.installStatus || 'none'
 })
 
 function goBack() {
@@ -47,8 +95,155 @@ function toggleVersion(version: string) {
 }
 
 const formatSize = (bytes: number) => formatFileSize(bytes)
-
 const formatDate = (dateStr: string) => formatDateRelative(dateStr)
+
+// 轮询下载进度
+function startProgressPolling(id: string) {
+  stopProgressPolling()
+  progressTimer = setInterval(async () => {
+    try {
+      const result = await api.apiGet<InstallProgress>(`/marketplace/download-progress/${id}`)
+      downloadProgress.value = result
+      if (result.status === 'installed' || result.status === 'error') {
+        stopProgressPolling()
+        if (result.status === 'installed') {
+          // 更新本地状态
+          if (item.value) {
+            item.value.installStatus = 'installed'
+            item.value.downloadCount += 1
+          }
+          // 同步 store 中对应条目的状态，确保卡片等页面一致
+          const storeItem = store.getItemByTypeAndId(itemType.value, itemId.value)
+          if (storeItem) {
+            storeItem.installStatus = 'installed'
+            storeItem.downloadCount += 1
+          }
+          // 同步后端统计数据 + 排行榜
+          store.syncAllStats()
+          setTimeout(() => {
+            downloadProgress.value = null
+          }, 2000)
+        }
+        if (result.status === 'error') {
+          installError.value = result.error || result.message || '安装失败'
+        }
+      }
+    } catch {
+      stopProgressPolling()
+    }
+  }, 500)
+}
+
+function stopProgressPolling() {
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = null
+  }
+}
+
+// 安装
+async function handleInstall() {
+  if (!item.value) return
+  installLoading.value = true
+  installError.value = null
+
+  try {
+    const result = await api.apiPost<InstallProgress>('/marketplace/install', {
+      itemId: item.value.id,
+      itemType: item.value.type,
+      itemName: item.value.name,
+      version: item.value.version,
+      downloadUrl: item.value.versions?.[0]?.downloadUrl || '',
+    })
+
+    downloadProgress.value = result
+    startProgressPolling(item.value.id)
+  } catch (e: any) {
+    installError.value = e.message || '安装请求失败'
+    errorType.value = 'install'
+  } finally {
+    installLoading.value = false
+  }
+}
+
+// 卸载
+async function handleUninstall() {
+  if (!item.value) return
+  uninstallLoading.value = true
+  installError.value = null
+
+  try {
+    await api.apiPost('/marketplace/uninstall', { itemId: item.value.id })
+    // 通过 store 统一更新状态，确保所有页面一致
+    store.uninstallItem(item.value.id)
+    // 同时更新当前详情页的 item（可能来自 repoSourceStore）
+    if (item.value) {
+      item.value.installStatus = 'none'
+    }
+    downloadProgress.value = null
+  } catch (e: any) {
+    installError.value = e.message || '卸载失败'
+    errorType.value = 'uninstall'
+  } finally {
+    uninstallLoading.value = false
+  }
+}
+
+// 重试
+async function handleRetry() {
+  installError.value = null
+  downloadProgress.value = null
+  if (errorType.value === 'uninstall') {
+    await handleUninstall()
+  } else {
+    await handleInstall()
+  }
+}
+
+// 截图模态框
+function openScreenshot(index: number) {
+  screenshotModal.value = index
+}
+
+function closeScreenshot() {
+  screenshotModal.value = null
+}
+
+// 喜欢
+const likeLoading = ref(false)
+
+async function handleToggleLike() {
+  if (!item.value || likeLoading.value) return
+  likeLoading.value = true
+  try {
+    await store.toggleLike(item.value.id, item.value.type)
+  } finally {
+    likeLoading.value = false
+  }
+}
+
+const likeDisplay = computed(() => {
+  if (!item.value) return 0
+  return item.value.likeCount || 0
+})
+
+onMounted(async () => {
+  // 检查当前条目的安装状态
+  try {
+    const result = await api.apiGet<{ status: string }>(`/marketplace/install-status/${itemId.value}`)
+    if (result.status === 'installed' && item.value) {
+      item.value.installStatus = 'installed'
+    }
+  } catch {
+    // 忽略
+  }
+  // 同步统计数据（下载计数、喜欢计数、排行榜）
+  await store.syncAllStats()
+})
+
+onUnmounted(() => {
+  stopProgressPolling()
+})
 </script>
 
 <template>
@@ -61,6 +256,7 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
     </div>
 
     <div class="detail-content">
+      <!-- Hero 区域 -->
       <div class="detail-hero animate-slide-up">
         <div class="hero-icon">
           <component :is="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON" :size="40" />
@@ -68,18 +264,18 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
         <div class="hero-info">
           <div class="hero-title-row">
             <h1 class="hero-title">{{ item.name }}</h1>
-            <span v-if="item.author.verified" class="verified-badge">
+            <span v-if="item.author?.verified" class="verified-badge">
               <Check :size="12" />
               认证
             </span>
           </div>
-          <p class="hero-author">by {{ item.author.name }}</p>
+          <p class="hero-author">by {{ item.author?.name || '未知' }}</p>
           <p class="hero-summary">{{ item.summary }}</p>
           <div class="hero-stats">
             <div class="hero-stat">
               <Star :size="14" class="star-icon" />
               <span class="stat-value">{{ item.rating.toFixed(1) }}</span>
-              <span class="stat-label">({{ item.ratingCount }})</span>
+              <span class="stat-label">({{ item.ratingCount || 0 }})</span>
             </div>
             <div class="hero-stat">
               <Download :size="14" />
@@ -91,19 +287,130 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
               <span class="stat-value">{{ item.installedCount }}</span>
               <span class="stat-label">安装</span>
             </div>
+            <button
+              :class="['hero-stat', 'hero-like-btn', { liked: item.isLiked }]"
+              @click="handleToggleLike"
+              :disabled="likeLoading"
+            >
+              <Heart :size="14" :fill="item.isLiked ? 'currentColor' : 'none'" />
+              <span class="stat-value">{{ likeDisplay }}</span>
+              <span class="stat-label">喜欢</span>
+            </button>
           </div>
           <div class="hero-tags">
             <span
               v-for="tag in item.tags"
               :key="tag.id"
               class="detail-tag"
-              :style="{ '--tag-color': tag.color }"
+              :style="{ '--tag-color': tag.color || '#6b7280' }"
             >{{ tag.name }}</span>
           </div>
-          <MarketplaceInstallBtn :item="item" size="large" />
+
+          <!-- 安装/卸载按钮区域 -->
+          <div class="hero-actions">
+            <!-- 错误提示 -->
+            <div v-if="installError" class="install-error">
+              <AlertCircle :size="14" />
+              <span>{{ installError }}</span>
+              <button class="retry-btn" @click="handleRetry">
+                <RefreshCw :size="12" />
+                {{ errorType === 'uninstall' ? '重试卸载' : '重试安装' }}
+              </button>
+            </div>
+
+            <!-- 下载进度条 -->
+            <div
+              v-if="downloadProgress && ['downloading', 'installing', 'updating'].includes(downloadProgress.status)"
+              class="download-progress-bar"
+            >
+              <div class="progress-info">
+                <span class="progress-message">
+                  <Loader2 :size="13" class="spin-icon" />
+                  {{ downloadProgress.message || (downloadProgress.status === 'downloading' ? '正在下载...' : '正在安装...') }}
+                </span>
+                <span class="progress-stats">
+                  <span v-if="downloadProgress.speed" class="progress-speed">{{ formatSpeed(downloadProgress.speed) }}</span>
+                  <span v-if="downloadProgress.eta" class="progress-eta">剩余 {{ formatEta(downloadProgress.eta) }}</span>
+                  <span class="progress-pct">{{ Math.round(downloadProgress.progress) }}%</span>
+                </span>
+              </div>
+              <div class="progress-track">
+                <div
+                  class="progress-fill"
+                  :class="downloadProgress.status"
+                  :style="{ width: downloadProgress.progress + '%' }"
+                ></div>
+              </div>
+            </div>
+
+            <!-- 已安装状态 -->
+            <template v-if="installStatus === 'installed'">
+              <button class="action-btn installed-btn" disabled>
+                <Check :size="16" />
+                <span>已安装 v{{ item.version }}</span>
+              </button>
+              <button
+                class="action-btn uninstall-btn"
+                :disabled="uninstallLoading"
+                @click="handleUninstall"
+              >
+                <Trash2 v-if="!uninstallLoading" :size="14" />
+                <Loader2 v-else :size="14" class="spin-icon" />
+                <span>{{ uninstallLoading ? '卸载中...' : '卸载' }}</span>
+              </button>
+            </template>
+
+            <!-- 安装中/下载中 -->
+            <template v-else-if="installStatus === 'downloading' || installStatus === 'installing' || installStatus === 'updating'">
+              <button class="action-btn operating-btn" disabled>
+                <Loader2 :size="14" class="spin-icon" />
+                <span>{{ downloadProgress?.message || '处理中...' }}</span>
+              </button>
+            </template>
+
+            <!-- 错误状态 -->
+            <template v-else-if="installStatus === 'error'">
+              <button class="action-btn install-btn" @click="handleRetry">
+                <RefreshCw :size="14" />
+                <span>{{ errorType === 'uninstall' ? '重试卸载' : '重试安装' }}</span>
+              </button>
+            </template>
+
+            <!-- 未安装状态 -->
+            <template v-else>
+              <button
+                class="action-btn install-btn"
+                :disabled="installLoading"
+                @click="handleInstall"
+              >
+                <Download v-if="!installLoading" :size="14" />
+                <Loader2 v-else :size="14" class="spin-icon" />
+                <span>{{ installLoading ? '请求中...' : '安装' }}</span>
+              </button>
+            </template>
+          </div>
         </div>
       </div>
 
+      <!-- 截图区域 -->
+      <div v-if="item.screenshots && item.screenshots.length > 0" class="detail-screenshots animate-slide-up">
+        <h3 class="section-title">截图预览</h3>
+        <div class="screenshots-grid">
+          <div
+            v-for="(shot, idx) in item.screenshots"
+            :key="idx"
+            class="screenshot-thumb"
+            @click="openScreenshot(idx)"
+          >
+            <img :src="shot.url" :alt="shot.caption || `截图 ${idx + 1}`" loading="lazy" />
+            <div class="screenshot-overlay">
+              <Image :size="20" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 标签页 -->
       <div class="detail-tabs">
         <button
           :class="['tab-btn', { active: activeTab === 'info' }]"
@@ -117,23 +424,24 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
           @click="activeTab = 'versions'"
         >
           <Tag :size="15" />
-          版本 ({{ item.versions.length }})
+          版本 ({{ item.versions?.length || 0 }})
         </button>
         <button
           :class="['tab-btn', { active: activeTab === 'reviews' }]"
           @click="activeTab = 'reviews'"
         >
           <Star :size="15" />
-          评价 ({{ item.ratingCount }})
+          评价 ({{ item.ratingCount || 0 }})
         </button>
       </div>
 
       <div class="detail-body">
         <Transition name="tab-switch" mode="out-in">
+          <!-- 详情 Tab -->
           <div v-if="activeTab === 'info'" key="info" class="tab-content">
             <div class="info-section">
               <h3 class="info-title">详细介绍</h3>
-              <p class="info-text">{{ item.description }}</p>
+              <p class="info-text">{{ item.description || item.summary }}</p>
             </div>
 
             <div class="info-section">
@@ -181,8 +489,9 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
             </div>
           </div>
 
+          <!-- 版本 Tab -->
           <div v-else-if="activeTab === 'versions'" key="versions" class="tab-content">
-            <div class="versions-list">
+            <div v-if="item.versions && item.versions.length > 0" class="versions-list">
               <div
                 v-for="ver in item.versions"
                 :key="ver.version"
@@ -205,19 +514,50 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
                 </button>
                 <Transition name="expand">
                   <div v-if="expandedVersion === ver.version" class="version-changelog">
-                    <p>{{ ver.changelog }}</p>
+                    <p>{{ ver.changelog || '暂无更新日志' }}</p>
                   </div>
                 </Transition>
               </div>
             </div>
+            <div v-else class="empty-versions">
+              <Tag :size="32" />
+              <p>暂无版本信息</p>
+            </div>
           </div>
 
+          <!-- 评价 Tab -->
           <div v-else-if="activeTab === 'reviews'" key="reviews" class="tab-content">
             <MarketplaceReviews :item-id="itemId" :reviews="itemReviews" />
           </div>
         </Transition>
       </div>
     </div>
+
+    <!-- 截图模态框 -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="screenshotModal !== null && item.screenshots?.[screenshotModal]" class="screenshot-modal" @click="closeScreenshot">
+          <div class="modal-content" @click.stop>
+            <button class="modal-close" @click="closeScreenshot">
+              <X :size="20" />
+            </button>
+            <img :src="item.screenshots[screenshotModal].url" :alt="item.screenshots[screenshotModal].caption" />
+            <div class="modal-caption">
+              {{ item.screenshots[screenshotModal].caption || `截图 ${screenshotModal + 1}` }}
+              <span class="modal-counter">{{ screenshotModal + 1 }} / {{ item.screenshots.length }}</span>
+            </div>
+            <div class="modal-nav">
+              <button v-if="screenshotModal > 0" class="nav-btn prev" @click.stop="screenshotModal!--">
+                <ChevronDown :size="20" style="transform: rotate(90deg)" />
+              </button>
+              <button v-if="screenshotModal < item.screenshots.length - 1" class="nav-btn next" @click.stop="screenshotModal!--">
+                <ChevronDown :size="20" style="transform: rotate(-90deg)" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 
   <div v-else class="detail-not-found">
@@ -265,6 +605,7 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
   padding: 24px 28px;
 }
 
+/* Hero */
 .detail-hero {
   display: flex;
   gap: 24px;
@@ -342,6 +683,23 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
   color: var(--lumi-star);
 }
 
+.hero-like-btn {
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  color: var(--text-muted);
+}
+
+.hero-like-btn:hover {
+  background: var(--lumi-accent-light);
+  color: var(--lumi-accent);
+}
+
+.hero-like-btn.liked {
+  color: var(--lumi-accent);
+}
+
 .stat-value {
   font-weight: 600;
   color: var(--text-primary);
@@ -368,6 +726,301 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
   color: var(--tag-color);
 }
 
+/* 安装/卸载按钮区域 */
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.install-btn {
+  color: var(--text-inverse);
+  background: var(--lumi-primary);
+}
+
+.install-btn:hover:not(:disabled) {
+  background: var(--lumi-primary-hover);
+}
+
+.installed-btn {
+  color: var(--lumi-success);
+  background: var(--lumi-success-light);
+}
+
+.uninstall-btn {
+  color: var(--text-muted);
+  background: var(--workspace-panel);
+  border: 1px solid var(--workspace-border);
+}
+
+.uninstall-btn:hover:not(:disabled) {
+  border-color: var(--lumi-accent);
+  color: var(--lumi-accent);
+  background: var(--lumi-accent-light);
+}
+
+.operating-btn {
+  color: var(--text-secondary);
+  background: var(--workspace-panel);
+  cursor: not-allowed;
+}
+
+.spin-icon {
+  animation: lumi-spin 1s linear infinite;
+}
+
+@keyframes lumi-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 错误提示 */
+.install-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--lumi-accent);
+  background: var(--lumi-accent-light);
+  width: 100%;
+}
+
+.retry-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--lumi-accent);
+  transition: all var(--transition-fast);
+}
+
+.retry-btn:hover {
+  background: var(--lumi-accent);
+  color: var(--text-inverse);
+}
+
+/* 下载进度条 */
+.download-progress-bar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-message {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.progress-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.progress-speed {
+  color: var(--lumi-primary);
+  font-weight: 500;
+}
+
+.progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-light);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-fill.downloading {
+  background: var(--lumi-primary);
+}
+
+.progress-fill.installing {
+  background: var(--lumi-warning);
+}
+
+.progress-fill.updating {
+  background: var(--lumi-primary);
+}
+
+/* 截图区域 */
+.detail-screenshots {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.screenshots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.screenshot-thumb {
+  position: relative;
+  aspect-ratio: 16/10;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid var(--workspace-border);
+  transition: all var(--transition-fast);
+}
+
+.screenshot-thumb:hover {
+  border-color: var(--lumi-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.screenshot-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.screenshot-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  color: white;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.screenshot-thumb:hover .screenshot-overlay {
+  opacity: 1;
+}
+
+/* 截图模态框 */
+.screenshot-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  animation: lumi-fade-in 0.2s ease-out;
+}
+
+.modal-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.modal-content img {
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: var(--radius-lg);
+  object-fit: contain;
+}
+
+.modal-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: all var(--transition-fast);
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-caption {
+  margin-top: 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal-counter {
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+.modal-nav {
+  position: absolute;
+  top: 50%;
+  left: -50px;
+  right: -50px;
+  display: flex;
+  justify-content: space-between;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  background: rgba(255, 255, 255, 0.15);
+  pointer-events: auto;
+  transition: all var(--transition-fast);
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Tabs */
 .detail-tabs {
   display: flex;
   gap: 4px;
@@ -477,6 +1130,7 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
   color: var(--text-inverse);
 }
 
+/* Versions */
 .versions-list {
   display: flex;
   flex-direction: column;
@@ -552,6 +1206,20 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
   line-height: 1.6;
 }
 
+.empty-versions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 0;
+  color: var(--text-muted);
+}
+
+.empty-versions p {
+  font-size: 13px;
+}
+
+/* Transitions */
 .expand-enter-active,
 .expand-leave-active {
   transition: all 0.2s ease-in-out;
@@ -572,6 +1240,14 @@ const formatDate = (dateStr: string) => formatDateRelative(dateStr)
 
 .tab-switch-leave-active {
   animation: lumi-fade-in 0.1s ease-out reverse;
+}
+
+.modal-enter-active {
+  animation: lumi-fade-in 0.2s ease-out;
+}
+
+.modal-leave-active {
+  animation: lumi-fade-in 0.15s ease-out reverse;
 }
 
 .detail-not-found {
