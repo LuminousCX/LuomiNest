@@ -50,11 +50,30 @@ class ContextBuilder:
                 used_chars += len(section) + 20
 
         # 3. 记忆事实（query-aware：优先注入与当前问题相关的事实）
-        # Agent级共享facts + 对话级隔离facts
+        # 隔离靠"facts存在哪个store"决定：
+        #   - Agent级store中的facts → 全局可见（蒸馏提升后的）
+        #   - 对话级store中的facts → 仅当前对话可见（新提取的，待提升）
         all_facts = []
-        # Agent级：只取共享作用域的facts
+        # Agent级：全局可见的共享facts
         for f in data.facts:
-            if f.is_latest and f.category in FACT_SCOPE_AGENT:
+            if not f.is_latest:
+                continue
+            if f.category not in FACT_SCOPE_AGENT:
+                continue
+            if f.expires_at:
+                try:
+                    exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
+                    if exp_time <= datetime.now(datetime.UTC):
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            all_facts.append(f)
+        # 对话级：当前对话的所有facts都可见（包括待提升的Agent级类facts）
+        if conversation_store:
+            conv_data = conversation_store.load_data()
+            for f in conv_data.facts:
+                if not f.is_latest:
+                    continue
                 if f.expires_at:
                     try:
                         exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
@@ -63,20 +82,6 @@ class ContextBuilder:
                     except (ValueError, TypeError):
                         pass
                 all_facts.append(f)
-        # 对话级：取对话作用域的facts
-        if conversation_store:
-            conv_data = conversation_store.load_data()
-            for f in conv_data.facts:
-                if f.is_latest and f.category in FACT_SCOPE_CONVERSATION:
-                    if f.expires_at:
-                        try:
-                            exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
-                            if exp_time <= datetime.now(datetime.UTC):
-                                continue
-                        except (ValueError, TypeError):
-                            # 容错：expires_at 格式或类型异常时，按“不过期”处理，避免因脏数据中断上下文构建。
-                            pass
-                    all_facts.append(f)
 
         # query-aware 排序：优先使用向量召回结果，再用关键词匹配
         if self._relevant_fact_ids:
