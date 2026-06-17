@@ -13,6 +13,17 @@ import RepoSourcePanel from '../components/marketplace/RepoSourcePanel.vue'
 import LumiCardIcon from '../components/common/LumiCardIcon.vue'
 import type { MarketplaceFilter, MarketplaceItem, MarketplaceType } from '../types/marketplace'
 
+// 安全的同步时间格式化，防止 Invalid Date
+const formatSyncTime = (ts: string) => {
+  try {
+    const d = new Date(ts)
+    if (isNaN(d.getTime())) return ts
+    return d.toLocaleString('zh-CN')
+  } catch {
+    return ts
+  }
+}
+
 const route = useRoute()
 const router = useRouter()
 const store = useMarketplaceStore()
@@ -47,7 +58,7 @@ onMounted(async () => {
   // 从后端同步安装状态
   await store.syncInstallStatus()
   // 从后端同步统计数据（下载计数、喜欢计数、排行榜）
-  store.syncAllStats()
+  await store.syncAllStats()
 })
 
 const categories = computed(() => store.getCategories(activeTab.value))
@@ -220,7 +231,7 @@ function toggleFilters() {
           <Database :size="13" />
           <span>数据来源: {{ repoSourceStore.activeSource?.name || '远程仓库' }}</span>
           <span v-if="repoSourceStore.activeSource?.lastSyncedAt" class="indicator-sync-time">
-            同步于 {{ new Date(repoSourceStore.activeSource.lastSyncedAt).toLocaleString('zh-CN') }}
+            同步于 {{ formatSyncTime(repoSourceStore.activeSource.lastSyncedAt) }}
           </span>
         </div>
         <div v-else-if="repoSourceStore.activeSource?.status === 'loading'" class="remote-source-indicator loading">

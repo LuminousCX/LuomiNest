@@ -1,6 +1,10 @@
 """
 市场内容安装/卸载/下载/统计 API
 """
+import ipaddress
+import socket
+from urllib.parse import urlparse
+
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
@@ -19,6 +23,39 @@ from app.infrastructure.database.json_store import marketplace_stats_store
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
 
+# 受信任的下载域名白名单
+_TRUSTED_DOWNLOAD_HOSTS = {
+    "github.com", "raw.githubusercontent.com", "api.github.com",
+    "objects.githubusercontent.com", "github-releases.githubusercontent.com",
+    "codeload.github.com",
+}
+
+
+def _validate_download_url(url: str) -> str:
+    """验证下载 URL 安全性，防止 SSRF 攻击"""
+    if not url:
+        return url
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"不支持的 URL 协议: {parsed.scheme}")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("缺少主机名")
+    # 检查白名单
+    hostname_lower = hostname.lower()
+    if not any(hostname_lower == trusted or hostname_lower.endswith("." + trusted)
+               for trusted in _TRUSTED_DOWNLOAD_HOSTS):
+        # 不在白名单中，检查是否为私有/内部 IP
+        try:
+            addr = ipaddress.ip_address(socket.gethostbyname(hostname_lower))
+            if addr.is_private or addr.is_loopback or addr.is_link_local:
+                raise ValueError(f"禁止访问内部地址: {hostname}")
+        except ValueError:
+            raise
+        except socket.gaierror:
+            raise ValueError(f"无法解析主机名: {hostname}")
+    return url
+
 
 class InstallRequest(BaseModel):
     itemId: str
@@ -35,17 +72,19 @@ class UninstallRequest(BaseModel):
 async def _do_install(req: InstallRequest):
     """后台执行下载安装"""
     try:
-        await download_item(
+        safe_url = _validate_download_url(req.downloadUrl or "")
+        result = await download_item(
             item_id=req.itemId,
-            download_url=req.downloadUrl or "",
+            download_url=safe_url,
             item_type=req.itemType,
             item_name=req.itemName,
             version=req.version,
         )
-        # 安装成功后自动增加下载计数
-        _increment_download_count(req.itemId, req.itemType)
-    except Exception:
-        pass
+        # 仅在安装成功后增加下载计数
+        if result.get("status") == "installed":
+            _increment_download_count(req.itemId, req.itemType)
+    except Exception as e:
+        logger.error(f"[MarketplaceAPI] Install failed for {req.itemId}: {e}")
 
 
 @router.post("/install")
@@ -60,23 +99,30 @@ async def install_marketplace_item(req: InstallRequest, background_tasks: Backgr
 
     # 检查是否正在下载/安装中
     current = get_download_status(req.itemId)
-    if current and current.get("status") in ("downloading", "installing"):
+    if current and current.get("status") in ("downloading", "installing", "queued"):
         return current
+
+    # 原子标记为排队中，防止并发请求创建重复后台任务
+    from app.infrastructure.install.install_service import _active_downloads
+    if req.itemId in _active_downloads:
+        return _active_downloads[req.itemId]
+    _active_downloads[req.itemId] = {
+        "itemId": req.itemId,
+        "status": "queued",
+        "progress": 0,
+        "message": "排队等待中...",
+        "speed": 0,
+        "eta": 0,
+        "downloadedBytes": 0,
+        "totalBytes": 0,
+        "startTime": __import__("time").time(),
+    }
 
     # 在后台启动下载安装任务
     background_tasks.add_task(_do_install, req)
 
     # 立即返回初始状态
-    return {
-        "itemId": req.itemId,
-        "status": "downloading",
-        "progress": 0,
-        "message": "正在准备下载...",
-        "speed": 0,
-        "eta": 0,
-        "downloadedBytes": 0,
-        "totalBytes": 0,
-    }
+    return _active_downloads[req.itemId]
 
 
 @router.post("/uninstall")
@@ -145,42 +191,58 @@ def _get_item_stats(item_id: str) -> dict:
 
 
 def _increment_download_count(item_id: str, item_type: str):
-    """增加下载计数（线程安全，由 JsonStore lock 保护）"""
-    stats = _get_item_stats(item_id)
-    stats["downloadCount"] = stats.get("downloadCount", 0) + 1
-    if item_type:
-        stats["type"] = item_type
-    marketplace_stats_store.set(item_id, stats)
+    """增加下载计数（原子操作，由 JsonStore.mutate 锁保护）"""
+    def _updater(stats):
+        if stats is None:
+            stats = {"downloadCount": 0, "likeCount": 0, "type": ""}
+        stats["downloadCount"] = stats.get("downloadCount", 0) + 1
+        if item_type:
+            stats["type"] = item_type
+        return stats
+
+    stats = marketplace_stats_store.mutate(item_id, _updater)
     logger.info(f"[MarketplaceStats] Download count incremented: {item_id} -> {stats['downloadCount']}")
 
 
 class LikeRequest(BaseModel):
     itemId: str
     itemType: str = ""
+    userId: str = ""  # 可选用户标识，桌面单用户场景下为空
+
+
+def _get_likes_key(user_id: str = "") -> str:
+    """获取用户专属或全局喜欢列表的存储键"""
+    return f"__user_likes__:{user_id}" if user_id else "__user_likes__"
 
 
 @router.post("/stats/like")
 async def toggle_like(req: LikeRequest):
     """切换喜欢状态，返回当前是否喜欢及喜欢计数"""
-    stats = _get_item_stats(req.itemId)
-    if req.itemType:
-        stats["type"] = req.itemType
-
-    # 从 store 中获取当前用户的喜欢列表
-    likes_store_data = marketplace_stats_store.get("__user_likes__") or {}
+    likes_key = _get_likes_key(req.userId)
+    likes_store_data = marketplace_stats_store.get(likes_key) or {}
     user_likes: set = set(likes_store_data.get("liked_ids", []))
 
     is_liked = req.itemId in user_likes
 
+    # 原子更新点赞计数
+    def _updater(stats):
+        if stats is None:
+            stats = {"downloadCount": 0, "likeCount": 0, "type": ""}
+        if req.itemType:
+            stats["type"] = req.itemType
+        if is_liked:
+            stats["likeCount"] = max(0, stats.get("likeCount", 0) - 1)
+        else:
+            stats["likeCount"] = stats.get("likeCount", 0) + 1
+        return stats
+
+    stats = marketplace_stats_store.mutate(req.itemId, _updater)
+
     if is_liked:
         user_likes.discard(req.itemId)
-        stats["likeCount"] = max(0, stats.get("likeCount", 0) - 1)
     else:
         user_likes.add(req.itemId)
-        stats["likeCount"] = stats.get("likeCount", 0) + 1
-
-    marketplace_stats_store.set(req.itemId, stats)
-    marketplace_stats_store.set("__user_likes__", {"liked_ids": list(user_likes)})
+    marketplace_stats_store.set(likes_key, {"liked_ids": list(user_likes)})
 
     return {
         "itemId": req.itemId,
@@ -190,10 +252,11 @@ async def toggle_like(req: LikeRequest):
 
 
 @router.get("/stats/{item_id}")
-async def get_item_stats(item_id: str):
+async def get_item_stats(item_id: str, userId: str = ""):
     """获取单个条目的统计数据"""
     stats = _get_item_stats(item_id)
-    likes_store_data = marketplace_stats_store.get("__user_likes__") or {}
+    likes_key = _get_likes_key(userId)
+    likes_store_data = marketplace_stats_store.get(likes_key) or {}
     user_likes: set = set(likes_store_data.get("liked_ids", []))
     return {
         "itemId": item_id,
@@ -206,10 +269,12 @@ async def get_item_stats(item_id: str):
 @router.get("/stats")
 async def get_all_stats(
     type: Optional[str] = Query(None, description="按类型过滤"),
+    userId: str = "",
 ):
     """获取所有条目的统计数据"""
     all_stats = marketplace_stats_store.list_all()
-    likes_store_data = marketplace_stats_store.get("__user_likes__") or {}
+    likes_key = _get_likes_key(userId)
+    likes_store_data = marketplace_stats_store.get(likes_key) or {}
     user_likes: set = set(likes_store_data.get("liked_ids", []))
     result = []
     for item_id, stats in all_stats.items():

@@ -17,13 +17,10 @@ import httpx
 from loguru import logger
 
 from app.core.config import settings
-from app.infrastructure.database.json_store import JsonStore
+from app.infrastructure.database.json_store import JsonStore, repo_sources_store
 
 # 安装记录存储
 install_store = JsonStore("installed_items.json")
-# 仓库来源和同步缓存存储
-repo_sources_store = JsonStore("repo_sources.json")
-repo_sync_cache_store = JsonStore("repo_sync_cache.json")
 
 # 下载临时目录
 DOWNLOAD_DIR = Path(settings.DATA_DIR) / "downloads"
@@ -165,7 +162,7 @@ async def _download_from_url(item_id: str, url: str, dest_path: Path):
     """从 URL 下载文件，支持进度追踪"""
     state = _active_downloads[item_id]
 
-    async with httpx.AsyncClient(timeout=120.0, verify=False, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
         async with client.stream("GET", url) as response:
             if response.status_code != 200:
                 raise Exception(f"下载失败: HTTP {response.status_code}")
@@ -266,7 +263,7 @@ async def _download_from_github_source(item_id: str, item_type: str, dest_path: 
         await _create_simulated_package(item_id, item_type, dest_path)
         return
 
-    owner, repo, sub_dir = source_info
+    owner, repo, download_url = source_info
     branch = "main"
 
     # 使用 GitHub API 下载子目录内容
@@ -274,62 +271,78 @@ async def _download_from_github_source(item_id: str, item_type: str, dest_path: 
     if token:
         headers["Authorization"] = f"token {token}"
 
-    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{sub_dir}?ref={branch}"
+    state = _active_downloads[item_id]
 
-    async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
-        resp = await client.get(api_url, headers=headers)
-        if resp.status_code != 200:
-            error_detail = resp.text[:200] if resp.text else ""
-            raise Exception(f"获取仓库内容失败: HTTP {resp.status_code} - {error_detail}")
+    # 创建临时目录
+    temp_dir = DOWNLOAD_DIR / f"{item_id}_tmp"
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir)
+    temp_dir.mkdir(parents=True)
 
-        contents = resp.json()
-        state = _active_downloads[item_id]
-        total_files = len([c for c in contents if c.get("type") == "file"])
-        downloaded_files = 0
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            await _download_github_dir(client, owner, repo, download_url, branch, headers, temp_dir, state)
 
-        # 创建临时目录
-        temp_dir = DOWNLOAD_DIR / f"{item_id}_tmp"
+        # 打包为 zip
+        with zipfile.ZipFile(dest_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for file_path in temp_dir.rglob("*"):
+                if file_path.is_file():
+                    arcname = file_path.relative_to(temp_dir)
+                    zf.write(file_path, arcname)
+    finally:
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
-        temp_dir.mkdir(parents=True)
-
-        try:
-            # 下载所有文件
-            for content_item in contents:
-                if content_item.get("type") != "file":
-                    continue
-
-                file_url = content_item.get("download_url")
-                if not file_url:
-                    continue
-
-                file_resp = await client.get(file_url, headers=headers)
-                if file_resp.status_code == 200:
-                    file_path = temp_dir / content_item["name"]
-                    file_path.write_bytes(file_resp.content)
-                    downloaded_files += 1
-                    state["progress"] = round((downloaded_files / max(total_files, 1)) * 100, 1)
-
-            # 打包为 zip
-            with zipfile.ZipFile(dest_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for file_path in temp_dir.rglob("*"):
-                    if file_path.is_file():
-                        arcname = file_path.relative_to(temp_dir)
-                        zf.write(file_path, arcname)
-        finally:
-            # 清理临时目录
-            if temp_dir.exists():
-                shutil.rmtree(temp_dir)
 
     state["progress"] = 100
 
 
+async def _download_github_dir(
+    client: httpx.AsyncClient,
+    owner: str,
+    repo: str,
+    path: str,
+    branch: str,
+    headers: dict,
+    target_dir: Path,
+    state: dict,
+):
+    """递归下载 GitHub 仓库目录内容（支持子目录）"""
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
+    resp = await client.get(api_url, headers=headers)
+    if resp.status_code != 200:
+        error_detail = resp.text[:200] if resp.text else ""
+        raise Exception(f"获取仓库内容失败: HTTP {resp.status_code} - {error_detail}")
+
+    contents = resp.json()
+    if not isinstance(contents, list):
+        contents = [contents]
+
+    for content_item in contents:
+        item_type = content_item.get("type", "")
+        item_name = content_item.get("name", "")
+        if item_type == "dir":
+            # 递归下载子目录
+            sub_target = target_dir / item_name
+            sub_target.mkdir(parents=True, exist_ok=True)
+            sub_path = f"{path}/{item_name}" if path else item_name
+            await _download_github_dir(client, owner, repo, sub_path, branch, headers, sub_target, state)
+        elif item_type == "file":
+            file_url = content_item.get("download_url")
+            if not file_url:
+                continue
+            file_resp = await client.get(file_url, headers=headers)
+            if file_resp.status_code == 200:
+                file_path = target_dir / item_name
+                file_path.write_bytes(file_resp.content)
+                state["downloaded"] = state.get("downloaded", 0) + 1
+
+
 def _find_item_source(item_id: str, item_type: str) -> Optional[tuple]:
     """从缓存中查找条目的 GitHub 仓库来源"""
-    from app.infrastructure.sync.github_sync import parse_github_url
+    from app.infrastructure.sync.github_sync import parse_github_url, _sync_cache_store
 
     sources = repo_sources_store.list_all()
-    cache = repo_sync_cache_store.list_all()
+    cache = _sync_cache_store.list_all()
 
     for source_id, source in sources.items():
         if source.get("type") != "github":
@@ -346,7 +359,7 @@ def _find_item_source(item_id: str, item_type: str) -> Optional[tuple]:
                     url = sm.get("url", "")
                     parsed = parse_github_url(url)
                     if parsed:
-                        return parsed[0], parsed[1], item_id
+                        return parsed[0], parsed[1], item.get("downloadUrl", "")
 
     return None
 
@@ -386,10 +399,22 @@ async def install_from_archive(
                 shutil.rmtree(backup_dir)
             target_dir.rename(backup_dir)
 
-        # 解压安装
+        # 安全解压安装（防止路径遍历攻击）
         target_dir.mkdir(parents=True, exist_ok=True)
+        resolved_target = target_dir.resolve()
         with zipfile.ZipFile(archive_path, "r") as zf:
-            zf.extractall(target_dir)
+            for entry in zf.infolist():
+                dest_path = (resolved_target / entry.filename).resolve()
+                # 拒绝绝对路径和父目录遍历
+                if not dest_path.is_relative_to(resolved_target):
+                    logger.warning(f"[InstallService] Skipped suspicious entry: {entry.filename}")
+                    continue
+                if entry.is_dir():
+                    dest_path.mkdir(parents=True, exist_ok=True)
+                else:
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(entry) as src, open(dest_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
 
         # 记录安装信息
         now = datetime.now(timezone.utc).isoformat()

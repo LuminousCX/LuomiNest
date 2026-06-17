@@ -209,16 +209,17 @@ async def update_repo_source(source_id: str, request: RepoSourceUpdate):
 
     update_data = request.model_dump(exclude_unset=True)
     if "sub_markets" in update_data and update_data["sub_markets"] is not None:
+        existing_sms = source.get("sub_markets", [])
         update_data["sub_markets"] = [
             {
-                "id": str(uuid.uuid4())[:8],
+                "id": existing_sms[i]["id"] if i < len(existing_sms) else str(uuid.uuid4())[:8],
                 "name": sm["name"],
                 "type": sm["type"],
                 "url": sm["url"],
                 "description": sm.get("description", ""),
                 "linked": True,
             }
-            for sm in update_data["sub_markets"]
+            for i, sm in enumerate(update_data["sub_markets"])
         ]
     source.update(update_data)
     source["updated_at"] = datetime.now(timezone.utc).isoformat()

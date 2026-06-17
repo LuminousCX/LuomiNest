@@ -48,8 +48,12 @@ function navigateToDetail() {
   router.push(`/market/detail/${props.item.type}/${props.item.id}`)
 }
 
+const isInstalling = ref(false)
+
 function handleInstall(e: Event) {
   e.stopPropagation()
+  if (isInstalling.value) return
+  isInstalling.value = true
   // 调用真实后端安装接口
   api.apiPost<InstallProgress>('/marketplace/install', {
     itemId: props.item.id,
@@ -65,6 +69,8 @@ function handleInstall(e: Event) {
     props.item.installStatus = 'installing'
   }).catch(() => {
     // 安装请求失败，忽略
+  }).finally(() => {
+    isInstalling.value = false
   })
 }
 

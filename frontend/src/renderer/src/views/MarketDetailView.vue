@@ -107,12 +107,7 @@ function startProgressPolling(id: string) {
       if (result.status === 'installed' || result.status === 'error') {
         stopProgressPolling()
         if (result.status === 'installed') {
-          // 更新本地状态
-          if (item.value) {
-            item.value.installStatus = 'installed'
-            item.value.downloadCount += 1
-          }
-          // 同步 store 中对应条目的状态，确保卡片等页面一致
+          // 通过 store 方法更新状态，避免直接修改 computed 派生值
           const storeItem = store.getItemByTypeAndId(itemType.value, itemId.value)
           if (storeItem) {
             storeItem.installStatus = 'installed'
@@ -144,6 +139,11 @@ function stopProgressPolling() {
 // 安装
 async function handleInstall() {
   if (!item.value) return
+  const downloadUrl = item.value.versions?.[0]?.downloadUrl
+  if (!downloadUrl) {
+    installError.value = '此条目没有可用的下载地址'
+    return
+  }
   installLoading.value = true
   installError.value = null
 
@@ -153,7 +153,7 @@ async function handleInstall() {
       itemType: item.value.type,
       itemName: item.value.name,
       version: item.value.version,
-      downloadUrl: item.value.versions?.[0]?.downloadUrl || '',
+      downloadUrl,
     })
 
     downloadProgress.value = result
@@ -550,7 +550,7 @@ onUnmounted(() => {
               <button v-if="screenshotModal > 0" class="nav-btn prev" @click.stop="screenshotModal!--">
                 <ChevronDown :size="20" style="transform: rotate(90deg)" />
               </button>
-              <button v-if="screenshotModal < item.screenshots.length - 1" class="nav-btn next" @click.stop="screenshotModal!--">
+              <button v-if="screenshotModal < item.screenshots.length - 1" class="nav-btn next" @click.stop="screenshotModal++">
                 <ChevronDown :size="20" style="transform: rotate(-90deg)" />
               </button>
             </div>
