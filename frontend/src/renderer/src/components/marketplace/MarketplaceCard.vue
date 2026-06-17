@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Star, Download, Heart, Check, Loader2 } from 'lucide-vue-next'
 import type { MarketplaceItem, InstallProgress } from '../../types/marketplace'
