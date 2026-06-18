@@ -126,42 +126,60 @@ export const useApi = () => {
       const decoder = new TextDecoder()
       let buffer = ''
 
+      const processLine = (line: string): boolean => {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data: ')) return false
+        const dataStr = trimmed.slice(6)
+        if (!dataStr.trim()) return false
+        if (dataStr.trim() === '[DONE]') {
+          return true
+        }
+
+        try {
+          const raw = JSON.parse(dataStr)
+          const chunk: ChatStreamChunk = {
+            id: raw.id,
+            content: raw.content || '',
+            reasoning_content: raw.reasoning_content || raw.reasoningContent || '',
+            model: raw.model || '',
+            provider: raw.provider || '',
+            done: !!raw.done,
+            suggested_questions: raw.suggested_questions || undefined,
+          }
+          onChunk(chunk)
+          return chunk.done
+        } catch {
+          return false
+        }
+      }
+
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+
+        if (done) {
+          if (value) {
+            buffer += decoder.decode(value, { stream: false })
+          } else {
+            buffer += decoder.decode()
+          }
+          const lines = buffer.split('\n')
+          for (const line of lines) {
+            if (processLine(line)) {
+              await onDone()
+              return
+            }
+          }
+          break
+        }
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
 
         for (const line of lines) {
-          const trimmed = line.trim()
-          if (!trimmed.startsWith('data: ')) continue
-          const dataStr = trimmed.slice(6)
-          if (!dataStr.trim()) continue
-          if (dataStr.trim() === '[DONE]') {
+          if (processLine(line)) {
             await onDone()
             return
-          }
-
-          try {
-            const raw = JSON.parse(dataStr)
-            const chunk: ChatStreamChunk = {
-              id: raw.id,
-              content: raw.content || '',
-              reasoning_content: raw.reasoning_content || raw.reasoningContent || '',
-              model: raw.model || '',
-              provider: raw.provider || '',
-              done: !!raw.done,
-              suggested_questions: raw.suggested_questions || undefined,
-            }
-            onChunk(chunk)
-            if (chunk.done) {
-              await onDone()
-              return
-            }
-          } catch {
-            continue
           }
         }
       }

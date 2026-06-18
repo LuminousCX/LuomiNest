@@ -48,7 +48,10 @@ const saveWindowState = (): void => {
 const createWindow = (): void => {
   const savedState = configStore.getWindowState()
 
-  const appIcon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
+  const iconResourcePath = isDev
+    ? join(__dirname, '../../resources/icon.png')
+    : join(process.resourcesPath, 'icon.png')
+  const appIcon = nativeImage.createFromPath(iconResourcePath)
 
   mainWindow = new BrowserWindow({
     width: savedState.width || 1280,
@@ -134,8 +137,10 @@ const createWindow = (): void => {
 }
 
 const createTray = (): void => {
-  const iconPath = join(__dirname, '../../resources/icon.png')
-  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+  const trayIconPath = isDev
+    ? join(__dirname, '../../resources/icon.png')
+    : join(process.resourcesPath, 'icon.png')
+  const icon = nativeImage.createFromPath(trayIconPath).resize({ width: 16, height: 16 })
   tray = new Tray(icon)
   const contextMenu = Menu.buildFromTemplate([
     { label: '显示窗口', click: () => { mainWindow?.show(); mainWindow?.focus() } },
