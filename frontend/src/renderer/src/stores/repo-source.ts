@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { RepoSource, RepoSourceType, RepoSubMarket, MarketplaceItem } from '../types/marketplace'
+import type { RepoSource, RepoSourceType, MarketplaceItem } from '../types/marketplace'
 import { useApi } from '../composables/useApi'
 
 const REPO_SOURCES_KEY = 'luominest-repo-sources-active'
@@ -26,9 +26,13 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
 
   function loadActiveSourceId(): string {
     try {
-      return localStorage.getItem(REPO_SOURCES_KEY) || 'github-official'
+      const stored = localStorage.getItem(REPO_SOURCES_KEY)
+      if (stored && sources.value.some(s => s.id === stored)) {
+        return stored
+      }
+      return sources.value[0]?.id || ''
     } catch {
-      return 'github-official'
+      return sources.value[0]?.id || ''
     }
   }
 
@@ -106,7 +110,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: any) {
-      error.value = e.message
+      error.value = e?.message || '操作失败'
     }
   }
 
@@ -119,7 +123,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: any) {
-      error.value = e.message
+      error.value = e?.message || '操作失败'
     }
   }
 
@@ -132,7 +136,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: any) {
-      error.value = e.message
+      error.value = e?.message || '操作失败'
     }
   }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { Star, Download, Heart, ArrowRight, Trophy } from 'lucide-vue-next'
-import type { MarketplaceItem, MarketplaceType, LeaderboardItem } from '../../types/marketplace'
+import type { MarketplaceItem, MarketplaceType } from '../../types/marketplace'
 import { useRouter } from 'vue-router'
 import { useMarketplaceStore } from '../../stores/marketplace'
 import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'

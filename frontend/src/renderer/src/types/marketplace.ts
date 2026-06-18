@@ -23,7 +23,7 @@ export interface RepoSource {
   enabled: boolean
   subMarkets?: RepoSubMarket[]
   lastSyncedAt?: string
-  status: 'idle' | 'loading' | 'loaded' | 'error'
+  status: 'idle' | 'loading' | 'loaded' | 'syncing' | 'error'
   errorMessage?: string
 }
 

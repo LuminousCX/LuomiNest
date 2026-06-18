@@ -6,6 +6,7 @@ GitHub 仓库同步服务
 - 完善的错误处理
 """
 
+import hashlib
 import os
 import time
 import asyncio
@@ -180,7 +181,7 @@ async def fetch_manifest_from_github(
 
     # 尝试 raw URL（更快、无 API 速率限制）
     raw_url = f"{GITHUB_RAW_BASE}/{owner}/{repo}/{branch}/{MANIFEST_FILENAME}"
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, verify=False) as client:
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         try:
             resp = await client.get(raw_url, headers=headers)
             if resp.status_code == 200:
@@ -224,7 +225,7 @@ async def fetch_repo_tree(
         headers["Authorization"] = f"token {token}"
 
     tree_url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, verify=False) as client:
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         try:
             resp = await client.get(tree_url, headers=headers)
             if resp.status_code == 200:
@@ -263,9 +264,9 @@ def parse_manifest_to_items(manifest: dict, repo_url: str) -> list[dict]:
         if not isinstance(raw, dict):
             continue
         item = ManifestItem(raw)
-        # 补全必要字段
+        # 补全必要字段（使用确定性哈希，包含仓库信息避免跨源碰撞）
         if not item.id:
-            item.id = f"{item.type}-{hash(item.name) & 0xFFFFFF:x}"
+            item.id = f"{item.type}-{hashlib.md5((repo_url + item.name).encode()).hexdigest()[:6]}"
         if not item.created_at:
             item.created_at = now
         if not item.updated_at:
@@ -300,6 +301,7 @@ def parse_manifest_to_items(manifest: dict, repo_url: str) -> list[dict]:
             "downloadUrl": item.download_url,
             "installStatus": "none",
             "isFavorite": False,
+            "extra": item.extra,
         })
     return result
 
@@ -361,7 +363,7 @@ async def fetch_dir_listing(
         headers["Authorization"] = f"token {token}"
 
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}?ref={branch}"
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, verify=False) as client:
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         try:
             resp = await client.get(url, headers=headers)
             if resp.status_code == 200:
@@ -388,7 +390,7 @@ async def fetch_sub_manifest(
 
     # 先尝试 raw URL
     raw_url = f"{GITHUB_RAW_BASE}/{owner}/{repo}/{branch}/{sub_dir}/{MANIFEST_FILENAME}"
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, verify=False) as client:
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         try:
             resp = await client.get(raw_url, headers=headers)
             if resp.status_code == 200:
@@ -505,6 +507,7 @@ def parse_single_manifest(manifest: dict, repo_url: str) -> Optional[dict]:
         "downloadUrl": item.download_url,
         "installStatus": "none",
         "isFavorite": False,
+        "extra": item.extra,
     }
 
 
@@ -712,6 +715,12 @@ def clear_cache(source_id: Optional[str] = None, sub_market_id: Optional[str] = 
     if source_id and sub_market_id:
         cache_key = f"{source_id}::{sub_market_id}"
         _sync_cache_store.delete(cache_key)
+    elif source_id:
+        # 仅清除该 source_id 下的所有子市场缓存
+        prefix = f"{source_id}::"
+        for key in list(_sync_cache_store.list_all().keys()):
+            if key.startswith(prefix):
+                _sync_cache_store.delete(key)
     else:
         _sync_cache_store.clear()
     logger.info(f"[GitHubSync] Cache cleared for source={source_id}, sub_market={sub_market_id}")

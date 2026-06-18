@@ -606,7 +606,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
 
       const updateStatus = (items: MarketplaceItem[]) => {
         for (const item of items) {
-          const installed = installedItems.find((i: any) => i.id === item.id)
+          const installed = installedItems.find((i) => i.id === item.id && i.type === item.type)
           item.installStatus = installed ? 'installed' : 'none'
         }
       }
@@ -632,6 +632,10 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       clearInterval(intervalId)
     }
     activeIntervals.clear()
+    for (const timerId of Object.values(_progressTimers)) {
+      clearInterval(timerId)
+    }
+    Object.keys(_progressTimers).forEach(key => delete _progressTimers[key])
   }
 
   // ─── 统计功能 ───────────────────────────────────────────

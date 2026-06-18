@@ -8,8 +8,10 @@ import ToastContainer from './components/common/ToastContainer.vue'
 const route = useRoute()
 
 const isWelcomePage = computed(() => route.path === '/welcome')
+const isSplashPage = computed(() => route.path === '/splash')
+const isLoginPage = computed(() => route.path === '/login')
 const isDesktopPetPage = computed(() => route.path === '/desktop-pet')
-const isMinimalLayout = computed(() => isWelcomePage.value || isDesktopPetPage.value)
+const isMinimalLayout = computed(() => isWelcomePage.value || isSplashPage.value || isLoginPage.value || isDesktopPetPage.value)
 
 watch(isDesktopPetPage, (val) => {
   if (val) {

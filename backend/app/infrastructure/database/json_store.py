@@ -2,6 +2,7 @@ import json
 import os
 import threading
 from datetime import datetime, timezone
+from typing import Optional
 from loguru import logger
 from app.core.config import settings
 
@@ -88,6 +89,16 @@ class JsonStore:
             elif key in data:
                 data[key] = updates
                 self._save()
+
+    def mutate(self, key: str, updater_fn) -> Optional[dict]:
+        """原子读-改-写操作，整个操作在锁内完成。updater_fn 接收旧值（可为 None）返回新值。"""
+        with self._lock:
+            data = self._load()
+            value = data.get(key)
+            new_value = updater_fn(value)
+            data[key] = new_value
+            self._save()
+            return new_value
 
     def invalidate(self):
         self._cache = None

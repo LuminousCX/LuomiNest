@@ -74,13 +74,13 @@ export const useApi = () => {
 
   const apiGet = <T>(path: string): Promise<T> => request<T>(path)
 
-  const apiPost = <T>(path: string, body: any): Promise<T> =>
+  const apiPost = <T>(path: string, body?: any): Promise<T> =>
     request<T>(path, { method: 'POST', body })
 
   const apiPut = <T>(path: string, body: any): Promise<T> =>
     request<T>(path, { method: 'PUT', body })
 
-  const apiPatch = <T>(path: string, body: any): Promise<T> =>
+  const apiPatch = <T>(path: string, body?: any): Promise<T> =>
     request<T>(path, { method: 'PATCH', body })
 
   const apiDelete = <T = void>(path: string): Promise<T | void> =>

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import {
   BarChart3,
   Zap,
@@ -14,29 +13,12 @@ import {
   TrendingUp,
   TrendingDown,
   Server,
-  Shield,
   Cpu,
-  Search,
-  Bot,
-  MessageSquare,
-  Sparkles,
-  Archive,
-  Trash2,
-  Edit3,
-  Plus,
-  Loader2,
-  X,
-  Save,
-  Globe,
-  Lock,
-  Flame,
-  Tag,
   Users,
 } from 'lucide-vue-next'
 import { useMemoryStore } from '../../stores/memory'
 import { useStatsStore } from '../../stores/stats'
 
-const router = useRouter()
 const memoryStore = useMemoryStore()
 const statsStore = useStatsStore()
 

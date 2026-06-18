@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import {
   Github, Cloud, Globe, Plus, Link2, Unlink, RefreshCw,
   ChevronDown, ChevronRight, X, Loader2, Check, AlertCircle,
-  Trash2, Settings2, ExternalLink, Database, Clock,
+  Trash2, ExternalLink, Database, Clock,
 } from 'lucide-vue-next'
 import { useRepoSourceStore } from '../../stores/repo-source'
-import type { RepoSource, RepoSourceType, RepoSubMarket } from '../../types/marketplace'
+import type { RepoSource, RepoSourceType } from '../../types/marketplace'
 
 const store = useRepoSourceStore()
 
@@ -72,6 +72,17 @@ const handleSelectSource = (sourceId: string) => {
 
 const handleAddCustom = async () => {
   if (!addForm.value.name.trim()) return
+  if (!addForm.value.url.trim()) return
+  // 基本 URL 校验
+  try {
+    const parsed = new URL(addForm.value.url.trim())
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('仅支持 http/https 协议')
+    }
+  } catch {
+    alert('请输入有效的 URL 地址（以 http:// 或 https:// 开头）')
+    return
+  }
   const result = await store.addCustomSource({
     name: addForm.value.name.trim(),
     url: addForm.value.url.trim(),
@@ -256,7 +267,7 @@ const formatSyncTime = (timeStr?: string) => {
                   <button
                     v-if="sm.linked"
                     class="sub-action-btn sync-sub-btn"
-                    :disabled="source.status === 'loading'"
+                    :disabled="source.status === 'loading' || source.status === 'syncing'"
                     title="同步此子市场"
                     @click="handleSyncSubMarket(source.id, sm.id)"
                   >
