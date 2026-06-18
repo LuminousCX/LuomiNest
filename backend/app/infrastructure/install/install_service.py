@@ -379,8 +379,9 @@ def _find_item_source(item_id: str, item_type: str) -> Optional[tuple]:
                                 # 格式: owner/repo/tree/branch/path...
                                 if len(parts) > 4 and parts[2] in ("tree", "blob"):
                                     sub_path = "/".join(parts[4:])
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                # 非关键解析失败时保持 sub_path 为空，继续使用仓库根目录
+                                logger.debug(f"解析 downloadUrl 子路径失败: {download_url}, error: {e}")
                         return parsed[0], parsed[1], sub_path
 
     return None
