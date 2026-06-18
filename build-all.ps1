@@ -196,7 +196,7 @@ echo "WSL_LINUX_BUILD_DONE"
             $scriptPath = Join-Path $env:TEMP "luominest-wsl-build.sh"
             $wslBuildScript | Out-File -FilePath $scriptPath -Encoding utf8 -Force
 
-            $wslScriptPath = ($scriptPath -replace '\\', '/' -replace '^([A-Z]):', { '/mnt/$1'.ToLower() })
+            $wslScriptPath = ($scriptPath -replace '\\', '/' -replace '^([A-Z]):', '/mnt/$1').ToLower()
             wsl -d $wslDistro -- bash $wslScriptPath
 
             if ($LASTEXITCODE -eq 0) {

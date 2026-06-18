@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Puzzle, Sparkles, SlidersHorizontal, X, Package, Bot, Database, CloudOff } from 'lucide-vue-next'
+import { Puzzle, Sparkles, SlidersHorizontal, X, Package, Bot, Database } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
 import { useRepoSourceStore } from '../stores/repo-source'
 import MarketplaceSearch from '../components/marketplace/MarketplaceSearch.vue'

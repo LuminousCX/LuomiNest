@@ -606,7 +606,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
 
       const updateStatus = (items: MarketplaceItem[]) => {
         for (const item of items) {
-          const installed = installedItems.find((i: any) => i.id === item.id && i.type === item.type)
+          const installed = installedItems.find((i) => i.id === item.id && i.type === item.type)
           item.installStatus = installed ? 'installed' : 'none'
         }
       }

@@ -210,20 +210,28 @@ async def update_repo_source(source_id: str, request: RepoSourceUpdate):
     update_data = request.model_dump(exclude_unset=True)
     if "sub_markets" in update_data and update_data["sub_markets"] is not None:
         existing_sms = source.get("sub_markets", [])
+        existing_by_id = {sm.get("id"): sm for sm in existing_sms}
+        existing_by_url = {sm.get("url"): sm for sm in existing_sms}
         update_data["sub_markets"] = [
             {
-                "id": existing_sms[i]["id"] if i < len(existing_sms) else str(uuid.uuid4())[:8],
+                "id": sm.get("id") or existing_by_url.get(sm.get("url", ""), {}).get("id") or str(uuid.uuid4())[:8],
                 "name": sm["name"],
                 "type": sm["type"],
                 "url": sm["url"],
                 "description": sm.get("description", ""),
                 "linked": True,
             }
-            for i, sm in enumerate(update_data["sub_markets"])
+            for sm in update_data["sub_markets"]
         ]
     source.update(update_data)
     source["updated_at"] = datetime.now(timezone.utc).isoformat()
     repo_sources_store.set(source_id, source)
+    # 清除该来源的同步缓存，防止子市场 URL 变更后返回旧数据
+    try:
+        from app.infrastructure.sync.github_sync import clear_cache
+        clear_cache(source_id=source_id)
+    except ImportError:
+        pass
     logger.success(f"[API] PATCH /repo-sources/{source_id} - Updated")
     return _to_response(source)
 

@@ -162,8 +162,16 @@ async def _download_from_url(item_id: str, url: str, dest_path: Path):
     """从 URL 下载文件，支持进度追踪"""
     state = _active_downloads[item_id]
 
-    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=False) as client:
         async with client.stream("GET", url) as response:
+            # 手动处理重定向，确保重定向目标也通过 SSRF 校验
+            if response.status_code in (301, 302, 303, 307, 308):
+                location = response.headers.get("location", "")
+                if not location:
+                    raise Exception(f"重定向缺少 Location 头: HTTP {response.status_code}")
+                # 递归下载重定向目标（会再次触发 SSRF 校验）
+                await _download_from_url(item_id, location, dest_path)
+                return
             if response.status_code != 200:
                 raise Exception(f"下载失败: HTTP {response.status_code}")
 
@@ -263,7 +271,7 @@ async def _download_from_github_source(item_id: str, item_type: str, dest_path: 
         await _create_simulated_package(item_id, item_type, dest_path)
         return
 
-    owner, repo, download_url = source_info
+    owner, repo, sub_path = source_info
     branch = "main"
 
     # 使用 GitHub API 下载子目录内容
@@ -281,7 +289,7 @@ async def _download_from_github_source(item_id: str, item_type: str, dest_path: 
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            await _download_github_dir(client, owner, repo, download_url, branch, headers, temp_dir, state)
+            await _download_github_dir(client, owner, repo, sub_path, branch, headers, temp_dir, state)
 
         # 打包为 zip
         with zipfile.ZipFile(dest_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -331,14 +339,15 @@ async def _download_github_dir(
             if not file_url:
                 continue
             file_resp = await client.get(file_url, headers=headers)
-            if file_resp.status_code == 200:
-                file_path = target_dir / item_name
-                file_path.write_bytes(file_resp.content)
-                state["downloaded"] = state.get("downloaded", 0) + 1
+            if file_resp.status_code != 200:
+                raise Exception(f"下载文件失败: {item_name} HTTP {file_resp.status_code}")
+            file_path = target_dir / item_name
+            file_path.write_bytes(file_resp.content)
+            state["downloaded"] = state.get("downloaded", 0) + 1
 
 
 def _find_item_source(item_id: str, item_type: str) -> Optional[tuple]:
-    """从缓存中查找条目的 GitHub 仓库来源"""
+    """从缓存中查找条目的 GitHub 仓库来源，返回 (owner, repo, sub_path)"""
     from app.infrastructure.sync.github_sync import parse_github_url, _sync_cache_store
 
     sources = repo_sources_store.list_all()
@@ -350,7 +359,6 @@ def _find_item_source(item_id: str, item_type: str) -> Optional[tuple]:
         sub_markets = source.get("sub_markets", [])
         for sm in sub_markets:
             sm_id = sm.get("id", "")
-            # 缓存 key 格式: sourceId::subMarketId
             cache_key = f"{source_id}::{sm_id}"
             cached = cache.get(cache_key, {})
             items = cached.get("items", [])
@@ -359,7 +367,21 @@ def _find_item_source(item_id: str, item_type: str) -> Optional[tuple]:
                     url = sm.get("url", "")
                     parsed = parse_github_url(url)
                     if parsed:
-                        return parsed[0], parsed[1], item.get("downloadUrl", "")
+                        # 返回仓库的子路径（基于 downloadUrl 推导或留空使用仓库根目录）
+                        download_url = item.get("downloadUrl", "")
+                        sub_path = ""
+                        if download_url and "github.com" in download_url:
+                            # 从 downloadUrl 中提取仓库内的路径部分
+                            try:
+                                from urllib.parse import urlparse
+                                du = urlparse(download_url)
+                                parts = du.path.strip("/").split("/")
+                                # 格式: owner/repo/tree/branch/path...
+                                if len(parts) > 4 and parts[2] in ("tree", "blob"):
+                                    sub_path = "/".join(parts[4:])
+                            except Exception:
+                                pass
+                        return parsed[0], parsed[1], sub_path
 
     return None
 
@@ -390,6 +412,12 @@ async def install_from_archive(
 
     target_dir = install_dir / item_id
 
+    # 校验 item_id 是否为合法路径组件，防止路径遍历
+    resolved_install = install_dir.resolve()
+    resolved_target = target_dir.resolve()
+    if not resolved_target.is_relative_to(resolved_install):
+        return {"success": False, "error": f"非法的条目 ID: {item_id}"}
+
     try:
         # 如果已存在，先备份
         backup_dir = None
@@ -399,16 +427,33 @@ async def install_from_archive(
                 shutil.rmtree(backup_dir)
             target_dir.rename(backup_dir)
 
-        # 安全解压安装（防止路径遍历攻击）
+        # 安全解压安装（防止路径遍历 + 资源耗尽攻击）
         target_dir.mkdir(parents=True, exist_ok=True)
         resolved_target = target_dir.resolve()
+        MAX_DECOMPRESSED_SIZE = 500 * 1024 * 1024  # 500MB 总解压上限
+        MAX_ENTRY_SIZE = 100 * 1024 * 1024  # 单文件 100MB 上限
+        MAX_ENTRY_COUNT = 10000  # 最大文件数
+        total_size = 0
+        entry_count = 0
         with zipfile.ZipFile(archive_path, "r") as zf:
             for entry in zf.infolist():
+                entry_count += 1
+                if entry_count > MAX_ENTRY_COUNT:
+                    logger.warning(f"[InstallService] Exceeded max entry count ({MAX_ENTRY_COUNT}), skipping rest")
+                    break
                 dest_path = (resolved_target / entry.filename).resolve()
                 # 拒绝绝对路径和父目录遍历
                 if not dest_path.is_relative_to(resolved_target):
                     logger.warning(f"[InstallService] Skipped suspicious entry: {entry.filename}")
                     continue
+                # 检查单文件大小
+                if entry.file_size > MAX_ENTRY_SIZE:
+                    logger.warning(f"[InstallService] Skipped oversized entry: {entry.filename} ({entry.file_size}B)")
+                    continue
+                total_size += entry.file_size
+                if total_size > MAX_DECOMPRESSED_SIZE:
+                    logger.warning(f"[InstallService] Exceeded total decompressed size limit, aborting")
+                    break
                 if entry.is_dir():
                     dest_path.mkdir(parents=True, exist_ok=True)
                 else:

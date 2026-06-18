@@ -147,11 +147,11 @@ function prevStep() {
 }
 
 function startApp() {
-  router.push('/workspace')
+  router.push('/splash')
 }
 
 function skipWizard() {
-  router.push('/workspace')
+  router.push('/splash')
 }
 
 // --- AI Model Step ---

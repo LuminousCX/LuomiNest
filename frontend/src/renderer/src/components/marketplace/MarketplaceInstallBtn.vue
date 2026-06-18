@@ -52,7 +52,7 @@ async function handleInstall() {
     store.startProgressPolling(props.item.id)
   } catch (e: any) {
     error.value = e.message || '安装请求失败'
-    store.setInstallProgress(props.item.id, { status: 'error', progress: 0, error: error.value })
+    store.setInstallProgress(props.item.id, { itemId: props.item.id, status: 'error', progress: 0, error: error.value ?? undefined })
   } finally {
     loading.value = false
   }

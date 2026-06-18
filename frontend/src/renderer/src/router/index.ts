@@ -13,6 +13,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Welcome - LuomiNest', icon: 'Sparkles' }
   },
   {
+    path: '/splash',
+    name: 'Splash',
+    component: () => import('../views/SplashView.vue'),
+    meta: { title: 'Loading - LuomiNest' }
+  },
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/LoginView.vue'),
+    meta: { title: 'Login - LuomiNest' }
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('../views/DashboardView.vue'),

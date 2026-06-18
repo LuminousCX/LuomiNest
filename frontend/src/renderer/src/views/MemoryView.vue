@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import {
   Brain,
   RefreshCw,
@@ -14,7 +13,6 @@ import {
   Edit3,
   Trash2,
   Archive,
-  MessageSquare,
   Calendar,
   Sparkles,
   Activity,
@@ -26,9 +24,7 @@ import {
   Filter,
   Download,
   Upload,
-  Clock,
   ChevronDown,
-  ChevronUp,
   Check,
   AlertCircle,
 } from 'lucide-vue-next'
@@ -36,7 +32,6 @@ import { useMemoryStore, CATEGORY_LABELS, CATEGORY_COLORS, FACT_CATEGORIES } fro
 import type { FactItem, FactCategory } from '../stores/memory'
 import { useToast } from '../composables/useToast'
 
-const router = useRouter()
 const memoryStore = useMemoryStore()
 const toast = useToast()
 
@@ -308,12 +303,6 @@ async function handleAddDaily() {
   }
 }
 
-function chatAboutMemory(text: string) {
-  const event = new CustomEvent('luominest:memory-chat-trigger', { detail: { text } })
-  window.dispatchEvent(event)
-  router.push('/workspace')
-}
-
 const isSaving = ref(false)
 const selectedAgentId = ref<string | null>(null)
 
@@ -416,12 +405,12 @@ const openConfirm = (action: ConfirmAction) => {
   showMenu.value = false
 }
 
-const cancelConfirm = () => {
+let cancelConfirm = () => {
   showConfirm.value = false
   confirmAction.value = null
 }
 
-const executeConfirm = async () => {
+let executeConfirm = async () => {
   if (!confirmAction.value || isProcessing.value) return
   
   isProcessing.value = true
@@ -481,7 +470,7 @@ async function confirmDeletion(title: string, message: string): Promise<boolean>
     const originalExecute = executeConfirm
     const originalCancel = cancelConfirm
     
-    executeConfirm = () => {
+    executeConfirm = async () => {
       executeConfirm = originalExecute
       cancelConfirm = originalCancel
       handleConfirm()
@@ -1036,7 +1025,7 @@ window.addEventListener('click', closeMenu)
 </template>
 
 <script lang="ts">
-function getDailyCount(date: string): number {
+function getDailyCount(_date: string): number {
   return 0
 }
 

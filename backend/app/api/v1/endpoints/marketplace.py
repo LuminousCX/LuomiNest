@@ -85,6 +85,12 @@ async def _do_install(req: InstallRequest):
             _increment_download_count(req.itemId, req.itemType)
     except Exception as e:
         logger.error(f"[MarketplaceAPI] Install failed for {req.itemId}: {e}")
+        # 更新任务状态为失败，防止进度轮询永久返回 queued
+        from app.infrastructure.install.install_service import _active_downloads
+        if req.itemId in _active_downloads:
+            _active_downloads[req.itemId]["status"] = "error"
+            _active_downloads[req.itemId]["message"] = str(e)
+            _active_downloads[req.itemId]["error"] = str(e)
 
 
 @router.post("/install")
@@ -216,28 +222,37 @@ def _get_likes_key(user_id: str = "") -> str:
 
 
 @router.post("/stats/like")
-async def toggle_like(req: LikeRequest):
-    """切换喜欢状态，返回当前是否喜欢及喜欢计数"""
+async def toggle_like(req: LikeRequest) -> dict:
+    """切换喜欢状态，返回当前是否喜欢及喜欢计数（原子操作）"""
     likes_key = _get_likes_key(req.userId)
-    likes_store_data = marketplace_stats_store.get(likes_key) or {}
-    user_likes: set = set(likes_store_data.get("liked_ids", []))
 
-    is_liked = req.itemId in user_likes
-
-    # 原子更新点赞计数
-    def _updater(stats):
+    # 使用单个 mutate 完成点赞状态切换 + 计数更新，避免竞态
+    def _toggle_updater(stats):
         if stats is None:
             stats = {"downloadCount": 0, "likeCount": 0, "type": ""}
         if req.itemType:
             stats["type"] = req.itemType
+        # 确保 likes_key 存在于同一个存储中
+        likes_data = stats.get("__likes__", {})
+        user_likes: set = set(likes_data.get("liked_ids", []))
+        is_liked = req.itemId in user_likes
+
         if is_liked:
+            user_likes.discard(req.itemId)
             stats["likeCount"] = max(0, stats.get("likeCount", 0) - 1)
         else:
+            user_likes.add(req.itemId)
             stats["likeCount"] = stats.get("likeCount", 0) + 1
+
+        stats["__likes__"] = {"liked_ids": list(user_likes)}
         return stats
 
-    stats = marketplace_stats_store.mutate(req.itemId, _updater)
+    stats = marketplace_stats_store.mutate(req.itemId, _toggle_updater)
 
+    # 独立维护按用户的喜欢列表 key（兼容旧查询）
+    likes_store_data = marketplace_stats_store.get(likes_key) or {}
+    user_likes: set = set(likes_store_data.get("liked_ids", []))
+    is_liked = req.itemId in user_likes
     if is_liked:
         user_likes.discard(req.itemId)
     else:

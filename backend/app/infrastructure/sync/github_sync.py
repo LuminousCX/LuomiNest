@@ -264,9 +264,9 @@ def parse_manifest_to_items(manifest: dict, repo_url: str) -> list[dict]:
         if not isinstance(raw, dict):
             continue
         item = ManifestItem(raw)
-        # 补全必要字段（使用确定性哈希，避免 Python hash 随机化）
+        # 补全必要字段（使用确定性哈希，包含仓库信息避免跨源碰撞）
         if not item.id:
-            item.id = f"{item.type}-{hashlib.md5(item.name.encode()).hexdigest()[:6]}"
+            item.id = f"{item.type}-{hashlib.md5((repo_url + item.name).encode()).hexdigest()[:6]}"
         if not item.created_at:
             item.created_at = now
         if not item.updated_at:

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import {
   Github, Cloud, Globe, Plus, Link2, Unlink, RefreshCw,
   ChevronDown, ChevronRight, X, Loader2, Check, AlertCircle,
-  Trash2, Settings2, ExternalLink, Database, Clock,
+  Trash2, ExternalLink, Database, Clock,
 } from 'lucide-vue-next'
 import { useRepoSourceStore } from '../../stores/repo-source'
-import type { RepoSource, RepoSourceType, RepoSubMarket } from '../../types/marketplace'
+import type { RepoSource, RepoSourceType } from '../../types/marketplace'
 
 const store = useRepoSourceStore()
 

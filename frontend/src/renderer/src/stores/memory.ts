@@ -4,9 +4,9 @@ import { useApi } from '../composables/useApi'
 
 export interface MemoryProfile {
   name: string
-  updated_at: string
-  static_facts: string[]
-  dynamic_context: string[]
+  updated_at?: string
+  static_facts?: string[]
+  dynamic_context?: string[]
 }
 
 export interface FactItem {
@@ -30,6 +30,7 @@ export interface KnowledgeSection {
 export interface SummarySections {
   用户画像: string
   偏好设置: string
+  兴趣偏好: string
   兴趣目标: string
   近期状态: string
   事件时间线: string
@@ -76,7 +77,7 @@ export const useMemoryStore = defineStore('memory', () => {
   const knowledgeContent = ref('')
   const knowledgeSections = ref<KnowledgeSection[]>([])
   const summaryContent = ref('')
-  const summarySections = ref<SummarySections>({ 用户画像: '', 偏好设置: '', 兴趣目标: '', 近期状态: '', 事件时间线: '' })
+  const summarySections = ref<SummarySections>({ 用户画像: '', 偏好设置: '', 兴趣偏好: '', 兴趣目标: '', 近期状态: '', 事件时间线: '' })
   const dailyContent = ref('')
   const dailyDate = ref('')
   const dailies = ref<string[]>([])
@@ -166,10 +167,10 @@ export const useMemoryStore = defineStore('memory', () => {
     try {
       const result = await apiGet<{ content: string; sections: SummarySections }>(`/memory/summary${agentQuery(agentId)}`)
       summaryContent.value = result.content || ''
-      summarySections.value = result.sections || { 用户画像: '', 偏好设置: '', 兴趣目标: '', 近期状态: '', 事件时间线: '' }
+      summarySections.value = result.sections || { 用户画像: '', 偏好设置: '', 兴趣偏好: '', 兴趣目标: '', 近期状态: '', 事件时间线: '' }
     } catch {
       summaryContent.value = ''
-      summarySections.value = { 用户画像: '', 偏好设置: '', 兴趣目标: '', 近期状态: '', 事件时间线: '' }
+      summarySections.value = { 用户画像: '', 偏好设置: '', 兴趣偏好: '', 兴趣目标: '', 近期状态: '', 事件时间线: '' }
     }
   }
 
@@ -235,15 +236,10 @@ export const useMemoryStore = defineStore('memory', () => {
     }
   }
 
-  interface ConversationInfo {
-  id: string
-  title: string
-}
-
-const conversationDailies = ref<ConversationInfo[]>([])
-const fetchConversationDailies = async (agentId?: string | null) => {
-  try {
-    const result = await apiGet<{ conversations: ConversationInfo[] }>(`/memory/conversation-dailies${agentQuery(agentId)}`)
+  const conversationDailies = ref<{ id: string; title: string }[]>([])
+  const fetchConversationDailies = async (agentId?: string | null) => {
+    try {
+      const result = await apiGet<{ conversations: { id: string; title: string }[] }>(`/memory/conversation-dailies${agentQuery(agentId)}`)
     conversationDailies.value = result.conversations || []
   } catch {
     conversationDailies.value = []

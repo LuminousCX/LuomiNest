@@ -142,6 +142,7 @@ async function handleInstall() {
   const downloadUrl = item.value.versions?.[0]?.downloadUrl
   if (!downloadUrl) {
     installError.value = '此条目没有可用的下载地址'
+    errorType.value = 'install'
     return
   }
   installLoading.value = true

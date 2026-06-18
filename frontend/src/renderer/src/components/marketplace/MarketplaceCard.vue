@@ -74,11 +74,6 @@ function handleInstall(e: Event) {
   })
 }
 
-function handleFavorite(e: Event) {
-  e.stopPropagation()
-  store.toggleFavorite(props.item.id)
-}
-
 function handleLike(e: Event) {
   e.stopPropagation()
   store.toggleLike(props.item.id, props.item.type)
