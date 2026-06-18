@@ -230,8 +230,8 @@ async def update_repo_source(source_id: str, request: RepoSourceUpdate):
     try:
         from app.infrastructure.sync.github_sync import clear_cache
         clear_cache(source_id=source_id)
-    except ImportError:
-        pass
+    except ImportError as e:
+        logger.warning(f"[API] PATCH /repo-sources/{source_id} - Skip cache clear: {e}")
     logger.success(f"[API] PATCH /repo-sources/{source_id} - Updated")
     return _to_response(source)
 
