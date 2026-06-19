@@ -185,7 +185,7 @@ export const useMemoryStore = defineStore('memory', () => {
     }
   }
 
-  const triggerDistill = async (messages: Array<Record<string, any>>, agentId?: string | null) => {
+  const triggerDistill = async (messages: Array<Record<string, unknown>>, agentId?: string | null) => {
     distilling.value = true
     try {
       await apiPost(`/memory/distill${agentQuery(agentId)}`, { messages })

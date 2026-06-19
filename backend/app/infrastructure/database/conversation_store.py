@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import threading
@@ -326,6 +327,51 @@ class ConversationStore:
         if migrated > 0:
             logger.success(f"[ConvStore] Migrated {migrated} conversations from old store")
         return migrated
+
+
+    # ── Async wrappers (non-blocking for FastAPI async endpoints) ──
+
+    async def get_async(self, conv_id: str) -> dict | None:
+        return await asyncio.to_thread(self.get, conv_id)
+
+    async def set_async(self, conv_id: str, conv: dict):
+        return await asyncio.to_thread(self.set, conv_id, conv)
+
+    async def delete_async(self, conv_id: str):
+        return await asyncio.to_thread(self.delete, conv_id)
+
+    async def list_conversations_async(self, agent_id: str | None = None) -> list[dict]:
+        return await asyncio.to_thread(self.list_conversations, agent_id)
+
+    async def search_conversations_async(self, keyword: str, agent_id: str | None = None) -> list[dict]:
+        return await asyncio.to_thread(self.search_conversations, keyword, agent_id)
+
+    async def soft_delete_async(self, conv_id: str):
+        return await asyncio.to_thread(self.soft_delete, conv_id)
+
+    async def rename_async(self, conv_id: str, new_title: str) -> bool:
+        return await asyncio.to_thread(self.rename, conv_id, new_title)
+
+    async def list_trash_async(self, agent_id: str | None = None) -> list[dict]:
+        return await asyncio.to_thread(self.list_trash, agent_id)
+
+    async def restore_async(self, conv_id: str):
+        return await asyncio.to_thread(self.restore, conv_id)
+
+    async def permanent_delete_async(self, conv_id: str) -> bool:
+        return await asyncio.to_thread(self.permanent_delete, conv_id)
+
+    async def batch_soft_delete_async(self, conv_ids: list[str]):
+        return await asyncio.to_thread(self.batch_soft_delete, conv_ids)
+
+    async def batch_restore_async(self, conv_ids: list[str]):
+        return await asyncio.to_thread(self.batch_restore, conv_ids)
+
+    async def batch_permanent_delete_async(self, conv_ids: list[str]):
+        return await asyncio.to_thread(self.batch_permanent_delete, conv_ids)
+
+    async def empty_trash_async(self, agent_id: str | None = None):
+        return await asyncio.to_thread(self.empty_trash, agent_id)
 
 
 conversation_store = ConversationStore()

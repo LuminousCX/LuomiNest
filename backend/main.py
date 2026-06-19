@@ -22,7 +22,10 @@ def parse_args():
 def main():
     args = parse_args()
     setup_logging()
-    
+
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
     logger.info(f"LuomiNest Backend starting on {args.host}:{args.port}")
     
     try:

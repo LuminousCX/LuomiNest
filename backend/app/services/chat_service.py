@@ -23,9 +23,9 @@ class ChatService:
         self._suggestions = suggestions
 
     @staticmethod
-    def persist_conv(conv_id: str, conv: dict) -> None:
+    async def persist_conv(conv_id: str, conv: dict) -> None:
         conv["updated_at"] = datetime.now(timezone.utc).isoformat()
-        conversation_store.set(conv_id, conv)
+        await conversation_store.set_async(conv_id, conv)
 
     @staticmethod
     def save_user_message(
@@ -281,7 +281,7 @@ class ChatService:
                     if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
                         persist_state["content"] = ""
                     self.save_assistant_message(conv, persist_state, versions=versions)
-                    self.persist_conv(conv_id, conv)
+                    await self.persist_conv(conv_id, conv)
                 except Exception as persist_err:
                     logger.error(f"[STREAM] Persist failed: conv={conv_id}, error={persist_err}")
 

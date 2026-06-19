@@ -3,6 +3,45 @@ import { ref, computed } from 'vue'
 import type { AgentProfile, MainAgentConfig } from '../types'
 import { useApi } from '../composables/useApi'
 
+/** Raw agent object returned by GET /agents */
+interface RawAgent {
+  id: string
+  name: string
+  description?: string
+  avatar?: string
+  color?: string
+  system_prompt?: string
+  systemPrompt?: string
+  model?: string
+  provider?: string
+  capabilities?: string[]
+  is_active?: boolean
+  is_main?: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+/** Raw agent object returned by POST /agents */
+interface RawAgentCreateResponse {
+  id: string
+  name?: string
+  description?: string
+  provider?: string
+  model?: string
+  color?: string
+}
+
+/** Raw main-agent config returned by GET /agents/main-agent/config */
+interface RawMainAgentConfig {
+  provider?: string
+  model?: string
+  systemPrompt?: string
+  system_prompt?: string
+  temperature?: number
+  maxTokens?: number
+  max_tokens?: number
+}
+
 export const useAgentStore = defineStore('agent', () => {
   const { apiGet, apiPost, apiPatch, apiDelete } = useApi()
 
@@ -22,7 +61,7 @@ export const useAgentStore = defineStore('agent', () => {
   const fetchAgents = async () => {
     loading.value = true
     try {
-      const data = await apiGet<any[]>('/agents')
+      const data = await apiGet<RawAgent[]>('/agents')
       agents.value = data
         .filter(a => !a.is_main)
         .map(a => ({
@@ -59,7 +98,7 @@ export const useAgentStore = defineStore('agent', () => {
     color?: string
     capabilities?: string[]
   }) => {
-    const result = await apiPost<any>('/agents', {
+    const result = await apiPost<RawAgentCreateResponse>('/agents', {
       name: agent.name,
       description: agent.description || '',
       system_prompt: agent.systemPrompt || '',
@@ -77,7 +116,7 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   const updateAgent = async (agentId: string, updates: Partial<AgentProfile>) => {
-    const body: any = {}
+    const body: Record<string, unknown> = {}
     if (updates.name !== undefined) body.name = updates.name
     if (updates.description !== undefined) body.description = updates.description
     if (updates.systemPrompt !== undefined) body.system_prompt = updates.systemPrompt
@@ -112,7 +151,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   const fetchMainAgentConfig = async () => {
     try {
-      const result = await apiGet<any>('/agents/main-agent/config')
+      const result = await apiGet<RawMainAgentConfig>('/agents/main-agent/config')
       mainAgentConfig.value = {
         provider: result.provider || '',
         model: result.model || '',
@@ -126,14 +165,14 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   const updateMainAgentConfig = async (updates: Partial<MainAgentConfig>) => {
-    const body: any = {}
+    const body: Record<string, unknown> = {}
     if (updates.provider !== undefined) body.provider = updates.provider
     if (updates.model !== undefined) body.model = updates.model
     if (updates.systemPrompt !== undefined) body.systemPrompt = updates.systemPrompt
     if (updates.temperature !== undefined) body.temperature = updates.temperature
     if (updates.maxTokens !== undefined) body.maxTokens = updates.maxTokens
 
-    const result = await apiPatch<any>('/agents/main-agent/config', body)
+    const result = await apiPatch<RawMainAgentConfig>('/agents/main-agent/config', body)
     mainAgentConfig.value = {
       provider: result.provider || '',
       model: result.model || '',

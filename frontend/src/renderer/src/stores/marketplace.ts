@@ -467,14 +467,6 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
 
   const uninstallItem = (itemId: string) => {
     cancelledInstalls.add(itemId)
-    const current = installProgress.value[itemId]
-    if (current) {
-      for (const intervalId of activeIntervals) {
-        if ((current as any)._intervalId === intervalId) {
-          cleanupInterval(intervalId)
-        }
-      }
-    }
     removeProgress(itemId)
 
     const updateUninstalledItem = (items: MarketplaceItem[]) => {

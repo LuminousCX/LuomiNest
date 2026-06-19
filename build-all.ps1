@@ -173,7 +173,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip --quiet
 pip install pyinstaller --quiet
-pip install -e '.[dev]' --quiet 2>/dev/null || pip install -e . --quiet
+pip install -e '.[dev,voice]' --quiet 2>/dev/null || pip install -e '.[voice]' --quiet
 pyinstaller luominest-backend.spec --clean --noconfirm
 
 echo "Copying Linux backend to frontend resources..."

@@ -86,7 +86,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       const api = useApi()
       const data = await api.apiGet<RepoSource[]>('/repo-sources')
       sources.value = data
-    } catch (e: any) {
+    } catch (e: unknown) {
       error.value = e.message
       sources.value = getDefaultSources()
     } finally {
@@ -109,7 +109,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       if (idx >= 0) {
         sources.value[idx] = updated
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       error.value = e?.message || '操作失败'
     }
   }
@@ -122,7 +122,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       if (idx >= 0) {
         sources.value[idx] = updated
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       error.value = e?.message || '操作失败'
     }
   }
@@ -135,7 +135,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       if (idx >= 0) {
         sources.value[idx] = updated
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       error.value = e?.message || '操作失败'
     }
   }
@@ -156,7 +156,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
 
       // 同步完成后获取条目
       await fetchSourceItems(sourceId)
-    } catch (e: any) {
+    } catch (e: unknown) {
       error.value = e.message
       const idx = sources.value.findIndex(s => s.id === sourceId)
       if (idx >= 0) {
@@ -176,7 +176,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       // 更新该来源的条目缓存
       await fetchSourceItems(sourceId)
       return result
-    } catch (e: any) {
+    } catch (e: unknown) {
       error.value = e.message
       return null
     }
@@ -190,7 +190,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       const api = useApi()
       const result = await api.apiGet<SyncedItemsResult>(`/repo-sources/${sourceId}/items`)
       syncedItems.value = { ...syncedItems.value, [sourceId]: result.items || [] }
-    } catch (e: any) {
+    } catch (e: unknown) {
       // 静默失败，不影响用户体验
       console.warn('[RepoSource] Failed to fetch source items:', e.message)
     }
@@ -204,7 +204,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       const api = useApi()
       const result = await api.apiGet<SyncedItemsResult>(`/repo-sources/${sourceId}/items?type=${type}`)
       return result.items || []
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.warn('[RepoSource] Failed to fetch source items by type:', e.message)
       return []
     }
@@ -221,7 +221,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       const newSynced = { ...syncedItems.value }
       delete newSynced[sourceId]
       syncedItems.value = newSynced
-    } catch (e: any) {
+    } catch (e: unknown) {
       error.value = e.message
     }
   }
@@ -239,7 +239,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       })
       sources.value.push(created)
       return created
-    } catch (e: any) {
+    } catch (e: unknown) {
       error.value = e.message
       return null
     }
@@ -258,7 +258,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         activeSourceId.value = sources.value[0]?.id || ''
         saveActiveSourceId(activeSourceId.value)
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       error.value = e.message
     }
   }

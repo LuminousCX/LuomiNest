@@ -295,7 +295,7 @@ async def list_memory_agents():
                 continue
             if not (d / "memory.json").exists():
                 continue
-            agent = agents_store.get(d.name)
+            agent = await agents_store.get_async(d.name)
             name = agent.get("name", d.name) if agent else d.name
             entry = {"id": d.name, "name": name}
             try:

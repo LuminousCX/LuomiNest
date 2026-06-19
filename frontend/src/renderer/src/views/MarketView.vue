@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Puzzle, Sparkles, SlidersHorizontal, X, Package, Bot, Database } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
@@ -59,6 +59,10 @@ onMounted(async () => {
   await store.syncInstallStatus()
   // 从后端同步统计数据（下载计数、喜欢计数、排行榜）
   await store.syncAllStats()
+})
+
+onUnmounted(() => {
+  store.cleanup()
 })
 
 const categories = computed(() => store.getCategories(activeTab.value))

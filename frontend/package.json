@@ -134,7 +134,6 @@
       "runAfterFinish": true,
       "menuCategory": true,
       "displayLanguageSelector": true,
-      "installerSidebarImage": "",
       "uninstallDisplayName": "LuomiNest",
       "installerHeaderIcon": "resources/icon.ico",
       "unicode": true

@@ -153,7 +153,7 @@ def _to_response(source: dict) -> RepoSourceResponse:
 @router.get("", response_model=list[RepoSourceResponse])
 async def list_repo_sources():
     logger.info("[API] GET /repo-sources - Listing all repo sources")
-    sources = repo_sources_store.all()
+    sources = await repo_sources_store.all_async()
     return [_to_response(s) for s in sources]
 
 
@@ -186,7 +186,7 @@ async def create_repo_source(request: RepoSourceCreate):
         "created_at": now,
         "updated_at": now,
     }
-    repo_sources_store.set(source_id, source)
+    await repo_sources_store.set_async(source_id, source)
     logger.success(f"[API] POST /repo-sources - Created: id={source_id}")
     return _to_response(source)
 
@@ -194,7 +194,7 @@ async def create_repo_source(request: RepoSourceCreate):
 @router.get("/{source_id}", response_model=RepoSourceResponse)
 async def get_repo_source(source_id: str):
     logger.info(f"[API] GET /repo-sources/{source_id}")
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
     return _to_response(source)
@@ -203,7 +203,7 @@ async def get_repo_source(source_id: str):
 @router.patch("/{source_id}", response_model=RepoSourceResponse)
 async def update_repo_source(source_id: str, request: RepoSourceUpdate):
     logger.info(f"[API] PATCH /repo-sources/{source_id}")
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
 
@@ -225,7 +225,7 @@ async def update_repo_source(source_id: str, request: RepoSourceUpdate):
         ]
     source.update(update_data)
     source["updated_at"] = datetime.now(timezone.utc).isoformat()
-    repo_sources_store.set(source_id, source)
+    await repo_sources_store.set_async(source_id, source)
     # 清除该来源的同步缓存，防止子市场 URL 变更后返回旧数据
     try:
         from app.infrastructure.sync.github_sync import clear_cache
@@ -239,10 +239,10 @@ async def update_repo_source(source_id: str, request: RepoSourceUpdate):
 @router.delete("/{source_id}")
 async def delete_repo_source(source_id: str):
     logger.info(f"[API] DELETE /repo-sources/{source_id}")
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
-    repo_sources_store.delete(source_id)
+    await repo_sources_store.delete_async(source_id)
     logger.success(f"[API] DELETE /repo-sources/{source_id} - Deleted")
     return {"error": None, "data": {"deleted": True}}
 
@@ -250,12 +250,12 @@ async def delete_repo_source(source_id: str):
 @router.post("/{source_id}/toggle", response_model=RepoSourceResponse)
 async def toggle_repo_source(source_id: str):
     logger.info(f"[API] POST /repo-sources/{source_id}/toggle")
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
     source["enabled"] = not source.get("enabled", True)
     source["updated_at"] = datetime.now(timezone.utc).isoformat()
-    repo_sources_store.set(source_id, source)
+    await repo_sources_store.set_async(source_id, source)
     logger.success(f"[API] POST /repo-sources/{source_id}/toggle - enabled={source['enabled']}")
     return _to_response(source)
 
@@ -263,7 +263,7 @@ async def toggle_repo_source(source_id: str):
 @router.patch("/{source_id}/sub-markets/{sub_market_id}/unlink")
 async def unlink_sub_market(source_id: str, sub_market_id: str):
     logger.info(f"[API] PATCH /repo-sources/{source_id}/sub-markets/{sub_market_id}/unlink")
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
 
@@ -279,7 +279,7 @@ async def unlink_sub_market(source_id: str, sub_market_id: str):
 
     source["sub_markets"] = sub_markets
     source["updated_at"] = datetime.now(timezone.utc).isoformat()
-    repo_sources_store.set(source_id, source)
+    await repo_sources_store.set_async(source_id, source)
     logger.success(f"[API] Unlinked sub-market {sub_market_id}")
     return _to_response(source)
 
@@ -287,7 +287,7 @@ async def unlink_sub_market(source_id: str, sub_market_id: str):
 @router.patch("/{source_id}/sub-markets/{sub_market_id}/link")
 async def link_sub_market(source_id: str, sub_market_id: str):
     logger.info(f"[API] PATCH /repo-sources/{source_id}/sub-markets/{sub_market_id}/link")
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
 
@@ -303,7 +303,7 @@ async def link_sub_market(source_id: str, sub_market_id: str):
 
     source["sub_markets"] = sub_markets
     source["updated_at"] = datetime.now(timezone.utc).isoformat()
-    repo_sources_store.set(source_id, source)
+    await repo_sources_store.set_async(source_id, source)
     logger.success(f"[API] Linked sub-market {sub_market_id}")
     return _to_response(source)
 
@@ -311,13 +311,13 @@ async def link_sub_market(source_id: str, sub_market_id: str):
 @router.post("/{source_id}/sync", response_model=RepoSourceResponse)
 async def sync_repo_source(source_id: str, force: bool = False):
     logger.info(f"[API] POST /repo-sources/{source_id}/sync")
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
 
     source["status"] = "loading"
     source["error_message"] = ""
-    repo_sources_store.set(source_id, source)
+    await repo_sources_store.set_async(source_id, source)
 
     try:
         from app.infrastructure.sync.github_sync import sync_source
@@ -339,12 +339,12 @@ async def sync_repo_source(source_id: str, force: bool = False):
 
         source["last_synced_at"] = datetime.now(timezone.utc).isoformat()
         source["updated_at"] = datetime.now(timezone.utc).isoformat()
-        repo_sources_store.set(source_id, source)
+        await repo_sources_store.set_async(source_id, source)
         logger.success(f"[API] POST /repo-sources/{source_id}/sync - Success ({len(results)} sub-markets)")
     except Exception as e:
         source["status"] = "error"
         source["error_message"] = str(e)
-        repo_sources_store.set(source_id, source)
+        await repo_sources_store.set_async(source_id, source)
         logger.error(f"[API] POST /repo-sources/{source_id}/sync - Error: {e}")
 
     return _to_response(source)
@@ -354,7 +354,7 @@ async def sync_repo_source(source_id: str, force: bool = False):
 async def sync_sub_market(source_id: str, sub_market_id: str, force: bool = False):
     """同步单个子市场"""
     logger.info(f"[API] POST /repo-sources/{source_id}/sub-markets/{sub_market_id}/sync")
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
 
@@ -379,7 +379,7 @@ async def sync_sub_market(source_id: str, sub_market_id: str, force: bool = Fals
 async def get_source_items(source_id: str, type: Optional[str] = None):
     """获取仓库来源下的所有已缓存市场条目"""
     logger.info(f"[API] GET /repo-sources/{source_id}/items")
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
 
@@ -396,7 +396,7 @@ async def get_source_items(source_id: str, type: Optional[str] = None):
 @router.get("/{source_id}/sub-markets/{sub_market_id}/items")
 async def get_sub_market_items(source_id: str, sub_market_id: str):
     """获取子市场下的已缓存市场条目"""
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
 
@@ -410,7 +410,7 @@ async def get_sub_market_items(source_id: str, sub_market_id: str):
 @router.delete("/{source_id}/cache")
 async def clear_source_cache(source_id: str, sub_market_id: Optional[str] = None):
     """清除仓库来源的缓存"""
-    source = repo_sources_store.get(source_id)
+    source = await repo_sources_store.get_async(source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
 

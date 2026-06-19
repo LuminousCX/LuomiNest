@@ -49,6 +49,12 @@ hidden_imports = [
     'passlib',
     'passlib.handlers',
     'passlib.handlers.bcrypt',
+    'edge_tts',
+    'edge_tts.voice',
+    'edge_tts.list_voices',
+    'pyttsx3',
+    'pyttsx3.drivers',
+    'pyttsx3.drivers.sapi5',
 ]
 
 if is_linux:

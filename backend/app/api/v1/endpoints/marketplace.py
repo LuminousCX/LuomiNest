@@ -82,7 +82,7 @@ async def _do_install(req: InstallRequest):
         )
         # 仅在安装成功后增加下载计数
         if result.get("status") == "installed":
-            _increment_download_count(req.itemId, req.itemType)
+            await _increment_download_count(req.itemId, req.itemType)
     except Exception as e:
         logger.error(f"[MarketplaceAPI] Install failed for {req.itemId}: {e}")
         # 更新任务状态为失败，防止进度轮询永久返回 queued
@@ -187,17 +187,17 @@ async def list_installed_items(
 # ─── 统计功能 ───────────────────────────────────────────────
 
 
-def _get_item_stats(item_id: str) -> dict:
+async def _get_item_stats(item_id: str) -> dict:
     """获取单个条目的统计数据，不存在则初始化"""
-    stats = marketplace_stats_store.get(item_id)
+    stats = await marketplace_stats_store.get_async(item_id)
     if stats is None:
         stats = {"downloadCount": 0, "likeCount": 0, "type": ""}
-        marketplace_stats_store.set(item_id, stats)
+        await marketplace_stats_store.set_async(item_id, stats)
     return stats
 
 
-def _increment_download_count(item_id: str, item_type: str):
-    """增加下载计数（原子操作，由 JsonStore.mutate 锁保护）"""
+async def _increment_download_count(item_id: str, item_type: str):
+    """增加下载计数（原子操作，由 JsonStore.mutate_async 锁保护）"""
     def _updater(stats):
         if stats is None:
             stats = {"downloadCount": 0, "likeCount": 0, "type": ""}
@@ -206,7 +206,7 @@ def _increment_download_count(item_id: str, item_type: str):
             stats["type"] = item_type
         return stats
 
-    stats = marketplace_stats_store.mutate(item_id, _updater)
+    stats = await marketplace_stats_store.mutate_async(item_id, _updater)
     logger.info(f"[MarketplaceStats] Download count incremented: {item_id} -> {stats['downloadCount']}")
 
 
@@ -247,17 +247,17 @@ async def toggle_like(req: LikeRequest) -> dict:
         stats["__likes__"] = {"liked_ids": list(user_likes)}
         return stats
 
-    stats = marketplace_stats_store.mutate(req.itemId, _toggle_updater)
+    stats = await marketplace_stats_store.mutate_async(req.itemId, _toggle_updater)
 
     # 独立维护按用户的喜欢列表 key（兼容旧查询）
-    likes_store_data = marketplace_stats_store.get(likes_key) or {}
+    likes_store_data = await marketplace_stats_store.get_async(likes_key) or {}
     user_likes: set = set(likes_store_data.get("liked_ids", []))
     is_liked = req.itemId in user_likes
     if is_liked:
         user_likes.discard(req.itemId)
     else:
         user_likes.add(req.itemId)
-    marketplace_stats_store.set(likes_key, {"liked_ids": list(user_likes)})
+    await marketplace_stats_store.set_async(likes_key, {"liked_ids": list(user_likes)})
 
     return {
         "itemId": req.itemId,
@@ -269,9 +269,9 @@ async def toggle_like(req: LikeRequest) -> dict:
 @router.get("/stats/{item_id}")
 async def get_item_stats(item_id: str, userId: str = ""):
     """获取单个条目的统计数据"""
-    stats = _get_item_stats(item_id)
+    stats = await _get_item_stats(item_id)
     likes_key = _get_likes_key(userId)
-    likes_store_data = marketplace_stats_store.get(likes_key) or {}
+    likes_store_data = await marketplace_stats_store.get_async(likes_key) or {}
     user_likes: set = set(likes_store_data.get("liked_ids", []))
     return {
         "itemId": item_id,
@@ -287,9 +287,9 @@ async def get_all_stats(
     userId: str = "",
 ):
     """获取所有条目的统计数据"""
-    all_stats = marketplace_stats_store.list_all()
+    all_stats = await marketplace_stats_store.list_all_async()
     likes_key = _get_likes_key(userId)
-    likes_store_data = marketplace_stats_store.get(likes_key) or {}
+    likes_store_data = await marketplace_stats_store.get_async(likes_key) or {}
     user_likes: set = set(likes_store_data.get("liked_ids", []))
     result = []
     for item_id, stats in all_stats.items():
@@ -317,7 +317,7 @@ async def get_leaderboard(
     获取排行榜，基于下载次数和喜欢次数综合排序。
     composite = downloadCount * 1 + likeCount * 3 (喜欢权重更高)
     """
-    all_stats = marketplace_stats_store.list_all()
+    all_stats = await marketplace_stats_store.list_all_async()
     items = []
     for item_id, stats in all_stats.items():
         if item_id.startswith("__"):

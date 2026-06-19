@@ -207,7 +207,7 @@ const reasonerModelConfig = ref({
 const ttsConfigForm = ref({
   provider: '',
   model: 'tts-1',
-  voice: 'alloy',
+  voice: 'zh-CN-XiaoxiaoNeural',
   speed: 1.0,
 })
 
@@ -521,7 +521,7 @@ onMounted(async () => {
   const tts = modelStore.ttsConfig
   ttsConfigForm.value.provider = tts.provider || ''
   ttsConfigForm.value.model = tts.model || 'tts-1'
-  ttsConfigForm.value.voice = tts.voice || 'alloy'
+  ttsConfigForm.value.voice = tts.voice || 'zh-CN-XiaoxiaoNeural'
   ttsConfigForm.value.speed = tts.speed ?? 1.0
 
   const stt = modelStore.sttConfig
@@ -878,11 +878,11 @@ onMounted(async () => {
               <div class="voice-grid">
                 <button
                   v-for="voice in modelStore.TTS_VOICES"
-                  :key="voice"
-                  :class="['voice-btn', { active: ttsConfigForm.voice === voice }]"
-                  @click="ttsConfigForm.voice = voice"
+                  :key="voice.value"
+                  :class="['voice-btn', { active: ttsConfigForm.voice === voice.value }]"
+                  @click="ttsConfigForm.voice = voice.value"
                 >
-                  {{ voice }}
+                  {{ voice.label }}
                 </button>
               </div>
             </div>

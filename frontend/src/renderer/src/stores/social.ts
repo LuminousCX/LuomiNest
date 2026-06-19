@@ -8,11 +8,17 @@ import type {
   CollaborationPhase,
   CollaborationSubTask,
   CollaborationEvent,
+  SearchResult,
 } from '../types'
 import { useApi } from '../composables/useApi'
 
 export const useSocialStore = defineStore('social', () => {
   const { apiGet, apiPost, apiDelete, apiSseStream } = useApi()
+
+  interface StreamEvent {
+    type: string
+    data: Record<string, unknown>
+  }
 
   const groups = ref<GroupInfo[]>([])
   const currentGroup = ref<GroupInfo | null>(null)
@@ -86,7 +92,7 @@ export const useSocialStore = defineStore('social', () => {
       await apiSseStream(
         `/social/groups/${groupId}/messages`,
         { content, sender_id: 'user' },
-        (event: { type?: string; data?: Record<string, unknown> }) => _handleMessageEvent(event as any),
+        (event: { type?: string; data?: Record<string, unknown> }) => _handleMessageEvent({ type: event.type || 'unknown', data: event.data || {} }),
         async () => {},
         (err: string) => console.error('Failed to send message:', err),
       )
@@ -97,7 +103,7 @@ export const useSocialStore = defineStore('social', () => {
     }
   }
 
-  const _handleMessageEvent = (event: any) => {
+  const _handleMessageEvent = (event: StreamEvent) => {
     switch (event.type) {
       case 'user_message': {
         const msg = _validateMessageData(event.data)
@@ -151,14 +157,14 @@ export const useSocialStore = defineStore('social', () => {
     try {
       const response = await apiGet<{ data: { messages: GroupMessage[] } }>(`/social/groups/${groupId}`)
       if (response.data?.messages) {
-        groupMessages.value = response.data.messages.map((msg: any) => _normalizeMessage(msg))
+        groupMessages.value = response.data.messages.map((msg) => _normalizeMessage(msg))
       }
     } catch {
       groupMessages.value = []
     }
   }
 
-  const _normalizeMessage = (msg: any): GroupMessage => {
+  const _normalizeMessage = (msg: Record<string, unknown>): GroupMessage => {
     return {
       id: msg.id || msg.message_id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       groupId: msg.groupId || msg.group_id || currentGroup.value?.id || '',
@@ -172,7 +178,7 @@ export const useSocialStore = defineStore('social', () => {
     }
   }
 
-  const _validateMessageData = (data: any): GroupMessage | null => {
+  const _validateMessageData = (data: Record<string, unknown>): GroupMessage | null => {
     if (!data || typeof data !== 'object') return null
     const content = data.content ?? data.Content
     if (typeof content !== 'string' || !content.trim()) return null
@@ -392,7 +398,7 @@ export const useSocialStore = defineStore('social', () => {
     collaborationSessionId.value = null
   }
 
-  const indexRAGContent = async (content: string, source: string, metadata?: Record<string, any>) => {
+  const indexRAGContent = async (content: string, source: string, metadata?: Record<string, unknown>) => {
     const response = await apiPost<{ data: { indexed_chunks: number } }>('/social/rag/index', {
       content,
       source,
@@ -402,7 +408,7 @@ export const useSocialStore = defineStore('social', () => {
   }
 
   const searchRAG = async (query: string, topK?: number) => {
-    const response = await apiPost<{ data: any[] }>('/social/rag/search', {
+    const response = await apiPost<{ data: SearchResult[] }>('/social/rag/search', {
       query,
       top_k: topK || 5,
     })

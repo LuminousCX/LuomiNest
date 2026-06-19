@@ -40,6 +40,7 @@ dependencies = [
     "tzdata>=2024.1",
     "pymupdf>=1.24.0",
     "python-docx>=1.1.0",
+    "edge-tts>=6.1.18",
 ]
 
 [project.optional-dependencies]
@@ -53,9 +54,9 @@ dev = [
 ]
 voice = [
     "whisper-cpp-python>=0.2.5",
-    "edge-tts>=6.1.18",
     "soundfile>=0.12.1",
     "pyaudio>=0.2.14",
+    "pyttsx3>=2.90",
 ]
 render = [
     "cubism-live2d-core>=0.1.0",

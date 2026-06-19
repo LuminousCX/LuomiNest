@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     EXTERNAL_PARSE_API_URL: str = ""
     FILE_MAX_SIZE: int = 100 * 1024 * 1024
 
+    TTS_PROXY: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

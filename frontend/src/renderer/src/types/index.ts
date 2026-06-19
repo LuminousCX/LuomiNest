@@ -195,7 +195,7 @@ export interface SearchResult {
   content: string
   source: string
   score: number
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 export interface ExecutionStep {
@@ -264,12 +264,20 @@ export interface STTConfig {
   apiKeySet?: boolean
 }
 
+export interface GroupMember {
+  agent_id: string
+  name: string
+  type: string
+  role: string
+  color: string
+}
+
 export interface GroupInfo {
   id: string
   name: string
   description: string
   type: string
-  members: any[]
+  members: GroupMember[]
   memberCount: number
   aiCount: number
   lastMessage?: string
@@ -325,7 +333,7 @@ export interface CollaborationSubTask {
 
 export interface CollaborationEvent {
   type: string
-  data: any
+  data: unknown
 }
 
 export interface ProviderLogo {
@@ -380,8 +388,8 @@ export interface PlatformAdapterType {
   description: string
   icon: string
   category: string
-  configTemplate: Record<string, any>
-  configMetadata: Record<string, any>
+  configTemplate: Record<string, unknown>
+  configMetadata: Record<string, unknown>
   supportStreaming: boolean
   supportProactive: boolean
 }
@@ -390,7 +398,7 @@ export interface PlatformInstance {
   id: string
   adapterType: string
   name: string
-  config: Record<string, any>
+  config: Record<string, unknown>
   status: 'pending' | 'running' | 'stopped' | 'error'
   enable: boolean
   messageCount: number
@@ -427,7 +435,7 @@ export interface PlatformLogEntry {
   message: string
   instanceId: string
   adapterType: string
-  details: Record<string, any>
+  details: Record<string, unknown>
 }
 
 export interface PlatformLogResult {

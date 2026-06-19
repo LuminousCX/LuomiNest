@@ -4,9 +4,9 @@ import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig
 import { useApi } from '../composables/useApi'
 import { PROVIDER_LOGOS } from '../config/provider-logos'
 
-const unwrapData = <T>(result: any): T => {
-  if (result && typeof result === 'object' && 'data' in result) {
-    return result.data as T
+const unwrapData = <T>(result: T | { data: T }): T => {
+  if (typeof result === 'object' && result !== null && 'data' in result) {
+    return (result as { data: T }).data
   }
   return result as T
 }
@@ -238,7 +238,84 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
   },
 ]
 
-const TTS_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const
+interface RawProvider {
+  id: string
+  name: string
+  type?: string
+  vendor?: string
+  baseUrl?: string
+  base_url?: string
+  apiKeySet?: boolean
+  api_key_set?: boolean
+  defaultModel?: string
+  default_model?: string
+  isDefault?: boolean
+  is_default?: boolean
+  models?: unknown[]
+}
+
+interface RawTemplate {
+  id: string
+  name: string
+  vendor?: string
+  baseUrl?: string
+  base_url?: string
+  defaultModel?: string
+  default_model?: string
+  description?: string
+}
+
+interface RawModelConfig {
+  defaultProvider?: string
+  default_provider?: string
+  defaultModel?: string
+  default_model?: string
+  defaultTemperature?: number
+  default_temperature?: number
+  defaultMaxTokens?: number
+  default_max_tokens?: number
+  defaultTopP?: number
+  default_top_p?: number
+  reasonerProvider?: string
+  reasoner_provider?: string
+  reasonerModel?: string
+  reasoner_model?: string
+  reasonerTemperature?: number
+  reasoner_temperature?: number
+  reasonerMaxTokens?: number
+  reasoner_max_tokens?: number
+  reasonerEffort?: string
+  reasoner_effort?: string
+  ttsProvider?: string
+  tts_provider?: string
+  ttsModel?: string
+  tts_model?: string
+  ttsVoice?: string
+  tts_voice?: string
+  ttsSpeed?: number
+  tts_speed?: number
+  sttProvider?: string
+  stt_provider?: string
+  sttModel?: string
+  stt_model?: string
+  sttLanguage?: string
+  stt_language?: string
+  sttAutoSend?: boolean
+  stt_auto_send?: boolean
+  sttAutoSendDelay?: number
+  stt_auto_send_delay?: number
+}
+
+const TTS_VOICES = [
+  { value: 'zh-CN-XiaoxiaoNeural', label: '晓晓（女·温柔）' },
+  { value: 'zh-CN-YunxiNeural', label: '云希（男·阳光）' },
+  { value: 'zh-CN-YunjianNeural', label: '云健（男·沉稳）' },
+  { value: 'zh-CN-XiaoyiNeural', label: '晓艺（女·活泼）' },
+  { value: 'en-US-JennyNeural', label: 'Jenny（EN·Female）' },
+  { value: 'en-US-GuyNeural', label: 'Guy（EN·Male）' },
+  { value: 'ja-JP-NanamiNeural', label: '七海（JA·Female）' },
+  { value: 'ja-JP-KeitaNeural', label: '圭太（JA·Male）' },
+] as const
 const STT_LANGUAGES = [
   { value: 'zh-CN', label: '中文（简体）' },
   { value: 'zh-TW', label: '中文（繁体）' },
@@ -265,7 +342,7 @@ export const useModelStore = defineStore('model', () => {
   const ttsConfig = ref<TTSConfig>({
     provider: '',
     model: 'tts-1',
-    voice: 'alloy',
+    voice: 'zh-CN-XiaoxiaoNeural',
     speed: 1.0,
     baseUrl: '',
     apiKeySet: false,
@@ -353,7 +430,7 @@ export const useModelStore = defineStore('model', () => {
   const fetchProviders = async () => {
     loading.value = true
     try {
-      const result = await apiGet<any[]>('/models/providers')
+      const result = await apiGet<RawProvider[]>('/models/providers')
       const raw = Array.isArray(result) ? result : []
       providers.value = raw.map(p => ({
         id: p.id,
@@ -381,7 +458,7 @@ export const useModelStore = defineStore('model', () => {
 
   const fetchTemplates = async () => {
     try {
-      const result = await apiGet<any[]>('/models/providers/templates')
+      const result = await apiGet<RawTemplate[]>('/models/providers/templates')
       const raw = Array.isArray(result) ? result : []
       templates.value = raw.map(t => {
         const local = LOCAL_TEMPLATES.find(lt => lt.id === t.id)
@@ -463,8 +540,8 @@ export const useModelStore = defineStore('model', () => {
 
   const fetchModelConfig = async () => {
     try {
-      const result = await apiGet<any>('/models/config')
-      const config = unwrapData<any>(result)
+      const result = await apiGet<RawModelConfig>('/models/config')
+      const config = unwrapData<RawModelConfig>(result)
       if (config) {
         modelConfig.value = {
           defaultProvider: config.defaultProvider || config.default_provider || '',
@@ -479,7 +556,7 @@ export const useModelStore = defineStore('model', () => {
           reasonerEffort: config.reasonerEffort || config.reasoner_effort,
           ttsProvider: config.ttsProvider || config.tts_provider,
           ttsModel: config.ttsModel || config.tts_model || 'tts-1',
-          ttsVoice: config.ttsVoice || config.tts_voice || 'alloy',
+          ttsVoice: config.ttsVoice || config.tts_voice || 'zh-CN-XiaoxiaoNeural',
           ttsSpeed: config.ttsSpeed ?? config.tts_speed ?? 1.0,
           sttProvider: config.sttProvider || config.stt_provider,
           sttModel: config.sttModel || config.stt_model || 'whisper-1',
@@ -499,7 +576,7 @@ export const useModelStore = defineStore('model', () => {
   const updateModelConfig = async (config: Partial<ModelConfig>) => {
     saveStatus.value = 'saving'
     try {
-      const body: any = {}
+      const body: Record<string, unknown> = {}
       if (config.defaultProvider !== undefined) body.provider = config.defaultProvider
       if (config.defaultModel !== undefined) body.model = config.defaultModel
       if (config.defaultTemperature !== undefined) body.temperature = config.defaultTemperature
@@ -555,7 +632,7 @@ export const useModelStore = defineStore('model', () => {
         ttsConfig.value = {
           provider: saved.provider || modelConfig.value.ttsProvider || '',
           model: saved.model || modelConfig.value.ttsModel || 'tts-1',
-          voice: saved.voice || modelConfig.value.ttsVoice || 'alloy',
+          voice: saved.voice || modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
           speed: saved.speed ?? modelConfig.value.ttsSpeed ?? 1.0,
           baseUrl: saved.baseUrl || '',
           apiKeySet: false,
@@ -564,7 +641,7 @@ export const useModelStore = defineStore('model', () => {
         ttsConfig.value = {
           provider: modelConfig.value.ttsProvider || '',
           model: modelConfig.value.ttsModel || 'tts-1',
-          voice: modelConfig.value.ttsVoice || 'alloy',
+          voice: modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
           speed: modelConfig.value.ttsSpeed ?? 1.0,
           baseUrl: '',
           apiKeySet: false,

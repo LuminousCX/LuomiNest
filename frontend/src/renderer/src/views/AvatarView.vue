@@ -4,9 +4,10 @@ import {
   Palette, Sparkles, Heart, Eye, Smile, Frown, Meh, Zap,
   Volume2, RotateCcw, Maximize2, Download, Settings2,
   Loader2, AlertCircle, FolderOpen, Check, Monitor, MonitorOff,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Send, Mic, Square, Type
 } from 'lucide-vue-next'
 import { useLuomiNestLive2D } from '@/composables/useLuomiNestLive2D'
+import { useAvatarTTS } from '@/composables/useAvatarTTS'
 import { useAvatarControlStore } from '@/stores/avatar-control'
 import { LUOMINEST_BUILTIN_MODELS, type LuomiNestModelInfo } from '@/config/luominest-models'
 import type { PetModelInfo } from '../vite-env.d'
@@ -20,9 +21,31 @@ const {
   error: loadError,
   loadModel,
   driveEmotion,
+  syncLipParam,
   resetPose,
   destroy: teardown
 } = useLuomiNestLive2D(canvasRef)
+
+const ttsText = ref('')
+const subtitleEnabled = ref(true)
+
+const {
+  isSpeaking: isAvatarSpeaking,
+  isSynthesizing: isAvatarSynthesizing,
+  error: ttsError,
+  subtitleText,
+  subtitleVisible,
+  speak: avatarSpeak,
+  stopSpeaking: avatarStopSpeaking,
+} = useAvatarTTS({
+  syncLipParam: (value: number) => {
+    if (isDesktopMode.value) {
+      avatarControl.driveLipSync(value)
+    } else {
+      syncLipParam(value)
+    }
+  },
+})
 
 const importError = ref<string | null>(null)
 const importedModels = ref<LuomiNestModelInfo[]>([])
@@ -188,6 +211,27 @@ async function switchToInlineMode() {
   }
 }
 
+async function handleTTSSend() {
+  const text = ttsText.value.trim()
+  if (!text) return
+  if (isAvatarSpeaking.value) {
+    avatarStopSpeaking()
+    return
+  }
+  await avatarSpeak(text)
+}
+
+function handleTTSKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    handleTTSSend()
+  }
+}
+
+function toggleSubtitle() {
+  subtitleEnabled.value = !subtitleEnabled.value
+}
+
 function toggleSkinSidebar() {
   skinSidebarVisible.value = !skinSidebarVisible.value
 }
@@ -247,6 +291,13 @@ onBeforeUnmount(() => {
         <div class="header-divider"></div>
         <button class="h-btn" title="Reset Pose" @click="handleResetPose"><RotateCcw :size="16" /></button>
         <button class="h-btn" title="Fullscreen"><Maximize2 :size="16" /></button>
+        <button
+          :class="['h-btn', { active: subtitleEnabled }]"
+          title="Subtitle"
+          @click="toggleSubtitle"
+        >
+          <Type :size="16" />
+        </button>
         <button class="h-btn primary" title="Import Avatar" @click="handleImportClick">
           <Download :size="16" /> Import
         </button>
@@ -270,6 +321,15 @@ onBeforeUnmount(() => {
               <span class="error-text">{{ loadError }}</span>
               <span class="error-hint">Check model resources and try again</span>
             </div>
+
+            <Transition name="subtitle-fade">
+              <div
+                v-if="subtitleEnabled && subtitleVisible && subtitleText"
+                class="subtitle-overlay"
+              >
+                <span class="subtitle-text">{{ subtitleText }}</span>
+              </div>
+            </Transition>
 
             <div v-if="!isLoading && !loadError && !isModelReady" class="avatar-placeholder" :class="[`emotion-${currentEmotionLocal.id}`]">
               <div class="avatar-ring"></div>
@@ -316,59 +376,93 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-if="!isDesktopMode" class="stage-controls">
-          <div class="mode-switcher">
-            <button
-              v-for="mode in avatarModes"
-              :key="mode.id"
-              :class="['mode-btn', { active: currentMode === mode.id }]"
-              @click="selectMode(mode.id)"
-            >
-              <span class="mode-name">{{ mode.label }}</span>
-              <span class="mode-desc">{{ mode.desc }}</span>
-            </button>
-          </div>
-
-          <div class="emotion-panel">
-            <div class="panel-title">
-              <Heart :size="14" />
-              <span>Emotion</span>
-              <span class="expression-value">PAD: {{ expressionValue > 0 ? '+' : '' }}{{ expressionValue.toFixed(1) }}</span>
-            </div>
-            <div class="emotion-grid">
+          <div class="controls-top-row">
+            <div class="mode-switcher">
               <button
-                v-for="emo in emotions"
-                :key="emo.id"
-                :class="['emo-btn', { active: currentEmotionLocal.id === emo.id }]"
-                :style="{ '--emo-color': emo.color }"
-                @click="selectEmotion(emo)"
+                v-for="mode in avatarModes"
+                :key="mode.id"
+                :class="['mode-btn', { active: currentMode === mode.id }]"
+                @click="selectMode(mode.id)"
               >
-                <component :is="emo.icon" :size="18" />
-                <span>{{ emo.label }}</span>
+                <span class="mode-name">{{ mode.label }}</span>
+                <span class="mode-desc">{{ mode.desc }}</span>
               </button>
             </div>
+
+            <div class="tts-inline">
+              <div class="tts-input-row">
+                <textarea
+                  v-model="ttsText"
+                  class="tts-input"
+                  placeholder="Type text to speak..."
+                  rows="1"
+                  :disabled="isAvatarSynthesizing"
+                  @keydown="handleTTSKeydown"
+                ></textarea>
+                <button
+                  :class="['tts-send-btn', { speaking: isAvatarSpeaking, loading: isAvatarSynthesizing }]"
+                  :disabled="isAvatarSynthesizing || (!ttsText.trim() && !isAvatarSpeaking)"
+                  :title="isAvatarSpeaking ? 'Stop' : 'Speak'"
+                  @click="handleTTSSend"
+                >
+                  <Square v-if="isAvatarSpeaking" :size="14" />
+                  <Loader2 v-else-if="isAvatarSynthesizing" :size="14" class="tts-loading-spin" />
+                  <Send v-else :size="14" />
+                </button>
+              </div>
+              <div class="tts-status-row">
+                <Mic :size="11" />
+                <span v-if="isAvatarSpeaking" class="tts-status-text speaking">Speaking</span>
+                <span v-else-if="isAvatarSynthesizing" class="tts-status-text synthesizing">Synthesizing</span>
+                <span v-else class="tts-status-text">Text to Speech</span>
+                <span v-if="ttsError" class="tts-error">{{ ttsError }}</span>
+              </div>
+            </div>
           </div>
 
-          <div class="idle-panel">
-            <div class="panel-title">
-              <Volume2 :size="14" />
-              <span>Idle Animation</span>
+          <div class="controls-panels-row">
+            <div class="emotion-panel">
+              <div class="panel-title">
+                <Heart :size="14" />
+                <span>Emotion</span>
+                <span class="expression-value">PAD: {{ expressionValue > 0 ? '+' : '' }}{{ expressionValue.toFixed(1) }}</span>
+              </div>
+              <div class="emotion-grid">
+                <button
+                  v-for="emo in emotions"
+                  :key="emo.id"
+                  :class="['emo-btn', { active: currentEmotionLocal.id === emo.id }]"
+                  :style="{ '--emo-color': emo.color }"
+                  @click="selectEmotion(emo)"
+                >
+                  <component :is="emo.icon" :size="18" />
+                  <span>{{ emo.label }}</span>
+                </button>
+              </div>
             </div>
-            <div class="idle-list">
-              <div
-                v-for="(anim, idx) in idleAnimations"
-                :key="idx"
-                class="idle-item"
-              >
-                <div class="idle-info">
-                  <span class="idle-name">{{ anim.name }}</span>
-                  <span :class="['idle-status', anim.status]">{{ anim.status === 'running' ? 'Running' : 'Paused' }}</span>
-                </div>
-                <div class="idle-bar">
-                  <div
-                    class="idle-fill"
-                    :class="anim.status"
-                    :style="{ width: anim.progress + '%' }"
-                  ></div>
+
+            <div class="idle-panel">
+              <div class="panel-title">
+                <Volume2 :size="14" />
+                <span>Idle Animation</span>
+              </div>
+              <div class="idle-list">
+                <div
+                  v-for="(anim, idx) in idleAnimations"
+                  :key="idx"
+                  class="idle-item"
+                >
+                  <div class="idle-info">
+                    <span class="idle-name">{{ anim.name }}</span>
+                    <span :class="['idle-status', anim.status]">{{ anim.status === 'running' ? 'Running' : 'Paused' }}</span>
+                  </div>
+                  <div class="idle-bar">
+                    <div
+                      class="idle-fill"
+                      :class="anim.status"
+                      :style="{ width: anim.progress + '%' }"
+                    ></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -550,6 +644,11 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 14px var(--lumi-primary-border);
 }
 
+.h-btn.active {
+  background: var(--lumi-primary-subtle);
+  color: var(--lumi-primary);
+}
+
 .avatar-body {
   display: flex;
   flex: 1;
@@ -721,6 +820,54 @@ onBeforeUnmount(() => {
   color: var(--text-muted);
 }
 
+.subtitle-overlay {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  max-width: 80%;
+  padding: 8px 20px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px var(--shadow-color);
+  pointer-events: none;
+}
+
+.subtitle-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  text-align: center;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.subtitle-fade-enter-active {
+  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
+}
+
+.subtitle-fade-leave-active {
+  transition: opacity 800ms ease-in-out, transform 800ms ease-in-out;
+}
+
+.subtitle-fade-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+}
+
+.subtitle-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(0);
+}
+
+.subtitle-fade-enter-to,
+.subtitle-fade-leave-from {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .avatar-placeholder {
   position: relative;
   width: 260px;
@@ -851,12 +998,11 @@ onBeforeUnmount(() => {
 
 .stage-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 12px;
   padding: 14px 20px;
   flex-shrink: 0;
   position: relative;
-  align-items: flex-start;
 }
 
 .stage-controls::before {
@@ -867,6 +1013,20 @@ onBeforeUnmount(() => {
   right: 20px;
   height: 1px;
   background: var(--divider-soft);
+}
+
+.controls-top-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.controls-panels-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 
 .mode-switcher {
@@ -913,9 +1073,123 @@ onBeforeUnmount(() => {
 
 .emotion-panel,
 .idle-panel {
-  flex-shrink: 0;
+  flex: 1;
   min-width: 180px;
-  max-width: 220px;
+}
+
+.tts-inline {
+  flex: 1;
+  min-width: 240px;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tts-inline .tts-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.tts-inline .tts-input {
+  flex: 1;
+  min-height: 32px;
+  max-height: 64px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  line-height: 1.4;
+  resize: none;
+  transition: border-color 300ms ease-in-out;
+  outline: none;
+}
+
+.tts-inline .tts-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.tts-inline .tts-input:focus {
+  border-color: var(--lumi-primary-border);
+  box-shadow: 0 0 0 2px var(--lumi-primary-subtle);
+}
+
+.tts-inline .tts-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tts-inline .tts-send-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lumi-primary);
+  color: var(--text-inverse);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 300ms ease-in-out;
+}
+
+.tts-inline .tts-send-btn:hover:not(:disabled) {
+  background: var(--lumi-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px var(--lumi-primary-border);
+}
+
+.tts-inline .tts-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tts-inline .tts-send-btn.speaking {
+  background: var(--lumi-accent);
+}
+
+.tts-inline .tts-send-btn.speaking:hover:not(:disabled) {
+  background: var(--lumi-danger-hover);
+}
+
+.tts-inline .tts-send-btn.loading {
+  background: var(--lumi-primary-soft);
+}
+
+.tts-loading-spin {
+  animation: spin 1s linear infinite;
+}
+
+.tts-status-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+.tts-status-text {
+  font-weight: 500;
+}
+
+.tts-status-text.speaking {
+  color: var(--lumi-success);
+}
+
+.tts-status-text.synthesizing {
+  color: var(--lumi-amber-dark);
+}
+
+.tts-inline .tts-error {
+  font-size: 10px;
+  color: var(--lumi-accent);
+  padding: 0 2px;
 }
 
 .panel-title {

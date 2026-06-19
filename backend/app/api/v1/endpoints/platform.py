@@ -184,7 +184,7 @@ async def create_platform_instance(request: PlatformInstanceCreate):
         updated_at=now,
     )
 
-    platforms_store.set(instance_id, {
+    await platforms_store.set_async(instance_id, {
         "id": instance_id,
         "adapter_type": request.adapter_type,
         "name": request.name,
@@ -198,7 +198,7 @@ async def create_platform_instance(request: PlatformInstanceCreate):
 
     if request.enable:
         await start_instance(instance_id)
-        platforms_store.update(instance_id, {
+        await platforms_store.update_async(instance_id, {
             "status": inst.status.value,
             "last_sync": datetime.now(timezone.utc).isoformat(),
         })
@@ -242,7 +242,7 @@ async def update_platform_instance(instance_id: str, request: PlatformInstanceUp
 
     inst.updated_at = now
 
-    persist_data = platforms_store.get(instance_id, {})
+    persist_data = await platforms_store.get_async(instance_id, {})
     persist_data.update({
         "name": inst.name,
         "config": inst.config,
@@ -250,7 +250,7 @@ async def update_platform_instance(instance_id: str, request: PlatformInstanceUp
         "updated_at": now,
         "status": inst.status.value,
     })
-    platforms_store.set(instance_id, persist_data)
+    await platforms_store.set_async(instance_id, persist_data)
 
     logger.success(f"[API] PATCH /platforms/instances/{instance_id} - Updated")
     return _instance_to_response(inst)
@@ -268,7 +268,7 @@ async def delete_platform_instance(instance_id: str):
         await stop_instance(instance_id)
 
     remove_instance(instance_id)
-    platforms_store.delete(instance_id)
+    await platforms_store.delete_async(instance_id)
     logger.success(f"[API] DELETE /platforms/instances/{instance_id} - Deleted")
     return {"error": None, "data": {"deleted": True}}
 
@@ -292,7 +292,7 @@ async def start_platform_instance(instance_id: str):
 
     now = datetime.now(timezone.utc).isoformat()
     inst.last_sync = now
-    platforms_store.update(instance_id, {
+    await platforms_store.update_async(instance_id, {
         "status": PlatformStatus.RUNNING.value,
         "last_sync": now,
     })
@@ -309,7 +309,7 @@ async def stop_platform_instance(instance_id: str):
         raise NotFoundError(f"Platform instance {instance_id} not found")
 
     await stop_instance(instance_id)
-    platforms_store.update(instance_id, {
+    await platforms_store.update_async(instance_id, {
         "status": PlatformStatus.STOPPED.value,
     })
 
@@ -324,7 +324,7 @@ async def get_platform_conversations(instance_id: str):
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Platform instance {instance_id} not found")
 
-    convs_data = platforms_store.get(instance_id, {}).get("conversations", [])
+    convs_data = (await platforms_store.get_async(instance_id, {})).get("conversations", [])
     result = []
     for c in convs_data:
         result.append(PlatformConversationResponse(

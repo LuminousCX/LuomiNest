@@ -47,10 +47,10 @@ echo Installing PyInstaller...
 pip install pyinstaller --quiet
 
 echo Installing project dependencies (development mode)...
-pip install -e ".[dev]" --quiet 2>nul
+pip install -e ".[dev,voice]" --quiet 2>nul
 if %ERRORLEVEL% neq 0 (
     echo [WARNING] Some dev dependencies may have failed, trying without dev extras...
-    pip install -e . --quiet
+    pip install -e ".[voice]" --quiet
 )
 
 echo.
