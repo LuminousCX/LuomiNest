@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "LuomiNest"
-    APP_VERSION: str = "0.5.0"
+    APP_VERSION: str = "0.7.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 

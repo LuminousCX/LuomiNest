@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PlatformAdapterType, PlatformInstance, PlatformConversation, PlatformStats, PlatformLogEntry, PlatformLogSummary } from '../types'
+import type { PlatformAdapterType, PlatformInstance, PlatformConversation, PlatformStats, PlatformLogEntry, PlatformLogSummary, MainAgentInfo } from '../types'
 import { useApi } from '../composables/useApi'
 
 interface RawLogEntry {
@@ -112,6 +112,7 @@ export const usePlatformStore = defineStore('platform', () => {
   const logTotal = ref(0)
   const logSummary = ref<PlatformLogSummary>({ totalEntries: 0, totalInstances: 0, byLevel: {} })
   const stats = ref<PlatformStats>({ totalPlatforms: 0, activeConnections: 0, totalMessages: 0 })
+  const mainAgent = ref<MainAgentInfo | null>(null)
   const loading = ref(false)
   const selectedInstanceId = ref<string | null>(null)
   const logLevelFilter = ref<string | null>(null)
@@ -137,7 +138,7 @@ export const usePlatformStore = defineStore('platform', () => {
       const data = await apiGet<RawAdapterType[]>('/platforms/types')
       adapterTypes.value = data.map(t => ({
         name: t.name,
-        displayName: t.display_name || t.displayName,
+        displayName: t.display_name || t.displayName || '',
         description: t.description,
         icon: t.icon,
         category: t.category,
@@ -157,17 +158,17 @@ export const usePlatformStore = defineStore('platform', () => {
       const data = await apiGet<RawInstance[]>('/platforms/instances')
       instances.value = data.map(i => ({
         id: i.id,
-        adapterType: i.adapter_type || i.adapterType,
+        adapterType: i.adapter_type || i.adapterType || '',
         name: i.name,
         config: i.config || {},
-        status: i.status || 'stopped',
+        status: (i.status || 'stopped') as PlatformInstance['status'],
         enable: i.enable ?? true,
         messageCount: i.message_count ?? i.messageCount ?? 0,
         lastSync: i.last_sync || i.lastSync || '',
         errorMessage: i.error_message || i.errorMessage || '',
         icon: i.icon || 'Globe',
         category: i.category || 'general',
-        displayName: i.display_name || i.displayName || i.adapter_type || i.adapterType,
+        displayName: i.display_name || i.displayName || i.adapter_type || i.adapterType || '',
         createdAt: i.created_at || i.createdAt || '',
         updatedAt: i.updated_at || i.updatedAt || '',
       }))
@@ -222,7 +223,7 @@ export const usePlatformStore = defineStore('platform', () => {
         logs.value = (data.entries || []).map((l: RawLogEntry) => ({
           id: l.id,
           timestamp: l.timestamp,
-          level: l.level,
+          level: l.level as PlatformLogEntry['level'],
           event: l.event,
           message: l.message,
           instanceId: l.instance_id || l.instanceId || id,
@@ -236,7 +237,7 @@ export const usePlatformStore = defineStore('platform', () => {
         logs.value = (data.entries || []).map((l: RawLogEntry) => ({
           id: l.id,
           timestamp: l.timestamp,
-          level: l.level,
+          level: l.level as PlatformLogEntry['level'],
           event: l.event,
           message: l.message,
           instanceId: l.instance_id || l.instanceId || '',
@@ -263,6 +264,49 @@ export const usePlatformStore = defineStore('platform', () => {
     } catch {
       logSummary.value = { totalEntries: 0, totalInstances: 0, byLevel: {} }
     }
+  }
+
+  interface RawMainAgentInfo {
+    provider?: string
+    provider_name?: string
+    providerName?: string
+    model?: string
+    supports_multimodal?: boolean
+    supportsMultimodal?: boolean
+    system_prompt?: string
+    systemPrompt?: string
+    temperature?: number
+    max_tokens?: number
+    maxTokens?: number
+  }
+
+  const fetchMainAgent = async () => {
+    try {
+      const result = await apiGet<{ data?: RawMainAgentInfo } | RawMainAgentInfo>('/platforms/main_agent')
+      const data = (result as { data?: RawMainAgentInfo })?.data || (result as RawMainAgentInfo)
+      mainAgent.value = {
+        provider: data.provider || '',
+        providerName: data.provider_name || data.providerName || data.provider || '',
+        model: data.model || '',
+        supportsMultimodal: data.supports_multimodal ?? data.supportsMultimodal ?? false,
+        systemPrompt: data.system_prompt || data.systemPrompt || '',
+        temperature: data.temperature ?? 0.7,
+        maxTokens: data.max_tokens ?? data.maxTokens ?? 4096,
+      }
+    } catch {
+      mainAgent.value = null
+    }
+  }
+
+  const updateMainAgent = async (updates: Partial<MainAgentInfo>) => {
+    const body: Record<string, unknown> = {}
+    if (updates.provider !== undefined) body.provider = updates.provider
+    if (updates.model !== undefined) body.model = updates.model
+    if (updates.systemPrompt !== undefined) body.system_prompt = updates.systemPrompt
+    if (updates.temperature !== undefined) body.temperature = updates.temperature
+    if (updates.maxTokens !== undefined) body.max_tokens = updates.maxTokens
+    await apiPatch('/platforms/main_agent', body)
+    await fetchMainAgent()
   }
 
   const clearLogs = async (instanceId: string) => {
@@ -334,7 +378,7 @@ export const usePlatformStore = defineStore('platform', () => {
   }
 
   const refreshAll = async () => {
-    await Promise.all([fetchAdapterTypes(), fetchInstances(), fetchStats(), fetchLogSummary()])
+    await Promise.all([fetchAdapterTypes(), fetchInstances(), fetchStats(), fetchLogSummary(), fetchMainAgent()])
     if (selectedInstanceId.value) {
       await Promise.all([fetchConversations(selectedInstanceId.value), fetchLogs(selectedInstanceId.value)])
     } else {
@@ -350,6 +394,7 @@ export const usePlatformStore = defineStore('platform', () => {
     logTotal,
     logSummary,
     stats,
+    mainAgent,
     loading,
     selectedInstanceId,
     logLevelFilter,
@@ -364,6 +409,8 @@ export const usePlatformStore = defineStore('platform', () => {
     fetchConversations,
     fetchLogs,
     fetchLogSummary,
+    fetchMainAgent,
+    updateMainAgent,
     clearLogs,
     createInstance,
     updateInstance,

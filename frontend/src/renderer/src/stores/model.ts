@@ -436,12 +436,12 @@ export const useModelStore = defineStore('model', () => {
         id: p.id,
         name: p.name,
         type: p.type || p.vendor || 'openai_compatible',
-        vendor: p.vendor,
+        vendor: p.vendor || '',
         baseUrl: p.baseUrl || p.base_url || '',
         apiKeySet: p.apiKeySet || p.api_key_set || false,
         defaultModel: p.defaultModel || p.default_model || '',
         isDefault: p.isDefault || p.is_default || false,
-        models: p.models || [],
+        models: (p.models || []) as { id: string; name: string }[],
       }))
 
       for (const provider of providers.value) {
@@ -465,7 +465,7 @@ export const useModelStore = defineStore('model', () => {
         return {
           id: t.id,
           name: t.name,
-          vendor: t.vendor,
+          vendor: t.vendor || '',
           baseUrl: t.baseUrl || t.base_url || '',
           defaultModel: t.defaultModel || t.default_model || '',
           description: t.description || '',

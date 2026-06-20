@@ -32,10 +32,18 @@ class UsageStore:
             return self._records
 
     def _save(self):
+        """原子写入：先写临时文件，再 rename 替换，防止写入中断导致数据损坏。"""
+        tmp_path = self._path + ".tmp"
         try:
-            with open(self._path, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self._records, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, self._path)
         except Exception as e:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
             logger.error(f"[UsageStore] Failed to save: {e}")
 
     def record(

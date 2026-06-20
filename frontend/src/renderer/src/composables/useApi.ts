@@ -4,14 +4,61 @@ import { API_ENDPOINTS } from '../config/api'
 
 const getApiUrl = (path: string) => `${API_ENDPOINTS.V1}${path}`
 
+// HTTP 状态码到中文友好提示的映射
+const HTTP_STATUS_MESSAGES: Record<number, string> = {
+  400: '请求参数错误，请检查输入',
+  401: '未授权，请检查 API Key 配置',
+  403: '无权限访问该资源',
+  404: '请求的资源不存在',
+  408: '请求超时，请检查网络后重试',
+  429: '请求过于频繁，请稍后重试',
+  500: '服务器内部错误，请查看后端日志',
+  502: '网关错误，后端服务可能未启动',
+  503: '服务暂不可用，请稍后重试',
+  504: '网关超时，请检查后端服务状态',
+}
+
+// 后端 err_code 到中文友好提示的映射
+const ERR_CODE_MESSAGES: Record<string, string> = {
+  LLM_ALL_PROVIDERS_FAILED: '所有 AI 模型均不可用，请在设置中检查模型配置',
+  LLM_PROVIDER_UNAUTHORIZED: 'AI 模型授权失败，请检查 API Key',
+  LLM_PROVIDER_UNAVAILABLE: 'AI 模型服务暂不可用，请稍后重试',
+  LLM_RATE_LIMITED: 'AI 模型请求过于频繁，请稍后重试',
+  TTS_NO_ENGINE: '未安装语音合成引擎，语音功能不可用',
+  TTS_SYNTHESIS_FAILED: '语音合成失败',
+  TTS_MODEL_NOT_FOUND: '语音模型未下载，请参考后端日志安装',
+  MEMORY_NOT_FOUND: '记忆数据不存在',
+  CONVERSATION_NOT_FOUND: '对话不存在，可能已被删除',
+  AGENT_NOT_FOUND: 'Agent 不存在',
+}
+
+const statusToMessage = (status: number): string =>
+  HTTP_STATUS_MESSAGES[status] || `请求失败 (${status})`
+
 const extractErrorMessage = (errData: any, status: number): string => {
-  let errMsg = errData?.error?.message || errData?.detail || ''
+  // 1. 优先处理 err_code（符合工作区规则 "API 响应必须包含错误码"）
+  const errCode = errData?.err_code ?? errData?.error?.code
+  if (errCode && ERR_CODE_MESSAGES[errCode]) {
+    return ERR_CODE_MESSAGES[errCode]
+  }
+
+  // 2. 兼容 error 为字符串的情况（TTS 接口等）
+  let errMsg = ''
+  if (typeof errData?.error === 'string') {
+    errMsg = errData.error
+  } else {
+    errMsg = errData?.error?.message || errData?.detail || errData?.message || ''
+  }
+
+  // 3. 数组形式（FastAPI 校验错误）
   if (Array.isArray(errMsg)) {
     errMsg = errMsg.map((e: any) => e.msg || e.message || JSON.stringify(e)).join('; ')
   } else if (typeof errMsg === 'object' && errMsg !== null) {
     errMsg = JSON.stringify(errMsg)
   }
-  return errMsg || `API error: ${status}`
+
+  // 4. 无具体消息时，按 HTTP 状态码返回友好提示
+  return errMsg || statusToMessage(status)
 }
 
 export const useApi = () => {
@@ -121,7 +168,7 @@ export const useApi = () => {
       }
 
       const reader = resp.body?.getReader()
-      if (!reader) throw new Error('No readable stream')
+      if (!reader) throw new Error('无法读取响应流，请检查后端服务')
 
       const decoder = new TextDecoder()
       let buffer = ''
@@ -145,10 +192,12 @@ export const useApi = () => {
             provider: raw.provider || '',
             done: !!raw.done,
             suggested_questions: raw.suggested_questions || undefined,
+            emotion: raw.emotion || undefined,
           }
           onChunk(chunk)
           return chunk.done
-        } catch {
+        } catch (parseErr) {
+          console.warn('[API] Stream chunk parse failed:', dataStr, parseErr)
           return false
         }
       }
@@ -224,7 +273,7 @@ export const useApi = () => {
       }
 
       const reader = resp.body?.getReader()
-      if (!reader) throw new Error('No readable stream')
+      if (!reader) throw new Error('无法读取响应流，请检查后端服务')
 
       const decoder = new TextDecoder()
       let buffer = ''

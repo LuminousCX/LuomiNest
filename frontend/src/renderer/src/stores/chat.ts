@@ -25,6 +25,7 @@ interface RawConversation {
   updatedAt?: string
 }
 import { useApi } from '../composables/useApi'
+import { useToast } from '../composables/useToast'
 import { useAgentStore } from './agent'
 import { useChatTrashStore } from './chat-trash'
 import { detectSearchIntent, extractSearchQuery } from '../utils/searchIntent'
@@ -32,6 +33,7 @@ import { detectSearchIntent, extractSearchQuery } from '../utils/searchIntent'
 export const useChatStore = defineStore('chat', () => {
   const { apiGet, apiPost, apiPatch, apiDelete, apiStream, checkHealth } = useApi()
   const agentStore = useAgentStore()
+  const toast = useToast()
 
   const agentConversations = ref<Record<string, ConversationListItem[]>>({})
   const agentCurrentConvId = ref<Record<string, string | null>>({})
@@ -106,11 +108,12 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  const loadConversation = async (convId: string) => {
-    if (!activeAgentId.value) return
+  const loadConversation = async (convId: string, agentId?: string) => {
+    const targetAgentId = agentId || activeAgentId.value
+    if (!targetAgentId) return
 
     // 切换对话前，通知后端对当前对话执行最终蒸馏
-    const prevConvId = agentCurrentConvId.value[activeAgentId.value]
+    const prevConvId = agentCurrentConvId.value[targetAgentId]
     if (prevConvId && prevConvId !== convId) {
       apiPost(`/chat/conversations/${prevConvId}/leave`).catch(() => {})
     }
@@ -120,7 +123,7 @@ export const useChatStore = defineStore('chat', () => {
 
     agentCurrentConvId.value = {
       ...agentCurrentConvId.value,
-      [activeAgentId.value]: convId
+      [targetAgentId]: convId
     }
 
     if (convMessages.value[convId] && convMessages.value[convId].length > 0) {
@@ -311,6 +314,7 @@ export const useChatStore = defineStore('chat', () => {
       fileType?: string
       fileName?: string
       _preserveVersions?: MessageVersion[]
+      onChunk?: (chunk: ChatStreamChunk) => void
     }
   ) => {
     const targetAgentId = options?.agentId || activeAgentId.value
@@ -518,6 +522,7 @@ export const useChatStore = defineStore('chat', () => {
         if (chunk.usage) {
           lastUsage.value = chunk.usage
         }
+        options?.onChunk?.(chunk)
       },
       async () => {
         const newControllers = { ...convAbortControllers.value }
@@ -578,6 +583,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
         lastError.value = err
+        toast.error(`对话失败：${err}`)
         fetchConversations(targetAgentId)
       },
       controller.signal
@@ -624,8 +630,8 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  const regenerateMessage = async (messageId: string) => {
-    const convId = currentConvId.value
+  const regenerateMessage = async (messageId: string, options?: { onChunk?: (chunk: ChatStreamChunk) => void; convId?: string; agentId?: string }) => {
+    const convId = options?.convId || currentConvId.value
     if (!convId) return
     const msgs = convMessages.value[convId]
     if (!msgs) return
@@ -679,7 +685,7 @@ export const useChatStore = defineStore('chat', () => {
       versions: existingVersions,
     }
 
-    const targetAgentId = activeAgentId.value
+    const targetAgentId = options?.agentId || activeAgentId.value
     if (targetAgentId) {
       requestBody.agent_id = targetAgentId
     }
@@ -716,6 +722,7 @@ export const useChatStore = defineStore('chat', () => {
         if (chunk.usage) {
           lastUsage.value = chunk.usage
         }
+        options?.onChunk?.(chunk)
       },
       async () => {
         const newControllers = { ...convAbortControllers.value }
@@ -774,6 +781,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
         lastError.value = err
+        toast.error(`重新生成失败：${err}`)
         if (targetAgentId) {
           fetchConversations(targetAgentId)
         }
@@ -782,8 +790,10 @@ export const useChatStore = defineStore('chat', () => {
     )
   }
 
-  const clearMessages = () => {
-    agentCurrentConvId.value = { ...agentCurrentConvId.value, [activeAgentId.value]: null }
+  const clearMessages = (agentId?: string) => {
+    const targetAgentId = agentId || activeAgentId.value
+    if (!targetAgentId) return
+    agentCurrentConvId.value = { ...agentCurrentConvId.value, [targetAgentId]: null }
     lastError.value = null
   }
 
@@ -866,6 +876,7 @@ export const useChatStore = defineStore('chat', () => {
     lastError,
     lastUsage,
     activeAgentId,
+    agentConversations,
     convStreaming,
     convMessages,
     currentSuggestionMessageId,

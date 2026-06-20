@@ -32,10 +32,18 @@ class ConversationStore:
             return self._index_cache
 
     def _save_index(self):
+        """原子写入索引文件。"""
+        tmp_path = self._index_path + ".tmp"
         try:
-            with open(self._index_path, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self._index_cache, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, self._index_path)
         except Exception as e:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
             logger.error(f"[ConvStore] Failed to save index: {e}")
 
     def _conv_path(self, conv_id: str) -> str:
@@ -55,10 +63,17 @@ class ConversationStore:
 
     def set(self, conv_id: str, conv: dict):
         path = self._conv_path(conv_id)
+        tmp_path = path + ".tmp"
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(conv, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, path)
         except Exception as e:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
             logger.error(f"[ConvStore] Failed to save conv {conv_id}: {e}")
             return
 
@@ -262,8 +277,10 @@ class ConversationStore:
             conv["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             try:
-                with open(path, "w", encoding="utf-8") as f:
+                tmp_path = path + ".tmp"
+                with open(tmp_path, "w", encoding="utf-8") as f:
                     json.dump(conv, f, ensure_ascii=False, indent=2)
+                os.replace(tmp_path, path)
             except Exception as e:
                 logger.error(f"[ConvStore] Failed to save renamed conv {conv_id}: {e}")
                 return False

@@ -31,16 +31,16 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '控制台 - LuomiNest', icon: 'LayoutDashboard' }
   },
   {
+    path: '/workbench',
+    name: 'Workbench',
+    component: () => import('../views/WorkbenchView.vue'),
+    meta: { title: '工作台 - LuomiNest', icon: 'Sparkles' }
+  },
+  {
     path: '/workspace',
     name: 'Workspace',
     component: () => import('../views/WorkspaceView.vue'),
     meta: { title: '对话 - LuomiNest', icon: 'MessageCircle' }
-  },
-  {
-    path: '/social',
-    name: 'Social',
-    component: () => import('../views/SocialView.vue'),
-    meta: { title: '群组Agent - LuomiNest', icon: 'Users' }
   },
   {
     path: '/chat/platform',
@@ -65,6 +65,24 @@ const routes: RouteRecordRaw[] = [
     name: 'SettingsAIModel',
     component: () => import('../views/settings/AIModelSettings.vue'),
     meta: { title: '模型配置 - LuomiNest', icon: 'Cpu' }
+  },
+  {
+    path: '/settings/about',
+    name: 'SettingsAbout',
+    component: () => import('../views/settings/AboutView.vue'),
+    meta: { title: '关于开发者 - LuomiNest' }
+  },
+  {
+    path: '/settings/license',
+    name: 'SettingsLicense',
+    component: () => import('../views/settings/LicenseView.vue'),
+    meta: { title: '开源协议 - LuomiNest' }
+  },
+  {
+    path: '/settings/privacy-detail',
+    name: 'SettingsPrivacyDetail',
+    component: () => import('../views/settings/PrivacyDetailView.vue'),
+    meta: { title: '用户隐私 - LuomiNest' }
   },
   {
     path: '/avatar',

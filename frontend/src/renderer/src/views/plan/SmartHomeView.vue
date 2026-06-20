@@ -392,7 +392,7 @@ const toggleScene = (sceneId: string) => {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: white;
+  background: var(--surface);
   position: absolute;
   top: 2px;
   left: 2px;
@@ -534,7 +534,7 @@ const toggleScene = (sceneId: string) => {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: white;
+  background: var(--surface);
   position: absolute;
   top: 2px;
   left: 2px;

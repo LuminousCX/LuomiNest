@@ -1012,7 +1012,7 @@ const handleCreateAgent = async () => {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 1px 3px var(--overlay-subtle);
   transition: all var(--transition-normal);
 }

@@ -29,7 +29,112 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Memory engine init skipped: {e}")
 
+    # 注册内置工具
+    try:
+        from app.core.tools import tool_registry
+        from app.core.tools.builtin import (
+            CliTool, ReadFileTool, WriteFileTool, ListFilesTool, SearchFilesTool,
+            McpTool, ListMcpServersTool, DelegateToSubagentTool,
+            CreateScheduledTaskTool, CreateBrowserTabTool,
+        )
+        tool_registry.register(CliTool())
+        tool_registry.register(ReadFileTool())
+        tool_registry.register(WriteFileTool())
+        tool_registry.register(ListFilesTool())
+        tool_registry.register(SearchFilesTool())
+        tool_registry.register(McpTool())
+        tool_registry.register(ListMcpServersTool())
+        tool_registry.register(DelegateToSubagentTool())
+        tool_registry.register(CreateScheduledTaskTool())
+        tool_registry.register(CreateBrowserTabTool())
+        logger.info(f"[LuomiNest] Registered {len(tool_registry.list_names())} tools: {', '.join(tool_registry.list_names())}")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Tool registration skipped: {e}")
+
+    # 启动定时任务调度器（APScheduler）
+    try:
+        from app.core.scheduler import luomi_scheduler
+        await luomi_scheduler.init()
+        logger.info(f"[LuomiNest] Scheduler started, tasks: {len(luomi_scheduler.list_tasks())}")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Scheduler init skipped: {e}")
+
+    # 初始化 MCP 管理器（加载配置并自动连接）
+    try:
+        from app.core.tools.mcp.manager import mcp_manager
+        await mcp_manager.init()
+        servers = mcp_manager.list_servers()
+        if servers:
+            logger.info(f"[LuomiNest] MCP servers: {len(servers)} configured")
+        else:
+            logger.info(f"[LuomiNest] No MCP servers configured")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] MCP manager init skipped: {e}")
+
+    # 启动平台消息路由器（QQ/微信/Minecraft/游戏等）
+    try:
+        from app.services.platform_router import attach_router_to_instances
+        attach_router_to_instances()
+        logger.info(f"[LuomiNest] Platform router attached to instances")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Platform router init skipped: {e}")
+
+    # 启动时清理临时文件
+    try:
+        from app.services.cleanup_service import lumi_cleanup_service
+        temp_cleaned = lumi_cleanup_service.cleanup_temp_files()
+        if temp_cleaned > 0:
+            logger.info(f"[LuomiNest] Cleaned {temp_cleaned} temp files on startup")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Startup cleanup skipped: {e}")
+
+    # 注册定时清理任务（每24小时执行一次）
+    try:
+        from apscheduler.triggers.interval import IntervalTrigger
+        from app.services.cleanup_service import lumi_cleanup_service
+
+        async def _periodic_cleanup():
+            try:
+                await lumi_cleanup_service.run_all_async()
+            except Exception as cleanup_err:
+                logger.warning(f"[LuomiNest] Periodic cleanup failed: {cleanup_err}")
+
+        if luomi_scheduler._scheduler is not None:
+            luomi_scheduler._scheduler.add_job(
+                _periodic_cleanup,
+                trigger=IntervalTrigger(hours=24),
+                id="lumi_periodic_cleanup",
+                replace_existing=True,
+            )
+            logger.info(f"[LuomiNest] Periodic cleanup job registered (every 24h)")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Periodic cleanup registration skipped: {e}")
+
     yield
+
+    # 停止所有平台实例
+    try:
+        from app.runtime.platform.registry import stop_all_instances
+        await stop_all_instances()
+        logger.info(f"[LuomiNest] Platform instances stopped")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Platform shutdown skipped: {e}")
+
+    # 断开所有 MCP 连接
+    try:
+        from app.core.tools.mcp.manager import mcp_manager
+        await mcp_manager.disconnect_all()
+        logger.info(f"[LuomiNest] MCP connections closed")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] MCP shutdown skipped: {e}")
+
+    # 关闭定时任务调度器
+    try:
+        from app.core.scheduler import luomi_scheduler
+        await luomi_scheduler.shutdown()
+        logger.info(f"[LuomiNest] Scheduler stopped")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Scheduler shutdown skipped: {e}")
 
     try:
         from app.engines.memory import shutdown_memory
@@ -46,7 +151,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="LuomiNest API",
         description="LuomiNest - AI Agent Platform Backend API",
-        version="0.5.0",
+        version="0.7.0",
         docs_url="/docs" if settings.DEBUG else None,
         redoc_url="/redoc" if settings.DEBUG else None,
         lifespan=lifespan,
@@ -121,7 +226,7 @@ def create_app() -> FastAPI:
     async def root():
         return {
             "name": "LuomiNest",
-            "version": "0.5.0",
+            "version": "0.7.0",
             "docs": "/docs" if settings.DEBUG else "disabled",
         }
 

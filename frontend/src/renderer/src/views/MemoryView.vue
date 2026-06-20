@@ -1911,8 +1911,8 @@ function getWeekday(dateStr: string): string {
 }
 
 .fact-btn.danger:hover {
-  background: #ef444418;
-  color: #ef4444;
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
 }
 
 .fact-edit-row {

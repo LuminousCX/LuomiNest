@@ -103,6 +103,8 @@ def create_instance(
 
     merged_config = {**at.config_template, **config}
     adapter = at.adapter_cls()
+    adapter.set_instance_id(instance_id)
+    adapter.initialize(merged_config)
 
     inst = PlatformInstance(
         instance_id=instance_id,
@@ -210,3 +212,29 @@ def update_last_sync(instance_id: str, last_sync: str) -> None:
     inst = _instances.get(instance_id)
     if inst:
         inst.last_sync = last_sync
+
+
+def attach_message_handler(handler) -> None:
+    """为所有已注册实例设置消息回调（由平台路由器在启动时调用）。"""
+    for inst in _instances.values():
+        if inst.adapter:
+            inst.adapter.set_message_handler(handler)
+
+
+def get_adapter(instance_id: str) -> BasePlatformAdapter | None:
+    """获取指定实例的适配器对象。"""
+    inst = _instances.get(instance_id)
+    return inst.adapter if inst else None
+
+
+async def stop_all_instances() -> None:
+    """应用关闭时停止所有运行中的平台实例。"""
+    running = [inst for inst in _instances.values() if inst.status == PlatformStatus.RUNNING]
+    if not running:
+        return
+    logger.info(f"[PlatformRegistry] Stopping {len(running)} running platform instance(s)")
+    for inst in running:
+        try:
+            await stop_instance(inst.instance_id)
+        except Exception as e:
+            logger.warning(f"[PlatformRegistry] Error stopping {inst.instance_id}: {e}")

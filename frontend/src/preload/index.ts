@@ -88,7 +88,9 @@ const api = {
       ipcRenderer.invoke('desktop-pet:drivePadEmotion', pleasure, arousal, dominance),
     setCoreParam: (paramId: string, value: number) =>
       ipcRenderer.invoke('desktop-pet:setCoreParam', paramId, value),
-    getModelCapabilities: () => ipcRenderer.invoke('desktop-pet:getModelCapabilities')
+    getModelCapabilities: () => ipcRenderer.invoke('desktop-pet:getModelCapabilities'),
+    sendSubtitle: (text: string) => ipcRenderer.invoke('desktop-pet:sendSubtitle', text),
+    hideSubtitle: () => ipcRenderer.invoke('desktop-pet:hideSubtitle')
   }
 }
 

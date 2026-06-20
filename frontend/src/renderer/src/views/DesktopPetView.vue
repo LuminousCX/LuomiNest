@@ -1,9 +1,9 @@
-﻿﻿<script setup lang="ts">
+﻿<script setup lang="ts">
 import '@pixi/unsafe-eval'
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Application, Ticker } from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'
-import { LUOMINEST_BUILTIN_MODELS } from '@/config/luominest-models'
+import { LUOMINEST_BUILTIN_MODELS, resolveExpression } from '@/config/luominest-models'
 import {
   RotateCcw, Eye, EyeOff, X,
   ChevronUp, Minimize, Pin, PinOff
@@ -19,12 +19,14 @@ interface PetModelInfo {
 }
 
 const EXPRESSION_BLOCKLIST = ['水印', 'watermark', 'copyright', 'credit', 'logo']
+const LUMINEST_PET_SUBTITLE_FADE_DELAY = 2000
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const isModelReady = ref(false)
 const isLoading = ref(false)
 const loadError = ref<string | null>(null)
 const currentModelName = ref('')
+const currentModelId = ref('')
 const isIslandExpanded = ref(false)
 const isAlwaysOnTop = ref(true)
 const isMousePassthrough = ref(true)
@@ -32,6 +34,8 @@ const availableMotions = ref<string[]>([])
 const availableExpressions = ref<string[]>([])
 const fadeOnHoverEnabled = ref(true)
 const shouldFadeUI = ref(false)
+const subtitleText = ref('')
+const subtitleVisible = ref(false)
 
 let pixiApp: Application | null = null
 let currentModel: Live2DModel | null = null
@@ -62,7 +66,37 @@ let currentLoadToken = 0
 let transparencyCheckTimer: ReturnType<typeof setInterval> | null = null
 let lastMouseX = 0
 let lastMouseY = 0
+let subtitleFadeTimer: ReturnType<typeof setTimeout> | null = null
+let ipcSubtitleHandler: ((event: any, text: string) => void) | null = null
+let ipcSubtitleHideHandler: ((event: any) => void) | null = null
 const MAX_RETRIES = 3
+
+const resolveEmotionForCurrentModel = (emotionId: string): string => {
+  if (!currentModelId.value) return emotionId
+  return resolveExpression(currentModelId.value, emotionId)
+}
+
+const clearSubtitleFade = () => {
+  if (subtitleFadeTimer !== null) {
+    clearTimeout(subtitleFadeTimer)
+    subtitleFadeTimer = null
+  }
+}
+
+const showSubtitle = (text: string) => {
+  if (!text.trim()) return
+  clearSubtitleFade()
+  subtitleText.value = text.trim()
+  subtitleVisible.value = true
+}
+
+const hideSubtitle = () => {
+  clearSubtitleFade()
+  subtitleFadeTimer = setTimeout(() => {
+    subtitleVisible.value = false
+    subtitleFadeTimer = null
+  }, LUMINEST_PET_SUBTITLE_FADE_DELAY)
+}
 
 const mapPADtoEmotion = (pleasure: number, arousal: number, dominance: number): string => {
   if (pleasure > 0.3 && arousal > 0.5) return 'happy'
@@ -512,6 +546,7 @@ onMounted(async () => {
   }
 
   currentModelName.value = modelToLoad.name
+  currentModelId.value = modelToLoad.id
 
   if (canvasRef.value) {
     await loadModel(modelToLoad.url, modelToLoad.scale)
@@ -519,6 +554,7 @@ onMounted(async () => {
 
   ipcLoadModelHandler = async (_event: any, modelInfo: PetModelInfo) => {
     currentModelName.value = modelInfo.name
+    currentModelId.value = modelInfo.id
     retryCount = 0
     if (canvasRef.value) {
       await loadModel(modelInfo.url, modelInfo.scale)
@@ -538,8 +574,9 @@ onMounted(async () => {
 
   ipcTriggerExpressionHandler = async (_event: any, name: string) => {
     if (currentModel) {
+      const resolved = resolveEmotionForCurrentModel(name)
       try {
-        await currentModel.expression(name)
+        await currentModel.expression(resolved)
       } catch {
       }
     }
@@ -571,8 +608,9 @@ onMounted(async () => {
   ipcPadEmotionHandler = (_event: any, pad: { pleasure: number; arousal: number; dominance: number }) => {
     const emotionId = mapPADtoEmotion(pad.pleasure, pad.arousal, pad.dominance)
     if (currentModel) {
+      const resolved = resolveEmotionForCurrentModel(emotionId)
       try {
-        currentModel.expression(emotionId)
+        currentModel.expression(resolved)
       } catch {
       }
     }
@@ -605,6 +643,16 @@ onMounted(async () => {
     setTimeout(() => setIgnoreMouseEvents(true), 1000)
   }
   window.addEventListener('contextmenu', contextMenuHandler)
+
+  ipcSubtitleHandler = (_event: any, text: string) => {
+    showSubtitle(text)
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:subtitle', ipcSubtitleHandler)
+
+  ipcSubtitleHideHandler = () => {
+    hideSubtitle()
+  }
+  window.electron?.ipcRenderer.on('desktop-pet:subtitle-hide', ipcSubtitleHideHandler)
 
   transparencyCheckTimer = setInterval(checkTransparencyAndUpdateMouseEvents, 50)
 })
@@ -664,6 +712,17 @@ onBeforeUnmount(() => {
     contextMenuHandler = null
   }
 
+  if (ipcSubtitleHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:subtitle', ipcSubtitleHandler)
+    ipcSubtitleHandler = null
+  }
+  if (ipcSubtitleHideHandler) {
+    window.electron?.ipcRenderer.removeListener('desktop-pet:subtitle-hide', ipcSubtitleHideHandler)
+    ipcSubtitleHideHandler = null
+  }
+
+  clearSubtitleFade()
+
   if (wheelHandler) {
     window.removeEventListener('wheel', wheelHandler)
     wheelHandler = null
@@ -691,6 +750,15 @@ onBeforeUnmount(() => {
     <div v-if="loadError" class="pet-error">
       <span>{{ loadError }}</span>
     </div>
+
+    <Transition name="pet-subtitle-fade">
+      <div
+        v-if="subtitleVisible && subtitleText"
+        class="pet-subtitle-overlay"
+      >
+        <span class="pet-subtitle-text">{{ subtitleText }}</span>
+      </div>
+    </Transition>
 
     <div
       class="controls-island"
@@ -801,6 +869,49 @@ onBeforeUnmount(() => {
   z-index: 10;
   white-space: nowrap;
   pointer-events: none;
+}
+
+.pet-subtitle-overlay {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: 90%;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px var(--shadow-color);
+  pointer-events: none;
+}
+
+.pet-subtitle-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  text-align: center;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.pet-subtitle-fade-enter-active {
+  transition: opacity 250ms ease-in-out, transform 250ms ease-in-out;
+}
+
+.pet-subtitle-fade-leave-active {
+  transition: opacity 600ms ease-in-out, transform 600ms ease-in-out;
+}
+
+.pet-subtitle-fade-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+}
+
+.pet-subtitle-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(0);
 }
 
 .controls-island {

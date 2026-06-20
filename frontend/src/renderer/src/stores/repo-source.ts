@@ -5,6 +5,12 @@ import { useApi } from '../composables/useApi'
 
 const REPO_SOURCES_KEY = 'luominest-repo-sources-active'
 
+/** 从 catch 块的 unknown 类型错误中提取消息字符串 */
+const getErrorMessage = (e: unknown): string => {
+  if (e instanceof Error) return e.message
+  return String(e)
+}
+
 export interface SyncedItemsResult {
   items: MarketplaceItem[]
   total: number
@@ -87,7 +93,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       const data = await api.apiGet<RepoSource[]>('/repo-sources')
       sources.value = data
     } catch (e: unknown) {
-      error.value = e.message
+      error.value = getErrorMessage(e)
       sources.value = getDefaultSources()
     } finally {
       loading.value = false
@@ -110,7 +116,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: unknown) {
-      error.value = e?.message || '操作失败'
+      error.value = getErrorMessage(e) || '操作失败'
     }
   }
 
@@ -123,7 +129,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: unknown) {
-      error.value = e?.message || '操作失败'
+      error.value = getErrorMessage(e) || '操作失败'
     }
   }
 
@@ -136,7 +142,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: unknown) {
-      error.value = e?.message || '操作失败'
+      error.value = getErrorMessage(e) || '操作失败'
     }
   }
 
@@ -157,10 +163,11 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       // 同步完成后获取条目
       await fetchSourceItems(sourceId)
     } catch (e: unknown) {
-      error.value = e.message
+      const msg = getErrorMessage(e)
+      error.value = msg
       const idx = sources.value.findIndex(s => s.id === sourceId)
       if (idx >= 0) {
-        sources.value[idx] = { ...sources.value[idx], status: 'error', errorMessage: e.message }
+        sources.value[idx] = { ...sources.value[idx], status: 'error', errorMessage: msg }
       }
     } finally {
       syncedItemsLoading.value = { ...syncedItemsLoading.value, [sourceId]: false }
@@ -177,7 +184,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       await fetchSourceItems(sourceId)
       return result
     } catch (e: unknown) {
-      error.value = e.message
+      error.value = getErrorMessage(e)
       return null
     }
   }
@@ -192,7 +199,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       syncedItems.value = { ...syncedItems.value, [sourceId]: result.items || [] }
     } catch (e: unknown) {
       // 静默失败，不影响用户体验
-      console.warn('[RepoSource] Failed to fetch source items:', e.message)
+      console.warn('[RepoSource] Failed to fetch source items:', getErrorMessage(e))
     }
   }
 
@@ -205,7 +212,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       const result = await api.apiGet<SyncedItemsResult>(`/repo-sources/${sourceId}/items?type=${type}`)
       return result.items || []
     } catch (e: unknown) {
-      console.warn('[RepoSource] Failed to fetch source items by type:', e.message)
+      console.warn('[RepoSource] Failed to fetch source items by type:', getErrorMessage(e))
       return []
     }
   }
@@ -222,7 +229,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       delete newSynced[sourceId]
       syncedItems.value = newSynced
     } catch (e: unknown) {
-      error.value = e.message
+      error.value = getErrorMessage(e)
     }
   }
 
@@ -240,7 +247,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       sources.value.push(created)
       return created
     } catch (e: unknown) {
-      error.value = e.message
+      error.value = getErrorMessage(e)
       return null
     }
   }
@@ -259,7 +266,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         saveActiveSourceId(activeSourceId.value)
       }
     } catch (e: unknown) {
-      error.value = e.message
+      error.value = getErrorMessage(e)
     }
   }
 

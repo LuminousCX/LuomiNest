@@ -1,19 +1,28 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   Palette, Sparkles, Heart, Eye, Smile, Frown, Meh, Zap,
   Volume2, RotateCcw, Maximize2, Download, Settings2,
   Loader2, AlertCircle, FolderOpen, Check, Monitor, MonitorOff,
-  ChevronLeft, ChevronRight, Send, Mic, Square, Type
+  ChevronLeft, ChevronRight, Send, Square, Type, MessageCircle
 } from 'lucide-vue-next'
 import { useLuomiNestLive2D } from '@/composables/useLuomiNestLive2D'
 import { useAvatarTTS } from '@/composables/useAvatarTTS'
+import { useAvatarChat } from '@/composables/useAvatarChat'
+import { useApi } from '@/composables/useApi'
 import { useAvatarControlStore } from '@/stores/avatar-control'
-import { LUOMINEST_BUILTIN_MODELS, type LuomiNestModelInfo } from '@/config/luominest-models'
+import { useModelStore } from '@/stores/model'
+import { LUOMINEST_BUILTIN_MODELS, type LuomiNestModelInfo, resolveExpressionByModelUrl, getAvatarBinding } from '@/config/luominest-models'
 import type { PetModelInfo } from '../vite-env.d'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const avatarControl = useAvatarControlStore()
+const modelStore = useModelStore()
+const { apiStream } = useApi()
+
+// 桌面宠物模式状态（需在 composables 之前声明，避免 TDZ）
+const isDesktopMode = ref(false)
+const isDesktopPetRunning = ref(false)
 
 const {
   isReady: isModelReady,
@@ -28,13 +37,13 @@ const {
 
 const ttsText = ref('')
 const subtitleEnabled = ref(true)
+const ttsEnabled = ref(true)
 
 const {
   isSpeaking: isAvatarSpeaking,
   isSynthesizing: isAvatarSynthesizing,
-  error: ttsError,
-  subtitleText,
-  subtitleVisible,
+  subtitleText: manualSubtitleText,
+  subtitleVisible: manualSubtitleVisible,
   speak: avatarSpeak,
   stopSpeaking: avatarStopSpeaking,
 } = useAvatarTTS({
@@ -47,11 +56,72 @@ const {
   },
 })
 
+// Chat-driven avatar: LLM stream → expression + streaming TTS + subtitle
+const chatText = ref('')
+const isChatStreaming = ref(false)
+let chatAbortController: AbortController | null = null
+
+const currentVoice = computed(() => {
+  const modelInfo = currentModelInfo.value
+  if (!modelInfo) return 'zh-CN-XiaoxiaoNeural'
+  const binding = getAvatarBinding(modelInfo.id)
+  return binding?.voice || 'zh-CN-XiaoxiaoNeural'
+})
+
+const {
+  isSpeaking: isChatSpeaking,
+  isSynthesizing: isChatSynthesizing,
+  subtitleText: chatSubtitleText,
+  subtitleVisible: chatSubtitleVisible,
+  currentEmotion: chatCurrentEmotion,
+  feedChunk,
+  finishStream,
+  stop: stopAvatarChat,
+} = useAvatarChat({
+  voice: () => currentVoice.value,
+  driveEmotion: (emotionId: string) => {
+    if (isDesktopMode.value && isDesktopPetRunning.value) {
+      const modelUrl = currentModelInfo.value?.url || ''
+      const resolved = resolveExpressionByModelUrl(modelUrl, emotionId)
+      avatarControl.triggerExpression(resolved)
+    } else {
+      driveEmotion(emotionId)
+    }
+  },
+  syncLipParam: (value: number) => {
+    if (isDesktopMode.value) {
+      avatarControl.driveLipSync(value)
+    } else {
+      syncLipParam(value)
+    }
+  },
+  ttsEnabled: () => ttsEnabled.value,
+  subtitleEnabled: () => subtitleEnabled.value,
+})
+
+// Unified subtitle display: chat subtitle takes priority over manual TTS subtitle
+const subtitleText = computed(() => {
+  if (chatSubtitleVisible.value && chatSubtitleText.value) return chatSubtitleText.value
+  return manualSubtitleText.value
+})
+const subtitleVisible = computed(() => {
+  if (chatSubtitleVisible.value) return true
+  return manualSubtitleVisible.value
+})
+
+// Forward subtitle to desktop pet window when in desktop mode
+watch([subtitleVisible, subtitleText, isDesktopMode], ([visible, text, desktopMode]) => {
+  if (!desktopMode || !isDesktopPetRunning.value) return
+  if (visible && text) {
+    window.api.desktopPet.sendSubtitle(text)
+  } else {
+    window.api.desktopPet.hideSubtitle()
+  }
+})
+
 const importError = ref<string | null>(null)
 const importedModels = ref<LuomiNestModelInfo[]>([])
 const showImportSuccess = ref(false)
-const isDesktopMode = ref(false)
-const isDesktopPetRunning = ref(false)
 const skinSidebarVisible = ref(true)
 
 const avatarModes = [
@@ -115,7 +185,13 @@ function selectMode(modeId: string) {
 
 function selectEmotion(emo: typeof emotions[0]) {
   currentEmotionLocal.value = emo
-  driveEmotion(emo.id)
+  if (isDesktopMode.value && isDesktopPetRunning.value) {
+    const modelUrl = currentModelInfo.value?.url || ''
+    const resolved = resolveExpressionByModelUrl(modelUrl, emo.id)
+    avatarControl.triggerExpression(resolved)
+  } else {
+    driveEmotion(emo.id)
+  }
 }
 
 async function handleResetPose() {
@@ -193,6 +269,7 @@ async function toggleDesktopMode() {
 }
 
 async function switchToDesktopMode() {
+  teardown()
   isDesktopMode.value = true
   const modelInfo = currentModelInfo.value
   await window.api.desktopPet.open(modelInfo ?? undefined)
@@ -228,8 +305,77 @@ function handleTTSKeydown(e: KeyboardEvent) {
   }
 }
 
+async function handleChatSend() {
+  const text = chatText.value.trim()
+  if (!text || isChatStreaming.value) return
+
+  if (isChatStreaming.value) {
+    stopChatStream()
+    return
+  }
+
+  chatText.value = ''
+  isChatStreaming.value = true
+  stopAvatarChat()
+
+  const provider = modelStore.modelConfig.defaultProvider || ''
+  const model = modelStore.modelConfig.defaultModel || ''
+
+  const requestBody = {
+    messages: [{ role: 'user', content: text }],
+    provider,
+    model,
+    stream: true,
+  }
+
+  chatAbortController = new AbortController()
+
+  await apiStream(
+    '/chat/completions',
+    requestBody,
+    (chunk) => {
+      feedChunk(chunk)
+    },
+    () => {
+      finishStream()
+      isChatStreaming.value = false
+      chatAbortController = null
+    },
+    (err: string) => {
+      console.warn('[AvatarView] Chat stream error:', err)
+      finishStream()
+      isChatStreaming.value = false
+      chatAbortController = null
+    },
+    chatAbortController.signal
+  )
+}
+
+function stopChatStream() {
+  if (chatAbortController) {
+    chatAbortController.abort()
+    chatAbortController = null
+  }
+  finishStream()
+  isChatStreaming.value = false
+}
+
+function handleChatKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    handleChatSend()
+  }
+}
+
 function toggleSubtitle() {
   subtitleEnabled.value = !subtitleEnabled.value
+}
+
+function toggleTTS() {
+  ttsEnabled.value = !ttsEnabled.value
+  if (!ttsEnabled.value) {
+    stopAvatarChat()
+  }
 }
 
 function toggleSkinSidebar() {
@@ -271,6 +417,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  stopChatStream()
+  stopAvatarChat()
   teardown()
 })
 </script>
@@ -291,6 +439,13 @@ onBeforeUnmount(() => {
         <div class="header-divider"></div>
         <button class="h-btn" title="Reset Pose" @click="handleResetPose"><RotateCcw :size="16" /></button>
         <button class="h-btn" title="Fullscreen"><Maximize2 :size="16" /></button>
+        <button
+          :class="['h-btn', { active: ttsEnabled }]"
+          title="Toggle TTS"
+          @click="toggleTTS"
+        >
+          <Volume2 :size="16" />
+        </button>
         <button
           :class="['h-btn', { active: subtitleEnabled }]"
           title="Subtitle"
@@ -390,11 +545,39 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="tts-inline">
+              <div class="chat-input-row">
+                <textarea
+                  v-model="chatText"
+                  class="chat-input"
+                  placeholder="Chat with avatar... (Enter to send)"
+                  rows="1"
+                  :disabled="isChatSynthesizing"
+                  @keydown="handleChatKeydown"
+                ></textarea>
+                <button
+                  :class="['chat-send-btn', { streaming: isChatStreaming, loading: isChatSynthesizing }]"
+                  :disabled="isChatSynthesizing || (!chatText.trim() && !isChatStreaming)"
+                  :title="isChatStreaming ? 'Stop' : 'Send'"
+                  @click="handleChatSend"
+                >
+                  <Square v-if="isChatStreaming" :size="14" />
+                  <Loader2 v-else-if="isChatSynthesizing" :size="14" class="tts-loading-spin" />
+                  <MessageCircle v-else :size="14" />
+                </button>
+              </div>
+              <div class="tts-status-row">
+                <MessageCircle :size="11" />
+                <span v-if="isChatStreaming" class="tts-status-text synthesizing">Streaming</span>
+                <span v-else-if="isChatSpeaking" class="tts-status-text speaking">Speaking</span>
+                <span v-else-if="isChatSynthesizing" class="tts-status-text synthesizing">Synthesizing</span>
+                <span v-else class="tts-status-text">Avatar Chat</span>
+                <span v-if="chatCurrentEmotion" class="tts-emotion-tag">{{ chatCurrentEmotion }}</span>
+              </div>
               <div class="tts-input-row">
                 <textarea
                   v-model="ttsText"
                   class="tts-input"
-                  placeholder="Type text to speak..."
+                  placeholder="Or type text to speak directly..."
                   rows="1"
                   :disabled="isAvatarSynthesizing"
                   @keydown="handleTTSKeydown"
@@ -409,13 +592,6 @@ onBeforeUnmount(() => {
                   <Loader2 v-else-if="isAvatarSynthesizing" :size="14" class="tts-loading-spin" />
                   <Send v-else :size="14" />
                 </button>
-              </div>
-              <div class="tts-status-row">
-                <Mic :size="11" />
-                <span v-if="isAvatarSpeaking" class="tts-status-text speaking">Speaking</span>
-                <span v-else-if="isAvatarSynthesizing" class="tts-status-text synthesizing">Synthesizing</span>
-                <span v-else class="tts-status-text">Text to Speech</span>
-                <span v-if="ttsError" class="tts-error">{{ ttsError }}</span>
               </div>
             </div>
           </div>
@@ -1090,6 +1266,89 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 6px;
   align-items: flex-end;
+}
+
+.tts-inline .chat-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  margin-bottom: 4px;
+}
+
+.tts-inline .chat-input {
+  flex: 1;
+  min-height: 32px;
+  max-height: 64px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--lumi-primary-border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  line-height: 1.4;
+  resize: none;
+  transition: border-color 300ms ease-in-out;
+  outline: none;
+}
+
+.tts-inline .chat-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.tts-inline .chat-input:focus {
+  border-color: var(--lumi-primary);
+  box-shadow: 0 0 0 2px var(--lumi-primary-subtle);
+}
+
+.tts-inline .chat-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tts-inline .chat-send-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lumi-primary);
+  color: var(--text-inverse);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 300ms ease-in-out;
+}
+
+.tts-inline .chat-send-btn:hover:not(:disabled) {
+  background: var(--lumi-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px var(--lumi-primary-border);
+}
+
+.tts-inline .chat-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tts-inline .chat-send-btn.streaming {
+  background: var(--lumi-accent);
+}
+
+.tts-inline .chat-send-btn.streaming:hover:not(:disabled) {
+  background: var(--lumi-danger-hover);
+}
+
+.tts-emotion-tag {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--lumi-primary-subtle);
+  color: var(--lumi-primary);
+  font-weight: 500;
+  text-transform: capitalize;
 }
 
 .tts-inline .tts-input {

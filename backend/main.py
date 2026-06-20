@@ -23,8 +23,9 @@ def main():
     args = parse_args()
     setup_logging()
 
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # Use the default ProactorEventLoop on Windows. The SelectorEventLoop breaks
+    # edge_tts (aiohttp WebSocket + SSL) — no audio is received from the service.
+    # ProactorEventLoop supports subprocess, SSL, and pipes on Python 3.8+.
 
     logger.info(f"LuomiNest Backend starting on {args.host}:{args.port}")
     

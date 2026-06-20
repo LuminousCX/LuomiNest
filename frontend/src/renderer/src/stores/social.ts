@@ -8,6 +8,7 @@ import type {
   CollaborationPhase,
   CollaborationSubTask,
   CollaborationEvent,
+  MessageCollaboration,
   SearchResult,
 } from '../types'
 import { useApi } from '../composables/useApi'
@@ -112,7 +113,7 @@ export const useSocialStore = defineStore('social', () => {
       }
 
       case 'agents_start':
-        respondingAgentNames.value = event.data?.agentNames || event.data?.agent_names || []
+        respondingAgentNames.value = (event.data?.agentNames || event.data?.agent_names || []) as string[]
         break
 
       case 'agent_message': {
@@ -133,7 +134,7 @@ export const useSocialStore = defineStore('social', () => {
         break
 
       case 'info':
-        if (event.data?.message) {
+        if (event.data?.message && typeof event.data.message === 'string') {
           groupMessages.value.push({
             id: `info-${Date.now()}`,
             groupId: currentGroup.value?.id || '',
@@ -157,7 +158,7 @@ export const useSocialStore = defineStore('social', () => {
     try {
       const response = await apiGet<{ data: { messages: GroupMessage[] } }>(`/social/groups/${groupId}`)
       if (response.data?.messages) {
-        groupMessages.value = response.data.messages.map((msg) => _normalizeMessage(msg))
+        groupMessages.value = response.data.messages.map((msg) => _normalizeMessage(msg as unknown as Record<string, unknown>))
       }
     } catch {
       groupMessages.value = []
@@ -165,16 +166,18 @@ export const useSocialStore = defineStore('social', () => {
   }
 
   const _normalizeMessage = (msg: Record<string, unknown>): GroupMessage => {
+    const asString = (v: unknown): string => (typeof v === 'string' ? v : '')
+    const asOptionalString = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
     return {
-      id: msg.id || msg.message_id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      groupId: msg.groupId || msg.group_id || currentGroup.value?.id || '',
-      senderId: msg.senderId || msg.sender_id || '',
-      senderName: msg.senderName || msg.sender_name || '',
-      senderType: msg.senderType || msg.sender_type || 'user',
-      content: typeof (msg.content) === 'string' ? msg.content : '',
-      timestamp: msg.timestamp || new Date().toISOString(),
-      role: msg.role,
-      collaboration: msg.collaboration,
+      id: asString(msg.id || msg.message_id) || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      groupId: asString(msg.groupId || msg.group_id) || currentGroup.value?.id || '',
+      senderId: asString(msg.senderId || msg.sender_id),
+      senderName: asOptionalString(msg.senderName || msg.sender_name),
+      senderType: asString(msg.senderType || msg.sender_type) || 'user',
+      content: asString(msg.content),
+      timestamp: asString(msg.timestamp) || new Date().toISOString(),
+      role: asOptionalString(msg.role),
+      collaboration: msg.collaboration as MessageCollaboration | undefined,
     }
   }
 

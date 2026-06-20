@@ -92,6 +92,55 @@ export interface ChatResponse {
   provider: string
 }
 
+export interface ToolCall {
+  id: string
+  type: string
+  function: {
+    name: string
+    arguments: string
+  }
+}
+
+export interface ToolEvent {
+  tool_name: string
+  status: 'started' | 'completed' | 'failed'
+  output?: string | null
+}
+
+/** 子 Agent 执行事件（主 Agent 通过 delegate_to_subagent 工具委派时推送） */
+export interface SubagentEvent {
+  subagent_id: string
+  status: 'started' | 'running' | 'completed' | 'failed'
+  task: string
+  depth: number
+  iteration?: number
+  tool_name?: string
+  tool_args?: string
+  tool_output?: string
+  progress?: string
+  result?: string
+  error?: string
+  /** 浏览器工具专用字段（create_browser_tab 工具复用 subagent_event 通道） */
+  browser_action?: string
+  browser_url?: string
+  browser_title?: string
+  browser_purpose?: string
+  browser_tab_id?: string
+}
+
+/** 定时任务事件（后端调度器触发时推送） */
+export interface TaskStreamEvent {
+  task_id: string
+  task_name: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'removed'
+  task_type: 'date' | 'cron' | 'interval'
+  message: string
+  result?: string | null
+  error?: string | null
+  timestamp: string
+  payload?: Record<string, unknown>
+}
+
 export interface ChatStreamChunk {
   id: string
   content: string
@@ -105,6 +154,12 @@ export interface ChatStreamChunk {
     totalTokens?: number
   }
   suggested_questions?: string[]
+  emotion?: string
+  tool_calls?: ToolCall[]
+  tool_event?: ToolEvent
+  subagent_event?: SubagentEvent
+  task_event?: TaskStreamEvent
+  iteration?: number
 }
 
 export interface Conversation {
@@ -333,7 +388,7 @@ export interface CollaborationSubTask {
 
 export interface CollaborationEvent {
   type: string
-  data: unknown
+  data: Record<string, any>
 }
 
 export interface ProviderLogo {
@@ -382,6 +437,23 @@ export interface LogUploadResponse {
   status: string
 }
 
+export interface ExecuteCommandRequest {
+  command: string
+  description?: string
+  executed_by?: string
+  working_dir?: string
+  timeout?: number
+}
+
+export interface ExecuteCommandResponse {
+  command_id: string
+  status: 'success' | 'failed' | 'running'
+  exit_code: number | null
+  output: string | null
+  error: string | null
+  duration_ms: number
+}
+
 export interface PlatformAdapterType {
   name: string
   displayName: string
@@ -389,7 +461,7 @@ export interface PlatformAdapterType {
   icon: string
   category: string
   configTemplate: Record<string, unknown>
-  configMetadata: Record<string, unknown>
+  configMetadata: Record<string, any>
   supportStreaming: boolean
   supportProactive: boolean
 }
@@ -447,6 +519,16 @@ export interface PlatformLogSummary {
   totalEntries: number
   totalInstances: number
   byLevel: Record<string, number>
+}
+
+export interface MainAgentInfo {
+  provider: string
+  providerName: string
+  model: string
+  supportsMultimodal: boolean
+  systemPrompt: string
+  temperature: number
+  maxTokens: number
 }
 
 export {}

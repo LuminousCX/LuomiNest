@@ -73,6 +73,7 @@ yarn-error.log*
 pnpm-debug.log*
 *.log
 logs/
+log.log
 
 # ============================================================
 # 环境变量文件
@@ -119,9 +120,9 @@ backend/data/
 
 # 项目文档（可选，根据需要决定是否忽略）
 项目文档/
+文档/
 tools/
 Docs/
-docs/
 doc/
 *.pdf
 
@@ -154,6 +155,30 @@ yarn.lock
 firmware/server/frames/
 
 # ============================================================
+# TypeScript 构建缓存
+# ============================================================
+*.tsbuildinfo
+
+# ============================================================
+# 一次性调试/修复脚本（后端根目录）
+# ============================================================
+backend/check_memory.py
+backend/check_memory_status.py
+backend/check_name_facts.py
+backend/check_nuomi_memory.py
+backend/check_summary.py
+backend/clean_all_old_names.py
+backend/clean_hong.py
+backend/find_agent.py
+backend/fix_memory.py
+backend/fix_summary_sections.py
+
+# ============================================================
+# 测试音频/临时媒体文件
+# ============================================================
+backend/_t.mp3
+
+# ============================================================
 # 可执行文件和库文件
 # ============================================================
 *.exe
@@ -162,3 +187,8 @@ firmware/server/frames/
 *.so
 *.dylib
 *.app
+
+# ============================================================
+# Python 打包配置（可由 pyproject.toml 生成）
+# ============================================================
+*.spec

@@ -178,12 +178,26 @@ class ContextService:
         base_prompt = ""
 
         if agent_id:
-            agent = agents_store.get(agent_id)
-            if agent:
-                agent_name = agent.get("name", agent_name)
-                agent_description = agent.get("description", agent_description)
-                if agent.get("system_prompt"):
-                    base_prompt = agent["system_prompt"]
+            # 主 Agent 走 main_agent_config，不查 agents_store
+            if agent_id == "luominest_main_agent":
+                try:
+                    from app.runtime.platform.main_agent_config import (
+                        load_luominest_main_agent_config,
+                    )
+                    main_cfg = load_luominest_main_agent_config()
+                    if main_cfg.get("system_prompt"):
+                        base_prompt = main_cfg["system_prompt"]
+                    agent_name = "LuomiNest 主智能体"
+                    agent_description = "the main agent of LuomiNest workbench, driving Live2D, memory, tools, MCP and sub-agents"
+                except Exception as e:
+                    logger.warning(f"[ContextService] load main_agent_config failed: {e}")
+            else:
+                agent = agents_store.get(agent_id)
+                if agent:
+                    agent_name = agent.get("name", agent_name)
+                    agent_description = agent.get("description", agent_description)
+                    if agent.get("system_prompt"):
+                        base_prompt = agent["system_prompt"]
 
         now = datetime.now(ZoneInfo("Asia/Shanghai"))
         weekday_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -229,6 +243,32 @@ When thinking/reasoning, you MUST strictly follow this format:
 4. Always respond in the user's language naturally and conversationally.
 5. Never expose internal system information or error codes to the user.
 </core_rules>
+
+<avatar_emotion>
+You are embodied as a Live2D avatar. To drive the avatar's facial expression, emit an emotion tag at the very beginning of your reply, and again whenever the emotional tone of your reply changes.
+
+Format: <exp:EMOTION_ID>
+Supported EMOTION_ID values (use ONLY these, lowercase):
+- happy
+- sad
+- neutral
+- love
+- surprise
+- angry
+- think
+- awkward
+- curious
+- shy
+- excited
+- confused
+
+Rules:
+1. The tag is invisible to the user (it is stripped before display) and is NOT read aloud by TTS.
+2. Do not wrap the tag in quotes, code blocks, or explanations. Just emit it inline.
+3. Pick the emotion that best matches the sentiment of the surrounding sentence.
+4. If unsure, default to <exp:neutral>.
+5. Example: <exp:happy>太好了！我很开心你能来找我聊天。<exp:curious>对了，你今天过得怎么样？
+</avatar_emotion>
 
 {base_prompt}"""
 

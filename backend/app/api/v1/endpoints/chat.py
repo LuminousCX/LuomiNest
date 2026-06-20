@@ -760,32 +760,30 @@ class TTSRequest(BaseModel):
 @router.post("/tts/synthesize")
 async def tts_synthesize(request: TTSRequest):
     if not request.text.strip():
-        return JSONResponse({"error": "text is required"}, status_code=400)
+        return JSONResponse({"error": "文本内容不能为空"}, status_code=400)
 
     from fastapi.responses import Response
 
-    # Try Edge TTS first (natural voices, requires network)
+    # 优先使用 Sherpa-ONNX TTS（完全离线，神经网络语音，质量好）
     try:
-        from app.runtime.provider.tts.edge_tts import EdgeTTSProvider
-        settings = get_settings()
-        proxy = settings.TTS_PROXY or None
-        provider = EdgeTTSProvider(proxy=proxy)
+        from app.runtime.provider.tts.sherpa_onnx_tts import SherpaOnnxTTSProvider
+        provider = SherpaOnnxTTSProvider()
         audio_bytes = await provider.synthesize(request.text, request.voice)
         return Response(
             content=audio_bytes,
-            media_type="audio/mpeg",
+            media_type="audio/wav",
             headers={"Content-Disposition": "inline"},
         )
-    except ImportError:
-        logger.warning("[API] TTS: edge-tts not installed, trying local TTS")
+    except FileNotFoundError as e:
+        logger.warning(f"[API] TTS: Sherpa-ONNX model not found ({e}), falling back to local TTS")
     except Exception as e:
-        logger.warning(f"[API] TTS: Edge TTS failed ({e}), falling back to local TTS")
+        logger.warning(f"[API] TTS: Sherpa-ONNX failed ({e}), falling back to local TTS")
 
-    # Fallback to local TTS (offline, system voice)
+    # 兜底：本地 pyttsx3 TTS（系统语音，离线）
     try:
         from app.runtime.provider.tts.local_tts import LocalTTSProvider
         provider = LocalTTSProvider()
-        audio_bytes = await provider.synthesize(request.text)
+        audio_bytes = await provider.synthesize(request.text, request.voice)
         return Response(
             content=audio_bytes,
             media_type="audio/wav",
@@ -794,9 +792,121 @@ async def tts_synthesize(request: TTSRequest):
     except ImportError:
         logger.error("[API] TTS: pyttsx3 not installed")
         return JSONResponse(
-            {"error": "No TTS engine available. Install edge-tts or pyttsx3"},
+            {"error": "未安装语音合成引擎，请安装 sherpa-onnx 或 pyttsx3"},
             status_code=503,
         )
     except Exception as e:
         logger.error(f"[API] TTS: all providers failed: {e}")
-        return JSONResponse({"error": f"TTS synthesis failed: {e}"}, status_code=500)
+        return JSONResponse({"error": f"语音合成失败：{e}"}, status_code=500)
+
+
+def _detect_tts_device() -> dict:
+    """Detect compute device availability for TTS.
+
+    Checks for CUDA (GPU) via torch if installed, otherwise reports CPU.
+    pyttsx3 is CPU-only; this info helps the frontend show what's available
+    and lets future GPU-based TTS engines be auto-selected.
+    """
+    import platform
+
+    device = {"type": "cpu", "name": platform.processor() or "Unknown CPU", "cuda_available": False}
+
+    try:
+        import torch
+        if torch.cuda.is_available():
+            device["type"] = "gpu"
+            device["name"] = torch.cuda.get_device_name(0)
+            device["cuda_available"] = True
+            device["cuda_version"] = torch.version.cuda or "unknown"
+    except ImportError:
+        pass
+    except Exception as dev_err:
+        logger.debug(f"[API] TTS device detection (torch) failed: {dev_err}")
+
+    return device
+
+
+@router.get("/tts/engines")
+async def tts_engines():
+    """Report available TTS engines, device info, and avatar voice bindings."""
+    engines: list[dict] = []
+
+    # Sherpa-ONNX TTS (offline, neural network)
+    try:
+        from app.runtime.provider.tts.sherpa_onnx_tts import SherpaOnnxTTSProvider
+        try:
+            SherpaOnnxTTSProvider()  # 测试是否能初始化
+            engines.append({
+                "id": "sherpa-onnx",
+                "name": "Sherpa-ONNX TTS (离线神经网络)",
+                "online": False,
+                "available": True,
+                "default_voices": SherpaOnnxTTSProvider.DEFAULT_VOICES,
+            })
+        except Exception as init_err:
+            logger.debug(f"[API] TTS sherpa-onnx init check failed: {init_err}")
+            engines.append({
+                "id": "sherpa-onnx",
+                "name": "Sherpa-ONNX TTS (离线神经网络)",
+                "online": False,
+                "available": False,
+                "default_voices": SherpaOnnxTTSProvider.DEFAULT_VOICES,
+            })
+    except ImportError:
+        engines.append({
+            "id": "sherpa-onnx",
+            "name": "Sherpa-ONNX TTS (离线神经网络)",
+            "online": False,
+            "available": False,
+        })
+
+    # Local TTS (offline, CPU via pyttsx3)
+    try:
+        import pyttsx3  # noqa: F401
+        local_voices: list[dict] = []
+        lang_map: dict[str, str] = {}
+        try:
+            from app.runtime.provider.tts.local_tts import LocalTTSProvider
+            provider = LocalTTSProvider()
+            local_voices = provider.list_voices()
+            lang_map = provider.get_lang_map()
+        except Exception as lv_err:
+            logger.debug(f"[API] TTS local voice enumeration failed: {lv_err}")
+        engines.append({
+            "id": "local",
+            "name": "本地 TTS (pyttsx3, CPU)",
+            "online": False,
+            "available": True,
+            "voices": local_voices,
+            "lang_map": lang_map,
+        })
+    except ImportError:
+        engines.append({
+            "id": "local",
+            "name": "本地 TTS (pyttsx3, CPU)",
+            "online": False,
+            "available": False,
+        })
+
+    device = _detect_tts_device()
+
+    # Avatar voice bindings (model_id -> voice/lang)
+    from app.services.avatar_manager import LUOMINEST_AVATAR_BINDINGS
+    bindings = {
+        mid: {
+            "model_id": b.model_id,
+            "voice": b.voice,
+            "voice_lang": b.voice_lang,
+            "default_expression": b.default_expression,
+        }
+        for mid, b in LUOMINEST_AVATAR_BINDINGS.items()
+    }
+
+    return {
+        "error": None,
+        "data": {
+            "engines": engines,
+            "device": device,
+            "avatar_bindings": bindings,
+        },
+    }

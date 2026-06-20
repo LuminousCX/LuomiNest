@@ -10,6 +10,7 @@ class EdgeTTSProvider(TTSProvider):
     DEFAULT_VOICES = {
         "zh": "zh-CN-XiaoxiaoNeural",
         "en": "en-US-JennyNeural",
+        "ja": "ja-JP-NanamiNeural",
     }
 
     def __init__(self, proxy: str | None = None):
@@ -18,6 +19,9 @@ class EdgeTTSProvider(TTSProvider):
     async def synthesize(self, text: str, voice: str = "default") -> bytes:
         if voice == "default" or not voice:
             voice = self.DEFAULT_VOICES.get("zh", "zh-CN-XiaoxiaoNeural")
+        # Allow callers to pass a language code ('zh'/'ja'/'en') instead of a full voice name.
+        elif voice in self.DEFAULT_VOICES:
+            voice = self.DEFAULT_VOICES[voice]
 
         try:
             communicate = edge_tts.Communicate(text, voice, proxy=self.proxy)

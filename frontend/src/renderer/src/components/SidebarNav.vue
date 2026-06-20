@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   MessageCircle,
   MessageSquare,
-  Users,
   Globe,
   Wifi,
   Settings2,
@@ -25,6 +24,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Brain,
+  Bot,
 } from 'lucide-vue-next'
 import LumiBrandStar from './common/LumiBrandStar.vue'
 
@@ -62,8 +62,8 @@ const navGroups: NavGroup[] = [
     label: '聊天',
     icon: MessageCircle,
     children: [
+      { id: '/workbench', label: '工作台', icon: Bot },
       { id: '/workspace', label: '对话', icon: MessageSquare },
-      { id: '/social', label: '群组Agent', icon: Users },
       { id: '/chat/platform', label: '平台接入', icon: Globe },
       { id: '/chat/devices', label: '设备与群组', icon: Wifi },
     ],
@@ -366,7 +366,7 @@ const handleNavigate = (path: string) => {
   right: 6px;
   width: 6px;
   height: 6px;
-  background: #ef4444;
+  background: var(--lumi-danger);
   border-radius: 50%;
 }
 
@@ -441,6 +441,7 @@ const handleNavigate = (path: string) => {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 4px 0;
+  scrollbar-width: thin;
 }
 
 .sidebar-nav-panel.collapsed .nav-content {
@@ -452,14 +453,21 @@ const handleNavigate = (path: string) => {
   padding: 0 8px;
 }
 
+.nav-section + .nav-section {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--divider-horizontal);
+}
+
 .section-label {
-  padding: 8px 8px 4px;
-  font-size: 11px;
-  font-weight: 600;
+  padding: 10px 10px 6px;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1.2px;
   user-select: none;
+  opacity: 0.65;
 }
 
 .nav-group {
@@ -471,13 +479,13 @@ const handleNavigate = (path: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px;
+  padding: 8px 10px;
   border: none;
   background: transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--text-secondary);
-  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
+  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
   position: relative;
   overflow: hidden;
 }
@@ -488,27 +496,26 @@ const handleNavigate = (path: string) => {
   border-radius: var(--radius-lg);
 }
 
-.group-header::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  opacity: 0;
-  background: var(--surface-hover);
-  transition: opacity 0.15s ease-in-out;
-  pointer-events: none;
-}
-
 .group-header:hover {
+  background: var(--surface-hover);
   color: var(--text-primary);
-}
-
-.group-header:active::after {
-  opacity: 1;
 }
 
 .group-header.active {
   color: var(--lumi-primary);
+  background: var(--lumi-primary-subtle);
+}
+
+.group-header.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--lumi-primary);
+  opacity: 0.7;
 }
 
 .group-header-left {
@@ -521,6 +528,11 @@ const handleNavigate = (path: string) => {
 
 .group-icon {
   flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.group-header.active .group-icon {
+  opacity: 1;
 }
 
 .group-label {
@@ -531,15 +543,25 @@ const handleNavigate = (path: string) => {
   text-overflow: ellipsis;
 }
 
+.group-header.active .group-label {
+  font-weight: 600;
+}
+
 .group-chevron {
   position: relative;
   z-index: 1;
   flex-shrink: 0;
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.5;
+  transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+}
+
+.group-header:hover .group-chevron {
+  opacity: 0.8;
 }
 
 .group-header.active .group-chevron {
   color: var(--lumi-primary);
+  opacity: 0.8;
 }
 
 .group-chevron.rotated {
@@ -547,18 +569,18 @@ const handleNavigate = (path: string) => {
 }
 
 .group-children {
-  padding: 2px 0;
+  padding: 2px 0 2px 0;
 }
 
 .tree-child {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px 5px 20px;
+  padding: 6px 10px 6px 22px;
   cursor: pointer;
   border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
+  color: var(--text-muted);
+  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
   position: relative;
   overflow: hidden;
   font-size: 13px;
@@ -588,6 +610,12 @@ const handleNavigate = (path: string) => {
 
 .tree-child.active {
   color: var(--lumi-primary);
+  background: var(--lumi-primary-subtle);
+  font-weight: 500;
+}
+
+.tree-child.active .child-icon {
+  color: var(--lumi-primary);
 }
 
 .tree-line {
@@ -605,7 +633,7 @@ const handleNavigate = (path: string) => {
   top: 0;
   height: 50%;
   width: 1px;
-  background: var(--divider-vertical);
+  background: var(--border);
 }
 
 .tree-child.last .tree-branch {
@@ -618,7 +646,7 @@ const handleNavigate = (path: string) => {
   top: 50%;
   width: 5px;
   height: 1px;
-  background: var(--divider-vertical);
+  background: var(--border);
 }
 
 .tree-child.last .tree-node {
@@ -651,38 +679,37 @@ const handleNavigate = (path: string) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px;
+  padding: 8px 10px;
   border: none;
   background: transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  color: var(--text-secondary);
-  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
+  color: var(--text-muted);
+  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
   position: relative;
   overflow: hidden;
 }
 
-.nav-item::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  opacity: 0;
-  background: var(--surface-hover);
-  transition: opacity 0.15s ease-in-out;
-  pointer-events: none;
-}
-
 .nav-item:hover {
+  background: var(--surface-hover);
   color: var(--text-primary);
-}
-
-.nav-item:active::after {
-  opacity: 1;
 }
 
 .nav-item.active {
   color: var(--lumi-primary);
+  background: var(--lumi-primary-subtle);
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--lumi-primary);
+  opacity: 0.7;
 }
 
 .nav-item-icon {
@@ -734,7 +761,7 @@ const handleNavigate = (path: string) => {
   cursor: pointer;
   color: var(--text-muted);
   font-size: 12px;
-  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
+  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
 }
 
 .sidebar-nav-panel.collapsed .footer-btn {
@@ -743,16 +770,16 @@ const handleNavigate = (path: string) => {
 
 .footer-btn:hover {
   background: var(--surface-hover);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 /* Tree expand transition */
 .tree-expand-enter-active {
-  animation: tree-expand-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: tree-expand-in 0.2s ease-in-out;
 }
 
 .tree-expand-leave-active {
-  animation: tree-expand-out 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: tree-expand-out 0.15s ease-in-out;
 }
 
 @keyframes tree-expand-in {

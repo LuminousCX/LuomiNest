@@ -7,8 +7,8 @@ import { PATHS } from './paths'
 const isDev = !app.isPackaged
 const isMac = platform() === 'darwin'
 
-const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
-const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
 
 export interface ImportedModelRecord {
   id: string
@@ -324,6 +324,23 @@ export function registerDesktopPetIpc(mainWindow: BrowserWindow | null): void {
     }
     const clampedScale = Math.max(0.1, Math.min(10, scale))
     return sendToDesktopPet('desktop-pet:set-scale', clampedScale)
+      ? { success: true }
+      : { success: false, error: 'Desktop pet window not running' }
+  })
+
+  ipcMain.handle('desktop-pet:sendSubtitle', async (event: IpcMainInvokeEvent, text: string) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
+    if (typeof text !== 'string') {
+      return { success: false, error: 'Invalid subtitle text: must be a string' }
+    }
+    return sendToDesktopPet('desktop-pet:subtitle', text)
+      ? { success: true }
+      : { success: false, error: 'Desktop pet window not running' }
+  })
+
+  ipcMain.handle('desktop-pet:hideSubtitle', async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
+    return sendToDesktopPet('desktop-pet:subtitle-hide')
       ? { success: true }
       : { success: false, error: 'Desktop pet window not running' }
   })

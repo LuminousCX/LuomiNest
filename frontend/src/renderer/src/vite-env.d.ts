@@ -146,6 +146,8 @@ export interface ElectronApi {
     drivePadEmotion: (pleasure: number, arousal: number, dominance: number) => Promise<{ success: boolean }>
     setCoreParam: (paramId: string, value: number) => Promise<{ success: boolean }>
     getModelCapabilities: () => Promise<ModelCapabilities | null>
+    sendSubtitle: (text: string) => Promise<{ success: boolean }>
+    hideSubtitle: () => Promise<{ success: boolean }>
   }
 }
 

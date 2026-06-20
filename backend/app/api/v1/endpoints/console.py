@@ -1,3 +1,6 @@
+import asyncio
+import os
+import shlex
 import uuid
 from datetime import datetime, timezone
 
@@ -6,6 +9,35 @@ from loguru import logger
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/console", tags=["console"])
+
+
+# 命令白名单（允许执行的主命令）
+ALLOWED_COMMANDS = {
+    "git", "npm", "pnpm", "yarn", "node", "python", "python3", "pip", "pip3",
+    "ls", "dir", "cat", "type", "echo", "pwd", "cd", "mkdir", "md", "rmdir",
+    "cp", "copy", "mv", "move", "touch", "find", "grep", "rg", "head", "tail",
+    "wc", "curl", "wget", "ping", "nslookup", "ipconfig", "netstat",
+    "docker", "docker-compose", "redis-cli", "sqlite3",
+    "tasklist", "systeminfo", "where", "which",
+}
+
+# 危险命令模式（即使主命令在白名单中，包含这些模式也拒绝）
+DANGEROUS_PATTERNS = {
+    "rm -rf /", "rm -rf ~", "rm -rf *", "rm -rf .",
+    "del /f /s /q C:\\", "del /f /s /q c:\\",
+    "format ", "shutdown", "reboot", ":(){:|:&};:",
+    "mkfs", "dd if=", "> /dev/sda", "> /dev/hda",
+    "chmod -R 777 /", "chown -R",
+}
+
+# 默认命令超时（秒）
+DEFAULT_COMMAND_TIMEOUT = 30
+# 最大命令超时（秒）
+MAX_COMMAND_TIMEOUT = 120
+# 最大输出长度（字符）
+MAX_OUTPUT_LENGTH = 10000
+# 存储上限
+MAX_STORE_SIZE = 500
 
 
 class CommandRecord(BaseModel):
@@ -45,233 +77,166 @@ class LogUploadResponse(BaseModel):
     status: str
 
 
+class ExecuteCommandRequest(BaseModel):
+    command: str
+    description: str = ""
+    executed_by: str = "user"
+    working_dir: str | None = None
+    timeout: int | None = None
+
+
+class ExecuteCommandResponse(BaseModel):
+    command_id: str
+    status: str
+    exit_code: int | None
+    output: str | None
+    error: str | None
+    duration_ms: int
+
+
+# 存储初始为空，不再使用 demo 数据
 _command_store: list[CommandRecord] = []
 _log_store: list[SystemLogEntry] = []
 
 
-def _init_demo_data() -> None:
-    now = datetime.now(timezone.utc)
-
-    demo_commands = [
-        CommandRecord(
-            id=str(uuid.uuid4())[:8],
-            command="ollama pull deepseek-r1:7b",
-            description="拉取 DeepSeek-R1 7B 模型到本地 Ollama",
-            status="success",
-            exit_code=0,
-            executed_by="Agent-小助手",
-            started_at=datetime(2026, 5, 31, 10, 2, 15, tzinfo=timezone.utc).isoformat(),
-            finished_at=datetime(2026, 5, 31, 10, 5, 42, tzinfo=timezone.utc).isoformat(),
-            duration_ms=207000,
-            output="success",
-            rollback_command="ollama rm deepseek-r1:7b",
-        ),
-        CommandRecord(
-            id=str(uuid.uuid4())[:8],
-            command="pip install luominest-plugin-weather==2.1.0",
-            description="安装天气插件 v2.1.0",
-            status="failed",
-            exit_code=1,
-            executed_by="Agent-小助手",
-            started_at=datetime(2026, 5, 31, 10, 8, 0, tzinfo=timezone.utc).isoformat(),
-            finished_at=datetime(2026, 5, 31, 10, 8, 3, tzinfo=timezone.utc).isoformat(),
-            duration_ms=3000,
-            output=None,
-            error="Package 'luominest-plugin-weather' not found on PyPI",
-            rollback_command="pip uninstall luominest-plugin-weather -y",
-        ),
-        CommandRecord(
-            id=str(uuid.uuid4())[:8],
-            command="luominest agent create --name 代码审查员 --model deepseek-chat",
-            description="创建代码审查 Agent",
-            status="success",
-            exit_code=0,
-            executed_by="System",
-            started_at=datetime(2026, 5, 31, 10, 12, 30, tzinfo=timezone.utc).isoformat(),
-            finished_at=datetime(2026, 5, 31, 10, 12, 31, tzinfo=timezone.utc).isoformat(),
-            duration_ms=1200,
-            output="Agent '代码审查员' created with id: agt_coder01",
-            rollback_command="luominest agent delete agt_coder01",
-        ),
-        CommandRecord(
-            id=str(uuid.uuid4())[:8],
-            command="redis-cli SET session:active_agent '小助手'",
-            description="设置当前活跃 Agent 为小助手",
-            status="success",
-            exit_code=0,
-            executed_by="Agent-小助手",
-            started_at=datetime(2026, 5, 31, 10, 15, 0, tzinfo=timezone.utc).isoformat(),
-            finished_at=datetime(2026, 5, 31, 10, 15, 0, tzinfo=timezone.utc).isoformat(),
-            duration_ms=15,
-            output="OK",
-            rollback_command="redis-cli DEL session:active_agent",
-        ),
-        CommandRecord(
-            id=str(uuid.uuid4())[:8],
-            command="luominest memory export --format markdown --output ./exports/memory.md",
-            description="导出长期记忆为 Markdown 文件",
-            status="success",
-            exit_code=0,
-            executed_by="Agent-翻译官",
-            started_at=datetime(2026, 5, 31, 10, 20, 10, tzinfo=timezone.utc).isoformat(),
-            finished_at=datetime(2026, 5, 31, 10, 20, 12, tzinfo=timezone.utc).isoformat(),
-            duration_ms=2000,
-            output="Exported 45 memory entries to ./exports/memory.md",
-            rollback_command="rm ./exports/memory.md",
-        ),
-    ]
-    _command_store.extend(demo_commands)
-
-    demo_logs = [
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 0, 0, tzinfo=timezone.utc).isoformat(),
-            level="info",
-            source="backend",
-            message="[LuomiNest] Starting application...",
-            module="app_factory",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 0, 1, tzinfo=timezone.utc).isoformat(),
-            level="info",
-            source="backend",
-            message="[LuomiNest] Environment: Development",
-            module="app_factory",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 0, 2, tzinfo=timezone.utc).isoformat(),
-            level="success",
-            source="backend",
-            message="[AppFactory] FastAPI application created successfully",
-            module="app_factory",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 0, 3, tzinfo=timezone.utc).isoformat(),
-            level="info",
-            source="backend",
-            message="[HTTP] --> GET /api/v1/system/health (id=140234567890)",
-            module="middleware",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 0, 3, tzinfo=timezone.utc).isoformat(),
-            level="success",
-            source="backend",
-            message="[HTTP] <-- GET /api/v1/system/health 200 (12.3ms)",
-            module="middleware",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 0, 5, tzinfo=timezone.utc).isoformat(),
-            level="info",
-            source="backend",
-            message="Memory engine initialized successfully",
-            module="memory_engine",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 2, 15, tzinfo=timezone.utc).isoformat(),
-            level="info",
-            source="backend",
-            message="Agent '小助手' executing command: ollama pull deepseek-r1:7b",
-            module="agent_orchestrator",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 5, 42, tzinfo=timezone.utc).isoformat(),
-            level="success",
-            source="backend",
-            message="Command 'ollama pull deepseek-r1:7b' completed (exit_code=0, duration=207s)",
-            module="agent_orchestrator",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 8, 3, tzinfo=timezone.utc).isoformat(),
-            level="error",
-            source="backend",
-            message="Command 'pip install luominest-plugin-weather==2.1.0' failed: Package not found on PyPI",
-            module="agent_orchestrator",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 10, 0, tzinfo=timezone.utc).isoformat(),
-            level="warn",
-            source="backend",
-            message="HomeAssistant connection timeout, retrying in 5s...",
-            module="home_assistant",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 10, 5, tzinfo=timezone.utc).isoformat(),
-            level="success",
-            source="backend",
-            message="HomeAssistant reconnected successfully",
-            module="home_assistant",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 12, 31, tzinfo=timezone.utc).isoformat(),
-            level="info",
-            source="backend",
-            message="Agent '代码审查员' created (id=agt_coder01)",
-            module="agent_service",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 15, 0, tzinfo=timezone.utc).isoformat(),
-            level="info",
-            source="frontend",
-            message="WebSocket connection established to /ws/chat",
-            module="ws_manager",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 15, 1, tzinfo=timezone.utc).isoformat(),
-            level="info",
-            source="frontend",
-            message="Live2D model 'Hiyori' loaded successfully",
-            module="live2d_loader",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 18, 0, tzinfo=timezone.utc).isoformat(),
-            level="warn",
-            source="frontend",
-            message="TTS engine slow response (latency: 850ms > threshold 500ms)",
-            module="tts_engine",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 20, 12, tzinfo=timezone.utc).isoformat(),
-            level="info",
-            source="backend",
-            message="Memory export completed: 45 entries -> ./exports/memory.md",
-            module="markdown_exporter",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 25, 0, tzinfo=timezone.utc).isoformat(),
-            level="info",
-            source="frontend",
-            message="User switched to dark theme",
-            module="theme_store",
-        ),
-        SystemLogEntry(
-            id=str(uuid.uuid4())[:8],
-            timestamp=datetime(2026, 5, 31, 10, 30, 0, tzinfo=timezone.utc).isoformat(),
-            level="error",
-            source="frontend",
-            message="Plugin 'weather-v2' load failed: missing dependency 'requests>=2.28'",
-            module="plugin_loader",
-        ),
-    ]
-    _log_store.extend(demo_logs)
+def _add_log(entry: SystemLogEntry) -> None:
+    """添加日志条目，超过上限时删除最旧的"""
+    _log_store.append(entry)
+    if len(_log_store) > MAX_STORE_SIZE:
+        _log_store.pop(0)
 
 
-_init_demo_data()
+def _add_command(record: CommandRecord) -> None:
+    """添加命令记录到头部，超过上限时删除最旧的"""
+    _command_store.insert(0, record)
+    if len(_command_store) > MAX_STORE_SIZE:
+        _command_store.pop()
+
+
+class ConsoleLogHandler:
+    """loguru handler，把后端日志实时写入 _log_store。
+
+    支持解析 platform_logger 通过 logger.bind() 传入的结构化字段
+    （source / adapter_type / event / instance_id），使控制台页面
+    能以统一格式展示平台事件与一般后端日志。
+    """
+
+    def __call__(self, message) -> None:
+        try:
+            record = message.record
+            level = record["level"].name.lower()
+            # 映射 loguru 级别到 console 级别
+            if level in ("trace", "debug"):
+                level = "info"
+            elif level == "warning":
+                level = "warn"
+            elif level == "critical":
+                level = "error"
+
+            extra = record.get("extra", {}) or {}
+            message_text = record["message"]
+
+            # 识别平台日志：platform_logger 通过 bind 注入 source=platform
+            if extra.get("source") == "platform":
+                adapter_type = extra.get("adapter_type", "")
+                event = extra.get("event", "")
+                instance_id = extra.get("instance_id", "")
+                module = f"platform:{adapter_type}" if adapter_type else "platform"
+                # 组装带事件标识的可读消息
+                if event:
+                    display_msg = f"[{event}] {message_text}"
+                else:
+                    display_msg = message_text
+                entry_extra = {"adapter_type": adapter_type, "event": event, "instance_id": instance_id}
+            else:
+                module = record.get("module") or record.get("name") or "unknown"
+                display_msg = message_text
+                entry_extra = dict(extra) if extra else None
+
+            entry = SystemLogEntry(
+                id=str(uuid.uuid4())[:8],
+                timestamp=datetime.fromtimestamp(
+                    record["time"].timestamp(), tz=timezone.utc
+                ).isoformat(),
+                level=level,
+                source="backend",
+                message=display_msg,
+                module=module,
+                extra=entry_extra,
+            )
+            _add_log(entry)
+        except Exception:
+            # 防止日志 handler 自身出错导致崩溃
+            pass
+
+
+# 注册 loguru handler，捕获 INFO 及以上级别的日志
+_console_handler = ConsoleLogHandler()
+logger.add(_console_handler, level="INFO", format="{message}")
+
+
+def _validate_command(command: str) -> tuple[bool, str]:
+    """验证命令是否安全：白名单 + 危险模式检查"""
+    if not command or not command.strip():
+        return False, "命令不能为空"
+
+    # 检查危险模式
+    for pattern in DANGEROUS_PATTERNS:
+        if pattern in command:
+            return False, f"命令包含危险操作: {pattern}"
+
+    # 解析命令
+    try:
+        posix_mode = os.name != "nt"
+        parts = shlex.split(command, posix=posix_mode)
+    except ValueError as e:
+        return False, f"命令解析失败: {e}"
+
+    if not parts:
+        return False, "命令不能为空"
+
+    # 提取主命令（处理路径和 .exe 后缀）
+    main_cmd = os.path.basename(parts[0]).lower()
+    if main_cmd.endswith(".exe"):
+        main_cmd = main_cmd[:-4]
+
+    if main_cmd not in ALLOWED_COMMANDS:
+        allowed = ", ".join(sorted(ALLOWED_COMMANDS))
+        return False, f"命令 '{main_cmd}' 不在白名单中。允许的命令: {allowed}"
+
+    return True, ""
+
+
+async def _execute_command_async(
+    command: str, working_dir: str | None, timeout: int
+) -> tuple[int, str, str]:
+    """异步执行命令，返回 (exit_code, stdout, stderr)"""
+    try:
+        cwd = working_dir if working_dir and os.path.isdir(working_dir) else None
+
+        process = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=cwd,
+        )
+
+        try:
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                process.communicate(),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            return -1, "", f"命令执行超时（{timeout}秒）"
+
+        stdout = stdout_bytes.decode("utf-8", errors="replace")[:MAX_OUTPUT_LENGTH]
+        stderr = stderr_bytes.decode("utf-8", errors="replace")[:MAX_OUTPUT_LENGTH]
+
+        return process.returncode or 0, stdout, stderr
+    except Exception as e:
+        return -1, "", str(e)
 
 
 @router.get("/commands", response_model=list[CommandRecord])
@@ -288,9 +253,92 @@ async def get_command_records(
 
 @router.post("/commands", response_model=CommandRecord)
 async def create_command_record(record: CommandRecord):
-    _command_store.insert(0, record)
+    """手动记录一条命令记录（不执行，仅记录）"""
+    _add_command(record)
     logger.info(f"[Console] Command recorded: {record.command} (status={record.status})")
     return record
+
+
+@router.post("/execute", response_model=ExecuteCommandResponse)
+async def execute_command(req: ExecuteCommandRequest):
+    """执行命令（带白名单 + 超时 + 工作目录限制）"""
+    command = req.command.strip()
+
+    # 验证命令安全性
+    is_valid, error_msg = _validate_command(command)
+    if not is_valid:
+        logger.warning(f"[Console] Command rejected: {command} - {error_msg}")
+        return ExecuteCommandResponse(
+            command_id=str(uuid.uuid4())[:8],
+            status="failed",
+            exit_code=-1,
+            output=None,
+            error=error_msg,
+            duration_ms=0,
+        )
+
+    command_id = str(uuid.uuid4())[:8]
+    started_at = datetime.now(timezone.utc)
+    timeout = min(req.timeout or DEFAULT_COMMAND_TIMEOUT, MAX_COMMAND_TIMEOUT)
+
+    logger.info(
+        f"[Console] Executing command: {command} (id={command_id}, timeout={timeout}s)"
+    )
+
+    # 记录开始状态
+    record = CommandRecord(
+        id=command_id,
+        command=command,
+        description=req.description or f"执行命令: {command[:50]}",
+        status="running",
+        executed_by=req.executed_by,
+        started_at=started_at.isoformat(),
+    )
+    _add_command(record)
+
+    # 执行命令
+    exit_code, stdout, stderr = await _execute_command_async(
+        command, req.working_dir, timeout
+    )
+
+    finished_at = datetime.now(timezone.utc)
+    duration_ms = int((finished_at - started_at).total_seconds() * 1000)
+    status = "success" if exit_code == 0 else "failed"
+
+    # 更新记录
+    record.status = status
+    record.exit_code = exit_code
+    record.finished_at = finished_at.isoformat()
+    record.duration_ms = duration_ms
+    record.output = stdout if stdout else None
+    record.error = stderr if stderr else None
+
+    if status == "success":
+        logger.success(
+            f"[Console] Command completed: {command} (exit={exit_code}, duration={duration_ms}ms)"
+        )
+    else:
+        logger.error(
+            f"[Console] Command failed: {command} (exit={exit_code}, duration={duration_ms}ms)"
+        )
+
+    return ExecuteCommandResponse(
+        command_id=command_id,
+        status=status,
+        exit_code=exit_code,
+        output=stdout if stdout else None,
+        error=stderr if stderr else None,
+        duration_ms=duration_ms,
+    )
+
+
+@router.delete("/commands")
+async def clear_command_records():
+    """清空命令记录"""
+    count = len(_command_store)
+    _command_store.clear()
+    logger.info(f"[Console] Cleared {count} command records")
+    return {"status": "ok", "cleared": count}
 
 
 @router.get("/logs", response_model=list[SystemLogEntry])
@@ -305,13 +353,20 @@ async def get_system_logs(
         entries = [e for e in entries if e.source == source]
     if level:
         entries = [e for e in entries if e.level == level]
-    return entries[offset : offset + limit]
+    # 返回最新的日志（倒序）
+    result = list(reversed(entries))
+    return result[offset : offset + limit]
 
 
 @router.post("/logs/upload", response_model=LogUploadResponse)
 async def upload_logs(req: LogUploadRequest):
+    """接收前端上传的日志并存入存储"""
     upload_id = str(uuid.uuid4())[:12]
     received = len(req.logs)
+
+    for log_entry in req.logs:
+        _add_log(log_entry)
+
     logger.info(
         f"[Console] Logs uploaded: upload_id={upload_id}, "
         f"count={received}, source={req.uploaded_by}"
@@ -321,3 +376,12 @@ async def upload_logs(req: LogUploadRequest):
         received_count=received,
         status="accepted",
     )
+
+
+@router.delete("/logs")
+async def clear_system_logs():
+    """清空系统日志"""
+    count = len(_log_store)
+    _log_store.clear()
+    logger.info(f"[Console] Cleared {count} log entries")
+    return {"status": "ok", "cleared": count}

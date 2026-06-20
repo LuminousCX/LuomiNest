@@ -67,9 +67,9 @@ export const useAgentStore = defineStore('agent', () => {
         .map(a => ({
           id: a.id,
           name: a.name,
-          description: a.description,
-          avatar: a.avatar,
-          color: a.color,
+          description: a.description || '',
+          avatar: a.avatar || '',
+          color: a.color || '',
           systemPrompt: a.system_prompt || a.systemPrompt || '',
           model: a.model || '',
           provider: a.provider,

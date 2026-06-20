@@ -1,5 +1,5 @@
 #define MyAppName "LuomiNest"
-#define MyAppVersion "0.5.0"
+#define MyAppVersion "0.7.0"
 #define MyAppPublisher "LuminousCX R&D Team"
 #define MyAppExeName "LuomiNest.exe"
 #define MyAppId "com.luominest.desktop"

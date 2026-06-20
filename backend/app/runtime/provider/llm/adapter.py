@@ -231,7 +231,11 @@ class LLMAdapter:
                 continue
 
         logger.error(f"[LLM] All providers failed in fallback")
-        raise ProviderError(f"All LLM providers failed. Last error: {last_error}")
+        raise ProviderError(
+            f"All LLM providers failed. Last error: {last_error}",
+            code="LLM_ALL_PROVIDERS_FAILED",
+            status_code=502,
+        )
 
     async def chat_stream(
         self,
