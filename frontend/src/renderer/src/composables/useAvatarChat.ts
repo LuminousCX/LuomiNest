@@ -1,5 +1,6 @@
 import { ref, onBeforeUnmount } from 'vue'
 import { API_ENDPOINTS } from '../config/api'
+import { filterTtsText } from '../utils/ttsTextFilter'
 import type { ChatStreamChunk } from '../types'
 
 export interface AvatarChatOptions {
@@ -305,7 +306,11 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
       textBuffer += cleanContent
       const segments = extractSegments()
       for (const seg of segments) {
-        ttsQueue.push(seg)
+        // 过滤 markdown/emoji/特殊符号，只保留适合朗读的纯文本
+        const filtered = filterTtsText(seg)
+        if (filtered) {
+          ttsQueue.push(filtered)
+        }
       }
       if (ttsQueue.length > 0 && !isProcessingQueue) {
         processQueue()

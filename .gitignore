@@ -118,6 +118,9 @@ desktop.ini
 # 后端数据目录
 backend/data/
 
+# TTS/ASR 等大模型文件（由后端自动下载，不纳入版本控制）
+backend/models/
+
 # 项目文档（可选，根据需要决定是否忽略）
 项目文档/
 文档/

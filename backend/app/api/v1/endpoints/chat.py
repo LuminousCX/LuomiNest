@@ -763,12 +763,18 @@ async def tts_synthesize(request: TTSRequest):
         return JSONResponse({"error": "文本内容不能为空"}, status_code=400)
 
     from fastapi.responses import Response
+    from app.utils.tts_text_filter import filter_tts_text
+
+    # 后端兜底过滤：清理 markdown/emoji/特殊符号
+    clean_text = filter_tts_text(request.text)
+    if not clean_text:
+        return JSONResponse({"error": "过滤后文本为空，无需合成"}, status_code=400)
 
     # 优先使用 Sherpa-ONNX TTS（完全离线，神经网络语音，质量好）
     try:
         from app.runtime.provider.tts.sherpa_onnx_tts import SherpaOnnxTTSProvider
         provider = SherpaOnnxTTSProvider()
-        audio_bytes = await provider.synthesize(request.text, request.voice)
+        audio_bytes = await provider.synthesize(clean_text, request.voice)
         return Response(
             content=audio_bytes,
             media_type="audio/wav",
@@ -783,7 +789,7 @@ async def tts_synthesize(request: TTSRequest):
     try:
         from app.runtime.provider.tts.local_tts import LocalTTSProvider
         provider = LocalTTSProvider()
-        audio_bytes = await provider.synthesize(request.text, request.voice)
+        audio_bytes = await provider.synthesize(clean_text, request.voice)
         return Response(
             content=audio_bytes,
             media_type="audio/wav",
