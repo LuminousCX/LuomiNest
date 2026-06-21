@@ -24,8 +24,8 @@ def setup_console_encoding():
             ctypes.windll.kernel32.SetConsoleOutputCP(65001)
             # 设置控制台输入代码页为UTF-8 (65001)
             ctypes.windll.kernel32.SetConsoleCP(65001)
-        except Exception:
-            pass
+        except (OSError, AttributeError) as e:
+            logger.debug(f"控制台代码页设置失败: {type(e).__name__}")
 
 def setup_logging():
     logger.remove()

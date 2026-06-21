@@ -309,26 +309,32 @@ async function toggleDesktopMode() {
 
 async function switchToDesktopMode() {
   isSwitchingMode.value = true
-  teardown()
-  isDesktopMode.value = true
-  const modelInfo = currentModelInfo.value
-  await window.api.desktopPet.open(modelInfo ?? undefined)
-  await avatarControl.checkDesktopPetStatus()
-  isDesktopPetRunning.value = avatarControl.isDesktopPetRunning
-  isSwitchingMode.value = false
+  try {
+    teardown()
+    isDesktopMode.value = true
+    const modelInfo = currentModelInfo.value
+    await window.api.desktopPet.open(modelInfo ?? undefined)
+    await avatarControl.checkDesktopPetStatus()
+    isDesktopPetRunning.value = avatarControl.isDesktopPetRunning
+  } finally {
+    isSwitchingMode.value = false
+  }
 }
 
 async function switchToInlineMode() {
   isSwitchingMode.value = true
-  isDesktopMode.value = false
-  await window.api.desktopPet.close()
-  await avatarControl.checkDesktopPetStatus()
-  isDesktopPetRunning.value = avatarControl.isDesktopPetRunning
-  await nextTick()
-  if (currentModelInfo.value) {
-    await loadModel(currentModelInfo.value.url, currentModelInfo.value.scale)
+  try {
+    isDesktopMode.value = false
+    await window.api.desktopPet.close()
+    await avatarControl.checkDesktopPetStatus()
+    isDesktopPetRunning.value = avatarControl.isDesktopPetRunning
+    await nextTick()
+    if (currentModelInfo.value) {
+      await loadModel(currentModelInfo.value.url, currentModelInfo.value.scale)
+    }
+  } finally {
+    isSwitchingMode.value = false
   }
-  isSwitchingMode.value = false
 }
 
 async function handleTTSSend() {

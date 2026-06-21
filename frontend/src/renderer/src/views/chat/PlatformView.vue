@@ -370,7 +370,7 @@ watch(() => store.selectedConversationDetail, () => {
   if (conversationMessagesRef.value) {
     conversationMessagesRef.value.scrollTop = conversationMessagesRef.value.scrollHeight
   }
-})
+}, { flush: 'post' })
 
 const handleToggleStatus = async (instance: PlatformInstance) => {
   try {

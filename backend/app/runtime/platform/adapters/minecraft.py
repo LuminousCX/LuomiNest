@@ -1,6 +1,7 @@
 import asyncio
 import json
 import struct
+import time
 from typing import Any
 from loguru import logger
 
@@ -130,7 +131,6 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
     - ws_port: WS 服务器监听端口
     - bot_name: 机器人在游戏内的显示名称
     - screenshot_enabled: 是否启用截图识别
-    - screenshot_interval: 自动截图间隔（秒，0 表示禁用自动截图）
     """
 
     platform_name = "minecraft"
@@ -164,8 +164,8 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
             self._rcon = _LuomiNestRconClient(self._rcon_host, self._rcon_port, self._rcon_password)
             connected = await self._rcon.connect()
             if not connected:
-                logger.warning(f"[Minecraft] RCON connection failed, will retry in background")
-                self._log("warning", "connection_failed", f"RCON 连接失败，将后台重试", details={
+                logger.warning("[Minecraft] RCON connection failed, will retry in background")
+                self._log("warning", "connection_failed", "RCON 连接失败，将后台重试", details={
                     "host": self._rcon_host, "port": self._rcon_port,
                 })
                 self._reconnect_task = asyncio.create_task(self._reconnect_loop())
@@ -174,14 +174,14 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
                     "host": self._rcon_host, "port": self._rcon_port,
                 })
         else:
-            logger.warning(f"[Minecraft] No RCON password configured, RCON disabled")
+            logger.warning("[Minecraft] No RCON password configured, RCON disabled")
             self._log("warning", "config_missing", "未配置 RCON 密码，RCON 功能禁用")
 
         if self._ws_enabled:
             await self._start_ws_server()
 
         logger.success(f"[Minecraft] Adapter started (RCON={bool(self._rcon)}, WS={self._ws_enabled}, Screenshot={self._screenshot_enabled})")
-        self._log("success", "instance_started", f"Minecraft 适配器已启动", details={
+        self._log("success", "instance_started", "Minecraft 适配器已启动", details={
             "rcon": bool(self._rcon), "ws": self._ws_enabled, "screenshot": self._screenshot_enabled,
         })
 
@@ -211,12 +211,12 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
             except Exception:
                 pass
         self._ws_connections.clear()
-        logger.info(f"[Minecraft] Adapter stopped")
+        logger.info("[Minecraft] Adapter stopped")
         self._log("info", "instance_stopped", "Minecraft 适配器已停止")
 
     async def send_message(self, response: PlatformResponse, target: str) -> bool:
         if not self._rcon:
-            logger.warning(f"[Minecraft] RCON not connected, cannot send message")
+            logger.warning("[Minecraft] RCON not connected, cannot send message")
             self._log("warning", "message_failed", "RCON 未连接，无法发送消息", details={
                 "target": target, "content_preview": response.content[:80],
             })
@@ -271,7 +271,7 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
             logger.info(f"[Minecraft] Attempting RCON reconnect (attempt {retry_count})...")
             self._rcon = _LuomiNestRconClient(self._rcon_host, self._rcon_port, self._rcon_password)
             if await self._rcon.connect():
-                logger.success(f"[Minecraft] RCON reconnected")
+                logger.success("[Minecraft] RCON reconnected")
                 self._log("success", "connection_established", f"RCON 重连成功 (第 {retry_count} 次)", details={
                     "retry_count": retry_count,
                 })
@@ -295,7 +295,7 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
                         data = json.loads(raw)
                         await self._handle_ws_event(data)
                     except json.JSONDecodeError:
-                        logger.warning(f"[Minecraft] Invalid WS JSON")
+                        logger.warning("[Minecraft] Invalid WS JSON")
                         self._log("warning", "message_failed", "WS 收到无效 JSON 数据")
                     except Exception as e:
                         logger.error(f"[Minecraft] WS event handling failed: {e}")
@@ -404,7 +404,7 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
             user_id=player,
             content=prompt,
             session_id=player,
-            message_id=data.get("message_id", f"ss_{int(__import__('time').time())}"),
+            message_id=data.get("message_id", f"ss_{int(time.time())}"),
             sender_name=player,
             is_group=False,
             image_urls=image_urls,

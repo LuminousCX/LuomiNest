@@ -325,11 +325,11 @@ class LLMAdapter:
                 "error": None,
             }
         except Exception as e:
-            logger.warning(f"[Adapter] Test failed: {e}")
+            logger.warning(f"[Adapter] Test failed: {type(e).__name__}")
             return {
                 "success": False,
                 "models": [],
-                "error": str(e),
+                "error": "Provider 测试失败，请检查配置或网络",
             }
 
 
