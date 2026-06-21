@@ -24,8 +24,9 @@ def setup_console_encoding():
             ctypes.windll.kernel32.SetConsoleOutputCP(65001)
             # 设置控制台输入代码页为UTF-8 (65001)
             ctypes.windll.kernel32.SetConsoleCP(65001)
-        except Exception:
-            pass
+        except Exception as e:
+            # Best-effort on Windows: if code page update fails, continue startup.
+            logger.debug(f"Failed to set Windows console code page to UTF-8: {e}")
 
 def setup_logging():
     logger.remove()
