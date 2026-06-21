@@ -139,8 +139,10 @@ class LuomiNestGameWebSocketAdapter(BasePlatformAdapter):
             try:
                 await ws.send(raw)
                 success += 1
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"[GameWS] Broadcast failed for client {cid}: {e}")
+                self._clients.pop(cid, None)
+                self._client_meta.pop(cid, None)
         logger.info(f"[GameWS] Broadcast to {success}/{len(self._clients)} clients")
         return success
 
