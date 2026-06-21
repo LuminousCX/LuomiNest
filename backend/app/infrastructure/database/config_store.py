@@ -58,8 +58,10 @@ class LumiConfigStore:
             if os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
-                except OSError:
-                    pass
+                except OSError as cleanup_error:
+                    logger.warning(
+                        f"[ConfigStore] Failed to remove temp file {tmp_path}: {cleanup_error}"
+                    )
             logger.error(f"[ConfigStore] Failed to save {self._path}: {e}")
 
     def _is_encrypted_key(self, key: str) -> bool:
