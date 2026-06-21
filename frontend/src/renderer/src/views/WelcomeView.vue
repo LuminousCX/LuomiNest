@@ -244,7 +244,6 @@ onMounted(async () => {
     <div class="welcome-bg">
       <div class="bg-orb bg-orb-1"></div>
       <div class="bg-orb bg-orb-2"></div>
-      <div class="bg-grid"></div>
     </div>
 
     <button class="skip-btn" @click="skipWizard" :title="i18n.skip">
@@ -494,39 +493,30 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-.bg-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(var(--lumi-primary-subtle) 1px, transparent 1px),
-    linear-gradient(90deg, var(--lumi-primary-subtle) 1px, transparent 1px);
-  background-size: 40px 40px;
-}
-
 .bg-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.4;
-  animation: orb-float 12s ease-in-out infinite;
+  filter: blur(120px);
+  opacity: 0.2;
+  animation: orb-float 18s ease-in-out infinite;
 }
 
 .bg-orb-1 {
-  width: 400px;
-  height: 400px;
+  width: 500px;
+  height: 500px;
   background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
-  top: -100px;
-  right: -80px;
+  top: -150px;
+  right: -120px;
   animation-delay: 0s;
 }
 
 .bg-orb-2 {
-  width: 320px;
-  height: 320px;
+  width: 400px;
+  height: 400px;
   background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
-  bottom: -60px;
-  left: -60px;
-  animation-delay: -6s;
+  bottom: -100px;
+  left: -100px;
+  animation-delay: -9s;
 }
 
 @keyframes orb-float {
@@ -555,8 +545,8 @@ onMounted(async () => {
 .welcome-container {
   position: relative;
   width: 100%;
-  max-width: 520px;
-  padding: 40px;
+  max-width: 480px;
+  padding: 48px;
   z-index: 1;
 }
 
@@ -583,7 +573,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 32px var(--lumi-primary-glow);
+  box-shadow: 0 4px 24px var(--lumi-primary-glow);
 }
 
 .brand-title {
@@ -650,9 +640,9 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 20px;
+  padding: 14px 18px;
   border-radius: var(--radius-lg);
-  border: 1.5px solid var(--workspace-border);
+  border: 1px solid var(--workspace-border);
   background: var(--workspace-card);
   cursor: pointer;
   transition: all 300ms ease-in-out;
@@ -661,14 +651,14 @@ onMounted(async () => {
 
 .lang-card:hover {
   border-color: var(--lumi-primary-border);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
+  box-shadow: 0 2px 12px var(--lumi-primary-light);
+  transform: translateY(-1px);
 }
 
 .lang-card.active {
   border-color: var(--lumi-primary);
   background: var(--lumi-primary-subtle);
-  box-shadow: 0 4px 16px var(--lumi-primary-light);
+  box-shadow: 0 2px 12px var(--lumi-primary-light);
 }
 
 .lang-flag {
@@ -726,9 +716,9 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 22px 16px;
+  padding: 20px 16px;
   border-radius: var(--radius-lg);
-  border: 1.5px solid var(--workspace-border);
+  border: 1px solid var(--workspace-border);
   background: var(--workspace-card);
   text-align: center;
   transition: all 300ms ease-in-out;
@@ -737,8 +727,8 @@ onMounted(async () => {
 
 .feature-card:hover {
   border-color: var(--feat-color);
-  box-shadow: 0 6px 24px color-mix(in srgb, var(--feat-color) 12%, transparent);
-  transform: translateY(-3px);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--feat-color) 10%, transparent);
+  transform: translateY(-2px);
 }
 
 .feat-name {
@@ -857,7 +847,7 @@ onMounted(async () => {
   padding: 10px 12px;
   border-radius: var(--radius-md);
   background: var(--workspace-card);
-  border: 1.5px solid var(--workspace-border);
+  border: 1px solid var(--workspace-border);
   transition: all 250ms ease-in-out;
   cursor: pointer;
   text-align: left;
@@ -865,8 +855,8 @@ onMounted(async () => {
 }
 
 .template-card:hover {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 1px 4px var(--lumi-primary-light);
+  border-color: var(--lumi-primary-border);
+  box-shadow: 0 1px 6px var(--lumi-primary-light);
 }
 
 .template-card.selected {
@@ -1080,7 +1070,7 @@ onMounted(async () => {
   justify-content: center;
   gap: 6px;
   flex: 1;
-  padding: 13px 28px;
+  padding: 12px 28px;
   border-radius: var(--radius-lg);
   font-size: 14px;
   font-weight: 600;
@@ -1093,7 +1083,7 @@ onMounted(async () => {
 .primary-btn:hover:not(:disabled) {
   background: var(--lumi-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px var(--lumi-primary-border);
+  box-shadow: 0 4px 16px var(--lumi-primary-border);
 }
 
 .primary-btn:active:not(:disabled) {
@@ -1110,7 +1100,7 @@ onMounted(async () => {
 }
 
 .launch-btn:hover:not(:disabled) {
-  box-shadow: 0 8px 28px var(--lumi-primary-border);
+  box-shadow: 0 6px 24px var(--lumi-primary-border);
 }
 
 .ghost-btn {

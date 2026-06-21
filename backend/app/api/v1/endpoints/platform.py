@@ -69,6 +69,7 @@ class PlatformInstanceResponse(BaseModel):
     display_name: str = Field(alias="displayName", default="")
     created_at: str = Field(alias="createdAt", default="")
     updated_at: str = Field(alias="updatedAt", default="")
+    model_config_data: dict = Field(alias="modelConfig", default_factory=dict)
 
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
@@ -81,6 +82,30 @@ class PlatformConversationResponse(BaseModel):
     preview: str
     time: str
     message_count: int = Field(alias="messageCount", default=0)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class PlatformMessageResponse(BaseModel):
+    id: str
+    role: str
+    content: str
+    timestamp: str = ""
+    sender_name: str = ""
+    is_group: bool = False
+    image_urls: list[str] = Field(default_factory=list)
+    model: str = ""
+    provider: str = ""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class PlatformModelConfigUpdate(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    system_prompt: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -102,6 +127,7 @@ def _instance_to_response(inst) -> PlatformInstanceResponse:
         display_name=at.display_name if at else inst.adapter_type,
         created_at=inst.created_at,
         updated_at=inst.updated_at,
+        model_config_data=inst.config.get("model_config", {}) or {},
     )
 
 
@@ -324,19 +350,216 @@ async def get_platform_conversations(instance_id: str):
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Platform instance {instance_id} not found")
 
-    convs_data = (await platforms_store.get_async(instance_id, {})).get("conversations", [])
+    from app.runtime.platform.session import list_platform_sessions
+    from app.infrastructure.database.conversation_store import conversation_store
+
+    sessions = list_platform_sessions(instance_id)
     result = []
-    for c in convs_data:
+    for s in sessions:
+        conv_id = s.get("conversation_id", "")
+        if not conv_id:
+            continue
+        conv = await conversation_store.get_async(conv_id)
+        if not conv:
+            continue
+
+        messages = conv.get("messages", [])
+        preview = ""
+        for m in reversed(messages):
+            content = m.get("content", "")
+            if isinstance(content, list):
+                text_parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+                preview = text_parts[0] if text_parts else ""
+            else:
+                preview = str(content)
+            if preview:
+                break
+
         result.append(PlatformConversationResponse(
-            id=c.get("id", ""),
+            id=conv_id,
             platform_instance_id=instance_id,
-            platform_name=inst.name,
-            title=c.get("title", ""),
-            preview=c.get("preview", ""),
-            time=c.get("time", ""),
-            message_count=c.get("message_count", 0),
+            platform_name=s.get("platform_name", inst.name),
+            title=conv.get("title", ""),
+            preview=preview[:100],
+            time=conv.get("updated_at", conv.get("created_at", "")),
+            message_count=len(messages),
         ))
+
+    result.sort(key=lambda c: c.time, reverse=True)
     return result
+
+
+@router.get("/instances/{instance_id}/conversations/{conversation_id}/messages")
+async def get_platform_conversation_messages(instance_id: str, conversation_id: str):
+    """获取平台实例下指定对话的详细消息列表（含图片消息）。"""
+    logger.info(f"[API] GET /platforms/instances/{instance_id}/conversations/{conversation_id}/messages")
+    inst = get_instance(instance_id)
+    if not inst:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Platform instance {instance_id} not found")
+
+    from app.infrastructure.database.conversation_store import conversation_store
+
+    conv = await conversation_store.get_async(conversation_id)
+    if not conv:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Conversation {conversation_id} not found")
+
+    conv_platform = conv.get("platform", {}) or {}
+    if conv_platform.get("instance_id") != instance_id:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Conversation {conversation_id} does not belong to instance {instance_id}")
+
+    messages = []
+    for msg in conv.get("messages", []):
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            text_parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+            image_parts = [p.get("image_url", {}).get("url", "") for p in content if isinstance(p, dict) and p.get("type") == "image_url"]
+            content_text = "\n".join(text_parts)
+            image_urls = [u for u in image_parts if u]
+        else:
+            content_text = str(content)
+            image_urls = msg.get("image_urls", []) or []
+
+        platform_info = msg.get("platform", {}) or {}
+        messages.append(PlatformMessageResponse(
+            id=msg.get("id", ""),
+            role=role,
+            content=content_text,
+            timestamp=msg.get("timestamp", msg.get("created_at", "")),
+            sender_name=platform_info.get("sender_name", ""),
+            is_group=platform_info.get("is_group", False),
+            image_urls=image_urls,
+            model=msg.get("model", ""),
+            provider=msg.get("provider", ""),
+        ))
+
+    return {
+        "error": None,
+        "data": {
+            "conversation_id": conversation_id,
+            "title": conv.get("title", ""),
+            "instance_id": instance_id,
+            "platform_name": conv_platform.get("platform_name", inst.name),
+            "sender_name": conv_platform.get("sender_name", ""),
+            "is_group": conv_platform.get("is_group", False),
+            "messages": [m.model_dump(by_alias=True) for m in messages],
+            "message_count": len(messages),
+        },
+    }
+
+
+@router.get("/instances/{instance_id}/model_config")
+async def get_platform_model_config(instance_id: str):
+    """获取平台实例的模型配置（含主 Agent 默认值回退信息）。"""
+    logger.info(f"[API] GET /platforms/instances/{instance_id}/model_config")
+    inst = get_instance(instance_id)
+    if not inst:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Platform instance {instance_id} not found")
+
+    from app.runtime.platform.main_agent_config import (
+        load_luominest_main_agent_config,
+        resolve_main_agent_provider_model,
+    )
+    from app.runtime.provider.llm.adapter import llm_adapter
+
+    main_config = load_luominest_main_agent_config()
+    main_provider, main_model = resolve_main_agent_provider_model()
+
+    main_provider_name = main_provider
+    main_supports_vision = False
+    try:
+        provider_inst = llm_adapter.get_provider(main_provider)
+        main_provider_name = getattr(provider_inst, "display_name", None) or main_provider
+        main_supports_vision = provider_inst.supports_multimodal(main_model)
+    except Exception as e:
+        logger.warning(f"[PlatformAPI] Failed to resolve main provider info: {e}")
+
+    inst_cfg = inst.config.get("model_config", {}) or {}
+    instance_provider = inst_cfg.get("provider", "")
+    instance_model = inst_cfg.get("model", "")
+
+    instance_provider_name = instance_provider
+    instance_supports_vision = False
+    is_overridden = bool(instance_provider or instance_model)
+    if is_overridden:
+        try:
+            provider_inst = llm_adapter.get_provider(instance_provider or main_provider)
+            instance_provider_name = getattr(provider_inst, "display_name", None) or (instance_provider or main_provider)
+            instance_supports_vision = provider_inst.supports_multimodal(instance_model or main_model)
+        except Exception as e:
+            logger.warning(f"[PlatformAPI] Failed to resolve instance provider info: {e}")
+
+    return {
+        "error": None,
+        "data": {
+            "instance_id": instance_id,
+            "is_overridden": is_overridden,
+            "instance_config": {
+                "provider": instance_provider,
+                "model": instance_model,
+                "system_prompt": inst_cfg.get("system_prompt", ""),
+                "temperature": inst_cfg.get("temperature"),
+                "max_tokens": inst_cfg.get("max_tokens"),
+            },
+            "main_agent": {
+                "provider": main_provider,
+                "provider_name": main_provider_name,
+                "model": main_model,
+                "supports_multimodal": main_supports_vision,
+                "system_prompt": main_config.get("system_prompt", ""),
+                "temperature": main_config.get("temperature", 0.7),
+                "max_tokens": main_config.get("max_tokens", 4096),
+            },
+            "effective": {
+                "provider": instance_provider or main_provider,
+                "provider_name": instance_provider_name if is_overridden else main_provider_name,
+                "model": instance_model or main_model,
+                "supports_multimodal": instance_supports_vision if is_overridden else main_supports_vision,
+            },
+            "category": inst.adapter_type,
+        },
+    }
+
+
+@router.patch("/instances/{instance_id}/model_config")
+async def update_platform_model_config(instance_id: str, request: PlatformModelConfigUpdate):
+    """更新平台实例的模型配置（空值表示继承主 Agent）。"""
+    logger.info(f"[API] PATCH /platforms/instances/{instance_id}/model_config")
+    inst = get_instance(instance_id)
+    if not inst:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Platform instance {instance_id} not found")
+
+    model_cfg = inst.config.get("model_config", {}) or {}
+    updates = request.model_dump(exclude_unset=True)
+
+    for key, val in updates.items():
+        if val is None:
+            model_cfg.pop(key, None)
+        else:
+            model_cfg[key] = val
+
+    inst.config["model_config"] = model_cfg
+    inst.updated_at = datetime.now(timezone.utc).isoformat()
+
+    persist_data = await platforms_store.get_async(instance_id, {})
+    persist_data.setdefault("config", {})
+    persist_data["config"]["model_config"] = model_cfg
+    persist_data["updated_at"] = inst.updated_at
+    await platforms_store.set_async(instance_id, persist_data)
+
+    platform_logger.log(
+        instance_id, "info", "model_config_updated",
+        f"模型配置已更新: {model_cfg}",
+        adapter_type=inst.adapter_type,
+        details={"model_config": model_cfg, "is_overridden": bool(model_cfg.get("provider") or model_cfg.get("model"))},
+    )
+
+    return {"error": None, "data": {"updated": True, "model_config": model_cfg}}
 
 
 class PlatformLogResponse(BaseModel):

@@ -6,6 +6,9 @@ from loguru import logger
 from app.engines.memory import get_memory_engine
 from app.engines.memory.prompts import _DISTILL_PROMPT_ROUND, _MERGE_SUMMARY_PROMPT
 
+# 主 Agent 唯一标识（与 context_service.MAIN_AGENT_ID 保持一致）
+_MAIN_AGENT_ID = "luominest_main_agent"
+
 
 class DistillationService:
     """
@@ -153,6 +156,9 @@ class DistillationService:
         触发条件：full_turns >= DROPLET_THRESHOLD 且有未蒸馏的增量轮次。
         通过 _last_distilled_turns 记录上次蒸馏时的轮次数，避免重复蒸馏。
         """
+        # 蒸馏属于记忆系统，仅对主 Agent 生效
+        if agent_id != _MAIN_AGENT_ID:
+            return False
         full_turns = DistillationService.count_full_turns(messages)
 
         if full_turns < DistillationService.DROPLET_THRESHOLD:
@@ -294,6 +300,9 @@ class DistillationService:
     @staticmethod
     async def final_distill(agent_id: str, conversation_id: str, messages: list, llm_adapter=None):
         """对话结束触发最终蒸馏，兜底处理未蒸馏的剩余轮次"""
+        # 蒸馏属于记忆系统，仅对主 Agent 生效
+        if agent_id != _MAIN_AGENT_ID:
+            return
         full_turns = DistillationService.count_full_turns(messages)
 
         if full_turns < 2:

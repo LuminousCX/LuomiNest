@@ -17,7 +17,6 @@ import {
   Sparkles,
   Activity,
   Tag,
-  Users,
   MoreVertical,
   Eraser,
   Search,
@@ -304,15 +303,8 @@ async function handleAddDaily() {
 }
 
 const isSaving = ref(false)
-const selectedAgentId = ref<string | null>(null)
-
-async function onAgentChange() {
-  localStorage.setItem('lastMemoryAgentId', selectedAgentId.value || '')
-  selectedDailyDate.value = ''
-  selectedConversationId.value = null
-  await memoryStore.switchAgent(selectedAgentId.value)
-  await memoryStore.fetchConversationDailies(selectedAgentId.value)
-}
+// 记忆系统仅对主 Agent 生效，固定为主 Agent ID
+const selectedAgentId = ref<string | null>('luominest_main_agent')
 
 async function switchConversation(convId: string | null) {
   selectedConversationId.value = convId
@@ -325,15 +317,6 @@ async function switchConversation(convId: string | null) {
 }
 
 async function loadData() {
-  await memoryStore.fetchMemoryAgents()
-  
-  const lastAgentId = localStorage.getItem('lastMemoryAgentId')
-  if (lastAgentId && memoryStore.memoryAgents.some(a => a.id === lastAgentId)) {
-    selectedAgentId.value = lastAgentId
-  } else if (memoryStore.memoryAgents.length > 0) {
-    selectedAgentId.value = memoryStore.memoryAgents[0].id
-  }
-  
   await Promise.all([
     memoryStore.fetchMemory(selectedAgentId.value),
     memoryStore.fetchKnowledge(selectedAgentId.value),
@@ -342,7 +325,7 @@ async function loadData() {
     memoryStore.fetchConversationDailies(selectedAgentId.value),
     memoryStore.fetchFacts(undefined, selectedAgentId.value),
   ])
-  
+
   if (memoryStore.dailies.length > 0) {
     selectedDailyDate.value = memoryStore.dailies[memoryStore.dailies.length - 1]
     await memoryStore.fetchDaily(selectedDailyDate.value, selectedAgentId.value)
@@ -572,14 +555,6 @@ window.addEventListener('click', closeMenu)
         <span class="header-badge">AI驱动的记忆系统</span>
       </div>
       <div class="header-actions">
-        <div class="agent-selector">
-          <Users :size="14" />
-          <select v-model="selectedAgentId" class="agent-select" @change="onAgentChange">
-            <option v-for="a in memoryStore.memoryAgents" :key="a.id" :value="a.id">
-              {{ a.name }}{{ a.fact_count !== undefined ? ` (${a.fact_count}条)` : '' }}
-            </option>
-          </select>
-        </div>
         <button class="h-btn" @click="exportMemory" title="导出记忆">
           <Download :size="15" />
         </button>
@@ -1203,26 +1178,6 @@ function getWeekday(dateStr: string): string {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.agent-selector {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-}
-
-.agent-select {
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-size: 12px;
-  outline: none;
-  cursor: pointer;
 }
 
 .h-btn {
@@ -2096,11 +2051,6 @@ function getWeekday(dateStr: string): string {
     order: 2;
     width: 100%;
     justify-content: flex-end;
-  }
-  
-  .agent-selector {
-    flex: 1;
-    justify-content: flex-start;
   }
   
   .layer-nav {

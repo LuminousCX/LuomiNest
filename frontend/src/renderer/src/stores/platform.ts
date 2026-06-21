@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PlatformAdapterType, PlatformInstance, PlatformConversation, PlatformStats, PlatformLogEntry, PlatformLogSummary, MainAgentInfo } from '../types'
+import type {
+  PlatformAdapterType, PlatformInstance, PlatformConversation, PlatformStats,
+  PlatformLogEntry, PlatformLogSummary, MainAgentInfo,
+  PlatformMessage, PlatformConversationDetail, PlatformModelConfig, PlatformModelConfigResponse,
+} from '../types'
 import { useApi } from '../composables/useApi'
 
 interface RawLogEntry {
@@ -55,6 +59,8 @@ interface RawInstance {
   createdAt?: string
   updated_at?: string
   updatedAt?: string
+  model_config?: Record<string, unknown>
+  modelConfig?: Record<string, unknown>
 }
 
 interface RawStatsData {
@@ -102,6 +108,52 @@ interface RawLogSummaryResponse {
   byLevel?: Record<string, number>
 }
 
+interface RawMessage {
+  id: string
+  role: string
+  content: string
+  timestamp?: string
+  sender_name?: string
+  senderName?: string
+  is_group?: boolean
+  isGroup?: boolean
+  image_urls?: string[]
+  imageUrls?: string[]
+  model?: string
+  provider?: string
+}
+
+interface RawConversationDetail {
+  conversation_id?: string
+  conversationId?: string
+  title?: string
+  instance_id?: string
+  instanceId?: string
+  platform_name?: string
+  platformName?: string
+  sender_name?: string
+  senderName?: string
+  is_group?: boolean
+  isGroup?: boolean
+  messages?: RawMessage[]
+  message_count?: number
+  messageCount?: number
+}
+
+interface RawModelConfigResponse {
+  data?: PlatformModelConfigResponse
+  instance_id?: string
+  instanceId?: string
+  is_overridden?: boolean
+  isOverridden?: boolean
+  instance_config?: PlatformModelConfig
+  instanceConfig?: PlatformModelConfig
+  main_agent?: PlatformModelConfigResponse['mainAgent']
+  mainAgent?: PlatformModelConfigResponse['mainAgent']
+  effective?: PlatformModelConfigResponse['effective']
+  category?: string
+}
+
 export const usePlatformStore = defineStore('platform', () => {
   const { apiGet, apiPost, apiPatch, apiDelete } = useApi()
 
@@ -116,6 +168,10 @@ export const usePlatformStore = defineStore('platform', () => {
   const loading = ref(false)
   const selectedInstanceId = ref<string | null>(null)
   const logLevelFilter = ref<string | null>(null)
+  const selectedConversationId = ref<string | null>(null)
+  const selectedConversationDetail = ref<PlatformConversationDetail | null>(null)
+  const conversationLoading = ref(false)
+  const instanceModelConfig = ref<PlatformModelConfigResponse | null>(null)
 
   const activeInstances = computed(() => instances.value.filter(i => i.status === 'running'))
   const disconnectedInstances = computed(() => instances.value.filter(i => i.status !== 'running'))
@@ -171,6 +227,7 @@ export const usePlatformStore = defineStore('platform', () => {
         displayName: i.display_name || i.displayName || i.adapter_type || i.adapterType || '',
         createdAt: i.created_at || i.createdAt || '',
         updatedAt: i.updated_at || i.updatedAt || '',
+        modelConfig: (i.model_config || i.modelConfig || {}) as PlatformModelConfig,
       }))
     } catch {
       instances.value = []
@@ -211,6 +268,70 @@ export const usePlatformStore = defineStore('platform', () => {
     } catch {
       // conversations will remain as-is
     }
+  }
+
+  const fetchConversationMessages = async (instanceId: string, conversationId: string) => {
+    conversationLoading.value = true
+    try {
+      const result = await apiGet<RawConversationDetail | { data: RawConversationDetail }>(
+        `/platforms/instances/${instanceId}/conversations/${conversationId}/messages`
+      )
+      const data = (result as { data?: RawConversationDetail })?.data || (result as RawConversationDetail)
+      selectedConversationDetail.value = {
+        conversationId: data.conversation_id || data.conversationId || conversationId,
+        title: data.title || '',
+        instanceId: data.instance_id || data.instanceId || instanceId,
+        platformName: data.platform_name || data.platformName || '',
+        senderName: data.sender_name || data.senderName || '',
+        isGroup: data.is_group ?? data.isGroup ?? false,
+        messages: (data.messages || []).map(m => ({
+          id: m.id,
+          role: m.role as PlatformMessage['role'],
+          content: m.content,
+          timestamp: m.timestamp || '',
+          senderName: m.sender_name || m.senderName || '',
+          isGroup: m.is_group ?? m.isGroup ?? false,
+          imageUrls: m.image_urls || m.imageUrls || [],
+          model: m.model || '',
+          provider: m.provider || '',
+        })),
+        messageCount: data.message_count ?? data.messageCount ?? 0,
+      }
+      selectedConversationId.value = conversationId
+    } catch {
+      selectedConversationDetail.value = null
+    } finally {
+      conversationLoading.value = false
+    }
+  }
+
+  const fetchInstanceModelConfig = async (instanceId: string) => {
+    try {
+      const result = await apiGet<RawModelConfigResponse>(`/platforms/instances/${instanceId}/model_config`)
+      const data = (result as { data?: PlatformModelConfigResponse })?.data || (result as PlatformModelConfigResponse)
+      instanceModelConfig.value = {
+        instanceId: data.instanceId || instanceId,
+        isOverridden: data.isOverridden ?? false,
+        instanceConfig: data.instanceConfig || {},
+        mainAgent: data.mainAgent,
+        effective: data.effective,
+        category: data.category || '',
+      }
+    } catch {
+      instanceModelConfig.value = null
+    }
+  }
+
+  const updateInstanceModelConfig = async (instanceId: string, updates: PlatformModelConfig) => {
+    const body: Record<string, unknown> = {}
+    if (updates.provider !== undefined) body.provider = updates.provider || null
+    if (updates.model !== undefined) body.model = updates.model || null
+    if (updates.systemPrompt !== undefined) body.system_prompt = updates.systemPrompt || null
+    if (updates.temperature !== undefined) body.temperature = updates.temperature
+    if (updates.maxTokens !== undefined) body.max_tokens = updates.maxTokens
+    await apiPatch(`/platforms/instances/${instanceId}/model_config`, body)
+    await fetchInstanceModelConfig(instanceId)
+    await fetchInstances()
   }
 
   const fetchLogs = async (instanceId?: string, level?: string | null) => {
@@ -364,11 +485,24 @@ export const usePlatformStore = defineStore('platform', () => {
 
   const selectInstance = (instanceId: string | null) => {
     selectedInstanceId.value = instanceId
+    selectedConversationId.value = null
+    selectedConversationDetail.value = null
     if (instanceId) {
       fetchConversations(instanceId)
       fetchLogs(instanceId)
     } else {
       fetchLogs()
+    }
+  }
+
+  const selectConversation = (conversationId: string | null) => {
+    if (!conversationId) {
+      selectedConversationId.value = null
+      selectedConversationDetail.value = null
+      return
+    }
+    if (selectedInstanceId.value) {
+      fetchConversationMessages(selectedInstanceId.value, conversationId)
     }
   }
 
@@ -398,6 +532,10 @@ export const usePlatformStore = defineStore('platform', () => {
     loading,
     selectedInstanceId,
     logLevelFilter,
+    selectedConversationId,
+    selectedConversationDetail,
+    conversationLoading,
+    instanceModelConfig,
     activeInstances,
     disconnectedInstances,
     selectedInstance,
@@ -407,6 +545,9 @@ export const usePlatformStore = defineStore('platform', () => {
     fetchInstances,
     fetchStats,
     fetchConversations,
+    fetchConversationMessages,
+    fetchInstanceModelConfig,
+    updateInstanceModelConfig,
     fetchLogs,
     fetchLogSummary,
     fetchMainAgent,
@@ -418,6 +559,7 @@ export const usePlatformStore = defineStore('platform', () => {
     startInstance,
     stopInstance,
     selectInstance,
+    selectConversation,
     setLogLevelFilter,
     refreshAll,
   }

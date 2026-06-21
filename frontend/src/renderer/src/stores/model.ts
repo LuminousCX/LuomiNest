@@ -347,6 +347,8 @@ interface RawProvider {
   default_model?: string
   isDefault?: boolean
   is_default?: boolean
+  selectedModels?: string[]
+  selected_models?: string[]
   models?: unknown[]
 }
 
@@ -537,6 +539,7 @@ export const useModelStore = defineStore('model', () => {
         apiKeySet: p.apiKeySet || p.api_key_set || false,
         defaultModel: p.defaultModel || p.default_model || '',
         isDefault: p.isDefault || p.is_default || false,
+        selectedModels: p.selectedModels || p.selected_models || [],
         models: (p.models || []) as { id: string; name: string }[],
       }))
 
@@ -585,6 +588,7 @@ export const useModelStore = defineStore('model', () => {
     apiKey: string
     defaultModel: string
     isDefault: boolean
+    selectedModels?: string[]
   }) => {
     const result = await apiPost<ModelProvider>('/models/providers', {
       id: provider.id,
@@ -594,6 +598,7 @@ export const useModelStore = defineStore('model', () => {
       apiKey: provider.apiKey,
       defaultModel: provider.defaultModel,
       isDefault: provider.isDefault,
+      selectedModels: provider.selectedModels || [],
     })
     await fetchProviders()
     return result
@@ -606,6 +611,7 @@ export const useModelStore = defineStore('model', () => {
     apiKey?: string
     defaultModel?: string
     isDefault?: boolean
+    selectedModels?: string[]
   }) => {
     const result = await apiPatch<ModelProvider>(`/models/providers/${providerId}`, {
       name: updates.name,
@@ -614,6 +620,7 @@ export const useModelStore = defineStore('model', () => {
       apiKey: updates.apiKey,
       defaultModel: updates.defaultModel,
       isDefault: updates.isDefault,
+      selectedModels: updates.selectedModels,
     })
     await fetchProviders()
     return result
@@ -622,6 +629,22 @@ export const useModelStore = defineStore('model', () => {
   const removeProvider = async (providerId: string) => {
     await apiDelete(`/models/providers/${providerId}`)
     providers.value = providers.value.filter(p => p.id !== providerId)
+  }
+
+  const testProvider = async (payload: {
+    vendor: string
+    baseUrl: string
+    apiKey: string
+    defaultModel?: string
+  }): Promise<{ success: boolean; models: ModelInfo[]; error: string | null }> => {
+    const result = await apiPost<{ success: boolean; models: ModelInfo[]; error: string | null } | { data: { success: boolean; models: ModelInfo[]; error: string | null } }>('/models/providers/test', {
+      vendor: payload.vendor,
+      baseUrl: payload.baseUrl,
+      apiKey: payload.apiKey,
+      defaultModel: payload.defaultModel || '',
+    })
+    const data = unwrapData(result as any)
+    return data
   }
 
   const fetchProviderModels = async (providerId: string) => {
@@ -847,6 +870,7 @@ export const useModelStore = defineStore('model', () => {
     addProvider,
     updateProvider,
     removeProvider,
+    testProvider,
     fetchProviderModels,
     fetchModelConfig,
     updateModelConfig,

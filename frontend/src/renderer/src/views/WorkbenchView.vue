@@ -33,9 +33,7 @@ import {
   Radio,
   ChevronRight,
   Cpu,
-  Quote,
-  Paperclip,
-  X,
+  Monitor,
 } from 'lucide-vue-next'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
@@ -46,10 +44,10 @@ import { useLuomiNestLive2D } from '../composables/useLuomiNestLive2D'
 import { useAvatarChat } from '../composables/useAvatarChat'
 import { useApi } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
-import { useFileUpload } from '../composables/useFileUpload'
-import FileUpload from '../components/FileUpload.vue'
+import { getProviderLogo } from '../config/provider-logos'
 import { stripEmotionTags } from '../utils/emotionTagInterceptor'
-import { LUOMINEST_BUILTIN_MODELS, getAvatarBinding } from '../config/luominest-models'
+import { LUOMINEST_BUILTIN_MODELS, getAvatarBinding, resolveExpressionByModelUrl } from '../config/luominest-models'
+import { useAvatarControlStore } from '../stores/avatar-control'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import type { ConversationListItem, ConversationSearchResult, ChatStreamChunk, SubagentEvent, AgentProfile } from '../types'
@@ -96,8 +94,13 @@ const modelStore = useModelStore()
 const memoryStore = useMemoryStore()
 const platformStore = usePlatformStore()
 const taskStreamStore = useTaskStreamStore()
+const avatarControl = useAvatarControlStore()
 const { apiGet } = useApi()
 const toast = useToast()
+
+// 桌面宠物模式：通过全局 store 状态统一管理，与 AvatarView 共享同一状态源
+// 桌宠模式下工作台不渲染本地 Live2D，表情/动作/唇形通过 IPC 转发到桌宠窗口
+const isDesktopMode = computed(() => avatarControl.isDesktopPetRunning)
 
 // 主 Agent 固定标识：工作台所有对话均归属主 Agent，与对话页面的模拟联系人彻底分离
 const MAIN_AGENT_ID = 'luominest_main_agent'
@@ -283,12 +286,37 @@ const {
   dismissSubtitle,
 } = useAvatarChat({
   voice: () => currentBinding.value?.voice || 'zh-CN-XiaoxiaoNeural',
-  driveEmotion: (emotionId: string) => driveEmotion(emotionId),
-  syncLipParam: (value: number) => syncLipParam(value),
+  driveEmotion: (emotionId: string) => {
+    if (isDesktopMode.value) {
+      // 桌宠模式：通过 IPC 转发到桌宠窗口（需先做表情名映射，与 composable 内部逻辑一致）
+      const modelUrl = currentModelInfo.value.url
+      const resolved = resolveExpressionByModelUrl(modelUrl, emotionId)
+      avatarControl.triggerExpression(resolved)
+    } else {
+      driveEmotion(emotionId)
+    }
+  },
+  syncLipParam: (value: number) => {
+    if (isDesktopMode.value) {
+      // 桌宠模式：唇形同步值通过 IPC 转发到桌宠窗口
+      avatarControl.driveLipSync(value)
+    } else {
+      syncLipParam(value)
+    }
+  },
   ttsEnabled: () => ttsEnabled.value,
   subtitleEnabled: () => subtitleEnabled.value,
   onTtsError: (err: Error) => toast.warning(`语音合成失败：${err.message}`),
-  onSpeakEnd: () => { ttsSpeakingMsgId.value = null },
+})
+
+// 桌宠模式下：将字幕同步到桌宠窗口（与 AvatarView 行为一致）
+watch([subtitleVisible, subtitleText, isDesktopMode], ([visible, text, desktopMode]) => {
+  if (!desktopMode) return
+  if (visible && text) {
+    window.api.desktopPet.sendSubtitle(text)
+  } else {
+    window.api.desktopPet.hideSubtitle()
+  }
 })
 
 // 布局状态
@@ -508,12 +536,6 @@ const SCROLL_BOTTOM_THRESHOLD = 120
 const showScrollToBottomBtn = ref(false)
 let resizeObserver: ResizeObserver | null = null
 
-// 文件上传状态（复用 useFileUpload composable）
-const { isUploading, parsedContent, fileType, fileName, clearUploadState } = useFileUpload()
-const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
-// 当前 TTS 朗读的消息 ID（用于"重读"按钮状态展示）
-const ttsSpeakingMsgId = ref<string | null>(null)
-
 const messages = computed(() => chatStore.messages)
 const isStreaming = computed(() => chatStore.isStreaming)
 const isBackendReady = computed(() => chatStore.isBackendReady)
@@ -527,32 +549,58 @@ const currentModel = computed(() => {
   return resolved?.model || '未配置模型'
 })
 
+const currentProvider = computed(() => {
+  const mainAgent = platformStore.mainAgent
+  if (mainAgent?.provider) return mainAgent.provider
+  const resolved = modelStore.resolveModel
+  return resolved?.provider || ''
+})
+
+const currentProviderLogo = computed(() => getProviderLogo(currentProvider.value))
+
+// 模型下拉框：只展示各供应商已多选的模型（selectedModels）
+const showModelDropdown = ref(false)
+const availableModelOptions = computed(() => {
+  const options: { providerId: string; providerName: string; providerLogo: ReturnType<typeof getProviderLogo>; modelId: string; modelName: string }[] = []
+  for (const provider of modelStore.providers) {
+    const logo = getProviderLogo(provider.id)
+    // 优先使用已多选模型；若未多选则回退到 defaultModel
+    const modelIds = provider.selectedModels.length > 0
+      ? provider.selectedModels
+      : (provider.defaultModel ? [provider.defaultModel] : [])
+    for (const modelId of modelIds) {
+      options.push({
+        providerId: provider.id,
+        providerName: provider.name,
+        providerLogo: logo,
+        modelId,
+        modelName: modelId,
+      })
+    }
+  }
+  return options
+})
+
+const selectModel = async (providerId: string, modelId: string) => {
+  try {
+    await platformStore.updateMainAgent({ provider: providerId, model: modelId })
+  } catch (e: any) {
+    toast.error(`切换模型失败：${e.message || '未知错误'}`)
+  }
+  showModelDropdown.value = false
+}
+
 const canSend = computed(() => {
   if (!isBackendReady.value) return false
-  if (isUploading.value) return false
-  return inputText.value.trim().length > 0 || !!parsedContent.value || !!chatStore.quotedMessage
+  return inputText.value.trim().length > 0
 })
 
 const sendMessage = async () => {
   if (!canSend.value) return
 
-  let content = inputText.value.trim()
-  const fileContent = parsedContent.value
-  const currentFileName = fileName.value
-  const currentFileType = fileType.value
-
-  // 无文字但有文件或引用时，补充默认提示文案
-  if (!content && fileContent) {
-    content = '请帮我分析上传的文件'
-  }
-  if (!content && chatStore.quotedMessage) {
-    content = '请看上面的引用内容'
-  }
-
+  const content = inputText.value.trim()
   inputText.value = ''
   resetTextareaHeight()
-  clearUploadState()
-  fileUploadRef.value?.clearUploadState()
 
   // 主 Agent 配置：优先使用 platformStore.mainAgent，回退到 modelStore.resolveModel
   const mainAgent = platformStore.mainAgent
@@ -620,12 +668,6 @@ const sendMessage = async () => {
         })
       }
     },
-  }
-  // 携带上传文件内容（图片/文档等由后端解析）
-  if (fileContent) {
-    options.fileContent = fileContent
-    options.fileType = currentFileType
-    options.fileName = currentFileName
   }
   // systemPrompt 由后端 build_system_prompt 从 main_agent_config 加载，前端不传
 
@@ -720,42 +762,6 @@ const copyMessage = async (msgId: string, content: string) => {
       copiedId.value = null
     }, 2000)
   } catch {}
-}
-
-/** 引用消息：写入 chatStore.quotedMessage，发送时附带 */
-const handleQuoteMessage = (msg: any) => {
-  chatStore.quotedMessage = msg
-  nextTick(() => {
-    if (textareaRef.value) textareaRef.value.focus()
-  })
-}
-
-/** 重读：停止当前 TTS，将消息内容喂入 Avatar Chat TTS 管线重新朗读 */
-const replayMessage = (msg: any) => {
-  // 正在朗读同一条消息时，点击则停止
-  if (ttsSpeakingMsgId.value === msg.id && isSpeaking.value) {
-    stopTts()
-    ttsSpeakingMsgId.value = null
-    return
-  }
-  stopTts()
-  ttsSpeakingMsgId.value = msg.id
-  // 重置代码块过滤状态机，避免跨消息残留
-  inCodeBlock = false
-  const cleaned = stripEmotionTags(msg.content || '')
-  if (!cleaned) {
-    ttsSpeakingMsgId.value = null
-    return
-  }
-  feedChunk({
-    id: `replay-${msg.id}-${Date.now()}`,
-    content: cleaned,
-    reasoning_content: '',
-    model: '',
-    provider: '',
-    done: false,
-  })
-  finishStream()
 }
 
 const isLastAssistantMessage = (msgId: string) => {
@@ -855,7 +861,12 @@ watch(isLoadingCurrentConv, (loading) => {
 // Live2D 模型切换
 const switchModel = async (model: typeof LUOMINEST_BUILTIN_MODELS[0]) => {
   currentModelInfo.value = model
-  await loadModel(model.url, model.scale)
+  if (isDesktopMode.value) {
+    // 桌宠模式：通过 IPC 切换桌宠窗口的模型，不加载本地实例
+    await window.api.desktopPet.loadModel(model)
+  } else {
+    await loadModel(model.url, model.scale)
+  }
 }
 
 onMounted(async () => {
@@ -877,14 +888,40 @@ onMounted(async () => {
       fetchMcpStatus(),
     ])
   }
-  // 加载默认 Live2D 模型
-  const defaultModel = LUOMINEST_BUILTIN_MODELS[0]
-  await loadModel(defaultModel.url, defaultModel.scale)
+  // 检查桌宠窗口运行状态（可能从上次会话残留或由 AvatarView 开启）
+  await avatarControl.checkDesktopPetStatus()
+  // 仅在内联模式下加载本地 Live2D 模型；桌宠模式下由桌宠窗口负责渲染
+  if (!isDesktopMode.value) {
+    const defaultModel = LUOMINEST_BUILTIN_MODELS[0]
+    await loadModel(defaultModel.url, defaultModel.scale)
+  }
+  document.addEventListener('click', handleClickOutsideModel)
   nextTick(() => setupResizeObserver())
 })
 
+// 监听桌宠模式切换：与 AvatarView 的开关操作联动，自动销毁/重建本地 Live2D 实例
+watch(isDesktopMode, async (desktopMode) => {
+  if (desktopMode) {
+    // 进入桌宠模式：销毁本地 Live2D 实例，避免双窗口同时渲染
+    teardownLive2D()
+  } else {
+    // 退出桌宠模式：重新加载本地模型
+    await nextTick()
+    const modelToLoad = currentModelInfo.value
+    await loadModel(modelToLoad.url, modelToLoad.scale)
+  }
+})
+
+const handleClickOutsideModel = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+  if (!target.closest('.model-dropdown-container')) {
+    showModelDropdown.value = false
+  }
+}
+
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  document.removeEventListener('click', handleClickOutsideModel)
   stopTts()
   teardownLive2D()
 })
@@ -1234,22 +1271,6 @@ onBeforeUnmount(() => {
                       <Check v-if="copiedId === msg.id" :size="14" />
                       <Copy v-else :size="14" />
                     </button>
-                    <button class="u-btn" title="引用" @click="handleQuoteMessage(msg)">
-                      <Quote :size="14" />
-                    </button>
-                    <button
-                      class="u-btn"
-                      :title="ttsSpeakingMsgId === msg.id && isSpeaking ? '停止朗读' : '重读'"
-                      @click="replayMessage(msg)"
-                    >
-                      <div v-if="ttsSpeakingMsgId === msg.id && isSpeaking" class="tts-bars">
-                        <span class="tts-bar" style="--h: 8px; --d: 0s"></span>
-                        <span class="tts-bar" style="--h: 14px; --d: 0.15s"></span>
-                        <span class="tts-bar" style="--h: 10px; --d: 0.3s"></span>
-                        <span class="tts-bar" style="--h: 6px; --d: 0.45s"></span>
-                      </div>
-                      <Volume2 v-else :size="14" />
-                    </button>
                     <button
                       v-if="isLastAssistantMessage(msg.id)"
                       class="u-btn"
@@ -1307,18 +1328,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="input-area">
-        <FileUpload ref="fileUploadRef" />
         <div class="input-wrapper">
-          <div v-if="chatStore.quotedMessage" class="quote-preview">
-            <Quote :size="14" class="quote-preview-icon" />
-            <div class="quote-preview-content">
-              <span class="quote-preview-label">{{ chatStore.quotedMessage.role === 'assistant' ? '助手' : '用户' }}</span>
-              <span class="quote-preview-text">{{ chatStore.quotedMessage.content.slice(0, 80) }}{{ chatStore.quotedMessage.content.length > 80 ? '...' : '' }}</span>
-            </div>
-            <button class="quote-preview-cancel" title="取消引用" @click="chatStore.quotedMessage = null">
-              <X :size="14" />
-            </button>
-          </div>
           <textarea
             ref="textareaRef"
             v-model="inputText"
@@ -1331,12 +1341,43 @@ onBeforeUnmount(() => {
           ></textarea>
           <div class="input-toolbar">
             <div class="toolbar-left">
-              <span class="model-tag">{{ currentModel }}</span>
+              <div class="model-dropdown-container">
+                <button class="tool-btn" title="选择模型" @click.stop="showModelDropdown = !showModelDropdown">
+                  <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
+                  <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+                    {{ currentProviderLogo.initials }}
+                  </span>
+                  <span class="model-btn-text">{{ currentModel }}</span>
+                  <ChevronDown :size="14" />
+                </button>
+                <Transition name="dropdown-fade">
+                  <div v-if="showModelDropdown" class="model-dropdown">
+                    <div class="dropdown-header">选择模型</div>
+                    <div class="dropdown-list">
+                      <button
+                        v-for="opt in availableModelOptions"
+                        :key="`${opt.providerId}-${opt.modelId}`"
+                        :class="['dropdown-item', { active: currentProvider === opt.providerId && currentModel === opt.modelId }]"
+                        @click="selectModel(opt.providerId, opt.modelId)"
+                      >
+                        <span v-if="opt.providerLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="opt.providerLogo.svgIcon"></span>
+                        <span v-else class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
+                          {{ opt.providerLogo.initials }}
+                        </span>
+                        <div class="dropdown-item-info">
+                          <span class="dropdown-item-model">{{ opt.modelName }}</span>
+                          <span class="dropdown-item-provider">{{ opt.providerName }}</span>
+                        </div>
+                      </button>
+                      <div v-if="availableModelOptions.length === 0" class="dropdown-empty">
+                        暂无可用模型，请先到设置多选模型
+                      </div>
+                    </div>
+                  </div>
+                </Transition>
+              </div>
             </div>
             <div class="toolbar-right">
-              <button class="tool-btn icon-only" title="附件" :disabled="isUploading" @click="fileUploadRef?.triggerFileSelect()">
-                <Paperclip :size="16" />
-              </button>
               <button
                 v-if="isStreaming"
                 class="send-btn stop"
@@ -1379,33 +1420,46 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div class="avatar-stage">
-        <canvas ref="canvasRef" class="live2d-canvas"></canvas>
-        <Transition name="fade">
-          <div v-if="isModelLoading && !isModelReady" class="avatar-loading">
-            <Loader2 :size="28" class="spin-animation" />
-            <span>加载模型中...</span>
+      <div class="avatar-stage" :class="{ 'desktop-mode-active': isDesktopMode }">
+        <template v-if="!isDesktopMode">
+          <canvas ref="canvasRef" class="live2d-canvas"></canvas>
+          <Transition name="fade">
+            <div v-if="isModelLoading && !isModelReady" class="avatar-loading">
+              <Loader2 :size="28" class="spin-animation" />
+              <span>加载模型中...</span>
+            </div>
+          </Transition>
+          <Transition name="fade">
+            <div v-if="loadError" class="avatar-error">
+              <AlertTriangle :size="24" />
+              <span>{{ loadError }}</span>
+            </div>
+          </Transition>
+          <div v-if="isModelReady" class="avatar-status">
+            <span class="status-dot" :class="{ speaking: isSpeaking }"></span>
+            <span>{{ isSpeaking ? '正在说话' : (isSynthesizing ? '合成语音中' : (currentModelInfo.name + ' 已就绪')) }}</span>
           </div>
-        </Transition>
-        <Transition name="fade">
-          <div v-if="loadError" class="avatar-error">
-            <AlertTriangle :size="24" />
-            <span>{{ loadError }}</span>
+          <Transition name="subtitle-fade">
+            <div
+              v-if="subtitleVisible && subtitleText"
+              class="avatar-subtitle"
+              @click="dismissSubtitle"
+            >
+              {{ subtitleText }}
+            </div>
+          </Transition>
+        </template>
+
+        <div v-else class="desktop-mode-hint">
+          <div class="hint-icon">
+            <Monitor :size="40" />
           </div>
-        </Transition>
-        <div v-if="isModelReady" class="avatar-status">
-          <span class="status-dot" :class="{ speaking: isSpeaking }"></span>
-          <span>{{ isSpeaking ? '正在说话' : (isSynthesizing ? '合成语音中' : (currentModelInfo.name + ' 已就绪')) }}</span>
+          <div class="hint-content">
+            <h3>桌宠模式已开启</h3>
+            <p>模型已切换到桌面宠物窗口，请直接在桌面上与角色互动。</p>
+            <p class="hint-sub">工作台的对话、表情和动作会同步到桌宠。前往"皮套工坊"可切换回内联模式。</p>
+          </div>
         </div>
-        <Transition name="subtitle-fade">
-          <div
-            v-if="subtitleVisible && subtitleText"
-            class="avatar-subtitle"
-            @click="dismissSubtitle"
-          >
-            {{ subtitleText }}
-          </div>
-        </Transition>
       </div>
 
       <div class="avatar-footer">
@@ -1609,7 +1663,7 @@ onBeforeUnmount(() => {
   height: 36px;
   background: var(--surface);
   border-radius: var(--radius-md);
-  border: 1px solid transparent;
+  border: 1px solid var(--border-light);
   transition: all var(--transition-fast);
   box-sizing: border-box;
 }
@@ -1895,8 +1949,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 20px;
-  border-bottom: 1px solid var(--workspace-border);
-  background: var(--workspace-card);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--surface);
   flex-shrink: 0;
 }
 
@@ -2645,21 +2699,22 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
+  padding: 80px 20px;
   text-align: center;
   color: var(--text-muted);
 }
 
 .empty-icon {
-  width: 80px;
-  height: 80px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   background: var(--lumi-primary-gradient-soft);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--lumi-primary);
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 24px var(--lumi-primary-glow);
 }
 
 .empty-title {
@@ -2682,8 +2737,8 @@ onBeforeUnmount(() => {
 }
 
 .quick-action {
-  padding: 8px 14px;
-  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border: 1px solid var(--border-light);
   background: var(--surface);
   color: var(--text-secondary);
   border-radius: var(--radius-full);
@@ -2728,7 +2783,7 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   width: 36px;
   height: 36px;
-  border: none;
+  border: 1px solid var(--border-light);
   background: var(--surface);
   color: var(--text-secondary);
   border-radius: 50%;
@@ -2736,7 +2791,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: all 0.15s ease-in-out;
   z-index: 4;
 }
@@ -2765,121 +2820,16 @@ onBeforeUnmount(() => {
   max-width: 820px;
   margin: 0 auto;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   padding: 10px 12px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
   transition: border-color 0.15s ease-in-out;
 }
 
 .input-wrapper:focus-within {
   border-color: var(--lumi-primary);
   box-shadow: 0 0 0 3px var(--lumi-primary-glow);
-}
-
-/* 引用预览条 */
-.quote-preview {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--border-light);
-  background: var(--lumi-primary-subtle);
-  border-radius: var(--radius-sm);
-}
-
-.quote-preview-icon {
-  color: var(--lumi-primary);
-  flex-shrink: 0;
-}
-
-.quote-preview-content {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.quote-preview-label {
-  font-size: 11px;
-  color: var(--lumi-primary);
-}
-
-.quote-preview-text {
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.quote-preview-cancel {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  transition: color 0.15s ease-in-out, background 0.15s ease-in-out;
-}
-
-.quote-preview-cancel:hover {
-  color: var(--text-primary);
-  background: var(--surface-active);
-}
-
-/* 工具栏按钮（附件等） */
-.tool-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 6px;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
-}
-
-.tool-btn:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.tool-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* TTS 朗读波形动画 */
-.tts-bars {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  width: 16px;
-  height: 16px;
-}
-
-.tts-bar {
-  width: 3px;
-  border-radius: 1.5px;
-  background: var(--lumi-primary);
-  animation: tts-bar-bounce 0.8s ease-in-out infinite alternate;
-  animation-delay: var(--d);
-}
-
-@keyframes tts-bar-bounce {
-  0% { height: 4px; }
-  100% { height: var(--h); }
 }
 
 .chat-input {
@@ -2924,6 +2874,155 @@ onBeforeUnmount(() => {
   padding: 3px 8px;
   background: var(--surface-hover);
   border-radius: var(--radius-full);
+}
+
+/* 模型下拉框 */
+.model-btn-text {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-dropdown-container {
+  position: relative;
+}
+
+.model-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 280px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--border-light);
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.dropdown-header {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dropdown-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: var(--divider-soft);
+}
+
+.dropdown-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: all 250ms ease-in-out;
+}
+
+.dropdown-item:hover {
+  background: var(--workspace-hover);
+}
+
+.dropdown-item.active {
+  background: var(--lumi-primary-light);
+}
+
+.dropdown-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dropdown-item-model {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-item-provider {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-item.active .dropdown-item-model {
+  color: var(--lumi-primary);
+}
+
+.dropdown-empty {
+  padding: 20px 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.provider-icon-mini {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-inverse);
+  flex-shrink: 0;
+}
+
+.provider-svg-mini {
+  background: transparent !important;
+}
+
+.provider-svg-mini :deep(svg) {
+  width: 16px;
+  height: 16px;
+}
+
+.dropdown-fade-enter-active {
+  animation: dropdown-in 0.2s ease-out;
+}
+
+.dropdown-fade-leave-active {
+  animation: dropdown-in 0.15s ease-out reverse;
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .toolbar-right {
@@ -3026,8 +3125,67 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-gradient);
+  background: var(--surface);
   overflow: hidden;
+}
+
+.avatar-stage.desktop-mode-active {
+  background:
+    radial-gradient(circle at 50% 50%, var(--lumi-primary-subtle) 0%, transparent 70%),
+    var(--surface);
+}
+
+.desktop-mode-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px 24px;
+  text-align: center;
+  animation: hint-fade-in 500ms ease-in-out;
+}
+
+@keyframes hint-fade-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.desktop-mode-hint .hint-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  animation: hint-icon-pulse 3s ease-in-out infinite;
+}
+
+@keyframes hint-icon-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-primary-glow); }
+  50% { box-shadow: 0 0 0 12px transparent; }
+}
+
+.desktop-mode-hint .hint-content h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.desktop-mode-hint .hint-content p {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 280px;
+}
+
+.desktop-mode-hint .hint-sub {
+  font-size: 11px !important;
+  opacity: 0.7;
+  margin-top: 4px;
 }
 
 .live2d-canvas {
@@ -3063,12 +3221,12 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
+  background: var(--surface);
+  backdrop-filter: blur(8px);
   border-radius: var(--radius-full);
   font-size: 11px;
   color: var(--text-secondary);
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--border-light);
   z-index: 2;
 }
 
@@ -3092,9 +3250,9 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   max-width: 88%;
   padding: 8px 14px;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
+  background: var(--surface);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   font-size: 13px;
   line-height: 1.5;
@@ -3102,7 +3260,7 @@ onBeforeUnmount(() => {
   text-align: center;
   cursor: pointer;
   z-index: 3;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .avatar-footer {

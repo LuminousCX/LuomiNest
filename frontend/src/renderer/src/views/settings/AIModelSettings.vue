@@ -26,6 +26,7 @@ import {
   Cloud,
   Monitor,
   Network,
+  CheckSquare,
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
@@ -94,14 +95,12 @@ const editProvider = ref({
   isDefault: false,
 })
 
-const addModelSelect = ref('')
 const editModelSelect = ref('')
 const shakingDialog = ref('')
 
-const currentTemplateDefaultModels = computed(() => {
-  const tmpl = modelStore.allTemplates.find(t => t.id === selectedTemplate.value)
-  return tmpl?.defaultModels || []
-})
+// 添加供应商对话框：检测状态
+const testingProvider = ref(false)
+const testResult = ref<{ success: boolean; modelCount: number; error: string } | null>(null)
 
 const editTemplateDefaultModels = computed(() => {
   const tmpl = modelStore.allTemplates.find(t => t.id === editingProviderId.value)
@@ -109,14 +108,6 @@ const editTemplateDefaultModels = computed(() => {
 })
 
 const selectedTmpl = computed(() => modelStore.allTemplates.find(t => t.id === selectedTemplate.value))
-
-const onAddModelSelectChange = () => {
-  if (addModelSelect.value && addModelSelect.value !== '__custom__') {
-    newProvider.value.defaultModel = addModelSelect.value
-  } else if (addModelSelect.value === '__custom__') {
-    newProvider.value.defaultModel = ''
-  }
-}
 
 const onEditModelSelectChange = () => {
   if (editModelSelect.value && editModelSelect.value !== '__custom__') {
@@ -161,14 +152,9 @@ const handleTemplateSelect = (templateId: string) => {
     } else {
       newProvider.value.apiKey = ''
     }
-    if (tmpl.defaultModel && tmpl.defaultModels?.includes(tmpl.defaultModel)) {
-      addModelSelect.value = tmpl.defaultModel
-    } else if (tmpl.defaultModel) {
-      addModelSelect.value = '__custom__'
-    } else {
-      addModelSelect.value = ''
-    }
   }
+  // 重置检测状态
+  testResult.value = null
   addDialogStep.value = 'configure'
 }
 
@@ -219,13 +205,65 @@ const sttConfigForm = ref({
   autoSendDelay: 2000,
 })
 
-const mainAvailableModels = computed(() =>
-  modelStore.getProviderModels(mainModelConfig.value.selectedProvider)
-)
+const mainAvailableModels = computed(() => {
+  const provider = providers.value.find(p => p.id === mainModelConfig.value.selectedProvider)
+  if (!provider) return []
+  // 优先使用已多选的模型；若未多选则回退到该供应商全部已获取模型
+  if (provider.selectedModels.length > 0) {
+    return provider.selectedModels.map(id => ({ id, name: id }))
+  }
+  return provider.models
+})
 
-const reasonerAvailableModels = computed(() =>
-  modelStore.getProviderModels(reasonerModelConfig.value.selectedProvider)
-)
+const reasonerAvailableModels = computed(() => {
+  const provider = providers.value.find(p => p.id === reasonerModelConfig.value.selectedProvider)
+  if (!provider) return []
+  if (provider.selectedModels.length > 0) {
+    return provider.selectedModels.map(id => ({ id, name: id }))
+  }
+  return provider.models
+})
+
+// 供应商卡片：多选模型展开状态
+const expandedModelPicker = ref<string>('')
+const savingSelectedModels = ref<string>('')
+const localSelectedModels = ref<Record<string, string[]>>({})
+
+const toggleModelPicker = (providerId: string) => {
+  if (expandedModelPicker.value === providerId) {
+    expandedModelPicker.value = ''
+  } else {
+    // 初始化本地多选状态为后端已保存的 selectedModels
+    const provider = providers.value.find(p => p.id === providerId)
+    localSelectedModels.value[providerId] = provider ? [...provider.selectedModels] : []
+    expandedModelPicker.value = providerId
+  }
+}
+
+const toggleModelSelection = (providerId: string, modelId: string) => {
+  const list = localSelectedModels.value[providerId] || []
+  const idx = list.indexOf(modelId)
+  if (idx >= 0) {
+    list.splice(idx, 1)
+  } else {
+    list.push(modelId)
+  }
+  localSelectedModels.value[providerId] = [...list]
+}
+
+const saveSelectedModels = async (providerId: string) => {
+  savingSelectedModels.value = providerId
+  try {
+    const selected = localSelectedModels.value[providerId] || []
+    await modelStore.updateProvider(providerId, { selectedModels: selected })
+    toast.success(`已保存 ${selected.length} 个模型`)
+    expandedModelPicker.value = ''
+  } catch (e: any) {
+    toast.error(`保存失败：${e.message || '未知错误'}`)
+  } finally {
+    savingSelectedModels.value = ''
+  }
+}
 
 const newProviderValidation = computed(() => {
   const errors: string[] = []
@@ -233,7 +271,6 @@ const newProviderValidation = computed(() => {
   if (!newProvider.value.baseUrl.trim()) errors.push('API 地址不能为空')
   if (newProvider.value.baseUrl.trim() && !isValidUrl(newProvider.value.baseUrl)) errors.push('API 地址格式不正确')
   if (newProvider.value.vendor !== 'ollama' && !newProvider.value.apiKey.trim()) errors.push('API Key 不能为空')
-  if (!newProvider.value.defaultModel.trim()) errors.push('请选择或输入默认模型')
   return errors
 })
 
@@ -292,9 +329,50 @@ const openAddDialog = () => {
     id: '', name: '', vendor: 'openai_compatible',
     baseUrl: '', apiKey: '', defaultModel: '', isDefault: false,
   }
-  addModelSelect.value = ''
+  testResult.value = null
   addProviderError.value = ''
   showAddDialog.value = true
+}
+
+/** 检测供应商 API/TOKEN 是否可用：调用 /models/providers/test 临时获取模型列表 */
+const handleTestProvider = async () => {
+  if (!newProvider.value.baseUrl.trim()) {
+    toast.warning('请先填写 API 地址')
+    return
+  }
+  if (newProvider.value.vendor !== 'ollama' && !newProvider.value.apiKey.trim()) {
+    toast.warning('请先填写 API Key')
+    return
+  }
+  testingProvider.value = true
+  testResult.value = null
+  try {
+    const result = await modelStore.testProvider({
+      vendor: newProvider.value.vendor,
+      baseUrl: newProvider.value.baseUrl.trim(),
+      apiKey: newProvider.value.apiKey,
+      defaultModel: newProvider.value.defaultModel,
+    })
+    testResult.value = {
+      success: result.success,
+      modelCount: result.models.length,
+      error: result.error || '',
+    }
+    if (result.success) {
+      toast.success(`检测成功，共获取到 ${result.models.length} 个模型`)
+    } else {
+      toast.error(`检测失败：${result.error || '未知错误'}`)
+    }
+  } catch (e: any) {
+    testResult.value = {
+      success: false,
+      modelCount: 0,
+      error: e.message || '网络错误',
+    }
+    toast.error(`检测失败：${e.message || '网络错误'}`)
+  } finally {
+    testingProvider.value = false
+  }
 }
 
 const handleAddProvider = async () => {
@@ -499,9 +577,12 @@ const handleSaveSTTConfig = async () => {
 }
 
 onMounted(async () => {
-  await modelStore.fetchProviders()
-  await modelStore.fetchTemplates()
-  await modelStore.fetchModelConfig()
+  // 三个配置接口并行加载，避免串行 await 导致的白屏等待
+  await Promise.all([
+    modelStore.fetchProviders(),
+    modelStore.fetchTemplates(),
+    modelStore.fetchModelConfig(),
+  ])
 
   const cfg = modelStore.modelConfig
   mainModelConfig.value.selectedProvider = cfg.defaultProvider
@@ -698,6 +779,7 @@ onMounted(async () => {
                       <Server v-else :size="14" class="provider-item-icon" />
                       <span class="provider-item-name">{{ provider.name }}</span>
                       <span v-if="provider.isDefault" class="default-badge">默认</span>
+                      <span v-if="provider.selectedModels.length > 0" class="selected-count-badge">{{ provider.selectedModels.length }} 模型</span>
                     </div>
                     <div class="provider-item-detail">
                       <span class="detail-text">{{ provider.baseUrl }}</span>
@@ -706,6 +788,9 @@ onMounted(async () => {
                     </div>
                   </div>
                   <div class="provider-item-actions">
+                    <button class="action-btn" title="多选模型" @click="toggleModelPicker(provider.id)">
+                      <CheckSquare :size="13" />
+                    </button>
                     <button class="action-btn" title="获取模型" @click="handleFetchModels(provider.id)">
                       <Search :size="13" />
                     </button>
@@ -716,6 +801,40 @@ onMounted(async () => {
                       <Trash2 :size="13" />
                     </button>
                   </div>
+                  <Transition name="expand">
+                    <div v-if="expandedModelPicker === provider.id" class="model-picker-panel">
+                      <div class="model-picker-header">
+                        <span class="model-picker-title">多选可用模型（显示到工作台/对话页）</span>
+                        <span v-if="provider.models.length === 0" class="model-picker-hint">暂无模型列表，请先点击搜索图标获取</span>
+                      </div>
+                      <div v-if="provider.models.length > 0" class="model-picker-list">
+                        <label
+                          v-for="m in provider.models"
+                          :key="m.id"
+                          class="model-picker-item"
+                        >
+                          <input
+                            type="checkbox"
+                            :checked="(localSelectedModels[provider.id] || []).includes(m.id)"
+                            @change="toggleModelSelection(provider.id, m.id)"
+                          />
+                          <span class="model-picker-name">{{ m.name }}</span>
+                        </label>
+                      </div>
+                      <div v-if="provider.models.length > 0" class="model-picker-footer">
+                        <span class="model-picker-count">已选 {{ (localSelectedModels[provider.id] || []).length }} 个</span>
+                        <button
+                          class="model-picker-save"
+                          :disabled="savingSelectedModels === provider.id"
+                          @click="saveSelectedModels(provider.id)"
+                        >
+                          <Loader2 v-if="savingSelectedModels === provider.id" :size="12" class="spin-animation" />
+                          <Check v-else :size="12" />
+                          保存
+                        </button>
+                      </div>
+                    </div>
+                  </Transition>
                 </div>
                 <div v-if="providers.length === 0" class="empty-provider">
                   <p>暂无供应商</p>
@@ -1120,17 +1239,25 @@ onMounted(async () => {
                 <span class="form-hint">Ollama 自动填充，其他供应商需填写真实密钥</span>
               </div>
               <div class="form-group">
-                <label class="form-label">默认模型</label>
-                <div class="form-select-wrap">
-                  <select v-model="addModelSelect" class="form-select" @change="onAddModelSelectChange">
-                    <option value="">请选择模型</option>
-                    <option v-for="m in currentTemplateDefaultModels" :key="m" :value="m">{{ m }}</option>
-                    <option value="__custom__">自定义模型...</option>
-                  </select>
-                  <ChevronRight :size="14" class="select-icon" />
+                <label class="form-label">API 连通性检测</label>
+                <div class="test-provider-row">
+                  <button
+                    class="test-btn"
+                    :disabled="testingProvider || !newProvider.baseUrl.trim() || (newProvider.vendor !== 'ollama' && !newProvider.apiKey.trim())"
+                    @click="handleTestProvider"
+                  >
+                    <Loader2 v-if="testingProvider" :size="14" class="spin-animation" />
+                    <Zap v-else :size="14" />
+                    {{ testingProvider ? '检测中...' : '检测 API / TOKEN' }}
+                  </button>
+                  <div v-if="testResult" :class="['test-result', testResult.success ? 'success' : 'error']">
+                    <Check v-if="testResult.success" :size="14" />
+                    <AlertCircle v-else :size="14" />
+                    <span v-if="testResult.success">可用，共 {{ testResult.modelCount }} 个模型</span>
+                    <span v-else>{{ testResult.error || '不可用' }}</span>
+                  </div>
                 </div>
-                <input v-if="addModelSelect === '__custom__'" v-model="newProvider.defaultModel" type="text" class="form-input" placeholder="输入自定义模型名称" style="margin-top: 8px;" />
-                <span class="form-hint">添加后可点击搜索图标获取可用模型列表</span>
+                <span class="form-hint">检测会调用供应商 /models 接口验证 API 地址与密钥是否可用</span>
               </div>
               <div class="form-group">
                 <div class="toggle-row">
@@ -1583,6 +1710,55 @@ export default { name: 'AIModelSettings' }
   color: var(--text-inverse);
 }
 
+/* 添加供应商对话框：API 检测 */
+.test-provider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.test-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--lumi-primary);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.test-btn:hover:not(:disabled) {
+  background: var(--lumi-primary);
+  color: var(--text-inverse);
+}
+
+.test-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.test-result {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.test-result.success {
+  color: var(--lumi-success, #10b981);
+}
+
+.test-result.error {
+  color: var(--lumi-accent);
+}
+
 .form-error-banner {
   display: flex;
   align-items: center;
@@ -1849,6 +2025,7 @@ export default { name: 'AIModelSettings' }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   padding: 10px 12px;
   border-radius: var(--radius-md);
   background: var(--workspace-panel);
@@ -1893,6 +2070,112 @@ export default { name: 'AIModelSettings' }
   background: var(--lumi-primary);
   color: var(--text-inverse);
   font-weight: 500;
+}
+
+.selected-count-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  font-weight: 500;
+}
+
+/* 供应商卡片：多选模型面板 */
+.model-picker-panel {
+  flex-basis: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-light);
+}
+
+.model-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.model-picker-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.model-picker-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.model-picker-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.model-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-bg, var(--surface-active));
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  transition: all 200ms ease-in-out;
+}
+
+.model-picker-item:hover {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.model-picker-item input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.model-picker-name {
+  white-space: nowrap;
+}
+
+.model-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+.model-picker-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.model-picker-save {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-inverse);
+  background: var(--lumi-primary);
+  cursor: pointer;
+  transition: opacity 200ms ease-in-out;
+}
+
+.model-picker-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .provider-item-detail {

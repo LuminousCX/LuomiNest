@@ -125,10 +125,10 @@ export function registerAvatarProtocol(): void {
   })
 
   console.info(`[INFO][LuomiNestAvatar] Protocol "luominest-avatar" registered successfully`)
-  console.info(`[INFO][LuomiNestAvatar]   builtinBasePath → ${builtinBasePath}`)
-  console.info(`[INFO][LuomiNestAvatar]   cubismCoreBasePath → ${cubismCoreBasePath}`)
-  console.info(`[INFO][LuomiNestAvatar]   isPackaged → ${app.isPackaged}`)
-  console.info(`[INFO][LuomiNestAvatar]   resourcesPath → ${process.resourcesPath}`)
+  console.info(`[INFO][LuomiNestAvatar]   builtinBasePath -> ${builtinBasePath}`)
+  console.info(`[INFO][LuomiNestAvatar]   cubismCoreBasePath -> ${cubismCoreBasePath}`)
+  console.info(`[INFO][LuomiNestAvatar]   isPackaged -> ${app.isPackaged}`)
+  console.info(`[INFO][LuomiNestAvatar]   resourcesPath -> ${process.resourcesPath}`)
 }
 
 export function verifyAvatarResources(): void {
