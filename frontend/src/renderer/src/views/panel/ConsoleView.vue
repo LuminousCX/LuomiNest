@@ -6,14 +6,13 @@ import {
   Clock, User, Filter, RefreshCw, ChevronDown, Server, Monitor
 } from 'lucide-vue-next'
 import { useApi } from '../../composables/useApi'
-import type { CommandRecord, SystemLogEntry, LogUploadResponse } from '../../types'
+import type { CommandRecord, SystemLogEntry, LogUploadResponse, ExecuteCommandResponse } from '../../types'
 
-const { apiGet, apiPost } = useApi()
+const { apiGet, apiPost, apiDelete } = useApi()
 
 const activeTab = ref<'console' | 'logs'>('console')
 const isExpanded = ref(false)
 const commandInput = ref('')
-const isRunning = ref(false)
 
 const commands = ref<CommandRecord[]>([])
 const logs = ref<SystemLogEntry[]>([])
@@ -132,19 +131,55 @@ const copyLogs = () => {
   navigator.clipboard.writeText(entries)
 }
 
-const handleCommand = () => {
+const isExecuting = ref(false)
+const executeResult = ref<string | null>(null)
+
+const handleCommand = async () => {
   const cmd = commandInput.value.trim()
-  if (!cmd) return
+  if (!cmd || isExecuting.value) return
   commandInput.value = ''
 
+  // 本地命令
   if (cmd === 'help') {
-    console.info('[LuomiNest Console] Available commands: help, refresh, clear')
-  } else if (cmd === 'refresh') {
+    executeResult.value = '可用命令: help 查看帮助, refresh 刷新, clear 清空, 其他命令将真实执行（受白名单限制）'
+    setTimeout(() => { executeResult.value = null }, 4000)
+    return
+  }
+  if (cmd === 'refresh') {
     if (activeTab.value === 'console') fetchCommands()
     else fetchLogs()
-  } else if (cmd === 'clear') {
-    if (activeTab.value === 'console') commands.value = []
-    else logs.value = []
+    return
+  }
+  if (cmd === 'clear') {
+    if (activeTab.value === 'console') {
+      await apiDelete('/console/commands').catch(() => {})
+      commands.value = []
+    } else {
+      await apiDelete('/console/logs').catch(() => {})
+      logs.value = []
+    }
+    return
+  }
+
+  // 真实执行命令
+  isExecuting.value = true
+  executeResult.value = null
+  try {
+    const resp = await apiPost<ExecuteCommandResponse>('/console/execute', {
+      command: cmd,
+      executed_by: 'user',
+    })
+    if (resp.status === 'success') {
+      executeResult.value = `执行成功 (${resp.duration_ms}ms, exit=${resp.exit_code})`
+    } else {
+      executeResult.value = `执行失败: ${resp.error || '未知错误'}`
+    }
+    await fetchCommands()
+  } catch (e: any) {
+    executeResult.value = `执行失败: ${e.message || e}`
+  } finally {
+    isExecuting.value = false
+    setTimeout(() => { executeResult.value = null }, 5000)
   }
 }
 
@@ -329,14 +364,24 @@ onBeforeUnmount(() => {
         v-model="commandInput"
         type="text"
         class="command-input"
-        placeholder="输入命令 (help 查看帮助)..."
+        :placeholder="isExecuting ? '执行中...' : '输入命令 (help 查看帮助, 受白名单限制)...'"
+        :disabled="isExecuting"
         @keydown.enter="handleCommand"
       />
-      <button :class="['run-btn', { active: isRunning }]" @click="isRunning = !isRunning">
-        <Square v-if="isRunning" :size="14" />
+      <button
+        :class="['run-btn', { active: isExecuting }]"
+        :disabled="isExecuting"
+        @click="handleCommand"
+      >
+        <Square v-if="isExecuting" :size="14" />
         <Play v-else :size="14" />
       </button>
     </div>
+    <Transition name="fade">
+      <div v-if="executeResult" :class="['execute-toast', { error: executeResult.includes('失败') }]">
+        {{ executeResult }}
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -895,12 +940,43 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.run-btn:hover {
+.run-btn:hover:not(:disabled) {
   background: var(--lumi-primary-hover);
+}
+
+.run-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .run-btn.active {
   background: var(--lumi-accent);
+}
+
+.execute-toast {
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--task-green-soft);
+  color: var(--lumi-success);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.execute-toast.error {
+  background: var(--lumi-accent-light);
+  color: var(--lumi-accent);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease-in-out;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 .spinning {

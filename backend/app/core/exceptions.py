@@ -32,9 +32,9 @@ class RateLimitError(LuomiNestError):
 
 
 class ProviderError(LuomiNestError):
-    def __init__(self, message: str = "LLM provider error", provider: str = ""):
+    def __init__(self, message: str = "LLM provider error", provider: str = "", code: str = "PROVIDER_ERROR", status_code: int = 502):
         self.provider = provider
-        super().__init__(message, "PROVIDER_ERROR", 502)
+        super().__init__(message, code, status_code)
 
 
 class PluginError(LuomiNestError):

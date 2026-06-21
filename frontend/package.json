@@ -1,9 +1,8 @@
 {
   "name": "luominest-desktop",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "description": "LuomiNest 辰汐分布式AI伴侣平台 - Electron桌面客户端",
   "author": "LuminousCX R&D Team",
-  "homepage": "https://github.com/LuminousCX/LuomiNest",
   "main": "./out/main/index.js",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
@@ -12,13 +11,20 @@
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
     "build:win": "pnpm run build && electron-builder --win",
-    "build:linux": "pnpm run build && electron-builder --linux AppImage deb rpm",
+    "build:win-nsis": "pnpm run build && electron-builder --win nsis",
+    "build:win-portable": "pnpm run build && electron-builder --win portable",
+    "build:linux": "pnpm run build && electron-builder --linux",
+    "build:linux-appimage": "pnpm run build && electron-builder --linux AppImage",
+    "build:linux-deb": "pnpm run build && electron-builder --linux deb",
     "build:mac": "pnpm run build && electron-builder --mac",
+    "build:mac-dmg": "pnpm run build && electron-builder --mac dmg",
+    "build:backend": "cd ../backend && build.bat",
+    "build:complete": "cd .. && build-all.bat",
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && vue-tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
     "@pixi/unsafe-eval": "^7.4.3",
-    "dompurify": "^3.4.2",
+    "dompurify": "^3.4.11",
     "marked": "^18.0.1",
     "pinia": "^3.0.4",
     "pixi-live2d-display-mulmotion": "0.5.0-mm-6",
@@ -26,10 +32,8 @@
     "vue-router": "^5.0.4"
   },
   "devDependencies": {
-    "@types/dompurify": "^3.2.0",
     "@types/node": "^22.13.5",
     "@vitejs/plugin-vue": "^6.0.5",
-    "cross-env": "^7.0.3",
     "electron": "^41.0.0",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
@@ -39,6 +43,7 @@
     "sharp": "^0.34.5",
     "typescript": "~6.0.2",
     "vite": "^6.2.0",
+    "vue": "^3.5.32",
     "vue-tsc": "^3.2.6"
   },
   "build": {
@@ -49,10 +54,13 @@
       "output": "release/dist"
     },
     "files": [
-      "out/**/*",
-      "!out/renderer/live2d/**/*"
+      "out/**/*"
     ],
     "extraResources": [
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      },
       {
         "from": "resources/backend",
         "to": "backend",
@@ -71,12 +79,27 @@
         "from": "src/renderer/public/live2d",
         "to": "live2d",
         "filter": [
-          "**/*"
+          "**/*.moc3",
+          "**/*.model3.json",
+          "**/*.physics3.json",
+          "**/*.pose3.json",
+          "**/*.cdi3.json",
+          "**/*.exp3.json",
+          "**/*.motion3.json",
+          "**/*.userdata3.json",
+          "**/*.png",
+          "**/*.jpg"
         ]
       }
     ],
     "win": {
       "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
         {
           "target": "portable",
           "arch": [
@@ -87,7 +110,33 @@
       "icon": "resources/icon.ico",
       "signAndEditExecutable": false,
       "requestedExecutionLevel": "asInvoker",
-      "artifactName": "LuomiNest-Portable-${version}-win-${arch}.${ext}"
+      "artifactName": "LuomiNest-Setup-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "language": "2052",
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico",
+      "license": "../LICENSE",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LuomiNest",
+      "include": "build/nsis-extra.nsh",
+      "artifactName": "LuomiNest-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "menuCategory": true,
+      "displayLanguageSelector": true,
+      "uninstallDisplayName": "LuomiNest",
+      "installerHeaderIcon": "resources/icon.ico",
+      "unicode": true
     },
     "portable": {
       "artifactName": "LuomiNest-Portable-${version}.${ext}"
@@ -107,7 +156,7 @@
           ]
         },
         {
-          "target": "rpm",
+          "target": "tar.gz",
           "arch": [
             "x64"
           ]
@@ -131,14 +180,6 @@
         "libnss3"
       ],
       "artifactName": "LuomiNest-${version}-linux-${arch}.deb"
-    },
-    "rpm": {
-      "depends": [
-        "libnotify",
-        "libXtst6",
-        "nss"
-      ],
-      "artifactName": "LuomiNest-${version}-linux-${arch}.rpm"
     },
     "mac": {
       "target": [
@@ -194,7 +235,10 @@
     },
     "asar": true,
     "asarUnpack": [
-      "**/*.node"
+      "**/*.node",
+      "**/*.moc3",
+      "**/*.png",
+      "**/*.jpg"
     ]
   }
 }

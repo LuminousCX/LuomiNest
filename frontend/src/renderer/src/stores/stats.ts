@@ -71,8 +71,8 @@ export const useStatsStore = defineStore('stats', () => {
     try {
       const params = days ? `?days=${days}` : ''
       overview.value = await apiGet<StatsOverview>(`/stats/overview${params}`)
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to fetch stats overview'
+    } catch (e: unknown) {
+      error.value = (e instanceof Error ? e.message : '') || 'Failed to fetch stats overview'
     } finally {
       loading.value = false
     }
@@ -84,8 +84,8 @@ export const useStatsStore = defineStore('stats', () => {
     try {
       const params = days ? `?days=${days}` : ''
       usageSummary.value = await apiGet<UsageSummary>(`/stats/usage${params}`)
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to fetch usage stats'
+    } catch (e: unknown) {
+      error.value = (e instanceof Error ? e.message : '') || 'Failed to fetch usage stats'
     } finally {
       loading.value = false
     }
@@ -95,7 +95,7 @@ export const useStatsStore = defineStore('stats', () => {
     try {
       const result = await apiGet<{ by_day: Record<string, number> }>(`/stats/usage/daily?days=${days}`)
       dailyUsage.value = result?.by_day ?? {}
-    } catch (e: any) {
+    } catch (e: unknown) {
       dailyUsage.value = {}
     }
   }

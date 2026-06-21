@@ -1,4 +1,4 @@
-﻿﻿﻿﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import {
   Plus,
@@ -31,12 +31,18 @@ import {
   Flag,
   Timer,
   Save,
-  RotateCcw
+  RotateCcw,
+  Loader2,
+  XCircle,
+  AlertCircle
 } from 'lucide-vue-next'
+import { useTaskStreamStore } from '../stores/taskStream'
+
+const taskStreamStore = useTaskStreamStore()
 
 type TaskStatus = 'done' | 'progress' | 'pending'
 type TaskPriority = 'high' | 'medium' | 'low'
-type ViewMode = 'card' | 'week' | 'month'
+type ViewMode = 'card' | 'week' | 'month' | 'scheduled'
 
 interface LuomiNestTask {
   id: number
@@ -215,7 +221,27 @@ watch(tasks, savePersistedData, { deep: true })
 watch(viewDate, savePersistedData)
 watch(currentView, savePersistedData)
 
-onMounted(loadPersistedData)
+onMounted(() => {
+  loadPersistedData()
+  // 拉取后端定时任务
+  taskStreamStore.fetchScheduledTasks()
+})
+
+// 格式化定时任务时间
+const formatScheduledTime = (isoStr: string | null): string => {
+  if (!isoStr) return '未知'
+  try {
+    const dt = new Date(isoStr)
+    return dt.toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return isoStr
+  }
+}
 
 const subTasks = ref([
   { label: '需求分析', done: true },
@@ -687,7 +713,7 @@ const timeSlotOptions = [
     <div class="toolbar animate-slide-up">
       <div class="view-switcher">
         <button
-          v-for="view in (['card', 'week', 'month'] as ViewMode[])"
+          v-for="view in (['card', 'week', 'month', 'scheduled'] as ViewMode[])"
           :key="view"
           :class="['view-btn', { active: currentView === view }]"
           @click="currentView = view"
@@ -695,8 +721,10 @@ const timeSlotOptions = [
           <LayoutGrid v-if="view === 'card'" :size="14" />
           <CalendarRange v-if="view === 'week'" :size="14" />
           <CalendarDays v-if="view === 'month'" :size="14" />
-          {{ view === 'card' ? '卡片' : view === 'week' ? '周视图' : '月视图' }}
+          <Timer v-if="view === 'scheduled'" :size="14" />
+          {{ view === 'card' ? '卡片' : view === 'week' ? '周视图' : view === 'month' ? '月视图' : '定时任务' }}
           <span v-if="view === 'card'" class="view-indicator"></span>
+          <span v-if="view === 'scheduled' && taskStreamStore.activeScheduledTasks.length > 0" class="view-indicator"></span>
         </button>
       </div>
 
@@ -968,6 +996,78 @@ const timeSlotOptions = [
           </div>
         </div>
       </Transition>
+    </div>
+
+    <!-- 定时任务视图（主 Agent 通过 create_scheduled_task 工具创建） -->
+    <div v-if="currentView === 'scheduled'" class="scheduled-section animate-slide-up" style="animation-delay: 70ms">
+      <div class="scheduled-header">
+        <div class="scheduled-title">
+          <Timer :size="18" />
+          <span>定时任务</span>
+          <span class="scheduled-count">{{ taskStreamStore.scheduledTasks.length }}</span>
+        </div>
+        <button class="scheduled-refresh-btn" @click="taskStreamStore.fetchScheduledTasks()">
+          <RotateCcw :size="14" />
+          刷新
+        </button>
+      </div>
+
+      <div v-if="taskStreamStore.scheduledTasks.length === 0" class="scheduled-empty">
+        <Timer :size="40" />
+        <p>暂无定时任务</p>
+        <span>主 Agent 可通过 create_scheduled_task 工具创建定时任务</span>
+      </div>
+
+      <div v-else class="scheduled-list">
+        <div
+          v-for="task in taskStreamStore.scheduledTasks"
+          :key="task.id"
+          :class="['scheduled-card', `status-${task.status}`]"
+        >
+          <div class="scheduled-card-header">
+            <div class="scheduled-status-icon">
+              <Loader2 v-if="task.status === 'running'" :size="16" class="spin-animation" />
+              <CheckCircle2 v-else-if="task.status === 'completed'" :size="16" />
+              <XCircle v-else-if="task.status === 'failed'" :size="16" />
+              <Clock v-else-if="task.status === 'pending'" :size="16" />
+              <AlertCircle v-else :size="16" />
+            </div>
+            <div class="scheduled-card-info">
+              <div class="scheduled-card-title">{{ task.name }}</div>
+              <div class="scheduled-card-meta">
+                <span class="scheduled-type">{{ task.task_type }}</span>
+                <span v-if="task.next_run_time" class="scheduled-next">
+                  下次: {{ formatScheduledTime(task.next_run_time) }}
+                </span>
+                <span v-if="task.last_run_time" class="scheduled-last">
+                  上次: {{ formatScheduledTime(task.last_run_time) }}
+                </span>
+              </div>
+            </div>
+            <button class="scheduled-delete-btn" @click="taskStreamStore.removeScheduledTask(task.id)">
+              <Trash2 :size="14" />
+            </button>
+          </div>
+
+          <div v-if="task.description" class="scheduled-card-desc">{{ task.description }}</div>
+
+          <div v-if="task.last_result" class="scheduled-card-result">
+            <div class="scheduled-result-label">
+              <CheckCircle2 :size="12" />
+              <span>执行结果</span>
+            </div>
+            <div class="scheduled-result-content">{{ task.last_result }}</div>
+          </div>
+
+          <div v-if="task.last_error" class="scheduled-card-error">
+            <div class="scheduled-error-label">
+              <XCircle :size="12" />
+              <span>错误信息</span>
+            </div>
+            <div class="scheduled-error-content">{{ task.last_error }}</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 统计概览 -->
@@ -3248,5 +3348,242 @@ const timeSlotOptions = [
 .luomi-modal-body::-webkit-scrollbar-thumb {
   background: var(--workspace-border);
   border-radius: 10px;
+}
+
+/* ===== 定时任务视图 ===== */
+.scheduled-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.scheduled-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.scheduled-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--workspace-text);
+}
+
+.scheduled-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--workspace-text-muted);
+  padding: 2px 8px;
+  background: var(--workspace-hover);
+  border-radius: 10px;
+}
+
+.scheduled-refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--workspace-text-muted);
+  background: var(--workspace-card);
+  border: 1px solid var(--workspace-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.scheduled-refresh-btn:hover {
+  color: var(--workspace-text);
+  background: var(--workspace-hover);
+}
+
+.scheduled-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--workspace-text-muted);
+}
+
+.scheduled-empty p {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 8px 0 0;
+}
+
+.scheduled-empty span {
+  font-size: 12px;
+}
+
+.scheduled-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.scheduled-card {
+  background: var(--workspace-card);
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  transition: border-color 0.2s ease-in-out;
+}
+
+.scheduled-card.status-running {
+  border-color: var(--lumi-primary, #147EBC);
+}
+
+.scheduled-card.status-failed {
+  border-color: var(--lumi-danger, #ef4444);
+}
+
+.scheduled-card.status-completed {
+  border-color: var(--lumi-success, #22c55e);
+}
+
+.scheduled-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scheduled-status-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.scheduled-status-icon .spin-animation {
+  animation: spin 1s linear infinite;
+  color: var(--lumi-primary, #147EBC);
+}
+
+.status-completed .scheduled-status-icon {
+  color: var(--lumi-success, #22c55e);
+}
+
+.status-failed .scheduled-status-icon {
+  color: var(--lumi-danger, #ef4444);
+}
+
+.status-pending .scheduled-status-icon {
+  color: var(--workspace-text-muted);
+}
+
+.scheduled-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.scheduled-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--workspace-text);
+  margin-bottom: 4px;
+}
+
+.scheduled-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--workspace-text-muted);
+}
+
+.scheduled-type {
+  padding: 1px 6px;
+  background: var(--workspace-hover);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+.scheduled-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--workspace-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.scheduled-delete-btn:hover {
+  color: var(--lumi-danger, #ef4444);
+  background: var(--workspace-hover);
+}
+
+.scheduled-card-desc {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--workspace-text-muted);
+  line-height: 1.5;
+}
+
+.scheduled-card-result,
+.scheduled-card-error {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.scheduled-card-result {
+  background: rgba(34, 197, 94, 0.08);
+  border-left: 2px solid var(--lumi-success, #22c55e);
+}
+
+.scheduled-card-error {
+  background: rgba(239, 68, 68, 0.08);
+  border-left: 2px solid var(--lumi-danger, #ef4444);
+}
+
+.scheduled-result-label,
+.scheduled-error-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.scheduled-result-label {
+  color: var(--lumi-success, #22c55e);
+}
+
+.scheduled-error-label {
+  color: var(--lumi-danger, #ef4444);
+}
+
+.scheduled-result-content,
+.scheduled-error-content {
+  color: var(--workspace-text);
+  line-height: 1.5;
+  max-height: 120px;
+  overflow-y: auto;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

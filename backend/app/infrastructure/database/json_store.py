@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import threading
@@ -31,10 +32,18 @@ class JsonStore:
             return self._cache
 
     def _save(self):
+        """原子写入：先写临时文件，再 rename 替换，防止写入中断导致数据损坏。"""
+        tmp_path = self._path + ".tmp"
         try:
-            with open(self._path, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self._cache, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, self._path)
         except Exception as e:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
             logger.error(f"[Store] Failed to save {self._path}: {e}")
 
     def get(self, key: str, default=None):
@@ -102,6 +111,41 @@ class JsonStore:
 
     def invalidate(self):
         self._cache = None
+
+    # ── Async wrappers (non-blocking for FastAPI async endpoints) ──
+
+    async def get_async(self, key: str, default=None):
+        return await asyncio.to_thread(self.get, key, default)
+
+    async def set_async(self, key: str, value):
+        return await asyncio.to_thread(self.set, key, value)
+
+    async def delete_async(self, key: str):
+        return await asyncio.to_thread(self.delete, key)
+
+    async def list_all_async(self) -> dict:
+        return await asyncio.to_thread(self.list_all)
+
+    async def all_async(self) -> list:
+        return await asyncio.to_thread(self.all)
+
+    async def update_async(self, key: str, updates: dict):
+        return await asyncio.to_thread(self.update, key, updates)
+
+    async def values_async(self) -> list:
+        return await asyncio.to_thread(self.values)
+
+    async def items_async(self) -> list:
+        return await asyncio.to_thread(self.items)
+
+    async def count_async(self) -> int:
+        return await asyncio.to_thread(self.count)
+
+    async def clear_async(self):
+        return await asyncio.to_thread(self.clear)
+
+    async def mutate_async(self, key: str, updater_fn) -> Optional[dict]:
+        return await asyncio.to_thread(self.mutate, key, updater_fn)
 
 
 agents_store = JsonStore("agents.json")

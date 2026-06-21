@@ -184,7 +184,7 @@ async def create_platform_instance(request: PlatformInstanceCreate):
         updated_at=now,
     )
 
-    platforms_store.set(instance_id, {
+    await platforms_store.set_async(instance_id, {
         "id": instance_id,
         "adapter_type": request.adapter_type,
         "name": request.name,
@@ -198,7 +198,7 @@ async def create_platform_instance(request: PlatformInstanceCreate):
 
     if request.enable:
         await start_instance(instance_id)
-        platforms_store.update(instance_id, {
+        await platforms_store.update_async(instance_id, {
             "status": inst.status.value,
             "last_sync": datetime.now(timezone.utc).isoformat(),
         })
@@ -242,7 +242,7 @@ async def update_platform_instance(instance_id: str, request: PlatformInstanceUp
 
     inst.updated_at = now
 
-    persist_data = platforms_store.get(instance_id, {})
+    persist_data = await platforms_store.get_async(instance_id, {})
     persist_data.update({
         "name": inst.name,
         "config": inst.config,
@@ -250,7 +250,7 @@ async def update_platform_instance(instance_id: str, request: PlatformInstanceUp
         "updated_at": now,
         "status": inst.status.value,
     })
-    platforms_store.set(instance_id, persist_data)
+    await platforms_store.set_async(instance_id, persist_data)
 
     logger.success(f"[API] PATCH /platforms/instances/{instance_id} - Updated")
     return _instance_to_response(inst)
@@ -268,7 +268,7 @@ async def delete_platform_instance(instance_id: str):
         await stop_instance(instance_id)
 
     remove_instance(instance_id)
-    platforms_store.delete(instance_id)
+    await platforms_store.delete_async(instance_id)
     logger.success(f"[API] DELETE /platforms/instances/{instance_id} - Deleted")
     return {"error": None, "data": {"deleted": True}}
 
@@ -292,7 +292,7 @@ async def start_platform_instance(instance_id: str):
 
     now = datetime.now(timezone.utc).isoformat()
     inst.last_sync = now
-    platforms_store.update(instance_id, {
+    await platforms_store.update_async(instance_id, {
         "status": PlatformStatus.RUNNING.value,
         "last_sync": now,
     })
@@ -309,7 +309,7 @@ async def stop_platform_instance(instance_id: str):
         raise NotFoundError(f"Platform instance {instance_id} not found")
 
     await stop_instance(instance_id)
-    platforms_store.update(instance_id, {
+    await platforms_store.update_async(instance_id, {
         "status": PlatformStatus.STOPPED.value,
     })
 
@@ -324,7 +324,7 @@ async def get_platform_conversations(instance_id: str):
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Platform instance {instance_id} not found")
 
-    convs_data = platforms_store.get(instance_id, {}).get("conversations", [])
+    convs_data = (await platforms_store.get_async(instance_id, {})).get("conversations", [])
     result = []
     for c in convs_data:
         result.append(PlatformConversationResponse(
@@ -421,3 +421,210 @@ async def get_platform_stats():
             "totalMessages": total_messages,
         },
     }
+
+
+@router.get("/instances/{instance_id}/webhook")
+async def platform_webhook_verify(
+    instance_id: str,
+    msg_signature: str | None = None,
+    signature: str | None = None,
+    timestamp: str | None = None,
+    nonce: str | None = None,
+    echostr: str | None = None,
+):
+    """平台 Webhook URL 验证（企业微信/公众号 GET 请求）。"""
+    from fastapi import Request
+    from fastapi.responses import PlainTextResponse
+
+    inst = get_instance(instance_id)
+    if not inst or not inst.adapter:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Platform instance {instance_id} not found")
+
+    adapter = inst.adapter
+    sig = msg_signature or signature or ""
+
+    if hasattr(adapter, "verify_url"):
+        result = await adapter.verify_url(sig, timestamp or "", nonce or "", echostr or "")
+        if result is not None:
+            return PlainTextResponse(content=result)
+        return PlainTextResponse(content="signature mismatch", status_code=403)
+
+    return PlainTextResponse(content=echostr or "")
+
+
+@router.post("/instances/{instance_id}/webhook")
+async def platform_webhook_receive(instance_id: str, request: dict):
+    """平台 Webhook 消息接收（QQ官方/企业微信/公众号 POST 请求）。
+
+    请求体由 FastAPI 解析为 dict（JSON）或由调用方传入 XML 解析后的 dict。
+    对于企业微信/公众号的 XML 格式，前端代理层需先转换为 JSON 或直接调用适配器。
+    """
+    inst = get_instance(instance_id)
+    if not inst or not inst.adapter:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Platform instance {instance_id} not found")
+
+    adapter = inst.adapter
+    adapter_type = inst.adapter_type
+
+    try:
+        if adapter_type == "qq_official" and hasattr(adapter, "handle_webhook"):
+            await adapter.handle_webhook(request)
+            return {"error": None, "data": {"received": True}}
+
+        if adapter_type == "wechat_work" and hasattr(adapter, "handle_webhook"):
+            body = request.get("body", "")
+            if not body:
+                return {"error": None, "data": {"received": True, "note": "empty body"}}
+            msg_signature = request.get("msg_signature", "")
+            timestamp = request.get("timestamp", "")
+            nonce = request.get("nonce", "")
+            await adapter.handle_webhook(msg_signature, timestamp, nonce, body)
+            return {"error": None, "data": {"received": True}}
+
+        if adapter_type == "wechat_mp" and hasattr(adapter, "handle_webhook"):
+            body = request.get("body", "")
+            if not body:
+                return {"error": None, "data": {"received": True, "note": "empty body"}}
+            signature = request.get("signature", "")
+            timestamp = request.get("timestamp", "")
+            nonce = request.get("nonce", "")
+            reply = await adapter.handle_webhook(signature, timestamp, nonce, body)
+            from fastapi.responses import PlainTextResponse
+            return PlainTextResponse(content=reply or "")
+
+        return {"error": None, "data": {"received": True, "note": "adapter does not support webhook"}}
+    except Exception as e:
+        logger.error(f"[API] Webhook handling failed for {instance_id}: {e}")
+        from app.core.exceptions import LuomiNestError
+        raise LuomiNestError(f"Webhook handling failed: {e}", code="PLATFORM_WEBHOOK_FAILED", status_code=500)
+
+
+@router.post("/instances/{instance_id}/send")
+async def send_platform_message(
+    instance_id: str,
+    target: str = "",
+    content: str = "",
+):
+    """主动向平台发送消息（主 Agent 主动推送场景）。"""
+    from app.services.platform_router import send_platform_response
+    from app.runtime.platform.base import PlatformResponse
+
+    inst = get_instance(instance_id)
+    if not inst:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Platform instance {instance_id} not found")
+
+    if not target or not content:
+        from app.core.exceptions import ValidationError
+        raise ValidationError("target and content are required")
+
+    response = PlatformResponse(content=content, message_type="text")
+    success = await send_platform_response(instance_id, target, response)
+    return {"error": None, "data": {"sent": success}}
+
+
+@router.get("/instances/{instance_id}/sessions")
+async def list_platform_sessions(instance_id: str):
+    """列出平台实例的所有会话映射。"""
+    from app.runtime.platform.session import list_platform_sessions as list_sessions
+
+    inst = get_instance(instance_id)
+    if not inst:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Platform instance {instance_id} not found")
+
+    sessions = list_sessions(instance_id)
+    return {"error": None, "data": sessions}
+
+
+@router.get("/main_agent")
+async def get_main_agent_info():
+    """获取主 Agent 的 LLM 配置信息（供前端平台管理页面展示）。
+
+    返回字段：
+    - provider: 主 Agent 使用的供应商 ID
+    - provider_name: 供应商显示名称
+    - model: 主 Agent 使用的模型 ID
+    - supports_multimodal: 当前模型是否支持图片识别
+    - system_prompt: 主 Agent 系统提示词
+    - temperature / max_tokens: 生成参数
+    """
+    from app.runtime.platform.main_agent_config import (
+        load_luominest_main_agent_config,
+        resolve_main_agent_provider_model,
+    )
+    from app.runtime.provider.llm.adapter import llm_adapter
+
+    config = load_luominest_main_agent_config()
+    provider, model = resolve_main_agent_provider_model()
+
+    provider_name = provider
+    supports_multimodal = False
+    try:
+        provider_inst = llm_adapter.get_provider(provider)
+        provider_name = getattr(provider_inst, "display_name", None) or provider
+        supports_multimodal = provider_inst.supports_multimodal(model)
+    except Exception as e:
+        logger.warning(f"[PlatformAPI] Failed to resolve provider info: {e}")
+
+    return {
+        "error": None,
+        "data": {
+            "provider": provider,
+            "provider_name": provider_name,
+            "model": model,
+            "supports_multimodal": supports_multimodal,
+            "system_prompt": config.get("system_prompt", ""),
+            "temperature": config.get("temperature", 0.7),
+            "max_tokens": config.get("max_tokens", 4096),
+        },
+    }
+
+
+@router.patch("/main_agent")
+async def update_main_agent_info(request: dict):
+    """更新主 Agent 的 LLM 配置（系统提示词、温度、最大 tokens、provider、model）。
+
+    前端可在此切换主 Agent 使用的供应商/模型，平台消息路由会自动复用新配置。
+    """
+    import json
+    from app.runtime.platform.main_agent_config import (
+        _MAIN_AGENT_CONFIG_FILE,
+        _ensure_config_dir,
+        load_luominest_main_agent_config,
+    )
+
+    current = load_luominest_main_agent_config()
+    updated_fields: list[str] = []
+
+    for key in ("provider", "model", "system_prompt", "temperature", "max_tokens"):
+        if key in request and request[key] is not None:
+            new_val = request[key]
+            if key in ("temperature", "max_tokens") and new_val is not None:
+                try:
+                    new_val = float(new_val) if key == "temperature" else int(new_val)
+                except (TypeError, ValueError):
+                    continue
+            if current.get(key) != new_val:
+                current[key] = new_val
+                updated_fields.append(key)
+
+    if not updated_fields:
+        return {"error": None, "data": {"updated": False, "note": "no changes"}}
+
+    _ensure_config_dir()
+    try:
+        with open(_MAIN_AGENT_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(current, f, ensure_ascii=False, indent=2)
+        logger.info(f"[PlatformAPI] Main agent config updated: {updated_fields}")
+    except Exception as e:
+        from app.core.exceptions import LuomiNestError
+        raise LuomiNestError(
+            f"Failed to persist main agent config: {e}",
+            code="MAIN_AGENT_CONFIG_PERSIST_FAILED",
+            status_code=500,
+        )
+
+    return {"error": None, "data": {"updated": True, "fields": updated_fields}}

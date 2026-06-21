@@ -61,7 +61,7 @@ class AIChatRequest(BaseModel):
 @router.get("/groups")
 async def list_groups():
     logger.info("[API] GET /social/groups - Listing groups")
-    groups = groups_store.values()
+    groups = await groups_store.values_async()
     result = []
     for g in groups:
         members = g.get("members", [])
@@ -98,14 +98,14 @@ async def create_group(request: GroupCreate):
         "created_at": now,
         "updated_at": now,
     }
-    groups_store.set(group_id, group)
+    await groups_store.set_async(group_id, group)
     return {"error": None, "data": to_camel_case(group)}
 
 
 @router.get("/groups/{group_id}")
 async def get_group(group_id: str):
     logger.info(f"[API] GET /social/groups/{group_id} - Fetching group")
-    group = groups_store.get(group_id)
+    group = await groups_store.get_async(group_id)
     if not group:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Group {group_id} not found")
@@ -117,33 +117,33 @@ async def get_group(group_id: str):
 @router.patch("/groups/{group_id}")
 async def update_group(group_id: str, request: GroupUpdate):
     logger.info(f"[API] PATCH /social/groups/{group_id} - Updating group")
-    group = groups_store.get(group_id)
+    group = await groups_store.get_async(group_id)
     if not group:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Group {group_id} not found")
     update_data = request.model_dump(exclude_unset=True)
     group.update(update_data)
     group["updated_at"] = datetime.now(timezone.utc).isoformat()
-    groups_store.set(group_id, group)
+    await groups_store.set_async(group_id, group)
     return {"error": None, "data": to_camel_case(group)}
 
 
 @router.delete("/groups/{group_id}")
 async def delete_group(group_id: str):
     logger.info(f"[API] DELETE /social/groups/{group_id} - Deleting group")
-    groups_store.delete(group_id)
+    await groups_store.delete_async(group_id)
     return {"error": None, "data": {"deleted": True}}
 
 
 @router.post("/groups/{group_id}/members")
 async def add_group_member(group_id: str, request: GroupMemberAdd):
     logger.info(f"[API] POST /social/groups/{group_id}/members - Adding member")
-    group = groups_store.get(group_id)
+    group = await groups_store.get_async(group_id)
     if not group:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Group {group_id} not found")
 
-    agent = agents_store.get(request.agent_id)
+    agent = await agents_store.get_async(request.agent_id)
     if not agent:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Agent {request.agent_id} not found")
@@ -162,14 +162,14 @@ async def add_group_member(group_id: str, request: GroupMemberAdd):
     })
     group["members"] = members
     group["updated_at"] = datetime.now(timezone.utc).isoformat()
-    groups_store.set(group_id, group)
+    await groups_store.set_async(group_id, group)
     return {"error": None, "data": to_camel_case(group)}
 
 
 @router.delete("/groups/{group_id}/members/{agent_id}")
 async def remove_group_member(group_id: str, agent_id: str):
     logger.info(f"[API] DELETE /social/groups/{group_id}/members/{agent_id} - Removing member")
-    group = groups_store.get(group_id)
+    group = await groups_store.get_async(group_id)
     if not group:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Group {group_id} not found")
@@ -177,14 +177,14 @@ async def remove_group_member(group_id: str, agent_id: str):
     members = group.get("members", [])
     group["members"] = [m for m in members if m.get("agent_id") != agent_id]
     group["updated_at"] = datetime.now(timezone.utc).isoformat()
-    groups_store.set(group_id, group)
+    await groups_store.set_async(group_id, group)
     return {"error": None, "data": to_camel_case(group)}
 
 
 @router.post("/groups/{group_id}/messages")
 async def send_group_message(group_id: str, request: GroupMessageSend):
     logger.info(f"[API] POST /social/groups/{group_id}/messages - Sending message (stream)")
-    group = groups_store.get(group_id)
+    group = await groups_store.get_async(group_id)
     if not group:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Group {group_id} not found")
@@ -226,7 +226,7 @@ async def send_group_message(group_id: str, request: GroupMessageSend):
 @router.post("/groups/{group_id}/collaborate")
 async def collaborate(group_id: str, request: CollaborationRequest):
     logger.info(f"[API] POST /social/groups/{group_id}/collaborate - Multi-agent collaboration")
-    group = groups_store.get(group_id)
+    group = await groups_store.get_async(group_id)
     if not group:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Group {group_id} not found")
@@ -320,7 +320,7 @@ async def ai_to_ai_chat(request: AIChatRequest):
 @router.get("/agents")
 async def list_available_agents():
     logger.info("[API] GET /social/agents - Listing available agents for social")
-    agents = agents_store.values()
+    agents = await agents_store.values_async()
     safe_agents = []
     for a in agents:
         safe_agents.append({

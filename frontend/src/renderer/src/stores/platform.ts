@@ -1,7 +1,106 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PlatformAdapterType, PlatformInstance, PlatformConversation, PlatformStats, PlatformLogEntry, PlatformLogSummary } from '../types'
+import type { PlatformAdapterType, PlatformInstance, PlatformConversation, PlatformStats, PlatformLogEntry, PlatformLogSummary, MainAgentInfo } from '../types'
 import { useApi } from '../composables/useApi'
+
+interface RawLogEntry {
+  id: string
+  timestamp: string
+  level: string
+  event: string
+  message: string
+  instance_id?: string
+  instanceId?: string
+  adapter_type?: string
+  adapterType?: string
+  details?: Record<string, unknown>
+}
+
+interface RawAdapterType {
+  name: string
+  display_name?: string
+  displayName?: string
+  description: string
+  icon: string
+  category: string
+  config_template?: Record<string, unknown>
+  configTemplate?: Record<string, unknown>
+  config_metadata?: Record<string, unknown>
+  configMetadata?: Record<string, unknown>
+  support_streaming?: boolean
+  supportStreaming?: boolean
+  support_proactive?: boolean
+  supportProactive?: boolean
+}
+
+interface RawInstance {
+  id: string
+  adapter_type?: string
+  adapterType?: string
+  name: string
+  config?: Record<string, unknown>
+  status?: string
+  enable?: boolean
+  message_count?: number
+  messageCount?: number
+  last_sync?: string
+  lastSync?: string
+  error_message?: string
+  errorMessage?: string
+  icon?: string
+  category?: string
+  display_name?: string
+  displayName?: string
+  created_at?: string
+  createdAt?: string
+  updated_at?: string
+  updatedAt?: string
+}
+
+interface RawStatsData {
+  totalPlatforms?: number
+  activeConnections?: number
+  totalMessages?: number
+}
+
+interface RawStatsResponse {
+  data?: RawStatsData
+  totalPlatforms?: number
+  activeConnections?: number
+  totalMessages?: number
+}
+
+interface RawConversation {
+  id: string
+  platform_instance_id?: string
+  platformInstanceId?: string
+  platform_name?: string
+  platformName?: string
+  title?: string
+  preview?: string
+  time?: string
+  message_count?: number
+  messageCount?: number
+}
+
+interface RawLogsResponse {
+  data?: { entries?: RawLogEntry[]; total?: number }
+  entries?: RawLogEntry[]
+  total?: number
+}
+
+interface RawLogSummaryData {
+  totalEntries?: number
+  totalInstances?: number
+  byLevel?: Record<string, number>
+}
+
+interface RawLogSummaryResponse {
+  data?: RawLogSummaryData
+  totalEntries?: number
+  totalInstances?: number
+  byLevel?: Record<string, number>
+}
 
 export const usePlatformStore = defineStore('platform', () => {
   const { apiGet, apiPost, apiPatch, apiDelete } = useApi()
@@ -13,6 +112,7 @@ export const usePlatformStore = defineStore('platform', () => {
   const logTotal = ref(0)
   const logSummary = ref<PlatformLogSummary>({ totalEntries: 0, totalInstances: 0, byLevel: {} })
   const stats = ref<PlatformStats>({ totalPlatforms: 0, activeConnections: 0, totalMessages: 0 })
+  const mainAgent = ref<MainAgentInfo | null>(null)
   const loading = ref(false)
   const selectedInstanceId = ref<string | null>(null)
   const logLevelFilter = ref<string | null>(null)
@@ -35,10 +135,10 @@ export const usePlatformStore = defineStore('platform', () => {
 
   const fetchAdapterTypes = async () => {
     try {
-      const data = await apiGet<any[]>('/platforms/types')
+      const data = await apiGet<RawAdapterType[]>('/platforms/types')
       adapterTypes.value = data.map(t => ({
         name: t.name,
-        displayName: t.display_name || t.displayName,
+        displayName: t.display_name || t.displayName || '',
         description: t.description,
         icon: t.icon,
         category: t.category,
@@ -55,20 +155,20 @@ export const usePlatformStore = defineStore('platform', () => {
   const fetchInstances = async () => {
     loading.value = true
     try {
-      const data = await apiGet<any[]>('/platforms/instances')
+      const data = await apiGet<RawInstance[]>('/platforms/instances')
       instances.value = data.map(i => ({
         id: i.id,
-        adapterType: i.adapter_type || i.adapterType,
+        adapterType: i.adapter_type || i.adapterType || '',
         name: i.name,
         config: i.config || {},
-        status: i.status || 'stopped',
+        status: (i.status || 'stopped') as PlatformInstance['status'],
         enable: i.enable ?? true,
         messageCount: i.message_count ?? i.messageCount ?? 0,
         lastSync: i.last_sync || i.lastSync || '',
         errorMessage: i.error_message || i.errorMessage || '',
         icon: i.icon || 'Globe',
         category: i.category || 'general',
-        displayName: i.display_name || i.displayName || i.adapter_type || i.adapterType,
+        displayName: i.display_name || i.displayName || i.adapter_type || i.adapterType || '',
         createdAt: i.created_at || i.createdAt || '',
         updatedAt: i.updated_at || i.updatedAt || '',
       }))
@@ -81,7 +181,7 @@ export const usePlatformStore = defineStore('platform', () => {
 
   const fetchStats = async () => {
     try {
-      const result = await apiGet<any>('/platforms/stats')
+      const result = await apiGet<RawStatsResponse>('/platforms/stats')
       stats.value = {
         totalPlatforms: result.data?.totalPlatforms ?? result.totalPlatforms ?? 0,
         activeConnections: result.data?.activeConnections ?? result.activeConnections ?? 0,
@@ -97,7 +197,7 @@ export const usePlatformStore = defineStore('platform', () => {
 
   const fetchConversations = async (instanceId: string) => {
     try {
-      const data = await apiGet<any[]>(`/platforms/instances/${instanceId}/conversations`)
+      const data = await apiGet<RawConversation[]>(`/platforms/instances/${instanceId}/conversations`)
       const mapped = data.map(c => ({
         id: c.id,
         platformInstanceId: c.platform_instance_id || c.platformInstanceId || instanceId,
@@ -118,12 +218,12 @@ export const usePlatformStore = defineStore('platform', () => {
       const id = instanceId || selectedInstanceId.value
       const lvl = level ?? logLevelFilter.value
       if (id) {
-        const result = await apiGet<any>(`/platforms/instances/${id}/logs?limit=200${lvl ? `&level=${lvl}` : ''}`)
+        const result = await apiGet<RawLogsResponse>(`/platforms/instances/${id}/logs?limit=200${lvl ? `&level=${lvl}` : ''}`)
         const data = result.data || result
-        logs.value = (data.entries || []).map((l: any) => ({
+        logs.value = (data.entries || []).map((l: RawLogEntry) => ({
           id: l.id,
           timestamp: l.timestamp,
-          level: l.level,
+          level: l.level as PlatformLogEntry['level'],
           event: l.event,
           message: l.message,
           instanceId: l.instance_id || l.instanceId || id,
@@ -132,12 +232,12 @@ export const usePlatformStore = defineStore('platform', () => {
         }))
         logTotal.value = data.total || 0
       } else {
-        const result = await apiGet<any>(`/platforms/logs?limit=200${lvl ? `&level=${lvl}` : ''}`)
+        const result = await apiGet<RawLogsResponse>(`/platforms/logs?limit=200${lvl ? `&level=${lvl}` : ''}`)
         const data = result.data || result
-        logs.value = (data.entries || []).map((l: any) => ({
+        logs.value = (data.entries || []).map((l: RawLogEntry) => ({
           id: l.id,
           timestamp: l.timestamp,
-          level: l.level,
+          level: l.level as PlatformLogEntry['level'],
           event: l.event,
           message: l.message,
           instanceId: l.instance_id || l.instanceId || '',
@@ -154,7 +254,7 @@ export const usePlatformStore = defineStore('platform', () => {
 
   const fetchLogSummary = async () => {
     try {
-      const result = await apiGet<any>('/platforms/logs/summary')
+      const result = await apiGet<RawLogSummaryResponse>('/platforms/logs/summary')
       const data = result.data || result
       logSummary.value = {
         totalEntries: data.totalEntries ?? 0,
@@ -166,13 +266,56 @@ export const usePlatformStore = defineStore('platform', () => {
     }
   }
 
+  interface RawMainAgentInfo {
+    provider?: string
+    provider_name?: string
+    providerName?: string
+    model?: string
+    supports_multimodal?: boolean
+    supportsMultimodal?: boolean
+    system_prompt?: string
+    systemPrompt?: string
+    temperature?: number
+    max_tokens?: number
+    maxTokens?: number
+  }
+
+  const fetchMainAgent = async () => {
+    try {
+      const result = await apiGet<{ data?: RawMainAgentInfo } | RawMainAgentInfo>('/platforms/main_agent')
+      const data = (result as { data?: RawMainAgentInfo })?.data || (result as RawMainAgentInfo)
+      mainAgent.value = {
+        provider: data.provider || '',
+        providerName: data.provider_name || data.providerName || data.provider || '',
+        model: data.model || '',
+        supportsMultimodal: data.supports_multimodal ?? data.supportsMultimodal ?? false,
+        systemPrompt: data.system_prompt || data.systemPrompt || '',
+        temperature: data.temperature ?? 0.7,
+        maxTokens: data.max_tokens ?? data.maxTokens ?? 4096,
+      }
+    } catch {
+      mainAgent.value = null
+    }
+  }
+
+  const updateMainAgent = async (updates: Partial<MainAgentInfo>) => {
+    const body: Record<string, unknown> = {}
+    if (updates.provider !== undefined) body.provider = updates.provider
+    if (updates.model !== undefined) body.model = updates.model
+    if (updates.systemPrompt !== undefined) body.system_prompt = updates.systemPrompt
+    if (updates.temperature !== undefined) body.temperature = updates.temperature
+    if (updates.maxTokens !== undefined) body.max_tokens = updates.maxTokens
+    await apiPatch('/platforms/main_agent', body)
+    await fetchMainAgent()
+  }
+
   const clearLogs = async (instanceId: string) => {
     await apiDelete(`/platforms/instances/${instanceId}/logs`)
     await fetchLogs(instanceId)
   }
 
-  const createInstance = async (params: { adapterType: string; name: string; config?: Record<string, any>; enable?: boolean }) => {
-    const result = await apiPost<any>('/platforms/instances', {
+  const createInstance = async (params: { adapterType: string; name: string; config?: Record<string, unknown>; enable?: boolean }) => {
+    const result = await apiPost<Record<string, unknown>>('/platforms/instances', {
       adapter_type: params.adapterType,
       name: params.name,
       config: params.config || {},
@@ -185,7 +328,7 @@ export const usePlatformStore = defineStore('platform', () => {
   }
 
   const updateInstance = async (instanceId: string, updates: Partial<PlatformInstance>) => {
-    const body: any = {}
+    const body: Record<string, unknown> = {}
     if (updates.name !== undefined) body.name = updates.name
     if (updates.config !== undefined) body.config = updates.config
     if (updates.enable !== undefined) body.enable = updates.enable
@@ -235,7 +378,7 @@ export const usePlatformStore = defineStore('platform', () => {
   }
 
   const refreshAll = async () => {
-    await Promise.all([fetchAdapterTypes(), fetchInstances(), fetchStats(), fetchLogSummary()])
+    await Promise.all([fetchAdapterTypes(), fetchInstances(), fetchStats(), fetchLogSummary(), fetchMainAgent()])
     if (selectedInstanceId.value) {
       await Promise.all([fetchConversations(selectedInstanceId.value), fetchLogs(selectedInstanceId.value)])
     } else {
@@ -251,6 +394,7 @@ export const usePlatformStore = defineStore('platform', () => {
     logTotal,
     logSummary,
     stats,
+    mainAgent,
     loading,
     selectedInstanceId,
     logLevelFilter,
@@ -265,6 +409,8 @@ export const usePlatformStore = defineStore('platform', () => {
     fetchConversations,
     fetchLogs,
     fetchLogSummary,
+    fetchMainAgent,
+    updateMainAgent,
     clearLogs,
     createInstance,
     updateInstance,

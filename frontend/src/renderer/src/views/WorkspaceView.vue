@@ -6,7 +6,6 @@ import {
   Mic,
   Wand2,
   ChevronDown,
-  ChevronUp,
   ChevronLeft,
   ChevronRight,
   Bot,
@@ -22,16 +21,35 @@ import {
   Image,
   File,
   Download,
-  Sparkles,
   Trash2,
   Quote,
   X,
   Volume2,
+  Users,
+  User,
+  MessageCircle,
+  Plus,
+  Search,
+  MoreVertical,
+  Hash,
+  ImagePlus,
+  UserPlus,
+  Zap,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Play,
+  Layers,
+  MessageSquare,
+  SquareCheck,
+  Pencil,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
+import { useSocialStore } from '../stores/social'
+import { useChatTrashStore } from '../stores/chat-trash'
 
 import { useTTS } from '../composables/useTTS'
 import FileUpload from '../components/FileUpload.vue'
@@ -40,8 +58,10 @@ import SuggestedQuestions from '../components/SuggestedQuestions.vue'
 import { useFileUpload } from '../composables/useFileUpload'
 import { useApi } from '../composables/useApi'
 import { getProviderLogo } from '../config/provider-logos'
+import { stripEmotionTags } from '../utils/emotionTagInterceptor'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
+import type { ConversationListItem, ConversationSearchResult, GroupInfo, CollaborationPhase, AgentProfile } from '../types'
 
 marked.setOptions({
   breaks: true,
@@ -52,6 +72,8 @@ const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const modelStore = useModelStore()
+const socialStore = useSocialStore()
+const chatTrashStore = useChatTrashStore()
 const { isSpeaking: isTTSSpeaking, speakingMessageId: ttsSpeakingMsgId, speak: ttsSpeak, stopSpeaking: ttsStopSpeaking } = useTTS()
 
 const { isUploading, uploadingFile, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
@@ -62,11 +84,6 @@ const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const showModelDropdown = ref(false)
-const agentsCollapsed = ref(false)
-
-const toggleAgents = () => {
-  agentsCollapsed.value = !agentsCollapsed.value
-}
 const copiedId = ref<string | null>(null)
 const showReasoning = ref<Record<string, boolean>>({})
 const reasoningRefs = ref<Record<string, HTMLElement>>({})
@@ -177,10 +194,16 @@ const handleUpdateAgent = async () => {
 
 const handleDeleteAgent = async () => {
   if (!editingAgentId.value) return
+  const deletedId = editingAgentId.value
   try {
-    await agentStore.deleteAgent(editingAgentId.value)
+    await agentStore.deleteAgent(deletedId)
     showEditDialog.value = false
     editingAgentId.value = null
+    if (localSelectedAgent.value?.id === deletedId) {
+      selectedType.value = null
+      localSelectedAgent.value = null
+      localSelectedConvId.value = null
+    }
   } catch (e: any) {
     displayToast(e?.message || '删除 Agent 失败')
   }
@@ -200,19 +223,459 @@ const displayToast = (msg: string) => {
   }, 3000)
 }
 
-const messages = computed(() => chatStore.messages)
-const isStreaming = computed(() => chatStore.isStreaming)
+// ===== 联系人面板状态 =====
+type ContactType = 'agent' | 'group'
+const selectedType = ref<ContactType | null>(null)
+const contactSearchQuery = ref('')
+
+// ===== 本地状态隔离：WorkspaceView 不依赖 agentStore.activeAgent =====
+// 工作台主 Agent 和聊天页面联系人完全分开，互不影响
+const localSelectedAgent = ref<AgentProfile | null>(null)
+const localSelectedConvId = ref<string | null>(null)
+
+const filteredAgents = computed(() => {
+  if (!contactSearchQuery.value) return agentStore.agents
+  const q = contactSearchQuery.value.toLowerCase()
+  return agentStore.agents.filter(a => a.name.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q))
+})
+
+const filteredGroups = computed(() => {
+  if (!contactSearchQuery.value) return socialStore.groups
+  const q = contactSearchQuery.value.toLowerCase()
+  return socialStore.groups.filter(g => g.name.toLowerCase().includes(q))
+})
+
+const selectAgent = async (agent: AgentProfile) => {
+  localSelectedAgent.value = agent
+  selectedType.value = 'agent'
+  selectedGroupId.value = null
+  localSelectedConvId.value = null
+  await chatStore.fetchConversations(agent.id)
+  chatTrashStore.fetchTrash(agent.id)
+}
+
+const selectGroup = (group: GroupInfo) => {
+  selectedType.value = 'group'
+  selectedGroupId.value = group.id
+  socialStore.currentGroup = group
+  socialStore.fetchGroupMessages(group.id)
+}
+
+// 返回联系人列表：清空选中状态
+const backToContacts = () => {
+  selectedType.value = null
+  localSelectedAgent.value = null
+  localSelectedConvId.value = null
+  selectedGroupId.value = null
+  batchMode.value = false
+  selectedIds.value = new Set()
+}
+
+// ===== 群聊状态 =====
+const selectedGroupId = ref<string | null>(null)
+const groupChatInput = ref('')
+const sendingGroupMessage = ref(false)
+const collaborationMode = ref(false)
+const groupMessagesContainer = ref<HTMLElement | null>(null)
+const showAddAgentDialog = ref(false)
+const showCreateGroupDialog = ref(false)
+const addAgentRole = ref('')
+const addAgentId = ref('')
+const newGroupName = ref('')
+const newGroupDesc = ref('')
+
+const selectedGroup = computed(() => {
+  if (!selectedGroupId.value) return null
+  return socialStore.groups.find(g => g.id === selectedGroupId.value) || null
+})
+
+const groupMessages = computed(() => socialStore.groupMessages)
+
+const availableAgentsForGroup = computed(() => {
+  if (!selectedGroup.value) return agentStore.agents
+  const memberIds = selectedGroup.value.members.map(m => m.agent_id)
+  return agentStore.agents.filter(a => !memberIds.includes(a.id))
+})
+
+const collaborationPhase = computed(() => socialStore.collaborationPhase)
+const collaborationActive = computed(() => socialStore.collaborationActive)
+const collaborationTasks = computed(() => socialStore.collaborationTasks)
+const agentsResponding = computed(() => socialStore.agentsResponding)
+const respondingAgentNames = computed(() => socialStore.respondingAgentNames)
+
+const phaseLabel = computed(() => {
+  const labels: Record<CollaborationPhase, string> = {
+    analyzing: '分析中',
+    dispatching: '分配任务',
+    executing: '执行中',
+    synthesizing: '综合结果',
+    completed: '已完成',
+    failed: '失败',
+  }
+  return collaborationPhase.value ? labels[collaborationPhase.value] : ''
+})
+
+const phaseIcon = computed(() => {
+  const icons: Record<CollaborationPhase, typeof Loader2> = {
+    analyzing: Loader2,
+    dispatching: Layers,
+    executing: Play,
+    synthesizing: Layers,
+    completed: CheckCircle2,
+    failed: AlertCircle,
+  }
+  return collaborationPhase.value ? icons[collaborationPhase.value] : null
+})
+
+const sendGroupMessage = async () => {
+  if (!groupChatInput.value.trim() || !selectedGroupId.value) return
+  sendingGroupMessage.value = true
+  const userContent = groupChatInput.value
+  groupChatInput.value = ''
+
+  try {
+    if (collaborationMode.value) {
+      socialStore.groupMessages.push({
+        id: `user-${Date.now()}`,
+        groupId: selectedGroupId.value,
+        senderId: 'user',
+        senderType: 'user',
+        content: userContent,
+        timestamp: new Date().toISOString(),
+      })
+
+      await socialStore.collaborateStream(
+        selectedGroupId.value,
+        userContent,
+        () => {},
+        (err) => { console.error('Collaboration error:', err) },
+        () => {},
+      )
+    } else {
+      await socialStore.sendGroupMessage(selectedGroupId.value, userContent)
+    }
+    await nextTick()
+    if (groupMessagesContainer.value) {
+      groupMessagesContainer.value.scrollTo({ top: groupMessagesContainer.value.scrollHeight, behavior: 'smooth' })
+    }
+  } catch (e) {
+    console.error('Failed to send message:', e)
+  } finally {
+    sendingGroupMessage.value = false
+  }
+}
+
+const createGroup = async () => {
+  if (!newGroupName.value.trim()) return
+  try {
+    const group = await socialStore.createGroup(newGroupName.value.trim(), newGroupDesc.value.trim())
+    newGroupName.value = ''
+    newGroupDesc.value = ''
+    showCreateGroupDialog.value = false
+    if (group) {
+      selectGroup(group)
+    }
+  } catch (e) {
+    console.error('Failed to create group:', e)
+  }
+}
+
+const deleteGroup = async (groupId: string) => {
+  try {
+    await socialStore.deleteGroup(groupId)
+    if (selectedGroupId.value === groupId) {
+      selectedGroupId.value = null
+      selectedType.value = null
+    }
+  } catch (e) {
+    console.error('Failed to delete group:', e)
+  }
+}
+
+const addAgentToGroup = async () => {
+  if (!addAgentId.value || !selectedGroupId.value) return
+  try {
+    await socialStore.addAgentToGroup(selectedGroupId.value, addAgentId.value, addAgentRole.value || '成员')
+    addAgentId.value = ''
+    addAgentRole.value = ''
+    showAddAgentDialog.value = false
+  } catch (e) {
+    console.error('Failed to add agent:', e)
+  }
+}
+
+const removeAgentFromGroup = async (groupId: string, agentId: string) => {
+  try {
+    await socialStore.removeAgentFromGroup(groupId, agentId)
+  } catch (e) {
+    console.error('Failed to remove agent:', e)
+  }
+}
+
+const formatGroupTime = (dateStr: string) => {
+  try {
+    const d = new Date(dateStr)
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
+  }
+}
+
+const getTaskStatusIcon = (status: string) => {
+  switch (status) {
+    case 'running': return Loader2
+    case 'completed': return CheckCircle2
+    case 'failed': return AlertCircle
+    default: return Clock
+  }
+}
+
+const getTaskStatusClass = (status: string) => {
+  switch (status) {
+    case 'running': return 'status-running'
+    case 'completed': return 'status-completed'
+    case 'failed': return 'status-failed'
+    default: return 'status-pending'
+  }
+}
+
+watch(groupMessages, () => {
+  nextTick(() => {
+    if (groupMessagesContainer.value) {
+      groupMessagesContainer.value.scrollTo({ top: groupMessagesContainer.value.scrollHeight, behavior: 'smooth' })
+    }
+  })
+}, { deep: true })
+
+// ===== 对话历史列表（从 SidebarHistory 迁移） =====
+const convSearchQuery = ref('')
+const searchResults = ref<ConversationSearchResult[]>([])
+const isSearching = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+let searchSeq = 0
+
+watch(convSearchQuery, (q) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  if (!q.trim()) {
+    searchResults.value = []
+    isSearching.value = false
+    return
+  }
+  isSearching.value = true
+  searchSeq++
+  const currentSeq = searchSeq
+  searchTimer = setTimeout(async () => {
+    const results = await chatStore.searchConversations(q)
+    if (currentSeq === searchSeq) {
+      searchResults.value = results
+      isSearching.value = false
+    }
+  }, 300)
+})
+
+const isSearchMode = computed(() => convSearchQuery.value.trim().length > 0)
+
+interface TimeGroup {
+  label: string
+  items: ConversationListItem[]
+}
+
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+const timeGroups = computed<TimeGroup[]>(() => {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+  const groups: TimeGroup[] = [
+    { label: '今天', items: [] },
+    { label: '昨天', items: [] },
+    { label: '近7天', items: [] },
+    { label: '更早', items: [] }
+  ]
+
+  const convs = localSelectedAgent.value
+    ? (chatStore.agentConversations[localSelectedAgent.value.id] || [])
+    : []
+  for (const conv of convs) {
+    const d = new Date(conv.updated_at)
+    const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
+
+    if (diffDays <= 0) groups[0].items.push(conv)
+    else if (diffDays === 1) groups[1].items.push(conv)
+    else if (diffDays <= 7) groups[2].items.push(conv)
+    else groups[3].items.push(conv)
+  }
+
+  return groups.filter(g => g.items.length > 0)
+})
+
+const formatConvTime = (dateStr: string) => {
+  const d = new Date(dateStr)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
+  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+
+  if (diffDays <= 0) return time
+  if (diffDays === 1) return `昨天 ${time}`
+  if (diffDays <= 7) return `${WEEKDAYS[d.getDay()]} ${time}`
+  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+const highlightSnippet = (snippet: string): string => {
+  if (!snippet) return ''
+  const escaped = snippet
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+  const q = convSearchQuery.value.trim()
+  if (!q) return escaped
+  const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escapedQ})`, 'gi')
+  return escaped.replace(regex, '<mark>$1</mark>')
+}
+
+const selectConversation = (convId: string, searchKeyword?: string) => {
+  if (searchKeyword) {
+    chatStore.pendingSearchKeyword = searchKeyword
+    chatStore.searchScrollTarget = { convId, keyword: searchKeyword }
+  }
+  if (localSelectedAgent.value) {
+    chatStore.loadConversation(convId, localSelectedAgent.value.id)
+    localSelectedConvId.value = convId
+  }
+}
+
+const handleDeleteConversation = async (convId: string) => {
+  try {
+    await chatStore.deleteConversation(convId, localSelectedAgent.value?.id)
+    if (localSelectedConvId.value === convId) {
+      localSelectedConvId.value = null
+    }
+  } catch (e: unknown) {
+    console.error('Failed to delete conversation:', e)
+  }
+}
+
+const handleNewConversation = () => {
+  const prevConvId = localSelectedConvId.value
+  if (prevConvId) {
+    chatStore.leaveCurrentConversation(prevConvId).catch(() => {})
+  }
+  if (localSelectedAgent.value) {
+    chatStore.clearMessages(localSelectedAgent.value.id)
+  }
+  localSelectedConvId.value = null
+}
+
+const batchMode = ref(false)
+const selectedIds = ref<Set<string>>(new Set())
+
+const renamingConvId = ref<string | null>(null)
+const renamingTitle = ref('')
+
+const startRename = (convId: string, currentTitle: string) => {
+  renamingConvId.value = convId
+  renamingTitle.value = currentTitle
+  nextTick(() => {
+    const input = document.querySelector('.history-item-rename-input') as HTMLInputElement
+    if (input) {
+      input.focus()
+      input.select()
+    }
+  })
+}
+
+const confirmRename = async () => {
+  if (!renamingConvId.value) return
+  const newTitle = renamingTitle.value.trim()
+  if (!newTitle) {
+    renamingConvId.value = null
+    return
+  }
+  if (newTitle.length > 200) {
+    return
+  }
+  const success = await chatStore.renameConversation(renamingConvId.value, newTitle, localSelectedAgent.value?.id)
+  if (success) {
+    renamingConvId.value = null
+    renamingTitle.value = ''
+  }
+}
+
+const cancelRename = () => {
+  renamingConvId.value = null
+  renamingTitle.value = ''
+}
+
+const toggleBatchMode = () => {
+  batchMode.value = !batchMode.value
+  if (!batchMode.value) {
+    selectedIds.value = new Set()
+  }
+}
+
+const toggleSelect = (convId: string) => {
+  const next = new Set(selectedIds.value)
+  if (next.has(convId)) {
+    next.delete(convId)
+  } else {
+    next.add(convId)
+  }
+  selectedIds.value = next
+}
+
+const selectAll = () => {
+  const convs = localSelectedAgent.value
+    ? (chatStore.agentConversations[localSelectedAgent.value.id] || [])
+    : []
+  const allIds = convs.map((c: ConversationListItem) => c.id)
+  if (selectedIds.value.size === allIds.length) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(allIds)
+  }
+}
+
+const handleBatchDelete = async () => {
+  if (selectedIds.value.size === 0) return
+  try {
+    const agentId = localSelectedAgent.value?.id
+    await chatTrashStore.batchSoftDelete(Array.from(selectedIds.value), agentId, () => chatStore.fetchConversations(agentId))
+    selectedIds.value = new Set()
+    batchMode.value = false
+  } catch (e: unknown) {
+    console.error('Failed to batch delete:', e)
+  }
+}
+
+const messages = computed(() => {
+  if (!localSelectedConvId.value) return []
+  return chatStore.convMessages[localSelectedConvId.value] || []
+})
+const isStreaming = computed(() => {
+  if (!localSelectedConvId.value) return false
+  return !!chatStore.convStreaming[localSelectedConvId.value]
+})
 const isBackendReady = computed(() => chatStore.isBackendReady)
 
+// 本地 currentConvId：不依赖 chatStore.currentConvId（后者基于 agentStore.activeAgent）
+const currentConvId = computed(() => localSelectedConvId.value || '')
+
 const currentModel = computed(() => {
-  const agent = agentStore.activeAgent
+  const agent = localSelectedAgent.value
   if (agent?.model) return agent.model
   const resolved = modelStore.resolveModel
   return resolved?.model || '未配置模型'
 })
 
 const currentProvider = computed(() => {
-  const agent = agentStore.activeAgent
+  const agent = localSelectedAgent.value
   if (agent?.provider) return agent.provider
   const resolved = modelStore.resolveModel
   return resolved?.provider || ''
@@ -250,8 +713,8 @@ const availableModelOptions = computed(() => {
 })
 
 const selectModel = (providerId: string, modelId: string) => {
-  if (agentStore.activeAgent) {
-    agentStore.updateAgent(agentStore.activeAgent.id, {
+  if (localSelectedAgent.value) {
+    agentStore.updateAgent(localSelectedAgent.value.id, {
       provider: providerId,
       model: modelId,
     })
@@ -285,7 +748,7 @@ const sendMessage = async () => {
   clearUploadState()
   fileUploadRef.value?.clearUploadState()
 
-  const agent = agentStore.activeAgent
+  const agent = localSelectedAgent.value
   const resolved = modelStore.resolveModel
 
   const options: any = {
@@ -358,7 +821,9 @@ const autoResize = () => {
 
 const renderMarkdown = (text: string): string => {
   if (!text) return ''
-  const raw = marked.parse(text) as string
+  // 拦截器：剥离 <exp:xxx> 表情标签，防止标签显示在前端
+  const cleaned = stripEmotionTags(text)
+  const raw = marked.parse(cleaned) as string
   return DOMPurify.sanitize(raw)
 }
 
@@ -421,7 +886,9 @@ const beautifyThinking = (text: string): string => {
 // 渲染思考过程的 markdown
 const renderReasoningMarkdown = (text: string): string => {
   if (!text) return ''
-  const beautified = beautifyThinking(text)
+  // 拦截器：剥离 <exp:xxx> 表情标签，防止标签显示在前端
+  const cleaned = stripEmotionTags(text)
+  const beautified = beautifyThinking(cleaned)
   const raw = marked.parse(beautified) as string
   return DOMPurify.sanitize(raw)
 }
@@ -471,7 +938,7 @@ const getVersionIndex = (msg: any): number => {
 }
 
 const handleSwitchVersion = (messageId: string, versionIndex: number) => {
-  const convId = chatStore.currentConvId
+  const convId = currentConvId.value
   if (!convId) return
   chatStore.switchVersion(convId, messageId, versionIndex)
 }
@@ -484,7 +951,10 @@ const handleSuggestionClick = (question: string) => {
 
 // 重新生成：删除当前AI消息及对应的用户消息，重新发送
 const handleRegenerate = async (messageId: string) => {
-  await chatStore.regenerateMessage(messageId)
+  await chatStore.regenerateMessage(messageId, {
+    convId: localSelectedConvId.value || undefined,
+    agentId: localSelectedAgent.value?.id,
+  })
   await nextTick()
   scrollToBottom(true)
 }
@@ -519,7 +989,7 @@ function computeDeleteRange(msgs: any[], messageId: string): { startIndex: numbe
 }
 
 const handleDeleteMessage = (messageId: string) => {
-  const convId = chatStore.currentConvId
+  const convId = currentConvId.value
   if (!convId) return
   const msgs = chatStore.convMessages[convId]
   if (!msgs) return
@@ -530,23 +1000,23 @@ const handleDeleteMessage = (messageId: string) => {
   openConfirmDialog(
     '确定删除这条消息及其关联回复？此操作不可撤销。',
     async () => {
-      const currentConvId = chatStore.currentConvId
-      if (!currentConvId) return
-      const currentMsgs = chatStore.convMessages[currentConvId]
+      const currentConvIdLocal = currentConvId.value
+      if (!currentConvIdLocal) return
+      const currentMsgs = chatStore.convMessages[currentConvIdLocal]
       if (!currentMsgs) return
 
       const { startIndex: reStart, deleteCount: reCount } = computeDeleteRange(currentMsgs, messageId)
       if (reStart === -1) return
 
       if (reStart + reCount === currentMsgs.length) {
-        await truncateMessages(currentConvId, reStart)
-        chatStore.convMessages[currentConvId] = currentMsgs.slice(0, reStart)
+        await truncateMessages(currentConvIdLocal, reStart)
+        chatStore.convMessages[currentConvIdLocal] = currentMsgs.slice(0, reStart)
       } else {
         const idsToDelete = currentMsgs.slice(reStart, reStart + reCount).map((m: any) => m.id)
         for (const id of idsToDelete) {
-          await deleteMessage(currentConvId, id)
+          await deleteMessage(currentConvIdLocal, id)
         }
-        chatStore.convMessages[currentConvId] = currentMsgs.slice(0, reStart).concat(currentMsgs.slice(reStart + reCount))
+        chatStore.convMessages[currentConvIdLocal] = currentMsgs.slice(0, reStart).concat(currentMsgs.slice(reStart + reCount))
       }
 
       if (chatStore.currentSuggestionMessageId === messageId) {
@@ -562,7 +1032,7 @@ const handleGoBackToStart = (msg: any) => {
   openConfirmDialog(
     '确定回退这条消息？该消息及之后的所有消息将被删除，内容将恢复到输入框。',
     async () => {
-      const convId = chatStore.currentConvId
+      const convId = currentConvId.value
       if (!convId) return
       const msgs = chatStore.convMessages[convId]
       if (!msgs) return
@@ -799,12 +1269,6 @@ function handleMemoryChatTrigger(event: CustomEvent) {
   }
 }
 
-// Agent列表横向滚动：鼠标滚轮转横向滚动
-function onAgentListWheel(e: WheelEvent) {
-  const el = (e.currentTarget as HTMLElement)
-  el.scrollLeft += e.deltaY
-}
-
 function handleMemoryChatTriggerDirect(text: string) {
   inputText.value = `关于我之前提到的「${text.slice(0, 80)}」，请帮我进一步分析。`
 }
@@ -818,8 +1282,14 @@ onMounted(async () => {
       agentStore.fetchAgents(),
       modelStore.fetchProviders(),
       modelStore.fetchModelConfig(),
-      chatStore.fetchConversations(),
+      socialStore.fetchGroups(),
+      socialStore.fetchAvailableAgents(),
+      socialStore.fetchAgentRoles(),
     ])
+    // 自动选中第一个真实 agent（不继承工作台的主 Agent，实现状态隔离）
+    if (agentStore.agents.length > 0) {
+      await selectAgent(agentStore.agents[0])
+    }
   }
   document.addEventListener('click', handleClickOutsideModel)
   document.addEventListener('dragenter', handleGlobalDragEnter)
@@ -848,66 +1318,284 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="workspace-layout">
-    <div class="workspace-main">
-      <div class="workspace-view">
-        <!-- 展开状态：顶栏显示 Agent 列表 -->
-        <Transition name="agent-panel-slide">
-          <div v-if="!agentsCollapsed" class="workspace-header">
-            <div class="header-left">
-              <div class="agent-list" @wheel.prevent.stop="onAgentListWheel">
-                <!-- 新建 Agent -->
-                <button class="agent-new-btn" @click="showCreateDialog = true">
-                  <div class="agent-new-icon">
-                    <Sparkles :size="22" />
-                  </div>
-                  <div class="agent-new-info">
-                    <span class="agent-new-title">自定义</span>
-                    <span class="agent-new-desc">创建全新 Agent</span>
-                  </div>
-                </button>
+    <!-- 左侧：切换式面板（联系人列表 <-> 对话历史/群组信息） -->
+    <aside class="left-panel">
+      <!-- 联系人列表模式 -->
+      <template v-if="!selectedType">
+        <div class="contact-header">
+          <div class="contact-search">
+            <Search :size="14" class="search-icon" />
+            <input v-model="contactSearchQuery" type="text" placeholder="搜索联系人..." />
+          </div>
+          <button class="contact-add-btn" title="新建 Agent" @click="showCreateDialog = true">
+            <Plus :size="14" />
+          </button>
+        </div>
 
-                <!-- Agent 列表 -->
-                <button
-                  v-for="agent in agentStore.agents"
-                  :key="agent.id"
-                  :class="['agent-card', { active: agentStore.activeAgent?.id === agent.id }]"
-                  @click="agentStore.setActiveAgent(agent)"
-                >
-                  <span v-if="agentStore.activeAgent?.id === agent.id" class="active-dot"></span>
-                  <div class="agent-card-icon" :style="{ background: agent.color + '18', color: agent.color }">
-                    <Bot :size="22" />
-                  </div>
-                  <div class="agent-card-info">
-                    <span class="agent-card-name">{{ agent.name }}</span>
-                    <span class="agent-card-desc">{{ agent.description || '智能AI' }}</span>
-                  </div>
-                  <div class="agent-card-arrow" @click.stop="openEditDialog(agent, $event)">
-                    <span class="arrow-icon">›</span>
-                  </div>
-                </button>
-              </div>
+        <div class="contact-list">
+          <!-- Agent 分组 -->
+          <div class="contact-section" v-if="filteredAgents.length > 0">
+            <div class="contact-section-label">
+              <User :size="12" />
+              <span>Agent</span>
+              <span class="section-count">{{ filteredAgents.length }}</span>
             </div>
-            <div class="header-right">
-              <button v-if="!isBackendReady" class="header-icon-btn warning" title="后端未连接" @click="chatStore.checkBackend()">
-                <AlertTriangle :size="18" />
-              </button>
-              <!-- 收起按钮 -->
-              <button class="agent-toggle-btn" title="收起Agent列表" @click="toggleAgents">
-                <ChevronUp :size="16" />
+            <div
+              v-for="agent in filteredAgents"
+              :key="agent.id"
+              :class="['contact-item', { active: selectedType === 'agent' && localSelectedAgent?.id === agent.id }]"
+              @click="selectAgent(agent)"
+            >
+              <div class="contact-avatar" :style="{ background: agent.color + '18', color: agent.color }">
+                <Bot :size="16" />
+              </div>
+              <div class="contact-info">
+                <span class="contact-name">{{ agent.name }}</span>
+                <span class="contact-desc">{{ agent.description || '智能AI' }}</span>
+              </div>
+              <button class="contact-edit-btn" title="编辑" @click.stop="openEditDialog(agent, $event)">
+                <MoreVertical :size="12" />
               </button>
             </div>
           </div>
-        </Transition>
 
-        <!-- 收起状态：展开按钮 -->
-        <Transition name="agent-list-fade">
-          <div v-if="agentsCollapsed" class="agent-expand-wrapper">
-            <button class="agent-toggle-btn" title="展开Agent列表" @click="toggleAgents">
-              <ChevronDown :size="16" />
+          <!-- 群聊分组 -->
+          <div class="contact-section">
+            <div class="contact-section-label">
+              <Hash :size="12" />
+              <span>群聊</span>
+              <span class="section-count">{{ filteredGroups.length }}</span>
+              <button class="section-add-btn" title="新建群组" @click="showCreateGroupDialog = true">
+                <Plus :size="12" />
+              </button>
+            </div>
+            <div
+              v-for="group in filteredGroups"
+              :key="group.id"
+              :class="['contact-item', { active: selectedType === 'group' && selectedGroupId === group.id }]"
+              @click="selectGroup(group)"
+            >
+              <div class="contact-avatar group-avatar">
+                <Users :size="16" />
+              </div>
+              <div class="contact-info">
+                <div class="contact-top-row">
+                  <span class="contact-name">{{ group.name }}</span>
+                  <span class="contact-meta">{{ group.aiCount }} AI</span>
+                </div>
+                <span class="contact-desc">{{ group.description || '暂无描述' }}</span>
+              </div>
+              <button class="contact-edit-btn" title="删除群组" @click.stop="deleteGroup(group.id)">
+                <Trash2 :size="12" />
+              </button>
+            </div>
+            <div v-if="filteredGroups.length === 0 && !contactSearchQuery" class="contact-empty-mini">
+              暂无群组
+            </div>
+          </div>
+
+          <div v-if="filteredAgents.length === 0 && filteredGroups.length === 0" class="contact-empty">
+            <Bot :size="28" />
+            <p>{{ contactSearchQuery ? '未找到匹配的联系人' : '暂无联系人' }}</p>
+          </div>
+        </div>
+      </template>
+
+      <!-- Agent 模式：对话历史列表 -->
+      <template v-else-if="selectedType === 'agent'">
+        <div class="left-panel-header">
+          <button class="back-btn" title="返回联系人" @click="backToContacts">
+            <ChevronLeft :size="16" />
+          </button>
+          <div class="left-panel-title">
+            <div class="left-panel-avatar" :style="{ background: localSelectedAgent?.color + '18', color: localSelectedAgent?.color }">
+              <Bot :size="14" />
+            </div>
+            <span class="left-panel-name">{{ localSelectedAgent?.name }}</span>
+          </div>
+        </div>
+
+        <div class="sidebar-header">
+          <div class="conv-search">
+            <Search :size="14" class="search-icon" />
+            <input v-model="convSearchQuery" type="text" placeholder="搜索对话..." />
+          </div>
+          <div class="sidebar-actions">
+            <button class="new-conv-btn" title="创建新对话" @click="handleNewConversation">
+              <Plus :size="14" />
+              <span>新对话</span>
+            </button>
+            <button
+              :class="['batch-toggle-btn', { active: batchMode }]"
+              title="批量操作"
+              @click="toggleBatchMode"
+            >
+              <SquareCheck :size="14" />
             </button>
           </div>
-        </Transition>
+        </div>
 
+        <div v-if="batchMode" class="batch-toolbar">
+          <button class="batch-action-btn" @click="selectAll">全选</button>
+          <span class="batch-count">已选 {{ selectedIds.size }} 项</span>
+          <button
+            :class="['batch-delete-btn', { disabled: selectedIds.size === 0 }]"
+            :disabled="selectedIds.size === 0"
+            title="批量删除"
+            @click="handleBatchDelete"
+          >
+            <Trash2 :size="13" />
+            删除
+          </button>
+        </div>
+
+        <div class="conv-list">
+          <template v-if="isSearchMode">
+            <div v-if="isSearching" class="conv-empty">
+              <Loader2 :size="20" class="spin-animation" />
+              <span>搜索中...</span>
+            </div>
+            <template v-else>
+              <div
+                v-for="result in searchResults"
+                :key="result.id"
+                :class="['conv-item', { active: currentConvId === result.id }]"
+                @click="selectConversation(result.id, convSearchQuery.trim())"
+              >
+                <MessageSquare :size="14" class="conv-item-icon" />
+                <div class="conv-item-content">
+                  <span class="conv-item-title">{{ result.title }}</span>
+                  <span class="conv-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
+                </div>
+              </div>
+              <div v-if="searchResults.length === 0" class="conv-empty">
+                <MessageSquare :size="24" />
+                <span>未找到匹配的会话</span>
+              </div>
+            </template>
+          </template>
+
+          <template v-else>
+            <template v-for="group in timeGroups" :key="group.label">
+              <div class="time-group">
+                <div class="time-group-label">
+                  <Clock :size="12" />
+                  <span>{{ group.label }}</span>
+                </div>
+                <div
+                  v-for="conv in group.items"
+                  :key="conv.id"
+                  :class="['conv-item', { active: currentConvId === conv.id }]"
+                  @click="batchMode ? toggleSelect(conv.id) : selectConversation(conv.id)"
+                >
+                  <div v-if="batchMode" class="conv-item-checkbox" @click.stop="toggleSelect(conv.id)">
+                    <div :class="['checkbox-box', { checked: selectedIds.has(conv.id) }]">
+                      <Check v-if="selectedIds.has(conv.id)" :size="10" />
+                    </div>
+                  </div>
+                  <MessageSquare :size="14" class="conv-item-icon" />
+                  <div class="conv-item-content">
+                    <template v-if="renamingConvId === conv.id">
+                      <input
+                        v-model="renamingTitle"
+                        class="conv-item-rename-input"
+                        maxlength="200"
+                        @keydown.enter="confirmRename"
+                        @keydown.escape="cancelRename"
+                        @blur="confirmRename"
+                        @click.stop
+                      />
+                    </template>
+                    <template v-else>
+                      <span class="conv-item-title">{{ conv.title }}</span>
+                      <span class="conv-item-time">{{ formatConvTime(conv.updated_at) }}</span>
+                    </template>
+                  </div>
+                  <template v-if="!batchMode">
+                    <button v-if="renamingConvId !== conv.id" class="conv-item-rename" title="重命名" @click.stop="startRename(conv.id, conv.title)">
+                      <Pencil :size="13" />
+                    </button>
+                    <button class="conv-item-delete" title="删除对话" @click.stop="handleDeleteConversation(conv.id)">
+                      <Trash2 :size="13" />
+                    </button>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <div v-if="timeGroups.length === 0" class="conv-empty">
+              <MessageSquare :size="24" />
+              <span>暂无历史记录</span>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- 群组模式：群组信息 + 成员列表 -->
+      <template v-else-if="selectedType === 'group' && selectedGroup">
+        <div class="left-panel-header">
+          <button class="back-btn" title="返回联系人" @click="backToContacts">
+            <ChevronLeft :size="16" />
+          </button>
+          <div class="left-panel-title">
+            <div class="left-panel-avatar group-avatar">
+              <Users :size="14" />
+            </div>
+            <div class="left-panel-title-text">
+              <span class="left-panel-name">{{ selectedGroup.name }}</span>
+              <span class="left-panel-sub">{{ selectedGroup.members.length }} 成员 · {{ selectedGroup.aiCount }} AI</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="group-actions">
+          <button
+            :class="['group-action-btn', { active: collaborationMode }]"
+            title="协作模式"
+            @click="collaborationMode = !collaborationMode"
+          >
+            <Zap :size="14" />
+            <span>协作模式</span>
+          </button>
+          <button class="group-action-btn" title="添加 Agent" @click="showAddAgentDialog = true">
+            <UserPlus :size="14" />
+            <span>添加成员</span>
+          </button>
+        </div>
+
+        <div class="group-members">
+          <div class="members-label">
+            <Bot :size="12" />
+            <span>群成员</span>
+          </div>
+          <div
+            v-for="member in selectedGroup.members"
+            :key="member.agent_id"
+            class="member-item"
+          >
+            <div class="member-avatar" :style="{ background: member.color + '14', color: member.color }">
+              <Bot :size="14" />
+            </div>
+            <div class="member-info">
+              <span class="member-name">{{ member.name }}</span>
+              <span class="member-role">{{ member.role }}</span>
+            </div>
+            <button class="member-remove-btn" title="移除成员" @click="removeAgentFromGroup(selectedGroup!.id, member.agent_id)">
+              <X :size="12" />
+            </button>
+          </div>
+          <div v-if="selectedGroup.members.length === 0" class="conv-empty">
+            <Bot :size="24" />
+            <span>暂无成员，点击上方添加</span>
+          </div>
+        </div>
+      </template>
+    </aside>
+
+    <!-- 右侧：聊天面板 -->
+    <main class="chat-panel">
+      <!-- Agent 模式：原有聊天功能 -->
+      <div v-if="selectedType === 'agent'" class="chat-agent-mode">
         <div v-if="!isBackendReady" class="backend-warning">
           <div class="warning-content">
             <AlertTriangle :size="20" />
@@ -950,7 +1638,7 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
                   <div class="message-body">
-                    <div class="message-sender" v-if="msg.role === 'assistant'">{{ agentStore.activeAgent?.name || 'LuomiNest' }}</div>
+                    <div class="message-sender" v-if="msg.role === 'assistant'">{{ localSelectedAgent?.name || 'LuomiNest' }}</div>
                     <div
                       v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
                       class="reasoning-section"
@@ -1231,7 +1919,174 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-    </div>
+
+      <!-- 群组模式：群聊消息 -->
+      <div v-else-if="selectedType === 'group' && selectedGroup" class="chat-group-mode">
+        <div class="group-chat-header">
+          <div class="chat-title-area">
+            <div class="chat-avatar-mini">
+              <Users :size="14" />
+            </div>
+            <div class="chat-title-text">
+              <h3>{{ selectedGroup.name }}</h3>
+              <span class="chat-status-line">
+                {{ selectedGroup.members.length }} 成员 · {{ selectedGroup.aiCount }} AI
+              </span>
+            </div>
+          </div>
+          <div class="chat-actions">
+            <button
+              :class="['chat-action-btn', { active: collaborationMode }]"
+              title="协作模式"
+              @click="collaborationMode = !collaborationMode"
+            >
+              <Zap :size="15" />
+            </button>
+            <button class="chat-action-btn" title="添加 Agent" @click="showAddAgentDialog = true">
+              <UserPlus :size="15" />
+            </button>
+            <button class="chat-action-btn" title="更多">
+              <MoreVertical :size="15" />
+            </button>
+          </div>
+        </div>
+
+        <div class="collaboration-bar" v-if="collaborationMode">
+          <div class="collab-mode-indicator">
+            <Zap :size="12" />
+            <span>多 Agent 协作模式</span>
+          </div>
+          <div class="collab-phase" v-if="collaborationActive && collaborationPhase">
+            <component
+              :is="phaseIcon"
+              :size="14"
+              :class="{ 'spin-animation': collaborationPhase === 'analyzing' || collaborationPhase === 'executing' }"
+            />
+            <span>{{ phaseLabel }}</span>
+          </div>
+          <div class="collab-tasks-mini" v-if="collaborationTasks.length > 0">
+            <div
+              v-for="task in collaborationTasks"
+              :key="task.taskId"
+              :class="['collab-task-chip', getTaskStatusClass(task.status)]"
+            >
+              <component
+                :is="getTaskStatusIcon(task.status)"
+                :size="10"
+                :class="{ 'spin-animation': task.status === 'running' }"
+              />
+              <span>{{ task.description.slice(0, 12) }}{{ task.description.length > 12 ? '...' : '' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div ref="groupMessagesContainer" class="group-chat-messages">
+          <div
+            v-for="msg in groupMessages"
+            :key="msg.id"
+            :class="['msg-row', msg.senderType, { 'collab-synthesis': msg.collaboration?.type === 'synthesis' }]"
+          >
+            <div v-if="msg.senderType === 'agent'" class="msg-avatar">
+              <div
+                class="avatar-agent"
+                :style="msg.role === '调度员' ? { background: 'rgba(20, 126, 188, 0.15)', color: 'var(--lumi-primary)' } : {}"
+              >
+                <Bot :size="14" />
+              </div>
+            </div>
+            <div :class="['msg-bubble', msg.senderType, { 'synthesis-bubble': msg.collaboration?.type === 'synthesis' }]">
+              <span class="msg-sender" v-if="msg.senderType === 'agent'">
+                {{ msg.senderName || 'AI' }}
+                <span
+                  v-if="msg.role"
+                  class="msg-role-tag"
+                  :style="msg.collaboration?.type === 'synthesis' ? { background: 'rgba(20, 126, 188, 0.15)', color: 'var(--lumi-primary)' } : {}"
+                >
+                  {{ msg.role }}
+                </span>
+                <span v-if="msg.collaboration?.taskId" class="msg-collab-tag">
+                  {{ msg.collaboration.taskDescription?.slice(0, 8) }}...
+                </span>
+              </span>
+              <p class="msg-text">{{ msg.content }}</p>
+              <span class="msg-time">{{ formatGroupTime(msg.timestamp) }}</span>
+            </div>
+            <div v-if="msg.senderType === 'user'" class="msg-avatar user-avatar">
+              <User :size="16" />
+            </div>
+          </div>
+
+          <div v-if="collaborationActive && collaborationPhase" class="collab-progress-msg">
+            <div class="collab-progress-inner">
+              <Loader2 :size="14" class="spin-animation" />
+              <span class="collab-progress-text">
+                <template v-if="collaborationPhase === 'analyzing'">调度员正在分析任务...</template>
+                <template v-else-if="collaborationPhase === 'dispatching'">正在分配子任务...</template>
+                <template v-else-if="collaborationPhase === 'executing'">
+                  Agent 团队执行中 ({{ collaborationTasks.filter(t => t.status === 'completed').length }}/{{ collaborationTasks.length }})
+                </template>
+                <template v-else-if="collaborationPhase === 'synthesizing'">调度员正在综合结果...</template>
+              </span>
+            </div>
+          </div>
+
+          <div v-if="agentsResponding && !collaborationActive" class="collab-progress-msg">
+            <div class="collab-progress-inner">
+              <Loader2 :size="14" class="spin-animation" />
+              <span class="collab-progress-text">
+                {{ respondingAgentNames.length > 0
+                  ? `${respondingAgentNames.join('、')} 正在思考...`
+                  : 'Agent 正在响应...' }}
+              </span>
+            </div>
+          </div>
+
+          <div v-if="groupMessages.length === 0 && !collaborationActive" class="chat-empty">
+            <MessageCircle :size="32" />
+            <p>群聊已创建，添加 Agent 开始协作</p>
+          </div>
+        </div>
+
+        <div class="group-chat-input-bar">
+          <div class="input-tools">
+            <button class="input-tool-btn" title="图片">
+              <ImagePlus :size="16" />
+            </button>
+            <button class="input-tool-btn" title="语音">
+              <Mic :size="16" />
+            </button>
+          </div>
+          <div class="input-main">
+            <input
+              v-model="groupChatInput"
+              type="text"
+              :placeholder="collaborationMode ? '输入消息，Agent 团队将协作处理...' : '发送消息到群聊...'"
+              :disabled="sendingGroupMessage || collaborationActive || agentsResponding"
+              @keydown.enter="sendGroupMessage"
+            />
+            <button
+              class="input-send-btn"
+              @click="sendGroupMessage"
+              :disabled="!groupChatInput.trim() || sendingGroupMessage || collaborationActive || agentsResponding"
+            >
+              <Loader2 v-if="sendingGroupMessage || collaborationActive || agentsResponding" :size="15" class="spin-animation" />
+              <Send v-else :size="15" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 空状态：未选择联系人 -->
+      <div v-else class="chat-empty-state">
+        <div class="empty-visual">
+          <div class="empty-orb">
+            <MessageCircle :size="36" />
+          </div>
+        </div>
+        <h3>选择一个联系人开始对话</h3>
+        <p>在左侧选择 Agent 或群聊，开始你的对话</p>
+      </div>
+    </main>
 
     <Transition name="global-drop-fade">
       <div v-if="showGlobalDropOverlay" class="global-drop-overlay" @dragover.prevent @drop.prevent>
@@ -1408,6 +2263,90 @@ onBeforeUnmount(() => {
       </div>
     </Transition>
 
+    <!-- 创建群组对话框 -->
+    <Transition name="dialog-fade">
+      <div v-if="showCreateGroupDialog" class="create-dialog-overlay" @click.self="showCreateGroupDialog = false">
+        <div class="create-dialog">
+          <h3>创建群组</h3>
+          <div class="form-group">
+            <label class="form-label">
+              群组名称
+              <span class="required-mark">*</span>
+            </label>
+            <input v-model="newGroupName" type="text" class="form-input" placeholder="如: 项目讨论组" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <input v-model="newGroupDesc" type="text" class="form-input" placeholder="群组用途描述" />
+          </div>
+          <div class="dialog-actions">
+            <button class="dialog-btn cancel" @click="showCreateGroupDialog = false">取消</button>
+            <button
+              :class="['dialog-btn confirm', { disabled: !newGroupName.trim() }]"
+              :disabled="!newGroupName.trim()"
+              @click="createGroup"
+            >
+              创建
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 添加 Agent 到群组对话框 -->
+    <Transition name="dialog-fade">
+      <div v-if="showAddAgentDialog" class="create-dialog-overlay" @click.self="showAddAgentDialog = false">
+        <div class="create-dialog">
+          <h3>添加 Agent 到群组</h3>
+          <div v-if="availableAgentsForGroup.length === 0" class="dialog-empty">
+            <Bot :size="24" />
+            <p>所有 Agent 都已在群组中，或暂无可用 Agent</p>
+          </div>
+          <div v-else class="agent-select-list">
+            <div
+              v-for="agent in availableAgentsForGroup"
+              :key="agent.id"
+              :class="['agent-select-item', { selected: addAgentId === agent.id }]"
+              @click="addAgentId = agent.id"
+            >
+              <div class="agent-select-avatar" :style="{ background: agent.color + '14', color: agent.color }">
+                <Bot :size="18" />
+              </div>
+              <div class="agent-select-info">
+                <span class="agent-select-name">{{ agent.name }}</span>
+                <span class="agent-select-desc">{{ agent.description || '暂无描述' }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="addAgentId" class="form-group">
+            <label class="form-label">角色定位</label>
+            <input v-model="addAgentRole" type="text" class="form-input" placeholder="如: 调度员、数据专员、计算专员、审核专员" />
+            <div class="role-suggestions" v-if="socialStore.agentRoles.length > 0">
+              <button
+                v-for="role in socialStore.agentRoles"
+                :key="role.roleId"
+                class="role-suggestion-chip"
+                :style="{ background: role.color + '14', color: role.color }"
+                @click="addAgentRole = role.name"
+              >
+                {{ role.name }}
+              </button>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button class="dialog-btn cancel" @click="showAddAgentDialog = false">取消</button>
+            <button
+              :class="['dialog-btn confirm', { disabled: !addAgentId }]"
+              :disabled="!addAgentId"
+              @click="addAgentToGroup"
+            >
+              添加
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
   </div>
 </template>
 
@@ -1419,274 +2358,1290 @@ onBeforeUnmount(() => {
   background: var(--workspace-bg);
 }
 
-.workspace-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.workspace-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  position: relative;
-}
-
-.workspace-header {
-  display: flex;
-  align-items: center;
-  padding: 8px 24px 8px 24px;
+/* ===== 左侧：切换式面板（联系人列表 <-> 对话历史/群组信息） ===== */
+.left-panel {
+  width: 260px;
   flex-shrink: 0;
-  position: relative;
-  min-height: 68px;
-  z-index: 10;
-  overflow: visible;
-}
-
-.workspace-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 24px;
-  right: 24px;
-  height: 1px;
-  background: var(--divider-soft);
-}
-
-.header-left {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  flex: 1;
-  min-width: 0;
+  flex-direction: column;
+  background: var(--workspace-sidebar);
+  border-right: 1px solid var(--workspace-border);
   overflow: hidden;
 }
 
-.header-right {
+/* 左栏头部：返回按钮 + 当前选中标题（agent/群组模式） */
+.left-panel-header {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 10px 12px;
   flex-shrink: 0;
-  margin-left: auto;
+  border-bottom: 1px solid var(--workspace-border);
 }
 
-.agent-toggle-btn {
-  width: 24px;
-  height: 60px;
+.back-btn {
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  color: var(--text-muted);
-  cursor: pointer;
-  background: var(--surface);
-  border: 1px solid var(--divider-soft);
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-  padding: 0;
-}
-
-.agent-toggle-btn:hover {
-  color: var(--lumi-primary);
-  background: var(--surface-hover);
-  border-color: var(--lumi-primary);
-}
-
-.agent-expand-wrapper {
-  position: absolute;
-  top: 8px;
-  right: 24px;
-  z-index: 20;
-}
-
-.agent-panel-slide-enter-active {
-  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.agent-panel-slide-leave-active {
-  transition: opacity 0.2s cubic-bezier(0.55, 0, 1, 0.45), transform 0.2s cubic-bezier(0.55, 0, 1, 0.45);
-}
-
-.agent-panel-slide-enter-from {
-  opacity: 0;
-  transform: scaleY(0);
-}
-
-.agent-panel-slide-enter-to {
-  opacity: 1;
-  transform: scaleY(1);
-}
-
-.agent-panel-slide-leave-from {
-  opacity: 1;
-  transform: scaleY(1);
-}
-
-.agent-panel-slide-leave-to {
-  opacity: 0;
-  transform: scaleY(0);
-}
-
-.workspace-header {
-  transform-origin: top center;
-}
-
-.agent-list-fade-enter-active {
-  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.agent-list-fade-leave-active {
-  transition: opacity 0.2s cubic-bezier(0.55, 0, 1, 0.45), transform 0.2s cubic-bezier(0.55, 0, 1, 0.45);
-}
-
-.agent-list-fade-enter-from {
-  opacity: 0;
-  transform: translateX(8px);
-}
-
-.agent-list-fade-enter-to {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-.agent-list-fade-leave-from {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-.agent-list-fade-leave-to {
-  opacity: 0;
-  transform: translateX(8px);
-}
-
-.agent-list {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 6px 0;
-  flex: 1;
-  min-width: 0;
-}
-
-/* 横向滚动条样式 */
-.agent-list::-webkit-scrollbar {
-  height: 4px;
-}
-
-.agent-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.agent-list::-webkit-scrollbar-thumb {
-  background: var(--overlay-subtle);
-  border-radius: 4px;
-}
-
-.agent-list::-webkit-scrollbar-thumb:hover {
-  background: var(--overlay-bg);
-}
-
-.agent-new-btn,
-.agent-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 200ms ease;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
   background: transparent;
   border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
-  white-space: nowrap;
 }
 
-.agent-new-btn:hover,
-.agent-card:hover {
-  background: var(--workspace-hover);
+.back-btn:hover {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
 }
 
-.agent-new-icon,
-.agent-card-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+.left-panel-title {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
 }
 
-.agent-new-icon {
-  background: var(--lumi-accent-glow);
-  color: var(--task-pink);
-}
-
-.agent-new-info,
-.agent-card-info {
+.left-panel-title-text {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  min-width: 0;
 }
 
-.agent-new-title,
-.agent-card-name {
-  font-size: 14px;
+.left-panel-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.left-panel-avatar.group-avatar {
+  background: var(--lumi-primary-glow);
+  color: var(--lumi-primary);
+}
+
+.left-panel-name {
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-.agent-new-desc,
-.agent-card-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  max-width: 100px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.agent-card.active {
-  background: var(--workspace-active);
+.left-panel-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.agent-card-arrow {
+.contact-header {
+  padding: 12px 12px 8px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
-.arrow-icon {
-  font-size: 18px;
+.contact-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--workspace-panel);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.contact-search:focus-within {
+  border-color: var(--lumi-primary-border);
+  background: var(--surface);
+}
+
+.contact-search .search-icon {
   color: var(--text-muted);
-  line-height: 1;
-  transition: all 200ms ease;
-  cursor: pointer;
-  width: 24px;
-  height: 24px;
+  flex-shrink: 0;
+}
+
+.contact-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.contact-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.contact-add-btn {
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
 }
 
-.arrow-icon:hover {
+.contact-add-btn:hover {
+  background: var(--lumi-primary-light);
   color: var(--lumi-primary);
+}
+
+.contact-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 12px;
+}
+
+.contact-section {
+  margin-bottom: 8px;
+}
+
+.contact-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.contact-section-label .section-count {
+  background: var(--workspace-panel);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.section-add-btn {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.section-add-btn:hover {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+
+.contact-item:hover {
+  background: var(--workspace-hover);
+}
+
+.contact-item.active {
   background: var(--lumi-primary-light);
 }
 
-.active-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--lumi-primary);
+.contact-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  margin-right: 2px;
+}
+
+.contact-avatar.group-avatar {
+  background: var(--lumi-primary-glow);
+  color: var(--lumi-primary);
+}
+
+.contact-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.contact-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.contact-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contact-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.contact-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contact-edit-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.contact-item:hover .contact-edit-btn {
+  opacity: 1;
+}
+
+.contact-edit-btn:hover {
+  background: var(--overlay-subtle);
+  color: var(--text-secondary);
+}
+
+.contact-empty-mini {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.contact-empty {
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.contact-empty p {
+  font-size: 12px;
+  margin: 0;
+}
+
+/* ===== 对话历史/群组信息区域（在 left-panel 内） ===== */
+.sidebar-header {
+  padding: 12px 12px 8px;
+  flex-shrink: 0;
+}
+
+.conv-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+  margin-bottom: 8px;
+}
+
+.conv-search:focus-within {
+  border-color: var(--lumi-primary-border);
+}
+
+.conv-search .search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.conv-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.conv-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.new-conv-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.new-conv-btn:hover {
+  background: var(--lumi-primary-glow);
+}
+
+.batch-toggle-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--workspace-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.batch-toggle-btn:hover {
+  color: var(--text-secondary);
+  background: var(--workspace-hover);
+}
+
+.batch-toggle-btn.active {
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
+  border-color: var(--lumi-primary-border);
+}
+
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--lumi-primary-subtle);
+  border-bottom: 1px solid var(--workspace-border);
+  flex-shrink: 0;
+}
+
+.batch-action-btn {
+  font-size: 12px;
+  color: var(--lumi-primary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.batch-action-btn:hover {
+  background: var(--lumi-primary-light);
+}
+
+.batch-count {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.batch-delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--lumi-danger);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.batch-delete-btn:hover:not(.disabled) {
+  background: var(--lumi-danger-light);
+}
+
+.batch-delete-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.conv-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 12px;
+}
+
+.time-group {
+  margin-bottom: 4px;
+}
+
+.time-group-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 8px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.conv-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.conv-item:hover {
+  background: var(--workspace-hover);
+}
+
+.conv-item.active {
+  background: var(--lumi-primary-light);
+}
+
+.conv-item-checkbox {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.checkbox-box {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid var(--workspace-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.checkbox-box.checked {
+  background: var(--lumi-primary);
+  border-color: var(--lumi-primary);
+  color: var(--text-inverse);
+}
+
+.conv-item-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.conv-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conv-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conv-item-time {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.conv-item-snippet {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.conv-item-snippet :deep(mark) {
+  background: var(--lumi-amber-soft);
+  color: var(--lumi-amber-dark);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.conv-item-rename-input {
+  width: 100%;
+  border: 1px solid var(--lumi-primary-border);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--surface);
+  outline: none;
+}
+
+.conv-item-rename,
+.conv-item-delete {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.conv-item:hover .conv-item-rename,
+.conv-item:hover .conv-item-delete {
+  opacity: 1;
+}
+
+.conv-item-rename:hover {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.conv-item-delete:hover {
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
+}
+
+.conv-empty {
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.conv-empty span {
+  font-size: 12px;
+}
+
+/* ===== 群组操作区 ===== */
+.group-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px 8px;
+  flex-shrink: 0;
+}
+
+.group-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--workspace-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.group-action-btn:hover {
+  background: var(--workspace-hover);
+  color: var(--text-primary);
+}
+
+.group-action-btn.active {
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
+  border-color: var(--lumi-primary-border);
+}
+
+.group-members {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 12px 12px;
+}
+
+.members-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.member-item:hover {
+  background: var(--workspace-hover);
+}
+
+.member-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.member-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.member-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.member-role {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.member-remove-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.member-item:hover .member-remove-btn {
+  opacity: 1;
+}
+
+.member-remove-btn:hover {
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
+}
+
+/* ===== 右侧：聊天面板 ===== */
+.chat-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--workspace-bg);
+  overflow: hidden;
+  position: relative;
+}
+
+.chat-agent-mode {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.chat-group-mode {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.chat-empty-state .empty-visual {
+  margin-bottom: 8px;
+}
+
+.chat-empty-state .empty-orb {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lumi-primary-gradient-soft);
+  color: var(--lumi-primary);
+}
+
+.chat-empty-state h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.chat-empty-state p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ===== 群聊头部 ===== */
+.group-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--workspace-border);
+  background: var(--workspace-sidebar);
+  flex-shrink: 0;
+}
+
+.chat-title-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-avatar-mini {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lumi-primary-glow);
+  color: var(--lumi-primary);
+}
+
+.chat-title-text h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.chat-status-line {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-action-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.chat-action-btn:hover {
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
+}
+
+.chat-action-btn.active {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+/* ===== 协作模式栏 ===== */
+.collaboration-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  background: var(--lumi-primary-subtle);
+  border-bottom: 1px solid var(--lumi-primary-border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.collab-mode-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lumi-primary);
+}
+
+.collab-phase {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.collab-tasks-mini {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.collab-task-chip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  background: var(--surface);
+  border: 1px solid var(--workspace-border);
+}
+
+.collab-task-chip.status-running {
+  color: var(--lumi-primary);
+  border-color: var(--lumi-primary-border);
+}
+
+.collab-task-chip.status-completed {
+  color: var(--lumi-success);
+  border-color: var(--task-green-border);
+}
+
+.collab-task-chip.status-failed {
+  color: var(--lumi-danger);
+  border-color: var(--task-red-border);
+}
+
+.collab-task-chip.status-pending {
+  color: var(--text-muted);
+}
+
+/* ===== 群聊消息区 ===== */
+.group-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg-row {
+  display: flex;
+  gap: 8px;
+  max-width: 80%;
+}
+
+.msg-row.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.msg-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--lumi-primary-glow);
+  color: var(--lumi-primary);
+}
+
+.msg-avatar.user-avatar {
+  background: var(--lumi-primary);
+  color: var(--text-inverse);
+}
+
+.avatar-agent {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.msg-bubble {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.msg-bubble.agent {
+  background: var(--surface);
+  border: 1px solid var(--workspace-border);
+  color: var(--text-primary);
+}
+
+.msg-bubble.user {
+  background: var(--lumi-primary);
+  color: var(--text-inverse);
+}
+
+.msg-bubble.synthesis-bubble {
+  background: var(--lumi-primary-light);
+  border-color: var(--lumi-primary-border);
+}
+
+.msg-sender {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.msg-role-tag {
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 500;
+  background: var(--workspace-panel);
+  color: var(--text-muted);
+}
+
+.msg-collab-tag {
+  font-size: 9px;
+  color: var(--text-muted);
+  padding: 1px 4px;
+  background: var(--workspace-panel);
+  border-radius: 4px;
+}
+
+.msg-text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.msg-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  display: block;
+}
+
+.msg-bubble.user .msg-time {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.collab-progress-msg {
+  align-self: center;
+  padding: 8px 16px;
+  background: var(--surface);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-full);
+}
+
+.collab-progress-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chat-empty {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  padding: 32px;
+}
+
+.chat-empty p {
+  font-size: 13px;
+  margin: 0;
+}
+
+/* ===== 群聊输入栏 ===== */
+.group-chat-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--workspace-border);
+  background: var(--workspace-sidebar);
+  flex-shrink: 0;
+}
+
+.input-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.input-tool-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.input-tool-btn:hover {
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
+}
+
+.input-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-md);
+  padding: 4px 4px 4px 12px;
+}
+
+.input-main input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 6px 0;
+}
+
+.input-main input::placeholder {
+  color: var(--text-muted);
+}
+
+.input-send-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-inverse);
+  background: var(--lumi-primary);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.input-send-btn:hover:not(:disabled) {
+  background: var(--lumi-primary-hover);
+}
+
+.input-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== 对话框扩展样式 ===== */
+.dialog-empty {
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.dialog-empty p {
+  font-size: 12px;
+  margin: 0;
+  text-align: center;
+}
+
+.agent-select-list {
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0 -4px 8px;
+  padding: 0 4px;
+}
+
+.agent-select-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.agent-select-item:hover {
+  background: var(--workspace-hover);
+}
+
+.agent-select-item.selected {
+  background: var(--lumi-primary-light);
+}
+
+.agent-select-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.agent-select-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-select-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.agent-select-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.role-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.role-suggestion-chip {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.role-suggestion-chip:hover {
+  transform: translateY(-1px);
+}
+
+/* ===== 通用动画 ===== */
+.spin-animation {
+  animation: luominest-spin 1s linear infinite;
+}
+
+@keyframes luominest-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .provider-icon-mini {
@@ -1709,37 +3664,6 @@ onBeforeUnmount(() => {
 .provider-svg-mini :deep(svg) {
   width: 16px;
   height: 16px;
-}
-
-.header-icon-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.header-icon-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--text-secondary);
-}
-
-.header-icon-btn.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.header-icon-btn.warning {
-  color: var(--lumi-accent);
-  animation: pulse-warning 2s ease-in-out infinite;
-}
-
-@keyframes pulse-warning {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
 
 .backend-warning {

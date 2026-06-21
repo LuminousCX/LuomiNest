@@ -24,6 +24,7 @@ from app.core.context import get_context_manager
 from app.services.context_service import context_service
 from app.services.suggestion_service import suggestion_service
 from app.services.chat_service import ChatService
+from app.core.config import get_settings
 
 _chat_service = ChatService(context_service, suggestion_service)
 
@@ -118,7 +119,7 @@ async def chat_completions(request: ChatRequest):
 @router.get("/conversations", response_model=list[ConversationListResponse])
 async def list_conversations(agent_id: str | None = None):
     logger.info(f"[API] GET /chat/conversations - Listing conversations, agent_id={agent_id}")
-    conv_list = conversation_store.list_conversations(agent_id)
+    conv_list = await conversation_store.list_conversations_async(agent_id)
     result = []
     for meta in conv_list:
         conv_id = meta.get("id")
@@ -147,7 +148,7 @@ async def search_conversations(keyword: str, agent_id: str | None = None):
         f"req_id={req_id}, keyword_len={len(keyword)}, "
         f"agent_id={'***' if agent_id else None}"
     )
-    results = conversation_store.search_conversations(keyword, agent_id)
+    results = await conversation_store.search_conversations_async(keyword, agent_id)
     response = [
         ConversationSearchResult(
             id=r["id"],
@@ -181,7 +182,7 @@ async def create_conversation(request: ConversationCreate):
         "created_at": now,
         "updated_at": now,
     }
-    conversation_store.set(conv_id, conv)
+    await conversation_store.set_async(conv_id, conv)
     logger.success(f"[API] POST /chat/conversations - Conversation created: id={conv_id}")
     return ConversationResponse(**conv)
 
@@ -189,7 +190,7 @@ async def create_conversation(request: ConversationCreate):
 @router.get("/conversations/{conv_id}", response_model=ConversationResponse)
 async def get_conversation(conv_id: str):
     logger.info(f"[API] GET /chat/conversations/{conv_id} - Fetching conversation")
-    conv = conversation_store.get(conv_id)
+    conv = await conversation_store.get_async(conv_id)
     if not conv:
         logger.error(f"[API] GET /chat/conversations/{conv_id} - Conversation not found")
         from app.core.exceptions import NotFoundError
@@ -201,12 +202,12 @@ async def get_conversation(conv_id: str):
     return ConversationResponse(**conv)
 
 
-def _resolve_agent_id(conv: dict, request_agent_id: str | None = None) -> str | None:
+async def _resolve_agent_id(conv: dict, request_agent_id: str | None = None) -> str | None:
     """解析并回填 agent_id：优先 conv 存储，其次 request，最后 agents_store 兜底。"""
     agent_id = conv.get("agent_id") or request_agent_id
     if not agent_id:
         from app.infrastructure.database.json_store import agents_store
-        all_agents = agents_store.all()
+        all_agents = await agents_store.all_async()
         if all_agents:
             agent_id = all_agents[0].get("id")
     if agent_id and not conv.get("agent_id"):
@@ -219,10 +220,10 @@ async def leave_conversation(conv_id: str):
     """用户离开/切换对话时触发最终蒸馏"""
     logger.info(f"[API] POST /chat/conversations/{conv_id}/leave")
     try:
-        conv = conversation_store.get(conv_id)
+        conv = await conversation_store.get_async(conv_id)
         if conv and conv.get("messages"):
             from app.services.distillation_service import distillation_service
-            agent_id = _resolve_agent_id(conv)
+            agent_id = await _resolve_agent_id(conv)
             await distillation_service.final_distill(
                 agent_id, conv_id, conv["messages"], llm_adapter,
             )
@@ -236,17 +237,17 @@ async def delete_conversation(conv_id: str):
     logger.info(f"[API] DELETE /chat/conversations/{conv_id} - Moving to trash")
     # 对话移到回收站前触发最终蒸馏
     try:
-        conv = conversation_store.get(conv_id)
+        conv = await conversation_store.get_async(conv_id)
         if conv and conv.get("messages"):
             from app.services.distillation_service import distillation_service
-            agent_id = _resolve_agent_id(conv)
+            agent_id = await _resolve_agent_id(conv)
             await distillation_service.final_distill(
                 agent_id, conv_id, conv["messages"], llm_adapter,
             )
     except Exception as distill_err:
         logger.warning(f"[API] Final distill on delete failed: {distill_err}")
 
-    conversation_store.soft_delete(conv_id)
+    await conversation_store.soft_delete_async(conv_id)
     logger.success(f"[API] DELETE /chat/conversations/{conv_id} - Moved to trash")
     return {"error": None, "data": {"deleted": True}}
 
@@ -258,7 +259,7 @@ class RenameConversationRequest(BaseModel):
 @router.patch("/conversations/{conv_id}/rename")
 async def rename_conversation(conv_id: str, request: RenameConversationRequest):
     logger.info(f"[API] PATCH /chat/conversations/{conv_id}/rename - title_len={len(request.title)}")
-    success = conversation_store.rename(conv_id, request.title)
+    success = await conversation_store.rename_async(conv_id, request.title)
     if not success:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
@@ -280,15 +281,15 @@ async def truncate_messages(conv_id: str, request: TruncateMessagesRequest):
         f"[API] PATCH /chat/conversations/{conv_id}/messages - "
         f"Truncating to {request.keep_count}"
     )
-    conv = conversation_store.get(conv_id)
+    conv = await conversation_store.get_async(conv_id)
     if not conv:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
     conv["messages"] = conv["messages"][:request.keep_count]
-    _chat_service.persist_conv(conv_id, conv)
+    await _chat_service.persist_conv(conv_id, conv)
 
     # 截断的是尾部，重建对话级记忆
-    agent_id = _resolve_agent_id(conv)
+    agent_id = await _resolve_agent_id(conv)
     if agent_id:
         try:
             from app.engines.memory import get_memory_engine
@@ -333,14 +334,14 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
     start_time = time.time()
     logger.info(f"[API] POST /chat/conversations/{conv_id}/regenerate")
 
-    conv = conversation_store.get(conv_id)
+    conv = await conversation_store.get_async(conv_id)
     if not conv:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
 
     while conv["messages"] and conv["messages"][-1].get("role") == "assistant":
         conv["messages"].pop()
-    _chat_service.persist_conv(conv_id, conv)
+    await _chat_service.persist_conv(conv_id, conv)
 
     resolved_provider = (
         request.provider or conv.get("provider") or llm_adapter.default_provider
@@ -370,7 +371,7 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
     agent_id = conv.get("agent_id") or request.agent_id
     if not agent_id:
         from app.infrastructure.database.json_store import agents_store
-        all_agents = agents_store.all()
+        all_agents = await agents_store.all_async()
         if all_agents:
             agent_id = all_agents[0].get("id")
     # 回写到对话中，确保后续使用一致
@@ -414,7 +415,7 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
         persist_state["content"] = ""
 
     _chat_service.save_assistant_message(conv, persist_state, versions=request.versions)
-    _chat_service.persist_conv(conv_id, conv)
+    await _chat_service.persist_conv(conv_id, conv)
 
     try:
         await context_service.schedule_memory_update(
@@ -447,7 +448,7 @@ async def update_message_version(conv_id: str, request: UpdateMessageVersionRequ
         f"[API] PATCH /chat/conversations/{conv_id}/messages/version - "
         f"Updating message version for {request.message_id}"
     )
-    conv = conversation_store.get(conv_id)
+    conv = await conversation_store.get_async(conv_id)
     if not conv:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
@@ -468,7 +469,7 @@ async def update_message_version(conv_id: str, request: UpdateMessageVersionRequ
                 msg["suggested_questions"] = v["suggested_questions"]
             elif "suggested_questions" in msg:
                 del msg["suggested_questions"]
-            _chat_service.persist_conv(conv_id, conv)
+            await _chat_service.persist_conv(conv_id, conv)
             logger.success(
                 f"[API] PATCH /chat/conversations/{conv_id}/messages/version - Version updated"
             )
@@ -483,7 +484,7 @@ async def delete_message(conv_id: str, message_id: str):
     logger.info(
         f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Deleting message"
     )
-    conv = conversation_store.get(conv_id)
+    conv = await conversation_store.get_async(conv_id)
     if not conv:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
@@ -508,10 +509,10 @@ async def delete_message(conv_id: str, message_id: str):
             last_user_idx = i
 
     conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
-    _chat_service.persist_conv(conv_id, conv)
+    await _chat_service.persist_conv(conv_id, conv)
 
     # 删除用户消息时始终重建记忆，删除中间AI消息则跳过
-    agent_id = _resolve_agent_id(conv)
+    agent_id = await _resolve_agent_id(conv)
     if agent_id and conv["messages"]:
         if deleted_role == "user" or deleted_idx >= last_user_idx:
             try:
@@ -542,7 +543,7 @@ async def add_message(conv_id: str, request: ChatRequest):
     start_time = time.time()
     logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Adding message")
 
-    conv = conversation_store.get(conv_id)
+    conv = await conversation_store.get_async(conv_id)
     if not conv:
         from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conv_id} not found")
@@ -556,7 +557,7 @@ async def add_message(conv_id: str, request: ChatRequest):
     _chat_service.save_user_message(
         conv, last_user_content, request.file_content, request.file_name, request.file_type,
     )
-    _chat_service.persist_conv(conv_id, conv)
+    await _chat_service.persist_conv(conv_id, conv)
 
     resolved_provider = (
         request.provider or conv.get("provider") or llm_adapter.default_provider
@@ -586,7 +587,7 @@ async def add_message(conv_id: str, request: ChatRequest):
     agent_id = conv.get("agent_id") or request.agent_id
     if not agent_id:
         from app.infrastructure.database.json_store import agents_store
-        all_agents = agents_store.all()
+        all_agents = await agents_store.all_async()
         if all_agents:
             agent_id = all_agents[0].get("id")
     # 回写到对话中，确保后续使用一致
@@ -636,7 +637,7 @@ async def add_message(conv_id: str, request: ChatRequest):
         persist_state["content"] = ""
 
     _chat_service.save_assistant_message(conv, persist_state, versions=request.versions)
-    _chat_service.persist_conv(conv_id, conv)
+    await _chat_service.persist_conv(conv_id, conv)
     await context_service.schedule_memory_update(
         [dict(m) for m in conv["messages"]], conv_id, agent_id,
         llm_adapter=llm_adapter,
@@ -665,7 +666,7 @@ async def add_message(conv_id: str, request: ChatRequest):
 @router.get("/trash", response_model=list[TrashListItemResponse])
 async def list_trash(agent_id: str | None = None):
     logger.info(f"[API] GET /chat/trash - Listing trash, agent_id={agent_id}")
-    items = conversation_store.list_trash(agent_id)
+    items = await conversation_store.list_trash_async(agent_id)
     result = []
     for meta in items:
         result.append(TrashListItemResponse(
@@ -686,7 +687,7 @@ async def list_trash(agent_id: str | None = None):
 @router.post("/trash/{conv_id}/restore")
 async def restore_conversation(conv_id: str):
     logger.info(f"[API] POST /chat/trash/{conv_id}/restore - Restoring conversation")
-    restored = conversation_store.restore(conv_id)
+    restored = await conversation_store.restore_async(conv_id)
     if not restored:
         logger.warning(f"[API] POST /chat/trash/{conv_id}/restore - Restore failed, not found")
         return {"error": "not found", "data": {"restored": False}}
@@ -697,7 +698,7 @@ async def restore_conversation(conv_id: str):
 @router.delete("/trash/{conv_id}")
 async def permanent_delete_conversation(conv_id: str):
     logger.info(f"[API] DELETE /chat/trash/{conv_id} - Permanent deleting conversation")
-    deleted = conversation_store.permanent_delete(conv_id)
+    deleted = await conversation_store.permanent_delete_async(conv_id)
     if not deleted:
         logger.warning(f"[API] DELETE /chat/trash/{conv_id} - Delete failed, not found")
         return {"error": "not found", "data": {"deleted": False}}
@@ -708,7 +709,7 @@ async def permanent_delete_conversation(conv_id: str):
 @router.delete("/trash")
 async def empty_trash(agent_id: str | None = None):
     logger.info(f"[API] DELETE /chat/trash - Emptying trash, agent_id={agent_id}")
-    count = conversation_store.empty_trash(agent_id)
+    count = await conversation_store.empty_trash_async(agent_id)
     logger.success(f"[API] DELETE /chat/trash - Emptied {count} items")
     return {"error": None, "data": {"deleted_count": count}}
 
@@ -716,7 +717,7 @@ async def empty_trash(agent_id: str | None = None):
 @router.post("/trash/batch-restore")
 async def batch_restore(request: BatchIdsRequest):
     logger.info(f"[API] POST /chat/trash/batch-restore - Restoring {len(request.ids)} items")
-    count = conversation_store.batch_restore(request.ids)
+    count = await conversation_store.batch_restore_async(request.ids)
     logger.success(f"[API] POST /chat/trash/batch-restore - Restored {count} items")
     return {"error": None, "data": {"restored_count": count}}
 
@@ -724,7 +725,7 @@ async def batch_restore(request: BatchIdsRequest):
 @router.post("/trash/batch-delete")
 async def batch_permanent_delete(request: BatchIdsRequest):
     logger.info(f"[API] POST /chat/trash/batch-delete - Deleting {len(request.ids)} items")
-    count = conversation_store.batch_permanent_delete(request.ids)
+    count = await conversation_store.batch_permanent_delete_async(request.ids)
     logger.success(f"[API] POST /chat/trash/batch-delete - Deleted {count} items")
     return {"error": None, "data": {"deleted_count": count}}
 
@@ -736,17 +737,17 @@ async def batch_soft_delete(request: BatchIdsRequest):
     # 为每个对话触发最终蒸馏（与单个删除行为对齐）
     for conv_id in request.ids:
         try:
-            conv = conversation_store.get(conv_id)
+            conv = await conversation_store.get_async(conv_id)
             if conv and conv.get("messages"):
                 from app.services.distillation_service import distillation_service as ds
-                agent_id = _resolve_agent_id(conv)
+                agent_id = await _resolve_agent_id(conv)
                 await ds.final_distill(
                     agent_id, conv_id, conv["messages"], llm_adapter,
                 )
         except Exception as distill_err:
             logger.warning(f"[Memory] Final distill on batch delete failed for {conv_id}: {distill_err}")
 
-    count = conversation_store.batch_soft_delete(request.ids)
+    count = await conversation_store.batch_soft_delete_async(request.ids)
     logger.success(f"[API] POST /chat/conversations/batch-delete - Moved {count} to trash")
     return {"error": None, "data": {"deleted_count": count}}
 
@@ -759,8 +760,159 @@ class TTSRequest(BaseModel):
 @router.post("/tts/synthesize")
 async def tts_synthesize(request: TTSRequest):
     if not request.text.strip():
-        return JSONResponse({"error": "text is required"}, status_code=400)
-    return JSONResponse(
-        {"error": "TTS service is not yet implemented"},
-        status_code=501,
-    )
+        return JSONResponse({"error": "文本内容不能为空"}, status_code=400)
+
+    from fastapi.responses import Response
+    from app.utils.tts_text_filter import filter_tts_text
+
+    # 后端兜底过滤：清理 markdown/emoji/特殊符号
+    clean_text = filter_tts_text(request.text)
+    if not clean_text:
+        return JSONResponse({"error": "过滤后文本为空，无需合成"}, status_code=400)
+
+    # 优先使用 Sherpa-ONNX TTS（完全离线，神经网络语音，质量好）
+    try:
+        from app.runtime.provider.tts.sherpa_onnx_tts import SherpaOnnxTTSProvider
+        provider = SherpaOnnxTTSProvider()
+        audio_bytes = await provider.synthesize(clean_text, request.voice)
+        return Response(
+            content=audio_bytes,
+            media_type="audio/wav",
+            headers={"Content-Disposition": "inline"},
+        )
+    except FileNotFoundError as e:
+        logger.warning(f"[API] TTS: Sherpa-ONNX model not found ({e}), falling back to local TTS")
+    except Exception as e:
+        logger.warning(f"[API] TTS: Sherpa-ONNX failed ({e}), falling back to local TTS")
+
+    # 兜底：本地 pyttsx3 TTS（系统语音，离线）
+    try:
+        from app.runtime.provider.tts.local_tts import LocalTTSProvider
+        provider = LocalTTSProvider()
+        audio_bytes = await provider.synthesize(clean_text, request.voice)
+        return Response(
+            content=audio_bytes,
+            media_type="audio/wav",
+            headers={"Content-Disposition": "inline"},
+        )
+    except ImportError:
+        logger.error("[API] TTS: pyttsx3 not installed")
+        return JSONResponse(
+            {"error": "未安装语音合成引擎，请安装 sherpa-onnx 或 pyttsx3"},
+            status_code=503,
+        )
+    except Exception as e:
+        logger.error(f"[API] TTS: all providers failed: {e}")
+        return JSONResponse({"error": f"语音合成失败：{e}"}, status_code=500)
+
+
+def _detect_tts_device() -> dict:
+    """Detect compute device availability for TTS.
+
+    Checks for CUDA (GPU) via torch if installed, otherwise reports CPU.
+    pyttsx3 is CPU-only; this info helps the frontend show what's available
+    and lets future GPU-based TTS engines be auto-selected.
+    """
+    import platform
+
+    device = {"type": "cpu", "name": platform.processor() or "Unknown CPU", "cuda_available": False}
+
+    try:
+        import torch
+        if torch.cuda.is_available():
+            device["type"] = "gpu"
+            device["name"] = torch.cuda.get_device_name(0)
+            device["cuda_available"] = True
+            device["cuda_version"] = torch.version.cuda or "unknown"
+    except ImportError:
+        pass
+    except Exception as dev_err:
+        logger.debug(f"[API] TTS device detection (torch) failed: {dev_err}")
+
+    return device
+
+
+@router.get("/tts/engines")
+async def tts_engines():
+    """Report available TTS engines, device info, and avatar voice bindings."""
+    engines: list[dict] = []
+
+    # Sherpa-ONNX TTS (offline, neural network)
+    try:
+        from app.runtime.provider.tts.sherpa_onnx_tts import SherpaOnnxTTSProvider
+        try:
+            SherpaOnnxTTSProvider()  # 测试是否能初始化
+            engines.append({
+                "id": "sherpa-onnx",
+                "name": "Sherpa-ONNX TTS (离线神经网络)",
+                "online": False,
+                "available": True,
+                "default_voices": SherpaOnnxTTSProvider.DEFAULT_VOICES,
+            })
+        except Exception as init_err:
+            logger.debug(f"[API] TTS sherpa-onnx init check failed: {init_err}")
+            engines.append({
+                "id": "sherpa-onnx",
+                "name": "Sherpa-ONNX TTS (离线神经网络)",
+                "online": False,
+                "available": False,
+                "default_voices": SherpaOnnxTTSProvider.DEFAULT_VOICES,
+            })
+    except ImportError:
+        engines.append({
+            "id": "sherpa-onnx",
+            "name": "Sherpa-ONNX TTS (离线神经网络)",
+            "online": False,
+            "available": False,
+        })
+
+    # Local TTS (offline, CPU via pyttsx3)
+    try:
+        import pyttsx3  # noqa: F401
+        local_voices: list[dict] = []
+        lang_map: dict[str, str] = {}
+        try:
+            from app.runtime.provider.tts.local_tts import LocalTTSProvider
+            provider = LocalTTSProvider()
+            local_voices = provider.list_voices()
+            lang_map = provider.get_lang_map()
+        except Exception as lv_err:
+            logger.debug(f"[API] TTS local voice enumeration failed: {lv_err}")
+        engines.append({
+            "id": "local",
+            "name": "本地 TTS (pyttsx3, CPU)",
+            "online": False,
+            "available": True,
+            "voices": local_voices,
+            "lang_map": lang_map,
+        })
+    except ImportError:
+        engines.append({
+            "id": "local",
+            "name": "本地 TTS (pyttsx3, CPU)",
+            "online": False,
+            "available": False,
+        })
+
+    device = _detect_tts_device()
+
+    # Avatar voice bindings (model_id -> voice/lang)
+    from app.services.avatar_manager import LUOMINEST_AVATAR_BINDINGS
+    bindings = {
+        mid: {
+            "model_id": b.model_id,
+            "voice": b.voice,
+            "voice_lang": b.voice_lang,
+            "default_expression": b.default_expression,
+        }
+        for mid, b in LUOMINEST_AVATAR_BINDINGS.items()
+    }
+
+    return {
+        "error": None,
+        "data": {
+            "engines": engines,
+            "device": device,
+            "avatar_bindings": bindings,
+        },
+    }

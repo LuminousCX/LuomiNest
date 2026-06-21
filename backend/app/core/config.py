@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "LuomiNest"
-    APP_VERSION: str = "0.5.0"
+    APP_VERSION: str = "0.7.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     GITHUB_TOKEN: str = ""
     EXTERNAL_PARSE_API_URL: str = ""
     FILE_MAX_SIZE: int = 100 * 1024 * 1024
+
+    TTS_PROXY: str = ""
 
     class Config:
         env_file = ".env"

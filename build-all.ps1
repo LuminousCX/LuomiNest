@@ -173,7 +173,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip --quiet
 pip install pyinstaller --quiet
-pip install -e '.[dev]' --quiet 2>/dev/null || pip install -e . --quiet
+pip install -e '.[dev,voice]' --quiet 2>/dev/null || pip install -e '.[voice]' --quiet
 pyinstaller luominest-backend.spec --clean --noconfirm
 
 echo "Copying Linux backend to frontend resources..."
@@ -196,7 +196,7 @@ echo "WSL_LINUX_BUILD_DONE"
             $scriptPath = Join-Path $env:TEMP "luominest-wsl-build.sh"
             $wslBuildScript | Out-File -FilePath $scriptPath -Encoding utf8 -Force
 
-            $wslScriptPath = ($scriptPath -replace '\\', '/' -replace '^([A-Z]):', '/mnt/$1').ToLower()
+            $wslScriptPath = ($scriptPath -replace '\\', '/' -replace '^([A-Z]):', { '/mnt/$1'.ToLower() })
             wsl -d $wslDistro -- bash $wslScriptPath
 
             if ($LASTEXITCODE -eq 0) {

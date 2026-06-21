@@ -2,7 +2,7 @@ import '@pixi/unsafe-eval'
 import { ref, type Ref } from 'vue'
 import { Application, Ticker } from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'
-import { validateLuomiNestModelUrl } from '@/config/luominest-models'
+import { validateLuomiNestModelUrl, resolveExpressionByModelUrl } from '@/config/luominest-models'
 
 const EXPRESSION_BLOCKLIST = ['水印', 'watermark', 'copyright', 'credit', 'logo']
 
@@ -25,6 +25,7 @@ export interface LuomiNestLive2DState {
   isLoading: boolean
   error: string | null
   currentModelName: string
+  currentModelUrl: string
   availableMotions: string[]
   availableExpressions: string[]
 }
@@ -34,6 +35,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const currentModelName = ref('')
+  const currentModelUrl = ref('')
   const availableMotions = ref<string[]>([])
   const availableExpressions = ref<string[]>([])
 
@@ -194,7 +196,8 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       const parent = canvasRef.value?.parentElement
       if (parent) {
         model.x = parent.clientWidth / 2
-        model.y = parent.clientHeight / 2
+        // 模型中心下移至容器 65% 处，让头、肩、胸、肚子露出
+        model.y = parent.clientHeight * 0.90
       }
 
       try {
@@ -225,6 +228,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
 
       const urlParts = url.split('/')
       currentModelName.value = urlParts[2] || 'Unknown'
+      currentModelUrl.value = url
 
       try {
         await model.motion('Idle', 0)
@@ -378,12 +382,13 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     try {
       await currentModel.expression(name)
     } catch {
-      // intentionally ignored: expected non-fatal error
+      // intentionally ignored: expression switch failure is non-fatal
     }
   }
 
   const driveEmotion = async (emotionId: string) => {
-    await triggerExpression(emotionId)
+    const expressionName = resolveExpressionByModelUrl(currentModelUrl.value, emotionId)
+    await triggerExpression(expressionName)
   }
 
   const drivePadEmotion = (pleasure: number, _arousal: number, _dominance: number) => {
@@ -513,6 +518,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       pixiApp = null
     }
     isReady.value = false
+    currentModelUrl.value = ''
   }
 
   return {
@@ -520,6 +526,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     isLoading,
     error,
     currentModelName,
+    currentModelUrl,
     availableMotions,
     availableExpressions,
     loadModel,

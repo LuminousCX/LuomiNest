@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import threading
@@ -31,10 +32,18 @@ class ConversationStore:
             return self._index_cache
 
     def _save_index(self):
+        """原子写入索引文件。"""
+        tmp_path = self._index_path + ".tmp"
         try:
-            with open(self._index_path, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self._index_cache, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, self._index_path)
         except Exception as e:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError as cleanup_err:
+                    logger.debug(f"[ConvStore] Failed to remove temp index file {tmp_path}: {cleanup_err}")
             logger.error(f"[ConvStore] Failed to save index: {e}")
 
     def _conv_path(self, conv_id: str) -> str:
@@ -54,10 +63,17 @@ class ConversationStore:
 
     def set(self, conv_id: str, conv: dict):
         path = self._conv_path(conv_id)
+        tmp_path = path + ".tmp"
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(conv, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, path)
         except Exception as e:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
             logger.error(f"[ConvStore] Failed to save conv {conv_id}: {e}")
             return
 
@@ -261,8 +277,10 @@ class ConversationStore:
             conv["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             try:
-                with open(path, "w", encoding="utf-8") as f:
+                tmp_path = path + ".tmp"
+                with open(tmp_path, "w", encoding="utf-8") as f:
                     json.dump(conv, f, ensure_ascii=False, indent=2)
+                os.replace(tmp_path, path)
             except Exception as e:
                 logger.error(f"[ConvStore] Failed to save renamed conv {conv_id}: {e}")
                 return False
@@ -326,6 +344,51 @@ class ConversationStore:
         if migrated > 0:
             logger.success(f"[ConvStore] Migrated {migrated} conversations from old store")
         return migrated
+
+
+    # ── Async wrappers (non-blocking for FastAPI async endpoints) ──
+
+    async def get_async(self, conv_id: str) -> dict | None:
+        return await asyncio.to_thread(self.get, conv_id)
+
+    async def set_async(self, conv_id: str, conv: dict):
+        return await asyncio.to_thread(self.set, conv_id, conv)
+
+    async def delete_async(self, conv_id: str):
+        return await asyncio.to_thread(self.delete, conv_id)
+
+    async def list_conversations_async(self, agent_id: str | None = None) -> list[dict]:
+        return await asyncio.to_thread(self.list_conversations, agent_id)
+
+    async def search_conversations_async(self, keyword: str, agent_id: str | None = None) -> list[dict]:
+        return await asyncio.to_thread(self.search_conversations, keyword, agent_id)
+
+    async def soft_delete_async(self, conv_id: str):
+        return await asyncio.to_thread(self.soft_delete, conv_id)
+
+    async def rename_async(self, conv_id: str, new_title: str) -> bool:
+        return await asyncio.to_thread(self.rename, conv_id, new_title)
+
+    async def list_trash_async(self, agent_id: str | None = None) -> list[dict]:
+        return await asyncio.to_thread(self.list_trash, agent_id)
+
+    async def restore_async(self, conv_id: str):
+        return await asyncio.to_thread(self.restore, conv_id)
+
+    async def permanent_delete_async(self, conv_id: str) -> bool:
+        return await asyncio.to_thread(self.permanent_delete, conv_id)
+
+    async def batch_soft_delete_async(self, conv_ids: list[str]):
+        return await asyncio.to_thread(self.batch_soft_delete, conv_ids)
+
+    async def batch_restore_async(self, conv_ids: list[str]):
+        return await asyncio.to_thread(self.batch_restore, conv_ids)
+
+    async def batch_permanent_delete_async(self, conv_ids: list[str]):
+        return await asyncio.to_thread(self.batch_permanent_delete, conv_ids)
+
+    async def empty_trash_async(self, agent_id: str | None = None):
+        return await asyncio.to_thread(self.empty_trash, agent_id)
 
 
 conversation_store = ConversationStore()

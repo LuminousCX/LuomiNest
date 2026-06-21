@@ -569,7 +569,7 @@ const formatSyncTime = (timeStr?: string) => {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: white;
+  background: var(--surface);
   transition: transform 0.25s;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }

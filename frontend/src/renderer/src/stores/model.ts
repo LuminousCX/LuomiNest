@@ -4,9 +4,9 @@ import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig
 import { useApi } from '../composables/useApi'
 import { PROVIDER_LOGOS } from '../config/provider-logos'
 
-const unwrapData = <T>(result: any): T => {
-  if (result && typeof result === 'object' && 'data' in result) {
-    return result.data as T
+const unwrapData = <T>(result: T | { data: T }): T => {
+  if (typeof result === 'object' && result !== null && 'data' in result) {
+    return (result as { data: T }).data
   }
   return result as T
 }
@@ -225,6 +225,102 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     defaultModels: [],
   },
   {
+    id: 'nous',
+    name: 'Nous Research',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://inference-api.nousresearch.com/v1',
+    defaultModel: 'deephermes-3-llama-3-8b-preview:free',
+    description: 'Nous Research Hermes 系列模型',
+    category: 'cloud',
+    color: '#3b82f6',
+    initials: 'NR',
+    defaultModels: ['deephermes-3-llama-3-8b-preview:free', 'hermes-3-llama-3.1-405b'],
+  },
+  {
+    id: 'nvidia',
+    name: 'NVIDIA NIM',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    defaultModel: 'meta/llama-3.1-70b-instruct',
+    description: 'NVIDIA NIM 云端推理',
+    category: 'cloud',
+    color: '#76b900',
+    initials: 'NV',
+    defaultModels: ['meta/llama-3.1-70b-instruct', 'meta/llama-3.1-405b-instruct', 'nvidia/llama-3.1-nemotron-70b-instruct'],
+  },
+  {
+    id: 'stepfun',
+    name: 'StepFun',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://api.stepfun.ai/step_plan/v1',
+    defaultModel: 'step-2-16k',
+    description: '阶跃星辰 Step 系列模型',
+    category: 'cloud',
+    color: '#2563eb',
+    initials: 'SF',
+    defaultModels: ['step-2-16k', 'step-1v-32k', 'step-1-flash'],
+  },
+  {
+    id: 'huggingface',
+    name: 'HuggingFace',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://api-inference.huggingface.co/v1',
+    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct',
+    description: 'HuggingFace 推理 API 聚合',
+    category: 'aggregator',
+    color: '#ff9d00',
+    initials: 'HF',
+    defaultModels: ['meta-llama/Llama-3.3-70B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.3'],
+  },
+  {
+    id: 'arcee',
+    name: 'Arcee AI',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://api.arcee.ai/api/v1',
+    defaultModel: 'arcee-blitz',
+    description: 'Arcee AI 模型融合平台',
+    category: 'cloud',
+    color: '#8b5cf6',
+    initials: 'AR',
+    defaultModels: ['arcee-blitz', 'arcee-coder', 'arcee-super'],
+  },
+  {
+    id: 'gmi',
+    name: 'GMI',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://api.gmi-serving.com/v1',
+    defaultModel: 'gmi-cloud-1',
+    description: 'GMI 云端推理服务',
+    category: 'cloud',
+    color: '#0ea5e9',
+    initials: 'GM',
+    defaultModels: ['gmi-cloud-1', 'gmi-cloud-2'],
+  },
+  {
+    id: 'minimax',
+    name: 'MiniMax',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://api.minimax.chat/v1',
+    defaultModel: 'MiniMax-Text-01',
+    description: 'MiniMax 文本模型',
+    category: 'cloud',
+    color: '#ec4899',
+    initials: 'MM',
+    defaultModels: ['MiniMax-Text-01', 'abab6.5s-chat'],
+  },
+  {
+    id: 'vercel',
+    name: 'Vercel AI',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://sdk.vercel.ai/api/v1',
+    defaultModel: 'openai/gpt-4o-mini',
+    description: 'Vercel AI 网关聚合',
+    category: 'aggregator',
+    color: '#000000',
+    initials: 'VC',
+    defaultModels: ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash'],
+  },
+  {
     id: 'custom',
     name: 'Custom',
     vendor: 'openai_compatible',
@@ -238,7 +334,84 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
   },
 ]
 
-const TTS_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const
+interface RawProvider {
+  id: string
+  name: string
+  type?: string
+  vendor?: string
+  baseUrl?: string
+  base_url?: string
+  apiKeySet?: boolean
+  api_key_set?: boolean
+  defaultModel?: string
+  default_model?: string
+  isDefault?: boolean
+  is_default?: boolean
+  models?: unknown[]
+}
+
+interface RawTemplate {
+  id: string
+  name: string
+  vendor?: string
+  baseUrl?: string
+  base_url?: string
+  defaultModel?: string
+  default_model?: string
+  description?: string
+}
+
+interface RawModelConfig {
+  defaultProvider?: string
+  default_provider?: string
+  defaultModel?: string
+  default_model?: string
+  defaultTemperature?: number
+  default_temperature?: number
+  defaultMaxTokens?: number
+  default_max_tokens?: number
+  defaultTopP?: number
+  default_top_p?: number
+  reasonerProvider?: string
+  reasoner_provider?: string
+  reasonerModel?: string
+  reasoner_model?: string
+  reasonerTemperature?: number
+  reasoner_temperature?: number
+  reasonerMaxTokens?: number
+  reasoner_max_tokens?: number
+  reasonerEffort?: string
+  reasoner_effort?: string
+  ttsProvider?: string
+  tts_provider?: string
+  ttsModel?: string
+  tts_model?: string
+  ttsVoice?: string
+  tts_voice?: string
+  ttsSpeed?: number
+  tts_speed?: number
+  sttProvider?: string
+  stt_provider?: string
+  sttModel?: string
+  stt_model?: string
+  sttLanguage?: string
+  stt_language?: string
+  sttAutoSend?: boolean
+  stt_auto_send?: boolean
+  sttAutoSendDelay?: number
+  stt_auto_send_delay?: number
+}
+
+const TTS_VOICES = [
+  { value: 'zh-CN-XiaoxiaoNeural', label: '晓晓（女·温柔）' },
+  { value: 'zh-CN-YunxiNeural', label: '云希（男·阳光）' },
+  { value: 'zh-CN-YunjianNeural', label: '云健（男·沉稳）' },
+  { value: 'zh-CN-XiaoyiNeural', label: '晓艺（女·活泼）' },
+  { value: 'en-US-JennyNeural', label: 'Jenny（EN·Female）' },
+  { value: 'en-US-GuyNeural', label: 'Guy（EN·Male）' },
+  { value: 'ja-JP-NanamiNeural', label: '七海（JA·Female）' },
+  { value: 'ja-JP-KeitaNeural', label: '圭太（JA·Male）' },
+] as const
 const STT_LANGUAGES = [
   { value: 'zh-CN', label: '中文（简体）' },
   { value: 'zh-TW', label: '中文（繁体）' },
@@ -265,7 +438,7 @@ export const useModelStore = defineStore('model', () => {
   const ttsConfig = ref<TTSConfig>({
     provider: '',
     model: 'tts-1',
-    voice: 'alloy',
+    voice: 'zh-CN-XiaoxiaoNeural',
     speed: 1.0,
     baseUrl: '',
     apiKeySet: false,
@@ -353,18 +526,18 @@ export const useModelStore = defineStore('model', () => {
   const fetchProviders = async () => {
     loading.value = true
     try {
-      const result = await apiGet<any[]>('/models/providers')
+      const result = await apiGet<RawProvider[]>('/models/providers')
       const raw = Array.isArray(result) ? result : []
       providers.value = raw.map(p => ({
         id: p.id,
         name: p.name,
         type: p.type || p.vendor || 'openai_compatible',
-        vendor: p.vendor,
+        vendor: p.vendor || '',
         baseUrl: p.baseUrl || p.base_url || '',
         apiKeySet: p.apiKeySet || p.api_key_set || false,
         defaultModel: p.defaultModel || p.default_model || '',
         isDefault: p.isDefault || p.is_default || false,
-        models: p.models || [],
+        models: (p.models || []) as { id: string; name: string }[],
       }))
 
       for (const provider of providers.value) {
@@ -381,14 +554,14 @@ export const useModelStore = defineStore('model', () => {
 
   const fetchTemplates = async () => {
     try {
-      const result = await apiGet<any[]>('/models/providers/templates')
+      const result = await apiGet<RawTemplate[]>('/models/providers/templates')
       const raw = Array.isArray(result) ? result : []
       templates.value = raw.map(t => {
         const local = LOCAL_TEMPLATES.find(lt => lt.id === t.id)
         return {
           id: t.id,
           name: t.name,
-          vendor: t.vendor,
+          vendor: t.vendor || '',
           baseUrl: t.baseUrl || t.base_url || '',
           defaultModel: t.defaultModel || t.default_model || '',
           description: t.description || '',
@@ -463,8 +636,8 @@ export const useModelStore = defineStore('model', () => {
 
   const fetchModelConfig = async () => {
     try {
-      const result = await apiGet<any>('/models/config')
-      const config = unwrapData<any>(result)
+      const result = await apiGet<RawModelConfig>('/models/config')
+      const config = unwrapData<RawModelConfig>(result)
       if (config) {
         modelConfig.value = {
           defaultProvider: config.defaultProvider || config.default_provider || '',
@@ -479,7 +652,7 @@ export const useModelStore = defineStore('model', () => {
           reasonerEffort: config.reasonerEffort || config.reasoner_effort,
           ttsProvider: config.ttsProvider || config.tts_provider,
           ttsModel: config.ttsModel || config.tts_model || 'tts-1',
-          ttsVoice: config.ttsVoice || config.tts_voice || 'alloy',
+          ttsVoice: config.ttsVoice || config.tts_voice || 'zh-CN-XiaoxiaoNeural',
           ttsSpeed: config.ttsSpeed ?? config.tts_speed ?? 1.0,
           sttProvider: config.sttProvider || config.stt_provider,
           sttModel: config.sttModel || config.stt_model || 'whisper-1',
@@ -499,7 +672,7 @@ export const useModelStore = defineStore('model', () => {
   const updateModelConfig = async (config: Partial<ModelConfig>) => {
     saveStatus.value = 'saving'
     try {
-      const body: any = {}
+      const body: Record<string, unknown> = {}
       if (config.defaultProvider !== undefined) body.provider = config.defaultProvider
       if (config.defaultModel !== undefined) body.model = config.defaultModel
       if (config.defaultTemperature !== undefined) body.temperature = config.defaultTemperature
@@ -555,7 +728,7 @@ export const useModelStore = defineStore('model', () => {
         ttsConfig.value = {
           provider: saved.provider || modelConfig.value.ttsProvider || '',
           model: saved.model || modelConfig.value.ttsModel || 'tts-1',
-          voice: saved.voice || modelConfig.value.ttsVoice || 'alloy',
+          voice: saved.voice || modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
           speed: saved.speed ?? modelConfig.value.ttsSpeed ?? 1.0,
           baseUrl: saved.baseUrl || '',
           apiKeySet: false,
@@ -564,7 +737,7 @@ export const useModelStore = defineStore('model', () => {
         ttsConfig.value = {
           provider: modelConfig.value.ttsProvider || '',
           model: modelConfig.value.ttsModel || 'tts-1',
-          voice: modelConfig.value.ttsVoice || 'alloy',
+          voice: modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
           speed: modelConfig.value.ttsSpeed ?? 1.0,
           baseUrl: '',
           apiKeySet: false,

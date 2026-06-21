@@ -153,8 +153,18 @@ class PlatformLogger:
             self._index[instance_id]["last_log"] = entry["timestamp"]
             self._save_index()
 
-        loguru_fn = getattr(logger, level, logger.info)
-        loguru_fn(f"[PlatformLogger] [{adapter_type or instance_id}] [{event}] {message}")
+        # 统一格式输出到 loguru（控制台日志通过 ConsoleLogHandler 捕获）
+        # 格式: [adapter_type] [event] message
+        adapter_label = adapter_type or instance_id
+        loguru_msg = f"[{adapter_label}] [{event}] {message}"
+        bound_logger = logger.bind(
+            source="platform",
+            adapter_type=adapter_type,
+            event=event,
+            instance_id=instance_id,
+        )
+        loguru_fn = getattr(bound_logger, level, bound_logger.info)
+        loguru_fn(loguru_msg)
 
         return entry
 

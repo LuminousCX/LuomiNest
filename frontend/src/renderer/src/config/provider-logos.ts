@@ -31,6 +31,14 @@ export const PROVIDER_LOGOS: Record<string, ProviderLogo> = {
   xai: { id: 'xai', name: 'xAI', color: '#1d1d1d', initials: 'XA', svgIcon: SVG_XAI },
   siliconflow: { id: 'siliconflow', name: 'SiliconFlow', color: '#7c3aed', initials: 'SF' },
   lmstudio: { id: 'lmstudio', name: 'LM Studio', color: '#0ea5e9', initials: 'LM' },
+  nous: { id: 'nous', name: 'Nous Research', color: '#3b82f6', initials: 'NR' },
+  nvidia: { id: 'nvidia', name: 'NVIDIA NIM', color: '#76b900', initials: 'NV' },
+  stepfun: { id: 'stepfun', name: 'StepFun', color: '#2563eb', initials: 'SF' },
+  huggingface: { id: 'huggingface', name: 'HuggingFace', color: '#ff9d00', initials: 'HF' },
+  arcee: { id: 'arcee', name: 'Arcee AI', color: '#8b5cf6', initials: 'AR' },
+  gmi: { id: 'gmi', name: 'GMI', color: '#0ea5e9', initials: 'GM' },
+  minimax: { id: 'minimax', name: 'MiniMax', color: '#ec4899', initials: 'MM' },
+  vercel: { id: 'vercel', name: 'Vercel AI', color: '#000000', initials: 'VC' },
 }
 
 export const getProviderLogo = (providerId: string): ProviderLogo => {

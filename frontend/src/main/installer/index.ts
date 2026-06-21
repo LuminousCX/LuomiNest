@@ -11,7 +11,7 @@ const getAssetPath = (...paths: string[]): string => {
   if (isDev) {
     return join(__dirname, '..', '..', '..', '..', 'src', 'renderer', 'installer', ...paths)
   }
-  return join(process.resourcesPath, ...paths)
+  return join(__dirname, '..', '..', 'renderer', 'installer', ...paths)
 }
 
 const LICENSE_TEXT = (() => {

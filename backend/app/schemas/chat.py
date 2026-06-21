@@ -45,6 +45,15 @@ class ChatStreamChunk(BaseModel):
     provider: str
     done: bool = False
     suggested_questions: list[str] | None = None
+    emotion: str | None = None
+    # 工具调用相关字段（主 Agent 工具调用循环）
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_event: dict[str, Any] | None = None
+    iteration: int = 0
+    # 子 Agent 群组事件（主 Agent 通过 delegate_to_subagent 工具委派子任务时推送）
+    subagent_event: dict[str, Any] | None = None
+    # 定时任务事件（主 Agent 通过 create_scheduled_task 工具创建任务时推送）
+    task_event: dict[str, Any] | None = None
 
     @field_validator("content", "reasoning_content", mode="before")
     @classmethod

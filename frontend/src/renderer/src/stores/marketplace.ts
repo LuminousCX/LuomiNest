@@ -21,6 +21,7 @@ import {
   MOCK_AGENTS,
   MOCK_REVIEWS,
 } from '../config/marketplace-data'
+import { useRepoSourceStore } from './repo-source'
 
 const SEARCH_HISTORY_KEY = 'luominest-marketplace-search-history'
 const FAVORITES_KEY = 'luominest-marketplace-favorites'
@@ -339,7 +340,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
               updateInstalledItem(skillItems.value)
               updateInstalledItem(agentItems.value)
               // 同步 repoSourceStore 中对应条目的状态
-              import('../stores/repo-source').then(({ useRepoSourceStore }) => {
+              {
                 const repoStore = useRepoSourceStore()
                 for (const items of Object.values(repoStore.syncedItems)) {
                   const ri = (items as MarketplaceItem[]).find(i => i.id === itemId)
@@ -348,7 +349,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
                     ri.downloadCount += 1
                   }
                 }
-              })
+              }
               // 同步后端统计数据 + 排行榜
               syncAllStats()
               setTimeout(() => {
@@ -467,14 +468,6 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
 
   const uninstallItem = (itemId: string) => {
     cancelledInstalls.add(itemId)
-    const current = installProgress.value[itemId]
-    if (current) {
-      for (const intervalId of activeIntervals) {
-        if ((current as any)._intervalId === intervalId) {
-          cleanupInterval(intervalId)
-        }
-      }
-    }
     removeProgress(itemId)
 
     const updateUninstalledItem = (items: MarketplaceItem[]) => {
@@ -488,7 +481,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     updateUninstalledItem(skillItems.value)
     updateUninstalledItem(agentItems.value)
     // 同步 repoSourceStore 中对应条目的状态
-    import('../stores/repo-source').then(({ useRepoSourceStore }) => {
+    {
       const repoStore = useRepoSourceStore()
       for (const items of Object.values(repoStore.syncedItems)) {
         const ri = (items as MarketplaceItem[]).find(i => i.id === itemId)
@@ -496,7 +489,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           ri.installStatus = 'none'
         }
       }
-    })
+    }
   }
 
   const updateItem = (itemId: string) => {
@@ -616,12 +609,12 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       updateStatus(agentItems.value)
 
       // 同步 repoSourceStore 中的安装状态
-      import('../stores/repo-source').then(({ useRepoSourceStore }) => {
+      {
         const repoStore = useRepoSourceStore()
         for (const items of Object.values(repoStore.syncedItems)) {
           updateStatus(items as MarketplaceItem[])
         }
-      })
+      }
     } catch {
       // 忽略同步失败
     }
@@ -708,12 +701,12 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       syncStats(agentItems.value)
 
       // 同步 repoSourceStore 中的统计数据
-      import('../stores/repo-source').then(({ useRepoSourceStore }) => {
+      {
         const repoStore = useRepoSourceStore()
         for (const items of Object.values(repoStore.syncedItems)) {
           syncStats(items as MarketplaceItem[])
         }
-      })
+      }
     } catch {
       // 忽略
     }
@@ -742,12 +735,12 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       updateLike(agentItems.value)
 
       // 同步 repoSourceStore 中对应条目的状态
-      import('../stores/repo-source').then(({ useRepoSourceStore }) => {
+      {
         const repoStore = useRepoSourceStore()
         for (const items of Object.values(repoStore.syncedItems)) {
           updateLike(items as MarketplaceItem[])
         }
-      })
+      }
 
       // 更新 statsMap
       if (itemStatsMap.value[itemId]) {

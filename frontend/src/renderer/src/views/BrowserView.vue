@@ -7,6 +7,9 @@ import BookmarkBar from '../components/browser/BookmarkBar.vue'
 import HomePage from '../components/browser/HomePage.vue'
 import ErrorPage from '../components/browser/ErrorPage.vue'
 import DevPanel from '../components/browser/DevPanel.vue'
+import { useTaskStreamStore } from '../stores/taskStream'
+
+const taskStreamStore = useTaskStreamStore()
 
 interface Tab {
   id: string
@@ -70,6 +73,21 @@ onMounted(async () => {
   window.electron?.ipcRenderer?.on('tab:new-tab-request', handleNewTabRequest)
   window.electron?.ipcRenderer?.on('tab:navigation-state', handleNavigationState)
 })
+
+// 订阅 taskStream：主 Agent 通过 create_browser_tab 工具创建的标签页自动打开
+watch(
+  () => taskStreamStore.pendingBrowserTasks,
+  (pendingTasks) => {
+    for (const task of pendingTasks) {
+      if (task.url) {
+        console.info(`[LuomiNestBrowser] 主 Agent 请求打开标签页: ${task.url}`)
+        createTab(task.url)
+        taskStreamStore.markBrowserTabOpened(task.tab_id)
+      }
+    }
+  },
+  { deep: true }
+)
 
 onUnmounted(() => {
   window.electron?.ipcRenderer?.removeListener('tab:updated', handleTabUpdated)

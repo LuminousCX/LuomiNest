@@ -123,8 +123,15 @@
   --task-red-border: rgba(239, 68, 68, 0.3);
   --task-blue-border: rgba(59, 130, 246, 0.3);
 
+  --surface-active: #E2EAF2;
+  --divider-horizontal: var(--border-light);
+
+  --surface-ghost: rgba(20, 126, 188, 0.04);
+  --surface-ghost-hover: rgba(20, 126, 188, 0.10);
   --overlay-bg: rgba(0, 0, 0, 0.45);
+  --overlay-backdrop: rgba(0, 0, 0, 0.50);
   --overlay-subtle: rgba(0, 0, 0, 0.15);
+  --progress-shimmer: rgba(20, 126, 188, 0.3);
 
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -228,6 +235,13 @@
   --task-red-border: rgba(239, 68, 68, 0.3);
   --task-blue-border: rgba(59, 130, 246, 0.3);
 
+  --surface-active: #222222;
+  --divider-horizontal: var(--border-light);
+
+  --surface-ghost: rgba(58, 159, 212, 0.05);
+  --surface-ghost-hover: rgba(58, 159, 212, 0.12);
   --overlay-bg: rgba(0, 0, 0, 0.6);
+  --overlay-backdrop: rgba(0, 0, 0, 0.65);
   --overlay-subtle: rgba(0, 0, 0, 0.25);
+  --progress-shimmer: rgba(58, 159, 212, 0.3);
 }

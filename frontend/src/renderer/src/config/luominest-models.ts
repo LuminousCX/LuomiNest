@@ -2,6 +2,14 @@ import type { PetModelInfo } from '@/stores/avatar-control'
 
 export type LuomiNestModelInfo = PetModelInfo
 
+export interface LuomiNestAvatarBinding {
+  modelId: string
+  voice: string
+  voiceLang: 'zh' | 'ja' | 'en'
+  expressionMap: Record<string, string>
+  defaultExpression: string
+}
+
 export const LUOMINEST_BUILTIN_MODELS: LuomiNestModelInfo[] = [
   {
     id: 'llny',
@@ -28,6 +36,85 @@ export const LUOMINEST_BUILTIN_MODELS: LuomiNestModelInfo[] = [
     tags: ['Cubism4', 'Built-in']
   }
 ]
+
+const LLNY_EXPRESSION_MAP: Record<string, string> = {
+  happy: '星星',
+  sad: '哭',
+  neutral: '- -',
+  love: '脸红',
+  surprise: '阿尼亚',
+  angry: '生气',
+  think: '眼镜',
+  awkward: '脸黑',
+  curious: '吐舌',
+  shy: '脸红',
+  excited: '比心',
+  confused: '荷包蛋'
+}
+
+const HIYORI_EXPRESSION_MAP: Record<string, string> = {
+  happy: 'happy',
+  sad: 'sad',
+  neutral: 'neutral',
+  love: 'love',
+  surprise: 'surprised',
+  angry: 'angry',
+  think: 'think',
+  awkward: 'awkward',
+  curious: 'curious'
+}
+
+const SHIZUKU_EXPRESSION_MAP: Record<string, string> = {
+  happy: 'happy',
+  sad: 'sad',
+  neutral: 'neutral',
+  love: 'love',
+  surprise: 'surprised',
+  angry: 'angry',
+  think: 'think',
+  awkward: 'awkward',
+  curious: 'curious'
+}
+
+export const LUOMINEST_AVATAR_BINDINGS: Record<string, LuomiNestAvatarBinding> = {
+  llny: {
+    modelId: 'llny',
+    voice: 'zh-CN-XiaoxiaoNeural',
+    voiceLang: 'zh',
+    expressionMap: LLNY_EXPRESSION_MAP,
+    defaultExpression: '- -'
+  },
+  hiyori: {
+    modelId: 'hiyori',
+    voice: 'zh-CN-XiaoxiaoNeural',
+    voiceLang: 'zh',
+    expressionMap: HIYORI_EXPRESSION_MAP,
+    defaultExpression: 'neutral'
+  },
+  shizuku: {
+    modelId: 'shizuku',
+    voice: 'zh-CN-XiaoxiaoNeural',
+    voiceLang: 'zh',
+    expressionMap: SHIZUKU_EXPRESSION_MAP,
+    defaultExpression: 'neutral'
+  }
+}
+
+export const getAvatarBinding = (modelId: string): LuomiNestAvatarBinding | null => {
+  return LUOMINEST_AVATAR_BINDINGS[modelId] ?? null
+}
+
+export const resolveExpression = (modelId: string, emotionId: string): string => {
+  const binding = LUOMINEST_AVATAR_BINDINGS[modelId]
+  if (!binding) return emotionId
+  return binding.expressionMap[emotionId] ?? binding.defaultExpression
+}
+
+export const resolveExpressionByModelUrl = (modelUrl: string, emotionId: string): string => {
+  const model = LUOMINEST_BUILTIN_MODELS.find(m => m.url === modelUrl)
+  if (!model) return emotionId
+  return resolveExpression(model.id, emotionId)
+}
 
 export const LUOMINEST_MODEL_ACCEPT_EXTENSIONS = '.model3.json'
 

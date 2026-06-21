@@ -1,18 +1,46 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   Palette, Sparkles, Heart, Eye, Smile, Frown, Meh, Zap,
   Volume2, RotateCcw, Maximize2, Download, Settings2,
   Loader2, AlertCircle, FolderOpen, Check, Monitor, MonitorOff,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Send, Square, Type, MessageCircle
 } from 'lucide-vue-next'
 import { useLuomiNestLive2D } from '@/composables/useLuomiNestLive2D'
+import { useAvatarTTS } from '@/composables/useAvatarTTS'
+import { useAvatarChat } from '@/composables/useAvatarChat'
+import { useToast } from '@/composables/useToast'
 import { useAvatarControlStore } from '@/stores/avatar-control'
-import { LUOMINEST_BUILTIN_MODELS, type LuomiNestModelInfo } from '@/config/luominest-models'
+import { useModelStore } from '@/stores/model'
+import { useChatStore } from '@/stores/chat'
+import { useAgentStore } from '@/stores/agent'
+import { usePlatformStore } from '@/stores/platform'
+import { LUOMINEST_BUILTIN_MODELS, type LuomiNestModelInfo, resolveExpressionByModelUrl, getAvatarBinding } from '@/config/luominest-models'
 import type { PetModelInfo } from '../vite-env.d'
+import type { AgentProfile, ChatStreamChunk } from '../types'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const avatarControl = useAvatarControlStore()
+const modelStore = useModelStore()
+const chatStore = useChatStore()
+const agentStore = useAgentStore()
+const platformStore = usePlatformStore()
+const toast = useToast()
+
+// 主 Agent 固定标识：皮套工坊与工作台共用同一主 Agent 对话流
+const MAIN_AGENT_ID = 'luominest_main_agent'
+const MAIN_AGENT_PROFILE: AgentProfile = {
+  id: MAIN_AGENT_ID,
+  name: '主智能体',
+  description: 'LuomiNest 工作台主 Agent，驱动 Live2D、记忆、工具、MCP 和子 Agent',
+  color: '#147EBC',
+  isMain: true,
+  isActive: true,
+}
+
+// 桌面宠物模式状态（需在 composables 之前声明，避免 TDZ）
+const isDesktopMode = ref(false)
+const isDesktopPetRunning = ref(false)
 
 const {
   isReady: isModelReady,
@@ -20,15 +48,115 @@ const {
   error: loadError,
   loadModel,
   driveEmotion,
+  syncLipParam,
   resetPose,
   destroy: teardown
 } = useLuomiNestLive2D(canvasRef)
 
+const ttsText = ref('')
+const subtitleEnabled = ref(true)
+const ttsEnabled = ref(true)
+
+const {
+  isSpeaking: isAvatarSpeaking,
+  isSynthesizing: isAvatarSynthesizing,
+  subtitleText: manualSubtitleText,
+  subtitleVisible: manualSubtitleVisible,
+  speak: avatarSpeak,
+  stopSpeaking: avatarStopSpeaking,
+} = useAvatarTTS({
+  syncLipParam: (value: number) => {
+    if (isDesktopMode.value) {
+      avatarControl.driveLipSync(value)
+    } else {
+      syncLipParam(value)
+    }
+  },
+})
+
+// Chat-driven avatar: LLM stream → expression + streaming TTS + subtitle
+const chatText = ref('')
+const isChatStreaming = ref(false)
+
+const currentVoice = computed(() => {
+  const modelInfo = currentModelInfo.value
+  if (!modelInfo) return 'zh-CN-XiaoxiaoNeural'
+  const binding = getAvatarBinding(modelInfo.id)
+  return binding?.voice || 'zh-CN-XiaoxiaoNeural'
+})
+
+const {
+  isSpeaking: isChatSpeaking,
+  isSynthesizing: isChatSynthesizing,
+  subtitleText: chatSubtitleText,
+  subtitleVisible: chatSubtitleVisible,
+  currentEmotion: chatCurrentEmotion,
+  feedChunk,
+  finishStream,
+  stop: stopAvatarChat,
+} = useAvatarChat({
+  voice: () => currentVoice.value,
+  driveEmotion: (emotionId: string) => {
+    if (isDesktopMode.value && isDesktopPetRunning.value) {
+      const modelUrl = currentModelInfo.value?.url || ''
+      const resolved = resolveExpressionByModelUrl(modelUrl, emotionId)
+      avatarControl.triggerExpression(resolved)
+    } else {
+      driveEmotion(emotionId)
+    }
+  },
+  syncLipParam: (value: number) => {
+    if (isDesktopMode.value) {
+      avatarControl.driveLipSync(value)
+    } else {
+      syncLipParam(value)
+    }
+  },
+  ttsEnabled: () => ttsEnabled.value,
+  subtitleEnabled: () => subtitleEnabled.value,
+  onTtsError: (err: Error) => toast.warning(`语音合成失败：${err.message}`),
+})
+
+// 代码块过滤状态机：跳过 ``` 包裹的代码块，不送入 TTS（与工作台一致）
+let inCodeBlock = false
+const filterCodeForTts = (content: string): string => {
+  if (!content) return ''
+  const parts = content.split('```')
+  let result = ''
+  for (let i = 0; i < parts.length; i++) {
+    if (i === 0) {
+      if (!inCodeBlock) result += parts[i]
+    } else {
+      inCodeBlock = !inCodeBlock
+      if (!inCodeBlock) result += parts[i]
+    }
+  }
+  return result
+}
+
+// Unified subtitle display: chat subtitle takes priority over manual TTS subtitle
+const subtitleText = computed(() => {
+  if (chatSubtitleVisible.value && chatSubtitleText.value) return chatSubtitleText.value
+  return manualSubtitleText.value
+})
+const subtitleVisible = computed(() => {
+  if (chatSubtitleVisible.value) return true
+  return manualSubtitleVisible.value
+})
+
+// Forward subtitle to desktop pet window when in desktop mode
+watch([subtitleVisible, subtitleText, isDesktopMode], ([visible, text, desktopMode]) => {
+  if (!desktopMode || !isDesktopPetRunning.value) return
+  if (visible && text) {
+    window.api.desktopPet.sendSubtitle(text)
+  } else {
+    window.api.desktopPet.hideSubtitle()
+  }
+})
+
 const importError = ref<string | null>(null)
 const importedModels = ref<LuomiNestModelInfo[]>([])
 const showImportSuccess = ref(false)
-const isDesktopMode = ref(false)
-const isDesktopPetRunning = ref(false)
 const skinSidebarVisible = ref(true)
 
 const avatarModes = [
@@ -92,7 +220,13 @@ function selectMode(modeId: string) {
 
 function selectEmotion(emo: typeof emotions[0]) {
   currentEmotionLocal.value = emo
-  driveEmotion(emo.id)
+  if (isDesktopMode.value && isDesktopPetRunning.value) {
+    const modelUrl = currentModelInfo.value?.url || ''
+    const resolved = resolveExpressionByModelUrl(modelUrl, emo.id)
+    avatarControl.triggerExpression(resolved)
+  } else {
+    driveEmotion(emo.id)
+  }
 }
 
 async function handleResetPose() {
@@ -170,6 +304,7 @@ async function toggleDesktopMode() {
 }
 
 async function switchToDesktopMode() {
+  teardown()
   isDesktopMode.value = true
   const modelInfo = currentModelInfo.value
   await window.api.desktopPet.open(modelInfo ?? undefined)
@@ -185,6 +320,104 @@ async function switchToInlineMode() {
   await nextTick()
   if (currentModelInfo.value) {
     await loadModel(currentModelInfo.value.url, currentModelInfo.value.scale)
+  }
+}
+
+async function handleTTSSend() {
+  const text = ttsText.value.trim()
+  if (!text) return
+  if (isAvatarSpeaking.value) {
+    avatarStopSpeaking()
+    return
+  }
+  await avatarSpeak(text)
+}
+
+function handleTTSKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    handleTTSSend()
+  }
+}
+
+async function handleChatSend() {
+  const text = chatText.value.trim()
+  if (!text || isChatStreaming.value) return
+
+  chatText.value = ''
+  isChatStreaming.value = true
+  stopAvatarChat()
+
+  // 主 Agent 配置：与工作台页面一致
+  const mainAgent = platformStore.mainAgent
+  const resolved = modelStore.resolveModel
+
+  const options: {
+    agentId: string
+    model?: string
+    provider?: string
+    temperature?: number
+    maxTokens?: number
+    topP?: number
+    onChunk: (chunk: ChatStreamChunk) => void
+  } = {
+    agentId: MAIN_AGENT_ID,
+    model: mainAgent?.model || resolved?.model || undefined,
+    provider: mainAgent?.provider || resolved?.provider || undefined,
+    temperature: mainAgent?.temperature ?? modelStore.modelConfig.defaultTemperature,
+    maxTokens: mainAgent?.maxTokens ?? modelStore.modelConfig.defaultMaxTokens,
+    topP: modelStore.modelConfig.defaultTopP,
+    onChunk: (chunk: ChatStreamChunk) => {
+      if (chunk.done) {
+        finishStream()
+        isChatStreaming.value = false
+        return
+      }
+      const filteredContent = filterCodeForTts(chunk.content || '')
+      if (filteredContent || chunk.emotion) {
+        feedChunk({
+          ...chunk,
+          content: filteredContent,
+        })
+      }
+    },
+  }
+
+  // 重置代码块过滤状态机
+  inCodeBlock = false
+
+  try {
+    await chatStore.sendMessage(text, options)
+  } catch (e: unknown) {
+    const errMsg = e instanceof Error ? e.message : String(e)
+    toast.error(`发送消息失败：${errMsg}`)
+  } finally {
+    isChatStreaming.value = false
+  }
+}
+
+function stopChatStream() {
+  chatStore.cancelCurrentRequest()
+  stopAvatarChat()
+  finishStream()
+  isChatStreaming.value = false
+}
+
+function handleChatKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    handleChatSend()
+  }
+}
+
+function toggleSubtitle() {
+  subtitleEnabled.value = !subtitleEnabled.value
+}
+
+function toggleTTS() {
+  ttsEnabled.value = !ttsEnabled.value
+  if (!ttsEnabled.value) {
+    stopAvatarChat()
   }
 }
 
@@ -216,9 +449,24 @@ const checkDesktopPetStatus = async () => {
 }
 
 onMounted(async () => {
+  // 设置虚拟主 Agent Profile，使 chat store 的 computed 基于 MAIN_AGENT_ID 工作（与工作台一致）
+  agentStore.setActiveAgent(MAIN_AGENT_PROFILE)
+
   await loadPersistedModels()
   await checkDesktopPetStatus()
   await avatarControl.checkDesktopPetStatus()
+
+  // 并发加载：后端状态 / 主 Agent 配置 / 模型配置 / 对话历史
+  await Promise.all([
+    chatStore.checkBackend(),
+    platformStore.fetchMainAgent(),
+    modelStore.fetchProviders(),
+    modelStore.fetchModelConfig(),
+  ])
+  if (chatStore.isBackendReady) {
+    await chatStore.fetchConversations(MAIN_AGENT_ID)
+  }
+
   await nextTick()
   if (!isDesktopPetRunning.value) {
     const defaultModel = LUOMINEST_BUILTIN_MODELS[0]
@@ -227,6 +475,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  stopChatStream()
+  stopAvatarChat()
   teardown()
 })
 </script>
@@ -247,6 +497,20 @@ onBeforeUnmount(() => {
         <div class="header-divider"></div>
         <button class="h-btn" title="Reset Pose" @click="handleResetPose"><RotateCcw :size="16" /></button>
         <button class="h-btn" title="Fullscreen"><Maximize2 :size="16" /></button>
+        <button
+          :class="['h-btn', { active: ttsEnabled }]"
+          title="Toggle TTS"
+          @click="toggleTTS"
+        >
+          <Volume2 :size="16" />
+        </button>
+        <button
+          :class="['h-btn', { active: subtitleEnabled }]"
+          title="Subtitle"
+          @click="toggleSubtitle"
+        >
+          <Type :size="16" />
+        </button>
         <button class="h-btn primary" title="Import Avatar" @click="handleImportClick">
           <Download :size="16" /> Import
         </button>
@@ -270,6 +534,15 @@ onBeforeUnmount(() => {
               <span class="error-text">{{ loadError }}</span>
               <span class="error-hint">Check model resources and try again</span>
             </div>
+
+            <Transition name="subtitle-fade">
+              <div
+                v-if="subtitleEnabled && subtitleVisible && subtitleText"
+                class="subtitle-overlay"
+              >
+                <span class="subtitle-text">{{ subtitleText }}</span>
+              </div>
+            </Transition>
 
             <div v-if="!isLoading && !loadError && !isModelReady" class="avatar-placeholder" :class="[`emotion-${currentEmotionLocal.id}`]">
               <div class="avatar-ring"></div>
@@ -316,59 +589,114 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-if="!isDesktopMode" class="stage-controls">
-          <div class="mode-switcher">
-            <button
-              v-for="mode in avatarModes"
-              :key="mode.id"
-              :class="['mode-btn', { active: currentMode === mode.id }]"
-              @click="selectMode(mode.id)"
-            >
-              <span class="mode-name">{{ mode.label }}</span>
-              <span class="mode-desc">{{ mode.desc }}</span>
-            </button>
-          </div>
-
-          <div class="emotion-panel">
-            <div class="panel-title">
-              <Heart :size="14" />
-              <span>Emotion</span>
-              <span class="expression-value">PAD: {{ expressionValue > 0 ? '+' : '' }}{{ expressionValue.toFixed(1) }}</span>
-            </div>
-            <div class="emotion-grid">
+          <div class="controls-top-row">
+            <div class="mode-switcher">
               <button
-                v-for="emo in emotions"
-                :key="emo.id"
-                :class="['emo-btn', { active: currentEmotionLocal.id === emo.id }]"
-                :style="{ '--emo-color': emo.color }"
-                @click="selectEmotion(emo)"
+                v-for="mode in avatarModes"
+                :key="mode.id"
+                :class="['mode-btn', { active: currentMode === mode.id }]"
+                @click="selectMode(mode.id)"
               >
-                <component :is="emo.icon" :size="18" />
-                <span>{{ emo.label }}</span>
+                <span class="mode-name">{{ mode.label }}</span>
+                <span class="mode-desc">{{ mode.desc }}</span>
               </button>
             </div>
+
+            <div class="tts-inline">
+              <div class="chat-input-row">
+                <textarea
+                  v-model="chatText"
+                  class="chat-input"
+                  placeholder="Chat with avatar... (Enter to send)"
+                  rows="1"
+                  :disabled="isChatSynthesizing"
+                  @keydown="handleChatKeydown"
+                ></textarea>
+                <button
+                  :class="['chat-send-btn', { streaming: isChatStreaming, loading: isChatSynthesizing }]"
+                  :disabled="isChatSynthesizing || (!chatText.trim() && !isChatStreaming)"
+                  :title="isChatStreaming ? 'Stop' : 'Send'"
+                  @click="handleChatSend"
+                >
+                  <Square v-if="isChatStreaming" :size="14" />
+                  <Loader2 v-else-if="isChatSynthesizing" :size="14" class="tts-loading-spin" />
+                  <MessageCircle v-else :size="14" />
+                </button>
+              </div>
+              <div class="tts-status-row">
+                <MessageCircle :size="11" />
+                <span v-if="isChatStreaming" class="tts-status-text synthesizing">Streaming</span>
+                <span v-else-if="isChatSpeaking" class="tts-status-text speaking">Speaking</span>
+                <span v-else-if="isChatSynthesizing" class="tts-status-text synthesizing">Synthesizing</span>
+                <span v-else class="tts-status-text">Avatar Chat</span>
+                <span v-if="chatCurrentEmotion" class="tts-emotion-tag">{{ chatCurrentEmotion }}</span>
+              </div>
+              <div class="tts-input-row">
+                <textarea
+                  v-model="ttsText"
+                  class="tts-input"
+                  placeholder="Or type text to speak directly..."
+                  rows="1"
+                  :disabled="isAvatarSynthesizing"
+                  @keydown="handleTTSKeydown"
+                ></textarea>
+                <button
+                  :class="['tts-send-btn', { speaking: isAvatarSpeaking, loading: isAvatarSynthesizing }]"
+                  :disabled="isAvatarSynthesizing || (!ttsText.trim() && !isAvatarSpeaking)"
+                  :title="isAvatarSpeaking ? 'Stop' : 'Speak'"
+                  @click="handleTTSSend"
+                >
+                  <Square v-if="isAvatarSpeaking" :size="14" />
+                  <Loader2 v-else-if="isAvatarSynthesizing" :size="14" class="tts-loading-spin" />
+                  <Send v-else :size="14" />
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div class="idle-panel">
-            <div class="panel-title">
-              <Volume2 :size="14" />
-              <span>Idle Animation</span>
+          <div class="controls-panels-row">
+            <div class="emotion-panel">
+              <div class="panel-title">
+                <Heart :size="14" />
+                <span>Emotion</span>
+                <span class="expression-value">PAD: {{ expressionValue > 0 ? '+' : '' }}{{ expressionValue.toFixed(1) }}</span>
+              </div>
+              <div class="emotion-grid">
+                <button
+                  v-for="emo in emotions"
+                  :key="emo.id"
+                  :class="['emo-btn', { active: currentEmotionLocal.id === emo.id }]"
+                  :style="{ '--emo-color': emo.color }"
+                  @click="selectEmotion(emo)"
+                >
+                  <component :is="emo.icon" :size="18" />
+                  <span>{{ emo.label }}</span>
+                </button>
+              </div>
             </div>
-            <div class="idle-list">
-              <div
-                v-for="(anim, idx) in idleAnimations"
-                :key="idx"
-                class="idle-item"
-              >
-                <div class="idle-info">
-                  <span class="idle-name">{{ anim.name }}</span>
-                  <span :class="['idle-status', anim.status]">{{ anim.status === 'running' ? 'Running' : 'Paused' }}</span>
-                </div>
-                <div class="idle-bar">
-                  <div
-                    class="idle-fill"
-                    :class="anim.status"
-                    :style="{ width: anim.progress + '%' }"
-                  ></div>
+
+            <div class="idle-panel">
+              <div class="panel-title">
+                <Volume2 :size="14" />
+                <span>Idle Animation</span>
+              </div>
+              <div class="idle-list">
+                <div
+                  v-for="(anim, idx) in idleAnimations"
+                  :key="idx"
+                  class="idle-item"
+                >
+                  <div class="idle-info">
+                    <span class="idle-name">{{ anim.name }}</span>
+                    <span :class="['idle-status', anim.status]">{{ anim.status === 'running' ? 'Running' : 'Paused' }}</span>
+                  </div>
+                  <div class="idle-bar">
+                    <div
+                      class="idle-fill"
+                      :class="anim.status"
+                      :style="{ width: anim.progress + '%' }"
+                    ></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -550,6 +878,11 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 14px var(--lumi-primary-border);
 }
 
+.h-btn.active {
+  background: var(--lumi-primary-subtle);
+  color: var(--lumi-primary);
+}
+
 .avatar-body {
   display: flex;
   flex: 1;
@@ -721,6 +1054,54 @@ onBeforeUnmount(() => {
   color: var(--text-muted);
 }
 
+.subtitle-overlay {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  max-width: 80%;
+  padding: 8px 20px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px var(--shadow-color);
+  pointer-events: none;
+}
+
+.subtitle-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  text-align: center;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.subtitle-fade-enter-active {
+  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
+}
+
+.subtitle-fade-leave-active {
+  transition: opacity 800ms ease-in-out, transform 800ms ease-in-out;
+}
+
+.subtitle-fade-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+}
+
+.subtitle-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(0);
+}
+
+.subtitle-fade-enter-to,
+.subtitle-fade-leave-from {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .avatar-placeholder {
   position: relative;
   width: 260px;
@@ -851,12 +1232,11 @@ onBeforeUnmount(() => {
 
 .stage-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 12px;
   padding: 14px 20px;
   flex-shrink: 0;
   position: relative;
-  align-items: flex-start;
 }
 
 .stage-controls::before {
@@ -867,6 +1247,20 @@ onBeforeUnmount(() => {
   right: 20px;
   height: 1px;
   background: var(--divider-soft);
+}
+
+.controls-top-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.controls-panels-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 
 .mode-switcher {
@@ -913,9 +1307,206 @@ onBeforeUnmount(() => {
 
 .emotion-panel,
 .idle-panel {
-  flex-shrink: 0;
+  flex: 1;
   min-width: 180px;
-  max-width: 220px;
+}
+
+.tts-inline {
+  flex: 1;
+  min-width: 240px;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tts-inline .tts-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.tts-inline .chat-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  margin-bottom: 4px;
+}
+
+.tts-inline .chat-input {
+  flex: 1;
+  min-height: 32px;
+  max-height: 64px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--lumi-primary-border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  line-height: 1.4;
+  resize: none;
+  transition: border-color 300ms ease-in-out;
+  outline: none;
+}
+
+.tts-inline .chat-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.tts-inline .chat-input:focus {
+  border-color: var(--lumi-primary);
+  box-shadow: 0 0 0 2px var(--lumi-primary-subtle);
+}
+
+.tts-inline .chat-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tts-inline .chat-send-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lumi-primary);
+  color: var(--text-inverse);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 300ms ease-in-out;
+}
+
+.tts-inline .chat-send-btn:hover:not(:disabled) {
+  background: var(--lumi-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px var(--lumi-primary-border);
+}
+
+.tts-inline .chat-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tts-inline .chat-send-btn.streaming {
+  background: var(--lumi-accent);
+}
+
+.tts-inline .chat-send-btn.streaming:hover:not(:disabled) {
+  background: var(--lumi-danger-hover);
+}
+
+.tts-emotion-tag {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--lumi-primary-subtle);
+  color: var(--lumi-primary);
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.tts-inline .tts-input {
+  flex: 1;
+  min-height: 32px;
+  max-height: 64px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  line-height: 1.4;
+  resize: none;
+  transition: border-color 300ms ease-in-out;
+  outline: none;
+}
+
+.tts-inline .tts-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.tts-inline .tts-input:focus {
+  border-color: var(--lumi-primary-border);
+  box-shadow: 0 0 0 2px var(--lumi-primary-subtle);
+}
+
+.tts-inline .tts-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tts-inline .tts-send-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lumi-primary);
+  color: var(--text-inverse);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 300ms ease-in-out;
+}
+
+.tts-inline .tts-send-btn:hover:not(:disabled) {
+  background: var(--lumi-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px var(--lumi-primary-border);
+}
+
+.tts-inline .tts-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tts-inline .tts-send-btn.speaking {
+  background: var(--lumi-accent);
+}
+
+.tts-inline .tts-send-btn.speaking:hover:not(:disabled) {
+  background: var(--lumi-danger-hover);
+}
+
+.tts-inline .tts-send-btn.loading {
+  background: var(--lumi-primary-soft);
+}
+
+.tts-loading-spin {
+  animation: spin 1s linear infinite;
+}
+
+.tts-status-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+.tts-status-text {
+  font-weight: 500;
+}
+
+.tts-status-text.speaking {
+  color: var(--lumi-success);
+}
+
+.tts-status-text.synthesizing {
+  color: var(--lumi-amber-dark);
+}
+
+.tts-inline .tts-error {
+  font-size: 10px;
+  color: var(--lumi-accent);
+  padding: 0 2px;
 }
 
 .panel-title {

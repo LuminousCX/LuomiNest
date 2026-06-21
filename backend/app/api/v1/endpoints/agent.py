@@ -165,7 +165,7 @@ async def update_main_agent_config(request: MainAgentConfigUpdate):
 @router.get("", response_model=list[AgentResponse])
 async def list_agents():
     logger.info("[API] GET /agents - Listing all agents")
-    agents = [a for a in agents_store.values() if not a.get("is_main", False)]
+    agents = [a for a in await agents_store.values_async() if not a.get("is_main", False)]
     logger.success(f"[API] GET /agents - Success: returned {len(agents)} agents")
     return agents
 
@@ -174,7 +174,7 @@ async def list_agents():
 async def create_agent(request: AgentCreate):
     logger.info(f"[API] POST /agents - Creating agent: name={request.name}")
     
-    agents = agents_store.all()
+    agents = await agents_store.all_async()
     if len(agents) >= 10:
         raise HTTPException(status_code=400, detail="最多只能创建 10 个 Agent")
     
@@ -199,7 +199,7 @@ async def create_agent(request: AgentCreate):
         "created_at": now,
         "updated_at": now,
     }
-    agents_store.set(agent_id, agent)
+    await agents_store.set_async(agent_id, agent)
     logger.success(f"[API] POST /agents - Agent created: id={agent_id}, name={request.name}")
     return AgentResponse(**agent)
 
@@ -207,7 +207,7 @@ async def create_agent(request: AgentCreate):
 @router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent(agent_id: str):
     logger.info(f"[API] GET /agents/{agent_id} - Fetching agent")
-    agent = agents_store.get(agent_id)
+    agent = await agents_store.get_async(agent_id)
     if not agent:
         logger.error(f"[API] GET /agents/{agent_id} - Agent not found")
         from app.core.exceptions import NotFoundError
@@ -219,7 +219,7 @@ async def get_agent(agent_id: str):
 @router.patch("/{agent_id}", response_model=AgentResponse)
 async def update_agent(agent_id: str, request: AgentUpdate):
     logger.info(f"[API] PATCH /agents/{agent_id} - Updating agent")
-    agent = agents_store.get(agent_id)
+    agent = await agents_store.get_async(agent_id)
     if not agent:
         logger.error(f"[API] PATCH /agents/{agent_id} - Agent not found")
         from app.core.exceptions import NotFoundError
@@ -229,14 +229,14 @@ async def update_agent(agent_id: str, request: AgentUpdate):
     
     if "name" in update_data:
         new_name = update_data["name"]
-        all_agents = agents_store.all()
+        all_agents = await agents_store.all_async()
         for ag in all_agents:
             if ag.get("id") != agent_id and ag.get("name") == new_name:
                 raise HTTPException(status_code=400, detail=f"Agent 名称 '{new_name}' 已存在")
     updated_fields = list(update_data.keys())
     agent.update(update_data)
     agent["updated_at"] = datetime.now(timezone.utc).isoformat()
-    agents_store.set(agent_id, agent)
+    await agents_store.set_async(agent_id, agent)
 
     logger.success(f"[API] PATCH /agents/{agent_id} - Updated fields: {updated_fields}")
     return AgentResponse(**agent)
@@ -245,10 +245,10 @@ async def update_agent(agent_id: str, request: AgentUpdate):
 @router.delete("/{agent_id}")
 async def delete_agent(agent_id: str):
     logger.info(f"[API] DELETE /agents/{agent_id} - Deleting agent")
-    agent = agents_store.get(agent_id)
+    agent = await agents_store.get_async(agent_id)
     if agent:
         agent_name = agent.get("name", "unknown")
-        agents_store.delete(agent_id)
+        await agents_store.delete_async(agent_id)
         logger.success(f"[API] DELETE /agents/{agent_id} - Agent deleted: name={agent_name}")
     else:
         logger.warning(f"[API] DELETE /agents/{agent_id} - Agent not found (already deleted)")
