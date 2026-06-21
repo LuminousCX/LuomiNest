@@ -55,8 +55,10 @@ class LumiBackupManager:
             if os.path.exists(backup_path):
                 try:
                     os.remove(backup_path)
-                except OSError:
-                    pass
+                except OSError as cleanup_error:
+                    logger.warning(
+                        f"[Backup] Failed to remove partial backup file {backup_path}: {cleanup_error}"
+                    )
             return None
 
     def restore_backup(self, backup_path: str) -> bool:
