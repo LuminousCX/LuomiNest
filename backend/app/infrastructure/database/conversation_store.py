@@ -42,8 +42,8 @@ class ConversationStore:
             if os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
-                except OSError:
-                    pass
+                except OSError as cleanup_err:
+                    logger.debug(f"[ConvStore] Failed to remove temp index file {tmp_path}: {cleanup_err}")
             logger.error(f"[ConvStore] Failed to save index: {e}")
 
     def _conv_path(self, conv_id: str) -> str:
