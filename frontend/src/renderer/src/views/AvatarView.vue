@@ -9,16 +9,34 @@ import {
 import { useLuomiNestLive2D } from '@/composables/useLuomiNestLive2D'
 import { useAvatarTTS } from '@/composables/useAvatarTTS'
 import { useAvatarChat } from '@/composables/useAvatarChat'
-import { useApi } from '@/composables/useApi'
+import { useToast } from '@/composables/useToast'
 import { useAvatarControlStore } from '@/stores/avatar-control'
 import { useModelStore } from '@/stores/model'
+import { useChatStore } from '@/stores/chat'
+import { useAgentStore } from '@/stores/agent'
+import { usePlatformStore } from '@/stores/platform'
 import { LUOMINEST_BUILTIN_MODELS, type LuomiNestModelInfo, resolveExpressionByModelUrl, getAvatarBinding } from '@/config/luominest-models'
 import type { PetModelInfo } from '../vite-env.d'
+import type { AgentProfile, ChatStreamChunk } from '../types'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const avatarControl = useAvatarControlStore()
 const modelStore = useModelStore()
-const { apiStream } = useApi()
+const chatStore = useChatStore()
+const agentStore = useAgentStore()
+const platformStore = usePlatformStore()
+const toast = useToast()
+
+// 主 Agent 固定标识：皮套工坊与工作台共用同一主 Agent 对话流
+const MAIN_AGENT_ID = 'luominest_main_agent'
+const MAIN_AGENT_PROFILE: AgentProfile = {
+  id: MAIN_AGENT_ID,
+  name: '主智能体',
+  description: 'LuomiNest 工作台主 Agent，驱动 Live2D、记忆、工具、MCP 和子 Agent',
+  color: '#147EBC',
+  isMain: true,
+  isActive: true,
+}
 
 // 桌面宠物模式状态（需在 composables 之前声明，避免 TDZ）
 const isDesktopMode = ref(false)
@@ -59,7 +77,6 @@ const {
 // Chat-driven avatar: LLM stream → expression + streaming TTS + subtitle
 const chatText = ref('')
 const isChatStreaming = ref(false)
-let chatAbortController: AbortController | null = null
 
 const currentVoice = computed(() => {
   const modelInfo = currentModelInfo.value
@@ -97,7 +114,25 @@ const {
   },
   ttsEnabled: () => ttsEnabled.value,
   subtitleEnabled: () => subtitleEnabled.value,
+  onTtsError: (err: Error) => toast.warning(`语音合成失败：${err.message}`),
 })
+
+// 代码块过滤状态机：跳过 ``` 包裹的代码块，不送入 TTS（与工作台一致）
+let inCodeBlock = false
+const filterCodeForTts = (content: string): string => {
+  if (!content) return ''
+  const parts = content.split('```')
+  let result = ''
+  for (let i = 0; i < parts.length; i++) {
+    if (i === 0) {
+      if (!inCodeBlock) result += parts[i]
+    } else {
+      inCodeBlock = !inCodeBlock
+      if (!inCodeBlock) result += parts[i]
+    }
+  }
+  return result
+}
 
 // Unified subtitle display: chat subtitle takes priority over manual TTS subtitle
 const subtitleText = computed(() => {
@@ -309,53 +344,61 @@ async function handleChatSend() {
   const text = chatText.value.trim()
   if (!text || isChatStreaming.value) return
 
-  if (isChatStreaming.value) {
-    stopChatStream()
-    return
-  }
-
   chatText.value = ''
   isChatStreaming.value = true
   stopAvatarChat()
 
-  const provider = modelStore.modelConfig.defaultProvider || ''
-  const model = modelStore.modelConfig.defaultModel || ''
+  // 主 Agent 配置：与工作台页面一致
+  const mainAgent = platformStore.mainAgent
+  const resolved = modelStore.resolveModel
 
-  const requestBody = {
-    messages: [{ role: 'user', content: text }],
-    provider,
-    model,
-    stream: true,
+  const options: {
+    agentId: string
+    model?: string
+    provider?: string
+    temperature?: number
+    maxTokens?: number
+    topP?: number
+    onChunk: (chunk: ChatStreamChunk) => void
+  } = {
+    agentId: MAIN_AGENT_ID,
+    model: mainAgent?.model || resolved?.model || undefined,
+    provider: mainAgent?.provider || resolved?.provider || undefined,
+    temperature: mainAgent?.temperature ?? modelStore.modelConfig.defaultTemperature,
+    maxTokens: mainAgent?.maxTokens ?? modelStore.modelConfig.defaultMaxTokens,
+    topP: modelStore.modelConfig.defaultTopP,
+    onChunk: (chunk: ChatStreamChunk) => {
+      if (chunk.done) {
+        finishStream()
+        isChatStreaming.value = false
+        return
+      }
+      const filteredContent = filterCodeForTts(chunk.content || '')
+      if (filteredContent || chunk.emotion) {
+        feedChunk({
+          ...chunk,
+          content: filteredContent,
+        })
+      }
+    },
   }
 
-  chatAbortController = new AbortController()
+  // 重置代码块过滤状态机
+  inCodeBlock = false
 
-  await apiStream(
-    '/chat/completions',
-    requestBody,
-    (chunk) => {
-      feedChunk(chunk)
-    },
-    () => {
-      finishStream()
-      isChatStreaming.value = false
-      chatAbortController = null
-    },
-    (err: string) => {
-      console.warn('[AvatarView] Chat stream error:', err)
-      finishStream()
-      isChatStreaming.value = false
-      chatAbortController = null
-    },
-    chatAbortController.signal
-  )
+  try {
+    await chatStore.sendMessage(text, options)
+  } catch (e: unknown) {
+    const errMsg = e instanceof Error ? e.message : String(e)
+    toast.error(`发送消息失败：${errMsg}`)
+  } finally {
+    isChatStreaming.value = false
+  }
 }
 
 function stopChatStream() {
-  if (chatAbortController) {
-    chatAbortController.abort()
-    chatAbortController = null
-  }
+  chatStore.cancelCurrentRequest()
+  stopAvatarChat()
   finishStream()
   isChatStreaming.value = false
 }
@@ -406,9 +449,24 @@ const checkDesktopPetStatus = async () => {
 }
 
 onMounted(async () => {
+  // 设置虚拟主 Agent Profile，使 chat store 的 computed 基于 MAIN_AGENT_ID 工作（与工作台一致）
+  agentStore.setActiveAgent(MAIN_AGENT_PROFILE)
+
   await loadPersistedModels()
   await checkDesktopPetStatus()
   await avatarControl.checkDesktopPetStatus()
+
+  // 并发加载：后端状态 / 主 Agent 配置 / 模型配置 / 对话历史
+  await Promise.all([
+    chatStore.checkBackend(),
+    platformStore.fetchMainAgent(),
+    modelStore.fetchProviders(),
+    modelStore.fetchModelConfig(),
+  ])
+  if (chatStore.isBackendReady) {
+    await chatStore.fetchConversations(MAIN_AGENT_ID)
+  }
+
   await nextTick()
   if (!isDesktopPetRunning.value) {
     const defaultModel = LUOMINEST_BUILTIN_MODELS[0]

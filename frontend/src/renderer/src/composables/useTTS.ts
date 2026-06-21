@@ -17,6 +17,8 @@ function revokeCurrentAudioUrl() {
 
 function cleanTextForTTS(text: string): string {
   return text
+    // 表情标签 <exp:xxx> → 删除（必须在最前面，防止标签被朗读）
+    .replace(/<\s*exp[:=]\s*[a-zA-Z]+\s*\/?\s*>/g, '')
     .replace(/```[\s\S]*?```/g, '，代码块，')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/\*\*([^*]+)\*\*/g, '$1')

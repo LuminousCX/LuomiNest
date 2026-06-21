@@ -79,22 +79,22 @@ const SHIZUKU_EXPRESSION_MAP: Record<string, string> = {
 export const LUOMINEST_AVATAR_BINDINGS: Record<string, LuomiNestAvatarBinding> = {
   llny: {
     modelId: 'llny',
-    voice: 'ja-JP-NanamiNeural',
-    voiceLang: 'ja',
+    voice: 'zh-CN-XiaoxiaoNeural',
+    voiceLang: 'zh',
     expressionMap: LLNY_EXPRESSION_MAP,
     defaultExpression: '- -'
   },
   hiyori: {
     modelId: 'hiyori',
-    voice: 'ja-JP-NanamiNeural',
-    voiceLang: 'ja',
+    voice: 'zh-CN-XiaoxiaoNeural',
+    voiceLang: 'zh',
     expressionMap: HIYORI_EXPRESSION_MAP,
     defaultExpression: 'neutral'
   },
   shizuku: {
     modelId: 'shizuku',
-    voice: 'ja-JP-NanamiNeural',
-    voiceLang: 'ja',
+    voice: 'zh-CN-XiaoxiaoNeural',
+    voiceLang: 'zh',
     expressionMap: SHIZUKU_EXPRESSION_MAP,
     defaultExpression: 'neutral'
   }

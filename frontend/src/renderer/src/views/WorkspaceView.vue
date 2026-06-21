@@ -58,6 +58,7 @@ import SuggestedQuestions from '../components/SuggestedQuestions.vue'
 import { useFileUpload } from '../composables/useFileUpload'
 import { useApi } from '../composables/useApi'
 import { getProviderLogo } from '../config/provider-logos'
+import { stripEmotionTags } from '../utils/emotionTagInterceptor'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import type { ConversationListItem, ConversationSearchResult, GroupInfo, CollaborationPhase, AgentProfile } from '../types'
@@ -820,7 +821,9 @@ const autoResize = () => {
 
 const renderMarkdown = (text: string): string => {
   if (!text) return ''
-  const raw = marked.parse(text) as string
+  // 拦截器：剥离 <exp:xxx> 表情标签，防止标签显示在前端
+  const cleaned = stripEmotionTags(text)
+  const raw = marked.parse(cleaned) as string
   return DOMPurify.sanitize(raw)
 }
 
@@ -883,7 +886,9 @@ const beautifyThinking = (text: string): string => {
 // 渲染思考过程的 markdown
 const renderReasoningMarkdown = (text: string): string => {
   if (!text) return ''
-  const beautified = beautifyThinking(text)
+  // 拦截器：剥离 <exp:xxx> 表情标签，防止标签显示在前端
+  const cleaned = stripEmotionTags(text)
+  const beautified = beautifyThinking(cleaned)
   const raw = marked.parse(beautified) as string
   return DOMPurify.sanitize(raw)
 }

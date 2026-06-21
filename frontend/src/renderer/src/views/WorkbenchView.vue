@@ -33,6 +33,9 @@ import {
   Radio,
   ChevronRight,
   Cpu,
+  Quote,
+  Paperclip,
+  X,
 } from 'lucide-vue-next'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
@@ -43,6 +46,9 @@ import { useLuomiNestLive2D } from '../composables/useLuomiNestLive2D'
 import { useAvatarChat } from '../composables/useAvatarChat'
 import { useApi } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
+import { useFileUpload } from '../composables/useFileUpload'
+import FileUpload from '../components/FileUpload.vue'
+import { stripEmotionTags } from '../utils/emotionTagInterceptor'
 import { LUOMINEST_BUILTIN_MODELS, getAvatarBinding } from '../config/luominest-models'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
@@ -282,6 +288,7 @@ const {
   ttsEnabled: () => ttsEnabled.value,
   subtitleEnabled: () => subtitleEnabled.value,
   onTtsError: (err: Error) => toast.warning(`语音合成失败：${err.message}`),
+  onSpeakEnd: () => { ttsSpeakingMsgId.value = null },
 })
 
 // 布局状态
@@ -501,6 +508,12 @@ const SCROLL_BOTTOM_THRESHOLD = 120
 const showScrollToBottomBtn = ref(false)
 let resizeObserver: ResizeObserver | null = null
 
+// 文件上传状态（复用 useFileUpload composable）
+const { isUploading, parsedContent, fileType, fileName, clearUploadState } = useFileUpload()
+const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
+// 当前 TTS 朗读的消息 ID（用于"重读"按钮状态展示）
+const ttsSpeakingMsgId = ref<string | null>(null)
+
 const messages = computed(() => chatStore.messages)
 const isStreaming = computed(() => chatStore.isStreaming)
 const isBackendReady = computed(() => chatStore.isBackendReady)
@@ -516,15 +529,30 @@ const currentModel = computed(() => {
 
 const canSend = computed(() => {
   if (!isBackendReady.value) return false
-  return inputText.value.trim().length > 0
+  if (isUploading.value) return false
+  return inputText.value.trim().length > 0 || !!parsedContent.value || !!chatStore.quotedMessage
 })
 
 const sendMessage = async () => {
   if (!canSend.value) return
 
-  const content = inputText.value.trim()
+  let content = inputText.value.trim()
+  const fileContent = parsedContent.value
+  const currentFileName = fileName.value
+  const currentFileType = fileType.value
+
+  // 无文字但有文件或引用时，补充默认提示文案
+  if (!content && fileContent) {
+    content = '请帮我分析上传的文件'
+  }
+  if (!content && chatStore.quotedMessage) {
+    content = '请看上面的引用内容'
+  }
+
   inputText.value = ''
   resetTextareaHeight()
+  clearUploadState()
+  fileUploadRef.value?.clearUploadState()
 
   // 主 Agent 配置：优先使用 platformStore.mainAgent，回退到 modelStore.resolveModel
   const mainAgent = platformStore.mainAgent
@@ -593,6 +621,12 @@ const sendMessage = async () => {
       }
     },
   }
+  // 携带上传文件内容（图片/文档等由后端解析）
+  if (fileContent) {
+    options.fileContent = fileContent
+    options.fileType = currentFileType
+    options.fileName = currentFileName
+  }
   // systemPrompt 由后端 build_system_prompt 从 main_agent_config 加载，前端不传
 
   // 重置代码块过滤状态机
@@ -657,13 +691,17 @@ const autoResize = () => {
 
 const renderMarkdown = (text: string): string => {
   if (!text) return ''
-  const raw = marked.parse(text) as string
+  // 拦截器：剥离 <exp:xxx> 表情标签，防止标签显示在前端
+  const cleaned = stripEmotionTags(text)
+  const raw = marked.parse(cleaned) as string
   return DOMPurify.sanitize(raw)
 }
 
 const renderReasoningMarkdown = (text: string): string => {
   if (!text) return ''
-  const raw = marked.parse(text) as string
+  // 拦截器：剥离 <exp:xxx> 表情标签，防止标签显示在前端
+  const cleaned = stripEmotionTags(text)
+  const raw = marked.parse(cleaned) as string
   return DOMPurify.sanitize(raw)
 }
 
@@ -682,6 +720,42 @@ const copyMessage = async (msgId: string, content: string) => {
       copiedId.value = null
     }, 2000)
   } catch {}
+}
+
+/** 引用消息：写入 chatStore.quotedMessage，发送时附带 */
+const handleQuoteMessage = (msg: any) => {
+  chatStore.quotedMessage = msg
+  nextTick(() => {
+    if (textareaRef.value) textareaRef.value.focus()
+  })
+}
+
+/** 重读：停止当前 TTS，将消息内容喂入 Avatar Chat TTS 管线重新朗读 */
+const replayMessage = (msg: any) => {
+  // 正在朗读同一条消息时，点击则停止
+  if (ttsSpeakingMsgId.value === msg.id && isSpeaking.value) {
+    stopTts()
+    ttsSpeakingMsgId.value = null
+    return
+  }
+  stopTts()
+  ttsSpeakingMsgId.value = msg.id
+  // 重置代码块过滤状态机，避免跨消息残留
+  inCodeBlock = false
+  const cleaned = stripEmotionTags(msg.content || '')
+  if (!cleaned) {
+    ttsSpeakingMsgId.value = null
+    return
+  }
+  feedChunk({
+    id: `replay-${msg.id}-${Date.now()}`,
+    content: cleaned,
+    reasoning_content: '',
+    model: '',
+    provider: '',
+    done: false,
+  })
+  finishStream()
 }
 
 const isLastAssistantMessage = (msgId: string) => {
@@ -1160,6 +1234,22 @@ onBeforeUnmount(() => {
                       <Check v-if="copiedId === msg.id" :size="14" />
                       <Copy v-else :size="14" />
                     </button>
+                    <button class="u-btn" title="引用" @click="handleQuoteMessage(msg)">
+                      <Quote :size="14" />
+                    </button>
+                    <button
+                      class="u-btn"
+                      :title="ttsSpeakingMsgId === msg.id && isSpeaking ? '停止朗读' : '重读'"
+                      @click="replayMessage(msg)"
+                    >
+                      <div v-if="ttsSpeakingMsgId === msg.id && isSpeaking" class="tts-bars">
+                        <span class="tts-bar" style="--h: 8px; --d: 0s"></span>
+                        <span class="tts-bar" style="--h: 14px; --d: 0.15s"></span>
+                        <span class="tts-bar" style="--h: 10px; --d: 0.3s"></span>
+                        <span class="tts-bar" style="--h: 6px; --d: 0.45s"></span>
+                      </div>
+                      <Volume2 v-else :size="14" />
+                    </button>
                     <button
                       v-if="isLastAssistantMessage(msg.id)"
                       class="u-btn"
@@ -1217,7 +1307,18 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="input-area">
+        <FileUpload ref="fileUploadRef" />
         <div class="input-wrapper">
+          <div v-if="chatStore.quotedMessage" class="quote-preview">
+            <Quote :size="14" class="quote-preview-icon" />
+            <div class="quote-preview-content">
+              <span class="quote-preview-label">{{ chatStore.quotedMessage.role === 'assistant' ? '助手' : '用户' }}</span>
+              <span class="quote-preview-text">{{ chatStore.quotedMessage.content.slice(0, 80) }}{{ chatStore.quotedMessage.content.length > 80 ? '...' : '' }}</span>
+            </div>
+            <button class="quote-preview-cancel" title="取消引用" @click="chatStore.quotedMessage = null">
+              <X :size="14" />
+            </button>
+          </div>
           <textarea
             ref="textareaRef"
             v-model="inputText"
@@ -1233,6 +1334,9 @@ onBeforeUnmount(() => {
               <span class="model-tag">{{ currentModel }}</span>
             </div>
             <div class="toolbar-right">
+              <button class="tool-btn icon-only" title="附件" :disabled="isUploading" @click="fileUploadRef?.triggerFileSelect()">
+                <Paperclip :size="16" />
+              </button>
               <button
                 v-if="isStreaming"
                 class="send-btn stop"
@@ -1259,7 +1363,7 @@ onBeforeUnmount(() => {
     <div class="workbench-avatar">
       <div class="avatar-header">
         <div class="avatar-title">
-          <Sparkles :size="15" />
+          <!-- <Sparkles :size="15" /> -->
           <span>陪伴形象</span>
         </div>
         <div class="avatar-model-selector">
@@ -2671,6 +2775,111 @@ onBeforeUnmount(() => {
 .input-wrapper:focus-within {
   border-color: var(--lumi-primary);
   box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+}
+
+/* 引用预览条 */
+.quote-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--lumi-primary-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.quote-preview-icon {
+  color: var(--lumi-primary);
+  flex-shrink: 0;
+}
+
+.quote-preview-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quote-preview-label {
+  font-size: 11px;
+  color: var(--lumi-primary);
+}
+
+.quote-preview-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quote-preview-cancel {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  transition: color 0.15s ease-in-out, background 0.15s ease-in-out;
+}
+
+.quote-preview-cancel:hover {
+  color: var(--text-primary);
+  background: var(--surface-active);
+}
+
+/* 工具栏按钮（附件等） */
+.tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
+}
+
+.tool-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* TTS 朗读波形动画 */
+.tts-bars {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 16px;
+  height: 16px;
+}
+
+.tts-bar {
+  width: 3px;
+  border-radius: 1.5px;
+  background: var(--lumi-primary);
+  animation: tts-bar-bounce 0.8s ease-in-out infinite alternate;
+  animation-delay: var(--d);
+}
+
+@keyframes tts-bar-bounce {
+  0% { height: 4px; }
+  100% { height: var(--h); }
 }
 
 .chat-input {

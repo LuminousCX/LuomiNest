@@ -1,6 +1,7 @@
 import { ref, onBeforeUnmount } from 'vue'
 import { useModelStore } from '../stores/model'
 import { API_ENDPOINTS } from '../config/api'
+import { stripEmotionTags } from '../utils/emotionTagInterceptor'
 
 export interface AvatarTTSOptions {
   syncLipParam?: (value: number) => void
@@ -143,7 +144,9 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
   }
 
   const speak = async (text: string) => {
-    if (!text.trim()) return
+    // 拦截器：剥离 <exp:xxx> 表情标签，防止标签被 TTS 朗读
+    const cleanedText = stripEmotionTags(text)
+    if (!cleanedText.trim()) return
 
     stopSpeaking()
 
@@ -160,7 +163,7 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
       const response = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim(), voice }),
+        body: JSON.stringify({ text: cleanedText.trim(), voice }),
         signal: controller.signal,
       })
 
@@ -194,7 +197,7 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
 
         audioElement.onplay = () => {
           isSpeaking.value = true
-          animateSubtitleChars(text.trim())
+          animateSubtitleChars(cleanedText.trim())
           options.onSpeakStart?.()
           if (analyserNode) {
             smoothedRms = 0

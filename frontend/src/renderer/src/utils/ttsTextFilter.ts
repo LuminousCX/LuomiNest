@@ -8,8 +8,10 @@
  * - 字幕显示保留原始 markdown，仅 TTS 文本过滤
  *
  * 过滤顺序敏感，必须按以下顺序执行：
- * 代码块(状态机) → 行内代码 → 图片 → 链接 → 标题/列表/引用/分割线/表格 → 粗体 → 斜体 → 删除线 → emoji → 空白合并
+ * 表情标签<exp:xxx> → 代码块(状态机) → 行内代码 → 图片 → 链接 → 标题/列表/引用/分割线/表格 → 粗体 → 斜体 → 删除线 → emoji → 空白合并
  */
+
+import { stripEmotionTags } from './emotionTagInterceptor'
 
 // 行内代码 `code` → 保留 code 内容（在图片/链接之前处理，避免反引号干扰）
 const INLINE_CODE_RE = /`([^`]+)`/g
@@ -77,6 +79,9 @@ export const filterTtsText = (text: string): string => {
   if (!text) return ''
 
   let result = text
+
+  // 0. 表情标签 <exp:xxx> → 删除（必须在最前面，防止标签被朗读）
+  result = stripEmotionTags(result)
 
   // 1. 行内代码 → 保留内容
   result = result.replace(INLINE_CODE_RE, '$1')

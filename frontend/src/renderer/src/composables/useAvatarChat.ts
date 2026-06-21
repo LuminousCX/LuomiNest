@@ -1,10 +1,11 @@
 import { ref, onBeforeUnmount } from 'vue'
 import { API_ENDPOINTS } from '../config/api'
 import { filterTtsText } from '../utils/ttsTextFilter'
+import { interceptEmotionTags } from '../utils/emotionTagInterceptor'
 import type { ChatStreamChunk } from '../types'
 
 export interface AvatarChatOptions {
-  /** Voice identifier passed to the TTS backend (e.g. 'ja-JP-NanamiNeural'). */
+  /** Voice identifier passed to the TTS backend (e.g. 'zh-CN-XiaoxiaoNeural'). */
   voice: () => string
   /** Drive avatar expression by semantic emotion id (e.g. 'happy'). */
   driveEmotion: (emotionId: string) => void
@@ -31,10 +32,6 @@ const MIN_SOFT_SPLIT_LENGTH = 12
 // Maximum chars to buffer before forcing a flush.
 const MAX_BUFFER_LENGTH = 80
 
-// 防御性正则：匹配 <exp:NAME> 及其各种变体（空格、自闭合等），
-// 防止 LLM 输出的非标准格式标签泄漏到 TTS 朗读中
-const EMOTION_TAG_RE = /<\s*exp:\s*[a-zA-Z]+\s*\/?\s*>/g
-
 const LUMINEST_SMOOTHING = 0.3
 const LUMINEST_SILENCE_THRESHOLD = 0.02
 const LUMINEST_RMS_EXPONENT = 1.5
@@ -49,8 +46,11 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
   const currentEmotion = ref<string | null>(null)
 
   let textBuffer = ''
-  const ttsQueue: string[] = []
+  // TTS 段队列：每段携带对应的 emotion，播放时才驱动 Live2D
+  const ttsQueue: Array<{ text: string; emotion: string | null }> = []
   let isProcessingQueue = false
+  // 暂存最近接收到的 emotion，等待下一段 TTS 文本提取时附加
+  let pendingEmotion: string | null = null
 
   let audioContext: AudioContext | null = null
   let analyserNode: AnalyserNode | null = null
@@ -132,15 +132,16 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
     animFrameId = requestAnimationFrame(tick)
   }
 
-  /** Extract complete sentences from the buffer, leaving any trailing partial. */
-  const extractSegments = (): string[] => {
-    const segments: string[] = []
+  /** Extract complete sentences from the buffer, leaving any trailing partial.
+   *  每段附加当前的 pendingEmotion，用于播放时同步驱动 Live2D 表情。 */
+  const extractSegments = (): Array<{ text: string; emotion: string | null }> => {
+    const segments: Array<{ text: string; emotion: string | null }> = []
     while (textBuffer.length > 0) {
       const match = textBuffer.match(SENTENCE_ENDINGS)
       if (match && match.index !== undefined) {
         const end = match.index + match[0].length
         const segment = textBuffer.slice(0, end).trim()
-        if (segment) segments.push(segment)
+        if (segment) segments.push({ text: segment, emotion: pendingEmotion })
         textBuffer = textBuffer.slice(end)
         continue
       }
@@ -150,13 +151,13 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
         if (softMatch && softMatch.index !== undefined && softMatch.index >= MIN_SOFT_SPLIT_LENGTH) {
           const end = softMatch.index + softMatch[0].length
           const segment = textBuffer.slice(0, end).trim()
-          if (segment) segments.push(segment)
+          if (segment) segments.push({ text: segment, emotion: pendingEmotion })
           textBuffer = textBuffer.slice(end)
           continue
         }
         // Force flush if buffer is too long without any split point.
         const segment = textBuffer.trim()
-        if (segment) segments.push(segment)
+        if (segment) segments.push({ text: segment, emotion: pendingEmotion })
         textBuffer = ''
         break
       }
@@ -165,8 +166,15 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
     return segments
   }
 
-  const playSegment = async (text: string): Promise<void> => {
+  const playSegment = async (segment: { text: string; emotion: string | null }): Promise<void> => {
+    const { text, emotion } = segment
     if (!text.trim() || !options.ttsEnabled()) return
+
+    // 同步驱动 Live2D 表情：在播放该段 TTS 前切换到对应表情
+    if (emotion && emotion !== currentEmotion.value) {
+      currentEmotion.value = emotion
+      options.driveEmotion(emotion)
+    }
 
     const controller = new AbortController()
     currentAbortController = controller
@@ -290,26 +298,32 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
     options.onSpeakEnd?.()
   }
 
-  /** Feed a stream chunk. Drives expression and queues TTS segments. */
+  /** Feed a stream chunk. Drives expression and queues TTS segments.
+   *  emotion 不立即驱动 Live2D，而是暂存为 pendingEmotion，
+   *  等待对应 TTS 段播放时才同步切换表情。 */
   const feedChunk = (chunk: ChatStreamChunk) => {
     streamActive = true
 
+    // 侦听器：暂存后端解析的 chunk.emotion，等待下一段 TTS 文本提取时附加
     if (chunk.emotion) {
-      currentEmotion.value = chunk.emotion
-      options.driveEmotion(chunk.emotion)
+      pendingEmotion = chunk.emotion
     }
 
     if (chunk.content) {
-      // 防御性过滤：剥离可能残留的 <exp:...> 标签，防止 TTS 朗读
-      const cleanContent = chunk.content.replace(EMOTION_TAG_RE, '')
-      if (!cleanContent) return
-      textBuffer += cleanContent
+      // 拦截器：主动扫描 content 中的 <exp:xxx> 标签（兜底）
+      // 如果后端 EmotionStreamParser 漏解析了标签变体，此处兜底提取表情
+      const { cleanText, emotion: interceptedEmotion } = interceptEmotionTags(chunk.content)
+      if (interceptedEmotion) {
+        pendingEmotion = interceptedEmotion
+      }
+      if (!cleanText) return
+      textBuffer += cleanText
       const segments = extractSegments()
       for (const seg of segments) {
         // 过滤 markdown/emoji/特殊符号，只保留适合朗读的纯文本
-        const filtered = filterTtsText(seg)
+        const filtered = filterTtsText(seg.text)
         if (filtered) {
-          ttsQueue.push(filtered)
+          ttsQueue.push({ text: filtered, emotion: seg.emotion })
         }
       }
       if (ttsQueue.length > 0 && !isProcessingQueue) {
@@ -322,7 +336,7 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
   const finishStream = () => {
     streamActive = false
     if (textBuffer.trim()) {
-      ttsQueue.push(textBuffer.trim())
+      ttsQueue.push({ text: textBuffer.trim(), emotion: pendingEmotion })
       textBuffer = ''
     }
     if (ttsQueue.length > 0 && !isProcessingQueue) {
@@ -335,6 +349,7 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
     streamActive = false
     ttsQueue.length = 0
     textBuffer = ''
+    pendingEmotion = null
     if (currentAbortController) {
       currentAbortController.abort()
       currentAbortController = null

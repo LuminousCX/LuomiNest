@@ -7,6 +7,10 @@
 import re
 from loguru import logger
 
+# 表情标签 <exp:NAME> / <exp=NAME> 及各种变体（空格、自闭合等）→ 删除
+# 与 avatar_manager.py 的 _EMOTION_TAG_LOOSE_RE 保持一致
+_EMOTION_TAG_RE = re.compile(r"<\s*exp[:=]\s*[a-zA-Z]+\s*/?\s*>")
+
 # 标题标记
 _HEADING_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 
@@ -67,6 +71,9 @@ def filter_tts_text(text: str) -> str:
     """
     if not text:
         return ""
+
+    # 表情标签 <exp:xxx> → 删除（必须在最前面，防止标签被朗读）
+    text = _EMOTION_TAG_RE.sub("", text)
 
     # 行内代码 → 保留内容
     text = _INLINE_CODE_RE.sub(r"\1", text)

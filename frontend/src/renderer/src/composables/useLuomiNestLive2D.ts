@@ -196,7 +196,8 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       const parent = canvasRef.value?.parentElement
       if (parent) {
         model.x = parent.clientWidth / 2
-        model.y = parent.clientHeight / 2
+        // 模型中心下移至容器 65% 处，让头、肩、胸、肚子露出
+        model.y = parent.clientHeight * 0.90
       }
 
       try {
@@ -381,7 +382,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     try {
       await currentModel.expression(name)
     } catch {
-      // intentionally ignored: expected non-fatal error
+      // intentionally ignored: expression switch failure is non-fatal
     }
   }
 
