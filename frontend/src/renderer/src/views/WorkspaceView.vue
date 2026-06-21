@@ -689,23 +689,17 @@ const availableModelOptions = computed(() => {
   const options: { providerId: string; providerName: string; providerLogo: ReturnType<typeof getProviderLogo>; modelId: string; modelName: string }[] = []
   for (const provider of modelStore.providers) {
     const logo = getProviderLogo(provider.id)
-    if (provider.models.length > 0) {
-      for (const model of provider.models) {
-        options.push({
-          providerId: provider.id,
-          providerName: provider.name,
-          providerLogo: logo,
-          modelId: model.id,
-          modelName: model.name,
-        })
-      }
-    } else {
+    // 优先使用已多选模型；若未多选则回退到 defaultModel
+    const modelIds = provider.selectedModels.length > 0
+      ? provider.selectedModels
+      : (provider.defaultModel ? [provider.defaultModel] : [])
+    for (const modelId of modelIds) {
       options.push({
         providerId: provider.id,
         providerName: provider.name,
         providerLogo: logo,
-        modelId: provider.defaultModel,
-        modelName: provider.defaultModel,
+        modelId,
+        modelName: modelId,
       })
     }
   }
@@ -2462,7 +2456,7 @@ onBeforeUnmount(() => {
   padding: 6px 10px;
   background: var(--workspace-panel);
   border-radius: var(--radius-sm);
-  border: 1px solid transparent;
+  border: 1px solid var(--workspace-border);
   transition: all var(--transition-fast);
 }
 
@@ -2694,7 +2688,7 @@ onBeforeUnmount(() => {
   padding: 6px 10px;
   background: var(--surface);
   border-radius: var(--radius-sm);
-  border: 1px solid transparent;
+  border: 1px solid var(--workspace-border);
   transition: all var(--transition-fast);
   margin-bottom: 8px;
 }
@@ -2758,7 +2752,7 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   background: transparent;
-  border: 1px solid var(--workspace-border);
+  border: 1px solid var(--border-light);
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
@@ -2877,7 +2871,7 @@ onBeforeUnmount(() => {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  border: 1.5px solid var(--workspace-border);
+  border: 1px solid var(--workspace-border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3007,7 +3001,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--text-secondary);
   background: var(--surface);
-  border: 1px solid var(--workspace-border);
+  border: 1px solid var(--border-light);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -3152,14 +3146,15 @@ onBeforeUnmount(() => {
 }
 
 .chat-empty-state .empty-orb {
-  width: 80px;
-  height: 80px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--lumi-primary-gradient-soft);
   color: var(--lumi-primary);
+  box-shadow: 0 4px 24px var(--lumi-primary-glow);
 }
 
 .chat-empty-state h3 {
@@ -3181,8 +3176,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  border-bottom: 1px solid var(--workspace-border);
-  background: var(--workspace-sidebar);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--surface);
   flex-shrink: 0;
 }
 
@@ -3289,7 +3284,7 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   font-size: 10px;
   background: var(--surface);
-  border: 1px solid var(--workspace-border);
+  border: 1px solid var(--border-light);
 }
 
 .collab-task-chip.status-running {
@@ -3368,7 +3363,7 @@ onBeforeUnmount(() => {
 
 .msg-bubble.agent {
   background: var(--surface);
-  border: 1px solid var(--workspace-border);
+  border: 1px solid var(--border-light);
   color: var(--text-primary);
 }
 
@@ -3429,7 +3424,7 @@ onBeforeUnmount(() => {
   align-self: center;
   padding: 8px 16px;
   background: var(--surface);
-  border: 1px solid var(--workspace-border);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-full);
 }
 

@@ -1,8 +1,32 @@
 import argparse
 import asyncio
 import sys
+import os
 from pathlib import Path
 from loguru import logger
+
+def setup_console_encoding():
+    """设置控制台编码为UTF-8，解决Windows下的中文乱码问题"""
+    if sys.platform == "win32":
+        # 设置环境变量
+        os.environ["PYTHONIOENCODING"] = "utf-8"
+        
+        # 设置标准输出编码
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8')
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8')
+        
+        # 尝试设置控制台代码页
+        try:
+            import ctypes
+            # 设置控制台输出代码页为UTF-8 (65001)
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+            # 设置控制台输入代码页为UTF-8 (65001)
+            ctypes.windll.kernel32.SetConsoleCP(65001)
+        except Exception as e:
+            # Best-effort on Windows: if code page update fails, continue startup.
+            logger.debug(f"Failed to set Windows console code page to UTF-8: {e}")
 
 def setup_logging():
     logger.remove()
@@ -21,6 +45,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    setup_console_encoding()
     setup_logging()
 
     # Use the default ProactorEventLoop on Windows. The SelectorEventLoop breaks

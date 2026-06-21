@@ -279,6 +279,14 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
     }
   }
 
+  /** 对话结束后回归正常表情（neutral） */
+  const resetEmotionToNeutral = () => {
+    if (currentEmotion.value !== 'idle') {
+      currentEmotion.value = 'idle'
+      options.driveEmotion('idle')
+    }
+  }
+
   const processQueue = async () => {
     if (isProcessingQueue) return
     isProcessingQueue = true
@@ -292,6 +300,10 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
     isProcessingQueue = false
     isSpeaking.value = false
     options.syncLipParam(0)
+    // 流已结束，回归正常表情
+    if (!streamActive) {
+      resetEmotionToNeutral()
+    }
     if (options.subtitleEnabled()) {
       scheduleSubtitleFadeOut()
     }
@@ -336,11 +348,24 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
   const finishStream = () => {
     streamActive = false
     if (textBuffer.trim()) {
-      ttsQueue.push({ text: textBuffer.trim(), emotion: pendingEmotion })
+      // 推入队列前必须过滤，防止纯标签/符号文本导致后端 400
+      const filtered = filterTtsText(textBuffer.trim())
+      if (filtered) {
+        ttsQueue.push({ text: filtered, emotion: pendingEmotion })
+      }
       textBuffer = ''
     }
     if (ttsQueue.length > 0 && !isProcessingQueue) {
       processQueue()
+    } else if (!isProcessingQueue) {
+      // 队列为空且无正在处理的播放，直接结束并回归正常表情
+      isSpeaking.value = false
+      options.syncLipParam(0)
+      resetEmotionToNeutral()
+      if (options.subtitleEnabled()) {
+        scheduleSubtitleFadeOut()
+      }
+      options.onSpeakEnd?.()
     }
   }
 

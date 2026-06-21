@@ -92,6 +92,30 @@ const licenses = [
     license: 'MIT',
     description: 'Nous Research 开源的 AI Agent 框架，支持工具调用与多模态交互。',
     url: 'https://github.com/NousResearch/hermes-agent'
+  },
+  {
+    name: 'Mindcraft',
+    version: '1.0',
+    author: 'Kolby Nottingham',
+    license: 'MIT',
+    description: '基于 LLM 与 Mineflayer 的 Minecraft AI Agent 框架，为游戏世界构建具备自主行为的智能体。',
+    url: 'https://github.com/mindcraft-bots/mindcraft'
+  },
+  {
+    name: 'TencentDB Agent Memory',
+    version: '0.3',
+    author: 'Tencent',
+    license: 'MIT',
+    description: '腾讯开源的四层本地记忆系统插件，通过本地 LLM 与 SQLite 向量检索实现对话知识的自动捕获与结构化。',
+    url: 'https://github.com/tencentdb-agent-memory/memory-tencentdb'
+  },
+  {
+    name: 'CubeSandbox',
+    version: '1.0',
+    author: 'Tencent',
+    license: 'Apache-2.0',
+    description: '腾讯开源的面向 AI Agent 的即时、并发、安全且轻量的沙箱服务，提供隔离的代码执行环境。',
+    url: 'https://github.com/tencentcloud/CubeSandbox'
   }
 ]
 

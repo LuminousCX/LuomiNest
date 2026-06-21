@@ -4,7 +4,8 @@ import {
   Palette, Sparkles, Heart, Eye, Smile, Frown, Meh, Zap,
   Volume2, RotateCcw, Maximize2, Download, Settings2,
   Loader2, AlertCircle, FolderOpen, Check, Monitor, MonitorOff,
-  ChevronLeft, ChevronRight, Send, Square, Type, MessageCircle
+  ChevronLeft, ChevronRight, Send, Square, Type, MessageCircle,
+  Loader
 } from 'lucide-vue-next'
 import { useLuomiNestLive2D } from '@/composables/useLuomiNestLive2D'
 import { useAvatarTTS } from '@/composables/useAvatarTTS'
@@ -41,6 +42,7 @@ const MAIN_AGENT_PROFILE: AgentProfile = {
 // 桌面宠物模式状态（需在 composables 之前声明，避免 TDZ）
 const isDesktopMode = ref(false)
 const isDesktopPetRunning = ref(false)
+const isSwitchingMode = ref(false)
 
 const {
   isReady: isModelReady,
@@ -50,6 +52,7 @@ const {
   driveEmotion,
   syncLipParam,
   resetPose,
+  idleActive,
   destroy: teardown
 } = useLuomiNestLive2D(canvasRef)
 
@@ -187,7 +190,7 @@ const expressionValue = computed(() => {
 const idleAnimations = computed(() => [
   { name: 'Breath', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 65 : 0 },
   { name: 'Blink', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 40 : 0 },
-  { name: 'Idle Motion', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 80 : 0 },
+  { name: 'Idle Motion', status: idleActive.value ? 'running' : 'paused', progress: idleActive.value ? 80 : 0 },
   { name: 'Head Track', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 50 : 0 }
 ])
 
@@ -296,6 +299,7 @@ async function handleImportClick() {
 }
 
 async function toggleDesktopMode() {
+  if (isSwitchingMode.value) return
   if (isDesktopMode.value) {
     await switchToInlineMode()
   } else {
@@ -304,22 +308,32 @@ async function toggleDesktopMode() {
 }
 
 async function switchToDesktopMode() {
-  teardown()
-  isDesktopMode.value = true
-  const modelInfo = currentModelInfo.value
-  await window.api.desktopPet.open(modelInfo ?? undefined)
-  isDesktopPetRunning.value = true
-  avatarControl.checkDesktopPetStatus()
+  isSwitchingMode.value = true
+  try {
+    teardown()
+    isDesktopMode.value = true
+    const modelInfo = currentModelInfo.value
+    await window.api.desktopPet.open(modelInfo ?? undefined)
+    await avatarControl.checkDesktopPetStatus()
+    isDesktopPetRunning.value = avatarControl.isDesktopPetRunning
+  } finally {
+    isSwitchingMode.value = false
+  }
 }
 
 async function switchToInlineMode() {
-  isDesktopMode.value = false
-  await window.api.desktopPet.close()
-  isDesktopPetRunning.value = false
-  avatarControl.checkDesktopPetStatus()
-  await nextTick()
-  if (currentModelInfo.value) {
-    await loadModel(currentModelInfo.value.url, currentModelInfo.value.scale)
+  isSwitchingMode.value = true
+  try {
+    isDesktopMode.value = false
+    await window.api.desktopPet.close()
+    await avatarControl.checkDesktopPetStatus()
+    isDesktopPetRunning.value = avatarControl.isDesktopPetRunning
+    await nextTick()
+    if (currentModelInfo.value) {
+      await loadModel(currentModelInfo.value.url, currentModelInfo.value.scale)
+    }
+  } finally {
+    isSwitchingMode.value = false
   }
 }
 
@@ -456,6 +470,11 @@ onMounted(async () => {
   await checkDesktopPetStatus()
   await avatarControl.checkDesktopPetStatus()
 
+  // Sync desktop mode with actual pet running state (e.g. pet still running from previous session)
+  if (isDesktopPetRunning.value) {
+    isDesktopMode.value = true
+  }
+
   // 并发加载：后端状态 / 主 Agent 配置 / 模型配置 / 对话历史
   await Promise.all([
     chatStore.checkBackend(),
@@ -490,9 +509,9 @@ onBeforeUnmount(() => {
         <span class="header-badge">LuomiNest</span>
       </div>
       <div class="header-actions">
-        <div class="desktop-mode-toggle" :class="{ active: isDesktopMode }" @click="toggleDesktopMode" :title="isDesktopMode ? 'Switch to Inline Mode' : 'Switch to Desktop Mode'">
-          <component :is="isDesktopMode ? MonitorOff : Monitor" :size="16" />
-          <span class="toggle-label">{{ isDesktopMode ? 'Inline' : 'Desktop' }}</span>
+        <div class="desktop-mode-toggle" :class="{ active: isDesktopMode, switching: isSwitchingMode }" @click="toggleDesktopMode" :title="isSwitchingMode ? 'Switching...' : (isDesktopMode ? 'Switch to Inline Mode' : 'Switch to Desktop Mode')">
+          <component :is="isSwitchingMode ? Loader : (isDesktopMode ? Monitor : MonitorOff)" :size="16" :class="{ spin: isSwitchingMode }" />
+          <span class="toggle-label">{{ isSwitchingMode ? '...' : (isDesktopMode ? 'Desktop' : 'Inline') }}</span>
         </div>
         <div class="header-divider"></div>
         <button class="h-btn" title="Reset Pose" @click="handleResetPose"><RotateCcw :size="16" /></button>
@@ -843,6 +862,21 @@ onBeforeUnmount(() => {
   background: var(--lumi-primary-glow);
   color: var(--lumi-primary);
   border: 1px solid var(--lumi-primary-border);
+}
+
+.desktop-mode-toggle.switching {
+  opacity: 0.6;
+  cursor: wait;
+  pointer-events: none;
+}
+
+.desktop-mode-toggle .spin {
+  animation: luominest-spin 0.8s linear infinite;
+}
+
+@keyframes luominest-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .toggle-label {

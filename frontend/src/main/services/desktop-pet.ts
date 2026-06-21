@@ -7,6 +7,11 @@ import { PATHS } from './paths'
 const isDev = !app.isPackaged
 const isMac = platform() === 'darwin'
 
+const MIN_WIDTH = 280
+const MIN_HEIGHT = 400
+const MAX_WIDTH = 1200
+const MAX_HEIGHT = 1600
+
 const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
 const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
 
@@ -60,10 +65,11 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   const display = screen.getPrimaryDisplay()
   const { width: screenWidth, height: screenHeight } = display.workAreaSize
 
-  const petWidth = 420
-  const petHeight = 560
-  const petX = screenWidth - petWidth - 60
-  const petY = screenHeight - petHeight - 60
+  // Target ~75% of screen height so the full character is clearly visible
+  const petHeight = Math.min(900, Math.round(screenHeight * 0.75))
+  const petWidth = Math.round(petHeight * 0.68)
+  const petX = screenWidth - petWidth - 40
+  const petY = screenHeight - petHeight - 40
 
   const windowConfig: Electron.BrowserWindowConstructorOptions = {
     width: petWidth,
@@ -73,21 +79,21 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     show: false,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     hasShadow: false,
     resizable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    minWidth: 200,
-    minHeight: 280,
-    maxWidth: 800,
-    maxHeight: 1000,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
+    maxWidth: MAX_WIDTH,
+    maxHeight: MAX_HEIGHT,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      backgroundThrottling: false,
-      partition: 'persist:desktop-pet'
+      backgroundThrottling: false
     }
   }
 
@@ -116,11 +122,9 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     })
   })
 
-  if (isMac) {
-    desktopPetWindow.setIgnoreMouseEvents(true)
-  } else {
-    desktopPetWindow.setIgnoreMouseEvents(true, { forward: true })
-  }
+  // Keep the window clickable by default so users can interact with the pet.
+  // The renderer will request mouse passthrough explicitly when needed.
+  desktopPetWindow.setIgnoreMouseEvents(false)
 
   const allModels = [...LUOMINEST_BUILTIN_MODELS, ...loadImportedModels()]
 
@@ -176,8 +180,43 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     }
   }
 
+  const handleResizeWindow = (_event: any, width: number, height: number) => {
+    if (!desktopPetWindow || desktopPetWindow.isDestroyed()) return
+    const clampedW = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(width)))
+    const clampedH = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(height)))
+    desktopPetWindow.setSize(clampedW, clampedH)
+  }
+
+  let dragOffsetX = 0
+  let dragOffsetY = 0
+
+  const handleStartDrag = (_event: any, mouseX: number, mouseY: number) => {
+    if (!desktopPetWindow || desktopPetWindow.isDestroyed()) return
+    const [x, y] = desktopPetWindow.getPosition()
+    dragOffsetX = mouseX - x
+    dragOffsetY = mouseY - y
+  }
+
+  const handleDragWindow = (_event: any, mouseX: number, mouseY: number) => {
+    if (!desktopPetWindow || desktopPetWindow.isDestroyed()) return
+    desktopPetWindow.setPosition(mouseX - dragOffsetX, mouseY - dragOffsetY)
+  }
+
+  const handleEndDrag = () => {
+    if (!desktopPetWindow || desktopPetWindow.isDestroyed()) return
+    // Refresh the transparent surface once the drag finishes to work around
+    // Windows DWM occasionally leaving a white background after setPosition.
+    const currentOpacity = desktopPetWindow.getOpacity()
+    desktopPetWindow.setOpacity(0.99)
+    desktopPetWindow.setOpacity(currentOpacity)
+  }
+
   ipcMain.on('desktop-pet:set-ignore-mouse-events', handleSetIgnoreMouseEvents)
   ipcMain.on('desktop-pet:show-context-menu', handleShowContextMenu)
+  ipcMain.on('desktop-pet:start-drag', handleStartDrag)
+  ipcMain.on('desktop-pet:drag-window', handleDragWindow)
+  ipcMain.on('desktop-pet:end-drag', handleEndDrag)
+  ipcMain.on('desktop-pet:resize-window', handleResizeWindow)
 
   const loadPetWindow = async () => {
     if (isDev && process.env['ELECTRON_RENDERER_URL']) {
@@ -204,6 +243,10 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   desktopPetWindow.on('closed', () => {
     ipcMain.removeListener('desktop-pet:set-ignore-mouse-events', handleSetIgnoreMouseEvents)
     ipcMain.removeListener('desktop-pet:show-context-menu', handleShowContextMenu)
+    ipcMain.removeListener('desktop-pet:start-drag', handleStartDrag)
+    ipcMain.removeListener('desktop-pet:drag-window', handleDragWindow)
+    ipcMain.removeListener('desktop-pet:end-drag', handleEndDrag)
+    ipcMain.removeListener('desktop-pet:resize-window', handleResizeWindow)
     desktopPetWindow = null
   })
 

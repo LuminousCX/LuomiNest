@@ -307,8 +307,30 @@ class LLMAdapter:
                 "base_url": getattr(provider, "base_url", ""),
                 "api_key_set": bool(api_key and api_key not in ("ollama", "lmstudio", "")),
                 "default_model": getattr(provider, "default_model", ""),
+                "selected_models": cfg.get("selected_models", []),
             })
         return result
+
+
+    async def test_provider(self, config: dict) -> dict:
+        """临时构造 provider 并调用 list_models 检测 API/TOKEN 是否可用，不注册到全局。"""
+        logger.info(f"[Adapter] Testing provider: {config.get('id', 'unknown')}, base_url={config.get('base_url')}")
+        try:
+            provider = _create_provider_from_config(config)
+            models = await provider.list_models()
+            logger.success(f"[Adapter] Test success: {len(models)} models fetched")
+            return {
+                "success": True,
+                "models": models,
+                "error": None,
+            }
+        except Exception as e:
+            logger.warning(f"[Adapter] Test failed: {type(e).__name__}")
+            return {
+                "success": False,
+                "models": [],
+                "error": "Provider 测试失败，请检查配置或网络",
+            }
 
 
 llm_adapter = LLMAdapter()

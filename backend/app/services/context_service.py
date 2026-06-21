@@ -17,6 +17,14 @@ from app.engines.memory.memory_engine import (
 )
 from app.services.distillation_service import distillation_service
 
+# 主 Agent 唯一标识：记忆系统仅对主 Agent 生效，联系人 Agent 不读写记忆
+MAIN_AGENT_ID = "luominest_main_agent"
+
+
+def is_main_agent(agent_id: str | None) -> bool:
+    """判断给定 agent_id 是否为主 Agent（工作台）。"""
+    return agent_id == MAIN_AGENT_ID
+
 
 class ContextService:
     def __init__(self):
@@ -245,29 +253,37 @@ When thinking/reasoning, you MUST strictly follow this format:
 </core_rules>
 
 <avatar_emotion>
-You are embodied as a Live2D avatar. To drive the avatar's facial expression, emit an emotion tag at the very beginning of your reply, and again whenever the emotional tone of your reply changes.
+You are embodied as a Live2D avatar. To drive the avatar's facial expression, emit an emotion tag BEFORE each sentence or paragraph whose emotional tone is distinct from the previous one. The tag switches the avatar's expression in sync with TTS playback of the following text.
 
 Format: <exp:EMOTION_ID>
 Supported EMOTION_ID values (use ONLY these, lowercase):
-- happy
-- sad
-- neutral
-- love
-- surprise
-- angry
-- think
-- awkward
-- curious
-- shy
-- excited
-- confused
+- happy      (开心、愉快、满意)
+- sad        (难过、失落、伤心)
+- neutral    (平静、正常、陈述)
+- love       (喜爱、心动、撒娇)
+- surprise   (惊讶、意外、震惊)
+- angry      (生气、不满、愤怒)
+- think      (思考、分析、回忆)
+- awkward    (尴尬、无语、无奈)
+- curious    (好奇、感兴趣、疑问)
+- shy        (害羞、脸红、不好意思)
+- excited    (兴奋、激动、期待)
+- confused   (困惑、迷茫、不解)
 
 Rules:
-1. The tag is invisible to the user (it is stripped before display) and is NOT read aloud by TTS.
-2. Do not wrap the tag in quotes, code blocks, or explanations. Just emit it inline.
-3. Pick the emotion that best matches the sentiment of the surrounding sentence.
-4. If unsure, default to <exp:neutral>.
-5. Example: <exp:happy>太好了！我很开心你能来找我聊天。<exp:curious>对了，你今天过得怎么样？
+1. The tag is invisible to the user (stripped before display) and is NOT read aloud by TTS.
+2. Emit the tag INLINE at the very start of your reply, and again whenever the emotional tone changes.
+3. Do NOT wrap tags in quotes, code blocks, or explanations. Emit them directly in plain text.
+4. Do NOT emit tags inside code blocks, tables, or JSON — only in conversational text.
+5. Pick the emotion that best matches the sentiment of the FOLLOWING sentence.
+6. Be responsive: if the user jokes, show happy/excited; if the user is sad, show sad/love; if discussing a problem, show think/curious.
+7. If unsure, default to <exp:neutral>.
+8. The avatar automatically returns to neutral after the conversation ends, so no need to emit a closing tag.
+
+Examples:
+<exp:happy>太好了！我很开心你能来找我聊天呀～<exp:curious>对了，你今天过得怎么样？有没有遇到什么有趣的事？
+<exp:think>让我想想这个问题应该怎么解决...<exp:happy>我知道了！你可以试试这个方法。
+<exp:shy>嘿嘿，被你夸得有点不好意思了～<exp:curious>那你接下来想做什么呢？
 </avatar_emotion>
 
 {base_prompt}"""
@@ -329,6 +345,9 @@ Rules:
 
     @staticmethod
     async def _detect_and_sync_profile_updates(messages: list[dict], llm_adapter=None, agent_id: str | None = None) -> bool:
+        # 记忆系统仅对主 Agent 生效
+        if not is_main_agent(agent_id):
+            return False
         user_messages = []
         for msg in messages:
             if msg.get("role") == "user":
@@ -359,6 +378,9 @@ Rules:
         thread_id: str = "",
         llm_adapter=None,
     ) -> list[dict]:
+        # 记忆系统仅对主 Agent 生效，联系人 Agent 不注入记忆
+        if not is_main_agent(agent_id):
+            return messages
         try:
             engine = get_memory_engine(agent_id)
             # query-aware：用用户最新消息作为 query 优化事实检索
@@ -454,6 +476,9 @@ Rules:
         agent_id: str | None = None,
         llm_adapter=None,
     ) -> None:
+        # 记忆系统仅对主 Agent 生效，联系人 Agent 不更新记忆
+        if not is_main_agent(agent_id):
+            return
         user_count = sum(1 for m in messages if m.get("role") == "user")
         logger.info(f"[Memory] schedule_memory_update: thread={thread_id}, user_msgs={user_count}, has_adapter={llm_adapter is not None}")
         try:

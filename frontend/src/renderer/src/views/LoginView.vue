@@ -71,7 +71,6 @@ const goBack = () => {
     <div class="login-bg">
       <div class="bg-orb login-orb-1"></div>
       <div class="bg-orb login-orb-2"></div>
-      <div class="bg-grid"></div>
     </div>
 
     <div class="login-container">
@@ -293,40 +292,30 @@ const goBack = () => {
   overflow: hidden;
 }
 
-.bg-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(var(--lumi-primary-subtle) 1px, transparent 1px),
-    linear-gradient(90deg, var(--lumi-primary-subtle) 1px, transparent 1px);
-  background-size: 40px 40px;
-  opacity: 0.4;
-}
-
 .bg-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.25;
-  animation: orb-float 14s ease-in-out infinite;
+  filter: blur(120px);
+  opacity: 0.15;
+  animation: orb-float 18s ease-in-out infinite;
 }
 
 .login-orb-1 {
-  width: 320px;
-  height: 320px;
+  width: 400px;
+  height: 400px;
   background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
-  top: -100px;
-  right: -60px;
+  top: -120px;
+  right: -80px;
   animation-delay: 0s;
 }
 
 .login-orb-2 {
-  width: 260px;
-  height: 260px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.12), transparent 70%);
-  bottom: -60px;
-  left: -40px;
-  animation-delay: -7s;
+  width: 350px;
+  height: 350px;
+  background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
+  bottom: -80px;
+  left: -60px;
+  animation-delay: -9s;
 }
 
 @keyframes orb-float {
@@ -365,7 +354,7 @@ const goBack = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 32px var(--lumi-primary-glow);
+  box-shadow: 0 4px 24px var(--lumi-primary-glow);
 }
 
 .login-title {
@@ -389,9 +378,9 @@ const goBack = () => {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 16px 18px;
+  padding: 14px 18px;
   border-radius: var(--radius-lg);
-  border: 1.5px solid var(--workspace-border);
+  border: 1px solid var(--workspace-border);
   background: var(--workspace-card);
   cursor: pointer;
   transition: all 300ms ease-in-out;
@@ -401,8 +390,8 @@ const goBack = () => {
 
 .login-option-card:hover {
   border-color: var(--lumi-primary-border);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
+  box-shadow: 0 2px 12px var(--lumi-primary-light);
+  transform: translateY(-1px);
 }
 
 .option-icon {
@@ -561,7 +550,7 @@ const goBack = () => {
   gap: 6px;
   padding: 0 14px;
   border-radius: var(--radius-md);
-  border: 1.5px solid var(--workspace-border);
+  border: 1px solid var(--workspace-border);
   background: var(--workspace-card);
   transition: all 300ms ease-in-out;
 }
@@ -634,7 +623,7 @@ const goBack = () => {
 .submit-btn:hover:not(.disabled) {
   background: var(--lumi-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px var(--lumi-primary-border);
+  box-shadow: 0 4px 16px var(--lumi-primary-border);
 }
 
 .submit-btn:active:not(.disabled) {

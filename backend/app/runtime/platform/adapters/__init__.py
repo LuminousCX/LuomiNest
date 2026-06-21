@@ -321,7 +321,7 @@ def _register_all_adapter_types():
     register_adapter_type(
         name="minecraft",
         display_name="Minecraft",
-        description="通过 RCON 协议连接 Minecraft 服务器，支持发送游戏内消息和执行命令，可选 WebSocket 接收玩家聊天事件",
+        description="通过 RCON 协议连接 Minecraft 服务器，支持发送游戏内消息、执行命令、接收玩家聊天事件和游戏截图识别（参考 mindcraft 视觉理解方法）",
         adapter_cls=LuomiNestMinecraftAdapter,
         config_template={
             "rcon_host": "127.0.0.1",
@@ -332,6 +332,7 @@ def _register_all_adapter_types():
             "ws_port": 8081,
             "bot_name": "LuomiNest",
             "message_format": "tellraw",
+            "screenshot_enabled": True,
         },
         config_metadata={
             "rcon_host": {"label": "RCON 地址", "type": "text", "required": True},
@@ -342,6 +343,7 @@ def _register_all_adapter_types():
             "ws_port": {"label": "WS 监听端口", "type": "number", "required": False},
             "bot_name": {"label": "机器人名称", "type": "text", "required": False},
             "message_format": {"label": "消息格式", "type": "select", "options": ["tellraw", "tell", "say"], "required": False},
+            "screenshot_enabled": {"label": "启用截图识别", "type": "switch", "required": False},
         },
         icon="Gamepad2",
         category="game",

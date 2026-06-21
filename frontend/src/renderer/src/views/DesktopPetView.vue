@@ -1,12 +1,11 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import '@pixi/unsafe-eval'
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Application, Ticker } from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'
 import { LUOMINEST_BUILTIN_MODELS, resolveExpression } from '@/config/luominest-models'
 import {
-  RotateCcw, Eye, EyeOff, X,
-  ChevronUp, Minimize, Pin, PinOff
+  RotateCcw, X, Pin, PinOff
 } from 'lucide-vue-next'
 
 interface PetModelInfo {
@@ -27,48 +26,47 @@ const isLoading = ref(false)
 const loadError = ref<string | null>(null)
 const currentModelName = ref('')
 const currentModelId = ref('')
-const isIslandExpanded = ref(false)
+const isControlsVisible = ref(false)
 const isAlwaysOnTop = ref(true)
-const isMousePassthrough = ref(true)
 const availableMotions = ref<string[]>([])
 const availableExpressions = ref<string[]>([])
-const fadeOnHoverEnabled = ref(true)
-const shouldFadeUI = ref(false)
 const subtitleText = ref('')
 const subtitleVisible = ref(false)
 
 let pixiApp: Application | null = null
 let currentModel: Live2DModel | null = null
-let isDragging = false
-let dragOffset = { x: 0, y: 0 }
-let islandHideTimer: ReturnType<typeof setTimeout> | null = null
+let ipcLoadModelHandler: ((event: any, modelInfo: PetModelInfo) => void) | null = null
+let ipcTriggerMotionHandler: ((event: any, group: string, index: number) => void) | null = null
+let ipcTriggerExpressionHandler: ((event: any, name: string) => void) | null = null
+let ipcLipSyncHandler: ((event: any, value: number) => void) | null = null
+let ipcPadEmotionHandler: ((event: any, pad: { pleasure: number; arousal: number; dominance: number }) => void) | null = null
+let ipcSetCoreParamHandler: ((event: any, paramId: string, value: number) => void) | null = null
+let ipcGetModelCapabilitiesHandler: ((event: any, requestId: string) => void) | null = null
+let contextMenuHandler: ((e: MouseEvent) => void) | null = null
+let ipcSubtitleHandler: ((event: any, text: string) => void) | null = null
+let ipcSubtitleHideHandler: ((event: any) => void) | null = null
+let idleTickerCallback: (() => void) | null = null
+let idleStartTime = 0
+let subtitleFadeTimer: ReturnType<typeof setTimeout> | null = null
+let retryCount = 0
+let retryTimerId: ReturnType<typeof setTimeout> | null = null
+let currentLoadToken = 0
+let controlsHideTimer: ReturnType<typeof setTimeout> | null = null
+let resizeHandler: (() => void) | null = null
+let isDraggingWindow = false
+let canvasMouseDownHandler: ((e: MouseEvent) => void) | null = null
+let windowMouseMoveHandler: ((e: MouseEvent) => void) | null = null
+let windowMouseUpHandler: ((e: MouseEvent) => void) | null = null
 let wheelHandler: ((e: WheelEvent) => void) | null = null
+let mouseMoveHandler: ((e: MouseEvent) => void) | null = null
+let isMouseIgnored = false
+let modelOriginalBounds: { width: number; height: number } | null = null
+// 鼠标跟踪相关变量
 let focusTargetX = 0
 let focusTargetY = 0
 let focusCurrentX = 0
 let focusCurrentY = 0
 let focusTickerCallback: (() => void) | null = null
-let focusMouseMoveHandler: ((e: MouseEvent) => void) | null = null
-let focusMouseLeaveHandler: (() => void) | null = null
-let ipcLoadModelHandler: ((event: any, modelInfo: PetModelInfo) => void) | null = null
-let ipcTriggerMotionHandler: ((event: any, group: string, index: number) => void) | null = null
-let ipcTriggerExpressionHandler: ((event: any, name: string) => void) | null = null
-let ipcSetPositionHandler: ((event: any, x: number, y: number) => void | null) | null = null
-let ipcSetScaleHandler: ((event: any, scale: number) => void | null) | null = null
-let ipcLipSyncHandler: ((event: any, value: number) => void | null) | null = null
-let ipcPadEmotionHandler: ((event: any, pad: { pleasure: number; arousal: number; dominance: number }) => void | null) | null = null
-let ipcSetCoreParamHandler: ((event: any, paramId: string, value: number) => void | null) | null = null
-let ipcGetModelCapabilitiesHandler: ((event: any, requestId: string) => void | null) | null = null
-let contextMenuHandler: ((e: MouseEvent) => void) | null = null
-let retryCount = 0
-let retryTimerId: ReturnType<typeof setTimeout> | null = null
-let currentLoadToken = 0
-let transparencyCheckTimer: ReturnType<typeof setInterval> | null = null
-let lastMouseX = 0
-let lastMouseY = 0
-let subtitleFadeTimer: ReturnType<typeof setTimeout> | null = null
-let ipcSubtitleHandler: ((event: any, text: string) => void) | null = null
-let ipcSubtitleHideHandler: ((event: any) => void) | null = null
 const MAX_RETRIES = 3
 
 const resolveEmotionForCurrentModel = (emotionId: string): string => {
@@ -111,114 +109,16 @@ const mapPADtoEmotion = (pleasure: number, arousal: number, dominance: number): 
   return 'neutral'
 }
 
-const cleanupFocus = () => {
-  if (focusTickerCallback) {
-    Ticker.shared.remove(focusTickerCallback)
-    focusTickerCallback = null
-  }
-  if (focusMouseMoveHandler) {
-    window.removeEventListener('mousemove', focusMouseMoveHandler)
-    focusMouseMoveHandler = null
-  }
-  if (focusMouseLeaveHandler) {
-    window.removeEventListener('mouseleave', focusMouseLeaveHandler)
-    focusMouseLeaveHandler = null
-  }
-}
-
-const setIgnoreMouseEvents = (ignore: boolean) => {
-  isMousePassthrough.value = ignore
-  window.electron?.ipcRenderer.send('desktop-pet:set-ignore-mouse-events', ignore)
-}
-
-const isCanvasRegionTransparent = (
-  gl: WebGL2RenderingContext | WebGLRenderingContext,
-  clientX: number,
-  clientY: number,
-  canvasEl: HTMLCanvasElement,
-  radius: number = 20,
-  threshold: number = 10
-): boolean => {
-  const rect = canvasEl.getBoundingClientRect()
-  const { left, top, width, height } = rect
-
-  if (!width || !height) return true
-  if (gl.drawingBufferWidth <= 0 || gl.drawingBufferHeight <= 0) return true
-
-  const xIn = clientX - left
-  const yIn = clientY - top
-  if (xIn < 0 || yIn < 0 || xIn >= width || yIn >= height) return true
-
-  const scaleX = gl.drawingBufferWidth / width
-  const scaleY = gl.drawingBufferHeight / height
-  if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY)) return true
-
-  const centerX = Math.floor(xIn * scaleX)
-  const centerY = Math.floor(gl.drawingBufferHeight - 1 - yIn * scaleY)
-  const radiusX = Math.ceil(radius * scaleX)
-  const radiusY = Math.ceil(radius * scaleY)
-
-  const startX = Math.max(0, centerX - radiusX)
-  const endX = Math.min(gl.drawingBufferWidth - 1, centerX + radiusX)
-  const startY = Math.max(0, centerY - radiusY)
-  const endY = Math.min(gl.drawingBufferHeight - 1, centerY + radiusY)
-
-  const readWidth = endX - startX + 1
-  const readHeight = endY - startY + 1
-  if (readWidth <= 0 || readHeight <= 0) return true
-
-  const data = new Uint8Array(readWidth * readHeight * 4)
-  try {
-    gl.readPixels(startX, startY, readWidth, readHeight, gl.RGBA, gl.UNSIGNED_BYTE, data)
-  } catch {
-    return true
-  }
-
-  const radiusSq = radius * radius
-  for (let y = 0; y < readHeight; y++) {
-    const gy = startY + y
-    const dy = (gy - centerY) / scaleY
-    const dySq = dy * dy
-    for (let x = 0; x < readWidth; x++) {
-      const gx = startX + x
-      const dx = (gx - centerX) / scaleX
-      if (dx * dx + dySq > radiusSq) continue
-      const index = (y * readWidth + x) * 4
-      if (data[index + 3] >= threshold) return false
-    }
-  }
-
-  return true
-}
-
-const checkTransparencyAndUpdateMouseEvents = () => {
-  if (!canvasRef.value || !fadeOnHoverEnabled.value || isDragging) return
-
-  const gl = canvasRef.value.getContext('webgl2') || canvasRef.value.getContext('webgl') as WebGL2RenderingContext | WebGLRenderingContext | null
-  if (!gl) return
-
-  const isTransparent = isCanvasRegionTransparent(gl, lastMouseX, lastMouseY, canvasRef.value, 20, 10)
-
-  if (isTransparent) {
-    setIgnoreMouseEvents(true)
-    shouldFadeUI.value = false
-  } else {
-    setIgnoreMouseEvents(false)
-    shouldFadeUI.value = true
-  }
-}
-
 const setCoreParam = (paramId: string, value: number) => {
   if (!currentModel) return
   try {
-    const internalModel = currentModel.internalModel
-    if (internalModel && 'coreModel' in internalModel) {
-      const coreModel = (internalModel as any).coreModel
-      if (coreModel && typeof coreModel.setParameterValueById === 'function') {
-        coreModel.setParameterValueById(paramId, value)
-      }
+    const internalModel = currentModel.internalModel as any
+    const coreModel = internalModel?.coreModel
+    if (coreModel && typeof coreModel.setParameterValueById === 'function') {
+      coreModel.setParameterValueById(paramId, value)
     }
   } catch {
+    // intentionally ignored
   }
 }
 
@@ -243,12 +143,129 @@ const scanModelCapabilities = (model: Live2DModel) => {
       }
     }
   } catch {
+    // intentionally ignored
   }
   availableMotions.value = motions
   availableExpressions.value = expressions
 }
 
-const loadModel = async (url: string, scale: number) => {
+const hideWatermark = (model: Live2DModel) => {
+  try {
+    const internalModel = model.internalModel as any
+    if (!internalModel?.coreModel) return
+    const coreModel = internalModel.coreModel
+
+    const param14Idx = coreModel.getParameterIndex('Param14')
+    if (param14Idx >= 0) {
+      coreModel.setParameterValueByIndex(param14Idx, 1)
+    }
+
+    const settings = internalModel?.settings
+    const displayInfo = settings?.displayInfo
+    if (displayInfo?.Parameters) {
+      for (const param of displayInfo.Parameters) {
+        const rawName = String(param?.Name ?? '')
+        const lowerName = rawName.toLowerCase()
+        if (rawName.includes('水印') || lowerName.includes('watermark') || lowerName.includes('copyright')) {
+          const idx = coreModel.getParameterIndex(param.Id)
+          if (idx >= 0) {
+            coreModel.setParameterValueByIndex(idx, 1)
+          }
+        }
+      }
+    }
+  } catch {
+    // intentionally ignored
+  }
+}
+
+const cleanupIdle = () => {
+  if (idleTickerCallback) {
+    Ticker.shared.remove(idleTickerCallback)
+    idleTickerCallback = null
+  }
+}
+
+const setupIdleAnimation = () => {
+  cleanupIdle()
+  idleStartTime = Date.now()
+
+  idleTickerCallback = () => {
+    if (!currentModel) return
+    try {
+      const internalModel = currentModel.internalModel as any
+      const coreModel = internalModel?.coreModel
+      if (!coreModel) return
+
+      const param14Idx = coreModel.getParameterIndex('Param14')
+      if (param14Idx >= 0) {
+        coreModel.setParameterValueByIndex(param14Idx, 1)
+      }
+
+      const t = (Date.now() - idleStartTime) / 1000
+      const bodyXIdx = coreModel.getParameterIndex('ParamBodyAngleX')
+      const bodyYIdx = coreModel.getParameterIndex('ParamBodyAngleY')
+      const bodyZIdx = coreModel.getParameterIndex('ParamBodyAngleZ')
+
+      if (bodyXIdx >= 0) {
+        coreModel.setParameterValueByIndex(bodyXIdx, Math.sin(t * 0.6) * 3 + Math.sin(t * 1.2) * 0.8)
+      }
+      if (bodyYIdx >= 0) {
+        coreModel.setParameterValueByIndex(bodyYIdx, Math.sin(t * 0.4 + 1.5) * 2.5)
+      }
+      if (bodyZIdx >= 0) {
+        coreModel.setParameterValueByIndex(bodyZIdx, Math.sin(t * 0.5 + 3) * 2)
+      }
+    } catch {
+      // intentionally ignored
+    }
+  }
+
+  Ticker.shared.add(idleTickerCallback)
+}
+
+const MODEL_FIT_PADDING = 16
+
+const fitModelToWindow = (model: Live2DModel) => {
+  // Ensure the renderer matches the current window size; this also seems to
+  // help Live2DModel's anchor/pivot take effect during initial load.
+  if (pixiApp) {
+    pixiApp.renderer.resize(window.innerWidth, window.innerHeight)
+  }
+  // Reset to original size, force transform update, render once, then measure.
+  model.scale.set(1)
+  model.updateTransform()
+  pixiApp?.render()
+  const bounds = model.getLocalBounds()
+  if (bounds.width > 0 && bounds.height > 0) {
+    modelOriginalBounds = { width: bounds.width, height: bounds.height }
+    const targetWidth = Math.max(1, window.innerWidth - MODEL_FIT_PADDING * 2)
+    const targetHeight = Math.max(1, window.innerHeight - MODEL_FIT_PADDING * 2)
+    const scale = Math.min(targetWidth / bounds.width, targetHeight / bounds.height)
+    model.scale.set(scale)
+    // Use the model's anchor to center it. If the anchor is not respected
+    // immediately, the delayed verification below will correct it.
+    model.x = window.innerWidth / 2
+    model.y = window.innerHeight / 2
+    // Verify after a short delay and correct if the rendered bounds are off.
+    window.setTimeout(() => {
+      if (!pixiApp || !currentModel) return
+      pixiApp.render()
+      const gb = currentModel.getBounds()
+      if (
+        gb.x < 0 ||
+        gb.y < 0 ||
+        gb.x + gb.width > window.innerWidth ||
+        gb.y + gb.height > window.innerHeight
+      ) {
+        currentModel.x += (window.innerWidth - gb.width) / 2 - gb.x
+        currentModel.y += (window.innerHeight - gb.height) / 2 - gb.y
+      }
+    }, 150)
+  }
+}
+
+const loadModel = async (url: string, _scale: number) => {
   if (retryTimerId !== null) {
     clearTimeout(retryTimerId)
     retryTimerId = null
@@ -268,7 +285,6 @@ const loadModel = async (url: string, scale: number) => {
         backgroundAlpha: 0,
         antialias: true,
         preserveDrawingBuffer: true,
-        resizeTo: window,
         resolution: Math.min(window.devicePixelRatio || 1, 2),
         autoDensity: true
       } as any)
@@ -286,8 +302,9 @@ const loadModel = async (url: string, scale: number) => {
       currentModel = null
     }
 
-    cleanupFocus()
+    cleanupIdle()
 
+    console.info('[LuomiNestDesktopPet] Loading model:', url)
     const model = await Live2DModel.from(url, {
       autoHitTest: true,
       autoFocus: false,
@@ -299,23 +316,10 @@ const loadModel = async (url: string, scale: number) => {
       return
     }
 
-    const clampedScale = Math.max(0.05, Math.min(2.0, scale))
-    model.scale.set(clampedScale)
     model.anchor.set(0.5, 0.5)
+    // Position the model before fitting; scale will be set by fitModelToWindow.
     model.x = window.innerWidth / 2
     model.y = window.innerHeight / 2
-
-    try {
-      const internalModel = model.internalModel as any
-      if (internalModel?.coreModel) {
-        const coreModel = internalModel.coreModel
-        const param14Idx = coreModel.getParameterIndex('Param14')
-        if (param14Idx >= 0) {
-          coreModel.setParameterValueByIndex(param14Idx, 0)
-        }
-      }
-    } catch {
-    }
 
     model.on('hit', (hitAreas: string[]) => {
       if (hitAreas.includes('body') || hitAreas.includes('head')) {
@@ -323,12 +327,18 @@ const loadModel = async (url: string, scale: number) => {
       }
     })
 
-    setupDrag(model)
-    setupWheel(model)
-    setupFocus(model)
-
     pixiApp.stage.addChild(model)
     currentModel = model
+
+    // Fit the model once after loading so it is fully visible from the start.
+    fitModelToWindow(model)
+
+    hideWatermark(model)
+    setupIdleAnimation()
+    setupWheelZoom(model)
+    setupMousePassthrough()
+    setupFocusTracking()
+
     isModelReady.value = true
     retryCount = 0
 
@@ -337,23 +347,25 @@ const loadModel = async (url: string, scale: number) => {
     try {
       await model.motion('Idle', 0)
     } catch {
+      // intentionally ignored
     }
+    hideWatermark(model)
 
-    console.info('[INFO][LuomiNestDesktopPet] Model loaded successfully:', url)
+    console.info('[LuomiNestDesktopPet] Model loaded:', url)
   } catch (err) {
     if (loadToken !== currentLoadToken) return
 
     const message = err instanceof Error ? err.message : 'Failed to load model'
     loadError.value = message
-    console.error('[ERROR][LuomiNestDesktopPet] Model load error:', message)
+    console.error('[LuomiNestDesktopPet] Model load error:', message)
 
     if (retryCount < MAX_RETRIES) {
       retryCount++
-      console.info(`[INFO][LuomiNestDesktopPet] Retrying (${retryCount}/${MAX_RETRIES})...`)
-      retryTimerId = setTimeout(async () => {
+      console.info(`[LuomiNestDesktopPet] Retrying (${retryCount}/${MAX_RETRIES})...`)
+      retryTimerId = setTimeout(() => {
         retryTimerId = null
         if (loadToken !== currentLoadToken) return
-        await loadModel(url, scale)
+        loadModel(url, _scale)
       }, 1000 * retryCount)
     }
   } finally {
@@ -363,73 +375,138 @@ const loadModel = async (url: string, scale: number) => {
   }
 }
 
-const setupDrag = (model: Live2DModel) => {
-  model.interactive = true
-
-  model.on('pointerdown', (e: any) => {
-    if (e.data.button !== 0) return
-    isDragging = true
-    dragOffset.x = e.data.global.x - model.x
-    dragOffset.y = e.data.global.y - model.y
-    setIgnoreMouseEvents(false)
-  })
-
-  model.on('pointermove', (e: any) => {
-    if (!isDragging) return
-    model.x = e.data.global.x - dragOffset.x
-    model.y = e.data.global.y - dragOffset.y
-  })
-
-  const endDrag = () => {
-    if (!isDragging) return
-    isDragging = false
-    setTimeout(() => {
-      if (currentModel && !isDragging) {
-        setIgnoreMouseEvents(true)
-      }
-    }, 100)
-  }
-
-  model.on('pointerup', endDrag)
-  model.on('pointerupoutside', endDrag)
+const showControls = () => {
+  isControlsVisible.value = true
+  if (controlsHideTimer) clearTimeout(controlsHideTimer)
 }
 
-const setupWheel = (model: Live2DModel) => {
+const scheduleHideControls = () => {
+  if (controlsHideTimer) clearTimeout(controlsHideTimer)
+  controlsHideTimer = setTimeout(() => {
+    isControlsVisible.value = false
+  }, 3000)
+}
+
+const handleResetPose = async () => {
+  showControls()
+  if (currentModel) {
+    try {
+      await currentModel.motion('Idle', 0)
+    } catch {
+      // intentionally ignored
+    }
+    hideWatermark(currentModel)
+  }
+  scheduleHideControls()
+}
+
+const handleToggleAlwaysOnTop = () => {
+  showControls()
+  isAlwaysOnTop.value = !isAlwaysOnTop.value
+  window.electron?.ipcRenderer.send('desktop-pet:set-ignore-mouse-events', !isAlwaysOnTop.value)
+  scheduleHideControls()
+}
+
+const handleClose = () => {
+  window.api.desktopPet.close()
+}
+
+const MIN_PET_WIDTH = 280
+const MIN_PET_HEIGHT = 400
+const MAX_PET_WIDTH = 1200
+const MAX_PET_HEIGHT = 1600
+
+const setupWheelZoom = (model: Live2DModel) => {
   if (wheelHandler) {
     window.removeEventListener('wheel', wheelHandler)
   }
   wheelHandler = (e: WheelEvent) => {
     if (!model) return
     e.preventDefault()
-    const scaleFactor = e.deltaY > 0 ? 0.95 : 1.05
-    const newScale = Math.max(0.05, Math.min(3.0, model.scale.x * scaleFactor))
-    model.scale.set(newScale)
+    const oldScale = model.scale.x
+    const factor = e.deltaY > 0 ? 0.95 : 1.05
+
+    const bounds = modelOriginalBounds
+    if (bounds) {
+      // Keep window and model in sync: stop scaling once the window hits its
+      // minimum or maximum allowed size.
+      const minScale = Math.max(
+        (MIN_PET_WIDTH - MODEL_FIT_PADDING * 2) / bounds.width,
+        (MIN_PET_HEIGHT - MODEL_FIT_PADDING * 2) / bounds.height
+      )
+      const maxScale = Math.min(
+        (MAX_PET_WIDTH - MODEL_FIT_PADDING * 2) / bounds.width,
+        (MAX_PET_HEIGHT - MODEL_FIT_PADDING * 2) / bounds.height
+      )
+      const newScale = Math.max(minScale, Math.min(maxScale, oldScale * factor))
+      const newWidth = Math.round(bounds.width * newScale + MODEL_FIT_PADDING * 2)
+      const newHeight = Math.round(bounds.height * newScale + MODEL_FIT_PADDING * 2)
+      window.electron?.ipcRenderer.send('desktop-pet:resize-window', newWidth, newHeight)
+      model.scale.set(newScale)
+    } else {
+      const newScale = Math.max(0.05, Math.min(1.5, oldScale * factor))
+      model.scale.set(newScale)
+    }
   }
   window.addEventListener('wheel', wheelHandler, { passive: false })
 }
 
-const setupFocus = (_model: Live2DModel) => {
-  cleanupFocus()
+const updateMousePassthrough = (clientX: number, clientY: number) => {
+  if (!currentModel || !pixiApp) return
+  try {
+    // Render once so bounds reflect the latest pose/scale before hit testing.
+    pixiApp.render()
+    const bounds = currentModel.getBounds()
+    const isOverModel =
+      clientX >= bounds.x &&
+      clientX <= bounds.x + bounds.width &&
+      clientY >= bounds.y &&
+      clientY <= bounds.y + bounds.height
+    const shouldIgnore = !isOverModel
+    if (shouldIgnore !== isMouseIgnored) {
+      isMouseIgnored = shouldIgnore
+      window.electron?.ipcRenderer.send('desktop-pet:set-ignore-mouse-events', shouldIgnore)
+    }
+  } catch {
+    // If bounds/hit-test fails, keep mouse events enabled to stay interactive.
+  }
+}
 
-  const FOCUS_DAMPING = 0.15
+const setupMousePassthrough = () => {
+  if (mouseMoveHandler) return
+  mouseMoveHandler = (e: MouseEvent) => {
+    if (isDraggingWindow) return
+    updateMousePassthrough(e.clientX, e.clientY)
+    // 鼠标在模型上时，更新跟踪目标（归一化到 [-1, 1]）
+    if (!isMouseIgnored && currentModel) {
+      const bounds = currentModel.getBounds()
+      const centerX = bounds.x + bounds.width / 2
+      const centerY = bounds.y + bounds.height / 2
+      focusTargetX = Math.max(-1, Math.min(1, (e.clientX - centerX) / (bounds.width / 2)))
+      focusTargetY = Math.max(-1, Math.min(1, -((e.clientY - centerY) / (bounds.height / 2))))
+    }
+  }
+  window.addEventListener('mousemove', mouseMoveHandler)
+}
 
-  const onMouseMove = (e: MouseEvent) => {
-    focusTargetX = (e.clientX / window.innerWidth) * 2 - 1
-    focusTargetY = -((e.clientY / window.innerHeight) * 2 - 1)
-    lastMouseX = e.clientX
-    lastMouseY = e.clientY
+/** 鼠标跟踪：头部和眼球跟随鼠标，鼠标离开模型时平滑回归中心 */
+const setupFocusTracking = () => {
+  if (focusTickerCallback) {
+    Ticker.shared.remove(focusTickerCallback)
   }
 
-  const onMouseLeave = () => {
-    focusTargetX = 0
-    focusTargetY = 0
-  }
-
-  focusMouseMoveHandler = onMouseMove
-  focusMouseLeaveHandler = onMouseLeave
+  const FOCUS_DAMPING = 0.12
 
   focusTickerCallback = () => {
     if (!currentModel) return
+
+    // 鼠标不在模型上时，回归中心
+    if (isMouseIgnored) {
+      focusTargetX = 0
+      focusTargetY = 0
+    }
+
+    // 阻尼平滑插值
     focusCurrentX += (focusTargetX - focusCurrentX) * FOCUS_DAMPING
     focusCurrentY += (focusTargetY - focusCurrentY) * FOCUS_DAMPING
 
@@ -443,6 +520,7 @@ const setupFocus = (_model: Live2DModel) => {
       const eyeBallXParam = coreModel.getParameterIndex('ParamEyeBallX')
       const eyeBallYParam = coreModel.getParameterIndex('ParamEyeBallY')
 
+      // 头部混合：原值 60% + 鼠标 40%（最大 15 度）
       if (angleXParam >= 0) {
         const base = coreModel.getParameterValueByIndex(angleXParam)
         coreModel.setParameterValueByIndex(angleXParam, base * 0.6 + focusCurrentX * 15 * 0.4)
@@ -451,6 +529,7 @@ const setupFocus = (_model: Live2DModel) => {
         const base = coreModel.getParameterValueByIndex(angleYParam)
         coreModel.setParameterValueByIndex(angleYParam, base * 0.6 + focusCurrentY * 15 * 0.4)
       }
+      // 眼球混合：原值 50% + 鼠标 50%
       if (eyeBallXParam >= 0) {
         const base = coreModel.getParameterValueByIndex(eyeBallXParam)
         coreModel.setParameterValueByIndex(eyeBallXParam, base * 0.5 + focusCurrentX * 0.5)
@@ -460,98 +539,51 @@ const setupFocus = (_model: Live2DModel) => {
         coreModel.setParameterValueByIndex(eyeBallYParam, base * 0.5 + focusCurrentY * 0.5)
       }
     } catch {
+      // intentionally ignored
     }
   }
 
-  window.addEventListener('mousemove', onMouseMove)
-  window.addEventListener('mouseleave', onMouseLeave)
   Ticker.shared.add(focusTickerCallback)
 }
 
-const toggleIsland = () => {
-  isIslandExpanded.value = !isIslandExpanded.value
-  if (isIslandExpanded.value) {
-    setIgnoreMouseEvents(false)
-    resetIslandTimer()
-  }
-}
+const setupCanvasDrag = () => {
+  if (!canvasRef.value) return
+  let lastDragSend = 0
 
-const resetIslandTimer = () => {
-  if (islandHideTimer) clearTimeout(islandHideTimer)
-  if (isIslandExpanded.value) {
-    islandHideTimer = setTimeout(() => {
-      isIslandExpanded.value = false
-    }, 4000)
-  }
-}
-
-const handleIslandMouseEnter = () => {
-  if (islandHideTimer) clearTimeout(islandHideTimer)
-  setIgnoreMouseEvents(false)
-}
-
-const handleIslandMouseLeave = () => {
-  resetIslandTimer()
-  setTimeout(() => {
-    if (!isDragging) {
-      setIgnoreMouseEvents(true)
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button !== 0) return
+    isDraggingWindow = true
+    if (isMouseIgnored) {
+      isMouseIgnored = false
+      window.electron?.ipcRenderer.send('desktop-pet:set-ignore-mouse-events', false)
     }
-  }, 200)
-}
-
-const handleResetPose = async () => {
-  if (currentModel) {
-    try {
-      await currentModel.motion('Idle', 0)
-    } catch {
-    }
-  }
-  resetIslandTimer()
-}
-
-const handleToggleAlwaysOnTop = () => {
-  isAlwaysOnTop.value = !isAlwaysOnTop.value
-  resetIslandTimer()
-}
-
-const handleToggleFadeOnHover = () => {
-  fadeOnHoverEnabled.value = !fadeOnHoverEnabled.value
-  if (!fadeOnHoverEnabled.value) {
-    shouldFadeUI.value = false
-    setIgnoreMouseEvents(true)
-  }
-  resetIslandTimer()
-}
-
-const handleClose = () => {
-  window.api.desktopPet.close()
-}
-
-onMounted(async () => {
-  await nextTick()
-
-  const modelInfoStr = new URLSearchParams(window.location.hash.split('?')[1] || '').get('model')
-  let modelToLoad: PetModelInfo | null = null
-
-  if (modelInfoStr) {
-    try {
-      modelToLoad = JSON.parse(decodeURIComponent(modelInfoStr))
-    } catch {
-    }
+    window.electron?.ipcRenderer.send('desktop-pet:start-drag', e.screenX, e.screenY)
   }
 
-  if (!modelToLoad) {
-    const builtin = LUOMINEST_BUILTIN_MODELS[0]
-    modelToLoad = { id: builtin.id, name: builtin.name, url: builtin.url, scale: builtin.scale, type: builtin.type, tags: builtin.tags }
+  const onMouseMove = (e: MouseEvent) => {
+    if (!isDraggingWindow) return
+    const now = performance.now()
+    if (now - lastDragSend < 16) return
+    lastDragSend = now
+    window.electron?.ipcRenderer.send('desktop-pet:drag-window', e.screenX, e.screenY)
   }
 
-  currentModelName.value = modelToLoad.name
-  currentModelId.value = modelToLoad.id
-
-  if (canvasRef.value) {
-    await loadModel(modelToLoad.url, modelToLoad.scale)
+  const onMouseUp = () => {
+    if (!isDraggingWindow) return
+    isDraggingWindow = false
+    window.electron?.ipcRenderer.send('desktop-pet:end-drag')
   }
 
+  canvasMouseDownHandler = onMouseDown
+  windowMouseMoveHandler = onMouseMove
+  windowMouseUpHandler = onMouseUp
+
+  canvasRef.value.addEventListener('mousedown', onMouseDown)
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
+}
+
+const setupIpc = () => {
   ipcLoadModelHandler = async (_event: any, modelInfo: PetModelInfo) => {
     currentModelName.value = modelInfo.name
     currentModelId.value = modelInfo.id
@@ -567,6 +599,7 @@ onMounted(async () => {
       try {
         await currentModel.motion(group, index)
       } catch {
+        // intentionally ignored
       }
     }
   }
@@ -578,26 +611,11 @@ onMounted(async () => {
       try {
         await currentModel.expression(resolved)
       } catch {
+        // intentionally ignored
       }
     }
   }
   window.electron?.ipcRenderer.on('desktop-pet:trigger-expression', ipcTriggerExpressionHandler)
-
-  ipcSetPositionHandler = (_event: any, x: number, y: number) => {
-    if (currentModel) {
-      currentModel.x = x
-      currentModel.y = y
-    }
-  }
-  window.electron?.ipcRenderer.on('desktop-pet:set-position', ipcSetPositionHandler)
-
-  ipcSetScaleHandler = (_event: any, scale: number) => {
-    if (currentModel) {
-      const clamped = Math.max(0.05, Math.min(3.0, scale))
-      currentModel.scale.set(clamped)
-    }
-  }
-  window.electron?.ipcRenderer.on('desktop-pet:set-scale', ipcSetScaleHandler)
 
   ipcLipSyncHandler = (_event: any, value: number) => {
     const clamped = Math.max(0, Math.min(1, value))
@@ -612,6 +630,7 @@ onMounted(async () => {
       try {
         currentModel.expression(resolved)
       } catch {
+        // intentionally ignored
       }
     }
   }
@@ -636,14 +655,6 @@ onMounted(async () => {
   }
   window.electron?.ipcRenderer.on('desktop-pet:get-model-capabilities', ipcGetModelCapabilitiesHandler)
 
-  contextMenuHandler = (e: MouseEvent) => {
-    e.preventDefault()
-    setIgnoreMouseEvents(false)
-    window.electron?.ipcRenderer.send('desktop-pet:show-context-menu')
-    setTimeout(() => setIgnoreMouseEvents(true), 1000)
-  }
-  window.addEventListener('contextmenu', contextMenuHandler)
-
   ipcSubtitleHandler = (_event: any, text: string) => {
     showSubtitle(text)
   }
@@ -653,8 +664,76 @@ onMounted(async () => {
     hideSubtitle()
   }
   window.electron?.ipcRenderer.on('desktop-pet:subtitle-hide', ipcSubtitleHideHandler)
+}
 
-  transparencyCheckTimer = setInterval(checkTransparencyAndUpdateMouseEvents, 50)
+const cleanupIpc = () => {
+  const handlers = [
+    { name: 'desktop-pet:load-model', ref: ipcLoadModelHandler, setter: (v: any) => { ipcLoadModelHandler = v } },
+    { name: 'desktop-pet:trigger-motion', ref: ipcTriggerMotionHandler, setter: (v: any) => { ipcTriggerMotionHandler = v } },
+    { name: 'desktop-pet:trigger-expression', ref: ipcTriggerExpressionHandler, setter: (v: any) => { ipcTriggerExpressionHandler = v } },
+    { name: 'desktop-pet:lip-sync', ref: ipcLipSyncHandler, setter: (v: any) => { ipcLipSyncHandler = v } },
+    { name: 'desktop-pet:pad-emotion', ref: ipcPadEmotionHandler, setter: (v: any) => { ipcPadEmotionHandler = v } },
+    { name: 'desktop-pet:set-core-param', ref: ipcSetCoreParamHandler, setter: (v: any) => { ipcSetCoreParamHandler = v } },
+    { name: 'desktop-pet:get-model-capabilities', ref: ipcGetModelCapabilitiesHandler, setter: (v: any) => { ipcGetModelCapabilitiesHandler = v } },
+    { name: 'desktop-pet:subtitle', ref: ipcSubtitleHandler, setter: (v: any) => { ipcSubtitleHandler = v } },
+    { name: 'desktop-pet:subtitle-hide', ref: ipcSubtitleHideHandler, setter: (v: any) => { ipcSubtitleHideHandler = v } }
+  ]
+
+  for (const h of handlers) {
+    if (h.ref) {
+      window.electron?.ipcRenderer.removeListener(h.name, h.ref)
+      h.setter(null)
+    }
+  }
+}
+
+onMounted(async () => {
+  await nextTick()
+
+  const modelInfoStr = new URLSearchParams(window.location.hash.split('?')[1] || '').get('model')
+  let modelToLoad: PetModelInfo | null = null
+
+  if (modelInfoStr) {
+    try {
+      modelToLoad = JSON.parse(decodeURIComponent(modelInfoStr))
+    } catch {
+      // intentionally ignored
+    }
+  }
+
+  if (!modelToLoad) {
+    const builtin = LUOMINEST_BUILTIN_MODELS[0]
+    modelToLoad = { id: builtin.id, name: builtin.name, url: builtin.url, scale: builtin.scale, type: builtin.type, tags: builtin.tags }
+  }
+
+  currentModelName.value = modelToLoad.name
+  currentModelId.value = modelToLoad.id
+
+  setupIpc()
+
+  contextMenuHandler = (e: MouseEvent) => {
+    e.preventDefault()
+    window.electron?.ipcRenderer.send('desktop-pet:show-context-menu')
+  }
+  window.addEventListener('contextmenu', contextMenuHandler)
+
+  resizeHandler = () => {
+    if (pixiApp) {
+      pixiApp.renderer.resize(window.innerWidth, window.innerHeight)
+    }
+    if (currentModel) {
+      // Keep the current scale and re-center the model after the window resizes.
+      currentModel.x = window.innerWidth / 2
+      currentModel.y = window.innerHeight / 2
+    }
+  }
+  window.addEventListener('resize', resizeHandler)
+
+  if (canvasRef.value) {
+    await loadModel(modelToLoad.url, modelToLoad.scale)
+  }
+
+  setupCanvasDrag()
 })
 
 onBeforeUnmount(() => {
@@ -663,69 +742,47 @@ onBeforeUnmount(() => {
     retryTimerId = null
   }
   currentLoadToken++
-  if (islandHideTimer) clearTimeout(islandHideTimer)
-  if (transparencyCheckTimer) {
-    clearInterval(transparencyCheckTimer)
-    transparencyCheckTimer = null
-  }
-  cleanupFocus()
-
-  if (ipcLoadModelHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:load-model', ipcLoadModelHandler)
-    ipcLoadModelHandler = null
-  }
-  if (ipcTriggerMotionHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:trigger-motion', ipcTriggerMotionHandler)
-    ipcTriggerMotionHandler = null
-  }
-  if (ipcTriggerExpressionHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:trigger-expression', ipcTriggerExpressionHandler)
-    ipcTriggerExpressionHandler = null
-  }
-  if (ipcSetPositionHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:set-position', ipcSetPositionHandler)
-    ipcSetPositionHandler = null
-  }
-  if (ipcSetScaleHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:set-scale', ipcSetScaleHandler)
-    ipcSetScaleHandler = null
-  }
-  if (ipcLipSyncHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:lip-sync', ipcLipSyncHandler)
-    ipcLipSyncHandler = null
-  }
-  if (ipcPadEmotionHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:pad-emotion', ipcPadEmotionHandler)
-    ipcPadEmotionHandler = null
-  }
-  if (ipcSetCoreParamHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:set-core-param', ipcSetCoreParamHandler)
-    ipcSetCoreParamHandler = null
-  }
-  if (ipcGetModelCapabilitiesHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:get-model-capabilities', ipcGetModelCapabilitiesHandler)
-    ipcGetModelCapabilitiesHandler = null
-  }
+  if (controlsHideTimer) clearTimeout(controlsHideTimer)
+  clearSubtitleFade()
+  cleanupIdle()
+  cleanupIpc()
 
   if (contextMenuHandler) {
     window.removeEventListener('contextmenu', contextMenuHandler)
     contextMenuHandler = null
   }
 
-  if (ipcSubtitleHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:subtitle', ipcSubtitleHandler)
-    ipcSubtitleHandler = null
-  }
-  if (ipcSubtitleHideHandler) {
-    window.electron?.ipcRenderer.removeListener('desktop-pet:subtitle-hide', ipcSubtitleHideHandler)
-    ipcSubtitleHideHandler = null
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+    resizeHandler = null
   }
 
-  clearSubtitleFade()
+  if (canvasRef.value && canvasMouseDownHandler) {
+    canvasRef.value.removeEventListener('mousedown', canvasMouseDownHandler)
+    canvasMouseDownHandler = null
+  }
+  if (windowMouseMoveHandler) {
+    window.removeEventListener('mousemove', windowMouseMoveHandler)
+    windowMouseMoveHandler = null
+  }
+  if (windowMouseUpHandler) {
+    window.removeEventListener('mouseup', windowMouseUpHandler)
+    windowMouseUpHandler = null
+  }
 
   if (wheelHandler) {
     window.removeEventListener('wheel', wheelHandler)
     wheelHandler = null
+  }
+
+  if (mouseMoveHandler) {
+    window.removeEventListener('mousemove', mouseMoveHandler)
+    mouseMoveHandler = null
+  }
+
+  if (focusTickerCallback) {
+    Ticker.shared.remove(focusTickerCallback)
+    focusTickerCallback = null
   }
 
   if (currentModel) {
@@ -761,52 +818,28 @@ onBeforeUnmount(() => {
     </Transition>
 
     <div
-      class="controls-island"
-      :class="{ 'fade-out': shouldFadeUI && fadeOnHoverEnabled }"
-      @mouseenter="handleIslandMouseEnter"
-      @mouseleave="handleIslandMouseLeave"
+      class="controls-anchor"
+      @mouseenter="showControls"
+      @mouseleave="scheduleHideControls"
     >
-      <Transition
-        enter-active-class="island-enter-active"
-        leave-active-class="island-leave-active"
-        enter-from-class="island-enter-from"
-        leave-to-class="island-leave-to"
-      >
-        <div v-if="isIslandExpanded" class="island-panel">
-          <div class="island-grid">
-            <button class="island-btn" title="Reset Pose" @click="handleResetPose">
-              <RotateCcw :size="16" />
-            </button>
-            <button
-              class="island-btn"
-              :class="{ active: isAlwaysOnTop }"
-              :title="isAlwaysOnTop ? 'Unpin' : 'Pin on Top'"
-              @click="handleToggleAlwaysOnTop"
-            >
-              <component :is="isAlwaysOnTop ? Pin : PinOff" :size="16" />
-            </button>
-            <button
-              class="island-btn"
-              :class="{ active: fadeOnHoverEnabled }"
-              :title="fadeOnHoverEnabled ? 'Disable Fade on Hover' : 'Enable Fade on Hover'"
-              @click="handleToggleFadeOnHover"
-            >
-              <component :is="fadeOnHoverEnabled ? Eye : EyeOff" :size="16" />
-            </button>
-            <button class="island-btn danger" title="Close Pet" @click="handleClose">
-              <X :size="16" />
-            </button>
-          </div>
-
-          <div v-if="currentModelName" class="island-model-name">
-            {{ currentModelName }}
-          </div>
+      <Transition name="controls-fade">
+        <div v-if="isControlsVisible" class="controls-panel">
+          <button class="control-btn" title="Reset Pose" @click="handleResetPose">
+            <RotateCcw :size="16" />
+          </button>
+          <button
+            class="control-btn"
+            :class="{ active: isAlwaysOnTop }"
+            :title="isAlwaysOnTop ? 'Unpin' : 'Pin on Top'"
+            @click="handleToggleAlwaysOnTop"
+          >
+            <component :is="isAlwaysOnTop ? Pin : PinOff" :size="16" />
+          </button>
+          <button class="control-btn danger" title="Close Pet" @click="handleClose">
+            <X :size="16" />
+          </button>
         </div>
       </Transition>
-
-      <button class="island-toggle" @click="toggleIsland" :title="isIslandExpanded ? 'Collapse' : 'Expand'">
-        <component :is="isIslandExpanded ? Minimize : ChevronUp" :size="14" />
-      </button>
     </div>
   </div>
 </template>
@@ -816,21 +849,30 @@ onBeforeUnmount(() => {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: transparent;
+  background: transparent !important;
   position: relative;
-  -webkit-app-region: no-drag;
   margin: 0;
   padding: 0;
+  /* Use the system drag region for transparent windows to avoid the white
+     background flash caused by manual setPosition during dragging. */
+  -webkit-app-region: drag;
+}
+
+:global(html.desktop-pet),
+:global(html.desktop-pet body),
+:global(html.desktop-pet #app) {
+  background: transparent !important;
 }
 
 .pet-canvas {
   position: fixed;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100%;
   height: 100%;
   z-index: 1;
   background: transparent;
+  /* The canvas handles its own mouse events (hit tests, wheel zoom). */
+  -webkit-app-region: no-drag;
 }
 
 .pet-loading {
@@ -914,29 +956,26 @@ onBeforeUnmount(() => {
   transform: translateX(-50%) translateY(0);
 }
 
-.controls-island {
+.controls-anchor {
   position: fixed;
-  bottom: 12px;
-  right: 12px;
+  bottom: 0;
+  right: 0;
+  width: 80px;
+  height: 80px;
   z-index: 100;
   display: flex;
-  flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
-  transition: opacity 250ms ease-in-out;
+  justify-content: flex-end;
+  padding: 12px;
+  /* Allow clicking the controls instead of starting a window drag. */
+  -webkit-app-region: no-drag;
 }
 
-.controls-island.fade-out {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.island-panel {
+.controls-panel {
   display: flex;
-  flex-direction: column;
   gap: 8px;
-  padding: 10px;
-  border-radius: 16px;
+  padding: 8px;
+  border-radius: 14px;
   background: var(--overlay-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -944,13 +983,7 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-lg);
 }
 
-.island-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-
-.island-btn {
+.control-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -958,72 +991,39 @@ onBeforeUnmount(() => {
   height: 36px;
   border-radius: 10px;
   border: 1px solid var(--border-light);
-  background: color-mix(in srgb, var(--surface) 6%, transparent);
+  background: color-mix(in srgb, var(--surface) 8%, transparent);
   color: var(--text-inverse);
   cursor: pointer;
   transition: all 200ms ease-in-out;
 }
 
-.island-btn:hover {
-  background: color-mix(in srgb, var(--surface) 12%, transparent);
-  color: var(--text-inverse);
+.control-btn:hover {
+  background: color-mix(in srgb, var(--surface) 14%, transparent);
   transform: scale(1.05);
 }
 
-.island-btn.active {
+.control-btn.active {
   background: var(--lumi-primary-border);
   border-color: var(--lumi-primary-border);
   color: var(--lumi-primary);
 }
 
-.island-btn.danger:hover {
+.control-btn.danger:hover {
   background: var(--task-red-border);
   border-color: var(--task-red-border);
   color: var(--lumi-danger);
 }
 
-.island-model-name {
-  text-align: center;
-  font-size: 10px;
-  color: var(--text-muted);
-  padding-top: 2px;
-  border-top: 1px solid var(--border-light);
+.controls-fade-enter-active {
+  transition: opacity 200ms ease-in-out, transform 200ms ease-in-out;
 }
 
-.island-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--border-light);
-  background: var(--overlay-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  color: var(--text-inverse);
-  cursor: pointer;
-  transition: all 200ms ease-in-out;
-  box-shadow: var(--shadow-md);
+.controls-fade-leave-active {
+  transition: opacity 150ms ease-in-out, transform 150ms ease-in-out;
 }
 
-.island-toggle:hover {
-  background: var(--overlay-bg);
-  color: var(--text-inverse);
-  transform: scale(1.1);
-}
-
-.island-enter-active {
-  transition: all 400ms cubic-bezier(0.32, 0.72, 0, 1);
-}
-.island-leave-active {
-  transition: all 300ms cubic-bezier(0.32, 0.72, 0, 1);
-}
-.island-enter-from {
-  opacity: 0;
-  transform: translateY(12px) scale(0.9);
-}
-.island-leave-to {
+.controls-fade-enter-from,
+.controls-fade-leave-to {
   opacity: 0;
   transform: translateY(8px) scale(0.95);
 }

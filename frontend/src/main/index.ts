@@ -11,6 +11,7 @@ import { createDesktopPet, getDesktopPetWindow, registerDesktopPetIpc } from './
 import { registerAvatarProtocol, verifyAvatarResources, registerAvatarIpc } from './services/avatar-protocol'
 
 if (platform() === 'win32') {
+  // 启用 Windows 控制台 UTF-8 输出模式（ANSI 转义序列）
   process.stdout.write('\x1b[?65001h')
 }
 

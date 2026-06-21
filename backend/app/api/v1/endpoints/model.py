@@ -66,6 +66,7 @@ class ProviderCreate(BaseModel):
     api_key: str = Field(alias="apiKey", default="")
     default_model: str = Field(alias="defaultModel", default="")
     is_default: bool = Field(alias="isDefault", default=False)
+    selected_models: list[str] = Field(alias="selectedModels", default_factory=list)
 
 
 class ProviderUpdate(BaseModel):
@@ -77,6 +78,7 @@ class ProviderUpdate(BaseModel):
     api_key: str | None = Field(alias="apiKey", default=None)
     default_model: str | None = Field(alias="defaultModel", default=None)
     is_default: bool | None = Field(alias="isDefault", default=None)
+    selected_models: list[str] | None = Field(alias="selectedModels", default=None)
 
 
 class ProviderResponse(BaseModel):
@@ -89,7 +91,17 @@ class ProviderResponse(BaseModel):
     api_key_set: bool = Field(alias="apiKeySet")
     default_model: str = Field(alias="defaultModel")
     is_default: bool = Field(alias="isDefault")
+    selected_models: list[str] = Field(alias="selectedModels", default_factory=list)
     models: list[dict] = []
+
+
+class ProviderTestRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    vendor: str = "openai_compatible"
+    base_url: str = Field(alias="baseUrl", default="")
+    api_key: str = Field(alias="apiKey", default="")
+    default_model: str = Field(alias="defaultModel", default="")
 
 
 class ProviderTemplateResponse(BaseModel):
@@ -142,6 +154,7 @@ def _build_provider_response(provider_id: str) -> ProviderResponse:
         api_key_set=bool(api_key and api_key not in ("ollama", "lmstudio", "")),
         default_model=getattr(provider, "default_model", ""),
         is_default=provider_id == llm_adapter.default_provider,
+        selected_models=cfg.get("selected_models", []),
         models=[],
     )
 
@@ -177,6 +190,7 @@ async def list_providers():
             api_key_set=p["api_key_set"],
             default_model=p["default_model"],
             is_default=p["is_default"],
+            selected_models=p.get("selected_models", []),
             models=[],
         ))
     logger.success(f"[API] GET /models/providers - Success: returned {len(result)} providers")
@@ -198,6 +212,7 @@ async def add_provider(request: ProviderCreate):
         "api_key": request.api_key,
         "default_model": request.default_model,
         "is_default": request.is_default,
+        "selected_models": request.selected_models,
     }
 
     provider = _create_provider_from_config(config)
@@ -224,6 +239,7 @@ async def add_provider(request: ProviderCreate):
         api_key_set=bool(config["api_key"] and config["api_key"] not in ("ollama", "lmstudio", "")),
         default_model=provider.default_model,
         is_default=request.is_default,
+        selected_models=config["selected_models"],
         models=models,
     )
 
@@ -257,6 +273,9 @@ async def update_provider(provider_id: str, request: ProviderUpdate):
     if request.is_default is not None:
         updated_cfg["is_default"] = request.is_default
         updated_fields.append("is_default")
+    if request.selected_models is not None:
+        updated_cfg["selected_models"] = request.selected_models
+        updated_fields.append("selected_models")
 
     provider = _create_provider_from_config(updated_cfg)
     set_default = request.is_default if request.is_default is not None else False
@@ -296,6 +315,27 @@ async def list_provider_models(provider_id: str):
         elapsed = time.time() - start_time
         logger.error(f"[API] GET /models/providers/{provider_id}/models - Failed: elapsed={elapsed:.2f}s, error={e}")
         raise
+
+
+@router.post("/providers/test")
+async def test_provider(request: ProviderTestRequest):
+    """检测供应商 API/TOKEN 是否可用：临时构造 provider 调用 list_models，不注册到全局。"""
+    logger.info(f"[API] POST /models/providers/test - Testing vendor={request.vendor}, base_url={request.base_url}")
+    start_time = time.time()
+    config = {
+        "id": "test",
+        "vendor": request.vendor,
+        "base_url": request.base_url.rstrip("/"),
+        "api_key": request.api_key,
+        "default_model": request.default_model,
+    }
+    result = await llm_adapter.test_provider(config)
+    elapsed = time.time() - start_time
+    if result["success"]:
+        logger.success(f"[API] POST /models/providers/test - Success: {len(result['models'])} models, elapsed={elapsed:.2f}s")
+    else:
+        logger.warning(f"[API] POST /models/providers/test - Failed: elapsed={elapsed:.2f}s, error={result['error']}")
+    return {"error": None, "data": result}
 
 
 @router.get("/list")

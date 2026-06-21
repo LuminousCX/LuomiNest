@@ -15,7 +15,7 @@ const CHECK_INTERVAL = 500
 const LOG_LEVEL_PATTERN = /\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|/
 
 const routeBackendLog = (data: Buffer, source: 'stdout' | 'stderr') => {
-  const text = data.toString().trim()
+  const text = data.toString('utf8').trim()
   if (!text) return
 
   if (source === 'stdout') {
@@ -148,6 +148,7 @@ export const startBackend = async (): Promise<boolean> => {
   const env: Record<string, string | undefined> = {
     ...process.env,
     PYTHONUNBUFFERED: '1',
+    PYTHONIOENCODING: 'utf-8',
     LUOMINEST_DATA_DIR: PATHS.backendData
   }
 

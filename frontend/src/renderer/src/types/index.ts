@@ -207,6 +207,7 @@ export interface ModelProvider {
   apiKeySet: boolean
   isDefault: boolean
   defaultModel: string
+  selectedModels: string[]
   models: { id: string; name: string }[]
 }
 
@@ -481,6 +482,37 @@ export interface PlatformInstance {
   displayName: string
   createdAt: string
   updatedAt: string
+  modelConfig?: PlatformModelConfig
+}
+
+export interface PlatformModelConfig {
+  provider?: string
+  model?: string
+  systemPrompt?: string
+  temperature?: number | null
+  maxTokens?: number | null
+}
+
+export interface PlatformModelConfigResponse {
+  instanceId: string
+  isOverridden: boolean
+  instanceConfig: PlatformModelConfig
+  mainAgent: {
+    provider: string
+    providerName: string
+    model: string
+    supportsMultimodal: boolean
+    systemPrompt: string
+    temperature: number
+    maxTokens: number
+  }
+  effective: {
+    provider: string
+    providerName: string
+    model: string
+    supportsMultimodal: boolean
+  }
+  category: string
 }
 
 export interface PlatformConversation {
@@ -490,6 +522,29 @@ export interface PlatformConversation {
   title: string
   preview: string
   time: string
+  messageCount: number
+}
+
+export interface PlatformMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp: string
+  senderName: string
+  isGroup: boolean
+  imageUrls: string[]
+  model: string
+  provider: string
+}
+
+export interface PlatformConversationDetail {
+  conversationId: string
+  title: string
+  instanceId: string
+  platformName: string
+  senderName: string
+  isGroup: boolean
+  messages: PlatformMessage[]
   messageCount: number
 }
 

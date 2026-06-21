@@ -38,6 +38,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   const currentModelUrl = ref('')
   const availableMotions = ref<string[]>([])
   const availableExpressions = ref<string[]>([])
+  const idleActive = ref(false)
 
   let pixiApp: Application | null = null
   let currentModel: Live2DModel | null = null
@@ -56,6 +57,8 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   let retryTimerId: ReturnType<typeof setTimeout> | null = null
   let currentLoadToken = 0
   const MAX_RETRIES = 3
+  let idleTickerCallback: (() => void) | null = null
+  let idleStartTime = 0
 
   const cleanupFocus = () => {
     if (focusTickerCallback) {
@@ -144,6 +147,87 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     availableExpressions.value = expressions
   }
 
+  const hideWatermark = (model: Live2DModel) => {
+    try {
+      const internalModel = model.internalModel as any
+      if (!internalModel?.coreModel) return
+      const coreModel = internalModel.coreModel
+
+      // Param14 is "去掉水印" (Remove Watermark) - set to 1 to hide
+      const param14Idx = coreModel.getParameterIndex('Param14')
+      if (param14Idx >= 0) {
+        coreModel.setParameterValueByIndex(param14Idx, 1)
+      }
+
+      // Scan displayInfo for other watermark-related parameters
+      const settings = internalModel?.settings
+      const displayInfo = settings?.displayInfo
+      if (displayInfo?.Parameters) {
+        for (const param of displayInfo.Parameters) {
+          const rawName = String(param?.Name ?? '')
+          const lowerName = rawName.toLowerCase()
+          if (rawName.includes('水印') || lowerName.includes('watermark') || lowerName.includes('copyright')) {
+            const idx = coreModel.getParameterIndex(param.Id)
+            if (idx >= 0) {
+              coreModel.setParameterValueByIndex(idx, 1)
+            }
+          }
+        }
+      }
+    } catch {
+      // intentionally ignored: expected non-fatal error
+    }
+  }
+
+  const cleanupIdle = () => {
+    if (idleTickerCallback) {
+      Ticker.shared.remove(idleTickerCallback)
+      idleTickerCallback = null
+    }
+    idleActive.value = false
+  }
+
+  const setupIdleAnimation = () => {
+    cleanupIdle()
+    idleStartTime = Date.now()
+    idleActive.value = true
+
+    idleTickerCallback = () => {
+      if (!currentModel) return
+      try {
+        const internalModel = currentModel.internalModel as any
+        const coreModel = internalModel?.coreModel
+        if (!coreModel) return
+
+        // Keep watermark hidden every frame (Param14 = 1)
+        const param14Idx = coreModel.getParameterIndex('Param14')
+        if (param14Idx >= 0) {
+          coreModel.setParameterValueByIndex(param14Idx, 1)
+        }
+
+        // Gentle body sway using layered sine waves for natural idle movement
+        const t = (Date.now() - idleStartTime) / 1000
+        const bodyXIdx = coreModel.getParameterIndex('ParamBodyAngleX')
+        const bodyYIdx = coreModel.getParameterIndex('ParamBodyAngleY')
+        const bodyZIdx = coreModel.getParameterIndex('ParamBodyAngleZ')
+
+        if (bodyXIdx >= 0) {
+          coreModel.setParameterValueByIndex(bodyXIdx, Math.sin(t * 0.6) * 3 + Math.sin(t * 1.2) * 0.8)
+        }
+        if (bodyYIdx >= 0) {
+          coreModel.setParameterValueByIndex(bodyYIdx, Math.sin(t * 0.4 + 1.5) * 2.5)
+        }
+        if (bodyZIdx >= 0) {
+          coreModel.setParameterValueByIndex(bodyZIdx, Math.sin(t * 0.5 + 3) * 2)
+        }
+      } catch {
+        // intentionally ignored: expected non-fatal error
+      }
+    }
+
+    Ticker.shared.add(idleTickerCallback)
+  }
+
   const loadModel = async (url: string, scale: number = 0.25) => {
     if (retryTimerId !== null) {
       clearTimeout(retryTimerId)
@@ -177,6 +261,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       }
 
       cleanupFocus()
+      cleanupIdle()
 
       const model = await Live2DModel.from(url, {
         autoHitTest: true,
@@ -200,21 +285,11 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         model.y = parent.clientHeight * 0.90
       }
 
-      try {
-        const internalModel = model.internalModel as any
-        if (internalModel?.coreModel) {
-          const coreModel = internalModel.coreModel
-          const param14Idx = coreModel.getParameterIndex('Param14')
-          if (param14Idx >= 0) {
-            coreModel.setParameterValueByIndex(param14Idx, 0)
-          }
-        }
-      } catch {
-      // intentionally ignored: expected non-fatal error
-      }
+      hideWatermark(model)
 
       setupInteraction(model)
       setupFocus(model)
+      setupIdleAnimation()
       setupWheel(model)
 
       patchIsInteractive(model)
@@ -292,7 +367,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   const setupFocus = (_model: Live2DModel) => {
     cleanupFocus()
 
-    const FOCUS_DAMPING = 0.12
+    const FOCUS_DAMPING = 0.15
 
     const onMouseMove = (e: MouseEvent) => {
       const parent = canvasRef.value?.parentElement
@@ -324,21 +399,23 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         const eyeBallXParam = coreModel.getParameterIndex('ParamEyeBallX')
         const eyeBallYParam = coreModel.getParameterIndex('ParamEyeBallY')
 
+        // 头部混合：保留原值 50% + 鼠标驱动 50%（最大 20 度）
         if (angleXParam >= 0) {
           const base = coreModel.getParameterValueByIndex(angleXParam)
-          coreModel.setParameterValueByIndex(angleXParam, base * 0.6 + focusCurrentX * 15 * 0.4)
+          coreModel.setParameterValueByIndex(angleXParam, base * 0.5 + focusCurrentX * 20 * 0.5)
         }
         if (angleYParam >= 0) {
           const base = coreModel.getParameterValueByIndex(angleYParam)
-          coreModel.setParameterValueByIndex(angleYParam, base * 0.6 + focusCurrentY * 15 * 0.4)
+          coreModel.setParameterValueByIndex(angleYParam, base * 0.5 + focusCurrentY * 20 * 0.5)
         }
+        // 眼球混合：保留原值 40% + 鼠标驱动 60%
         if (eyeBallXParam >= 0) {
           const base = coreModel.getParameterValueByIndex(eyeBallXParam)
-          coreModel.setParameterValueByIndex(eyeBallXParam, base * 0.5 + focusCurrentX * 0.5)
+          coreModel.setParameterValueByIndex(eyeBallXParam, base * 0.4 + focusCurrentX * 0.6)
         }
         if (eyeBallYParam >= 0) {
           const base = coreModel.getParameterValueByIndex(eyeBallYParam)
-          coreModel.setParameterValueByIndex(eyeBallYParam, base * 0.5 + focusCurrentY * 0.5)
+          coreModel.setParameterValueByIndex(eyeBallYParam, base * 0.4 + focusCurrentY * 0.6)
         }
       } catch {
       // intentionally ignored: expected non-fatal error
@@ -496,6 +573,9 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     } catch {
       // intentionally ignored: expected non-fatal error
     }
+    if (currentModel) {
+      hideWatermark(currentModel)
+    }
   }
 
   const destroy = () => {
@@ -505,6 +585,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     }
     currentLoadToken++
     cleanupFocus()
+    cleanupIdle()
     if (wheelHandler) {
       canvasRef.value?.removeEventListener('wheel', wheelHandler)
       wheelHandler = null
@@ -529,6 +610,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     currentModelUrl,
     availableMotions,
     availableExpressions,
+    idleActive,
     loadModel,
     triggerMotion,
     triggerExpression,
