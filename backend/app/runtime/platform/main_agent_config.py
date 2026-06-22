@@ -36,16 +36,36 @@ def resolve_main_agent_provider_model() -> tuple[str, str]:
     """解析主 Agent 实际使用的 provider 和 model。
 
     优先使用 main_agent.json 中的配置，为空则回退到 llm_adapter 默认值。
+    若默认 provider 也不可用，返回空字符串而非抛异常，避免 /platforms/main_agent 接口 502。
     """
     from app.runtime.provider.llm.adapter import llm_adapter
 
     config = load_luominest_main_agent_config()
     provider = config.get("provider") or llm_adapter.default_provider
+    model = config.get("model", "")
+
+    # 尝试用配置的 provider 解析 model
     try:
         provider_inst = llm_adapter.get_provider(provider)
-        model = config.get("model") or provider_inst.default_model
+        model = model or provider_inst.default_model
+        return provider, model
     except Exception:
-        provider = llm_adapter.default_provider
-        provider_inst = llm_adapter.get_provider(provider)
-        model = provider_inst.default_model
-    return provider, model
+        pass
+
+    # 配置的 provider 不可用，尝试任意一个已注册的 provider
+    for provider_info in llm_adapter.list_providers():
+        fallback_provider = provider_info.get("id", "")
+        if not fallback_provider:
+            continue
+        try:
+            provider_inst = llm_adapter.get_provider(fallback_provider)
+            return fallback_provider, model or provider_inst.default_model
+        except Exception:
+            continue
+
+    # 所有 provider 都不可用：返回空值，让前端展示"未配置"状态
+    logger.warning(
+        "[MainAgentConfig] No LLM provider available. "
+        "Please configure at least one provider in settings."
+    )
+    return "", model

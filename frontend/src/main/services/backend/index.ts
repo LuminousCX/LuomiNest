@@ -99,7 +99,7 @@ export const getBackendUrl = (): string => `http://${BACKEND_HOST}:${BACKEND_POR
 
 export const waitForBackend = async (): Promise<boolean> => {
   const startTime = Date.now()
-  
+
   while (Date.now() - startTime < MAX_STARTUP_WAIT) {
     try {
       const response = await fetch(`http://${BACKEND_HOST}:${BACKEND_PORT}/health`, {
@@ -107,6 +107,12 @@ export const waitForBackend = async (): Promise<boolean> => {
         signal: AbortSignal.timeout(CHECK_INTERVAL)
       })
       if (response.ok) {
+        // 拒绝 minimal mode：那是依赖缺失时的残废服务器，所有 /api/v1/* 都会 404
+        const data = await response.json().catch(() => ({} as any))
+        if (data?.mode === 'minimal') {
+          console.error('[BackendService] Backend is running in minimal mode (missing dependencies). Refusing to connect.')
+          return false
+        }
         backendReady = true
         console.log('[BackendService] Backend is ready!')
         return true
@@ -115,7 +121,7 @@ export const waitForBackend = async (): Promise<boolean> => {
       await new Promise(resolve => setTimeout(resolve, CHECK_INTERVAL))
     }
   }
-  
+
   console.error('[BackendService] Backend startup timeout')
   return false
 }

@@ -53,13 +53,22 @@ def main():
     # ProactorEventLoop supports subprocess, SSL, and pipes on Python 3.8+.
 
     logger.info(f"LuomiNest Backend starting on {args.host}:{args.port}")
-    
+
+    # 依赖缺失时直接报错退出，绝不静默降级为 minimal mode
+    # （历史教训：minimal mode 会占用端口并让前端误以为后端就绪，导致所有 /api/v1/* 返回 404）
     try:
         import uvicorn
         from app.core.app_factory import create_app
-        
+    except ImportError as e:
+        logger.error(
+            f"[LuomiNest] Missing dependency: {e}. "
+            f"Please install backend dependencies (uvicorn/fastapi) into the venv "
+            f"and restart. Refusing to start in minimal mode."
+        )
+        sys.exit(1)
+
+    try:
         app = create_app()
-        
         uvicorn.run(
             app,
             host=args.host,
@@ -67,30 +76,6 @@ def main():
             log_level="debug" if args.debug else "info",
             access_log=args.debug
         )
-    except ImportError as e:
-        logger.error(f"Failed to import dependencies: {e}")
-        logger.info("Running in minimal mode...")
-        
-        from http.server import HTTPServer, BaseHTTPRequestHandler
-        import json
-        
-        class MinimalHandler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                if self.path == "/health":
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "ok", "mode": "minimal"}).encode())
-                else:
-                    self.send_response(404)
-                    self.end_headers()
-            
-            def log_message(self, format, *args):
-                logger.info(f"HTTP: {args[0]}")
-        
-        server = HTTPServer((args.host, args.port), MinimalHandler)
-        logger.info(f"Minimal server running on http://{args.host}:{args.port}")
-        server.serve_forever()
     except Exception as e:
         logger.error(f"Failed to start server: {e}")
         sys.exit(1)

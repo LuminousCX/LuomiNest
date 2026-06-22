@@ -447,6 +447,9 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
 
   const triggerMotion = async (group: string, index: number = 0) => {
     if (!currentModel) return
+    // 模型可能在异步等待期间被销毁，调用前再次校验内部状态
+    const internal = (currentModel as any).internalModel
+    if (!internal || internal.destroyed) return
     try {
       await currentModel.motion(group, index)
     } catch {
@@ -456,6 +459,11 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
 
   const triggerExpression = async (name: string) => {
     if (!currentModel) return
+    // 模型可能在异步等待期间被销毁，调用前再次校验内部状态
+    const internal = (currentModel as any).internalModel
+    if (!internal || internal.destroyed) return
+    // 空表达式名跳过，避免触发无效文件加载
+    if (!name || !name.trim()) return
     try {
       await currentModel.expression(name)
     } catch {
