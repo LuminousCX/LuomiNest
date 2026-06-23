@@ -24,6 +24,7 @@ const settingGroups = ref([
       { label: '主智能体', desc: '工作台主 Agent 的人格、模型与行为', route: '/settings/main-agent' },
       { label: 'AI 模型', desc: '选择 LLM 推理引擎', route: '/settings/ai-model' },
       { label: '语音合成 (TTS)', desc: '本地/在线 TTS 引擎与设备检测', route: '/settings/tts' },
+      { label: '语音识别 (STT)', desc: '本地/在线 STT 引擎与语音输入', route: '/settings/stt' },
       { label: '隐私安全', desc: '数据加密与访问控制', route: '/settings/privacy' }
     ]
   },

@@ -1,30 +1,106 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Wifi, Users, Home, Cpu, Plus, Search, Settings2, ChevronRight, Activity, MessageSquare, Clock } from 'lucide-vue-next'
+import { useApi } from '../../composables/useApi'
+import { formatDateRelative } from '../../utils/format'
+
+interface Device {
+  id: string
+  name: string
+  type: 'iot' | 'mcu' | 'hub'
+  status: 'online' | 'offline'
+  protocol: string
+  lastActive: string
+  messages: number
+}
+
+interface Group {
+  id: string
+  name: string
+  members: string[]
+  type: 'iot-group' | 'hybrid'
+  online: boolean
+}
+
+interface RecentChat {
+  id: string
+  target: string
+  message: string
+  time: string
+}
+
+interface RawInstance {
+  id: string
+  adapter_type?: string
+  adapterType?: string
+  name: string
+  status?: string
+  message_count?: number
+  messageCount?: number
+  last_sync?: string
+  lastSync?: string
+  display_name?: string
+  displayName?: string
+  category?: string
+}
+
+const SUPPORTED_ADAPTER_TYPES = ['mqtt_terminal', 'home_assistant', 'xiaomi_iot']
+
+const PROTOCOL_MAP: Record<string, string> = {
+  mqtt_terminal: 'MQTT',
+  home_assistant: 'HTTP',
+  xiaomi_iot: 'MQTT',
+}
 
 const searchQuery = ref('')
 const activeTab = ref<'devices' | 'groups'>('devices')
 
-const devices = ref([
-  { id: 'd1', name: 'ESP32 智能灯控', type: 'iot', status: 'online', protocol: 'MQTT', lastActive: '刚刚', messages: 56 },
-  { id: 'd2', name: 'Arduino 温湿度传感器', type: 'mcu', status: 'online', protocol: 'Serial', lastActive: '3 分钟前', messages: 23 },
-  { id: 'd3', name: '树莓派 网关', type: 'iot', status: 'online', protocol: 'HTTP', lastActive: '1 分钟前', messages: 142 },
-  { id: 'd4', name: 'HomeAssistant 中控', type: 'hub', status: 'offline', protocol: 'WS', lastActive: '2 小时前', messages: 89 },
-  { id: 'd5', name: 'ESP8266 窗帘电机', type: 'iot', status: 'offline', protocol: 'MQTT', lastActive: '1 天前', messages: 12 },
-])
+const devices = ref<Device[]>([])
+const groups = ref<Group[]>([])
+const recentChats = ref<RecentChat[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 
-const groups = ref([
-  { id: 'g1', name: '家庭安防组', members: ['ESP32 摄像头', '门窗传感器', '树莓派网关'], type: 'iot-group', online: true },
-  { id: 'g2', name: '照明控制组', members: ['客厅灯', '卧室灯', 'ESP32 灯控'], type: 'iot-group', online: true },
-  { id: 'g3', name: '开发测试群', members: ['小陈', 'ESP32 DevKit', 'Claude Agent'], type: 'hybrid', online: true },
-  { id: 'g4', name: '办公室自动化', members: ['空调控制器', '打卡机', '小王'], type: 'hybrid', online: false },
-])
+const { apiGet } = useApi()
 
-const recentChats = ref([
-  { id: 'rc1', target: 'ESP32 智能灯控', message: '已将客厅灯亮度调至 60%', time: '2 分钟前' },
-  { id: 'rc2', target: '开发测试群', message: '小陈: 新固件已烧录完成', time: '15 分钟前' },
-  { id: 'rc3', target: 'Arduino 温湿度传感器', message: '当前温度: 24.5°C 湿度: 65%', time: '30 分钟前' },
-])
+const mapInstanceToDevice = (inst: RawInstance): Device => {
+  const adapterType = inst.adapter_type || inst.adapterType || ''
+  const status = inst.status || 'stopped'
+  const lastSync = inst.last_sync || inst.lastSync || ''
+  return {
+    id: inst.id,
+    name: inst.name,
+    type: adapterType === 'home_assistant' ? 'hub' : 'iot',
+    status: status === 'running' ? 'online' : 'offline',
+    protocol: PROTOCOL_MAP[adapterType] || adapterType || '—',
+    lastActive: lastSync ? formatDateRelative(lastSync) : '未知',
+    messages: inst.message_count ?? inst.messageCount ?? 0,
+  }
+}
+
+const fetchDevices = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const data = await apiGet<RawInstance[]>(
+      '/platforms/instances?adapter_type=mqtt_terminal,home_assistant,xiaomi_iot'
+    )
+    const filtered = (data || []).filter(i => {
+      const at = i.adapter_type || i.adapterType || ''
+      return SUPPORTED_ADAPTER_TYPES.includes(at)
+    })
+    devices.value = filtered.map(mapInstanceToDevice)
+  } catch (e: any) {
+    error.value = e?.message || '加载设备列表失败'
+    devices.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchDevices()
+})
 </script>
 
 <template>
@@ -65,6 +141,9 @@ const recentChats = ref([
             <input v-model="searchQuery" type="text" placeholder="搜索设备..." class="search-input" />
           </div>
           <div class="device-list">
+            <div v-if="loading" class="state-tip">加载中...</div>
+            <div v-else-if="error" class="state-tip state-error">{{ error }}</div>
+            <div v-else-if="devices.length === 0" class="state-tip">暂无设备</div>
             <div v-for="d in devices" :key="d.id" :class="['device-card', { offline: d.status === 'offline' }]">
               <div class="device-icon-wrap">
                 <Cpu :size="18" />
@@ -89,6 +168,7 @@ const recentChats = ref([
             <input v-model="searchQuery" type="text" placeholder="搜索群组..." class="search-input" />
           </div>
           <div class="group-list">
+            <div v-if="groups.length === 0" class="state-tip">暂无群组</div>
             <div v-for="g in groups" :key="g.id" :class="['group-card', { offline: !g.online }]">
               <div class="group-icon-wrap">
                 <Users v-if="g.type === 'hybrid'" :size="18" />
@@ -134,6 +214,7 @@ const recentChats = ref([
             <span>最近对话</span>
           </div>
           <div class="recent-list">
+            <div v-if="recentChats.length === 0" class="state-tip">暂无最近对话</div>
             <div v-for="rc in recentChats" :key="rc.id" class="recent-item">
               <MessageSquare :size="12" class="recent-icon" />
               <div class="recent-info">
@@ -500,5 +581,16 @@ const recentChats = ref([
   color: var(--text-muted);
   flex-shrink: 0;
   white-space: nowrap;
+}
+
+.state-tip {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.state-tip.state-error {
+  color: var(--lumi-error, #ef4444);
 }
 </style>

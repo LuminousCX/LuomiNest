@@ -63,6 +63,8 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
   let subtitleFadeTimer: ReturnType<typeof setTimeout> | null = null
   let streamActive = false
   let lastTtsErrorTime = 0
+  // TTS 引擎不可用标志：遇到 503（未安装引擎）后置位，阻止后续请求继续打 503
+  let ttsUnavailable = false
 
   const cleanupAudio = () => {
     if (animFrameId !== null) {
@@ -169,6 +171,8 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
   const playSegment = async (segment: { text: string; emotion: string | null }): Promise<void> => {
     const { text, emotion } = segment
     if (!text.trim() || !options.ttsEnabled()) return
+    // TTS 引擎不可用时直接跳过，避免对队列中每一段都打 503
+    if (ttsUnavailable) return
 
     // 同步驱动 Live2D 表情：在播放该段 TTS 前切换到对应表情
     if (emotion && emotion !== currentEmotion.value) {
@@ -266,6 +270,15 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
       }
       console.warn('[LuomiNest AvatarChat] TTS error:', e)
       isSynthesizing.value = false
+      // 检测 TTS 引擎不可用（503 / 未安装引擎）：置位标志，清空队列，避免后续分段继续打 503
+      const errMsg = e instanceof Error ? e.message : String(e)
+      if (errMsg.includes('503') || errMsg.includes('未安装') || errMsg.includes('not installed') || errMsg.includes('Service Unavailable')) {
+        ttsUnavailable = true
+        ttsQueue.length = 0
+        textBuffer = ''
+        streamActive = false
+        console.warn('[LuomiNest AvatarChat] TTS 引擎不可用，已停止后续 TTS 请求')
+      }
       // 节流：5 秒内只通知一次，避免每个分段都弹 toast
       const now = Date.now()
       if (options.onTtsError && now - lastTtsErrorTime > 5000) {
@@ -316,6 +329,14 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
   const feedChunk = (chunk: ChatStreamChunk) => {
     streamActive = true
 
+    // TTS 引擎不可用时，只更新表情状态，不入队 TTS 请求
+    if (ttsUnavailable) {
+      if (chunk.emotion) {
+        pendingEmotion = chunk.emotion
+      }
+      return
+    }
+
     // 侦听器：暂存后端解析的 chunk.emotion，等待下一段 TTS 文本提取时附加
     if (chunk.emotion) {
       pendingEmotion = chunk.emotion
@@ -347,6 +368,14 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
   /** Flush any remaining buffered text and mark stream as done. */
   const finishStream = () => {
     streamActive = false
+    // TTS 引擎不可用时，直接结束，不入队剩余文本
+    if (ttsUnavailable) {
+      isSpeaking.value = false
+      options.syncLipParam(0)
+      resetEmotionToNeutral()
+      options.onSpeakEnd?.()
+      return
+    }
     if (textBuffer.trim()) {
       // 推入队列前必须过滤，防止纯标签/符号文本导致后端 400
       const filtered = filterTtsText(textBuffer.trim())

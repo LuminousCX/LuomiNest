@@ -1,7 +1,7 @@
 import uuid
 import time
 from datetime import datetime, timezone
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import HTTPException
 from typing import Any
@@ -914,5 +914,197 @@ async def tts_engines():
             "engines": engines,
             "device": device,
             "avatar_bindings": bindings,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# STT (Speech-to-Text) endpoints
+# ---------------------------------------------------------------------------
+
+# STT 引擎优先级（自动降级顺序）
+_STT_FALLBACK_ORDER = ["sherpa-onnx", "funasr", "faster-whisper"]
+
+
+def _get_stt_provider(engine_id: str | None = None):
+    """根据引擎 ID 获取 STT Provider，支持自动降级.
+
+    Args:
+        engine_id: 用户指定的引擎 ID，None 时按优先级自动选择
+
+    Returns:
+        (provider, engine_id) 元组
+
+    Raises:
+        RuntimeError: 所有引擎都不可用
+    """
+    # 构建尝试顺序：用户指定的优先，其余按 fallback order
+    if engine_id and engine_id != "auto":
+        try_order = [engine_id] + [e for e in _STT_FALLBACK_ORDER if e != engine_id]
+    else:
+        try_order = list(_STT_FALLBACK_ORDER)
+
+    errors: list[str] = []
+
+    for eid in try_order:
+        try:
+            if eid == "sherpa-onnx":
+                from app.runtime.provider.stt.sherpa_onnx_stt import SherpaOnnxSTTProvider
+                if not SherpaOnnxSTTProvider.is_available():
+                    errors.append(f"{eid}: sherpa-onnx 未安装")
+                    continue
+                provider = SherpaOnnxSTTProvider()
+                return provider, eid
+
+            elif eid == "faster-whisper":
+                from app.runtime.provider.stt.faster_whisper_stt import FasterWhisperSTTProvider
+                if not FasterWhisperSTTProvider.is_available():
+                    errors.append(f"{eid}: faster-whisper 未安装")
+                    continue
+                provider = FasterWhisperSTTProvider()
+                return provider, eid
+
+            elif eid == "funasr":
+                from app.runtime.provider.stt.funasr_stt import FunASRSTTProvider
+                if not FunASRSTTProvider.is_available():
+                    errors.append(f"{eid}: funasr 未安装")
+                    continue
+                provider = FunASRSTTProvider()
+                return provider, eid
+
+        except Exception as e:
+            errors.append(f"{eid}: {e}")
+            logger.warning(f"[API] STT engine [{eid}] failed: {e}, trying next...")
+
+    raise RuntimeError(
+        f"所有 STT 引擎均不可用: {'; '.join(errors)}. "
+        f"请安装 sherpa-onnx / faster-whisper / funasr 中的至少一个"
+    )
+
+
+@router.post("/stt/transcribe")
+async def stt_transcribe(
+    audio: "UploadFile" = File(...),
+    engine: str = Form(default="auto"),
+    language: str = Form(default="auto"),
+):
+    """语音识别接口 - 接收音频文件，返回识别文本.
+
+    Args:
+        audio: 音频文件（wav/mp3/webm/ogg 等）
+        engine: STT 引擎 ID（sherpa-onnx / funasr / faster-whisper / auto）
+        language: 识别语言（auto/zh/en/ja/ko 等）
+
+    Returns:
+        {"error": None, "data": {"text": "...", "engine": "sherpa-onnx"}}
+    """
+    audio_data = await audio.read()
+    if not audio_data:
+        return JSONResponse({"error": "音频文件为空"}, status_code=400)
+
+    # 获取音频格式（从文件扩展名推断）
+    format_hint = "wav"
+    if audio.filename:
+        ext = audio.filename.rsplit(".", 1)[-1].lower() if "." in audio.filename else ""
+        if ext:
+            format_hint = ext
+
+    try:
+        provider, used_engine = _get_stt_provider(engine)
+    except RuntimeError as e:
+        return JSONResponse({"error": str(e)}, status_code=503)
+
+    try:
+        text = await provider.transcribe(audio_data, format=format_hint)
+        logger.info(f"[API] STT transcribed by [{used_engine}]: {text[:80]}...")
+        return {
+            "error": None,
+            "data": {
+                "text": text,
+                "engine": used_engine,
+            },
+        }
+    except Exception as e:
+        logger.error(f"[API] STT transcribe failed: {e}")
+        return JSONResponse({"error": f"语音识别失败：{e}"}, status_code=500)
+
+
+@router.get("/stt/engines")
+async def stt_engines():
+    """报告可用的 STT 引擎列表."""
+    engines: list[dict] = []
+
+    # Sherpa-ONNX STT
+    try:
+        from app.runtime.provider.stt.sherpa_onnx_stt import SherpaOnnxSTTProvider
+        sherpa_available = SherpaOnnxSTTProvider.is_available()
+        sherpa_model_ready = SherpaOnnxSTTProvider.is_model_ready() if sherpa_available else False
+        engines.append({
+            "id": "sherpa-onnx",
+            "name": "Sherpa-ONNX (离线, SenseVoice)",
+            "online": False,
+            "available": sherpa_available,
+            "model_ready": sherpa_model_ready,
+            "languages": ["zh", "en", "ja", "ko", "yue", "auto"],
+            "description": "基于 ONNX 的离线语音识别，默认使用 SenseVoice 模型，支持中英日韩粤",
+            "model_types": ["sense_voice", "paraformer", "whisper"],
+        })
+    except ImportError:
+        engines.append({
+            "id": "sherpa-onnx",
+            "name": "Sherpa-ONNX (离线, SenseVoice)",
+            "online": False,
+            "available": False,
+        })
+
+    # FunASR STT
+    try:
+        from app.runtime.provider.stt.funasr_stt import FunASRSTTProvider
+        funasr_available = FunASRSTTProvider.is_available()
+        engines.append({
+            "id": "funasr",
+            "name": "FunASR (离线, 阿里达摩院)",
+            "online": False,
+            "available": funasr_available,
+            "model_ready": funasr_available,
+            "languages": ["zh", "en", "auto"],
+            "description": "阿里达摩院 FunASR，默认使用 SenseVoiceSmall，中文识别效果优秀",
+            "models": FunASRSTTProvider.SUPPORTED_MODELS,
+        })
+    except ImportError:
+        engines.append({
+            "id": "funasr",
+            "name": "FunASR (离线, 阿里达摩院)",
+            "online": False,
+            "available": False,
+        })
+
+    # Faster Whisper STT
+    try:
+        from app.runtime.provider.stt.faster_whisper_stt import FasterWhisperSTTProvider, MODEL_SIZES as FW_MODEL_SIZES
+        fw_available = FasterWhisperSTTProvider.is_available()
+        engines.append({
+            "id": "faster-whisper",
+            "name": "Faster Whisper (离线, CTranslate2 加速)",
+            "online": False,
+            "available": fw_available,
+            "model_ready": fw_available,
+            "languages": ["zh", "en", "ja", "ko", "fr", "de", "es", "auto"],
+            "description": "基于 CTranslate2 的 Whisper 加速版，比原版快 4 倍以上",
+            "model_sizes": list(FW_MODEL_SIZES.keys()),
+        })
+    except ImportError:
+        engines.append({
+            "id": "faster-whisper",
+            "name": "Faster Whisper (离线, CTranslate2 加速)",
+            "online": False,
+            "available": False,
+        })
+
+    return {
+        "error": None,
+        "data": {
+            "engines": engines,
+            "fallback_order": _STT_FALLBACK_ORDER,
         },
     }

@@ -52,6 +52,79 @@ export const useStatsStore = defineStore('stats', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  // === Token 侦听器 ===
+  // 实时统计 LLM 返回的字符数（前端拦截）
+  const liveSessionTokens = ref<{
+    prompt_chars: number
+    completion_chars: number
+    total_chars: number
+    started_at: number
+  }>({
+    prompt_chars: 0,
+    completion_chars: 0,
+    total_chars: 0,
+    started_at: Date.now(),
+  })
+
+  // 历史会话记录（最近 100 次）
+  const sessionHistory = ref<Array<{
+    timestamp: number
+    provider: string
+    model: string
+    completion_chars: number
+    conv_id?: string
+  }>>([])
+
+  /**
+   * Token 侦听器：在 apiStream 的 onChunk 中调用
+   * 拦截 LLM 返回的所有字符，实时统计
+   */
+  const interceptChunk = (chunk: {
+    content?: string
+    reasoning_content?: string
+    model?: string
+    provider?: string
+    done?: boolean
+  }, convId?: string) => {
+    if (chunk.content) {
+      liveSessionTokens.value.completion_chars += chunk.content.length
+      liveSessionTokens.value.total_chars += chunk.content.length
+    }
+    if (chunk.reasoning_content) {
+      liveSessionTokens.value.completion_chars += chunk.reasoning_content.length
+      liveSessionTokens.value.total_chars += chunk.reasoning_content.length
+    }
+
+    // 流结束时记录到历史
+    if (chunk.done) {
+      sessionHistory.value.unshift({
+        timestamp: Date.now(),
+        provider: chunk.provider || 'unknown',
+        model: chunk.model || 'unknown',
+        completion_chars: liveSessionTokens.value.completion_chars,
+        conv_id: convId,
+      })
+      if (sessionHistory.value.length > 100) {
+        sessionHistory.value = sessionHistory.value.slice(0, 100)
+      }
+      // 重置当前会话计数
+      liveSessionTokens.value = {
+        prompt_chars: 0,
+        completion_chars: 0,
+        total_chars: 0,
+        started_at: Date.now(),
+      }
+    }
+  }
+
+  /**
+   * 记录 prompt 字符数（在发送消息时调用）
+   */
+  const recordPrompt = (prompt: string) => {
+    liveSessionTokens.value.prompt_chars += prompt.length
+    liveSessionTokens.value.total_chars += prompt.length
+  }
+
   const totalRequests = computed(() => usageSummary.value?.total_requests ?? 0)
   const totalTokens = computed(() => usageSummary.value?.total_tokens ?? 0)
   const totalPromptTokens = computed(() => usageSummary.value?.total_prompt_tokens ?? 0)
@@ -131,6 +204,11 @@ export const useStatsStore = defineStore('stats', () => {
     totalMessages,
     agentsCount,
     memoryStats,
+    // Token 侦听器
+    liveSessionTokens,
+    sessionHistory,
+    interceptChunk,
+    recordPrompt,
     fetchOverview,
     fetchUsage,
     fetchDailyUsage,

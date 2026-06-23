@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import {
   Bot,
   Plus,
@@ -15,6 +15,9 @@ import {
   Cpu,
   MousePointerClick
 } from 'lucide-vue-next'
+import { useWorkflowStore } from '../stores/workflow'
+
+const workflowStore = useWorkflowStore()
 
 interface WorkflowNode {
   id: string
@@ -34,61 +37,9 @@ interface WorkflowConnection {
   label?: string
 }
 
-const nodes = ref<WorkflowNode[]>([
-  {
-    id: 'node-1',
-    name: '用户输入',
-    type: 'input',
-    icon: MousePointerClick,
-    color: '#147EBC',
-    x: 80,
-    y: 200
-  },
-  {
-    id: 'node-2',
-    name: '代可行 (主控)',
-    type: 'agent',
-    icon: Bot,
-    color: '#6366f1',
-    x: 280,
-    y: 160
-  },
-  {
-    id: 'node-3',
-    name: '无言 (撰写)',
-    type: 'agent',
-    icon: Bot,
-    color: '#f59e0b',
-    x: 480,
-    y: 100
-  },
-  {
-    id: 'node-4',
-    name: '林且慢 (审核)',
-    type: 'agent',
-    icon: Bot,
-    color: '#22c55e',
-    x: 480,
-    y: 240
-  },
-  {
-    id: 'node-5',
-    name: '文档输出',
-    type: 'output',
-    icon: FileText,
-    color: '#f43f5e',
-    x: 680,
-    y: 170
-  }
-])
+const nodes = ref<WorkflowNode[]>([])
 
-const connections = ref<WorkflowConnection[]>([
-  { id: 'conn-1', from: 'node-1', to: 'node-2', label: '任务分发' },
-  { id: 'conn-2', from: 'node-2', to: 'node-3', label: '撰写指令' },
-  { id: 'conn-3', from: 'node-2', to: 'node-4', label: '审核请求' },
-  { id: 'conn-4', from: 'node-3', to: 'node-5', label: '草稿' },
-  { id: 'conn-5', from: 'node-4', to: 'node-5', label: '确认' }
-])
+const connections = ref<WorkflowConnection[]>([])
 
 const isRunning = ref(false)
 const selectedNode = ref<string | null>(null)
@@ -148,6 +99,135 @@ function getNodePos(nodeId: string): { x: number; y: number } {
   const node = nodes.value.find(n => n.id === nodeId)
   return node ? { x: node.x, y: node.y } : { x: 0, y: 0 }
 }
+
+// 模块图标映射
+const MODULE_ICONS: Record<string, any> = {
+  browser: Globe,
+  schedule: Settings,
+  memory: Cpu,
+  console: FileText,
+  smart_home: Zap,
+  subagent: Bot,
+}
+
+const MODULE_COLORS: Record<string, string> = {
+  browser: '#3b82f6',
+  schedule: '#f59e0b',
+  memory: '#8b5cf6',
+  console: '#f43f5e',
+  smart_home: '#22c55e',
+  subagent: '#6366f1',
+}
+
+/**
+ * 监听工作流 store 变化，自动在画布上创建流程节点
+ * 当工作流引擎创建了执行计划（plan_created）后，自动生成对应的节点和连接
+ */
+watch(
+  () => workflowStore.currentSession,
+  (session) => {
+    if (!session) return
+
+    // 当计划创建后，生成画布节点
+    if (session.plan && session.tasks.length > 0) {
+      // 清除旧节点，添加输入节点
+      nodes.value = [{
+        id: 'node-input',
+        name: '用户输入',
+        type: 'input',
+        icon: MousePointerClick,
+        color: '#147EBC',
+        x: 80,
+        y: 200,
+      }]
+      connections.value = []
+
+      const startX = 80
+      const startY = 200
+
+      session.tasks.forEach((task, idx) => {
+        const module = task.tool_name.split('.')[0] || 'tool'
+        const icon = MODULE_ICONS[module] || Cpu
+        const color = MODULE_COLORS[module] || '#6366f1'
+
+        const nodeId = `wf-${task.task_id}`
+        if (!nodes.value.find(n => n.id === nodeId)) {
+          nodes.value.push({
+            id: nodeId,
+            name: task.title,
+            type: 'tool',
+            icon,
+            color,
+            x: startX + 200 + (idx % 3) * 200,
+            y: startY + Math.floor(idx / 3) * 120 - 100,
+            config: {
+              tool_name: task.tool_name,
+              status: task.status,
+              task_type: task.task_type,
+            },
+          })
+
+          // 创建连接：输入节点 → 第一个任务，任务间按依赖关系连接
+          if (task.depends_on.length === 0) {
+            connections.value.push({
+              id: `conn-wf-${task.task_id}`,
+              from: 'node-input',
+              to: nodeId,
+              label: '执行',
+            })
+          } else {
+            for (const dep of task.depends_on) {
+              connections.value.push({
+                id: `conn-wf-${dep}-${task.task_id}`,
+                from: `wf-${dep}`,
+                to: nodeId,
+                label: '依赖',
+              })
+            }
+          }
+        }
+      })
+
+      // 添加输出节点
+      const lastTask = session.tasks[session.tasks.length - 1]
+      if (lastTask) {
+        const outputId = 'wf-output'
+        if (!nodes.value.find(n => n.id === outputId)) {
+          const lastNode = nodes.value[nodes.value.length - 1]
+          nodes.value.push({
+            id: outputId,
+            name: '执行结果',
+            type: 'output',
+            icon: FileText,
+            color: '#f43f5e',
+            x: lastNode.x + 200,
+            y: lastNode.y,
+          })
+          connections.value.push({
+            id: 'conn-wf-output',
+            from: `wf-${lastTask.task_id}`,
+            to: outputId,
+            label: '输出',
+          })
+        }
+      }
+    }
+
+    // 实时更新节点状态
+    if (session.tasks.length > 0) {
+      for (const task of session.tasks) {
+        const node = nodes.value.find(n => n.id === `wf-${task.task_id}`)
+        if (node && node.config) {
+          node.config.status = task.status
+        }
+      }
+    }
+
+    // 工作流运行状态同步
+    isRunning.value = workflowStore.isRunning
+  },
+  { deep: true }
+)
 </script>
 
 <template>
@@ -224,6 +304,13 @@ function getNodePos(nodeId: string): { x: number; y: number } {
       </aside>
 
       <main class="canvas-area" @click.self="deselectNode">
+        <!-- 空状态提示 -->
+        <div v-if="nodes.length === 0" class="canvas-empty-state">
+          <Sparkles :size="32" />
+          <p class="empty-title">工作流画布</p>
+          <p class="empty-desc">在主 Agent 工作台开启工作流模式后，执行计划将自动生成节点</p>
+          <p class="empty-hint">也可以从左侧拖拽节点手动编排</p>
+        </div>
         <svg class="connections-layer">
           <defs>
             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -547,6 +634,33 @@ function getNodePos(nodeId: string): { x: number; y: number } {
   background:
     radial-gradient(circle at 1px 1px, var(--workspace-border) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+.canvas-empty-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.canvas-empty-state .empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 12px 0 8px;
+  color: var(--text-secondary);
+}
+
+.canvas-empty-state .empty-desc {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.canvas-empty-state .empty-hint {
+  font-size: 12px;
+  opacity: 0.7;
 }
 
 .connections-layer {

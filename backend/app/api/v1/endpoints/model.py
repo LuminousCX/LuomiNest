@@ -137,6 +137,7 @@ class ModelConfigUpdate(BaseModel):
     stt_language: str | None = Field(alias="sttLanguage", default=None)
     stt_auto_send: bool | None = Field(alias="sttAutoSend", default=None)
     stt_auto_send_delay: int | None = Field(alias="sttAutoSendDelay", default=None)
+    stt_engine: str | None = Field(alias="sttEngine", default=None)
 
 
 def _build_provider_response(provider_id: str) -> ProviderResponse:
@@ -410,6 +411,8 @@ async def update_model_config(request: ModelConfigUpdate):
         updated_fields.append("stt_auto_send")
     if request.stt_auto_send_delay is not None:
         updated_fields.append("stt_auto_send_delay")
+    if request.stt_engine is not None:
+        updated_fields.append("stt_engine")
 
     existing_config = _load_model_config()
     config_to_save = {
@@ -423,7 +426,8 @@ async def update_model_config(request: ModelConfigUpdate):
     for field in ["reasoner_provider", "reasoner_model", "reasoner_temperature",
                    "reasoner_max_tokens", "reasoner_effort", "tts_provider",
                    "tts_model", "tts_voice", "tts_speed", "stt_provider",
-                   "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay"]:
+                   "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay",
+                   "stt_engine"]:
         val = getattr(request, field, None)
         if val is not None:
             config_to_save[field] = val

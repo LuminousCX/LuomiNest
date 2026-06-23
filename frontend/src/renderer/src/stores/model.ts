@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig, STTConfig } from '../types'
+import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig, STTConfig, STTEngine } from '../types'
 import { useApi } from '../composables/useApi'
 import { PROVIDER_LOGOS } from '../config/provider-logos'
 
@@ -453,9 +453,11 @@ export const useModelStore = defineStore('model', () => {
     autoSendDelay: 2000,
     baseUrl: '',
     apiKeySet: false,
+    engine: 'auto',
   })
   const loading = ref(false)
   const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const sttEngines = ref<STTEngine[]>([])
 
   const defaultProvider = computed(() =>
     providers.value.find(p => p.isDefault)
@@ -682,6 +684,7 @@ export const useModelStore = defineStore('model', () => {
           sttLanguage: config.sttLanguage || config.stt_language || 'zh-CN',
           sttAutoSend: config.sttAutoSend ?? config.stt_auto_send ?? false,
           sttAutoSendDelay: config.sttAutoSendDelay ?? config.stt_auto_send_delay ?? 2000,
+          sttEngine: config.sttEngine || config.stt_engine || 'auto',
         }
       }
     } catch {
@@ -715,6 +718,7 @@ export const useModelStore = defineStore('model', () => {
       if (config.sttLanguage !== undefined) body.sttLanguage = config.sttLanguage
       if (config.sttAutoSend !== undefined) body.sttAutoSend = config.sttAutoSend
       if (config.sttAutoSendDelay !== undefined) body.sttAutoSendDelay = config.sttAutoSendDelay
+      if (config.sttEngine !== undefined) body.sttEngine = config.sttEngine
 
       try {
         await apiPatch('/models/config', body)
@@ -780,6 +784,7 @@ export const useModelStore = defineStore('model', () => {
       autoSend: cfg.autoSend,
       autoSendDelay: cfg.autoSendDelay,
       baseUrl: cfg.baseUrl,
+      engine: cfg.engine,
     }
     localStorage.setItem('luominest-stt-config', JSON.stringify(data))
     window.api?.config?.setSTT(data).catch(() => {})
@@ -798,6 +803,7 @@ export const useModelStore = defineStore('model', () => {
           autoSendDelay: saved.autoSendDelay ?? modelConfig.value.sttAutoSendDelay ?? 2000,
           baseUrl: saved.baseUrl || '',
           apiKeySet: false,
+          engine: saved.engine || 'auto',
         }
       } else {
         sttConfig.value = {
@@ -808,6 +814,7 @@ export const useModelStore = defineStore('model', () => {
           autoSendDelay: modelConfig.value.sttAutoSendDelay ?? 2000,
           baseUrl: '',
           apiKeySet: false,
+          engine: 'auto',
         }
       }
     } catch {
@@ -842,11 +849,26 @@ export const useModelStore = defineStore('model', () => {
     if (updates.language !== undefined) configUpdates.sttLanguage = updates.language
     if (updates.autoSend !== undefined) configUpdates.sttAutoSend = updates.autoSend
     if (updates.autoSendDelay !== undefined) configUpdates.sttAutoSendDelay = updates.autoSendDelay
+    if (updates.engine !== undefined) configUpdates.sttEngine = updates.engine
 
     try {
       await updateModelConfig(configUpdates)
     } catch {
       // local save already done
+    }
+  }
+
+  const fetchSTTEngines = async () => {
+    try {
+      const result = await apiGet<{ engines: STTEngine[] } | STTEngine[]>('/chat/stt/engines')
+      const data = unwrapData<{ engines: STTEngine[] } | STTEngine[]>(result)
+      if (Array.isArray(data)) {
+        sttEngines.value = data
+      } else if (data?.engines) {
+        sttEngines.value = data.engines
+      }
+    } catch {
+      sttEngines.value = []
     }
   }
 
@@ -856,6 +878,7 @@ export const useModelStore = defineStore('model', () => {
     modelConfig,
     ttsConfig,
     sttConfig,
+    sttEngines,
     loading,
     saveStatus,
     defaultProvider,
@@ -876,6 +899,7 @@ export const useModelStore = defineStore('model', () => {
     updateModelConfig,
     updateTTSConfig,
     updateSTTConfig,
+    fetchSTTEngines,
     TTS_VOICES,
     STT_LANGUAGES,
   }

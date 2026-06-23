@@ -193,6 +193,11 @@ export const useApi = () => {
             done: !!raw.done,
             suggested_questions: raw.suggested_questions || undefined,
             emotion: raw.emotion || undefined,
+            tool_calls: raw.tool_calls || undefined,
+            tool_event: raw.tool_event || undefined,
+            subagent_event: raw.subagent_event || undefined,
+            task_event: raw.task_event || undefined,
+            iteration: raw.iteration ?? undefined,
           }
           onChunk(chunk)
           return chunk.done

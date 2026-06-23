@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import system, chat, agent, model, social, memory, console, stats, platform, repo_source, marketplace, tools, mcp, scheduler
+from app.api.v1.endpoints import system, chat, agent, model, social, memory, console, stats, platform, repo_source, marketplace, tools, mcp, scheduler, workflow, smart_home
 
 api_router = APIRouter()
 api_router.include_router(system.router)
@@ -17,3 +17,5 @@ api_router.include_router(marketplace.router)
 api_router.include_router(tools.router)
 api_router.include_router(mcp.router)
 api_router.include_router(scheduler.router)
+api_router.include_router(workflow.router)
+api_router.include_router(smart_home.router)
