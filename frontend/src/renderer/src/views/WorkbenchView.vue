@@ -34,6 +34,9 @@ import {
   ChevronRight,
   Cpu,
   Monitor,
+  ListChecks,
+  X,
+  ClipboardList,
 } from 'lucide-vue-next'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
@@ -52,6 +55,8 @@ import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import type { ConversationListItem, ConversationSearchResult, ChatStreamChunk, SubagentEvent, AgentProfile } from '../types'
 import { useTaskStreamStore } from '../stores/taskStream'
+import { useWorkflowStore } from '../stores/workflow'
+import { useStatsStore } from '../stores/stats'
 
 marked.setOptions({
   breaks: true,
@@ -94,6 +99,8 @@ const modelStore = useModelStore()
 const memoryStore = useMemoryStore()
 const platformStore = usePlatformStore()
 const taskStreamStore = useTaskStreamStore()
+const workflowStore = useWorkflowStore()
+const statsStore = useStatsStore()
 const avatarControl = useAvatarControlStore()
 const { apiGet } = useApi()
 const toast = useToast()
@@ -537,24 +544,74 @@ const showScrollToBottomBtn = ref(false)
 let resizeObserver: ResizeObserver | null = null
 
 const messages = computed(() => chatStore.messages)
-const isStreaming = computed(() => chatStore.isStreaming)
+const isStreaming = computed(() => chatStore.isStreaming || workflowStore.isRunning)
 const isBackendReady = computed(() => chatStore.isBackendReady)
 const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
 
+// 工作流模式：开启后输入的任务将通过 WorkflowEngine 执行长任务
+const workflowMode = ref(false)
+// 工作流执行模式（P2：长任务执行模式）
+// - flash: 闪电模式，快速响应简单任务（跳过计划确认）
+// - standard: 标准模式，平衡速度与深度（默认）
+// - pro: 专业模式，更多迭代与并发，适合中等复杂任务
+// - ultra: 超长模式，最大能力，适合复杂长任务
+type WorkflowModeLevel = 'flash' | 'standard' | 'pro' | 'ultra'
+const workflowModeLevel = ref<WorkflowModeLevel>('standard')
+const WORKFLOW_MODE_OPTIONS: Array<{
+  value: WorkflowModeLevel
+  label: string
+  title: string
+}> = [
+  { value: 'flash', label: '闪电', title: '闪电模式：快速响应简单任务，跳过计划确认' },
+  { value: 'standard', label: '标准', title: '标准模式：平衡速度与深度，需确认计划' },
+  { value: 'pro', label: '专业', title: '专业模式：更多迭代与并发，适合中等复杂任务' },
+  { value: 'ultra', label: '超长', title: '超长模式：最大能力，适合复杂长任务' },
+]
+
+// 推理模型关键词：模型名包含这些词的视为推理模型
+const REASONING_MODEL_KEYWORDS = ['reasoner', 'reason', 'o1', 'o3', 'o4', 'thinking', 'r1']
+
+/** 判断模型是否是推理模型 */
+const isReasoningModel = (modelId: string): boolean => {
+  const lower = modelId.toLowerCase()
+  return REASONING_MODEL_KEYWORDS.some(kw => lower.includes(kw))
+}
+
 const currentModel = computed(() => {
-  // 主 Agent 优先使用 platformStore.mainAgent 配置，回退到 modelStore.resolveModel
-  const mainAgent = platformStore.mainAgent
-  if (mainAgent?.model) return mainAgent.model
   const resolved = modelStore.resolveModel
   return resolved?.model || '未配置模型'
 })
 
 const currentProvider = computed(() => {
-  const mainAgent = platformStore.mainAgent
-  if (mainAgent?.provider) return mainAgent.provider
   const resolved = modelStore.resolveModel
   return resolved?.provider || ''
 })
+
+/**
+ * 切换工作流模式时自动选择对应类型的模型
+ * - 工作流模式 → 优先选择推理模型（deepseek-reasoner, o1 等）
+ * - 普通模式 → 优先选择快速响应模型（deepseek-chat, gpt-4o 等）
+ */
+const toggleWorkflowMode = () => {
+  workflowMode.value = !workflowMode.value
+
+  const options = availableModelOptions.value
+  if (options.length === 0) return
+
+  if (workflowMode.value) {
+    // 工作流模式：优先选择推理模型
+    const reasoning = options.find(opt => isReasoningModel(opt.modelId))
+    if (reasoning) {
+      selectModel(reasoning.providerId, reasoning.modelId)
+    }
+  } else {
+    // 普通模式：优先选择快速响应模型
+    const fast = options.find(opt => !isReasoningModel(opt.modelId))
+    if (fast) {
+      selectModel(fast.providerId, fast.modelId)
+    }
+  }
+}
 
 const currentProviderLogo = computed(() => getProviderLogo(currentProvider.value))
 
@@ -602,9 +659,17 @@ const sendMessage = async () => {
   inputText.value = ''
   resetTextareaHeight()
 
-  // 主 Agent 配置：优先使用 platformStore.mainAgent，回退到 modelStore.resolveModel
-  const mainAgent = platformStore.mainAgent
+  // Token 侦听器：记录 prompt 字符数
+  statsStore.recordPrompt(content)
+
+  // 模型配置：使用工具栏选择的模型（modelStore.resolveModel）
   const resolved = modelStore.resolveModel
+
+  // 工作流模式：通过 WorkflowEngine 执行长任务
+  if (workflowMode.value) {
+    await submitWorkflowTask(content, resolved)
+    return
+  }
 
   // 重置工具调用活动追踪
   toolActivities.value = []
@@ -612,12 +677,15 @@ const sendMessage = async () => {
 
   const options: any = {
     agentId: MAIN_AGENT_ID,
-    model: mainAgent?.model || resolved?.model || undefined,
-    provider: mainAgent?.provider || resolved?.provider || undefined,
-    temperature: mainAgent?.temperature ?? modelStore.modelConfig.defaultTemperature,
-    maxTokens: mainAgent?.maxTokens ?? modelStore.modelConfig.defaultMaxTokens,
+    model: resolved?.model || undefined,
+    provider: resolved?.provider || undefined,
+    temperature: modelStore.modelConfig.defaultTemperature,
+    maxTokens: modelStore.modelConfig.defaultMaxTokens,
     topP: modelStore.modelConfig.defaultTopP,
     onChunk: (chunk: ChatStreamChunk) => {
+      // Token 侦听器：拦截 LLM 返回的所有字符
+      statsStore.interceptChunk(chunk, chatStore.currentConversationId)
+
       if (chunk.done) {
         finishStream()
         return
@@ -684,7 +752,170 @@ const sendMessage = async () => {
   scrollToBottom(true)
 }
 
+/**
+ * 提交长任务到工作流引擎
+ * 工作流模式下，主 Agent 通过 WorkflowEngine 分解任务、调度内部模块
+ */
+const submitWorkflowTask = async (
+  content: string,
+  resolved: { model?: string; provider?: string } | null,
+) => {
+  // 重置工具调用活动追踪
+  toolActivities.value = []
+  subagentActivities.value = []
+
+  isNearBottom.value = true
+  inCodeBlock = false
+
+  // === DEBUG START ===
+  console.group('[WorkflowDebug] submitWorkflowTask 调用')
+  console.log('[WorkflowDebug] 输入内容:', content)
+  console.log('[WorkflowDebug] resolved model/provider:', resolved)
+  console.log('[WorkflowDebug] MAIN_AGENT_ID:', MAIN_AGENT_ID)
+  console.log('[WorkflowDebug] agentStore.activeAgent:', agentStore.activeAgent)
+  console.log('[WorkflowDebug] chatStore.activeAgentId:', chatStore.activeAgentId)
+  console.log('[WorkflowDebug] chatStore.currentConvId:', chatStore.currentConvId)
+  console.log('[WorkflowDebug] chatStore.conversations count:', chatStore.conversations.length)
+  console.log('[WorkflowDebug] chatStore.conversations:', chatStore.conversations)
+  // === DEBUG END ===
+
+  let convId = chatStore.currentConvId
+  if (!convId) {
+    console.warn('[WorkflowDebug] currentConvId 为空，尝试自动创建对话...')
+    try {
+      const conv = await chatStore.createConversation(
+        content.slice(0, 30) || '新对话',
+        MAIN_AGENT_ID,
+        resolved?.model,
+        resolved?.provider,
+      )
+      convId = conv?.id || null
+      console.log('[WorkflowDebug] 自动创建对话结果:', conv)
+      console.log('[WorkflowDebug] 创建后 currentConvId:', chatStore.currentConvId)
+    } catch (e: unknown) {
+      console.error('[WorkflowDebug] 自动创建对话失败:', e)
+      const errMsg = e instanceof Error ? e.message : String(e)
+      toast.error(`创建对话失败：${errMsg}`)
+      return
+    }
+  }
+
+  if (!convId) {
+    console.error('[WorkflowDebug] convId 仍为空，无法继续')
+    toast.error('请先选择或创建对话')
+    return
+  }
+  console.log('[WorkflowDebug] 使用 convId:', convId)
+  console.groupEnd()
+
+  // 1. 添加用户消息到 chatStore
+  const userMsgId = `user-${Date.now()}`
+  const userMessage = {
+    id: userMsgId,
+    role: 'user' as const,
+    content,
+    timestamp: Date.now(),
+  }
+  chatStore.convMessages = {
+    ...chatStore.convMessages,
+    [convId]: [...(chatStore.convMessages[convId] || []), userMessage],
+  }
+
+  // 2. 添加空的 assistant 消息（占位，工作流完成后填充）
+  const assistantMsgId = `assistant-${Date.now()}`
+  const assistantMessage = {
+    id: assistantMsgId,
+    role: 'assistant' as const,
+    content: '',
+    reasoningContent: '',
+    timestamp: Date.now(),
+    done: false,
+  }
+  chatStore.convMessages = {
+    ...chatStore.convMessages,
+    [convId]: [...(chatStore.convMessages[convId] || []), assistantMessage],
+  }
+
+  await nextTick()
+  scrollToBottom(true)
+
+  try {
+    await workflowStore.submitWorkflow(content, {
+      provider: resolved?.provider || undefined,
+      model: resolved?.model || undefined,
+      mode: workflowModeLevel.value,
+      onPhaseChange: (phase) => {
+        console.info(`[Workbench] 工作流阶段: ${phase}`)
+      },
+      onReasoning: (reasoningContent, phase) => {
+        console.info(`[Workbench] 收到思考过程 (${phase}): ${reasoningContent.slice(0, 80)}${reasoningContent.length > 80 ? '...' : ''}`)
+        const msgs = chatStore.convMessages[convId] || []
+        const updatedMsgs = msgs.map(m =>
+          m.id === assistantMsgId
+            ? { ...m, reasoningContent: (m.reasoningContent || '') + reasoningContent }
+            : m
+        )
+        chatStore.convMessages = {
+          ...chatStore.convMessages,
+          [convId]: updatedMsgs,
+        }
+      },
+      onFinalResult: (result) => {
+        // 工作流完成后，更新 assistant 消息内容
+        const msgs = chatStore.convMessages[convId] || []
+        const updatedMsgs = msgs.map(m =>
+          m.id === assistantMsgId
+            ? { ...m, content: result || '工作流执行完成', done: true }
+            : m
+        )
+        chatStore.convMessages = {
+          ...chatStore.convMessages,
+          [convId]: updatedMsgs,
+        }
+
+        // TTS 播报（失败不阻断消息显示）
+        if (result) {
+          try {
+            feedChunk({
+              id: `workflow_${Date.now()}`,
+              content: result,
+              reasoning_content: '',
+              model: resolved?.model || '',
+              provider: resolved?.provider || '',
+              done: true,
+            })
+          } catch (ttsErr) {
+            console.warn('[Workbench] TTS 播报失败，消息已正常显示:', ttsErr)
+          }
+        }
+        finishStream()
+      },
+    })
+  } catch (e: unknown) {
+    const errMsg = e instanceof Error ? e.message : String(e)
+    toast.error(`工作流执行失败：${errMsg}`)
+    // 错误时也要更新 assistant 消息
+    const msgs = chatStore.convMessages[convId] || []
+    const updatedMsgs = msgs.map(m =>
+      m.id === assistantMsgId
+        ? { ...m, content: `工作流执行失败：${errMsg}`, done: true }
+        : m
+    )
+    chatStore.convMessages = {
+      ...chatStore.convMessages,
+      [convId]: updatedMsgs,
+    }
+    finishStream()
+  }
+  await nextTick()
+  scrollToBottom(true)
+}
+
 const cancelStreaming = () => {
+  if (workflowStore.isRunning) {
+    workflowStore.cancelWorkflow()
+    return
+  }
   chatStore.cancelCurrentRequest()
   stopTts()
 }
@@ -1253,6 +1484,63 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
 
+                  <!-- 计划确认卡片（借鉴 deer-flow ClarificationMiddleware） -->
+                  <div
+                    v-if="msg.role === 'assistant' && msg.id === messages[messages.length - 1].id && workflowStore.pendingPlan"
+                    class="plan-confirmation-section"
+                  >
+                    <div class="plan-confirmation-header">
+                      <ClipboardList :size="14" />
+                      <span>执行计划待确认</span>
+                      <span class="plan-task-count">{{ workflowStore.pendingPlan.tasks.length }} 个子任务</span>
+                    </div>
+                    <div class="plan-confirmation-body">
+                      <div v-if="workflowStore.pendingPlan.plan" class="plan-summary">
+                        {{ workflowStore.pendingPlan.plan }}
+                      </div>
+                      <div class="plan-tasks-list">
+                        <div
+                          v-for="(task, idx) in workflowStore.pendingPlan.tasks"
+                          :key="task.task_id || idx"
+                          class="plan-task-item"
+                        >
+                          <div class="plan-task-index">{{ idx + 1 }}</div>
+                          <div class="plan-task-info">
+                            <div class="plan-task-title">{{ task.title }}</div>
+                            <div v-if="task.description" class="plan-task-desc">{{ task.description }}</div>
+                            <div class="plan-task-meta">
+                              <span v-if="task.tool_name" class="plan-task-tool">
+                                <Wrench :size="10" />
+                                {{ task.tool_name }}
+                              </span>
+                              <span v-if="task.priority && task.priority !== 'normal'" class="plan-task-priority" :class="task.priority">
+                                {{ task.priority }}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="plan-feedback-area">
+                        <textarea
+                          v-model="workflowStore.confirmationFeedback"
+                          class="plan-feedback-input"
+                          placeholder="反馈（可选）：如需调整计划，请在此说明..."
+                          rows="2"
+                        ></textarea>
+                      </div>
+                      <div class="plan-confirmation-actions">
+                        <button class="plan-btn plan-btn-reject" @click="workflowStore.rejectPlan">
+                          <X :size="14" />
+                          <span>拒绝执行</span>
+                        </button>
+                        <button class="plan-btn plan-btn-confirm" @click="workflowStore.confirmPlan">
+                          <Check :size="14" />
+                          <span>确认执行</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
                   <div v-if="msg.role === 'assistant' && msg.content && msg.content !== '[已中断]'" class="message-content markdown-body">
                     <div v-html="renderMarkdown(msg.content)"></div>
                     <span v-if="msg.interrupted" class="interrupted-inline">
@@ -1375,6 +1663,25 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
                 </Transition>
+              </div>
+              <button
+                :class="['tool-btn', 'workflow-toggle', { active: workflowMode }]"
+                :title="workflowMode ? '工作流模式已开启：长任务将自动分解并调度内部模块' : '开启工作流模式：长任务自动分解执行'"
+                @click="toggleWorkflowMode"
+              >
+                <Wand2 :size="15" />
+                <span class="workflow-toggle-text">{{ workflowMode ? '工作流' : '普通' }}</span>
+              </button>
+              <div v-if="workflowMode" class="workflow-mode-selector">
+                <button
+                  v-for="opt in WORKFLOW_MODE_OPTIONS"
+                  :key="opt.value"
+                  :class="['mode-chip', { active: workflowModeLevel === opt.value }]"
+                  :title="opt.title"
+                  @click="workflowModeLevel = opt.value"
+                >
+                  {{ opt.label }}
+                </button>
               </div>
             </div>
             <div class="toolbar-right">
@@ -2558,6 +2865,228 @@ onBeforeUnmount(() => {
   max-height: 0;
 }
 
+/* ===== 计划确认卡片（借鉴 deer-flow ClarificationMiddleware） ===== */
+.plan-confirmation-section {
+  margin-bottom: 8px;
+  background: var(--surface-hover);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--lumi-primary);
+  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  animation: plan-appear 0.25s ease-in-out;
+}
+
+@keyframes plan-appear {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.plan-confirmation-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.plan-task-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  background: var(--surface);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+}
+
+.plan-confirmation-body {
+  padding: 12px 14px;
+}
+
+.plan-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--lumi-primary);
+}
+
+.plan-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.plan-task-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  transition: border-color 0.15s ease-in-out;
+}
+
+.plan-task-item:hover {
+  border-color: var(--lumi-primary);
+}
+
+.plan-task-index {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.plan-task-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.plan-task-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.plan-task-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.plan-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.plan-task-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  background: var(--surface-hover);
+  border-radius: var(--radius-full);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+.plan-task-priority {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+}
+
+.plan-task-priority.urgent {
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
+}
+
+.plan-task-priority.high {
+  background: var(--lumi-warning-light, rgba(245, 158, 11, 0.1));
+  color: var(--lumi-warning);
+}
+
+.plan-task-priority.low {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+
+.plan-feedback-area {
+  margin-bottom: 10px;
+}
+
+.plan-feedback-input {
+  width: 100%;
+  border: 1px solid var(--border-light);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease-in-out;
+}
+
+.plan-feedback-input:focus {
+  border-color: var(--lumi-primary);
+  box-shadow: 0 0 0 2px var(--lumi-primary-glow);
+}
+
+.plan-feedback-input::placeholder {
+  color: var(--text-muted);
+}
+
+.plan-confirmation-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.plan-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.15s ease-in-out, transform 0.1s ease-in-out;
+}
+
+.plan-btn:active {
+  transform: scale(0.97);
+}
+
+.plan-btn-confirm {
+  background: var(--lumi-primary);
+  color: var(--text-inverse);
+}
+
+.plan-btn-confirm:hover {
+  background: var(--lumi-primary-hover);
+}
+
+.plan-btn-reject {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+}
+
+.plan-btn-reject:hover {
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
+  border-color: var(--lumi-danger);
+}
+
 .message-content {
   font-size: 14px;
   line-height: 1.7;
@@ -2866,6 +3395,69 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* 工作流模式切换按钮 */
+.workflow-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface-hover);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.workflow-toggle:hover {
+  background: var(--surface-active);
+  color: var(--text-primary);
+}
+
+.workflow-toggle.active {
+  color: var(--accent-primary, #10b981);
+  background: var(--accent-surface, rgba(16, 185, 129, 0.1));
+  border-color: var(--accent-border, rgba(16, 185, 129, 0.3));
+}
+
+.workflow-toggle-text {
+  white-space: nowrap;
+}
+
+/* P2：工作流执行模式选择器 */
+.workflow-mode-selector {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-hover);
+  border-radius: var(--radius-full);
+}
+
+.mode-chip {
+  padding: 3px 9px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  white-space: nowrap;
+}
+
+.mode-chip:hover {
+  color: var(--text-primary);
+  background: var(--surface-active);
+}
+
+.mode-chip.active {
+  color: var(--accent-primary, #10b981);
+  background: var(--accent-surface, rgba(16, 185, 129, 0.15));
+  font-weight: 500;
 }
 
 .model-tag {

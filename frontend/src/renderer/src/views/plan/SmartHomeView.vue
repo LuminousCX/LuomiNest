@@ -1,35 +1,72 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Home, Lightbulb, Thermometer, Droplets, Lock, Wifi, Power, Settings2, Sun, Moon, Wind, Eye, Plus, Activity } from 'lucide-vue-next'
+import { useApi } from '../../composables/useApi'
 
-const rooms = ref([
-  { id: 'r1', name: '客厅', devices: 6, active: 4, icon: Home },
-  { id: 'r2', name: '卧室', devices: 4, active: 3, icon: Moon },
-  { id: 'r3', name: '厨房', devices: 3, active: 2, icon: Sun },
-  { id: 'r4', name: '书房', devices: 5, active: 5, icon: Lightbulb },
-])
+const { apiGet } = useApi()
 
-const scenes = ref([
-  { id: 's1', name: '回家模式', icon: Home, active: true, desc: '开灯、开空调、播放音乐' },
-  { id: 's2', name: '离家模式', icon: Lock, active: false, desc: '关灯、锁门、启动监控' },
-  { id: 's3', name: '睡眠模式', icon: Moon, active: false, desc: '关灯、降温、关窗帘' },
-  { id: 's4', name: '阅读模式', icon: Lightbulb, active: false, desc: '台灯暖光、安静环境' },
-])
+interface Device {
+  id: string
+  name: string
+  room: string
+  type: string
+  status: boolean
+  value: string
+}
 
-const deviceList = ref([
-  { id: 'd1', name: '客厅主灯', room: '客厅', type: 'light', status: true, value: '60%' },
-  { id: 'd2', name: '空调', room: '客厅', type: 'ac', status: true, value: '24°C' },
-  { id: 'd3', name: '加湿器', room: '卧室', type: 'humidifier', status: false, value: '关' },
-  { id: 'd4', name: '智能门锁', room: '入口', type: 'lock', status: true, value: '已锁' },
-  { id: 'd5', name: '窗帘电机', room: '卧室', type: 'curtain', status: true, value: '已关' },
-  { id: 'd6', name: '温湿度传感器', room: '书房', type: 'sensor', status: true, value: '24.5°C / 65%' },
-])
+interface Scene {
+  id: string
+  name: string
+  icon: any
+  active: boolean
+  desc: string
+}
 
-const automations = ref([
-  { id: 'a1', name: '日落自动开灯', trigger: '日落', action: '开启客厅主灯', enabled: true },
-  { id: 'a2', name: '温度过高开空调', trigger: '温度 > 28°C', action: '开启空调 24°C', enabled: true },
-  { id: 'a3', name: '离家自动锁门', trigger: '所有人离开', action: '锁门 + 关灯', enabled: false },
-])
+interface Room {
+  id: string
+  name: string
+  devices: number
+  active: number
+  icon: any
+}
+
+interface Automation {
+  id: string
+  name: string
+  trigger: string
+  action: string
+  enabled: boolean
+}
+
+const rooms = ref<Room[]>([])
+const scenes = ref<Scene[]>([])
+const deviceList = ref<Device[]>([])
+const automations = ref<Automation[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
+
+const fetchData = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const [devicesRes, scenesRes, roomsRes, automationsRes] = await Promise.all([
+      apiGet<{ devices: Device[] }>('/smart-home/devices'),
+      apiGet<{ scenes: Scene[] }>('/smart-home/scenes'),
+      apiGet<{ rooms: Room[] }>('/smart-home/rooms'),
+      apiGet<{ automations: Automation[] }>('/smart-home/automations'),
+    ])
+    deviceList.value = devicesRes?.devices || []
+    scenes.value = scenesRes?.scenes || []
+    rooms.value = roomsRes?.rooms || []
+    automations.value = automationsRes?.automations || []
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : '加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(fetchData)
 
 const toggleScene = (sceneId: string) => {
   scenes.value = scenes.value.map(s => ({

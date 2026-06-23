@@ -231,6 +231,7 @@ export interface ModelConfig {
   sttLanguage?: string
   sttAutoSend?: boolean
   sttAutoSendDelay?: number
+  sttEngine?: string
 }
 
 export interface Skill {
@@ -318,6 +319,19 @@ export interface STTConfig {
   autoSendDelay?: number
   baseUrl?: string
   apiKeySet?: boolean
+  engine?: string
+}
+
+export interface STTEngine {
+  id: string
+  name: string
+  online: boolean
+  available: boolean
+  model_ready?: boolean
+  languages?: string[]
+  description?: string
+  model_types?: string[]
+  models?: string[]
 }
 
 export interface GroupMember {

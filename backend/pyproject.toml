@@ -59,6 +59,12 @@ voice = [
     "soundfile>=0.12.1",
     "pyaudio>=0.2.14",
     "pyttsx3>=2.90",
+    "sherpa-onnx>=1.10.0",
+    "faster-whisper>=1.0.0",
+    "funasr>=1.0.27",
+    "modelscope>=1.10.0",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
 ]
 render = [
     "cubism-live2d-core>=0.1.0",

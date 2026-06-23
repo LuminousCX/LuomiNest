@@ -51,6 +51,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Tool registration skipped: {e}")
 
+    # 注册工作流内部模块接口
+    try:
+        from app.core.workflow.register_tools import register_internal_tools
+        await register_internal_tools()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Workflow internal tools registration skipped: {e}")
+
     # 启动定时任务调度器（APScheduler）
     try:
         from app.core.scheduler import luomi_scheduler

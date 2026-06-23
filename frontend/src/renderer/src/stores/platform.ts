@@ -6,6 +6,7 @@ import type {
   PlatformMessage, PlatformConversationDetail, PlatformModelConfig, PlatformModelConfigResponse,
 } from '../types'
 import { useApi } from '../composables/useApi'
+import { useToast } from '../composables/useToast'
 
 interface RawLogEntry {
   id: string
@@ -165,6 +166,7 @@ export const usePlatformStore = defineStore('platform', () => {
   const logSummary = ref<PlatformLogSummary>({ totalEntries: 0, totalInstances: 0, byLevel: {} })
   const stats = ref<PlatformStats>({ totalPlatforms: 0, activeConnections: 0, totalMessages: 0 })
   const mainAgent = ref<MainAgentInfo | null>(null)
+  const mainAgentError = ref<string | null>(null)
   const loading = ref(false)
   const selectedInstanceId = ref<string | null>(null)
   const logLevelFilter = ref<string | null>(null)
@@ -401,7 +403,11 @@ export const usePlatformStore = defineStore('platform', () => {
     maxTokens?: number
   }
 
+  // 模块级标记：记录上次已弹 toast 的错误信息，避免页面切换时重复弹窗
+  let _lastMainAgentToastMsg: string | null = null
+
   const fetchMainAgent = async () => {
+    const toast = useToast()
     try {
       const result = await apiGet<{ data?: RawMainAgentInfo } | RawMainAgentInfo>('/platforms/main_agent')
       const data = (result as { data?: RawMainAgentInfo })?.data || (result as RawMainAgentInfo)
@@ -414,20 +420,36 @@ export const usePlatformStore = defineStore('platform', () => {
         temperature: data.temperature ?? 0.7,
         maxTokens: data.max_tokens ?? data.maxTokens ?? 4096,
       }
-    } catch {
+      mainAgentError.value = null
+      _lastMainAgentToastMsg = null
+    } catch (e: any) {
       mainAgent.value = null
+      const msg = e?.message || '未知错误'
+      mainAgentError.value = msg
+      // 仅当错误信息变化时弹 toast，避免页面切换时重复打扰
+      if (_lastMainAgentToastMsg !== msg) {
+        _lastMainAgentToastMsg = msg
+        toast.warning(`主 Agent 配置加载失败：${msg}。请在设置中检查 AI 模型配置。`, 5000)
+      }
     }
   }
 
   const updateMainAgent = async (updates: Partial<MainAgentInfo>) => {
+    const toast = useToast()
     const body: Record<string, unknown> = {}
     if (updates.provider !== undefined) body.provider = updates.provider
     if (updates.model !== undefined) body.model = updates.model
     if (updates.systemPrompt !== undefined) body.system_prompt = updates.systemPrompt
     if (updates.temperature !== undefined) body.temperature = updates.temperature
     if (updates.maxTokens !== undefined) body.max_tokens = updates.maxTokens
-    await apiPatch('/platforms/main_agent', body)
-    await fetchMainAgent()
+    try {
+      await apiPatch('/platforms/main_agent', body)
+      await fetchMainAgent()
+      toast.success('主 Agent 配置已更新')
+    } catch (e: any) {
+      toast.error(`更新失败：${e?.message || '未知错误'}`)
+      throw e
+    }
   }
 
   const clearLogs = async (instanceId: string) => {
@@ -529,6 +551,7 @@ export const usePlatformStore = defineStore('platform', () => {
     logSummary,
     stats,
     mainAgent,
+    mainAgentError,
     loading,
     selectedInstanceId,
     logLevelFilter,

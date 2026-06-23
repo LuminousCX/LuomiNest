@@ -755,40 +755,6 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
             </div>
 
             <template v-else>
-              <!-- 模型配置卡片 -->
-              <div class="main-agent-card">
-                <div class="main-agent-card-header">
-                  <Cpu :size="18" />
-                  <span class="main-agent-card-title">模型配置</span>
-                </div>
-                <div class="main-agent-card-body">
-                  <div class="platform-form-group">
-                    <label class="platform-form-label">供应商</label>
-                    <select class="platform-form-input" :value="mainAgentEdit.provider" @change="handleProviderChange(($event.target as HTMLSelectElement).value)">
-                      <option value="">未选择（使用默认）</option>
-                      <option v-for="p in modelStore.providers" :key="p.id" :value="p.id">{{ p.name }}</option>
-                    </select>
-                  </div>
-                  <div class="platform-form-group">
-                    <label class="platform-form-label">模型</label>
-                    <input v-model="mainAgentEdit.model" type="text" class="platform-form-input" placeholder="输入模型 ID 或从供应商选择" list="main-agent-models-list" />
-                    <datalist id="main-agent-models-list">
-                      <option v-for="m in modelStore.getProviderModels(mainAgentEdit.provider)" :key="m.id" :value="m.id" />
-                    </datalist>
-                  </div>
-                  <div class="platform-form-row">
-                    <div class="platform-form-group">
-                      <label class="platform-form-label">温度 (0-2)</label>
-                      <input v-model.number="mainAgentEdit.temperature" type="number" min="0" max="2" step="0.1" class="platform-form-input" />
-                    </div>
-                    <div class="platform-form-group">
-                      <label class="platform-form-label">最大 Tokens</label>
-                      <input v-model.number="mainAgentEdit.maxTokens" type="number" min="1" step="1" class="platform-form-input" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <!-- 人格配置卡片 -->
               <div class="main-agent-card">
                 <div class="main-agent-card-header">
@@ -995,28 +961,6 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
             <button class="platform-dialog-close" @click="closeMainAgentDialog"><X :size="18" /></button>
           </div>
           <div class="platform-dialog-body">
-            <div class="platform-form-group">
-              <label class="platform-form-label">供应商</label>
-              <select class="platform-form-input" :value="mainAgentEdit.provider" @change="handleProviderChange(($event.target as HTMLSelectElement).value)">
-                <option value="">未选择（使用默认）</option>
-                <option v-for="p in modelStore.providers" :key="p.id" :value="p.id">{{ p.name }}</option>
-              </select>
-            </div>
-            <div class="platform-form-group">
-              <label class="platform-form-label">模型</label>
-              <input v-model="mainAgentEdit.model" type="text" class="platform-form-input" placeholder="输入模型 ID 或从供应商选择" list="main-agent-models" />
-              <datalist id="main-agent-models">
-                <option v-for="m in modelStore.getProviderModels(mainAgentEdit.provider)" :key="m.id" :value="m.id" />
-              </datalist>
-            </div>
-            <div class="platform-form-group">
-              <label class="platform-form-label">温度 (0-2)</label>
-              <input v-model.number="mainAgentEdit.temperature" type="number" min="0" max="2" step="0.1" class="platform-form-input" />
-            </div>
-            <div class="platform-form-group">
-              <label class="platform-form-label">最大 Tokens</label>
-              <input v-model.number="mainAgentEdit.maxTokens" type="number" min="1" step="1" class="platform-form-input" />
-            </div>
             <div class="platform-form-group">
               <label class="platform-form-label">系统提示词</label>
               <textarea v-model="mainAgentEdit.systemPrompt" class="platform-form-textarea" rows="6" placeholder="主 Agent 的系统提示词，决定其角色与行为"></textarea>

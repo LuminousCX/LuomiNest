@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import {
   ArrowLeft,
   Cpu,
   Zap,
   Atom,
-  Volume2,
-  Mic,
   Plus,
   ChevronRight,
   Search,
@@ -34,21 +32,22 @@ import { useToast } from '../../composables/useToast'
 const router = useRouter()
 const modelStore = useModelStore()
 const toast = useToast()
+const route = useRoute()
 
-const activeTile = ref('main')
+const props = defineProps<{
+  initialTile?: string
+}>()
+
+const activeTile = ref(props.initialTile || (route.meta?.initialTile as string) || 'main')
 
 const modelTiles = [
   { id: 'main', label: '主模型', icon: Zap, tag: '快速响应' },
   { id: 'reasoner', label: '推理模型', icon: Atom, tag: 'Agent' },
-  { id: 'tts', label: '语音合成', icon: Volume2, tag: 'TTS' },
-  { id: 'stt', label: '语音识别', icon: Mic, tag: 'STT' },
 ]
 
 const showInfo = reactive<Record<string, boolean>>({
   main: false,
   reasoner: false,
-  tts: false,
-  stt: false,
 })
 
 const toggleInfo = (section: string) => {
@@ -188,21 +187,6 @@ const reasonerModelConfig = ref({
   temperature: 0.3,
   maxTokens: 8192,
   reasoningEffort: 'medium',
-})
-
-const ttsConfigForm = ref({
-  provider: '',
-  model: 'tts-1',
-  voice: 'zh-CN-XiaoxiaoNeural',
-  speed: 1.0,
-})
-
-const sttConfigForm = ref({
-  provider: '',
-  model: 'whisper-1',
-  language: 'zh-CN',
-  autoSend: false,
-  autoSendDelay: 2000,
 })
 
 const mainAvailableModels = computed(() => {
@@ -481,8 +465,6 @@ const handleFetchModels = async (providerId: string) => {
 const saveStatus = reactive<Record<string, 'idle' | 'saving' | 'saved' | 'error'>>({
   main: 'idle',
   reasoner: 'idle',
-  tts: 'idle',
-  stt: 'idle',
 })
 
 const handleSaveMainConfig = async () => {
@@ -541,41 +523,6 @@ const handleSaveReasonerConfig = async () => {
   }
 }
 
-const handleSaveTTSConfig = async () => {
-  saveStatus.tts = 'saving'
-  try {
-    await modelStore.updateTTSConfig({
-      provider: ttsConfigForm.value.provider,
-      model: ttsConfigForm.value.model,
-      voice: ttsConfigForm.value.voice,
-      speed: ttsConfigForm.value.speed,
-    })
-    saveStatus.tts = 'saved'
-    setTimeout(() => { saveStatus.tts = 'idle' }, 2000)
-  } catch {
-    saveStatus.tts = 'error'
-    setTimeout(() => { saveStatus.tts = 'idle' }, 3000)
-  }
-}
-
-const handleSaveSTTConfig = async () => {
-  saveStatus.stt = 'saving'
-  try {
-    await modelStore.updateSTTConfig({
-      provider: sttConfigForm.value.provider,
-      model: sttConfigForm.value.model,
-      language: sttConfigForm.value.language,
-      autoSend: sttConfigForm.value.autoSend,
-      autoSendDelay: sttConfigForm.value.autoSendDelay,
-    })
-    saveStatus.stt = 'saved'
-    setTimeout(() => { saveStatus.stt = 'idle' }, 2000)
-  } catch {
-    saveStatus.stt = 'error'
-    setTimeout(() => { saveStatus.stt = 'idle' }, 3000)
-  }
-}
-
 onMounted(async () => {
   // 三个配置接口并行加载，避免串行 await 导致的白屏等待
   await Promise.all([
@@ -598,19 +545,6 @@ onMounted(async () => {
     reasonerModelConfig.value.maxTokens = cfg.reasonerMaxTokens || 8192
     reasonerModelConfig.value.reasoningEffort = cfg.reasonerEffort || 'medium'
   }
-
-  const tts = modelStore.ttsConfig
-  ttsConfigForm.value.provider = tts.provider || ''
-  ttsConfigForm.value.model = tts.model || 'tts-1'
-  ttsConfigForm.value.voice = tts.voice || 'zh-CN-XiaoxiaoNeural'
-  ttsConfigForm.value.speed = tts.speed ?? 1.0
-
-  const stt = modelStore.sttConfig
-  sttConfigForm.value.provider = stt.provider || ''
-  sttConfigForm.value.model = stt.model || 'whisper-1'
-  sttConfigForm.value.language = stt.language || 'zh-CN'
-  sttConfigForm.value.autoSend = stt.autoSend ?? false
-  sttConfigForm.value.autoSendDelay = stt.autoSendDelay ?? 2000
 })
 </script>
 
@@ -951,175 +885,6 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- TTS 语音合成 -->
-        <div v-if="activeTile === 'tts'" class="content-section">
-          <div class="section-header">
-            <div class="section-header-left">
-              <div class="section-header-text">
-                <h3 class="section-title">语音合成</h3>
-                <span class="section-tag">TTS</span>
-              </div>
-            </div>
-            <button
-              :class="['info-btn', { active: showInfo.tts }]"
-              @click="toggleInfo('tts')"
-            >
-              <Info :size="16" />
-            </button>
-          </div>
-          <Transition name="info-expand">
-            <div v-if="showInfo.tts" class="section-info-panel">
-              <p>配置文字转语音服务，为 LuomiNest 赋予语音输出能力。支持 OpenAI 兼容的 TTS API。</p>
-              <p class="info-tip">配置后，Agent 的回复将通过语音播报。支持多种语音风格选择。</p>
-            </div>
-          </Transition>
-
-          <div class="config-form">
-            <div class="form-group">
-              <label class="form-label">供应商</label>
-              <div class="form-select-wrap">
-                <select v-model="ttsConfigForm.provider" class="form-select">
-                  <option value="">请选择供应商</option>
-                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">模型</label>
-              <input v-model="ttsConfigForm.model" type="text" class="form-input" placeholder="tts-1" />
-              <span class="form-hint">OpenAI: tts-1 / tts-1-hd | 其他: 参考供应商文档</span>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">语音风格</label>
-              <div class="voice-grid">
-                <button
-                  v-for="voice in modelStore.TTS_VOICES"
-                  :key="voice.value"
-                  :class="['voice-btn', { active: ttsConfigForm.voice === voice.value }]"
-                  @click="ttsConfigForm.voice = voice.value"
-                >
-                  {{ voice.label }}
-                </button>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <div class="form-label-row">
-                <label class="form-label">语速</label>
-                <span class="form-value">{{ ttsConfigForm.speed.toFixed(1) }}x</span>
-              </div>
-              <input type="range" v-model.number="ttsConfigForm.speed" min="0.25" max="4.0" step="0.25" class="form-slider" />
-              <div class="slider-labels"><span>慢速</span><span>快速</span></div>
-            </div>
-
-            <button
-              :class="['save-btn', { saving: saveStatus.tts === 'saving', saved: saveStatus.tts === 'saved', error: saveStatus.tts === 'error' }]"
-              :disabled="saveStatus.tts === 'saving'"
-              @click="handleSaveTTSConfig"
-            >
-              <Loader2 v-if="saveStatus.tts === 'saving'" :size="16" class="spin-animation" />
-              <Check v-else-if="saveStatus.tts === 'saved'" :size="16" />
-              <AlertCircle v-else-if="saveStatus.tts === 'error'" :size="16" />
-              <Check v-else :size="16" />
-              {{ saveStatus.tts === 'saving' ? '保存中...' : saveStatus.tts === 'saved' ? '已保存' : saveStatus.tts === 'error' ? '保存失败' : '保存配置' }}
-            </button>
-          </div>
-        </div>
-
-        <!-- STT 语音识别 -->
-        <div v-if="activeTile === 'stt'" class="content-section">
-          <div class="section-header">
-            <div class="section-header-left">
-              <div class="section-header-text">
-                <h3 class="section-title">语音识别</h3>
-                <span class="section-tag">STT</span>
-              </div>
-            </div>
-            <button
-              :class="['info-btn', { active: showInfo.stt }]"
-              @click="toggleInfo('stt')"
-            >
-              <Info :size="16" />
-            </button>
-          </div>
-          <Transition name="info-expand">
-            <div v-if="showInfo.stt" class="section-info-panel">
-              <p>配置语音转文字服务，支持语音输入。可使用 OpenAI 兼容的 Whisper API 或浏览器原生语音识别。</p>
-              <p class="info-tip">浏览器原生语音识别无需配置供应商，但识别精度有限。推荐使用 Whisper API 获得更好效果。</p>
-            </div>
-          </Transition>
-
-          <div class="config-form">
-            <div class="form-group">
-              <label class="form-label">供应商</label>
-              <div class="form-select-wrap">
-                <select v-model="sttConfigForm.provider" class="form-select">
-                  <option value="">请选择供应商</option>
-                  <option value="__browser__">浏览器原生 (Web Speech API)</option>
-                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-
-            <div class="form-group" v-if="sttConfigForm.provider && sttConfigForm.provider !== '__browser__'">
-              <label class="form-label">模型</label>
-              <input v-model="sttConfigForm.model" type="text" class="form-input" placeholder="whisper-1" />
-              <span class="form-hint">OpenAI: whisper-1 | 其他: 参考供应商文档</span>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">识别语言</label>
-              <div class="form-select-wrap">
-                <select v-model="sttConfigForm.language" class="form-select">
-                  <option v-for="lang in modelStore.STT_LANGUAGES" :key="lang.value" :value="lang.value">
-                    {{ lang.label }}
-                  </option>
-                </select>
-                <ChevronRight :size="14" class="select-icon" />
-              </div>
-            </div>
-
-            <div class="form-group">
-              <div class="toggle-row">
-                <div>
-                  <label class="form-label">自动发送</label>
-                  <span class="form-hint" style="margin-top: 2px;">语音识别完成后自动发送消息</span>
-                </div>
-                <button
-                  :class="['toggle-switch', { active: sttConfigForm.autoSend }]"
-                  @click="sttConfigForm.autoSend = !sttConfigForm.autoSend"
-                >
-                  <span class="toggle-thumb" />
-                </button>
-              </div>
-            </div>
-
-            <div v-if="sttConfigForm.autoSend" class="form-group">
-              <div class="form-label-row">
-                <label class="form-label">发送延迟</label>
-                <span class="form-value">{{ sttConfigForm.autoSendDelay }}ms</span>
-              </div>
-              <input type="range" v-model.number="sttConfigForm.autoSendDelay" min="500" max="5000" step="250" class="form-slider" />
-              <div class="slider-labels"><span>0.5s</span><span>5s</span></div>
-            </div>
-
-            <button
-              :class="['save-btn', { saving: saveStatus.stt === 'saving', saved: saveStatus.stt === 'saved', error: saveStatus.stt === 'error' }]"
-              :disabled="saveStatus.stt === 'saving'"
-              @click="handleSaveSTTConfig"
-            >
-              <Loader2 v-if="saveStatus.stt === 'saving'" :size="16" class="spin-animation" />
-              <Check v-else-if="saveStatus.stt === 'saved'" :size="16" />
-              <AlertCircle v-else-if="saveStatus.stt === 'error'" :size="16" />
-              <Check v-else :size="16" />
-              {{ saveStatus.stt === 'saving' ? '保存中...' : saveStatus.stt === 'saved' ? '已保存' : saveStatus.stt === 'error' ? '保存失败' : '保存配置' }}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
 

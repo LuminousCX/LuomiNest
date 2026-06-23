@@ -67,6 +67,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '模型配置 - LuomiNest', icon: 'Cpu' }
   },
   {
+    path: '/settings/stt',
+    name: 'SettingsSTT',
+    component: () => import('../views/settings/AIModelSettings.vue'),
+    meta: { title: '语音识别 - LuomiNest', icon: 'Mic', initialTile: 'stt' }
+  },
+  {
     path: '/settings/about',
     name: 'SettingsAbout',
     component: () => import('../views/settings/AboutView.vue'),
