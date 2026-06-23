@@ -1,3 +1,4 @@
+from loguru import logger
 from .models import (
     MemoryData,
     ProfileData,
@@ -25,19 +26,20 @@ async def init_memory() -> None:
                 agent_id = agent.get("id") if isinstance(agent, dict) else None
                 if agent_id and agent_id != "_default":
                     get_memory_engine(agent_id)
-    except Exception:
-        # 预加载失败不影响启动
-        pass
+    except Exception as e:
+        # 预加载失败不影响启动，但需记录以便排查
+        logger.warning(f"[Memory] Agent memory preloading failed: {e}")
 
 
 async def shutdown_memory() -> None:
     """关闭记忆引擎，保存未持久化的数据"""
-    for engine in _engines.values():
+    # 快照 engines，避免并发创建导致迭代期间字典变更
+    for engine in list(_engines.values()):
         try:
             if engine._vector_manager is not None:
                 engine._vector_manager.save()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"[Memory] Failed to persist engine data during shutdown: {e}")
 
 
 __all__ = [

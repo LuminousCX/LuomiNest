@@ -116,6 +116,9 @@ export const waitForBackend = async (): Promise<boolean> => {
         backendReady = true
         console.log('[BackendService] Backend is ready!')
         return true
+      } else {
+        // 非 OK 状态同样需要等待，避免高频请求（busy-wait）
+        await new Promise(resolve => setTimeout(resolve, CHECK_INTERVAL))
       }
     } catch {
       await new Promise(resolve => setTimeout(resolve, CHECK_INTERVAL))

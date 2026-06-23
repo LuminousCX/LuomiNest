@@ -49,8 +49,8 @@ def resolve_main_agent_provider_model() -> tuple[str, str]:
         provider_inst = llm_adapter.get_provider(provider)
         model = model or provider_inst.default_model
         return provider, model
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"[MainAgentConfig] Configured provider '{provider}' unavailable: {e}")
 
     # 配置的 provider 不可用，尝试任意一个已注册的 provider
     for provider_info in llm_adapter.list_providers():
@@ -60,7 +60,8 @@ def resolve_main_agent_provider_model() -> tuple[str, str]:
         try:
             provider_inst = llm_adapter.get_provider(fallback_provider)
             return fallback_provider, model or provider_inst.default_model
-        except Exception:
+        except Exception as e:
+            logger.debug(f"[MainAgentConfig] Fallback provider '{fallback_provider}' unavailable: {e}")
             continue
 
     # 所有 provider 都不可用：返回空值，让前端展示"未配置"状态
