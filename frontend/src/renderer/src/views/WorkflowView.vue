@@ -438,7 +438,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
+  padding: 14px var(--space-6);
   border-bottom: 1px solid var(--workspace-border);
   flex-shrink: 0;
 }
@@ -446,58 +446,58 @@ watch(
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .page-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 17px;
+  gap: var(--space-2);
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .page-subtitle {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   padding: 3px 10px;
   border-radius: var(--radius-full);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   font-weight: 500;
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .action-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 16px;
+  padding: 7px var(--space-4);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .action-btn.primary {
-  background: var(--lumi-primary);
-  color: white;
+  background: var(--lumi-brand);
+  color: var(--text-inverse);
 }
 
 .action-btn.primary:hover {
-  background: var(--lumi-primary-hover);
+  background: var(--lumi-brand-hover);
   transform: scale(1.02);
 }
 
 .action-btn.danger {
   background: var(--lumi-danger);
-  color: white;
+  color: var(--text-inverse);
 }
 
 .action-btn.danger:hover {
@@ -511,13 +511,13 @@ watch(
 }
 
 .action-btn.secondary:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
 }
 
 .action-btn.small {
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 6px var(--space-3);
+  font-size: var(--text-sm);
 }
 
 .workflow-body {
@@ -538,7 +538,7 @@ watch(
 }
 
 .sidebar-section {
-  padding: 14px 12px;
+  padding: 14px var(--space-3);
   border-bottom: 1px solid var(--workspace-border);
 }
 
@@ -546,7 +546,7 @@ watch(
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.6px;
@@ -563,7 +563,7 @@ watch(
 .template-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   padding: 9px 10px;
   border-radius: var(--radius-sm);
@@ -584,24 +584,24 @@ watch(
 .dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
 .tpl-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-primary);
 }
 
 .tpl-desc {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   margin-left: auto;
 }
 
 .sidebar-footer {
-  padding: 12px;
+  padding: var(--space-3);
   margin-top: auto;
 }
 
@@ -614,7 +614,7 @@ watch(
   padding: 9px;
   border-radius: var(--radius-md);
   border: 1.5px dashed var(--workspace-border);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
@@ -622,17 +622,16 @@ watch(
 }
 
 .new-workflow-btn:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 .canvas-area {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 1px 1px, var(--workspace-border) 1px, transparent 1px);
+  background: radial-gradient(circle at 1px 1px, var(--workspace-border) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
@@ -647,19 +646,19 @@ watch(
 }
 
 .canvas-empty-state .empty-title {
-  font-size: 16px;
+  font-size: var(--text-xl);
   font-weight: 600;
-  margin: 12px 0 8px;
+  margin: var(--space-3) 0 var(--space-2);
   color: var(--text-secondary);
 }
 
 .canvas-empty-state .empty-desc {
-  font-size: 13px;
-  margin-bottom: 4px;
+  font-size: var(--text-base);
+  margin-bottom: var(--space-1);
 }
 
 .canvas-empty-state .empty-hint {
-  font-size: 12px;
+  font-size: var(--text-sm);
   opacity: 0.7;
 }
 
@@ -671,16 +670,16 @@ watch(
 }
 
 .conn-line {
-  transition: stroke-width 0.2s ease-in-out;
+  transition: stroke-width var(--duration-leave) var(--var(--var(--ease-in-out)));
 }
 
 .conn-line:hover {
-  stroke: var(--lumi-primary);
+  stroke: var(--lumi-brand);
   stroke-width: 2.5;
 }
 
 .conn-label {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   fill: var(--text-muted);
   pointer-events: none;
 }
@@ -689,7 +688,7 @@ watch(
   position: absolute;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 10px 14px;
   min-width: 140px;
   background: var(--workspace-card);
@@ -697,9 +696,9 @@ watch(
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   cursor: grab;
-  z-index: 1;
+  z-index: var(--z-base);
   transition: all var(--transition-normal);
-  animation: lumi-scale-in 0.25s ease-out both;
+  animation: lumi-scale-in var(--duration-normal) var(--var(--var(--ease-out-expo)-expo)-expo) both;
 }
 
 .workflow-node:hover {
@@ -708,16 +707,16 @@ watch(
 }
 
 .workflow-node.selected {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 4px 20px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: 0 4px 20px var(--lumi-brand-glow);
 }
 
 .workflow-node.running .node-icon-wrap {
-  animation: pulse-glow 2s ease-in-out infinite;
+  animation: pulse-glow 2s var(--var(--var(--ease-in-out))) infinite;
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-primary-border); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-brand-border); }
   50% { box-shadow: 0 0 0 8px transparent; }
 }
 
@@ -752,7 +751,7 @@ watch(
 }
 
 .node-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -761,7 +760,7 @@ watch(
 }
 
 .node-type-badge {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   background: var(--workspace-panel);
   padding: 1px 6px;
@@ -790,7 +789,7 @@ watch(
   position: absolute;
   width: 10px;
   height: 10px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid var(--workspace-border);
   background: var(--workspace-card);
   transition: all var(--transition-fast);
@@ -809,8 +808,8 @@ watch(
 }
 
 .workflow-node:hover .node-port {
-  border-color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
   transform: scale(1.3);
   transform-origin: center;
 }
@@ -838,12 +837,12 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: 14px var(--space-4);
   border-bottom: 1px solid var(--workspace-border);
 }
 
 .panel-title {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -855,7 +854,7 @@ watch(
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  font-size: 18px;
+  font-size: var(--text-2xl);
   color: var(--text-muted);
   transition: all var(--transition-fast);
 }
@@ -866,7 +865,7 @@ watch(
 }
 
 .panel-body {
-  padding: 16px;
+  padding: var(--space-4);
 }
 
 .config-field {
@@ -875,7 +874,7 @@ watch(
 
 .config-field > label {
   display: block;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-secondary);
   margin-bottom: 6px;
@@ -884,27 +883,27 @@ watch(
 .config-input,
 .config-select {
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-2) 10px;
   border-radius: var(--radius-sm);
   background: var(--workspace-panel);
   border: 1px solid var(--workspace-border);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-primary);
   transition: border-color var(--transition-fast);
 }
 
 .config-input:focus,
 .config-select:focus {
-  border-color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
 }
 
 .config-textarea {
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-2) 10px;
   border-radius: var(--radius-sm);
   background: var(--workspace-panel);
   border: 1px solid var(--workspace-border);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-primary);
   resize: vertical;
   min-height: 60px;
@@ -919,9 +918,9 @@ watch(
 }
 
 .model-chip {
-  padding: 5px 12px;
+  padding: 5px var(--space-3);
   border-radius: var(--radius-full);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-muted);
   background: var(--workspace-panel);
@@ -931,19 +930,19 @@ watch(
 }
 
 .model-chip.active {
-  background: var(--lumi-primary-light);
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
 }
 
 .model-chip:hover {
-  border-color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
 }
 
 .config-actions {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .panel-slide-right-enter-active,

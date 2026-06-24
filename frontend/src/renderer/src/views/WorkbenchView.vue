@@ -34,7 +34,6 @@ import {
   ChevronRight,
   Cpu,
   Monitor,
-  ListChecks,
   X,
   ClipboardList,
 } from 'lucide-vue-next'
@@ -57,6 +56,8 @@ import type { ConversationListItem, ConversationSearchResult, ChatStreamChunk, S
 import { useTaskStreamStore } from '../stores/taskStream'
 import { useWorkflowStore } from '../stores/workflow'
 import { useStatsStore } from '../stores/stats'
+import LumiButton from '../components/common/LumiButton.vue'
+import LumiInput from '../components/common/LumiInput.vue'
 
 marked.setOptions({
   breaks: true,
@@ -293,6 +294,13 @@ const {
   dismissSubtitle,
 } = useAvatarChat({
   voice: () => currentBinding.value?.voice || 'zh-CN-XiaoxiaoNeural',
+  engine: () => modelStore.ttsConfig.provider || modelStore.ttsConfig.engine || 'auto',
+  ttsConfig: () => ({
+    model: modelStore.ttsConfig.model,
+    speed: modelStore.ttsConfig.speed,
+    apiKey: modelStore.ttsConfig.apiKey,
+    baseUrl: modelStore.ttsConfig.baseUrl,
+  }),
   driveEmotion: (emotionId: string) => {
     if (isDesktopMode.value) {
       // 桌宠模式：通过 IPC 转发到桌宠窗口（需先做表情名映射，与 composable 内部逻辑一致）
@@ -684,7 +692,7 @@ const sendMessage = async () => {
     topP: modelStore.modelConfig.defaultTopP,
     onChunk: (chunk: ChatStreamChunk) => {
       // Token 侦听器：拦截 LLM 返回的所有字符
-      statsStore.interceptChunk(chunk, chatStore.currentConversationId)
+      statsStore.interceptChunk(chunk, chatStore.currentConvId)
 
       if (chunk.done) {
         finishStream()
@@ -789,7 +797,7 @@ const submitWorkflowTask = async (
         resolved?.model,
         resolved?.provider,
       )
-      convId = conv?.id || null
+      convId = conv?.id || ''
       console.log('[WorkflowDebug] 自动创建对话结果:', conv)
       console.log('[WorkflowDebug] 创建后 currentConvId:', chatStore.currentConvId)
     } catch (e: unknown) {
@@ -1168,20 +1176,30 @@ onBeforeUnmount(() => {
             <Bot :size="16" />
             <span>陪伴对话</span>
           </div>
-          <button class="history-collapse-btn" title="收起历史记录" @click="isHistoryCollapsed = true">
+          <LumiButton
+            variant="ghost"
+            size="sm"
+            icon-only
+            aria-label="收起历史记录"
+            class="history-collapse-btn"
+            @click="isHistoryCollapsed = true"
+          >
             <PanelLeftClose :size="15" />
-          </button>
+          </LumiButton>
         </div>
 
         <div class="history-search">
-          <Search :size="14" class="search-icon" />
-          <input v-model="searchQuery" type="text" placeholder="搜索对话..." class="search-input" />
+          <LumiInput v-model="searchQuery" size="sm" placeholder="搜索对话...">
+            <template #icon>
+              <Search :size="14" />
+            </template>
+          </LumiInput>
         </div>
 
-        <button class="new-conv-btn" @click="handleNewConversation">
+        <LumiButton variant="primary" size="sm" block class="new-conv-btn" @click="handleNewConversation">
           <Plus :size="15" />
           <span>新建对话</span>
-        </button>
+        </LumiButton>
 
         <div class="history-list">
           <template v-if="isSearchMode">
@@ -1227,7 +1245,7 @@ onBeforeUnmount(() => {
                     <template v-if="renamingConvId === conv.id">
                       <input
                         v-model="renamingTitle"
-                        class="workbench-rename-input"
+                        class="lumi-input workbench-rename-input"
                         maxlength="200"
                         @keydown.enter="confirmRename"
                         @keydown.escape="cancelRename"
@@ -1241,12 +1259,26 @@ onBeforeUnmount(() => {
                     </template>
                   </div>
                   <template v-if="renamingConvId !== conv.id">
-                    <button class="history-item-rename" title="重命名" @click.stop="startRename(conv.id, conv.title)">
+                    <LumiButton
+                      variant="ghost"
+                      size="sm"
+                      icon-only
+                      aria-label="重命名"
+                      class="history-item-rename"
+                      @click.stop="startRename(conv.id, conv.title)"
+                    >
                       <Pencil :size="13" />
-                    </button>
-                    <button class="history-item-delete" title="删除对话" @click.stop="handleDeleteConversation(conv.id)">
+                    </LumiButton>
+                    <LumiButton
+                      variant="danger-ghost"
+                      size="sm"
+                      icon-only
+                      aria-label="删除对话"
+                      class="history-item-delete"
+                      @click.stop="handleDeleteConversation(conv.id)"
+                    >
                       <Trash2 :size="13" />
-                    </button>
+                    </LumiButton>
                   </template>
                 </div>
               </div>
@@ -1262,9 +1294,17 @@ onBeforeUnmount(() => {
     </Transition>
 
     <!-- 收起状态：展开按钮 -->
-    <button v-if="isHistoryCollapsed" class="history-expand-toggle" title="展开历史记录" @click="isHistoryCollapsed = false">
+    <LumiButton
+      v-if="isHistoryCollapsed"
+      variant="ghost"
+      size="sm"
+      icon-only
+      aria-label="展开历史记录"
+      class="history-expand-toggle"
+      @click="isHistoryCollapsed = false"
+    >
       <PanelLeftOpen :size="15" />
-    </button>
+    </LumiButton>
 
     <!-- 中间：对话面板 -->
     <div class="workbench-chat">
@@ -1275,10 +1315,10 @@ onBeforeUnmount(() => {
             <p class="warning-title">后端服务未连接</p>
             <p class="warning-desc">请确保 LuomiNest 后端服务已启动</p>
           </div>
-          <button class="retry-btn" @click="chatStore.checkBackend()">
+          <LumiButton variant="danger" size="sm" class="retry-btn" @click="chatStore.checkBackend()">
             <RotateCcw :size="14" />
-            重试
-          </button>
+            <span>重试</span>
+          </LumiButton>
         </div>
       </div>
 
@@ -1310,7 +1350,7 @@ onBeforeUnmount(() => {
                   </div>
                   <div
                     v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
-                    class="reasoning-section"
+                    class="reasoning-section lumi-card"
                   >
                     <div class="reasoning-header" @click="toggleReasoning(msg.id)">
                       <Loader2 v-if="!msg.done && !msg.content && !msg.reasoningContent" :size="12" class="spin-animation" />
@@ -1333,7 +1373,7 @@ onBeforeUnmount(() => {
 
                   <div
                     v-if="msg.role === 'assistant' && msg.id === messages[messages.length - 1].id && toolActivities.length > 0"
-                    class="tool-activities-section"
+                    class="tool-activities-section lumi-card"
                   >
                     <div class="tool-activities-header">
                       <Wrench :size="12" />
@@ -1377,7 +1417,7 @@ onBeforeUnmount(() => {
                   <!-- 子 Agent 群组执行卡片（参考 deer-flow SubtaskCard） -->
                   <div
                     v-if="msg.role === 'assistant' && msg.id === messages[messages.length - 1].id && subagentActivities.length > 0"
-                    class="subagent-activities-section"
+                    class="subagent-activities-section lumi-card"
                   >
                     <div class="subagent-activities-header">
                       <Cpu :size="12" />
@@ -1388,7 +1428,7 @@ onBeforeUnmount(() => {
                       <div
                         v-for="agent in subagentActivities"
                         :key="agent.id"
-                        :class="['subagent-card', { running: agent.status === 'running' }]"
+                        :class="['subagent-card', 'lumi-card', { running: agent.status === 'running' }]"
                       >
                         <div class="subagent-card-header" @click="toggleSubagent(agent.id)">
                           <div class="subagent-status-icon">
@@ -1416,10 +1456,10 @@ onBeforeUnmount(() => {
                               </span>
                             </div>
                           </div>
-                          <ChevronDown
+                          <ChevronRight
                             :size="14"
                             class="subagent-chevron"
-                            :class="{ rotated: !expandedSubagents[agent.id] }"
+                            :class="{ expanded: !expandedSubagents[agent.id] }"
                           />
                         </div>
 
@@ -1487,7 +1527,7 @@ onBeforeUnmount(() => {
                   <!-- 计划确认卡片（借鉴 deer-flow ClarificationMiddleware） -->
                   <div
                     v-if="msg.role === 'assistant' && msg.id === messages[messages.length - 1].id && workflowStore.pendingPlan"
-                    class="plan-confirmation-section"
+                    class="plan-confirmation-section lumi-card"
                   >
                     <div class="plan-confirmation-header">
                       <ClipboardList :size="14" />
@@ -1523,20 +1563,20 @@ onBeforeUnmount(() => {
                       <div class="plan-feedback-area">
                         <textarea
                           v-model="workflowStore.confirmationFeedback"
-                          class="plan-feedback-input"
+                          class="lumi-textarea plan-feedback-input"
                           placeholder="反馈（可选）：如需调整计划，请在此说明..."
                           rows="2"
                         ></textarea>
                       </div>
                       <div class="plan-confirmation-actions">
-                        <button class="plan-btn plan-btn-reject" @click="workflowStore.rejectPlan">
+                        <LumiButton variant="secondary" size="sm" class="plan-btn plan-btn-reject" @click="workflowStore.rejectPlan">
                           <X :size="14" />
                           <span>拒绝执行</span>
-                        </button>
-                        <button class="plan-btn plan-btn-confirm" @click="workflowStore.confirmPlan">
+                        </LumiButton>
+                        <LumiButton variant="primary" size="sm" class="plan-btn plan-btn-confirm" @click="workflowStore.confirmPlan">
                           <Check :size="14" />
                           <span>确认执行</span>
-                        </button>
+                        </LumiButton>
                       </div>
                     </div>
                   </div>
@@ -1555,26 +1595,43 @@ onBeforeUnmount(() => {
                   </div>
 
                   <div v-if="msg.role === 'assistant' && msg.done" class="assistant-msg-actions">
-                    <button class="u-btn" title="复制" @click="copyMessage(msg.id, msg.content)">
+                    <LumiButton
+                      variant="ghost"
+                      size="sm"
+                      icon-only
+                      class="u-btn"
+                      :aria-label="copiedId === msg.id ? '已复制' : '复制'"
+                      @click="copyMessage(msg.id, msg.content)"
+                    >
                       <Check v-if="copiedId === msg.id" :size="14" />
                       <Copy v-else :size="14" />
-                    </button>
-                    <button
+                    </LumiButton>
+                    <LumiButton
                       v-if="isLastAssistantMessage(msg.id)"
+                      variant="ghost"
+                      size="sm"
+                      icon-only
+                      aria-label="重新生成"
                       class="u-btn"
-                      title="重新生成"
                       @click="handleRegenerate(msg.id)"
                     >
                       <RotateCcw :size="14" />
-                    </button>
+                    </LumiButton>
                   </div>
 
                   <div v-if="msg.role === 'user'" class="user-msg-layout">
                     <div class="user-msg-btns">
-                      <button class="u-btn u-btn-hover" title="复制" @click="copyMessage(msg.id, msg.content)">
+                      <LumiButton
+                        variant="ghost"
+                        size="sm"
+                        icon-only
+                        class="u-btn u-btn-hover"
+                        :aria-label="copiedId === msg.id ? '已复制' : '复制'"
+                        @click="copyMessage(msg.id, msg.content)"
+                      >
                         <Check v-if="copiedId === msg.id" :size="14" />
                         <Copy v-else :size="14" />
-                      </button>
+                      </LumiButton>
                     </div>
                     <div class="message-content user-message">
                       {{ msg.content }}
@@ -1591,9 +1648,15 @@ onBeforeUnmount(() => {
               <p class="empty-title">与陪伴 AI 开始对话</p>
               <p class="empty-desc">右侧的 Live2D 将作为主 Agent 陪伴你</p>
               <div class="empty-quick-actions">
-                <button class="quick-action" @click="inputText = '你好，请介绍一下你自己'">打个招呼</button>
-                <button class="quick-action" @click="inputText = '帮我写一段 Python 代码'">写段代码</button>
-                <button class="quick-action" @click="inputText = '解释一下什么是大语言模型'">了解 LLM</button>
+                <LumiButton variant="outline" size="sm" class="quick-action" @click="inputText = '你好，请介绍一下你自己'">
+                  打个招呼
+                </LumiButton>
+                <LumiButton variant="outline" size="sm" class="quick-action" @click="inputText = '帮我写一段 Python 代码'">
+                  写段代码
+                </LumiButton>
+                <LumiButton variant="outline" size="sm" class="quick-action" @click="inputText = '解释一下什么是大语言模型'">
+                  了解 LLM
+                </LumiButton>
               </div>
             </div>
           </div>
@@ -1609,14 +1672,22 @@ onBeforeUnmount(() => {
         </Transition>
 
         <Transition name="scroll-btn-fade">
-          <button v-if="showScrollToBottomBtn" class="scroll-to-bottom-btn" @click="scrollToBottom(true)">
+          <LumiButton
+            v-if="showScrollToBottomBtn"
+            variant="secondary"
+            size="md"
+            icon-only
+            aria-label="滚动到底部"
+            class="scroll-to-bottom-btn"
+            @click="scrollToBottom(true)"
+          >
             <ChevronDown :size="18" />
-          </button>
+          </LumiButton>
         </Transition>
       </div>
 
       <div class="input-area">
-        <div class="input-wrapper">
+        <div class="input-wrapper lumi-card">
           <textarea
             ref="textareaRef"
             v-model="inputText"
@@ -1630,33 +1701,45 @@ onBeforeUnmount(() => {
           <div class="input-toolbar">
             <div class="toolbar-left">
               <div class="model-dropdown-container">
-                <button class="tool-btn" title="选择模型" @click.stop="showModelDropdown = !showModelDropdown">
-                  <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
-                  <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
-                    {{ currentProviderLogo.initials }}
-                  </span>
+                <LumiButton
+                  variant="secondary"
+                  size="sm"
+                  class="tool-btn"
+                  @click.stop="showModelDropdown = !showModelDropdown"
+                >
+                  <template #icon>
+                    <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
+                    <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+                      {{ currentProviderLogo.initials }}
+                    </span>
+                  </template>
                   <span class="model-btn-text">{{ currentModel }}</span>
                   <ChevronDown :size="14" />
-                </button>
+                </LumiButton>
                 <Transition name="dropdown-fade">
                   <div v-if="showModelDropdown" class="model-dropdown">
                     <div class="dropdown-header">选择模型</div>
                     <div class="dropdown-list">
-                      <button
+                      <LumiButton
                         v-for="opt in availableModelOptions"
                         :key="`${opt.providerId}-${opt.modelId}`"
+                        variant="ghost"
+                        size="sm"
+                        block
                         :class="['dropdown-item', { active: currentProvider === opt.providerId && currentModel === opt.modelId }]"
                         @click="selectModel(opt.providerId, opt.modelId)"
                       >
-                        <span v-if="opt.providerLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="opt.providerLogo.svgIcon"></span>
-                        <span v-else class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
-                          {{ opt.providerLogo.initials }}
-                        </span>
+                        <template #icon>
+                          <span v-if="opt.providerLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="opt.providerLogo.svgIcon"></span>
+                          <span v-else class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
+                            {{ opt.providerLogo.initials }}
+                          </span>
+                        </template>
                         <div class="dropdown-item-info">
                           <span class="dropdown-item-model">{{ opt.modelName }}</span>
                           <span class="dropdown-item-provider">{{ opt.providerName }}</span>
                         </div>
-                      </button>
+                      </LumiButton>
                       <div v-if="availableModelOptions.length === 0" class="dropdown-empty">
                         暂无可用模型，请先到设置多选模型
                       </div>
@@ -1664,43 +1747,56 @@ onBeforeUnmount(() => {
                   </div>
                 </Transition>
               </div>
-              <button
-                :class="['tool-btn', 'workflow-toggle', { active: workflowMode }]"
+              <LumiButton
+                :class="['workflow-toggle', { active: workflowMode }]"
+                variant="secondary"
+                size="sm"
                 :title="workflowMode ? '工作流模式已开启：长任务将自动分解并调度内部模块' : '开启工作流模式：长任务自动分解执行'"
                 @click="toggleWorkflowMode"
               >
-                <Wand2 :size="15" />
+                <template #icon>
+                  <Wand2 :size="15" />
+                </template>
                 <span class="workflow-toggle-text">{{ workflowMode ? '工作流' : '普通' }}</span>
-              </button>
+              </LumiButton>
               <div v-if="workflowMode" class="workflow-mode-selector">
-                <button
+                <LumiButton
                   v-for="opt in WORKFLOW_MODE_OPTIONS"
                   :key="opt.value"
                   :class="['mode-chip', { active: workflowModeLevel === opt.value }]"
+                  variant="secondary"
+                  size="sm"
                   :title="opt.title"
                   @click="workflowModeLevel = opt.value"
                 >
                   {{ opt.label }}
-                </button>
+                </LumiButton>
               </div>
             </div>
             <div class="toolbar-right">
-              <button
+              <LumiButton
                 v-if="isStreaming"
+                variant="danger"
+                size="md"
+                icon-only
+                aria-label="停止生成"
                 class="send-btn stop"
-                title="停止生成"
                 @click="cancelStreaming"
               >
                 <Square :size="16" />
-              </button>
-              <button
+              </LumiButton>
+              <LumiButton
                 v-else
-                :class="['send-btn', { disabled: !canSend }]"
-                title="发送"
+                variant="primary"
+                size="md"
+                icon-only
+                aria-label="发送"
+                class="send-btn"
+                :disabled="!canSend"
                 @click="sendMessage"
               >
                 <Send :size="17" />
-              </button>
+              </LumiButton>
             </div>
           </div>
         </div>
@@ -1715,15 +1811,17 @@ onBeforeUnmount(() => {
           <span>陪伴形象</span>
         </div>
         <div class="avatar-model-selector">
-          <button
+          <LumiButton
             v-for="model in LUOMINEST_BUILTIN_MODELS"
             :key="model.id"
+            :variant="currentModelInfo.id === model.id ? 'primary' : 'outline'"
+            size="sm"
             :class="['model-chip', { active: currentModelInfo.id === model.id }]"
             :title="model.name"
             @click="switchModel(model)"
           >
             {{ model.name }}
-          </button>
+          </LumiButton>
         </div>
       </div>
 
@@ -1771,29 +1869,38 @@ onBeforeUnmount(() => {
 
       <div class="avatar-footer">
         <div class="avatar-controls">
-          <button
+          <LumiButton
+            variant="outline"
+            size="sm"
+            icon-only
+            :aria-label="ttsEnabled ? '关闭语音播报' : '开启语音播报'"
             :class="['ctrl-btn', { active: ttsEnabled }]"
-            :title="ttsEnabled ? '关闭语音播报' : '开启语音播报'"
             @click="ttsEnabled = !ttsEnabled"
           >
             <Volume2 v-if="ttsEnabled" :size="15" />
             <VolumeX v-else :size="15" />
-          </button>
-          <button
+          </LumiButton>
+          <LumiButton
+            variant="outline"
+            size="sm"
+            icon-only
+            :aria-label="subtitleEnabled ? '关闭字幕' : '开启字幕'"
             :class="['ctrl-btn', { active: subtitleEnabled }]"
-            :title="subtitleEnabled ? '关闭字幕' : '开启字幕'"
             @click="subtitleEnabled = !subtitleEnabled"
           >
             <Subtitles :size="15" />
-          </button>
-          <button
+          </LumiButton>
+          <LumiButton
             v-if="isSpeaking || isSynthesizing"
+            variant="danger"
+            size="sm"
+            icon-only
+            aria-label="停止播放"
             class="ctrl-btn stop-btn"
-            title="停止播放"
             @click="stopTts"
           >
             <StopCircle :size="15" />
-          </button>
+          </LumiButton>
         </div>
         <p class="avatar-tip">主 Agent 工作台 · 支持工具调用与子 Agent 协作</p>
       </div>
@@ -1801,7 +1908,7 @@ onBeforeUnmount(() => {
       <!-- 主 Agent 状态面板（可折叠：记忆 / MCP / 消息平台） -->
       <div class="agent-panels">
         <!-- 记忆快览 -->
-        <div class="agent-panel">
+        <div class="agent-panel lumi-card">
           <div class="agent-panel-header" @click="toggleSidePanel('memory')">
             <Brain :size="14" />
             <span class="agent-panel-title">记忆</span>
@@ -1820,7 +1927,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- MCP 工具状态 -->
-        <div class="agent-panel">
+        <div class="agent-panel lumi-card">
           <div class="agent-panel-header" @click="toggleSidePanel('mcp')">
             <Server :size="14" />
             <span class="agent-panel-title">MCP 工具</span>
@@ -1847,7 +1954,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 消息平台状态 -->
-        <div class="agent-panel">
+        <div class="agent-panel lumi-card">
           <div class="agent-panel-header" @click="toggleSidePanel('platform')">
             <Radio :size="14" />
             <span class="agent-panel-title">消息平台</span>
@@ -1873,7 +1980,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 子 Agent 能力提示 -->
-        <div class="agent-panel">
+        <div class="agent-panel lumi-card">
           <div class="agent-panel-header" @click="toggleSidePanel('subagent')">
             <Cpu :size="14" />
             <span class="agent-panel-title">子 Agent</span>
@@ -1904,6 +2011,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
 .workbench-layout {
   display: flex;
   width: 100%;
@@ -1929,113 +2041,53 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 10px;
+  padding: var(--space-3) var(--space-4) var(--space-3);
   flex-shrink: 0;
 }
 
 .history-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: var(--space-2);
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .history-collapse-btn {
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
   color: var(--text-muted);
-  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
 }
 
 .history-collapse-btn:hover {
-  background: var(--surface-hover);
   color: var(--text-primary);
+  background: var(--surface-hover);
 }
 
 .history-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  margin: 0 14px 8px;
-  height: 36px;
-  background: var(--surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
-  transition: all var(--transition-fast);
-  box-sizing: border-box;
-}
-
-.history-search:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
-}
-
-.search-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.search-input {
-  width: 100%;
-  height: 100%;
-  background: transparent;
-  border: none;
-  outline: none;
-  font-size: 13px;
-  color: var(--text-primary);
-}
-
-.search-input::placeholder {
-  color: var(--text-muted);
+  padding: 0 var(--space-4) var(--space-2);
 }
 
 .new-conv-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
-  margin: 0 14px 8px;
-  border: none;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: background 0.15s ease-in-out;
-}
-
-.new-conv-btn:hover {
-  background: var(--lumi-primary-hover);
+  margin: 0 var(--space-4) var(--space-2);
+  width: calc(100% - var(--space-4) * 2);
 }
 
 .history-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 8px 8px;
+  padding: 0 var(--space-2) var(--space-2);
 }
 
 .time-group {
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .time-group-label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px 4px;
-  font-size: 11px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -2045,12 +2097,12 @@ onBeforeUnmount(() => {
 .history-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
-  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
   position: relative;
 }
 
@@ -2077,7 +2129,7 @@ onBeforeUnmount(() => {
 }
 
 .history-item-title {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -2085,35 +2137,35 @@ onBeforeUnmount(() => {
 }
 
 .history-item-time {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 .history-item-snippet {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 .history-item-snippet :deep(mark) {
   background: var(--lumi-primary-glow);
   color: var(--lumi-primary);
-  padding: 0 2px;
-  border-radius: 2px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
 }
 
 .workbench-rename-input {
   width: 100%;
-  height: 24px;
+  height: var(--space-6);
   background: var(--surface);
   border: 1px solid var(--lumi-primary);
   border-radius: var(--radius-sm);
-  padding: 0 6px;
-  font-size: 13px;
+  padding: 0 var(--space-1);
+  font-size: var(--text-base);
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
@@ -2121,19 +2173,8 @@ onBeforeUnmount(() => {
 
 .history-item-rename,
 .history-item-delete {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s ease-in-out, background 0.15s ease-in-out, color 0.15s ease-in-out;
-  flex-shrink: 0;
+  transition: opacity var(--transition-fast);
 }
 
 .history-item:hover .history-item-rename,
@@ -2141,40 +2182,25 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
-.history-item-rename:hover {
-  background: var(--surface-active);
-  color: var(--text-primary);
-}
-
-.history-item-delete:hover {
-  background: var(--lumi-danger-light);
-  color: var(--lumi-danger);
-}
-
 .history-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 40px 16px;
+  gap: var(--space-2);
+  padding: var(--space-10) var(--space-4);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .history-expand-toggle {
   width: 28px;
   height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   color: var(--text-muted);
-  cursor: pointer;
   background: var(--surface);
-  border: none;
-  border-right: 1px solid var(--border-light);
-  transition: all var(--transition-fast);
+  border: 1px solid var(--border-light);
+  border-left: none;
   flex-shrink: 0;
   z-index: 5;
 }
@@ -2195,7 +2221,7 @@ onBeforeUnmount(() => {
 }
 
 .backend-warning {
-  padding: 16px 24px;
+  padding: var(--space-4) var(--space-6);
   background: var(--lumi-danger-light);
   border-bottom: 1px solid var(--lumi-danger);
 }
@@ -2203,7 +2229,7 @@ onBeforeUnmount(() => {
 .warning-content {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   color: var(--lumi-danger);
 }
 
@@ -2212,34 +2238,15 @@ onBeforeUnmount(() => {
 }
 
 .warning-title {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
   margin: 0;
 }
 
 .warning-desc {
-  font-size: 12px;
-  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  margin: var(--space-1) 0 0;
   opacity: 0.8;
-}
-
-.retry-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: none;
-  background: var(--lumi-danger);
-  color: var(--text-inverse);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: background 0.15s ease-in-out;
-}
-
-.retry-btn:hover {
-  background: var(--lumi-danger-hover);
 }
 
 .chat-area {
@@ -2255,7 +2262,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 20px;
+  padding: var(--space-2) var(--space-5);
   border-bottom: 1px solid var(--border-light);
   background: var(--surface);
   flex-shrink: 0;
@@ -2264,25 +2271,25 @@ onBeforeUnmount(() => {
 .main-agent-badge {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
   background: var(--lumi-primary-light);
   border-radius: var(--radius-sm);
   color: var(--lumi-primary);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
 .main-agent-model {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .messages-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: var(--space-6);
 }
 
 .messages-container {
@@ -2292,9 +2299,9 @@ onBeforeUnmount(() => {
 
 .message-row {
   display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-  animation: msg-in 0.25s ease-in-out;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  animation: msg-in var(--duration-normal) var(--ease-in-out);
 }
 
 @keyframes msg-in {
@@ -2311,8 +2318,8 @@ onBeforeUnmount(() => {
 }
 
 .avatar-assistant {
-  width: 32px;
-  height: 32px;
+  width: var(--space-7);
+  height: var(--space-7);
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
   display: flex;
@@ -2328,28 +2335,27 @@ onBeforeUnmount(() => {
 }
 
 .message-sender {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .reasoning-section {
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
   background: var(--surface-hover);
-  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
 .reasoning-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
-  transition: background 0.15s ease-in-out;
+  transition: background-color var(--transition-fast);
 }
 
 .reasoning-header:hover {
@@ -2358,7 +2364,7 @@ onBeforeUnmount(() => {
 
 .reasoning-chevron {
   margin-left: auto;
-  transition: transform 0.2s ease-in-out;
+  transition: transform var(--transition-fast);
 }
 
 .reasoning-chevron.rotated {
@@ -2366,8 +2372,8 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-content {
-  padding: 8px 12px 12px;
-  font-size: 12px;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  font-size: var(--text-sm);
   color: var(--text-muted);
   max-height: 240px;
   overflow-y: auto;
@@ -2375,9 +2381,8 @@ onBeforeUnmount(() => {
 
 /* 工具调用活动区 */
 .tool-activities-section {
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
   background: var(--surface-hover);
-  border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border-light);
 }
@@ -2385,9 +2390,9 @@ onBeforeUnmount(() => {
 .tool-activities-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  font-size: 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-secondary);
   background: var(--surface-active);
@@ -2406,12 +2411,12 @@ onBeforeUnmount(() => {
 .tool-activity-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
-  transition: background 0.15s ease-in-out;
+  transition: background-color var(--transition-fast);
 }
 
 .tool-activity-header:hover {
@@ -2422,8 +2427,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: var(--space-4);
+  height: var(--space-4);
   flex-shrink: 0;
 }
 
@@ -2440,7 +2445,7 @@ onBeforeUnmount(() => {
 }
 
 .tool-activity-name {
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-family: var(--font-mono);
   font-weight: 500;
   color: var(--text-primary);
   flex: 1;
@@ -2451,9 +2456,9 @@ onBeforeUnmount(() => {
 }
 
 .tool-activity-iteration {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
-  padding: 1px 6px;
+  padding: 1px var(--space-2);
   background: var(--surface-hover);
   border-radius: var(--radius-full);
   flex-shrink: 0;
@@ -2463,7 +2468,7 @@ onBeforeUnmount(() => {
   margin-left: auto;
   flex-shrink: 0;
   color: var(--text-muted);
-  transition: transform 0.2s ease-in-out;
+  transition: transform var(--transition-fast);
 }
 
 .tool-activity-chevron.rotated {
@@ -2471,44 +2476,37 @@ onBeforeUnmount(() => {
 }
 
 .tool-activity-args {
-  padding: 0 12px 8px 36px;
+  padding: 0 var(--space-3) var(--space-2) var(--space-9);
 }
 
-.tool-activity-args pre {
-  font-size: 11px;
+.tool-activity-args pre,
+.tool-activity-output pre {
+  font-size: var(--text-xs);
   color: var(--text-muted);
   background: var(--bg-secondary);
-  padding: 6px 8px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   margin: 0;
   overflow-x: auto;
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .tool-activity-output {
-  padding: 0 12px 8px 36px;
+  padding: 0 var(--space-3) var(--space-2) var(--space-9);
 }
 
 .tool-activity-output pre {
-  font-size: 11px;
   color: var(--text-secondary);
-  background: var(--bg-secondary);
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  margin: 0;
-  overflow-x: auto;
   max-height: 200px;
   overflow-y: auto;
-  font-family: 'JetBrains Mono', Consolas, monospace;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 /* ===== 子 Agent 群组执行卡片 ===== */
 .subagent-activities-section {
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
   background: var(--surface-hover);
-  border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border-light);
 }
@@ -2516,9 +2514,9 @@ onBeforeUnmount(() => {
 .subagent-activities-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  font-size: 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-secondary);
   background: var(--surface-active);
@@ -2526,28 +2524,27 @@ onBeforeUnmount(() => {
 
 .subagent-active-badge {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   color: var(--lumi-primary);
-  padding: 2px 8px;
+  padding: var(--space-1) var(--space-2);
   background: var(--lumi-primary-light);
   border-radius: var(--radius-full);
-  animation: pulse 1.5s ease-in-out infinite;
+  animation: pulse var(--duration-slow) var(--ease-in-out) infinite;
 }
 
 .subagent-activities-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px;
+  gap: var(--space-2);
+  padding: var(--space-1);
 }
 
 .subagent-card {
   background: var(--surface);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
   overflow: hidden;
-  transition: border-color 0.2s ease-in-out;
+  transition: border-color var(--transition-fast);
 }
 
 /* 进行中的子 Agent 卡片：流光边框效果（参考 deer-flow ShineBorder） */
@@ -2560,7 +2557,7 @@ onBeforeUnmount(() => {
   content: '';
   position: absolute;
   inset: -1px;
-  border-radius: var(--radius-md);
+  border-radius: var(--card-radius);
   padding: 1px;
   background: linear-gradient(
     90deg,
@@ -2585,10 +2582,10 @@ onBeforeUnmount(() => {
 .subagent-card-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: var(--space-2);
+  padding: var(--space-3);
   cursor: pointer;
-  transition: background 0.15s ease-in-out;
+  transition: background-color var(--transition-fast);
 }
 
 .subagent-card-header:hover {
@@ -2625,17 +2622,17 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .subagent-card-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .subagent-task {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-primary);
   flex: 1;
@@ -2646,9 +2643,9 @@ onBeforeUnmount(() => {
 }
 
 .subagent-depth {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
-  padding: 1px 6px;
+  padding: 1px var(--space-2);
   background: var(--surface-hover);
   border-radius: var(--radius-full);
   flex-shrink: 0;
@@ -2657,8 +2654,8 @@ onBeforeUnmount(() => {
 .subagent-card-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11px;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
@@ -2677,8 +2674,8 @@ onBeforeUnmount(() => {
 
 .subagent-tools-count {
   margin-left: auto;
-  font-size: 10px;
-  padding: 1px 6px;
+  font-size: var(--text-2xs);
+  padding: 1px var(--space-2);
   background: var(--surface-hover);
   border-radius: var(--radius-full);
 }
@@ -2686,34 +2683,34 @@ onBeforeUnmount(() => {
 .subagent-chevron {
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: transform 0.2s ease-in-out;
+  transition: transform var(--transition-fast);
 }
 
-.subagent-chevron.rotated {
-  transform: rotate(-90deg);
+.subagent-chevron.expanded {
+  transform: rotate(90deg);
 }
 
 .subagent-card-body {
-  padding: 0 12px 12px;
+  padding: 0 var(--space-3) var(--space-3);
   border-top: 1px solid var(--border-light);
 }
 
 /* 子 Agent 工具调用历史 */
 .subagent-tools-section {
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 
 .subagent-tools-header {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 8px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   background: var(--surface-hover);
   border-radius: var(--radius-sm);
-  transition: background 0.15s ease-in-out;
+  transition: background-color var(--transition-fast);
 }
 
 .subagent-tools-header:hover {
@@ -2722,7 +2719,7 @@ onBeforeUnmount(() => {
 
 .subagent-tools-chevron {
   margin-left: auto;
-  transition: transform 0.2s ease-in-out;
+  transition: transform var(--transition-fast);
 }
 
 .subagent-tools-chevron.rotated {
@@ -2732,20 +2729,20 @@ onBeforeUnmount(() => {
 .subagent-tools-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 6px;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
 }
 
 .subagent-tool-item {
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);
-  padding: 6px 8px;
+  padding: var(--space-1) var(--space-2);
 }
 
 .subagent-tool-header {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-2);
 }
 
 .subagent-tool-icon {
@@ -2764,33 +2761,33 @@ onBeforeUnmount(() => {
 }
 
 .subagent-tool-name {
-  font-size: 11px;
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
   color: var(--text-primary);
   font-weight: 500;
 }
 
 .subagent-tool-args pre,
 .subagent-tool-output pre {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   background: var(--surface);
-  padding: 4px 6px;
+  padding: var(--space-1);
   border-radius: var(--radius-sm);
-  margin: 4px 0 0;
+  margin: var(--space-1) 0 0;
   overflow-x: auto;
   max-height: 120px;
   overflow-y: auto;
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-family: var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 /* 子 Agent 最终结果 */
 .subagent-result {
-  margin-top: 10px;
-  padding: 8px;
-  background: var(--lumi-success-light, rgba(34, 197, 94, 0.08));
+  margin-top: var(--space-3);
+  padding: var(--space-2);
+  background: var(--lumi-success-light);
   border-radius: var(--radius-sm);
   border-left: 2px solid var(--lumi-success);
 }
@@ -2798,38 +2795,38 @@ onBeforeUnmount(() => {
 .subagent-result-label {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--lumi-success);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .subagent-result-content {
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
   color: var(--text-primary);
   max-height: 240px;
   overflow-y: auto;
 }
 
 .subagent-result-content :deep(p) {
-  margin: 4px 0;
+  margin: var(--space-1) 0;
 }
 
 .subagent-result-content :deep(pre) {
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);
-  padding: 8px;
+  padding: var(--space-2);
   overflow-x: auto;
-  font-size: 11px;
-  margin: 4px 0;
+  font-size: var(--text-xs);
+  margin: var(--space-1) 0;
 }
 
 /* 子 Agent 错误信息 */
 .subagent-error {
-  margin-top: 10px;
-  padding: 8px;
+  margin-top: var(--space-3);
+  padding: var(--space-2);
   background: var(--lumi-danger-light);
   border-radius: var(--radius-sm);
   border-left: 2px solid var(--lumi-danger);
@@ -2838,24 +2835,24 @@ onBeforeUnmount(() => {
 .subagent-error-label {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--lumi-danger);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .subagent-error-content {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   word-break: break-word;
-  line-height: 1.5;
+  line-height: var(--leading-normal);
 }
 
 /* 子 Agent 卡片展开动画 */
 .subagent-slide-enter-active,
 .subagent-slide-leave-active {
-  transition: opacity 0.2s ease-in-out, max-height 0.2s ease-in-out;
+  transition: opacity var(--transition-fast), max-height var(--transition-normal);
   overflow: hidden;
 }
 
@@ -2867,13 +2864,12 @@ onBeforeUnmount(() => {
 
 /* ===== 计划确认卡片（借鉴 deer-flow ClarificationMiddleware） ===== */
 .plan-confirmation-section {
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
   background: var(--surface-hover);
-  border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--lumi-primary);
   box-shadow: 0 0 0 3px var(--lumi-primary-glow);
-  animation: plan-appear 0.25s ease-in-out;
+  animation: plan-appear var(--duration-normal) var(--ease-in-out);
 }
 
 @keyframes plan-appear {
@@ -2884,9 +2880,9 @@ onBeforeUnmount(() => {
 .plan-confirmation-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
-  font-size: 13px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--lumi-primary);
   background: var(--lumi-primary-light);
@@ -2895,24 +2891,24 @@ onBeforeUnmount(() => {
 
 .plan-task-count {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
-  padding: 2px 8px;
+  padding: var(--space-1) var(--space-2);
   background: var(--surface);
   border-radius: var(--radius-full);
   color: var(--text-secondary);
 }
 
 .plan-confirmation-body {
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-4);
 }
 
 .plan-summary {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 10px;
-  padding: 8px 10px;
+  line-height: var(--leading-relaxed);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2);
   background: var(--surface);
   border-radius: var(--radius-sm);
   border-left: 2px solid var(--lumi-primary);
@@ -2921,18 +2917,18 @@ onBeforeUnmount(() => {
 .plan-tasks-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
 }
 
 .plan-task-item {
   display: flex;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--space-3);
+  padding: var(--space-2);
   background: var(--surface);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-light);
-  transition: border-color 0.15s ease-in-out;
+  transition: border-color var(--transition-fast);
 }
 
 .plan-task-item:hover {
@@ -2942,13 +2938,13 @@ onBeforeUnmount(() => {
 .plan-task-index {
   width: 22px;
   height: 22px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -2958,44 +2954,44 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-1);
 }
 
 .plan-task-title {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-primary);
-  line-height: 1.4;
+  line-height: var(--leading-snug);
 }
 
 .plan-task-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
 }
 
 .plan-task-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 2px;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 .plan-task-tool {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 10px;
+  gap: var(--space-1);
+  font-size: var(--text-2xs);
   color: var(--text-muted);
-  padding: 1px 6px;
+  padding: 1px var(--space-2);
   background: var(--surface-hover);
   border-radius: var(--radius-full);
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .plan-task-priority {
-  font-size: 10px;
-  padding: 1px 6px;
+  font-size: var(--text-2xs);
+  padding: 1px var(--space-2);
   border-radius: var(--radius-full);
   font-weight: 500;
 }
@@ -3006,7 +3002,7 @@ onBeforeUnmount(() => {
 }
 
 .plan-task-priority.high {
-  background: var(--lumi-warning-light, rgba(245, 158, 11, 0.1));
+  background: var(--lumi-warning-light);
   color: var(--lumi-warning);
 }
 
@@ -3016,80 +3012,24 @@ onBeforeUnmount(() => {
 }
 
 .plan-feedback-area {
-  margin-bottom: 10px;
+  margin-bottom: var(--space-3);
 }
 
 .plan-feedback-input {
   width: 100%;
-  border: 1px solid var(--border-light);
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  font-size: 12px;
-  color: var(--text-primary);
-  font-family: inherit;
+  min-height: 60px;
   resize: none;
-  outline: none;
-  box-sizing: border-box;
-  transition: border-color 0.15s ease-in-out;
-}
-
-.plan-feedback-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 2px var(--lumi-primary-glow);
-}
-
-.plan-feedback-input::placeholder {
-  color: var(--text-muted);
 }
 
 .plan-confirmation-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   justify-content: flex-end;
 }
 
-.plan-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 14px;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: background 0.15s ease-in-out, transform 0.1s ease-in-out;
-}
-
-.plan-btn:active {
-  transform: scale(0.97);
-}
-
-.plan-btn-confirm {
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-}
-
-.plan-btn-confirm:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.plan-btn-reject {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-light);
-}
-
-.plan-btn-reject:hover {
-  background: var(--lumi-danger-light);
-  color: var(--lumi-danger);
-  border-color: var(--lumi-danger);
-}
-
 .message-content {
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
   color: var(--text-primary);
   word-break: break-word;
 }
@@ -3097,7 +3037,7 @@ onBeforeUnmount(() => {
 .message-content.user-message {
   background: var(--lumi-primary);
   color: var(--text-inverse);
-  padding: 10px 14px;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
   display: inline-block;
   max-width: 100%;
@@ -3107,14 +3047,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: row-reverse;
   align-items: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .user-msg-btns {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   opacity: 0;
-  transition: opacity 0.15s ease-in-out;
+  transition: opacity var(--transition-fast);
 }
 
 .message-row.user:hover .user-msg-btns {
@@ -3124,63 +3064,63 @@ onBeforeUnmount(() => {
 .markdown-body :deep(pre) {
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-4);
   overflow-x: auto;
-  font-size: 13px;
-  margin: 8px 0;
+  font-size: var(--text-base);
+  margin: var(--space-2) 0;
 }
 
 .markdown-body :deep(code) {
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .markdown-body :deep(p) {
-  margin: 6px 0;
+  margin: var(--space-2) 0;
 }
 
 .markdown-body :deep(ul),
 .markdown-body :deep(ol) {
-  padding-left: 20px;
-  margin: 6px 0;
+  padding-left: var(--space-5);
+  margin: var(--space-2) 0;
 }
 
 .markdown-body :deep(h1),
 .markdown-body :deep(h2),
 .markdown-body :deep(h3) {
-  margin: 12px 0 6px;
+  margin: var(--space-3) 0 var(--space-2);
   font-weight: 600;
 }
 
 .interrupted-inline {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
   color: var(--lumi-warning);
-  margin-left: 6px;
+  margin-left: var(--space-2);
 }
 
 .interrupted-only {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
   color: var(--lumi-warning);
-  padding: 4px 0;
+  padding: var(--space-1) 0;
 }
 
 .streaming-indicator {
   display: inline-flex;
   align-items: center;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .streaming-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--lumi-primary);
-  animation: pulse 1s ease-in-out infinite;
+  animation: pulse 1s var(--ease-in-out) infinite;
 }
 
 @keyframes pulse {
@@ -3190,10 +3130,10 @@ onBeforeUnmount(() => {
 
 .assistant-msg-actions {
   display: flex;
-  gap: 4px;
-  margin-top: 6px;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
   opacity: 0;
-  transition: opacity 0.15s ease-in-out;
+  transition: opacity var(--transition-fast);
 }
 
 .message-row.assistant:hover .assistant-msg-actions {
@@ -3201,22 +3141,14 @@ onBeforeUnmount(() => {
 }
 
 .u-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 26px;
   height: 26px;
-  border: none;
-  background: transparent;
   color: var(--text-muted);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
 }
 
 .u-btn:hover {
-  background: var(--surface-active);
   color: var(--text-primary);
+  background: var(--surface-active);
 }
 
 .u-btn-hover {
@@ -3228,7 +3160,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 80px 20px;
+  padding: var(--space-10) var(--space-5);
   text-align: center;
   color: var(--text-muted);
 }
@@ -3236,50 +3168,37 @@ onBeforeUnmount(() => {
 .empty-icon {
   width: 72px;
   height: 72px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--lumi-primary-gradient-soft);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--lumi-primary);
-  margin-bottom: 20px;
-  box-shadow: 0 4px 24px var(--lumi-primary-glow);
+  margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-glow-md);
 }
 
 .empty-title {
-  font-size: 16px;
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 6px;
+  margin: 0 0 var(--space-2);
 }
 
 .empty-desc {
-  font-size: 13px;
-  margin: 0 0 20px;
+  font-size: var(--text-base);
+  margin: 0 0 var(--space-5);
 }
 
 .empty-quick-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   justify-content: center;
 }
 
 .quick-action {
-  padding: 8px 16px;
-  border: 1px solid var(--border-light);
-  background: var(--surface);
-  color: var(--text-secondary);
   border-radius: var(--radius-full);
-  cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s ease-in-out;
-}
-
-.quick-action:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
 }
 
 .conv-loading-overlay {
@@ -3296,33 +3215,28 @@ onBeforeUnmount(() => {
 .conv-loading-content {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
   background: var(--surface);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
 }
 
 .scroll-to-bottom-btn {
   position: absolute;
-  bottom: 16px;
+  bottom: var(--space-4);
   left: 50%;
   transform: translateX(-50%);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-sm);
+  z-index: 4;
+}
+
+.scroll-to-bottom-btn.lumi-btn {
   width: 36px;
   height: 36px;
-  border: 1px solid var(--border-light);
-  background: var(--surface);
-  color: var(--text-secondary);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 0.15s ease-in-out;
-  z-index: 4;
 }
 
 .scroll-to-bottom-btn:hover {
@@ -3340,7 +3254,7 @@ onBeforeUnmount(() => {
 
 /* 输入区 */
 .input-area {
-  padding: 12px 24px 16px;
+  padding: var(--space-3) var(--space-6) var(--space-4);
   background: var(--bg);
   flex-shrink: 0;
 }
@@ -3348,12 +3262,9 @@ onBeforeUnmount(() => {
 .input-wrapper {
   max-width: 820px;
   margin: 0 auto;
-  background: var(--surface);
+  padding: var(--space-3);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  padding: 10px 12px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-  transition: border-color 0.15s ease-in-out;
+  transition: border-color var(--transition-fast);
 }
 
 .input-wrapper:focus-within {
@@ -3367,8 +3278,8 @@ onBeforeUnmount(() => {
   outline: none;
   background: transparent;
   resize: none;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
   color: var(--text-primary);
   font-family: inherit;
   min-height: 24px;
@@ -3388,39 +3299,34 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 /* 工作流模式切换按钮 */
 .workflow-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  font-size: 11px;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
   color: var(--text-muted);
   background: var(--surface-hover);
-  border: 1px solid transparent;
+  border-color: transparent;
   border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
 }
 
 .workflow-toggle:hover {
-  background: var(--surface-active);
   color: var(--text-primary);
+  background: var(--surface-active);
 }
 
 .workflow-toggle.active {
-  color: var(--accent-primary, #10b981);
-  background: var(--accent-surface, rgba(16, 185, 129, 0.1));
-  border-color: var(--accent-border, rgba(16, 185, 129, 0.3));
+  color: var(--lumi-success);
+  background: var(--lumi-success-light);
+  border-color: color-mix(in srgb, var(--lumi-success) 30%, transparent);
 }
 
 .workflow-toggle-text {
@@ -3431,21 +3337,19 @@ onBeforeUnmount(() => {
 .workflow-mode-selector {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: var(--space-1);
+  padding: var(--space-1);
   background: var(--surface-hover);
   border-radius: var(--radius-full);
 }
 
 .mode-chip {
-  padding: 3px 9px;
-  font-size: 11px;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
   color: var(--text-muted);
   background: transparent;
-  border: none;
+  border-color: transparent;
   border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
   white-space: nowrap;
 }
 
@@ -3455,17 +3359,8 @@ onBeforeUnmount(() => {
 }
 
 .mode-chip.active {
-  color: var(--accent-primary, #10b981);
-  background: var(--accent-surface, rgba(16, 185, 129, 0.15));
-  font-weight: 500;
-}
-
-.model-tag {
-  font-size: 11px;
-  color: var(--text-muted);
-  padding: 3px 8px;
-  background: var(--surface-hover);
-  border-radius: var(--radius-full);
+  color: var(--lumi-success);
+  background: var(--lumi-success-light);
 }
 
 /* 模型下拉框 */
@@ -3481,20 +3376,20 @@ onBeforeUnmount(() => {
 
 .model-dropdown {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + var(--space-2));
   left: 0;
   width: 280px;
   background: var(--surface);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-lg);
   border: 1px solid var(--border-light);
   z-index: 9999;
   overflow: hidden;
 }
 
 .dropdown-header {
-  padding: 10px 14px;
-  font-size: 12px;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -3502,15 +3397,15 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .dropdown-header::after {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 14px;
-  right: 14px;
+  left: var(--space-4);
+  right: var(--space-4);
   height: 1px;
   background: var(--divider-soft);
 }
@@ -3518,18 +3413,15 @@ onBeforeUnmount(() => {
 .dropdown-list {
   max-height: 280px;
   overflow-y: auto;
-  padding: 4px;
+  padding: var(--space-1);
 }
 
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
+.dropdown-item.lumi-btn {
+  justify-content: flex-start;
   text-align: left;
-  transition: all 250ms ease-in-out;
+  gap: var(--space-3);
+  padding: var(--space-2) 10px;
+  width: 100%;
 }
 
 .dropdown-item:hover {
@@ -3538,6 +3430,10 @@ onBeforeUnmount(() => {
 
 .dropdown-item.active {
   background: var(--lumi-primary-light);
+}
+
+.dropdown-item.active .dropdown-item-model {
+  color: var(--lumi-primary);
 }
 
 .dropdown-item-info {
@@ -3549,7 +3445,7 @@ onBeforeUnmount(() => {
 }
 
 .dropdown-item-model {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -3558,21 +3454,17 @@ onBeforeUnmount(() => {
 }
 
 .dropdown-item-provider {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.dropdown-item.active .dropdown-item-model {
-  color: var(--lumi-primary);
-}
-
 .dropdown-empty {
-  padding: 20px 14px;
+  padding: var(--space-5) var(--space-4);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -3583,7 +3475,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 8px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--text-inverse);
   flex-shrink: 0;
@@ -3598,61 +3490,15 @@ onBeforeUnmount(() => {
   height: 16px;
 }
 
-.dropdown-fade-enter-active {
-  animation: dropdown-in 0.2s ease-out;
-}
-
-.dropdown-fade-leave-active {
-  animation: dropdown-in 0.15s ease-out reverse;
-}
-
-@keyframes dropdown-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 .toolbar-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
-.send-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.send-btn.lumi-btn {
   width: 34px;
   height: 34px;
-  border: none;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background 0.15s ease-in-out;
-}
-
-.send-btn:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.send-btn.disabled {
-  background: var(--surface-hover);
-  color: var(--text-muted);
-  cursor: not-allowed;
-}
-
-.send-btn.stop {
-  background: var(--lumi-danger);
-}
-
-.send-btn.stop:hover {
-  background: var(--lumi-danger-hover);
 }
 
 /* 右侧 Live2D 区 */
@@ -3668,7 +3514,7 @@ onBeforeUnmount(() => {
 }
 
 .avatar-header {
-  padding: 14px 16px 10px;
+  padding: var(--space-3) var(--space-4) var(--space-3);
   border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
@@ -3676,33 +3522,22 @@ onBeforeUnmount(() => {
 .avatar-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: var(--space-2);
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 10px;
+  margin-bottom: var(--space-3);
 }
 
 .avatar-model-selector {
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .model-chip {
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
   border-radius: var(--radius-full);
-  cursor: pointer;
-  font-size: 11px;
-  transition: all 0.15s ease-in-out;
-}
-
-.model-chip:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
+  font-size: var(--text-xs);
 }
 
 .model-chip.active {
@@ -3732,10 +3567,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  padding: 40px 24px;
+  gap: var(--space-5);
+  padding: var(--space-10) var(--space-6);
   text-align: center;
-  animation: hint-fade-in 500ms ease-in-out;
+  animation: hint-fade-in 500ms var(--ease-in-out);
 }
 
 @keyframes hint-fade-in {
@@ -3746,13 +3581,13 @@ onBeforeUnmount(() => {
 .desktop-mode-hint .hint-icon {
   width: 72px;
   height: 72px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
-  animation: hint-icon-pulse 3s ease-in-out infinite;
+  animation: hint-icon-pulse 3s var(--ease-in-out) infinite;
 }
 
 @keyframes hint-icon-pulse {
@@ -3761,23 +3596,23 @@ onBeforeUnmount(() => {
 }
 
 .desktop-mode-hint .hint-content h3 {
-  font-size: 16px;
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .desktop-mode-hint .hint-content p {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
-  line-height: 1.6;
+  line-height: var(--leading-relaxed);
   max-width: 280px;
 }
 
 .desktop-mode-hint .hint-sub {
-  font-size: 11px !important;
+  font-size: var(--text-xs) !important;
   opacity: 0.7;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .live2d-canvas {
@@ -3794,9 +3629,9 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--space-3);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   background: var(--surface);
 }
 
@@ -3806,17 +3641,17 @@ onBeforeUnmount(() => {
 
 .avatar-status {
   position: absolute;
-  bottom: 12px;
+  bottom: var(--space-3);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
   background: var(--surface);
   backdrop-filter: blur(8px);
   border-radius: var(--radius-full);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   border: 1px solid var(--border-light);
   z-index: 2;
@@ -3825,14 +3660,14 @@ onBeforeUnmount(() => {
 .status-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--lumi-success);
-  animation: pulse 2s ease-in-out infinite;
+  animation: pulse 2s var(--ease-in-out) infinite;
 }
 
 .status-dot.speaking {
   background: var(--lumi-primary);
-  animation: pulse 0.6s ease-in-out infinite;
+  animation: pulse 0.6s var(--ease-in-out) infinite;
 }
 
 .avatar-subtitle {
@@ -3841,22 +3676,22 @@ onBeforeUnmount(() => {
   left: 50%;
   transform: translateX(-50%);
   max-width: 88%;
-  padding: 8px 14px;
+  padding: var(--space-2) var(--space-4);
   background: var(--surface);
   backdrop-filter: blur(8px);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
   color: var(--text-primary);
   text-align: center;
   cursor: pointer;
   z-index: 3;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .avatar-footer {
-  padding: 10px 16px 14px;
+  padding: var(--space-3) var(--space-4) var(--space-4);
   border-top: 1px solid var(--border-light);
   flex-shrink: 0;
 }
@@ -3865,22 +3700,14 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
-.ctrl-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.ctrl-btn.lumi-btn {
   width: 32px;
   height: 32px;
-  border: 1px solid var(--border);
-  background: var(--surface);
   color: var(--text-muted);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all 0.15s ease-in-out;
 }
 
 .ctrl-btn:hover {
@@ -3906,11 +3733,11 @@ onBeforeUnmount(() => {
 }
 
 .avatar-tip {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   margin: 0;
   text-align: center;
-  line-height: 1.5;
+  line-height: var(--leading-normal);
 }
 
 /* ===== 主 Agent 状态面板 ===== */
@@ -3919,37 +3746,30 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--border-light);
   max-height: 40%;
   overflow-y: auto;
+  padding: var(--space-2) var(--space-2) 0;
 }
 
 .agent-panel {
-  border-bottom: 1px solid var(--border-light);
+  margin-bottom: var(--space-2);
 }
 
 .agent-panel:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
 }
 
 .agent-panel-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
-  transition: background 0.15s ease-in-out;
+  transition: background-color var(--transition-fast);
 }
 
 .agent-panel-header:hover {
   background: var(--surface-hover);
-}
-
-.agent-panel-header.static {
-  cursor: default;
-}
-
-.agent-panel-header.static:hover {
-  background: transparent;
 }
 
 .agent-panel-title {
@@ -3959,24 +3779,17 @@ onBeforeUnmount(() => {
 }
 
 .agent-panel-badge {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
-  padding: 2px 7px;
+  padding: var(--space-1);
   background: var(--surface-hover);
   border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
-.agent-panel-hint {
-  font-size: 10px;
-  color: var(--text-muted);
-  flex: 1;
-  text-align: right;
-}
-
 .agent-panel-chevron {
   color: var(--text-muted);
-  transition: transform 0.2s ease-in-out;
+  transition: transform var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -3985,41 +3798,41 @@ onBeforeUnmount(() => {
 }
 
 .agent-panel-body {
-  padding: 8px 16px 12px;
-  font-size: 11px;
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
 .panel-empty {
   color: var(--text-muted);
-  font-size: 11px;
-  padding: 4px 0;
+  font-size: var(--text-xs);
+  padding: var(--space-1) 0;
 }
 
 /* 记忆快览 */
 .memory-profile {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
 .memory-label {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .memory-value {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-primary);
 }
 
 .memory-summary {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
   max-height: 60px;
   overflow-y: auto;
   word-break: break-word;
@@ -4029,14 +3842,14 @@ onBeforeUnmount(() => {
 .mcp-server-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
 }
 
 .mcp-server-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--text-muted);
   flex-shrink: 0;
 }
@@ -4056,7 +3869,7 @@ onBeforeUnmount(() => {
 
 .mcp-server-name {
   flex: 1;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4064,16 +3877,16 @@ onBeforeUnmount(() => {
 }
 
 .mcp-server-tools {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .mcp-total {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--border-light);
 }
 
@@ -4081,14 +3894,14 @@ onBeforeUnmount(() => {
 .platform-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
 }
 
 .platform-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--text-muted);
   flex-shrink: 0;
 }
@@ -4099,7 +3912,7 @@ onBeforeUnmount(() => {
 
 .platform-name {
   flex: 1;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4107,111 +3920,71 @@ onBeforeUnmount(() => {
 }
 
 .platform-type {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   flex-shrink: 0;
 }
 
-/* 右侧面板子 Agent 列表 */
-.subagent-side-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 0;
-}
-
-.subagent-side-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.subagent-side-dot.running {
-  background: var(--lumi-primary);
-  animation: pulse 1s ease-in-out infinite;
-}
-
-.subagent-side-dot.completed {
-  background: var(--lumi-success);
-}
-
-.subagent-side-dot.failed {
-  background: var(--lumi-danger);
-}
-
-.subagent-side-task {
-  flex: 1;
-  font-size: 11px;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.subagent-side-depth {
-  font-size: 10px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-/* 面板折叠动画 */
-.panel-slide-enter-active,
-.panel-slide-leave-active {
-  transition: opacity 0.2s ease-in-out, max-height 0.2s ease-in-out;
+/* ===== Vue Transitions ===== */
+.history-slide-enter-active,
+.history-slide-leave-active {
+  transition: width var(--transition-normal), opacity var(--transition-normal);
   overflow: hidden;
 }
 
-.panel-slide-enter-from,
-.panel-slide-leave-to {
+.history-slide-enter-from,
+.history-slide-leave-to {
+  width: 0;
   opacity: 0;
-  max-height: 0;
+}
+
+.msg-appear-enter-active,
+.msg-appear-leave-active {
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.msg-appear-enter-from,
+.msg-appear-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.dropdown-fade-enter-active,
+.dropdown-fade-leave-active {
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.dropdown-fade-enter-from,
+.dropdown-fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 .subtitle-fade-enter-active,
 .subtitle-fade-leave-active {
-  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  transition: opacity var(--transition-fast);
 }
 
 .subtitle-fade-enter-from,
 .subtitle-fade-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(8px);
 }
 
-/* 过渡动画 */
-.history-slide-enter-active {
-  animation: history-slide-in 0.2s ease-in-out;
+.panel-slide-enter-active,
+.panel-slide-leave-active {
+  transition: max-height var(--transition-normal), opacity var(--transition-fast);
+  overflow: hidden;
 }
 
-.history-slide-leave-active {
-  animation: history-slide-out 0.15s ease-in-out;
-}
-
-@keyframes history-slide-in {
-  from { opacity: 0; transform: translateX(-10px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes history-slide-out {
-  from { opacity: 1; transform: translateX(0); }
-  to { opacity: 0; transform: translateX(-10px); }
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease-in-out;
-}
-
-.fade-enter-from,
-.fade-leave-to {
+.panel-slide-enter-from,
+.panel-slide-leave-to {
+  max-height: 0;
   opacity: 0;
 }
 
 .conv-loading-fade-enter-active,
 .conv-loading-fade-leave-active {
-  transition: opacity 0.2s ease-in-out;
+  transition: opacity var(--transition-fast);
 }
 
 .conv-loading-fade-enter-from,
@@ -4221,21 +3994,32 @@ onBeforeUnmount(() => {
 
 .scroll-btn-fade-enter-active,
 .scroll-btn-fade-leave-active {
-  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
 
 .scroll-btn-fade-enter-from,
 .scroll-btn-fade-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(8px);
+  transform: translateX(-50%) translateY(10px);
 }
 
-.msg-appear-enter-active {
-  transition: opacity 0.25s ease-in-out, transform 0.25s ease-in-out;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--transition-fast);
 }
 
-.msg-appear-enter-from {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
-  transform: translateY(8px);
 }
-</style>
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

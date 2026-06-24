@@ -99,6 +99,13 @@ const {
   stop: stopAvatarChat,
 } = useAvatarChat({
   voice: () => currentVoice.value,
+  engine: () => modelStore.ttsConfig.provider || modelStore.ttsConfig.engine || 'auto',
+  ttsConfig: () => ({
+    model: modelStore.ttsConfig.model,
+    speed: modelStore.ttsConfig.speed,
+    apiKey: modelStore.ttsConfig.apiKey,
+    baseUrl: modelStore.ttsConfig.baseUrl,
+  }),
   driveEmotion: (emotionId: string) => {
     if (isDesktopMode.value && isDesktopPetRunning.value) {
       const modelUrl = currentModelInfo.value?.url || ''

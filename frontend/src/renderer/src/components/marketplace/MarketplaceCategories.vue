@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MarketplaceCategory } from '../../types/marketplace'
+import type { LucideIcon } from 'lucide-vue-next'
 import {
   LayoutGrid, Cpu, Wrench, Puzzle, Palette, Zap,
   MessageCircle, BookOpen, Code, Image, Heart,
@@ -7,7 +8,7 @@ import {
   ChevronRight
 } from 'lucide-vue-next'
 
-const ICON_MAP: Record<string, any> = {
+const ICON_MAP: Record<string, LucideIcon> = {
   LayoutGrid, Cpu, Wrench, Puzzle, Palette, Zap,
   MessageCircle, BookOpen, Code, Image, Heart,
   Bot, Lightbulb, BarChart3, Terminal, GraduationCap,
@@ -53,19 +54,19 @@ const emit = defineEmits<{
 .category-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 
 .category-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   width: 100%;
-  padding: 10px 14px;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
-  transition: all 0.25s ease-in-out;
+  transition: all var(--transition-normal);
   text-align: left;
   position: relative;
 }
@@ -76,20 +77,20 @@ const emit = defineEmits<{
 }
 
 .category-btn.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  font-weight: 500;
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+  font-weight: var(--font-medium);
 }
 
 .category-btn.active::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--lumi-primary);
+  top: calc(var(--space-1) + var(--space-1) / 2);
+  bottom: calc(var(--space-1) + var(--space-1) / 2);
+  width: calc(var(--space-1) / 2 + 1px);
+  border-radius: 0 calc(var(--space-1) / 2 + 1px) calc(var(--space-1) / 2 + 1px) 0;
+  background: var(--lumi-brand);
 }
 
 .cat-icon {
@@ -111,6 +112,13 @@ const emit = defineEmits<{
 }
 
 .category-btn.active .cat-expand {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .category-btn,
+  .cat-expand {
+    transition: none;
+  }
 }
 </style>

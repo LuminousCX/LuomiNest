@@ -531,14 +531,14 @@ const handleCreateAgent = async () => {
 .wizard-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--overlay-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  padding: 24px;
+  padding: var(--space-6);
 }
 
 .wizard-container {
@@ -558,7 +558,7 @@ const handleCreateAgent = async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 28px 16px;
+  padding: var(--space-5) 28px var(--space-4);
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-light);
 }
@@ -573,8 +573,8 @@ const handleCreateAgent = async () => {
   width: 38px;
   height: 38px;
   border-radius: var(--radius-md);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -587,14 +587,14 @@ const handleCreateAgent = async () => {
 }
 
 .wizard-title {
-  font-size: 17px;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.3;
 }
 
 .wizard-subtitle {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -617,7 +617,7 @@ const handleCreateAgent = async () => {
 .wizard-body {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 28px;
+  padding: var(--space-6) 28px;
   min-height: 0;
 }
 
@@ -635,20 +635,20 @@ const handleCreateAgent = async () => {
 .step-layout-full {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 /* Form styles */
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
 }
 
 .form-label {
   display: block;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .required {
@@ -663,13 +663,13 @@ const handleCreateAgent = async () => {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--text-md);
   transition: all var(--transition-fast);
 }
 
 .form-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
 }
 
 .form-input::placeholder {
@@ -683,15 +683,15 @@ const handleCreateAgent = async () => {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--text-md);
   resize: vertical;
   transition: all var(--transition-fast);
   line-height: 1.6;
 }
 
 .form-textarea:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
 }
 
 .form-textarea::placeholder {
@@ -702,7 +702,7 @@ const handleCreateAgent = async () => {
 .avatar-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .avatar-categories {
@@ -714,7 +714,7 @@ const handleCreateAgent = async () => {
 .cat-tab {
   padding: 6px 14px;
   border-radius: var(--radius-full);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-secondary);
   background: var(--bg-secondary);
@@ -742,12 +742,12 @@ const handleCreateAgent = async () => {
 .avatar-item {
   width: 52px;
   height: 52px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: var(--text-3xl);
   cursor: pointer;
   transition: all var(--transition-normal);
   background: var(--bg-secondary);
@@ -758,8 +758,8 @@ const handleCreateAgent = async () => {
 }
 
 .avatar-item.selected {
-  border-color: var(--avatar-color, var(--lumi-primary));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--avatar-color, var(--lumi-primary)) 20%, transparent);
+  border-color: var(--avatar-color, var(--lumi-brand));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--avatar-color, var(--lumi-brand)) 20%, transparent);
 }
 
 .upload-avatar {
@@ -769,22 +769,22 @@ const handleCreateAgent = async () => {
 }
 
 .upload-avatar:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 /* Style tags */
 .tag-list {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .style-tag {
-  padding: 7px 16px;
+  padding: 7px var(--space-4);
   border-radius: var(--radius-full);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-secondary);
   background: var(--bg-secondary);
@@ -805,14 +805,14 @@ const handleCreateAgent = async () => {
 /* Model chips */
 .model-list {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .model-chip {
-  padding: 7px 16px;
+  padding: 7px var(--space-4);
   border-radius: var(--radius-full);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-secondary);
   background: var(--bg-secondary);
@@ -835,32 +835,32 @@ const handleCreateAgent = async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .preview-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-secondary);
   width: 100%;
 }
 
 .preview-header svg {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .preview-hint {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   width: 100%;
 }
 
 .preview-card {
   width: 100%;
-  padding: 24px 20px;
+  padding: var(--space-6) var(--space-5);
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
@@ -874,7 +874,7 @@ const handleCreateAgent = async () => {
 .preview-avatar-ring {
   width: 64px;
   height: 64px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -882,17 +882,17 @@ const handleCreateAgent = async () => {
 }
 
 .preview-avatar-emoji {
-  font-size: 30px;
+  font-size: var(--text-4xl);
 }
 
 .preview-name {
-  font-size: 16px;
+  font-size: var(--text-xl);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .preview-badge {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   padding: 3px 10px;
   border-radius: var(--radius-full);
@@ -901,7 +901,7 @@ const handleCreateAgent = async () => {
 }
 
 .preview-desc {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.6;
   text-align: left;
@@ -909,44 +909,44 @@ const handleCreateAgent = async () => {
 }
 
 .preview-meta {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   width: 100%;
   text-align: left;
-  padding-top: 8px;
+  padding-top: var(--space-2);
   border-top: 1px solid var(--border-light);
 }
 
 .step-indicator {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   width: 100%;
   text-align: right;
-  padding-top: 4px;
+  padding-top: var(--space-1);
 }
 
 /* Skills section */
 .skills-intro {
   padding: 14px 18px;
   border-radius: var(--radius-md);
-  background: var(--lumi-primary-light);
+  background: var(--lumi-brand-light);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.6;
-  border: 1px solid color-mix(in srgb, var(--lumi-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lumi-brand) 10%, transparent);
 }
 
 .skills-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .skill-item {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 14px var(--space-4);
   border-radius: var(--radius-md);
   background: var(--surface);
   border: 1px solid var(--border-light);
@@ -962,8 +962,8 @@ const handleCreateAgent = async () => {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -976,14 +976,14 @@ const handleCreateAgent = async () => {
 }
 
 .skill-name {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 2px;
 }
 
 .skill-desc {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.5;
 }
@@ -1002,7 +1002,7 @@ const handleCreateAgent = async () => {
 }
 
 .skill-toggle.on {
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
 }
 
 .toggle-thumb {
@@ -1011,7 +1011,7 @@ const handleCreateAgent = async () => {
   left: 2px;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--surface);
   box-shadow: 0 1px 3px var(--overlay-subtle);
   transition: all var(--transition-normal);
@@ -1025,43 +1025,43 @@ const handleCreateAgent = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   padding: 14px;
   border-radius: var(--radius-md);
-  border: 1px dashed var(--lumi-primary);
-  color: var(--lumi-primary);
-  font-size: 13px;
+  border: 1px dashed var(--lumi-brand);
+  color: var(--lumi-brand);
+  font-size: var(--text-base);
   font-weight: 500;
   background: transparent;
   cursor: pointer;
   transition: all var(--transition-fast);
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 
 .add-skill-pack-btn:hover {
-  background: var(--lumi-primary-light);
+  background: var(--lumi-brand-light);
 }
 
 /* Settings grid */
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .settings-card {
-  padding: 20px;
+  padding: var(--space-5);
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
 }
 
 .card-title {
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .range-slider {
@@ -1078,10 +1078,10 @@ const handleCreateAgent = async () => {
   appearance: none;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
-  background: var(--lumi-primary);
+  border-radius: var(--radius-full);
+  background: var(--lumi-brand);
   cursor: pointer;
-  box-shadow: 0 2px 6px var(--lumi-primary-border);
+  box-shadow: 0 2px 6px var(--lumi-brand-border);
   transition: transform var(--transition-fast);
 }
 
@@ -1092,7 +1092,7 @@ const handleCreateAgent = async () => {
 .range-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   margin-top: 6px;
 }
@@ -1106,11 +1106,11 @@ const handleCreateAgent = async () => {
 .confirm-grid {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .confirm-card {
-  padding: 24px;
+  padding: var(--space-6);
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
@@ -1119,19 +1119,19 @@ const handleCreateAgent = async () => {
 .main-confirm {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .confirm-header-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .confirm-avatar-lg {
   width: 56px;
   height: 56px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1140,17 +1140,17 @@ const handleCreateAgent = async () => {
 }
 
 .confirm-avatar-emoji {
-  font-size: 28px;
+  font-size: var(--text-4xl);
 }
 
 .confirm-name {
-  font-size: 20px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .confirm-style {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
 }
 
@@ -1162,7 +1162,7 @@ const handleCreateAgent = async () => {
 .confirm-details {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .detail-row {
@@ -1172,19 +1172,19 @@ const handleCreateAgent = async () => {
 }
 
 .detail-label {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   font-weight: 500;
 }
 
 .detail-value {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-primary);
   font-weight: 600;
 }
 
 .side-title {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 14px;
@@ -1193,31 +1193,31 @@ const handleCreateAgent = async () => {
 .enabled-skills-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .enabled-skill-tag {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
   font-weight: 500;
 }
 
 .enabled-skill-tag svg {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
   flex-shrink: 0;
 }
 
 .no-skills {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   text-align: center;
-  padding: 16px;
+  padding: var(--space-4);
 }
 
 /* Footer */
@@ -1225,7 +1225,7 @@ const handleCreateAgent = async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 28px;
+  padding: var(--space-4) 28px;
   border-top: 1px solid var(--border-light);
   flex-shrink: 0;
 }
@@ -1236,7 +1236,7 @@ const handleCreateAgent = async () => {
   gap: 6px;
   padding: 11px 22px;
   border-radius: var(--radius-md);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -1254,15 +1254,15 @@ const handleCreateAgent = async () => {
 }
 
 .next-btn {
-  color: white;
-  background: var(--lumi-primary);
+  color: var(--text-inverse);
+  background: var(--lumi-brand);
   border: 1px solid transparent;
 }
 
 .next-btn:hover:not(.disabled) {
-  background: var(--lumi-primary-hover);
+  background: var(--lumi-brand-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--lumi-primary-border);
+  box-shadow: 0 4px 12px var(--lumi-brand-border);
 }
 
 .footer-btn.disabled {
@@ -1272,11 +1272,11 @@ const handleCreateAgent = async () => {
 
 /* Transitions */
 .step-fade-enter-active {
-  transition: all 350ms ease-in-out;
+  transition: all var(--duration-slow) var(--var(--var(--ease-in-out)));
 }
 
 .step-fade-leave-active {
-  transition: all 250ms ease-in-out;
+  transition: all var(--duration-normal) var(--var(--var(--ease-in-out)));
 }
 
 .step-fade-enter-from {
@@ -1315,14 +1315,14 @@ const handleCreateAgent = async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px;
+  padding: 14px var(--space-4);
   background: var(--task-red-soft);
   border: 1px solid var(--task-red-border);
   border-radius: var(--radius-lg, 10px);
   color: var(--lumi-danger);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
   box-shadow: 0 4px 12px var(--overlay-subtle);
 }
 
@@ -1350,10 +1350,10 @@ const handleCreateAgent = async () => {
   height: 24px;
   border: none;
   background: rgba(239, 68, 68, 0.1);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   color: var(--lumi-danger);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--duration-leave) var(--ease-default);
 }
 
 .notification-close:hover {
@@ -1362,11 +1362,11 @@ const handleCreateAgent = async () => {
 }
 
 .toast-slide-enter-active {
-  transition: all 0.3s ease-out;
+  transition: all var(--duration-normal) var(--var(--var(--ease-out-expo)-expo)-expo);
 }
 
 .toast-slide-leave-active {
-  transition: all 0.2s ease-in;
+  transition: all var(--duration-leave) ease-in;
 }
 
 .toast-slide-enter-from {

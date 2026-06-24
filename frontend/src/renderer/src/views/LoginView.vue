@@ -4,8 +4,6 @@ import { useRouter } from 'vue-router'
 import {
   Monitor,
   ArrowRight,
-  Eye,
-  EyeOff,
   Mail,
   Lock,
   User,
@@ -14,6 +12,8 @@ import {
   ChevronRight,
 } from 'lucide-vue-next'
 import LumiBrandStar from '../components/common/LumiBrandStar.vue'
+import LumiButton from '../components/common/LumiButton.vue'
+import LumiInput from '../components/common/LumiInput.vue'
 
 const router = useRouter()
 
@@ -23,8 +23,6 @@ const loginMode = ref<LoginMode>('select')
 
 const localForm = ref({ username: '', password: '' })
 const onlineForm = ref({ email: '', password: '' })
-const showLocalPassword = ref(false)
-const showOnlinePassword = ref(false)
 const isLoggingIn = ref(false)
 const loginError = ref('')
 
@@ -86,7 +84,7 @@ const goBack = () => {
           </div>
 
           <div class="login-options animate-slide-up">
-            <button class="login-option-card" @click="loginMode = 'local'">
+            <button class="login-option-card lumi-card" @click="loginMode = 'local'">
               <div class="option-icon local-icon">
                 <Monitor :size="22" />
               </div>
@@ -97,7 +95,7 @@ const goBack = () => {
               <ChevronRight :size="16" class="option-arrow" />
             </button>
 
-            <button class="login-option-card" @click="loginMode = 'online'">
+            <button class="login-option-card lumi-card" @click="loginMode = 'online'">
               <div class="option-icon online-icon">
                 <Cloud :size="22" />
               </div>
@@ -110,19 +108,21 @@ const goBack = () => {
           </div>
 
           <div class="login-footer animate-fade-in">
-            <button class="skip-link" @click="handleSkip">
-              跳过，直接使用
-              <ArrowRight :size="14" />
-            </button>
+            <LumiButton variant="ghost" size="sm" @click="handleSkip">
+              <span class="skip-content">
+                跳过，直接使用
+                <ArrowRight :size="14" />
+              </span>
+            </LumiButton>
           </div>
         </div>
 
         <!-- Local Login Form -->
         <div v-else-if="loginMode === 'local'" key="local" class="login-card">
           <div class="form-header">
-            <button class="back-btn" @click="goBack">
+            <LumiButton variant="ghost" icon-only size="sm" aria-label="返回" @click="goBack">
               <ArrowRight :size="16" style="transform: rotate(180deg)" />
-            </button>
+            </LumiButton>
             <div class="form-header-info">
               <div class="form-header-icon local-icon">
                 <Monitor :size="18" />
@@ -140,15 +140,16 @@ const goBack = () => {
                 <User :size="14" />
                 用户名
               </label>
-              <div class="field-input-wrap">
-                <input
-                  v-model="localForm.username"
-                  type="text"
-                  class="field-input"
-                  placeholder="输入用户名"
-                  autocomplete="username"
-                />
-              </div>
+              <LumiInput
+                v-model="localForm.username"
+                type="text"
+                placeholder="输入用户名"
+                autocomplete="username"
+              >
+                <template #icon>
+                  <User :size="16" />
+                </template>
+              </LumiInput>
             </div>
 
             <div class="form-field">
@@ -156,46 +157,49 @@ const goBack = () => {
                 <Lock :size="14" />
                 密码
               </label>
-              <div class="field-input-wrap">
-                <input
-                  v-model="localForm.password"
-                  :type="showLocalPassword ? 'text' : 'password'"
-                  class="field-input"
-                  placeholder="输入密码"
-                  autocomplete="current-password"
-                />
-                <button type="button" class="eye-btn" @click="showLocalPassword = !showLocalPassword">
-                  <Eye v-if="!showLocalPassword" :size="14" />
-                  <EyeOff v-else :size="14" />
-                </button>
-              </div>
+              <LumiInput
+                v-model="localForm.password"
+                type="password"
+                placeholder="输入密码"
+                autocomplete="current-password"
+              >
+                <template #icon>
+                  <Lock :size="16" />
+                </template>
+              </LumiInput>
             </div>
 
-            <button
+            <LumiButton
               type="submit"
-              :class="['submit-btn', { disabled: !canLocalLogin || isLoggingIn }]"
+              variant="primary"
+              size="lg"
+              block
+              :loading="isLoggingIn"
               :disabled="!canLocalLogin || isLoggingIn"
             >
-              <LogIn v-if="!isLoggingIn" :size="16" />
-              <span v-if="isLoggingIn" class="spin-dot"></span>
-              <span>{{ isLoggingIn ? '登录中...' : '登录' }}</span>
-            </button>
+              <template #icon v-if="!isLoggingIn">
+                <LogIn :size="16" />
+              </template>
+              {{ isLoggingIn ? '登录中...' : '登录' }}
+            </LumiButton>
           </form>
 
           <div class="form-footer">
-            <button class="skip-link" @click="handleSkip">
-              跳过，直接使用
-              <ArrowRight :size="14" />
-            </button>
+            <LumiButton variant="ghost" size="sm" @click="handleSkip">
+              <span class="skip-content">
+                跳过，直接使用
+                <ArrowRight :size="14" />
+              </span>
+            </LumiButton>
           </div>
         </div>
 
         <!-- Online Login Form -->
         <div v-else-if="loginMode === 'online'" key="online" class="login-card">
           <div class="form-header">
-            <button class="back-btn" @click="goBack">
+            <LumiButton variant="ghost" icon-only size="sm" aria-label="返回" @click="goBack">
               <ArrowRight :size="16" style="transform: rotate(180deg)" />
-            </button>
+            </LumiButton>
             <div class="form-header-info">
               <div class="form-header-icon online-icon">
                 <Cloud :size="18" />
@@ -213,15 +217,16 @@ const goBack = () => {
                 <Mail :size="14" />
                 邮箱
               </label>
-              <div class="field-input-wrap">
-                <input
-                  v-model="onlineForm.email"
-                  type="email"
-                  class="field-input"
-                  placeholder="输入邮箱地址"
-                  autocomplete="email"
-                />
-              </div>
+              <LumiInput
+                v-model="onlineForm.email"
+                type="email"
+                placeholder="输入邮箱地址"
+                autocomplete="email"
+              >
+                <template #icon>
+                  <Mail :size="16" />
+                </template>
+              </LumiInput>
             </div>
 
             <div class="form-field">
@@ -229,19 +234,16 @@ const goBack = () => {
                 <Lock :size="14" />
                 密码
               </label>
-              <div class="field-input-wrap">
-                <input
-                  v-model="onlineForm.password"
-                  :type="showOnlinePassword ? 'text' : 'password'"
-                  class="field-input"
-                  placeholder="输入密码"
-                  autocomplete="current-password"
-                />
-                <button type="button" class="eye-btn" @click="showOnlinePassword = !showOnlinePassword">
-                  <Eye v-if="!showOnlinePassword" :size="14" />
-                  <EyeOff v-else :size="14" />
-                </button>
-              </div>
+              <LumiInput
+                v-model="onlineForm.password"
+                type="password"
+                placeholder="输入密码"
+                autocomplete="current-password"
+              >
+                <template #icon>
+                  <Lock :size="16" />
+                </template>
+              </LumiInput>
             </div>
 
             <Transition name="toast-slide">
@@ -250,22 +252,28 @@ const goBack = () => {
               </div>
             </Transition>
 
-            <button
+            <LumiButton
               type="submit"
-              :class="['submit-btn', { disabled: !canOnlineLogin || isLoggingIn }]"
+              variant="primary"
+              size="lg"
+              block
+              :loading="isLoggingIn"
               :disabled="!canOnlineLogin || isLoggingIn"
             >
-              <Cloud v-if="!isLoggingIn" :size="16" />
-              <span v-if="isLoggingIn" class="spin-dot"></span>
-              <span>{{ isLoggingIn ? '连接中...' : '在线登录' }}</span>
-            </button>
+              <template #icon v-if="!isLoggingIn">
+                <Cloud :size="16" />
+              </template>
+              {{ isLoggingIn ? '连接中...' : '在线登录' }}
+            </LumiButton>
           </form>
 
           <div class="form-footer">
-            <button class="skip-link" @click="handleSkip">
-              跳过，直接使用
-              <ArrowRight :size="14" />
-            </button>
+            <LumiButton variant="ghost" size="sm" @click="handleSkip">
+              <span class="skip-content">
+                跳过，直接使用
+                <ArrowRight :size="14" />
+              </span>
+            </LumiButton>
           </div>
         </div>
       </Transition>
@@ -282,7 +290,7 @@ const goBack = () => {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: var(--workspace-bg);
+  background: var(--bg);
 }
 
 .login-bg {
@@ -297,13 +305,14 @@ const goBack = () => {
   border-radius: 50%;
   filter: blur(120px);
   opacity: 0.15;
-  animation: orb-float 18s ease-in-out infinite;
+  animation: orb-float 18s var(--ease-in-out) infinite;
+  will-change: transform, opacity;
 }
 
 .login-orb-1 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
+  background: radial-gradient(circle, var(--lumi-brand-glow), transparent 70%);
   top: -120px;
   right: -80px;
   animation-delay: 0s;
@@ -312,7 +321,7 @@ const goBack = () => {
 .login-orb-2 {
   width: 350px;
   height: 350px;
-  background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
+  background: radial-gradient(circle, var(--lumi-brand-glow), transparent 70%);
   bottom: -80px;
   left: -60px;
   animation-delay: -9s;
@@ -329,75 +338,76 @@ const goBack = () => {
   z-index: 1;
   width: 100%;
   max-width: 400px;
-  padding: 40px;
+  padding: var(--space-8);
 }
 
 .login-card {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: var(--space-7);
 }
 
 .login-brand {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   text-align: center;
 }
 
 .login-logo {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  background: var(--lumi-primary-gradient-soft);
+  width: var(--space-10);
+  height: var(--space-10);
+  border-radius: var(--radius-lg);
+  background: var(--lumi-brand-gradient-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 24px var(--lumi-primary-glow);
+  box-shadow: var(--shadow-md);
 }
 
 .login-title {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: var(--text-4xl);
+  font-weight: var(--font-bold);
   letter-spacing: -0.3px;
 }
 
 .login-subtitle {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
 }
 
 .login-options {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
-.login-option-card {
+.login-option-card.lumi-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-card);
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-  text-align: left;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   width: 100%;
+  text-align: left;
+  cursor: pointer;
 }
 
-.login-option-card:hover {
-  border-color: var(--lumi-primary-border);
-  box-shadow: 0 2px 12px var(--lumi-primary-light);
+.login-option-card.lumi-card:hover {
+  border-color: var(--lumi-brand-border);
+  box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
+}
+
+.login-option-card.lumi-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .option-icon {
   width: 42px;
   height: 42px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -405,12 +415,12 @@ const goBack = () => {
 }
 
 .local-icon {
-  background: linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(20, 126, 188, 0.04));
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-gradient-soft);
+  color: var(--lumi-brand);
 }
 
 .online-icon {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(139, 92, 246, 0.04));
+  background: linear-gradient(135deg, var(--task-purple-soft), var(--task-purple-bg));
   color: var(--task-purple);
 }
 
@@ -422,84 +432,56 @@ const goBack = () => {
 }
 
 .option-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text);
 }
 
 .option-desc {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .option-arrow {
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: transform 200ms ease-in-out;
+  transition: transform var(--transition-fast);
 }
 
-.login-option-card:hover .option-arrow {
-  color: var(--lumi-primary);
+.login-option-card.lumi-card:hover .option-arrow {
+  color: var(--lumi-brand);
   transform: translateX(3px);
 }
 
-.login-footer {
+.login-footer,
+.form-footer {
   display: flex;
   justify-content: center;
 }
 
-.skip-link {
-  display: flex;
+.skip-content {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  font-size: 13px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 200ms ease-in-out;
-  border-radius: var(--radius-full);
-}
-
-.skip-link:hover {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
+  gap: var(--space-1);
 }
 
 /* Form Header */
 .form-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.back-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 200ms ease-in-out;
-  flex-shrink: 0;
-}
-
-.back-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--text-secondary);
+  gap: var(--space-3);
 }
 
 .form-header-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .form-header-icon {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -507,13 +489,13 @@ const goBack = () => {
 }
 
 .form-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--text);
 }
 
 .form-desc {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   margin-top: 1px;
 }
@@ -522,7 +504,7 @@ const goBack = () => {
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .form-field {
@@ -535,8 +517,8 @@ const goBack = () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
   color: var(--text-secondary);
 }
 
@@ -544,122 +526,25 @@ const goBack = () => {
   color: var(--text-muted);
 }
 
-.field-input-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-card);
-  transition: all 300ms ease-in-out;
-}
-
-.field-input-wrap:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-light);
-}
-
-.field-input {
-  flex: 1;
-  padding: 11px 0;
-  font-size: 14px;
-  color: var(--text-primary);
-  background: transparent;
-  border: none;
-  outline: none;
-}
-
-.field-input::placeholder {
-  color: var(--text-muted);
-}
-
-.eye-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 200ms ease-in-out;
-  flex-shrink: 0;
-}
-
-.eye-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--text-primary);
-}
-
 .form-error {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   background: var(--lumi-accent-light);
   color: var(--lumi-accent);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.submit-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 24px;
-  border-radius: var(--radius-lg);
-  font-size: 14px;
-  font-weight: 600;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-  margin-top: 4px;
-}
-
-.submit-btn:hover:not(.disabled) {
-  background: var(--lumi-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px var(--lumi-primary-border);
-}
-
-.submit-btn:active:not(.disabled) {
-  transform: translateY(0) scale(0.98);
-}
-
-.submit-btn.disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.spin-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: var(--text-inverse);
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.form-footer {
-  display: flex;
-  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
 }
 
 /* Transitions */
 .login-step-enter-active {
-  transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: all var(--duration-slow) var(--ease-out-expo);
 }
 
 .login-step-leave-active {
-  transition: all 0.2s cubic-bezier(0.4, 0, 1, 1);
+  transition: all var(--duration-leave) var(--ease-default);
 }
 
 .login-step-enter-from {
@@ -673,11 +558,11 @@ const goBack = () => {
 }
 
 .toast-slide-enter-active {
-  transition: all 0.3s ease-out;
+  transition: all var(--duration-normal) var(--ease-default);
 }
 
 .toast-slide-leave-active {
-  transition: all 0.2s ease-in;
+  transition: all var(--duration-leave) var(--ease-default);
 }
 
 .toast-slide-enter-from {
@@ -691,19 +576,36 @@ const goBack = () => {
 }
 
 .animate-brand-enter {
-  animation: brand-enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: brand-enter var(--duration-enter) var(--ease-out-expo) both;
 }
 
 .animate-slide-up {
-  animation: lumi-slide-up 0.5s ease-out 0.15s both;
+  animation: lumi-slide-up var(--duration-slow) var(--ease-default) 0.15s both;
 }
 
 .animate-fade-in {
-  animation: lumi-fade-in 0.4s ease-out 0.3s both;
+  animation: lumi-fade-in var(--duration-enter) var(--ease-default) 0.3s both;
 }
 
 @keyframes brand-enter {
   0% { opacity: 0; transform: translateY(24px) scale(0.95); filter: blur(3px); }
   100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+button:focus-visible,
+.lumi-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 </style>

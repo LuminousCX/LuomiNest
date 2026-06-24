@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { X, Globe, Loader2, Moon } from 'lucide-vue-next'
+import { X, Globe, Loader2, Moon, Plus } from 'lucide-vue-next'
 
 interface Tab {
   id: string
@@ -50,7 +50,7 @@ function getTabTooltip(tab: Tab): string {
         </button>
       </div>
       <button class="tab-add" @click="emit('add')">
-        <span>+</span>
+        <Plus :size="16" />
       </button>
     </div>
   </div>
@@ -62,7 +62,7 @@ function getTabTooltip(tab: Tab): string {
   background: var(--bg-secondary);
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   position: relative;
 }
 
@@ -70,8 +70,8 @@ function getTabTooltip(tab: Tab): string {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 8px;
-  right: 8px;
+  left: var(--space-2);
+  right: var(--space-2);
   height: 1px;
   background: var(--divider-soft);
 }
@@ -91,15 +91,15 @@ function getTabTooltip(tab: Tab): string {
 .tab-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
   min-width: 120px;
   max-width: 200px;
   height: 30px;
   background: var(--border-light);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.15s ease-in-out, transform 0.15s ease-in-out;
+  transition: background var(--transition-fast), transform var(--transition-fast);
 }
 
 .tab-item:hover {
@@ -161,7 +161,7 @@ function getTabTooltip(tab: Tab): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
@@ -182,7 +182,7 @@ function getTabTooltip(tab: Tab): string {
   cursor: pointer;
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .tab-close:hover {
@@ -201,8 +201,8 @@ function getTabTooltip(tab: Tab): string {
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  font-size: 16px;
-  transition: all 0.2s ease-in-out;
+  font-size: var(--text-xl);
+  transition: all var(--transition-fast);
 }
 
 .tab-add:hover {

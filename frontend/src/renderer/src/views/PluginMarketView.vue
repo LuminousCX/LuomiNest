@@ -1,4 +1,4 @@
-﻿﻿﻿﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Puzzle, SlidersHorizontal, X } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
@@ -7,6 +7,8 @@ import MarketplaceCategories from '../components/marketplace/MarketplaceCategori
 import MarketplaceFilters from '../components/marketplace/MarketplaceFilters.vue'
 import MarketplaceCard from '../components/marketplace/MarketplaceCard.vue'
 import MarketplaceBanner from '../components/marketplace/MarketplaceBanner.vue'
+import LumiEmptyState from '../components/common/LumiEmptyState.vue'
+import LumiButton from '../components/common/LumiButton.vue'
 import type { MarketplaceFilter } from '../types/marketplace'
 
 const store = useMarketplaceStore()
@@ -107,13 +109,18 @@ const resetFilters = () => {
             />
           </div>
 
-          <div v-else class="empty-state">
-            <Puzzle :size="48" />
-            <p>没有找到匹配的插件</p>
-            <button class="reset-btn" @click="resetFilters">
-              重置筛选
-            </button>
-          </div>
+          <LumiEmptyState
+            v-else
+            icon="search"
+            title="没有找到匹配的插件"
+            description="尝试调整筛选条件或搜索关键词"
+          >
+            <template #action>
+              <LumiButton variant="outline" size="sm" @click="resetFilters">
+                重置筛选
+              </LumiButton>
+            </template>
+          </LumiEmptyState>
         </div>
       </main>
     </div>
@@ -132,38 +139,38 @@ const resetFilters = () => {
 .market-header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 24px 28px 0;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-7) 0;
 }
 
 .header-icon-wrap {
   width: 52px;
   height: 52px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(20, 126, 188, 0.1), rgba(98, 169, 200, 0.1));
+  background: var(--lumi-brand-gradient-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .page-title {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .page-subtitle {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: calc(var(--space-1) / 2);
 }
 
 .market-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 28px;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-7);
 }
 
 .market-toolbar > :deep(.market-search) {
@@ -180,29 +187,29 @@ const resetFilters = () => {
 .market-sidebar {
   width: 210px;
   flex-shrink: 0;
-  padding: 16px 12px 16px 20px;
+  padding: var(--space-4) var(--space-3) var(--space-4) var(--space-5);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   background: var(--workspace-sidebar);
   border-right: 1px solid var(--workspace-border);
 }
 
 .sidebar-filter-toggle {
-  padding-top: 4px;
+  padding-top: var(--space-1);
   border-top: 1px solid var(--workspace-border);
 }
 
 .filter-toggle-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
-  padding: 10px 14px;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
   background: var(--workspace-panel);
   border: 1px solid var(--workspace-border);
@@ -210,39 +217,39 @@ const resetFilters = () => {
 }
 
 .filter-toggle-btn:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  background: rgba(20, 126, 188, 0.06);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-subtle);
 }
 
 .filter-toggle-btn.active {
-  background: var(--lumi-primary-light);
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
 }
 
 .sidebar-filters {
-  padding-top: 8px;
+  padding-top: var(--space-2);
 }
 
 .filters-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .filters-header span {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .close-filters {
-  width: 24px;
-  height: 24px;
+  width: var(--space-6);
+  height: var(--space-6);
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -259,71 +266,53 @@ const resetFilters = () => {
 .market-main {
   flex: 1;
   overflow-y: auto;
-  padding: 0 28px 28px 16px;
+  padding: 0 var(--space-7) var(--space-7) var(--space-4);
   min-width: 0;
 }
 
 .items-section {
-  margin-top: 20px;
+  margin-top: var(--space-5);
 }
 
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .section-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .section-count {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .items-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 60px 0;
-  color: var(--text-muted);
-}
-
-.empty-state p {
-  font-size: 14px;
-}
-
-.reset-btn {
-  padding: 8px 20px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
-  transition: all var(--transition-fast);
-}
-
-.reset-btn:hover {
-  background: var(--lumi-primary);
-  color: white;
+  gap: var(--space-4);
 }
 
 .filter-slide-enter-active {
-  animation: lumi-fade-in 0.25s ease-in-out;
+  animation: lumi-fade-in var(--duration-normal) var(--ease-out-expo);
 }
 
 .filter-slide-leave-active {
-  animation: lumi-fade-in 0.15s ease-in-out reverse;
+  animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-header,
+  .market-toolbar,
+  .filter-toggle-btn,
+  .close-filters {
+    animation: none;
+    transition: none;
+  }
 }
 </style>

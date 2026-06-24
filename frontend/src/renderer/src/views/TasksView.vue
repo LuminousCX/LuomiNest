@@ -1502,7 +1502,7 @@ const timeSlotOptions = [
   height: 100%;
   background: var(--workspace-bg);
   overflow-y: auto;
-  padding: 20px 28px;
+  padding: var(--space-5) 28px;
   color: var(--text-primary);
 }
 
@@ -1510,8 +1510,8 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--workspace-border);
 }
 
@@ -1524,19 +1524,19 @@ const timeSlotOptions = [
 .project-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .indicator-dot {
   width: 9px;
   height: 9px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
-  box-shadow: 0 0 8px var(--lumi-primary-glow);
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--lumi-brand), var(--lumi-brand-soft));
+  box-shadow: 0 0 8px var(--lumi-brand-glow);
 }
 
 .page-title {
-  font-size: 18px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.2px;
@@ -1550,7 +1550,7 @@ const timeSlotOptions = [
 .avatar {
   width: 26px;
   height: 26px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid var(--workspace-bg);
   margin-left: -7px;
   object-fit: cover;
@@ -1577,7 +1577,7 @@ const timeSlotOptions = [
 }
 
 .project-path {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   margin-left: 2px;
 }
@@ -1585,7 +1585,7 @@ const timeSlotOptions = [
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .search-box {
@@ -1594,19 +1594,19 @@ const timeSlotOptions = [
 
 .search-box input {
   width: 200px;
-  padding: 7px 30px 7px 32px;
+  padding: 7px 30px 7px var(--space-7);
   border-radius: var(--radius-md);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--text-sm);
   outline: none;
   transition: all var(--transition-fast);
 }
 
 .search-box input:focus {
-  border-color: var(--lumi-primary-light);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand-light);
+  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
 }
 
 .search-box input::placeholder {
@@ -1621,7 +1621,7 @@ const timeSlotOptions = [
 
 .mic-icon {
   position: absolute;
-  right: 8px;
+  right: var(--space-2);
   color: var(--text-muted);
   cursor: pointer;
 }
@@ -1647,13 +1647,13 @@ const timeSlotOptions = [
 }
 
 .luomi-create-btn {
-  background: var(--lumi-primary);
-  border-color: var(--lumi-primary);
+  background: var(--lumi-brand);
+  border-color: var(--lumi-brand);
   color: var(--text-inverse);
 }
 
 .luomi-create-btn:hover {
-  background: var(--lumi-primary-hover);
+  background: var(--lumi-brand-hover);
   color: var(--text-inverse);
 }
 
@@ -1663,7 +1663,7 @@ const timeSlotOptions = [
   right: 7px;
   width: 5px;
   height: 5px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--lumi-accent);
 }
 
@@ -1676,7 +1676,7 @@ const timeSlotOptions = [
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -1707,9 +1707,9 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 12px;
+  padding: 6px var(--space-3);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-muted);
   background: transparent;
@@ -1731,14 +1731,14 @@ const timeSlotOptions = [
 .view-indicator {
   width: 5px;
   height: 5px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--task-yellow);
 }
 
 .toolbar-center {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .date-nav {
@@ -1767,7 +1767,7 @@ const timeSlotOptions = [
 }
 
 .current-date {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -1776,21 +1776,21 @@ const timeSlotOptions = [
 .today-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 5px 10px;
   border-radius: var(--radius-md);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .today-btn:hover {
-  background: var(--lumi-primary);
-  border-color: var(--lumi-primary);
+  background: var(--lumi-brand);
+  border-color: var(--lumi-brand);
   color: var(--text-inverse);
 }
 
@@ -1798,14 +1798,14 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .update-avatar {
   width: 18px;
   height: 18px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   object-fit: cover;
 }
 
@@ -1816,36 +1816,36 @@ const timeSlotOptions = [
 .calendar-header-row {
   display: grid;
   grid-template-columns: 48px repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 12px;
-  padding: 0 4px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-1);
 }
 
 .time-label-col {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 8px;
+  padding-bottom: var(--space-2);
 }
 
 .calendar-day-header {
   text-align: center;
-  padding: 12px 0 8px;
+  padding: var(--space-3) 0 var(--space-2);
 }
 
 .calendar-day-header.is-today .date-number {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .date-number {
-  font-size: 28px;
+  font-size: var(--text-4xl);
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1;
 }
 
 .date-weekday {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   margin-top: 2px;
 }
@@ -1853,7 +1853,7 @@ const timeSlotOptions = [
 .calendar-body {
   display: grid;
   grid-template-columns: 48px repeat(4, 1fr);
-  gap: 12px;
+  gap: var(--space-3);
   min-height: 320px;
 }
 
@@ -1861,15 +1861,15 @@ const timeSlotOptions = [
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 8px 0;
+  padding: var(--space-2) 0;
 }
 
 .time-slot-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   font-weight: 500;
   line-height: 1;
-  padding: 4px 0;
+  padding: var(--space-1) 0;
 }
 
 .calendar-columns {
@@ -1880,7 +1880,7 @@ const timeSlotOptions = [
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 4px 0;
+  padding: var(--space-1) 0;
 }
 
 .column-tasks {
@@ -1895,7 +1895,7 @@ const timeSlotOptions = [
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 14px var(--space-4);
   transition: all var(--transition-normal);
   overflow: hidden;
 }
@@ -1913,8 +1913,8 @@ const timeSlotOptions = [
 .card-accent-bar {
   position: absolute;
   top: 0;
-  left: 16px;
-  right: 16px;
+  left: var(--space-4);
+  right: var(--space-4);
   height: 3px;
   border-radius: 0 0 3px 3px;
   background: var(--card-accent);
@@ -1926,7 +1926,7 @@ const timeSlotOptions = [
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 10px;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .card-tags {
@@ -1936,7 +1936,7 @@ const timeSlotOptions = [
 }
 
 .card-tag {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   padding: 2px 7px;
   border-radius: 5px;
@@ -1947,7 +1947,7 @@ const timeSlotOptions = [
 }
 
 .card-priority {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 5px;
@@ -1972,7 +1972,7 @@ const timeSlotOptions = [
 .card-menu {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1989,15 +1989,15 @@ const timeSlotOptions = [
 }
 
 .card-title {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
   line-height: 1.35;
 }
 
 .card-time {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   margin-bottom: 10px;
 }
@@ -2005,7 +2005,7 @@ const timeSlotOptions = [
 .progress-mini {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin-bottom: 10px;
 }
 
@@ -2021,11 +2021,11 @@ const timeSlotOptions = [
   height: 100%;
   border-radius: 2px;
   background: linear-gradient(90deg, var(--card-accent), var(--progress-shimmer));
-  transition: width 0.5s ease-in-out;
+  transition: width var(--duration-enter) var(--var(--var(--ease-in-out)));
 }
 
 .progress-text {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -2050,7 +2050,7 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   transition: all var(--transition-fast);
 }
@@ -2075,9 +2075,9 @@ const timeSlotOptions = [
 
 .completion-info > span {
   display: block;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .completion-bar {
@@ -2091,7 +2091,7 @@ const timeSlotOptions = [
   height: 100%;
   border-radius: 2px;
   background: var(--card-accent);
-  transition: width 0.5s ease-in-out;
+  transition: width var(--duration-enter) var(--var(--var(--ease-in-out)));
 }
 
 .card-bottom {
@@ -2105,19 +2105,19 @@ const timeSlotOptions = [
 .bottom-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .due-date {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .status-badge {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   padding: 2px 7px;
   border-radius: 5px;
@@ -2147,7 +2147,7 @@ const timeSlotOptions = [
 .assignee-avatar {
   width: 22px;
   height: 22px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid var(--workspace-card);
   margin-left: -7px;
   object-fit: cover;
@@ -2159,10 +2159,10 @@ const timeSlotOptions = [
 
 .card-actions {
   position: absolute;
-  top: 12px;
+  top: var(--space-3);
   right: 38px;
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   opacity: 0;
   transition: opacity var(--transition-fast);
 }
@@ -2170,7 +2170,7 @@ const timeSlotOptions = [
 .action-chip {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2213,15 +2213,15 @@ const timeSlotOptions = [
 }
 
 .add-task-placeholder:hover {
-  border-color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 .add-task-inner {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -2231,8 +2231,8 @@ const timeSlotOptions = [
 .add-circle {
   width: 42px;
   height: 42px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--lumi-brand), var(--lumi-brand-soft));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2247,7 +2247,7 @@ const timeSlotOptions = [
 }
 
 .add-text {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -2272,7 +2272,7 @@ const timeSlotOptions = [
 }
 
 .week-day-header {
-  padding: 12px 8px;
+  padding: var(--space-3) var(--space-2);
   text-align: center;
   border-right: 1px solid var(--workspace-border);
   transition: background var(--transition-fast);
@@ -2283,7 +2283,7 @@ const timeSlotOptions = [
 }
 
 .week-day-header.is-today {
-  background: var(--lumi-primary-light);
+  background: var(--lumi-brand-light);
 }
 
 .week-day-header.is-weekend {
@@ -2291,25 +2291,25 @@ const timeSlotOptions = [
 }
 
 .week-day-weekday {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   font-weight: 500;
 }
 
 .week-day-date {
-  font-size: 22px;
+  font-size: var(--text-3xl);
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
 }
 
 .week-day-date.today-dot {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .week-day-count {
-  font-size: 10px;
-  color: var(--lumi-primary);
+  font-size: var(--text-2xs);
+  color: var(--lumi-brand);
   font-weight: 600;
   margin-top: 2px;
 }
@@ -2332,7 +2332,7 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   font-weight: 500;
   border-bottom: 1px solid var(--workspace-border);
@@ -2352,7 +2352,7 @@ const timeSlotOptions = [
 }
 
 .week-column.is-today {
-  background: var(--lumi-primary-light);
+  background: var(--lumi-brand-light);
 }
 
 .week-column.is-weekend {
@@ -2381,10 +2381,10 @@ const timeSlotOptions = [
   left: 0;
   right: 0;
   z-index: 2;
-  padding: 4px 6px;
+  padding: var(--space-1) 6px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   pointer-events: none;
 }
 
@@ -2392,8 +2392,8 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   cursor: pointer;
@@ -2429,13 +2429,13 @@ const timeSlotOptions = [
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding-left: 4px;
+  padding-left: var(--space-1);
   flex: 1;
   min-width: 0;
 }
 
 .week-task-title {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -2444,7 +2444,7 @@ const timeSlotOptions = [
 }
 
 .week-task-time {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
@@ -2498,9 +2498,9 @@ const timeSlotOptions = [
 }
 
 .month-weekday-cell {
-  padding: 10px 8px;
+  padding: 10px var(--space-2);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-muted);
   border-right: 1px solid var(--workspace-border);
@@ -2517,7 +2517,7 @@ const timeSlotOptions = [
 
 .month-cell {
   min-height: 100px;
-  padding: 8px;
+  padding: var(--space-2);
   border-right: 1px solid var(--workspace-border);
   border-bottom: 1px solid var(--workspace-border);
   cursor: pointer;
@@ -2533,7 +2533,7 @@ const timeSlotOptions = [
 }
 
 .month-cell.is-today {
-  background: var(--lumi-primary-light);
+  background: var(--lumi-brand-light);
 }
 
 .month-cell.is-weekend {
@@ -2552,28 +2552,28 @@ const timeSlotOptions = [
 }
 
 .month-cell-date {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .month-cell.is-today .month-cell-date {
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
   color: var(--text-inverse);
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .month-cell-count {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
   padding: 1px 6px;
   border-radius: 10px;
 }
@@ -2611,13 +2611,13 @@ const timeSlotOptions = [
 .month-task-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--card-accent);
   flex-shrink: 0;
 }
 
 .month-task-title {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -2626,8 +2626,8 @@ const timeSlotOptions = [
 }
 
 .month-task-more {
-  font-size: 10px;
-  color: var(--lumi-primary);
+  font-size: var(--text-2xs);
+  color: var(--lumi-brand);
   font-weight: 500;
   padding: 2px 6px;
   cursor: pointer;
@@ -2641,7 +2641,7 @@ const timeSlotOptions = [
 .month-slide-up-leave-active,
 .month-slide-down-enter-active,
 .month-slide-down-leave-active {
-  transition: all 0.28s ease-in-out;
+  transition: all var(--duration-slow) var(--var(--var(--ease-in-out)));
 }
 
 .month-slide-up-enter-from {
@@ -2667,7 +2667,7 @@ const timeSlotOptions = [
 .stats-overview {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  gap: var(--space-3);
   margin-bottom: 18px;
 }
 
@@ -2675,7 +2675,7 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px;
+  padding: 14px var(--space-4);
   border-radius: var(--radius-lg);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
@@ -2705,20 +2705,20 @@ const timeSlotOptions = [
 }
 
 .pill-content strong {
-  font-size: 20px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1;
 }
 
 .pill-content span {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .pill-trend {
   margin-left: auto;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 700;
 }
 
@@ -2731,7 +2731,7 @@ const timeSlotOptions = [
 }
 
 .insight-pill {
-  padding: 14px 16px;
+  padding: 14px var(--space-4);
   border-radius: var(--radius-lg);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
@@ -2745,13 +2745,13 @@ const timeSlotOptions = [
 }
 
 .insight-head span:first-child {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .insight-growth {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--task-green);
   font-weight: 600;
 }
@@ -2769,22 +2769,22 @@ const timeSlotOptions = [
 }
 
 .insight-cell small {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .insight-cell strong {
-  font-size: 17px;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .insight-cell em {
   font-style: normal;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--task-green);
   font-weight: 500;
-  margin-left: 4px;
+  margin-left: var(--space-1);
 }
 
 .bottom-toolbar {
@@ -2792,7 +2792,7 @@ const timeSlotOptions = [
   align-items: center;
   justify-content: space-between;
   margin-top: auto;
-  padding-top: 16px;
+  padding-top: var(--space-4);
   border-top: 1px solid var(--workspace-border);
 }
 
@@ -2806,12 +2806,12 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 7px 12px;
+  padding: 7px var(--space-3);
   border-radius: var(--radius-md);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -2827,14 +2827,14 @@ const timeSlotOptions = [
 }
 
 .filter-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .color-dot {
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid transparent;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -2888,7 +2888,7 @@ const timeSlotOptions = [
   width: auto;
   padding: 0 10px;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
 }
 
@@ -2897,14 +2897,14 @@ const timeSlotOptions = [
   color: var(--task-red);
   padding: 1px 5px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
 }
 
 .luomi-modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--z-modal);
   background: var(--overlay-backdrop);
   backdrop-filter: var(--glass-blur);
   display: flex;
@@ -2928,15 +2928,15 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px 16px;
+  padding: var(--space-5) var(--space-6) var(--space-4);
   border-bottom: 1px solid var(--workspace-border);
 }
 
 .luomi-modal-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 16px;
+  gap: var(--space-2);
+  font-size: var(--text-xl);
   font-weight: 700;
   color: var(--text-primary);
 }
@@ -2961,19 +2961,19 @@ const timeSlotOptions = [
 }
 
 .luomi-modal-body {
-  padding: 20px 24px;
+  padding: var(--space-5) var(--space-6);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .luomi-modal-footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 16px 24px;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--workspace-border);
 }
 
@@ -2987,26 +2987,26 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-secondary);
 }
 
 .luomi-form-input {
-  padding: 9px 12px;
+  padding: 9px var(--space-3);
   border-radius: var(--radius-md);
   background: var(--workspace-bg);
   border: 1px solid var(--workspace-border);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-base);
   outline: none;
   transition: all var(--transition-fast);
   font-family: inherit;
 }
 
 .luomi-form-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
 }
 
 .luomi-form-input::placeholder {
@@ -3014,12 +3014,12 @@ const timeSlotOptions = [
 }
 
 .luomi-form-textarea {
-  padding: 9px 12px;
+  padding: 9px var(--space-3);
   border-radius: var(--radius-md);
   background: var(--workspace-bg);
   border: 1px solid var(--workspace-border);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-base);
   outline: none;
   transition: all var(--transition-fast);
   font-family: inherit;
@@ -3028,8 +3028,8 @@ const timeSlotOptions = [
 }
 
 .luomi-form-textarea:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
 }
 
 .luomi-form-textarea::placeholder {
@@ -3037,12 +3037,12 @@ const timeSlotOptions = [
 }
 
 .luomi-form-select {
-  padding: 9px 12px;
+  padding: 9px var(--space-3);
   border-radius: var(--radius-md);
   background: var(--workspace-bg);
   border: 1px solid var(--workspace-border);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-base);
   outline: none;
   transition: all var(--transition-fast);
   font-family: inherit;
@@ -3055,13 +3055,13 @@ const timeSlotOptions = [
 }
 
 .luomi-form-select:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
 }
 
 .luomi-form-row {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .luomi-form-half {
@@ -3070,13 +3070,13 @@ const timeSlotOptions = [
 
 .luomi-form-select-group {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .luomi-select-chip {
-  padding: 6px 12px;
+  padding: 6px var(--space-3);
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   border: 1px solid var(--workspace-border);
   background: var(--workspace-bg);
@@ -3127,7 +3127,7 @@ const timeSlotOptions = [
 
 .luomi-color-picker {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .luomi-color-option {
@@ -3157,7 +3157,7 @@ const timeSlotOptions = [
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 8px 10px;
+  padding: var(--space-2) 10px;
   border-radius: var(--radius-md);
   background: var(--workspace-bg);
   border: 1px solid var(--workspace-border);
@@ -3167,19 +3167,19 @@ const timeSlotOptions = [
 }
 
 .luomi-tags-input:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
 }
 
 .luomi-tag-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  gap: var(--space-1);
+  padding: 3px var(--space-2);
   border-radius: 5px;
   background: var(--task-purple-soft);
   color: var(--task-purple);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -3204,7 +3204,7 @@ const timeSlotOptions = [
   background: transparent;
   border: none;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--text-sm);
   outline: none;
   font-family: inherit;
 }
@@ -3227,8 +3227,8 @@ const timeSlotOptions = [
   appearance: none;
   width: 16px;
   height: 16px;
-  border-radius: 50%;
-  background: var(--lumi-primary);
+  border-radius: var(--radius-full);
+  background: var(--lumi-brand);
   border: 2px solid var(--surface);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
@@ -3238,9 +3238,9 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   border: 1px solid var(--workspace-border);
   cursor: pointer;
@@ -3263,13 +3263,13 @@ const timeSlotOptions = [
 }
 
 .luomi-btn-primary {
-  background: var(--lumi-primary);
-  border-color: var(--lumi-primary);
+  background: var(--lumi-brand);
+  border-color: var(--lumi-brand);
   color: var(--text-inverse);
 }
 
 .luomi-btn-primary:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
+  background: var(--lumi-brand-hover);
 }
 
 .luomi-btn-danger {
@@ -3284,11 +3284,11 @@ const timeSlotOptions = [
 }
 
 .luomi-modal-enter-active {
-  transition: all 0.25s ease-in-out;
+  transition: all var(--duration-normal) var(--var(--var(--ease-in-out)));
 }
 
 .luomi-modal-leave-active {
-  transition: all 0.2s ease-in-out;
+  transition: all var(--duration-leave) var(--var(--var(--ease-in-out)));
 }
 
 .luomi-modal-enter-from {
@@ -3355,7 +3355,7 @@ const timeSlotOptions = [
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
   overflow: hidden;
 }
 
@@ -3363,23 +3363,23 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 4px;
+  padding: 0 var(--space-1);
 }
 
 .scheduled-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 16px;
+  gap: var(--space-2);
+  font-size: var(--text-xl);
   font-weight: 600;
-  color: var(--workspace-text);
+  color: var(--text);
 }
 
 .scheduled-count {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
-  color: var(--workspace-text-muted);
-  padding: 2px 8px;
+  color: var(--text-muted);
+  padding: 2px var(--space-2);
   background: var(--workspace-hover);
   border-radius: 10px;
 }
@@ -3388,18 +3388,18 @@ const timeSlotOptions = [
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  font-size: 12px;
-  color: var(--workspace-text-muted);
+  padding: 6px var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
+  transition: all var(--duration-leave) var(--var(--var(--ease-in-out)));
 }
 
 .scheduled-refresh-btn:hover {
-  color: var(--workspace-text);
+  color: var(--text);
   background: var(--workspace-hover);
 }
 
@@ -3409,18 +3409,18 @@ const timeSlotOptions = [
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  color: var(--workspace-text-muted);
+  gap: var(--space-2);
+  color: var(--text-muted);
 }
 
 .scheduled-empty p {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
-  margin: 8px 0 0;
+  margin: var(--space-2) 0 0;
 }
 
 .scheduled-empty span {
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .scheduled-list {
@@ -3429,19 +3429,19 @@ const timeSlotOptions = [
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-right: 4px;
+  padding-right: var(--space-1);
 }
 
 .scheduled-card {
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
-  border-radius: 12px;
-  padding: 14px 16px;
-  transition: border-color 0.2s ease-in-out;
+  border-radius: var(--radius-md);
+  padding: 14px var(--space-4);
+  transition: border-color var(--duration-leave) var(--var(--var(--ease-in-out)));
 }
 
 .scheduled-card.status-running {
-  border-color: var(--lumi-primary, #147EBC);
+  border-color: var(--lumi-brand, var(--lumi-brand));
 }
 
 .scheduled-card.status-failed {
@@ -3449,13 +3449,13 @@ const timeSlotOptions = [
 }
 
 .scheduled-card.status-completed {
-  border-color: var(--lumi-success, #22c55e);
+  border-color: var(--lumi-success, var(--lumi-success));
 }
 
 .scheduled-card-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .scheduled-status-icon {
@@ -3469,11 +3469,11 @@ const timeSlotOptions = [
 
 .scheduled-status-icon .spin-animation {
   animation: spin 1s linear infinite;
-  color: var(--lumi-primary, #147EBC);
+  color: var(--lumi-brand, var(--lumi-brand));
 }
 
 .status-completed .scheduled-status-icon {
-  color: var(--lumi-success, #22c55e);
+  color: var(--lumi-success, var(--lumi-success));
 }
 
 .status-failed .scheduled-status-icon {
@@ -3481,7 +3481,7 @@ const timeSlotOptions = [
 }
 
 .status-pending .scheduled-status-icon {
-  color: var(--workspace-text-muted);
+  color: var(--text-muted);
 }
 
 .scheduled-card-info {
@@ -3490,18 +3490,18 @@ const timeSlotOptions = [
 }
 
 .scheduled-card-title {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
-  color: var(--workspace-text);
-  margin-bottom: 4px;
+  color: var(--text);
+  margin-bottom: var(--space-1);
 }
 
 .scheduled-card-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 11px;
-  color: var(--workspace-text-muted);
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .scheduled-type {
@@ -3517,12 +3517,12 @@ const timeSlotOptions = [
   justify-content: center;
   width: 28px;
   height: 28px;
-  color: var(--workspace-text-muted);
+  color: var(--text-muted);
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--duration-fast) var(--var(--var(--ease-in-out)));
 }
 
 .scheduled-delete-btn:hover {
@@ -3531,23 +3531,23 @@ const timeSlotOptions = [
 }
 
 .scheduled-card-desc {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--workspace-text-muted);
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
   line-height: 1.5;
 }
 
 .scheduled-card-result,
 .scheduled-card-error {
   margin-top: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 12px;
+  padding: var(--space-2) 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
 }
 
 .scheduled-card-result {
   background: rgba(34, 197, 94, 0.08);
-  border-left: 2px solid var(--lumi-success, #22c55e);
+  border-left: 2px solid var(--lumi-success, var(--lumi-success));
 }
 
 .scheduled-card-error {
@@ -3559,13 +3559,13 @@ const timeSlotOptions = [
 .scheduled-error-label {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .scheduled-result-label {
-  color: var(--lumi-success, #22c55e);
+  color: var(--lumi-success, var(--lumi-success));
 }
 
 .scheduled-error-label {
@@ -3574,7 +3574,7 @@ const timeSlotOptions = [
 
 .scheduled-result-content,
 .scheduled-error-content {
-  color: var(--workspace-text);
+  color: var(--text);
   line-height: 1.5;
   max-height: 120px;
   overflow-y: auto;

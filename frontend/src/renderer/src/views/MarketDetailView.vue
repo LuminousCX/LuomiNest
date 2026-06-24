@@ -11,6 +11,8 @@ import { useMarketplaceStore } from '../stores/marketplace'
 import { useRepoSourceStore } from '../stores/repo-source'
 import { useApi } from '../composables/useApi'
 import MarketplaceReviews from '../components/marketplace/MarketplaceReviews.vue'
+import LumiEmptyState from '../components/common/LumiEmptyState.vue'
+import LumiButton from '../components/common/LumiButton.vue'
 import type { MarketplaceType, MarketplaceItem, InstallProgress } from '../types/marketplace'
 import { formatDateRelative, formatFileSize, formatDownloadCount } from '../utils/format'
 import { ITEM_ICON_MAP, DEFAULT_ICON } from '../utils/marketplace-icons'
@@ -303,7 +305,7 @@ onUnmounted(() => {
               v-for="tag in item.tags"
               :key="tag.id"
               class="detail-tag"
-              :style="{ '--tag-color': tag.color || '#6b7280' }"
+              :style="{ '--tag-color': tag.color || 'var(--text-muted)' }"
             >{{ tag.name }}</span>
           </div>
 
@@ -313,10 +315,12 @@ onUnmounted(() => {
             <div v-if="installError" class="install-error">
               <AlertCircle :size="14" />
               <span>{{ installError }}</span>
-              <button class="retry-btn" @click="handleRetry">
-                <RefreshCw :size="12" />
+              <LumiButton variant="outline" size="sm" @click="handleRetry">
+                <template #icon>
+                  <RefreshCw :size="12" />
+                </template>
                 {{ errorType === 'uninstall' ? '重试卸载' : '重试安装' }}
-              </button>
+              </LumiButton>
             </div>
 
             <!-- 下载进度条 -->
@@ -326,7 +330,7 @@ onUnmounted(() => {
             >
               <div class="progress-info">
                 <span class="progress-message">
-                  <Loader2 :size="13" class="spin-icon" />
+                  <Loader2 :size="13" class="spin-animation" />
                   {{ downloadProgress.message || (downloadProgress.status === 'downloading' ? '正在下载...' : '正在安装...') }}
                 </span>
                 <span class="progress-stats">
@@ -356,7 +360,7 @@ onUnmounted(() => {
                 @click="handleUninstall"
               >
                 <Trash2 v-if="!uninstallLoading" :size="14" />
-                <Loader2 v-else :size="14" class="spin-icon" />
+                <Loader2 v-else :size="14" class="spin-animation" />
                 <span>{{ uninstallLoading ? '卸载中...' : '卸载' }}</span>
               </button>
             </template>
@@ -364,7 +368,7 @@ onUnmounted(() => {
             <!-- 安装中/下载中 -->
             <template v-else-if="installStatus === 'downloading' || installStatus === 'installing' || installStatus === 'updating'">
               <button class="action-btn operating-btn" disabled>
-                <Loader2 :size="14" class="spin-icon" />
+                <Loader2 :size="14" class="spin-animation" />
                 <span>{{ downloadProgress?.message || '处理中...' }}</span>
               </button>
             </template>
@@ -385,7 +389,7 @@ onUnmounted(() => {
                 @click="handleInstall"
               >
                 <Download v-if="!installLoading" :size="14" />
-                <Loader2 v-else :size="14" class="spin-icon" />
+                <Loader2 v-else :size="14" class="spin-animation" />
                 <span>{{ installLoading ? '请求中...' : '安装' }}</span>
               </button>
             </template>
@@ -562,8 +566,15 @@ onUnmounted(() => {
   </div>
 
   <div v-else class="detail-not-found">
-    <p>未找到该商品</p>
-    <button class="back-btn" @click="goBack">返回市场</button>
+    <LumiEmptyState
+      icon="file"
+      title="未找到该商品"
+      description="该商品可能已被移除或链接有误"
+    >
+      <template #action>
+        <button class="back-btn" @click="goBack">返回市场</button>
+      </template>
+    </LumiEmptyState>
   </div>
 </template>
 
@@ -579,7 +590,7 @@ onUnmounted(() => {
 .detail-topbar {
   display: flex;
   align-items: center;
-  padding: 12px 24px;
+  padding: var(--space-3) var(--space-6);
   border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
@@ -587,10 +598,10 @@ onUnmounted(() => {
 .back-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
   transition: all var(--transition-fast);
 }
@@ -603,19 +614,19 @@ onUnmounted(() => {
 .detail-content {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 28px;
+  padding: var(--space-6) var(--space-7);
 }
 
 /* Hero */
 .detail-hero {
   display: flex;
-  gap: 24px;
-  margin-bottom: 28px;
+  gap: var(--space-6);
+  margin-bottom: var(--space-7);
 }
 
 .hero-icon {
-  width: 80px;
-  height: 80px;
+  width: calc(var(--space-8) * 2);
+  height: calc(var(--space-8) * 2);
   border-radius: var(--radius-xl);
   background: var(--workspace-panel);
   display: flex;
@@ -633,60 +644,60 @@ onUnmounted(() => {
 .hero-title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 4px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
 }
 
 .hero-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .verified-badge {
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 8px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-full);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
 }
 
 .hero-author {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .hero-summary {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
-  margin-bottom: 14px;
+  margin-bottom: var(--space-3);
 }
 
 .hero-stats {
   display: flex;
-  gap: 20px;
-  margin-bottom: 14px;
+  gap: var(--space-5);
+  margin-bottom: var(--space-3);
 }
 
 .hero-stat {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 13px;
+  gap: var(--space-1);
+  font-size: var(--text-base);
 }
 
 .hero-stat .star-icon {
-  color: var(--lumi-star);
+  color: var(--lumi-warning);
 }
 
 .hero-like-btn {
   cursor: pointer;
-  padding: 2px 8px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   transition: all var(--transition-fast);
   color: var(--text-muted);
@@ -702,27 +713,27 @@ onUnmounted(() => {
 }
 
 .stat-value {
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .stat-label {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .hero-tags {
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .detail-tag {
-  padding: 3px 10px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
   background: color-mix(in srgb, var(--tag-color) 10%, transparent);
   color: var(--tag-color);
 }
@@ -731,18 +742,18 @@ onUnmounted(() => {
 .hero-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 
 .action-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 18px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-5);
   border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   transition: all var(--transition-fast);
 }
 
@@ -778,44 +789,21 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-.spin-icon {
-  animation: lumi-spin 1s linear infinite;
-}
-
-@keyframes lumi-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 /* 错误提示 */
 .install-error {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-md);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--lumi-accent);
   background: var(--lumi-accent-light);
   width: 100%;
 }
 
-.retry-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.install-error .lumi-btn {
   margin-left: auto;
-  padding: 3px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--lumi-accent);
-  transition: all var(--transition-fast);
-}
-
-.retry-btn:hover {
-  background: var(--lumi-accent);
-  color: var(--text-inverse);
 }
 
 /* 下载进度条 */
@@ -823,7 +811,7 @@ onUnmounted(() => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .progress-info {
@@ -835,35 +823,35 @@ onUnmounted(() => {
 .progress-message {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
 .progress-stats {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 11px;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .progress-speed {
   color: var(--lumi-primary);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .progress-track {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--border-light);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
+  border-radius: var(--radius-xs);
+  transition: width var(--transition-slow);
 }
 
 .progress-fill.downloading {
@@ -880,20 +868,20 @@ onUnmounted(() => {
 
 /* 截图区域 */
 .detail-screenshots {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 
 .section-title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .screenshots-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .screenshot-thumb {
@@ -923,8 +911,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
-  color: white;
+  background: var(--overlay-bg);
+  color: var(--text-inverse);
   opacity: 0;
   transition: opacity var(--transition-fast);
 }
@@ -937,12 +925,12 @@ onUnmounted(() => {
 .screenshot-modal {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.85);
-  animation: lumi-fade-in 0.2s ease-out;
+  background: var(--overlay-backdrop);
+  animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo);
 }
 
 .modal-content {
@@ -963,33 +951,33 @@ onUnmounted(() => {
 
 .modal-close {
   position: absolute;
-  top: -40px;
+  top: calc(var(--space-8) * -1);
   right: 0;
-  width: 32px;
-  height: 32px;
+  width: var(--space-7);
+  height: var(--space-7);
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--text-inverse);
   transition: all var(--transition-fast);
 }
 
 .modal-close:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: color-mix(in srgb, var(--text-inverse) 20%, transparent);
 }
 
 .modal-caption {
-  margin-top: 12px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  margin-top: var(--space-3);
+  font-size: var(--text-base);
+  color: color-mix(in srgb, var(--text-inverse) 70%, transparent);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .modal-counter {
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: 0.5;
 }
 
@@ -1005,39 +993,39 @@ onUnmounted(() => {
 }
 
 .nav-btn {
-  width: 36px;
-  height: 36px;
+  width: var(--nav-item-height);
+  height: var(--nav-item-height);
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-inverse);
+  background: color-mix(in srgb, var(--text-inverse) 15%, transparent);
   pointer-events: auto;
   transition: all var(--transition-fast);
 }
 
 .nav-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: color-mix(in srgb, var(--text-inverse) 30%, transparent);
 }
 
 /* Tabs */
 .detail-tabs {
   display: flex;
-  gap: 4px;
-  padding: 4px;
+  gap: var(--space-1);
+  padding: var(--space-1);
   background: var(--workspace-panel);
   border-radius: var(--radius-lg);
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
 }
 
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 20px;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-5);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-muted);
   transition: all var(--transition-fast);
@@ -1060,23 +1048,23 @@ onUnmounted(() => {
 .tab-content {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-6);
 }
 
 .info-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .info-title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .info-text {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-secondary);
   line-height: 1.7;
 }
@@ -1084,43 +1072,43 @@ onUnmounted(() => {
 .info-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .info-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px;
+  gap: var(--space-1);
+  padding: var(--space-3);
   background: var(--workspace-panel);
   border-radius: var(--radius-md);
 }
 
 .info-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .info-value {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
 }
 
 .info-links {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .info-link {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--lumi-primary);
   background: var(--lumi-primary-light);
   transition: all var(--transition-fast);
@@ -1135,7 +1123,7 @@ onUnmounted(() => {
 .versions-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .version-item {
@@ -1150,7 +1138,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 14px 18px;
+  padding: var(--space-3) var(--space-5);
   cursor: pointer;
   transition: background var(--transition-fast);
 }
@@ -1162,37 +1150,37 @@ onUnmounted(() => {
 .version-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .version-number {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .version-current {
-  padding: 2px 8px;
+  padding: calc(var(--space-1) / 2) var(--space-2);
   border-radius: var(--radius-full);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
   background: var(--lumi-success-light);
   color: var(--lumi-success);
 }
 
 .version-date {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .version-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-4);
 }
 
 .version-size {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -1201,29 +1189,29 @@ onUnmounted(() => {
 }
 
 .version-changelog {
-  padding: 0 18px 14px;
-  font-size: 13px;
+  padding: 0 var(--space-5) var(--space-3);
+  font-size: var(--text-base);
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: var(--leading-normal);
 }
 
 .empty-versions {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 40px 0;
+  gap: var(--space-4);
+  padding: var(--space-10) 0;
   color: var(--text-muted);
 }
 
 .empty-versions p {
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 /* Transitions */
 .expand-enter-active,
 .expand-leave-active {
-  transition: all 0.2s ease-in-out;
+  transition: all var(--duration-fast) var(--ease-in-out);
   overflow: hidden;
 }
 
@@ -1236,19 +1224,19 @@ onUnmounted(() => {
 }
 
 .tab-switch-enter-active {
-  animation: lumi-fade-in 0.2s ease-out;
+  animation: lumi-fade-in var(--duration-normal) var(--ease-out-expo);
 }
 
 .tab-switch-leave-active {
-  animation: lumi-fade-in 0.1s ease-out reverse;
+  animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
 }
 
 .modal-enter-active {
-  animation: lumi-fade-in 0.2s ease-out;
+  animation: lumi-fade-in var(--duration-normal) var(--ease-out-expo);
 }
 
 .modal-leave-active {
-  animation: lumi-fade-in 0.15s ease-out reverse;
+  animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
 }
 
 .detail-not-found {
@@ -1257,11 +1245,38 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  gap: 16px;
+  gap: var(--space-4);
   color: var(--text-muted);
 }
 
 .detail-not-found .back-btn {
   color: var(--lumi-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back-btn,
+  .action-btn,
+  .screenshot-thumb,
+  .screenshot-overlay,
+  .modal-close,
+  .nav-btn,
+  .tab-btn,
+  .info-link,
+  .version-header,
+  .expand-enter-active,
+  .expand-leave-active,
+  .tab-switch-enter-active,
+  .tab-switch-leave-active,
+  .modal-enter-active,
+  .modal-leave-active {
+    animation: none;
+    transition: none;
+  }
+
+  .screenshot-thumb:hover,
+  .nav-btn:hover,
+  .modal-close:hover {
+    transform: none;
+  }
 }
 </style>

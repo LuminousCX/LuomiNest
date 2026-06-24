@@ -28,28 +28,28 @@ const emit = defineEmits<{
 
 <style scoped>
 .suggested-questions {
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 
 .suggestions-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .suggestion-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
   color: var(--text-secondary);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
+  background: var(--surface);
+  border: 1px solid var(--border);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
@@ -57,9 +57,9 @@ const emit = defineEmits<{
 }
 
 .suggestion-btn:hover {
-  color: var(--lumi-primary, #147EBC);
-  background: var(--lumi-primary-light, rgba(20, 126, 188, 0.08));
-  border-color: var(--lumi-primary, #147EBC);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
+  border-color: var(--lumi-brand);
   transform: translateY(-1px);
   box-shadow: var(--shadow-xs);
 }

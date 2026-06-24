@@ -2,7 +2,7 @@
 setlocal EnableDelayedExpansion
 
 echo ========================================
-echo  LuomiNest Backend Build Script v2.2
+echo  LuomiNest Backend Build Script v3.0
 echo  PyInstaller Executable Generator
 echo ========================================
 echo.
@@ -40,17 +40,30 @@ echo.
 echo [3/5] Activating virtual environment and installing dependencies...
 call .venv\Scripts\activate.bat
 
+REM Configure pip mirror for faster downloads in China
+pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple >nul 2>&1
+pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn >nul 2>&1
+
 echo Upgrading pip...
-python -m pip install --upgrade pip --quiet 2>nul
+python -m pip install --upgrade pip --quiet
 
 echo Installing PyInstaller...
 pip install pyinstaller --quiet
 
-echo Installing project dependencies (development mode)...
-pip install -e ".[dev,voice]" --quiet 2>nul
+echo Installing project dependencies (dev mode)...
+REM Retry up to 3 times for network resilience
+set RETRY_COUNT=0
+:INSTALL_RETRY
+pip install -e ".[dev]" --quiet
 if %ERRORLEVEL% neq 0 (
-    echo [WARNING] Some dev dependencies may have failed, trying without dev extras...
-    pip install -e ".[voice]" --quiet
+    set /a RETRY_COUNT+=1
+    if !RETRY_COUNT! lss 3 (
+        echo [WARNING] Install attempt !RETRY_COUNT! failed, retrying...
+        timeout /t 5 /nobreak >nul
+        goto INSTALL_RETRY
+    )
+    echo [WARNING] Dev dependencies failed after retries, installing base only...
+    pip install -e . --quiet
 )
 
 echo.
@@ -73,13 +86,13 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
-if not exist "dist\luominest-backend.exe" (
+if not exist "dist\luominest-backend\luominest-backend.exe" (
     echo.
-    echo [ERROR] Build output not found: dist\luominest-backend.exe
+    echo [ERROR] Build output not found: dist\luominest-backend\luominest-backend.exe
     exit /b 1
 )
 
-for %%A in ("dist\luominest-backend.exe") do set SIZE=%%~zA
+for %%A in ("dist\luominest-backend\luominest-backend.exe") do set SIZE=%%~zA
 set /a SIZEMB=!SIZE! / 1048576
 
 echo.
@@ -87,7 +100,7 @@ echo ========================================
 echo  Build completed successfully!
 echo ========================================
 echo.
-echo Output: dist\luominest-backend.exe
+echo Output: dist\luominest-backend\luominest-backend.exe
 echo Size: !SIZEMB! MB
 echo.
 echo Next steps:

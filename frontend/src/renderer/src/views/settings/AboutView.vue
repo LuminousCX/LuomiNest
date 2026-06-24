@@ -167,8 +167,8 @@ const techStacks = [
 }
 
 .profile-logo {
-  width: 80px;
-  height: 80px;
+  width: 120px;
+  height: 120px;
   border-radius: var(--radius-lg);
   object-fit: cover;
   flex-shrink: 0;

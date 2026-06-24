@@ -11,6 +11,10 @@ import {
 import { usePlatformStore } from '../../stores/platform'
 import { useModelStore } from '../../stores/model'
 import type { PlatformAdapterType, PlatformInstance, PlatformModelConfig } from '../../types'
+import LumiCard from '../../components/common/LumiCard.vue'
+import LumiButton from '../../components/common/LumiButton.vue'
+import LumiInput from '../../components/common/LumiInput.vue'
+import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 
 const store = usePlatformStore()
 const modelStore = useModelStore()
@@ -122,7 +126,7 @@ const getStatusColor = (status: string) => {
   switch (status) {
     case 'running': return 'var(--lumi-success)'
     case 'stopped': return 'var(--text-muted)'
-    case 'error': return 'var(--lumi-error, #ef4444)'
+    case 'error': return 'var(--lumi-danger)'
     default: return 'var(--text-muted)'
   }
 }
@@ -423,48 +427,47 @@ onMounted(() => {
         <p class="header-desc">第三方平台对话浏览 — 管理平台连接、查看对话与握手日志</p>
       </div>
       <div class="header-actions">
-        <button class="action-btn secondary" @click="handleRefresh" :disabled="store.loading">
-          <RefreshCw :size="15" :class="{ spinning: store.loading }" />
-          <span>刷新</span>
-        </button>
-        <button class="action-btn primary" @click="showAddDialog = true">
-          <Plus :size="15" />
-          <span>添加平台</span>
-        </button>
+        <LumiButton variant="secondary" size="sm" :disabled="store.loading" @click="handleRefresh">
+          <template #icon><RefreshCw :size="15" :class="{ spinning: store.loading }" /></template>
+          刷新
+        </LumiButton>
+        <LumiButton variant="primary" size="sm" @click="showAddDialog = true">
+          <template #icon><Plus :size="15" /></template>
+          添加平台
+        </LumiButton>
       </div>
     </div>
 
     <div class="platform-stats">
-      <div class="stat-card" style="animation-delay: 0.05s">
+      <LumiCard class="stat-card" :style="{ animationDelay: '0.05s' }" padding="md">
         <div class="stat-icon"><Server :size="18" /></div>
         <div class="stat-info">
           <span class="stat-value">{{ store.stats.totalPlatforms }}</span>
           <span class="stat-label">已接入平台</span>
         </div>
-      </div>
-      <div class="stat-card" style="animation-delay: 0.10s">
+      </LumiCard>
+      <LumiCard class="stat-card" :style="{ animationDelay: '0.10s' }" padding="md">
         <div class="stat-icon active"><Zap :size="18" /></div>
         <div class="stat-info">
           <span class="stat-value">{{ store.stats.activeConnections }}</span>
           <span class="stat-label">活跃连接</span>
         </div>
-      </div>
-      <div class="stat-card" style="animation-delay: 0.15s">
+      </LumiCard>
+      <LumiCard class="stat-card" :style="{ animationDelay: '0.15s' }" padding="md">
         <div class="stat-icon"><Shield :size="18" /></div>
         <div class="stat-info">
           <span class="stat-value">{{ store.stats.totalMessages }}</span>
           <span class="stat-label">消息总量</span>
         </div>
-      </div>
+      </LumiCard>
     </div>
 
     <div class="platform-content">
       <div class="platform-list-panel">
         <div class="panel-toolbar">
-          <div class="search-box">
-            <Search :size="14" class="search-icon" />
-            <input v-model="searchQuery" type="text" placeholder="搜索平台..." class="search-input" />
-          </div>
+          <LumiInput v-model="searchQuery" type="search" placeholder="搜索平台..." class="search-input">
+            <template #icon><Search :size="14" /></template>
+          </LumiInput>
           <div class="filter-group">
             <button :class="['filter-btn', { active: activeFilter === 'all' }]" @click="activeFilter = 'all'">全部</button>
             <button :class="['filter-btn', { active: activeFilter === 'active' }]" @click="activeFilter = 'active'">活跃</button>
@@ -473,11 +476,14 @@ onMounted(() => {
         </div>
 
         <div class="platform-cards">
-          <div
+          <LumiCard
             v-for="(p, idx) in filteredInstances"
             :key="p.id"
-            :class="['platform-card', { disconnected: p.status !== 'running', selected: store.selectedInstanceId === p.id }]"
+            class="platform-card"
+            :class="{ disconnected: p.status !== 'running', selected: store.selectedInstanceId === p.id }"
             :style="{ animationDelay: (0.08 + idx * 0.04) + 's' }"
+            padding="md"
+            hoverable
             @click="handleSelectInstance(p)"
           >
             <div class="card-top">
@@ -493,41 +499,64 @@ onMounted(() => {
             <div class="card-bottom">
               <span class="card-messages">{{ p.messageCount }} 条消息</span>
               <div class="card-actions">
-                <button
-                  class="card-action-btn"
-                  :class="p.status === 'running' ? 'stop' : 'start'"
+                <LumiButton
+                  size="sm"
+                  icon-only
+                  :variant="p.status === 'running' ? 'danger-ghost' : 'ghost'"
+                  :class="['card-action-btn', p.status === 'running' ? 'stop' : 'start']"
+                  :aria-label="p.status === 'running' ? '停止' : '启动'"
                   @click.stop="handleToggleStatus(p)"
-                  :title="p.status === 'running' ? '停止' : '启动'"
                 >
-                  <Square v-if="p.status === 'running'" :size="12" />
-                  <Play v-else :size="12" />
-                </button>
-                <button class="card-action-btn config" @click.stop="openConfigDialog(p)" title="配置">
-                  <Settings :size="12" />
-                </button>
-                <button class="card-action-btn delete" @click.stop="handleDelete(p)" title="删除">
-                  <Trash2 :size="12" />
-                </button>
+                  <template #icon>
+                    <Square v-if="p.status === 'running'" :size="12" />
+                    <Play v-else :size="12" />
+                  </template>
+                </LumiButton>
+                <LumiButton
+                  size="sm"
+                  icon-only
+                  variant="ghost"
+                  class="card-action-btn config"
+                  aria-label="配置"
+                  @click.stop="openConfigDialog(p)"
+                >
+                  <template #icon><Settings :size="12" /></template>
+                </LumiButton>
+                <LumiButton
+                  size="sm"
+                  icon-only
+                  variant="danger-ghost"
+                  class="card-action-btn delete"
+                  aria-label="删除"
+                  @click.stop="handleDelete(p)"
+                >
+                  <template #icon><Trash2 :size="12" /></template>
+                </LumiButton>
               </div>
             </div>
             <div v-if="p.errorMessage" class="card-error">
               <AlertCircle :size="11" />
               <span>{{ p.errorMessage }}</span>
             </div>
-          </div>
+          </LumiCard>
 
-          <div v-if="filteredInstances.length === 0" class="empty-state">
-            <Globe :size="32" class="empty-icon" />
-            <span class="empty-text">暂无平台实例</span>
-            <button class="empty-btn" @click="showAddDialog = true">
-              <Plus :size="14" />
-              添加平台
-            </button>
-          </div>
+          <LumiEmptyState
+            v-if="filteredInstances.length === 0"
+            icon="folder"
+            title="暂无平台实例"
+            size="md"
+          >
+            <template #action>
+              <LumiButton variant="primary" size="sm" @click="showAddDialog = true">
+                <template #icon><Plus :size="14" /></template>
+                添加平台
+              </LumiButton>
+            </template>
+          </LumiEmptyState>
         </div>
       </div>
 
-      <div class="detail-panel">
+      <LumiCard class="detail-panel" padding="none">
         <div class="detail-tabs">
           <button :class="['detail-tab', { active: rightTab === 'conversations' }]" @click="rightTab = 'conversations'">
             <MessageSquare :size="14" />
@@ -547,9 +576,17 @@ onMounted(() => {
                 <button :class="['log-filter-btn', { active: store.logLevelFilter === 'warning' }]" @click="handleLogLevelFilter('warning')">警告</button>
                 <button :class="['log-filter-btn', { active: store.logLevelFilter === 'success' }]" @click="handleLogLevelFilter('success')">成功</button>
               </div>
-              <button v-if="store.selectedInstanceId" class="tab-action-btn" @click="handleClearLogs" title="清空日志">
-                <Trash :size="13" />
-              </button>
+              <LumiButton
+                v-if="store.selectedInstanceId"
+                size="sm"
+                icon-only
+                variant="ghost"
+                class="tab-action-btn"
+                aria-label="清空日志"
+                @click="handleClearLogs"
+              >
+                <template #icon><Trash :size="13" /></template>
+              </LumiButton>
             </template>
           </div>
         </div>
@@ -581,10 +618,11 @@ onMounted(() => {
                   <span class="conv-item-count">{{ c.messageCount }} 条</span>
                 </div>
               </div>
-              <div v-if="store.selectedConversations.length === 0" class="detail-empty">
-                <Eye :size="24" />
-                <span>{{ store.selectedInstanceId ? '暂无对话记录' : '选择平台查看对话记录' }}</span>
-              </div>
+              <LumiEmptyState
+                :icon="store.selectedInstanceId ? MessageSquare : Eye"
+                :title="store.selectedInstanceId ? '暂无对话记录' : '选择平台查看对话记录'"
+                size="md"
+              />
             </div>
             <div class="detail-notice">
               <Eye :size="14" />
@@ -594,9 +632,16 @@ onMounted(() => {
 
           <div v-else class="conv-detail-pane">
             <div class="conv-detail-header">
-              <button class="back-btn" @click="handleBackToConversationList" title="返回对话列表">
-                <ChevronLeft :size="16" />
-              </button>
+              <LumiButton
+                size="sm"
+                icon-only
+                variant="ghost"
+                class="back-btn"
+                aria-label="返回对话列表"
+                @click="handleBackToConversationList"
+              >
+                <template #icon><ChevronLeft :size="16" /></template>
+              </LumiButton>
               <div class="conv-detail-title">
                 <span class="title-text">{{ store.selectedConversationDetail?.title || '对话详情' }}</span>
                 <span v-if="store.selectedConversationDetail" class="title-meta">
@@ -649,16 +694,20 @@ onMounted(() => {
                   </div>
                 </div>
               </div>
-              <div v-if="store.selectedConversationDetail.messages.length === 0" class="detail-empty">
-                <MessageSquare :size="24" />
-                <span>对话暂无消息</span>
-              </div>
+              <LumiEmptyState
+                v-if="store.selectedConversationDetail.messages.length === 0"
+                :icon="MessageSquare"
+                title="对话暂无消息"
+                size="md"
+              />
             </div>
 
-            <div v-else class="detail-empty">
-              <MessageSquare :size="24" />
-              <span>无法加载对话内容</span>
-            </div>
+            <LumiEmptyState
+              v-else
+              :icon="MessageSquare"
+              title="无法加载对话内容"
+              size="md"
+            />
           </div>
         </div>
 
@@ -712,17 +761,19 @@ onMounted(() => {
                 </template>
               </div>
             </div>
-            <div v-if="store.logs.length === 0" class="detail-empty">
-              <FileText :size="24" />
-              <span>{{ store.selectedInstanceId ? '暂无日志记录' : '选择平台查看日志' }}</span>
-            </div>
+            <LumiEmptyState
+              v-if="store.logs.length === 0"
+              :icon="FileText"
+              :title="store.selectedInstanceId ? '暂无日志记录' : '选择平台查看日志'"
+              size="md"
+            />
           </div>
           <div class="detail-notice">
             <FileText :size="14" />
             <span>平台日志 — 连接握手、消息收发、LLM 调用、异常详情（点击展开）</span>
           </div>
         </div>
-      </div>
+      </LumiCard>
     </div>
 
     <Teleport to="body">
@@ -730,7 +781,9 @@ onMounted(() => {
         <div class="dialog">
           <div class="dialog-header">
             <h2 class="dialog-title">添加平台</h2>
-            <button class="dialog-close" @click="closeAddDialog"><X :size="18" /></button>
+            <LumiButton size="sm" icon-only variant="ghost" class="dialog-close" aria-label="关闭" @click="closeAddDialog">
+              <template #icon><X :size="18" /></template>
+            </LumiButton>
           </div>
 
           <div v-if="!selectedAdapterType" class="dialog-body">
@@ -757,7 +810,7 @@ onMounted(() => {
           <div v-else class="dialog-body">
             <div class="form-group">
               <label class="form-label">平台名称</label>
-              <input v-model="newPlatformName" type="text" class="form-input" placeholder="输入平台实例名称" />
+              <LumiInput v-model="newPlatformName" type="text" placeholder="输入平台实例名称" />
             </div>
             <div class="form-group">
               <label class="form-label">平台类型</label>
@@ -771,10 +824,9 @@ onMounted(() => {
               <div class="config-fields">
                 <div v-for="(meta, key) in selectedAdapterType.configMetadata" :key="key" class="config-field">
                   <label class="config-field-label">{{ meta.label || key }}</label>
-                  <input
+                  <LumiInput
                     v-model="newPlatformConfig[key]"
                     :type="meta.type === 'password' ? 'password' : meta.type === 'number' ? 'number' : 'text'"
-                    class="form-input"
                     :placeholder="meta.label || key"
                   />
                 </div>
@@ -783,14 +835,15 @@ onMounted(() => {
           </div>
 
           <div class="dialog-footer">
-            <button class="dialog-btn cancel" @click="closeAddDialog">取消</button>
-            <button
+            <LumiButton variant="secondary" size="sm" @click="closeAddDialog">取消</LumiButton>
+            <LumiButton
               v-if="selectedAdapterType"
-              class="dialog-btn confirm"
-              @click="handleCreate"
+              variant="primary"
+              size="sm"
               :disabled="!newPlatformName.trim()"
-            >确认添加</button>
-            <button v-else class="dialog-btn confirm" @click="closeAddDialog">关闭</button>
+              @click="handleCreate"
+            >确认添加</LumiButton>
+            <LumiButton v-else variant="primary" size="sm" @click="closeAddDialog">关闭</LumiButton>
           </div>
         </div>
       </div>
@@ -799,7 +852,9 @@ onMounted(() => {
         <div class="dialog config-dialog">
           <div class="dialog-header">
             <h2 class="dialog-title">平台配置 - {{ editingInstance.name }}</h2>
-            <button class="dialog-close" @click="closeConfigDialog"><X :size="18" /></button>
+            <LumiButton size="sm" icon-only variant="ghost" class="dialog-close" aria-label="关闭" @click="closeConfigDialog">
+              <template #icon><X :size="18" /></template>
+            </LumiButton>
           </div>
           <div class="dialog-body">
             <div class="form-group">
@@ -885,23 +940,21 @@ onMounted(() => {
                   <div class="config-field-row">
                     <div class="config-field">
                       <label class="config-field-label">Temperature (空 = 继承)</label>
-                      <input
+                      <LumiInput
                         v-model.number="modelEditConfig.temperature"
                         type="number"
                         step="0.1"
                         min="0"
                         max="2"
-                        class="form-input"
                         placeholder="继承"
                       />
                     </div>
                     <div class="config-field">
                       <label class="config-field-label">Max Tokens (空 = 继承)</label>
-                      <input
+                      <LumiInput
                         v-model.number="modelEditConfig.maxTokens"
                         type="number"
                         min="1"
-                        class="form-input"
                         placeholder="继承"
                       />
                     </div>
@@ -924,7 +977,7 @@ onMounted(() => {
               <div class="config-fields">
                 <div v-for="(_val, key) in editConfig" :key="key" class="config-field">
                   <label class="config-field-label">{{ key }}</label>
-                  <input v-model="editConfig[key]" type="text" class="form-input" />
+                  <LumiInput v-model="editConfig[key]" type="text" />
                 </div>
               </div>
             </div>
@@ -934,8 +987,8 @@ onMounted(() => {
             </div>
           </div>
           <div class="dialog-footer">
-            <button class="dialog-btn cancel" @click="closeConfigDialog">取消</button>
-            <button class="dialog-btn confirm" @click="handleSaveConfig">保存配置</button>
+            <LumiButton variant="secondary" size="sm" @click="closeConfigDialog">取消</LumiButton>
+            <LumiButton variant="primary" size="sm" @click="handleSaveConfig">保存配置</LumiButton>
           </div>
         </div>
       </div>
@@ -948,8 +1001,8 @@ onMounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 24px 28px;
-  gap: 20px;
+  padding: var(--space-6) var(--space-7);
+  gap: var(--space-5);
   overflow-y: auto;
 }
 
@@ -960,56 +1013,20 @@ onMounted(() => {
 }
 
 .header-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .header-desc {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.action-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.action-btn.primary {
-  background: var(--lumi-primary);
-  color: white;
-}
-
-.action-btn.primary:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.action-btn.secondary {
-  background: var(--surface);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-
-.action-btn.secondary:hover {
-  background: var(--surface-hover);
+  gap: var(--space-2);
 }
 
 .spinning {
@@ -1023,27 +1040,23 @@ onMounted(() => {
 
 .platform-stats {
   display: flex;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .stat-card {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 20px;
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-  animation: content-fade-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+  gap: var(--space-3);
+  animation: content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
 .stat-icon {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1055,20 +1068,20 @@ onMounted(() => {
 }
 
 .stat-value {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .platform-content {
   flex: 1;
   display: flex;
-  gap: 16px;
+  gap: var(--space-4);
   min-height: 0;
 }
 
@@ -1077,50 +1090,28 @@ onMounted(() => {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .panel-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.search-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
-}
-
-.search-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
+  gap: var(--space-2);
 }
 
 .search-input {
-  flex: 1;
-  background: transparent;
-  font-size: 13px;
-  color: var(--text-primary);
-}
-
-.search-input::placeholder {
-  color: var(--text-muted);
+  width: 100%;
 }
 
 .filter-group {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .filter-btn {
-  padding: 5px 12px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   background: var(--surface);
   border: 1px solid var(--border-light);
@@ -1129,9 +1120,9 @@ onMounted(() => {
 }
 
 .filter-btn.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  border-color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+  border-color: var(--lumi-brand);
 }
 
 .platform-cards {
@@ -1139,27 +1130,22 @@ onMounted(() => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .platform-card {
-  padding: 14px 16px;
-  background: var(--surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
   cursor: pointer;
-  transition: all var(--transition-fast);
-  animation: content-fade-up 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: content-fade-up var(--duration-slow) var(--ease-default) both;
 }
 
 .platform-card:hover {
-  border-color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
   box-shadow: var(--shadow-glow-sm);
 }
 
 .platform-card.selected {
-  border-color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 .platform-card.disconnected {
@@ -1169,16 +1155,16 @@ onMounted(() => {
 .card-top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
 .card-icon {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-sm);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1201,13 +1187,13 @@ onMounted(() => {
 }
 
 .card-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .card-sync {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
@@ -1239,124 +1225,55 @@ onMounted(() => {
 }
 
 .card-messages {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .card-actions {
   display: flex;
-  gap: 4px;
-}
-
-.card-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  background: transparent;
-  color: var(--text-muted);
+  gap: var(--space-1);
 }
 
 .card-action-btn.start {
   color: var(--lumi-success);
 }
 
-.card-action-btn.start:hover {
-  background: var(--task-green-soft);
-}
-
-.card-action-btn.stop {
-  color: var(--lumi-danger);
-}
-
-.card-action-btn.stop:hover {
-  background: var(--task-red-soft);
+.card-action-btn.start:hover:not(:disabled) {
+  background: var(--lumi-success-light);
 }
 
 .card-action-btn.config {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
-.card-action-btn.config:hover {
-  background: var(--lumi-primary-light);
-}
-
-.card-action-btn.delete {
-  color: var(--text-muted);
-}
-
-.card-action-btn.delete:hover {
-  background: var(--task-red-soft);
-  color: var(--lumi-danger);
+.card-action-btn.config:hover:not(:disabled) {
+  background: var(--lumi-brand-light);
 }
 
 .card-error {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-top: 8px;
-  padding: 6px 8px;
-  background: var(--task-red-soft);
-  border-radius: 4px;
-  font-size: 11px;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--lumi-danger-light);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
   color: var(--lumi-danger);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px 20px;
-  color: var(--text-muted);
-}
-
-.empty-icon {
-  opacity: 0.4;
-}
-
-.empty-text {
-  font-size: 13px;
-}
-
-.empty-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  background: var(--lumi-primary);
-  color: white;
-  transition: all var(--transition-fast);
-}
-
-.empty-btn:hover {
-  background: var(--lumi-primary-hover);
 }
 
 .detail-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
   overflow: hidden;
 }
 
 .detail-tabs {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 8px 12px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border-light);
 }
 
@@ -1364,10 +1281,10 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 14px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -1379,42 +1296,43 @@ onMounted(() => {
 }
 
 .detail-tab.active {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 .tab-count {
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 4px;
+  font-size: var(--text-2xs);
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
   background: var(--border-light);
   color: var(--text-muted);
 }
 
 .detail-tab.active .tab-count {
-  background: var(--lumi-primary-glow);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-glow);
+  color: var(--lumi-brand);
 }
 
 .detail-tab-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .log-filter-group {
   display: flex;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .log-filter-btn {
-  padding: 3px 8px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 500;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
   background: transparent;
+  border: none;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -1424,24 +1342,16 @@ onMounted(() => {
 }
 
 .log-filter-btn.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .tab-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 4px;
   color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
 }
 
-.tab-action-btn:hover {
-  background: var(--task-red-soft);
+.tab-action-btn:hover:not(:disabled) {
+  background: var(--lumi-danger-light);
   color: var(--lumi-danger);
 }
 
@@ -1455,29 +1365,29 @@ onMounted(() => {
 .detail-badge {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 14px;
-  font-size: 11px;
-  font-weight: 500;
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   border-bottom: 1px solid var(--border-light);
 }
 
 .conv-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: var(--space-2);
 }
 
 .conv-item {
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   cursor: default;
   transition: background var(--transition-fast);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .conv-item:hover {
@@ -1491,66 +1401,56 @@ onMounted(() => {
 }
 
 .conv-item-platform {
-  font-size: 11px;
-  color: var(--lumi-primary);
-  font-weight: 500;
+  font-size: var(--text-xs);
+  color: var(--lumi-brand);
+  font-weight: var(--font-medium);
 }
 
 .conv-item-time {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .conv-item-title {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
 }
 
 .conv-item-preview {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.detail-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 60px 20px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
 .detail-notice {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 10px;
+  gap: var(--space-1);
+  padding: var(--space-2);
   background: var(--bg-secondary);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   border-top: 1px solid var(--border-light);
 }
 
 .log-list {
   flex: 1;
   overflow-y: auto;
-  padding: 6px;
-  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+  padding: var(--space-1);
+  font-family: var(--font-mono);
 }
 
 .log-entry {
-  padding: 8px 12px;
-  border-radius: 4px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-xs);
   margin-bottom: 2px;
   transition: background var(--transition-fast);
   border-left: 3px solid transparent;
+  cursor: pointer;
 }
 
 .log-entry:hover {
@@ -1558,7 +1458,7 @@ onMounted(() => {
 }
 
 .log-entry.log-info {
-  border-left-color: var(--lumi-primary);
+  border-left-color: var(--lumi-brand);
 }
 
 .log-entry.log-success {
@@ -1566,36 +1466,36 @@ onMounted(() => {
 }
 
 .log-entry.log-warning {
-  border-left-color: var(--lumi-amber);
+  border-left-color: var(--lumi-warning);
 }
 
 .log-entry.log-error {
   border-left-color: var(--lumi-danger);
-  background: var(--task-red-soft);
+  background: var(--lumi-danger-light);
 }
 
 .log-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin-bottom: 3px;
 }
 
 .log-level {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 3px;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-bold);
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
   letter-spacing: 0.5px;
 }
 
 .log-level.info {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .log-level.success {
-  background: var(--task-green-soft);
+  background: var(--lumi-success-light);
   color: var(--lumi-success);
 }
 
@@ -1605,45 +1505,32 @@ onMounted(() => {
 }
 
 .log-level.error {
-  background: var(--task-red-soft);
+  background: var(--lumi-danger-light);
   color: var(--lumi-danger);
 }
 
 .log-event {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .log-time {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   margin-left: auto;
 }
 
 .log-message {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
   padding-left: 2px;
-}
-
-.log-details {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-  padding-left: 2px;
-}
-
-.log-detail-item {
-  font-size: 10px;
-  color: var(--text-muted);
 }
 
 .log-detail-key {
-  color: var(--lumi-primary);
-  font-weight: 500;
+  color: var(--lumi-brand);
+  font-weight: var(--font-medium);
 }
 
 .log-detail-val {
@@ -1659,8 +1546,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  animation: fade-in 0.2s ease-in-out;
+  z-index: var(--z-modal);
+  animation: fade-in var(--duration-fast) var(--ease-in-out);
 }
 
 .dialog {
@@ -1671,37 +1558,29 @@ onMounted(() => {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  animation: content-fade-up 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 24px 48px -12px var(--overlay-subtle), 0 0 0 1px var(--overlay-subtle);
+  animation: content-fade-up var(--duration-fast) var(--ease-default);
+  box-shadow: var(--shadow-xl);
 }
 
 .dialog-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--border-light);
 }
 
 .dialog-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .dialog-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
   color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
 }
 
-.dialog-close:hover {
+.dialog-close:hover:not(:disabled) {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
@@ -1709,26 +1588,26 @@ onMounted(() => {
 .dialog-body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: var(--space-5);
 }
 
 .dialog-desc {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .adapter-type-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .adapter-type-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   background: var(--surface);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
@@ -1738,7 +1617,7 @@ onMounted(() => {
 }
 
 .adapter-type-card:hover {
-  border-color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
   box-shadow: var(--shadow-glow-sm);
 }
 
@@ -1746,8 +1625,8 @@ onMounted(() => {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-sm);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1773,13 +1652,13 @@ onMounted(() => {
 }
 
 .atc-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .atc-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1787,10 +1666,10 @@ onMounted(() => {
 }
 
 .atc-category {
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-medium);
   flex-shrink: 0;
 }
 
@@ -1805,123 +1684,74 @@ onMounted(() => {
 }
 
 .atc-category.general {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .form-group {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .form-label {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
   color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
-.form-input {
-  width: 100%;
-  padding: 8px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  color: var(--text-primary);
-  transition: border-color var(--transition-fast);
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: var(--lumi-primary);
+  margin-bottom: var(--space-1);
 }
 
 .form-type-badge {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: var(--lumi-primary-light);
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--lumi-brand-light);
   border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--lumi-primary);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  color: var(--lumi-brand);
 }
 
 .config-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .config-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .config-field-label {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
 }
 
 .status-display {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 500;
+  gap: var(--space-1);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
 }
 
 .error-display {
-  padding: 8px 12px;
-  background: var(--task-red-soft);
+  padding: var(--space-2) var(--space-3);
+  background: var(--lumi-danger-light);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--lumi-danger);
 }
 
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 16px 20px;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--border-light);
-}
-
-.dialog-btn {
-  padding: 8px 20px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.dialog-btn.cancel {
-  background: var(--surface);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-
-.dialog-btn.cancel:hover {
-  background: var(--surface-hover);
-}
-
-.dialog-btn.confirm {
-  background: var(--lumi-primary);
-  color: white;
-}
-
-.dialog-btn.confirm:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.dialog-btn.confirm:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 @keyframes content-fade-up {
@@ -1965,12 +1795,12 @@ onMounted(() => {
 
 .badge-count {
   margin-left: auto;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  background: var(--lumi-primary-glow);
-  color: var(--lumi-primary);
-  font-weight: 500;
+  font-size: var(--text-2xs);
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--lumi-brand-glow);
+  color: var(--lumi-brand);
+  font-weight: var(--font-medium);
 }
 
 .conv-item.clickable {
@@ -1979,51 +1809,42 @@ onMounted(() => {
 
 .conv-item.clickable:hover {
   background: var(--surface-hover);
-  border-left: 2px solid var(--lumi-primary);
-  padding-left: 12px;
+  border-left: 2px solid var(--lumi-brand);
+  padding-left: var(--space-4);
 }
 
 .conv-item-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .conv-item-count {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
-  padding: 1px 5px;
+  padding: 1px var(--space-1);
   background: var(--bg-secondary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   flex-shrink: 0;
 }
 
 .conv-detail-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--border-light);
   background: var(--surface);
 }
 
 .back-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  background: transparent;
 }
 
-.back-btn:hover {
+.back-btn:hover:not(:disabled) {
   background: var(--surface-hover);
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .conv-detail-title {
@@ -2035,8 +1856,8 @@ onMounted(() => {
 }
 
 .title-text {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2044,17 +1865,17 @@ onMounted(() => {
 }
 
 .title-meta {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .conv-detail-count {
-  font-size: 11px;
-  padding: 3px 8px;
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  border-radius: 4px;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  padding: 3px var(--space-2);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+  border-radius: var(--radius-xs);
+  font-weight: var(--font-medium);
   flex-shrink: 0;
 }
 
@@ -2064,25 +1885,25 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--space-2);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .conv-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-3);
 }
 
 .msg-row {
   display: flex;
-  gap: 10px;
+  gap: var(--space-2);
   max-width: 85%;
-  animation: content-fade-up 0.3s ease-out both;
+  animation: content-fade-up var(--duration-fast) var(--ease-out-expo) both;
 }
 
 .msg-row.user {
@@ -2103,19 +1924,19 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .msg-row.user .msg-avatar {
-  background: var(--task-green-soft);
+  background: var(--lumi-success-light);
   color: var(--lumi-success);
 }
 
 .msg-content-wrap {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -2126,13 +1947,13 @@ onMounted(() => {
 .msg-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 10px;
+  gap: var(--space-1);
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .msg-sender {
-  font-weight: 500;
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
 }
 
@@ -2140,10 +1961,10 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 1px 5px;
+  padding: 1px var(--space-1);
   background: var(--bg-secondary);
-  border-radius: 3px;
-  font-size: 9px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
 }
 
 .msg-time {
@@ -2157,10 +1978,10 @@ onMounted(() => {
 }
 
 .msg-bubble {
-  padding: 10px 14px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
   word-break: break-word;
   background: var(--surface-hover);
   color: var(--text-primary);
@@ -2168,14 +1989,14 @@ onMounted(() => {
 }
 
 .msg-row.assistant .msg-bubble {
-  border-top-left-radius: 4px;
-  background: var(--lumi-primary-light);
-  border-color: var(--lumi-primary-glow);
+  border-top-left-radius: var(--radius-xs);
+  background: var(--lumi-brand-light);
+  border-color: var(--lumi-brand-glow);
 }
 
 .msg-row.user .msg-bubble {
-  border-top-right-radius: 4px;
-  background: var(--task-green-soft);
+  border-top-right-radius: var(--radius-xs);
+  background: var(--lumi-success-light);
   border-color: var(--lumi-success);
   color: var(--text-primary);
 }
@@ -2187,8 +2008,8 @@ onMounted(() => {
 .msg-images {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
 }
 
 .msg-image-item {
@@ -2215,9 +2036,9 @@ onMounted(() => {
 .msg-empty {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-style: italic;
 }
 
@@ -2234,29 +2055,29 @@ onMounted(() => {
 
 .badge {
   margin-left: auto;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-medium);
 }
 
 .badge.overridden {
-  background: var(--task-green-soft);
+  background: var(--lumi-success-light);
   color: var(--lumi-success);
 }
 
 .badge.inherited {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .model-config-loading {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 12px;
+  gap: var(--space-1);
+  padding: var(--space-3);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);
 }
@@ -2264,26 +2085,26 @@ onMounted(() => {
 .model-config-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .vision-hint {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: var(--task-amber-soft, rgba(245, 158, 11, 0.1));
-  border: 1px solid var(--lumi-amber);
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--lumi-amber-soft);
+  border: 1px solid var(--lumi-amber-border);
   border-radius: var(--radius-sm);
   color: var(--lumi-amber);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .model-current-info {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-light);
@@ -2292,19 +2113,19 @@ onMounted(() => {
 .info-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
   flex-wrap: wrap;
 }
 
 .info-label {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .info-value {
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .info-sep {
@@ -2312,21 +2133,21 @@ onMounted(() => {
 }
 
 .main-agent-info {
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: 0.8;
 }
 
 .vision-tag {
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  background: var(--task-red-soft);
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
+  background: var(--lumi-danger-light);
   color: var(--lumi-danger);
 }
 
 .vision-tag.supported {
-  background: var(--task-green-soft);
+  background: var(--lumi-success-light);
   color: var(--lumi-success);
 }
 
@@ -2334,7 +2155,7 @@ onMounted(() => {
   cursor: pointer;
   appearance: auto;
   background-image: none;
-  padding-right: 12px;
+  padding-right: var(--space-3);
 }
 
 .form-select:disabled {
@@ -2345,12 +2166,12 @@ onMounted(() => {
 .form-textarea {
   resize: vertical;
   font-family: inherit;
-  min-height: 60px;
+  min-height: 80px;
 }
 
 .config-field-row {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .config-field-row .config-field {
@@ -2360,13 +2181,13 @@ onMounted(() => {
 .reset-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
   background: transparent;
   color: var(--text-muted);
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: var(--text-xs);
   cursor: pointer;
   transition: all var(--transition-fast);
   align-self: flex-start;
@@ -2375,7 +2196,7 @@ onMounted(() => {
 .reset-btn:hover:not(:disabled) {
   color: var(--lumi-danger);
   border-color: var(--lumi-danger);
-  background: var(--task-red-soft);
+  background: var(--lumi-danger-light);
 }
 
 .reset-btn:disabled {
@@ -2384,12 +2205,8 @@ onMounted(() => {
 }
 
 /* ===== 增强日志展示 ===== */
-.log-entry {
-  cursor: pointer;
-}
-
 .log-entry.log-traceable {
-  border-left-color: var(--lumi-primary);
+  border-left-color: var(--lumi-brand);
 }
 
 .log-entry.log-performance {
@@ -2398,7 +2215,7 @@ onMounted(() => {
 
 .log-entry.log-error-entry {
   border-left-color: var(--lumi-danger);
-  background: var(--task-red-soft);
+  background: var(--lumi-danger-light);
 }
 
 .log-entry.expanded {
@@ -2411,68 +2228,68 @@ onMounted(() => {
 }
 
 .log-expand-hint {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
+  font-size: var(--text-2xs);
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   color: var(--text-muted);
   margin-left: 4px;
 }
 
 .log-entry.expanded .log-expand-hint {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .log-perf-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 6px;
-  padding: 6px 8px;
-  background: var(--task-amber-soft, rgba(245, 158, 11, 0.08));
-  border-radius: 3px;
-  border: 1px solid var(--lumi-amber-soft, rgba(245, 158, 11, 0.2));
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--lumi-amber-soft);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--lumi-amber-border);
 }
 
 .perf-stat {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10px;
+  gap: var(--space-1);
+  font-size: var(--text-2xs);
 }
 
 .perf-key {
   color: var(--lumi-amber);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .perf-val {
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
 }
 
 .log-details-expanded {
-  margin-top: 6px;
-  padding: 8px 10px;
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   background: var(--bg-secondary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .log-detail-row {
   display: flex;
-  gap: 6px;
-  font-size: 10px;
-  line-height: 1.5;
+  gap: var(--space-1);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-normal);
 }
 
 .log-detail-row .log-detail-key {
-  color: var(--lumi-primary);
-  font-weight: 500;
+  color: var(--lumi-brand);
+  font-weight: var(--font-medium);
   flex-shrink: 0;
   min-width: 80px;
 }
@@ -2486,26 +2303,46 @@ onMounted(() => {
 .log-stack-trace {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .log-stack-trace .log-detail-key {
   color: var(--lumi-danger);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
 }
 
 .stack-trace-content {
   margin: 0;
-  padding: 8px;
-  background: var(--task-red-soft);
-  border-radius: 3px;
-  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
-  font-size: 10px;
+  padding: var(--space-2);
+  background: var(--lumi-danger-light);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   color: var(--lumi-danger);
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 200px;
   overflow-y: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinning,
+  .stat-card,
+  .platform-card,
+  .msg-row,
+  .log-entry,
+  .filter-btn,
+  .detail-tab,
+  .log-filter-btn,
+  .tab-action-btn,
+  .back-btn,
+  .adapter-type-card,
+  .reset-btn,
+  .msg-image-item,
+  .card-action-btn {
+    animation: none;
+    transition: none;
+  }
 }
 </style>

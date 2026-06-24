@@ -70,7 +70,16 @@ class LocalTTSProvider(TTSProvider):
 
     provider_name = "local"
 
-    def __init__(self):
+    @classmethod
+    def is_available(cls) -> bool:
+        """检查 pyttsx3 是否已安装."""
+        try:
+            import pyttsx3  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
+    def __init__(self, **kwargs):
         self._all_voices: list[dict] = []
         self._voice_id_by_lang: dict[str, str] = {}
         self._initialized = False

@@ -38,8 +38,8 @@ const emit = defineEmits<{
   background: var(--bg);
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  gap: 4px;
+  padding: 0 var(--space-3);
+  gap: var(--space-1);
   overflow-x: auto;
   scrollbar-width: none;
   position: relative;
@@ -62,13 +62,13 @@ const emit = defineEmits<{
 .bookmark-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: background 0.2s ease-in-out;
+  transition: background var(--transition-fast);
   white-space: nowrap;
 }
 
@@ -82,7 +82,7 @@ const emit = defineEmits<{
 }
 
 .bm-name {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
@@ -97,7 +97,7 @@ const emit = defineEmits<{
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  transition: all 0.2s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .bookmark-more:hover {

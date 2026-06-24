@@ -63,19 +63,20 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   justify-content: space-between;
   height: 34px;
   background: var(--surface);
+  border-bottom: 1px solid var(--border-light);
   box-shadow: var(--shadow-xs);
   -webkit-app-region: drag;
   user-select: none;
   flex-shrink: 0;
   position: relative;
-  z-index: 100;
+  z-index: var(--z-sticky);
 }
 
 .title-drag-region {
   display: flex;
   align-items: center;
-  padding-left: 14px;
-  gap: 8px;
+  padding-left: var(--space-4);
+  gap: var(--space-2);
   flex: 1;
   min-width: 0;
   height: 100%;
@@ -84,11 +85,11 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
 .brand-mark {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-2);
   -webkit-app-region: no-drag;
-  padding: 2px 6px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  transition: background var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
 .brand-mark:hover {
@@ -96,18 +97,18 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
 }
 
 .brand-text {
-  font-size: 12.5px;
-  font-weight: 700;
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
   letter-spacing: -0.2px;
   white-space: nowrap;
 }
 
 .brand-sub {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
   white-space: nowrap;
-  margin-left: 4px;
+  margin-left: var(--space-1);
 }
 
 .win-controls {
@@ -123,8 +124,19 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  transition: all var(--transition-fast);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast);
   outline: none;
+}
+
+.ctrl-btn:focus-visible {
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--focus-ring);
 }
 
 .ctrl-btn:hover {

@@ -79,24 +79,24 @@ function handleExecute() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border);
 }
 
 .dev-tabs {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .dev-tab {
-  padding: 4px 12px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .dev-tab:hover {
@@ -114,12 +114,12 @@ function handleExecute() {
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .dev-close:hover {
@@ -143,12 +143,12 @@ function handleExecute() {
 
 .dev-input {
   flex: 1;
-  padding: 12px;
+  padding: var(--space-3);
   background: transparent;
   border: none;
   color: var(--text-inverse);
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   resize: none;
   outline: none;
 }
@@ -161,20 +161,20 @@ function handleExecute() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 16px;
-  margin: 8px;
-  border-radius: 6px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  margin: var(--space-2);
+  border-radius: var(--radius-sm);
   background: var(--lumi-info);
   border: none;
   color: var(--text-inverse);
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .dev-execute:hover:not(:disabled) {
-  background: var(--lumi-primary);
+  background: var(--lumi-info-hover);
 }
 
 .dev-execute:disabled {
@@ -185,21 +185,21 @@ function handleExecute() {
 .dev-output {
   flex: 1;
   background: var(--border);
-  padding: 12px;
+  padding: var(--space-3);
   overflow: auto;
 }
 
 .dev-output pre {
   margin: 0;
   color: var(--text-muted);
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
 .output-placeholder {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 </style>

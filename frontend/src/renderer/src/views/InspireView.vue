@@ -65,14 +65,14 @@ const ideas = ref([
   height: 100%;
   background: var(--workspace-bg);
   overflow-y: auto;
-  padding: 28px 32px;
+  padding: 28px var(--space-7);
 }
 
 .inspire-header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 32px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-7);
 }
 
 .header-icon-wrap {
@@ -87,13 +87,13 @@ const ideas = ref([
 }
 
 .page-title {
-  font-size: 24px;
+  font-size: var(--text-3xl);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .page-subtitle {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   margin-top: 2px;
 }
@@ -101,15 +101,15 @@ const ideas = ref([
 .inspire-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-bottom: 32px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-7);
 }
 
 .idea-card {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 20px;
+  gap: var(--space-4);
+  padding: var(--space-5);
   border-radius: var(--radius-lg);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
@@ -138,14 +138,14 @@ const ideas = ref([
 }
 
 .idea-content h3 {
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .idea-content p {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.5;
 }
@@ -175,17 +175,17 @@ const ideas = ref([
 .empty-icon {
   width: 88px;
   height: 88px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--workspace-panel);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  margin: 0 auto 16px;
+  margin: 0 auto var(--space-4);
 }
 
 .inspire-empty-state p {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
 }
 </style>

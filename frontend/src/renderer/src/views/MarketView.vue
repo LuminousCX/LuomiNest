@@ -11,6 +11,8 @@ import MarketplaceCard from '../components/marketplace/MarketplaceCard.vue'
 import MarketplaceBanner from '../components/marketplace/MarketplaceBanner.vue'
 import RepoSourcePanel from '../components/marketplace/RepoSourcePanel.vue'
 import LumiCardIcon from '../components/common/LumiCardIcon.vue'
+import LumiEmptyState from '../components/common/LumiEmptyState.vue'
+import LumiButton from '../components/common/LumiButton.vue'
 import type { MarketplaceFilter, MarketplaceItem, MarketplaceType } from '../types/marketplace'
 
 // 安全的同步时间格式化，防止 Invalid Date
@@ -266,13 +268,18 @@ function toggleFilters() {
             />
           </div>
 
-          <div v-else class="empty-state">
-            <component :is="headerConfig.emptyIcon" :size="48" />
-            <p>{{ headerConfig.emptyText }}</p>
-            <button class="reset-btn" @click="activeCategory = 'all'; store.clearSearch()">
-              重置筛选
-            </button>
-          </div>
+          <LumiEmptyState
+            v-else
+            :icon="headerConfig.emptyIcon"
+            :title="headerConfig.emptyText"
+            description="尝试调整筛选条件或搜索关键词"
+          >
+            <template #action>
+              <LumiButton variant="outline" size="sm" @click="activeCategory = 'all'; store.clearSearch()">
+                重置筛选
+              </LumiButton>
+            </template>
+          </LumiEmptyState>
         </div>
       </main>
     </div>
@@ -292,32 +299,32 @@ function toggleFilters() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 24px 28px 0;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-7) 0;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .page-title {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .page-subtitle {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: calc(var(--space-1) / 2);
 }
 
 .market-switch {
   display: flex;
-  gap: 2px;
-  padding: 3px;
+  gap: calc(var(--space-1) / 2);
+  padding: var(--space-1);
   background: var(--workspace-panel);
   border-radius: var(--radius-lg);
   border: 1px solid var(--workspace-border);
@@ -327,13 +334,13 @@ function toggleFilters() {
 .switch-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
-  transition: all 0.25s ease-in-out;
+  transition: all var(--transition-normal);
   position: relative;
 }
 
@@ -350,8 +357,8 @@ function toggleFilters() {
 .market-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 28px;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-7);
 }
 
 .market-toolbar > :deep(.market-search) {
@@ -368,33 +375,33 @@ function toggleFilters() {
 .market-sidebar {
   width: 210px;
   flex-shrink: 0;
-  padding: 16px 12px 16px 20px;
+  padding: var(--space-4) var(--space-3) var(--space-4) var(--space-5);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   background: var(--workspace-sidebar);
   border-right: 1px solid var(--workspace-border);
   backdrop-filter: blur(12px);
 }
 
 .sidebar-filter-toggle {
-  padding-top: 4px;
+  padding-top: var(--space-1);
   border-top: 1px solid var(--workspace-border);
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .filter-toggle-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   flex: 1;
   justify-content: center;
-  padding: 10px 10px;
+  padding: var(--space-3);
   border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
   background: var(--workspace-panel);
   border: 1px solid var(--workspace-border);
@@ -414,33 +421,33 @@ function toggleFilters() {
 }
 
 .sidebar-filters {
-  padding-top: 8px;
+  padding-top: var(--space-2);
 }
 
 .sidebar-repo-source {
-  padding-top: 8px;
+  padding-top: var(--space-2);
   border-top: 1px solid var(--workspace-border);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .filters-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .filters-header span {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .close-filters {
-  width: 24px;
-  height: 24px;
+  width: var(--space-6);
+  height: var(--space-6);
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -457,7 +464,7 @@ function toggleFilters() {
 .market-main {
   flex: 1;
   overflow-y: auto;
-  padding: 0 28px 28px 16px;
+  padding: 0 var(--space-7) var(--space-7) var(--space-4);
   min-width: 0;
 }
 
@@ -465,14 +472,14 @@ function toggleFilters() {
 .remote-source-indicator {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  margin-bottom: 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
   border-radius: var(--radius-md);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--lumi-primary);
   background: var(--lumi-primary-light);
-  border: 1px solid rgba(var(--lumi-primary-rgb, 20, 126, 188), 0.15);
+  border: 1px solid var(--lumi-primary-border);
 }
 
 .remote-source-indicator.loading {
@@ -483,40 +490,40 @@ function toggleFilters() {
 
 .indicator-sync-time {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: 0.7;
 }
 
 .items-section {
-  margin-top: 20px;
+  margin-top: var(--space-5);
 }
 
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .section-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .section-count {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .items-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .items-grid > * {
-  animation: lumi-card-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: lumi-card-enter var(--duration-enter) var(--ease-out-expo) both;
 }
 
 .items-grid > *:nth-child(1) { animation-delay: 0ms; }
@@ -531,40 +538,11 @@ function toggleFilters() {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 60px 0;
-  color: var(--text-muted);
-  animation: lumi-card-enter 0.5s ease-out both;
-}
-
-.empty-state p {
-  font-size: 14px;
-}
-
-.reset-btn {
-  padding: 8px 20px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
-  transition: all var(--transition-fast);
-}
-
-.reset-btn:hover {
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-}
-
 .filter-slide-enter-active {
-  animation: lumi-fade-in 0.25s ease-out;
+  animation: lumi-fade-in var(--duration-normal) var(--ease-out-expo);
 }
 
 .filter-slide-leave-active {
-  animation: lumi-fade-in 0.15s ease-out reverse;
+  animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
 }
 </style>

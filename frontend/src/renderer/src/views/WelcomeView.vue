@@ -12,17 +12,17 @@ import {
   Palette,
   ArrowRight,
   Cpu,
-  Eye,
-  EyeOff,
   Cloud,
   Monitor,
   Network,
   AlertCircle,
-  Loader2,
 } from 'lucide-vue-next'
 import { useModelStore } from '../stores/model'
 import LumiCardIcon from '../components/common/LumiCardIcon.vue'
 import LumiBrandStar from '../components/common/LumiBrandStar.vue'
+import LumiButton from '../components/common/LumiButton.vue'
+import LumiInput from '../components/common/LumiInput.vue'
+import LumiEmptyState from '../components/common/LumiEmptyState.vue'
 
 const router = useRouter()
 const modelStore = useModelStore()
@@ -157,7 +157,6 @@ function skipWizard() {
 // --- AI Model Step ---
 const addTemplateCategory = ref('cloud')
 const selectedTemplate = ref<string>('')
-const showApiKey = ref(false)
 const aiModelSaving = ref(false)
 const aiModelError = ref('')
 
@@ -292,10 +291,10 @@ onMounted(async () => {
           </div>
 
           <div class="step-actions animate-fade-in">
-            <button class="primary-btn" @click="nextStep">
+            <LumiButton variant="primary" size="lg" block @click="nextStep">
               <span>{{ i18n.btnNext }}</span>
               <ChevronRight :size="16" />
-            </button>
+            </LumiButton>
           </div>
         </div>
 
@@ -324,13 +323,13 @@ onMounted(async () => {
           </div>
 
           <div class="step-actions">
-            <button class="ghost-btn" @click="prevStep">
+            <LumiButton variant="ghost" size="lg" @click="prevStep">
               {{ i18n.btnBack }}
-            </button>
-            <button class="primary-btn" @click="nextStep">
+            </LumiButton>
+            <LumiButton variant="primary" size="lg" block @click="nextStep">
               <span>{{ i18n.btnNext }}</span>
               <ChevronRight :size="16" />
-            </button>
+            </LumiButton>
           </div>
         </div>
 
@@ -365,6 +364,11 @@ onMounted(async () => {
             </div>
 
             <div class="template-scroll">
+              <LumiEmptyState
+                v-if="!(modelStore.templatesByCategory[addTemplateCategory] || []).length"
+                icon="inbox"
+                :title="i18n.aiModelNoProviders"
+              />
               <button
                 v-for="tmpl in (modelStore.templatesByCategory[addTemplateCategory] || [])"
                 :key="tmpl.id"
@@ -385,25 +389,15 @@ onMounted(async () => {
             <div v-if="selectedTemplate" class="provider-config">
               <div class="form-group">
                 <label>{{ i18n.aiModelApiUrl }}</label>
-                <input v-model="newProvider.baseUrl" type="text" placeholder="https://api.openai.com/v1" />
+                <LumiInput v-model="newProvider.baseUrl" type="text" placeholder="https://api.openai.com/v1" />
               </div>
               <div class="form-group">
                 <label>{{ i18n.aiModelApiKey }}</label>
-                <div class="api-key-row">
-                  <input
-                    v-model="newProvider.apiKey"
-                    :type="showApiKey ? 'text' : 'password'"
-                    placeholder="sk-..."
-                  />
-                  <button class="eye-btn" @click="showApiKey = !showApiKey">
-                    <Eye v-if="!showApiKey" :size="14" />
-                    <EyeOff v-else :size="14" />
-                  </button>
-                </div>
+                <LumiInput v-model="newProvider.apiKey" type="password" placeholder="sk-..." />
               </div>
               <div class="form-group">
                 <label>{{ i18n.aiModelDefaultModel }}</label>
-                <input v-model="newProvider.defaultModel" type="text" placeholder="gpt-4o-mini" />
+                <LumiInput v-model="newProvider.defaultModel" type="text" placeholder="gpt-4o-mini" />
               </div>
             </div>
 
@@ -411,23 +405,24 @@ onMounted(async () => {
           </div>
 
           <div class="step-actions">
-            <button class="ghost-btn" @click="prevStep">
+            <LumiButton variant="ghost" size="lg" @click="prevStep">
               {{ i18n.btnBack }}
-            </button>
-            <button
+            </LumiButton>
+            <LumiButton
               v-if="selectedTemplate && newProviderFormValid"
-              class="primary-btn"
+              variant="primary"
+              size="lg"
+              block
+              :loading="aiModelSaving"
               @click="addProviderAndNext"
-              :disabled="aiModelSaving"
             >
-              <Loader2 v-if="aiModelSaving" :size="16" class="spin-animation" />
               <span>{{ aiModelSaving ? i18n.aiModelSaving : i18n.aiModelAdd }}</span>
               <ChevronRight v-if="!aiModelSaving" :size="16" />
-            </button>
-            <button v-else class="primary-btn" @click="nextStep">
+            </LumiButton>
+            <LumiButton v-else variant="primary" size="lg" block @click="nextStep">
               <span>{{ i18n.aiModelNext }}</span>
               <ChevronRight :size="16" />
-            </button>
+            </LumiButton>
           </div>
         </div>
 
@@ -451,13 +446,13 @@ onMounted(async () => {
           </label>
 
           <div class="step-actions animate-slide-up">
-            <button class="ghost-btn" @click="prevStep">
+            <LumiButton variant="ghost" size="lg" @click="prevStep">
               {{ i18n.btnBack }}
-            </button>
-            <button class="primary-btn launch-btn" @click="startApp" :disabled="!agreed">
+            </LumiButton>
+            <LumiButton class="launch-btn" variant="primary" size="lg" block :disabled="!agreed" @click="startApp">
               <span>{{ i18n.btnStart }}</span>
               <ArrowRight :size="16" />
-            </button>
+            </LumiButton>
           </div>
         </div>
       </Transition>
@@ -483,7 +478,7 @@ onMounted(async () => {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: var(--workspace-bg);
+  background: var(--bg);
 }
 
 .welcome-bg {
@@ -499,12 +494,13 @@ onMounted(async () => {
   filter: blur(120px);
   opacity: 0.2;
   animation: orb-float 18s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 .bg-orb-1 {
   width: 500px;
   height: 500px;
-  background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
+  background: radial-gradient(circle, var(--lumi-brand-glow), transparent 70%);
   top: -150px;
   right: -120px;
   animation-delay: 0s;
@@ -513,7 +509,7 @@ onMounted(async () => {
 .bg-orb-2 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
+  background: radial-gradient(circle, var(--lumi-brand-glow), transparent 70%);
   bottom: -100px;
   left: -100px;
   animation-delay: -9s;
@@ -527,18 +523,18 @@ onMounted(async () => {
 
 .skip-btn {
   position: absolute;
-  top: 20px;
-  right: 24px;
-  padding: 6px 16px;
-  font-size: 13px;
+  top: var(--space-5);
+  right: var(--space-6);
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--text-base);
   color: var(--text-muted);
   border-radius: var(--radius-full);
-  transition: all 300ms ease-in-out;
+  transition: all var(--transition-normal);
   z-index: 10;
 }
 
 .skip-btn:hover {
-  background: var(--workspace-panel);
+  background: var(--bg-secondary);
   color: var(--text-secondary);
 }
 
@@ -546,7 +542,7 @@ onMounted(async () => {
   position: relative;
   width: 100%;
   max-width: 480px;
-  padding: 48px;
+  padding: var(--space-9);
   z-index: 1;
 }
 
@@ -554,30 +550,30 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 28px;
+  gap: var(--space-7);
 }
 
 .brand-hero {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   text-align: center;
 }
 
 .brand-icon-wrap {
   width: 72px;
   height: 72px;
-  border-radius: 20px;
-  background: var(--lumi-primary-gradient-soft);
+  border-radius: var(--radius-xl);
+  background: var(--lumi-brand-gradient-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 24px var(--lumi-primary-glow);
+  box-shadow: var(--shadow-md);
 }
 
 .brand-title {
-  font-size: 32px;
+  font-size: var(--text-4xl);
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.5px;
@@ -585,7 +581,7 @@ onMounted(async () => {
 
 .brand-greeting {
   display: block;
-  font-size: 18px;
+  font-size: var(--text-2xl);
   font-weight: 400;
   color: var(--text-secondary);
 }
@@ -595,119 +591,119 @@ onMounted(async () => {
 }
 
 .brand-subtitle {
-  font-size: 15px;
+  font-size: var(--text-lg);
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .version-badge {
-  font-size: 11px;
-  padding: 3px 12px;
+  font-size: var(--text-xs);
+  padding: 3px var(--space-3);
   border-radius: var(--radius-full);
-  background: var(--workspace-panel);
+  background: var(--bg-secondary);
   color: var(--text-muted);
   font-weight: 500;
-  border: 1px solid var(--workspace-border);
+  border: 1px solid var(--border);
 }
 
 .lang-section {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-3);
 }
 
 .section-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 15px;
+  gap: var(--space-2);
+  font-size: var(--text-lg);
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .section-header svg {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .lang-options {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .lang-card {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 18px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-card);
+  border: 1px solid var(--border);
+  background: var(--surface);
   cursor: pointer;
-  transition: all 300ms ease-in-out;
+  transition: all var(--transition-normal);
   position: relative;
 }
 
 .lang-card:hover {
-  border-color: var(--lumi-primary-border);
-  box-shadow: 0 2px 12px var(--lumi-primary-light);
+  border-color: var(--lumi-brand-border);
+  box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
 }
 
 .lang-card.active {
-  border-color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
-  box-shadow: 0 2px 12px var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
+  box-shadow: var(--shadow-sm);
 }
 
 .lang-flag {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-md);
-  background: var(--workspace-panel);
+  background: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 700;
   color: var(--text-secondary);
   flex-shrink: 0;
 }
 
 .lang-label {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .lang-check {
   margin-left: auto;
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .feature-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   text-align: center;
   flex-direction: column;
 }
 
 .feature-icon {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .feature-header h2 {
-  font-size: 22px;
+  font-size: var(--text-3xl);
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .feature-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: var(--space-3);
   width: 100%;
 }
 
@@ -715,46 +711,46 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 20px 16px;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-card);
+  border: 1px solid var(--border);
+  background: var(--surface);
   text-align: center;
-  transition: all 300ms ease-in-out;
-  animation: lumi-scale-in 0.35s ease-out both;
+  transition: all var(--transition-normal);
+  animation: lumi-scale-in var(--duration-slow) var(--ease-out-expo) both;
 }
 
 .feature-card:hover {
   border-color: var(--feat-color);
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--feat-color) 10%, transparent);
+  box-shadow: var(--shadow-md);
   transform: translateY(-2px);
 }
 
 .feat-name {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .feat-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
 }
 
 /* Step Hero (Profile & AI Model) */
 .step-hero {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
   width: 100%;
 }
 
 .step-hero-icon {
   width: 52px;
   height: 52px;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -767,16 +763,16 @@ onMounted(async () => {
 }
 
 .step-hero-title {
-  font-size: 22px;
+  font-size: var(--text-3xl);
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .step-hero-desc {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  margin-top: 2px;
-  line-height: 1.5;
+  margin-top: var(--space-1);
+  line-height: var(--leading-normal);
 }
 
 /* AI Model Form */
@@ -784,84 +780,84 @@ onMounted(async () => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-3);
 }
 
 .form-error-banner {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  background: var(--task-red-soft);
+  background: var(--lumi-danger-light);
   color: var(--lumi-danger);
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 500;
 }
 
 .category-tabs {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .category-tab {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-secondary);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  transition: all 250ms ease-in-out;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: all var(--transition-normal);
   cursor: pointer;
 }
 
 .category-tab:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
 }
 
 .category-tab.active {
-  background: var(--lumi-primary-light);
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
   font-weight: 600;
 }
 
 .template-scroll {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
   max-height: 200px;
   overflow-y: auto;
-  padding-right: 4px;
+  padding-right: var(--space-1);
 }
 
 .template-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  transition: all 250ms ease-in-out;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: all var(--transition-normal);
   cursor: pointer;
   text-align: left;
   width: 100%;
 }
 
 .template-card:hover {
-  border-color: var(--lumi-primary-border);
-  box-shadow: 0 1px 6px var(--lumi-primary-light);
+  border-color: var(--lumi-brand-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .template-card.selected {
-  border-color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
+  border-color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 .template-card-logo {
@@ -875,7 +871,7 @@ onMounted(async () => {
 }
 
 .template-initials {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--text-inverse);
   letter-spacing: 0.5px;
@@ -890,13 +886,13 @@ onMounted(async () => {
 }
 
 .template-card-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .template-card-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -904,61 +900,18 @@ onMounted(async () => {
 }
 
 .template-card-check {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
   flex-shrink: 0;
 }
 
 .provider-config {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
+  gap: var(--space-3);
+  padding: var(--space-3);
   border-radius: var(--radius-lg);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-}
-
-.provider-config .form-group input {
-  background: var(--workspace-panel);
-}
-
-.api-key-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.api-key-row input {
-  flex: 1;
-  padding: 9px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-panel);
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.api-key-row input:focus {
-  outline: none;
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-light);
-}
-
-.eye-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  transition: all 200ms ease-in-out;
-}
-
-.eye-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 
 /* Ready Step */
@@ -972,8 +925,8 @@ onMounted(async () => {
 .ready-ring {
   width: 96px;
   height: 96px;
-  border-radius: 28px;
-  background: var(--lumi-primary-gradient-soft);
+  border-radius: var(--radius-2xl);
+  background: var(--lumi-brand-gradient-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -981,7 +934,7 @@ onMounted(async () => {
 }
 
 @keyframes ring-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-primary-border); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-brand-border); }
   50% { box-shadow: 0 0 0 12px transparent; }
 }
 
@@ -991,11 +944,11 @@ onMounted(async () => {
   right: -2px;
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--lumi-success);
   color: var(--text-inverse);
   padding: 5px;
-  animation: shield-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both;
+  animation: shield-pop 0.5s var(--ease-spring) 0.3s both;
 }
 
 @keyframes shield-pop {
@@ -1004,23 +957,23 @@ onMounted(async () => {
 }
 
 .ready-title {
-  font-size: 26px;
+  font-size: var(--text-3xl);
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .ready-desc {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
   max-width: 360px;
   text-align: center;
-  line-height: 1.6;
+  line-height: var(--leading-relaxed);
 }
 
 .agree-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   cursor: pointer;
   user-select: none;
 }
@@ -1032,120 +985,76 @@ onMounted(async () => {
 .agree-custom {
   width: 20px;
   height: 20px;
-  border-radius: 6px;
-  border: 1.5px solid var(--workspace-border);
+  border-radius: var(--radius-xs);
+  border: 1.5px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-inverse);
-  background: var(--workspace-card);
-  transition: all 300ms ease-in-out;
+  background: var(--surface);
+  transition: all var(--transition-normal);
   flex-shrink: 0;
 }
 
 .agree-row:hover .agree-custom {
-  border-color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
 }
 
 .agree-row:has(.agree-checkbox:checked) .agree-custom {
-  background: var(--lumi-primary);
-  border-color: var(--lumi-primary);
+  background: var(--lumi-brand);
+  border-color: var(--lumi-brand);
 }
 
 .agree-text {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
 }
 
 .step-actions {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
-.primary-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+.step-actions .lumi-btn--block {
   flex: 1;
-  padding: 12px 28px;
-  border-radius: var(--radius-lg);
-  font-size: 14px;
-  font-weight: 600;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
 }
 
-.primary-btn:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px var(--lumi-primary-border);
-}
-
-.primary-btn:active:not(:disabled) {
-  transform: translateY(0) scale(0.98);
-}
-
-.primary-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+.step-actions .lumi-btn-text > svg {
+  margin-left: var(--space-1);
 }
 
 .launch-btn {
-  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
+  background: linear-gradient(135deg, var(--lumi-brand), var(--lumi-brand-soft));
 }
 
 .launch-btn:hover:not(:disabled) {
-  box-shadow: 0 6px 24px var(--lumi-primary-border);
-}
-
-.ghost-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 13px 24px;
-  border-radius: var(--radius-lg);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-  border: 1px solid var(--workspace-border);
-  background: transparent;
-}
-
-.ghost-btn:hover {
-  background: var(--workspace-panel);
-  color: var(--text-secondary);
-  border-color: var(--workspace-border);
+  box-shadow: var(--shadow-lg);
 }
 
 .step-dots {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   justify-content: center;
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 
 .dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
-  background: var(--workspace-border);
+  border-radius: var(--radius-full);
+  background: var(--border);
   border: none;
   cursor: pointer;
-  transition: all 300ms ease-in-out;
+  transition: all var(--transition-normal);
   padding: 0;
 }
 
 .dot.active {
   width: 24px;
-  border-radius: 4px;
-  background: var(--lumi-primary);
+  border-radius: var(--radius-xs);
+  background: var(--lumi-brand);
 }
 
 @keyframes brand-enter {
@@ -1154,15 +1063,15 @@ onMounted(async () => {
 }
 
 .animate-brand-enter {
-  animation: brand-enter 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: brand-enter 0.7s var(--ease-out-expo) both;
 }
 
 .step-fade-enter-active {
-  transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: all var(--duration-enter) var(--ease-out-expo);
 }
 
 .step-fade-leave-active {
-  transition: all 0.25s cubic-bezier(0.4, 0, 1, 1);
+  transition: all var(--duration-leave) var(--ease-default);
 }
 
 .step-fade-enter-from {
@@ -1173,5 +1082,22 @@ onMounted(async () => {
 .step-fade-leave-to {
   opacity: 0;
   transform: translateX(-20px);
+}
+
+button:focus-visible,
+.lumi-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 </style>

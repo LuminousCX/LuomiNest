@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Home, Lightbulb, Thermometer, Droplets, Lock, Wifi, Power, Settings2, Sun, Moon, Wind, Eye, Plus, Activity } from 'lucide-vue-next'
+import { Lightbulb, Thermometer, Droplets, Lock, Wifi, Power, Settings2, Wind, Eye, Plus, Activity } from 'lucide-vue-next'
 import { useApi } from '../../composables/useApi'
 
 const { apiGet } = useApi()

@@ -8,6 +8,7 @@ import { useApi } from '../../composables/useApi'
 import { formatDownloadCount } from '../../utils/format'
 import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
 import LumiCardIcon from '../common/LumiCardIcon.vue'
+import LumiCard from '../common/LumiCard.vue'
 
 const props = defineProps<{
   item: MarketplaceItem
@@ -83,7 +84,7 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
 </script>
 
 <template>
-  <div class="market-card" @click="navigateToDetail">
+  <LumiCard class="market-card" hoverable padding="lg" @click="navigateToDetail">
     <div class="card-header">
       <LumiCardIcon
         :icon="ITEM_ICON_MAP[item.icon] || DEFAULT_ICON"
@@ -145,7 +146,7 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
           :disabled="isOperating"
           @click="handleInstall"
         >
-          <Loader2 v-if="isOperating" :size="14" class="spin-icon" />
+          <Loader2 v-if="isOperating" :size="14" class="spin-animation" />
           <span>{{ installLabel }}</span>
           <span v-if="installProgress && isOperating" class="progress-text">
             {{ Math.round(installProgress.progress) }}%
@@ -157,24 +158,18 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
         </button>
       </div>
     </div>
-  </div>
+  </LumiCard>
 </template>
 
 <style scoped>
 .market-card {
-  display: flex;
-  flex-direction: column;
-  padding: 18px;
-  border-radius: var(--radius-lg);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
   cursor: pointer;
   transition: all var(--transition-normal);
 }
 
 .market-card:hover {
-  border-color: var(--lumi-primary);
-  box-shadow: var(--shadow-md), 0 0 0 1px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--lumi-brand-glow);
   transform: translateY(-2px);
 }
 
@@ -182,24 +177,24 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: var(--space-4);
 }
 
 .card-badge-area {
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .badge {
-  padding: 2px 8px;
+  padding: calc(var(--space-1) / 2) var(--space-2);
   border-radius: var(--radius-full);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
 }
 
 .badge-featured {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .badge-installed {
@@ -209,22 +204,22 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
 
 .card-body {
   flex: 1;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .card-title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
-  margin-bottom: 6px;
-  line-height: 1.3;
+  margin-bottom: var(--space-2);
+  line-height: var(--leading-snug);
 }
 
 .card-summary {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
-  line-height: 1.5;
-  margin-bottom: 8px;
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-2);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -235,30 +230,30 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
 .card-author {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .author-name {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--text-secondary);
 }
 
 .verified-icon {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .card-tags {
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: var(--space-4);
 }
 
 .tag {
-  padding: 2px 8px;
+  padding: calc(var(--space-1) / 2) var(--space-2);
   border-radius: var(--radius-full);
-  font-size: 10px;
-  font-weight: 500;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-medium);
   background: color-mix(in srgb, var(--tag-color) 10%, transparent);
   color: var(--tag-color);
 }
@@ -267,25 +262,25 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 12px;
+  padding-top: var(--space-3);
   border-top: 1px solid var(--border-light);
 }
 
 .card-stats {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .stat {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .stat-icon.star {
-  color: var(--lumi-star);
+  color: var(--lumi-warning);
 }
 
 .stat-icon.like {
@@ -295,12 +290,12 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
 .card-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .fav-btn {
-  width: 32px;
-  height: 32px;
+  width: var(--space-7);
+  height: var(--space-7);
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -321,18 +316,18 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
 .install-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 14px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-inverse);
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
   transition: all var(--transition-fast);
 }
 
 .install-btn:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
+  background: var(--lumi-brand-hover);
 }
 
 .install-btn.operating {
@@ -346,16 +341,20 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
 }
 
 .progress-text {
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: 0.8;
 }
 
-.spin-icon {
-  animation: lumi-spin 1s linear infinite;
-}
+@media (prefers-reduced-motion: reduce) {
+  .market-card,
+  .fav-btn,
+  .install-btn {
+    animation: none;
+    transition: none;
+  }
 
-@keyframes lumi-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  .market-card:hover {
+    transform: none;
+  }
 }
 </style>

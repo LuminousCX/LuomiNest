@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { TrendingUp, Clock, Star, Download, Filter } from 'lucide-vue-next'
+import type { LucideIcon } from 'lucide-vue-next'
 import type { MarketplaceFilter, InstallStatus } from '../../types/marketplace'
 
 const props = defineProps<{
@@ -10,7 +11,7 @@ const emit = defineEmits<{
   update: [filter: Partial<MarketplaceFilter>]
 }>()
 
-const sortOptions: { value: MarketplaceFilter['sortBy']; label: string; icon: any }[] = [
+const sortOptions: { value: MarketplaceFilter['sortBy']; label: string; icon: LucideIcon }[] = [
   { value: 'popular', label: '最热', icon: TrendingUp },
   { value: 'newest', label: '最新', icon: Clock },
   { value: 'rating', label: '评分', icon: Star },
@@ -67,21 +68,21 @@ const installStatusOptions: { value: InstallStatus | 'all'; label: string }[] = 
 .market-filters {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .filter-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .filter-label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -90,17 +91,17 @@ const installStatusOptions: { value: InstallStatus | 'all'; label: string }[] = 
 .filter-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .filter-chip {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
   background: var(--workspace-panel);
   transition: all var(--transition-fast);
@@ -112,7 +113,13 @@ const installStatusOptions: { value: InstallStatus | 'all'; label: string }[] = 
 }
 
 .filter-chip.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-chip {
+    transition: none;
+  }
 }
 </style>

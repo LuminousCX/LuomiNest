@@ -1027,9 +1027,9 @@ function getWeekday(dateStr: string): string {
   z-index: 1000;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 8px 0;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-lg);
   min-width: 200px;
 }
 
@@ -1049,17 +1049,17 @@ function getWeekday(dateStr: string): string {
 }
 
 .menu-item.danger {
-  color: #ef4444;
+  color: var(--lumi-danger);
 }
 
 .menu-item.danger:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--lumi-danger-light);
 }
 
 .menu-divider {
   height: 1px;
   background: var(--border);
-  margin: 4px 0;
+  margin: var(--space-1) 0;
 }
 
 .confirm-overlay {
@@ -1068,7 +1068,7 @@ function getWeekday(dateStr: string): string {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1079,26 +1079,26 @@ function getWeekday(dateStr: string): string {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 24px;
+  padding: var(--space-6);
   max-width: 400px;
   width: 90%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-xl);
 }
 
 .confirm-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 12x
 }
 
 .danger-icon {
-  color: #ef4444;
+  color: var(--lumi-danger);
 }
 
 .confirm-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-2xl);
   font-weight: 600;
   color: var(--text);
 }
@@ -1117,17 +1117,17 @@ function getWeekday(dateStr: string): string {
 .confirm-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .h-btn.danger {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #ef4444;
+  background: var(--lumi-danger-light);
+  border: 1px solid var(--lumi-danger-border);
+  color: var(--lumi-danger);
 }
 
 .h-btn.danger:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: var(--lumi-danger-light);
 }
 
 .memory-loading {
@@ -1147,7 +1147,7 @@ function getWeekday(dateStr: string): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  padding: var(--space-4) var(--space-6);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -1160,7 +1160,7 @@ function getWeekday(dateStr: string): string {
 }
 
 .header-left h2 {
-  font-size: 18px;
+  font-size: var(--text-2xl);
   font-weight: 600;
   color: var(--text);
 }
@@ -1168,7 +1168,7 @@ function getWeekday(dateStr: string): string {
 .header-badge {
   font-size: 11px;
   padding: 3px 10px;
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   background: var(--task-purple-soft);
   color: var(--task-purple);
   font-weight: 500;
@@ -1177,7 +1177,7 @@ function getWeekday(dateStr: string): string {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .h-btn {
@@ -1185,11 +1185,11 @@ function getWeekday(dateStr: string): string {
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   font-size: 13px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 300ms ease-in-out;
+  transition: all var(--transition-slow);
   white-space: nowrap;
 }
 
@@ -1213,7 +1213,7 @@ function getWeekday(dateStr: string): string {
 
 .layer-nav {
   width: 280px;
-  padding: 20px;
+  padding: var(--space-5);
   border-right: 1px solid var(--border);
   overflow-y: auto;
   flex-shrink: 0;
@@ -1224,7 +1224,7 @@ function getWeekday(dateStr: string): string {
 }
 
 .stats-overview {
-  padding: 14px;
+  padding: var(--space-3);
   border-radius: 12px;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -1234,9 +1234,9 @@ function getWeekday(dateStr: string): string {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
-  margin-bottom: 12px;
+  margin-bottom: 12x
 }
 
 .stats-grid {
@@ -1248,9 +1248,9 @@ function getWeekday(dateStr: string): string {
 
 .stat-item {
   text-align: center;
-  padding: 8px;
+  padding: var(--space-2);
   background: var(--surface);
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
 }
 
 .stat-value {
@@ -1289,14 +1289,14 @@ function getWeekday(dateStr: string): string {
   flex: 1;
   height: 4px;
   background: var(--border);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
 .cat-bar-fill {
   height: 100%;
-  border-radius: 2px;
-  transition: width 300ms;
+  border-radius: var(--radius-xs);
+  transition: width var(--transition-slow);
 }
 
 .cat-count {
@@ -1307,12 +1307,12 @@ function getWeekday(dateStr: string): string {
 }
 
 .nav-card {
-  padding: 14px;
+  padding: var(--space-3);
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--bg);
   cursor: pointer;
-  transition: all 300ms ease-in-out;
+  transition: all var(--transition-slow);
 }
 
 .nav-card:hover {
@@ -1335,7 +1335,7 @@ function getWeekday(dateStr: string): string {
 .nav-icon-wrap {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1369,14 +1369,14 @@ function getWeekday(dateStr: string): string {
 .nav-stat {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: var(--surface);
 }
 
 .memory-detail {
   flex: 1;
   min-height: 0;
-  padding: 24px;
+  padding: var(--space-6);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1390,7 +1390,7 @@ function getWeekday(dateStr: string): string {
 }
 
 .detail-header h3 {
-  font-size: 18px;
+  font-size: var(--text-2xl);
   font-weight: 600;
   color: var(--text);
 }
@@ -1398,7 +1398,7 @@ function getWeekday(dateStr: string): string {
 .detail-actions {
   margin-left: auto;
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .profile-card {
@@ -1423,7 +1423,7 @@ function getWeekday(dateStr: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -1431,18 +1431,18 @@ function getWeekday(dateStr: string): string {
 .profile-info { display: flex; flex-direction: column; }
 
 .profile-name {
-  font-size: 16px;
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--text);
 }
 
 .profile-label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .profile-section {
-  margin-top: 12px;
+  margin-top: var(--space-3);
 }
 
 .profile-section-label {
@@ -1461,18 +1461,18 @@ function getWeekday(dateStr: string): string {
 .profile-tag {
   padding: 3px 10px;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 
 .profile-tag.static {
-  background: rgba(34, 197, 94, 0.12);
-  color: #22c55e;
+  background: var(--lumi-success-light);
+  color: var(--lumi-success);
 }
 
 .profile-tag.dynamic {
-  background: rgba(14, 165, 233, 0.12);
-  color: #0ea5e9;
+  background: var(--lumi-info-light);
+  color: var(--lumi-info);
 }
 
 .editor-section { flex: 1; min-height: 300px; }
@@ -1497,19 +1497,19 @@ function getWeekday(dateStr: string): string {
 .editor-hint {
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 8px;
+  margin-top: var(--space-2);
   text-align: right;
 }
 
 .markdown-preview { flex: 1; }
 
 .memory-section-card {
-  padding: 14px 16px;
+  padding: var(--space-3) var(--space-4);
   border-radius: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   margin-bottom: 10px;
-  transition: all 300ms ease-in-out;
+  transition: all var(--transition-slow);
 }
 
 .memory-section-card:hover {
@@ -1520,7 +1520,7 @@ function getWeekday(dateStr: string): string {
 .ms-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin-bottom: 10px;
 }
 
@@ -1549,18 +1549,18 @@ function getWeekday(dateStr: string): string {
 }
 
 .ms-line {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.6;
   margin-bottom: 3px;
 }
 
 .distilled-section-card {
-  padding: 14px;
+  padding: var(--space-3);
   border-radius: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  transition: all 300ms ease-in-out;
+  transition: all var(--transition-slow);
 }
 
 .distilled-section-card:hover {
@@ -1571,7 +1571,7 @@ function getWeekday(dateStr: string): string {
 .distilled-section-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin-bottom: 10px;
 }
 
@@ -1593,7 +1593,7 @@ function getWeekday(dateStr: string): string {
 }
 
 .distilled-line {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text);
   line-height: 1.6;
   margin-bottom: 2px;
@@ -1602,7 +1602,7 @@ function getWeekday(dateStr: string): string {
 .section-title {
   font-size: 13px;
   font-weight: 600;
-  margin-bottom: 12px;
+  margin-bottom: 12x
   color: var(--text);
   display: flex;
   align-items: center;
@@ -1637,10 +1637,10 @@ function getWeekday(dateStr: string): string {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: var(--surface);
 }
 
@@ -1661,9 +1661,9 @@ function getWeekday(dateStr: string): string {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: var(--surface);
   color: var(--text);
   font-size: 13px;
@@ -1676,20 +1676,20 @@ function getWeekday(dateStr: string): string {
   right: 0;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px;
+  border-radius: var(--radius-xs);
+  padding: var(--space-1);
   min-width: 120px;
 }
 
 .filter-option {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   font-size: 13px;
   color: var(--text);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .filter-option:hover {
@@ -1701,7 +1701,7 @@ function getWeekday(dateStr: string): string {
 }
 
 .add-fact-form {
-  padding: 14px;
+  padding: var(--space-3);
   border-radius: 12px;
   background: var(--surface);
   border: 1px solid var(--task-purple-border);
@@ -1709,15 +1709,15 @@ function getWeekday(dateStr: string): string {
 
 .add-fact-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
 }
 
 .add-fact-input {
   flex: 1;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: var(--bg);
   color: var(--text);
   font-size: 13px;
@@ -1729,10 +1729,10 @@ function getWeekday(dateStr: string): string {
 .add-fact-select {
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: var(--bg);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--text-sm);
   outline: none;
   min-width: 80px;
 }
@@ -1753,7 +1753,7 @@ function getWeekday(dateStr: string): string {
 .fact-category-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 10px 14px;
   background: color-mix(in srgb, var(--cat-color) 6%, transparent);
   border-bottom: 1px solid var(--border);
@@ -1778,7 +1778,7 @@ function getWeekday(dateStr: string): string {
   color: var(--text-muted);
   margin-left: auto;
   padding: 1px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: var(--bg);
 }
 
@@ -1791,7 +1791,7 @@ function getWeekday(dateStr: string): string {
   align-items: center;
   gap: 10px;
   padding: 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   transition: all 200ms;
 }
 
@@ -1804,7 +1804,7 @@ function getWeekday(dateStr: string): string {
   min-width: 0;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
@@ -1815,8 +1815,8 @@ function getWeekday(dateStr: string): string {
 }
 
 .fact-error {
-  font-size: 11px;
-  color: #f97316;
+  font-size: var(--text-xs);
+  color: var(--lumi-warning);
   opacity: 0.8;
 }
 
@@ -1828,19 +1828,19 @@ function getWeekday(dateStr: string): string {
 .fact-badge {
   display: inline-block;
   padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 10px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
   font-weight: 500;
 }
 
 .fact-badge.deprecated {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
 }
 
 .fact-badge.expires {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background: var(--lumi-warning-light);
+  color: var(--lumi-warning);
 }
 
 .fact-actions {
@@ -1854,7 +1854,7 @@ function getWeekday(dateStr: string): string {
   justify-content: center;
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   color: var(--text-muted);
   cursor: pointer;
   transition: all 200ms;
@@ -1887,31 +1887,31 @@ function getWeekday(dateStr: string): string {
 .conversation-filter {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 0 4px;
+  gap: var(--space-2);
+  margin-bottom: 12x
+  padding: 0 var(--space-1);
 }
 
 .filter-label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
 .conversation-select {
   flex: 1;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--bg-secondary, rgba(40, 40, 40, 0.8));
-  color: var(--text-primary, #e0e0e0);
-  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.08));
-  font-size: 12px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: var(--input-border);
+  font-size: var(--text-sm);
   outline: none;
   cursor: pointer;
 }
 
 .conversation-select:focus {
-  border-color: var(--lumi-primary, #147EBC);
+  border-color: var(--lumi-primary);
 }
 
 .daily-sidebar {
@@ -1919,7 +1919,7 @@ function getWeekday(dateStr: string): string {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .daily-dates {
@@ -1933,10 +1933,10 @@ function getWeekday(dateStr: string): string {
 .daily-date-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-sm);
   color: var(--text-muted);
   cursor: pointer;
   transition: all 200ms;
@@ -1946,9 +1946,9 @@ function getWeekday(dateStr: string): string {
 .daily-date-item.active { background: var(--lumi-sky-soft); color: var(--lumi-sky); font-weight: 600; }
 
 .daily-count {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--border);
   margin-left: auto;
 }
@@ -1964,17 +1964,17 @@ function getWeekday(dateStr: string): string {
 .daily-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .daily-date-label {
-  font-size: 16px;
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--text);
 }
 
 .daily-weekday {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -1988,10 +1988,10 @@ function getWeekday(dateStr: string): string {
   display: flex;
   gap: 12px;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   border: 1px solid transparent;
-  transition: all 300ms ease-in-out;
+  transition: all var(--transition-slow);
 }
 
 .memo-item:hover { border-color: var(--border); }
@@ -2013,12 +2013,12 @@ function getWeekday(dateStr: string): string {
 }
 
 .add-daily-section {
-  margin-top: 12px;
+  margin-top: var(--space-3);
 }
 
 .add-daily-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
 }
 
@@ -2026,7 +2026,7 @@ function getWeekday(dateStr: string): string {
   flex: 1;
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text);
   font-size: 13px;
@@ -2130,7 +2130,7 @@ function getWeekday(dateStr: string): string {
   }
   
   .fact-actions {
-    margin-top: 8px;
+    margin-top: var(--space-2);
   }
   
   .confirm-dialog {

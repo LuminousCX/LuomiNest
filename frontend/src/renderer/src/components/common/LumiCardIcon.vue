@@ -22,199 +22,199 @@ const themeMap: Record<string, {
   Brain: {
     gradient: 'linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(236, 72, 153, 0.04))',
     glow: '0 4px 16px rgba(236, 72, 153, 0.15)',
-    iconColor: '#ec4899',
+    iconColor: 'var(--task-pink)',
     animClass: 'anim-pulse',
   },
   Bot: {
     gradient: 'linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(98, 169, 200, 0.06))',
     glow: '0 4px 16px rgba(20, 126, 188, 0.15)',
-    iconColor: 'var(--lumi-primary)',
+    iconColor: 'var(--lumi-brand)',
     animClass: 'anim-float',
   },
   Zap: {
     gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))',
     glow: '0 4px 16px rgba(245, 158, 11, 0.15)',
-    iconColor: '#f59e0b',
+    iconColor: 'var(--lumi-amber)',
     animClass: 'anim-shimmer',
   },
   Globe: {
     gradient: 'linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.04))',
     glow: '0 4px 16px rgba(59, 130, 246, 0.15)',
-    iconColor: '#3b82f6',
+    iconColor: 'var(--lumi-info)',
     animClass: 'anim-float',
   },
   Palette: {
     gradient: 'linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(244, 114, 182, 0.06))',
     glow: '0 4px 16px rgba(236, 72, 153, 0.15)',
-    iconColor: '#ec4899',
+    iconColor: 'var(--task-pink)',
     animClass: 'anim-float',
   },
   Cpu: {
     gradient: 'linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(59, 130, 246, 0.06))',
     glow: '0 4px 16px rgba(20, 126, 188, 0.15)',
-    iconColor: '#147ebc',
+    iconColor: 'var(--lumi-brand)',
     animClass: 'anim-pulse',
   },
   Lightbulb: {
     gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(251, 191, 36, 0.06))',
     glow: '0 4px 16px rgba(245, 158, 11, 0.15)',
-    iconColor: '#f59e0b',
+    iconColor: 'var(--lumi-amber)',
     animClass: 'anim-glow',
   },
   Terminal: {
     gradient: 'linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.04))',
     glow: '0 4px 16px rgba(34, 197, 94, 0.15)',
-    iconColor: '#22c55e',
+    iconColor: 'var(--lumi-success)',
     animClass: 'anim-shimmer',
   },
   Code: {
     gradient: 'linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(16, 185, 129, 0.06))',
     glow: '0 4px 16px rgba(34, 197, 94, 0.15)',
-    iconColor: '#22c55e',
+    iconColor: 'var(--lumi-success)',
     animClass: 'anim-float',
   },
   MessageCircle: {
     gradient: 'linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(59, 130, 246, 0.06))',
     glow: '0 4px 16px rgba(20, 126, 188, 0.15)',
-    iconColor: '#3b82f6',
+    iconColor: 'var(--lumi-info)',
     animClass: 'anim-pulse',
   },
   MessageSquare: {
     gradient: 'linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(59, 130, 246, 0.06))',
     glow: '0 4px 16px rgba(20, 126, 188, 0.15)',
-    iconColor: '#3b82f6',
+    iconColor: 'var(--lumi-info)',
     animClass: 'anim-pulse',
   },
   Search: {
     gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(139, 92, 246, 0.04))',
     glow: '0 4px 16px rgba(139, 92, 246, 0.15)',
-    iconColor: '#8b5cf6',
+    iconColor: 'var(--task-purple)',
     animClass: 'anim-shimmer',
   },
   Shield: {
     gradient: 'linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.04))',
     glow: '0 4px 16px rgba(34, 197, 94, 0.15)',
-    iconColor: '#22c55e',
+    iconColor: 'var(--lumi-success)',
     animClass: 'anim-float',
   },
   Heart: {
     gradient: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.04))',
     glow: '0 4px 16px rgba(239, 68, 68, 0.15)',
-    iconColor: '#ef4444',
+    iconColor: 'var(--lumi-danger)',
     animClass: 'anim-pulse',
   },
   HeartPulse: {
     gradient: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.04))',
     glow: '0 4px 16px rgba(239, 68, 68, 0.15)',
-    iconColor: '#ef4444',
+    iconColor: 'var(--lumi-danger)',
     animClass: 'anim-pulse',
   },
   Users: {
     gradient: 'linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(59, 130, 246, 0.06))',
     glow: '0 4px 16px rgba(20, 126, 188, 0.15)',
-    iconColor: '#3b82f6',
+    iconColor: 'var(--lumi-info)',
     animClass: 'anim-float',
   },
   User: {
     gradient: 'linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(59, 130, 246, 0.06))',
     glow: '0 4px 16px rgba(20, 126, 188, 0.15)',
-    iconColor: '#3b82f6',
+    iconColor: 'var(--lumi-info)',
     animClass: 'anim-float',
   },
   BookOpen: {
     gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))',
     glow: '0 4px 16px rgba(245, 158, 11, 0.15)',
-    iconColor: '#f59e0b',
+    iconColor: 'var(--lumi-amber)',
     animClass: 'anim-float',
   },
   GraduationCap: {
     gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(139, 92, 246, 0.04))',
     glow: '0 4px 16px rgba(139, 92, 246, 0.15)',
-    iconColor: '#8b5cf6',
+    iconColor: 'var(--task-purple)',
     animClass: 'anim-float',
   },
   BarChart3: {
     gradient: 'linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(59, 130, 246, 0.06))',
     glow: '0 4px 16px rgba(20, 126, 188, 0.15)',
-    iconColor: '#3b82f6',
+    iconColor: 'var(--lumi-info)',
     animClass: 'anim-shimmer',
   },
   TrendingUp: {
     gradient: 'linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.04))',
     glow: '0 4px 16px rgba(34, 197, 94, 0.15)',
-    iconColor: '#22c55e',
+    iconColor: 'var(--lumi-success)',
     animClass: 'anim-shimmer',
   },
   Puzzle: {
     gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))',
     glow: '0 4px 16px rgba(245, 158, 11, 0.15)',
-    iconColor: '#f59e0b',
+    iconColor: 'var(--lumi-amber)',
     animClass: 'anim-shimmer',
   },
   Wrench: {
     gradient: 'linear-gradient(135deg, rgba(107, 114, 128, 0.12), rgba(107, 114, 128, 0.04))',
     glow: '0 4px 16px rgba(107, 114, 128, 0.15)',
-    iconColor: '#6b7280',
+    iconColor: 'var(--text-muted)',
     animClass: 'anim-shimmer',
   },
   Package: {
     gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))',
     glow: '0 4px 16px rgba(245, 158, 11, 0.15)',
-    iconColor: '#f59e0b',
+    iconColor: 'var(--lumi-amber)',
     animClass: 'anim-float',
   },
   Image: {
     gradient: 'linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(244, 114, 182, 0.06))',
     glow: '0 4px 16px rgba(236, 72, 153, 0.15)',
-    iconColor: '#ec4899',
+    iconColor: 'var(--task-pink)',
     animClass: 'anim-shimmer',
   },
   Volume2: {
     gradient: 'linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(244, 114, 182, 0.06))',
     glow: '0 4px 16px rgba(236, 72, 153, 0.15)',
-    iconColor: '#ec4899',
+    iconColor: 'var(--task-pink)',
     animClass: 'anim-pulse',
   },
   PenTool: {
     gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(139, 92, 246, 0.04))',
     glow: '0 4px 16px rgba(139, 92, 246, 0.15)',
-    iconColor: '#8b5cf6',
+    iconColor: 'var(--task-purple)',
     animClass: 'anim-float',
   },
   Laptop: {
     gradient: 'linear-gradient(135deg, rgba(107, 114, 128, 0.12), rgba(107, 114, 128, 0.04))',
     glow: '0 4px 16px rgba(107, 114, 128, 0.15)',
-    iconColor: '#6b7280',
+    iconColor: 'var(--text-muted)',
     animClass: 'anim-float',
   },
   Home: {
     gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))',
     glow: '0 4px 16px rgba(245, 158, 11, 0.15)',
-    iconColor: '#f59e0b',
+    iconColor: 'var(--lumi-amber)',
     animClass: 'anim-float',
   },
   RefreshCw: {
     gradient: 'linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.04))',
     glow: '0 4px 16px rgba(34, 197, 94, 0.15)',
-    iconColor: '#22c55e',
+    iconColor: 'var(--lumi-success)',
     animClass: 'anim-pulse',
   },
   Scale: {
     gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(139, 92, 246, 0.04))',
     glow: '0 4px 16px rgba(139, 92, 246, 0.15)',
-    iconColor: '#8b5cf6',
+    iconColor: 'var(--task-purple)',
     animClass: 'anim-float',
   },
   LayoutGrid: {
     gradient: 'linear-gradient(135deg, rgba(20, 126, 188, 0.12), rgba(59, 130, 246, 0.06))',
     glow: '0 4px 16px rgba(20, 126, 188, 0.15)',
-    iconColor: '#3b82f6',
+    iconColor: 'var(--lumi-info)',
     animClass: 'anim-shimmer',
   },
   default: {
     gradient: 'linear-gradient(135deg, rgba(20, 126, 188, 0.10), rgba(98, 169, 200, 0.05))',
     glow: '0 4px 16px rgba(20, 126, 188, 0.12)',
-    iconColor: 'var(--lumi-primary)',
+    iconColor: 'var(--lumi-brand)',
     animClass: 'anim-float',
   },
 }
@@ -257,17 +257,17 @@ const borderRadius = computed(() => `${Math.round((props.size + 24) * 0.25)}px`)
   justify-content: center;
   flex-shrink: 0;
   overflow: hidden;
-  transition: all 300ms ease-in-out;
+  transition: all var(--transition-slow);
 }
 
 .lumi-card-icon:hover {
   transform: translateY(-2px) scale(1.05);
-  box-shadow: var(--icon-glow-shadow, 0 6px 20px rgba(20, 126, 188, 0.2));
+  box-shadow: var(--icon-glow-shadow, var(--shadow-md));
 }
 
 .icon-inner {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-base);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -280,7 +280,7 @@ const borderRadius = computed(() => `${Math.round((props.size + 24) * 0.25)}px`)
   border-radius: 50%;
   opacity: 0;
   filter: blur(12px);
-  transition: opacity 300ms ease-in-out;
+  transition: opacity var(--transition-slow);
   pointer-events: none;
 }
 

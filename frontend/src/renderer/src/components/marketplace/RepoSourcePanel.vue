@@ -2,11 +2,15 @@
 import { ref, onMounted } from 'vue'
 import {
   Github, Cloud, Globe, Plus, Link2, Unlink, RefreshCw,
-  ChevronDown, ChevronRight, X, Loader2, Check, AlertCircle,
+  ChevronDown, ChevronRight, Loader2, Check, AlertCircle,
   Trash2, ExternalLink, Database, Clock,
 } from 'lucide-vue-next'
+import type { LucideIcon } from 'lucide-vue-next'
 import { useRepoSourceStore } from '../../stores/repo-source'
 import type { RepoSource, RepoSourceType } from '../../types/marketplace'
+import LumiButton from '../../components/common/LumiButton.vue'
+import LumiInput from '../../components/common/LumiInput.vue'
+import LumiModal from '../../components/common/LumiModal.vue'
 
 const store = useRepoSourceStore()
 
@@ -14,11 +18,11 @@ const expandedSourceIds = ref<Set<string>>(new Set(['github-official']))
 const showAddDialog = ref(false)
 const addForm = ref({ name: '', url: '', description: '' })
 
-const TYPE_CONFIG: Record<RepoSourceType, { icon: any; label: string; color: string }> = {
-  github: { icon: Github, label: 'GitHub', color: '#8b5cf6' },
-  cloud: { icon: Cloud, label: '云端', color: '#3b82f6' },
-  cdn: { icon: Globe, label: 'CDN', color: '#06b6d4' },
-  custom: { icon: Plus, label: '自定义', color: '#f59e0b' },
+const TYPE_CONFIG: Record<RepoSourceType, { icon: LucideIcon; label: string; color: string }> = {
+  github: { icon: Github, label: 'GitHub', color: 'var(--task-purple)' },
+  cloud: { icon: Cloud, label: '云端', color: 'var(--lumi-info)' },
+  cdn: { icon: Globe, label: 'CDN', color: 'var(--lumi-sky)' },
+  custom: { icon: Plus, label: '自定义', color: 'var(--lumi-amber)' },
 }
 
 const SUB_MARKET_TYPE_LABEL: Record<string, string> = {
@@ -154,9 +158,16 @@ const formatSyncTime = (timeStr?: string) => {
   <div class="repo-source-panel">
     <div class="panel-header">
       <span class="panel-title">仓库来源</span>
-      <button class="add-source-btn" @click="showAddDialog = true" title="添加自定义来源">
+      <LumiButton
+        variant="ghost"
+        size="sm"
+        icon-only
+        aria-label="添加自定义来源"
+        title="添加自定义来源"
+        @click="showAddDialog = true"
+      >
         <Plus :size="14" />
-      </button>
+      </LumiButton>
     </div>
 
     <div v-if="store.loading" class="panel-loading">
@@ -181,7 +192,7 @@ const formatSyncTime = (timeStr?: string) => {
                 :size="14"
               />
             </button>
-            <div class="source-type-icon" :style="{ color: TYPE_CONFIG[source.type]?.color || '#888' }">
+            <div class="source-type-icon" :style="{ color: TYPE_CONFIG[source.type]?.color || 'var(--text-muted)' }">
               <component :is="TYPE_CONFIG[source.type]?.icon || Globe" :size="16" />
             </div>
             <div class="source-info">
@@ -198,7 +209,7 @@ const formatSyncTime = (timeStr?: string) => {
               v-if="getStatusIcon(source)"
               :is="getStatusIcon(source)"
               :size="14"
-              :class="['status-icon', getStatusClass(source)]"
+              :class="['status-icon', getStatusClass(source), { 'spin-animation': source.status === 'loading' }]"
             />
             <button
               class="toggle-btn"
@@ -328,44 +339,35 @@ const formatSyncTime = (timeStr?: string) => {
     </div>
 
     <!-- Add Custom Source Dialog -->
-    <Teleport to="body">
-      <Transition name="dialog-fade">
-        <div v-if="showAddDialog" class="dialog-overlay" @click.self="showAddDialog = false">
-          <div class="dialog-content">
-            <div class="dialog-header">
-              <h3>添加自定义仓库来源</h3>
-              <button class="dialog-close" @click="showAddDialog = false">
-                <X :size="18" />
-              </button>
-            </div>
-            <div class="dialog-body">
-              <div class="form-field">
-                <label>名称</label>
-                <input v-model="addForm.name" type="text" placeholder="输入仓库名称" />
-              </div>
-              <div class="form-field">
-                <label>URL</label>
-                <input v-model="addForm.url" type="text" placeholder="输入仓库地址（如 GitHub 仓库 URL）" />
-              </div>
-              <div class="form-field">
-                <label>描述</label>
-                <textarea v-model="addForm.description" placeholder="输入仓库描述（可选）" rows="3" />
-              </div>
-            </div>
-            <div class="dialog-footer">
-              <button class="btn-cancel" @click="showAddDialog = false">取消</button>
-              <button
-                class="btn-confirm"
-                :disabled="!addForm.name.trim()"
-                @click="handleAddCustom"
-              >
-                添加
-              </button>
-            </div>
-          </div>
+    <LumiModal v-model:visible="showAddDialog" title="添加自定义仓库来源">
+      <div class="dialog-body">
+        <div class="form-field">
+          <label>名称</label>
+          <LumiInput v-model="addForm.name" placeholder="输入仓库名称" />
         </div>
-      </Transition>
-    </Teleport>
+        <div class="form-field">
+          <label>URL</label>
+          <LumiInput v-model="addForm.url" placeholder="输入仓库地址（如 GitHub 仓库 URL）" />
+        </div>
+        <div class="form-field">
+          <label>描述</label>
+          <textarea v-model="addForm.description" class="form-textarea" placeholder="输入仓库描述（可选）" rows="3" />
+        </div>
+      </div>
+      <template #footer>
+        <LumiButton variant="ghost" size="md" @click="showAddDialog = false">
+          取消
+        </LumiButton>
+        <LumiButton
+          variant="primary"
+          size="md"
+          :disabled="!addForm.name.trim()"
+          @click="handleAddCustom"
+        >
+          添加
+        </LumiButton>
+      </template>
+    </LumiModal>
   </div>
 </template>
 
@@ -373,65 +375,49 @@ const formatSyncTime = (timeStr?: string) => {
 .repo-source-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 4px;
+  padding: 0 var(--space-1);
 }
 
 .panel-title {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-
-.add-source-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.add-source-btn:hover {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
 }
 
 .panel-loading {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 20px 0;
+  gap: var(--space-2);
+  padding: var(--space-5) 0;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .source-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .source-item {
   border-radius: var(--radius-md);
   border: 1px solid transparent;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .source-item.active {
-  border-color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 .source-item.disabled {
@@ -442,10 +428,10 @@ const formatSyncTime = (timeStr?: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
   border-radius: var(--radius-md);
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .source-header:hover {
@@ -453,20 +439,20 @@ const formatSyncTime = (timeStr?: string) => {
 }
 
 .source-item.active .source-header:hover {
-  background: rgba(var(--lumi-primary-rgb, 20, 126, 188), 0.08);
+  background: var(--lumi-brand-subtle);
 }
 
 .source-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1;
   min-width: 0;
 }
 
 .expand-btn {
-  width: 20px;
-  height: 20px;
+  width: var(--space-5);
+  height: var(--space-5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -490,13 +476,13 @@ const formatSyncTime = (timeStr?: string) => {
 .source-info {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: calc(var(--space-1) / 4);
   min-width: 0;
 }
 
 .source-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -504,7 +490,7 @@ const formatSyncTime = (timeStr?: string) => {
 }
 
 .source-url {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -514,15 +500,15 @@ const formatSyncTime = (timeStr?: string) => {
 .source-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-shrink: 0;
 }
 
 .source-item-count {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   background: var(--workspace-panel);
-  padding: 2px 6px;
+  padding: calc(var(--space-1) / 2) var(--space-1);
   border-radius: var(--radius-sm);
 }
 
@@ -531,16 +517,15 @@ const formatSyncTime = (timeStr?: string) => {
 }
 
 .status-icon.status-loading {
-  color: var(--lumi-primary);
-  animation: spin 1s linear infinite;
+  color: var(--lumi-brand);
 }
 
 .status-icon.status-loaded {
-  color: #22c55e;
+  color: var(--lumi-success);
 }
 
 .status-icon.status-error {
-  color: #ef4444;
+  color: var(--lumi-danger);
 }
 
 .toggle-btn {
@@ -552,14 +537,14 @@ const formatSyncTime = (timeStr?: string) => {
 .toggle-track {
   width: 32px;
   height: 18px;
-  border-radius: 9px;
+  border-radius: var(--radius-full);
   background: var(--workspace-border);
   position: relative;
-  transition: background 0.25s;
+  transition: background var(--transition-fast);
 }
 
 .toggle-btn.on .toggle-track {
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
 }
 
 .toggle-thumb {
@@ -568,10 +553,10 @@ const formatSyncTime = (timeStr?: string) => {
   left: 2px;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--surface);
-  transition: transform 0.25s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  transition: transform var(--transition-fast);
+  box-shadow: 0 1px 3px var(--overlay-subtle);
 }
 
 .toggle-btn.on .toggle-thumb {
@@ -579,16 +564,16 @@ const formatSyncTime = (timeStr?: string) => {
 }
 
 .source-detail {
-  padding: 0 10px 10px 38px;
+  padding: 0 var(--space-3) var(--space-3) calc(var(--space-8) - var(--space-1) / 2);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .source-desc {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
   margin: 0;
 }
 
@@ -597,29 +582,29 @@ const formatSyncTime = (timeStr?: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--text-xs);
   background: var(--workspace-panel);
   border: 1px solid var(--workspace-border);
 }
 
 .sync-status-bar.loading {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 .sync-status-bar.loaded {
-  color: #22c55e;
-  border-color: rgba(34, 197, 94, 0.2);
-  background: rgba(34, 197, 94, 0.05);
+  color: var(--lumi-success);
+  border-color: var(--task-green-border);
+  background: var(--lumi-success-light);
 }
 
 .sync-status-bar.error {
-  color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.2);
-  background: rgba(239, 68, 68, 0.05);
+  color: var(--lumi-danger);
+  border-color: var(--task-red-border);
+  background: var(--lumi-danger-light);
 }
 
 .sync-status-bar.idle {
@@ -629,34 +614,34 @@ const formatSyncTime = (timeStr?: string) => {
 .sync-status-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .sync-time {
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: 0.7;
 }
 
 .source-error {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  font-size: 12px;
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
+  font-size: var(--text-xs);
 }
 
 .sub-markets {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .sub-markets-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -666,12 +651,12 @@ const formatSyncTime = (timeStr?: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--workspace-panel);
   border: 1px solid var(--workspace-border);
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .sub-market-item.unlinked {
@@ -682,36 +667,36 @@ const formatSyncTime = (timeStr?: string) => {
 .sub-market-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
 .sub-market-type-badge {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 6px;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
+  padding: calc(var(--space-1) / 2) var(--space-1);
   border-radius: var(--radius-sm);
   text-transform: uppercase;
   flex-shrink: 0;
 }
 
 .sub-market-type-badge[data-type="plugin"] {
-  background: rgba(139, 92, 246, 0.15);
-  color: #8b5cf6;
+  background: var(--task-purple-soft);
+  color: var(--task-purple);
 }
 
 .sub-market-type-badge[data-type="skill"] {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background: var(--task-green-soft);
+  color: var(--task-green);
 }
 
 .sub-market-type-badge[data-type="agent"] {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: var(--task-blue-soft);
+  color: var(--task-blue);
 }
 
 .sub-market-name {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -719,25 +704,25 @@ const formatSyncTime = (timeStr?: string) => {
 }
 
 .sub-market-count {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   background: var(--workspace-border);
-  padding: 1px 5px;
-  border-radius: 8px;
-  min-width: 18px;
+  padding: calc(var(--space-1) / 4) calc(var(--space-1) + var(--space-1) / 4);
+  border-radius: var(--radius-sm);
+  min-width: var(--space-5);
   text-align: center;
 }
 
 .sub-market-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
 }
 
 .sub-market-link {
-  width: 24px;
-  height: 24px;
+  width: var(--space-6);
+  height: var(--space-6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -748,12 +733,12 @@ const formatSyncTime = (timeStr?: string) => {
 
 .sub-market-link:hover {
   background: var(--surface-hover);
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .sub-action-btn {
-  width: 24px;
-  height: 24px;
+  width: var(--space-6);
+  height: var(--space-6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -763,8 +748,8 @@ const formatSyncTime = (timeStr?: string) => {
 }
 
 .sub-action-btn:hover {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .sub-action-btn:disabled {
@@ -776,10 +761,10 @@ const formatSyncTime = (timeStr?: string) => {
 .link-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: var(--text-xs);
   transition: all var(--transition-fast);
 }
 
@@ -788,36 +773,31 @@ const formatSyncTime = (timeStr?: string) => {
 }
 
 .unlink-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
 }
 
 .link-btn {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .link-btn:hover {
-  background: var(--lumi-primary-light);
-}
-
-.sync-info {
-  font-size: 11px;
-  color: var(--text-muted);
+  background: var(--lumi-brand-light);
 }
 
 .source-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .action-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   transition: all var(--transition-fast);
 }
@@ -827,16 +807,16 @@ const formatSyncTime = (timeStr?: string) => {
 }
 
 .sync-btn:hover {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .cache-btn:hover {
-  color: #f59e0b;
+  color: var(--lumi-amber);
 }
 
 .delete-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
 }
 
 .action-btn:disabled {
@@ -844,145 +824,25 @@ const formatSyncTime = (timeStr?: string) => {
   cursor: not-allowed;
 }
 
-/* Dialog */
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-
-.dialog-content {
-  width: 400px;
-  background: var(--workspace-card);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--workspace-border);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-
-.dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--workspace-border);
-}
-
-.dialog-header h3 {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.dialog-close {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.dialog-close:hover {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-}
-
-.dialog-body {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
 .form-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .form-field label {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
-}
-
-.form-field input,
-.form-field textarea {
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-panel);
-  color: var(--text-primary);
-  font-size: 13px;
-  outline: none;
-  transition: border-color var(--transition-fast);
-  font-family: inherit;
-}
-
-.form-field input:focus,
-.form-field textarea:focus {
-  border-color: var(--lumi-primary);
-}
-
-.form-field textarea {
-  resize: vertical;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--workspace-border);
-}
-
-.btn-cancel,
-.btn-confirm {
-  padding: 8px 18px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  transition: all var(--transition-fast);
-}
-
-.btn-cancel {
-  color: var(--text-secondary);
-}
-
-.btn-cancel:hover {
-  background: var(--surface-hover);
-}
-
-.btn-confirm {
-  background: var(--lumi-primary);
-  color: white;
-}
-
-.btn-confirm:hover {
-  opacity: 0.9;
-}
-
-.btn-confirm:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* Transitions */
 .expand-enter-active {
-  animation: expand-in 0.25s ease-out;
+  animation: expand-in var(--duration-normal) var(--ease-out-expo);
 }
 
 .expand-leave-active {
-  animation: expand-in 0.15s ease-in reverse;
+  animation: expand-in var(--duration-fast) var(--ease-out-expo) reverse;
 }
 
 @keyframes expand-in {
@@ -997,31 +857,24 @@ const formatSyncTime = (timeStr?: string) => {
   }
 }
 
-.dialog-fade-enter-active {
-  animation: dialog-in 0.2s ease-out;
-}
-
-.dialog-fade-leave-active {
-  animation: dialog-in 0.15s ease-in reverse;
-}
-
-@keyframes dialog-in {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
+@media (prefers-reduced-motion: reduce) {
+  .source-item,
+  .source-header,
+  .expand-btn,
+  .toggle-track,
+  .toggle-thumb,
+  .sub-market-item,
+  .sub-market-link,
+  .sub-action-btn,
+  .unlink-btn,
+  .link-btn,
+  .action-btn {
+    animation: none;
+    transition: none;
   }
-  to {
-    opacity: 1;
-    transform: scale(1);
+
+  .spin-animation {
+    animation: none;
   }
-}
-
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 </style>

@@ -1,0 +1,34 @@
+# LuomiNest - Development Overrides
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+version: "3.8"
+
+services:
+  postgres:
+    ports:
+      - "${POSTGRES_EXPOSE_PORT:-5432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_EXPOSE_PORT:-6379}:6379"
+
+  backend:
+    build:
+      target: development
+    ports:
+      - "${BACKEND_PORT:-18000}:18000"
+    volumes:
+      - ../backend:/app:delegated
+      - backend_venv:/app/.venv
+    environment:
+      LUOMINEST_ENV: development
+      DEBUG: "true"
+    command: ["uvicorn", "app.core.app_factory:create_app", "--host", "0.0.0.0", "--port", "18000", "--reload"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18000/api/v1/system/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  backend_venv:

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { WifiOff, ShieldAlert, SearchX, Globe, ServerCrash, LockKeyhole, RefreshCw } from 'lucide-vue-next'
+import LumiButton from '../common/LumiButton.vue'
 
 const props = defineProps<{
   code: number
@@ -70,10 +71,12 @@ const displayUrl = computed(() => {
       </div>
 
       <div class="error-actions">
-        <button class="btn-reload" @click="emit('retry')">
-          <RefreshCw :size="16" />
-          <span>重新加载</span>
-        </button>
+        <LumiButton variant="primary" @click="emit('retry')">
+          <template #icon>
+            <RefreshCw :size="16" />
+          </template>
+          重新加载
+        </LumiButton>
       </div>
 
       <div class="error-suggestions">
@@ -98,9 +101,9 @@ const displayUrl = computed(() => {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 80px 40px 40px;
+  padding: var(--space-10) var(--space-8) var(--space-8);
   background: var(--surface);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   overflow-y: auto;
 }
 
@@ -111,49 +114,49 @@ const displayUrl = computed(() => {
 
 .error-icon {
   color: var(--text-muted);
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 
 .error-heading {
-  font-size: 20px;
-  font-weight: 400;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-normal);
   color: var(--text);
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-3);
   line-height: 1.4;
 }
 
 .error-url {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
-  margin: 0 0 16px;
+  margin: 0 0 var(--space-4);
   line-height: 1.5;
 }
 
 .error-url span {
   color: var(--text);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .error-suggestion {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
-  margin: 0 0 20px;
+  margin: 0 0 var(--space-5);
   line-height: 1.5;
 }
 
 .error-details {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 
 .error-details details {
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .error-details summary {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
   cursor: pointer;
-  font-size: 14px;
-  padding: 4px 0;
+  font-size: var(--text-md);
+  padding: var(--space-1) 0;
   user-select: none;
   list-style: none;
 }
@@ -165,9 +168,9 @@ const displayUrl = computed(() => {
 .error-details summary::before {
   content: '▶';
   display: inline-block;
-  font-size: 10px;
-  margin-right: 8px;
-  transition: transform 0.2s ease;
+  font-size: var(--text-2xs);
+  margin-right: var(--space-2);
+  transition: transform var(--transition-fast);
 }
 
 .error-details details[open] summary::before {
@@ -175,9 +178,9 @@ const displayUrl = computed(() => {
 }
 
 .details-content {
-  padding: 12px 0 0 18px;
+  padding: var(--space-3) 0 0 var(--space-5);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.8;
 }
 
@@ -186,42 +189,19 @@ const displayUrl = computed(() => {
 }
 
 .error-actions {
-  margin-bottom: 32px;
-}
-
-.btn-reload {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 24px;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.btn-reload:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.btn-reload:active {
-  background: var(--lumi-primary-hover);
+  margin-bottom: var(--space-7);
 }
 
 .error-suggestions {
   border-top: 1px solid var(--border);
-  padding-top: 20px;
+  padding-top: var(--space-5);
 }
 
 .error-suggestions h3 {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--text-md);
+  font-weight: var(--font-medium);
   color: var(--text);
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-3);
 }
 
 .error-suggestions ul {
@@ -231,10 +211,10 @@ const displayUrl = computed(() => {
 }
 
 .error-suggestions li {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
-  padding: 4px 0;
-  padding-left: 16px;
+  padding: var(--space-1) 0;
+  padding-left: var(--space-4);
   position: relative;
   line-height: 1.6;
 }
@@ -249,14 +229,14 @@ const displayUrl = computed(() => {
 .btn-link {
   background: none;
   border: none;
-  color: var(--lumi-primary);
-  font-size: 14px;
+  color: var(--lumi-brand);
+  font-size: var(--text-md);
   cursor: pointer;
   padding: 0;
   text-decoration: underline;
 }
 
 .btn-link:hover {
-  color: var(--lumi-primary-hover);
+  color: var(--lumi-brand-hover);
 }
 </style>

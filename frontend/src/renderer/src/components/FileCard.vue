@@ -59,16 +59,16 @@ const formatSize = (bytes: number): string => {
 .file-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--workspace-card);
-  border: 1px solid var(--divider-soft);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .file-card:hover {
-  border-color: var(--divider-medium);
+  border-color: var(--border);
 }
 
 .file-card.status-failed {
@@ -83,7 +83,7 @@ const formatSize = (bytes: number): string => {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
-  background: var(--workspace-hover);
+  background: var(--surface-hover);
   color: var(--text-muted);
 }
 
@@ -93,24 +93,24 @@ const formatSize = (bytes: number): string => {
 }
 
 .file-name {
-  font-size: 13px;
-  color: var(--text-primary);
+  font-size: var(--text-base);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .file-status {
-  font-size: 11px;
+  font-size: var(--text-xs);
   margin-top: 2px;
 }
 
 .file-status.uploading {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .file-status.success {
-  color: var(--lumi-success-dark);
+  color: var(--lumi-success);
 }
 
 .file-status.failed {
@@ -118,14 +118,14 @@ const formatSize = (bytes: number): string => {
 }
 
 .file-size {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   margin-top: 2px;
 }
 
 .file-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .action-btn {
@@ -136,11 +136,11 @@ const formatSize = (bytes: number): string => {
   height: 24px;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .action-btn:hover {
-  background: var(--workspace-hover);
+  background: var(--surface-hover);
   color: var(--text-secondary);
 }
 </style>

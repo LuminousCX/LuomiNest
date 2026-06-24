@@ -99,7 +99,7 @@ const glowId = `lumi-logo-glow-${uid}`
 }
 
 .lumi-brand-star.animated:hover {
-  animation: lumi-star-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: lumi-star-pop var(--duration-enter) var(--ease-spring);
 }
 
 @keyframes lumi-star-breathe {

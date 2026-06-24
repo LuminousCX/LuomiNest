@@ -9,6 +9,8 @@ import {
   MessageSquare,
   AlertTriangle,
 } from 'lucide-vue-next'
+import LumiButton from './common/LumiButton.vue'
+import LumiEmptyState from './common/LumiEmptyState.vue'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
 import { useChatTrashStore } from '../stores/chat-trash'
@@ -142,24 +144,28 @@ const formatDeleteTime = (dateStr: string) => {
     <div v-if="trashBatchMode" class="batch-toolbar">
       <button class="batch-action-btn" @click="selectAllTrash">全选</button>
       <span class="batch-count">已选 {{ trashSelectedIds.size }} 项</span>
-      <button
-        :class="['batch-restore-btn', { disabled: trashSelectedIds.size === 0 }]"
+      <LumiButton
+        variant="primary"
+        size="sm"
         :disabled="trashSelectedIds.size === 0"
-        title="批量恢复"
         @click="handleBatchRestore"
       >
-        <Undo2 :size="13" />
+        <template #icon>
+          <Undo2 :size="13" />
+        </template>
         恢复
-      </button>
-      <button
-        :class="['batch-delete-btn', { disabled: trashSelectedIds.size === 0 }]"
+      </LumiButton>
+      <LumiButton
+        variant="danger"
+        size="sm"
         :disabled="trashSelectedIds.size === 0"
-        title="批量永久删除"
         @click="handleBatchPermanentDelete"
       >
-        <Trash2 :size="13" />
+        <template #icon>
+          <Trash2 :size="13" />
+        </template>
         删除
-      </button>
+      </LumiButton>
     </div>
 
     <div class="trash-toolbar" v-if="!trashBatchMode && chatTrashStore.trashItems.length > 0">
@@ -170,10 +176,7 @@ const formatDeleteTime = (dateStr: string) => {
     </div>
 
     <div class="trash-list">
-      <div v-if="chatTrashStore.trashItems.length === 0" class="history-empty">
-        <Trash2 :size="24" />
-        <span>回收站为空</span>
-      </div>
+      <LumiEmptyState v-if="chatTrashStore.trashItems.length === 0" :icon="Trash2" title="回收站为空" size="sm" />
       <div
         v-for="item in chatTrashStore.trashItems"
         :key="item.id"
@@ -209,8 +212,8 @@ const formatDeleteTime = (dateStr: string) => {
           </div>
           <p class="confirm-dialog-message">{{ trashConfirmMessage }}</p>
           <div class="confirm-dialog-actions">
-            <button class="dialog-btn danger" @click="handleTrashConfirm">删除</button>
-            <button class="dialog-btn cancel" @click="showTrashConfirm = false">取消</button>
+            <LumiButton variant="danger" size="md" @click="handleTrashConfirm">删除</LumiButton>
+            <LumiButton variant="secondary" size="md" @click="showTrashConfirm = false">取消</LumiButton>
           </div>
         </div>
       </div>
@@ -229,9 +232,9 @@ const formatDeleteTime = (dateStr: string) => {
 .trash-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--divider-horizontal);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .trash-back-btn {
@@ -245,19 +248,19 @@ const formatDeleteTime = (dateStr: string) => {
   color: var(--text-secondary);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .trash-back-btn:hover {
   background: var(--surface-active);
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .trash-title {
   flex: 1;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text);
 }
 
 .batch-toggle-btn {
@@ -271,137 +274,80 @@ const formatDeleteTime = (dateStr: string) => {
   color: var(--text-muted);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .batch-toggle-btn:hover {
   background: var(--surface-active);
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .batch-toggle-btn.active {
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
   color: var(--text-inverse);
 }
 
 .batch-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--divider-horizontal);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .batch-action-btn {
-  padding: 4px 10px;
-  border: 1px solid var(--divider-horizontal);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-light);
   background: var(--surface);
   color: var(--text-secondary);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s ease-in-out;
+  font-size: var(--text-sm);
+  transition: all var(--transition-fast);
 }
 
 .batch-action-btn:hover {
   background: var(--surface-hover);
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
 }
 
 .batch-count {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   flex: 1;
-}
-
-.batch-restore-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border: none;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 12px;
-  transition: opacity 0.15s ease-in-out;
-}
-
-.batch-restore-btn:hover {
-  opacity: 0.85;
-}
-
-.batch-restore-btn.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.batch-delete-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border: none;
-  background: var(--color-danger);
-  color: var(--text-inverse);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 12px;
-  transition: opacity 0.15s ease-in-out;
-}
-
-.batch-delete-btn:hover {
-  opacity: 0.85;
-}
-
-.batch-delete-btn.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .trash-toolbar {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 14px;
+  padding: var(--space-2) var(--space-4);
 }
 
 .empty-trash-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border: 1px solid var(--color-danger);
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--lumi-danger);
   background: transparent;
-  color: var(--color-danger);
+  color: var(--lumi-danger);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s ease-in-out;
+  font-size: var(--text-sm);
+  transition: all var(--transition-fast);
 }
 
 .empty-trash-btn:hover {
-  background: var(--color-danger);
+  background: var(--lumi-danger);
   color: var(--text-inverse);
 }
 
 .trash-list {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 8px;
-}
-
-.history-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 40px 20px;
-  color: var(--text-muted);
-  font-size: 13px;
+  padding: var(--space-1) var(--space-2);
 }
 
 .history-item-checkbox {
@@ -417,18 +363,18 @@ const formatDeleteTime = (dateStr: string) => {
 .checkbox-box {
   width: 16px;
   height: 16px;
-  border: 1.5px solid var(--divider-vertical);
-  border-radius: 4px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
   color: var(--text-inverse);
 }
 
 .checkbox-box.checked {
-  background: var(--lumi-primary);
-  border-color: var(--lumi-primary);
+  background: var(--lumi-brand);
+  border-color: var(--lumi-brand);
 }
 
 .history-item-icon {
@@ -437,8 +383,8 @@ const formatDeleteTime = (dateStr: string) => {
 }
 
 .history-item-title {
-  font-size: 13px;
-  color: var(--text-primary);
+  font-size: var(--text-base);
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -447,11 +393,11 @@ const formatDeleteTime = (dateStr: string) => {
 .trash-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   cursor: default;
-  transition: background 0.15s ease-in-out;
+  transition: background var(--transition-fast);
 }
 
 .trash-item:hover {
@@ -467,13 +413,13 @@ const formatDeleteTime = (dateStr: string) => {
 }
 
 .trash-item-deleted-time {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .trash-item-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
 }
 
@@ -487,23 +433,23 @@ const formatDeleteTime = (dateStr: string) => {
   background: transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .trash-action-btn.restore {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .trash-action-btn.restore:hover {
-  background: var(--lumi-primary-soft);
+  background: var(--lumi-brand-soft);
 }
 
 .trash-action-btn.delete {
-  color: var(--color-danger);
+  color: var(--lumi-danger);
 }
 
 .trash-action-btn.delete:hover {
-  background: var(--color-danger-soft);
+  background: var(--lumi-danger-light);
 }
 
 .create-dialog-overlay {
@@ -513,14 +459,14 @@ const formatDeleteTime = (dateStr: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
 }
 
 .confirm-dialog {
   background: var(--surface);
   border-radius: var(--radius-lg);
-  padding: 24px;
-  max-width: 360px;
+  padding: var(--space-6);
+  max-width: var(--modal-width-sm);
   width: 90%;
   box-shadow: var(--shadow-lg);
 }
@@ -532,59 +478,31 @@ const formatDeleteTime = (dateStr: string) => {
   width: 48px;
   height: 48px;
   border-radius: var(--radius-full);
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-  margin: 0 auto 16px;
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
+  margin: 0 auto var(--space-4);
 }
 
 .confirm-dialog-message {
   text-align: center;
-  font-size: 14px;
-  color: var(--text-primary);
-  line-height: 1.5;
-  margin: 0 0 20px;
+  font-size: var(--text-md);
+  color: var(--text);
+  line-height: var(--leading-normal);
+  margin: 0 0 var(--space-5);
 }
 
 .confirm-dialog-actions {
   display: flex;
-  gap: 10px;
+  gap: var(--space-2);
   justify-content: center;
 }
 
-.dialog-btn {
-  padding: 8px 20px;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.15s ease-in-out;
-}
-
-.dialog-btn.danger {
-  background: var(--color-danger);
-  color: var(--text-inverse);
-}
-
-.dialog-btn.danger:hover {
-  opacity: 0.85;
-}
-
-.dialog-btn.cancel {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-}
-
-.dialog-btn.cancel:hover {
-  background: var(--surface-active);
-}
-
 .selection-fade-enter-active {
-  animation: selection-fade-in 0.15s ease-in-out;
+  animation: selection-fade-in var(--duration-fast) var(--ease-in-out);
 }
 
 .selection-fade-leave-active {
-  animation: selection-fade-out 0.1s ease-in-out;
+  animation: selection-fade-out var(--duration-fast) var(--ease-in-out);
 }
 
 @keyframes selection-fade-in {
@@ -595,5 +513,12 @@ const formatDeleteTime = (dateStr: string) => {
 @keyframes selection-fade-out {
   from { opacity: 1; }
   to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .selection-fade-enter-active,
+  .selection-fade-leave-active {
+    animation: none;
+  }
 }
 </style>

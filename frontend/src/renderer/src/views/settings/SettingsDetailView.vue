@@ -57,6 +57,8 @@ interface TtsEngineInfo {
   name: string
   online: boolean
   available: boolean
+  category?: string
+  needs_api_key?: boolean
   default_voices?: Record<string, string>
   voices?: Array<{ id: string; name: string; lang: string }>
   lang_map?: Record<string, string>
@@ -102,6 +104,131 @@ const fetchTtsInfo = async () => {
     ttsError.value = e instanceof Error ? e.message : '获取 TTS 信息失败'
   } finally {
     ttsLoading.value = false
+  }
+}
+
+/* ============== TTS 配置 ============== */
+const ttsConfigForm = ref({
+  engine: 'auto',
+  voice: '',
+  model: '',
+  apiKey: '',
+  baseUrl: '',
+  speed: 1.0,
+})
+const ttsConfigSaving = ref(false)
+const ttsConfigTesting = ref(false)
+const ttsTestText = '你好，这是语音合成测试。'
+const ttsTestResult = ref<{ ok: boolean; msg: string } | null>(null)
+
+/** 当前引擎是否需要 API Key */
+const ttsNeedsApiKey = computed(() => {
+  const opt = modelStore.TTS_ENGINE_OPTIONS.find(o => o.value === ttsConfigForm.value.engine)
+  return opt?.needsApiKey ?? false
+})
+
+/** 当前引擎可选音色列表 */
+const ttsVoiceOptions = computed(() => {
+  return modelStore.TTS_ENGINE_VOICES[ttsConfigForm.value.engine] || []
+})
+
+/** 当前引擎是否显示 model 输入框 */
+const ttsShowModel = computed(() => {
+  return ['gemini', 'minimax', 'siliconflow'].includes(ttsConfigForm.value.engine)
+})
+
+/** 当前引擎是否显示 speed 滑块 */
+const ttsShowSpeed = computed(() => {
+  return ['minimax', 'siliconflow', 'sherpa-onnx'].includes(ttsConfigForm.value.engine)
+})
+
+/** 当前引擎是否显示 baseUrl 输入框 */
+const ttsShowBaseUrl = computed(() => {
+  return ['gemini', 'minimax', 'siliconflow', 'fish-audio'].includes(ttsConfigForm.value.engine)
+})
+
+/** 引擎切换时重置相关字段 */
+const onTtsEngineChange = () => {
+  const engine = ttsConfigForm.value.engine
+  const voices = modelStore.TTS_ENGINE_VOICES[engine] || []
+  if (voices.length > 0 && voices[0].value) {
+    ttsConfigForm.value.voice = voices[0].value
+  } else {
+    ttsConfigForm.value.voice = ''
+  }
+  const defaultModel = modelStore.TTS_ENGINE_DEFAULT_MODEL[engine]
+  ttsConfigForm.value.model = defaultModel || ''
+  ttsTestResult.value = null
+}
+
+/** 从 store 同步配置到表单 */
+const syncTtsConfigForm = () => {
+  const cfg = modelStore.ttsConfig
+  ttsConfigForm.value.engine = cfg.engine || cfg.provider || 'auto'
+  ttsConfigForm.value.voice = cfg.voice || ''
+  ttsConfigForm.value.model = cfg.model || ''
+  ttsConfigForm.value.apiKey = cfg.apiKey || ''
+  ttsConfigForm.value.baseUrl = cfg.baseUrl || ''
+  ttsConfigForm.value.speed = cfg.speed ?? 1.0
+}
+
+/** 保存 TTS 配置 */
+const saveTtsConfig = async () => {
+  ttsConfigSaving.value = true
+  try {
+    await modelStore.updateTTSConfig({
+      engine: ttsConfigForm.value.engine,
+      provider: ttsConfigForm.value.engine,
+      voice: ttsConfigForm.value.voice,
+      model: ttsConfigForm.value.model,
+      apiKey: ttsConfigForm.value.apiKey,
+      baseUrl: ttsConfigForm.value.baseUrl,
+      speed: ttsConfigForm.value.speed,
+      apiKeySet: !!ttsConfigForm.value.apiKey,
+    })
+    ttsTestResult.value = { ok: true, msg: '配置已保存' }
+  } catch (e) {
+    ttsTestResult.value = { ok: false, msg: e instanceof Error ? e.message : '保存失败' }
+  } finally {
+    ttsConfigSaving.value = false
+  }
+}
+
+/** 测试 TTS 合成 */
+const testTtsSynthesize = async () => {
+  ttsConfigTesting.value = true
+  ttsTestResult.value = null
+  try {
+    const resp = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: ttsTestText,
+        voice: ttsConfigForm.value.voice || 'default',
+        engine: ttsConfigForm.value.engine,
+        model: ttsConfigForm.value.model,
+        speed: ttsConfigForm.value.speed,
+        apiKey: ttsConfigForm.value.apiKey,
+        baseUrl: ttsConfigForm.value.baseUrl,
+      }),
+    })
+    if (!resp.ok) {
+      const errJson = await resp.json().catch(() => null)
+      throw new Error(errJson?.error || `请求失败 (${resp.status})`)
+    }
+    const blob = await resp.blob()
+    if (blob.size === 0) {
+      throw new Error('返回空音频')
+    }
+    const url = URL.createObjectURL(blob)
+    const audio = new Audio(url)
+    audio.onended = () => URL.revokeObjectURL(url)
+    await audio.play()
+    ttsTestResult.value = { ok: true, msg: '测试成功，正在播放' }
+  } catch (e) {
+    ttsTestResult.value = { ok: false, msg: e instanceof Error ? e.message : '测试失败' }
+  } finally {
+    ttsConfigTesting.value = false
   }
 }
 
@@ -292,16 +419,6 @@ const handleSaveMainAgent = async () => {
   }
 }
 
-const handleProviderChange = async (providerId: string) => {
-  mainAgentEdit.value.provider = providerId
-  const models = modelStore.getProviderModels(providerId)
-  if (models.length > 0 && !models.find(m => m.id === mainAgentEdit.value.model)) {
-    mainAgentEdit.value.model = models[0].id
-  } else if (models.length === 0) {
-    const provider = modelStore.providers.find(p => p.id === providerId)
-    mainAgentEdit.value.model = provider?.defaultModel || ''
-  }
-}
 
 /* ============== 主智能体设置页 ============== */
 const mainAgentLoading = ref(false)
@@ -353,6 +470,7 @@ const handleSaveMainAgentConfig = async () => {
 onMounted(() => {
   if (section.value === 'tts') {
     fetchTtsInfo()
+    syncTtsConfigForm()
   } else if (section.value === 'platforms') {
     platformStore.refreshAll()
     if (modelStore.providers.length === 0) {
@@ -483,6 +601,139 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
             </div>
 
             <template v-else>
+              <!-- TTS 引擎配置卡片 -->
+              <div class="tts-card tts-config-card">
+                <div class="tts-card-header">
+                  <Settings :size="18" />
+                  <span class="tts-card-title">引擎配置</span>
+                </div>
+                <div class="tts-config-form">
+                  <!-- 引擎选择 -->
+                  <div class="tts-config-row">
+                    <label class="tts-config-label">TTS 引擎</label>
+                    <select
+                      v-model="ttsConfigForm.engine"
+                      class="tts-config-select"
+                      @change="onTtsEngineChange"
+                    >
+                      <option
+                        v-for="opt in modelStore.TTS_ENGINE_OPTIONS"
+                        :key="opt.value"
+                        :value="opt.value"
+                      >
+                        {{ opt.label }}
+                      </option>
+                    </select>
+                  </div>
+
+                  <!-- API Key（需要密钥的引擎） -->
+                  <div v-if="ttsNeedsApiKey" class="tts-config-row">
+                    <label class="tts-config-label">API Key</label>
+                    <input
+                      v-model="ttsConfigForm.apiKey"
+                      type="password"
+                      class="tts-config-input"
+                      placeholder="输入 API Key"
+                    />
+                  </div>
+
+                  <!-- 音色选择 -->
+                  <div v-if="ttsVoiceOptions.length > 0" class="tts-config-row">
+                    <label class="tts-config-label">音色</label>
+                    <select v-model="ttsConfigForm.voice" class="tts-config-select">
+                      <option
+                        v-for="v in ttsVoiceOptions"
+                        :key="v.value"
+                        :value="v.value"
+                      >
+                        {{ v.label }}
+                      </option>
+                    </select>
+                  </div>
+
+                  <!-- 自定义音色输入（Fish Audio 等无预设列表的引擎） -->
+                  <div
+                    v-else-if="ttsConfigForm.engine === 'fish-audio' || ttsConfigForm.engine === 'local'"
+                    class="tts-config-row"
+                  >
+                    <label class="tts-config-label">
+                      {{ ttsConfigForm.engine === 'fish-audio' ? 'Reference ID / 角色名' : '音色 ID' }}
+                    </label>
+                    <input
+                      v-model="ttsConfigForm.voice"
+                      type="text"
+                      class="tts-config-input"
+                      :placeholder="ttsConfigForm.engine === 'fish-audio' ? '32位十六进制 ID 或角色名称' : '系统语音 ID'"
+                    />
+                  </div>
+
+                  <!-- 模型（部分引擎） -->
+                  <div v-if="ttsShowModel" class="tts-config-row">
+                    <label class="tts-config-label">模型</label>
+                    <input
+                      v-model="ttsConfigForm.model"
+                      type="text"
+                      class="tts-config-input"
+                      :placeholder="modelStore.TTS_ENGINE_DEFAULT_MODEL[ttsConfigForm.engine] || '模型名称'"
+                    />
+                  </div>
+
+                  <!-- 语速（部分引擎） -->
+                  <div v-if="ttsShowSpeed" class="tts-config-row">
+                    <label class="tts-config-label">语速 ({{ ttsConfigForm.speed.toFixed(1) }}x)</label>
+                    <input
+                      v-model.number="ttsConfigForm.speed"
+                      type="range"
+                      min="0.5"
+                      max="2.0"
+                      step="0.1"
+                      class="tts-config-slider"
+                    />
+                  </div>
+
+                  <!-- 自定义 API 地址（部分引擎） -->
+                  <div v-if="ttsShowBaseUrl" class="tts-config-row">
+                    <label class="tts-config-label">API 地址（可选）</label>
+                    <input
+                      v-model="ttsConfigForm.baseUrl"
+                      type="text"
+                      class="tts-config-input"
+                      placeholder="留空使用默认地址"
+                    />
+                  </div>
+
+                  <!-- 操作按钮 -->
+                  <div class="tts-config-actions">
+                    <button
+                      class="tts-btn tts-btn-primary"
+                      :disabled="ttsConfigSaving"
+                      @click="saveTtsConfig"
+                    >
+                      <Save :size="14" />
+                      <span>{{ ttsConfigSaving ? '保存中...' : '保存配置' }}</span>
+                    </button>
+                    <button
+                      class="tts-btn tts-btn-secondary"
+                      :disabled="ttsConfigTesting"
+                      @click="testTtsSynthesize"
+                    >
+                      <Loader2 v-if="ttsConfigTesting" :size="14" class="tts-spin" />
+                      <Play v-else :size="14" />
+                      <span>{{ ttsConfigTesting ? '测试中...' : '测试语音' }}</span>
+                    </button>
+                  </div>
+
+                  <!-- 测试结果 -->
+                  <div
+                    v-if="ttsTestResult"
+                    :class="['tts-test-result', ttsTestResult.ok ? 'success' : 'error']"
+                  >
+                    <component :is="ttsTestResult.ok ? Check : AlertCircle" :size="14" />
+                    <span>{{ ttsTestResult.msg }}</span>
+                  </div>
+                </div>
+              </div>
+
               <!-- 设备检测卡片 -->
               <div class="tts-card">
                 <div class="tts-card-header">
@@ -1369,6 +1620,135 @@ const currentSection = computed(() => sectionMap[section.value] ?? null)
   padding-top: 6px;
   border-top: 1px solid var(--divider-soft);
   margin-top: 4px;
+}
+
+/* TTS 配置表单 */
+.tts-config-card {
+  border: 1px solid var(--accent-soft, rgba(99, 102, 241, 0.2));
+}
+
+.tts-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.tts-config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tts-config-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.tts-config-select,
+.tts-config-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.2s ease-in-out;
+}
+
+.tts-config-select:focus,
+.tts-config-input:focus {
+  border-color: var(--accent-primary, #6366f1);
+}
+
+.tts-config-slider {
+  width: 100%;
+  height: 4px;
+  background: var(--divider);
+  border-radius: 2px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.tts-config-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-primary, #6366f1);
+  cursor: pointer;
+  transition: transform 0.15s ease-in-out;
+}
+
+.tts-config-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.tts-config-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.tts-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.tts-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tts-btn-primary {
+  background: var(--accent-primary, #6366f1);
+  color: #fff;
+}
+
+.tts-btn-primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover, #4f46e5);
+}
+
+.tts-btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--divider);
+}
+
+.tts-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.tts-test-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.tts-test-result.success {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.tts-test-result.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
 }
 
 .tts-engine-list {

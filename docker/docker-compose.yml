@@ -1,0 +1,94 @@
+# LuomiNest - Docker Compose Base
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: luominest-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-luominest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-luominest}
+      POSTGRES_DB: ${POSTGRES_DB:-luominest}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - luominest
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-luominest} -d ${POSTGRES_DB:-luominest}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: luominest-redis
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_data:/data
+    networks:
+      - luominest
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: luominest-mqtt
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+      - "${MQTT_WS_PORT:-9001}:9001"
+    volumes:
+      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mqtt_data:/mosquitto/data
+      - mqtt_logs:/mosquitto/log
+    networks:
+      - luominest
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-t", "luominest/health", "-m", "ok", "-r"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../docker/backend/Dockerfile
+    container_name: luominest-backend
+    restart: unless-stopped
+    environment:
+      LUOMINEST_ENV: ${LUOMINEST_ENV:-production}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-luominest}:${POSTGRES_PASSWORD:-luominest}@postgres:5432/${POSTGRES_DB:-luominest}
+      REDIS_URL: redis://redis:6379/0
+      MQTT_BROKER_HOST: mqtt
+      MQTT_BROKER_PORT: 1883
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    networks:
+      - luominest
+
+volumes:
+  postgres_data:
+  redis_data:
+  mqtt_data:
+  mqtt_logs:
+
+networks:
+  luominest:
+    driver: bridge

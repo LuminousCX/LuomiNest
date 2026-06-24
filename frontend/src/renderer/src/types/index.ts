@@ -309,6 +309,10 @@ export interface TTSConfig {
   speed?: number
   baseUrl?: string
   apiKeySet?: boolean
+  /** 引擎 ID，与 provider 同义（edge-tts / sherpa-onnx / local / auto 等） */
+  engine?: string
+  /** 云端引擎 API Key（仅前端暂存标记，明文不回传） */
+  apiKey?: string
 }
 
 export interface STTConfig {

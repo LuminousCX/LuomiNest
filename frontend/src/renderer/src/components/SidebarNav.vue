@@ -261,7 +261,7 @@ const handleNavigate = (path: string) => {
   flex-shrink: 0;
   overflow: hidden;
   position: relative;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width var(--transition-normal);
 }
 
 .sidebar-nav-panel.collapsed {
@@ -271,8 +271,8 @@ const handleNavigate = (path: string) => {
 .sidebar-nav-panel::after {
   content: '';
   position: absolute;
-  top: 12px;
-  bottom: 12px;
+  top: var(--space-3);
+  bottom: var(--space-3);
   right: 0;
   width: 1px;
   background: var(--divider-vertical);
@@ -286,14 +286,14 @@ const handleNavigate = (path: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 10px;
+  padding: var(--space-3) var(--space-4) var(--space-2);
   flex-shrink: 0;
 }
 
 .sidebar-nav-panel.collapsed .nav-header {
   flex-direction: column;
-  gap: 8px;
-  padding: 14px 8px 10px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2) var(--space-2);
   align-items: center;
   justify-content: center;
 }
@@ -301,7 +301,7 @@ const handleNavigate = (path: string) => {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .brand-avatar {
@@ -322,14 +322,14 @@ const handleNavigate = (path: string) => {
 }
 
 .brand-name {
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
 }
 
 .brand-tag {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   font-weight: 500;
   letter-spacing: 0.3px;
@@ -337,7 +337,7 @@ const handleNavigate = (path: string) => {
 
 .header-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .header-action-btn {
@@ -351,7 +351,7 @@ const handleNavigate = (path: string) => {
   justify-content: center;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: background 0.15s ease-in-out;
+  transition: background var(--transition-fast);
   position: relative;
 }
 
@@ -362,8 +362,8 @@ const handleNavigate = (path: string) => {
 
 .header-action-dot {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: calc(var(--space-1) * 1.5);
+  right: calc(var(--space-1) * 1.5);
   width: 6px;
   height: 6px;
   background: var(--lumi-danger);
@@ -381,7 +381,7 @@ const handleNavigate = (path: string) => {
   justify-content: center;
   cursor: pointer;
   color: var(--text-muted);
-  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .collapse-toggle-btn:hover {
@@ -394,9 +394,9 @@ const handleNavigate = (path: string) => {
 }
 
 .nav-search {
-  padding: 0 12px;
+  padding: 0 var(--space-3);
   position: relative;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .nav-search:focus-within .nav-search-icon {
@@ -405,7 +405,7 @@ const handleNavigate = (path: string) => {
 
 .nav-search-icon {
   position: absolute;
-  left: 20px;
+  left: var(--space-5);
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
@@ -418,8 +418,8 @@ const handleNavigate = (path: string) => {
   border: none;
   background: var(--surface-hover);
   border-radius: var(--radius-md);
-  padding: 0 32px 0 28px;
-  font-size: 12px;
+  padding: 0 var(--space-7) 0 calc(var(--space-6) + var(--space-1));
+  font-size: var(--text-sm);
   color: var(--text-primary);
   cursor: pointer;
 }
@@ -430,7 +430,7 @@ const handleNavigate = (path: string) => {
 
 .nav-search-sparkle {
   position: absolute;
-  right: 20px;
+  right: var(--space-5);
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
@@ -440,28 +440,28 @@ const handleNavigate = (path: string) => {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 0;
+  padding: var(--space-1) 0;
   scrollbar-width: thin;
 }
 
 .sidebar-nav-panel.collapsed .nav-content {
-  padding: 4px 0 0;
+  padding: var(--space-1) 0 0;
   overflow: visible;
 }
 
 .nav-section {
-  padding: 0 8px;
+  padding: 0 var(--space-2);
 }
 
 .nav-section + .nav-section {
-  margin-top: 4px;
-  padding-top: 4px;
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
   border-top: 1px solid var(--divider-horizontal);
 }
 
 .section-label {
-  padding: 10px 10px 6px;
-  font-size: 10px;
+  padding: var(--space-2) var(--space-2) calc(var(--space-1) * 1.5);
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -479,49 +479,49 @@ const handleNavigate = (path: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-2);
   border: none;
   background: transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--nav-item-radius);
   cursor: pointer;
   color: var(--text-secondary);
-  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+  transition: background var(--transition-fast), color var(--transition-fast);
   position: relative;
   overflow: hidden;
 }
 
 .sidebar-nav-panel.collapsed .group-header {
-  padding: 8px 0;
+  padding: var(--space-2) 0;
   justify-content: center;
   border-radius: var(--radius-lg);
 }
 
 .group-header:hover {
-  background: var(--surface-hover);
+  background: var(--nav-item-hover-bg);
   color: var(--text-primary);
 }
 
 .group-header.active {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
+  color: var(--nav-item-active-color);
+  background: var(--nav-item-active-bg);
 }
 
 .group-header.active::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 6px;
-  bottom: 6px;
+  top: calc(var(--space-1) * 1.5);
+  bottom: calc(var(--space-1) * 1.5);
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: var(--lumi-primary);
+  background: var(--nav-item-active-color);
   opacity: 0.7;
 }
 
 .group-header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   position: relative;
   z-index: 1;
 }
@@ -536,7 +536,7 @@ const handleNavigate = (path: string) => {
 }
 
 .group-label {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -552,7 +552,7 @@ const handleNavigate = (path: string) => {
   z-index: 1;
   flex-shrink: 0;
   opacity: 0.5;
-  transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
 }
 
 .group-header:hover .group-chevron {
@@ -560,7 +560,7 @@ const handleNavigate = (path: string) => {
 }
 
 .group-header.active .group-chevron {
-  color: var(--lumi-primary);
+  color: var(--nav-item-active-color);
   opacity: 0.8;
 }
 
@@ -575,18 +575,18 @@ const handleNavigate = (path: string) => {
 .tree-child {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px 6px 22px;
+  gap: var(--space-2);
+  padding: calc(var(--space-1) * 1.5) var(--space-2) calc(var(--space-1) * 1.5) var(--space-5);
   cursor: pointer;
-  border-radius: var(--radius-md);
+  border-radius: var(--nav-item-radius);
   color: var(--text-muted);
-  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+  transition: background var(--transition-fast), color var(--transition-fast);
   position: relative;
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--text-base);
   opacity: 0;
   transform: translateY(-4px);
-  animation: tree-item-in 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: tree-item-in var(--duration-leave) var(--ease-default) forwards;
 }
 
 @keyframes tree-item-in {
@@ -604,56 +604,62 @@ const handleNavigate = (path: string) => {
 .tree-child:nth-child(6) { animation-delay: 0.12s; }
 
 .tree-child:hover {
-  background: var(--surface-hover);
+  background: var(--nav-item-hover-bg);
   color: var(--text-primary);
 }
 
 .tree-child.active {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
+  color: var(--nav-item-active-color);
+  background: var(--nav-item-active-bg);
   font-weight: 500;
 }
 
 .tree-child.active .child-icon {
-  color: var(--lumi-primary);
+  color: var(--nav-item-active-color);
 }
 
 .tree-line {
   position: absolute;
-  left: 12px;
+  left: var(--space-3);
   top: 0;
   bottom: 0;
-  width: 12px;
+  width: var(--space-3);
   pointer-events: none;
+}
+
+.tree-line::before {
+  content: '';
+  position: absolute;
+  left: var(--space-1);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
 }
 
 .tree-branch {
   position: absolute;
-  left: 4px;
-  top: 0;
-  height: 50%;
-  width: 1px;
-  background: var(--border);
-}
-
-.tree-child.last .tree-branch {
-  height: 50%;
-}
-
-.tree-node {
-  position: absolute;
-  left: 4px;
+  left: var(--space-1);
   top: 50%;
   width: 5px;
   height: 1px;
   background: var(--border);
+  transform: translateY(-50%);
 }
 
-.tree-child.last .tree-node {
-  top: 0;
-  height: 50%;
-  width: 1px;
-  left: 4px;
+.tree-node {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--border);
+  transform: translate(-50%, -50%);
+}
+
+.tree-child.last .tree-line::before {
+  bottom: 50%;
 }
 
 .child-icon {
@@ -662,7 +668,7 @@ const handleNavigate = (path: string) => {
 }
 
 .child-label {
-  font-size: 13px;
+  font-size: var(--text-base);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -678,37 +684,37 @@ const handleNavigate = (path: string) => {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
   border: none;
   background: transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--nav-item-radius);
   cursor: pointer;
   color: var(--text-muted);
-  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+  transition: background var(--transition-fast), color var(--transition-fast);
   position: relative;
   overflow: hidden;
 }
 
 .nav-item:hover {
-  background: var(--surface-hover);
+  background: var(--nav-item-hover-bg);
   color: var(--text-primary);
 }
 
 .nav-item.active {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
+  color: var(--nav-item-active-color);
+  background: var(--nav-item-active-bg);
 }
 
 .nav-item.active::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 6px;
-  bottom: 6px;
+  top: calc(var(--space-1) * 1.5);
+  bottom: calc(var(--space-1) * 1.5);
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: var(--lumi-primary);
+  background: var(--nav-item-active-color);
   opacity: 0.7;
 }
 
@@ -719,7 +725,7 @@ const handleNavigate = (path: string) => {
 }
 
 .nav-item-label {
-  font-size: 13px;
+  font-size: var(--text-base);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -728,8 +734,8 @@ const handleNavigate = (path: string) => {
 }
 
 .nav-item-badge {
-  font-size: 10px;
-  padding: 1px 6px;
+  font-size: var(--text-2xs);
+  padding: var(--badge-padding);
   border-radius: var(--radius-full);
   background: var(--lumi-primary);
   color: var(--text-inverse);
@@ -739,7 +745,7 @@ const handleNavigate = (path: string) => {
 }
 
 .nav-footer {
-  padding: 8px;
+  padding: var(--space-2);
   border-top: 1px solid var(--divider-horizontal);
   flex-shrink: 0;
 }
@@ -753,33 +759,33 @@ const handleNavigate = (path: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--space-2);
+  padding: var(--space-2);
   border: none;
   background: transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--nav-item-radius);
   cursor: pointer;
   color: var(--text-muted);
-  font-size: 12px;
-  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+  font-size: var(--text-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .sidebar-nav-panel.collapsed .footer-btn {
-  padding: 8px 0;
+  padding: var(--space-2) 0;
 }
 
 .footer-btn:hover {
-  background: var(--surface-hover);
+  background: var(--nav-item-hover-bg);
   color: var(--text-primary);
 }
 
 /* Tree expand transition */
 .tree-expand-enter-active {
-  animation: tree-expand-in 0.2s ease-in-out;
+  animation: tree-expand-in var(--duration-leave) var(--ease-in-out);
 }
 
 .tree-expand-leave-active {
-  animation: tree-expand-out 0.15s ease-in-out;
+  animation: tree-expand-out var(--duration-fast) var(--ease-in-out);
 }
 
 @keyframes tree-expand-in {
@@ -790,5 +796,40 @@ const handleNavigate = (path: string) => {
 @keyframes tree-expand-out {
   from { opacity: 1; max-height: 300px; }
   to { opacity: 0; max-height: 0; }
+}
+
+/* Focus visible */
+.header-action-btn:focus-visible,
+.collapse-toggle-btn:focus-visible,
+.group-header:focus-visible,
+.nav-item:focus-visible,
+.footer-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-nav-panel,
+  .header-action-btn,
+  .collapse-toggle-btn,
+  .group-header,
+  .group-chevron,
+  .tree-child,
+  .nav-item,
+  .footer-btn {
+    transition: none;
+  }
+
+  .tree-child {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .tree-expand-enter-active,
+  .tree-expand-leave-active {
+    animation: none;
+  }
 }
 </style>

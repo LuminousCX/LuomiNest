@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { X, FileText, Image, File, Download } from 'lucide-vue-next'
+import { X, FileText, Image, Download, File } from 'lucide-vue-next'
+import LumiButton from './common/LumiButton.vue'
+import LumiEmptyState from './common/LumiEmptyState.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -73,12 +75,16 @@ const handleDownload = () => {
               <pre>{{ fileContent }}</pre>
             </div>
             <div v-else class="no-content">
-              <File :size="48" />
-              <p>无法预览此文件类型</p>
-              <button class="download-btn" @click="handleDownload">
-                <Download :size="16" />
-                下载文件
-              </button>
+              <LumiEmptyState icon="file" title="无法预览此文件类型">
+                <template #action>
+                  <LumiButton variant="primary" @click="handleDownload">
+                    <template #icon>
+                      <Download :size="16" />
+                    </template>
+                    下载文件
+                  </LumiButton>
+                </template>
+              </LumiEmptyState>
             </div>
           </div>
         </div>
@@ -98,12 +104,12 @@ const handleDownload = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  padding: 20px;
+  z-index: var(--z-modal);
+  padding: var(--space-5);
 }
 
 .file-preview-modal {
-  background: var(--workspace-card);
+  background: var(--surface);
   border-radius: var(--radius-lg);
   max-width: 90%;
   max-height: 90%;
@@ -117,60 +123,60 @@ const handleDownload = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--divider-soft);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .file-info {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--text-primary);
+  gap: var(--space-2);
+  color: var(--text);
 }
 
 .file-name {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--text-md);
+  font-weight: var(--font-medium);
 }
 
 .modal-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .action-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border: 1px solid var(--divider-medium);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .action-btn:hover {
-  background: var(--workspace-hover);
+  background: var(--surface-hover);
 }
 
 .close-btn {
   display: flex;
   align-items: center;
-  padding: 6px;
+  padding: var(--space-1);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
 }
 
 .close-btn:hover {
-  background: var(--workspace-hover);
+  background: var(--surface-hover);
   color: var(--text-secondary);
 }
 
 .modal-body {
   flex: 1;
   overflow: auto;
-  padding: 18px;
+  padding: var(--space-4);
 }
 
 .image-preview {
@@ -193,9 +199,9 @@ const handleDownload = () => {
 .text-preview pre {
   white-space: pre-wrap;
   word-break: break-all;
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.6;
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
   margin: 0;
 }
 
@@ -204,35 +210,13 @@ const handleDownload = () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px;
+  padding: var(--space-6) var(--space-4);
   color: var(--text-muted);
-}
-
-.no-content p {
-  margin-top: 12px;
-  font-size: 14px;
-}
-
-.download-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 16px;
-  padding: 10px 20px;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: 14px;
-}
-
-.download-btn:hover {
-  opacity: 0.9;
 }
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .fade-enter-from,

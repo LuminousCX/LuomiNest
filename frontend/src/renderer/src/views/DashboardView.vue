@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMemoryStore } from '../stores/memory'
+import LumiButton from '../components/common/LumiButton.vue'
+import LumiCard from '../components/common/LumiCard.vue'
 import {
   LayoutDashboard,
   Cpu,
@@ -33,6 +35,7 @@ import {
   Volume2,
   Wand2,
   UserCircle,
+  Plus,
 } from 'lucide-vue-next'
 
 const currentTime = ref(new Date())
@@ -77,10 +80,10 @@ interface ModelProvider {
 }
 
 const modelProviders = ref<ModelProvider[]>([
-  { id: 'openai', name: 'OpenAI', icon: 'OAI', status: 'active', model: 'GPT-4o', endpoint: 'https://api.openai.com/v1', requests: 12847, latency: 234, color: '#10a37f' },
-  { id: 'anthropic', name: 'Anthropic', icon: 'ANT', status: 'active', model: 'Claude 3.5 Sonnet', endpoint: 'https://api.anthropic.com/v1', requests: 8234, latency: 189, color: '#d4a574' },
-  { id: 'deepseek', name: 'DeepSeek', icon: 'DSK', status: 'active', model: 'DeepSeek-V3', endpoint: 'https://api.deepseek.com/v1', requests: 5621, latency: 312, color: '#4d6bfe' },
-  { id: 'ollama', name: 'Ollama Local', icon: 'OLL', status: 'inactive', model: 'Llama 3.1', endpoint: 'http://localhost:11434', requests: 0, latency: 0, color: '#6c757d' },
+  { id: 'openai', name: 'OpenAI', icon: 'OAI', status: 'active', model: 'GPT-4o', endpoint: 'https://api.openai.com/v1', requests: 12847, latency: 234, color: 'var(--lumi-success)' },
+  { id: 'anthropic', name: 'Anthropic', icon: 'ANT', status: 'active', model: 'Claude 3.5 Sonnet', endpoint: 'https://api.anthropic.com/v1', requests: 8234, latency: 189, color: 'var(--lumi-warning)' },
+  { id: 'deepseek', name: 'DeepSeek', icon: 'DSK', status: 'active', model: 'DeepSeek-V3', endpoint: 'https://api.deepseek.com/v1', requests: 5621, latency: 312, color: 'var(--lumi-info)' },
+  { id: 'ollama', name: 'Ollama Local', icon: 'OLL', status: 'inactive', model: 'Llama 3.1', endpoint: 'http://localhost:11434', requests: 0, latency: 0, color: 'var(--text-muted)' },
 ])
 
 interface PersonaConfig {
@@ -110,17 +113,17 @@ interface UsageMetric {
 
 const apiUsageMetrics = ref<UsageMetric[]>([
   { label: '今日请求', value: 26702, unit: '次', change: 12.5, trend: 'up', color: 'var(--lumi-primary)' },
-  { label: 'Token 消耗', value: '2.84M', unit: '', change: 8.3, trend: 'up', color: '#22c55e' },
-  { label: '平均延迟', value: 245, unit: 'ms', change: -5.2, trend: 'down', color: '#f59e0b' },
-  { label: '成功率', value: 99.7, unit: '%', change: 0.3, trend: 'up', color: '#8b5cf6' },
+  { label: 'Token 消耗', value: '2.84M', unit: '', change: 8.3, trend: 'up', color: 'var(--lumi-success)' },
+  { label: '平均延迟', value: 245, unit: 'ms', change: -5.2, trend: 'down', color: 'var(--lumi-warning)' },
+  { label: '成功率', value: 99.7, unit: '%', change: 0.3, trend: 'up', color: 'var(--task-purple)' },
 ])
 
 const memoryStore = useMemoryStore()
 
 const memoryMetrics = ref<UsageMetric[]>([
-  { label: '工作记忆', value: 0, unit: '/100', change: 0, trend: 'up', color: '#f59e0b' },
-  { label: '情景记忆', value: 0, unit: '/50', change: 0, trend: 'up', color: '#22c55e' },
-  { label: '语义记忆', value: 0, unit: '/500', change: 0, trend: 'up', color: '#8b5cf6' },
+  { label: '工作记忆', value: 0, unit: '/100', change: 0, trend: 'up', color: 'var(--lumi-warning)' },
+  { label: '情景记忆', value: 0, unit: '/50', change: 0, trend: 'up', color: 'var(--lumi-success)' },
+  { label: '语义记忆', value: 0, unit: '/500', change: 0, trend: 'up', color: 'var(--task-purple)' },
   { label: '记忆健康度', value: 0, unit: '%', change: 0, trend: 'up', color: 'var(--lumi-primary)' },
 ])
 
@@ -146,9 +149,9 @@ const refreshMemoryMetrics = async () => {
 
 const contextMetrics = ref<UsageMetric[]>([
   { label: '当前上下文', value: 8192, unit: 'tokens', change: 12.0, trend: 'up', color: 'var(--lumi-primary)' },
-  { label: '窗口使用率', value: 68, unit: '%', change: -3.5, trend: 'down', color: '#f59e0b' },
-  { label: '对话轮次', value: 24, unit: '轮', change: 8.0, trend: 'up', color: '#22c55e' },
-  { label: '压缩次数', value: 3, unit: '次', change: 0, trend: 'up', color: '#8b5cf6' },
+  { label: '窗口使用率', value: 68, unit: '%', change: -3.5, trend: 'down', color: 'var(--lumi-warning)' },
+  { label: '对话轮次', value: 24, unit: '轮', change: 8.0, trend: 'up', color: 'var(--lumi-success)' },
+  { label: '压缩次数', value: 3, unit: '次', change: 0, trend: 'up', color: 'var(--task-purple)' },
 ])
 
 interface LogEntry {
@@ -186,10 +189,10 @@ const tabs = [
 
 function getLogLevelStyle(level: string) {
   const map: Record<string, { bg: string; text: string; dot: string }> = {
-    info: { bg: 'rgba(20,126,188,0.1)', text: 'var(--lumi-primary)', dot: 'var(--lumi-primary)' },
-    warn: { bg: 'rgba(234,179,8,0.1)', text: '#eab308', dot: '#eab308' },
-    error: { bg: 'rgba(244,63,94,0.1)', text: '#ef4444', dot: '#ef4444' },
-    success: { bg: 'rgba(34,197,94,0.1)', text: '#22c55e', dot: '#22c55e' },
+    info: { bg: 'var(--lumi-primary-light)', text: 'var(--lumi-primary)', dot: 'var(--lumi-primary)' },
+    warn: { bg: 'var(--lumi-warning-light)', text: 'var(--lumi-warning)', dot: 'var(--lumi-warning)' },
+    error: { bg: 'var(--lumi-danger-light)', text: 'var(--lumi-danger)', dot: 'var(--lumi-danger)' },
+    success: { bg: 'var(--lumi-success-light)', text: 'var(--lumi-success)', dot: 'var(--lumi-success)' },
   }
   return map[level] || map.info
 }
@@ -239,12 +242,16 @@ function clearConsole() {
         </div>
       </div>
       <div class="header-right">
-        <button class="header-action-btn" title="刷新数据">
-          <RefreshCw :size="16" />
-        </button>
-        <button class="header-action-btn" title="设置">
-          <Settings2 :size="16" />
-        </button>
+        <LumiButton variant="ghost" size="sm" icon-only aria-label="刷新数据">
+          <template #icon>
+            <RefreshCw :size="16" />
+          </template>
+        </LumiButton>
+        <LumiButton variant="ghost" size="sm" icon-only aria-label="设置">
+          <template #icon>
+            <Settings2 :size="16" />
+          </template>
+        </LumiButton>
       </div>
     </div>
 
@@ -253,7 +260,7 @@ function clearConsole() {
         <section class="dash-section overview-top">
           <div class="stat-cards-row">
             <div v-for="(metric, idx) in [...apiUsageMetrics.slice(0, 2), ...memoryMetrics.slice(0, 2)]" :key="metric.label"
-              class="stat-card" :style="{ '--card-delay': `${idx * 0.08}s`, '--accent-color': metric.color }">
+              class="stat-card lumi-card" :style="{ '--card-delay': `${idx * 0.08}s`, '--accent-color': metric.color }">
               <div class="stat-card-header">
                 <span class="stat-label">{{ metric.label }}</span>
                 <component :is="metric.trend === 'up' ? ArrowUpRight : ArrowDownRight" :size="16"
@@ -276,17 +283,21 @@ function clearConsole() {
 
         <section class="dash-section main-grid">
           <div class="grid-left">
-            <div class="panel-card model-panel">
-              <div class="panel-header">
+            <LumiCard class="panel-card model-panel" padding="none">
+              <template #title>
                 <div class="panel-title-group">
                   <Cpu :size="18" class="panel-icon" style="color: var(--lumi-primary)" />
                   <h3>模型配置</h3>
                   <span class="panel-badge">Model Providers</span>
                 </div>
-                <button class="panel-action-btn">
-                  <Settings2 :size="14" />
-                </button>
-              </div>
+              </template>
+              <template #header>
+                <LumiButton variant="ghost" size="sm" icon-only aria-label="设置">
+                  <template #icon>
+                    <Settings2 :size="14" />
+                  </template>
+                </LumiButton>
+              </template>
               <div class="provider-list">
                 <div v-for="provider in modelProviders" :key="provider.id"
                   :class="['provider-item', { inactive: provider.status !== 'active' }]"
@@ -314,22 +325,26 @@ function clearConsole() {
                   <ChevronRight :size="16" class="provider-arrow" />
                 </div>
               </div>
-            </div>
+            </LumiCard>
 
-            <div class="panel-card persona-panel">
-              <div class="panel-header">
+            <LumiCard class="panel-card persona-panel" padding="none">
+              <template #title>
                 <div class="panel-title-group">
-                  <Palette :size="18" class="panel-icon" style="color: #ec4899" />
+                  <Palette :size="18" class="panel-icon" style="color: var(--task-pink)" />
                   <h3>皮套工坊</h3>
                   <span class="panel-badge pink">Avatar Studio</span>
                 </div>
-                <button class="panel-action-btn primary">
-                  <Wand2 :size="14" />
-                  <span>自定义</span>
-                </button>
-              </div>
+              </template>
+              <template #header>
+                <LumiButton variant="primary" size="sm">
+                  <template #icon>
+                    <Wand2 :size="14" />
+                  </template>
+                  自定义
+                </LumiButton>
+              </template>
               <div class="persona-grid">
-                <div v-for="p in personas" :key="p.id" :class="['persona-card', { active: p.active }]">
+                <div v-for="p in personas" :key="p.id" :class="['persona-card lumi-card', { active: p.active }]">
                   <div class="persona-avatar-preview">
                     <UserCircle :size="36" />
                     <div v-if="p.active" class="active-ring" />
@@ -343,24 +358,25 @@ function clearConsole() {
                   </div>
                 </div>
               </div>
-            </div>
+            </LumiCard>
           </div>
 
           <div class="grid-right">
-            <div class="panel-card chart-panel">
-              <div class="panel-header">
+            <LumiCard class="panel-card chart-panel" padding="none">
+              <template #title>
                 <div class="panel-title-group">
-                  <BarChart3 :size="18" class="panel-icon" style="color: #22c55e" />
+                  <BarChart3 :size="18" class="panel-icon" style="color: var(--lumi-success)" />
                   <h3>用量统计</h3>
                   <span class="panel-badge green">Live</span>
                 </div>
+              </template>
+              <template #header>
                 <div class="chart-period-selector">
                   <button class="period-btn active">7天</button>
                   <button class="period-btn">30天</button>
                   <button class="period-btn">90天</button>
                 </div>
-              </div>
-
+              </template>
               <div class="chart-area">
                 <div class="big-chart-svg-wrap">
                   <svg viewBox="0 0 400 160" class="area-chart" preserveAspectRatio="none">
@@ -370,8 +386,8 @@ function clearConsole() {
                         <stop offset="100%" stop-color="var(--lumi-primary)" stop-opacity="0.02" />
                       </linearGradient>
                       <linearGradient id="chartGrad2" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#22c55e" stop-opacity="0.25" />
-                        <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02" />
+                        <stop offset="0%" stop-color="var(--lumi-success)" stop-opacity="0.25" />
+                        <stop offset="100%" stop-color="var(--lumi-success)" stop-opacity="0.02" />
                       </linearGradient>
                     </defs>
                     <path d="M0,140 Q40,120 80,100 T160,70 T240,90 T320,50 T400,35 L400,160 L0,160 Z"
@@ -382,10 +398,10 @@ function clearConsole() {
                     <path d="M0,150 Q50,135 100,125 T200,110 T300,95 T400,80 L400,160 L0,160 Z"
                       fill="url(#chartGrad2)" class="chart-area-fill" style="animation-delay: 0.3s" />
                     <path d="M0,150 Q50,135 100,125 T200,110 T300,95 T400,80"
-                      fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round"
+                      fill="none" stroke="var(--lumi-success)" stroke-width="2" stroke-linecap="round"
                       class="chart-line animate-draw" style="animation-delay: 0.3s" />
                     <circle cx="400" cy="35" r="4" fill="var(--lumi-primary)" class="chart-dot pulse-dot" />
-                    <circle cx="400" cy="80" r="4" fill="#22c55e" class="chart-dot pulse-dot" style="animation-delay: 0.5s" />
+                    <circle cx="400" cy="80" r="4" fill="var(--lumi-success)" class="chart-dot pulse-dot" style="animation-delay: 0.5s" />
                   </svg>
                   <div class="chart-overlay-stats">
                     <div class="overlay-stat primary">
@@ -422,24 +438,30 @@ function clearConsole() {
                   <span class="umi-value">{{ m.value }}{{ m.unit }}</span>
                 </div>
               </div>
-            </div>
+            </LumiCard>
 
-            <div class="panel-card console-panel">
-              <div class="panel-header">
+            <LumiCard class="panel-card console-panel" padding="none">
+              <template #title>
                 <div class="panel-title-group">
-                  <Terminal :size="18" class="panel-icon" style="color: #f59e0b" />
+                  <Terminal :size="18" class="panel-icon" style="color: var(--lumi-warning)" />
                   <h3>控制台</h3>
                   <span class="panel-badge yellow">Real-time</span>
                 </div>
+              </template>
+              <template #header>
                 <div class="console-actions">
-                  <button class="panel-action-btn" title="清空日志" @click="clearConsole">
-                    <RotateCcw :size="13" />
-                  </button>
-                  <button class="panel-action-btn" title="复制全部">
-                    <Copy :size="13" />
-                  </button>
+                  <LumiButton variant="ghost" size="sm" icon-only aria-label="清空日志" @click="clearConsole">
+                    <template #icon>
+                      <RotateCcw :size="13" />
+                    </template>
+                  </LumiButton>
+                  <LumiButton variant="ghost" size="sm" icon-only aria-label="复制全部">
+                    <template #icon>
+                      <Copy :size="13" />
+                    </template>
+                  </LumiButton>
                 </div>
-              </div>
+              </template>
               <div class="console-log-area">
                 <div v-for="log in consoleLogs" :key="log.id" class="log-entry"
                   :style="{ '--log-bg': getLogLevelStyle(log.level).bg, '--log-text': getLogLevelStyle(log.level).text, '--log-dot': getLogLevelStyle(log.level).dot }">
@@ -453,33 +475,40 @@ function clearConsole() {
                 <span class="console-prompt">$ luominest</span>
                 <input v-model="consoleInput" type="text" class="console-input"
                   placeholder="输入命令... (help 查看帮助)" @keydown.enter="handleConsoleCommand" />
-                <button class="console-send-btn" @click="handleConsoleCommand" :disabled="!consoleInput.trim()">
-                  <Play :size="14" />
-                </button>
+                <LumiButton variant="primary" size="sm" icon-only :disabled="!consoleInput.trim()" @click="handleConsoleCommand">
+                  <template #icon>
+                    <Play :size="14" />
+                  </template>
+                </LumiButton>
               </div>
-            </div>
+            </LumiCard>
           </div>
         </section>
       </div>
 
       <div v-show="activeTab === 'model'" class="tab-content animate-fade-in">
         <section class="dash-section full-panel">
-          <div class="panel-card full-height">
-            <div class="panel-header">
+          <LumiCard class="full-height" padding="none">
+            <template #title>
               <div class="panel-title-group">
                 <Cpu :size="20" class="panel-icon" style="color: var(--lumi-primary)" />
                 <h3>模型配置中心</h3>
               </div>
-              <button class="panel-action-btn primary">
-                <Plus :size="14" /> 添加供应商
-              </button>
-            </div>
+            </template>
+            <template #header>
+              <LumiButton variant="primary" size="sm">
+                <template #icon>
+                  <Plus :size="14" />
+                </template>
+                添加供应商
+              </LumiButton>
+            </template>
             <div class="model-config-grid">
               <div v-for="provider in modelProviders" :key="provider.id"
-                :class="['model-config-card', `status-${provider.status}`]"
+                :class="['model-config-card lumi-card', `status-${provider.status}`]"
                 :style="{ '--pc-color': provider.color }">
                 <div class="mc-header">
-                  <div class="mc-brand" :style="{ background: provider.color + '15' }">
+                  <div class="mc-brand" :style="{ background: `color-mix(in srgb, ${provider.color} 10%, transparent)` }">
                     <span :style="{ color: provider.color }">{{ provider.icon }}</span>
                   </div>
                   <div class="mc-meta">
@@ -527,25 +556,30 @@ function clearConsole() {
                 </div>
               </div>
             </div>
-          </div>
+          </LumiCard>
         </section>
       </div>
 
       <div v-show="activeTab === 'persona'" class="tab-content animate-fade-in">
         <section class="dash-section full-panel">
-          <div class="panel-card full-height">
-            <div class="panel-header">
+          <LumiCard class="full-height" padding="none">
+            <template #title>
               <div class="panel-title-group">
-                <Palette :size="20" class="panel-icon" style="color: #ec4899" />
+                <Palette :size="20" class="panel-icon" style="color: var(--task-pink)" />
                 <h3>皮套工坊</h3>
                 <span class="panel-badge pink">Avatar Workshop</span>
               </div>
-              <button class="panel-action-btn primary">
-                <Wand2 :size="14" /> 创建新皮套
-              </button>
-            </div>
+            </template>
+            <template #header>
+              <LumiButton variant="primary" size="sm">
+                <template #icon>
+                  <Wand2 :size="14" />
+                </template>
+                创建新皮套
+              </LumiButton>
+            </template>
             <div class="persona-workshop-grid">
-              <div v-for="p in personas" :key="p.id" :class="['pw-card', { active: p.active }]">
+              <div v-for="p in personas" :key="p.id" :class="['pw-card lumi-card', { active: p.active }]">
                 <div class="pw-visual">
                   <div class="pw-avatar-large">
                     <UserCircle :size="64" />
@@ -572,9 +606,9 @@ function clearConsole() {
                     <span>音色：{{ p.tone }}</span>
                   </div>
                 </div>
-                <button :class="['pw-action-btn', { active: p.active }]">
+                <LumiButton variant="outline" size="sm" block class="pw-action-btn" :class="{ active: p.active }">
                   {{ p.active ? '正在使用' : '切换使用' }}
-                </button>
+                </LumiButton>
               </div>
               <div class="pw-card add-new">
                 <div class="add-new-content">
@@ -583,27 +617,29 @@ function clearConsole() {
                 </div>
               </div>
             </div>
-          </div>
+          </LumiCard>
         </section>
       </div>
 
       <div v-show="activeTab === 'usage'" class="tab-content animate-fade-in">
         <section class="dash-section full-panel">
-          <div class="panel-card full-height">
-            <div class="panel-header">
+          <LumiCard class="full-height" padding="none">
+            <template #title>
               <div class="panel-title-group">
-                <BarChart3 :size="20" class="panel-icon" style="color: #22c55e" />
+                <BarChart3 :size="20" class="panel-icon" style="color: var(--lumi-success)" />
                 <h3>用量统计分析</h3>
               </div>
+            </template>
+            <template #header>
               <div class="chart-period-selector">
                 <button class="period-btn">今天</button>
                 <button class="period-btn active">7天</button>
                 <button class="period-btn">30天</button>
                 <button class="period-btn">自定义</button>
               </div>
-            </div>
+            </template>
             <div class="usage-detail-grid">
-              <div class="ud-card">
+              <div class="ud-card lumi-card">
                 <div class="ud-header">
                   <Database :size="18" style="color: var(--lumi-primary)" />
                   <h4>API 用量</h4>
@@ -626,19 +662,19 @@ function clearConsole() {
                   </div>
                 </div>
               </div>
-              <div class="ud-card">
+              <div class="ud-card lumi-card">
                 <div class="ud-header">
-                  <Brain :size="18" style="color: #8b5cf6" />
+                  <Brain :size="18" style="color: var(--task-purple)" />
                   <h4>记忆用量</h4>
                 </div>
                 <div class="ud-chart-placeholder donut-wrap">
                   <svg viewBox="0 0 100 100" class="donut-chart">
                     <circle cx="50" cy="50" r="40" fill="none" stroke="var(--border)" stroke-width="10" />
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="#f59e0b" stroke-width="10"
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="var(--lumi-warning)" stroke-width="10"
                       stroke-dasharray="167 251" stroke-dashoffset="0" class="donut-anim" />
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="#22c55e" stroke-width="10"
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="var(--lumi-success)" stroke-width="10"
                       stroke-dasharray="107 251" stroke-dashoffset="-167" class="donut-anim" style="animation-delay: 0.3s" />
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="#8b5cf6" stroke-width="10"
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="var(--task-purple)" stroke-width="10"
                       stroke-dasharray="215 251" stroke-dashoffset="-274" class="donut-anim" style="animation-delay: 0.6s" />
                   </svg>
                   <div class="donut-center">
@@ -647,14 +683,14 @@ function clearConsole() {
                   </div>
                 </div>
                 <div class="ud-legend">
-                  <div class="legend-item"><span class="legend-dot" style="background:#f59e0b" />工作 67</div>
-                  <div class="legend-item"><span class="legend-dot" style="background:#22c55e" />情景 34</div>
-                  <div class="legend-item"><span class="legend-dot" style="background:#8b5cf6" />语义 428</div>
+                  <div class="legend-item"><span class="legend-dot" style="background: var(--lumi-warning)" />工作 67</div>
+                  <div class="legend-item"><span class="legend-dot" style="background: var(--lumi-success)" />情景 34</div>
+                  <div class="legend-item"><span class="legend-dot" style="background: var(--task-purple)" />语义 428</div>
                 </div>
               </div>
-              <div class="ud-card wide">
+              <div class="ud-card lumi-card wide">
                 <div class="ud-header">
-                  <Layers :size="18" style="color: #f59e0b" />
+                  <Layers :size="18" style="color: var(--lumi-warning)" />
                   <h4>上下文监控</h4>
                 </div>
                 <div class="ctx-bars">
@@ -673,32 +709,42 @@ function clearConsole() {
                 </div>
               </div>
             </div>
-          </div>
+          </LumiCard>
         </section>
       </div>
 
       <div v-show="activeTab === 'console'" class="tab-content animate-fade-in">
         <section class="dash-section full-panel">
-          <div class="panel-card full-height console-full">
-            <div class="panel-header">
+          <LumiCard class="full-height console-full" padding="none">
+            <template #title>
               <div class="panel-title-group">
-                <Terminal :size="20" class="panel-icon" style="color: #f59e0b" />
+                <Terminal :size="20" class="panel-icon" style="color: var(--lumi-warning)" />
                 <h3>系统控制台</h3>
                 <span class="panel-badge yellow">{{ consoleLogs.length }} 条日志</span>
               </div>
+            </template>
+            <template #header>
               <div class="console-toolbar">
-                <button class="panel-action-btn" @click="clearConsole">
-                  <RotateCcw :size="14" /> 清空
-                </button>
-                <button class="panel-action-btn">
-                  <Download :size="14" /> 导出
-                </button>
-                <button :class="['panel-action-btn', { running: isConsoleRunning }]" @click="isConsoleRunning = !isConsoleRunning">
-                  <component :is="isConsoleRunning ? Square : Play" :size="14" />
+                <LumiButton variant="ghost" size="sm" @click="clearConsole">
+                  <template #icon>
+                    <RotateCcw :size="14" />
+                  </template>
+                  清空
+                </LumiButton>
+                <LumiButton variant="ghost" size="sm">
+                  <template #icon>
+                    <Download :size="14" />
+                  </template>
+                  导出
+                </LumiButton>
+                <LumiButton variant="ghost" size="sm" :class="{ running: isConsoleRunning }" @click="isConsoleRunning = !isConsoleRunning">
+                  <template #icon>
+                    <component :is="isConsoleRunning ? Square : Play" :size="14" />
+                  </template>
                   {{ isConsoleRunning ? '暂停' : '实时' }}
-                </button>
+                </LumiButton>
               </div>
-            </div>
+            </template>
             <div class="console-main">
               <div class="console-log-area full-log">
                 <div v-for="log in consoleLogs" :key="log.id" class="log-entry"
@@ -715,12 +761,14 @@ function clearConsole() {
                 <span class="console-prompt">$ luominest<span class="prompt-blink">_</span></span>
                 <input v-model="consoleInput" type="text" class="console-input flex-grow"
                   placeholder="输入命令或查询... 按 Enter 执行，Tab 自动补全" @keydown.enter="handleConsoleCommand" />
-                <button class="console-send-btn" @click="handleConsoleCommand" :disabled="!consoleInput.trim()">
-                  <Play :size="14" />
-                </button>
+                <LumiButton variant="primary" size="sm" icon-only :disabled="!consoleInput.trim()" @click="handleConsoleCommand">
+                  <template #icon>
+                    <Play :size="14" />
+                  </template>
+                </LumiButton>
               </div>
             </div>
-          </div>
+          </LumiCard>
         </section>
       </div>
     </div>
@@ -740,11 +788,11 @@ function clearConsole() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
+  padding: var(--space-3) var(--space-6);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   background: var(--surface);
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .header-left {
@@ -754,19 +802,19 @@ function clearConsole() {
 .greeting-block {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .greeting-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-md);
   background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-inverse);
-  box-shadow: 0 4px 12px var(--lumi-primary-border);
+  box-shadow: var(--shadow-md);
 }
 
 .greeting-text {
@@ -775,13 +823,13 @@ function clearConsole() {
 }
 
 .greeting-label {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
   color: var(--text);
 }
 
 .greeting-date {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
@@ -793,23 +841,23 @@ function clearConsole() {
 
 .tab-nav {
   display: flex;
-  gap: 2px;
+  gap: var(--space-1);
   background: var(--bg-secondary);
-  border-radius: 10px;
-  padding: 3px;
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
 }
 
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 250ms ease-in-out;
+  transition: all var(--transition-normal);
   white-space: nowrap;
 }
 
@@ -824,40 +872,28 @@ function clearConsole() {
   box-shadow: var(--shadow-xs);
 }
 
+.tab-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
 .header-right {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   flex-shrink: 0;
-}
-
-.header-action-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 200ms ease-in-out;
-}
-
-.header-action-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
 }
 
 .dash-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: var(--space-5) var(--space-6);
 }
 
 .tab-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .dash-section {
@@ -868,40 +904,37 @@ function clearConsole() {
 .stat-cards-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .stat-card {
   position: relative;
-  padding: 20px;
-  border-radius: 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  padding: var(--space-5);
   overflow: hidden;
   opacity: 0;
-  animation: statCardIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: statCardIn var(--duration-enter) var(--ease-out-expo) both;
   animation-delay: var(--card-delay);
-  transition: all 250ms ease-in-out;
+  transition: all var(--transition-normal);
 }
 
 @keyframes statCardIn {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(var(--space-3)); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .stat-card:hover {
   border-color: var(--accent-color);
   box-shadow: 0 4px 20px color-mix(in srgb, var(--accent-color) 10%, transparent);
-  transform: translateY(-2px);
+  transform: translateY(calc(var(--space-1) / -2));
 }
 
 .stat-card-glow {
   position: absolute;
-  top: -40px;
-  right: -40px;
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
+  top: calc(var(--space-8) * -1);
+  right: calc(var(--space-8) * -1);
+  width: calc(var(--space-8) * 2.5);
+  height: calc(var(--space-8) * 2.5);
+  border-radius: var(--radius-full);
   background: radial-gradient(circle, color-mix(in srgb, var(--accent-color) 12%, transparent) 0%, transparent 70%);
   pointer-events: none;
 }
@@ -910,13 +943,13 @@ function clearConsole() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .trend-icon {
@@ -929,83 +962,71 @@ function clearConsole() {
 .stat-card-body {
   display: flex;
   align-items: baseline;
-  gap: 4px;
-  margin-bottom: 12px;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
 }
 
 .stat-value {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: var(--text-4xl);
+  font-weight: var(--font-bold);
   color: var(--text);
-  line-height: 1;
+  line-height: var(--leading-none);
 }
 
 .stat-unit {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
 }
 
 .stat-card-footer {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .change-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 6px;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
+  padding: var(--badge-padding);
+  border-radius: var(--radius-xs);
 }
 
 .change-badge.up { background: var(--task-green-soft); color: var(--lumi-success); }
 .change-badge.down { background: var(--task-red-soft); color: var(--lumi-danger); }
 
 .change-label {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .main-grid {
   display: grid;
   grid-template-columns: 1fr 1.3fr;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
-.grid-left {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
+.grid-left,
 .grid-right {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .panel-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-light);
-  flex-shrink: 0;
+.panel-card :deep(.lumi-card__body),
+.full-height :deep(.lumi-card__body) {
+  display: contents;
 }
 
 .panel-title-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .panel-icon {
@@ -1013,77 +1034,44 @@ function clearConsole() {
 }
 
 .panel-title-group h3 {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
   color: var(--text);
 }
 
 .panel-badge {
-  font-size: 10px;
-  padding: 2px 10px;
-  border-radius: 20px;
+  font-size: var(--text-2xs);
+  padding: calc(var(--space-1) / 2) var(--space-3);
+  border-radius: var(--radius-full);
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
-  font-weight: 500;
+  font-weight: var(--font-medium);
   letter-spacing: 0.3px;
 }
 
-.panel-badge.pink { background: var(--lumi-accent-light); color: var(--task-pink); }
+.panel-badge.pink { background: var(--task-pink-soft); color: var(--task-pink); }
 .panel-badge.green { background: var(--task-green-soft); color: var(--lumi-success); }
 .panel-badge.yellow { background: var(--lumi-amber-soft); color: var(--lumi-amber); }
-
-.panel-action-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 200ms ease-in-out;
-  white-space: nowrap;
-}
-
-.panel-action-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.panel-action-btn.primary {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  border: 1px solid var(--lumi-primary-glow);
-}
-
-.panel-action-btn.primary:hover {
-  background: var(--lumi-primary-glow);
-}
-
-.panel-action-btn.running {
-  background: var(--task-green-soft);
-  color: var(--lumi-success);
-}
 
 .model-panel {
   flex: 1;
 }
 
 .provider-list {
-  padding: 12px 16px;
+  padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .provider-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 250ms ease-in-out;
+  transition: all var(--transition-normal);
   border: 1px solid transparent;
 }
 
@@ -1097,14 +1085,14 @@ function clearConsole() {
 }
 
 .provider-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
   color: var(--provider-color);
   background: color-mix(in srgb, var(--provider-color) 10%, transparent);
   flex-shrink: 0;
@@ -1118,20 +1106,20 @@ function clearConsole() {
 .provider-name-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 2px;
+  gap: var(--space-1);
+  margin-bottom: calc(var(--space-1) / 2);
 }
 
 .provider-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text);
 }
 
 .status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  width: calc(var(--space-2) - 1px);
+  height: calc(var(--space-2) - 1px);
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
@@ -1140,28 +1128,28 @@ function clearConsole() {
 .status-dot.error { background: var(--lumi-danger); box-shadow: 0 0 6px var(--task-red-border); }
 
 .provider-model {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .provider-stats {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   flex-shrink: 0;
 }
 
 .mini-stat {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .provider-arrow {
   color: var(--text-muted);
   opacity: 0;
-  transition: all 200ms;
+  transition: all var(--transition-fast);
 }
 
 .provider-item:hover .provider-arrow {
@@ -1174,21 +1162,21 @@ function clearConsole() {
 }
 
 .persona-grid {
-  padding: 14px 16px;
+  padding: var(--space-3) var(--space-4);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .persona-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 12px;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   cursor: pointer;
-  transition: all 250ms ease-in-out;
+  transition: all var(--transition-normal);
 }
 
 .persona-card:hover {
@@ -1209,8 +1197,8 @@ function clearConsole() {
 
 .active-ring {
   position: absolute;
-  inset: -3px;
-  border-radius: 50%;
+  inset: calc(var(--space-1) / -2);
+  border-radius: var(--radius-full);
   border: 2px solid var(--task-pink);
   animation: ringPulse 2s ease-in-out infinite;
 }
@@ -1227,25 +1215,25 @@ function clearConsole() {
 
 .persona-name {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
   color: var(--text);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .persona-tags {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   flex-wrap: wrap;
 }
 
 .p-tag {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 10px;
-  padding: 2px 7px;
-  border-radius: 6px;
+  gap: var(--space-1);
+  font-size: var(--text-2xs);
+  padding: var(--badge-padding);
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   color: var(--text-muted);
 }
@@ -1256,37 +1244,42 @@ function clearConsole() {
 
 .chart-period-selector {
   display: flex;
-  gap: 2px;
+  gap: var(--space-1);
   background: var(--bg-secondary);
-  border-radius: 8px;
-  padding: 2px;
+  border-radius: var(--radius-sm);
+  padding: calc(var(--space-1) / 2);
 }
 
 .period-btn {
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-size: 11px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 200ms;
+  transition: all var(--transition-fast);
 }
 
 .period-btn:hover { color: var(--text-secondary); }
 .period-btn.active {
   background: var(--surface);
   color: var(--text);
-  font-weight: 500;
+  font-weight: var(--font-medium);
   box-shadow: var(--shadow-xs);
 }
 
+.period-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
 .chart-area {
-  padding: 16px 20px 0;
+  padding: var(--space-4) var(--space-5) 0;
 }
 
 .big-chart-svg-wrap {
   position: relative;
-  height: 180px;
-  border-radius: 12px;
+  height: calc(var(--space-5) * 9);
+  border-radius: var(--radius-md);
   background: linear-gradient(180deg, var(--lumi-primary-subtle) 0%, transparent 100%);
 }
 
@@ -1305,7 +1298,7 @@ function clearConsole() {
 .chart-line {
   stroke-dasharray: 800;
   stroke-dashoffset: 800;
-  animation: drawLine 1.5s cubic-bezier(0.4, 0, 0.2, 1) 0.3s both;
+  animation: drawLine 1.5s var(--ease-default) 0.3s both;
 }
 
 @keyframes drawLine { to { stroke-dashoffset: 0; } }
@@ -1328,11 +1321,11 @@ function clearConsole() {
 
 .chart-overlay-stats {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: var(--space-4);
+  right: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .overlay-stat {
@@ -1340,20 +1333,20 @@ function clearConsole() {
 }
 
 .os-label {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .os-value {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text);
 }
 
 .os-trend {
-  font-size: 11px;
-  font-weight: 600;
-  margin-left: 4px;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  margin-left: var(--space-1);
 }
 
 .os-trend.up { color: var(--lumi-success); }
@@ -1365,25 +1358,25 @@ function clearConsole() {
 .chart-x-axis {
   display: flex;
   justify-content: space-between;
-  padding: 8px 8px 0;
+  padding: var(--space-2) var(--space-2) 0;
 }
 
 .chart-x-axis span {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .usage-mini-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  padding: 12px 20px 16px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) var(--space-4);
   border-top: 1px solid var(--border-light);
 }
 
 .usage-mini-item {
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
   background: var(--bg-secondary);
 }
 
@@ -1391,76 +1384,76 @@ function clearConsole() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .umi-label {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .umi-change {
   display: flex;
   align-items: center;
-  gap: 2px;
-  font-size: 10px;
-  font-weight: 600;
+  gap: calc(var(--space-1) / 2);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
 }
 
 .umi-change.up { color: var(--lumi-success); }
 .umi-change.down { color: var(--lumi-danger); }
 
 .umi-bar-track {
-  height: 4px;
+  height: var(--space-1);
   background: var(--border);
-  border-radius: 2px;
+  border-radius: calc(var(--space-1) / 2);
   overflow: hidden;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-2);
 }
 
 .umi-bar-fill {
   height: 100%;
-  border-radius: 2px;
-  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+  border-radius: calc(var(--space-1) / 2);
+  transition: width 1s var(--ease-out-expo);
 }
 
 .umi-value {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text);
 }
 
 .console-panel {
   flex: 1;
-  min-height: 240px;
+  min-height: calc(var(--space-8) * 6);
 }
 
 .console-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .console-log-area {
   flex: 1;
-  padding: 12px 16px;
+  padding: var(--space-3) var(--space-4);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 11px;
-  min-height: 180px;
-  max-height: 220px;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  min-height: calc(var(--space-5) * 9);
+  max-height: calc(var(--space-5) * 11);
 }
 
 .log-entry {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 10px;
-  border-radius: 6px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
   background: var(--log-bg);
-  transition: all 150ms ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .log-entry:hover {
@@ -1474,16 +1467,16 @@ function clearConsole() {
 }
 
 .log-level-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+  width: calc(var(--space-2) - 2px);
+  height: calc(var(--space-2) - 2px);
+  border-radius: var(--radius-full);
   background: var(--log-dot);
   flex-shrink: 0;
 }
 
 .log-source {
   color: var(--log-text);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   flex-shrink: 0;
   font-family: inherit;
 }
@@ -1497,32 +1490,32 @@ function clearConsole() {
 }
 
 .log-level-badge {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 4px;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-bold);
+  padding: var(--badge-padding);
+  border-radius: var(--radius-xs);
   flex-shrink: 0;
   letter-spacing: 0.5px;
 }
 
 .log-level-badge.info { background: var(--lumi-primary-light); color: var(--lumi-primary); }
-.log-level-badge.warn { background: var(--task-yellow-soft); color: var(--lumi-warning); }
-.log-level-badge.error { background: var(--task-red-soft); color: var(--lumi-danger); }
-.log-level-badge.success { background: var(--task-green-soft); color: var(--lumi-success); }
+.log-level-badge.warn { background: var(--lumi-warning-light); color: var(--lumi-warning); }
+.log-level-badge.error { background: var(--lumi-danger-light); color: var(--lumi-danger); }
+.log-level-badge.success { background: var(--lumi-success-light); color: var(--lumi-success); }
 
 .console-input-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   border-top: 1px solid var(--border-light);
   background: var(--bg-secondary);
 }
 
 .console-prompt {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 12px;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
   color: var(--lumi-primary);
   flex-shrink: 0;
 }
@@ -1535,14 +1528,14 @@ function clearConsole() {
 
 .console-input {
   flex: 1;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
   background: var(--surface);
   border: 1px solid transparent;
-  font-size: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
   color: var(--text);
-  transition: all 200ms;
+  transition: all var(--transition-fast);
 }
 
 .console-input:focus {
@@ -1552,29 +1545,6 @@ function clearConsole() {
 
 .console-input::placeholder {
   color: var(--text-muted);
-}
-
-.console-send-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  cursor: pointer;
-  transition: all 200ms;
-  flex-shrink: 0;
-}
-
-.console-send-btn:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-}
-
-.console-send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .full-panel {
@@ -1590,29 +1560,21 @@ function clearConsole() {
 .model-config-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  padding: 20px;
+  gap: var(--space-4);
+  padding: var(--space-5);
   flex: 1;
   overflow-y: auto;
   align-content: start;
 }
 
 .model-config-card {
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  padding: 20px;
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  transition: all 250ms ease-in-out;
+  gap: var(--space-4);
+  transition: all var(--transition-normal);
   opacity: 0;
-  animation: cardSlideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes cardSlideUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  animation: cardSlideUp var(--duration-enter) var(--ease-out-expo) both;
 }
 
 .model-config-card:hover {
@@ -1622,21 +1584,26 @@ function clearConsole() {
 
 .model-config-card.status-error { border-color: var(--lumi-danger); }
 
+@keyframes cardSlideUp {
+  from { opacity: 0; transform: translateY(var(--space-4)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .mc-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .mc-brand {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: var(--space-9);
+  height: var(--space-9);
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--text-md);
+  font-weight: var(--font-bold);
   flex-shrink: 0;
 }
 
@@ -1646,16 +1613,16 @@ function clearConsole() {
 
 .mc-name {
   display: block;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
   color: var(--text);
 }
 
 .mc-status {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  margin-top: 2px;
+  font-size: var(--text-xs);
+  padding: var(--badge-padding);
+  border-radius: var(--radius-xs);
+  margin-top: calc(var(--space-1) / 2);
   display: inline-block;
 }
 
@@ -1666,9 +1633,9 @@ function clearConsole() {
 .mc-menu {
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
-  transition: all 200ms;
+  padding: var(--space-1);
+  border-radius: var(--radius-xs);
+  transition: all var(--transition-fast);
 }
 
 .mc-menu:hover {
@@ -1679,463 +1646,89 @@ function clearConsole() {
 .mc-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .mc-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .mc-field label {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .mc-input-mock {
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
   background: var(--surface);
   border: 1px solid var(--border);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--font-mono);
 }
 
 .mc-input-mock.highlight {
   color: var(--pc-color);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
 }
 
 .mc-progress-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 8px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
   background: var(--surface);
   border: 1px solid var(--border);
 }
 
 .mc-progress-fill {
-  height: 5px;
-  border-radius: 3px;
+  height: var(--space-1);
+  border-radius: calc(var(--space-1) / 2);
   flex: 1;
-  max-width: 120px;
-  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+  max-width: calc(var(--space-8) * 3);
+  transition: width 1s var(--ease-out-expo);
 }
 
 .mc-progress-bar span {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
 .mc-footer {
   display: flex;
-  gap: 20px;
-  padding-top: 12px;
+  gap: var(--space-5);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--border-light);
 }
 
 .mc-footer-stat {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .mc-footer-stat svg { color: var(--lumi-primary); }
 
-.persona-workshop-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  padding: 20px;
-  flex: 1;
-  overflow-y: auto;
-  align-content: start;
-}
-
-.pw-card {
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  transition: all 250ms ease-in-out;
-  text-align: center;
-}
-
-.pw-card:hover {
-  border-color: var(--task-pink);
-  box-shadow: 0 4px 24px var(--lumi-accent-light);
-}
-
-.pw-card.active {
-  border-color: var(--task-pink);
-  background: linear-gradient(180deg, var(--lumi-accent-glow) 0%, transparent 100%);
-}
-
-.pw-visual {
-  position: relative;
-}
-
-.pw-avatar-large {
-  color: var(--text-muted);
-  transition: all 250ms;
-}
-
-.pw-card:hover .pw-avatar-large,
-.pw-card.active .pw-avatar-large {
-  color: var(--task-pink);
-}
-
-.pw-active-badge {
-  position: absolute;
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 10px;
-  border-radius: 10px;
-  background: var(--task-pink);
-  color: var(--text-inverse);
-  white-space: nowrap;
-}
-
-.pw-info h4 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.pw-info p {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.pw-config-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-}
-
-.pw-config-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  padding: 5px 10px;
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.pw-config-item svg { color: var(--text-muted); flex-shrink: 0; }
-
-.pw-action-btn {
-  width: 100%;
-  padding: 8px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 200ms;
-  background: var(--surface);
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-}
-
-.pw-action-btn:hover {
-  border-color: var(--task-pink);
-  color: var(--task-pink);
-  background: var(--lumi-accent-glow);
-}
-
-.pw-action-btn.active {
-  background: var(--task-pink);
-  color: var(--text-inverse);
-  border-color: var(--task-pink);
-}
-
-.add-new {
-  border-style: dashed;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 260px;
-  cursor: pointer;
-}
-
-.add-new:hover {
-  border-color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
-}
-
-.add-new-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-muted);
-}
-
-.add-new-content span {
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.usage-detail-grid {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr 1fr;
-  gap: 16px;
-  padding: 20px;
-  flex: 1;
-  overflow-y: auto;
-}
-
-.ud-card {
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.ud-card.wide {
-  grid-column: span 1;
-}
-
-.ud-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ud-header h4 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.ud-chart-placeholder {
-  border-radius: 12px;
-  background: var(--surface);
-  overflow: hidden;
-}
-
-.ud-chart-placeholder.large {
-  height: 160px;
-}
-
-.bar-chart-svg {
-  width: 100%;
-  height: 100%;
-  padding: 16px;
-}
-
-.bar-anim {
-  transform-origin: bottom;
-  animation: barGrow 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes barGrow {
-  from { transform: scaleY(0); }
-  to { transform: scaleY(1); }
-}
-
-.donut-wrap {
-  position: relative;
-  height: 140px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.donut-chart {
-  width: 120px;
-  height: 120px;
-}
-
-.donut-anim {
-  stroke-dasharray: 0 251;
-  animation: donutDraw 1s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes donutDraw {
-  to { stroke-dasharray: attr(stroke-dasharray); }
-}
-
-.donut-center {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.dc-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.dc-label {
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.ud-legend {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-}
-
-.ud-stats-row {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-
-.ud-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--surface);
-}
-
-.ud-stat-label {
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.ud-stat-value {
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.ud-stat-trend {
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.ud-stat-trend.up { color: var(--lumi-success); }
-.ud-stat-trend.down { color: var(--lumi-danger); }
-
-.ctx-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.ctx-bar-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.cbi-labels {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.cbi-name {
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.cbi-val {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.cbi-bar-track {
-  height: 8px;
-  background: var(--surface);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.cbi-bar-fill {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 1.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.console-full {
-  min-height: 0;
-}
-
-.console-main {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.full-log {
-  max-height: none;
-  flex: 1;
-}
-
-.console-input-area {
-  flex-shrink: 0;
-}
-
-.console-input-row.full-width {
-  padding: 14px 20px;
-}
-
-.console-input.flex-grow {
-  flex: 1;
-}
-
-.console-toolbar {
-  display: flex;
-  gap: 6px;
-}
-
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--workspace-border);
-  border-radius: 4px;
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-view,
+  .dashboard-view *,
+  .dashboard-view *::before,
+  .dashboard-view *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 </style>

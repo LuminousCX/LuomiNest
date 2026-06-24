@@ -121,7 +121,7 @@ function handleRetry() {
 
     <template v-else-if="isOperating">
       <button class="action-btn operating-btn" disabled>
-        <Loader2 :size="size === 'large' ? 16 : 14" class="spin-icon" />
+        <Loader2 :size="size === 'large' ? 16 : 14" class="spin-animation" />
         <span>{{ progress?.message || '处理中...' }}</span>
         <span v-if="progress" class="progress-pct">{{ Math.round(progress.progress) }}%</span>
       </button>
@@ -138,7 +138,7 @@ function handleRetry() {
     <template v-else>
       <button class="action-btn install-btn" :disabled="loading" @click="handleInstall">
         <Download v-if="!loading" :size="size === 'large' ? 16 : 14" />
-        <Loader2 v-else :size="size === 'large' ? 16 : 14" class="spin-icon" />
+        <Loader2 v-else :size="size === 'large' ? 16 : 14" class="spin-animation" />
         <span>{{ loading ? '请求中...' : '安装' }}</span>
       </button>
     </template>
@@ -149,7 +149,7 @@ function handleRetry() {
 .install-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .fav-action-btn {
@@ -178,21 +178,21 @@ function handleRetry() {
 .action-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 18px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-5);
   border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   transition: all var(--transition-fast);
 }
 
 .install-btn {
   color: var(--text-inverse);
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
 }
 
 .install-btn:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
+  background: var(--lumi-brand-hover);
 }
 
 .retry-action-btn {
@@ -212,13 +212,13 @@ function handleRetry() {
 }
 
 .update-btn {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
-  border: 1px solid var(--lumi-primary);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
+  border: 1px solid var(--lumi-brand);
 }
 
 .update-btn:hover {
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
   color: var(--text-inverse);
 }
 
@@ -241,29 +241,20 @@ function handleRetry() {
 }
 
 .progress-pct {
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: 0.7;
 }
 
 .speed-label {
-  font-size: 10px;
-  color: var(--lumi-primary);
-  font-weight: 500;
-}
-
-.spin-icon {
-  animation: lumi-spin 1s linear infinite;
-}
-
-@keyframes lumi-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  font-size: var(--text-2xs);
+  color: var(--lumi-brand);
+  font-weight: var(--font-medium);
 }
 
 .install-error-inline {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   color: var(--lumi-accent);
 }
 
@@ -281,5 +272,13 @@ function handleRetry() {
 .retry-inline-btn:hover {
   background: var(--lumi-accent);
   color: var(--text-inverse);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fav-action-btn,
+  .action-btn,
+  .retry-inline-btn {
+    transition: none;
+  }
 }
 </style>

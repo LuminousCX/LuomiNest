@@ -869,7 +869,7 @@ onBeforeUnmount(() => {
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
+  z-index: var(--z-base);
   background: transparent;
   /* The canvas handles its own mouse events (hit tests, wheel zoom). */
   -webkit-app-region: no-drag;
@@ -881,17 +881,17 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
+  z-index: var(--z-sticky);
   pointer-events: none;
 }
 
 .pet-loading-spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid var(--lumi-primary-border);
-  border-top-color: var(--lumi-primary);
-  border-radius: 50%;
-  animation: pet-spin 0.8s linear infinite;
+  border: 2px solid var(--lumi-brand-border);
+  border-top-color: var(--lumi-brand);
+  border-radius: var(--radius-full);
+  animation: pet-spin var(--duration-enter) linear infinite;
 }
 
 @keyframes pet-spin {
@@ -900,22 +900,22 @@ onBeforeUnmount(() => {
 
 .pet-error {
   position: fixed;
-  bottom: 8px;
+  bottom: var(--space-2);
   left: 50%;
   transform: translateX(-50%);
-  padding: 4px 12px;
-  border-radius: 8px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
   background: var(--task-red-soft);
   color: var(--lumi-danger);
-  font-size: 11px;
-  z-index: 10;
+  font-size: var(--text-xs);
+  z-index: var(--z-sticky);
   white-space: nowrap;
   pointer-events: none;
 }
 
 .pet-subtitle-overlay {
   position: fixed;
-  bottom: 16px;
+  bottom: var(--space-4);
   left: 50%;
   transform: translateX(-50%);
   z-index: 50;
@@ -930,7 +930,7 @@ onBeforeUnmount(() => {
 }
 
 .pet-subtitle-text {
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--text);
   text-align: center;
@@ -939,11 +939,11 @@ onBeforeUnmount(() => {
 }
 
 .pet-subtitle-fade-enter-active {
-  transition: opacity 250ms ease-in-out, transform 250ms ease-in-out;
+  transition: opacity var(--duration-normal) var(--var(--var(--ease-in-out))), transform var(--duration-normal) var(--var(--var(--ease-in-out)));
 }
 
 .pet-subtitle-fade-leave-active {
-  transition: opacity 600ms ease-in-out, transform 600ms ease-in-out;
+  transition: opacity var(--duration-slow) var(--var(--var(--ease-in-out))), transform var(--duration-slow) var(--var(--var(--ease-in-out)));
 }
 
 .pet-subtitle-fade-enter-from {
@@ -962,19 +962,19 @@ onBeforeUnmount(() => {
   right: 0;
   width: 80px;
   height: 80px;
-  z-index: 100;
+  z-index: var(--z-dropdown);
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  padding: 12px;
+  padding: var(--space-3);
   /* Allow clicking the controls instead of starting a window drag. */
   -webkit-app-region: no-drag;
 }
 
 .controls-panel {
   display: flex;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--space-2);
+  padding: var(--space-2);
   border-radius: 14px;
   background: var(--overlay-bg);
   backdrop-filter: blur(20px);
@@ -994,7 +994,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--surface) 8%, transparent);
   color: var(--text-inverse);
   cursor: pointer;
-  transition: all 200ms ease-in-out;
+  transition: all var(--duration-leave) var(--var(--var(--ease-in-out)));
 }
 
 .control-btn:hover {
@@ -1003,9 +1003,9 @@ onBeforeUnmount(() => {
 }
 
 .control-btn.active {
-  background: var(--lumi-primary-border);
-  border-color: var(--lumi-primary-border);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-border);
+  border-color: var(--lumi-brand-border);
+  color: var(--lumi-brand);
 }
 
 .control-btn.danger:hover {
@@ -1015,11 +1015,11 @@ onBeforeUnmount(() => {
 }
 
 .controls-fade-enter-active {
-  transition: opacity 200ms ease-in-out, transform 200ms ease-in-out;
+  transition: opacity var(--duration-leave) var(--var(--var(--ease-in-out))), transform var(--duration-leave) var(--var(--var(--ease-in-out)));
 }
 
 .controls-fade-leave-active {
-  transition: opacity 150ms ease-in-out, transform 150ms ease-in-out;
+  transition: opacity var(--duration-fast) var(--var(--var(--ease-in-out))), transform var(--duration-fast) var(--var(--var(--ease-in-out)));
 }
 
 .controls-fade-enter-from,

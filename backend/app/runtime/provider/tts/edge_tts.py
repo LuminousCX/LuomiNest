@@ -13,8 +13,18 @@ class EdgeTTSProvider(TTSProvider):
         "ja": "ja-JP-NanamiNeural",
     }
 
-    def __init__(self, proxy: str | None = None):
-        self.proxy = proxy or os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or None
+    @classmethod
+    def is_available(cls) -> bool:
+        """检查 edge-tts 是否已安装."""
+        try:
+            import edge_tts  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
+    def __init__(self, **kwargs):
+        proxy = kwargs.get("proxy") or os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or None
+        self.proxy = proxy
 
     async def synthesize(self, text: str, voice: str = "default") -> bytes:
         if voice == "default" or not voice:

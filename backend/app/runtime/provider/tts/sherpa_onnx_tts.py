@@ -227,12 +227,21 @@ class SherpaOnnxTTSProvider(TTSProvider):
         "en": "en-female",
     }
 
+    @classmethod
+    def is_available(cls) -> bool:
+        """检查 sherpa-onnx 是否已安装."""
+        try:
+            import sherpa_onnx  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, model_dir: str | Path | None = None, num_threads: int = 2, speed: float = 1.0):
+    def __init__(self, model_dir: str | Path | None = None, num_threads: int = 2, speed: float = 1.0, **kwargs):
         if self._tts_engine is not None:
             return
         import sherpa_onnx

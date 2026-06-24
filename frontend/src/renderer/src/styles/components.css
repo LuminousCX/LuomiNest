@@ -1,37 +1,610 @@
+/* =========================================================
+   LuomiNest Global Component Styles
+   统一的按钮、卡片、输入框、徽章、表单、弹窗等组件样式
+   ========================================================= */
+
+/* -------------------------------------------------------
+   1. 按钮 (Button)
+   ------------------------------------------------------- */
+.lumi-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--btn-height-md);
+  padding: var(--btn-padding-md);
+  border-radius: var(--btn-radius);
+  font-family: var(--font-sans);
+  font-size: var(--btn-font-md);
+  font-weight: var(--font-medium);
+  line-height: 1;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.lumi-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.lumi-btn:disabled,
+.lumi-btn.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lumi-btn.is-loading {
+  pointer-events: none;
+}
+
+.lumi-btn.is-loading .lumi-btn-text {
+  opacity: 0.7;
+}
+
+/* 尺寸 */
+.lumi-btn--sm {
+  height: var(--btn-height-sm);
+  padding: var(--btn-padding-sm);
+  font-size: var(--btn-font-sm);
+}
+
+.lumi-btn--lg {
+  height: var(--btn-height-lg);
+  padding: var(--btn-padding-lg);
+  font-size: var(--btn-font-lg);
+}
+
+/* 变体 */
+.lumi-btn--primary {
+  color: var(--text-inverse);
+  background: var(--lumi-brand);
+  border-color: var(--lumi-brand);
+}
+
+.lumi-btn--primary:hover:not(:disabled) {
+  background: var(--lumi-brand-hover);
+  border-color: var(--lumi-brand-hover);
+}
+
+.lumi-btn--primary:active:not(:disabled) {
+  background: var(--lumi-brand-pressed);
+  border-color: var(--lumi-brand-pressed);
+}
+
+.lumi-btn--secondary {
+  color: var(--text);
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+.lumi-btn--secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border);
+}
+
+.lumi-btn--ghost {
+  color: var(--text-secondary);
+  background: transparent;
+  border-color: transparent;
+}
+
+.lumi-btn--ghost:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.lumi-btn--outline {
+  color: var(--lumi-brand);
+  background: transparent;
+  border-color: var(--lumi-brand-border);
+}
+
+.lumi-btn--outline:hover:not(:disabled) {
+  background: var(--lumi-brand-subtle);
+  border-color: var(--lumi-brand);
+}
+
+.lumi-btn--danger {
+  color: var(--text-inverse);
+  background: var(--lumi-danger);
+  border-color: var(--lumi-danger);
+}
+
+.lumi-btn--danger:hover:not(:disabled) {
+  background: var(--lumi-danger-hover);
+  border-color: var(--lumi-danger-hover);
+}
+
+.lumi-btn--danger-ghost {
+  color: var(--lumi-danger);
+  background: transparent;
+  border-color: transparent;
+}
+
+.lumi-btn--danger-ghost:hover:not(:disabled) {
+  background: var(--lumi-danger-light);
+}
+
+.lumi-btn--icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.lumi-btn--icon-sm {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.lumi-btn--icon-lg {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+.lumi-btn--block {
+  width: 100%;
+}
+
+/* -------------------------------------------------------
+   2. 卡片 (Card)
+   ------------------------------------------------------- */
+.lumi-card {
+  background: var(--card-bg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  transition:
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.lumi-card--hover:hover {
+  box-shadow: var(--card-hover-shadow);
+  transform: var(--card-hover-translate);
+}
+
+.lumi-card--borderless {
+  border: none;
+}
+
+.lumi-card--flat {
+  box-shadow: none;
+}
+
+.lumi-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.lumi-card__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text);
+}
+
+.lumi-card__body {
+  padding: var(--card-padding);
+}
+
+.lumi-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-light);
+}
+
+/* -------------------------------------------------------
+   3. 输入框 (Input)
+   ------------------------------------------------------- */
+.lumi-input,
+.lumi-textarea,
+.lumi-select {
+  width: 100%;
+  min-height: var(--input-height);
+  padding: var(--input-padding);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  color: var(--text);
+  background: var(--input-bg);
+  border: var(--input-border);
+  border-radius: var(--input-radius);
+  outline: none;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.lumi-input::placeholder,
+.lumi-textarea::placeholder {
+  color: var(--input-placeholder-color);
+}
+
+.lumi-input:hover,
+.lumi-textarea:hover,
+.lumi-select:hover {
+  border-color: var(--border);
+}
+
+.lumi-input:focus,
+.lumi-textarea:focus,
+.lumi-select:focus {
+  border-color: var(--input-focus-border);
+  box-shadow: var(--input-focus-ring);
+  background: var(--surface);
+}
+
+.lumi-input:disabled,
+.lumi-textarea:disabled,
+.lumi-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--bg-secondary);
+}
+
+.lumi-input.is-error,
+.lumi-textarea.is-error,
+.lumi-select.is-error {
+  border-color: var(--lumi-danger);
+  box-shadow: 0 0 0 3px var(--lumi-danger-light);
+}
+
+.lumi-input.is-success,
+.lumi-textarea.is-success,
+.lumi-select.is-success {
+  border-color: var(--lumi-success);
+}
+
+.lumi-input__wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lumi-input__icon {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.lumi-input__wrapper .lumi-input,
+.lumi-input__wrapper .lumi-select {
+  padding-left: var(--space-8);
+}
+
+.lumi-textarea {
+  padding: var(--space-3) var(--space-4);
+  min-height: 80px;
+  resize: vertical;
+}
+
+.lumi-select {
+  appearance: none;
+  cursor: pointer;
+}
+
+/* -------------------------------------------------------
+   4. 徽章 (Badge)
+   ------------------------------------------------------- */
+.lumi-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: var(--badge-height);
+  padding: var(--badge-padding);
+  border-radius: var(--badge-radius);
+  font-size: var(--badge-font);
+  font-weight: var(--font-semibold);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.lumi-badge--success {
+  background: var(--lumi-success-light);
+  color: var(--lumi-success);
+}
+
+.lumi-badge--warning {
+  background: var(--lumi-warning-light);
+  color: var(--lumi-warning);
+}
+
+.lumi-badge--danger {
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
+}
+
+.lumi-badge--info {
+  background: var(--lumi-info-light);
+  color: var(--lumi-info);
+}
+
+.lumi-badge--brand {
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+}
+
+.lumi-badge--purple {
+  background: var(--task-purple-soft);
+  color: var(--task-purple);
+}
+
+.lumi-badge--pink {
+  background: var(--task-pink-soft);
+  color: var(--task-pink);
+}
+
+.lumi-badge--amber {
+  background: var(--lumi-amber-soft);
+  color: var(--lumi-amber);
+}
+
+/* 旧徽章类名保持兼容 */
+.badge-success { background: var(--lumi-success-light); color: var(--lumi-success); }
+.badge-error { background: var(--lumi-danger-light); color: var(--lumi-danger); }
+.badge-warning { background: var(--lumi-warning-light); color: var(--lumi-warning); }
+.badge-info { background: var(--lumi-info-light); color: var(--lumi-info); }
+.badge-purple { background: var(--task-purple-soft); color: var(--task-purple); }
+.badge-pink { background: var(--task-pink-soft); color: var(--task-pink); }
+.badge-amber { background: var(--lumi-amber-soft); color: var(--lumi-amber); }
+
+.badge-success,
+.badge-error,
+.badge-warning,
+.badge-info,
+.badge-purple,
+.badge-pink,
+.badge-amber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: var(--badge-height);
+  padding: var(--badge-padding);
+  border-radius: var(--badge-radius);
+  font-size: var(--badge-font);
+  font-weight: var(--font-semibold);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------
+   5. 空状态 (Empty State)
+   ------------------------------------------------------- */
+.lumi-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.lumi-empty__icon {
+  width: 48px;
+  height: 48px;
+  color: var(--border);
+  margin-bottom: var(--space-2);
+}
+
+.lumi-empty__title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text);
+}
+
+.lumi-empty__desc {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  max-width: 320px;
+  line-height: var(--leading-normal);
+}
+
+.lumi-empty__action {
+  margin-top: var(--space-2);
+}
+
+/* -------------------------------------------------------
+   6. 表单 (Form)
+   ------------------------------------------------------- */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.form-label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text);
+}
+
+.required-mark {
+  color: var(--lumi-accent);
+  font-weight: var(--font-bold);
+  margin-left: 2px;
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 10px var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--text);
+  background: var(--input-bg);
+  border: var(--input-border);
+  border-radius: var(--input-radius);
+  outline: none;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  border-color: var(--lumi-brand);
+  box-shadow: var(--input-focus-ring);
+  background: var(--surface);
+}
+
+.form-input::placeholder,
+.form-textarea::placeholder {
+  color: var(--input-placeholder-color);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.form-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--lumi-danger);
+}
+
+.form-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------
+   7. 弹窗 (Modal / Dialog)
+   ------------------------------------------------------- */
+.lumi-modal-overlay,
 .create-dialog-overlay,
 .confirm-dialog-overlay {
   position: fixed;
   inset: 0;
-  background: var(--overlay-bg);
+  background: var(--modal-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  z-index: var(--z-modal);
+  animation: lumi-fade-in var(--duration-fast) var(--ease-default);
+}
+
+.lumi-modal {
+  background: var(--card-bg);
+  border: var(--card-border);
+  border-radius: var(--modal-radius);
+  padding: var(--modal-padding);
+  width: var(--modal-width-md);
+  max-width: calc(100% - var(--space-8));
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--modal-shadow);
+  animation: lumi-scale-in var(--duration-enter) var(--ease-out-expo);
+}
+
+.lumi-modal--sm { width: var(--modal-width-sm); }
+.lumi-modal--lg { width: var(--modal-width-lg); }
+
+.lumi-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.lumi-modal__title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text);
+}
+
+.lumi-modal__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.lumi-modal__close:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.lumi-modal__body {
+  color: var(--text-secondary);
+}
+
+.lumi-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+/* 旧弹窗类名保持兼容 */
+.create-dialog,
+.confirm-dialog {
+  background: var(--card-bg);
+  border: var(--card-border);
+  border-radius: var(--modal-radius);
+  box-shadow: var(--modal-shadow);
 }
 
 .create-dialog {
-  background: var(--workspace-card);
-  border-radius: var(--radius-xl);
-  padding: 28px;
+  padding: var(--space-7);
   width: 400px;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: var(--shadow-lg);
 }
 
 .create-dialog h3 {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 20px;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--text);
+  margin-bottom: var(--space-5);
 }
 
 .confirm-dialog {
-  background: var(--workspace-card);
-  border-radius: var(--radius-xl);
-  padding: 32px 28px 24px;
-  width: 360px;
-  box-shadow: var(--shadow-lg);
+  padding: var(--space-7) var(--space-6) var(--space-5);
+  width: var(--modal-width-sm);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -47,33 +620,34 @@
   justify-content: center;
   background: var(--lumi-danger-light);
   color: var(--lumi-danger);
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .confirm-dialog-message {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text-primary);
-  margin: 0 0 24px;
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  color: var(--text);
+  margin: 0 0 var(--space-5);
 }
 
 .confirm-dialog-actions {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
 }
 
 .confirm-dialog-actions .dialog-btn {
   flex: 1;
   justify-content: center;
-  padding: 10px 20px;
-  border-radius: var(--radius-lg);
-  font-size: 14px;
-  font-weight: 500;
+  height: var(--btn-height-md);
+  padding: var(--btn-padding-md);
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
+  font-weight: var(--font-medium);
 }
 
 .confirm-dialog .dialog-btn.confirm {
-  color: white;
+  color: var(--text-inverse);
   background: var(--lumi-danger);
   border: none;
 }
@@ -82,56 +656,74 @@
   background: var(--lumi-danger-hover);
 }
 
-.form-group {
+.dialog-actions {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  margin-top: var(--space-5);
 }
 
-.form-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: flex;
+.dialog-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 2px;
-}
-
-.required-mark {
-  color: var(--lumi-accent);
-  font-weight: 700;
-  margin-left: 2px;
-}
-
-.form-input {
-  width: 100%;
-  padding: 10px 14px;
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  color: var(--text-primary);
+  justify-content: center;
+  gap: var(--space-1);
+  height: var(--btn-height-md);
+  padding: var(--btn-padding-md);
+  border-radius: var(--btn-radius);
+  font-size: var(--btn-font-md);
+  font-weight: var(--font-medium);
+  cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.form-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
-}
-
-.form-input::placeholder {
+.dialog-btn.cancel {
   color: var(--text-muted);
+  background: var(--bg-secondary);
 }
 
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
+.dialog-btn.cancel:hover {
+  background: var(--surface-hover);
 }
 
+.dialog-btn.confirm {
+  color: var(--text-inverse);
+  background: var(--lumi-brand);
+}
+
+.dialog-btn.confirm:hover {
+  background: var(--lumi-brand-hover);
+}
+
+.dialog-btn.confirm.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-btn.delete {
+  color: var(--lumi-danger);
+  background: var(--lumi-danger-light);
+}
+
+.dialog-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.dialog-btn.danger {
+  color: var(--text-inverse);
+  background: var(--lumi-danger);
+}
+
+.dialog-btn.danger:hover {
+  background: var(--lumi-danger-hover);
+}
+
+/* -------------------------------------------------------
+   8. 颜色选择器
+   ------------------------------------------------------- */
 .color-picker {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .color-dot {
@@ -148,101 +740,106 @@
 }
 
 .color-dot.active {
-  border-color: var(--text-primary);
-  box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px currentColor;
 }
 
-.dialog-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.dialog-btn {
+/* -------------------------------------------------------
+   9. 列表项 / 设置项
+   ------------------------------------------------------- */
+.lumi-list-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 20px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
-.dialog-btn.cancel {
+.lumi-list-item:hover {
+  background: var(--surface-hover);
+}
+
+.lumi-list-item__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.lumi-list-item__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.lumi-list-item__title {
+  font-size: var(--text-md);
+  font-weight: var(--font-medium);
+  color: var(--text);
+}
+
+.lumi-list-item__desc {
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  background: var(--workspace-panel);
 }
 
-.dialog-btn.cancel:hover {
-  background: var(--workspace-hover);
+.lumi-list-item__arrow {
+  color: var(--text-muted);
 }
 
-.dialog-btn.confirm {
-  color: white;
-  background: var(--lumi-primary);
+/* -------------------------------------------------------
+   10. 开关 / 复选框基础样式
+   ------------------------------------------------------- */
+.lumi-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 40px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--border);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
 }
 
-.dialog-btn.confirm:hover {
-  background: var(--lumi-primary-hover);
+.lumi-toggle.is-active {
+  background: var(--lumi-brand);
 }
 
-.dialog-btn.confirm.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.lumi-toggle::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  transition: transform var(--transition-fast);
 }
 
-.dialog-btn.delete {
-  color: var(--lumi-accent);
-  background: var(--lumi-danger-light);
+.lumi-toggle.is-active::after {
+  transform: translateX(18px);
 }
 
-.dialog-btn.delete:hover {
-  background: rgba(239, 68, 68, 0.18);
+/* -------------------------------------------------------
+   11. 分割线与 subtle 背景
+   ------------------------------------------------------- */
+.lumi-divider {
+  height: 1px;
+  background: var(--border-light);
+  border: none;
+  margin: var(--space-4) 0;
 }
 
-.dialog-btn.danger {
-  color: white;
-  background: var(--lumi-danger);
-}
-
-.dialog-btn.danger:hover {
-  background: var(--lumi-danger-hover);
-}
-
-.badge-success {
-  background: var(--task-green-soft);
-  color: var(--lumi-success);
-}
-
-.badge-error {
-  background: var(--task-red-soft);
-  color: var(--lumi-danger);
-}
-
-.badge-warning {
-  background: var(--task-yellow-soft);
-  color: var(--lumi-warning);
-}
-
-.badge-info {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.badge-purple {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
-}
-
-.badge-pink {
-  background: var(--task-pink-soft);
-  color: var(--task-pink);
-}
-
-.badge-amber {
-  background: var(--lumi-amber-soft);
-  color: var(--lumi-amber);
+.lumi-divider--vertical {
+  width: 1px;
+  height: auto;
+  align-self: stretch;
+  margin: 0 var(--space-4);
 }

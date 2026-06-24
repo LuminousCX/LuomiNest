@@ -437,22 +437,22 @@ async function handleQuickAction(action: string) {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 16px;
-  right: 16px;
+  left: var(--space-4);
+  right: var(--space-4);
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, #f59e0b 20%, #f59e0b 80%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, var(--lumi-amber) 20%, var(--lumi-amber) 80%, transparent 100%);
 }
 
 .captcha-banner-content {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: var(--space-2);
+  font-size: var(--text-base);
   color: var(--lumi-amber-dark);
 }
 
 .captcha-icon {
-  font-size: 16px;
+  font-size: var(--text-xl);
 }
 
 .browser-content {
@@ -460,7 +460,7 @@ async function handleQuickAction(action: string) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: height 0.2s ease-in-out;
+  transition: height var(--duration-leave) var(--var(--var(--ease-in-out)));
 }
 
 .browser-content.with-panel {

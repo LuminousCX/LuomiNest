@@ -69,8 +69,8 @@ function handleKeydown(e: KeyboardEvent) {
   background: var(--surface);
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  gap: 12px;
+  padding: 0 var(--space-3);
+  gap: var(--space-3);
   position: relative;
 }
 
@@ -78,15 +78,15 @@ function handleKeydown(e: KeyboardEvent) {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 12px;
-  right: 12px;
+  left: var(--space-3);
+  right: var(--space-3);
   height: 1px;
   background: var(--divider-soft);
 }
 
 .nav-buttons {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .nav-btn {
@@ -100,7 +100,7 @@ function handleKeydown(e: KeyboardEvent) {
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .nav-btn:hover:not(:disabled) {
@@ -125,8 +125,8 @@ function handleKeydown(e: KeyboardEvent) {
   height: 34px;
   background: var(--bg-secondary);
   border-radius: var(--radius-xl);
-  padding: 0 12px;
-  gap: 8px;
+  padding: 0 var(--space-3);
+  gap: var(--space-2);
 }
 
 .address-bar:focus-within {
@@ -143,7 +143,7 @@ function handleKeydown(e: KeyboardEvent) {
   flex: 1;
   border: none;
   background: transparent;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
   outline: none;
 }
@@ -154,6 +154,6 @@ function handleKeydown(e: KeyboardEvent) {
 
 .nav-right {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 </style>
