@@ -50,6 +50,7 @@ class CxPluginHotReload:
             try:
                 await self._task
             except asyncio.CancelledError:
+                # 任务已显式取消；这是预期控制流，无需额外处理。
                 pass
             self._task = None
         logger.info("[CxPlugin] Hot reload watcher stopped")
