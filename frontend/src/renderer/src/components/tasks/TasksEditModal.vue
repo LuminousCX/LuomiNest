@@ -133,7 +133,7 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
             </button>
           </div>
 
-          <div class="luomi-modal-body">
+          <div class="luomi-modal-body custom-scrollbar--thin">
             <div class="luomi-form-group">
               <label class="luomi-form-label">
                 <Type :size="13" />
@@ -298,14 +298,8 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
 
 <style scoped>
 .luomi-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
   background: var(--overlay-backdrop);
   backdrop-filter: var(--glass-blur);
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .luomi-modal {
@@ -703,16 +697,4 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
   transform: scale(0.95) translateY(10px);
 }
 
-.luomi-modal-body::-webkit-scrollbar {
-  width: var(--space-1);
-}
-
-.luomi-modal-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.luomi-modal-body::-webkit-scrollbar-thumb {
-  background: var(--workspace-border);
-  border-radius: var(--radius-full);
-}
 </style>

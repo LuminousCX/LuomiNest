@@ -16,7 +16,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="bookmark-bar">
+  <div class="bookmark-bar custom-scrollbar--thin">
     <button
       v-for="(bm, idx) in bookmarks"
       :key="idx"
@@ -41,7 +41,6 @@ const emit = defineEmits<{
   padding: 0 var(--space-3);
   gap: var(--space-1);
   overflow-x: auto;
-  scrollbar-width: none;
   position: relative;
 }
 
@@ -53,10 +52,6 @@ const emit = defineEmits<{
   right: var(--space-3);
   height: 1px;
   background: var(--divider-soft);
-}
-
-.bookmark-bar::-webkit-scrollbar {
-  display: none;
 }
 
 .bookmark-item {

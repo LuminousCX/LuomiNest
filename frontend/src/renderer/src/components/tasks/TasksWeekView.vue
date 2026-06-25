@@ -40,7 +40,7 @@ const openCreateForSlot = (day: CalendarDay, slot: string) => {
       </div>
     </div>
 
-    <div class="week-body">
+    <div class="week-body custom-scrollbar--thin">
       <div class="week-time-gutter">
         <div v-for="slot in timeSlots" :key="slot" class="week-time-label">
           {{ slot }}
@@ -330,16 +330,4 @@ const openCreateForSlot = (day: CalendarDay, slot: string) => {
   color: var(--task-red);
 }
 
-.week-body::-webkit-scrollbar {
-  width: var(--space-1);
-}
-
-.week-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.week-body::-webkit-scrollbar-thumb {
-  background: var(--workspace-border);
-  border-radius: var(--radius-full);
-}
 </style>

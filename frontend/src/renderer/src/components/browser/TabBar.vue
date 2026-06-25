@@ -32,7 +32,7 @@ function getTabTooltip(tab: Tab): string {
 
 <template>
   <div class="tab-bar">
-    <div class="tab-list">
+    <div class="tab-list custom-scrollbar--thin">
       <div
         v-for="tab in tabs"
         :key="tab.id"
@@ -81,11 +81,6 @@ function getTabTooltip(tab: Tab): string {
   align-items: center;
   gap: calc(var(--space-1) / 2);
   overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.tab-list::-webkit-scrollbar {
-  display: none;
 }
 
 .tab-item {

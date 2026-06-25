@@ -157,15 +157,17 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 
 <template>
   <div class="privacy-detail-view">
-    <div class="privacy-header animate-fade-in">
-      <button class="back-btn" @click="router.push('/settings')">
-        <ArrowLeft :size="18" />
-      </button>
-      <div>
-        <h1 class="page-title">用户隐私政策</h1>
-        <p class="page-subtitle">LuomiNest 如何保护您的数据与隐私</p>
+    <header class="privacy-header page-header animate-fade-in">
+      <div class="page-header__main">
+        <button class="page-header__back" @click="router.push('/settings')">
+          <ArrowLeft :size="18" />
+        </button>
+        <div>
+          <h1 class="page-header__title">用户隐私政策</h1>
+          <p class="page-subtitle">LuomiNest 如何保护您的数据与隐私</p>
+        </div>
       </div>
-    </div>
+    </header>
 
     <div class="privacy-body">
       <article class="privacy-document animate-slide-up">
@@ -230,28 +232,7 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
   padding: var(--space-5) var(--space-7);
   border-bottom: 1px solid var(--workspace-border);
   flex-shrink: 0;
-}
-
-.back-btn {
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.back-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--lumi-primary);
-}
-
-.page-title {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--text-primary);
+  margin-bottom: 0;
 }
 
 .page-subtitle {

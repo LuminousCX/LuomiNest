@@ -329,14 +329,8 @@ const addAgentRoleModel = computed({
 <style scoped>
 .create-dialog-overlay,
 .confirm-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
   background: var(--overlay-bg);
   backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: var(--space-4);
 }
 

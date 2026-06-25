@@ -540,12 +540,6 @@ const handleCreateAgent = async () => {
 
 <style scoped>
 .wizard-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   background: var(--overlay-bg);
   backdrop-filter: blur(var(--space-2));
   -webkit-backdrop-filter: blur(var(--space-2));

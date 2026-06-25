@@ -506,8 +506,11 @@
    7. 弹窗 (Modal / Dialog)
    ------------------------------------------------------- */
 .lumi-modal-overlay,
+.luomi-modal-overlay,
 .create-dialog-overlay,
-.confirm-dialog-overlay {
+.confirm-dialog-overlay,
+.dialog-overlay,
+.wizard-overlay {
   position: fixed;
   inset: 0;
   background: var(--modal-overlay);
@@ -842,4 +845,135 @@
   height: auto;
   align-self: stretch;
   margin: 0 var(--space-4);
+}
+
+/* -------------------------------------------------------
+   12. 页面头部 (Page Header)
+   ------------------------------------------------------- */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.page-header__main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.page-header__back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.page-header__back:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.page-header__title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+/* -------------------------------------------------------
+   13. 图标容器 (Icon Wrap)
+   ------------------------------------------------------- */
+.lumi-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+}
+
+.lumi-icon-wrap--sm {
+  width: var(--space-7);
+  height: var(--space-7);
+}
+
+.lumi-icon-wrap--md {
+  width: var(--space-8);
+  height: var(--space-8);
+}
+
+.lumi-icon-wrap--lg {
+  width: var(--space-10);
+  height: var(--space-10);
+}
+
+.lumi-icon-wrap--brand {
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+}
+
+.lumi-icon-wrap--primary {
+  background: var(--lumi-primary-light);
+  color: var(--lumi-primary);
+}
+
+.lumi-icon-wrap--success {
+  background: var(--lumi-success-light);
+  color: var(--lumi-success);
+}
+
+.lumi-icon-wrap--warning {
+  background: var(--lumi-warning-light);
+  color: var(--lumi-warning);
+}
+
+.lumi-icon-wrap--danger {
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
+}
+
+/* -------------------------------------------------------
+   14. 自定义滚动条 (Custom Scrollbar)
+   ------------------------------------------------------- */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--workspace-border);
+  border-radius: var(--radius-full);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.custom-scrollbar--thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
 }

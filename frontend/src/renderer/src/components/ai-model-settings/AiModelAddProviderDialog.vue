@@ -216,7 +216,7 @@ watch(() => props.visible, (visible) => {
       <div :class="['dialog', 'add-dialog', { 'shake-animation': shakingDialog }]">
         <div class="dialog-header">
           <div class="dialog-header-left">
-            <div class="dialog-header-icon">
+            <div class="lumi-icon-wrap lumi-icon-wrap--sm dialog-header-icon">
               <Plus :size="18" />
             </div>
             <h3>添加模型供应商</h3>
@@ -253,7 +253,7 @@ watch(() => props.visible, (visible) => {
               class="template-card"
               @click="handleTemplateSelect(tmpl.id)"
             >
-              <div class="template-card-logo" :style="tmpl.svgIcon ? {} : { background: tmpl.color || 'var(--text-muted)' }">
+              <div class="lumi-icon-wrap lumi-icon-wrap--md template-card-logo" :style="tmpl.svgIcon ? {} : { background: tmpl.color || 'var(--text-muted)' }">
                 <div v-if="tmpl.svgIcon" class="template-svg-icon" v-html="tmpl.svgIcon"></div>
                 <span v-else class="template-initials">{{ tmpl.initials || tmpl.name.slice(0, 2).toUpperCase() }}</span>
               </div>
@@ -388,13 +388,7 @@ watch(() => props.visible, (visible) => {
 }
 
 .dialog-header-icon {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-md);
   background: var(--lumi-primary-gradient-soft);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   color: var(--lumi-primary);
 }
 
@@ -472,12 +466,6 @@ watch(() => props.visible, (visible) => {
 }
 
 .template-card-logo {
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
 }
 
@@ -599,12 +587,7 @@ watch(() => props.visible, (visible) => {
 }
 
 .dialog-overlay {
-  position: fixed;
-  inset: 0;
   background: var(--overlay-bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 100;
   backdrop-filter: blur(var(--space-1));
 }
