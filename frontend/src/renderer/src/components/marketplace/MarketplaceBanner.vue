@@ -133,7 +133,7 @@ function getRankClass(rank: number): string {
       </div>
     </div>
 
-    <div class="banner-scroll">
+    <div class="banner-scroll custom-scrollbar--thin">
       <div
         v-for="entry in displayItems"
         :key="entry.id"
@@ -252,10 +252,6 @@ function getRankClass(rank: number): string {
   overflow-x: auto;
   padding-bottom: var(--space-1);
   scroll-snap-type: x mandatory;
-}
-
-.banner-scroll::-webkit-scrollbar {
-  height: calc(var(--space-1) * 0.75);
 }
 
 .banner-card {

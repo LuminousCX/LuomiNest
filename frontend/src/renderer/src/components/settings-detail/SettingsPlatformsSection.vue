@@ -280,21 +280,21 @@ onMounted(() => {
 
     <div class="platform-stats-row">
       <div class="platform-stat-card">
-        <div class="platform-stat-icon"><Server :size="16" /></div>
+        <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary"><Server :size="16" /></div>
         <div class="platform-stat-info">
           <span class="platform-stat-value">{{ platformStore.stats.totalPlatforms }}</span>
           <span class="platform-stat-label">已接入平台</span>
         </div>
       </div>
       <div class="platform-stat-card">
-        <div class="platform-stat-icon active"><Zap :size="16" /></div>
+        <div class="lumi-icon-wrap lumi-icon-wrap--md platform-stat-active"><Zap :size="16" /></div>
         <div class="platform-stat-info">
           <span class="platform-stat-value">{{ platformStore.stats.activeConnections }}</span>
           <span class="platform-stat-label">活跃连接</span>
         </div>
       </div>
       <div class="platform-stat-card">
-        <div class="platform-stat-icon"><MessageCircle :size="16" /></div>
+        <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary"><MessageCircle :size="16" /></div>
         <div class="platform-stat-info">
           <span class="platform-stat-value">{{ platformStore.stats.totalMessages }}</span>
           <span class="platform-stat-label">消息总量</span>
@@ -695,18 +695,7 @@ onMounted(() => {
   border-radius: var(--radius-lg);
 }
 
-.platform-stat-icon {
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-md);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.platform-stat-icon.active {
+.platform-stat-active {
   background: var(--task-green-soft);
   color: var(--lumi-success);
 }

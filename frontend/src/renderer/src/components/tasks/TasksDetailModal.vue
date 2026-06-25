@@ -115,14 +115,8 @@ const closeModal = () => {
 
 <style scoped>
 .luomi-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
   background: var(--overlay-backdrop);
   backdrop-filter: var(--glass-blur);
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .luomi-modal {

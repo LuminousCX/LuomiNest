@@ -375,7 +375,7 @@ onMounted(async () => {
                 :class="['template-card', { selected: selectedTemplate === tmpl.id }]"
                 @click="handleTemplateSelect(tmpl.id)"
               >
-                <div class="template-card-logo" :style="{ background: tmpl.color }">
+                <div class="lumi-icon-wrap lumi-icon-wrap--sm template-card-logo" :style="{ background: tmpl.color }">
                   <span class="template-initials">{{ tmpl.initials }}</span>
                 </div>
                 <div class="template-card-info">
@@ -861,12 +861,6 @@ onMounted(async () => {
 }
 
 .template-card-logo {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
 }
 

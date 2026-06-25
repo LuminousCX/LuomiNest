@@ -44,7 +44,7 @@ const emit = defineEmits<{
         <span>Model imported successfully</span>
       </div>
 
-      <div class="skin-list">
+      <div class="skin-list custom-scrollbar--thin">
         <div
           v-for="(skin, idx) in props.skinList"
           :key="idx"
@@ -175,23 +175,6 @@ const emit = defineEmits<{
   overflow-y: auto;
   margin-right: 2px;
   padding-right: 2px;
-}
-
-.skin-list::-webkit-scrollbar {
-  width: 3px;
-}
-
-.skin-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.skin-list::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: var(--radius-xs);
-}
-
-.skin-list::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
 }
 
 .skin-card {

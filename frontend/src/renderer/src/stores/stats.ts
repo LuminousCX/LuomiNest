@@ -28,6 +28,19 @@ export interface UsageSummary {
   recent: UsageRecord[]
 }
 
+export interface UsageComparison {
+  current: {
+    total_requests: number
+    total_tokens: number
+    by_day: Record<string, number>
+  }
+  previous: {
+    total_requests: number
+    total_tokens: number
+    by_day: Record<string, number>
+  }
+}
+
 export interface MemoryStats {
   user_facts: number
   agent_facts: number
@@ -49,6 +62,7 @@ export const useStatsStore = defineStore('stats', () => {
   const overview = ref<StatsOverview | null>(null)
   const usageSummary = ref<UsageSummary | null>(null)
   const dailyUsage = ref<Record<string, number>>({})
+  const usageComparison = ref<UsageComparison | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -173,6 +187,14 @@ export const useStatsStore = defineStore('stats', () => {
     }
   }
 
+  async function fetchComparison(days: number = 7) {
+    try {
+      usageComparison.value = await apiGet<UsageComparison>(`/stats/usage/compare?days=${days}`)
+    } catch (e: unknown) {
+      usageComparison.value = null
+    }
+  }
+
   async function fetchAll(days?: number) {
     loading.value = true
     error.value = null
@@ -181,6 +203,7 @@ export const useStatsStore = defineStore('stats', () => {
         fetchOverview(days),
         fetchUsage(days),
         fetchDailyUsage(days || 7),
+        fetchComparison(days || 7),
       ])
     } finally {
       loading.value = false
@@ -191,6 +214,7 @@ export const useStatsStore = defineStore('stats', () => {
     overview,
     usageSummary,
     dailyUsage,
+    usageComparison,
     loading,
     error,
     totalRequests,
@@ -212,6 +236,7 @@ export const useStatsStore = defineStore('stats', () => {
     fetchOverview,
     fetchUsage,
     fetchDailyUsage,
+    fetchComparison,
     fetchAll,
   }
 })

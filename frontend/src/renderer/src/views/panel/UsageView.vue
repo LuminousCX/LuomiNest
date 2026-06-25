@@ -73,7 +73,10 @@ const recentActivity = ref([
         :style="{ animationDelay: `${(idx + 1) * 0.04}s` }"
         padding="md"
       >
-        <div class="stat-icon-wrap" :class="stat.key">
+        <div
+          class="lumi-icon-wrap lumi-icon-wrap--md"
+          :class="[stat.key, { 'lumi-icon-wrap--brand': stat.key === 'tokens' }]"
+        >
           <component :is="stat.icon" :size="18" />
         </div>
         <div class="stat-body">
@@ -242,32 +245,17 @@ const recentActivity = ref([
   animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
-.stat-icon-wrap {
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.stat-icon-wrap.tokens {
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
-}
-
-.stat-icon-wrap.requests {
+.requests {
   background: var(--task-green-soft);
   color: var(--lumi-success);
 }
 
-.stat-icon-wrap.cost {
+.cost {
   background: var(--task-yellow-soft);
   color: var(--lumi-warning);
 }
 
-.stat-icon-wrap.memory {
+.memory {
   background: var(--task-purple-soft);
   color: var(--task-purple);
 }

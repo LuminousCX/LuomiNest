@@ -498,13 +498,15 @@ const collaborators = [
 
 <template>
   <div class="license-view">
-    <header class="license-header">
-      <button class="back-btn" @click="router.push('/settings')">
-        <ArrowLeft :size="18" />
-      </button>
-      <div>
-        <h1 class="page-title">开源协议</h1>
-        <p class="page-subtitle">LuomiNest 依赖的开源项目及其许可证</p>
+    <header class="license-header page-header">
+      <div class="page-header__main">
+        <button class="page-header__back" @click="router.push('/settings')">
+          <ArrowLeft :size="18" />
+        </button>
+        <div>
+          <h1 class="page-header__title">开源协议</h1>
+          <p class="page-subtitle">LuomiNest 依赖的开源项目及其许可证</p>
+        </div>
       </div>
     </header>
 
@@ -543,7 +545,7 @@ const collaborators = [
 
       <section class="content-section">
         <div class="section-header">
-          <div class="section-icon primary">
+          <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary">
             <ExternalLink :size="16" />
           </div>
           <div>
@@ -581,7 +583,7 @@ const collaborators = [
 
       <section class="content-section">
         <div class="section-header">
-          <div class="section-icon primary">
+          <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary">
             <ExternalLink :size="16" />
           </div>
           <div>
@@ -619,7 +621,7 @@ const collaborators = [
 
       <section class="content-section">
         <div class="section-header">
-          <div class="section-icon primary">
+          <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary">
             <ExternalLink :size="16" />
           </div>
           <div>
@@ -657,7 +659,7 @@ const collaborators = [
 
       <section class="content-section">
         <div class="section-header">
-          <div class="section-icon warning">
+          <div class="lumi-icon-wrap lumi-icon-wrap--md license-section-warning">
             <AlertTriangle :size="16" />
           </div>
           <div>
@@ -712,7 +714,7 @@ const collaborators = [
 
       <section class="content-section">
         <div class="section-header">
-          <div class="section-icon primary">
+          <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary">
             <Scale :size="16" />
           </div>
           <div>
@@ -742,7 +744,7 @@ const collaborators = [
 
       <section class="content-section">
         <div class="section-header">
-          <div class="section-icon heart">
+          <div class="lumi-icon-wrap lumi-icon-wrap--md license-section-heart">
             <Heart :size="16" />
           </div>
           <div>
@@ -794,28 +796,7 @@ const collaborators = [
   border-bottom: 1px solid var(--workspace-border);
   flex-shrink: 0;
   background: var(--workspace-card);
-}
-
-.back-btn {
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.back-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--lumi-primary);
-}
-
-.page-title {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--text-primary);
+  margin-bottom: 0;
 }
 
 .page-subtitle {
@@ -936,27 +917,12 @@ const collaborators = [
   animation: fadeInLeft var(--duration-slow) var(--ease-out-expo) both;
 }
 
-.section-icon {
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.section-icon.primary {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.section-icon.warning {
+.license-section-warning {
   background: color-mix(in srgb, var(--lumi-warning) 12%, transparent);
   color: var(--lumi-warning);
 }
 
-.section-icon.heart {
+.license-section-heart {
   background: color-mix(in srgb, var(--lumi-danger) 12%, transparent);
   color: var(--lumi-danger);
 }

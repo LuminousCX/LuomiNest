@@ -539,7 +539,7 @@ const timeSlotOptions = [
 </script>
 
 <template>
-  <div class="tasks-view">
+  <div class="tasks-view custom-scrollbar">
     <TasksToolbar
       v-model:currentView="currentView"
       v-model:searchQuery="searchQuery"
@@ -620,20 +620,4 @@ const timeSlotOptions = [
   color: var(--text-primary);
 }
 
-.tasks-view::-webkit-scrollbar {
-  width: 5px;
-}
-
-.tasks-view::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.tasks-view::-webkit-scrollbar-thumb {
-  background: var(--workspace-border);
-  border-radius: var(--radius-full);
-}
-
-.tasks-view::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
 </style>

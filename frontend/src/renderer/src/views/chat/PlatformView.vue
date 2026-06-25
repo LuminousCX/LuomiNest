@@ -71,21 +71,21 @@ onMounted(() => {
 
     <div class="platform-stats">
       <LumiCard class="stat-card" :style="{ animationDelay: '0.05s' }" padding="md">
-        <div class="stat-icon"><Server :size="18" /></div>
+        <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--brand"><Server :size="18" /></div>
         <div class="stat-info">
           <span class="stat-value">{{ store.stats.totalPlatforms }}</span>
           <span class="stat-label">已接入平台</span>
         </div>
       </LumiCard>
       <LumiCard class="stat-card" :style="{ animationDelay: '0.10s' }" padding="md">
-        <div class="stat-icon active"><Zap :size="18" /></div>
+        <div class="lumi-icon-wrap lumi-icon-wrap--md stat-active"><Zap :size="18" /></div>
         <div class="stat-info">
           <span class="stat-value">{{ store.stats.activeConnections }}</span>
           <span class="stat-label">活跃连接</span>
         </div>
       </LumiCard>
       <LumiCard class="stat-card" :style="{ animationDelay: '0.15s' }" padding="md">
-        <div class="stat-icon"><Shield :size="18" /></div>
+        <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--brand"><Shield :size="18" /></div>
         <div class="stat-info">
           <span class="stat-value">{{ store.stats.totalMessages }}</span>
           <span class="stat-label">消息总量</span>
@@ -195,18 +195,7 @@ onMounted(() => {
   animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
-.stat-icon {
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-md);
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stat-icon.active {
+.stat-active {
   background: var(--task-green-soft);
   color: var(--lumi-success);
 }

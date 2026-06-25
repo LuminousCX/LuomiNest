@@ -25,12 +25,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Login - LuomiNest' }
   },
   {
-    path: '/dashboard',
-    name: 'Dashboard',
-    component: () => import('../views/DashboardView.vue'),
-    meta: { title: '控制台 - LuomiNest', icon: 'LayoutDashboard' }
-  },
-  {
     path: '/workbench',
     name: 'Workbench',
     component: () => import('../views/WorkbenchView.vue'),
@@ -180,12 +174,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/AgentCreateView.vue'),
     meta: { title: '创建智能体 - LuomiNest', icon: 'Sparkles' }
   },
-  {
-    path: '/inspire',
-    name: 'Inspire',
-    component: () => import('../views/InspireView.vue'),
-    meta: { title: '灵感 - LuomiNest', icon: 'Lightbulb' }
-  }
 ]
 
 const router = createRouter({

@@ -229,12 +229,7 @@ watch(() => props.providerId, (providerId) => {
 
 <style scoped>
 .dialog-overlay {
-  position: fixed;
-  inset: 0;
   background: var(--overlay-bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 100;
   backdrop-filter: blur(var(--space-1));
 }
