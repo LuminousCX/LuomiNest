@@ -16,6 +16,10 @@ import {
   MousePointerClick
 } from 'lucide-vue-next'
 import { useWorkflowStore } from '../stores/workflow'
+import LumiButton from '../components/common/LumiButton.vue'
+import LumiEmptyState from '../components/common/LumiEmptyState.vue'
+import LumiInput from '../components/common/LumiInput.vue'
+import { generateId } from '../utils/id'
 
 const workflowStore = useWorkflowStore()
 
@@ -46,18 +50,18 @@ const selectedNode = ref<string | null>(null)
 const showNodePanel = ref(false)
 
 const agentTemplates = [
-  { name: '代可行', desc: '主控Agent · 任务调度', color: '#6366f1' },
-  { name: '无言', desc: '撰写Agent · 文档生成', color: '#f59e0b' },
-  { name: '林且慢', desc: '审核Agent · 质量把控', color: '#22c55e' },
-  { name: '浏览器助手', desc: '工具Agent · 网页操作', color: '#3b82f6' },
-  { name: '代码执行器', desc: '工具Agent · 运行代码', color: '#8b5cf6' }
+  { name: '代可行', desc: '主控Agent · 任务调度', color: 'var(--lumi-indigo)' },
+  { name: '无言', desc: '撰写Agent · 文档生成', color: 'var(--lumi-amber)' },
+  { name: '林且慢', desc: '审核Agent · 质量把控', color: 'var(--lumi-success)' },
+  { name: '浏览器助手', desc: '工具Agent · 网页操作', color: 'var(--lumi-info)' },
+  { name: '代码执行器', desc: '工具Agent · 运行代码', color: 'var(--task-purple)' }
 ]
 
 const toolTemplates = [
-  { name: '文件读写', icon: FileText, color: '#f43f5e' },
-  { name: '网页浏览', icon: Globe, color: '#3b82f6' },
-  { name: 'LLM调用', icon: Cpu, color: '#8b5cf6' },
-  { name: '智能搜索', icon: Zap, color: '#22c55e' }
+  { name: '文件读写', icon: FileText, color: 'var(--lumi-accent)' },
+  { name: '网页浏览', icon: Globe, color: 'var(--lumi-info)' },
+  { name: 'LLM调用', icon: Cpu, color: 'var(--task-purple)' },
+  { name: '智能搜索', icon: Zap, color: 'var(--lumi-success)' }
 ]
 
 function selectNode(nodeId: string) {
@@ -72,7 +76,7 @@ function deselectNode() {
 
 function addNode(template: typeof agentTemplates[0]) {
   const newNode: WorkflowNode = {
-    id: `node-${Date.now()}`,
+    id: generateId('node'),
     name: template.name,
     type: 'agent',
     icon: Bot,
@@ -111,12 +115,12 @@ const MODULE_ICONS: Record<string, any> = {
 }
 
 const MODULE_COLORS: Record<string, string> = {
-  browser: '#3b82f6',
-  schedule: '#f59e0b',
-  memory: '#8b5cf6',
-  console: '#f43f5e',
-  smart_home: '#22c55e',
-  subagent: '#6366f1',
+  browser: 'var(--lumi-info)',
+  schedule: 'var(--lumi-amber)',
+  memory: 'var(--task-purple)',
+  console: 'var(--lumi-accent)',
+  smart_home: 'var(--lumi-success)',
+  subagent: 'var(--lumi-indigo)',
 }
 
 /**
@@ -136,7 +140,7 @@ watch(
         name: '用户输入',
         type: 'input',
         icon: MousePointerClick,
-        color: '#147EBC',
+        color: 'var(--lumi-brand)',
         x: 80,
         y: 200,
       }]
@@ -148,7 +152,7 @@ watch(
       session.tasks.forEach((task, idx) => {
         const module = task.tool_name.split('.')[0] || 'tool'
         const icon = MODULE_ICONS[module] || Cpu
-        const color = MODULE_COLORS[module] || '#6366f1'
+        const color = MODULE_COLORS[module] || 'var(--lumi-indigo)'
 
         const nodeId = `wf-${task.task_id}`
         if (!nodes.value.find(n => n.id === nodeId)) {
@@ -199,7 +203,7 @@ watch(
             name: '执行结果',
             type: 'output',
             icon: FileText,
-            color: '#f43f5e',
+            color: 'var(--lumi-accent)',
             x: lastNode.x + 200,
             y: lastNode.y,
           })
@@ -241,19 +245,23 @@ watch(
         <span class="page-subtitle">Multi-Agent 协作编排</span>
       </div>
       <div class="header-actions">
-        <button class="action-btn secondary" title="设置">
-          <Settings :size="15" />
-          <span>配置</span>
-        </button>
-        <button
-          :class="['action-btn', isRunning ? 'danger' : 'primary']"
-          @click="toggleRun"
+        <LumiButton variant="secondary" size="sm" title="设置">
+          <template #icon>
+            <Settings :size="15" />
+          </template>
+          配置
+        </LumiButton>
+        <LumiButton
+          :variant="isRunning ? 'danger' : 'primary'"
+          size="sm"
           :title="isRunning ? '停止' : '运行'"
+          @click="toggleRun"
         >
-          <Square v-if="isRunning" :size="15" />
-          <Play v-else :size="15" />
-          <span>{{ isRunning ? '停止' : '运行' }}</span>
-        </button>
+          <template #icon>
+            <component :is="isRunning ? Square : Play" :size="15" />
+          </template>
+          {{ isRunning ? '停止' : '运行' }}
+        </LumiButton>
       </div>
     </div>
 
@@ -296,25 +304,28 @@ watch(
         </div>
 
         <div class="sidebar-footer">
-          <button class="new-workflow-btn">
-            <Plus :size="14" />
-            <span>新建工作流</span>
-          </button>
+          <LumiButton variant="outline" size="sm" block>
+            <template #icon>
+              <Plus :size="14" />
+            </template>
+            新建工作流
+          </LumiButton>
         </div>
       </aside>
 
       <main class="canvas-area" @click.self="deselectNode">
-        <!-- 空状态提示 -->
-        <div v-if="nodes.length === 0" class="canvas-empty-state">
-          <Sparkles :size="32" />
-          <p class="empty-title">工作流画布</p>
-          <p class="empty-desc">在主 Agent 工作台开启工作流模式后，执行计划将自动生成节点</p>
-          <p class="empty-hint">也可以从左侧拖拽节点手动编排</p>
-        </div>
+        <LumiEmptyState
+          v-if="nodes.length === 0"
+          class="canvas-empty-state"
+          icon="inbox"
+          title="工作流画布"
+          description="在主 Agent 工作台开启工作流模式后，执行计划将自动生成节点；也可以从左侧拖拽节点手动编排。"
+          size="md"
+        />
         <svg class="connections-layer">
           <defs>
             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-              <polygon points="0 0, 10 3.5, 0 7" fill="#78716c" />
+              <polygon points="0 0, 10 3.5, 0 7" fill="var(--text-muted)" />
             </marker>
           </defs>
           <line
@@ -324,7 +335,7 @@ watch(
             :y1="getNodePos(conn.from).y + 30"
             :x2="getNodePos(conn.to).x"
             :y2="getNodePos(conn.to).y + 30"
-            stroke="#78716c"
+            stroke="var(--text-muted)"
             stroke-width="1.5"
             marker-end="url(#arrowhead)"
             class="conn-line"
@@ -348,7 +359,13 @@ watch(
           <div class="node-drag-handle">
             <GripVertical :size="12" />
           </div>
-          <div class="node-icon-wrap" :style="{ background: node.color + '14', borderColor: selectedNode === node.id ? node.color : 'transparent' }">
+          <div
+            class="node-icon-wrap"
+            :style="{
+              background: `color-mix(in srgb, ${node.color} 8%, transparent)`,
+              borderColor: selectedNode === node.id ? node.color : 'transparent'
+            }"
+          >
             <component :is="node.icon" :size="18" :style="{ color: node.color }" />
           </div>
           <div class="node-info">
@@ -379,7 +396,7 @@ watch(
               <div v-if="node.id === selectedNode" class="config-content">
                 <div class="config-field">
                   <label>节点名称</label>
-                  <input type="text" :value="node.name" class="config-input" />
+                  <LumiInput :model-value="node.name" size="sm" />
                 </div>
                 <div class="config-field">
                   <label>节点类型</label>
@@ -411,10 +428,12 @@ watch(
                   </select>
                 </div>
                 <div class="config-actions">
-                  <button class="action-btn primary small">
-                    <Play :size="13" />
-                    <span>单独运行</span>
-                  </button>
+                  <LumiButton variant="primary" size="sm">
+                    <template #icon>
+                      <Play :size="13" />
+                    </template>
+                    单独运行
+                  </LumiButton>
                 </div>
               </div>
             </template>
@@ -438,7 +457,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
+  padding: var(--space-4) var(--space-6);
   border-bottom: 1px solid var(--workspace-border);
   flex-shrink: 0;
 }
@@ -446,78 +465,30 @@ watch(
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .page-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 17px;
+  gap: var(--space-2);
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .page-subtitle {
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 3px 10px;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   font-weight: 500;
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.action-btn.primary {
-  background: var(--lumi-primary);
-  color: white;
-}
-
-.action-btn.primary:hover {
-  background: var(--lumi-primary-hover);
-  transform: scale(1.02);
-}
-
-.action-btn.danger {
-  background: var(--lumi-danger);
-  color: white;
-}
-
-.action-btn.danger:hover {
-  background: var(--lumi-danger-hover);
-}
-
-.action-btn.secondary {
-  background: var(--workspace-card);
-  color: var(--text-secondary);
-  border: 1px solid var(--workspace-border);
-}
-
-.action-btn.secondary:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-}
-
-.action-btn.small {
-  padding: 6px 12px;
-  font-size: 12px;
+  gap: var(--space-2);
 }
 
 .workflow-body {
@@ -538,34 +509,34 @@ watch(
 }
 
 .sidebar-section {
-  padding: 14px 12px;
+  padding: var(--space-4) var(--space-3);
   border-bottom: 1px solid var(--workspace-border);
 }
 
 .section-label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: var(--text-muted);
-  margin-bottom: 10px;
+  margin-bottom: var(--space-3);
 }
 
 .template-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-1);
 }
 
 .template-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
-  padding: 9px 10px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   text-align: left;
   transition: all var(--transition-fast);
@@ -577,63 +548,40 @@ watch(
 }
 
 .template-item.tool {
-  gap: 6px;
-  padding: 7px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
 .tpl-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-primary);
 }
 
 .tpl-desc {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   margin-left: auto;
 }
 
 .sidebar-footer {
-  padding: 12px;
+  padding: var(--space-3);
   margin-top: auto;
-}
-
-.new-workflow-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  padding: 9px;
-  border-radius: var(--radius-md);
-  border: 1.5px dashed var(--workspace-border);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.new-workflow-btn:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
 }
 
 .canvas-area {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 1px 1px, var(--workspace-border) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background: radial-gradient(circle at 1px 1px, var(--workspace-border) 1px, transparent 1px);
+  background-size: var(--space-6) var(--space-6);
 }
 
 .canvas-empty-state {
@@ -641,26 +589,7 @@ watch(
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  text-align: center;
-  color: var(--text-muted);
   pointer-events: none;
-}
-
-.canvas-empty-state .empty-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 12px 0 8px;
-  color: var(--text-secondary);
-}
-
-.canvas-empty-state .empty-desc {
-  font-size: 13px;
-  margin-bottom: 4px;
-}
-
-.canvas-empty-state .empty-hint {
-  font-size: 12px;
-  opacity: 0.7;
 }
 
 .connections-layer {
@@ -671,16 +600,16 @@ watch(
 }
 
 .conn-line {
-  transition: stroke-width 0.2s ease-in-out;
+  transition: stroke-width var(--duration-leave) var(--ease-in-out);
 }
 
 .conn-line:hover {
-  stroke: var(--lumi-primary);
+  stroke: var(--lumi-brand);
   stroke-width: 2.5;
 }
 
 .conn-label {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   fill: var(--text-muted);
   pointer-events: none;
 }
@@ -689,17 +618,17 @@ watch(
   position: absolute;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   min-width: 140px;
   background: var(--workspace-card);
-  border: 1.5px solid transparent;
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   cursor: grab;
-  z-index: 1;
+  z-index: var(--z-base);
   transition: all var(--transition-normal);
-  animation: lumi-scale-in 0.25s ease-out both;
+  animation: lumi-scale-in var(--duration-normal) var(--ease-out-expo) both;
 }
 
 .workflow-node:hover {
@@ -708,16 +637,16 @@ watch(
 }
 
 .workflow-node.selected {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 4px 20px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: var(--shadow-glow-md);
 }
 
 .workflow-node.running .node-icon-wrap {
-  animation: pulse-glow 2s ease-in-out infinite;
+  animation: pulse-glow var(--duration-slow) var(--ease-in-out) infinite;
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-primary-border); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-brand-border); }
   50% { box-shadow: 0 0 0 8px transparent; }
 }
 
@@ -747,12 +676,12 @@ watch(
 .node-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
 .node-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -761,17 +690,17 @@ watch(
 }
 
 .node-type-badge {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   background: var(--workspace-panel);
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
   width: fit-content;
 }
 
 .node-remove-btn {
-  width: 22px;
-  height: 22px;
+  width: var(--space-6);
+  height: var(--space-6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -788,9 +717,9 @@ watch(
 
 .node-port {
   position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+  width: var(--space-3);
+  height: var(--space-3);
+  border-radius: var(--radius-full);
   border: 2px solid var(--workspace-border);
   background: var(--workspace-card);
   transition: all var(--transition-fast);
@@ -809,8 +738,8 @@ watch(
 }
 
 .workflow-node:hover .node-port {
-  border-color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
   transform: scale(1.3);
   transform-origin: center;
 }
@@ -838,24 +767,24 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: var(--space-4);
   border-bottom: 1px solid var(--workspace-border);
 }
 
 .panel-title {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .panel-close {
-  width: 26px;
-  height: 26px;
+  width: var(--space-6);
+  height: var(--space-6);
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  font-size: 18px;
+  font-size: var(--text-2xl);
   color: var(--text-muted);
   transition: all var(--transition-fast);
 }
@@ -866,62 +795,62 @@ watch(
 }
 
 .panel-body {
-  padding: 16px;
+  padding: var(--space-4);
 }
 
 .config-field {
-  margin-bottom: 14px;
+  margin-bottom: var(--space-4);
 }
 
 .config-field > label {
   display: block;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 6px;
+  margin-bottom: var(--space-2);
 }
 
 .config-input,
 .config-select {
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--workspace-panel);
   border: 1px solid var(--workspace-border);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-primary);
   transition: border-color var(--transition-fast);
 }
 
 .config-input:focus,
 .config-select:focus {
-  border-color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
 }
 
 .config-textarea {
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--workspace-panel);
   border: 1px solid var(--workspace-border);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-primary);
   resize: vertical;
-  min-height: 60px;
-  line-height: 1.5;
+  min-height: calc(var(--space-8) * 1.5);
+  line-height: var(--leading-normal);
   font-family: var(--font-sans);
 }
 
 .model-selector {
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .model-chip {
-  padding: 5px 12px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-muted);
   background: var(--workspace-panel);
@@ -931,19 +860,19 @@ watch(
 }
 
 .model-chip.active {
-  background: var(--lumi-primary-light);
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
 }
 
 .model-chip:hover {
-  border-color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
 }
 
 .config-actions {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .panel-slide-right-enter-active,
@@ -954,7 +883,8 @@ watch(
 .panel-slide-right-enter-from,
 .panel-slide-right-leave-to {
   opacity: 0;
-  transform: translateX(20px);
+  transform: translateX(var(--space-5));
   width: 0;
 }
+
 </style>

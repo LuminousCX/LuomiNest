@@ -23,7 +23,7 @@ const glowId = `lumi-logo-glow-${uid}`
     :width="size"
     :height="size"
     viewBox="0 0 140.89 140.83"
-    :class="['lumi-brand-star', { animated }]"
+    :class="['lumi-brand-star', 'shrink-0', { animated }]"
   >
     <defs>
       <linearGradient :id="grad44Id" x1="10.25" y1="33.97" x2="130.75" y2="106.79" gradientUnits="userSpaceOnUse">
@@ -90,16 +90,12 @@ const glowId = `lumi-logo-glow-${uid}`
 </template>
 
 <style scoped>
-.lumi-brand-star {
-  flex-shrink: 0;
-}
-
 .lumi-brand-star.animated {
-  animation: lumi-star-breathe 3s ease-in-out infinite;
+  animation: lumi-star-breathe calc(var(--duration-slow) * 8 + var(--duration-fast)) var(--ease-in-out) infinite;
 }
 
 .lumi-brand-star.animated:hover {
-  animation: lumi-star-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: lumi-star-pop var(--duration-enter) var(--ease-spring);
 }
 
 @keyframes lumi-star-breathe {
@@ -112,4 +108,5 @@ const glowId = `lumi-logo-glow-${uid}`
   50% { transform: scale(1.15); }
   100% { transform: scale(1); }
 }
+
 </style>

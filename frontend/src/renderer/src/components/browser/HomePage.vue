@@ -32,19 +32,19 @@ interface QuickAction {
 }
 
 const searchEngines: SearchEngine[] = [
-  { id: 'bing', name: 'Bing', icon: Search, url: 'https://www.bing.com/search?q=', color: '#00809d' },
-  { id: 'google', name: 'Google', icon: Globe, url: 'https://www.google.com/search?q=', color: '#4285f4' },
-  { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=', color: '#00a1d6' },
-  { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: '#ff0000' },
-  { id: 'ai', name: 'AI', icon: Bot, url: '', color: '#8b5cf6' }
+  { id: 'bing', name: 'Bing', icon: Search, url: 'https://www.bing.com/search?q=', color: 'var(--lumi-brand)' },
+  { id: 'google', name: 'Google', icon: Globe, url: 'https://www.google.com/search?q=', color: 'var(--lumi-info)' },
+  { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=', color: 'var(--lumi-sky)' },
+  { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: 'var(--lumi-danger)' },
+  { id: 'ai', name: 'AI', icon: Bot, url: '', color: 'var(--task-purple)' }
 ]
 
 const quickActions: QuickAction[] = [
-  { icon: Code2, label: '执行脚本', color: '#8b5cf6', action: 'script' },
-  { icon: Camera, label: '页面截图', color: '#3b82f6', action: 'screenshot' },
-  { icon: MousePointerClick, label: '点击元素', color: '#22c55e', action: 'click' },
-  { icon: Globe, label: '读取DOM', color: '#f59e0b', action: 'dom' },
-  { icon: Send, label: '填表单', color: '#f43f5e', action: 'fill' }
+  { icon: Code2, label: '执行脚本', color: 'var(--task-purple)', action: 'script' },
+  { icon: Camera, label: '页面截图', color: 'var(--lumi-info)', action: 'screenshot' },
+  { icon: MousePointerClick, label: '点击元素', color: 'var(--lumi-success)', action: 'click' },
+  { icon: Globe, label: '读取DOM', color: 'var(--lumi-amber)', action: 'dom' },
+  { icon: Send, label: '填表单', color: 'var(--lumi-accent)', action: 'fill' }
 ]
 
 const searchInput = ref('')
@@ -182,9 +182,9 @@ function handleKeydown(e: KeyboardEvent) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px;
-  gap: 32px;
-  background: linear-gradient(180deg, var(--bg) 0%, var(--lumi-primary-subtle) 50%, var(--bg-secondary) 100%);
+  padding: var(--space-8);
+  gap: var(--space-7);
+  background: linear-gradient(180deg, var(--bg) 0%, var(--lumi-brand-subtle) 50%, var(--bg-secondary) 100%);
 }
 
 .brand-area {
@@ -192,8 +192,8 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .brand-title {
-  font-size: 42px;
-  font-weight: 600;
+  font-size: var(--text-5xl);
+  font-weight: var(--font-semibold);
   letter-spacing: -0.02em;
   margin: 0;
 }
@@ -207,8 +207,8 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .brand-tagline {
-  margin-top: 8px;
-  font-size: 14px;
+  margin-top: var(--space-2);
+  font-size: var(--text-md);
   color: var(--text-muted);
 }
 
@@ -223,16 +223,16 @@ function handleKeydown(e: KeyboardEvent) {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm), var(--shadow-inset);
   overflow: hidden;
-  transition: all 0.25s ease-in-out;
+  transition: all var(--transition-normal);
 }
 
 .search-box:focus-within {
-  border-color: var(--lumi-primary-border);
-  box-shadow: var(--shadow-md), 0 0 0 3px var(--lumi-primary-light);
+  border-color: var(--lumi-brand-border);
+  box-shadow: var(--shadow-md), 0 0 0 3px var(--lumi-brand-light);
 }
 
 .engine-bar {
-  padding: 12px 16px;
+  padding: var(--space-3) var(--space-4);
   position: relative;
 }
 
@@ -240,8 +240,8 @@ function handleKeydown(e: KeyboardEvent) {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 16px;
-  right: 16px;
+  left: var(--space-4);
+  right: var(--space-4);
   height: 1px;
   background: linear-gradient(90deg, transparent 0%, var(--bg-secondary) 15%, var(--bg-secondary) 85%, transparent 100%);
 }
@@ -249,13 +249,13 @@ function handleKeydown(e: KeyboardEvent) {
 .engine-selector {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
   border: none;
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .engine-selector:hover {
@@ -263,13 +263,13 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .engine-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
 }
 
 .engine-arrow {
   color: var(--text-muted);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-fast);
 }
 
 .engine-arrow.rotated {
@@ -279,28 +279,28 @@ function handleKeydown(e: KeyboardEvent) {
 .engine-dropdown {
   position: absolute;
   top: 100%;
-  left: 12px;
-  margin-top: 4px;
+  left: var(--space-3);
+  margin-top: var(--space-1);
   background: var(--surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-md);
   overflow: hidden;
-  z-index: 100;
+  z-index: var(--z-dropdown);
 }
 
 .engine-option {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   width: 100%;
-  padding: 10px 14px;
+  padding: var(--space-2) var(--space-4);
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .engine-option:hover {
@@ -314,9 +314,9 @@ function handleKeydown(e: KeyboardEvent) {
 .search-textarea {
   width: 100%;
   min-height: 60px;
-  padding: 16px;
+  padding: var(--space-4);
   border: none;
-  font-size: 15px;
+  font-size: var(--text-lg);
   color: var(--text);
   resize: none;
   outline: none;
@@ -330,7 +330,7 @@ function handleKeydown(e: KeyboardEvent) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: var(--space-3) var(--space-4);
   position: relative;
 }
 
@@ -338,8 +338,8 @@ function handleKeydown(e: KeyboardEvent) {
   content: '';
   position: absolute;
   top: 0;
-  left: 16px;
-  right: 16px;
+  left: var(--space-4);
+  right: var(--space-4);
   height: 1px;
   background: linear-gradient(90deg, transparent 0%, var(--bg-secondary) 15%, var(--bg-secondary) 85%, transparent 100%);
 }
@@ -348,21 +348,21 @@ function handleKeydown(e: KeyboardEvent) {
 .actions-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .tool-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  transition: all 0.2s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .tool-btn:hover {
@@ -371,21 +371,21 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .tool-btn.icon-only {
-  padding: 6px;
+  padding: var(--space-1);
 }
 
 .send-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: calc(var(--space-8) - var(--space-1));
+  height: calc(var(--space-8) - var(--space-1));
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, var(--text), var(--text-secondary));
   border: none;
   cursor: pointer;
   color: var(--text-inverse);
-  transition: all 0.2s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .send-btn:hover:not(:disabled) {
@@ -398,21 +398,17 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .loading-spinner {
-  width: 16px;
-  height: 16px;
+  width: var(--space-4);
+  height: var(--space-4);
   border: 2px solid color-mix(in srgb, var(--text-inverse) 30%, transparent);
   border-top-color: var(--text-inverse);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  border-radius: var(--radius-full);
+  animation: spin calc(var(--duration-normal) * 3 + var(--duration-fast)) linear infinite;
 }
 
 .quick-actions {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   flex-wrap: wrap;
   justify-content: center;
 }
@@ -421,45 +417,46 @@ function handleKeydown(e: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 16px 20px;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-lg);
   background: var(--surface);
   border: 1px solid var(--border);
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .qa-card:hover {
   border-color: var(--qa-color);
-  box-shadow: var(--shadow-md), 0 0 0 1px var(--lumi-primary-subtle);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--lumi-brand-subtle);
+  transform: translateY(calc(var(--space-1) / -2));
 }
 
 .qa-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: calc(var(--radius-md) - var(--space-1) / 2);
   background: linear-gradient(135deg, var(--qa-color), color-mix(in srgb, var(--qa-color) 70%, var(--text-inverse)));
   color: var(--text-inverse);
 }
 
 .qa-label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
 .dropdown-enter-active,
 .dropdown-leave-active {
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .dropdown-enter-from,
 .dropdown-leave-to {
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(calc(var(--space-1) * -2));
 }
+
 </style>

@@ -7,6 +7,9 @@ import {
   FileSpreadsheet, FileCode, Plus, CircleDot
 } from 'lucide-vue-next'
 import { useAgentStore } from '../stores/agent'
+import LumiButton from '../components/common/LumiButton.vue'
+import LumiInput from '../components/common/LumiInput.vue'
+import LumiCard from '../components/common/LumiCard.vue'
 
 const router = useRouter()
 const agentStore = useAgentStore()
@@ -32,24 +35,24 @@ const avatarCategories = [
 
 const avatarOptions: Record<string, AvatarOption[]> = {
   classic: [
-    { id: 'c1', emoji: '\u{1F9D4}', color: '#147EBC' },
-    { id: 'c2', emoji: '\u{1F9D3}', color: '#3b82f6' },
-    { id: 'c3', emoji: '\u{1F9D1}\u200D\u{1F52C}', color: '#8b5cf6' }
+    { id: 'c1', emoji: '\u{1F9D4}', color: 'var(--lumi-brand)' },
+    { id: 'c2', emoji: '\u{1F9D3}', color: 'var(--lumi-info)' },
+    { id: 'c3', emoji: '\u{1F9D1}\u200D\u{1F52C}', color: 'var(--task-purple)' }
   ],
   cute: [
-    { id: 'cu1', emoji: '\u{1F978}', color: '#22c55e' },
-    { id: 'cu2', emoji: '\u{1F4A1}', color: '#eab308' },
-    { id: 'cu3', emoji: '\u{1F389}', color: '#f43f5e' }
+    { id: 'cu1', emoji: '\u{1F978}', color: 'var(--lumi-success)' },
+    { id: 'cu2', emoji: '\u{1F4A1}', color: 'var(--lumi-warning)' },
+    { id: 'cu3', emoji: '\u{1F389}', color: 'var(--lumi-accent)' }
   ],
   tech: [
-    { id: 't1', emoji: '\u{1F916}', color: '#06b6d4' },
-    { id: 't2', emoji: '\u{1F6E0}\uFE0F', color: '#6366f1' },
-    { id: 't3', emoji: '\u{26A1}', color: '#f97316' }
+    { id: 't1', emoji: '\u{1F916}', color: 'var(--lumi-sky)' },
+    { id: 't2', emoji: '\u{1F6E0}\uFE0F', color: 'var(--lumi-indigo)' },
+    { id: 't3', emoji: '\u{26A1}', color: 'var(--lumi-amber)' }
   ],
   artistic: [
-    { id: 'a1', emoji: '\u{1F3A8}', color: '#ec4899' },
-    { id: 'a2', emoji: '\u{1F3B8}', color: '#a855f7' },
-    { id: 'a3', emoji: '\u{2728}', color: '#62A9C8' }
+    { id: 'a1', emoji: '\u{1F3A8}', color: 'var(--task-pink)' },
+    { id: 'a2', emoji: '\u{1F3B8}', color: 'var(--task-purple)' },
+    { id: 'a3', emoji: '\u{2728}', color: 'var(--lumi-brand-soft)' }
   ]
 }
 
@@ -235,9 +238,15 @@ const handleCreateAgent = async () => {
             <p class="wizard-subtitle">第 {{ currentStep + 1 }} 步 > {{ stepSubtitles[currentStep] }}</p>
           </div>
         </div>
-        <button class="close-btn" @click="handleClose" aria-label="关闭">
-          <X :size="18" />
-        </button>
+        <LumiButton
+          variant="ghost"
+          size="sm"
+          icon-only
+          aria-label="关闭"
+          @click="handleClose"
+        >
+          <template #icon><X :size="18" /></template>
+        </LumiButton>
       </div>
 
       <div class="wizard-body">
@@ -247,10 +256,9 @@ const handleCreateAgent = async () => {
             <div class="form-area">
               <div class="form-group">
                 <label class="form-label">名称<span class="required">*</span></label>
-                <input
+                <LumiInput
                   v-model="formData.name"
                   type="text"
-                  class="form-input"
                   placeholder="给你的智能体起个名字..."
                 />
               </div>
@@ -289,7 +297,7 @@ const handleCreateAgent = async () => {
                 <label class="form-label">描述</label>
                 <textarea
                   v-model="formData.description"
-                  class="form-textarea"
+                  class="lumi-textarea"
                   rows="3"
                   placeholder="简要描述这个智能体的定位和能力..."
                 ></textarea>
@@ -331,8 +339,11 @@ const handleCreateAgent = async () => {
               </div>
               <p class="preview-hint">实时预览智能体效果</p>
 
-              <div class="preview-card">
-                <div class="preview-avatar-ring" :style="{ background: `linear-gradient(135deg, ${selectedAvatar.color}, ${selectedAvatar.color}99)` }">
+              <LumiCard class="preview-card" padding="md">
+                <div
+                  class="preview-avatar-ring"
+                  :style="{ '--avatar-color': selectedAvatar.color }"
+                >
                   <span class="preview-avatar-emoji">{{ selectedAvatar.emoji }}</span>
                 </div>
                 <h3 class="preview-name">{{ formData.name || '未命名智能体' }}</h3>
@@ -341,7 +352,7 @@ const handleCreateAgent = async () => {
                 <div class="preview-meta">
                   <span>模型：{{ modelOptions.find(m => m.id === formData.selectedModel)?.label }}</span>
                 </div>
-              </div>
+              </LumiCard>
 
               <div class="step-indicator">
                 简览步骤 • 第 {{ currentStep + 1 }} / {{ totalSteps }} 步
@@ -368,12 +379,10 @@ const handleCreateAgent = async () => {
                   <p class="skill-desc">{{ skill.desc }}</p>
                 </div>
                 <button
-                  :class="['skill-toggle', { on: formData.skills[skill.id] }]"
+                  :class="['lumi-toggle', { 'is-active': formData.skills[skill.id] }]"
                   @click="toggleSkill(skill.id)"
                   :aria-label="formData.skills[skill.id] ? '关闭' : '开启'"
-                >
-                  <span class="toggle-thumb"></span>
-                </button>
+                ></button>
               </div>
             </div>
             <button class="add-skill-pack-btn">
@@ -385,7 +394,7 @@ const handleCreateAgent = async () => {
           <!-- Step 3: Advanced Settings -->
           <div v-else-if="currentStep === 2" key="step-3" class="step-content step-layout-full">
             <div class="settings-grid">
-              <div class="settings-card">
+              <LumiCard class="settings-card" padding="md">
                 <h3 class="card-title">模型参数</h3>
                 <div class="form-group">
                   <label class="form-label">Temperature ({{ formData.temperature.toFixed(1) }})</label>
@@ -404,27 +413,26 @@ const handleCreateAgent = async () => {
                 </div>
                 <div class="form-group">
                   <label class="form-label">最大 Token 数</label>
-                  <input
+                  <LumiInput
                     v-model.number="formData.maxTokens"
                     type="number"
-                    class="form-input"
                     min="256"
                     max="128000"
                   />
                 </div>
-              </div>
+              </LumiCard>
 
-              <div class="settings-card">
+              <LumiCard class="settings-card" padding="md">
                 <h3 class="card-title">系统提示词</h3>
                 <div class="form-group">
                   <textarea
                     v-model="formData.systemPrompt"
-                    class="form-textarea system-prompt-area"
+                    class="lumi-textarea system-prompt-area"
                     rows="10"
                     placeholder="定义智能体的角色、行为准则和约束条件...&#10;&#10;例如：你是一个专业的编程助手，专注于提供高质量的代码解决方案。"
                   ></textarea>
                 </div>
-              </div>
+              </LumiCard>
             </div>
           </div>
 
@@ -449,9 +457,12 @@ const handleCreateAgent = async () => {
               </div>
             </Transition>
             <div class="confirm-grid">
-              <div class="confirm-card main-confirm">
+              <LumiCard class="confirm-card main-confirm" padding="md">
                 <div class="confirm-header-row">
-                  <div class="confirm-avatar-lg" :style="{ background: `linear-gradient(135deg, ${selectedAvatar.color}, ${selectedAvatar.color}99)` }">
+                  <div
+                    class="confirm-avatar-lg"
+                    :style="{ '--avatar-color': selectedAvatar.color }"
+                  >
                     <span class="confirm-avatar-emoji">{{ selectedAvatar.emoji }}</span>
                   </div>
                   <div>
@@ -482,9 +493,9 @@ const handleCreateAgent = async () => {
                     <span class="detail-value">{{ formData.maxTokens }}</span>
                   </div>
                 </div>
-              </div>
+              </LumiCard>
 
-              <div class="confirm-card side-confirm">
+              <LumiCard class="confirm-card side-confirm" padding="md">
                 <h4 class="side-title">已启用技能</h4>
                 <div class="enabled-skills-list">
                   <div
@@ -497,31 +508,31 @@ const handleCreateAgent = async () => {
                   </div>
                   <p v-if="enabledSkillsCount === 0" class="no-skills">暂无启用技能</p>
                 </div>
-              </div>
+              </LumiCard>
             </div>
           </div>
         </Transition>
       </div>
 
       <div class="wizard-footer">
-        <button
-          class="footer-btn prev-btn"
-          :class="{ disabled: currentStep === 0 }"
+        <LumiButton
+          variant="secondary"
+          size="md"
           :disabled="currentStep === 0"
           @click="goPrev"
         >
           <ChevronLeft :size="16" />
           <span>上一步</span>
-        </button>
-        <button
-          class="footer-btn next-btn"
-          :class="{ disabled: !canGoNext }"
+        </LumiButton>
+        <LumiButton
+          variant="primary"
+          size="md"
           :disabled="!canGoNext"
           @click="goNext"
         >
           <span>{{ currentStep === totalSteps - 1 ? '创建 Agent' : `下一步: ${currentStep === 0 ? '技能' : currentStep === 1 ? '设置' : '确认'}` }}</span>
           <ChevronRight :size="16" />
-        </button>
+        </LumiButton>
       </div>
     </div>
   </div>
@@ -531,14 +542,14 @@ const handleCreateAgent = async () => {
 .wizard-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--overlay-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 24px;
+  backdrop-filter: blur(var(--space-2));
+  -webkit-backdrop-filter: blur(var(--space-2));
+  padding: var(--space-6);
 }
 
 .wizard-container {
@@ -558,7 +569,7 @@ const handleCreateAgent = async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 28px 16px;
+  padding: var(--space-5) var(--space-7) var(--space-4);
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-light);
 }
@@ -566,15 +577,15 @@ const handleCreateAgent = async () => {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-3);
 }
 
 .header-icon-wrap {
   width: 38px;
   height: 38px;
   border-radius: var(--radius-md);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -587,37 +598,21 @@ const handleCreateAgent = async () => {
 }
 
 .wizard-title {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
   line-height: 1.3;
 }
 
 .wizard-subtitle {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
-}
-
-.close-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.close-btn:hover {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
 }
 
 .wizard-body {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 28px;
+  padding: var(--space-6) var(--space-7);
   min-height: 0;
 }
 
@@ -628,27 +623,27 @@ const handleCreateAgent = async () => {
 .step-layout-split {
   display: grid;
   grid-template-columns: 1fr 300px;
-  gap: 36px;
+  gap: var(--space-8);
   align-items: start;
 }
 
 .step-layout-full {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 /* Form styles */
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
 }
 
 .form-label {
   display: block;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .required {
@@ -656,66 +651,24 @@ const handleCreateAgent = async () => {
   margin-left: 2px;
 }
 
-.form-input {
-  width: 100%;
-  padding: 11px 14px;
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  color: var(--text-primary);
-  font-size: 14px;
-  transition: all var(--transition-fast);
-}
-
-.form-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
-}
-
-.form-input::placeholder {
-  color: var(--text-muted);
-}
-
-.form-textarea {
-  width: 100%;
-  padding: 11px 14px;
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  color: var(--text-primary);
-  font-size: 14px;
-  resize: vertical;
-  transition: all var(--transition-fast);
-  line-height: 1.6;
-}
-
-.form-textarea:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
-}
-
-.form-textarea::placeholder {
-  color: var(--text-muted);
-}
-
 /* Avatar section */
 .avatar-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .avatar-categories {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   flex-wrap: wrap;
 }
 
 .cat-tab {
-  padding: 6px 14px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
   color: var(--text-secondary);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -735,19 +688,19 @@ const handleCreateAgent = async () => {
 
 .avatar-grid {
   display: flex;
-  gap: 10px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .avatar-item {
   width: 52px;
   height: 52px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: var(--text-3xl);
   cursor: pointer;
   transition: all var(--transition-normal);
   background: var(--bg-secondary);
@@ -758,8 +711,8 @@ const handleCreateAgent = async () => {
 }
 
 .avatar-item.selected {
-  border-color: var(--avatar-color, var(--lumi-primary));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--avatar-color, var(--lumi-primary)) 20%, transparent);
+  border-color: var(--avatar-color, var(--lumi-brand));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--avatar-color, var(--lumi-brand)) 20%, transparent);
 }
 
 .upload-avatar {
@@ -769,23 +722,23 @@ const handleCreateAgent = async () => {
 }
 
 .upload-avatar:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 /* Style tags */
 .tag-list {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .style-tag {
-  padding: 7px 16px;
+  padding: 7px var(--space-4);
   border-radius: var(--radius-full);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -805,15 +758,15 @@ const handleCreateAgent = async () => {
 /* Model chips */
 .model-list {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .model-chip {
-  padding: 7px 16px;
+  padding: 7px var(--space-4);
   border-radius: var(--radius-full);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -835,118 +788,123 @@ const handleCreateAgent = async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .preview-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
+  gap: var(--space-1);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text-secondary);
   width: 100%;
 }
 
 .preview-header svg {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .preview-hint {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   width: 100%;
 }
 
 .preview-card {
   width: 100%;
-  padding: 24px 20px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.preview-card :deep(.lumi-card__body) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
   text-align: center;
 }
 
 .preview-avatar-ring {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
+  width: var(--space-10);
+  height: var(--space-10);
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 16px var(--overlay-subtle);
+  background: linear-gradient(135deg, var(--avatar-color, var(--lumi-brand)), color-mix(in srgb, var(--avatar-color, var(--lumi-brand)) 60%, transparent));
+  box-shadow: var(--shadow-md);
 }
 
 .preview-avatar-emoji {
-  font-size: 30px;
+  font-size: var(--text-4xl);
 }
 
 .preview-name {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .preview-badge {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  padding: 3px 10px;
+  padding: 3px var(--space-2);
   border-radius: var(--radius-full);
   background: var(--surface);
   border: 1px solid var(--border-light);
 }
 
 .preview-desc {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
-  line-height: 1.6;
+  line-height: var(--leading-relaxed);
   text-align: left;
   width: 100%;
 }
 
 .preview-meta {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   width: 100%;
   text-align: left;
-  padding-top: 8px;
+  padding-top: var(--space-2);
   border-top: 1px solid var(--border-light);
 }
 
 .step-indicator {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   width: 100%;
   text-align: right;
-  padding-top: 4px;
+  padding-top: var(--space-1);
 }
 
 /* Skills section */
 .skills-intro {
-  padding: 14px 18px;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--lumi-primary-light);
+  background: var(--lumi-brand-light);
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
-  border: 1px solid color-mix(in srgb, var(--lumi-primary) 10%, transparent);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+  border: 1px solid color-mix(in srgb, var(--lumi-brand) 10%, transparent);
 }
 
 .skills-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .skill-item {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   background: var(--surface);
   border: 1px solid var(--border-light);
@@ -962,8 +920,8 @@ const handleCreateAgent = async () => {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -976,98 +934,70 @@ const handleCreateAgent = async () => {
 }
 
 .skill-name {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
   margin-bottom: 2px;
 }
 
 .skill-desc {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.5;
-}
-
-.skill-toggle {
-  width: 44px;
-  height: 24px;
-  border-radius: var(--radius-full);
-  background: var(--border);
-  position: relative;
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  flex-shrink: 0;
-  border: none;
-  padding: 0;
-}
-
-.skill-toggle.on {
-  background: var(--lumi-primary);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--surface);
-  box-shadow: 0 1px 3px var(--overlay-subtle);
-  transition: all var(--transition-normal);
-}
-
-.skill-toggle.on .toggle-thumb {
-  left: 22px;
 }
 
 .add-skill-pack-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
-  padding: 14px;
+  padding: var(--space-3);
   border-radius: var(--radius-md);
-  border: 1px dashed var(--lumi-primary);
-  color: var(--lumi-primary);
-  font-size: 13px;
-  font-weight: 500;
+  border: 1px dashed var(--lumi-brand);
+  color: var(--lumi-brand);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   background: transparent;
   cursor: pointer;
   transition: all var(--transition-fast);
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 
 .add-skill-pack-btn:hover {
-  background: var(--lumi-primary-light);
+  background: var(--lumi-brand-light);
 }
 
 /* Settings grid */
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .settings-card {
-  padding: 20px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.settings-card :deep(.lumi-card__body) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 .card-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
-  margin-bottom: 16px;
+  margin-bottom: var(--space-3);
 }
 
 .range-slider {
   width: 100%;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   appearance: none;
   background: var(--border);
   outline: none;
@@ -1078,10 +1008,10 @@ const handleCreateAgent = async () => {
   appearance: none;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
-  background: var(--lumi-primary);
+  border-radius: var(--radius-full);
+  background: var(--lumi-brand);
   cursor: pointer;
-  box-shadow: 0 2px 6px var(--lumi-primary-border);
+  box-shadow: var(--shadow-sm);
   transition: transform var(--transition-fast);
 }
 
@@ -1092,9 +1022,9 @@ const handleCreateAgent = async () => {
 .range-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  margin-top: 6px;
+  margin-top: var(--space-1);
 }
 
 .system-prompt-area {
@@ -1106,51 +1036,54 @@ const handleCreateAgent = async () => {
 .confirm-grid {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .confirm-card {
-  padding: 24px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+}
+
+.confirm-card :deep(.lumi-card__body) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
 .main-confirm {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  gap: var(--space-3);
 }
 
 .confirm-header-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-3);
 }
 
 .confirm-avatar-lg {
   width: 56px;
   height: 56px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 16px var(--overlay-subtle);
+  background: linear-gradient(135deg, var(--avatar-color, var(--lumi-brand)), color-mix(in srgb, var(--avatar-color, var(--lumi-brand)) 60%, transparent));
+  box-shadow: var(--shadow-md);
 }
 
 .confirm-avatar-emoji {
-  font-size: 28px;
+  font-size: var(--text-4xl);
 }
 
 .confirm-name {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .confirm-style {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
 }
 
@@ -1162,7 +1095,7 @@ const handleCreateAgent = async () => {
 .confirm-details {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-2);
 }
 
 .detail-row {
@@ -1172,52 +1105,52 @@ const handleCreateAgent = async () => {
 }
 
 .detail-label {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .detail-value {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
 }
 
 .side-title {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--text-md);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
-  margin-bottom: 14px;
+  margin-bottom: var(--space-2);
 }
 
 .enabled-skills-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .enabled-skill-tag {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .enabled-skill-tag svg {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
   flex-shrink: 0;
 }
 
 .no-skills {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   text-align: center;
-  padding: 16px;
+  padding: var(--space-4);
 }
 
 /* Footer */
@@ -1225,58 +1158,18 @@ const handleCreateAgent = async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 28px;
+  padding: var(--space-4) var(--space-7);
   border-top: 1px solid var(--border-light);
   flex-shrink: 0;
 }
 
-.footer-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 11px 22px;
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.prev-btn {
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-}
-
-.prev-btn:hover:not(.disabled) {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.next-btn {
-  color: white;
-  background: var(--lumi-primary);
-  border: 1px solid transparent;
-}
-
-.next-btn:hover:not(.disabled) {
-  background: var(--lumi-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--lumi-primary-border);
-}
-
-.footer-btn.disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 /* Transitions */
 .step-fade-enter-active {
-  transition: all 350ms ease-in-out;
+  transition: all var(--duration-slow) var(--ease-in-out);
 }
 
 .step-fade-leave-active {
-  transition: all 250ms ease-in-out;
+  transition: all var(--duration-normal) var(--ease-in-out);
 }
 
 .step-fade-enter-from {
@@ -1314,16 +1207,16 @@ const handleCreateAgent = async () => {
 .error-notification {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   background: var(--task-red-soft);
   border: 1px solid var(--task-red-border);
-  border-radius: var(--radius-lg, 10px);
+  border-radius: var(--radius-lg);
   color: var(--lumi-danger);
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 12px var(--overlay-subtle);
+  font-size: var(--text-md);
+  font-weight: var(--font-medium);
+  margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-sm);
 }
 
 .notification-icon {
@@ -1346,27 +1239,27 @@ const handleCreateAgent = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: var(--space-6);
+  height: var(--space-6);
   border: none;
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: 6px;
+  background: var(--lumi-danger-light);
+  border-radius: var(--radius-xs);
   color: var(--lumi-danger);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .notification-close:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: color-mix(in srgb, var(--lumi-danger) 18%, transparent);
   transform: rotate(90deg);
 }
 
 .toast-slide-enter-active {
-  transition: all 0.3s ease-out;
+  transition: all var(--duration-normal) var(--ease-out-expo);
 }
 
 .toast-slide-leave-active {
-  transition: all 0.2s ease-in;
+  transition: all var(--duration-leave) var(--ease-in-out);
 }
 
 .toast-slide-enter-from {
@@ -1378,4 +1271,5 @@ const handleCreateAgent = async () => {
   opacity: 0;
   transform: translateY(-10px) scale(0.95);
 }
+
 </style>

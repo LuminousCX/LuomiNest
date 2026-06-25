@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig, STTConfig, STTEngine } from '../types'
 import { useApi } from '../composables/useApi'
 import { PROVIDER_LOGOS } from '../config/provider-logos'
+import { getItem, setItem } from '../utils/storage'
 
 const unwrapData = <T>(result: T | { data: T }): T => {
   if (typeof result === 'object' && result !== null && 'data' in result) {
@@ -402,6 +403,8 @@ interface RawModelConfig {
   stt_auto_send?: boolean
   sttAutoSendDelay?: number
   stt_auto_send_delay?: number
+  sttEngine?: string
+  stt_engine?: string
 }
 
 const TTS_VOICES = [
@@ -414,6 +417,75 @@ const TTS_VOICES = [
   { value: 'ja-JP-NanamiNeural', label: '七海（JA·Female）' },
   { value: 'ja-JP-KeitaNeural', label: '圭太（JA·Male）' },
 ] as const
+
+/** TTS 引擎选项（与后端 engine_meta 对应） */
+const TTS_ENGINE_OPTIONS = [
+  { value: 'auto', label: '自动（按降级链选择）', category: 'auto', needsApiKey: false },
+  { value: 'edge-tts', label: 'Edge TTS（在线·免费）', category: 'cloud-free', needsApiKey: false },
+  { value: 'gemini', label: 'Gemini TTS（Google·免费层）', category: 'cloud-paid', needsApiKey: true },
+  { value: 'minimax', label: 'MiniMax TTS（高质量）', category: 'cloud-paid', needsApiKey: true },
+  { value: 'siliconflow', label: 'SiliconFlow TTS（CosyVoice2 云端）', category: 'cloud-paid', needsApiKey: true },
+  { value: 'fish-audio', label: 'Fish Audio TTS（多语言）', category: 'cloud-paid', needsApiKey: true },
+  { value: 'sherpa-onnx', label: 'Sherpa-ONNX TTS（离线神经网络）', category: 'local', needsApiKey: false },
+  { value: 'local', label: '本地 TTS（pyttsx3·CPU）', category: 'local', needsApiKey: false },
+] as const
+
+/** 各引擎音色列表 */
+const TTS_ENGINE_VOICES: Record<string, Array<{ value: string; label: string }>> = {
+  'edge-tts': [...TTS_VOICES],
+  'gemini': [
+    { value: 'Leda', label: 'Leda' },
+    { value: 'Puck', label: 'Puck' },
+    { value: 'Charon', label: 'Charon' },
+    { value: 'Aoede', label: 'Aoede' },
+    { value: 'Fenrir', label: 'Fenrir' },
+    { value: 'Kore', label: 'Kore' },
+    { value: 'Orus', label: 'Orus' },
+    { value: 'Zephyr', label: 'Zephyr' },
+    { value: 'Sulochan', label: 'Sulochan' },
+    { value: 'Algenib', label: 'Algenib' },
+    { value: 'Achernar', label: 'Achernar' },
+    { value: 'Aldebaran', label: 'Aldebaran' },
+    { value: 'Bellatrix', label: 'Bellatrix' },
+    { value: 'Castor', label: 'Castor' },
+    { value: 'Pollux', label: 'Pollux' },
+  ],
+  'minimax': [
+    { value: 'English_Graceful_Lady', label: 'English Graceful Lady（英文优雅女声）' },
+    { value: 'English_Trustworth_Man', label: 'English Trustworth Man（英文可靠男声）' },
+    { value: 'Chinese_Gentle_Lady', label: 'Chinese Gentle Lady（中文温柔女声）' },
+    { value: 'Chinese_Serene_Man', label: 'Chinese Serene Man（中文沉稳男声）' },
+    { value: 'Chinese_Expressive_Girl', label: 'Chinese Expressive Girl（中文活泼女孩）' },
+    { value: 'Chinese_Fresh_Girl', label: 'Chinese Fresh Girl（中文清新女声）' },
+    { value: 'Japanese_Calm_Woman', label: 'Japanese Calm Woman（日文冷静女声）' },
+  ],
+  'siliconflow': [
+    { value: 'FunAudioLLM/CosyVoice2-0.5B:alex', label: 'Alex（英文男声）' },
+    { value: 'FunAudioLLM/CosyVoice2-0.5B:benjamin', label: 'Benjamin（英文男声）' },
+    { value: 'FunAudioLLM/CosyVoice2-0.5B:bella', label: 'Bella（英文女声）' },
+    { value: 'FunAudioLLM/CosyVoice2-0.5B:claire', label: 'Claire（英文女声）' },
+    { value: 'FunAudioLLM/CosyVoice2-0.5B:david', label: 'David（英文男声）' },
+    { value: 'FunAudioLLM/CosyVoice2-0.5B:diana', label: 'Diana（英文女声）' },
+    { value: 'FunAudioLLM/CosyVoice2-0.5B:emily', label: 'Emily（英文女声）' },
+    { value: 'FunAudioLLM/CosyVoice2-0.5B:grace', label: 'Grace（英文女声）' },
+  ],
+  'fish-audio': [
+    { value: '', label: '请输入 reference_id 或角色名称' },
+  ],
+  'sherpa-onnx': [
+    { value: 'zh-female', label: '中文女声' },
+    { value: 'en-female', label: '英文女声' },
+  ],
+  'local': [],
+  'auto': [],
+}
+
+/** 各引擎默认模型 */
+const TTS_ENGINE_DEFAULT_MODEL: Record<string, string> = {
+  'gemini': 'gemini-2.5-flash-preview-tts',
+  'minimax': 'speech-2.8-hd',
+  'siliconflow': 'FunAudioLLM/CosyVoice2-0.5B',
+}
 const STT_LANGUAGES = [
   { value: 'zh-CN', label: '中文（简体）' },
   { value: 'zh-TW', label: '中文（繁体）' },
@@ -444,6 +516,7 @@ export const useModelStore = defineStore('model', () => {
     speed: 1.0,
     baseUrl: '',
     apiKeySet: false,
+    engine: 'auto',
   })
   const sttConfig = ref<STTConfig>({
     provider: '',
@@ -742,36 +815,34 @@ export const useModelStore = defineStore('model', () => {
       voice: cfg.voice,
       speed: cfg.speed,
       baseUrl: cfg.baseUrl,
+      engine: cfg.engine,
     }
-    localStorage.setItem('luominest-tts-config', JSON.stringify(data))
+    setItem('luominest-tts-config', data)
     window.api?.config?.setTTS(data).catch(() => {})
   }
 
   const loadTTSConfigFromLocal = () => {
-    try {
-      const raw = localStorage.getItem('luominest-tts-config')
-      if (raw) {
-        const saved = JSON.parse(raw)
-        ttsConfig.value = {
-          provider: saved.provider || modelConfig.value.ttsProvider || '',
-          model: saved.model || modelConfig.value.ttsModel || 'tts-1',
-          voice: saved.voice || modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
-          speed: saved.speed ?? modelConfig.value.ttsSpeed ?? 1.0,
-          baseUrl: saved.baseUrl || '',
-          apiKeySet: false,
-        }
-      } else {
-        ttsConfig.value = {
-          provider: modelConfig.value.ttsProvider || '',
-          model: modelConfig.value.ttsModel || 'tts-1',
-          voice: modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
-          speed: modelConfig.value.ttsSpeed ?? 1.0,
-          baseUrl: '',
-          apiKeySet: false,
-        }
+    const saved = getItem<Partial<TTSConfig> | null>('luominest-tts-config', null)
+    if (saved) {
+      ttsConfig.value = {
+        provider: saved.provider || modelConfig.value.ttsProvider || '',
+        model: saved.model || modelConfig.value.ttsModel || 'tts-1',
+        voice: saved.voice || modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
+        speed: saved.speed ?? modelConfig.value.ttsSpeed ?? 1.0,
+        baseUrl: saved.baseUrl || '',
+        apiKeySet: false,
+        engine: saved.engine || saved.provider || 'auto',
       }
-    } catch {
-      // use defaults
+    } else {
+      ttsConfig.value = {
+        provider: modelConfig.value.ttsProvider || '',
+        model: modelConfig.value.ttsModel || 'tts-1',
+        voice: modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
+        speed: modelConfig.value.ttsSpeed ?? 1.0,
+        baseUrl: '',
+        apiKeySet: false,
+        engine: modelConfig.value.ttsProvider || 'auto',
+      }
     }
   }
 
@@ -786,39 +857,34 @@ export const useModelStore = defineStore('model', () => {
       baseUrl: cfg.baseUrl,
       engine: cfg.engine,
     }
-    localStorage.setItem('luominest-stt-config', JSON.stringify(data))
+    setItem('luominest-stt-config', data)
     window.api?.config?.setSTT(data).catch(() => {})
   }
 
   const loadSTTConfigFromLocal = () => {
-    try {
-      const raw = localStorage.getItem('luominest-stt-config')
-      if (raw) {
-        const saved = JSON.parse(raw)
-        sttConfig.value = {
-          provider: saved.provider || modelConfig.value.sttProvider || '',
-          model: saved.model || modelConfig.value.sttModel || 'whisper-1',
-          language: saved.language || modelConfig.value.sttLanguage || 'zh-CN',
-          autoSend: saved.autoSend ?? modelConfig.value.sttAutoSend ?? false,
-          autoSendDelay: saved.autoSendDelay ?? modelConfig.value.sttAutoSendDelay ?? 2000,
-          baseUrl: saved.baseUrl || '',
-          apiKeySet: false,
-          engine: saved.engine || 'auto',
-        }
-      } else {
-        sttConfig.value = {
-          provider: modelConfig.value.sttProvider || '',
-          model: modelConfig.value.sttModel || 'whisper-1',
-          language: modelConfig.value.sttLanguage || 'zh-CN',
-          autoSend: modelConfig.value.sttAutoSend ?? false,
-          autoSendDelay: modelConfig.value.sttAutoSendDelay ?? 2000,
-          baseUrl: '',
-          apiKeySet: false,
-          engine: 'auto',
-        }
+    const saved = getItem<Partial<STTConfig> | null>('luominest-stt-config', null)
+    if (saved) {
+      sttConfig.value = {
+        provider: saved.provider || modelConfig.value.sttProvider || '',
+        model: saved.model || modelConfig.value.sttModel || 'whisper-1',
+        language: saved.language || modelConfig.value.sttLanguage || 'zh-CN',
+        autoSend: saved.autoSend ?? modelConfig.value.sttAutoSend ?? false,
+        autoSendDelay: saved.autoSendDelay ?? modelConfig.value.sttAutoSendDelay ?? 2000,
+        baseUrl: saved.baseUrl || '',
+        apiKeySet: false,
+        engine: saved.engine || 'auto',
       }
-    } catch {
-      // use defaults
+    } else {
+      sttConfig.value = {
+        provider: modelConfig.value.sttProvider || '',
+        model: modelConfig.value.sttModel || 'whisper-1',
+        language: modelConfig.value.sttLanguage || 'zh-CN',
+        autoSend: modelConfig.value.sttAutoSend ?? false,
+        autoSendDelay: modelConfig.value.sttAutoSendDelay ?? 2000,
+        baseUrl: '',
+        apiKeySet: false,
+        engine: 'auto',
+      }
     }
   }
 
@@ -827,6 +893,9 @@ export const useModelStore = defineStore('model', () => {
     saveTTSConfigToLocal()
 
     const configUpdates: Partial<ModelConfig> = {}
+    // engine 与 provider 同义，统一写入 ttsProvider
+    const engineId = updates.engine ?? updates.provider
+    if (engineId !== undefined) configUpdates.ttsProvider = engineId
     if (updates.provider !== undefined) configUpdates.ttsProvider = updates.provider
     if (updates.model !== undefined) configUpdates.ttsModel = updates.model
     if (updates.voice !== undefined) configUpdates.ttsVoice = updates.voice
@@ -901,6 +970,9 @@ export const useModelStore = defineStore('model', () => {
     updateSTTConfig,
     fetchSTTEngines,
     TTS_VOICES,
+    TTS_ENGINE_OPTIONS,
+    TTS_ENGINE_VOICES,
+    TTS_ENGINE_DEFAULT_MODEL,
     STT_LANGUAGES,
   }
 })

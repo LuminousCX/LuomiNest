@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { Zap } from 'lucide-vue-next'
 import { useApi } from '../composables/useApi'
+import LumiButton from '../components/common/LumiButton.vue'
 
 const router = useRouter()
 const { checkHealth } = useApi()
@@ -19,7 +20,8 @@ const startLoading = async () => {
 
   await pollBackend()
 
-  if (backendStatus.value === 'ready') {
+  const status: string = backendStatus.value
+  if (status === 'ready') {
     progressPercent.value = 100
     setTimeout(() => router.push('/login'), 400)
   } else {
@@ -52,7 +54,8 @@ const retryBackend = async () => {
   backendStatus.value = 'loading'
   progressPercent.value = 30
   await pollBackend()
-  if (backendStatus.value === 'ready') {
+  const status: string = backendStatus.value
+  if (status === 'ready') {
     progressPercent.value = 100
     setTimeout(() => router.push('/login'), 400)
   }
@@ -86,13 +89,15 @@ onBeforeUnmount(() => {
       <div v-if="backendStatus === 'error'" class="splash-error animate-fade-in">
         <p class="error-hint">后端服务未响应，请确认 LuomiNest 后端已启动</p>
         <div class="error-actions">
-          <button class="splash-retry-btn" @click="retryBackend">
-            <Zap :size="13" />
-            <span>重新连接</span>
-          </button>
-          <button class="splash-skip-btn" @click="router.push('/login')">
+          <LumiButton variant="primary" size="sm" @click="retryBackend">
+            <template #icon>
+              <Zap :size="13" />
+            </template>
+            重新连接
+          </LumiButton>
+          <LumiButton variant="ghost" size="sm" @click="router.push('/login')">
             跳过
-          </button>
+          </LumiButton>
         </div>
       </div>
     </div>
@@ -115,7 +120,7 @@ onBeforeUnmount(() => {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: var(--workspace-bg);
+  background: var(--bg);
 }
 
 .splash-bg {
@@ -127,16 +132,17 @@ onBeforeUnmount(() => {
 
 .bg-orb {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   filter: blur(140px);
   opacity: 0.12;
-  animation: orb-drift 24s ease-in-out infinite;
+  will-change: transform, opacity;
+  animation: orb-drift 24s var(--ease-in-out) infinite;
 }
 
 .splash-orb-1 {
   width: 500px;
   height: 500px;
-  background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
+  background: radial-gradient(circle, var(--lumi-brand-glow), transparent 70%);
   top: -150px;
   left: 30%;
 }
@@ -144,7 +150,7 @@ onBeforeUnmount(() => {
 .splash-orb-2 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, var(--lumi-primary-glow), transparent 70%);
+  background: radial-gradient(circle, var(--lumi-brand-glow), transparent 70%);
   bottom: -100px;
   right: 20%;
   animation-delay: -12s;
@@ -161,10 +167,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 32px;
+  gap: var(--space-7);
   width: 100%;
   max-width: 320px;
-  padding: 40px;
+  padding: var(--space-8);
 }
 
 .splash-brand {
@@ -172,8 +178,8 @@ onBeforeUnmount(() => {
 }
 
 .splash-title {
-  font-size: 36px;
-  font-weight: 700;
+  font-size: var(--text-5xl);
+  font-weight: var(--font-bold);
   letter-spacing: -1px;
 }
 
@@ -181,16 +187,16 @@ onBeforeUnmount(() => {
 .splash-bar {
   width: 100%;
   height: 2px;
-  border-radius: 1px;
-  background: var(--workspace-panel);
+  border-radius: var(--radius-xs);
+  background: var(--bg-secondary);
   overflow: hidden;
 }
 
 .bar-fill {
   height: 100%;
-  border-radius: 1px;
-  background: var(--lumi-primary);
-  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  border-radius: var(--radius-xs);
+  background: var(--lumi-brand);
+  transition: width var(--transition-normal);
 }
 
 /* 错误状态 */
@@ -198,12 +204,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
 }
 
 .error-hint {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   text-align: center;
 }
@@ -211,56 +217,24 @@ onBeforeUnmount(() => {
 .error-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.splash-retry-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  cursor: pointer;
-  transition: all 250ms ease-in-out;
-}
-
-.splash-retry-btn:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.splash-skip-btn {
-  padding: 8px 16px;
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 200ms ease-in-out;
-  border-radius: var(--radius-md);
-}
-
-.splash-skip-btn:hover {
-  color: var(--text-secondary);
+  gap: var(--space-3);
 }
 
 /* 底部 */
 .splash-footer {
   position: absolute;
-  bottom: 24px;
+  bottom: var(--space-6);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   z-index: 1;
 }
 
 .footer-text {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -270,31 +244,37 @@ onBeforeUnmount(() => {
 .footer-bar {
   width: 100px;
   height: 1px;
-  background: var(--workspace-panel);
+  background: var(--bg-secondary);
   overflow: hidden;
 }
 
 .footer-bar-fill {
   height: 100%;
-  background: var(--lumi-primary);
-  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  background: var(--lumi-brand);
+  transition: width var(--transition-normal);
 }
 
 /* 动画 */
 .animate-brand-enter {
-  animation: brand-enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: brand-enter var(--duration-enter) var(--ease-out-expo) both;
 }
 
 .animate-slide-up {
-  animation: lumi-slide-up 0.4s ease-out 0.2s both;
+  animation: lumi-slide-up var(--duration-enter) var(--ease-out-expo) var(--duration-leave) both;
 }
 
 .animate-fade-in {
-  animation: lumi-fade-in 0.3s ease-out both;
+  animation: lumi-fade-in var(--duration-slow) var(--ease-out-expo) both;
 }
 
 @keyframes brand-enter {
   0% { opacity: 0; transform: translateY(20px); filter: blur(2px); }
   100% { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
+
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
 </style>

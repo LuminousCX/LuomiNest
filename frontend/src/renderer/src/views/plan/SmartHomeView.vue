@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Home, Lightbulb, Thermometer, Droplets, Lock, Wifi, Power, Settings2, Sun, Moon, Wind, Eye, Plus, Activity } from 'lucide-vue-next'
+import { Lightbulb, Thermometer, Droplets, Lock, Wifi, Power, Settings2, Wind, Eye, Plus, Activity } from 'lucide-vue-next'
+import LumiButton from '../../components/common/LumiButton.vue'
+import LumiCard from '../../components/common/LumiCard.vue'
 import { useApi } from '../../composables/useApi'
 
 const { apiGet } = useApi()
@@ -84,20 +86,20 @@ const toggleScene = (sceneId: string) => {
         <p class="header-desc">物联网智能居家计划与设备控制</p>
       </div>
       <div class="header-actions">
-        <button class="action-btn secondary">
-          <Settings2 :size="15" />
+        <LumiButton variant="secondary" size="sm">
+          <template #icon><Settings2 :size="14" /></template>
           <span>设置</span>
-        </button>
-        <button class="action-btn primary">
-          <Plus :size="15" />
+        </LumiButton>
+        <LumiButton variant="primary" size="sm">
+          <template #icon><Plus :size="14" /></template>
           <span>添加设备</span>
-        </button>
+        </LumiButton>
       </div>
     </div>
 
     <div class="sh-content">
       <div class="left-col">
-        <div class="section-card">
+        <LumiCard class="section-card" padding="md">
           <div class="section-header">
             <span class="section-title">房间</span>
           </div>
@@ -110,9 +112,9 @@ const toggleScene = (sceneId: string) => {
               <span class="room-count">{{ r.active }}/{{ r.devices }} 在线</span>
             </div>
           </div>
-        </div>
+        </LumiCard>
 
-        <div class="section-card">
+        <LumiCard class="section-card" padding="md">
           <div class="section-header">
             <span class="section-title">场景</span>
           </div>
@@ -135,11 +137,11 @@ const toggleScene = (sceneId: string) => {
               </div>
             </div>
           </div>
-        </div>
+        </LumiCard>
       </div>
 
       <div class="center-col">
-        <div class="section-card full">
+        <LumiCard class="section-card full" padding="md">
           <div class="section-header">
             <span class="section-title">设备控制</span>
             <Wifi :size="14" class="section-icon" />
@@ -162,11 +164,11 @@ const toggleScene = (sceneId: string) => {
               <span class="tile-value">{{ d.value }}</span>
             </div>
           </div>
-        </div>
+        </LumiCard>
       </div>
 
       <div class="right-col">
-        <div class="section-card">
+        <LumiCard class="section-card" padding="md">
           <div class="section-header">
             <span class="section-title">自动化</span>
             <Activity :size="14" class="section-icon" />
@@ -182,7 +184,7 @@ const toggleScene = (sceneId: string) => {
               </div>
             </div>
           </div>
-        </div>
+        </LumiCard>
       </div>
     </div>
   </div>
@@ -193,8 +195,8 @@ const toggleScene = (sceneId: string) => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 24px 28px;
-  gap: 20px;
+  padding: var(--space-6) var(--space-7);
+  gap: var(--space-5);
   overflow-y: auto;
 }
 
@@ -205,57 +207,26 @@ const toggleScene = (sceneId: string) => {
 }
 
 .header-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .header-desc {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.action-btn.primary {
-  background: var(--lumi-primary);
-  color: white;
-}
-
-.action-btn.primary:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.action-btn.secondary {
-  background: var(--surface);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-
-.action-btn.secondary:hover {
-  background: var(--surface-hover);
+  gap: var(--space-2);
 }
 
 .sh-content {
   flex: 1;
   display: flex;
-  gap: 16px;
+  gap: var(--space-4);
   min-height: 0;
 }
 
@@ -264,7 +235,7 @@ const toggleScene = (sceneId: string) => {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .center-col {
@@ -282,10 +253,9 @@ const toggleScene = (sceneId: string) => {
 }
 
 .section-card {
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-  padding: 18px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .section-card.full {
@@ -296,12 +266,12 @@ const toggleScene = (sceneId: string) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: var(--space-3);
 }
 
 .section-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
@@ -312,58 +282,58 @@ const toggleScene = (sceneId: string) => {
 .room-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .room-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 14px 10px;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2);
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
 .room-card:hover {
-  background: var(--lumi-primary-light);
+  background: var(--lumi-brand-light);
 }
 
 .room-icon-wrap {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .room-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .room-count {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .scene-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .scene-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: var(--space-2);
+  padding: var(--space-3);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
   cursor: pointer;
@@ -371,13 +341,13 @@ const toggleScene = (sceneId: string) => {
 }
 
 .scene-card.active {
-  border-color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  border-color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 .scene-icon-wrap {
-  width: 32px;
-  height: 32px;
+  width: var(--space-7);
+  height: var(--space-7);
   border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-secondary);
@@ -388,8 +358,8 @@ const toggleScene = (sceneId: string) => {
 }
 
 .scene-card.active .scene-icon-wrap {
-  background: var(--lumi-primary-glow);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-glow);
+  color: var(--lumi-brand);
 }
 
 .scene-info {
@@ -400,35 +370,35 @@ const toggleScene = (sceneId: string) => {
 }
 
 .scene-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
 }
 
 .scene-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .scene-toggle {
   width: 36px;
-  height: 20px;
-  border-radius: 10px;
+  height: var(--space-5);
+  border-radius: var(--radius-full);
   background: var(--border);
   position: relative;
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: background-color var(--transition-fast);
   flex-shrink: 0;
 }
 
 .scene-toggle.on {
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
 }
 
 .toggle-dot {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+  width: var(--space-4);
+  height: var(--space-4);
+  border-radius: var(--radius-full);
   background: var(--surface);
   position: absolute;
   top: 2px;
@@ -437,29 +407,29 @@ const toggleScene = (sceneId: string) => {
 }
 
 .scene-toggle.on .toggle-dot {
-  transform: translateX(16px);
+  transform: translateX(var(--space-4));
 }
 
 .device-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .device-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 16px 12px;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-3);
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
 .device-tile:hover {
-  background: var(--lumi-primary-light);
+  background: var(--lumi-brand-light);
 }
 
 .device-tile.off {
@@ -478,11 +448,11 @@ const toggleScene = (sceneId: string) => {
 }
 
 .power-icon.on {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .tile-room {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
@@ -490,8 +460,8 @@ const toggleScene = (sceneId: string) => {
   width: 44px;
   height: 44px;
   border-radius: var(--radius-md);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -503,28 +473,28 @@ const toggleScene = (sceneId: string) => {
 }
 
 .tile-name {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
   text-align: center;
 }
 
 .tile-value {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .automation-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .automation-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
 }
@@ -542,35 +512,35 @@ const toggleScene = (sceneId: string) => {
 }
 
 .auto-name {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
 }
 
 .auto-detail {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .auto-toggle {
-  width: 32px;
+  width: var(--space-7);
   height: 18px;
-  border-radius: 9px;
+  border-radius: var(--radius-full);
   background: var(--border);
   position: relative;
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: background-color var(--transition-fast);
   flex-shrink: 0;
 }
 
 .auto-toggle.on {
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
 }
 
 .auto-toggle .toggle-dot {
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--surface);
   position: absolute;
   top: 2px;
@@ -581,4 +551,5 @@ const toggleScene = (sceneId: string) => {
 .auto-toggle.on .toggle-dot {
   transform: translateX(14px);
 }
+
 </style>

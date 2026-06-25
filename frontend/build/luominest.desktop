@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=LuomiNest
+Comment=LuomiNest - Distributed AI Companion Platform
+Exec=LuomiNest %U
+Icon=luominest
+Type=Application
+Categories=Utility;Network;Chat;
+StartupNotify=true
+StartupWMClass=LuomiNest
+MimeType=x-scheme-handler/luominest;
+Keywords=AI;companion;chat;IoT;smart-home;

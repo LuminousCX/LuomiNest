@@ -29,6 +29,7 @@ import { useToast } from '../composables/useToast'
 import { useAgentStore } from './agent'
 import { useChatTrashStore } from './chat-trash'
 import { detectSearchIntent, extractSearchQuery } from '../utils/searchIntent'
+import { generateId } from '../utils/id'
 
 export const useChatStore = defineStore('chat', () => {
   const { apiGet, apiPost, apiPatch, apiDelete, apiStream, checkHealth } = useApi()
@@ -138,7 +139,7 @@ export const useChatStore = defineStore('chat', () => {
       const mappedMessages: ChatMessage[] = []
       for (const m of (conv.messages || []) as ApiMessage[]) {
         const msg: ChatMessage = {
-          id: m.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          id: m.id || generateId(),
           role: m.role,
           content: m.content || '',
           timestamp: m.timestamp || Date.now(),
@@ -343,7 +344,7 @@ export const useChatStore = defineStore('chat', () => {
     lastError.value = null
 
     const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
+      id: generateId('user'),
       role: 'user',
       content: content,
       timestamp: Date.now(),
@@ -369,7 +370,7 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const assistantMessage: ChatMessage = {
-      id: `assistant-${Date.now()}`,
+      id: generateId('assistant'),
       role: 'assistant',
       content: '',
       reasoningContent: '',
@@ -658,7 +659,7 @@ export const useChatStore = defineStore('chat', () => {
 
     const lastExistingVersion = existingVersions.length > 0 ? existingVersions[existingVersions.length - 1] : null
     const assistantMessage: ChatMessage = {
-      id: `assistant-${Date.now()}`,
+      id: generateId('assistant'),
       role: 'assistant',
       content: '',
       reasoningContent: '',

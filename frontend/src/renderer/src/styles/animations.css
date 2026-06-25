@@ -38,6 +38,17 @@
   50% { transform: scale(1.03); }
 }
 
+@keyframes lumi-content-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .lumi-gradient-text {
   background: linear-gradient(135deg, var(--lumi-primary) 0%, var(--lumi-primary-soft) 50%, #A8D1E1 100%);
   -webkit-background-clip: text;

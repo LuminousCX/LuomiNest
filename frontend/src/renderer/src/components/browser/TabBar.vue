@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { X, Globe, Loader2, Moon } from 'lucide-vue-next'
+import { X, Globe, Loader2, Moon, Plus } from 'lucide-vue-next'
 
 interface Tab {
   id: string
@@ -50,7 +50,7 @@ function getTabTooltip(tab: Tab): string {
         </button>
       </div>
       <button class="tab-add" @click="emit('add')">
-        <span>+</span>
+        <Plus :size="16" />
       </button>
     </div>
   </div>
@@ -58,11 +58,11 @@ function getTabTooltip(tab: Tab): string {
 
 <style scoped>
 .tab-bar {
-  height: 38px;
+  height: calc(var(--space-8) - 2px);
   background: var(--bg-secondary);
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   position: relative;
 }
 
@@ -70,8 +70,8 @@ function getTabTooltip(tab: Tab): string {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 8px;
-  right: 8px;
+  left: var(--space-2);
+  right: var(--space-2);
   height: 1px;
   background: var(--divider-soft);
 }
@@ -79,7 +79,7 @@ function getTabTooltip(tab: Tab): string {
 .tab-list {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -91,15 +91,15 @@ function getTabTooltip(tab: Tab): string {
 .tab-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  min-width: 120px;
-  max-width: 200px;
-  height: 30px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  min-width: calc(var(--space-9) * 2 + var(--space-6));
+  max-width: calc(var(--space-9) * 4 + var(--space-2));
+  height: calc(var(--space-7) - 2px);
   background: var(--border-light);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.15s ease-in-out, transform 0.15s ease-in-out;
+  transition: background var(--transition-fast), transform var(--transition-fast);
 }
 
 .tab-item:hover {
@@ -123,9 +123,9 @@ function getTabTooltip(tab: Tab): string {
 }
 
 .tab-favicon {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
+  width: var(--space-3);
+  height: var(--space-3);
+  border-radius: calc(var(--space-1) / 2);
   flex-shrink: 0;
 }
 
@@ -137,7 +137,7 @@ function getTabTooltip(tab: Tab): string {
 .tab-sleep-icon {
   flex-shrink: 0;
   color: var(--text-muted);
-  animation: pulse-sleep 2s ease-in-out infinite;
+  animation: pulse-sleep calc(var(--duration-normal) * 8) var(--ease-in-out) infinite;
 }
 
 @keyframes pulse-sleep {
@@ -147,13 +147,8 @@ function getTabTooltip(tab: Tab): string {
 
 .tab-spinner {
   flex-shrink: 0;
-  animation: spin 1s linear infinite;
+  animation: spin calc(var(--duration-normal) * 4) linear infinite;
   color: var(--text-muted);
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .tab-title {
@@ -161,7 +156,7 @@ function getTabTooltip(tab: Tab): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
@@ -174,15 +169,15 @@ function getTabTooltip(tab: Tab): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
+  width: var(--space-4);
+  height: var(--space-4);
+  border-radius: calc(var(--space-1) - 1px);
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .tab-close:hover {
@@ -194,19 +189,20 @@ function getTabTooltip(tab: Tab): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: calc(var(--space-6) + var(--space-1));
+  height: calc(var(--space-6) + var(--space-1));
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  font-size: 16px;
-  transition: all 0.2s ease-in-out;
+  font-size: var(--text-xl);
+  transition: all var(--transition-fast);
 }
 
 .tab-add:hover {
   background: var(--surface-hover);
   color: var(--text-secondary);
 }
+
 </style>

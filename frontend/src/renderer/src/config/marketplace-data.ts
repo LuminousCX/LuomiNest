@@ -1,5 +1,6 @@
 import type { MarketplaceCategory, MarketplaceTag, MarketplaceItem, MarketplaceAuthor } from '../types/marketplace'
 
+// ─── 插件分类（对齐 CxPlugin 系统） ───────────────────────────
 export const PLUGIN_CATEGORIES: MarketplaceCategory[] = [
   { id: 'all', name: '全部', icon: 'LayoutGrid' },
   { id: 'ai-model', name: 'AI 模型', icon: 'Cpu', children: [
@@ -34,35 +35,35 @@ export const PLUGIN_CATEGORIES: MarketplaceCategory[] = [
   ]},
 ]
 
+// ─── 技能分类（对齐真实 Skill 生态） ───────────────────────────
 export const SKILL_CATEGORIES: MarketplaceCategory[] = [
   { id: 'all', name: '全部', icon: 'LayoutGrid' },
-  { id: 'conversation', name: '对话', icon: 'MessageCircle', children: [
-    { id: 'chat', name: '日常对话' },
-    { id: 'roleplay', name: '角色扮演' },
-    { id: 'creative', name: '创意写作' },
-    { id: 'translate', name: '翻译' },
+  { id: 'coding', name: '编程', icon: 'Code', children: [
+    { id: 'frontend', name: '前端开发' },
+    { id: 'backend', name: '后端开发' },
+    { id: 'fullstack', name: '全栈工程' },
+    { id: 'refactor', name: '重构优化' },
+  ]},
+  { id: 'document', name: '文档', icon: 'FileText', children: [
+    { id: 'word', name: 'Word 文档' },
+    { id: 'pdf', name: 'PDF 文档' },
+    { id: 'slides', name: '演示文稿' },
+    { id: 'coauthor', name: '协作写作' },
+  ]},
+  { id: 'design', name: '设计', icon: 'Palette', children: [
+    { id: 'visual', name: '视觉设计' },
+    { id: 'brand', name: '品牌规范' },
+    { id: 'art', name: '艺术创作' },
   ]},
   { id: 'knowledge', name: '知识', icon: 'BookOpen', children: [
-    { id: 'qa', name: '问答' },
-    { id: 'research', name: '研究' },
-    { id: 'education', name: '教育' },
-    { id: 'summarize', name: '摘要' },
-  ]},
-  { id: 'coding', name: '编程', icon: 'Code', children: [
-    { id: 'debug', name: '调试' },
-    { id: 'review', name: '代码审查' },
-    { id: 'generate', name: '代码生成' },
-    { id: 'refactor', name: '重构' },
+    { id: 'comms', name: '内部通讯' },
+    { id: 'content', name: '内容创作' },
+    { id: 'research', name: '研究分析' },
   ]},
   { id: 'media', name: '媒体', icon: 'Image', children: [
     { id: 'image-gen', name: '图片生成' },
-    { id: 'music', name: '音乐' },
-    { id: 'video', name: '视频' },
-  ]},
-  { id: 'lifestyle', name: '生活', icon: 'Heart', children: [
-    { id: 'health', name: '健康' },
-    { id: 'cooking', name: '烹饪' },
-    { id: 'travel', name: '旅行' },
+    { id: 'animation', name: '动画' },
+    { id: 'gif', name: 'GIF 制作' },
   ]},
 ]
 
@@ -108,154 +109,242 @@ export const COMMON_TAGS: MarketplaceTag[] = [
 
 const MOCK_AUTHORS: MarketplaceAuthor[] = [
   { id: 'a1', name: 'LuminousCX', avatar: '', verified: true },
-  { id: 'a2', name: 'AIStudio', avatar: '', verified: true },
-  { id: 'a3', name: 'DevCommunity', avatar: '', verified: false },
-  { id: 'a4', name: 'TechLab', avatar: '', verified: true },
-  { id: 'a5', name: 'OpenSource', avatar: '', verified: false },
+  { id: 'a2', name: 'LuomiNest', avatar: '', verified: true },
+  { id: 'a3', name: 'ChenXiLab', avatar: '', verified: true },
+  { id: 'a4', name: 'OpenSkill', avatar: '', verified: false },
+  { id: 'a5', name: 'DevCommunity', avatar: '', verified: false },
 ]
 
+// ─── CxPlugin 插件（对齐后端 CxPlugin 系统） ───────────────────
 export const MOCK_PLUGINS: MarketplaceItem[] = [
   {
-    id: 'p1', type: 'plugin', name: 'DeepSeek 接入', description: '接入 DeepSeek 系列大语言模型，支持 DeepSeek-V3、DeepSeek-R1 等模型，提供高质量的推理与对话能力。',
-    summary: 'DeepSeek 系列模型接入插件', icon: 'Brain', author: MOCK_AUTHORS[0], category: 'ai-model',
+    id: 'cxp-deepseek', type: 'plugin', name: 'CxPlugin DeepSeek 接入',
+    description: '基于 CxPlugin 框架接入 DeepSeek 系列大语言模型，支持 DeepSeek-V3、DeepSeek-R1 等模型，提供高质量推理与流式对话能力，可注册为 LLM Provider。',
+    summary: 'DeepSeek 系列模型 CxPlugin 接入', icon: 'Brain', author: MOCK_AUTHORS[0], category: 'ai-model',
     tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[7]], version: '1.2.0', versions: [
-      { version: '1.2.0', changelog: '新增 DeepSeek-R1 支持', releasedAt: '2026-04-15', size: 2048 },
-      { version: '1.1.0', changelog: '优化流式输出性能', releasedAt: '2026-03-20', size: 1980 },
-      { version: '1.0.0', changelog: '初始版本', releasedAt: '2026-02-01', size: 1856 },
+      { version: '1.2.0', changelog: '新增 DeepSeek-R1 推理模型支持', releasedAt: '2026-04-15', size: 2048 },
+      { version: '1.1.0', changelog: '优化流式输出与上下文管理', releasedAt: '2026-03-20', size: 1980 },
+      { version: '1.0.0', changelog: '初始版本，接入 CxPlugin 框架', releasedAt: '2026-02-01', size: 1856 },
     ], screenshots: [], rating: 4.8, ratingCount: 256, downloadCount: 15200, installedCount: 8900,
     likeCount: 3200, installStatus: 'none', isFavorite: false, featured: true, homepage: 'https://deepseek.com',
-    license: 'MIT', minAppVersion: '0.1.0', createdAt: '2026-02-01', updatedAt: '2026-04-15', size: 2048,
+    license: 'MIT', minAppVersion: '0.7.0', createdAt: '2026-02-01', updatedAt: '2026-04-15', size: 2048,
   },
   {
-    id: 'p2', type: 'plugin', name: 'Home Assistant 桥接', description: '将 LuomiNest 与 Home Assistant 智能家居平台深度集成，支持设备控制、场景自动化和状态监控。',
-    summary: 'Home Assistant 智能家居集成', icon: 'Home', author: MOCK_AUTHORS[1], category: 'integration',
+    id: 'cxp-homeassistant', type: 'plugin', name: 'CxPlugin Home Assistant 桥接',
+    description: '通过 CxPlugin 框架将 LuomiNest 与 Home Assistant 智能家居平台深度集成，支持设备控制、场景自动化、状态监控与事件订阅。',
+    summary: 'Home Assistant 智能家居 CxPlugin', icon: 'Home', author: MOCK_AUTHORS[1], category: 'integration',
     tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[7]], version: '2.0.1', versions: [
-      { version: '2.0.1', changelog: '修复设备同步问题', releasedAt: '2026-04-10', size: 4096 },
-      { version: '2.0.0', changelog: '全新架构重写', releasedAt: '2026-03-15', size: 3800 },
+      { version: '2.0.1', changelog: '修复设备同步与状态推送问题', releasedAt: '2026-04-10', size: 4096 },
+      { version: '2.0.0', changelog: '基于 CxPlugin 全新架构重写', releasedAt: '2026-03-15', size: 3800 },
     ], screenshots: [], rating: 4.5, ratingCount: 128, downloadCount: 6800, installedCount: 4200,
     likeCount: 1800, installStatus: 'installed', isFavorite: true, featured: true, license: 'Apache-2.0',
     createdAt: '2026-01-15', updatedAt: '2026-04-10', size: 4096,
   },
   {
-    id: 'p3', type: 'plugin', name: 'Discord 通道', description: '让 LuomiNest 通过 Discord 与用户交互，支持多服务器、频道管理和富文本消息。',
-    summary: 'Discord 消息平台通道', icon: 'MessageSquare', author: MOCK_AUTHORS[2], category: 'integration',
+    id: 'cxp-discord', type: 'plugin', name: 'CxPlugin Discord 通道',
+    description: '让 LuomiNest 通过 CxPlugin 框架接入 Discord 平台，支持多服务器管理、频道消息路由、斜杠命令与富文本消息推送。',
+    summary: 'Discord 消息平台 CxPlugin 通道', icon: 'MessageSquare', author: MOCK_AUTHORS[4], category: 'integration',
     tags: [COMMON_TAGS[1], COMMON_TAGS[2]], version: '1.0.3', versions: [
-      { version: '1.0.3', changelog: '支持斜杠命令', releasedAt: '2026-04-05', size: 1536 },
+      { version: '1.0.3', changelog: '支持斜杠命令与消息回复', releasedAt: '2026-04-05', size: 1536 },
     ], screenshots: [], rating: 4.2, ratingCount: 89, downloadCount: 3200, installedCount: 1800,
     likeCount: 680, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-03-01', updatedAt: '2026-04-05', size: 1536,
   },
   {
-    id: 'p4', type: 'plugin', name: '网页搜索工具', description: '集成主流搜索引擎，为 AI 提供实时网页搜索能力，支持结果摘要和引用追踪。',
-    summary: 'AI 网页搜索增强工具', icon: 'Search', author: MOCK_AUTHORS[3], category: 'tool',
+    id: 'cxp-websearch', type: 'plugin', name: 'CxPlugin 网页搜索工具',
+    description: '基于 CxPlugin 框架集成主流搜索引擎，为 AI 提供实时网页搜索能力，支持结果摘要、引用追踪与多引擎切换，可作为 Tool 注册。',
+    summary: 'AI 网页搜索增强 CxPlugin 工具', icon: 'Search', author: MOCK_AUTHORS[2], category: 'tool',
     tags: [COMMON_TAGS[1], COMMON_TAGS[4], COMMON_TAGS[2]], version: '1.5.0', versions: [
-      { version: '1.5.0', changelog: '新增图片搜索', releasedAt: '2026-04-18', size: 3072 },
+      { version: '1.5.0', changelog: '新增图片搜索与结果缓存', releasedAt: '2026-04-18', size: 3072 },
     ], screenshots: [], rating: 4.6, ratingCount: 312, downloadCount: 18900, installedCount: 11200,
     likeCount: 4500, installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
     createdAt: '2025-12-01', updatedAt: '2026-04-18', size: 3072,
   },
   {
-    id: 'p5', type: 'plugin', name: '语音合成引擎', description: '基于 Edge TTS 和本地模型的语音合成插件，支持多种语言和音色，可自定义语速和情感。',
-    summary: '多语言语音合成引擎', icon: 'Volume2', author: MOCK_AUTHORS[0], category: 'ai-model',
+    id: 'cxp-tts', type: 'plugin', name: 'CxPlugin 语音合成引擎',
+    description: '基于 CxPlugin 框架的语音合成插件，集成 Edge TTS 与本地模型，支持多语言、多音色、语速情感调节，可注册为语音输出通道。',
+    summary: '多语言语音合成 CxPlugin 引擎', icon: 'Volume2', author: MOCK_AUTHORS[0], category: 'ai-model',
     tags: [COMMON_TAGS[0], COMMON_TAGS[2]], version: '1.1.0', versions: [
-      { version: '1.1.0', changelog: '新增情感控制', releasedAt: '2026-04-12', size: 5120 },
+      { version: '1.1.0', changelog: '新增情感控制与音色克隆', releasedAt: '2026-04-12', size: 5120 },
     ], screenshots: [], rating: 4.4, ratingCount: 167, downloadCount: 9500, installedCount: 5800,
     likeCount: 2100, installStatus: 'installed', isFavorite: false, license: 'MIT', createdAt: '2026-01-20', updatedAt: '2026-04-12', size: 5120,
   },
   {
-    id: 'p6', type: 'plugin', name: '代码执行沙箱', description: '安全的代码执行环境，支持 Python、JavaScript 等语言，为 AI 提供代码运行能力。',
-    summary: '安全代码执行环境', icon: 'Zap', author: MOCK_AUTHORS[4], category: 'tool',
+    id: 'cxp-sandbox', type: 'plugin', name: 'CxPlugin 代码执行沙箱',
+    description: '基于 CxPlugin 框架的安全代码执行环境，支持 Python、JavaScript 等语言，提供资源隔离与超时控制，为 AI 提供代码运行能力。',
+    summary: '安全代码执行 CxPlugin 沙箱', icon: 'Zap', author: MOCK_AUTHORS[4], category: 'tool',
     tags: [COMMON_TAGS[1], COMMON_TAGS[6], COMMON_TAGS[2]], version: '0.9.0', versions: [
-      { version: '0.9.0', changelog: 'Beta 版本发布', releasedAt: '2026-04-01', size: 8192 },
+      { version: '0.9.0', changelog: 'Beta 版本发布，支持 Python/JS', releasedAt: '2026-04-01', size: 8192 },
     ], screenshots: [], rating: 3.9, ratingCount: 45, downloadCount: 2100, installedCount: 980,
     likeCount: 320, installStatus: 'none', isFavorite: false, license: 'Apache-2.0', createdAt: '2026-03-15', updatedAt: '2026-04-01', size: 8192,
   },
   {
-    id: 'p7', type: 'plugin', name: 'VRM 模型加载器', description: '加载和渲染 VRM 格式的 3D 虚拟形象，支持表情控制和动作播放。',
-    summary: 'VRM 3D 形象加载器', icon: 'User', author: MOCK_AUTHORS[3], category: 'avatar',
+    id: 'cxp-vrm', type: 'plugin', name: 'CxPlugin VRM 模型加载器',
+    description: '基于 CxPlugin 框架加载和渲染 VRM 格式 3D 虚拟形象，支持表情控制、动作播放与唇形同步，可作为 Avatar 渲染通道。',
+    summary: 'VRM 3D 形象 CxPlugin 加载器', icon: 'User', author: MOCK_AUTHORS[2], category: 'avatar',
     tags: [COMMON_TAGS[1], COMMON_TAGS[5], COMMON_TAGS[6]], version: '0.5.0', versions: [
-      { version: '0.5.0', changelog: '初始 Alpha 版本', releasedAt: '2026-04-20', size: 6144 },
+      { version: '0.5.0', changelog: '初始 Alpha 版本，支持基础表情', releasedAt: '2026-04-20', size: 6144 },
     ], screenshots: [], rating: 3.5, ratingCount: 22, downloadCount: 890, installedCount: 340,
     likeCount: 120, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-04-20', updatedAt: '2026-04-20', size: 6144,
   },
   {
-    id: 'p8', type: 'plugin', name: '自动化工作流', description: '可视化工作流编排引擎，支持条件分支、循环、并行执行等高级流程控制。',
-    summary: '可视化工作流编排引擎', icon: 'RefreshCw', author: MOCK_AUTHORS[1], category: 'productivity',
+    id: 'cxp-workflow', type: 'plugin', name: 'CxPlugin 自动化工作流',
+    description: '基于 CxPlugin 框架的可视化工作流编排引擎，支持条件分支、循环、并行执行等高级流程控制，可订阅事件触发自动化任务。',
+    summary: '可视化工作流 CxPlugin 编排引擎', icon: 'RefreshCw', author: MOCK_AUTHORS[1], category: 'productivity',
     tags: [COMMON_TAGS[0], COMMON_TAGS[3], COMMON_TAGS[7]], version: '1.3.0', versions: [
-      { version: '1.3.0', changelog: '新增并行执行节点', releasedAt: '2026-04-08', size: 3584 },
+      { version: '1.3.0', changelog: '新增并行执行节点与事件订阅', releasedAt: '2026-04-08', size: 3584 },
     ], screenshots: [], rating: 4.7, ratingCount: 198, downloadCount: 12300, installedCount: 7600,
     likeCount: 3800, installStatus: 'none', isFavorite: true, featured: true, license: 'MIT',
     createdAt: '2025-11-15', updatedAt: '2026-04-08', size: 3584,
   },
 ]
 
+// ─── 技能（精选自 Skill 生态，覆盖编程/文档/设计/知识/媒体） ───
 export const MOCK_SKILLS: MarketplaceItem[] = [
   {
-    id: 's1', type: 'skill', name: '智能翻译官', description: '支持 50+ 语言的智能翻译技能，自动检测源语言，保留专业术语和上下文语义，支持批量翻译和对照阅读。',
-    summary: '多语言智能翻译技能', icon: 'Globe', author: MOCK_AUTHORS[0], category: 'conversation',
-    tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[4]], version: '2.1.0', versions: [
-      { version: '2.1.0', changelog: '新增方言支持', releasedAt: '2026-04-16', size: 1024 },
-      { version: '2.0.0', changelog: '全新翻译引擎', releasedAt: '2026-03-10', size: 980 },
+    id: 'skill-frontend-design', type: 'skill', name: '前端设计',
+    description: '为构建新 UI 或重塑现有界面提供独特的视觉设计指导，涵盖调色板、字体排版、布局结构与动效设计，避免模板化默认风格。',
+    summary: '独特视觉设计指导技能', icon: 'Palette', author: MOCK_AUTHORS[0], category: 'coding',
+    tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[4]], version: '2.0.0', versions: [
+      { version: '2.0.0', changelog: '新增动效设计与排版指南', releasedAt: '2026-04-16', size: 1024 },
+      { version: '1.5.0', changelog: '优化设计原则与流程', releasedAt: '2026-03-10', size: 980 },
     ], screenshots: [], rating: 4.9, ratingCount: 456, downloadCount: 28500, installedCount: 19200,
     likeCount: 6800, installStatus: 'installed', isFavorite: true, featured: true, license: 'MIT',
     createdAt: '2025-10-01', updatedAt: '2026-04-16', size: 1024,
   },
   {
-    id: 's2', type: 'skill', name: '代码助手', description: '专业的编程辅助技能，支持代码生成、调试、审查、重构和文档编写，覆盖主流编程语言。',
-    summary: '专业编程辅助技能', icon: 'Laptop', author: MOCK_AUTHORS[3], category: 'coding',
+    id: 'skill-mcp-builder', type: 'skill', name: 'MCP 服务器构建',
+    description: '创建高质量 MCP（Model Context Protocol）服务器的完整指南，支持 Python（FastMCP）与 Node/TypeScript（MCP SDK），让 LLM 与外部服务交互。',
+    summary: 'MCP 服务器开发构建技能', icon: 'Plug', author: MOCK_AUTHORS[0], category: 'coding',
     tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[4]], version: '1.8.0', versions: [
-      { version: '1.8.0', changelog: '新增 Rust 支持', releasedAt: '2026-04-14', size: 2048 },
+      { version: '1.8.0', changelog: '新增 Node/TypeScript SDK 示例', releasedAt: '2026-04-14', size: 2048 },
     ], screenshots: [], rating: 4.7, ratingCount: 389, downloadCount: 22100, installedCount: 14800,
     likeCount: 5200, installStatus: 'installed', isFavorite: false, featured: true, license: 'MIT',
     createdAt: '2025-11-01', updatedAt: '2026-04-14', size: 2048,
   },
   {
-    id: 's3', type: 'skill', name: '创意写作', description: '激发创造力的写作技能，涵盖小说、诗歌、剧本、文案等多种文体，支持风格模仿和续写。',
-    summary: '多文体创意写作技能', icon: 'PenTool', author: MOCK_AUTHORS[2], category: 'conversation',
-    tags: [COMMON_TAGS[1], COMMON_TAGS[2], COMMON_TAGS[5]], version: '1.4.0', versions: [
-      { version: '1.4.0', changelog: '新增剧本模式', releasedAt: '2026-04-11', size: 1536 },
+    id: 'skill-doc-coauthoring', type: 'skill', name: '文档协作',
+    description: '引导用户通过结构化工作流共同编写文档，支持提案、技术规范、决策文档等，提供内容迭代与读者验证流程。',
+    summary: '结构化文档协作写作技能', icon: 'FileText', author: MOCK_AUTHORS[2], category: 'document',
+    tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[5]], version: '1.4.0', versions: [
+      { version: '1.4.0', changelog: '新增决策文档模板', releasedAt: '2026-04-11', size: 1536 },
     ], screenshots: [], rating: 4.5, ratingCount: 234, downloadCount: 14200, installedCount: 8900,
     likeCount: 3100, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-01-10', updatedAt: '2026-04-11', size: 1536,
   },
   {
-    id: 's4', type: 'skill', name: '学术研究', description: '深度学术研究技能，支持文献检索、论文分析、研究方法指导和学术写作辅助。',
-    summary: '学术研究辅助技能', icon: 'BookOpen', author: MOCK_AUTHORS[4], category: 'knowledge',
-    tags: [COMMON_TAGS[1], COMMON_TAGS[2]], version: '1.2.0', versions: [
-      { version: '1.2.0', changelog: '新增引用格式支持', releasedAt: '2026-04-06', size: 1280 },
+    id: 'skill-pdf', type: 'skill', name: 'PDF 文档处理',
+    description: '全面的 PDF 处理技能，支持读取、提取文本/表格、合并拆分、旋转页面、添加水印、创建新 PDF、填写表单、加密解密与 OCR 识别。',
+    summary: '全功能 PDF 文档处理技能', icon: 'FileText', author: MOCK_AUTHORS[0], category: 'document',
+    tags: [COMMON_TAGS[0], COMMON_TAGS[2]], version: '1.2.0', versions: [
+      { version: '1.2.0', changelog: '新增 OCR 识别与表单填充', releasedAt: '2026-04-06', size: 1280 },
     ], screenshots: [], rating: 4.3, ratingCount: 156, downloadCount: 8700, installedCount: 5200,
     likeCount: 1900, installStatus: 'none', isFavorite: true, license: 'Apache-2.0', createdAt: '2026-02-15', updatedAt: '2026-04-06', size: 1280,
   },
   {
-    id: 's5', type: 'skill', name: '图片生成', description: 'AI 图片生成技能，支持文生图、图生图、风格迁移等，集成 Stable Diffusion 和 DALL-E。',
-    summary: 'AI 图片生成技能', icon: 'Palette', author: MOCK_AUTHORS[1], category: 'media',
+    id: 'skill-docx', type: 'skill', name: 'Word 文档处理',
+    description: '创建、读取、编辑 Word 文档（.docx）的完整技能，支持目录、标题、页码、信头等格式，支持图片插入与修订追踪。',
+    summary: 'Word 文档创建编辑技能', icon: 'FileText', author: MOCK_AUTHORS[1], category: 'document',
     tags: [COMMON_TAGS[0], COMMON_TAGS[3], COMMON_TAGS[4]], version: '1.6.0', versions: [
-      { version: '1.6.0', changelog: '新增 ControlNet 支持', releasedAt: '2026-04-19', size: 2560 },
+      { version: '1.6.0', changelog: '新增修订追踪与批注支持', releasedAt: '2026-04-19', size: 2560 },
     ], screenshots: [], rating: 4.6, ratingCount: 278, downloadCount: 16800, installedCount: 10400,
     likeCount: 4200, installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
     createdAt: '2025-12-20', updatedAt: '2026-04-19', size: 2560,
   },
   {
-    id: 's6', type: 'skill', name: '健康顾问', description: '基于权威医学知识的健康咨询技能，提供症状分析、健康建议和就医指导，仅供参考不替代医疗。',
-    summary: '智能健康咨询技能', icon: 'HeartPulse', author: MOCK_AUTHORS[2], category: 'lifestyle',
-    tags: [COMMON_TAGS[1], COMMON_TAGS[2], COMMON_TAGS[6]], version: '0.8.0', versions: [
-      { version: '0.8.0', changelog: 'Beta 版本', releasedAt: '2026-04-02', size: 1792 },
+    id: 'skill-pptx', type: 'skill', name: 'PowerPoint 演示文稿',
+    description: '创建、读取、编辑 PowerPoint 演示文稿（.pptx）的技能，支持幻灯片布局、图表、缩略图生成与模板管理。',
+    summary: 'PowerPoint 演示文稿技能', icon: 'Presentation', author: MOCK_AUTHORS[1], category: 'document',
+    tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[6]], version: '0.8.0', versions: [
+      { version: '0.8.0', changelog: 'Beta 版本，支持基础幻灯片操作', releasedAt: '2026-04-02', size: 1792 },
     ], screenshots: [], rating: 3.8, ratingCount: 67, downloadCount: 3400, installedCount: 1800,
     likeCount: 560, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-03-20', updatedAt: '2026-04-02', size: 1792,
   },
   {
-    id: 's7', type: 'skill', name: '角色扮演大师', description: '沉浸式角色扮演技能，内置数百个角色模板，支持自定义角色设定和多角色互动。',
-    summary: '沉浸式角色扮演技能', icon: 'Users', author: MOCK_AUTHORS[4], category: 'conversation',
+    id: 'skill-canvas-design', type: 'skill', name: '画布设计',
+    description: '使用设计哲学创建精美的 .png 与 .pdf 视觉艺术作品，支持海报、艺术品、设计稿等静态视觉输出，避免版权侵权。',
+    summary: '静态视觉艺术创作技能', icon: 'Image', author: MOCK_AUTHORS[2], category: 'design',
     tags: [COMMON_TAGS[1], COMMON_TAGS[4], COMMON_TAGS[5]], version: '1.3.0', versions: [
-      { version: '1.3.0', changelog: '新增多人模式', releasedAt: '2026-04-13', size: 2048 },
+      { version: '1.3.0', changelog: '新增海报与艺术品模板', releasedAt: '2026-04-13', size: 2048 },
     ], screenshots: [], rating: 4.4, ratingCount: 201, downloadCount: 11600, installedCount: 7200,
     likeCount: 2800, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-01-05', updatedAt: '2026-04-13', size: 2048,
   },
   {
-    id: 's8', type: 'skill', name: '数据分析师', description: '专业的数据分析技能，支持数据清洗、统计分析、可视化图表生成和报告撰写。',
-    summary: '专业数据分析技能', icon: 'BarChart3', author: MOCK_AUTHORS[3], category: 'knowledge',
-    tags: [COMMON_TAGS[0], COMMON_TAGS[2]], version: '1.1.0', versions: [
-      { version: '1.1.0', changelog: '新增图表类型', releasedAt: '2026-04-09', size: 1536 },
+    id: 'skill-algorithmic-art', type: 'skill', name: '算法艺术',
+    description: '使用 p5.js 与种子随机数创建算法艺术，支持交互式参数探索、流场、粒子系统等生成式艺术，提供原创视觉输出。',
+    summary: 'p5.js 生成式算法艺术技能', icon: 'Sparkles', author: MOCK_AUTHORS[2], category: 'design',
+    tags: [COMMON_TAGS[1], COMMON_TAGS[2], COMMON_TAGS[6]], version: '1.1.0', versions: [
+      { version: '1.1.0', changelog: '新增流场与粒子系统', releasedAt: '2026-04-09', size: 1536 },
     ], screenshots: [], rating: 4.2, ratingCount: 134, downloadCount: 7800, installedCount: 4600,
     likeCount: 1600, installStatus: 'none', isFavorite: false, license: 'MIT', createdAt: '2026-02-28', updatedAt: '2026-04-09', size: 1536,
+  },
+  {
+    id: 'skill-brand-guidelines', type: 'skill', name: '品牌设计规范',
+    description: '应用官方品牌颜色与字体排版到任何需要品牌视觉的制品，支持幻灯片、文档、报告、HTML 落地页等，确保视觉一致性。',
+    summary: '品牌视觉规范应用技能', icon: 'Palette', author: MOCK_AUTHORS[0], category: 'design',
+    tags: [COMMON_TAGS[0], COMMON_TAGS[2]], version: '1.0.0', versions: [
+      { version: '1.0.0', changelog: '正式版发布，支持多主题', releasedAt: '2026-04-05', size: 1536 },
+    ], screenshots: [], rating: 4.4, ratingCount: 98, downloadCount: 6200, installedCount: 3800,
+    likeCount: 1200, installStatus: 'none', isFavorite: false, license: 'MIT',
+    createdAt: '2026-03-01', updatedAt: '2026-04-05', size: 1536,
+  },
+  {
+    id: 'skill-react-best-practices', type: 'skill', name: 'React 最佳实践',
+    description: 'React 与 Next.js 应用的全面性能优化指南，涵盖 40+ 规则，包括瀑布流消除、包体积优化、服务端性能、重渲染优化等 8 大类别。',
+    summary: 'React/Next.js 性能优化技能', icon: 'Code', author: MOCK_AUTHORS[3], category: 'coding',
+    tags: [COMMON_TAGS[1], COMMON_TAGS[4], COMMON_TAGS[2]], version: '1.0.0', versions: [
+      { version: '1.0.0', changelog: '初始版本，40+ 规则', releasedAt: '2026-04-01', size: 1280 },
+    ], screenshots: [], rating: 4.0, ratingCount: 56, downloadCount: 3800, installedCount: 2100,
+    likeCount: 680, installStatus: 'none', isFavorite: false, featured: true, license: 'MIT',
+    createdAt: '2026-03-15', updatedAt: '2026-04-01', size: 1280,
+  },
+  {
+    id: 'skill-theme-factory', type: 'skill', name: '主题工厂',
+    description: '为制品（幻灯片、文档、报告、HTML 落地页）应用主题的工具集，提供 10 个预设主题（颜色/字体），支持动态生成自定义主题。',
+    summary: '制品主题样式工具集技能', icon: 'Palette', author: MOCK_AUTHORS[0], category: 'coding',
+    tags: [COMMON_TAGS[0], COMMON_TAGS[7], COMMON_TAGS[2]], version: '1.2.0', versions: [
+      { version: '1.2.0', changelog: '新增动态主题生成', releasedAt: '2026-04-10', size: 2048 },
+    ], screenshots: [], rating: 4.2, ratingCount: 87, downloadCount: 5600, installedCount: 3400,
+    likeCount: 1100, installStatus: 'installed', isFavorite: false, license: 'MIT',
+    createdAt: '2026-01-25', updatedAt: '2026-04-10', size: 2048,
+  },
+  {
+    id: 'skill-skill-creator', type: 'skill', name: '技能创建器',
+    description: '创建、修改、优化技能的完整工具，支持技能评估、基准测试、性能分析与描述优化，帮助构建高质量可复用技能。',
+    summary: '技能创建与优化工具技能', icon: 'Wrench', author: MOCK_AUTHORS[0], category: 'coding',
+    tags: [COMMON_TAGS[0], COMMON_TAGS[3], COMMON_TAGS[6]], version: '0.8.0', versions: [
+      { version: '0.8.0', changelog: 'Beta 版本，支持技能评估', releasedAt: '2026-04-03', size: 1536 },
+    ], screenshots: [], rating: 3.9, ratingCount: 42, downloadCount: 2800, installedCount: 1500,
+    likeCount: 420, installStatus: 'none', isFavorite: false, license: 'Apache-2.0',
+    createdAt: '2026-03-20', updatedAt: '2026-04-03', size: 1536,
+  },
+  {
+    id: 'skill-internal-comms', type: 'skill', name: '内部通讯',
+    description: '帮助撰写各类内部通讯的资源集，支持状态报告、领导层更新、公司简报、FAQ、事件报告、项目更新等格式化内容。',
+    summary: '内部通讯撰写辅助技能', icon: 'Mail', author: MOCK_AUTHORS[1], category: 'knowledge',
+    tags: [COMMON_TAGS[1], COMMON_TAGS[2]], version: '1.1.0', versions: [
+      { version: '1.1.0', changelog: '新增事件报告模板', releasedAt: '2026-04-08', size: 1792 },
+    ], screenshots: [], rating: 4.3, ratingCount: 134, downloadCount: 8400, installedCount: 5100,
+    likeCount: 1800, installStatus: 'none', isFavorite: true, license: 'MIT',
+    createdAt: '2026-02-20', updatedAt: '2026-04-08', size: 1792,
+  },
+  {
+    id: 'skill-content-creator', type: 'skill', name: '内容创作',
+    description: '为博客、社交媒体、营销材料创建引人入胜的内容，聚焦受众参与度，支持标题撰写、社交内容、营销文案等。',
+    summary: '受众导向内容创作技能', icon: 'PenTool', author: MOCK_AUTHORS[4], category: 'knowledge',
+    tags: [COMMON_TAGS[1], COMMON_TAGS[4], COMMON_TAGS[5]], version: '1.0.0', versions: [
+      { version: '1.0.0', changelog: '正式版发布', releasedAt: '2026-04-12', size: 2048 },
+    ], screenshots: [], rating: 4.5, ratingCount: 189, downloadCount: 11600, installedCount: 7200,
+    likeCount: 2600, installStatus: 'none', isFavorite: false, license: 'MIT',
+    createdAt: '2026-01-08', updatedAt: '2026-04-12', size: 2048,
+  },
+  {
+    id: 'skill-slack-gif-creator', type: 'skill', name: 'Slack GIF 创建',
+    description: '创建为 Slack 优化的动画 GIF，提供约束、验证工具与动画概念，支持缓动、帧合成、GIF 构建等专业功能。',
+    summary: 'Slack 动画 GIF 创建技能', icon: 'Image', author: MOCK_AUTHORS[3], category: 'media',
+    tags: [COMMON_TAGS[1], COMMON_TAGS[6], COMMON_TAGS[2]], version: '1.0.0', versions: [
+      { version: '1.0.0', changelog: '初始版本，支持缓动与帧合成', releasedAt: '2026-04-15', size: 1280 },
+    ], screenshots: [], rating: 4.1, ratingCount: 78, downloadCount: 4200, installedCount: 2400,
+    likeCount: 890, installStatus: 'none', isFavorite: false, license: 'MIT',
+    createdAt: '2026-03-10', updatedAt: '2026-04-15', size: 1280,
   },
 ]
 
@@ -272,7 +361,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
   },
   {
     id: 'ag2', type: 'agent', name: '数据分析专家', description: '专业的数据分析智能体，支持自然语言查询数据库、自动生成可视化报表、趋势预测和异常检测。',
-    summary: '自然语言驱动的数据分析', icon: 'BarChart3', author: MOCK_AUTHORS[3], category: 'analysis',
+    summary: '自然语言驱动的数据分析', icon: 'BarChart3', author: MOCK_AUTHORS[2], category: 'analysis',
     tags: [COMMON_TAGS[0], COMMON_TAGS[2], COMMON_TAGS[4]], version: '1.5.0', versions: [
       { version: '1.5.0', changelog: '新增异常检测', releasedAt: '2026-04-14', size: 2560 },
     ], screenshots: [], rating: 4.6, ratingCount: 215, downloadCount: 14200, installedCount: 8900,
@@ -290,7 +379,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
   },
   {
     id: 'ag4', type: 'agent', name: '创意设计师', description: 'AI 创意设计智能体，支持品牌视觉设计、UI/UX 原型、营销素材生成，可理解设计需求并输出多套方案。',
-    summary: 'AI 驱动的创意设计助手', icon: 'Lightbulb', author: MOCK_AUTHORS[2], category: 'creative',
+    summary: 'AI 驱动的创意设计助手', icon: 'Lightbulb', author: MOCK_AUTHORS[4], category: 'creative',
     tags: [COMMON_TAGS[1], COMMON_TAGS[3], COMMON_TAGS[5]], version: '1.1.0', versions: [
       { version: '1.1.0', changelog: '新增品牌配色方案', releasedAt: '2026-04-08', size: 1792 },
     ], screenshots: [], rating: 4.3, ratingCount: 134, downloadCount: 8400, installedCount: 5100,
@@ -299,7 +388,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
   },
   {
     id: 'ag5', type: 'agent', name: '教育导师', description: '个性化教育智能体，支持自适应学习路径规划、知识点讲解、练习出题和学习进度追踪，覆盖 K12 和高等教育。',
-    summary: '个性化自适应学习导师', icon: 'GraduationCap', author: MOCK_AUTHORS[4], category: 'education',
+    summary: '个性化自适应学习导师', icon: 'GraduationCap', author: MOCK_AUTHORS[3], category: 'education',
     tags: [COMMON_TAGS[1], COMMON_TAGS[2]], version: '1.0.0', versions: [
       { version: '1.0.0', changelog: '正式版发布', releasedAt: '2026-04-05', size: 1536 },
     ], screenshots: [], rating: 4.4, ratingCount: 98, downloadCount: 6200, installedCount: 3800,
@@ -308,7 +397,7 @@ export const MOCK_AGENTS: MarketplaceItem[] = [
   },
   {
     id: 'ag6', type: 'agent', name: '市场研究员', description: '智能市场研究智能体，自动收集行业数据、竞品分析和市场趋势，生成结构化研究报告和策略建议。',
-    summary: '自动化市场研究与分析', icon: 'TrendingUp', author: MOCK_AUTHORS[3], category: 'analysis',
+    summary: '自动化市场研究与分析', icon: 'TrendingUp', author: MOCK_AUTHORS[2], category: 'analysis',
     tags: [COMMON_TAGS[0], COMMON_TAGS[3]], version: '0.9.0', versions: [
       { version: '0.9.0', changelog: 'Beta 版本', releasedAt: '2026-04-01', size: 1280 },
     ], screenshots: [], rating: 4.0, ratingCount: 56, downloadCount: 3800, installedCount: 2100,
@@ -340,23 +429,23 @@ export const MOCK_REVIEWS: Record<string, Array<{
   rating: number; content: string; createdAt: string;
   replies?: Array<{ id: string; userId: string; userName: string; content: string; createdAt: string }>;
 }>> = {
-  p1: [
-    { id: 'r1', itemId: 'p1', userId: 'u1', userName: '星辰用户', rating: 5, content: 'DeepSeek 接入非常流畅，推理速度很快，R1 模型的推理能力令人印象深刻。', createdAt: '2026-04-16', replies: [
+  'cxp-deepseek': [
+    { id: 'r1', itemId: 'cxp-deepseek', userId: 'u1', userName: '星辰用户', rating: 5, content: 'DeepSeek 接入非常流畅，推理速度很快，R1 模型的推理能力令人印象深刻。', createdAt: '2026-04-16', replies: [
       { id: 'rp1', userId: 'a1', userName: 'LuminousCX', content: '感谢支持！后续会持续优化性能。', createdAt: '2026-04-17' }
     ]},
-    { id: 'r2', itemId: 'p1', userId: 'u2', userName: '技术爱好者', rating: 4, content: '整体不错，但流式输出偶尔会卡顿，希望能进一步优化。', createdAt: '2026-04-10' },
-    { id: 'r3', itemId: 'p1', userId: 'u3', userName: 'AI研究员', rating: 5, content: 'R1 模型接入太方便了，省去了很多配置工作。', createdAt: '2026-04-05' },
+    { id: 'r2', itemId: 'cxp-deepseek', userId: 'u2', userName: '技术爱好者', rating: 4, content: '整体不错，但流式输出偶尔会卡顿，希望能进一步优化。', createdAt: '2026-04-10' },
+    { id: 'r3', itemId: 'cxp-deepseek', userId: 'u3', userName: 'AI研究员', rating: 5, content: 'CxPlugin 框架接入太方便了，省去了很多配置工作。', createdAt: '2026-04-05' },
   ],
-  p4: [
-    { id: 'r4', itemId: 'p4', userId: 'u4', userName: '效率达人', rating: 5, content: '搜索结果非常精准，摘要功能特别实用！', createdAt: '2026-04-19' },
-    { id: 'r5', itemId: 'p4', userId: 'u5', userName: '日常用户', rating: 4, content: '很好用，就是偶尔搜索速度有点慢。', createdAt: '2026-04-15' },
+  'cxp-websearch': [
+    { id: 'r4', itemId: 'cxp-websearch', userId: 'u4', userName: '效率达人', rating: 5, content: '搜索结果非常精准，摘要功能特别实用！', createdAt: '2026-04-19' },
+    { id: 'r5', itemId: 'cxp-websearch', userId: 'u5', userName: '日常用户', rating: 4, content: '很好用，就是偶尔搜索速度有点慢。', createdAt: '2026-04-15' },
   ],
-  s1: [
-    { id: 'r6', itemId: 's1', userId: 'u6', userName: '翻译工作者', rating: 5, content: '翻译质量很高，专业术语处理得很好，已经替代了我之前的翻译工具。', createdAt: '2026-04-17' },
-    { id: 'r7', itemId: 's1', userId: 'u7', userName: '语言学习者', rating: 5, content: '方言支持太棒了！粤语翻译非常地道。', createdAt: '2026-04-16' },
+  'skill-frontend-design': [
+    { id: 'r6', itemId: 'skill-frontend-design', userId: 'u6', userName: '前端设计师', rating: 5, content: '设计指导非常专业，避免了模板化风格，作品更有辨识度。', createdAt: '2026-04-17' },
+    { id: 'r7', itemId: 'skill-frontend-design', userId: 'u7', userName: '独立开发者', rating: 5, content: '调色板和字体排版建议太棒了！', createdAt: '2026-04-16' },
   ],
-  s2: [
-    { id: 'r8', itemId: 's2', userId: 'u8', userName: '全栈开发者', rating: 5, content: '代码生成质量很高，Rust 支持终于来了！', createdAt: '2026-04-15' },
-    { id: 'r9', itemId: 's2', userId: 'u9', userName: '初级程序员', rating: 4, content: '调试功能很有帮助，但有时候建议不够精确。', createdAt: '2026-04-12' },
+  'skill-mcp-builder': [
+    { id: 'r8', itemId: 'skill-mcp-builder', userId: 'u8', userName: '全栈开发者', rating: 5, content: 'MCP 服务器构建指南很完整，Python 和 TypeScript 都覆盖了！', createdAt: '2026-04-15' },
+    { id: 'r9', itemId: 'skill-mcp-builder', userId: 'u9', userName: '工具开发者', rating: 4, content: '示例代码很实用，希望能增加更多实战案例。', createdAt: '2026-04-12' },
   ],
 }

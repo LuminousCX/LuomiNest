@@ -65,12 +65,12 @@ function handleKeydown(e: KeyboardEvent) {
 
 <style scoped>
 .nav-bar {
-  height: 52px;
+  height: calc(var(--space-9) + var(--space-1));
   background: var(--surface);
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  gap: 12px;
+  padding: 0 var(--space-3);
+  gap: var(--space-3);
   position: relative;
 }
 
@@ -78,29 +78,29 @@ function handleKeydown(e: KeyboardEvent) {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 12px;
-  right: 12px;
+  left: var(--space-3);
+  right: var(--space-3);
   height: 1px;
   background: var(--divider-soft);
 }
 
 .nav-buttons {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .nav-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: calc(var(--space-7) + var(--space-1));
+  height: calc(var(--space-7) + var(--space-1));
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .nav-btn:hover:not(:disabled) {
@@ -122,16 +122,16 @@ function handleKeydown(e: KeyboardEvent) {
   flex: 1;
   display: flex;
   align-items: center;
-  height: 34px;
+  height: var(--btn-height-md);
   background: var(--bg-secondary);
   border-radius: var(--radius-xl);
-  padding: 0 12px;
-  gap: 8px;
+  padding: 0 var(--space-3);
+  gap: var(--space-2);
 }
 
 .address-bar:focus-within {
   background: var(--surface);
-  box-shadow: 0 0 0 2px var(--border);
+  box-shadow: 0 0 0 calc(var(--space-1) / 2) var(--border);
 }
 
 .addr-icon {
@@ -143,7 +143,7 @@ function handleKeydown(e: KeyboardEvent) {
   flex: 1;
   border: none;
   background: transparent;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
   outline: none;
 }
@@ -154,6 +154,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 .nav-right {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
+
 </style>

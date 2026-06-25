@@ -7,7 +7,7 @@
 html, body {
   height: 100%;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.6;
   color: var(--text-primary);
   background: var(--workspace-bg);
@@ -35,9 +35,9 @@ html.desktop-pet #app {
 }
 
 @media (max-width: 1024px) {
-  html { font-size: 13px; }
+  html { font-size: var(--text-base); }
 }
 
 @media (max-width: 960px) {
-  html { font-size: 12px; }
+  html { font-size: var(--text-sm); }
 }

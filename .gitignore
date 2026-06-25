@@ -18,14 +18,18 @@ release/
 .parcel-cache/
 .vite/
 
-# Electron 构建配置目录（保留 nsis-extra.nsh）
+# Electron 构建配置目录（保留打包所需的配置文件）
 frontend/build/*
 !frontend/build/nsis-extra.nsh
+!frontend/build/entitlements.mac.plist
+!frontend/build/luominest.desktop
 
 # 后端打包输出
 backend/dist/
 backend/build/
-frontend/resources/backend/*.exe
+# frontend/resources/backend 是 PyInstaller COLLECT 输出目录
+# 包含 exe + 大量依赖文件（_internal/、*.dll、*.so），不应入库
+frontend/resources/backend/
 
 # ============================================================
 # 构建输出 - Java
@@ -192,6 +196,9 @@ backend/_t.mp3
 *.app
 
 # ============================================================
-# Python 打包配置（可由 pyproject.toml 生成）
+# Python 打包配置
+# 注意：luominest-backend.spec 是 PyInstaller 打包必需文件，必须入库
 # ============================================================
+# 忽略 PyInstaller 自动生成的临时 spec，但保留项目正式 spec
 *.spec
+!backend/luominest-backend.spec

@@ -1,30 +1,30 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, watch } from 'vue'
 import { Search, Clock, X, TrendingUp, ArrowRight } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../../stores/marketplace'
+import { debounce } from '../../utils/debounce'
+import LumiInput from '../../components/common/LumiInput.vue'
 
 const store = useMarketplaceStore()
 
-const inputRef = ref<HTMLInputElement | null>(null)
 const localQuery = ref(store.searchQuery)
-
-let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
-onUnmounted(() => {
-  if (debounceTimer) clearTimeout(debounceTimer)
-})
 
 watch(() => store.searchQuery, (val) => {
   localQuery.value = val
 })
 
+const updateQuery = debounce((query: string) => {
+  store.searchQuery = query
+}, 200)
+
 const onInput = () => {
-  if (debounceTimer) clearTimeout(debounceTimer)
-  const query = localQuery.value
   store.showSearchSuggestions = true
-  debounceTimer = setTimeout(() => {
-    store.searchQuery = query
-  }, 200)
+  const query = localQuery.value
+  if (!query) {
+    store.clearSearch()
+    return
+  }
+  updateQuery(query)
 }
 
 const onFocus = () => {
@@ -43,15 +43,7 @@ const selectSuggestion = (text: string) => {
 }
 
 const handleSubmit = () => {
-  if (debounceTimer) clearTimeout(debounceTimer)
   store.performSearch(localQuery.value)
-}
-
-const clearInput = () => {
-  if (debounceTimer) clearTimeout(debounceTimer)
-  localQuery.value = ''
-  store.clearSearch()
-  inputRef.value?.focus()
 }
 
 const removeHistory = (text: string, e: Event) => {
@@ -63,21 +55,20 @@ const removeHistory = (text: string, e: Event) => {
 <template>
   <div class="market-search">
     <div class="search-input-wrap">
-      <Search :size="16" class="search-icon" />
-      <input
-        ref="inputRef"
+      <LumiInput
         v-model="localQuery"
-        type="text"
-        class="search-input"
+        size="md"
+        clearable
         placeholder="搜索插件或技能..."
-        @input="onInput"
+        @update:model-value="onInput"
         @focus="onFocus"
         @blur="onBlur"
-        @keyup.enter="handleSubmit"
-      />
-      <button v-if="localQuery" class="clear-btn" @click="clearInput">
-        <X :size="14" />
-      </button>
+        @enter="handleSubmit"
+      >
+        <template #icon>
+          <Search :size="16" />
+        </template>
+      </LumiInput>
     </div>
 
     <Transition name="suggestions">
@@ -124,74 +115,29 @@ const removeHistory = (text: string, e: Event) => {
 }
 
 .search-input-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-lg);
-  transition: all 0.25s ease-in-out;
-  backdrop-filter: blur(8px);
-}
-
-.search-input-wrap:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow), var(--shadow-sm);
-}
-
-.search-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.search-input {
-  flex: 1;
-  background: transparent;
-  font-size: 14px;
-  color: var(--text-primary);
-  min-width: 0;
-}
-
-.search-input::placeholder {
-  color: var(--text-muted);
-}
-
-.clear-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.clear-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
+  position: relative;
+  width: 100%;
 }
 
 .suggestions-dropdown {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + var(--space-2));
   left: 0;
   right: 0;
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  z-index: 50;
+  z-index: var(--z-dropdown);
   overflow: hidden;
-  backdrop-filter: blur(12px);
+  backdrop-filter: var(--glass-blur);
 }
 
 .suggestion-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   cursor: pointer;
   transition: background var(--transition-fast);
 }
@@ -201,8 +147,8 @@ const removeHistory = (text: string, e: Event) => {
 }
 
 .suggestion-icon {
-  width: 28px;
-  height: 28px;
+  width: calc(var(--space-6) + var(--space-1));
+  height: calc(var(--space-6) + var(--space-1));
   border-radius: var(--radius-sm);
   background: var(--workspace-panel);
   display: flex;
@@ -214,22 +160,22 @@ const removeHistory = (text: string, e: Event) => {
 
 .suggestion-text {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-primary);
 }
 
 .suggestion-type {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
-  padding: 2px 6px;
+  padding: calc(var(--space-1) / 2) var(--space-1);
   border-radius: var(--radius-full);
   background: var(--workspace-panel);
 }
 
 .remove-history-btn {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
+  width: var(--space-5);
+  height: var(--space-5);
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -248,12 +194,12 @@ const removeHistory = (text: string, e: Event) => {
 }
 
 .suggestions-footer {
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
   border-top: 1px solid var(--border-light);
 }
 
 .clear-history-btn {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   transition: color var(--transition-fast);
 }
@@ -263,10 +209,11 @@ const removeHistory = (text: string, e: Event) => {
 }
 
 .suggestions-enter-active {
-  animation: lumi-fade-in 0.2s ease-out;
+  animation: lumi-fade-in var(--duration-normal) var(--ease-out-expo);
 }
 
 .suggestions-leave-active {
-  animation: lumi-fade-in 0.15s ease-out reverse;
+  animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
 }
+
 </style>

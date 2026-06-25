@@ -111,15 +111,15 @@ const techStacks = [
 .about-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 20px 28px;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-7);
   border-bottom: 1px solid var(--workspace-border);
   flex-shrink: 0;
 }
 
 .back-btn {
-  width: 36px;
-  height: 36px;
+  width: var(--space-8);
+  height: var(--space-8);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -134,13 +134,13 @@ const techStacks = [
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .page-subtitle {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   margin-top: 1px;
 }
@@ -148,27 +148,27 @@ const techStacks = [
 .about-body {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 28px;
+  padding: var(--space-6) var(--space-7);
 }
 
 .profile-card {
   background: var(--workspace-card);
   border-radius: var(--radius-lg);
-  padding: 28px;
+  padding: var(--space-7);
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-6);
 }
 
 .profile-banner {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .profile-logo {
-  width: 80px;
-  height: 80px;
+  width: 170px;
+  height: 170px;
   border-radius: var(--radius-lg);
   object-fit: cover;
   flex-shrink: 0;
@@ -177,45 +177,45 @@ const techStacks = [
 .profile-identity {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .profile-name {
-  font-size: 22px;
+  font-size: var(--text-3xl);
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.3px;
 }
 
 .profile-role {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--lumi-primary);
   font-weight: 500;
 }
 
 .profile-alias {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .profile-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .profile-h3 {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 14px;
+  gap: var(--space-2);
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
   opacity: 0.85;
 }
 
 .profile-section p {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
   line-height: 1.75;
 }
@@ -240,20 +240,20 @@ const techStacks = [
 .tech-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .tech-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .tech-label {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-muted);
   min-width: 90px;
@@ -263,14 +263,14 @@ const techStacks = [
 .tech-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .tech-tag {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
   background: var(--surface-hover);
   color: var(--text-secondary);
 }
@@ -278,14 +278,14 @@ const techStacks = [
 .contact-links {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .contact-item {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: var(--space-2);
+  font-size: var(--text-base);
   color: var(--text-secondary);
   text-decoration: none;
   transition: color var(--transition-fast);
@@ -298,10 +298,10 @@ const techStacks = [
 .profile-support {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
   color: var(--text-muted);
-  padding-top: 8px;
+  padding-top: var(--space-2);
   border-top: 1px solid var(--divider-soft);
 }
 
@@ -321,4 +321,5 @@ const techStacks = [
   color: var(--lumi-primary-hover);
   text-decoration: underline;
 }
+
 </style>

@@ -5,6 +5,7 @@ import type { MarketplaceItem, MarketplaceType } from '../../types/marketplace'
 import { useRouter } from 'vue-router'
 import { useMarketplaceStore } from '../../stores/marketplace'
 import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
+import { formatCount } from '../../utils/format'
 import LumiCardIcon from '../common/LumiCardIcon.vue'
 
 const props = defineProps<{
@@ -101,10 +102,6 @@ function getRankClass(rank: number): string {
   if (rank === 3) return 'rank-bronze'
   return ''
 }
-
-function formatCount(n: number): string {
-  return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n)
-}
 </script>
 
 <template>
@@ -178,7 +175,7 @@ function formatCount(n: number): string {
 .market-banner {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-4);
 }
 
 .banner-header {
@@ -190,38 +187,38 @@ function formatCount(n: number): string {
 .banner-title-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .trophy-icon {
-  color: #f59e0b;
+  color: var(--lumi-amber);
 }
 
 .banner-title {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .banner-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .banner-sort {
   display: flex;
-  gap: 2px;
-  padding: 2px;
+  gap: calc(var(--space-1) / 2);
+  padding: calc(var(--space-1) / 2);
   background: var(--workspace-panel);
   border-radius: var(--radius-sm);
 }
 
 .sort-btn {
-  padding: 3px 8px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-xs);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
   transition: all var(--transition-fast);
 }
@@ -231,42 +228,42 @@ function formatCount(n: number): string {
 }
 
 .sort-btn.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .view-all-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--lumi-primary);
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--lumi-brand);
   transition: all var(--transition-fast);
 }
 
 .view-all-btn:hover {
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .banner-scroll {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: var(--space-1);
   scroll-snap-type: x mandatory;
 }
 
 .banner-scroll::-webkit-scrollbar {
-  height: 3px;
+  height: calc(var(--space-1) * 0.75);
 }
 
 .banner-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
-  min-width: 260px;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-width: calc(var(--space-8) * 6 + var(--space-5));
   border-radius: var(--radius-lg);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
@@ -277,38 +274,38 @@ function formatCount(n: number): string {
 }
 
 .banner-card:hover {
-  border-color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
   box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
 }
 
 .banner-rank {
-  width: 22px;
-  height: 22px;
+  width: calc(var(--space-5) + var(--space-1) / 2);
+  height: calc(var(--space-5) + var(--space-1) / 2);
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
   color: var(--text-muted);
   background: var(--workspace-panel);
   flex-shrink: 0;
 }
 
 .rank-gold {
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
-  color: #fff;
+  background: linear-gradient(135deg, var(--lumi-warning) 0%, var(--lumi-amber) 100%);
+  color: var(--text-inverse);
 }
 
 .rank-silver {
-  background: linear-gradient(135deg, #d1d5db, #9ca3af);
-  color: #fff;
+  background: linear-gradient(135deg, var(--border) 0%, var(--text-muted) 100%);
+  color: var(--text-inverse);
 }
 
 .rank-bronze {
-  background: linear-gradient(135deg, #f97316, #ea580c);
-  color: #fff;
+  background: linear-gradient(135deg, var(--lumi-amber) 0%, var(--lumi-accent) 100%);
+  color: var(--text-inverse);
 }
 
 .banner-card-info {
@@ -317,39 +314,40 @@ function formatCount(n: number): string {
 }
 
 .banner-card-info h4 {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
-  margin-bottom: 3px;
+  margin-bottom: var(--space-1);
 }
 
 .banner-card-info p {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .banner-card-stats {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .mini-stat {
   display: flex;
   align-items: center;
-  gap: 3px;
-  font-size: 10px;
+  gap: var(--space-1);
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .star-icon {
-  color: var(--lumi-star);
+  color: var(--lumi-warning);
 }
 
 .like-icon {
   color: var(--lumi-accent);
 }
+
 </style>

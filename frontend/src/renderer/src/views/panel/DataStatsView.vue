@@ -16,8 +16,11 @@ import {
   Cpu,
   Users,
 } from 'lucide-vue-next'
+import LumiCard from '../../components/common/LumiCard.vue'
+import LumiButton from '../../components/common/LumiButton.vue'
 import { useMemoryStore } from '../../stores/memory'
 import { useStatsStore } from '../../stores/stats'
+import { formatTime } from '../../utils/format'
 
 const memoryStore = useMemoryStore()
 const statsStore = useStatsStore()
@@ -93,11 +96,7 @@ const recentActivities = computed(() => {
   if (!records.length) return []
   return records.slice(0, 10).map(r => {
     const ts = r.timestamp
-    let timeStr = ''
-    try {
-      const d = new Date(ts)
-      timeStr = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0')
-    } catch { timeStr = '--:--' }
+    const timeStr = formatTime(ts)
     const tokStr = r.total_tokens > 0 ? ` (${r.total_tokens.toLocaleString()} tokens)` : ''
     return {
       time: timeStr,
@@ -159,64 +158,41 @@ watch(period, () => { statsStore.fetchAll(period.value) })
           <button :class="['period-btn', { active: period === 30 }]" @click="period = 30">30天</button>
           <button :class="['period-btn', { active: period === 90 }]" @click="period = 90">90天</button>
         </div>
-        <button :class="['refresh-btn', { spinning: isRefreshing }]" @click="handleRefresh">
-          <RefreshCw :size="14" />
-        </button>
+        <LumiButton variant="ghost" size="sm" icon-only aria-label="刷新" @click="handleRefresh">
+          <template #icon><RefreshCw :size="14" :class="{ spinning: isRefreshing }" /></template>
+        </LumiButton>
       </div>
     </div>
 
     <div class="top-stats-row">
-      <div class="stat-card" style="animation-delay: 0.04s">
-        <div class="stat-icon-wrap api">
-          <Activity :size="18" />
+      <LumiCard v-for="(stat, idx) in [
+        { key: 'api', icon: Activity, label: 'API 请求', value: periodData.requests.toLocaleString() },
+        { key: 'token', icon: Zap, label: 'Token 消耗', value: periodData.tokens },
+        { key: 'memory', icon: Brain, label: '记忆行数', value: memoryLineCount },
+        { key: 'context', icon: Cpu, label: '对话数', value: periodData.conversations },
+      ]" :key="stat.key" class="stat-card" :style="{ animationDelay: `${(idx + 1) * 0.04}s` }" padding="md">
+        <div class="stat-card-content">
+          <div class="stat-icon-wrap" :class="stat.key">
+            <component :is="stat.icon" :size="18" />
+          </div>
+          <div class="stat-body">
+            <span class="stat-label">{{ stat.label }}</span>
+            <span class="stat-value">{{ stat.value }}</span>
+          </div>
         </div>
-        <div class="stat-body">
-          <span class="stat-label">API 请求</span>
-          <span class="stat-value">{{ periodData.requests.toLocaleString() }}</span>
-        </div>
-      </div>
-
-      <div class="stat-card" style="animation-delay: 0.08s">
-        <div class="stat-icon-wrap token">
-          <Zap :size="18" />
-        </div>
-        <div class="stat-body">
-          <span class="stat-label">Token 消耗</span>
-          <span class="stat-value">{{ periodData.tokens }}</span>
-        </div>
-      </div>
-
-      <div class="stat-card" style="animation-delay: 0.12s">
-        <div class="stat-icon-wrap memory">
-          <Brain :size="18" />
-        </div>
-        <div class="stat-body">
-          <span class="stat-label">记忆行数</span>
-          <span class="stat-value">{{ memoryLineCount }}</span>
-        </div>
-      </div>
-
-      <div class="stat-card" style="animation-delay: 0.16s">
-        <div class="stat-icon-wrap context">
-          <Cpu :size="18" />
-        </div>
-        <div class="stat-body">
-          <span class="stat-label">对话数</span>
-          <span class="stat-value">{{ periodData.conversations }}</span>
-        </div>
-      </div>
+      </LumiCard>
     </div>
 
     <div class="main-content">
       <div class="left-col">
-        <div class="section-card" style="animation-delay: 0.10s">
-          <div class="section-header">
-            <div class="section-title-group">
-              <BarChart3 :size="16" class="section-icon" />
-              <span class="section-title">API 用量</span>
-            </div>
+        <LumiCard class="section-card" :style="{ animationDelay: '0.10s' }" padding="md">
+          <template #title>
+            <BarChart3 :size="16" />
+            <span>API 用量</span>
+          </template>
+          <template #header>
             <Calendar :size="14" class="section-icon-muted" />
-          </div>
+          </template>
           <div class="bar-chart-wrap">
             <svg viewBox="0 0 300 120" class="bar-chart-svg">
               <rect
@@ -227,7 +203,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
                 width="24"
                 :height="h"
                 rx="4"
-                fill="var(--lumi-primary)"
+                fill="var(--lumi-brand)"
                 :opacity="0.3 + (i * 0.1)"
                 class="bar-anim"
                 :style="{ animationDelay: `${i * 0.1}s` }"
@@ -258,14 +234,14 @@ watch(period, () => { statsStore.fetchAll(period.value) })
               </div>
             </div>
           </div>
-        </div>
+        </LumiCard>
 
-        <div class="section-card" style="animation-delay: 0.18s">
-          <div class="section-header">
-            <div class="section-title-group">
-              <Brain :size="16" class="section-icon" />
-              <span class="section-title">记忆统计</span>
-            </div>
+        <LumiCard class="section-card" :style="{ animationDelay: '0.18s' }" padding="md">
+          <template #title>
+            <Brain :size="16" />
+            <span>记忆统计</span>
+          </template>
+          <template #header>
             <div class="agent-selector">
               <Users :size="12" />
               <select v-model="selectedAgentId" class="agent-select" @change="onAgentChange">
@@ -274,7 +250,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
                 </option>
               </select>
             </div>
-          </div>
+          </template>
 
           <div class="memory-stats-grid">
             <div class="memory-stat-item">
@@ -301,7 +277,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
                 <circle cx="50" cy="50" r="40" fill="none" stroke="var(--border)" stroke-width="10" />
                 <circle
                   cx="50" cy="50" r="40" fill="none"
-                  stroke="var(--lumi-primary)" stroke-width="10"
+                  stroke="var(--lumi-brand)" stroke-width="10"
                   :stroke-dasharray="`${Math.min(memoryLineCount, 100) * 2.51} ${251.2 - Math.min(memoryLineCount, 100) * 2.51}`"
                   stroke-dashoffset="0"
                   class="donut-anim"
@@ -314,7 +290,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
             </div>
             <div class="donut-legend">
               <div class="legend-item">
-                <span class="legend-dot" style="background: var(--lumi-primary)" />
+                <span class="legend-dot" style="background: var(--lumi-brand)" />
                 <span class="legend-text">长期记忆</span>
                 <span class="legend-count">{{ memoryLineCount }} 行</span>
               </div>
@@ -343,18 +319,18 @@ watch(period, () => { statsStore.fetchAll(period.value) })
               ></div>
             </div>
           </div>
-        </div>
+        </LumiCard>
       </div>
 
       <div class="right-col">
-        <div class="section-card" style="animation-delay: 0.14s">
-          <div class="section-header">
-            <div class="section-title-group">
-              <Layers :size="16" class="section-icon" />
-              <span class="section-title">上下文监控</span>
-            </div>
+        <LumiCard class="section-card" :style="{ animationDelay: '0.14s' }" padding="md">
+          <template #title>
+            <Layers :size="16" />
+            <span>上下文监控</span>
+          </template>
+          <template #header>
             <Cpu :size="14" class="section-icon-muted" />
-          </div>
+          </template>
           <div class="context-metrics">
             <div
               v-for="(m, idx) in contextMetrics"
@@ -374,16 +350,16 @@ watch(period, () => { statsStore.fetchAll(period.value) })
               </div>
             </div>
           </div>
-        </div>
+        </LumiCard>
 
-        <div class="section-card" style="animation-delay: 0.22s">
-          <div class="section-header">
-            <div class="section-title-group">
-              <Clock :size="16" class="section-icon" />
-              <span class="section-title">最近活动</span>
-            </div>
+        <LumiCard class="section-card" :style="{ animationDelay: '0.22s' }" padding="md">
+          <template #title>
+            <Clock :size="16" />
+            <span>最近活动</span>
+          </template>
+          <template #header>
             <Database :size="14" class="section-icon-muted" />
-          </div>
+          </template>
           <div class="activity-timeline">
             <div
               v-for="(a, idx) in recentActivities"
@@ -404,7 +380,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
               </div>
             </div>
           </div>
-        </div>
+        </LumiCard>
       </div>
     </div>
   </div>
@@ -415,8 +391,8 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 24px 28px;
-  gap: 20px;
+  padding: var(--space-6) var(--space-7);
+  gap: var(--space-5);
   overflow-y: auto;
 }
 
@@ -424,48 +400,48 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  animation: content-fade-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
 .header-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .header-subtitle {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .period-tabs {
   display: flex;
-  gap: 4px;
-  padding: 4px;
+  gap: var(--space-1);
+  padding: var(--space-1);
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
 }
 
 .period-btn {
-  padding: 6px 16px;
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  font-weight: 500;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all var(--transition-fast) ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .period-btn.active {
   background: var(--surface);
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
   box-shadow: var(--shadow-xs);
 }
 
@@ -473,86 +449,32 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   color: var(--text-secondary);
 }
 
-.refresh-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast) ease-in-out;
-}
-
-.refresh-btn:hover {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
-}
-
-.refresh-btn.spinning {
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.spinning {
-  animation: spin 1s linear infinite;
-}
-
 .top-stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .stat-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 18px;
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-  animation: content-fade-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
-  transition: border-color var(--transition-fast) ease-in-out;
+  animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
-.stat-card:hover {
-  border-color: var(--lumi-primary);
+.stat-card-content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .stat-icon-wrap {
-  width: 40px;
-  height: 40px;
+  width: var(--space-8);
+  height: var(--space-8);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-.stat-icon-wrap.api {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.stat-icon-wrap.token {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.stat-icon-wrap.memory {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.stat-icon-wrap.context {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .stat-body {
@@ -562,13 +484,13 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .stat-value {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
@@ -576,8 +498,8 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   display: flex;
   align-items: center;
   gap: 2px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
 }
 
 .stat-trend.up {
@@ -590,14 +512,14 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 
 .main-content {
   display: flex;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .left-col {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .right-col {
@@ -605,67 +527,40 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .section-card {
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-  padding: 18px;
-  animation: content-fade-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 14px;
-}
-
-.section-title-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-icon {
-  color: var(--lumi-primary);
+  animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
 .section-icon-muted {
   color: var(--text-muted);
 }
 
-.section-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
 .agent-selector {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 6px;
+  gap: var(--space-1);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .agent-select {
   background: transparent;
   border: none;
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--text-xs);
   outline: none;
   cursor: pointer;
 }
 
 .bar-chart-wrap {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .bar-chart-svg {
@@ -674,7 +569,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .bar-anim {
-  transition: opacity var(--transition-normal) ease-in-out;
+  transition: opacity var(--transition-normal);
 }
 
 .provider-list {
@@ -686,10 +581,10 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 .provider-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 0;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
   border-bottom: 1px solid var(--border-light);
-  animation: content-fade-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: lumi-content-fade-up var(--duration-slow) var(--ease-default) both;
 }
 
 .provider-row:last-child {
@@ -699,7 +594,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 .provider-name-wrap {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   width: 100px;
   flex-shrink: 0;
 }
@@ -709,36 +604,36 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .provider-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
 }
 
 .provider-bar-bg {
   flex: 1;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   overflow: hidden;
 }
 
 .provider-bar-fill {
   height: 100%;
-  border-radius: 3px;
-  background: var(--lumi-primary);
-  transition: width var(--transition-normal) ease-in-out;
+  border-radius: var(--radius-xs);
+  background: var(--lumi-brand);
+  transition: width var(--transition-normal);
 }
 
 .provider-stats {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   width: 110px;
   flex-shrink: 0;
 }
 
 .provider-requests,
 .provider-tokens {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
@@ -759,35 +654,35 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 .memory-stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
 .memory-stat-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3);
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
 }
 
 .memory-stat-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .memory-stat-value {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .donut-section {
   display: flex;
   align-items: center;
-  gap: 24px;
-  margin-bottom: 16px;
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
 }
 
 .donut-wrap {
@@ -803,7 +698,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .donut-anim {
-  transition: stroke-dasharray var(--transition-normal) ease-in-out;
+  transition: stroke-dasharray var(--transition-normal);
 }
 
 .donut-center {
@@ -817,43 +712,43 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .dc-value {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .dc-label {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .donut-legend {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
 .legend-text {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
 .legend-count {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
   margin-left: auto;
 }
@@ -861,7 +756,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 .health-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .health-header {
@@ -871,42 +766,42 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .health-label {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
 }
 
 .health-value {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--lumi-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--lumi-brand);
 }
 
 .health-bar-bg {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   overflow: hidden;
 }
 
 .health-bar-fill {
   height: 100%;
-  border-radius: 3px;
-  background: var(--lumi-primary);
-  transition: width var(--transition-normal) ease-in-out;
+  border-radius: var(--radius-xs);
+  background: var(--lumi-brand);
+  transition: width var(--transition-normal);
 }
 
 .context-metrics {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-3);
 }
 
 .context-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  animation: content-fade-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+  gap: var(--space-1);
+  animation: lumi-content-fade-up var(--duration-slow) var(--ease-default) both;
 }
 
 .context-label-row {
@@ -915,28 +810,28 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .context-label {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
 }
 
 .context-value {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .context-bar-bg {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   overflow: hidden;
 }
 
 .context-bar-fill {
   height: 100%;
-  border-radius: 3px;
-  background: var(--lumi-primary);
-  transition: width var(--transition-normal) ease-in-out;
+  border-radius: var(--radius-xs);
+  background: var(--lumi-brand);
+  transition: width var(--transition-normal);
 }
 
 .activity-timeline {
@@ -947,29 +842,29 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 
 .activity-item {
   display: flex;
-  gap: 12px;
-  animation: content-fade-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
-  padding: 8px 0;
+  gap: var(--space-3);
+  animation: lumi-content-fade-up var(--duration-slow) var(--ease-default) both;
+  padding: var(--space-2) 0;
 }
 
 .activity-dot-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 12px;
+  width: var(--space-3);
   flex-shrink: 0;
-  padding-top: 4px;
+  padding-top: var(--space-1);
 }
 
 .activity-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
 .activity-dot.api {
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
 }
 
 .activity-dot.memory {
@@ -988,7 +883,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   width: 1px;
   flex: 1;
   background: var(--border-light);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .activity-content {
@@ -1005,22 +900,26 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .activity-action {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
 }
 
 .activity-time {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .activity-detail {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
 }
 
 </style>

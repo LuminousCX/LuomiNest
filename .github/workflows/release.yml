@@ -4,21 +4,37 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: 'Build all platforms (otherwise only the tagged release)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
 
+# Cancel in-progress runs for the same ref to save CI resources
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
             platform: win
           - os: ubuntu-latest
             platform: linux
+          - os: macos-latest
+            platform: mac
 
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -34,16 +50,30 @@ jobs:
         with:
           version: 10
 
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/pyproject.toml
 
       - name: Install Linux dependencies
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libarchive-tools rpm
+          sudo apt-get install -y libarchive-tools rpm libxtst6 libnss3 libnotify4
 
       - name: Install backend dependencies
         shell: bash
@@ -57,6 +87,9 @@ jobs:
           fi
           pip install --upgrade pip
           pip install pyinstaller
+          # Install dev deps only - voice deps (torch, faster-whisper, etc.)
+          # are heavy and not needed for the bundled backend. They are
+          # lazily imported at runtime and fall back gracefully.
           pip install -e ".[dev]"
 
       - name: Build backend
@@ -74,9 +107,9 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            BACKEND_EXE="backend/dist/luominest-backend.exe"
+            BACKEND_EXE="backend/dist/luominest-backend/luominest-backend.exe"
           else
-            BACKEND_EXE="backend/dist/luominest-backend"
+            BACKEND_EXE="backend/dist/luominest-backend/luominest-backend"
           fi
           if [ ! -f "$BACKEND_EXE" ]; then
             echo "[ERROR] Backend executable not found: $BACKEND_EXE"
@@ -88,42 +121,47 @@ jobs:
         shell: bash
         run: |
           mkdir -p frontend/resources/backend
+          # Copy the entire backend dist folder (exe + shared libs) so the
+          # bundled executable can find its dependencies at runtime.
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            cp backend/dist/luominest-backend.exe frontend/resources/backend/
+            cp -r backend/dist/luominest-backend/* frontend/resources/backend/
           else
-            cp backend/dist/luominest-backend frontend/resources/backend/
+            cp -r backend/dist/luominest-backend/* frontend/resources/backend/
             chmod +x frontend/resources/backend/luominest-backend
           fi
-
-      - name: Create build directory
-        if: matrix.platform == 'win'
-        shell: bash
-        run: |
-          mkdir -p frontend/build
 
       - name: Install frontend dependencies
         run: |
           cd frontend
-          pnpm install
+          pnpm install --frozen-lockfile
 
       - name: Build frontend
         run: |
           cd frontend
           pnpm run build
 
-      - name: Build Windows installer
+      - name: Build Windows packages
         if: matrix.platform == 'win'
         run: |
           cd frontend
           pnpm exec electron-builder --win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USE_HARD_LINKS: 'false'
 
       - name: Build Linux packages
         if: matrix.platform == 'linux'
         run: |
           cd frontend
-          pnpm exec electron-builder --linux AppImage deb rpm
+          pnpm exec electron-builder --linux AppImage deb
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build macOS packages
+        if: matrix.platform == 'mac'
+        run: |
+          cd frontend
+          pnpm exec electron-builder --mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -133,10 +171,16 @@ jobs:
           name: LuomiNest-${{ matrix.platform }}
           path: |
             frontend/release/dist/*
+            !frontend/release/dist/win-unpacked
+            !frontend/release/dist/linux-unpacked
+            !frontend/release/dist/mac
+          if-no-files-found: error
 
   create-release:
     needs: release
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -147,12 +191,22 @@ jobs:
         with:
           path: artifacts
 
+      - name: List artifacts
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find artifacts -type f | head -50
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
-          files: artifacts/**/*
+          files: |
+            artifacts/LuomiNest-win/*.exe
+            artifacts/LuomiNest-linux/*.AppImage
+            artifacts/LuomiNest-linux/*.deb
+            artifacts/LuomiNest-mac/*.dmg
+            artifacts/LuomiNest-mac/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Play, X } from 'lucide-vue-next'
+import LumiButton from '../common/LumiButton.vue'
 
 const input = ref('')
 const output = ref('')
@@ -34,9 +35,11 @@ function handleExecute() {
           DOM
         </button>
       </div>
-      <button class="dev-close" @click="emit('close')">
-        <X :size="16" />
-      </button>
+      <LumiButton variant="ghost" size="sm" icon-only aria-label="关闭" @click="emit('close')">
+        <template #icon>
+          <X :size="16" />
+        </template>
+      </LumiButton>
     </div>
     
     <div class="dev-content">
@@ -47,15 +50,18 @@ function handleExecute() {
           class="dev-input"
           :readonly="mode === 'dom'"
         ></textarea>
-        <button 
+        <LumiButton
           v-if="mode === 'script'"
-          class="dev-execute"
+          variant="primary"
+          size="sm"
           :disabled="!input.trim()"
           @click="handleExecute"
         >
-          <Play :size="14" />
+          <template #icon>
+            <Play :size="14" />
+          </template>
           执行
-        </button>
+        </LumiButton>
       </div>
       
       <div class="dev-output">
@@ -68,7 +74,7 @@ function handleExecute() {
 
 <style scoped>
 .dev-panel {
-  height: 220px;
+  height: calc(var(--space-9) * 4 + var(--btn-height-sm));
   background: var(--text);
   border-top: 1px solid var(--border);
   display: flex;
@@ -79,24 +85,24 @@ function handleExecute() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border);
 }
 
 .dev-tabs {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .dev-tab {
-  padding: 4px 12px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .dev-tab:hover {
@@ -108,29 +114,10 @@ function handleExecute() {
   color: var(--text-inverse);
 }
 
-.dev-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.dev-close:hover {
-  background: var(--border);
-  color: var(--text-secondary);
-}
-
 .dev-content {
   flex: 1;
   display: flex;
-  gap: 1px;
+  gap: calc(var(--space-1) / 4);
   overflow: hidden;
 }
 
@@ -143,12 +130,12 @@ function handleExecute() {
 
 .dev-input {
   flex: 1;
-  padding: 12px;
+  padding: var(--space-3);
   background: transparent;
   border: none;
   color: var(--text-inverse);
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   resize: none;
   outline: none;
 }
@@ -157,49 +144,30 @@ function handleExecute() {
   color: var(--text-muted);
 }
 
-.dev-execute {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 16px;
-  margin: 8px;
-  border-radius: 6px;
-  background: var(--lumi-info);
-  border: none;
-  color: var(--text-inverse);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.dev-execute:hover:not(:disabled) {
-  background: var(--lumi-primary);
-}
-
-.dev-execute:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.dev-input-area .lumi-btn {
+  margin: var(--space-2);
+  align-self: flex-start;
 }
 
 .dev-output {
   flex: 1;
   background: var(--border);
-  padding: 12px;
+  padding: var(--space-3);
   overflow: auto;
 }
 
 .dev-output pre {
   margin: 0;
   color: var(--text-muted);
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
 .output-placeholder {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
+
 </style>

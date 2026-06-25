@@ -6,13 +6,14 @@
         :key="toast.id"
         class="toast-item"
         :class="`toast-${toast.type}`"
+        role="alert"
         @click="remove(toast.id)"
       >
-        <span class="toast-icon">
-          <svg v-if="toast.type === 'success'" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-          <svg v-else-if="toast.type === 'error'" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-          <svg v-else-if="toast.type === 'warning'" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span class="toast-icon" aria-hidden="true">
+          <CheckCircle v-if="toast.type === 'success'" :size="18" />
+          <XCircle v-else-if="toast.type === 'error'" :size="18" />
+          <AlertTriangle v-else-if="toast.type === 'warning'" :size="18" />
+          <Info v-else :size="18" />
         </span>
         <span class="toast-message">{{ toast.message }}</span>
       </div>
@@ -21,6 +22,7 @@
 </template>
 
 <script setup lang="ts">
+import { CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-vue-next'
 import { useToast } from '../../composables/useToast'
 
 const { toasts, remove } = useToast()
@@ -29,56 +31,59 @@ const { toasts, remove } = useToast()
 <style scoped>
 .toast-container {
   position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 99999;
+  top: var(--space-5);
+  right: var(--space-5);
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
   pointer-events: none;
-  max-width: 400px;
+  max-width: calc(var(--space-9) * 8 + var(--space-4));
 }
 
 .toast-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 18px;
-  border-radius: var(--radius-lg, 10px);
-  font-size: 14px;
-  font-weight: 500;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-md);
+  font-weight: var(--font-medium);
   cursor: pointer;
   pointer-events: auto;
-  backdrop-filter: blur(16px);
-  box-shadow: 0 8px 24px var(--overlay-subtle);
-  transition: all 0.25s ease;
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-lg);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
 .toast-item:hover {
-  transform: translateX(-4px);
-  box-shadow: 0 8px 30px var(--overlay-subtle);
+  transform: translateX(calc(var(--space-1) * -1));
+  box-shadow: var(--shadow-xl);
 }
 
 .toast-success {
-  background: var(--task-green-soft);
+  background: var(--lumi-success-light);
   border: 1px solid var(--task-green-border);
   color: var(--lumi-success);
 }
 
 .toast-error {
-  background: var(--task-red-soft);
+  background: var(--lumi-danger-light);
   border: 1px solid var(--task-red-border);
   color: var(--lumi-danger);
 }
 
 .toast-warning {
-  background: var(--lumi-amber-soft);
+  background: var(--lumi-warning-light);
   border: 1px solid var(--lumi-amber-border);
-  color: var(--lumi-amber);
+  color: var(--lumi-warning);
 }
 
 .toast-info {
-  background: var(--task-blue-soft);
+  background: var(--lumi-info-light);
   border: 1px solid var(--task-blue-border);
   color: var(--lumi-info);
 }
@@ -90,28 +95,29 @@ const { toasts, remove } = useToast()
 }
 
 .toast-message {
-  line-height: 1.4;
+  line-height: var(--leading-snug);
 }
 
 .toast-slide-enter-active {
-  transition: all 0.3s ease-out;
+  transition: all var(--duration-slow) var(--ease-out-expo);
 }
 
 .toast-slide-leave-active {
-  transition: all 0.2s ease-in;
+  transition: all var(--duration-fast) var(--ease-default);
 }
 
 .toast-slide-enter-from {
   opacity: 0;
-  transform: translateX(60px);
+  transform: translateX(calc(var(--space-8) + var(--space-5)));
 }
 
 .toast-slide-leave-to {
   opacity: 0;
-  transform: translateX(60px) scale(0.95);
+  transform: translateX(calc(var(--space-8) + var(--space-5))) scale(0.95);
 }
 
 .toast-slide-move {
-  transition: transform 0.25s ease;
+  transition: transform var(--transition-fast);
 }
+
 </style>

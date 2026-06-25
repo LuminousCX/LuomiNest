@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import { getStringItem, setStringItem } from '../utils/storage'
 
 export const useThemeStore = defineStore('theme', () => {
   const STORAGE_KEY = 'luominest-theme'
@@ -11,7 +12,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function getInitialTheme(): boolean {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = getStringItem(STORAGE_KEY, '')
     if (stored) return stored === 'dark'
     return false
   }
@@ -32,7 +33,7 @@ export const useThemeStore = defineStore('theme', () => {
   let initialized = false
 
   watch(isDark, (val) => {
-    localStorage.setItem(STORAGE_KEY, val ? 'dark' : 'light')
+    setStringItem(STORAGE_KEY, val ? 'dark' : 'light')
     if (initialized) {
       getApi()?.setTheme(val ? 'dark' : 'light').catch(() => {})
     }

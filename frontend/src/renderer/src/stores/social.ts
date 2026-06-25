@@ -12,6 +12,7 @@ import type {
   SearchResult,
 } from '../types'
 import { useApi } from '../composables/useApi'
+import { generateId } from '../utils/id'
 
 export const useSocialStore = defineStore('social', () => {
   const { apiGet, apiPost, apiDelete, apiSseStream } = useApi()
@@ -136,7 +137,7 @@ export const useSocialStore = defineStore('social', () => {
       case 'info':
         if (event.data?.message && typeof event.data.message === 'string') {
           groupMessages.value.push({
-            id: `info-${Date.now()}`,
+            id: generateId('info'),
             groupId: currentGroup.value?.id || '',
             senderId: 'system',
             senderName: '系统',
@@ -169,7 +170,7 @@ export const useSocialStore = defineStore('social', () => {
     const asString = (v: unknown): string => (typeof v === 'string' ? v : '')
     const asOptionalString = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
     return {
-      id: asString(msg.id || msg.message_id) || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: asString(msg.id || msg.message_id) || generateId('msg'),
       groupId: asString(msg.groupId || msg.group_id) || currentGroup.value?.id || '',
       senderId: asString(msg.senderId || msg.sender_id),
       senderName: asOptionalString(msg.senderName || msg.sender_name),
@@ -324,7 +325,7 @@ export const useSocialStore = defineStore('social', () => {
         const agentName = event.data.agent_name || 'Agent'
 
         groupMessages.value.push({
-          id: `collab-${event.data.task_id}-${Date.now()}`,
+          id: `${generateId('collab')}-${event.data.task_id}`,
           groupId: currentGroup.value?.id || '',
           senderId: event.data.agent_id || 'agent',
           senderName: agentName,
@@ -357,7 +358,7 @@ export const useSocialStore = defineStore('social', () => {
 
       case 'direct_response': {
         groupMessages.value.push({
-          id: `direct-${Date.now()}`,
+          id: generateId('direct'),
           groupId: currentGroup.value?.id || '',
           senderId: event.data.agent_id || 'agent',
           senderName: event.data.agent_name || 'Agent',
@@ -371,7 +372,7 @@ export const useSocialStore = defineStore('social', () => {
 
       case 'final_result': {
         groupMessages.value.push({
-          id: `synthesis-${Date.now()}`,
+          id: generateId('synthesis'),
           groupId: currentGroup.value?.id || '',
           senderId: event.data.agent_id || 'coordinator',
           senderName: event.data.agent_name || '调度员',

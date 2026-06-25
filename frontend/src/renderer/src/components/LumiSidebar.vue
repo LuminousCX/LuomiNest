@@ -32,6 +32,6 @@ onMounted(async () => {
   box-shadow: var(--shadow-sm);
   position: relative;
   overflow: visible;
-  z-index: 1;
+  z-index: var(--z-base);
 }
 </style>

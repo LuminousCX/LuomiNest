@@ -19,20 +19,20 @@ ifeq ($(OS),Windows_NT)
   ACTIVATE      := .venv\Scripts\activate &&
   RM_RF         := rmdir /s /q
   MKDIR_P       := mkdir
-  COPY          := copy /Y
+  COPY          := xcopy /E /I /Y
   NULL          := > nul
   DEV_NULL      := > nul 2>&1
-  BACKEND_EXE   := luominest-backend.exe
+  BACKEND_EXE   := luominest-backend\luominest-backend.exe
   BUILD_SCRIPT  := build.bat
   PLATFORM      := win
 else
   ACTIVATE      := . .venv/bin/activate &&
   RM_RF         := rm -rf
   MKDIR_P       := mkdir -p
-  COPY          := cp
+  COPY          := cp -r
   NULL          :=
   DEV_NULL      :=
-  BACKEND_EXE   := luominest-backend
+  BACKEND_EXE   := luominest-backend/luominest-backend
   BUILD_SCRIPT  := build.sh
   UNAME_S       := $(shell uname -s)
   ifeq ($(UNAME_S),Darwin)
@@ -189,10 +189,11 @@ prepare-backend: build-backend verify-backend
 	@echo "[Prepare] Copying backend to frontend resources..."
 ifeq ($(OS),Windows_NT)
 	-$(MKDIR_P) $(FRONTEND_DIR)\resources\backend 2>$(NULL) || true
+	$(COPY) $(BACKEND_DIR)\dist\luominest-backend $(FRONTEND_DIR)\resources\backend $(NULL)
 else
 	$(MKDIR_P) $(FRONTEND_DIR)/resources/backend
+	$(COPY) $(BACKEND_DIR)/dist/luominest-backend/* $(FRONTEND_DIR)/resources/backend/
 endif
-	$(COPY) $(BACKEND_DIR)/dist/$(BACKEND_EXE) $(FRONTEND_DIR)/resources/backend/ $(NULL)
 	@echo "[Prepare] Backend ready for platform: $(PLATFORM)"
 
 verify-backend:

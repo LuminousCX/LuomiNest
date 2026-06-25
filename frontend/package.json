@@ -18,8 +18,7 @@
     "build:linux-deb": "pnpm run build && electron-builder --linux deb",
     "build:mac": "pnpm run build && electron-builder --mac",
     "build:mac-dmg": "pnpm run build && electron-builder --mac dmg",
-    "build:backend": "cd ../backend && build.bat",
-    "build:complete": "cd .. && build-all.bat",
+    "build:complete": "cd .. && pwsh -File build-all.ps1",
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && vue-tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {

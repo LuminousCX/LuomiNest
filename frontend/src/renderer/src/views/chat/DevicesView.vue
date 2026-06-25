@@ -3,6 +3,10 @@ import { ref, onMounted } from 'vue'
 import { Wifi, Users, Home, Cpu, Plus, Search, Settings2, ChevronRight, Activity, MessageSquare, Clock } from 'lucide-vue-next'
 import { useApi } from '../../composables/useApi'
 import { formatDateRelative } from '../../utils/format'
+import LumiCard from '../../components/common/LumiCard.vue'
+import LumiButton from '../../components/common/LumiButton.vue'
+import LumiInput from '../../components/common/LumiInput.vue'
+import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 
 interface Device {
   id: string
@@ -111,14 +115,14 @@ onMounted(() => {
         <p class="header-desc">物联网设备管理、人机混合群组、历史聊天记录</p>
       </div>
       <div class="header-actions">
-        <button class="action-btn secondary">
-          <Settings2 :size="15" />
-          <span>配置</span>
-        </button>
-        <button class="action-btn primary">
-          <Plus :size="15" />
-          <span>添加设备</span>
-        </button>
+        <LumiButton variant="secondary" size="sm">
+          <template #icon><Settings2 :size="15" /></template>
+          配置
+        </LumiButton>
+        <LumiButton variant="primary" size="sm">
+          <template #icon><Plus :size="15" /></template>
+          添加设备
+        </LumiButton>
       </div>
     </div>
 
@@ -136,15 +140,33 @@ onMounted(() => {
     <div class="devices-content">
       <div class="main-panel">
         <template v-if="activeTab === 'devices'">
-          <div class="search-box">
-            <Search :size="14" class="search-icon" />
-            <input v-model="searchQuery" type="text" placeholder="搜索设备..." class="search-input" />
-          </div>
+          <LumiInput v-model="searchQuery" type="search" placeholder="搜索设备..." class="search-input">
+            <template #icon><Search :size="14" /></template>
+          </LumiInput>
           <div class="device-list">
             <div v-if="loading" class="state-tip">加载中...</div>
-            <div v-else-if="error" class="state-tip state-error">{{ error }}</div>
-            <div v-else-if="devices.length === 0" class="state-tip">暂无设备</div>
-            <div v-for="d in devices" :key="d.id" :class="['device-card', { offline: d.status === 'offline' }]">
+            <LumiEmptyState
+              v-else-if="error"
+              icon="error"
+              title="加载失败"
+              :description="error"
+              size="md"
+            />
+            <LumiEmptyState
+              v-else-if="devices.length === 0"
+              icon="folder"
+              title="暂无设备"
+              size="md"
+            />
+            <LumiCard
+              v-for="d in devices"
+              v-else
+              :key="d.id"
+              class="device-card"
+              :class="{ offline: d.status === 'offline' }"
+              padding="md"
+              hoverable
+            >
               <div class="device-icon-wrap">
                 <Cpu :size="18" />
               </div>
@@ -159,17 +181,29 @@ onMounted(() => {
                 <span :class="['device-status', d.status]"></span>
                 <ChevronRight :size="16" class="device-arrow" />
               </div>
-            </div>
+            </LumiCard>
           </div>
         </template>
         <template v-else>
-          <div class="search-box">
-            <Search :size="14" class="search-icon" />
-            <input v-model="searchQuery" type="text" placeholder="搜索群组..." class="search-input" />
-          </div>
+          <LumiInput v-model="searchQuery" type="search" placeholder="搜索群组..." class="search-input">
+            <template #icon><Search :size="14" /></template>
+          </LumiInput>
           <div class="group-list">
-            <div v-if="groups.length === 0" class="state-tip">暂无群组</div>
-            <div v-for="g in groups" :key="g.id" :class="['group-card', { offline: !g.online }]">
+            <LumiEmptyState
+              v-if="groups.length === 0"
+              icon="folder"
+              title="暂无群组"
+              size="md"
+            />
+            <LumiCard
+              v-for="g in groups"
+              v-else
+              :key="g.id"
+              class="group-card"
+              :class="{ offline: !g.online }"
+              padding="md"
+              hoverable
+            >
               <div class="group-icon-wrap">
                 <Users v-if="g.type === 'hybrid'" :size="18" />
                 <Home v-else :size="18" />
@@ -181,13 +215,13 @@ onMounted(() => {
               <div class="group-right">
                 <span :class="['group-type-badge', g.type]">{{ g.type === 'hybrid' ? '人机混合' : 'IoT群组' }}</span>
               </div>
-            </div>
+            </LumiCard>
           </div>
         </template>
       </div>
 
       <div class="side-panel">
-        <div class="side-section">
+        <LumiCard class="side-section" padding="md">
           <div class="side-header">
             <Activity :size="14" />
             <span>设备状态</span>
@@ -206,15 +240,20 @@ onMounted(() => {
               <span class="status-label">消息数</span>
             </div>
           </div>
-        </div>
+        </LumiCard>
 
-        <div class="side-section">
+        <LumiCard class="side-section" padding="md">
           <div class="side-header">
             <Clock :size="14" />
             <span>最近对话</span>
           </div>
           <div class="recent-list">
-            <div v-if="recentChats.length === 0" class="state-tip">暂无最近对话</div>
+            <LumiEmptyState
+              v-if="recentChats.length === 0"
+              icon="file"
+              title="暂无最近对话"
+              size="sm"
+            />
             <div v-for="rc in recentChats" :key="rc.id" class="recent-item">
               <MessageSquare :size="12" class="recent-icon" />
               <div class="recent-info">
@@ -224,7 +263,7 @@ onMounted(() => {
               <span class="recent-time">{{ rc.time }}</span>
             </div>
           </div>
-        </div>
+        </LumiCard>
       </div>
     </div>
   </div>
@@ -235,8 +274,8 @@ onMounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 24px 28px;
-  gap: 16px;
+  padding: var(--space-6) var(--space-7);
+  gap: var(--space-4);
   overflow-y: auto;
 }
 
@@ -247,57 +286,26 @@ onMounted(() => {
 }
 
 .header-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .header-desc {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.action-btn.primary {
-  background: var(--lumi-primary);
-  color: white;
-}
-
-.action-btn.primary:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.action-btn.secondary {
-  background: var(--surface);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-
-.action-btn.secondary:hover {
-  background: var(--surface-hover);
+  gap: var(--space-2);
 }
 
 .tab-bar {
   display: flex;
-  gap: 4px;
-  padding: 4px;
+  gap: var(--space-1);
+  padding: var(--space-1);
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
   width: fit-content;
@@ -306,11 +314,11 @@ onMounted(() => {
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 20px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-5);
   border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -318,14 +326,18 @@ onMounted(() => {
 
 .tab-btn.active {
   background: var(--surface);
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
   box-shadow: var(--shadow-xs);
+}
+
+.tab-btn:hover:not(.active) {
+  color: var(--text-secondary);
 }
 
 .devices-content {
   flex: 1;
   display: flex;
-  gap: 16px;
+  gap: var(--space-4);
   min-height: 0;
 }
 
@@ -333,78 +345,51 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
 }
 
-.search-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
-}
-
-.search-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
 .search-input {
-  flex: 1;
-  background: transparent;
-  font-size: 13px;
-  color: var(--text-primary);
+  width: 100%;
 }
 
-.search-input::placeholder {
-  color: var(--text-muted);
-}
-
-.device-list, .group-list {
+.device-list,
+.group-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
-.device-card, .group-card {
+.device-card,
+.group-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  background: var(--surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
+  gap: var(--space-3);
   cursor: pointer;
-  transition: all var(--transition-fast);
 }
 
-.device-card:hover, .group-card:hover {
-  border-color: var(--lumi-primary);
-  box-shadow: var(--shadow-glow-sm);
-}
-
-.device-card.offline, .group-card.offline {
+.device-card.offline,
+.group-card.offline {
   opacity: 0.6;
 }
 
-.device-icon-wrap, .group-icon-wrap {
+.device-icon-wrap,
+.group-icon-wrap {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.device-info, .group-info {
+.device-info,
+.group-info {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -412,24 +397,26 @@ onMounted(() => {
   gap: 2px;
 }
 
-.device-name, .group-name {
-  font-size: 13px;
-  font-weight: 600;
+.device-name,
+.group-name {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .device-meta {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
-.device-protocol, .device-time {
-  font-size: 11px;
+.device-protocol,
+.device-time {
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .group-members {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -439,13 +426,13 @@ onMounted(() => {
 .device-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .device-status {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
   background: var(--lumi-success);
 }
 
@@ -458,15 +445,15 @@ onMounted(() => {
 }
 
 .group-type-badge {
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-medium);
 }
 
 .group-type-badge.iot-group {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
 .group-type-badge.hybrid {
@@ -479,42 +466,40 @@ onMounted(() => {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .side-section {
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
 }
 
 .side-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
+  gap: var(--space-1);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .status-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .status-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .status-value {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
@@ -527,20 +512,20 @@ onMounted(() => {
 }
 
 .status-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .recent-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .recent-item {
   display: flex;
-  gap: 8px;
-  padding: 8px 0;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
   border-bottom: 1px solid var(--border-light);
 }
 
@@ -549,7 +534,7 @@ onMounted(() => {
 }
 
 .recent-icon {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -563,13 +548,13 @@ onMounted(() => {
 }
 
 .recent-target {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
 }
 
 .recent-msg {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -577,20 +562,17 @@ onMounted(() => {
 }
 
 .recent-time {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   flex-shrink: 0;
   white-space: nowrap;
 }
 
 .state-tip {
-  padding: 24px 16px;
+  padding: var(--space-6) var(--space-4);
   text-align: center;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
 }
 
-.state-tip.state-error {
-  color: var(--lumi-error, #ef4444);
-}
 </style>

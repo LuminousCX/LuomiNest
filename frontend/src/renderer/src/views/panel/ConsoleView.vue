@@ -5,8 +5,14 @@ import {
   CheckCircle2, XCircle, Maximize2, Minimize2, Upload, RotateCcw,
   Clock, User, Filter, RefreshCw, ChevronDown, Server, Monitor
 } from 'lucide-vue-next'
+import LumiButton from '../../components/common/LumiButton.vue'
+import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
+import LumiInput from '../../components/common/LumiInput.vue'
 import { useApi } from '../../composables/useApi'
+import { copyToClipboard } from '../../utils/clipboard'
+import { generateId } from '../../utils/id'
 import type { CommandRecord, SystemLogEntry, LogUploadResponse, ExecuteCommandResponse } from '../../types'
+import { formatTime, formatDuration } from '../../utils/format'
 
 const { apiGet, apiPost, apiDelete } = useApi()
 
@@ -46,18 +52,6 @@ const filteredLogs = computed(() => {
   }
   return result
 })
-
-const formatTimestamp = (iso: string) => {
-  const d = new Date(iso)
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
-const formatDuration = (ms: number | null) => {
-  if (ms === null) return '-'
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  return `${(ms / 60000).toFixed(1)}min`
-}
 
 const statusLabel = (status: CommandRecord['status']) => {
   const map: Record<CommandRecord['status'], string> = {
@@ -109,7 +103,7 @@ const uploadLogs = async () => {
     const resp = await apiPost<LogUploadResponse>('/console/logs/upload', {
       logs: filteredLogs.value,
       uploaded_by: 'frontend',
-      session_id: `session_${Date.now()}`,
+      session_id: generateId('session'),
     })
     uploadResult.value = `上传成功 (ID: ${resp.upload_id}, 共 ${resp.received_count} 条)`
   } catch (e: any) {
@@ -128,7 +122,7 @@ const copyLogs = () => {
     : filteredLogs.value.map(l =>
         `[${l.timestamp}] [${l.level.toUpperCase()}] [${l.source}] [${l.module || '-'}] ${l.message}`
       ).join('\n')
-  navigator.clipboard.writeText(entries)
+  copyToClipboard(entries)
 }
 
 const isExecuting = ref(false)
@@ -207,13 +201,29 @@ onBeforeUnmount(() => {
         <p class="header-desc">AI 命令执行记录、系统日志与运行状态</p>
       </div>
       <div class="header-actions">
-        <button class="action-btn ghost" @click="copyLogs" title="复制内容">
-          <Copy :size="14" />
-        </button>
-        <button :class="['action-btn ghost', { active: isExpanded }]" @click="isExpanded = !isExpanded" title="全屏">
-          <Maximize2 v-if="!isExpanded" :size="14" />
-          <Minimize2 v-else :size="14" />
-        </button>
+        <LumiButton
+          variant="ghost"
+          size="sm"
+          icon-only
+          :class="['header-action-btn', { 'is-active': false }]"
+          aria-label="复制内容"
+          @click="copyLogs"
+        >
+          <template #icon><Copy :size="14" /></template>
+        </LumiButton>
+        <LumiButton
+          variant="ghost"
+          size="sm"
+          icon-only
+          :class="['header-action-btn', { 'is-active': isExpanded }]"
+          :aria-label="isExpanded ? '退出全屏' : '全屏'"
+          @click="isExpanded = !isExpanded"
+        >
+          <template #icon>
+            <Maximize2 v-if="!isExpanded" :size="14" />
+            <Minimize2 v-else :size="14" />
+          </template>
+        </LumiButton>
       </div>
     </div>
 
@@ -247,9 +257,16 @@ onBeforeUnmount(() => {
           </div>
           <span class="record-count">{{ filteredCommands.length }} 条记录</span>
         </div>
-        <button class="action-btn ghost" @click="fetchCommands" :disabled="isLoadingCommands" title="刷新">
-          <RefreshCw :size="14" :class="{ spinning: isLoadingCommands }" />
-        </button>
+        <LumiButton
+          variant="ghost"
+          size="sm"
+          icon-only
+          :loading="isLoadingCommands"
+          aria-label="刷新"
+          @click="fetchCommands"
+        >
+          <template #icon><RefreshCw :size="14" /></template>
+        </LumiButton>
       </div>
 
       <div class="console-body">
@@ -257,7 +274,7 @@ onBeforeUnmount(() => {
           <div v-for="cmd in filteredCommands" :key="cmd.id" :class="['cmd-card', cmd.status]">
             <div class="cmd-card-header">
               <div class="cmd-card-left">
-                <component :is="cmd.status === 'success' ? CheckCircle2 : cmd.status === 'failed' ? XCircle : Play" :size="14" class="cmd-status-icon" />
+                <component :is="cmd.status === 'success' ? CheckCircle2 : cmd.status === 'failed' ? XCircle : Play" :size="14" class="cmd-status-icon shrink-0" />
                 <code class="cmd-text">{{ cmd.command }}</code>
               </div>
               <span :class="['cmd-badge', cmd.status]">{{ statusLabel(cmd.status) }}</span>
@@ -266,7 +283,7 @@ onBeforeUnmount(() => {
               <p class="cmd-desc">{{ cmd.description }}</p>
               <div class="cmd-meta">
                 <span class="meta-item"><User :size="12" />{{ cmd.executed_by }}</span>
-                <span class="meta-item"><Clock :size="12" />{{ formatTimestamp(cmd.started_at) }}</span>
+                <span class="meta-item"><Clock :size="12" />{{ formatTime(cmd.started_at, { seconds: true }) }}</span>
                 <span class="meta-item"><Clock :size="12" />{{ formatDuration(cmd.duration_ms) }}</span>
                 <span v-if="cmd.exit_code !== null" class="meta-item">exit: {{ cmd.exit_code }}</span>
               </div>
@@ -284,10 +301,12 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
-          <div v-if="filteredCommands.length === 0 && !isLoadingCommands" class="log-empty">
-            <Terminal :size="24" />
-            <span>暂无命令记录</span>
-          </div>
+          <LumiEmptyState
+            v-if="filteredCommands.length === 0 && !isLoadingCommands"
+            icon="file"
+            title="暂无命令记录"
+            size="md"
+          />
         </div>
       </div>
     </template>
@@ -324,13 +343,26 @@ onBeforeUnmount(() => {
           <span class="record-count">{{ filteredLogs.length }} 条日志</span>
         </div>
         <div class="toolbar-right">
-          <button class="action-btn ghost" @click="fetchLogs" :disabled="isLoadingLogs" title="刷新">
-            <RefreshCw :size="14" :class="{ spinning: isLoadingLogs }" />
-          </button>
-          <button :class="['upload-btn', { uploading: isUploading }]" @click="uploadLogs" :disabled="isUploading || filteredLogs.length === 0" title="上传日志">
-            <Upload :size="14" />
+          <LumiButton
+            variant="ghost"
+            size="sm"
+            icon-only
+            :loading="isLoadingLogs"
+            aria-label="刷新"
+            @click="fetchLogs"
+          >
+            <template #icon><RefreshCw :size="14" /></template>
+          </LumiButton>
+          <LumiButton
+            variant="primary"
+            size="sm"
+            :loading="isUploading"
+            :disabled="filteredLogs.length === 0"
+            @click="uploadLogs"
+          >
+            <template #icon><Upload :size="14" /></template>
             <span>{{ isUploading ? '上传中...' : '上传日志' }}</span>
-          </button>
+          </LumiButton>
         </div>
       </div>
       <div v-if="uploadResult" :class="['upload-toast', { error: uploadResult.includes('失败') }]">
@@ -340,8 +372,8 @@ onBeforeUnmount(() => {
       <div class="console-body">
         <div ref="logListRef" class="log-list">
           <div v-for="log in filteredLogs" :key="log.id" :class="['log-entry', log.level]">
-            <span class="log-time">{{ formatTimestamp(log.timestamp) }}</span>
-            <component :is="levelIcon(log.level)" :size="13" class="log-level-icon" />
+            <span class="log-time">{{ formatTime(log.timestamp, { seconds: true }) }}</span>
+            <component :is="levelIcon(log.level)" :size="13" class="log-level-icon shrink-0" />
             <span :class="['log-source', log.source]">
               <Monitor v-if="log.source === 'frontend'" :size="11" />
               <Server v-else :size="11" />
@@ -350,32 +382,39 @@ onBeforeUnmount(() => {
             <span v-if="log.module" class="log-module">{{ log.module }}</span>
             <span class="log-message">{{ log.message }}</span>
           </div>
-          <div v-if="filteredLogs.length === 0 && !isLoadingLogs" class="log-empty">
-            <Terminal :size="24" />
-            <span>暂无日志</span>
-          </div>
+          <LumiEmptyState
+            v-if="filteredLogs.length === 0 && !isLoadingLogs"
+            icon="file"
+            title="暂无日志"
+            size="md"
+          />
         </div>
       </div>
     </template>
 
     <div v-if="activeTab === 'console'" class="command-bar">
       <ChevronRight :size="16" class="prompt-icon" />
-      <input
+      <LumiInput
         v-model="commandInput"
         type="text"
         class="command-input"
         :placeholder="isExecuting ? '执行中...' : '输入命令 (help 查看帮助, 受白名单限制)...'"
         :disabled="isExecuting"
-        @keydown.enter="handleCommand"
+        @enter="handleCommand"
       />
-      <button
-        :class="['run-btn', { active: isExecuting }]"
+      <LumiButton
+        :variant="isExecuting ? 'danger' : 'primary'"
+        size="sm"
+        icon-only
         :disabled="isExecuting"
+        aria-label="执行命令"
         @click="handleCommand"
       >
-        <Square v-if="isExecuting" :size="14" />
-        <Play v-else :size="14" />
-      </button>
+        <template #icon>
+          <Square v-if="isExecuting" :size="14" />
+          <Play v-else :size="14" />
+        </template>
+      </LumiButton>
     </div>
     <Transition name="fade">
       <div v-if="executeResult" :class="['execute-toast', { error: executeResult.includes('失败') }]">
@@ -390,8 +429,8 @@ onBeforeUnmount(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 24px 28px;
-  gap: 12px;
+  padding: var(--space-6) var(--space-7);
+  gap: var(--space-3);
   overflow: hidden;
 }
 
@@ -402,53 +441,36 @@ onBeforeUnmount(() => {
 }
 
 .header-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
 .header-desc {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .header-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
-.action-btn.ghost {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+:deep(.header-action-btn.is-active) {
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
 }
 
-.action-btn.ghost:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-}
-
-.action-btn.ghost:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.action-btn.ghost.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
+:deep(.header-action-btn.is-active:hover:not(:disabled)) {
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand-hover);
 }
 
 .tab-bar {
   display: flex;
-  gap: 4px;
-  padding: 4px;
+  gap: var(--space-1);
+  padding: var(--space-1);
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
   width: fit-content;
@@ -457,11 +479,11 @@ onBeforeUnmount(() => {
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 20px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-5);
   border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -469,7 +491,7 @@ onBeforeUnmount(() => {
 
 .tab-btn.active {
   background: var(--surface);
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
   box-shadow: var(--shadow-xs);
 }
 
@@ -477,20 +499,20 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-shrink: 0;
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .filter-group {
@@ -500,11 +522,11 @@ onBeforeUnmount(() => {
 .filter-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
   background: var(--surface);
   border: 1px solid var(--border-light);
@@ -513,17 +535,17 @@ onBeforeUnmount(() => {
 }
 
 .filter-btn:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
 }
 
 .filter-dropdown {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + var(--space-1));
   left: 0;
-  z-index: 10;
+  z-index: var(--z-sticky);
   min-width: 140px;
-  padding: 4px;
+  padding: var(--space-1);
   background: var(--surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
@@ -533,11 +555,11 @@ onBeforeUnmount(() => {
 .filter-option {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   width: 100%;
-  padding: 7px 12px;
-  border-radius: 4px;
-  font-size: 12px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-sm);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -548,15 +570,15 @@ onBeforeUnmount(() => {
 }
 
 .filter-option.active {
-  color: var(--lumi-primary);
-  font-weight: 600;
+  color: var(--lumi-brand);
+  font-weight: var(--font-semibold);
 }
 
 .level-select {
-  padding: 6px 10px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
   background: var(--surface);
   border: 1px solid var(--border-light);
@@ -565,11 +587,11 @@ onBeforeUnmount(() => {
 }
 
 .level-select:hover {
-  border-color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
 }
 
 .record-count {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -585,10 +607,10 @@ onBeforeUnmount(() => {
 .cmd-list {
   height: 100%;
   overflow-y: auto;
-  padding: 12px 16px;
+  padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .cmd-card {
@@ -619,20 +641,16 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 14px;
+  padding: var(--space-3) var(--space-4);
   background: var(--bg-secondary);
 }
 
 .cmd-card-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
   flex: 1;
-}
-
-.cmd-status-icon {
-  flex-shrink: 0;
 }
 
 .cmd-card.success .cmd-status-icon {
@@ -648,8 +666,8 @@ onBeforeUnmount(() => {
 }
 
 .cmd-text {
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -657,15 +675,15 @@ onBeforeUnmount(() => {
 }
 
 .cmd-badge {
-  padding: 2px 10px;
+  padding: 2px var(--space-3);
   border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
   flex-shrink: 0;
 }
 
 .cmd-badge.success {
-  background: var(--task-green-soft);
+  background: var(--lumi-success-light);
   color: var(--lumi-success);
 }
 
@@ -675,33 +693,33 @@ onBeforeUnmount(() => {
 }
 
 .cmd-badge.running {
-  background: var(--task-yellow-soft);
+  background: var(--lumi-warning-light);
   color: var(--lumi-warning);
 }
 
 .cmd-card-body {
-  padding: 10px 14px;
+  padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .cmd-desc {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
 .cmd-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .meta-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
@@ -709,19 +727,19 @@ onBeforeUnmount(() => {
 .cmd-error {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 4px;
-  font-size: 11px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
 }
 
 .cmd-output {
-  background: var(--task-green-soft);
+  background: var(--lumi-success-light);
 }
 
 .cmd-output code {
   color: var(--lumi-success);
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
 }
 
 .cmd-error {
@@ -730,12 +748,12 @@ onBeforeUnmount(() => {
 
 .cmd-error code {
   color: var(--lumi-accent);
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
 }
 
 .output-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -743,48 +761,44 @@ onBeforeUnmount(() => {
 .cmd-rollback {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 4px;
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  font-size: 11px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-xs);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+  font-size: var(--text-xs);
 }
 
 .cmd-rollback code {
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
 }
 
 .log-list {
   height: 100%;
   overflow-y: auto;
-  padding: 12px 16px;
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-  font-size: 12px;
-  line-height: 1.8;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
 }
 
 .log-entry {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 2px 0;
-  border-radius: 4px;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-radius: var(--radius-xs);
 }
 
 .log-time {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   flex-shrink: 0;
   width: 70px;
 }
 
-.log-level-icon {
-  flex-shrink: 0;
-}
-
 .log-entry.info .log-level-icon {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .log-entry.warn .log-level-icon {
@@ -803,25 +817,25 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-weight: 600;
-  font-size: 11px;
+  font-weight: var(--font-semibold);
+  font-size: var(--text-xs);
   flex-shrink: 0;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
 }
 
 .log-source.frontend {
   color: var(--lumi-info);
-  background: var(--task-blue-soft);
+  background: var(--lumi-info-light);
 }
 
 .log-source.backend {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 .log-module {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   flex-shrink: 0;
   max-width: 120px;
@@ -839,50 +853,12 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.log-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 60px 0;
-  color: var(--text-muted);
-  font-family: var(--font-sans);
-}
-
-.upload-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 500;
-  color: white;
-  background: var(--lumi-primary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.upload-btn:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-}
-
-.upload-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.upload-btn.uploading {
-  background: var(--lumi-primary-soft);
-}
-
 .upload-toast {
-  padding: 8px 14px;
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 500;
-  background: var(--task-green-soft);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  background: var(--lumi-success-light);
   color: var(--lumi-success);
   transition: all var(--transition-fast);
   flex-shrink: 0;
@@ -896,8 +872,8 @@ onBeforeUnmount(() => {
 .command-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   background: var(--surface);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
@@ -905,60 +881,45 @@ onBeforeUnmount(() => {
 }
 
 .command-bar:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: var(--input-focus-ring);
 }
 
 .prompt-icon {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
   flex-shrink: 0;
 }
 
-.command-input {
+.command-bar :deep(.lumi-input-root) {
   flex: 1;
-  background: transparent;
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-  font-size: 13px;
-  color: var(--text-primary);
+  min-width: 0;
 }
 
-.command-input::placeholder {
+.command-bar :deep(.lumi-input) {
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.command-bar :deep(.lumi-input:focus) {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+}
+
+.command-bar :deep(.lumi-input::placeholder) {
   color: var(--text-muted);
 }
 
-.run-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-sm);
-  background: var(--lumi-primary);
-  color: white;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.run-btn:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-}
-
-.run-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.run-btn.active {
-  background: var(--lumi-accent);
-}
-
 .execute-toast {
-  padding: 8px 14px;
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 500;
-  background: var(--task-green-soft);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  background: var(--lumi-success-light);
   color: var(--lumi-success);
   transition: all var(--transition-fast);
   flex-shrink: 0;
@@ -971,7 +932,7 @@ onBeforeUnmount(() => {
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease-in-out;
+  transition: opacity var(--duration-fast) var(--ease-in-out);
 }
 
 .fade-enter-from,
@@ -983,8 +944,4 @@ onBeforeUnmount(() => {
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 </style>

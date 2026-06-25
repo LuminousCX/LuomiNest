@@ -253,7 +253,7 @@ const handleNavigate = (path: string) => {
 
 <style scoped>
 .sidebar-nav-panel {
-  width: 240px;
+  width: calc(var(--space-9) * 5);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -261,18 +261,18 @@ const handleNavigate = (path: string) => {
   flex-shrink: 0;
   overflow: hidden;
   position: relative;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width var(--transition-normal);
 }
 
 .sidebar-nav-panel.collapsed {
-  width: 52px;
+  width: calc(var(--space-8) + var(--space-3));
 }
 
 .sidebar-nav-panel::after {
   content: '';
   position: absolute;
-  top: 12px;
-  bottom: 12px;
+  top: var(--space-3);
+  bottom: var(--space-3);
   right: 0;
   width: 1px;
   background: var(--divider-vertical);
@@ -286,14 +286,14 @@ const handleNavigate = (path: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 10px;
+  padding: var(--space-3) var(--space-4) var(--space-2);
   flex-shrink: 0;
 }
 
 .sidebar-nav-panel.collapsed .nav-header {
   flex-direction: column;
-  gap: 8px;
-  padding: 14px 8px 10px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2) var(--space-2);
   align-items: center;
   justify-content: center;
 }
@@ -301,18 +301,18 @@ const handleNavigate = (path: string) => {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .brand-avatar {
-  width: 36px;
-  height: 36px;
+  width: var(--nav-item-height);
+  height: var(--nav-item-height);
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
+  background: var(--lumi-brand-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 3px 10px var(--lumi-primary-border);
+  box-shadow: var(--shadow-sm);
   color: var(--text-inverse);
 }
 
@@ -322,27 +322,27 @@ const handleNavigate = (path: string) => {
 }
 
 .brand-name {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
-  line-height: 1.2;
+  line-height: var(--leading-snug);
 }
 
 .brand-tag {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: var(--font-medium);
   letter-spacing: 0.3px;
 }
 
 .header-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .header-action-btn {
-  width: 32px;
-  height: 32px;
+  width: calc(var(--space-6) + var(--space-2));
+  height: calc(var(--space-6) + var(--space-2));
   border: none;
   background: var(--surface-hover);
   border-radius: var(--radius-md);
@@ -351,7 +351,7 @@ const handleNavigate = (path: string) => {
   justify-content: center;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: background 0.15s ease-in-out;
+  transition: background var(--transition-fast), color var(--transition-fast);
   position: relative;
 }
 
@@ -362,17 +362,17 @@ const handleNavigate = (path: string) => {
 
 .header-action-dot {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 6px;
-  height: 6px;
+  top: var(--radius-xs);
+  right: var(--radius-xs);
+  width: var(--radius-xs);
+  height: var(--radius-xs);
   background: var(--lumi-danger);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
 }
 
 .collapse-toggle-btn {
-  width: 28px;
-  height: 28px;
+  width: calc(var(--space-5) + var(--space-2));
+  height: calc(var(--space-5) + var(--space-2));
   border: none;
   background: transparent;
   border-radius: var(--radius-md);
@@ -381,7 +381,7 @@ const handleNavigate = (path: string) => {
   justify-content: center;
   cursor: pointer;
   color: var(--text-muted);
-  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .collapse-toggle-btn:hover {
@@ -394,9 +394,9 @@ const handleNavigate = (path: string) => {
 }
 
 .nav-search {
-  padding: 0 12px;
+  padding: 0 var(--space-3);
   position: relative;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .nav-search:focus-within .nav-search-icon {
@@ -405,7 +405,7 @@ const handleNavigate = (path: string) => {
 
 .nav-search-icon {
   position: absolute;
-  left: 20px;
+  left: var(--space-5);
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
@@ -414,12 +414,12 @@ const handleNavigate = (path: string) => {
 
 .nav-search-input {
   width: 100%;
-  height: 32px;
+  height: calc(var(--space-5) + var(--space-3));
   border: none;
   background: var(--surface-hover);
   border-radius: var(--radius-md);
-  padding: 0 32px 0 28px;
-  font-size: 12px;
+  padding: 0 var(--space-7) 0 calc(var(--space-6) + var(--space-1));
+  font-size: var(--text-sm);
   color: var(--text-primary);
   cursor: pointer;
 }
@@ -430,7 +430,7 @@ const handleNavigate = (path: string) => {
 
 .nav-search-sparkle {
   position: absolute;
-  right: 20px;
+  right: var(--space-5);
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
@@ -440,29 +440,29 @@ const handleNavigate = (path: string) => {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 0;
+  padding: var(--space-1) 0;
   scrollbar-width: thin;
 }
 
 .sidebar-nav-panel.collapsed .nav-content {
-  padding: 4px 0 0;
+  padding: var(--space-1) 0 0;
   overflow: visible;
 }
 
 .nav-section {
-  padding: 0 8px;
+  padding: 0 var(--space-2);
 }
 
 .nav-section + .nav-section {
-  margin-top: 4px;
-  padding-top: 4px;
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
   border-top: 1px solid var(--divider-horizontal);
 }
 
 .section-label {
-  padding: 10px 10px 6px;
-  font-size: 10px;
-  font-weight: 700;
+  padding: var(--space-2) var(--space-2) var(--radius-xs);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-bold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1.2px;
@@ -471,7 +471,7 @@ const handleNavigate = (path: string) => {
 }
 
 .nav-group {
-  margin-bottom: 2px;
+  margin-bottom: calc(var(--space-1) / 2);
 }
 
 .group-header {
@@ -479,49 +479,49 @@ const handleNavigate = (path: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-2);
   border: none;
   background: transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--nav-item-radius);
   cursor: pointer;
   color: var(--text-secondary);
-  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+  transition: background var(--transition-fast), color var(--transition-fast);
   position: relative;
   overflow: hidden;
 }
 
 .sidebar-nav-panel.collapsed .group-header {
-  padding: 8px 0;
+  padding: var(--space-2) 0;
   justify-content: center;
   border-radius: var(--radius-lg);
 }
 
 .group-header:hover {
-  background: var(--surface-hover);
+  background: var(--nav-item-hover-bg);
   color: var(--text-primary);
 }
 
 .group-header.active {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
+  color: var(--nav-item-active-color);
+  background: var(--nav-item-active-bg);
 }
 
 .group-header.active::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--lumi-primary);
+  top: var(--radius-xs);
+  bottom: var(--radius-xs);
+  width: calc(var(--space-1) / 1.5);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: var(--nav-item-active-color);
   opacity: 0.7;
 }
 
 .group-header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   position: relative;
   z-index: 1;
 }
@@ -536,15 +536,15 @@ const handleNavigate = (path: string) => {
 }
 
 .group-label {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .group-header.active .group-label {
-  font-weight: 600;
+  font-weight: var(--font-semibold);
 }
 
 .group-chevron {
@@ -552,7 +552,7 @@ const handleNavigate = (path: string) => {
   z-index: 1;
   flex-shrink: 0;
   opacity: 0.5;
-  transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
 }
 
 .group-header:hover .group-chevron {
@@ -560,7 +560,7 @@ const handleNavigate = (path: string) => {
 }
 
 .group-header.active .group-chevron {
-  color: var(--lumi-primary);
+  color: var(--nav-item-active-color);
   opacity: 0.8;
 }
 
@@ -569,24 +569,24 @@ const handleNavigate = (path: string) => {
 }
 
 .group-children {
-  padding: 2px 0 2px 0;
+  padding: calc(var(--space-1) / 2) 0;
 }
 
 .tree-child {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px 6px 22px;
+  gap: var(--space-2);
+  padding: var(--radius-xs) var(--space-2) var(--radius-xs) var(--space-5);
   cursor: pointer;
-  border-radius: var(--radius-md);
+  border-radius: var(--nav-item-radius);
   color: var(--text-muted);
-  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+  transition: background var(--transition-fast), color var(--transition-fast);
   position: relative;
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--text-base);
   opacity: 0;
-  transform: translateY(-4px);
-  animation: tree-item-in 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  transform: translateY(calc(var(--space-1) * -1));
+  animation: tree-item-in var(--duration-leave) var(--ease-default) forwards;
 }
 
 @keyframes tree-item-in {
@@ -596,64 +596,70 @@ const handleNavigate = (path: string) => {
   }
 }
 
-.tree-child:nth-child(1) { animation-delay: 0.02s; }
-.tree-child:nth-child(2) { animation-delay: 0.04s; }
-.tree-child:nth-child(3) { animation-delay: 0.06s; }
-.tree-child:nth-child(4) { animation-delay: 0.08s; }
-.tree-child:nth-child(5) { animation-delay: 0.10s; }
-.tree-child:nth-child(6) { animation-delay: 0.12s; }
+.tree-child:nth-child(1) { animation-delay: calc(var(--duration-fast) * 0.13); }
+.tree-child:nth-child(2) { animation-delay: calc(var(--duration-fast) * 0.27); }
+.tree-child:nth-child(3) { animation-delay: calc(var(--duration-fast) * 0.4); }
+.tree-child:nth-child(4) { animation-delay: calc(var(--duration-fast) * 0.53); }
+.tree-child:nth-child(5) { animation-delay: calc(var(--duration-fast) * 0.67); }
+.tree-child:nth-child(6) { animation-delay: calc(var(--duration-fast) * 0.8); }
 
 .tree-child:hover {
-  background: var(--surface-hover);
+  background: var(--nav-item-hover-bg);
   color: var(--text-primary);
 }
 
 .tree-child.active {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
-  font-weight: 500;
+  color: var(--nav-item-active-color);
+  background: var(--nav-item-active-bg);
+  font-weight: var(--font-medium);
 }
 
 .tree-child.active .child-icon {
-  color: var(--lumi-primary);
+  color: var(--nav-item-active-color);
 }
 
 .tree-line {
   position: absolute;
-  left: 12px;
+  left: var(--space-3);
   top: 0;
   bottom: 0;
-  width: 12px;
+  width: var(--space-3);
   pointer-events: none;
+}
+
+.tree-line::before {
+  content: '';
+  position: absolute;
+  left: var(--space-1);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
 }
 
 .tree-branch {
   position: absolute;
-  left: 4px;
-  top: 0;
-  height: 50%;
-  width: 1px;
+  left: var(--space-1);
+  top: 50%;
+  width: calc(var(--space-1) + 1px);
+  height: 1px;
   background: var(--border);
-}
-
-.tree-child.last .tree-branch {
-  height: 50%;
+  transform: translateY(-50%);
 }
 
 .tree-node {
   position: absolute;
-  left: 4px;
+  left: calc(var(--space-1) + var(--space-1) + 1px);
   top: 50%;
-  width: 5px;
-  height: 1px;
+  width: calc(var(--space-1) + 1px);
+  height: calc(var(--space-1) + 1px);
+  border-radius: var(--radius-full);
   background: var(--border);
+  transform: translate(-50%, -50%);
 }
 
-.tree-child.last .tree-node {
-  top: 0;
-  height: 50%;
-  width: 1px;
-  left: 4px;
+.tree-child.last .tree-line::before {
+  bottom: 50%;
 }
 
 .child-icon {
@@ -662,7 +668,7 @@ const handleNavigate = (path: string) => {
 }
 
 .child-label {
-  font-size: 13px;
+  font-size: var(--text-base);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -671,44 +677,44 @@ const handleNavigate = (path: string) => {
 .nav-items {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 
 .nav-item {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
   border: none;
   background: transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--nav-item-radius);
   cursor: pointer;
   color: var(--text-muted);
-  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+  transition: background var(--transition-fast), color var(--transition-fast);
   position: relative;
   overflow: hidden;
 }
 
 .nav-item:hover {
-  background: var(--surface-hover);
+  background: var(--nav-item-hover-bg);
   color: var(--text-primary);
 }
 
 .nav-item.active {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
+  color: var(--nav-item-active-color);
+  background: var(--nav-item-active-bg);
 }
 
 .nav-item.active::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--lumi-primary);
+  top: var(--radius-xs);
+  bottom: var(--radius-xs);
+  width: calc(var(--space-1) / 1.5);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: var(--nav-item-active-color);
   opacity: 0.7;
 }
 
@@ -719,7 +725,7 @@ const handleNavigate = (path: string) => {
 }
 
 .nav-item-label {
-  font-size: 13px;
+  font-size: var(--text-base);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -728,18 +734,18 @@ const handleNavigate = (path: string) => {
 }
 
 .nav-item-badge {
-  font-size: 10px;
-  padding: 1px 6px;
+  font-size: var(--text-2xs);
+  padding: var(--badge-padding);
   border-radius: var(--radius-full);
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
   color: var(--text-inverse);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   position: relative;
   z-index: 1;
 }
 
 .nav-footer {
-  padding: 8px;
+  padding: var(--space-2);
   border-top: 1px solid var(--divider-horizontal);
   flex-shrink: 0;
 }
@@ -753,33 +759,33 @@ const handleNavigate = (path: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--space-2);
+  padding: var(--space-2);
   border: none;
   background: transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--nav-item-radius);
   cursor: pointer;
   color: var(--text-muted);
-  font-size: 12px;
-  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+  font-size: var(--text-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .sidebar-nav-panel.collapsed .footer-btn {
-  padding: 8px 0;
+  padding: var(--space-2) 0;
 }
 
 .footer-btn:hover {
-  background: var(--surface-hover);
+  background: var(--nav-item-hover-bg);
   color: var(--text-primary);
 }
 
 /* Tree expand transition */
 .tree-expand-enter-active {
-  animation: tree-expand-in 0.2s ease-in-out;
+  animation: tree-expand-in var(--duration-leave) var(--ease-in-out);
 }
 
 .tree-expand-leave-active {
-  animation: tree-expand-out 0.15s ease-in-out;
+  animation: tree-expand-out var(--duration-fast) var(--ease-in-out);
 }
 
 @keyframes tree-expand-in {
@@ -791,4 +797,15 @@ const handleNavigate = (path: string) => {
   from { opacity: 1; max-height: 300px; }
   to { opacity: 0; max-height: 0; }
 }
+
+/* Focus visible */
+.header-action-btn:focus-visible,
+.collapse-toggle-btn:focus-visible,
+.group-header:focus-visible,
+.nav-item:focus-visible,
+.footer-btn:focus-visible {
+  outline: var(--space-1) solid var(--focus-ring);
+  outline-offset: calc(var(--space-1) / 2);
+}
+
 </style>

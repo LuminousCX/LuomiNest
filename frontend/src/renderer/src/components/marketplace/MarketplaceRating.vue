@@ -42,7 +42,7 @@ const selectStar = (index: number) => {
 <style scoped>
 .market-rating {
   display: flex;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 
 .star-btn {
@@ -63,7 +63,8 @@ const selectStar = (index: number) => {
 }
 
 .star-icon.filled {
-  color: var(--lumi-star);
-  fill: var(--lumi-star);
+  color: var(--lumi-warning);
+  fill: var(--lumi-warning);
 }
+
 </style>

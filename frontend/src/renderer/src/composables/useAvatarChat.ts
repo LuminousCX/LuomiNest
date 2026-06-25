@@ -7,6 +7,10 @@ import type { ChatStreamChunk } from '../types'
 export interface AvatarChatOptions {
   /** Voice identifier passed to the TTS backend (e.g. 'zh-CN-XiaoxiaoNeural'). */
   voice: () => string
+  /** TTS engine id passed to the backend (e.g. 'edge-tts' / 'auto'). */
+  engine: () => string
+  /** Full TTS config for cloud engines (model / speed / apiKey / baseUrl). */
+  ttsConfig: () => { model?: string; speed?: number; apiKey?: string; baseUrl?: string }
   /** Drive avatar expression by semantic emotion id (e.g. 'happy'). */
   driveEmotion: (emotionId: string) => void
   /** Drive avatar lip sync by RMS amplitude [0,1]. */
@@ -185,10 +189,19 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
     isSynthesizing.value = true
 
     try {
+      const cfg = options.ttsConfig()
       const response = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim(), voice: options.voice() }),
+        body: JSON.stringify({
+          text: text.trim(),
+          voice: options.voice(),
+          engine: options.engine(),
+          model: cfg.model || '',
+          speed: cfg.speed ?? 1.0,
+          apiKey: cfg.apiKey || '',
+          baseUrl: cfg.baseUrl || '',
+        }),
         signal: controller.signal,
       })
 

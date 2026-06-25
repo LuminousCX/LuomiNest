@@ -5,6 +5,9 @@ import type { MarketplaceReview } from '../../types/marketplace'
 import MarketplaceRating from './MarketplaceRating.vue'
 import { useMarketplaceStore } from '../../stores/marketplace'
 import { formatDateRelative as formatDate } from '../../utils/format'
+import LumiButton from '../../components/common/LumiButton.vue'
+import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
+import LumiInput from '../../components/common/LumiInput.vue'
 
 const props = defineProps<{
   itemId: string
@@ -69,7 +72,6 @@ function submitReply(reviewId: string) {
   replyContent.value = ''
   showReplyInput.value = null
 }
-
 </script>
 
 <template>
@@ -105,10 +107,10 @@ function submitReply(reviewId: string) {
           @click="sortBy = 'rating'"
         >评分</button>
       </div>
-      <button class="write-review-btn" @click="showReviewForm = !showReviewForm">
+      <LumiButton variant="primary" size="sm" @click="showReviewForm = !showReviewForm">
         <MessageCircle :size="14" />
         写评价
-      </button>
+      </LumiButton>
     </div>
 
     <Transition name="review-form">
@@ -119,20 +121,23 @@ function submitReply(reviewId: string) {
         </div>
         <textarea
           v-model="newReviewContent"
-          class="form-textarea"
+          class="lumi-textarea review-textarea"
           placeholder="分享你的使用体验..."
           rows="3"
         ></textarea>
         <div class="form-actions">
-          <button class="form-cancel" @click="showReviewForm = false">取消</button>
-          <button
-            :class="['form-submit', { disabled: !newReviewContent.trim() }]"
+          <LumiButton variant="ghost" size="sm" @click="showReviewForm = false">
+            取消
+          </LumiButton>
+          <LumiButton
+            variant="primary"
+            size="sm"
             :disabled="!newReviewContent.trim()"
             @click="submitReview"
           >
             <Send :size="13" />
             发布
-          </button>
+          </LumiButton>
         </div>
       </div>
     </Transition>
@@ -169,28 +174,32 @@ function submitReply(reviewId: string) {
 
         <Transition name="reply-form">
           <div v-if="showReplyInput === review.id" class="reply-form">
-            <input
+            <LumiInput
               v-model="replyContent"
-              type="text"
-              class="reply-input"
+              size="sm"
               placeholder="写回复..."
-              @keyup.enter="submitReply(review.id)"
+              @enter="submitReply(review.id)"
             />
-            <button
-              class="reply-submit"
+            <LumiButton
+              variant="outline"
+              size="sm"
+              icon-only
+              aria-label="发送回复"
               :disabled="!replyContent.trim()"
               @click="submitReply(review.id)"
             >
               <Send :size="12" />
-            </button>
+            </LumiButton>
           </div>
         </Transition>
       </div>
 
-      <div v-if="reviews.length === 0" class="empty-reviews">
-        <MessageCircle :size="32" />
-        <p>暂无评价，快来写第一条吧！</p>
-      </div>
+      <LumiEmptyState
+        v-if="reviews.length === 0"
+        :icon="MessageCircle"
+        title="暂无评价"
+        description="快来写第一条吧！"
+      />
     </div>
   </div>
 </template>
@@ -199,13 +208,13 @@ function submitReply(reviewId: string) {
 .market-reviews {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .reviews-summary {
   display: flex;
-  gap: 24px;
-  padding: 20px;
+  gap: var(--space-6);
+  padding: var(--space-5);
   background: var(--workspace-panel);
   border-radius: var(--radius-lg);
 }
@@ -214,19 +223,19 @@ function submitReply(reviewId: string) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  min-width: 100px;
+  gap: var(--space-2);
+  min-width: calc(var(--space-8) * 2 + var(--space-5));
 }
 
 .rating-number {
-  font-size: 32px;
-  font-weight: 700;
+  font-size: var(--text-4xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
-  line-height: 1;
+  line-height: var(--leading-none);
 }
 
 .rating-count {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
@@ -234,42 +243,42 @@ function submitReply(reviewId: string) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   justify-content: center;
 }
 
 .rating-bar-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .bar-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  width: 12px;
+  width: var(--space-3);
   text-align: right;
 }
 
 .bar-track {
   flex: 1;
-  height: 6px;
-  border-radius: 3px;
+  height: var(--radius-xs);
+  border-radius: var(--radius-xs);
   background: var(--border-light);
   overflow: hidden;
 }
 
 .bar-fill {
   height: 100%;
-  border-radius: 3px;
-  background: var(--lumi-star);
+  border-radius: var(--radius-xs);
+  background: var(--lumi-warning);
   transition: width var(--transition-normal);
 }
 
 .bar-count {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  width: 20px;
+  width: var(--space-5);
 }
 
 .reviews-actions {
@@ -280,17 +289,17 @@ function submitReply(reviewId: string) {
 
 .sort-toggle {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   background: var(--workspace-panel);
   border-radius: var(--radius-full);
-  padding: 3px;
+  padding: var(--space-1);
 }
 
 .sort-btn {
-  padding: 5px 12px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-muted);
   transition: all var(--transition-fast);
 }
@@ -301,114 +310,45 @@ function submitReply(reviewId: string) {
   box-shadow: var(--shadow-xs);
 }
 
-.write-review-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-inverse);
-  background: var(--lumi-primary);
-  transition: all var(--transition-fast);
-}
-
-.write-review-btn:hover {
-  background: var(--lumi-primary-hover);
-}
-
 .review-form {
-  padding: 16px;
+  padding: var(--space-5);
   background: var(--workspace-panel);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .form-rating {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .form-label {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
 }
 
-.form-textarea {
-  width: 100%;
-  padding: 10px 14px;
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  color: var(--text-primary);
-  resize: vertical;
-  min-height: 60px;
-  transition: border-color var(--transition-fast);
-}
-
-.form-textarea:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
-}
-
-.form-textarea::placeholder {
-  color: var(--text-muted);
+.review-textarea {
+  min-height: calc(var(--space-8) + var(--space-5));
 }
 
 .form-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   justify-content: flex-end;
-}
-
-.form-cancel {
-  padding: 6px 14px;
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.form-cancel:hover {
-  background: var(--surface-hover);
-}
-
-.form-submit {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 16px;
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-inverse);
-  background: var(--lumi-primary);
-  transition: all var(--transition-fast);
-}
-
-.form-submit:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-}
-
-.form-submit.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .reviews-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-5);
 }
 
 .review-item {
-  padding: 16px;
+  padding: var(--space-5);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   border-radius: var(--radius-lg);
@@ -418,26 +358,26 @@ function submitReply(reviewId: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-3);
 }
 
 .review-user {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .user-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+  width: var(--space-7);
+  height: var(--space-7);
+  border-radius: var(--radius-full);
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
 }
 
 .user-info {
@@ -446,30 +386,30 @@ function submitReply(reviewId: string) {
 }
 
 .user-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
 }
 
 .review-date {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .review-content {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 8px;
+  line-height: var(--leading-relaxed);
+  margin-bottom: var(--space-2);
 }
 
 .review-interactions {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .reply-btn {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   transition: color var(--transition-fast);
 }
@@ -479,16 +419,16 @@ function submitReply(reviewId: string) {
 }
 
 .replies-list {
-  margin-top: 12px;
-  padding-left: 16px;
-  border-left: 2px solid var(--border-light);
+  margin-top: var(--space-3);
+  padding-left: var(--space-4);
+  border-left: calc(var(--space-1) / 2) solid var(--border-light);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .reply-item {
-  padding: 10px;
+  padding: var(--space-3);
   background: var(--workspace-panel);
   border-radius: var(--radius-md);
 }
@@ -496,105 +436,54 @@ function submitReply(reviewId: string) {
 .reply-user {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
 .reply-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: var(--radius-full);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
 }
 
 .reply-name {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
 }
 
 .reply-date {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .reply-content {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
 }
 
 .reply-form {
   display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.reply-input {
-  flex: 1;
-  padding: 8px 12px;
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  color: var(--text-primary);
-  transition: border-color var(--transition-fast);
-}
-
-.reply-input:focus {
-  border-color: var(--lumi-primary);
-}
-
-.reply-input::placeholder {
-  color: var(--text-muted);
-}
-
-.reply-submit {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--lumi-primary);
-  transition: all var(--transition-fast);
-}
-
-.reply-submit:hover:not(:disabled) {
-  background: var(--lumi-primary-light);
-}
-
-.reply-submit:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.empty-reviews {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 40px 0;
-  color: var(--text-muted);
-}
-
-.empty-reviews p {
-  font-size: 13px;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
 .review-form-enter-active,
 .reply-form-enter-active {
-  animation: lumi-fade-in 0.25s ease-out;
+  animation: lumi-fade-in var(--duration-normal) var(--ease-out-expo);
 }
 
 .review-form-leave-active,
 .reply-form-leave-active {
-  animation: lumi-fade-in 0.15s ease-out reverse;
+  animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
 }
+
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   MessageSquare,
@@ -12,10 +12,14 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-vue-next'
+import LumiButton from './common/LumiButton.vue'
+import LumiEmptyState from './common/LumiEmptyState.vue'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
 import { useChatTrashStore } from '../stores/chat-trash'
+import { useDebouncedSearch } from '../composables/useDebouncedSearch'
 import type { ConversationListItem, ConversationSearchResult } from '../types'
+import { formatDateCalendar } from '../utils/format'
 
 defineProps<{
   trashCount: number
@@ -31,29 +35,11 @@ const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
 const searchQuery = ref('')
-const searchResults = ref<ConversationSearchResult[]>([])
-const isSearching = ref(false)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-let searchSeq = 0
-
-watch(searchQuery, (q) => {
-  if (searchTimer) clearTimeout(searchTimer)
-  if (!q.trim()) {
-    searchResults.value = []
-    isSearching.value = false
-    return
-  }
-  isSearching.value = true
-  searchSeq++
-  const currentSeq = searchSeq
-  searchTimer = setTimeout(async () => {
-    const results = await chatStore.searchConversations(q)
-    if (currentSeq === searchSeq) {
-      searchResults.value = results
-      isSearching.value = false
-    }
-  }, 300)
-})
+const { results: searchResults, isSearching } = useDebouncedSearch<ConversationSearchResult[]>(
+  searchQuery,
+  (q) => chatStore.searchConversations(q),
+  300,
+)
 
 const isSearchMode = computed(() => searchQuery.value.trim().length > 0)
 
@@ -86,23 +72,6 @@ const timeGroups = computed<TimeGroup[]>(() => {
 
   return groups.filter(g => g.items.length > 0)
 })
-
-const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-
-const formatTime = (dateStr: string) => {
-  const d = new Date(dateStr)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
-  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-
-  if (diffDays <= 0) return time
-  if (diffDays === 1) return `昨天 ${time}`
-  if (diffDays <= 7) return `${WEEKDAYS[d.getDay()]} ${time}`
-  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
-}
 
 const highlightSnippet = (snippet: string): string => {
   if (!snippet) return ''
@@ -245,10 +214,12 @@ const handleOpenTrash = () => {
         <input v-model="searchQuery" type="text" placeholder="搜索历史记录..." class="search-input" />
       </div>
       <div class="panel-header-actions">
-        <button class="new-conv-btn" title="创建新对话" @click="handleNewConversation">
-          <Plus :size="15" />
-          <span>创建新对话</span>
-        </button>
+        <LumiButton variant="primary" size="sm" block @click="handleNewConversation">
+          <template #icon>
+            <Plus :size="15" />
+          </template>
+          创建新对话
+        </LumiButton>
         <button
           :class="['batch-toggle-btn', { active: batchMode }]"
           title="批量操作"
@@ -262,15 +233,17 @@ const handleOpenTrash = () => {
     <div v-if="batchMode" class="batch-toolbar">
       <button class="batch-action-btn" @click="selectAll">全选</button>
       <span class="batch-count">已选 {{ selectedIds.size }} 项</span>
-      <button
-        :class="['batch-delete-btn', { disabled: selectedIds.size === 0 }]"
+      <LumiButton
+        variant="danger"
+        size="sm"
         :disabled="selectedIds.size === 0"
-        title="批量删除"
         @click="handleBatchDelete"
       >
-        <Trash2 :size="13" />
+        <template #icon>
+          <Trash2 :size="13" />
+        </template>
         删除
-      </button>
+      </LumiButton>
     </div>
 
     <div class="history-list">
@@ -293,10 +266,7 @@ const handleOpenTrash = () => {
               <span class="history-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
             </div>
           </div>
-          <div v-if="searchResults.length === 0" class="history-empty">
-            <MessageSquare :size="24" />
-            <span>未找到匹配的会话</span>
-          </div>
+          <LumiEmptyState v-if="searchResults.length === 0" :icon="MessageSquare" title="未找到匹配的会话" size="sm" />
         </template>
       </template>
 
@@ -334,7 +304,7 @@ const handleOpenTrash = () => {
                 </template>
                 <template v-else>
                   <span class="history-item-title">{{ conv.title }}</span>
-                  <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
+                  <span class="history-item-time">{{ formatDateCalendar(conv.updated_at) }}</span>
                 </template>
               </div>
               <template v-if="!batchMode">
@@ -349,10 +319,7 @@ const handleOpenTrash = () => {
           </div>
         </template>
 
-        <div v-if="timeGroups.length === 0" class="history-empty">
-          <MessageSquare :size="24" />
-          <span>暂无历史记录</span>
-        </div>
+        <LumiEmptyState v-if="timeGroups.length === 0" :icon="MessageSquare" title="暂无历史记录" size="sm" />
       </template>
     </div>
 
@@ -366,25 +333,25 @@ const handleOpenTrash = () => {
 
 <style scoped>
 .panel-header {
-  padding: 12px 14px 8px;
+  padding: var(--space-3) var(--space-4) var(--space-2);
 }
 
 .panel-header-actions {
   display: flex;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
 }
 
-.panel-header-actions .new-conv-btn {
+.panel-header-actions .lumi-btn {
   flex: 1;
 }
 
 .search-box {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  height: 48px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  height: calc(var(--space-8) + var(--space-2));
   background: var(--surface);
   border-radius: var(--radius-md);
   border: 1px solid transparent;
@@ -393,8 +360,8 @@ const handleOpenTrash = () => {
 }
 
 .search-box:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  border-color: var(--lumi-brand);
+  box-shadow: var(--input-focus-ring);
 }
 
 .search-icon {
@@ -408,130 +375,87 @@ const handleOpenTrash = () => {
   background: transparent;
   border: none;
   outline: none;
-  font-size: 13px;
-  color: var(--text-primary);
+  font-size: var(--text-base);
+  color: var(--text);
 }
 
 .search-input::placeholder {
   color: var(--text-muted);
 }
 
-.new-conv-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: none;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: background 0.15s ease-in-out;
-}
-
-.new-conv-btn:hover {
-  background: var(--lumi-primary-hover);
-}
-
 .batch-toggle-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: var(--btn-height-md);
+  height: var(--btn-height-md);
   border: none;
   background: var(--surface-hover);
   color: var(--text-muted);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .batch-toggle-btn:hover {
   background: var(--surface-active);
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .batch-toggle-btn.active {
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
   color: var(--text-inverse);
 }
 
 .batch-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--divider-horizontal);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .batch-action-btn {
-  padding: 4px 10px;
-  border: 1px solid var(--divider-horizontal);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-light);
   background: var(--surface);
   color: var(--text-secondary);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s ease-in-out;
+  font-size: var(--text-sm);
+  transition: all var(--transition-fast);
 }
 
 .batch-action-btn:hover {
   background: var(--surface-hover);
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
 }
 
 .batch-count {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   flex: 1;
-}
-
-.batch-delete-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border: none;
-  background: var(--color-danger);
-  color: var(--text-inverse);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 12px;
-  transition: opacity 0.15s ease-in-out;
-}
-
-.batch-delete-btn:hover {
-  opacity: 0.85;
-}
-
-.batch-delete-btn.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .history-list {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
 }
 
 .time-group {
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .time-group-label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  font-size: 11px;
-  font-weight: 600;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -541,11 +465,11 @@ const handleOpenTrash = () => {
 .history-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.15s ease-in-out;
+  transition: background var(--transition-fast);
   position: relative;
 }
 
@@ -554,20 +478,20 @@ const handleOpenTrash = () => {
 }
 
 .history-item.active {
-  background: var(--lumi-primary-soft);
+  background: var(--lumi-brand-light);
 }
 
 .history-item-indicator {
-  width: 3px;
-  height: 16px;
-  border-radius: 2px;
+  width: calc(var(--space-1) / 1.5);
+  height: var(--space-4);
+  border-radius: calc(var(--space-1) / 2);
   background: transparent;
   flex-shrink: 0;
-  transition: background 0.15s ease-in-out;
+  transition: background var(--transition-fast);
 }
 
 .history-item.active .history-item-indicator {
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
 }
 
 .history-item-icon {
@@ -576,7 +500,7 @@ const handleOpenTrash = () => {
 }
 
 .history-item.active .history-item-icon {
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .history-item-content {
@@ -584,29 +508,29 @@ const handleOpenTrash = () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 
 .history-item-title {
-  font-size: 13px;
-  color: var(--text-primary);
+  font-size: var(--text-base);
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .history-item.active .history-item-title {
-  color: var(--lumi-primary);
-  font-weight: 500;
+  color: var(--lumi-brand);
+  font-weight: var(--font-medium);
 }
 
 .history-item-time {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .history-item-snippet {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -614,25 +538,25 @@ const handleOpenTrash = () => {
 }
 
 .history-item-snippet :deep(mark) {
-  background: var(--lumi-primary-soft);
-  color: var(--lumi-primary);
-  padding: 0 1px;
-  border-radius: 2px;
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+  padding: 0 calc(var(--space-1) / 4);
+  border-radius: calc(var(--space-1) / 2);
 }
 
 .history-item-delete {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: calc(var(--space-5) + var(--space-1));
+  height: calc(var(--space-5) + var(--space-1));
   border: none;
   background: transparent;
   color: var(--text-muted);
   border-radius: var(--radius-md);
   cursor: pointer;
   flex-shrink: 0;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .history-item:hover .history-item-delete {
@@ -640,23 +564,23 @@ const handleOpenTrash = () => {
 }
 
 .history-item-delete:hover {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
 }
 
 .history-item-rename {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: calc(var(--space-5) + var(--space-1));
+  height: calc(var(--space-5) + var(--space-1));
   border: none;
   background: transparent;
   color: var(--text-muted);
   border-radius: var(--radius-md);
   cursor: pointer;
   flex-shrink: 0;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
 }
 
 .history-item:hover .history-item-rename,
@@ -667,47 +591,47 @@ const handleOpenTrash = () => {
 
 .history-item-rename:hover {
   background: var(--surface-active);
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .history-item-rename-input {
   width: 100%;
-  height: 24px;
-  border: 1px solid var(--lumi-primary);
+  height: calc(var(--space-5) + var(--space-1));
+  border: 1px solid var(--lumi-brand);
   border-radius: var(--radius-md);
-  padding: 0 6px;
-  font-size: 13px;
-  color: var(--text-primary);
+  padding: 0 var(--space-1);
+  font-size: var(--text-base);
+  color: var(--text);
   background: var(--surface);
   outline: none;
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
+  box-shadow: var(--input-focus-ring);
 }
 
 .history-item-checkbox {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: var(--space-5);
+  height: var(--space-5);
   flex-shrink: 0;
   cursor: pointer;
 }
 
 .checkbox-box {
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid var(--divider-vertical);
-  border-radius: 4px;
+  width: var(--space-4);
+  height: var(--space-4);
+  border: 1.5px solid var(--border);
+  border-radius: var(--space-1);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease-in-out;
+  transition: all var(--transition-fast);
   color: var(--text-inverse);
 }
 
 .checkbox-box.checked {
-  background: var(--lumi-primary);
-  border-color: var(--lumi-primary);
+  background: var(--lumi-brand);
+  border-color: var(--lumi-brand);
 }
 
 .history-empty {
@@ -715,51 +639,46 @@ const handleOpenTrash = () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 40px 20px;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-5);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .trash-entry-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px;
-  margin: 8px 8px;
-  border: 1px dashed var(--divider-horizontal);
+  gap: var(--space-1);
+  padding: var(--space-2);
+  margin: var(--space-2);
+  border: 1px dashed var(--border-light);
   background: transparent;
   color: var(--text-muted);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s ease-in-out;
+  font-size: var(--text-sm);
+  transition: all var(--transition-fast);
 }
 
 .trash-entry-btn:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-soft);
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
 }
 
 .trash-badge {
-  padding: 0 6px;
-  height: 18px;
-  line-height: 18px;
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--color-danger);
+  padding: 0 var(--space-1);
+  height: var(--badge-height);
+  line-height: var(--badge-height);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  background: var(--lumi-danger);
   color: var(--text-inverse);
   border-radius: var(--radius-full);
 }
 
 .spin-animation {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  animation: spin var(--duration-slow) linear infinite;
 }
 </style>

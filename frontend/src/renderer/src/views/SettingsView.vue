@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChevronRight } from 'lucide-vue-next'
 import LumiBrandStar from '../components/common/LumiBrandStar.vue'
+import LumiCard from '../components/common/LumiCard.vue'
+import LumiButton from '../components/common/LumiButton.vue'
 
 defineProps<{
   version?: string
@@ -62,7 +64,7 @@ const navigateTo = (route: string) => {
         :style="{ animationDelay: `${gIdx * 100}ms` }"
       >
         <h3 class="group-title">{{ group.title }}</h3>
-        <div class="setting-items">
+        <LumiCard class="setting-items" padding="none">
           <button
             v-for="item in group.items"
             :key="item.label"
@@ -75,7 +77,7 @@ const navigateTo = (route: string) => {
             </div>
             <ChevronRight :size="15" class="item-arrow" />
           </button>
-        </div>
+        </LumiCard>
       </div>
     </div>
 
@@ -85,14 +87,15 @@ const navigateTo = (route: string) => {
         <span v-if="version" class="version-text">LuomiNest v{{ version }} · LuminousChenXi</span>
       </div>
       <div class="footer-links">
-        <button
+        <LumiButton
           v-for="link in footerLinks"
           :key="link.label"
-          class="footer-link"
+          variant="ghost"
+          size="sm"
           @click="navigateTo(link.route)"
         >
           {{ link.label }}
-        </button>
+        </LumiButton>
       </div>
     </div>
   </div>
@@ -103,67 +106,65 @@ const navigateTo = (route: string) => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--workspace-bg);
+  background: var(--bg);
   overflow-y: auto;
-  padding: 28px 32px 20px;
+  padding: var(--space-7) var(--space-8) var(--space-5);
 }
 
 .settings-header {
-  margin-bottom: 28px;
+  margin-bottom: var(--space-7);
 }
 
 .page-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--text);
   letter-spacing: -0.3px;
 }
 
 .page-subtitle {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .settings-body {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-6);
 }
 
 .setting-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .group-title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--text-muted);
-  padding-left: 2px;
+  padding-left: var(--space-1);
   opacity: 0.7;
 }
 
 .setting-items {
-  background: var(--workspace-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow-xs);
 }
 
 .setting-item {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 14px 16px;
+  padding: var(--space-4);
   text-align: left;
   cursor: pointer;
-  transition: background 0.2s ease-in-out;
+  background: transparent;
+  border: none;
+  transition: background-color var(--transition-fast);
   position: relative;
 }
 
@@ -171,8 +172,8 @@ const navigateTo = (route: string) => {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 16px;
-  right: 16px;
+  left: var(--space-4);
+  right: var(--space-4);
   height: 1px;
   background: var(--divider-soft);
 }
@@ -182,19 +183,25 @@ const navigateTo = (route: string) => {
 }
 
 .setting-item:hover {
-  background: var(--workspace-hover);
+  background: var(--surface-hover);
 }
 
 .setting-item:hover::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--lumi-primary);
+  top: var(--space-2);
+  bottom: var(--space-2);
+  width: var(--space-1);
+  border-radius: 0 var(--space-1) var(--space-1) 0;
+  background: var(--lumi-brand);
   opacity: 0.5;
+}
+
+.setting-item:focus-visible {
+  outline: none;
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--focus-ring);
 }
 
 .item-info {
@@ -204,15 +211,15 @@ const navigateTo = (route: string) => {
 
 .item-label {
   display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 2px;
+  font-size: var(--text-md);
+  font-weight: var(--font-medium);
+  color: var(--text);
+  margin-bottom: var(--space-1);
 }
 
 .item-desc {
   display: block;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -220,52 +227,39 @@ const navigateTo = (route: string) => {
   color: var(--text-muted);
   flex-shrink: 0;
   opacity: 0.5;
-  transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+  transition: transform var(--transition-fast), opacity var(--transition-fast), color var(--transition-fast);
 }
 
 .setting-item:hover .item-arrow {
-  transform: translateX(2px);
+  transform: translateX(var(--space-1));
   opacity: 1;
-  color: var(--lumi-primary);
+  color: var(--lumi-brand);
 }
 
 .settings-footer {
   margin-top: auto;
-  padding-top: 20px;
+  padding-top: var(--space-5);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .footer-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .version-text {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .footer-links {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
-.footer-link {
-  font-size: 11px;
-  color: var(--text-muted);
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  transition: all 0.2s ease-in-out;
-  cursor: pointer;
-}
-
-.footer-link:hover {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
-}
 </style>

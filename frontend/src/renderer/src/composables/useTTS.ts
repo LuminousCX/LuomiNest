@@ -55,6 +55,7 @@ async function speakWithEdgeTTS(text: string, messageId: string): Promise<boolea
   const modelStore = useModelStore()
   const ttsConfig = modelStore.ttsConfig
   const voice = ttsConfig.voice || 'zh-CN-XiaoxiaoNeural'
+  const engine = ttsConfig.provider || ttsConfig.engine || 'auto'
 
   if (currentAbortController) {
     currentAbortController.abort()
@@ -67,7 +68,15 @@ async function speakWithEdgeTTS(text: string, messageId: string): Promise<boolea
     const response = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice }),
+      body: JSON.stringify({
+        text,
+        voice,
+        engine,
+        model: ttsConfig.model || '',
+        speed: ttsConfig.speed ?? 1.0,
+        apiKey: ttsConfig.apiKey || '',
+        baseUrl: ttsConfig.baseUrl || '',
+      }),
       signal: controller.signal,
     })
 

@@ -755,6 +755,11 @@ async def batch_soft_delete(request: BatchIdsRequest):
 class TTSRequest(BaseModel):
     text: str = Field(..., max_length=2000)
     voice: str = Field(default="default")
+    engine: str = Field(default="auto")
+    model: str = Field(default="")
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    apiKey: str = Field(default="")
+    baseUrl: str = Field(default="")
 
 
 @router.post("/tts/synthesize")
@@ -764,45 +769,45 @@ async def tts_synthesize(request: TTSRequest):
 
     from fastapi.responses import Response
     from app.utils.tts_text_filter import filter_tts_text
+    # 触发 TTS 引擎注册（import 包即注册）
+    import app.runtime.provider.tts  # noqa: F401
+    from app.runtime.provider.tts.tts_registry import LuminousChenXiTTSRegistry
 
     # 后端兜底过滤：清理 markdown/emoji/特殊符号
     clean_text = filter_tts_text(request.text)
     if not clean_text:
         return JSONResponse({"error": "过滤后文本为空，无需合成"}, status_code=400)
 
-    # 优先使用 Sherpa-ONNX TTS（完全离线，神经网络语音，质量好）
-    try:
-        from app.runtime.provider.tts.sherpa_onnx_tts import SherpaOnnxTTSProvider
-        provider = SherpaOnnxTTSProvider()
-        audio_bytes = await provider.synthesize(clean_text, request.voice)
-        return Response(
-            content=audio_bytes,
-            media_type="audio/wav",
-            headers={"Content-Disposition": "inline"},
-        )
-    except FileNotFoundError as e:
-        logger.warning(f"[API] TTS: Sherpa-ONNX model not found ({e}), falling back to local TTS")
-    except Exception as e:
-        logger.warning(f"[API] TTS: Sherpa-ONNX failed ({e}), falling back to local TTS")
+    # 构建引擎配置 kwargs（仅传递非空值，避免覆盖引擎默认值）
+    config: dict = {}
+    if request.model:
+        config["model"] = request.model
+    if request.speed and request.speed != 1.0:
+        config["speed"] = request.speed
+    if request.apiKey:
+        config["apiKey"] = request.apiKey
+    if request.baseUrl:
+        config["baseUrl"] = request.baseUrl
+    if request.voice and request.voice != "default":
+        config["voice"] = request.voice
 
-    # 兜底：本地 pyttsx3 TTS（系统语音，离线）
+    # 通过 Registry 解析引擎，支持自动降级
     try:
-        from app.runtime.provider.tts.local_tts import LocalTTSProvider
-        provider = LocalTTSProvider()
+        provider, used_engine = LuminousChenXiTTSRegistry.resolve(request.engine, **config)
+    except RuntimeError as e:
+        logger.error(f"[API] TTS: no engine available: {e}")
+        return JSONResponse({"error": str(e)}, status_code=503)
+
+    try:
         audio_bytes = await provider.synthesize(clean_text, request.voice)
+        logger.info(f"[API] TTS synthesized by [{used_engine}]: {clean_text[:60]}...")
         return Response(
             content=audio_bytes,
             media_type="audio/wav",
             headers={"Content-Disposition": "inline"},
         )
-    except ImportError:
-        logger.error("[API] TTS: pyttsx3 not installed")
-        return JSONResponse(
-            {"error": "未安装语音合成引擎，请安装 sherpa-onnx 或 pyttsx3"},
-            status_code=503,
-        )
     except Exception as e:
-        logger.error(f"[API] TTS: all providers failed: {e}")
+        logger.error(f"[API] TTS: engine [{used_engine}] failed: {e}")
         return JSONResponse({"error": f"语音合成失败：{e}"}, status_code=500)
 
 
@@ -835,64 +840,52 @@ def _detect_tts_device() -> dict:
 @router.get("/tts/engines")
 async def tts_engines():
     """Report available TTS engines, device info, and avatar voice bindings."""
+    # 触发 TTS 引擎注册
+    import app.runtime.provider.tts  # noqa: F401
+    from app.runtime.provider.tts.tts_registry import LuminousChenXiTTSRegistry
+
+    # 引擎元数据：显示名称、分类、是否需要 API Key、是否在线
+    engine_meta = {
+        "edge-tts": {"name": "Edge TTS (在线，免费)", "category": "cloud-free", "needs_api_key": False, "online": True},
+        "sherpa-onnx": {"name": "Sherpa-ONNX TTS (离线神经网络)", "category": "local", "needs_api_key": False, "online": False},
+        "local": {"name": "本地 TTS (pyttsx3, CPU)", "category": "local", "needs_api_key": False, "online": False},
+        "gemini": {"name": "Gemini TTS (Google，免费层)", "category": "cloud-paid", "needs_api_key": True, "online": True},
+        "minimax": {"name": "MiniMax TTS (高质量)", "category": "cloud-paid", "needs_api_key": True, "online": True},
+        "siliconflow": {"name": "SiliconFlow TTS (CosyVoice2 云端)", "category": "cloud-paid", "needs_api_key": True, "online": True},
+        "fish-audio": {"name": "Fish Audio TTS (多语言)", "category": "cloud-paid", "needs_api_key": True, "online": True},
+    }
+
     engines: list[dict] = []
+    for engine_id in LuminousChenXiTTSRegistry.list_engines():
+        provider_class = LuminousChenXiTTSRegistry.get(engine_id)
+        available = LuminousChenXiTTSRegistry.is_available(engine_id)
+        meta = engine_meta.get(engine_id, {"name": engine_id, "category": "unknown", "needs_api_key": False, "online": False})
 
-    # Sherpa-ONNX TTS (offline, neural network)
-    try:
-        from app.runtime.provider.tts.sherpa_onnx_tts import SherpaOnnxTTSProvider
-        try:
-            SherpaOnnxTTSProvider()  # 测试是否能初始化
-            engines.append({
-                "id": "sherpa-onnx",
-                "name": "Sherpa-ONNX TTS (离线神经网络)",
-                "online": False,
-                "available": True,
-                "default_voices": SherpaOnnxTTSProvider.DEFAULT_VOICES,
-            })
-        except Exception as init_err:
-            logger.debug(f"[API] TTS sherpa-onnx init check failed: {init_err}")
-            engines.append({
-                "id": "sherpa-onnx",
-                "name": "Sherpa-ONNX TTS (离线神经网络)",
-                "online": False,
-                "available": False,
-                "default_voices": SherpaOnnxTTSProvider.DEFAULT_VOICES,
-            })
-    except ImportError:
-        engines.append({
-            "id": "sherpa-onnx",
-            "name": "Sherpa-ONNX TTS (离线神经网络)",
-            "online": False,
-            "available": False,
-        })
+        engine_info: dict = {
+            "id": engine_id,
+            "name": meta["name"],
+            "category": meta["category"],
+            "needs_api_key": meta["needs_api_key"],
+            "online": meta["online"],
+            "available": available,
+        }
 
-    # Local TTS (offline, CPU via pyttsx3)
-    try:
-        import pyttsx3  # noqa: F401
-        local_voices: list[dict] = []
-        lang_map: dict[str, str] = {}
-        try:
-            from app.runtime.provider.tts.local_tts import LocalTTSProvider
-            provider = LocalTTSProvider()
-            local_voices = provider.list_voices()
-            lang_map = provider.get_lang_map()
-        except Exception as lv_err:
-            logger.debug(f"[API] TTS local voice enumeration failed: {lv_err}")
-        engines.append({
-            "id": "local",
-            "name": "本地 TTS (pyttsx3, CPU)",
-            "online": False,
-            "available": True,
-            "voices": local_voices,
-            "lang_map": lang_map,
-        })
-    except ImportError:
-        engines.append({
-            "id": "local",
-            "name": "本地 TTS (pyttsx3, CPU)",
-            "online": False,
-            "available": False,
-        })
+        # 附加引擎特定信息（default_voices / voices / lang_map）
+        if available and provider_class is not None:
+            default_voices = getattr(provider_class, "DEFAULT_VOICES", None)
+            if default_voices:
+                engine_info["default_voices"] = default_voices
+
+            # 本地引擎枚举系统语音列表
+            if engine_id == "local":
+                try:
+                    provider = provider_class()
+                    engine_info["voices"] = provider.list_voices()
+                    engine_info["lang_map"] = provider.get_lang_map()
+                except Exception as lv_err:
+                    logger.debug(f"[API] TTS local voice enumeration failed: {lv_err}")
+
+        engines.append(engine_info)
 
     device = _detect_tts_device()
 

@@ -1,8 +1,10 @@
 const RELATIVE_THRESHOLD = 7 * 24 * 60 * 60 * 1000
 
+const isValidDate = (d: Date): boolean => !isNaN(d.getTime())
+
 const formatDateRelative = (dateStr: string): string => {
   const date = new Date(dateStr)
-  if (isNaN(date.getTime())) return '—'
+  if (!isValidDate(date)) return '—'
 
   const now = new Date()
   const diff = now.getTime() - date.getTime()
@@ -37,4 +39,62 @@ const formatDownloadCount = (n: number): string => {
   return n.toString()
 }
 
-export { formatDateRelative, formatFileSize, formatDownloadCount, RELATIVE_THRESHOLD }
+const formatCount = (n: number): string => {
+  if (n >= 10000) return (n / 10000).toFixed(1) + 'w'
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
+  return String(n)
+}
+
+const formatTime = (dateStr: string, options?: { seconds?: boolean }): string => {
+  const date = new Date(dateStr)
+  if (!isValidDate(date)) return '--:--'
+  return date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: options?.seconds ? '2-digit' : undefined,
+    hour12: false,
+  })
+}
+
+const formatDateTime = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  if (!isValidDate(date)) return '—'
+  return `${date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} ${formatTime(dateStr)}`
+}
+
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+const formatDateCalendar = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  if (!isValidDate(date)) return '—'
+
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
+
+  if (diffDays <= 0) return formatTime(dateStr)
+  if (diffDays === 1) return `昨天 ${formatTime(dateStr)}`
+  if (diffDays <= 7) return `${WEEKDAYS[date.getDay()]} ${formatTime(dateStr)}`
+  if (date.getFullYear() === now.getFullYear()) return `${date.getMonth() + 1}月${date.getDate()}日`
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
+}
+
+const formatDuration = (ms: number | null): string => {
+  if (ms === null || ms === undefined) return '-'
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  return `${(ms / 60000).toFixed(1)}min`
+}
+
+export {
+  formatDateRelative,
+  formatFileSize,
+  formatDownloadCount,
+  formatCount,
+  formatTime,
+  formatDateTime,
+  formatDateCalendar,
+  formatDuration,
+  RELATIVE_THRESHOLD,
+}
