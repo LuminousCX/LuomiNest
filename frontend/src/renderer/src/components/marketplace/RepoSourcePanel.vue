@@ -11,6 +11,7 @@ import type { RepoSource, RepoSourceType } from '../../types/marketplace'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiInput from '../../components/common/LumiInput.vue'
 import LumiModal from '../../components/common/LumiModal.vue'
+import { formatDateRelative } from '../../utils/format'
 
 const store = useRepoSourceStore()
 
@@ -136,22 +137,6 @@ const getSubMarketItemCount = (sourceId: string, subMarketType: string): number 
   return items.filter(i => i.type === subMarketType).length
 }
 
-const formatSyncTime = (timeStr?: string) => {
-  if (!timeStr) return ''
-  try {
-    const d = new Date(timeStr)
-    const now = new Date()
-    const diffMs = now.getTime() - d.getTime()
-    const diffMin = Math.floor(diffMs / 60000)
-    if (diffMin < 1) return '刚刚'
-    if (diffMin < 60) return `${diffMin} 分钟前`
-    const diffHr = Math.floor(diffMin / 60)
-    if (diffHr < 24) return `${diffHr} 小时前`
-    return d.toLocaleDateString('zh-CN')
-  } catch {
-    return ''
-  }
-}
 </script>
 
 <template>
@@ -212,15 +197,11 @@ const formatSyncTime = (timeStr?: string) => {
               :class="['status-icon', getStatusClass(source), { 'spin-animation': source.status === 'loading' }]"
             />
             <button
-              class="toggle-btn"
-              :class="{ on: source.enabled }"
-              @click.stop="handleToggleSource(source.id)"
+              class="lumi-toggle"
+              :class="{ 'is-active': source.enabled }"
               :title="source.enabled ? '禁用' : '启用'"
-            >
-              <div class="toggle-track">
-                <div class="toggle-thumb" />
-              </div>
-            </button>
+              @click.stop="handleToggleSource(source.id)"
+            ></button>
           </div>
         </div>
 
@@ -239,7 +220,7 @@ const formatSyncTime = (timeStr?: string) => {
                 <span>{{ getStatusText(source) }}</span>
               </div>
               <span v-if="source.lastSyncedAt" class="sync-time">
-                {{ formatSyncTime(source.lastSyncedAt) }}
+                {{ formatDateRelative(source.lastSyncedAt) }}
               </span>
             </div>
 
@@ -351,7 +332,7 @@ const formatSyncTime = (timeStr?: string) => {
         </div>
         <div class="form-field">
           <label>描述</label>
-          <textarea v-model="addForm.description" class="form-textarea" placeholder="输入仓库描述（可选）" rows="3" />
+          <textarea v-model="addForm.description" class="lumi-textarea" placeholder="输入仓库描述（可选）" rows="3" />
         </div>
       </div>
       <template #footer>
@@ -528,39 +509,11 @@ const formatSyncTime = (timeStr?: string) => {
   color: var(--lumi-danger);
 }
 
-.toggle-btn {
+.lumi-toggle {
+  border: none;
   padding: 0;
-  background: none;
+  background: transparent;
   cursor: pointer;
-}
-
-.toggle-track {
-  width: 32px;
-  height: 18px;
-  border-radius: var(--radius-full);
-  background: var(--workspace-border);
-  position: relative;
-  transition: background var(--transition-fast);
-}
-
-.toggle-btn.on .toggle-track {
-  background: var(--lumi-brand);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-full);
-  background: var(--surface);
-  transition: transform var(--transition-fast);
-  box-shadow: 0 1px 3px var(--overlay-subtle);
-}
-
-.toggle-btn.on .toggle-thumb {
-  transform: translateX(14px);
 }
 
 .source-detail {
@@ -857,24 +810,4 @@ const formatSyncTime = (timeStr?: string) => {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .source-item,
-  .source-header,
-  .expand-btn,
-  .toggle-track,
-  .toggle-thumb,
-  .sub-market-item,
-  .sub-market-link,
-  .sub-action-btn,
-  .unlink-btn,
-  .link-btn,
-  .action-btn {
-    animation: none;
-    transition: none;
-  }
-
-  .spin-animation {
-    animation: none;
-  }
-}
 </style>

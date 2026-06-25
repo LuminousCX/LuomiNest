@@ -58,7 +58,7 @@ function getTabTooltip(tab: Tab): string {
 
 <style scoped>
 .tab-bar {
-  height: 38px;
+  height: calc(var(--space-8) - 2px);
   background: var(--bg-secondary);
   display: flex;
   align-items: center;
@@ -79,7 +79,7 @@ function getTabTooltip(tab: Tab): string {
 .tab-list {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -93,9 +93,9 @@ function getTabTooltip(tab: Tab): string {
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-1) var(--space-3);
-  min-width: 120px;
-  max-width: 200px;
-  height: 30px;
+  min-width: calc(var(--space-9) * 2 + var(--space-6));
+  max-width: calc(var(--space-9) * 4 + var(--space-2));
+  height: calc(var(--space-7) - 2px);
   background: var(--border-light);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -123,9 +123,9 @@ function getTabTooltip(tab: Tab): string {
 }
 
 .tab-favicon {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
+  width: var(--space-3);
+  height: var(--space-3);
+  border-radius: calc(var(--space-1) / 2);
   flex-shrink: 0;
 }
 
@@ -137,7 +137,7 @@ function getTabTooltip(tab: Tab): string {
 .tab-sleep-icon {
   flex-shrink: 0;
   color: var(--text-muted);
-  animation: pulse-sleep 2s ease-in-out infinite;
+  animation: pulse-sleep calc(var(--duration-normal) * 8) var(--ease-in-out) infinite;
 }
 
 @keyframes pulse-sleep {
@@ -147,13 +147,8 @@ function getTabTooltip(tab: Tab): string {
 
 .tab-spinner {
   flex-shrink: 0;
-  animation: spin 1s linear infinite;
+  animation: spin calc(var(--duration-normal) * 4) linear infinite;
   color: var(--text-muted);
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .tab-title {
@@ -174,9 +169,9 @@ function getTabTooltip(tab: Tab): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
+  width: var(--space-4);
+  height: var(--space-4);
+  border-radius: calc(var(--space-1) - 1px);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -194,8 +189,8 @@ function getTabTooltip(tab: Tab): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: calc(var(--space-6) + var(--space-1));
+  height: calc(var(--space-6) + var(--space-1));
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
@@ -209,4 +204,5 @@ function getTabTooltip(tab: Tab): string {
   background: var(--surface-hover);
   color: var(--text-secondary);
 }
+
 </style>

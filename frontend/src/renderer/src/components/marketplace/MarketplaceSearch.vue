@@ -1,34 +1,30 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, watch } from 'vue'
 import { Search, Clock, X, TrendingUp, ArrowRight } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../../stores/marketplace'
+import { debounce } from '../../utils/debounce'
 import LumiInput from '../../components/common/LumiInput.vue'
 
 const store = useMarketplaceStore()
 
 const localQuery = ref(store.searchQuery)
 
-let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
-onUnmounted(() => {
-  if (debounceTimer) clearTimeout(debounceTimer)
-})
-
 watch(() => store.searchQuery, (val) => {
   localQuery.value = val
 })
 
+const updateQuery = debounce((query: string) => {
+  store.searchQuery = query
+}, 200)
+
 const onInput = () => {
-  if (debounceTimer) clearTimeout(debounceTimer)
   store.showSearchSuggestions = true
   const query = localQuery.value
   if (!query) {
     store.clearSearch()
     return
   }
-  debounceTimer = setTimeout(() => {
-    store.searchQuery = query
-  }, 200)
+  updateQuery(query)
 }
 
 const onFocus = () => {
@@ -47,7 +43,6 @@ const selectSuggestion = (text: string) => {
 }
 
 const handleSubmit = () => {
-  if (debounceTimer) clearTimeout(debounceTimer)
   store.performSearch(localQuery.value)
 }
 
@@ -135,7 +130,7 @@ const removeHistory = (text: string, e: Event) => {
   box-shadow: var(--shadow-lg);
   z-index: var(--z-dropdown);
   overflow: hidden;
-  backdrop-filter: blur(12px);
+  backdrop-filter: var(--glass-blur);
 }
 
 .suggestion-item {
@@ -221,13 +216,4 @@ const removeHistory = (text: string, e: Event) => {
   animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .search-input-wrap,
-  .suggestion-item,
-  .remove-history-btn,
-  .clear-history-btn {
-    animation: none;
-    transition: none;
-  }
-}
 </style>

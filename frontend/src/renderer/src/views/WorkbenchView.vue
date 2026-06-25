@@ -1,42 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import {
-  Send,
-  Square,
-  Plus,
-  Search,
-  MessageSquare,
-  Clock,
-  Trash2,
-  Pencil,
-  Check,
-  Copy,
-  Loader2,
-  AlertTriangle,
-  RotateCcw,
-  ChevronDown,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Bot,
-  Sparkles,
-  Wand2,
-  Volume2,
-  VolumeX,
-  Subtitles,
-  StopCircle,
-  Wrench,
-  Terminal,
-  CheckCircle2,
-  XCircle,
-  Brain,
-  Server,
-  Radio,
-  ChevronRight,
-  Cpu,
-  Monitor,
-  X,
-  ClipboardList,
-} from 'lucide-vue-next'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, type VNodeRef } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
@@ -44,55 +7,33 @@ import { useMemoryStore } from '../stores/memory'
 import { usePlatformStore } from '../stores/platform'
 import { useLuomiNestLive2D } from '../composables/useLuomiNestLive2D'
 import { useAvatarChat } from '../composables/useAvatarChat'
+import { useDebouncedSearch } from '../composables/useDebouncedSearch'
 import { useApi } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
 import { getProviderLogo } from '../config/provider-logos'
-import { stripEmotionTags } from '../utils/emotionTagInterceptor'
 import { LUOMINEST_BUILTIN_MODELS, getAvatarBinding, resolveExpressionByModelUrl } from '../config/luominest-models'
 import { useAvatarControlStore } from '../stores/avatar-control'
-import DOMPurify from 'dompurify'
-import { marked } from 'marked'
-import type { ConversationListItem, ConversationSearchResult, ChatStreamChunk, SubagentEvent, AgentProfile } from '../types'
 import { useTaskStreamStore } from '../stores/taskStream'
 import { useWorkflowStore } from '../stores/workflow'
 import { useStatsStore } from '../stores/stats'
-import LumiButton from '../components/common/LumiButton.vue'
-import LumiInput from '../components/common/LumiInput.vue'
-
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-})
-
-interface ToolActivity {
-  id: string
-  name: string
-  arguments: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  output?: string
-  iteration: number
-}
-
-/** 子 Agent 工具调用记录 */
-interface SubagentToolCall {
-  name: string
-  args?: string
-  output?: string
-  status: 'running' | 'completed'
-}
-
-/** 子 Agent 执行活动（参考 deer-flow SubtaskCard） */
-interface SubagentActivity {
-  id: string             // subagent_id
-  task: string           // 任务描述
-  depth: number          // 委派深度
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  progress?: string      // 最新进度文本
-  result?: string        // 最终结果
-  error?: string         // 错误信息
-  iteration: number      // 当前迭代轮次
-  toolCalls: SubagentToolCall[]  // 工具调用历史
-}
+import type { ConversationSearchResult, ChatStreamChunk, SubagentEvent, AgentProfile } from '../types'
+import type {
+  ToolActivity,
+  SubagentActivity,
+  SubagentToolCall,
+  McpServerStatus,
+  McpStatus,
+  WorkflowModeLevel,
+  WorkflowModeOption,
+  WorkflowPendingPlan,
+  TimeGroup,
+} from '../components/workbench/types'
+import { generateId } from '../utils/id'
+import WorkbenchHistoryPanel from '../components/workbench/WorkbenchHistoryPanel.vue'
+import WorkbenchChatArea from '../components/workbench/WorkbenchChatArea.vue'
+import WorkbenchInputArea from '../components/workbench/WorkbenchInputArea.vue'
+import WorkbenchAvatarPanel from '../components/workbench/WorkbenchAvatarPanel.vue'
+import WorkbenchToolPanel from '../components/workbench/WorkbenchToolPanel.vue'
 
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
@@ -107,60 +48,44 @@ const { apiGet } = useApi()
 const toast = useToast()
 
 // 桌面宠物模式：通过全局 store 状态统一管理，与 AvatarView 共享同一状态源
-// 桌宠模式下工作台不渲染本地 Live2D，表情/动作/唇形通过 IPC 转发到桌宠窗口
 const isDesktopMode = computed(() => avatarControl.isDesktopPetRunning)
 
-// 主 Agent 固定标识：工作台所有对话均归属主 Agent，与对话页面的模拟联系人彻底分离
+// 主 Agent 固定标识
 const MAIN_AGENT_ID = 'luominest_main_agent'
 
-// 虚拟主 Agent Profile：用于让 chat store 的 computed（currentConvId/messages/conversations）
-// 基于 MAIN_AGENT_ID 工作。在 onMounted 中设置到 agentStore.activeAgent。
 const MAIN_AGENT_PROFILE: AgentProfile = {
   id: MAIN_AGENT_ID,
   name: '主智能体',
   description: 'LuomiNest 工作台主 Agent，驱动 Live2D、记忆、工具、MCP 和子 Agent',
-  color: '#147EBC',
+  color: 'var(--lumi-brand)',
   isMain: true,
   isActive: true,
 }
 
-// 工具调用活动追踪（主 Agent 工具调用循环）
+// 工具调用与子 Agent 活动追踪
 const toolActivities = ref<ToolActivity[]>([])
 const expandedToolOutputs = ref<Record<string, boolean>>({})
-
-// 子 Agent 群组活动追踪（主 Agent 通过 delegate_to_subagent 委派的子任务）
 const subagentActivities = ref<SubagentActivity[]>([])
 const expandedSubagents = ref<Record<string, boolean>>({})
 const expandedSubagentTools = ref<Record<string, boolean>>({})
 
 const toggleToolOutput = (id: string) => {
-  expandedToolOutputs.value = {
-    ...expandedToolOutputs.value,
-    [id]: !expandedToolOutputs.value[id],
-  }
+  expandedToolOutputs.value = { ...expandedToolOutputs.value, [id]: !expandedToolOutputs.value[id] }
 }
 
 const toggleSubagent = (id: string) => {
-  expandedSubagents.value = {
-    ...expandedSubagents.value,
-    [id]: !expandedSubagents.value[id],
-  }
+  expandedSubagents.value = { ...expandedSubagents.value, [id]: !expandedSubagents.value[id] }
 }
 
 const toggleSubagentTools = (id: string) => {
-  expandedSubagentTools.value = {
-    ...expandedSubagentTools.value,
-    [id]: !expandedSubagentTools.value[id],
-  }
+  expandedSubagentTools.value = { ...expandedSubagentTools.value, [id]: !expandedSubagentTools.value[id] }
 }
 
-/** 处理子 Agent 事件，更新 subagentActivities 状态 */
 const handleSubagentEvent = (event: SubagentEvent) => {
-  const existing = subagentActivities.value.find(a => a.id === event.subagent_id)
+  const existing = subagentActivities.value.find((a) => a.id === event.subagent_id)
 
   if (event.status === 'started') {
     if (existing) {
-      // 重置已有记录（理论上不应发生）
       existing.status = 'running'
       existing.task = event.task
       existing.depth = event.depth
@@ -189,22 +114,21 @@ const handleSubagentEvent = (event: SubagentEvent) => {
     if (event.iteration !== undefined) existing.iteration = event.iteration
     if (event.progress) existing.progress = event.progress
 
-    // 工具调用事件
     if (event.tool_name) {
       if (event.tool_output !== undefined) {
-        // 工具结果：更新最后一个同名工具调用
-        const lastCall = [...existing.toolCalls].reverse().find(c => c.name === event.tool_name && c.status === 'running')
+        const lastCall = [...existing.toolCalls]
+          .reverse()
+          .find((c) => c.name === event.tool_name && c.status === 'running')
         if (lastCall) {
           lastCall.status = 'completed'
           lastCall.output = event.tool_output
         }
       } else {
-        // 工具开始：添加新工具调用
         existing.toolCalls.push({
           name: event.tool_name,
           args: event.tool_args,
           status: 'running',
-        })
+        } as SubagentToolCall)
       }
     }
     return
@@ -214,7 +138,6 @@ const handleSubagentEvent = (event: SubagentEvent) => {
     existing.status = 'completed'
     if (event.result) existing.result = event.result
     existing.progress = undefined
-    // 标记所有未完成的工具调用为已完成
     for (const tc of existing.toolCalls) {
       if (tc.status === 'running') tc.status = 'completed'
     }
@@ -228,25 +151,14 @@ const handleSubagentEvent = (event: SubagentEvent) => {
     for (const tc of existing.toolCalls) {
       if (tc.status === 'running') tc.status = 'completed'
     }
-    return
-  }
-}
-
-const activeSubagentCount = computed(
-  () => subagentActivities.value.filter(a => a.status === 'running').length
-)
-
-const formatToolArgs = (args: string): string => {
-  try {
-    const parsed = JSON.parse(args)
-    return JSON.stringify(parsed, null, 2)
-  } catch {
-    return args
   }
 }
 
 // Live2D 集成
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const setCanvasRef: VNodeRef = (el) => {
+  canvasRef.value = el as HTMLCanvasElement | null
+}
 const {
   isReady: isModelReady,
   isLoading: isModelLoading,
@@ -257,15 +169,12 @@ const {
   destroy: teardownLive2D,
 } = useLuomiNestLive2D(canvasRef)
 
-// TTS 配置状态
+// TTS / 字幕
 const ttsEnabled = ref(true)
 const subtitleEnabled = ref(true)
-
-// 当前模型绑定信息（用于获取 voice）
 const currentModelInfo = ref(LUOMINEST_BUILTIN_MODELS[0])
 const currentBinding = computed(() => getAvatarBinding(currentModelInfo.value.id))
 
-// 代码块过滤状态机：跳过 ``` 包裹的代码块，不送入 TTS
 let inCodeBlock = false
 const filterCodeForTts = (content: string): string => {
   if (!content) return ''
@@ -282,7 +191,6 @@ const filterCodeForTts = (content: string): string => {
   return result
 }
 
-// Avatar Chat TTS 集成（流式分段 + 唇形同步 + 表情驱动 + 字幕）
 const {
   isSpeaking,
   isSynthesizing,
@@ -303,7 +211,6 @@ const {
   }),
   driveEmotion: (emotionId: string) => {
     if (isDesktopMode.value) {
-      // 桌宠模式：通过 IPC 转发到桌宠窗口（需先做表情名映射，与 composable 内部逻辑一致）
       const modelUrl = currentModelInfo.value.url
       const resolved = resolveExpressionByModelUrl(modelUrl, emotionId)
       avatarControl.triggerExpression(resolved)
@@ -313,7 +220,6 @@ const {
   },
   syncLipParam: (value: number) => {
     if (isDesktopMode.value) {
-      // 桌宠模式：唇形同步值通过 IPC 转发到桌宠窗口
       avatarControl.driveLipSync(value)
     } else {
       syncLipParam(value)
@@ -324,7 +230,6 @@ const {
   onTtsError: (err: Error) => toast.warning(`语音合成失败：${err.message}`),
 })
 
-// 桌宠模式下：将字幕同步到桌宠窗口（与 AvatarView 行为一致）
 watch([subtitleVisible, subtitleText, isDesktopMode], ([visible, text, desktopMode]) => {
   if (!desktopMode) return
   if (visible && text) {
@@ -334,22 +239,8 @@ watch([subtitleVisible, subtitleText, isDesktopMode], ([visible, text, desktopMo
   }
 })
 
-// 布局状态
+// 布局与状态面板
 const isHistoryCollapsed = ref(false)
-
-// ===== 主 Agent 状态面板（右栏可折叠：记忆 / MCP / 消息平台）=====
-interface McpServerStatus {
-  name: string
-  status: string
-  tool_count: number
-  description?: string
-  tools?: string[]
-}
-interface McpStatus {
-  servers: McpServerStatus[]
-  totalTools: number
-}
-
 const mcpStatus = ref<McpStatus>({ servers: [], totalTools: 0 })
 const sidePanelCollapsed = ref<Record<string, boolean>>({
   memory: true,
@@ -373,8 +264,6 @@ const fetchMcpStatus = async () => {
   }
 }
 
-const connectedMcpCount = computed(() => mcpStatus.value.servers.filter(s => s.status === 'connected').length)
-
 const memorySummaryPreview = computed(() => {
   const s = memoryStore.summaryContent
   if (!s) return '暂无摘要'
@@ -385,41 +274,17 @@ const activePlatformCount = computed(() => platformStore.activeInstances.length)
 
 // 对话历史
 const searchQuery = ref('')
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-let searchSeq = 0
-const searchResults = ref<ConversationSearchResult[]>([])
-const isSearching = ref(false)
+const { results: searchResults, isSearching } = useDebouncedSearch<ConversationSearchResult[]>(
+  searchQuery,
+  (q) => chatStore.searchConversations(q),
+  300,
+)
 
 const isSearchMode = computed(() => searchQuery.value.trim().length > 0)
-
-watch(searchQuery, (q) => {
-  if (searchTimer) clearTimeout(searchTimer)
-  if (!q.trim()) {
-    searchResults.value = []
-    isSearching.value = false
-    return
-  }
-  isSearching.value = true
-  searchSeq++
-  const currentSeq = searchSeq
-  searchTimer = setTimeout(async () => {
-    const results = await chatStore.searchConversations(q)
-    if (currentSeq === searchSeq) {
-      searchResults.value = results
-      isSearching.value = false
-    }
-  }, 300)
-})
-
-interface TimeGroup {
-  label: string
-  items: ConversationListItem[]
-}
 
 const timeGroups = computed<TimeGroup[]>(() => {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-
   const groups: TimeGroup[] = [
     { label: '今天', items: [] },
     { label: '昨天', items: [] },
@@ -431,7 +296,6 @@ const timeGroups = computed<TimeGroup[]>(() => {
     const d = new Date(conv.updated_at)
     const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
     const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
-
     if (diffDays <= 0) groups[0].items.push(conv)
     else if (diffDays === 1) groups[1].items.push(conv)
     else if (diffDays <= 7) groups[2].items.push(conv)
@@ -440,38 +304,6 @@ const timeGroups = computed<TimeGroup[]>(() => {
 
   return groups.filter((g) => g.items.length > 0)
 })
-
-const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-
-const formatTime = (dateStr: string) => {
-  const d = new Date(dateStr)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
-  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-
-  if (diffDays <= 0) return time
-  if (diffDays === 1) return `昨天 ${time}`
-  if (diffDays <= 7) return `${WEEKDAYS[d.getDay()]} ${time}`
-  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
-}
-
-const highlightSnippet = (snippet: string): string => {
-  if (!snippet) return ''
-  const escaped = snippet
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-  const q = searchQuery.value.trim()
-  if (!q) return escaped
-  const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`(${escapedQ})`, 'gi')
-  return escaped.replace(regex, '<mark>$1</mark>')
-}
 
 const selectConversation = (convId: string, searchKeyword?: string) => {
   if (searchKeyword) {
@@ -482,7 +314,6 @@ const selectConversation = (convId: string, searchKeyword?: string) => {
 }
 
 const handleNewConversation = () => {
-  // activeAgent 已在 onMounted 中设为虚拟主 Agent，currentConvId 基于 activeAgentId
   const prevConvId = chatStore.currentConvId
   if (prevConvId) {
     chatStore.leaveCurrentConversation(prevConvId).catch(() => {})
@@ -506,13 +337,6 @@ const renamingTitle = ref('')
 const startRename = (convId: string, currentTitle: string) => {
   renamingConvId.value = convId
   renamingTitle.value = currentTitle
-  nextTick(() => {
-    const input = document.querySelector('.workbench-rename-input') as HTMLInputElement
-    if (input) {
-      input.focus()
-      input.select()
-    }
-  })
 }
 
 const confirmRename = async () => {
@@ -542,47 +366,31 @@ const cancelRename = () => {
 
 // 对话面板
 const inputText = ref('')
-const messagesContainer = ref<HTMLElement | null>(null)
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const copiedId = ref<string | null>(null)
+const selectedSkillIds = ref<string[]>([])
 const showReasoning = ref<Record<string, boolean>>({})
 const isNearBottom = ref(true)
 const SCROLL_BOTTOM_THRESHOLD = 120
 const showScrollToBottomBtn = ref(false)
-let resizeObserver: ResizeObserver | null = null
 
 const messages = computed(() => chatStore.messages)
 const isStreaming = computed(() => chatStore.isStreaming || workflowStore.isRunning)
 const isBackendReady = computed(() => chatStore.isBackendReady)
 const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
 
-// 工作流模式：开启后输入的任务将通过 WorkflowEngine 执行长任务
+// 工作流模式
 const workflowMode = ref(false)
-// 工作流执行模式（P2：长任务执行模式）
-// - flash: 闪电模式，快速响应简单任务（跳过计划确认）
-// - standard: 标准模式，平衡速度与深度（默认）
-// - pro: 专业模式，更多迭代与并发，适合中等复杂任务
-// - ultra: 超长模式，最大能力，适合复杂长任务
-type WorkflowModeLevel = 'flash' | 'standard' | 'pro' | 'ultra'
 const workflowModeLevel = ref<WorkflowModeLevel>('standard')
-const WORKFLOW_MODE_OPTIONS: Array<{
-  value: WorkflowModeLevel
-  label: string
-  title: string
-}> = [
+const WORKFLOW_MODE_OPTIONS: WorkflowModeOption[] = [
   { value: 'flash', label: '闪电', title: '闪电模式：快速响应简单任务，跳过计划确认' },
   { value: 'standard', label: '标准', title: '标准模式：平衡速度与深度，需确认计划' },
   { value: 'pro', label: '专业', title: '专业模式：更多迭代与并发，适合中等复杂任务' },
   { value: 'ultra', label: '超长', title: '超长模式：最大能力，适合复杂长任务' },
 ]
 
-// 推理模型关键词：模型名包含这些词的视为推理模型
 const REASONING_MODEL_KEYWORDS = ['reasoner', 'reason', 'o1', 'o3', 'o4', 'thinking', 'r1']
-
-/** 判断模型是否是推理模型 */
 const isReasoningModel = (modelId: string): boolean => {
   const lower = modelId.toLowerCase()
-  return REASONING_MODEL_KEYWORDS.some(kw => lower.includes(kw))
+  return REASONING_MODEL_KEYWORDS.some((kw) => lower.includes(kw))
 }
 
 const currentModel = computed(() => {
@@ -595,41 +403,19 @@ const currentProvider = computed(() => {
   return resolved?.provider || ''
 })
 
-/**
- * 切换工作流模式时自动选择对应类型的模型
- * - 工作流模式 → 优先选择推理模型（deepseek-reasoner, o1 等）
- * - 普通模式 → 优先选择快速响应模型（deepseek-chat, gpt-4o 等）
- */
-const toggleWorkflowMode = () => {
-  workflowMode.value = !workflowMode.value
-
-  const options = availableModelOptions.value
-  if (options.length === 0) return
-
-  if (workflowMode.value) {
-    // 工作流模式：优先选择推理模型
-    const reasoning = options.find(opt => isReasoningModel(opt.modelId))
-    if (reasoning) {
-      selectModel(reasoning.providerId, reasoning.modelId)
-    }
-  } else {
-    // 普通模式：优先选择快速响应模型
-    const fast = options.find(opt => !isReasoningModel(opt.modelId))
-    if (fast) {
-      selectModel(fast.providerId, fast.modelId)
-    }
-  }
-}
-
 const currentProviderLogo = computed(() => getProviderLogo(currentProvider.value))
 
-// 模型下拉框：只展示各供应商已多选的模型（selectedModels）
 const showModelDropdown = ref(false)
 const availableModelOptions = computed(() => {
-  const options: { providerId: string; providerName: string; providerLogo: ReturnType<typeof getProviderLogo>; modelId: string; modelName: string }[] = []
+  const options: {
+    providerId: string
+    providerName: string
+    providerLogo: ReturnType<typeof getProviderLogo>
+    modelId: string
+    modelName: string
+  }[] = []
   for (const provider of modelStore.providers) {
     const logo = getProviderLogo(provider.id)
-    // 优先使用已多选模型；若未多选则回退到 defaultModel
     const modelIds = provider.selectedModels.length > 0
       ? provider.selectedModels
       : (provider.defaultModel ? [provider.defaultModel] : [])
@@ -655,31 +441,53 @@ const selectModel = async (providerId: string, modelId: string) => {
   showModelDropdown.value = false
 }
 
+const toggleWorkflowMode = () => {
+  workflowMode.value = !workflowMode.value
+  const options = availableModelOptions.value
+  if (options.length === 0) return
+  if (workflowMode.value) {
+    const reasoning = options.find((opt) => isReasoningModel(opt.modelId))
+    if (reasoning) selectModel(reasoning.providerId, reasoning.modelId)
+  } else {
+    const fast = options.find((opt) => !isReasoningModel(opt.modelId))
+    if (fast) selectModel(fast.providerId, fast.modelId)
+  }
+}
+
 const canSend = computed(() => {
   if (!isBackendReady.value) return false
   return inputText.value.trim().length > 0
 })
+
+const chatAreaRef = ref<InstanceType<typeof WorkbenchChatArea> | null>(null)
+const inputAreaRef = ref<InstanceType<typeof WorkbenchInputArea> | null>(null)
+
+const scrollToBottom = (force = false) => {
+  chatAreaRef.value?.scrollToBottom(force)
+}
+
+const handleMessagesScroll = (metrics: { scrollTop: number; scrollHeight: number; clientHeight: number }) => {
+  const { scrollTop, scrollHeight, clientHeight } = metrics
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+  isNearBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
+  showScrollToBottomBtn.value = !isNearBottom.value && messages.value.length > 0
+}
 
 const sendMessage = async () => {
   if (!canSend.value) return
 
   const content = inputText.value.trim()
   inputText.value = ''
-  resetTextareaHeight()
-
-  // Token 侦听器：记录 prompt 字符数
+  inputAreaRef.value?.resetTextareaHeight()
   statsStore.recordPrompt(content)
 
-  // 模型配置：使用工具栏选择的模型（modelStore.resolveModel）
   const resolved = modelStore.resolveModel
 
-  // 工作流模式：通过 WorkflowEngine 执行长任务
   if (workflowMode.value) {
     await submitWorkflowTask(content, resolved)
     return
   }
 
-  // 重置工具调用活动追踪
   toolActivities.value = []
   subagentActivities.value = []
 
@@ -691,23 +499,19 @@ const sendMessage = async () => {
     maxTokens: modelStore.modelConfig.defaultMaxTokens,
     topP: modelStore.modelConfig.defaultTopP,
     onChunk: (chunk: ChatStreamChunk) => {
-      // Token 侦听器：拦截 LLM 返回的所有字符
       statsStore.interceptChunk(chunk, chatStore.currentConvId)
 
       if (chunk.done) {
         finishStream()
         return
       }
-      // 处理子 Agent 执行事件（含浏览器工具事件）
       if (chunk.subagent_event) {
         handleSubagentEvent(chunk.subagent_event)
         taskStreamStore.handleSubagentEvent(chunk.subagent_event)
       }
-      // 处理定时任务事件
       if (chunk.task_event) {
         taskStreamStore.handleTaskEvent(chunk.task_event)
       }
-      // 处理工具调用事件
       if (chunk.tool_calls && chunk.tool_calls.length > 0) {
         for (const tc of chunk.tool_calls) {
           toolActivities.value.push({
@@ -738,16 +542,11 @@ const sendMessage = async () => {
       }
       const filteredContent = filterCodeForTts(chunk.content || '')
       if (filteredContent || chunk.emotion) {
-        feedChunk({
-          ...chunk,
-          content: filteredContent,
-        })
+        feedChunk({ ...chunk, content: filteredContent })
       }
     },
   }
-  // systemPrompt 由后端 build_system_prompt 从 main_agent_config 加载，前端不传
 
-  // 重置代码块过滤状态机
   inCodeBlock = false
   isNearBottom.value = true
   try {
@@ -760,36 +559,17 @@ const sendMessage = async () => {
   scrollToBottom(true)
 }
 
-/**
- * 提交长任务到工作流引擎
- * 工作流模式下，主 Agent 通过 WorkflowEngine 分解任务、调度内部模块
- */
 const submitWorkflowTask = async (
   content: string,
   resolved: { model?: string; provider?: string } | null,
 ) => {
-  // 重置工具调用活动追踪
   toolActivities.value = []
   subagentActivities.value = []
-
   isNearBottom.value = true
   inCodeBlock = false
 
-  // === DEBUG START ===
-  console.group('[WorkflowDebug] submitWorkflowTask 调用')
-  console.log('[WorkflowDebug] 输入内容:', content)
-  console.log('[WorkflowDebug] resolved model/provider:', resolved)
-  console.log('[WorkflowDebug] MAIN_AGENT_ID:', MAIN_AGENT_ID)
-  console.log('[WorkflowDebug] agentStore.activeAgent:', agentStore.activeAgent)
-  console.log('[WorkflowDebug] chatStore.activeAgentId:', chatStore.activeAgentId)
-  console.log('[WorkflowDebug] chatStore.currentConvId:', chatStore.currentConvId)
-  console.log('[WorkflowDebug] chatStore.conversations count:', chatStore.conversations.length)
-  console.log('[WorkflowDebug] chatStore.conversations:', chatStore.conversations)
-  // === DEBUG END ===
-
   let convId = chatStore.currentConvId
   if (!convId) {
-    console.warn('[WorkflowDebug] currentConvId 为空，尝试自动创建对话...')
     try {
       const conv = await chatStore.createConversation(
         content.slice(0, 30) || '新对话',
@@ -798,10 +578,7 @@ const submitWorkflowTask = async (
         resolved?.provider,
       )
       convId = conv?.id || ''
-      console.log('[WorkflowDebug] 自动创建对话结果:', conv)
-      console.log('[WorkflowDebug] 创建后 currentConvId:', chatStore.currentConvId)
     } catch (e: unknown) {
-      console.error('[WorkflowDebug] 自动创建对话失败:', e)
       const errMsg = e instanceof Error ? e.message : String(e)
       toast.error(`创建对话失败：${errMsg}`)
       return
@@ -809,15 +586,11 @@ const submitWorkflowTask = async (
   }
 
   if (!convId) {
-    console.error('[WorkflowDebug] convId 仍为空，无法继续')
     toast.error('请先选择或创建对话')
     return
   }
-  console.log('[WorkflowDebug] 使用 convId:', convId)
-  console.groupEnd()
 
-  // 1. 添加用户消息到 chatStore
-  const userMsgId = `user-${Date.now()}`
+  const userMsgId = generateId('user')
   const userMessage = {
     id: userMsgId,
     role: 'user' as const,
@@ -829,8 +602,7 @@ const submitWorkflowTask = async (
     [convId]: [...(chatStore.convMessages[convId] || []), userMessage],
   }
 
-  // 2. 添加空的 assistant 消息（占位，工作流完成后填充）
-  const assistantMsgId = `assistant-${Date.now()}`
+  const assistantMsgId = generateId('assistant')
   const assistantMessage = {
     id: assistantMsgId,
     role: 'assistant' as const,
@@ -855,43 +627,34 @@ const submitWorkflowTask = async (
       onPhaseChange: (phase) => {
         console.info(`[Workbench] 工作流阶段: ${phase}`)
       },
-      onReasoning: (reasoningContent, phase) => {
-        console.info(`[Workbench] 收到思考过程 (${phase}): ${reasoningContent.slice(0, 80)}${reasoningContent.length > 80 ? '...' : ''}`)
+      onReasoning: (reasoningContent) => {
         const msgs = chatStore.convMessages[convId] || []
-        const updatedMsgs = msgs.map(m =>
+        const updatedMsgs = msgs.map((m) =>
           m.id === assistantMsgId
             ? { ...m, reasoningContent: (m.reasoningContent || '') + reasoningContent }
             : m
         )
-        chatStore.convMessages = {
-          ...chatStore.convMessages,
-          [convId]: updatedMsgs,
-        }
+        chatStore.convMessages = { ...chatStore.convMessages, [convId]: updatedMsgs }
       },
       onFinalResult: (result) => {
-        // 工作流完成后，更新 assistant 消息内容
         const msgs = chatStore.convMessages[convId] || []
-        const updatedMsgs = msgs.map(m =>
+        const updatedMsgs = msgs.map((m) =>
           m.id === assistantMsgId
             ? { ...m, content: result || '工作流执行完成', done: true }
             : m
         )
-        chatStore.convMessages = {
-          ...chatStore.convMessages,
-          [convId]: updatedMsgs,
-        }
+        chatStore.convMessages = { ...chatStore.convMessages, [convId]: updatedMsgs }
 
-        // TTS 播报（失败不阻断消息显示）
         if (result) {
           try {
             feedChunk({
-              id: `workflow_${Date.now()}`,
+              id: generateId('workflow'),
               content: result,
               reasoning_content: '',
               model: resolved?.model || '',
               provider: resolved?.provider || '',
               done: true,
-            })
+            } as ChatStreamChunk)
           } catch (ttsErr) {
             console.warn('[Workbench] TTS 播报失败，消息已正常显示:', ttsErr)
           }
@@ -902,17 +665,13 @@ const submitWorkflowTask = async (
   } catch (e: unknown) {
     const errMsg = e instanceof Error ? e.message : String(e)
     toast.error(`工作流执行失败：${errMsg}`)
-    // 错误时也要更新 assistant 消息
     const msgs = chatStore.convMessages[convId] || []
-    const updatedMsgs = msgs.map(m =>
+    const updatedMsgs = msgs.map((m) =>
       m.id === assistantMsgId
         ? { ...m, content: `工作流执行失败：${errMsg}`, done: true }
         : m
     )
-    chatStore.convMessages = {
-      ...chatStore.convMessages,
-      [convId]: updatedMsgs,
-    }
+    chatStore.convMessages = { ...chatStore.convMessages, [convId]: updatedMsgs }
     finishStream()
   }
   await nextTick()
@@ -926,94 +685,6 @@ const cancelStreaming = () => {
   }
   chatStore.cancelCurrentRequest()
   stopTts()
-}
-
-const scrollToBottom = (force = false) => {
-  if (!messagesContainer.value) return
-  if (!force && !isNearBottom.value) return
-  messagesContainer.value.scrollTo({
-    top: messagesContainer.value.scrollHeight,
-    behavior: force ? 'auto' : 'smooth',
-  })
-}
-
-const handleMessagesScroll = () => {
-  if (!messagesContainer.value) return
-  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
-  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-  isNearBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
-  showScrollToBottomBtn.value = !isNearBottom.value && messages.value.length > 0
-}
-
-const setupResizeObserver = () => {
-  if (!messagesContainer.value) return
-  const inner = messagesContainer.value.querySelector('.messages-container') as HTMLElement
-  if (!inner) return
-  resizeObserver = new ResizeObserver(() => {
-    if (isNearBottom.value) {
-      scrollToBottom(true)
-    }
-  })
-  resizeObserver.observe(inner)
-}
-
-const resetTextareaHeight = () => {
-  if (textareaRef.value) {
-    textareaRef.value.style.height = 'auto'
-  }
-}
-
-const autoResize = () => {
-  if (textareaRef.value) {
-    textareaRef.value.style.height = 'auto'
-    textareaRef.value.style.height = `${Math.min(textareaRef.value.scrollHeight, 120)}px`
-  }
-}
-
-const renderMarkdown = (text: string): string => {
-  if (!text) return ''
-  // 拦截器：剥离 <exp:xxx> 表情标签，防止标签显示在前端
-  const cleaned = stripEmotionTags(text)
-  const raw = marked.parse(cleaned) as string
-  return DOMPurify.sanitize(raw)
-}
-
-const renderReasoningMarkdown = (text: string): string => {
-  if (!text) return ''
-  // 拦截器：剥离 <exp:xxx> 表情标签，防止标签显示在前端
-  const cleaned = stripEmotionTags(text)
-  const raw = marked.parse(cleaned) as string
-  return DOMPurify.sanitize(raw)
-}
-
-const toggleReasoning = (msgId: string) => {
-  showReasoning.value = {
-    ...showReasoning.value,
-    [msgId]: !showReasoning.value[msgId],
-  }
-}
-
-const copyMessage = async (msgId: string, content: string) => {
-  try {
-    await navigator.clipboard.writeText(content)
-    copiedId.value = msgId
-    setTimeout(() => {
-      copiedId.value = null
-    }, 2000)
-  } catch {}
-}
-
-const isLastAssistantMessage = (msgId: string) => {
-  const msgs = messages.value
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].role === 'assistant' && !msgs[i].done) return false
-  }
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].role === 'assistant') {
-      return msgs[i].id === msgId
-    }
-  }
-  return false
 }
 
 const handleRegenerate = async (messageId: string) => {
@@ -1063,10 +734,7 @@ const handleRegenerate = async (messageId: string) => {
       }
       const filteredContent = filterCodeForTts(chunk.content || '')
       if (filteredContent || chunk.emotion) {
-        feedChunk({
-          ...chunk,
-          content: filteredContent,
-        })
+        feedChunk({ ...chunk, content: filteredContent })
       }
     },
   })
@@ -1074,20 +742,28 @@ const handleRegenerate = async (messageId: string) => {
   scrollToBottom(true)
 }
 
-watch(() => messages.value, async (msgs) => {
-  for (const msg of msgs) {
-    if (msg.role !== 'assistant') continue
-    if (msg.content && msg.content.length > 0 && showReasoning.value[msg.id] === undefined) {
-      showReasoning.value = { ...showReasoning.value, [msg.id]: false }
+watch(
+  () => messages.value,
+  async (msgs) => {
+    for (const msg of msgs) {
+      if (msg.role !== 'assistant') continue
+      if (msg.content && msg.content.length > 0 && showReasoning.value[msg.id] === undefined) {
+        showReasoning.value = { ...showReasoning.value, [msg.id]: false }
+      }
     }
-  }
-}, { deep: true, immediate: true })
+  },
+  { deep: true, immediate: true }
+)
 
-watch(messages, () => {
-  if (isStreaming.value && isNearBottom.value) {
-    nextTick(() => scrollToBottom())
-  }
-}, { deep: true })
+watch(
+  messages,
+  () => {
+    if (isStreaming.value && isNearBottom.value) {
+      nextTick(() => scrollToBottom())
+    }
+  },
+  { deep: true }
+)
 
 watch(isLoadingCurrentConv, (loading) => {
   if (loading) {
@@ -1097,11 +773,9 @@ watch(isLoadingCurrentConv, (loading) => {
   }
 })
 
-// Live2D 模型切换
 const switchModel = async (model: typeof LUOMINEST_BUILTIN_MODELS[0]) => {
   currentModelInfo.value = model
   if (isDesktopMode.value) {
-    // 桌宠模式：通过 IPC 切换桌宠窗口的模型，不加载本地实例
     await window.api.desktopPet.loadModel(model)
   } else {
     await loadModel(model.url, model.scale)
@@ -1109,12 +783,10 @@ const switchModel = async (model: typeof LUOMINEST_BUILTIN_MODELS[0]) => {
 }
 
 onMounted(async () => {
-  // 设置虚拟主 Agent Profile，使 chat store 的 computed 基于 MAIN_AGENT_ID 工作
   agentStore.setActiveAgent(MAIN_AGENT_PROFILE)
 
   await chatStore.checkBackend()
   if (chatStore.isBackendReady) {
-    // 并发加载：主 Agent 配置 / 模型 / 对话历史 / 记忆 / 状态面板
     await Promise.all([
       agentStore.fetchAgents(),
       modelStore.fetchProviders(),
@@ -1127,24 +799,19 @@ onMounted(async () => {
       fetchMcpStatus(),
     ])
   }
-  // 检查桌宠窗口运行状态（可能从上次会话残留或由 AvatarView 开启）
   await avatarControl.checkDesktopPetStatus()
-  // 仅在内联模式下加载本地 Live2D 模型；桌宠模式下由桌宠窗口负责渲染
   if (!isDesktopMode.value) {
     const defaultModel = LUOMINEST_BUILTIN_MODELS[0]
     await loadModel(defaultModel.url, defaultModel.scale)
   }
   document.addEventListener('click', handleClickOutsideModel)
-  nextTick(() => setupResizeObserver())
+  nextTick(() => chatAreaRef.value?.setupResizeObserver())
 })
 
-// 监听桌宠模式切换：与 AvatarView 的开关操作联动，自动销毁/重建本地 Live2D 实例
 watch(isDesktopMode, async (desktopMode) => {
   if (desktopMode) {
-    // 进入桌宠模式：销毁本地 Live2D 实例，避免双窗口同时渲染
     teardownLive2D()
   } else {
-    // 退出桌宠模式：重新加载本地模型
     await nextTick()
     const modelToLoad = currentModelInfo.value
     await loadModel(modelToLoad.url, modelToLoad.scale)
@@ -1159,7 +826,7 @@ const handleClickOutsideModel = (e: MouseEvent) => {
 }
 
 onBeforeUnmount(() => {
-  resizeObserver?.disconnect()
+  chatAreaRef.value?.teardownResizeObserver()
   document.removeEventListener('click', handleClickOutsideModel)
   stopTts()
   teardownLive2D()
@@ -1168,854 +835,119 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="workbench-layout">
-    <!-- 左侧：聊天历史记录 -->
-    <Transition name="history-slide">
-      <div v-if="!isHistoryCollapsed" class="workbench-history">
-        <div class="history-header">
-          <div class="history-title">
-            <Bot :size="16" />
-            <span>陪伴对话</span>
-          </div>
-          <LumiButton
-            variant="ghost"
-            size="sm"
-            icon-only
-            aria-label="收起历史记录"
-            class="history-collapse-btn"
-            @click="isHistoryCollapsed = true"
-          >
-            <PanelLeftClose :size="15" />
-          </LumiButton>
-        </div>
+    <WorkbenchHistoryPanel
+      v-model:search-query="searchQuery"
+      v-model:renaming-title="renamingTitle"
+      :is-search-mode="isSearchMode"
+      :search-results="searchResults"
+      :is-searching="isSearching"
+      :time-groups="timeGroups"
+      :current-conv-id="chatStore.currentConvId"
+      :renaming-conv-id="renamingConvId"
+      :is-history-collapsed="isHistoryCollapsed"
+      @select="selectConversation"
+      @new-conversation="handleNewConversation"
+      @start-rename="startRename"
+      @confirm-rename="confirmRename"
+      @cancel-rename="cancelRename"
+      @delete-conversation="handleDeleteConversation"
+      @collapse="isHistoryCollapsed = true"
+      @expand="isHistoryCollapsed = false"
+    />
 
-        <div class="history-search">
-          <LumiInput v-model="searchQuery" size="sm" placeholder="搜索对话...">
-            <template #icon>
-              <Search :size="14" />
-            </template>
-          </LumiInput>
-        </div>
-
-        <LumiButton variant="primary" size="sm" block class="new-conv-btn" @click="handleNewConversation">
-          <Plus :size="15" />
-          <span>新建对话</span>
-        </LumiButton>
-
-        <div class="history-list">
-          <template v-if="isSearchMode">
-            <div v-if="isSearching" class="history-empty">
-              <Loader2 :size="20" class="spin-animation" />
-              <span>搜索中...</span>
-            </div>
-            <template v-else>
-              <div
-                v-for="result in searchResults"
-                :key="result.id"
-                :class="['history-item', { active: chatStore.currentConvId === result.id }]"
-                @click="selectConversation(result.id, searchQuery.trim())"
-              >
-                <MessageSquare :size="14" class="history-item-icon" />
-                <div class="history-item-content">
-                  <span class="history-item-title">{{ result.title }}</span>
-                  <span class="history-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
-                </div>
-              </div>
-              <div v-if="searchResults.length === 0" class="history-empty">
-                <MessageSquare :size="24" />
-                <span>未找到匹配的会话</span>
-              </div>
-            </template>
-          </template>
-
-          <template v-else>
-            <template v-for="group in timeGroups" :key="group.label">
-              <div class="time-group">
-                <div class="time-group-label">
-                  <Clock :size="12" />
-                  <span>{{ group.label }}</span>
-                </div>
-                <div
-                  v-for="conv in group.items"
-                  :key="conv.id"
-                  :class="['history-item', { active: chatStore.currentConvId === conv.id }]"
-                  @click="selectConversation(conv.id)"
-                >
-                  <MessageSquare :size="14" class="history-item-icon" />
-                  <div class="history-item-content">
-                    <template v-if="renamingConvId === conv.id">
-                      <input
-                        v-model="renamingTitle"
-                        class="lumi-input workbench-rename-input"
-                        maxlength="200"
-                        @keydown.enter="confirmRename"
-                        @keydown.escape="cancelRename"
-                        @blur="confirmRename"
-                        @click.stop
-                      />
-                    </template>
-                    <template v-else>
-                      <span class="history-item-title">{{ conv.title }}</span>
-                      <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
-                    </template>
-                  </div>
-                  <template v-if="renamingConvId !== conv.id">
-                    <LumiButton
-                      variant="ghost"
-                      size="sm"
-                      icon-only
-                      aria-label="重命名"
-                      class="history-item-rename"
-                      @click.stop="startRename(conv.id, conv.title)"
-                    >
-                      <Pencil :size="13" />
-                    </LumiButton>
-                    <LumiButton
-                      variant="danger-ghost"
-                      size="sm"
-                      icon-only
-                      aria-label="删除对话"
-                      class="history-item-delete"
-                      @click.stop="handleDeleteConversation(conv.id)"
-                    >
-                      <Trash2 :size="13" />
-                    </LumiButton>
-                  </template>
-                </div>
-              </div>
-            </template>
-
-            <div v-if="timeGroups.length === 0" class="history-empty">
-              <MessageSquare :size="24" />
-              <span>暂无历史记录</span>
-            </div>
-          </template>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- 收起状态：展开按钮 -->
-    <LumiButton
-      v-if="isHistoryCollapsed"
-      variant="ghost"
-      size="sm"
-      icon-only
-      aria-label="展开历史记录"
-      class="history-expand-toggle"
-      @click="isHistoryCollapsed = false"
-    >
-      <PanelLeftOpen :size="15" />
-    </LumiButton>
-
-    <!-- 中间：对话面板 -->
     <div class="workbench-chat">
-      <div v-if="!isBackendReady" class="backend-warning">
-        <div class="warning-content">
-          <AlertTriangle :size="20" />
-          <div class="warning-text">
-            <p class="warning-title">后端服务未连接</p>
-            <p class="warning-desc">请确保 LuomiNest 后端服务已启动</p>
-          </div>
-          <LumiButton variant="danger" size="sm" class="retry-btn" @click="chatStore.checkBackend()">
-            <RotateCcw :size="14" />
-            <span>重试</span>
-          </LumiButton>
-        </div>
-      </div>
+      <WorkbenchChatArea
+        ref="chatAreaRef"
+        :messages="messages"
+        :is-loading-current-conv="isLoadingCurrentConv"
+        :is-streaming="isStreaming"
+        :is-backend-ready="isBackendReady"
+        :current-model="currentModel"
+        :tool-activities="toolActivities"
+        :subagent-activities="subagentActivities"
+        :expanded-tool-outputs="expandedToolOutputs"
+        :expanded-subagents="expandedSubagents"
+        :expanded-subagent-tools="expandedSubagentTools"
+        :show-reasoning="showReasoning"
+        :workflow-pending-plan="(workflowStore.pendingPlan as WorkflowPendingPlan | null)"
+        :confirmation-feedback="workflowStore.confirmationFeedback"
+        :is-near-bottom="isNearBottom"
+        :show-scroll-to-bottom-btn="showScrollToBottomBtn"
+        @toggle-reasoning="(id) => { showReasoning = { ...showReasoning, [id]: !showReasoning[id] } }"
+        @regenerate="handleRegenerate"
+        @toggle-tool-output="toggleToolOutput"
+        @toggle-subagent="toggleSubagent"
+        @toggle-subagent-tools="toggleSubagentTools"
+        @confirm-plan="workflowStore.confirmPlan"
+        @reject-plan="workflowStore.rejectPlan"
+        @update:confirmation-feedback="(v) => workflowStore.confirmationFeedback = v"
+        @scroll="handleMessagesScroll"
+        @scroll-to-bottom="scrollToBottom(true)"
+        @retry-backend="chatStore.checkBackend()"
+        @set-input-text="(text) => inputText = text"
+      />
 
-      <div class="chat-area">
-        <!-- 主智能体标识栏 -->
-        <div class="main-agent-bar">
-          <div class="main-agent-badge">
-            <Brain :size="14" />
-            <span>主智能体</span>
-          </div>
-          <span class="main-agent-model">{{ currentModel }}</span>
-        </div>
-        <div ref="messagesContainer" class="messages-scroll" @scroll="handleMessagesScroll">
-          <div class="messages-container">
-            <TransitionGroup name="msg-appear" tag="div">
-              <div
-                v-for="msg in messages"
-                :key="msg.id"
-                :class="['message-row', msg.role]"
-              >
-                <div v-if="msg.role === 'assistant'" class="message-avatar">
-                  <div class="avatar-assistant">
-                    <Bot :size="16" />
-                  </div>
-                </div>
-                <div class="message-body">
-                  <div v-if="msg.role === 'assistant'" class="message-sender">
-                    主智能体
-                  </div>
-                  <div
-                    v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
-                    class="reasoning-section lumi-card"
-                  >
-                    <div class="reasoning-header" @click="toggleReasoning(msg.id)">
-                      <Loader2 v-if="!msg.done && !msg.content && !msg.reasoningContent" :size="12" class="spin-animation" />
-                      <Wand2 v-else :size="12" />
-                      <span>
-                        <template v-if="!msg.done && !msg.content && !msg.reasoningContent">等待模型中...</template>
-                        <template v-else-if="!msg.done && !msg.content && msg.reasoningContent">思考中...</template>
-                        <template v-else-if="msg.reasoningContent && msg.reasoningContent.length > 0">{{ showReasoning[msg.id] ? '思考过程' : '思考过程（已折叠）' }}</template>
-                        <template v-else>思考完成</template>
-                      </span>
-                      <ChevronDown :size="12" class="reasoning-chevron" :class="{ rotated: !showReasoning[msg.id] }" />
-                    </div>
-                    <div
-                      v-show="showReasoning[msg.id] !== false"
-                      class="reasoning-content reasoning-markdown"
-                    >
-                      <div v-html="renderReasoningMarkdown(msg.reasoningContent || '')"></div>
-                    </div>
-                  </div>
-
-                  <div
-                    v-if="msg.role === 'assistant' && msg.id === messages[messages.length - 1].id && toolActivities.length > 0"
-                    class="tool-activities-section lumi-card"
-                  >
-                    <div class="tool-activities-header">
-                      <Wrench :size="12" />
-                      <span>工具调用 ({{ toolActivities.length }})</span>
-                    </div>
-                    <div class="tool-activities-list">
-                      <div
-                        v-for="activity in toolActivities"
-                        :key="activity.id"
-                        class="tool-activity-item"
-                      >
-                        <div class="tool-activity-header" @click="toggleToolOutput(activity.id)">
-                          <div class="tool-activity-icon">
-                            <Loader2 v-if="activity.status === 'running' || activity.status === 'pending'" :size="13" class="spin-animation" />
-                            <CheckCircle2 v-else-if="activity.status === 'completed'" :size="13" />
-                            <XCircle v-else-if="activity.status === 'failed'" :size="13" />
-                          </div>
-                          <Terminal :size="12" />
-                          <span class="tool-activity-name">{{ activity.name }}</span>
-                          <span class="tool-activity-iteration" v-if="activity.iteration > 0">轮次 {{ activity.iteration + 1 }}</span>
-                          <ChevronDown
-                            v-if="activity.output"
-                            :size="12"
-                            class="tool-activity-chevron"
-                            :class="{ rotated: !expandedToolOutputs[activity.id] }"
-                          />
-                        </div>
-                        <div v-if="activity.arguments && activity.arguments !== '{}'" class="tool-activity-args">
-                          <pre>{{ formatToolArgs(activity.arguments) }}</pre>
-                        </div>
-                        <div
-                          v-if="activity.output && expandedToolOutputs[activity.id]"
-                          class="tool-activity-output"
-                        >
-                          <pre>{{ activity.output }}</pre>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 子 Agent 群组执行卡片（参考 deer-flow SubtaskCard） -->
-                  <div
-                    v-if="msg.role === 'assistant' && msg.id === messages[messages.length - 1].id && subagentActivities.length > 0"
-                    class="subagent-activities-section lumi-card"
-                  >
-                    <div class="subagent-activities-header">
-                      <Cpu :size="12" />
-                      <span>子 Agent 群组 ({{ subagentActivities.length }})</span>
-                      <span v-if="activeSubagentCount > 0" class="subagent-active-badge">{{ activeSubagentCount }} 执行中</span>
-                    </div>
-                    <div class="subagent-activities-list">
-                      <div
-                        v-for="agent in subagentActivities"
-                        :key="agent.id"
-                        :class="['subagent-card', 'lumi-card', { running: agent.status === 'running' }]"
-                      >
-                        <div class="subagent-card-header" @click="toggleSubagent(agent.id)">
-                          <div class="subagent-status-icon">
-                            <Loader2 v-if="agent.status === 'running'" :size="13" class="spin-animation" />
-                            <CheckCircle2 v-else-if="agent.status === 'completed'" :size="13" />
-                            <XCircle v-else-if="agent.status === 'failed'" :size="13" />
-                          </div>
-                          <div class="subagent-card-info">
-                            <div class="subagent-card-title">
-                              <span class="subagent-task">{{ agent.task }}</span>
-                              <span class="subagent-depth">深度 {{ agent.depth }}</span>
-                            </div>
-                            <div class="subagent-card-meta">
-                              <template v-if="agent.status === 'running' && agent.progress">
-                                <span class="subagent-progress">{{ agent.progress }}</span>
-                              </template>
-                              <template v-else-if="agent.status === 'completed'">
-                                <span class="subagent-status-text completed">已完成</span>
-                              </template>
-                              <template v-else-if="agent.status === 'failed'">
-                                <span class="subagent-status-text failed">执行失败</span>
-                              </template>
-                              <span v-if="agent.toolCalls.length > 0" class="subagent-tools-count">
-                                {{ agent.toolCalls.length }} 次工具调用
-                              </span>
-                            </div>
-                          </div>
-                          <ChevronRight
-                            :size="14"
-                            class="subagent-chevron"
-                            :class="{ expanded: !expandedSubagents[agent.id] }"
-                          />
-                        </div>
-
-                        <Transition name="subagent-slide">
-                          <div v-show="expandedSubagents[agent.id]" class="subagent-card-body">
-                            <!-- 工具调用历史 -->
-                            <div v-if="agent.toolCalls.length > 0" class="subagent-tools-section">
-                              <div class="subagent-tools-header" @click="toggleSubagentTools(agent.id)">
-                                <Terminal :size="11" />
-                                <span>工具调用历史</span>
-                                <ChevronDown
-                                  :size="11"
-                                  class="subagent-tools-chevron"
-                                  :class="{ rotated: !expandedSubagentTools[agent.id] }"
-                                />
-                              </div>
-                              <div v-show="expandedSubagentTools[agent.id]" class="subagent-tools-list">
-                                <div
-                                  v-for="(tc, idx) in agent.toolCalls"
-                                  :key="idx"
-                                  class="subagent-tool-item"
-                                >
-                                  <div class="subagent-tool-header">
-                                    <div class="subagent-tool-icon">
-                                      <Loader2 v-if="tc.status === 'running'" :size="11" class="spin-animation" />
-                                      <CheckCircle2 v-else :size="11" />
-                                    </div>
-                                    <span class="subagent-tool-name">{{ tc.name }}</span>
-                                  </div>
-                                  <div v-if="tc.args && tc.args !== '{}'" class="subagent-tool-args">
-                                    <pre>{{ formatToolArgs(tc.args) }}</pre>
-                                  </div>
-                                  <div v-if="tc.output" class="subagent-tool-output">
-                                    <pre>{{ tc.output }}</pre>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            <!-- 最终结果 -->
-                            <div v-if="agent.result" class="subagent-result">
-                              <div class="subagent-result-label">
-                                <CheckCircle2 :size="11" />
-                                <span>执行结果</span>
-                              </div>
-                              <div class="subagent-result-content markdown-body">
-                                <div v-html="renderMarkdown(agent.result)"></div>
-                              </div>
-                            </div>
-
-                            <!-- 错误信息 -->
-                            <div v-if="agent.error" class="subagent-error">
-                              <div class="subagent-error-label">
-                                <XCircle :size="11" />
-                                <span>错误信息</span>
-                              </div>
-                              <div class="subagent-error-content">{{ agent.error }}</div>
-                            </div>
-                          </div>
-                        </Transition>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 计划确认卡片（借鉴 deer-flow ClarificationMiddleware） -->
-                  <div
-                    v-if="msg.role === 'assistant' && msg.id === messages[messages.length - 1].id && workflowStore.pendingPlan"
-                    class="plan-confirmation-section lumi-card"
-                  >
-                    <div class="plan-confirmation-header">
-                      <ClipboardList :size="14" />
-                      <span>执行计划待确认</span>
-                      <span class="plan-task-count">{{ workflowStore.pendingPlan.tasks.length }} 个子任务</span>
-                    </div>
-                    <div class="plan-confirmation-body">
-                      <div v-if="workflowStore.pendingPlan.plan" class="plan-summary">
-                        {{ workflowStore.pendingPlan.plan }}
-                      </div>
-                      <div class="plan-tasks-list">
-                        <div
-                          v-for="(task, idx) in workflowStore.pendingPlan.tasks"
-                          :key="task.task_id || idx"
-                          class="plan-task-item"
-                        >
-                          <div class="plan-task-index">{{ idx + 1 }}</div>
-                          <div class="plan-task-info">
-                            <div class="plan-task-title">{{ task.title }}</div>
-                            <div v-if="task.description" class="plan-task-desc">{{ task.description }}</div>
-                            <div class="plan-task-meta">
-                              <span v-if="task.tool_name" class="plan-task-tool">
-                                <Wrench :size="10" />
-                                {{ task.tool_name }}
-                              </span>
-                              <span v-if="task.priority && task.priority !== 'normal'" class="plan-task-priority" :class="task.priority">
-                                {{ task.priority }}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="plan-feedback-area">
-                        <textarea
-                          v-model="workflowStore.confirmationFeedback"
-                          class="lumi-textarea plan-feedback-input"
-                          placeholder="反馈（可选）：如需调整计划，请在此说明..."
-                          rows="2"
-                        ></textarea>
-                      </div>
-                      <div class="plan-confirmation-actions">
-                        <LumiButton variant="secondary" size="sm" class="plan-btn plan-btn-reject" @click="workflowStore.rejectPlan">
-                          <X :size="14" />
-                          <span>拒绝执行</span>
-                        </LumiButton>
-                        <LumiButton variant="primary" size="sm" class="plan-btn plan-btn-confirm" @click="workflowStore.confirmPlan">
-                          <Check :size="14" />
-                          <span>确认执行</span>
-                        </LumiButton>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-if="msg.role === 'assistant' && msg.content && msg.content !== '[已中断]'" class="message-content markdown-body">
-                    <div v-html="renderMarkdown(msg.content)"></div>
-                    <span v-if="msg.interrupted" class="interrupted-inline">
-                      <AlertTriangle :size="12" /> 已中断
-                    </span>
-                  </div>
-                  <div v-else-if="(msg.interrupted || msg.content === '[已中断]') && msg.role === 'assistant'" class="interrupted-only">
-                    <AlertTriangle :size="12" /> 已中断
-                  </div>
-                  <div v-if="msg.role === 'assistant' && !msg.done && msg.content" class="streaming-indicator">
-                    <span class="streaming-dot"></span>
-                  </div>
-
-                  <div v-if="msg.role === 'assistant' && msg.done" class="assistant-msg-actions">
-                    <LumiButton
-                      variant="ghost"
-                      size="sm"
-                      icon-only
-                      class="u-btn"
-                      :aria-label="copiedId === msg.id ? '已复制' : '复制'"
-                      @click="copyMessage(msg.id, msg.content)"
-                    >
-                      <Check v-if="copiedId === msg.id" :size="14" />
-                      <Copy v-else :size="14" />
-                    </LumiButton>
-                    <LumiButton
-                      v-if="isLastAssistantMessage(msg.id)"
-                      variant="ghost"
-                      size="sm"
-                      icon-only
-                      aria-label="重新生成"
-                      class="u-btn"
-                      @click="handleRegenerate(msg.id)"
-                    >
-                      <RotateCcw :size="14" />
-                    </LumiButton>
-                  </div>
-
-                  <div v-if="msg.role === 'user'" class="user-msg-layout">
-                    <div class="user-msg-btns">
-                      <LumiButton
-                        variant="ghost"
-                        size="sm"
-                        icon-only
-                        class="u-btn u-btn-hover"
-                        :aria-label="copiedId === msg.id ? '已复制' : '复制'"
-                        @click="copyMessage(msg.id, msg.content)"
-                      >
-                        <Check v-if="copiedId === msg.id" :size="14" />
-                        <Copy v-else :size="14" />
-                      </LumiButton>
-                    </div>
-                    <div class="message-content user-message">
-                      {{ msg.content }}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </TransitionGroup>
-
-            <div v-if="messages.length === 0 && !isLoadingCurrentConv" class="empty-state">
-              <div class="empty-icon">
-                <Sparkles :size="48" />
-              </div>
-              <p class="empty-title">与陪伴 AI 开始对话</p>
-              <p class="empty-desc">右侧的 Live2D 将作为主 Agent 陪伴你</p>
-              <div class="empty-quick-actions">
-                <LumiButton variant="outline" size="sm" class="quick-action" @click="inputText = '你好，请介绍一下你自己'">
-                  打个招呼
-                </LumiButton>
-                <LumiButton variant="outline" size="sm" class="quick-action" @click="inputText = '帮我写一段 Python 代码'">
-                  写段代码
-                </LumiButton>
-                <LumiButton variant="outline" size="sm" class="quick-action" @click="inputText = '解释一下什么是大语言模型'">
-                  了解 LLM
-                </LumiButton>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <Transition name="conv-loading-fade">
-          <div v-if="isLoadingCurrentConv" class="conv-loading-overlay">
-            <div class="conv-loading-content">
-              <Loader2 :size="20" class="spin-animation" />
-              <span>加载对话中...</span>
-            </div>
-          </div>
-        </Transition>
-
-        <Transition name="scroll-btn-fade">
-          <LumiButton
-            v-if="showScrollToBottomBtn"
-            variant="secondary"
-            size="md"
-            icon-only
-            aria-label="滚动到底部"
-            class="scroll-to-bottom-btn"
-            @click="scrollToBottom(true)"
-          >
-            <ChevronDown :size="18" />
-          </LumiButton>
-        </Transition>
-      </div>
-
-      <div class="input-area">
-        <div class="input-wrapper lumi-card">
-          <textarea
-            ref="textareaRef"
-            v-model="inputText"
-            placeholder="与陪伴 AI 对话..."
-            rows="1"
-            class="chat-input"
-            :disabled="!isBackendReady"
-            @keydown.enter.exact.prevent="sendMessage"
-            @input="autoResize"
-          ></textarea>
-          <div class="input-toolbar">
-            <div class="toolbar-left">
-              <div class="model-dropdown-container">
-                <LumiButton
-                  variant="secondary"
-                  size="sm"
-                  class="tool-btn"
-                  @click.stop="showModelDropdown = !showModelDropdown"
-                >
-                  <template #icon>
-                    <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
-                    <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
-                      {{ currentProviderLogo.initials }}
-                    </span>
-                  </template>
-                  <span class="model-btn-text">{{ currentModel }}</span>
-                  <ChevronDown :size="14" />
-                </LumiButton>
-                <Transition name="dropdown-fade">
-                  <div v-if="showModelDropdown" class="model-dropdown">
-                    <div class="dropdown-header">选择模型</div>
-                    <div class="dropdown-list">
-                      <LumiButton
-                        v-for="opt in availableModelOptions"
-                        :key="`${opt.providerId}-${opt.modelId}`"
-                        variant="ghost"
-                        size="sm"
-                        block
-                        :class="['dropdown-item', { active: currentProvider === opt.providerId && currentModel === opt.modelId }]"
-                        @click="selectModel(opt.providerId, opt.modelId)"
-                      >
-                        <template #icon>
-                          <span v-if="opt.providerLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="opt.providerLogo.svgIcon"></span>
-                          <span v-else class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
-                            {{ opt.providerLogo.initials }}
-                          </span>
-                        </template>
-                        <div class="dropdown-item-info">
-                          <span class="dropdown-item-model">{{ opt.modelName }}</span>
-                          <span class="dropdown-item-provider">{{ opt.providerName }}</span>
-                        </div>
-                      </LumiButton>
-                      <div v-if="availableModelOptions.length === 0" class="dropdown-empty">
-                        暂无可用模型，请先到设置多选模型
-                      </div>
-                    </div>
-                  </div>
-                </Transition>
-              </div>
-              <LumiButton
-                :class="['workflow-toggle', { active: workflowMode }]"
-                variant="secondary"
-                size="sm"
-                :title="workflowMode ? '工作流模式已开启：长任务将自动分解并调度内部模块' : '开启工作流模式：长任务自动分解执行'"
-                @click="toggleWorkflowMode"
-              >
-                <template #icon>
-                  <Wand2 :size="15" />
-                </template>
-                <span class="workflow-toggle-text">{{ workflowMode ? '工作流' : '普通' }}</span>
-              </LumiButton>
-              <div v-if="workflowMode" class="workflow-mode-selector">
-                <LumiButton
-                  v-for="opt in WORKFLOW_MODE_OPTIONS"
-                  :key="opt.value"
-                  :class="['mode-chip', { active: workflowModeLevel === opt.value }]"
-                  variant="secondary"
-                  size="sm"
-                  :title="opt.title"
-                  @click="workflowModeLevel = opt.value"
-                >
-                  {{ opt.label }}
-                </LumiButton>
-              </div>
-            </div>
-            <div class="toolbar-right">
-              <LumiButton
-                v-if="isStreaming"
-                variant="danger"
-                size="md"
-                icon-only
-                aria-label="停止生成"
-                class="send-btn stop"
-                @click="cancelStreaming"
-              >
-                <Square :size="16" />
-              </LumiButton>
-              <LumiButton
-                v-else
-                variant="primary"
-                size="md"
-                icon-only
-                aria-label="发送"
-                class="send-btn"
-                :disabled="!canSend"
-                @click="sendMessage"
-              >
-                <Send :size="17" />
-              </LumiButton>
-            </div>
-          </div>
-        </div>
-      </div>
+      <WorkbenchInputArea
+        ref="inputAreaRef"
+        v-model:input-text="inputText"
+        v-model:workflow-mode-level="workflowModeLevel"
+        v-model:selected-skill-ids="selectedSkillIds"
+        :is-backend-ready="isBackendReady"
+        :is-streaming="isStreaming"
+        :can-send="canSend"
+        :current-model="currentModel"
+        :current-provider="currentProvider"
+        :current-provider-logo="currentProviderLogo"
+        :available-model-options="availableModelOptions"
+        :show-model-dropdown="showModelDropdown"
+        :workflow-mode="workflowMode"
+        :workflow-mode-options="WORKFLOW_MODE_OPTIONS"
+        @send="sendMessage"
+        @cancel="cancelStreaming"
+        @toggle-model-dropdown="showModelDropdown = !showModelDropdown"
+        @select-model="selectModel"
+        @toggle-workflow-mode="toggleWorkflowMode"
+      />
     </div>
 
-    <!-- 右侧：Live2D 陪伴区 -->
     <div class="workbench-avatar">
-      <div class="avatar-header">
-        <div class="avatar-title">
-          <!-- <Sparkles :size="15" /> -->
-          <span>陪伴形象</span>
-        </div>
-        <div class="avatar-model-selector">
-          <LumiButton
-            v-for="model in LUOMINEST_BUILTIN_MODELS"
-            :key="model.id"
-            :variant="currentModelInfo.id === model.id ? 'primary' : 'outline'"
-            size="sm"
-            :class="['model-chip', { active: currentModelInfo.id === model.id }]"
-            :title="model.name"
-            @click="switchModel(model)"
-          >
-            {{ model.name }}
-          </LumiButton>
-        </div>
-      </div>
+      <WorkbenchAvatarPanel
+        :is-desktop-mode="isDesktopMode"
+        :current-model-info="currentModelInfo"
+        :is-model-loading="isModelLoading"
+        :is-model-ready="isModelReady"
+        :load-error="loadError"
+        :is-speaking="isSpeaking"
+        :is-synthesizing="isSynthesizing"
+        :subtitle-visible="subtitleVisible"
+        :subtitle-text="subtitleText"
+        :tts-enabled="ttsEnabled"
+        :subtitle-enabled="subtitleEnabled"
+        :builtin-models="LUOMINEST_BUILTIN_MODELS"
+        :set-canvas-ref="setCanvasRef"
+        @switch-model="switchModel"
+        @toggle-tts="ttsEnabled = !ttsEnabled"
+        @toggle-subtitle="subtitleEnabled = !subtitleEnabled"
+        @stop-tts="stopTts"
+        @dismiss-subtitle="dismissSubtitle"
+      />
 
-      <div class="avatar-stage" :class="{ 'desktop-mode-active': isDesktopMode }">
-        <template v-if="!isDesktopMode">
-          <canvas ref="canvasRef" class="live2d-canvas"></canvas>
-          <Transition name="fade">
-            <div v-if="isModelLoading && !isModelReady" class="avatar-loading">
-              <Loader2 :size="28" class="spin-animation" />
-              <span>加载模型中...</span>
-            </div>
-          </Transition>
-          <Transition name="fade">
-            <div v-if="loadError" class="avatar-error">
-              <AlertTriangle :size="24" />
-              <span>{{ loadError }}</span>
-            </div>
-          </Transition>
-          <div v-if="isModelReady" class="avatar-status">
-            <span class="status-dot" :class="{ speaking: isSpeaking }"></span>
-            <span>{{ isSpeaking ? '正在说话' : (isSynthesizing ? '合成语音中' : (currentModelInfo.name + ' 已就绪')) }}</span>
-          </div>
-          <Transition name="subtitle-fade">
-            <div
-              v-if="subtitleVisible && subtitleText"
-              class="avatar-subtitle"
-              @click="dismissSubtitle"
-            >
-              {{ subtitleText }}
-            </div>
-          </Transition>
-        </template>
-
-        <div v-else class="desktop-mode-hint">
-          <div class="hint-icon">
-            <Monitor :size="40" />
-          </div>
-          <div class="hint-content">
-            <h3>桌宠模式已开启</h3>
-            <p>模型已切换到桌面宠物窗口，请直接在桌面上与角色互动。</p>
-            <p class="hint-sub">工作台的对话、表情和动作会同步到桌宠。前往"皮套工坊"可切换回内联模式。</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="avatar-footer">
-        <div class="avatar-controls">
-          <LumiButton
-            variant="outline"
-            size="sm"
-            icon-only
-            :aria-label="ttsEnabled ? '关闭语音播报' : '开启语音播报'"
-            :class="['ctrl-btn', { active: ttsEnabled }]"
-            @click="ttsEnabled = !ttsEnabled"
-          >
-            <Volume2 v-if="ttsEnabled" :size="15" />
-            <VolumeX v-else :size="15" />
-          </LumiButton>
-          <LumiButton
-            variant="outline"
-            size="sm"
-            icon-only
-            :aria-label="subtitleEnabled ? '关闭字幕' : '开启字幕'"
-            :class="['ctrl-btn', { active: subtitleEnabled }]"
-            @click="subtitleEnabled = !subtitleEnabled"
-          >
-            <Subtitles :size="15" />
-          </LumiButton>
-          <LumiButton
-            v-if="isSpeaking || isSynthesizing"
-            variant="danger"
-            size="sm"
-            icon-only
-            aria-label="停止播放"
-            class="ctrl-btn stop-btn"
-            @click="stopTts"
-          >
-            <StopCircle :size="15" />
-          </LumiButton>
-        </div>
-        <p class="avatar-tip">主 Agent 工作台 · 支持工具调用与子 Agent 协作</p>
-      </div>
-
-      <!-- 主 Agent 状态面板（可折叠：记忆 / MCP / 消息平台） -->
-      <div class="agent-panels">
-        <!-- 记忆快览 -->
-        <div class="agent-panel lumi-card">
-          <div class="agent-panel-header" @click="toggleSidePanel('memory')">
-            <Brain :size="14" />
-            <span class="agent-panel-title">记忆</span>
-            <span class="agent-panel-badge">{{ memoryStore.facts.length }}</span>
-            <ChevronRight :size="14" class="agent-panel-chevron" :class="{ expanded: !sidePanelCollapsed.memory }" />
-          </div>
-          <Transition name="panel-slide">
-            <div v-show="!sidePanelCollapsed.memory" class="agent-panel-body">
-              <div class="memory-profile">
-                <span class="memory-label">用户画像</span>
-                <span class="memory-value">{{ memoryStore.profile.name || '未设置' }}</span>
-              </div>
-              <div class="memory-summary">{{ memorySummaryPreview }}</div>
-            </div>
-          </Transition>
-        </div>
-
-        <!-- MCP 工具状态 -->
-        <div class="agent-panel lumi-card">
-          <div class="agent-panel-header" @click="toggleSidePanel('mcp')">
-            <Server :size="14" />
-            <span class="agent-panel-title">MCP 工具</span>
-            <span class="agent-panel-badge">{{ connectedMcpCount }}/{{ mcpStatus.servers.length }}</span>
-            <ChevronRight :size="14" class="agent-panel-chevron" :class="{ expanded: !sidePanelCollapsed.mcp }" />
-          </div>
-          <Transition name="panel-slide">
-            <div v-show="!sidePanelCollapsed.mcp" class="agent-panel-body">
-              <div v-if="mcpStatus.servers.length === 0" class="panel-empty">未配置 MCP 服务器</div>
-              <template v-else>
-                <div
-                  v-for="server in mcpStatus.servers"
-                  :key="server.name"
-                  class="mcp-server-item"
-                >
-                  <span class="mcp-server-dot" :class="server.status"></span>
-                  <span class="mcp-server-name">{{ server.name }}</span>
-                  <span class="mcp-server-tools">{{ server.tool_count }} 工具</span>
-                </div>
-                <div class="mcp-total">共 {{ mcpStatus.totalTools }} 个工具可用</div>
-              </template>
-            </div>
-          </Transition>
-        </div>
-
-        <!-- 消息平台状态 -->
-        <div class="agent-panel lumi-card">
-          <div class="agent-panel-header" @click="toggleSidePanel('platform')">
-            <Radio :size="14" />
-            <span class="agent-panel-title">消息平台</span>
-            <span class="agent-panel-badge">{{ activePlatformCount }}/{{ platformStore.instances.length }}</span>
-            <ChevronRight :size="14" class="agent-panel-chevron" :class="{ expanded: !sidePanelCollapsed.platform }" />
-          </div>
-          <Transition name="panel-slide">
-            <div v-show="!sidePanelCollapsed.platform" class="agent-panel-body">
-              <div v-if="platformStore.instances.length === 0" class="panel-empty">未配置消息平台</div>
-              <template v-else>
-                <div
-                  v-for="inst in platformStore.instances"
-                  :key="inst.id"
-                  class="platform-item"
-                >
-                  <span class="platform-dot" :class="{ active: inst.status === 'running' }"></span>
-                  <span class="platform-name">{{ inst.name }}</span>
-                  <span class="platform-type">{{ inst.displayName }}</span>
-                </div>
-              </template>
-            </div>
-          </Transition>
-        </div>
-
-        <!-- 子 Agent 能力提示 -->
-        <div class="agent-panel lumi-card">
-          <div class="agent-panel-header" @click="toggleSidePanel('subagent')">
-            <Cpu :size="14" />
-            <span class="agent-panel-title">子 Agent</span>
-            <span class="agent-panel-badge">{{ subagentActivities.length }}</span>
-            <ChevronRight :size="14" class="agent-panel-chevron" :class="{ expanded: !sidePanelCollapsed.subagent }" />
-          </div>
-          <Transition name="panel-slide">
-            <div v-show="!sidePanelCollapsed.subagent" class="agent-panel-body">
-              <div v-if="subagentActivities.length === 0" class="panel-empty">主 Agent 按需创建子 Agent</div>
-              <template v-else>
-                <div
-                  v-for="agent in subagentActivities"
-                  :key="agent.id"
-                  class="subagent-side-item"
-                >
-                  <span class="subagent-side-dot" :class="agent.status"></span>
-                  <span class="subagent-side-task">{{ agent.task }}</span>
-                  <span class="subagent-side-depth">d{{ agent.depth }}</span>
-                </div>
-                <div class="mcp-total">共 {{ subagentActivities.length }} 个子 Agent</div>
-              </template>
-            </div>
-          </Transition>
-        </div>
-      </div>
+      <WorkbenchToolPanel
+        :memory-fact-count="memoryStore.facts.length"
+        :memory-profile-name="memoryStore.profile.name"
+        :memory-summary-preview="memorySummaryPreview"
+        :mcp-status="mcpStatus"
+        :platform-instances="platformStore.instances"
+        :active-platform-count="activePlatformCount"
+        :subagent-activities="subagentActivities"
+        :collapsed="sidePanelCollapsed"
+        @toggle-panel="toggleSidePanel"
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
-button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
 .workbench-layout {
   display: flex;
   width: 100%;
@@ -2025,192 +957,6 @@ button:focus-visible {
   position: relative;
 }
 
-/* 左侧历史记录 */
-.workbench-history {
-  width: 260px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border-light);
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.history-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-4) var(--space-3);
-  flex-shrink: 0;
-}
-
-.history-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.history-collapse-btn {
-  color: var(--text-muted);
-}
-
-.history-collapse-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-
-.history-search {
-  padding: 0 var(--space-4) var(--space-2);
-}
-
-.new-conv-btn {
-  margin: 0 var(--space-4) var(--space-2);
-  width: calc(100% - var(--space-4) * 2);
-}
-
-.history-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 var(--space-2) var(--space-2);
-}
-
-.time-group {
-  margin-bottom: var(--space-2);
-}
-
-.time-group-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3) var(--space-1);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.history-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  transition: background-color var(--transition-fast), color var(--transition-fast);
-  position: relative;
-}
-
-.history-item:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.history-item.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.history-item-icon {
-  flex-shrink: 0;
-  color: inherit;
-}
-
-.history-item-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.history-item-title {
-  font-size: var(--text-base);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.history-item-time {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-}
-
-.history-item-snippet {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-top: var(--space-1);
-}
-
-.history-item-snippet :deep(mark) {
-  background: var(--lumi-primary-glow);
-  color: var(--lumi-primary);
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
-}
-
-.workbench-rename-input {
-  width: 100%;
-  height: var(--space-6);
-  background: var(--surface);
-  border: 1px solid var(--lumi-primary);
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-1);
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  outline: none;
-  box-sizing: border-box;
-}
-
-.history-item-rename,
-.history-item-delete {
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.history-item:hover .history-item-rename,
-.history-item:hover .history-item-delete {
-  opacity: 1;
-}
-
-.history-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-10) var(--space-4);
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-}
-
-.history-expand-toggle {
-  width: 28px;
-  height: 60px;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  color: var(--text-muted);
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  border-left: none;
-  flex-shrink: 0;
-  z-index: 5;
-}
-
-.history-expand-toggle:hover {
-  color: var(--lumi-primary);
-  background: var(--surface-hover);
-}
-
-/* 中间对话区 */
 .workbench-chat {
   flex: 1;
   display: flex;
@@ -2220,1288 +966,6 @@ button:focus-visible {
   position: relative;
 }
 
-.backend-warning {
-  padding: var(--space-4) var(--space-6);
-  background: var(--lumi-danger-light);
-  border-bottom: 1px solid var(--lumi-danger);
-}
-
-.warning-content {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--lumi-danger);
-}
-
-.warning-text {
-  flex: 1;
-}
-
-.warning-title {
-  font-size: var(--text-md);
-  font-weight: 600;
-  margin: 0;
-}
-
-.warning-desc {
-  font-size: var(--text-sm);
-  margin: var(--space-1) 0 0;
-  opacity: 0.8;
-}
-
-.chat-area {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 主智能体标识栏 */
-.main-agent-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-5);
-  border-bottom: 1px solid var(--border-light);
-  background: var(--surface);
-  flex-shrink: 0;
-}
-
-.main-agent-badge {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  background: var(--lumi-primary-light);
-  border-radius: var(--radius-sm);
-  color: var(--lumi-primary);
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.main-agent-model {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-.messages-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-6);
-}
-
-.messages-container {
-  max-width: 820px;
-  margin: 0 auto;
-}
-
-.message-row {
-  display: flex;
-  gap: var(--space-3);
-  margin-bottom: var(--space-5);
-  animation: msg-in var(--duration-normal) var(--ease-in-out);
-}
-
-@keyframes msg-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.message-row.user {
-  flex-direction: row-reverse;
-}
-
-.message-avatar {
-  flex-shrink: 0;
-}
-
-.avatar-assistant {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-inverse);
-}
-
-.message-body {
-  flex: 1;
-  min-width: 0;
-  max-width: calc(100% - 44px);
-}
-
-.message-sender {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: var(--space-1);
-}
-
-.reasoning-section {
-  margin-bottom: var(--space-2);
-  background: var(--surface-hover);
-  overflow: hidden;
-}
-
-.reasoning-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  transition: background-color var(--transition-fast);
-}
-
-.reasoning-header:hover {
-  background: var(--surface-active);
-}
-
-.reasoning-chevron {
-  margin-left: auto;
-  transition: transform var(--transition-fast);
-}
-
-.reasoning-chevron.rotated {
-  transform: rotate(-90deg);
-}
-
-.reasoning-content {
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-/* 工具调用活动区 */
-.tool-activities-section {
-  margin-bottom: var(--space-2);
-  background: var(--surface-hover);
-  overflow: hidden;
-  border: 1px solid var(--border-light);
-}
-
-.tool-activities-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--surface-active);
-}
-
-.tool-activities-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.tool-activity-item {
-  background: var(--surface);
-}
-
-.tool-activity-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  transition: background-color var(--transition-fast);
-}
-
-.tool-activity-header:hover {
-  background: var(--surface-hover);
-}
-
-.tool-activity-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--space-4);
-  height: var(--space-4);
-  flex-shrink: 0;
-}
-
-.tool-activity-icon :deep(svg) {
-  color: var(--text-muted);
-}
-
-.tool-activity-icon .spin-animation {
-  color: var(--lumi-primary);
-}
-
-.tool-activity-item .tool-activity-icon svg[stroke="currentColor"] {
-  color: var(--lumi-success);
-}
-
-.tool-activity-name {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  color: var(--text-primary);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tool-activity-iteration {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  padding: 1px var(--space-2);
-  background: var(--surface-hover);
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
-}
-
-.tool-activity-chevron {
-  margin-left: auto;
-  flex-shrink: 0;
-  color: var(--text-muted);
-  transition: transform var(--transition-fast);
-}
-
-.tool-activity-chevron.rotated {
-  transform: rotate(-90deg);
-}
-
-.tool-activity-args {
-  padding: 0 var(--space-3) var(--space-2) var(--space-9);
-}
-
-.tool-activity-args pre,
-.tool-activity-output pre {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  background: var(--bg-secondary);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  margin: 0;
-  overflow-x: auto;
-  font-family: var(--font-mono);
-}
-
-.tool-activity-output {
-  padding: 0 var(--space-3) var(--space-2) var(--space-9);
-}
-
-.tool-activity-output pre {
-  color: var(--text-secondary);
-  max-height: 200px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* ===== 子 Agent 群组执行卡片 ===== */
-.subagent-activities-section {
-  margin-bottom: var(--space-2);
-  background: var(--surface-hover);
-  overflow: hidden;
-  border: 1px solid var(--border-light);
-}
-
-.subagent-activities-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--surface-active);
-}
-
-.subagent-active-badge {
-  margin-left: auto;
-  font-size: var(--text-2xs);
-  font-weight: 500;
-  color: var(--lumi-primary);
-  padding: var(--space-1) var(--space-2);
-  background: var(--lumi-primary-light);
-  border-radius: var(--radius-full);
-  animation: pulse var(--duration-slow) var(--ease-in-out) infinite;
-}
-
-.subagent-activities-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-1);
-}
-
-.subagent-card {
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  overflow: hidden;
-  transition: border-color var(--transition-fast);
-}
-
-/* 进行中的子 Agent 卡片：流光边框效果（参考 deer-flow ShineBorder） */
-.subagent-card.running {
-  border-color: var(--lumi-primary);
-  position: relative;
-}
-
-.subagent-card.running::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: var(--card-radius);
-  padding: 1px;
-  background: linear-gradient(
-    90deg,
-    var(--lumi-primary),
-    var(--lumi-primary-soft),
-    var(--lumi-primary)
-  );
-  background-size: 200% 100%;
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: subagent-shine 2s linear infinite;
-  pointer-events: none;
-  z-index: 1;
-}
-
-@keyframes subagent-shine {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-.subagent-card-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.subagent-card-header:hover {
-  background: var(--surface-hover);
-}
-
-.subagent-status-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-}
-
-.subagent-status-icon :deep(svg) {
-  color: var(--text-muted);
-}
-
-.subagent-card.running .subagent-status-icon .spin-animation {
-  color: var(--lumi-primary);
-}
-
-.subagent-card.completed .subagent-status-icon :deep(svg) {
-  color: var(--lumi-success);
-}
-
-.subagent-card.failed .subagent-status-icon :deep(svg) {
-  color: var(--lumi-danger);
-}
-
-.subagent-card-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.subagent-card-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.subagent-task {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-primary);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.subagent-depth {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  padding: 1px var(--space-2);
-  background: var(--surface-hover);
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
-}
-
-.subagent-card-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.subagent-progress {
-  color: var(--lumi-primary);
-  font-style: italic;
-}
-
-.subagent-status-text.completed {
-  color: var(--lumi-success);
-}
-
-.subagent-status-text.failed {
-  color: var(--lumi-danger);
-}
-
-.subagent-tools-count {
-  margin-left: auto;
-  font-size: var(--text-2xs);
-  padding: 1px var(--space-2);
-  background: var(--surface-hover);
-  border-radius: var(--radius-full);
-}
-
-.subagent-chevron {
-  color: var(--text-muted);
-  flex-shrink: 0;
-  transition: transform var(--transition-fast);
-}
-
-.subagent-chevron.expanded {
-  transform: rotate(90deg);
-}
-
-.subagent-card-body {
-  padding: 0 var(--space-3) var(--space-3);
-  border-top: 1px solid var(--border-light);
-}
-
-/* 子 Agent 工具调用历史 */
-.subagent-tools-section {
-  margin-top: var(--space-2);
-}
-
-.subagent-tools-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
-  cursor: pointer;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  background: var(--surface-hover);
-  border-radius: var(--radius-sm);
-  transition: background-color var(--transition-fast);
-}
-
-.subagent-tools-header:hover {
-  background: var(--surface-active);
-}
-
-.subagent-tools-chevron {
-  margin-left: auto;
-  transition: transform var(--transition-fast);
-}
-
-.subagent-tools-chevron.rotated {
-  transform: rotate(-90deg);
-}
-
-.subagent-tools-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-}
-
-.subagent-tool-item {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  padding: var(--space-1) var(--space-2);
-}
-
-.subagent-tool-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.subagent-tool-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.subagent-tool-icon .spin-animation {
-  color: var(--lumi-primary);
-}
-
-.subagent-tool-icon :deep(svg) {
-  color: var(--lumi-success);
-}
-
-.subagent-tool-name {
-  font-size: var(--text-xs);
-  font-family: var(--font-mono);
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.subagent-tool-args pre,
-.subagent-tool-output pre {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  background: var(--surface);
-  padding: var(--space-1);
-  border-radius: var(--radius-sm);
-  margin: var(--space-1) 0 0;
-  overflow-x: auto;
-  max-height: 120px;
-  overflow-y: auto;
-  font-family: var(--font-mono);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* 子 Agent 最终结果 */
-.subagent-result {
-  margin-top: var(--space-3);
-  padding: var(--space-2);
-  background: var(--lumi-success-light);
-  border-radius: var(--radius-sm);
-  border-left: 2px solid var(--lumi-success);
-}
-
-.subagent-result-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--lumi-success);
-  margin-bottom: var(--space-1);
-}
-
-.subagent-result-content {
-  font-size: var(--text-sm);
-  line-height: var(--leading-relaxed);
-  color: var(--text-primary);
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-.subagent-result-content :deep(p) {
-  margin: var(--space-1) 0;
-}
-
-.subagent-result-content :deep(pre) {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
-  overflow-x: auto;
-  font-size: var(--text-xs);
-  margin: var(--space-1) 0;
-}
-
-/* 子 Agent 错误信息 */
-.subagent-error {
-  margin-top: var(--space-3);
-  padding: var(--space-2);
-  background: var(--lumi-danger-light);
-  border-radius: var(--radius-sm);
-  border-left: 2px solid var(--lumi-danger);
-}
-
-.subagent-error-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--lumi-danger);
-  margin-bottom: var(--space-1);
-}
-
-.subagent-error-content {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  word-break: break-word;
-  line-height: var(--leading-normal);
-}
-
-/* 子 Agent 卡片展开动画 */
-.subagent-slide-enter-active,
-.subagent-slide-leave-active {
-  transition: opacity var(--transition-fast), max-height var(--transition-normal);
-  overflow: hidden;
-}
-
-.subagent-slide-enter-from,
-.subagent-slide-leave-to {
-  opacity: 0;
-  max-height: 0;
-}
-
-/* ===== 计划确认卡片（借鉴 deer-flow ClarificationMiddleware） ===== */
-.plan-confirmation-section {
-  margin-bottom: var(--space-2);
-  background: var(--surface-hover);
-  overflow: hidden;
-  border: 1px solid var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
-  animation: plan-appear var(--duration-normal) var(--ease-in-out);
-}
-
-@keyframes plan-appear {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.plan-confirmation-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
-  border-bottom: 1px solid var(--border-light);
-}
-
-.plan-task-count {
-  margin-left: auto;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  padding: var(--space-1) var(--space-2);
-  background: var(--surface);
-  border-radius: var(--radius-full);
-  color: var(--text-secondary);
-}
-
-.plan-confirmation-body {
-  padding: var(--space-3) var(--space-4);
-}
-
-.plan-summary {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  line-height: var(--leading-relaxed);
-  margin-bottom: var(--space-3);
-  padding: var(--space-2);
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  border-left: 2px solid var(--lumi-primary);
-}
-
-.plan-tasks-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
-}
-
-.plan-task-item {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-2);
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-light);
-  transition: border-color var(--transition-fast);
-}
-
-.plan-task-item:hover {
-  border-color: var(--lumi-primary);
-}
-
-.plan-task-index {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-full);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.plan-task-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.plan-task-title {
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--text-primary);
-  line-height: var(--leading-snug);
-}
-
-.plan-task-desc {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  line-height: var(--leading-normal);
-}
-
-.plan-task-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-1);
-}
-
-.plan-task-tool {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  padding: 1px var(--space-2);
-  background: var(--surface-hover);
-  border-radius: var(--radius-full);
-  font-family: var(--font-mono);
-}
-
-.plan-task-priority {
-  font-size: var(--text-2xs);
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-full);
-  font-weight: 500;
-}
-
-.plan-task-priority.urgent {
-  background: var(--lumi-danger-light);
-  color: var(--lumi-danger);
-}
-
-.plan-task-priority.high {
-  background: var(--lumi-warning-light);
-  color: var(--lumi-warning);
-}
-
-.plan-task-priority.low {
-  background: var(--surface-hover);
-  color: var(--text-muted);
-}
-
-.plan-feedback-area {
-  margin-bottom: var(--space-3);
-}
-
-.plan-feedback-input {
-  width: 100%;
-  min-height: 60px;
-  resize: none;
-}
-
-.plan-confirmation-actions {
-  display: flex;
-  gap: var(--space-2);
-  justify-content: flex-end;
-}
-
-.message-content {
-  font-size: var(--text-md);
-  line-height: var(--leading-relaxed);
-  color: var(--text-primary);
-  word-break: break-word;
-}
-
-.message-content.user-message {
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
-  display: inline-block;
-  max-width: 100%;
-}
-
-.user-msg-layout {
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: flex-end;
-  gap: var(--space-2);
-}
-
-.user-msg-btns {
-  display: flex;
-  gap: var(--space-1);
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.message-row.user:hover .user-msg-btns {
-  opacity: 1;
-}
-
-.markdown-body :deep(pre) {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-  overflow-x: auto;
-  font-size: var(--text-base);
-  margin: var(--space-2) 0;
-}
-
-.markdown-body :deep(code) {
-  font-family: var(--font-mono);
-}
-
-.markdown-body :deep(p) {
-  margin: var(--space-2) 0;
-}
-
-.markdown-body :deep(ul),
-.markdown-body :deep(ol) {
-  padding-left: var(--space-5);
-  margin: var(--space-2) 0;
-}
-
-.markdown-body :deep(h1),
-.markdown-body :deep(h2),
-.markdown-body :deep(h3) {
-  margin: var(--space-3) 0 var(--space-2);
-  font-weight: 600;
-}
-
-.interrupted-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
-  color: var(--lumi-warning);
-  margin-left: var(--space-2);
-}
-
-.interrupted-only {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
-  color: var(--lumi-warning);
-  padding: var(--space-1) 0;
-}
-
-.streaming-indicator {
-  display: inline-flex;
-  align-items: center;
-  margin-top: var(--space-1);
-}
-
-.streaming-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--lumi-primary);
-  animation: pulse 1s var(--ease-in-out) infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.4; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.2); }
-}
-
-.assistant-msg-actions {
-  display: flex;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.message-row.assistant:hover .assistant-msg-actions {
-  opacity: 1;
-}
-
-.u-btn {
-  width: 26px;
-  height: 26px;
-  color: var(--text-muted);
-}
-
-.u-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-active);
-}
-
-.u-btn-hover {
-  background: var(--surface);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-10) var(--space-5);
-  text-align: center;
-  color: var(--text-muted);
-}
-
-.empty-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-full);
-  background: var(--lumi-primary-gradient-soft);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--lumi-primary);
-  margin-bottom: var(--space-5);
-  box-shadow: var(--shadow-glow-md);
-}
-
-.empty-title {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 var(--space-2);
-}
-
-.empty-desc {
-  font-size: var(--text-base);
-  margin: 0 0 var(--space-5);
-}
-
-.empty-quick-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  justify-content: center;
-}
-
-.quick-action {
-  border-radius: var(--radius-full);
-}
-
-.conv-loading-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--overlay-subtle);
-  backdrop-filter: blur(4px);
-  z-index: 5;
-}
-
-.conv-loading-content {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  background: var(--surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-}
-
-.scroll-to-bottom-btn {
-  position: absolute;
-  bottom: var(--space-4);
-  left: 50%;
-  transform: translateX(-50%);
-  border-radius: var(--radius-full);
-  box-shadow: var(--shadow-sm);
-  z-index: 4;
-}
-
-.scroll-to-bottom-btn.lumi-btn {
-  width: 36px;
-  height: 36px;
-}
-
-.scroll-to-bottom-btn:hover {
-  color: var(--lumi-primary);
-  box-shadow: var(--shadow-lg);
-}
-
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* 输入区 */
-.input-area {
-  padding: var(--space-3) var(--space-6) var(--space-4);
-  background: var(--bg);
-  flex-shrink: 0;
-}
-
-.input-wrapper {
-  max-width: 820px;
-  margin: 0 auto;
-  padding: var(--space-3);
-  border: 1px solid var(--border-light);
-  transition: border-color var(--transition-fast);
-}
-
-.input-wrapper:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
-}
-
-.chat-input {
-  width: 100%;
-  border: none;
-  outline: none;
-  background: transparent;
-  resize: none;
-  font-size: var(--text-md);
-  line-height: var(--leading-relaxed);
-  color: var(--text-primary);
-  font-family: inherit;
-  min-height: 24px;
-  max-height: 120px;
-}
-
-.chat-input::placeholder {
-  color: var(--text-muted);
-}
-
-.chat-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.input-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: var(--space-2);
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/* 工作流模式切换按钮 */
-.workflow-toggle {
-  gap: var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  background: var(--surface-hover);
-  border-color: transparent;
-  border-radius: var(--radius-full);
-}
-
-.workflow-toggle:hover {
-  color: var(--text-primary);
-  background: var(--surface-active);
-}
-
-.workflow-toggle.active {
-  color: var(--lumi-success);
-  background: var(--lumi-success-light);
-  border-color: color-mix(in srgb, var(--lumi-success) 30%, transparent);
-}
-
-.workflow-toggle-text {
-  white-space: nowrap;
-}
-
-/* P2：工作流执行模式选择器 */
-.workflow-mode-selector {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  background: var(--surface-hover);
-  border-radius: var(--radius-full);
-}
-
-.mode-chip {
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  background: transparent;
-  border-color: transparent;
-  border-radius: var(--radius-full);
-  white-space: nowrap;
-}
-
-.mode-chip:hover {
-  color: var(--text-primary);
-  background: var(--surface-active);
-}
-
-.mode-chip.active {
-  color: var(--lumi-success);
-  background: var(--lumi-success-light);
-}
-
-/* 模型下拉框 */
-.model-btn-text {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.model-dropdown-container {
-  position: relative;
-}
-
-.model-dropdown {
-  position: absolute;
-  bottom: calc(100% + var(--space-2));
-  left: 0;
-  width: 280px;
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border-light);
-  z-index: 9999;
-  overflow: hidden;
-}
-
-.dropdown-header {
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.dropdown-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: var(--space-4);
-  right: var(--space-4);
-  height: 1px;
-  background: var(--divider-soft);
-}
-
-.dropdown-list {
-  max-height: 280px;
-  overflow-y: auto;
-  padding: var(--space-1);
-}
-
-.dropdown-item.lumi-btn {
-  justify-content: flex-start;
-  text-align: left;
-  gap: var(--space-3);
-  padding: var(--space-2) 10px;
-  width: 100%;
-}
-
-.dropdown-item:hover {
-  background: var(--workspace-hover);
-}
-
-.dropdown-item.active {
-  background: var(--lumi-primary-light);
-}
-
-.dropdown-item.active .dropdown-item-model {
-  color: var(--lumi-primary);
-}
-
-.dropdown-item-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.dropdown-item-model {
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dropdown-item-provider {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dropdown-empty {
-  padding: var(--space-5) var(--space-4);
-  text-align: center;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-.provider-icon-mini {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  color: var(--text-inverse);
-  flex-shrink: 0;
-}
-
-.provider-svg-mini {
-  background: transparent !important;
-}
-
-.provider-svg-mini :deep(svg) {
-  width: 16px;
-  height: 16px;
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.send-btn.lumi-btn {
-  width: 34px;
-  height: 34px;
-}
-
-/* 右侧 Live2D 区 */
 .workbench-avatar {
   width: 340px;
   height: 100%;
@@ -3512,514 +976,4 @@ button:focus-visible {
   flex-shrink: 0;
   overflow: hidden;
 }
-
-.avatar-header {
-  padding: var(--space-3) var(--space-4) var(--space-3);
-  border-bottom: 1px solid var(--border-light);
-  flex-shrink: 0;
-}
-
-.avatar-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: var(--space-3);
-}
-
-.avatar-model-selector {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.model-chip {
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-}
-
-.model-chip.active {
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  border-color: var(--lumi-primary);
-}
-
-.avatar-stage {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface);
-  overflow: hidden;
-}
-
-.avatar-stage.desktop-mode-active {
-  background:
-    radial-gradient(circle at 50% 50%, var(--lumi-primary-subtle) 0%, transparent 70%),
-    var(--surface);
-}
-
-.desktop-mode-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-5);
-  padding: var(--space-10) var(--space-6);
-  text-align: center;
-  animation: hint-fade-in 500ms var(--ease-in-out);
-}
-
-@keyframes hint-fade-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.desktop-mode-hint .hint-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  animation: hint-icon-pulse 3s var(--ease-in-out) infinite;
-}
-
-@keyframes hint-icon-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-primary-glow); }
-  50% { box-shadow: 0 0 0 12px transparent; }
-}
-
-.desktop-mode-hint .hint-content h3 {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: var(--space-2);
-}
-
-.desktop-mode-hint .hint-content p {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  line-height: var(--leading-relaxed);
-  max-width: 280px;
-}
-
-.desktop-mode-hint .hint-sub {
-  font-size: var(--text-xs) !important;
-  opacity: 0.7;
-  margin-top: var(--space-1);
-}
-
-.live2d-canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.avatar-loading,
-.avatar-error {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  color: var(--text-muted);
-  font-size: var(--text-base);
-  background: var(--surface);
-}
-
-.avatar-error {
-  color: var(--lumi-danger);
-}
-
-.avatar-status {
-  position: absolute;
-  bottom: var(--space-3);
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  background: var(--surface);
-  backdrop-filter: blur(8px);
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-light);
-  z-index: 2;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--lumi-success);
-  animation: pulse 2s var(--ease-in-out) infinite;
-}
-
-.status-dot.speaking {
-  background: var(--lumi-primary);
-  animation: pulse 0.6s var(--ease-in-out) infinite;
-}
-
-.avatar-subtitle {
-  position: absolute;
-  bottom: 48px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: 88%;
-  padding: var(--space-2) var(--space-4);
-  background: var(--surface);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  line-height: var(--leading-relaxed);
-  color: var(--text-primary);
-  text-align: center;
-  cursor: pointer;
-  z-index: 3;
-  box-shadow: var(--shadow-sm);
-}
-
-.avatar-footer {
-  padding: var(--space-3) var(--space-4) var(--space-4);
-  border-top: 1px solid var(--border-light);
-  flex-shrink: 0;
-}
-
-.avatar-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-
-.ctrl-btn.lumi-btn {
-  width: 32px;
-  height: 32px;
-  color: var(--text-muted);
-}
-
-.ctrl-btn:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-}
-
-.ctrl-btn.active {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
-}
-
-.ctrl-btn.stop-btn {
-  border-color: var(--lumi-danger);
-  color: var(--lumi-danger);
-  background: var(--lumi-danger-light);
-}
-
-.ctrl-btn.stop-btn:hover {
-  background: var(--lumi-danger);
-  color: var(--text-inverse);
-}
-
-.avatar-tip {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin: 0;
-  text-align: center;
-  line-height: var(--leading-normal);
-}
-
-/* ===== 主 Agent 状态面板 ===== */
-.agent-panels {
-  flex-shrink: 0;
-  border-top: 1px solid var(--border-light);
-  max-height: 40%;
-  overflow-y: auto;
-  padding: var(--space-2) var(--space-2) 0;
-}
-
-.agent-panel {
-  margin-bottom: var(--space-2);
-}
-
-.agent-panel:last-child {
-  margin-bottom: 0;
-}
-
-.agent-panel-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  transition: background-color var(--transition-fast);
-}
-
-.agent-panel-header:hover {
-  background: var(--surface-hover);
-}
-
-.agent-panel-title {
-  font-weight: 600;
-  color: var(--text-primary);
-  flex: 1;
-}
-
-.agent-panel-badge {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  padding: var(--space-1);
-  background: var(--surface-hover);
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
-}
-
-.agent-panel-chevron {
-  color: var(--text-muted);
-  transition: transform var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.agent-panel-chevron.expanded {
-  transform: rotate(90deg);
-}
-
-.agent-panel-body {
-  padding: var(--space-2) var(--space-4) var(--space-3);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-.panel-empty {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  padding: var(--space-1) 0;
-}
-
-/* 记忆快览 */
-.memory-profile {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-
-.memory-label {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.memory-value {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.memory-summary {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  line-height: var(--leading-normal);
-  max-height: 60px;
-  overflow-y: auto;
-  word-break: break-word;
-}
-
-/* MCP 服务器列表 */
-.mcp-server-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) 0;
-}
-
-.mcp-server-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.mcp-server-dot.connected {
-  background: var(--lumi-success);
-}
-
-.mcp-server-dot.connecting {
-  background: var(--lumi-warning);
-}
-
-.mcp-server-dot.error,
-.mcp-server-dot.disconnected {
-  background: var(--text-muted);
-}
-
-.mcp-server-name {
-  flex: 1;
-  font-size: var(--text-xs);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mcp-server-tools {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.mcp-total {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  margin-top: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--border-light);
-}
-
-/* 消息平台列表 */
-.platform-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) 0;
-}
-
-.platform-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.platform-dot.active {
-  background: var(--lumi-success);
-}
-
-.platform-name {
-  flex: 1;
-  font-size: var(--text-xs);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.platform-type {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-/* ===== Vue Transitions ===== */
-.history-slide-enter-active,
-.history-slide-leave-active {
-  transition: width var(--transition-normal), opacity var(--transition-normal);
-  overflow: hidden;
-}
-
-.history-slide-enter-from,
-.history-slide-leave-to {
-  width: 0;
-  opacity: 0;
-}
-
-.msg-appear-enter-active,
-.msg-appear-leave-active {
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
-}
-
-.msg-appear-enter-from,
-.msg-appear-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.dropdown-fade-enter-active,
-.dropdown-fade-leave-active {
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
-}
-
-.dropdown-fade-enter-from,
-.dropdown-fade-leave-to {
-  opacity: 0;
-  transform: translateY(4px);
-}
-
-.subtitle-fade-enter-active,
-.subtitle-fade-leave-active {
-  transition: opacity var(--transition-fast);
-}
-
-.subtitle-fade-enter-from,
-.subtitle-fade-leave-to {
-  opacity: 0;
-}
-
-.panel-slide-enter-active,
-.panel-slide-leave-active {
-  transition: max-height var(--transition-normal), opacity var(--transition-fast);
-  overflow: hidden;
-}
-
-.panel-slide-enter-from,
-.panel-slide-leave-to {
-  max-height: 0;
-  opacity: 0;
-}
-
-.conv-loading-fade-enter-active,
-.conv-loading-fade-leave-active {
-  transition: opacity var(--transition-fast);
-}
-
-.conv-loading-fade-enter-from,
-.conv-loading-fade-leave-to {
-  opacity: 0;
-}
-
-.scroll-btn-fade-enter-active,
-.scroll-btn-fade-leave-active {
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
-}
-
-.scroll-btn-fade-enter-from,
-.scroll-btn-fade-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(10px);
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity var(--transition-fast);
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
+</style>

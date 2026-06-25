@@ -65,7 +65,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 <style scoped>
 .nav-bar {
-  height: 52px;
+  height: calc(var(--space-9) + var(--space-1));
   background: var(--surface);
   display: flex;
   align-items: center;
@@ -93,8 +93,8 @@ function handleKeydown(e: KeyboardEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: calc(var(--space-7) + var(--space-1));
+  height: calc(var(--space-7) + var(--space-1));
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
@@ -122,7 +122,7 @@ function handleKeydown(e: KeyboardEvent) {
   flex: 1;
   display: flex;
   align-items: center;
-  height: 34px;
+  height: var(--btn-height-md);
   background: var(--bg-secondary);
   border-radius: var(--radius-xl);
   padding: 0 var(--space-3);
@@ -131,7 +131,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 .address-bar:focus-within {
   background: var(--surface);
-  box-shadow: 0 0 0 2px var(--border);
+  box-shadow: 0 0 0 calc(var(--space-1) / 2) var(--border);
 }
 
 .addr-icon {
@@ -156,4 +156,5 @@ function handleKeydown(e: KeyboardEvent) {
   display: flex;
   gap: var(--space-1);
 }
+
 </style>

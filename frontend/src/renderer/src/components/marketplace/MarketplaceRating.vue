@@ -67,13 +67,4 @@ const selectStar = (index: number) => {
   fill: var(--lumi-warning);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .star-btn {
-    transition: none;
-  }
-
-  .star-btn:not(.readonly):hover {
-    transform: none;
-  }
-}
 </style>

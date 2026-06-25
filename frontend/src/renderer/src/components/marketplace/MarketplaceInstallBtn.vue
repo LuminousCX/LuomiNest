@@ -153,8 +153,8 @@ function handleRetry() {
 }
 
 .fav-action-btn {
-  width: 38px;
-  height: 38px;
+  width: calc(var(--space-8) - var(--space-1) / 2);
+  height: calc(var(--space-8) - var(--space-1) / 2);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -262,8 +262,8 @@ function handleRetry() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: var(--space-5);
+  height: var(--space-5);
   border-radius: var(--radius-sm);
   color: var(--lumi-accent);
   transition: all var(--transition-fast);
@@ -274,11 +274,4 @@ function handleRetry() {
   color: var(--text-inverse);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .fav-action-btn,
-  .action-btn,
-  .retry-inline-btn {
-    transition: none;
-  }
-}
 </style>

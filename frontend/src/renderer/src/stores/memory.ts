@@ -57,12 +57,12 @@ export const CATEGORY_LABELS: Record<string, string> = {
 }
 
 export const CATEGORY_COLORS: Record<string, string> = {
-  preference: '#22c55e',
-  knowledge: '#0ea5e9',
-  context: '#8b5cf6',
-  behavior: '#f59e0b',
-  goal: '#ef4444',
-  correction: '#f97316',
+  preference: 'var(--lumi-success)',
+  knowledge: 'var(--lumi-sky)',
+  context: 'var(--task-purple)',
+  behavior: 'var(--lumi-amber)',
+  goal: 'var(--lumi-danger)',
+  correction: 'var(--lumi-amber)',
 }
 
 function agentQuery(agentId?: string | null): string {

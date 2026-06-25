@@ -22,6 +22,8 @@ import {
   MOCK_REVIEWS,
 } from '../config/marketplace-data'
 import { useRepoSourceStore } from './repo-source'
+import { getItem, setItem } from '../utils/storage'
+import { generateId } from '../utils/id'
 
 const SEARCH_HISTORY_KEY = 'luominest-marketplace-search-history'
 const FAVORITES_KEY = 'luominest-marketplace-favorites'
@@ -60,29 +62,19 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   const cancelledInstalls = new Set<string>()
 
   function loadSearchHistory(): string[] {
-    try {
-      const stored = localStorage.getItem(SEARCH_HISTORY_KEY)
-      return stored ? JSON.parse(stored) : []
-    } catch {
-      return []
-    }
+    return getItem<string[]>(SEARCH_HISTORY_KEY, [])
   }
 
   const saveSearchHistory = (history: string[]) => {
-    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, 20)))
+    setItem(SEARCH_HISTORY_KEY, history.slice(0, 20))
   }
 
   function loadFavorites(): string[] {
-    try {
-      const stored = localStorage.getItem(FAVORITES_KEY)
-      return stored ? JSON.parse(stored) : []
-    } catch {
-      return []
-    }
+    return getItem<string[]>(FAVORITES_KEY, [])
   }
 
   const saveFavorites = () => {
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites.value))
+    setItem(FAVORITES_KEY, favorites.value)
   }
 
   const isFavorite = (itemId: string): boolean => {
@@ -136,6 +128,11 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
 
   const featuredAgents = computed(() => {
     return agentItems.value.filter(i => i.featured).sort((a, b) => b.rating - a.rating)
+  })
+
+  // 已安装的 Skills（供输入框 Skills 入口使用）
+  const installedSkills = computed(() => {
+    return skillItems.value.filter(i => i.installStatus === 'installed')
   })
 
   const filteredPluginItems = computed(() => {
@@ -555,7 +552,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   const addReview = (itemId: string, review: Omit<MarketplaceReview, 'id' | 'createdAt'>) => {
     const newReview: MarketplaceReview = {
       ...review,
-      id: `r-${Date.now()}`,
+      id: generateId('r'),
       createdAt: new Date().toISOString().split('T')[0],
     }
     if (!reviews.value[itemId]) {
@@ -585,7 +582,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     if (!review.replies) review.replies = []
     review.replies.push({
       ...reply,
-      id: `rp-${Date.now()}`,
+      id: generateId('rp'),
       createdAt: new Date().toISOString().split('T')[0],
     })
   }
@@ -794,6 +791,46 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     })
   })
 
+  // ─── 后端目录数据同步 ────────────────────────────────────────
+  const catalogLoaded = ref(false)
+  const catalogLoading = ref(false)
+
+  const fetchCatalogFromBackend = async () => {
+    if (catalogLoading.value || catalogLoaded.value) return
+    catalogLoading.value = true
+    try {
+      const { useApi } = await import('../composables/useApi')
+      const api = useApi()
+      const types: MarketplaceType[] = ['plugin', 'skill', 'agent']
+      const results = await Promise.allSettled(
+        types.map(t => api.apiGet<{ items: MarketplaceItem[]; total: number }>(`/marketplace/items?type=${t}`))
+      )
+
+      let updated = false
+      if (results[0].status === 'fulfilled' && results[0].value.items.length > 0) {
+        pluginItems.value = results[0].value.items
+        updated = true
+      }
+      if (results[1].status === 'fulfilled' && results[1].value.items.length > 0) {
+        skillItems.value = results[1].value.items
+        updated = true
+      }
+      if (results[2].status === 'fulfilled' && results[2].value.items.length > 0) {
+        agentItems.value = results[2].value.items
+        updated = true
+      }
+
+      if (updated) {
+        syncFavoriteFlags()
+        catalogLoaded.value = true
+      }
+    } catch {
+      // 后端不可用时保持 Mock 数据，不抛错
+    } finally {
+      catalogLoading.value = false
+    }
+  }
+
   return {
     pluginItems,
     skillItems,
@@ -807,10 +844,14 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     agentFilter,
     favorites,
     reviews,
+    installProgress,
+    catalogLoaded,
+    catalogLoading,
     featuredItems,
     featuredPlugins,
     featuredSkills,
     featuredAgents,
+    installedSkills,
     filteredPluginItems,
     filteredSkillItems,
     filteredAgentItems,
@@ -848,6 +889,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     syncAllStats,
     toggleLike,
     fetchLeaderboard,
+    fetchCatalogFromBackend,
     leaderboard,
     leaderboardItems,
     itemStatsMap,

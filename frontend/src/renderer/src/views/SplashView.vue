@@ -132,11 +132,11 @@ onBeforeUnmount(() => {
 
 .bg-orb {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   filter: blur(140px);
   opacity: 0.12;
   will-change: transform, opacity;
-  animation: orb-drift 24s ease-in-out infinite;
+  animation: orb-drift 24s var(--ease-in-out) infinite;
 }
 
 .splash-orb-1 {
@@ -260,11 +260,11 @@ onBeforeUnmount(() => {
 }
 
 .animate-slide-up {
-  animation: lumi-slide-up var(--duration-enter) ease-out var(--duration-leave) both;
+  animation: lumi-slide-up var(--duration-enter) var(--ease-out-expo) var(--duration-leave) both;
 }
 
 .animate-fade-in {
-  animation: lumi-fade-in var(--duration-slow) ease-out both;
+  animation: lumi-fade-in var(--duration-slow) var(--ease-out-expo) both;
 }
 
 @keyframes brand-enter {
@@ -277,13 +277,4 @@ button:focus-visible {
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
 </style>

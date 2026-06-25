@@ -7,8 +7,12 @@ import {
 } from 'lucide-vue-next'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
+import LumiInput from '../../components/common/LumiInput.vue'
 import { useApi } from '../../composables/useApi'
+import { copyToClipboard } from '../../utils/clipboard'
+import { generateId } from '../../utils/id'
 import type { CommandRecord, SystemLogEntry, LogUploadResponse, ExecuteCommandResponse } from '../../types'
+import { formatTime, formatDuration } from '../../utils/format'
 
 const { apiGet, apiPost, apiDelete } = useApi()
 
@@ -48,18 +52,6 @@ const filteredLogs = computed(() => {
   }
   return result
 })
-
-const formatTimestamp = (iso: string) => {
-  const d = new Date(iso)
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
-const formatDuration = (ms: number | null) => {
-  if (ms === null) return '-'
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  return `${(ms / 60000).toFixed(1)}min`
-}
 
 const statusLabel = (status: CommandRecord['status']) => {
   const map: Record<CommandRecord['status'], string> = {
@@ -111,7 +103,7 @@ const uploadLogs = async () => {
     const resp = await apiPost<LogUploadResponse>('/console/logs/upload', {
       logs: filteredLogs.value,
       uploaded_by: 'frontend',
-      session_id: `session_${Date.now()}`,
+      session_id: generateId('session'),
     })
     uploadResult.value = `上传成功 (ID: ${resp.upload_id}, 共 ${resp.received_count} 条)`
   } catch (e: any) {
@@ -130,7 +122,7 @@ const copyLogs = () => {
     : filteredLogs.value.map(l =>
         `[${l.timestamp}] [${l.level.toUpperCase()}] [${l.source}] [${l.module || '-'}] ${l.message}`
       ).join('\n')
-  navigator.clipboard.writeText(entries)
+  copyToClipboard(entries)
 }
 
 const isExecuting = ref(false)
@@ -282,7 +274,7 @@ onBeforeUnmount(() => {
           <div v-for="cmd in filteredCommands" :key="cmd.id" :class="['cmd-card', cmd.status]">
             <div class="cmd-card-header">
               <div class="cmd-card-left">
-                <component :is="cmd.status === 'success' ? CheckCircle2 : cmd.status === 'failed' ? XCircle : Play" :size="14" class="cmd-status-icon" />
+                <component :is="cmd.status === 'success' ? CheckCircle2 : cmd.status === 'failed' ? XCircle : Play" :size="14" class="cmd-status-icon shrink-0" />
                 <code class="cmd-text">{{ cmd.command }}</code>
               </div>
               <span :class="['cmd-badge', cmd.status]">{{ statusLabel(cmd.status) }}</span>
@@ -291,7 +283,7 @@ onBeforeUnmount(() => {
               <p class="cmd-desc">{{ cmd.description }}</p>
               <div class="cmd-meta">
                 <span class="meta-item"><User :size="12" />{{ cmd.executed_by }}</span>
-                <span class="meta-item"><Clock :size="12" />{{ formatTimestamp(cmd.started_at) }}</span>
+                <span class="meta-item"><Clock :size="12" />{{ formatTime(cmd.started_at, { seconds: true }) }}</span>
                 <span class="meta-item"><Clock :size="12" />{{ formatDuration(cmd.duration_ms) }}</span>
                 <span v-if="cmd.exit_code !== null" class="meta-item">exit: {{ cmd.exit_code }}</span>
               </div>
@@ -331,7 +323,7 @@ onBeforeUnmount(() => {
             </button>
             <div v-if="showLogFilter" class="filter-dropdown">
               <button :class="['filter-option', { active: logFilterSource === 'all' }]" @click="logFilterSource = 'all'; showLogFilter = false">全部来源</button>
-              <button :class="['filter-option', { active: logFilterSource === 'frontend' }]'" @click="logFilterSource = 'frontend'; showLogFilter = false">
+              <button :class="['filter-option', { active: logFilterSource === 'frontend' }]" @click="logFilterSource = 'frontend'; showLogFilter = false">
                 <Monitor :size="12" /> 前端
               </button>
               <button :class="['filter-option', { active: logFilterSource === 'backend' }]" @click="logFilterSource = 'backend'; showLogFilter = false">
@@ -380,8 +372,8 @@ onBeforeUnmount(() => {
       <div class="console-body">
         <div ref="logListRef" class="log-list">
           <div v-for="log in filteredLogs" :key="log.id" :class="['log-entry', log.level]">
-            <span class="log-time">{{ formatTimestamp(log.timestamp) }}</span>
-            <component :is="levelIcon(log.level)" :size="13" class="log-level-icon" />
+            <span class="log-time">{{ formatTime(log.timestamp, { seconds: true }) }}</span>
+            <component :is="levelIcon(log.level)" :size="13" class="log-level-icon shrink-0" />
             <span :class="['log-source', log.source]">
               <Monitor v-if="log.source === 'frontend'" :size="11" />
               <Server v-else :size="11" />
@@ -402,13 +394,13 @@ onBeforeUnmount(() => {
 
     <div v-if="activeTab === 'console'" class="command-bar">
       <ChevronRight :size="16" class="prompt-icon" />
-      <input
+      <LumiInput
         v-model="commandInput"
         type="text"
         class="command-input"
         :placeholder="isExecuting ? '执行中...' : '输入命令 (help 查看帮助, 受白名单限制)...'"
         :disabled="isExecuting"
-        @keydown.enter="handleCommand"
+        @enter="handleCommand"
       />
       <LumiButton
         :variant="isExecuting ? 'danger' : 'primary'"
@@ -661,10 +653,6 @@ onBeforeUnmount(() => {
   flex: 1;
 }
 
-.cmd-status-icon {
-  flex-shrink: 0;
-}
-
 .cmd-card.success .cmd-status-icon {
   color: var(--lumi-success);
 }
@@ -809,10 +797,6 @@ onBeforeUnmount(() => {
   width: 70px;
 }
 
-.log-level-icon {
-  flex-shrink: 0;
-}
-
 .log-entry.info .log-level-icon {
   color: var(--lumi-brand);
 }
@@ -906,15 +890,27 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.command-input {
+.command-bar :deep(.lumi-input-root) {
   flex: 1;
+  min-width: 0;
+}
+
+.command-bar :deep(.lumi-input) {
   background: transparent;
   font-family: var(--font-mono);
   font-size: var(--text-base);
   color: var(--text-primary);
+  border-color: transparent;
+  box-shadow: none;
 }
 
-.command-input::placeholder {
+.command-bar :deep(.lumi-input:focus) {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+}
+
+.command-bar :deep(.lumi-input::placeholder) {
   color: var(--text-muted);
 }
 
@@ -948,31 +944,4 @@ onBeforeUnmount(() => {
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tab-btn,
-  .filter-btn,
-  .filter-option,
-  .level-select,
-  .cmd-card,
-  .upload-toast,
-  .execute-toast,
-  .command-bar,
-  .log-entry {
-    transition: none;
-  }
-
-  .spinning {
-    animation: none;
-  }
-
-  .fade-enter-active,
-  .fade-leave-active {
-    transition: none;
-  }
-}
 </style>

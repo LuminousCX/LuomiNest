@@ -96,35 +96,35 @@ watch(isDesktopPetPage, (val) => {
 }
 
 .resize-n {
-  top: 0; left: 8px; right: 8px; height: 4px;
+  top: 0; left: var(--space-2); right: var(--space-2); height: var(--space-1);
   cursor: n-resize;
 }
 .resize-s {
-  bottom: 0; left: 8px; right: 8px; height: 4px;
+  bottom: 0; left: var(--space-2); right: var(--space-2); height: var(--space-1);
   cursor: s-resize;
 }
 .resize-e {
-  top: 8px; right: 0; bottom: 8px; width: 4px;
+  top: var(--space-2); right: 0; bottom: var(--space-2); width: var(--space-1);
   cursor: e-resize;
 }
 .resize-w {
-  top: 8px; left: 0; bottom: 8px; width: 4px;
+  top: var(--space-2); left: 0; bottom: var(--space-2); width: var(--space-1);
   cursor: w-resize;
 }
 .resize-ne {
-  top: 0; right: 0; width: 8px; height: 8px;
+  top: 0; right: 0; width: var(--space-2); height: var(--space-2);
   cursor: ne-resize;
 }
 .resize-nw {
-  top: 0; left: 0; width: 8px; height: 8px;
+  top: 0; left: 0; width: var(--space-2); height: var(--space-2);
   cursor: nw-resize;
 }
 .resize-se {
-  bottom: 0; right: 0; width: 8px; height: 8px;
+  bottom: 0; right: 0; width: var(--space-2); height: var(--space-2);
   cursor: se-resize;
 }
 .resize-sw {
-  bottom: 0; left: 0; width: 8px; height: 8px;
+  bottom: 0; left: 0; width: var(--space-2); height: var(--space-2);
   cursor: sw-resize;
 }
 

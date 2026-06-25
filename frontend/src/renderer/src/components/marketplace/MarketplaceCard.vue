@@ -99,7 +99,7 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
 
     <div class="card-body">
       <h3 class="card-title">{{ item.name }}</h3>
-      <p class="card-summary">{{ item.summary }}</p>
+      <p class="card-summary line-clamp-2">{{ item.summary }}</p>
       <div class="card-author">
         <span class="author-name">{{ item.author.name }}</span>
         <Check v-if="item.author.verified" :size="12" class="verified-icon" />
@@ -220,11 +220,6 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
   color: var(--text-muted);
   line-height: var(--leading-normal);
   margin-bottom: var(--space-2);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .card-author {
@@ -345,16 +340,4 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
   opacity: 0.8;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .market-card,
-  .fav-btn,
-  .install-btn {
-    animation: none;
-    transition: none;
-  }
-
-  .market-card:hover {
-    transform: none;
-  }
-}
 </style>

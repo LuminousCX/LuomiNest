@@ -306,13 +306,4 @@ const resetFilters = () => {
   animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .market-header,
-  .market-toolbar,
-  .filter-toggle-btn,
-  .close-filters {
-    animation: none;
-    transition: none;
-  }
-}
 </style>

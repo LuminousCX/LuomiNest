@@ -92,6 +92,14 @@ const frontendLicenses = [
     license: 'MIT',
     description: 'PixiJS 插件，允许在不支持 eval 的环境中运行 PixiJS。',
     url: 'https://github.com/pixijs/pixijs'
+  },
+  {
+    name: 'pixi-live2d-display-mulmotion',
+    version: '0.5.0',
+    author: 'guansss',
+    license: 'MIT',
+    description: '基于 PixiJS 的 Live2D 模型渲染器，支持多动作切换的社区维护版本。',
+    url: 'https://github.com/guansss/pixi-live2d-display'
   }
 ]
 
@@ -191,6 +199,182 @@ const backendLicenses = [
     license: 'BSD-3-Clause',
     description: 'Python 科学计算的基础库，提供多维数组和数学函数。',
     url: 'https://github.com/numpy/numpy'
+  },
+  {
+    name: 'Pydantic Settings',
+    version: '2.7',
+    author: 'Samuel Colvin',
+    license: 'MIT',
+    description: 'Pydantic 的配置管理扩展，支持环境变量、文件等来源的配置加载与验证。',
+    url: 'https://github.com/pydantic/pydantic-settings'
+  },
+  {
+    name: 'python-multipart',
+    version: '0.0.18',
+    author: 'Andrew Svetlov',
+    license: 'Apache-2.0',
+    description: 'Python 的 multipart/form-data 解析库，用于 FastAPI 文件上传和表单数据处理。',
+    url: 'https://github.com/andrew-svetlov/python-multipart'
+  },
+  {
+    name: 'aiofiles',
+    version: '24.1',
+    author: 'Tin Tvrtković',
+    license: 'Apache-2.0',
+    description: 'Python 异步文件操作库，提供 async/await 风格的文件 I/O 接口。',
+    url: 'https://github.com/Tinche/aiofiles'
+  },
+  {
+    name: 'aiosqlite',
+    version: '0.20',
+    author: 'Amjith Ramanujam',
+    license: 'MIT',
+    description: 'Python 异步 SQLite 数据库驱动，支持 async/await 异步数据库操作。',
+    url: 'https://github.com/omnilib/aiosqlite'
+  },
+  {
+    name: 'aiohttp',
+    version: '3.9',
+    author: 'Nikolay Kim',
+    license: 'Apache-2.0',
+    description: 'Python 异步 HTTP 客户端/服务端框架，支持高效的并发网络请求。',
+    url: 'https://github.com/aio-libs/aiohttp'
+  },
+  {
+    name: 'websockets',
+    version: '14.0',
+    author: 'Aymeric Augustin',
+    license: 'BSD-3-Clause',
+    description: 'Python WebSocket 协议实现库，支持实时双向通信。',
+    url: 'https://github.com/python-websockets/websockets'
+  },
+  {
+    name: 'paho-mqtt',
+    version: '2.1',
+    author: 'Eclipse Foundation',
+    license: 'EPL-2.0 OR BSD-3-Clause',
+    description: 'Eclipse Paho MQTT 客户端库，支持 MQTT v3.1/v3.1.1/v5.0 物联网通信协议。',
+    url: 'https://github.com/eclipse/paho.mqtt.python'
+  },
+  {
+    name: 'pgvector',
+    version: '0.3.6',
+    author: 'Andrew Kane',
+    license: 'MIT',
+    description: 'PostgreSQL 向量相似度检索扩展库，支持向量嵌入存储与 ANN 搜索。',
+    url: 'https://github.com/pgvector/pgvector-python'
+  },
+  {
+    name: 'python-jose',
+    version: '3.3',
+    author: 'Michael Davis',
+    license: 'MIT',
+    description: 'JOSE（JSON 对象签名与加密）标准实现库，支持 JWT 令牌的编解码与验证。',
+    url: 'https://github.com/mpdavis/python-jose'
+  },
+  {
+    name: 'passlib',
+    version: '1.7.4',
+    author: 'Eli Collins',
+    license: 'BSD-3-Clause',
+    description: 'Python 密码哈希库，支持 bcrypt 等多种密码哈希算法。',
+    url: 'https://github.com/glic3rinu/passlib'
+  },
+  {
+    name: 'cryptography',
+    version: '44.0',
+    author: 'Python Cryptographic Authority',
+    license: 'Apache-2.0 OR BSD-3-Clause',
+    description: 'Python 加密库，提供对称/非对称加密、数字签名、密钥交换等密码学原语。',
+    url: 'https://github.com/pyca/cryptography'
+  },
+  {
+    name: 'Loguru',
+    version: '0.7.3',
+    author: 'Delgan',
+    license: 'MIT',
+    description: 'Python 日志库，提供简洁美观的 API、自动旋转、结构化日志等高级特性。',
+    url: 'https://github.com/Delgan/loguru'
+  },
+  {
+    name: 'APScheduler',
+    version: '3.10',
+    author: 'Alex Grönholm',
+    license: 'MIT',
+    description: 'Python 高级任务调度库，支持 Cron 表达式、固定间隔和一次性定时任务。',
+    url: 'https://github.com/agronholm/apscheduler'
+  },
+  {
+    name: 'Tenacity',
+    version: '9.0',
+    author: 'Kenneth Reitz',
+    license: 'Apache-2.0',
+    description: 'Python 通用重试库，支持指数退避、自定义异常判断和异步重试。',
+    url: 'https://github.com/jd/tenacity'
+  },
+  {
+    name: 'Pillow',
+    version: '11.0',
+    author: 'Alex Clark',
+    license: 'Historical',
+    description: 'Python 图像处理库，支持图像打开、操作和保存等多种格式。',
+    url: 'https://github.com/python-pillow/Pillow'
+  },
+  {
+    name: 'orjson',
+    version: '3.10',
+    author: 'ijl',
+    license: 'MIT',
+    description: 'Python 高性能 JSON 序列化库，比标准 json 模块快 3-10 倍。',
+    url: 'https://github.com/ijl/orjson'
+  },
+  {
+    name: 'PyMuPDF',
+    version: '1.24',
+    author: 'Artifex Software',
+    license: 'AGPL-3.0',
+    description: 'Python PDF 文档解析库，支持提取文本、图像、表格等结构化内容。',
+    url: 'https://github.com/pymupdf/PyMuPDF'
+  },
+  {
+    name: 'python-docx',
+    version: '1.1',
+    author: 'Steve Canny',
+    license: 'MIT',
+    description: 'Python Word 文档 (.docx) 创建与解析库，支持读写 Microsoft Word 文件。',
+    url: 'https://github.com/python-openxml/python-docx'
+  },
+  {
+    name: 'edge-tts',
+    version: '6.1.18',
+    author: 'Rany',
+    license: 'GPL-3.0',
+    description: 'Python 微软 Edge 文本转语音库，利用 Edge 浏览器免费 TTS 服务生成自然语音。',
+    url: 'https://github.com/rany2/edge-tts'
+  },
+  {
+    name: 'MCP',
+    version: '1.0',
+    author: 'Anthropic',
+    license: 'MIT',
+    description: 'Model Context Protocol Python SDK，用于构建 AI Agent 工具与服务。',
+    url: 'https://github.com/modelcontextprotocol/python-sdk'
+  },
+  {
+    name: 'python-magic',
+    version: '0.4.27',
+    author: 'Adam Hupp',
+    license: 'MIT',
+    description: 'Python 文件类型检测库，基于 libmagic 识别文件的 MIME 类型。',
+    url: 'https://github.com/ahupp/python-magic'
+  },
+  {
+    name: 'tzdata',
+    version: '2024.1',
+    author: 'Paul Ganssle',
+    license: 'Apache-2.0',
+    description: 'Python IANA 时区数据库包，提供最新的时区信息支持。',
+    url: 'https://github.com/python/tzdata'
   }
 ]
 
@@ -234,6 +418,46 @@ const referenceProjects = [
     license: 'Apache-2.0',
     description: '腾讯开源的面向 AI Agent 的即时、并发、安全且轻量的沙箱服务，提供隔离的代码执行环境。',
     url: 'https://github.com/tencentcloud/CubeSandbox'
+  },
+  {
+    name: 'EverOS',
+    version: '1.1.0',
+    author: 'EverMind AI',
+    license: 'Apache-2.0',
+    description: '企业级 AI 长期记忆系统，支持多类型记忆提取、Agentic 检索与多租户架构。',
+    url: 'https://github.com/EverMind-AI/EverMemOS'
+  },
+  {
+    name: 'MSA',
+    version: '1.0',
+    author: 'EverMind AI',
+    license: 'MIT',
+    description: 'Memory Sparse Attention，端到端可训练的稀疏记忆框架，实现 100M token 超长上下文处理。',
+    url: 'https://github.com/EverMind-AI/MSA'
+  },
+  {
+    name: 'Fabric',
+    version: '1.0',
+    author: 'Daniel Miessler',
+    license: 'MIT',
+    description: 'AI Prompt 模式化编排框架，通过 170+ Pattern 增强 AI 任务效率，支持多供应商集成。',
+    url: 'https://github.com/danielmiessler/fabric'
+  },
+  {
+    name: 'Hyperledger Fabric',
+    version: '3.1.4',
+    author: 'Linux Foundation',
+    license: 'Apache-2.0',
+    description: '企业级许可型区块链平台，采用 Execute-Order-Validate 架构，支持可插拔共识与通道隐私隔离。',
+    url: 'https://github.com/hyperledger/fabric'
+  },
+  {
+    name: 'Stagehand',
+    version: '3.2.1',
+    author: 'Browserbase',
+    license: 'MIT',
+    description: 'AI 驱动的浏览器自动化框架，支持自然语言控制浏览器、结构化数据提取与多模式 AI Agent。',
+    url: 'https://github.com/browserbase/stagehand'
   }
 ]
 
@@ -565,16 +789,16 @@ const collaborators = [
 .license-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 20px 28px;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-7);
   border-bottom: 1px solid var(--workspace-border);
   flex-shrink: 0;
   background: var(--workspace-card);
 }
 
 .back-btn {
-  width: 36px;
-  height: 36px;
+  width: var(--space-8);
+  height: var(--space-8);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -589,13 +813,13 @@ const collaborators = [
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .page-subtitle {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   margin-top: 1px;
 }
@@ -603,10 +827,10 @@ const collaborators = [
 .license-body {
   flex: 1;
   overflow-y: auto;
-  padding: 32px 24px 64px;
+  padding: var(--space-7) var(--space-6) var(--space-10);
   display: flex;
   flex-direction: column;
-  gap: 56px;
+  gap: var(--space-9);
 }
 
 /* ── Hero section ── */
@@ -615,17 +839,17 @@ const collaborators = [
   width: 100%;
   max-width: 960px;
   margin: 0 auto;
-  animation: fadeInUp 0.6s ease-out both;
+  animation: fadeInUp var(--duration-enter) var(--ease-out-expo) both;
 }
 
 .hero-card {
   position: relative;
   background: linear-gradient(135deg, var(--lumi-primary) 0%, var(--lumi-primary-hover) 100%);
-  border-radius: 24px;
-  padding: 36px 32px;
-  color: white;
+  border-radius: var(--radius-2xl);
+  padding: var(--space-8) var(--space-7);
+  color: var(--text-inverse);
   overflow: hidden;
-  box-shadow: 0 12px 40px color-mix(in srgb, var(--lumi-primary) 25%, transparent);
+  box-shadow: 0 var(--space-3) var(--space-8) color-mix(in srgb, var(--lumi-primary) 25%, transparent);
 }
 
 .hero-card::before {
@@ -633,32 +857,32 @@ const collaborators = [
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.12) 0%, transparent 40%),
-    radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.08) 0%, transparent 40%);
+    radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--text-inverse) 0.12, transparent) 0%, transparent 40%),
+    radial-gradient(circle at 80% 70%, color-mix(in srgb, var(--text-inverse) 0.08, transparent) 0%, transparent 40%);
   pointer-events: none;
 }
 
 .hero-icon {
   position: relative;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
   opacity: 0.9;
 }
 
 .hero-title {
   position: relative;
-  font-size: 32px;
+  font-size: var(--text-4xl);
   font-weight: 800;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-2);
   letter-spacing: -0.5px;
 }
 
 .hero-desc {
   position: relative;
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.7;
   opacity: 0.92;
   max-width: 560px;
-  margin-bottom: 28px;
+  margin-bottom: var(--space-7);
 }
 
 .hero-desc strong {
@@ -669,30 +893,30 @@ const collaborators = [
   position: relative;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: var(--text-3xl);
   font-weight: 800;
   line-height: 1;
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   opacity: 0.8;
 }
 
 .stat-divider {
   width: 1px;
-  height: 36px;
-  background: rgba(255, 255, 255, 0.25);
+  height: var(--space-8);
+  background: color-mix(in srgb, var(--text-inverse) 0.25, transparent);
 }
 
 /* ── Content sections ── */
@@ -701,21 +925,21 @@ const collaborators = [
   width: 100%;
   max-width: 960px;
   margin: 0 auto;
-  animation: fadeInUp 0.6s ease-out both;
+  animation: fadeInUp var(--duration-enter) var(--ease-out-expo) both;
 }
 
 .section-header {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 24px;
-  animation: fadeInLeft 0.5s ease-out both;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  animation: fadeInLeft var(--duration-slow) var(--ease-out-expo) both;
 }
 
 .section-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -728,24 +952,24 @@ const collaborators = [
 }
 
 .section-icon.warning {
-  background: color-mix(in srgb, var(--warning) 12%, transparent);
-  color: var(--warning);
+  background: color-mix(in srgb, var(--lumi-warning) 12%, transparent);
+  color: var(--lumi-warning);
 }
 
 .section-icon.heart {
-  background: color-mix(in srgb, var(--error) 12%, transparent);
-  color: var(--error);
+  background: color-mix(in srgb, var(--lumi-danger) 12%, transparent);
+  color: var(--lumi-danger);
 }
 
 .section-title {
-  font-size: 18px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 2px;
+  margin-bottom: var(--space-1);
 }
 
 .section-desc {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
 }
 
@@ -754,31 +978,31 @@ const collaborators = [
 .license-grid {
   display: grid;
   grid-template-columns: repeat(1, 1fr);
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .license-card {
   position: relative;
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
-  border-radius: 18px;
-  padding: 20px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
   text-decoration: none;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   overflow: hidden;
-  animation: fadeInUp 0.5s ease-out both;
+  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) both;
   transition:
-    transform 0.25s ease-in-out,
-    box-shadow 0.25s ease-in-out,
-    border-color 0.25s ease-in-out;
+    transform var(--transition-normal),
+    box-shadow var(--transition-normal),
+    border-color var(--transition-normal);
 }
 
 .license-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(calc(var(--space-1) * -1));
   border-color: color-mix(in srgb, var(--lumi-primary) 30%, var(--workspace-border));
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-lg);
 }
 
 .card-shine {
@@ -791,7 +1015,7 @@ const collaborators = [
     transparent 50%
   );
   transform: translateX(-100%);
-  transition: transform 0.6s ease-in-out;
+  transition: transform var(--duration-enter) var(--ease-in-out);
   pointer-events: none;
 }
 
@@ -803,24 +1027,24 @@ const collaborators = [
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .card-name-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
 .card-name {
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: color 0.2s ease-in-out;
+  transition: color var(--transition-fast);
 }
 
 .license-card:hover .card-name {
@@ -830,7 +1054,7 @@ const collaborators = [
 .card-link-icon {
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: color 0.2s ease-in-out;
+  transition: color var(--transition-fast);
 }
 
 .license-card:hover .card-link-icon {
@@ -838,14 +1062,14 @@ const collaborators = [
 }
 
 .card-version {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   font-family: monospace;
   flex-shrink: 0;
 }
 
 .card-desc {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
   line-height: 1.6;
   flex: 1;
@@ -855,22 +1079,22 @@ const collaborators = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   margin-top: auto;
 }
 
 .license-badge {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 20px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xl);
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
   white-space: nowrap;
 }
 
 .card-author {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -882,51 +1106,51 @@ const collaborators = [
 .special-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .special-card {
   background: var(--workspace-card);
-  border: 1px solid color-mix(in srgb, var(--warning) 25%, var(--workspace-border));
-  border-radius: 20px;
-  padding: 24px;
+  border: 1px solid color-mix(in srgb, var(--lumi-warning) 25%, var(--workspace-border));
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  animation: fadeInUp 0.5s ease-out both;
+  gap: var(--space-4);
+  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) both;
   transition:
-    transform 0.25s ease-in-out,
-    box-shadow 0.25s ease-in-out;
+    transform var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 .special-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 32px color-mix(in srgb, var(--warning) 12%, transparent);
+  transform: translateY(calc(var(--space-1) * -1));
+  box-shadow: 0 var(--space-3) var(--space-7) color-mix(in srgb, var(--lumi-warning) 12%, transparent);
 }
 
 .special-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .special-card-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .special-name {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 17px;
+  gap: var(--space-2);
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--text-primary);
   text-decoration: none;
-  transition: color 0.2s ease-in-out;
+  transition: color var(--transition-fast);
 }
 
 .special-name:hover {
@@ -934,19 +1158,19 @@ const collaborators = [
 }
 
 .special-version {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   font-family: monospace;
 }
 
 .special-author {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .special-desc {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-secondary);
   line-height: 1.7;
 }
@@ -954,31 +1178,31 @@ const collaborators = [
 .special-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .special-tag {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   background: var(--workspace-bg);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--workspace-border);
 }
 
 .special-tag.proprietary {
-  border-color: color-mix(in srgb, var(--warning) 25%, var(--workspace-border));
-  background: color-mix(in srgb, var(--warning) 5%, var(--workspace-bg));
+  border-color: color-mix(in srgb, var(--lumi-warning) 25%, var(--workspace-border));
+  background: color-mix(in srgb, var(--lumi-warning) 5%, var(--workspace-bg));
 }
 
 .tag-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .tag-value {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 700;
   color: var(--text-primary);
 }
@@ -986,20 +1210,20 @@ const collaborators = [
 .special-alert {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 14px 16px;
-  background: color-mix(in srgb, var(--warning) 8%, transparent);
-  border-radius: 14px;
-  border-left: 4px solid var(--warning);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in srgb, var(--lumi-warning) 8%, transparent);
+  border-radius: var(--radius-md);
+  border-left: var(--space-1) solid var(--lumi-warning);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.6;
 }
 
 .special-alert svg {
-  color: var(--warning);
+  color: var(--lumi-warning);
   flex-shrink: 0;
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 /* ── AGPL card ── */
@@ -1007,29 +1231,29 @@ const collaborators = [
 .agpl-card {
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
-  border-radius: 20px;
-  padding: 28px;
-  animation: fadeInUp 0.5s ease-out both;
+  border-radius: var(--radius-xl);
+  padding: var(--space-7);
+  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) both;
   transition:
-    transform 0.25s ease-in-out,
-    box-shadow 0.25s ease-in-out;
+    transform var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 .agpl-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  transform: translateY(calc(var(--space-1) * -1));
+  box-shadow: var(--shadow-md);
 }
 
 .agpl-list {
-  padding-left: 20px;
-  margin-bottom: 20px;
+  padding-left: var(--space-5);
+  margin-bottom: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .agpl-list li {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-secondary);
   line-height: 1.7;
 }
@@ -1037,20 +1261,20 @@ const collaborators = [
 .agpl-link {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: var(--space-2);
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--lumi-primary);
   text-decoration: none;
-  padding: 8px 14px;
+  padding: var(--space-2) var(--space-3);
   background: var(--lumi-primary-light);
-  border-radius: 10px;
-  transition: all 0.2s ease-in-out;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
 }
 
 .agpl-link:hover {
   background: var(--lumi-primary);
-  color: white;
+  color: var(--text-inverse);
 }
 
 /* ── Collaborators ── */
@@ -1058,38 +1282,38 @@ const collaborators = [
 .collab-grid {
   display: grid;
   grid-template-columns: repeat(1, 1fr);
-  gap: 14px;
+  gap: var(--space-3);
 }
 
 .collab-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   text-decoration: none;
-  animation: fadeInUp 0.5s ease-out both;
+  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) both;
   transition:
-    transform 0.25s ease-in-out,
-    box-shadow 0.25s ease-in-out,
-    border-color 0.25s ease-in-out;
+    transform var(--transition-normal),
+    box-shadow var(--transition-normal),
+    border-color var(--transition-normal);
 }
 
 .collab-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(calc(var(--space-1) * -1));
   border-color: color-mix(in srgb, var(--lumi-primary) 30%, var(--workspace-border));
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
 }
 
 .collab-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: var(--space-9);
+  height: var(--space-9);
+  border-radius: var(--radius-full);
   object-fit: cover;
-  border: 2px solid var(--workspace-border);
-  transition: border-color 0.2s ease-in-out;
+  border: var(--space-1) solid var(--workspace-border);
+  transition: border-color var(--transition-fast);
 }
 
 .collab-card:hover .collab-avatar {
@@ -1099,18 +1323,18 @@ const collaborators = [
 .collab-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
 .collab-name {
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .collab-role {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -1122,12 +1346,12 @@ const collaborators = [
   max-width: 960px;
   margin: 0 auto;
   text-align: center;
-  padding-top: 24px;
-  animation: fadeIn 0.8s ease-out both;
+  padding-top: var(--space-6);
+  animation: fadeIn var(--duration-enter) var(--ease-out-expo) both;
 }
 
 .license-footer p {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -1145,7 +1369,7 @@ const collaborators = [
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(24px);
+    transform: translateY(var(--space-6));
   }
   to {
     opacity: 1;
@@ -1156,7 +1380,7 @@ const collaborators = [
 @keyframes fadeInLeft {
   from {
     opacity: 0;
-    transform: translateX(-16px);
+    transform: translateX(calc(var(--space-4) * -1));
   }
   to {
     opacity: 1;
@@ -1176,7 +1400,7 @@ const collaborators = [
   }
 
   .license-body {
-    padding: 40px 32px 72px;
+    padding: var(--space-8) var(--space-7) var(--space-10);
   }
 }
 
@@ -1195,4 +1419,5 @@ const collaborators = [
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
 </style>

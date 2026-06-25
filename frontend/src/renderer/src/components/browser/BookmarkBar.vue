@@ -34,7 +34,7 @@ const emit = defineEmits<{
 
 <style scoped>
 .bookmark-bar {
-  height: 34px;
+  height: var(--btn-height-md);
   background: var(--bg);
   display: flex;
   align-items: center;
@@ -49,8 +49,8 @@ const emit = defineEmits<{
   content: '';
   position: absolute;
   bottom: 0;
-  left: 12px;
-  right: 12px;
+  left: var(--space-3);
+  right: var(--space-3);
   height: 1px;
   background: var(--divider-soft);
 }
@@ -90,8 +90,8 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: var(--space-6);
+  height: var(--space-6);
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
@@ -104,4 +104,5 @@ const emit = defineEmits<{
   background: var(--surface-hover);
   color: var(--text-muted);
 }
+
 </style>

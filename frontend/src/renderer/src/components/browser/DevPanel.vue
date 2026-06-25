@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Play, X } from 'lucide-vue-next'
+import LumiButton from '../common/LumiButton.vue'
 
 const input = ref('')
 const output = ref('')
@@ -34,9 +35,11 @@ function handleExecute() {
           DOM
         </button>
       </div>
-      <button class="dev-close" @click="emit('close')">
-        <X :size="16" />
-      </button>
+      <LumiButton variant="ghost" size="sm" icon-only aria-label="关闭" @click="emit('close')">
+        <template #icon>
+          <X :size="16" />
+        </template>
+      </LumiButton>
     </div>
     
     <div class="dev-content">
@@ -47,15 +50,18 @@ function handleExecute() {
           class="dev-input"
           :readonly="mode === 'dom'"
         ></textarea>
-        <button 
+        <LumiButton
           v-if="mode === 'script'"
-          class="dev-execute"
+          variant="primary"
+          size="sm"
           :disabled="!input.trim()"
           @click="handleExecute"
         >
-          <Play :size="14" />
+          <template #icon>
+            <Play :size="14" />
+          </template>
           执行
-        </button>
+        </LumiButton>
       </div>
       
       <div class="dev-output">
@@ -68,7 +74,7 @@ function handleExecute() {
 
 <style scoped>
 .dev-panel {
-  height: 220px;
+  height: calc(var(--space-9) * 4 + var(--btn-height-sm));
   background: var(--text);
   border-top: 1px solid var(--border);
   display: flex;
@@ -108,29 +114,10 @@ function handleExecute() {
   color: var(--text-inverse);
 }
 
-.dev-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.dev-close:hover {
-  background: var(--border);
-  color: var(--text-secondary);
-}
-
 .dev-content {
   flex: 1;
   display: flex;
-  gap: 1px;
+  gap: calc(var(--space-1) / 4);
   overflow: hidden;
 }
 
@@ -157,29 +144,9 @@ function handleExecute() {
   color: var(--text-muted);
 }
 
-.dev-execute {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-4);
+.dev-input-area .lumi-btn {
   margin: var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--lumi-info);
-  border: none;
-  color: var(--text-inverse);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.dev-execute:hover:not(:disabled) {
-  background: var(--lumi-info-hover);
-}
-
-.dev-execute:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  align-self: flex-start;
 }
 
 .dev-output {
@@ -202,4 +169,5 @@ function handleExecute() {
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
+
 </style>

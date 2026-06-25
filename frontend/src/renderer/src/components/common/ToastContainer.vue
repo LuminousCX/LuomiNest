@@ -38,7 +38,7 @@ const { toasts, remove } = useToast()
   flex-direction: column;
   gap: var(--space-2);
   pointer-events: none;
-  max-width: 400px;
+  max-width: calc(var(--space-9) * 8 + var(--space-4));
 }
 
 .toast-item {
@@ -60,7 +60,7 @@ const { toasts, remove } = useToast()
 }
 
 .toast-item:hover {
-  transform: translateX(-4px);
+  transform: translateX(calc(var(--space-1) * -1));
   box-shadow: var(--shadow-xl);
 }
 
@@ -108,24 +108,16 @@ const { toasts, remove } = useToast()
 
 .toast-slide-enter-from {
   opacity: 0;
-  transform: translateX(60px);
+  transform: translateX(calc(var(--space-8) + var(--space-5)));
 }
 
 .toast-slide-leave-to {
   opacity: 0;
-  transform: translateX(60px) scale(0.95);
+  transform: translateX(calc(var(--space-8) + var(--space-5))) scale(0.95);
 }
 
 .toast-slide-move {
   transition: transform var(--transition-fast);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .toast-slide-enter-active,
-  .toast-slide-leave-active,
-  .toast-slide-move,
-  .toast-item {
-    transition: none;
-  }
-}
 </style>

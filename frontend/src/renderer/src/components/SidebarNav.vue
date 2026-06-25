@@ -253,7 +253,7 @@ const handleNavigate = (path: string) => {
 
 <style scoped>
 .sidebar-nav-panel {
-  width: 240px;
+  width: calc(var(--space-9) * 5);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -265,7 +265,7 @@ const handleNavigate = (path: string) => {
 }
 
 .sidebar-nav-panel.collapsed {
-  width: 52px;
+  width: calc(var(--space-8) + var(--space-3));
 }
 
 .sidebar-nav-panel::after {
@@ -305,14 +305,14 @@ const handleNavigate = (path: string) => {
 }
 
 .brand-avatar {
-  width: 36px;
-  height: 36px;
+  width: var(--nav-item-height);
+  height: var(--nav-item-height);
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
+  background: var(--lumi-brand-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 3px 10px var(--lumi-primary-border);
+  box-shadow: var(--shadow-sm);
   color: var(--text-inverse);
 }
 
@@ -323,15 +323,15 @@ const handleNavigate = (path: string) => {
 
 .brand-name {
   font-size: var(--text-lg);
-  font-weight: 700;
+  font-weight: var(--font-bold);
   color: var(--text-primary);
-  line-height: 1.2;
+  line-height: var(--leading-snug);
 }
 
 .brand-tag {
   font-size: var(--text-2xs);
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: var(--font-medium);
   letter-spacing: 0.3px;
 }
 
@@ -341,8 +341,8 @@ const handleNavigate = (path: string) => {
 }
 
 .header-action-btn {
-  width: 32px;
-  height: 32px;
+  width: calc(var(--space-6) + var(--space-2));
+  height: calc(var(--space-6) + var(--space-2));
   border: none;
   background: var(--surface-hover);
   border-radius: var(--radius-md);
@@ -351,7 +351,7 @@ const handleNavigate = (path: string) => {
   justify-content: center;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
   position: relative;
 }
 
@@ -362,17 +362,17 @@ const handleNavigate = (path: string) => {
 
 .header-action-dot {
   position: absolute;
-  top: calc(var(--space-1) * 1.5);
-  right: calc(var(--space-1) * 1.5);
-  width: 6px;
-  height: 6px;
+  top: var(--radius-xs);
+  right: var(--radius-xs);
+  width: var(--radius-xs);
+  height: var(--radius-xs);
   background: var(--lumi-danger);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
 }
 
 .collapse-toggle-btn {
-  width: 28px;
-  height: 28px;
+  width: calc(var(--space-5) + var(--space-2));
+  height: calc(var(--space-5) + var(--space-2));
   border: none;
   background: transparent;
   border-radius: var(--radius-md);
@@ -414,7 +414,7 @@ const handleNavigate = (path: string) => {
 
 .nav-search-input {
   width: 100%;
-  height: 32px;
+  height: calc(var(--space-5) + var(--space-3));
   border: none;
   background: var(--surface-hover);
   border-radius: var(--radius-md);
@@ -460,9 +460,9 @@ const handleNavigate = (path: string) => {
 }
 
 .section-label {
-  padding: var(--space-2) var(--space-2) calc(var(--space-1) * 1.5);
+  padding: var(--space-2) var(--space-2) var(--radius-xs);
   font-size: var(--text-2xs);
-  font-weight: 700;
+  font-weight: var(--font-bold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1.2px;
@@ -471,7 +471,7 @@ const handleNavigate = (path: string) => {
 }
 
 .nav-group {
-  margin-bottom: 2px;
+  margin-bottom: calc(var(--space-1) / 2);
 }
 
 .group-header {
@@ -510,10 +510,10 @@ const handleNavigate = (path: string) => {
   content: '';
   position: absolute;
   left: 0;
-  top: calc(var(--space-1) * 1.5);
-  bottom: calc(var(--space-1) * 1.5);
-  width: 3px;
-  border-radius: 0 3px 3px 0;
+  top: var(--radius-xs);
+  bottom: var(--radius-xs);
+  width: calc(var(--space-1) / 1.5);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
   background: var(--nav-item-active-color);
   opacity: 0.7;
 }
@@ -537,14 +537,14 @@ const handleNavigate = (path: string) => {
 
 .group-label {
   font-size: var(--text-base);
-  font-weight: 500;
+  font-weight: var(--font-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .group-header.active .group-label {
-  font-weight: 600;
+  font-weight: var(--font-semibold);
 }
 
 .group-chevron {
@@ -569,14 +569,14 @@ const handleNavigate = (path: string) => {
 }
 
 .group-children {
-  padding: 2px 0 2px 0;
+  padding: calc(var(--space-1) / 2) 0;
 }
 
 .tree-child {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: calc(var(--space-1) * 1.5) var(--space-2) calc(var(--space-1) * 1.5) var(--space-5);
+  padding: var(--radius-xs) var(--space-2) var(--radius-xs) var(--space-5);
   cursor: pointer;
   border-radius: var(--nav-item-radius);
   color: var(--text-muted);
@@ -585,7 +585,7 @@ const handleNavigate = (path: string) => {
   overflow: hidden;
   font-size: var(--text-base);
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(calc(var(--space-1) * -1));
   animation: tree-item-in var(--duration-leave) var(--ease-default) forwards;
 }
 
@@ -596,12 +596,12 @@ const handleNavigate = (path: string) => {
   }
 }
 
-.tree-child:nth-child(1) { animation-delay: 0.02s; }
-.tree-child:nth-child(2) { animation-delay: 0.04s; }
-.tree-child:nth-child(3) { animation-delay: 0.06s; }
-.tree-child:nth-child(4) { animation-delay: 0.08s; }
-.tree-child:nth-child(5) { animation-delay: 0.10s; }
-.tree-child:nth-child(6) { animation-delay: 0.12s; }
+.tree-child:nth-child(1) { animation-delay: calc(var(--duration-fast) * 0.13); }
+.tree-child:nth-child(2) { animation-delay: calc(var(--duration-fast) * 0.27); }
+.tree-child:nth-child(3) { animation-delay: calc(var(--duration-fast) * 0.4); }
+.tree-child:nth-child(4) { animation-delay: calc(var(--duration-fast) * 0.53); }
+.tree-child:nth-child(5) { animation-delay: calc(var(--duration-fast) * 0.67); }
+.tree-child:nth-child(6) { animation-delay: calc(var(--duration-fast) * 0.8); }
 
 .tree-child:hover {
   background: var(--nav-item-hover-bg);
@@ -611,7 +611,7 @@ const handleNavigate = (path: string) => {
 .tree-child.active {
   color: var(--nav-item-active-color);
   background: var(--nav-item-active-bg);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .tree-child.active .child-icon {
@@ -641,7 +641,7 @@ const handleNavigate = (path: string) => {
   position: absolute;
   left: var(--space-1);
   top: 50%;
-  width: 5px;
+  width: calc(var(--space-1) + 1px);
   height: 1px;
   background: var(--border);
   transform: translateY(-50%);
@@ -649,11 +649,11 @@ const handleNavigate = (path: string) => {
 
 .tree-node {
   position: absolute;
-  left: 9px;
+  left: calc(var(--space-1) + var(--space-1) + 1px);
   top: 50%;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
+  width: calc(var(--space-1) + 1px);
+  height: calc(var(--space-1) + 1px);
+  border-radius: var(--radius-full);
   background: var(--border);
   transform: translate(-50%, -50%);
 }
@@ -677,7 +677,7 @@ const handleNavigate = (path: string) => {
 .nav-items {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 
 .nav-item {
@@ -710,10 +710,10 @@ const handleNavigate = (path: string) => {
   content: '';
   position: absolute;
   left: 0;
-  top: calc(var(--space-1) * 1.5);
-  bottom: calc(var(--space-1) * 1.5);
-  width: 3px;
-  border-radius: 0 3px 3px 0;
+  top: var(--radius-xs);
+  bottom: var(--radius-xs);
+  width: calc(var(--space-1) / 1.5);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
   background: var(--nav-item-active-color);
   opacity: 0.7;
 }
@@ -737,9 +737,9 @@ const handleNavigate = (path: string) => {
   font-size: var(--text-2xs);
   padding: var(--badge-padding);
   border-radius: var(--radius-full);
-  background: var(--lumi-primary);
+  background: var(--lumi-brand);
   color: var(--text-inverse);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   position: relative;
   z-index: 1;
 }
@@ -804,32 +804,8 @@ const handleNavigate = (path: string) => {
 .group-header:focus-visible,
 .nav-item:focus-visible,
 .footer-btn:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline: var(--space-1) solid var(--focus-ring);
+  outline-offset: calc(var(--space-1) / 2);
 }
 
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-nav-panel,
-  .header-action-btn,
-  .collapse-toggle-btn,
-  .group-header,
-  .group-chevron,
-  .tree-child,
-  .nav-item,
-  .footer-btn {
-    transition: none;
-  }
-
-  .tree-child {
-    animation: none;
-    opacity: 1;
-    transform: none;
-  }
-
-  .tree-expand-enter-active,
-  .tree-expand-leave-active {
-    animation: none;
-  }
-}
 </style>

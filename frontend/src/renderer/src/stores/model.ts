@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig, STTConfig, STTEngine } from '../types'
 import { useApi } from '../composables/useApi'
 import { PROVIDER_LOGOS } from '../config/provider-logos'
+import { getItem, setItem } from '../utils/storage'
 
 const unwrapData = <T>(result: T | { data: T }): T => {
   if (typeof result === 'object' && result !== null && 'data' in result) {
@@ -816,37 +817,32 @@ export const useModelStore = defineStore('model', () => {
       baseUrl: cfg.baseUrl,
       engine: cfg.engine,
     }
-    localStorage.setItem('luominest-tts-config', JSON.stringify(data))
+    setItem('luominest-tts-config', data)
     window.api?.config?.setTTS(data).catch(() => {})
   }
 
   const loadTTSConfigFromLocal = () => {
-    try {
-      const raw = localStorage.getItem('luominest-tts-config')
-      if (raw) {
-        const saved = JSON.parse(raw)
-        ttsConfig.value = {
-          provider: saved.provider || modelConfig.value.ttsProvider || '',
-          model: saved.model || modelConfig.value.ttsModel || 'tts-1',
-          voice: saved.voice || modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
-          speed: saved.speed ?? modelConfig.value.ttsSpeed ?? 1.0,
-          baseUrl: saved.baseUrl || '',
-          apiKeySet: false,
-          engine: saved.engine || saved.provider || 'auto',
-        }
-      } else {
-        ttsConfig.value = {
-          provider: modelConfig.value.ttsProvider || '',
-          model: modelConfig.value.ttsModel || 'tts-1',
-          voice: modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
-          speed: modelConfig.value.ttsSpeed ?? 1.0,
-          baseUrl: '',
-          apiKeySet: false,
-          engine: modelConfig.value.ttsProvider || 'auto',
-        }
+    const saved = getItem<Partial<TTSConfig> | null>('luominest-tts-config', null)
+    if (saved) {
+      ttsConfig.value = {
+        provider: saved.provider || modelConfig.value.ttsProvider || '',
+        model: saved.model || modelConfig.value.ttsModel || 'tts-1',
+        voice: saved.voice || modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
+        speed: saved.speed ?? modelConfig.value.ttsSpeed ?? 1.0,
+        baseUrl: saved.baseUrl || '',
+        apiKeySet: false,
+        engine: saved.engine || saved.provider || 'auto',
       }
-    } catch {
-      // use defaults
+    } else {
+      ttsConfig.value = {
+        provider: modelConfig.value.ttsProvider || '',
+        model: modelConfig.value.ttsModel || 'tts-1',
+        voice: modelConfig.value.ttsVoice || 'zh-CN-XiaoxiaoNeural',
+        speed: modelConfig.value.ttsSpeed ?? 1.0,
+        baseUrl: '',
+        apiKeySet: false,
+        engine: modelConfig.value.ttsProvider || 'auto',
+      }
     }
   }
 
@@ -861,39 +857,34 @@ export const useModelStore = defineStore('model', () => {
       baseUrl: cfg.baseUrl,
       engine: cfg.engine,
     }
-    localStorage.setItem('luominest-stt-config', JSON.stringify(data))
+    setItem('luominest-stt-config', data)
     window.api?.config?.setSTT(data).catch(() => {})
   }
 
   const loadSTTConfigFromLocal = () => {
-    try {
-      const raw = localStorage.getItem('luominest-stt-config')
-      if (raw) {
-        const saved = JSON.parse(raw)
-        sttConfig.value = {
-          provider: saved.provider || modelConfig.value.sttProvider || '',
-          model: saved.model || modelConfig.value.sttModel || 'whisper-1',
-          language: saved.language || modelConfig.value.sttLanguage || 'zh-CN',
-          autoSend: saved.autoSend ?? modelConfig.value.sttAutoSend ?? false,
-          autoSendDelay: saved.autoSendDelay ?? modelConfig.value.sttAutoSendDelay ?? 2000,
-          baseUrl: saved.baseUrl || '',
-          apiKeySet: false,
-          engine: saved.engine || 'auto',
-        }
-      } else {
-        sttConfig.value = {
-          provider: modelConfig.value.sttProvider || '',
-          model: modelConfig.value.sttModel || 'whisper-1',
-          language: modelConfig.value.sttLanguage || 'zh-CN',
-          autoSend: modelConfig.value.sttAutoSend ?? false,
-          autoSendDelay: modelConfig.value.sttAutoSendDelay ?? 2000,
-          baseUrl: '',
-          apiKeySet: false,
-          engine: 'auto',
-        }
+    const saved = getItem<Partial<STTConfig> | null>('luominest-stt-config', null)
+    if (saved) {
+      sttConfig.value = {
+        provider: saved.provider || modelConfig.value.sttProvider || '',
+        model: saved.model || modelConfig.value.sttModel || 'whisper-1',
+        language: saved.language || modelConfig.value.sttLanguage || 'zh-CN',
+        autoSend: saved.autoSend ?? modelConfig.value.sttAutoSend ?? false,
+        autoSendDelay: saved.autoSendDelay ?? modelConfig.value.sttAutoSendDelay ?? 2000,
+        baseUrl: saved.baseUrl || '',
+        apiKeySet: false,
+        engine: saved.engine || 'auto',
       }
-    } catch {
-      // use defaults
+    } else {
+      sttConfig.value = {
+        provider: modelConfig.value.sttProvider || '',
+        model: modelConfig.value.sttModel || 'whisper-1',
+        language: modelConfig.value.sttLanguage || 'zh-CN',
+        autoSend: modelConfig.value.sttAutoSend ?? false,
+        autoSendDelay: modelConfig.value.sttAutoSendDelay ?? 2000,
+        baseUrl: '',
+        apiKeySet: false,
+        engine: 'auto',
+      }
     }
   }
 

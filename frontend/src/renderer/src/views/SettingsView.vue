@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChevronRight } from 'lucide-vue-next'
 import LumiBrandStar from '../components/common/LumiBrandStar.vue'
+import LumiCard from '../components/common/LumiCard.vue'
+import LumiButton from '../components/common/LumiButton.vue'
 
 defineProps<{
   version?: string
@@ -62,7 +64,7 @@ const navigateTo = (route: string) => {
         :style="{ animationDelay: `${gIdx * 100}ms` }"
       >
         <h3 class="group-title">{{ group.title }}</h3>
-        <div class="setting-items">
+        <LumiCard class="setting-items" padding="none">
           <button
             v-for="item in group.items"
             :key="item.label"
@@ -75,7 +77,7 @@ const navigateTo = (route: string) => {
             </div>
             <ChevronRight :size="15" class="item-arrow" />
           </button>
-        </div>
+        </LumiCard>
       </div>
     </div>
 
@@ -85,14 +87,15 @@ const navigateTo = (route: string) => {
         <span v-if="version" class="version-text">LuomiNest v{{ version }} · LuminousChenXi</span>
       </div>
       <div class="footer-links">
-        <button
+        <LumiButton
           v-for="link in footerLinks"
           :key="link.label"
-          class="footer-link"
+          variant="ghost"
+          size="sm"
           @click="navigateTo(link.route)"
         >
           {{ link.label }}
-        </button>
+        </LumiButton>
       </div>
     </div>
   </div>
@@ -148,11 +151,7 @@ const navigateTo = (route: string) => {
 }
 
 .setting-items {
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow-xs);
 }
 
 .setting-item {
@@ -191,10 +190,10 @@ const navigateTo = (route: string) => {
   content: '';
   position: absolute;
   left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
+  top: var(--space-2);
+  bottom: var(--space-2);
+  width: var(--space-1);
+  border-radius: 0 var(--space-1) var(--space-1) 0;
   background: var(--lumi-brand);
   opacity: 0.5;
 }
@@ -215,7 +214,7 @@ const navigateTo = (route: string) => {
   font-size: var(--text-md);
   font-weight: var(--font-medium);
   color: var(--text);
-  margin-bottom: 2px;
+  margin-bottom: var(--space-1);
 }
 
 .item-desc {
@@ -232,7 +231,7 @@ const navigateTo = (route: string) => {
 }
 
 .setting-item:hover .item-arrow {
-  transform: translateX(2px);
+  transform: translateX(var(--space-1));
   opacity: 1;
   color: var(--lumi-brand);
 }
@@ -263,36 +262,4 @@ const navigateTo = (route: string) => {
   gap: var(--space-1);
 }
 
-.footer-link {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-}
-
-.footer-link:hover {
-  color: var(--lumi-brand);
-  background: var(--lumi-brand-light);
-}
-
-.footer-link:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--focus-ring);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .setting-item,
-  .item-arrow,
-  .footer-link {
-    transition: none;
-  }
-
-  .setting-item:hover .item-arrow {
-    transform: none;
-  }
-}
 </style>

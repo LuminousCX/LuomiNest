@@ -20,6 +20,13 @@ from app.infrastructure.install.install_service import (
     get_all_install_status,
 )
 from app.infrastructure.database.json_store import marketplace_stats_store
+from app.data.marketplace_catalog import (
+    get_catalog_by_type,
+    get_all_catalog_items,
+    get_categories_by_type,
+    get_catalog_item,
+    COMMON_TAGS,
+)
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
 
@@ -55,6 +62,111 @@ def _validate_download_url(url: str) -> str:
         except socket.gaierror:
             raise ValueError(f"无法解析主机名: {hostname}")
     return url
+
+
+# ─── 目录查询接口（静态目录数据源） ─────────────────────────────
+
+
+@router.get("/items")
+async def list_catalog_items(
+    type: Optional[str] = Query(None, description="按类型过滤: plugin / skill / agent"),
+    category: Optional[str] = Query(None, description="按分类过滤"),
+    featured: Optional[bool] = Query(None, description="仅返回精选条目"),
+    search: Optional[str] = Query(None, description="搜索关键词"),
+):
+    """
+    获取市场目录条目列表。
+
+    支持按 type / category / featured / search 过滤。
+    返回的 installStatus 会与本地安装状态合并，确保前端展示一致。
+    """
+    if type and type in ("plugin", "skill", "agent"):
+        items = get_catalog_by_type(type)
+    else:
+        items = get_all_catalog_items()
+
+    # 合并本地安装状态
+    installed_records = get_installed_items()
+    installed_map = {r.get("itemId"): r for r in installed_records if r.get("itemId")}
+
+    result = []
+    for item in items:
+        # 合并安装状态
+        item_id = item["id"]
+        if item_id in installed_map:
+            item = {**item, "installStatus": "installed"}
+
+        # 应用过滤
+        if category and item.get("category") != category:
+            # 检查子分类
+            parent_match = False
+            cats = get_categories_by_type(item["type"])
+            for cat in cats:
+                if cat["id"] == category and any(
+                    c["id"] == item.get("category") for c in cat.get("children", [])
+                ):
+                    parent_match = True
+                    break
+            if not parent_match:
+                continue
+
+        if featured is not None and item.get("featured") != featured:
+            continue
+
+        if search:
+            q = search.lower().strip()
+            if not (
+                q in item["name"].lower()
+                or q in item["description"].lower()
+                or q in item["summary"].lower()
+                or any(q in t["name"].lower() for t in item.get("tags", []))
+                or q in item["author"]["name"].lower()
+            ):
+                continue
+
+        result.append(item)
+
+    return {"items": result, "total": len(result)}
+
+
+@router.get("/items/{item_id}")
+async def get_catalog_item_by_id(item_id: str):
+    """按 ID 获取单个目录条目，合并本地安装状态。"""
+    item = get_catalog_item(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail=f"条目 {item_id} 不存在")
+
+    # 合并安装状态
+    if is_installed(item_id):
+        item = {**item, "installStatus": "installed"}
+
+    return item
+
+
+@router.get("/categories")
+async def list_categories(
+    type: Optional[str] = Query(None, description="按类型过滤: plugin / skill / agent"),
+):
+    """获取分类列表，支持按类型过滤。"""
+    if type and type in ("plugin", "skill", "agent"):
+        cats = get_categories_by_type(type)
+        return {"categories": cats, "total": len(cats)}
+
+    all_cats = {
+        "plugin": get_categories_by_type("plugin"),
+        "skill": get_categories_by_type("skill"),
+        "agent": get_categories_by_type("agent"),
+    }
+    return {"categories": all_cats, "total": sum(len(c) for c in all_cats.values())}
+
+
+@router.get("/tags")
+async def list_tags():
+    """获取所有公共标签。"""
+    return {"tags": COMMON_TAGS, "total": len(COMMON_TAGS)}
+
+
+# ─── 安装/卸载接口 ─────────────────────────────────────────────
 
 
 class InstallRequest(BaseModel):

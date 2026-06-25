@@ -132,10 +132,10 @@ const features: Array<{
   key: 'featAgent' | 'featWorkflow' | 'featBrowser' | 'featAvatar'
   keyDesc: 'featAgentDesc' | 'featWorkflowDesc' | 'featBrowserDesc' | 'featAvatarDesc'
 }> = [
-  { icon: Bot, color: '#6366f1', theme: 'Bot', key: 'featAgent', keyDesc: 'featAgentDesc' },
-  { icon: Zap, color: '#f59e0b', theme: 'Zap', key: 'featWorkflow', keyDesc: 'featWorkflowDesc' },
-  { icon: Globe, color: '#3b82f6', theme: 'Globe', key: 'featBrowser', keyDesc: 'featBrowserDesc' },
-  { icon: Palette, color: '#ec4899', theme: 'Palette', key: 'featAvatar', keyDesc: 'featAvatarDesc' }
+  { icon: Bot, color: '--lumi-indigo', theme: 'Bot', key: 'featAgent', keyDesc: 'featAgentDesc' },
+  { icon: Zap, color: '--lumi-amber', theme: 'Zap', key: 'featWorkflow', keyDesc: 'featWorkflowDesc' },
+  { icon: Globe, color: '--lumi-info', theme: 'Globe', key: 'featBrowser', keyDesc: 'featBrowserDesc' },
+  { icon: Palette, color: '--task-pink', theme: 'Palette', key: 'featAvatar', keyDesc: 'featAvatarDesc' }
 ]
 
 function nextStep() {
@@ -310,7 +310,7 @@ onMounted(async () => {
               v-for="(feat, idx) in features"
               :key="feat.key"
               class="feature-card"
-              :style="{ '--feat-color': feat.color, animationDelay: `${idx * 100}ms` }"
+              :style="{ '--feat-color': `var(${feat.color})`, animationDelay: `${idx * 100}ms` }"
             >
               <LumiCardIcon
                 :icon="feat.icon"
@@ -490,10 +490,10 @@ onMounted(async () => {
 
 .bg-orb {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   filter: blur(120px);
   opacity: 0.2;
-  animation: orb-float 18s ease-in-out infinite;
+  animation: orb-float 18s var(--ease-in-out) infinite;
   will-change: transform, opacity;
 }
 
@@ -574,7 +574,7 @@ onMounted(async () => {
 
 .brand-title {
   font-size: var(--text-4xl);
-  font-weight: 700;
+  font-weight: var(--font-bold);
   line-height: 1.2;
   letter-spacing: -0.5px;
 }
@@ -582,7 +582,7 @@ onMounted(async () => {
 .brand-greeting {
   display: block;
   font-size: var(--text-2xl);
-  font-weight: 400;
+  font-weight: var(--font-normal);
   color: var(--text-secondary);
 }
 
@@ -598,11 +598,11 @@ onMounted(async () => {
 
 .version-badge {
   font-size: var(--text-xs);
-  padding: 3px var(--space-3);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
   background: var(--bg-secondary);
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: var(--font-medium);
   border: 1px solid var(--border);
 }
 
@@ -618,7 +618,7 @@ onMounted(async () => {
   align-items: center;
   gap: var(--space-2);
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   color: var(--text);
 }
 
@@ -666,14 +666,14 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   font-size: var(--text-md);
-  font-weight: 700;
+  font-weight: var(--font-bold);
   color: var(--text-secondary);
   flex-shrink: 0;
 }
 
 .lang-label {
   font-size: var(--text-md);
-  font-weight: 500;
+  font-weight: var(--font-medium);
   color: var(--text);
 }
 
@@ -696,7 +696,7 @@ onMounted(async () => {
 
 .feature-header h2 {
   font-size: var(--text-3xl);
-  font-weight: 700;
+  font-weight: var(--font-bold);
   color: var(--text);
 }
 
@@ -729,7 +729,7 @@ onMounted(async () => {
 
 .feat-name {
   font-size: var(--text-md);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   color: var(--text);
 }
 
@@ -764,7 +764,7 @@ onMounted(async () => {
 
 .step-hero-title {
   font-size: var(--text-3xl);
-  font-weight: 700;
+  font-weight: var(--font-bold);
   color: var(--text);
 }
 
@@ -792,7 +792,7 @@ onMounted(async () => {
   background: var(--lumi-danger-light);
   color: var(--lumi-danger);
   font-size: var(--text-xs);
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .category-tabs {
@@ -807,7 +807,7 @@ onMounted(async () => {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
   font-size: var(--text-xs);
-  font-weight: 500;
+  font-weight: var(--font-medium);
   color: var(--text-secondary);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -824,7 +824,7 @@ onMounted(async () => {
   background: var(--lumi-brand-light);
   border-color: var(--lumi-brand);
   color: var(--lumi-brand);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
 }
 
 .template-scroll {
@@ -861,8 +861,8 @@ onMounted(async () => {
 }
 
 .template-card-logo {
-  width: 32px;
-  height: 32px;
+  width: var(--space-7);
+  height: var(--space-7);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -872,7 +872,7 @@ onMounted(async () => {
 
 .template-initials {
   font-size: var(--text-2xs);
-  font-weight: 700;
+  font-weight: var(--font-bold);
   color: var(--text-inverse);
   letter-spacing: 0.5px;
 }
@@ -880,14 +880,14 @@ onMounted(async () => {
 .template-card-info {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: calc(var(--space-1) / 4);
   flex: 1;
   min-width: 0;
 }
 
 .template-card-name {
   font-size: var(--text-base);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   color: var(--text);
 }
 
@@ -930,12 +930,12 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: ring-pulse 2s ease-in-out infinite;
+  animation: ring-pulse calc(var(--duration-slow) * 6) var(--ease-in-out) infinite;
 }
 
 @keyframes ring-pulse {
   0%, 100% { box-shadow: 0 0 0 0 var(--lumi-brand-border); }
-  50% { box-shadow: 0 0 0 12px transparent; }
+  50% { box-shadow: 0 0 0 var(--space-3) transparent; }
 }
 
 .ready-shield {
@@ -947,8 +947,8 @@ onMounted(async () => {
   border-radius: var(--radius-full);
   background: var(--lumi-success);
   color: var(--text-inverse);
-  padding: 5px;
-  animation: shield-pop 0.5s var(--ease-spring) 0.3s both;
+  padding: var(--space-1);
+  animation: shield-pop var(--duration-enter) var(--ease-spring) var(--duration-normal) both;
 }
 
 @keyframes shield-pop {
@@ -958,7 +958,7 @@ onMounted(async () => {
 
 .ready-title {
   font-size: var(--text-3xl);
-  font-weight: 700;
+  font-weight: var(--font-bold);
   color: var(--text);
 }
 
@@ -983,8 +983,8 @@ onMounted(async () => {
 }
 
 .agree-custom {
-  width: 20px;
-  height: 20px;
+  width: var(--space-5);
+  height: var(--space-5);
   border-radius: var(--radius-xs);
   border: 1.5px solid var(--border);
   display: flex;
@@ -1041,8 +1041,8 @@ onMounted(async () => {
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
+  width: var(--space-2);
+  height: var(--space-2);
   border-radius: var(--radius-full);
   background: var(--border);
   border: none;
@@ -1052,7 +1052,7 @@ onMounted(async () => {
 }
 
 .dot.active {
-  width: 24px;
+  width: var(--space-6);
   border-radius: var(--radius-xs);
   background: var(--lumi-brand);
 }
@@ -1063,7 +1063,7 @@ onMounted(async () => {
 }
 
 .animate-brand-enter {
-  animation: brand-enter 0.7s var(--ease-out-expo) both;
+  animation: brand-enter var(--duration-enter) var(--ease-out-expo) both;
 }
 
 .step-fade-enter-active {
@@ -1090,14 +1090,4 @@ button:focus-visible,
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
 </style>

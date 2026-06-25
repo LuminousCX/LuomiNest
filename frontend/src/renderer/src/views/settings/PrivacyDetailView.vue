@@ -226,15 +226,15 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 .privacy-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 20px 28px;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-7);
   border-bottom: 1px solid var(--workspace-border);
   flex-shrink: 0;
 }
 
 .back-btn {
-  width: 36px;
-  height: 36px;
+  width: var(--space-8);
+  height: var(--space-8);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -249,13 +249,13 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .page-subtitle {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   margin-top: 1px;
 }
@@ -265,34 +265,34 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 .privacy-body {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 32px 40px;
+  padding: var(--space-7) var(--space-7) var(--space-8);
 }
 
 .privacy-document {
   background: var(--workspace-card);
   border-radius: var(--radius-lg);
-  padding: 28px 32px 36px;
+  padding: var(--space-7) var(--space-7) var(--space-8);
 }
 
 /* ── Lead paragraph ── */
 
 .doc-lead {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-secondary);
   line-height: 1.8;
-  margin-bottom: 32px;
-  padding-bottom: 24px;
+  margin-bottom: var(--space-7);
+  padding-bottom: var(--space-6);
   border-bottom: 1px solid var(--divider-soft);
 }
 
 /* ── Section with scroll-reveal ── */
 
 .doc-section {
-  margin-top: 28px;
-  padding-top: 4px;
+  margin-top: var(--space-7);
+  padding-top: var(--space-1);
   opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+  transform: translateY(var(--space-4));
+  transition: opacity var(--duration-enter) var(--ease-in-out), transform var(--duration-enter) var(--ease-in-out);
 }
 
 .doc-section.visible {
@@ -303,20 +303,20 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 /* ── Markdown-like typography ── */
 
 .doc-h2 {
-  font-size: 17px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 12px;
-  padding-bottom: 8px;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--divider-soft);
   letter-spacing: -0.2px;
 }
 
 .doc-paragraph {
-  font-size: 13.5px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
   line-height: 1.85;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-2);
 }
 
 .doc-paragraph:last-child {
@@ -324,15 +324,15 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 }
 
 .doc-list {
-  padding-left: 22px;
-  margin-top: 8px;
+  padding-left: var(--space-6);
+  margin-top: var(--space-2);
 }
 
 .doc-list li {
-  font-size: 13.5px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
   line-height: 1.85;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-2);
 }
 
 .doc-list a {
@@ -351,39 +351,40 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 .region-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-top: 12px;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
 }
 
 .region-card {
   background: var(--workspace-bg);
   border-radius: var(--radius-md);
-  padding: 16px 18px;
+  padding: var(--space-4) var(--space-4);
 }
 
 .region-name {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .region-law {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--lumi-primary);
   font-weight: 500;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-2);
   line-height: 1.5;
 }
 
 .region-card .doc-list {
-  padding-left: 18px;
+  padding-left: var(--space-4);
   margin-top: 0;
 }
 
 .region-card .doc-list li {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.75;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-2);
 }
+
 </style>

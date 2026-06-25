@@ -61,7 +61,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 34px;
+  height: var(--btn-height-md);
   background: var(--surface);
   border-bottom: 1px solid var(--border-light);
   box-shadow: var(--shadow-xs);
@@ -118,8 +118,8 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
 }
 
 .ctrl-btn {
-  width: 46px;
-  height: 34px;
+  width: calc(var(--space-9) - 2px);
+  height: var(--btn-height-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -152,4 +152,5 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
 .ctrl-btn:active {
   transform: scale(0.92);
 }
+
 </style>

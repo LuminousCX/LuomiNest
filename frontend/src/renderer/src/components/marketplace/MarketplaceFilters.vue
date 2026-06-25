@@ -117,9 +117,4 @@ const installStatusOptions: { value: InstallStatus | 'all'; label: string }[] = 
   color: var(--lumi-brand);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .filter-chip {
-    transition: none;
-  }
-}
 </style>

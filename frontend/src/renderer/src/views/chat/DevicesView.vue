@@ -430,9 +430,9 @@ onMounted(() => {
 }
 
 .device-status {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
   background: var(--lumi-success);
 }
 
@@ -575,12 +575,4 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .tab-btn,
-  .device-card,
-  .group-card,
-  .device-arrow {
-    transition: none;
-  }
-}
 </style>

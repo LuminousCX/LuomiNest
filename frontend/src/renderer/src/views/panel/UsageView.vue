@@ -239,12 +239,12 @@ const recentActivity = ref([
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  animation: content-fade-up var(--duration-enter) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
 .stat-icon-wrap {
-  width: 40px;
-  height: 40px;
+  width: var(--space-8);
+  height: var(--space-8);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -329,7 +329,7 @@ const recentActivity = ref([
 
 .section-card {
   flex: 1;
-  animation: content-fade-up var(--duration-enter) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
 .section-icon {
@@ -348,7 +348,7 @@ const recentActivity = ref([
   gap: var(--space-3);
   padding: var(--space-3) 0;
   border-bottom: 1px solid var(--border-light);
-  animation: content-fade-up var(--duration-slow) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-slow) var(--ease-default) both;
 }
 
 .provider-row:last-child {
@@ -408,7 +408,7 @@ const recentActivity = ref([
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  animation: content-fade-up var(--duration-slow) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-slow) var(--ease-default) both;
 }
 
 .memory-label-row {
@@ -452,13 +452,13 @@ const recentActivity = ref([
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) 0;
-  animation: content-fade-up var(--duration-slow) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-slow) var(--ease-default) both;
 }
 
 .activity-time {
   font-size: var(--text-xs);
   color: var(--text-muted);
-  width: 40px;
+  width: var(--space-8);
   flex-shrink: 0;
 }
 
@@ -495,27 +495,4 @@ const recentActivity = ref([
   white-space: nowrap;
 }
 
-@keyframes content-fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .period-btn,
-  .stat-card,
-  .section-card,
-  .provider-row,
-  .memory-item,
-  .activity-item,
-  .memory-bar-fill {
-    animation: none;
-    transition: none;
-  }
-}
 </style>

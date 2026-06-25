@@ -44,7 +44,7 @@ const emit = defineEmits<{
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
   font-size: var(--text-sm);
-  line-height: 1.4;
+  line-height: var(--leading-snug);
   color: var(--text-secondary);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -60,7 +60,7 @@ const emit = defineEmits<{
   color: var(--lumi-brand);
   background: var(--lumi-brand-light);
   border-color: var(--lumi-brand);
-  transform: translateY(-1px);
+  transform: translateY(calc(var(--space-1) / -4));
   box-shadow: var(--shadow-xs);
 }
 
@@ -72,4 +72,5 @@ const emit = defineEmits<{
 .suggestion-btn:hover .suggestion-icon {
   opacity: 1;
 }
+
 </style>

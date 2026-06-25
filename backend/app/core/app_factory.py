@@ -58,6 +58,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Workflow internal tools registration skipped: {e}")
 
+    # 加载 CxPlugin 插件系统
+    try:
+        from app.services.plugin_service import cx_plugin_service
+        from app.runtime.plugin.cxplugin import init_hot_reload
+        plugin_count = await cx_plugin_service.initialize()
+        logger.info(f"[LuomiNest] Loaded {plugin_count} CxPlugin(s)")
+        init_hot_reload()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] CxPlugin loading skipped: {e}")
+
     # 启动定时任务调度器（APScheduler）
     try:
         from app.core.scheduler import luomi_scheduler
@@ -118,6 +128,14 @@ async def lifespan(app: FastAPI):
         logger.warning(f"[LuomiNest] Periodic cleanup registration skipped: {e}")
 
     yield
+
+    # 停止 CxPlugin 热重载监听
+    try:
+        from app.runtime.plugin.cxplugin import shutdown_hot_reload
+        await shutdown_hot_reload()
+        logger.info(f"[LuomiNest] CxPlugin hot reload stopped")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] CxPlugin shutdown skipped: {e}")
 
     # 停止所有平台实例
     try:

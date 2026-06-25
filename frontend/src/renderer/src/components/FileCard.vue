@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { FileText, Image, File, X, Download } from 'lucide-vue-next'
+import { X, Download } from 'lucide-vue-next'
+import LumiButton from './common/LumiButton.vue'
+import { getFileIcon } from '../utils/file'
+import { formatFileSize } from '../utils/format'
 
 const props = defineProps<{
   name: string
@@ -14,22 +17,7 @@ const emit = defineEmits<{
   download: []
 }>()
 
-const fileIcon = computed(() => {
-  const ext = props.name.split('.').pop()?.toLowerCase()
-  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext || '')) {
-    return Image
-  }
-  if (['txt', 'md', 'json', 'xml', 'csv'].includes(ext || '')) {
-    return FileText
-  }
-  return File
-})
-
-const formatSize = (bytes: number): string => {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-}
+const fileIcon = computed(() => getFileIcon(props.name))
 </script>
 
 <template>
@@ -42,15 +30,19 @@ const formatSize = (bytes: number): string => {
       <div v-if="status === 'uploading'" class="file-status uploading">上传中...</div>
       <div v-else-if="status === 'success'" class="file-status success">已附加</div>
       <div v-else-if="status === 'failed'" class="file-status failed">{{ error || '上传失败' }}</div>
-      <div v-else class="file-size">{{ formatSize(size) }}</div>
+      <div v-else class="file-size">{{ formatFileSize(size) }}</div>
     </div>
     <div class="file-actions">
-      <button class="action-btn" @click="emit('download')" title="下载">
-        <Download :size="14" />
-      </button>
-      <button class="action-btn" @click="emit('remove')" title="移除">
-        <X :size="14" />
-      </button>
+      <LumiButton variant="ghost" size="sm" icon-only aria-label="下载" @click="emit('download')">
+        <template #icon>
+          <Download :size="14" />
+        </template>
+      </LumiButton>
+      <LumiButton variant="ghost" size="sm" icon-only aria-label="移除" @click="emit('remove')">
+        <template #icon>
+          <X :size="14" />
+        </template>
+      </LumiButton>
     </div>
   </div>
 </template>
@@ -80,8 +72,8 @@ const formatSize = (bytes: number): string => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--nav-item-height);
+  height: var(--nav-item-height);
   border-radius: var(--radius-sm);
   background: var(--surface-hover);
   color: var(--text-muted);
@@ -102,7 +94,7 @@ const formatSize = (bytes: number): string => {
 
 .file-status {
   font-size: var(--text-xs);
-  margin-top: 2px;
+  margin-top: calc(var(--space-1) / 2);
 }
 
 .file-status.uploading {
@@ -120,7 +112,7 @@ const formatSize = (bytes: number): string => {
 .file-size {
   font-size: var(--text-xs);
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: calc(var(--space-1) / 2);
 }
 
 .file-actions {
@@ -128,19 +120,4 @@ const formatSize = (bytes: number): string => {
   gap: var(--space-1);
 }
 
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.action-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-}
 </style>

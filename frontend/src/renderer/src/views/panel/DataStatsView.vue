@@ -20,6 +20,7 @@ import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
 import { useMemoryStore } from '../../stores/memory'
 import { useStatsStore } from '../../stores/stats'
+import { formatTime } from '../../utils/format'
 
 const memoryStore = useMemoryStore()
 const statsStore = useStatsStore()
@@ -95,11 +96,7 @@ const recentActivities = computed(() => {
   if (!records.length) return []
   return records.slice(0, 10).map(r => {
     const ts = r.timestamp
-    let timeStr = ''
-    try {
-      const d = new Date(ts)
-      timeStr = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0')
-    } catch { timeStr = '--:--' }
+    const timeStr = formatTime(ts)
     const tokStr = r.total_tokens > 0 ? ` (${r.total_tokens.toLocaleString()} tokens)` : ''
     return {
       time: timeStr,
@@ -403,7 +400,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  animation: content-fade-up var(--duration-enter) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
 .header-title {
@@ -459,7 +456,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .stat-card {
-  animation: content-fade-up var(--duration-enter) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
 .stat-card-content {
@@ -469,8 +466,8 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .stat-icon-wrap {
-  width: 40px;
-  height: 40px;
+  width: var(--space-8);
+  height: var(--space-8);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -492,7 +489,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: var(--text-2xl);
   font-weight: var(--font-bold);
   color: var(--text-primary);
 }
@@ -534,7 +531,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .section-card {
-  animation: content-fade-up var(--duration-enter) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
 .section-icon-muted {
@@ -587,7 +584,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   gap: var(--space-3);
   padding: var(--space-3) 0;
   border-bottom: 1px solid var(--border-light);
-  animation: content-fade-up var(--duration-slow) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-slow) var(--ease-default) both;
 }
 
 .provider-row:last-child {
@@ -615,14 +612,14 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 .provider-bar-bg {
   flex: 1;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   overflow: hidden;
 }
 
 .provider-bar-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--lumi-brand);
   transition: width var(--transition-normal);
 }
@@ -738,9 +735,9 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 }
 
 .legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
@@ -782,14 +779,14 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 
 .health-bar-bg {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   overflow: hidden;
 }
 
 .health-bar-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--lumi-brand);
   transition: width var(--transition-normal);
 }
@@ -804,7 +801,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  animation: content-fade-up var(--duration-slow) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-slow) var(--ease-default) both;
 }
 
 .context-label-row {
@@ -825,14 +822,14 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 
 .context-bar-bg {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   overflow: hidden;
 }
 
 .context-bar-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--lumi-brand);
   transition: width var(--transition-normal);
 }
@@ -846,7 +843,7 @@ watch(period, () => { statsStore.fetchAll(period.value) })
 .activity-item {
   display: flex;
   gap: var(--space-3);
-  animation: content-fade-up var(--duration-slow) var(--ease-default) both;
+  animation: lumi-content-fade-up var(--duration-slow) var(--ease-default) both;
   padding: var(--space-2) 0;
 }
 
@@ -854,15 +851,15 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 12px;
+  width: var(--space-3);
   flex-shrink: 0;
   padding-top: var(--space-1);
 }
 
 .activity-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
@@ -925,41 +922,4 @@ watch(period, () => { statsStore.fetchAll(period.value) })
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes content-fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .stats-header,
-  .stat-card,
-  .section-card,
-  .provider-row,
-  .context-item,
-  .activity-item,
-  .period-btn,
-  .bar-anim,
-  .donut-anim,
-  .provider-bar-fill,
-  .health-bar-fill,
-  .context-bar-fill {
-    animation: none;
-    transition: none;
-  }
-
-  .spinning {
-    animation: none;
-  }
-}
 </style>

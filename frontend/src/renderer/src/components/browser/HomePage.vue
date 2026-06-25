@@ -32,19 +32,19 @@ interface QuickAction {
 }
 
 const searchEngines: SearchEngine[] = [
-  { id: 'bing', name: 'Bing', icon: Search, url: 'https://www.bing.com/search?q=', color: '#00809d' },
-  { id: 'google', name: 'Google', icon: Globe, url: 'https://www.google.com/search?q=', color: '#4285f4' },
-  { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=', color: '#00a1d6' },
-  { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: '#ff0000' },
-  { id: 'ai', name: 'AI', icon: Bot, url: '', color: '#8b5cf6' }
+  { id: 'bing', name: 'Bing', icon: Search, url: 'https://www.bing.com/search?q=', color: 'var(--lumi-brand)' },
+  { id: 'google', name: 'Google', icon: Globe, url: 'https://www.google.com/search?q=', color: 'var(--lumi-info)' },
+  { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=', color: 'var(--lumi-sky)' },
+  { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: 'var(--lumi-danger)' },
+  { id: 'ai', name: 'AI', icon: Bot, url: '', color: 'var(--task-purple)' }
 ]
 
 const quickActions: QuickAction[] = [
-  { icon: Code2, label: '执行脚本', color: '#8b5cf6', action: 'script' },
-  { icon: Camera, label: '页面截图', color: '#3b82f6', action: 'screenshot' },
-  { icon: MousePointerClick, label: '点击元素', color: '#22c55e', action: 'click' },
-  { icon: Globe, label: '读取DOM', color: '#f59e0b', action: 'dom' },
-  { icon: Send, label: '填表单', color: '#f43f5e', action: 'fill' }
+  { icon: Code2, label: '执行脚本', color: 'var(--task-purple)', action: 'script' },
+  { icon: Camera, label: '页面截图', color: 'var(--lumi-info)', action: 'screenshot' },
+  { icon: MousePointerClick, label: '点击元素', color: 'var(--lumi-success)', action: 'click' },
+  { icon: Globe, label: '读取DOM', color: 'var(--lumi-amber)', action: 'dom' },
+  { icon: Send, label: '填表单', color: 'var(--lumi-accent)', action: 'fill' }
 ]
 
 const searchInput = ref('')
@@ -192,7 +192,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .brand-title {
-  font-size: 42px;
+  font-size: var(--text-5xl);
   font-weight: var(--font-semibold);
   letter-spacing: -0.02em;
   margin: 0;
@@ -378,8 +378,8 @@ function handleKeydown(e: KeyboardEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: calc(var(--space-8) - var(--space-1));
+  height: calc(var(--space-8) - var(--space-1));
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, var(--text), var(--text-secondary));
   border: none;
@@ -398,16 +398,12 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .loading-spinner {
-  width: 16px;
-  height: 16px;
+  width: var(--space-4);
+  height: var(--space-4);
   border: 2px solid color-mix(in srgb, var(--text-inverse) 30%, transparent);
   border-top-color: var(--text-inverse);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  border-radius: var(--radius-full);
+  animation: spin calc(var(--duration-normal) * 3 + var(--duration-fast)) linear infinite;
 }
 
 .quick-actions {
@@ -433,16 +429,16 @@ function handleKeydown(e: KeyboardEvent) {
 .qa-card:hover {
   border-color: var(--qa-color);
   box-shadow: var(--shadow-md), 0 0 0 1px var(--lumi-brand-subtle);
-  transform: translateY(-2px);
+  transform: translateY(calc(var(--space-1) / -2));
 }
 
 .qa-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: calc(var(--radius-md) - var(--space-1) / 2);
   background: linear-gradient(135deg, var(--qa-color), color-mix(in srgb, var(--qa-color) 70%, var(--text-inverse)));
   color: var(--text-inverse);
 }
@@ -460,6 +456,7 @@ function handleKeydown(e: KeyboardEvent) {
 .dropdown-enter-from,
 .dropdown-leave-to {
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(calc(var(--space-1) * -2));
 }
+
 </style>

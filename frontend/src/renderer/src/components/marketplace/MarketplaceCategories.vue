@@ -37,7 +37,7 @@ const emit = defineEmits<{
           v-if="cat.icon && ICON_MAP[cat.icon]"
           :is="ICON_MAP[cat.icon]"
           :size="16"
-          class="cat-icon"
+          class="cat-icon shrink-0"
         />
         <span class="cat-name">{{ cat.name }}</span>
         <ChevronRight v-if="cat.children?.length" :size="14" class="cat-expand" />
@@ -93,10 +93,6 @@ const emit = defineEmits<{
   background: var(--lumi-brand);
 }
 
-.cat-icon {
-  flex-shrink: 0;
-}
-
 .cat-name {
   flex: 1;
 }
@@ -115,10 +111,4 @@ const emit = defineEmits<{
   color: var(--lumi-brand);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .category-btn,
-  .cat-expand {
-    transition: none;
-  }
-}
 </style>

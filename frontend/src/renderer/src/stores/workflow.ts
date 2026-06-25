@@ -22,6 +22,7 @@ import { ref, computed } from 'vue'
 import { useApi } from '../composables/useApi'
 import { useTaskStreamStore } from './taskStream'
 import { useMemoryStore } from './memory'
+import { generateId } from '../utils/id'
 
 /** 工作流阶段 */
 export type WorkflowPhase =
@@ -509,7 +510,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
           try {
             // 通过 taskStreamStore 通知市场页面刷新
             taskStreamStore.handleSubagentEvent({
-              subagent_id: `workflow_market_${event.metadata?.item_id ?? Date.now()}`,
+              subagent_id: generateId('workflow_market'),
               status: 'completed',
               task: `扩展市场: ${event.action === 'installed' ? '安装' : '卸载'} ${event.metadata?.item_id ?? ''}`,
               depth: 0,

@@ -5,6 +5,7 @@ import type { MarketplaceItem, MarketplaceType } from '../../types/marketplace'
 import { useRouter } from 'vue-router'
 import { useMarketplaceStore } from '../../stores/marketplace'
 import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
+import { formatCount } from '../../utils/format'
 import LumiCardIcon from '../common/LumiCardIcon.vue'
 
 const props = defineProps<{
@@ -100,10 +101,6 @@ function getRankClass(rank: number): string {
   if (rank === 2) return 'rank-silver'
   if (rank === 3) return 'rank-bronze'
   return ''
-}
-
-function formatCount(n: number): string {
-  return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n)
 }
 </script>
 
@@ -258,7 +255,7 @@ function formatCount(n: number): string {
 }
 
 .banner-scroll::-webkit-scrollbar {
-  height: 3px;
+  height: calc(var(--space-1) * 0.75);
 }
 
 .banner-card {
@@ -266,7 +263,7 @@ function formatCount(n: number): string {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-4);
-  min-width: 260px;
+  min-width: calc(var(--space-8) * 6 + var(--space-5));
   border-radius: var(--radius-lg);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
@@ -283,8 +280,8 @@ function formatCount(n: number): string {
 }
 
 .banner-rank {
-  width: 22px;
-  height: 22px;
+  width: calc(var(--space-5) + var(--space-1) / 2);
+  height: calc(var(--space-5) + var(--space-1) / 2);
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
@@ -353,16 +350,4 @@ function formatCount(n: number): string {
   color: var(--lumi-accent);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .sort-btn,
-  .view-all-btn,
-  .banner-card {
-    animation: none;
-    transition: none;
-  }
-
-  .banner-card:hover {
-    transform: none;
-  }
-}
 </style>

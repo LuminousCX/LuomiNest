@@ -14,6 +14,7 @@ import {
 import LumiBrandStar from '../components/common/LumiBrandStar.vue'
 import LumiButton from '../components/common/LumiButton.vue'
 import LumiInput from '../components/common/LumiInput.vue'
+import LumiCard from '../components/common/LumiCard.vue'
 
 const router = useRouter()
 
@@ -84,27 +85,31 @@ const goBack = () => {
           </div>
 
           <div class="login-options animate-slide-up">
-            <button class="login-option-card lumi-card" @click="loginMode = 'local'">
-              <div class="option-icon local-icon">
-                <Monitor :size="22" />
-              </div>
-              <div class="option-info">
-                <span class="option-title">本地登录</span>
-                <span class="option-desc">数据保存在本地，无需网络</span>
-              </div>
-              <ChevronRight :size="16" class="option-arrow" />
-            </button>
+            <LumiCard class="login-option-card" hoverable padding="none">
+              <button class="login-option-inner" @click="loginMode = 'local'">
+                <div class="option-icon local-icon">
+                  <Monitor :size="22" />
+                </div>
+                <div class="option-info">
+                  <span class="option-title">本地登录</span>
+                  <span class="option-desc">数据保存在本地，无需网络</span>
+                </div>
+                <ChevronRight :size="16" class="option-arrow" />
+              </button>
+            </LumiCard>
 
-            <button class="login-option-card lumi-card" @click="loginMode = 'online'">
-              <div class="option-icon online-icon">
-                <Cloud :size="22" />
-              </div>
-              <div class="option-info">
-                <span class="option-title">在线登录</span>
-                <span class="option-desc">多端同步，云端备份数据</span>
-              </div>
-              <ChevronRight :size="16" class="option-arrow" />
-            </button>
+            <LumiCard class="login-option-card" hoverable padding="none">
+              <button class="login-option-inner" @click="loginMode = 'online'">
+                <div class="option-icon online-icon">
+                  <Cloud :size="22" />
+                </div>
+                <div class="option-info">
+                  <span class="option-title">在线登录</span>
+                  <span class="option-desc">多端同步，云端备份数据</span>
+                </div>
+                <ChevronRight :size="16" class="option-arrow" />
+              </button>
+            </LumiCard>
           </div>
 
           <div class="login-footer animate-fade-in">
@@ -302,7 +307,7 @@ const goBack = () => {
 
 .bg-orb {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   filter: blur(120px);
   opacity: 0.15;
   animation: orb-float 18s var(--ease-in-out) infinite;
@@ -383,23 +388,27 @@ const goBack = () => {
   gap: var(--space-2);
 }
 
-.login-option-card.lumi-card {
+.login-option-card {
+  width: 100%;
+}
+
+.login-option-inner {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
   width: 100%;
+  padding: var(--space-3) var(--space-4);
   text-align: left;
+  background: transparent;
+  border: none;
   cursor: pointer;
 }
 
-.login-option-card.lumi-card:hover {
+.login-option-card:hover {
   border-color: var(--lumi-brand-border);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
 }
 
-.login-option-card.lumi-card:focus-visible {
+.login-option-inner:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
@@ -428,7 +437,7 @@ const goBack = () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 
 .option-title {
@@ -448,7 +457,7 @@ const goBack = () => {
   transition: transform var(--transition-fast);
 }
 
-.login-option-card.lumi-card:hover .option-arrow {
+.login-option-card:hover .option-arrow {
   color: var(--lumi-brand);
   transform: translateX(3px);
 }
@@ -497,7 +506,7 @@ const goBack = () => {
 .form-desc {
   font-size: var(--text-sm);
   color: var(--text-muted);
-  margin-top: 1px;
+  margin-top: calc(var(--space-1) / 4);
 }
 
 /* Login Form */
@@ -510,13 +519,13 @@ const goBack = () => {
 .form-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: calc(var(--space-1) * 1.5);
 }
 
 .field-label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: calc(var(--space-1) * 1.5);
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
   color: var(--text-secondary);
@@ -598,14 +607,4 @@ button:focus-visible,
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
 </style>

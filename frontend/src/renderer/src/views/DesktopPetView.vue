@@ -886,8 +886,8 @@ onBeforeUnmount(() => {
 }
 
 .pet-loading-spinner {
-  width: 24px;
-  height: 24px;
+  width: var(--space-6);
+  height: var(--space-6);
   border: 2px solid var(--lumi-brand-border);
   border-top-color: var(--lumi-brand);
   border-radius: var(--radius-full);
@@ -921,11 +921,11 @@ onBeforeUnmount(() => {
   z-index: 50;
   max-width: 90%;
   padding: 6px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface) 85%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 2px 10px var(--shadow-color);
+  box-shadow: var(--shadow-md);
   pointer-events: none;
 }
 
@@ -939,11 +939,11 @@ onBeforeUnmount(() => {
 }
 
 .pet-subtitle-fade-enter-active {
-  transition: opacity var(--duration-normal) var(--var(--var(--ease-in-out))), transform var(--duration-normal) var(--var(--var(--ease-in-out)));
+  transition: opacity var(--duration-normal) var(--ease-in-out), transform var(--duration-normal) var(--ease-in-out);
 }
 
 .pet-subtitle-fade-leave-active {
-  transition: opacity var(--duration-slow) var(--var(--var(--ease-in-out))), transform var(--duration-slow) var(--var(--var(--ease-in-out)));
+  transition: opacity var(--duration-slow) var(--ease-in-out), transform var(--duration-slow) var(--ease-in-out);
 }
 
 .pet-subtitle-fade-enter-from {
@@ -975,7 +975,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: var(--space-2);
   padding: var(--space-2);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--overlay-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -989,12 +989,12 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
   background: color-mix(in srgb, var(--surface) 8%, transparent);
   color: var(--text-inverse);
   cursor: pointer;
-  transition: all var(--duration-leave) var(--var(--var(--ease-in-out)));
+  transition: all var(--duration-leave) var(--ease-in-out);
 }
 
 .control-btn:hover {
@@ -1015,11 +1015,11 @@ onBeforeUnmount(() => {
 }
 
 .controls-fade-enter-active {
-  transition: opacity var(--duration-leave) var(--var(--var(--ease-in-out))), transform var(--duration-leave) var(--var(--var(--ease-in-out)));
+  transition: opacity var(--duration-leave) var(--ease-in-out), transform var(--duration-leave) var(--ease-in-out);
 }
 
 .controls-fade-leave-active {
-  transition: opacity var(--duration-fast) var(--var(--var(--ease-in-out))), transform var(--duration-fast) var(--var(--var(--ease-in-out)));
+  transition: opacity var(--duration-fast) var(--ease-in-out), transform var(--duration-fast) var(--ease-in-out);
 }
 
 .controls-fade-enter-from,
@@ -1027,4 +1027,5 @@ onBeforeUnmount(() => {
   opacity: 0;
   transform: translateY(8px) scale(0.95);
 }
+
 </style>

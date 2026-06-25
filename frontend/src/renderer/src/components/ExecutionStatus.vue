@@ -75,7 +75,7 @@ const getStepIcon = (index: number) => {
 }
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(-8px); }
+  from { opacity: 0; transform: translateY(calc(var(--space-1) * -2)); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -101,9 +101,9 @@ const getStepIcon = (index: number) => {
 }
 
 .step-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+  width: var(--space-5);
+  height: var(--space-5);
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -119,7 +119,7 @@ const getStepIcon = (index: number) => {
 .execution-step.in_progress .step-icon {
   background: var(--lumi-brand-light);
   color: var(--lumi-brand);
-  animation: pulse 1.5s ease-in-out infinite;
+  animation: pulse calc(var(--duration-slow) * 4 + var(--duration-fast)) var(--ease-in-out) infinite;
 }
 
 @keyframes pulse {
@@ -138,12 +138,12 @@ const getStepIcon = (index: number) => {
 
 .icon-arrow {
   color: var(--lumi-brand);
-  animation: bounce-right 0.6s ease-in-out infinite;
+  animation: bounce-right calc(var(--duration-normal) * 2 + var(--duration-fast)) var(--ease-in-out) infinite;
 }
 
 @keyframes bounce-right {
   0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(2px); }
+  50% { transform: translateX(calc(var(--space-1) / 2)); }
 }
 
 .step-label {
@@ -180,13 +180,4 @@ const getStepIcon = (index: number) => {
   color: var(--lumi-accent);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .execution-status-container,
-  .execution-step,
-  .execution-step.in_progress .step-icon,
-  .icon-arrow {
-    animation: none;
-    transition: none;
-  }
-}
 </style>

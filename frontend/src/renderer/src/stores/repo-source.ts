@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { RepoSource, RepoSourceType, MarketplaceItem } from '../types/marketplace'
 import { useApi } from '../composables/useApi'
+import { getStringItem, setStringItem } from '../utils/storage'
 
 const REPO_SOURCES_KEY = 'luominest-repo-sources-active'
 
@@ -31,19 +32,15 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
   const syncedItemsLoading = ref<Record<string, boolean>>({})
 
   function loadActiveSourceId(): string {
-    try {
-      const stored = localStorage.getItem(REPO_SOURCES_KEY)
-      if (stored && sources.value.some(s => s.id === stored)) {
-        return stored
-      }
-      return sources.value[0]?.id || ''
-    } catch {
-      return sources.value[0]?.id || ''
+    const stored = getStringItem(REPO_SOURCES_KEY, '')
+    if (stored && sources.value.some(s => s.id === stored)) {
+      return stored
     }
+    return sources.value[0]?.id || ''
   }
 
   const saveActiveSourceId = (id: string) => {
-    localStorage.setItem(REPO_SOURCES_KEY, id)
+    setStringItem(REPO_SOURCES_KEY, id)
   }
 
   const activeSource = computed(() => {

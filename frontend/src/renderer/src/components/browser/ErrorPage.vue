@@ -122,14 +122,14 @@ const displayUrl = computed(() => {
   font-weight: var(--font-normal);
   color: var(--text);
   margin: 0 0 var(--space-3);
-  line-height: 1.4;
+  line-height: var(--leading-snug);
 }
 
 .error-url {
   font-size: var(--text-md);
   color: var(--text-muted);
   margin: 0 0 var(--space-4);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
 }
 
 .error-url span {
@@ -141,7 +141,7 @@ const displayUrl = computed(() => {
   font-size: var(--text-md);
   color: var(--text-muted);
   margin: 0 0 var(--space-5);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
 }
 
 .error-details {
@@ -181,7 +181,7 @@ const displayUrl = computed(() => {
   padding: var(--space-3) 0 0 var(--space-5);
   color: var(--text-muted);
   font-size: var(--text-base);
-  line-height: 1.8;
+  line-height: var(--leading-relaxed);
 }
 
 .details-content p {
@@ -239,4 +239,5 @@ const displayUrl = computed(() => {
 .btn-link:hover {
   color: var(--lumi-brand-hover);
 }
+
 </style>

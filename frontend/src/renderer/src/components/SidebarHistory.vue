@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   MessageSquare,
@@ -17,7 +17,9 @@ import LumiEmptyState from './common/LumiEmptyState.vue'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
 import { useChatTrashStore } from '../stores/chat-trash'
+import { useDebouncedSearch } from '../composables/useDebouncedSearch'
 import type { ConversationListItem, ConversationSearchResult } from '../types'
+import { formatDateCalendar } from '../utils/format'
 
 defineProps<{
   trashCount: number
@@ -33,29 +35,11 @@ const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
 const searchQuery = ref('')
-const searchResults = ref<ConversationSearchResult[]>([])
-const isSearching = ref(false)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-let searchSeq = 0
-
-watch(searchQuery, (q) => {
-  if (searchTimer) clearTimeout(searchTimer)
-  if (!q.trim()) {
-    searchResults.value = []
-    isSearching.value = false
-    return
-  }
-  isSearching.value = true
-  searchSeq++
-  const currentSeq = searchSeq
-  searchTimer = setTimeout(async () => {
-    const results = await chatStore.searchConversations(q)
-    if (currentSeq === searchSeq) {
-      searchResults.value = results
-      isSearching.value = false
-    }
-  }, 300)
-})
+const { results: searchResults, isSearching } = useDebouncedSearch<ConversationSearchResult[]>(
+  searchQuery,
+  (q) => chatStore.searchConversations(q),
+  300,
+)
 
 const isSearchMode = computed(() => searchQuery.value.trim().length > 0)
 
@@ -88,23 +72,6 @@ const timeGroups = computed<TimeGroup[]>(() => {
 
   return groups.filter(g => g.items.length > 0)
 })
-
-const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-
-const formatTime = (dateStr: string) => {
-  const d = new Date(dateStr)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
-  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-
-  if (diffDays <= 0) return time
-  if (diffDays === 1) return `昨天 ${time}`
-  if (diffDays <= 7) return `${WEEKDAYS[d.getDay()]} ${time}`
-  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
-}
 
 const highlightSnippet = (snippet: string): string => {
   if (!snippet) return ''
@@ -337,7 +304,7 @@ const handleOpenTrash = () => {
                 </template>
                 <template v-else>
                   <span class="history-item-title">{{ conv.title }}</span>
-                  <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
+                  <span class="history-item-time">{{ formatDateCalendar(conv.updated_at) }}</span>
                 </template>
               </div>
               <template v-if="!batchMode">
@@ -384,7 +351,7 @@ const handleOpenTrash = () => {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  height: 48px;
+  height: calc(var(--space-8) + var(--space-2));
   background: var(--surface);
   border-radius: var(--radius-md);
   border: 1px solid transparent;
@@ -394,7 +361,7 @@ const handleOpenTrash = () => {
 
 .search-box:focus-within {
   border-color: var(--lumi-brand);
-  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
+  box-shadow: var(--input-focus-ring);
 }
 
 .search-icon {
@@ -420,8 +387,8 @@ const handleOpenTrash = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: var(--btn-height-md);
+  height: var(--btn-height-md);
   border: none;
   background: var(--surface-hover);
   color: var(--text-muted);
@@ -515,9 +482,9 @@ const handleOpenTrash = () => {
 }
 
 .history-item-indicator {
-  width: 3px;
-  height: 16px;
-  border-radius: 2px;
+  width: calc(var(--space-1) / 1.5);
+  height: var(--space-4);
+  border-radius: calc(var(--space-1) / 2);
   background: transparent;
   flex-shrink: 0;
   transition: background var(--transition-fast);
@@ -541,7 +508,7 @@ const handleOpenTrash = () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 
 .history-item-title {
@@ -573,16 +540,16 @@ const handleOpenTrash = () => {
 .history-item-snippet :deep(mark) {
   background: var(--lumi-brand-light);
   color: var(--lumi-brand);
-  padding: 0 1px;
-  border-radius: 2px;
+  padding: 0 calc(var(--space-1) / 4);
+  border-radius: calc(var(--space-1) / 2);
 }
 
 .history-item-delete {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: calc(var(--space-5) + var(--space-1));
+  height: calc(var(--space-5) + var(--space-1));
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -605,8 +572,8 @@ const handleOpenTrash = () => {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: calc(var(--space-5) + var(--space-1));
+  height: calc(var(--space-5) + var(--space-1));
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -629,7 +596,7 @@ const handleOpenTrash = () => {
 
 .history-item-rename-input {
   width: 100%;
-  height: 24px;
+  height: calc(var(--space-5) + var(--space-1));
   border: 1px solid var(--lumi-brand);
   border-radius: var(--radius-md);
   padding: 0 var(--space-1);
@@ -637,24 +604,24 @@ const handleOpenTrash = () => {
   color: var(--text);
   background: var(--surface);
   outline: none;
-  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
+  box-shadow: var(--input-focus-ring);
 }
 
 .history-item-checkbox {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: var(--space-5);
+  height: var(--space-5);
   flex-shrink: 0;
   cursor: pointer;
 }
 
 .checkbox-box {
-  width: 16px;
-  height: 16px;
+  width: var(--space-4);
+  height: var(--space-4);
   border: 1.5px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--space-1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -702,8 +669,8 @@ const handleOpenTrash = () => {
 
 .trash-badge {
   padding: 0 var(--space-1);
-  height: 18px;
-  line-height: 18px;
+  height: var(--badge-height);
+  line-height: var(--badge-height);
   font-size: var(--text-xs);
   font-weight: var(--font-semibold);
   background: var(--lumi-danger);
@@ -712,17 +679,6 @@ const handleOpenTrash = () => {
 }
 
 .spin-animation {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .spin-animation {
-    animation: none;
-  }
+  animation: spin var(--duration-slow) linear infinite;
 }
 </style>

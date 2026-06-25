@@ -121,7 +121,7 @@ function submitReply(reviewId: string) {
         </div>
         <textarea
           v-model="newReviewContent"
-          class="form-textarea"
+          class="lumi-textarea review-textarea"
           placeholder="分享你的使用体验..."
           rows="3"
         ></textarea>
@@ -224,7 +224,7 @@ function submitReply(reviewId: string) {
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  min-width: 100px;
+  min-width: calc(var(--space-8) * 2 + var(--space-5));
 }
 
 .rating-number {
@@ -262,7 +262,7 @@ function submitReply(reviewId: string) {
 
 .bar-track {
   flex: 1;
-  height: 6px;
+  height: var(--radius-xs);
   border-radius: var(--radius-xs);
   background: var(--border-light);
   overflow: hidden;
@@ -331,26 +331,8 @@ function submitReply(reviewId: string) {
   color: var(--text-secondary);
 }
 
-.form-textarea {
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  resize: vertical;
-  min-height: 60px;
-  transition: border-color var(--transition-fast);
-}
-
-.form-textarea:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: var(--input-focus-ring);
-}
-
-.form-textarea::placeholder {
-  color: var(--text-muted);
+.review-textarea {
+  min-height: calc(var(--space-8) + var(--space-5));
 }
 
 .form-actions {
@@ -439,7 +421,7 @@ function submitReply(reviewId: string) {
 .replies-list {
   margin-top: var(--space-3);
   padding-left: var(--space-4);
-  border-left: 2px solid var(--border-light);
+  border-left: calc(var(--space-1) / 2) solid var(--border-light);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -504,12 +486,4 @@ function submitReply(reviewId: string) {
   animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .sort-btn,
-  .form-textarea,
-  .reply-btn {
-    animation: none;
-    transition: none;
-  }
-}
 </style>

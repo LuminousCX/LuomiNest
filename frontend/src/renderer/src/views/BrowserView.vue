@@ -8,6 +8,7 @@ import HomePage from '../components/browser/HomePage.vue'
 import ErrorPage from '../components/browser/ErrorPage.vue'
 import DevPanel from '../components/browser/DevPanel.vue'
 import { useTaskStreamStore } from '../stores/taskStream'
+import { generateId } from '../utils/id'
 
 const taskStreamStore = useTaskStreamStore()
 
@@ -172,7 +173,7 @@ async function createTab(url: string = '') {
   tabs.value.forEach(t => t.active = false)
 
   if (!url) {
-    tabs.value.push({ id: `home-${Date.now()}`, title: '新标签页', url: '', active: true })
+    tabs.value.push({ id: generateId('home'), title: '新标签页', url: '', active: true })
     showHomePage.value = true
     addressBar.value = ''
     canGoBack.value = false
@@ -201,7 +202,7 @@ async function createTab(url: string = '') {
   } catch (e: any) {
     console.error('[ERROR][LuomiNestBrowser] Failed to create tab:', e.message)
     tabs.value.push({
-      id: `error-${Date.now()}`,
+      id: generateId('error'),
       title: '加载失败',
       url,
       active: true,
@@ -460,7 +461,7 @@ async function handleQuickAction(action: string) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: height var(--duration-leave) var(--var(--var(--ease-in-out)));
+  transition: height var(--duration-leave) var(--ease-in-out);
 }
 
 .browser-content.with-panel {

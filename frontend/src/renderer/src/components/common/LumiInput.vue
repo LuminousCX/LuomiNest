@@ -135,8 +135,8 @@ const clear = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: var(--space-6);
+  height: var(--space-6);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -156,7 +156,7 @@ const clear = () => {
 }
 
 .lumi-input--sm {
-  min-height: 32px;
+  min-height: var(--space-7);
   font-size: var(--text-sm);
   padding: 0 var(--space-3);
 }

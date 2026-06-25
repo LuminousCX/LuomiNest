@@ -11,10 +11,12 @@ import {
 } from 'lucide-vue-next'
 import LumiButton from './common/LumiButton.vue'
 import LumiEmptyState from './common/LumiEmptyState.vue'
+import LumiModal from './common/LumiModal.vue'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
 import { useChatTrashStore } from '../stores/chat-trash'
 import type { TrashListItem } from '../types'
+import { formatDateTime } from '../utils/format'
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -119,10 +121,6 @@ const handleTrashConfirm = async () => {
   trashConfirmTargetId.value = ''
 }
 
-const formatDeleteTime = (dateStr: string) => {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
 </script>
 
 <template>
@@ -191,7 +189,7 @@ const formatDeleteTime = (dateStr: string) => {
         <MessageSquare :size="14" class="history-item-icon" />
         <div class="trash-item-content">
           <span class="history-item-title">{{ item.title }}</span>
-          <span class="trash-item-deleted-time">{{ formatDeleteTime(item.deleted_at) }}</span>
+          <span class="trash-item-deleted-time">{{ formatDateTime(item.deleted_at) }}</span>
         </div>
         <div v-if="!trashBatchMode" class="trash-item-actions">
           <button class="trash-action-btn restore" title="恢复" @click.stop="handleRestoreItem(item.id)">
@@ -204,20 +202,18 @@ const formatDeleteTime = (dateStr: string) => {
       </div>
     </div>
 
-    <Transition name="selection-fade">
-      <div v-if="showTrashConfirm" class="create-dialog-overlay" @click.self="showTrashConfirm = false">
-        <div class="confirm-dialog">
-          <div class="confirm-dialog-icon">
-            <AlertTriangle :size="24" />
-          </div>
-          <p class="confirm-dialog-message">{{ trashConfirmMessage }}</p>
-          <div class="confirm-dialog-actions">
-            <LumiButton variant="danger" size="md" @click="handleTrashConfirm">删除</LumiButton>
-            <LumiButton variant="secondary" size="md" @click="showTrashConfirm = false">取消</LumiButton>
-          </div>
+    <LumiModal v-model:visible="showTrashConfirm" title="确认删除" size="sm">
+      <div class="confirm-dialog-content">
+        <div class="confirm-dialog-icon">
+          <AlertTriangle :size="24" />
+        </div>
+        <p class="confirm-dialog-message">{{ trashConfirmMessage }}</p>
+        <div class="confirm-dialog-actions">
+          <LumiButton variant="danger" size="md" @click="handleTrashConfirm">删除</LumiButton>
+          <LumiButton variant="secondary" size="md" @click="showTrashConfirm = false">取消</LumiButton>
         </div>
       </div>
-    </Transition>
+    </LumiModal>
   </div>
 </template>
 
@@ -241,8 +237,8 @@ const formatDeleteTime = (dateStr: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: calc(var(--space-5) + var(--space-2));
+  height: calc(var(--space-5) + var(--space-2));
   border: none;
   background: var(--surface-hover);
   color: var(--text-secondary);
@@ -267,8 +263,8 @@ const formatDeleteTime = (dateStr: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: var(--btn-height-md);
+  height: var(--btn-height-md);
   border: none;
   background: var(--surface-hover);
   color: var(--text-muted);
@@ -354,17 +350,17 @@ const formatDeleteTime = (dateStr: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: var(--space-5);
+  height: var(--space-5);
   flex-shrink: 0;
   cursor: pointer;
 }
 
 .checkbox-box {
-  width: 16px;
-  height: 16px;
+  width: var(--space-4);
+  height: var(--space-4);
   border: 1.5px solid var(--border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--space-1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -409,7 +405,7 @@ const formatDeleteTime = (dateStr: string) => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 
 .trash-item-deleted-time {
@@ -427,8 +423,8 @@ const formatDeleteTime = (dateStr: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: calc(var(--space-5) + var(--space-2));
+  height: calc(var(--space-5) + var(--space-2));
   border: none;
   background: transparent;
   border-radius: var(--radius-md);
@@ -452,35 +448,23 @@ const formatDeleteTime = (dateStr: string) => {
   background: var(--lumi-danger-light);
 }
 
-.create-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay-bg);
+.confirm-dialog-content {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal);
-}
-
-.confirm-dialog {
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
-  max-width: var(--modal-width-sm);
-  width: 90%;
-  box-shadow: var(--shadow-lg);
+  text-align: center;
 }
 
 .confirm-dialog-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: calc(var(--space-6) * 2);
+  height: calc(var(--space-6) * 2);
   border-radius: var(--radius-full);
   background: var(--lumi-danger-light);
   color: var(--lumi-danger);
-  margin: 0 auto var(--space-4);
+  margin-bottom: var(--space-4);
 }
 
 .confirm-dialog-message {
@@ -497,28 +481,4 @@ const formatDeleteTime = (dateStr: string) => {
   justify-content: center;
 }
 
-.selection-fade-enter-active {
-  animation: selection-fade-in var(--duration-fast) var(--ease-in-out);
-}
-
-.selection-fade-leave-active {
-  animation: selection-fade-out var(--duration-fast) var(--ease-in-out);
-}
-
-@keyframes selection-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes selection-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .selection-fade-enter-active,
-  .selection-fade-leave-active {
-    animation: none;
-  }
-}
 </style>

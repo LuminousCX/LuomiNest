@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { X, FileText, Image, Download, File } from 'lucide-vue-next'
+import { Download } from 'lucide-vue-next'
 import LumiButton from './common/LumiButton.vue'
 import LumiEmptyState from './common/LumiEmptyState.vue'
+import LumiModal from './common/LumiModal.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -48,134 +49,47 @@ const handleDownload = () => {
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="visible" class="file-preview-overlay" @click.self="emit('close')">
-        <div class="file-preview-modal">
-          <div class="modal-header">
-            <div class="file-info">
-              <component :is="isImage ? Image : isText ? FileText : File" :size="18" />
-              <span class="file-name">{{ fileName }}</span>
-            </div>
-            <div class="modal-actions">
-              <button class="action-btn" @click="handleDownload">
-                <Download :size="16" />
-                <span>下载</span>
-              </button>
-              <button class="close-btn" @click="emit('close')">
-                <X :size="16" />
-              </button>
-            </div>
-          </div>
-          <div class="modal-body">
-            <div v-if="isImage && fileContent" class="image-preview">
-              <img :src="fileContent" :alt="fileName" />
-            </div>
-            <div v-else-if="isText && fileContent" class="text-preview">
-              <pre>{{ fileContent }}</pre>
-            </div>
-            <div v-else class="no-content">
-              <LumiEmptyState icon="file" title="无法预览此文件类型">
-                <template #action>
-                  <LumiButton variant="primary" @click="handleDownload">
-                    <template #icon>
-                      <Download :size="16" />
-                    </template>
-                    下载文件
-                  </LumiButton>
-                </template>
-              </LumiEmptyState>
-            </div>
-          </div>
-        </div>
+  <LumiModal
+    :visible="visible"
+    :title="fileName"
+    size="lg"
+    :closable="true"
+    :mask-closable="true"
+    @close="emit('close')"
+  >
+    <template #header>
+      <LumiButton variant="outline" size="sm" @click="handleDownload">
+        <template #icon>
+          <Download :size="16" />
+        </template>
+        下载
+      </LumiButton>
+    </template>
+    <div class="file-preview-body">
+      <div v-if="isImage && fileContent" class="image-preview">
+        <img :src="fileContent" :alt="fileName" />
       </div>
-    </Transition>
-  </Teleport>
+      <div v-else-if="isText && fileContent" class="text-preview">
+        <pre>{{ fileContent }}</pre>
+      </div>
+      <div v-else class="no-content">
+        <LumiEmptyState icon="file" title="无法预览此文件类型">
+          <template #action>
+            <LumiButton variant="primary" @click="handleDownload">
+              <template #icon>
+                <Download :size="16" />
+              </template>
+              下载文件
+            </LumiButton>
+          </template>
+        </LumiEmptyState>
+      </div>
+    </div>
+  </LumiModal>
 </template>
 
 <style scoped>
-.file-preview-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--overlay-bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal);
-  padding: var(--space-5);
-}
-
-.file-preview-modal {
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  max-width: 90%;
-  max-height: 90%;
-  width: 600px;
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--border-light);
-}
-
-.file-info {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text);
-}
-
-.file-name {
-  font-size: var(--text-md);
-  font-weight: var(--font-medium);
-}
-
-.modal-actions {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-base);
-}
-
-.action-btn:hover {
-  background: var(--surface-hover);
-}
-
-.close-btn {
-  display: flex;
-  align-items: center;
-  padding: var(--space-1);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-}
-
-.close-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-}
-
-.modal-body {
-  flex: 1;
-  overflow: auto;
+.file-preview-body {
   padding: var(--space-4);
 }
 
@@ -223,4 +137,5 @@ const handleDownload = () => {
 .fade-leave-to {
   opacity: 0;
 }
+
 </style>

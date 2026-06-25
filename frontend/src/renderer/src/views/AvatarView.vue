@@ -1,12 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import {
-  Palette, Sparkles, Heart, Eye, Smile, Frown, Meh, Zap,
-  Volume2, RotateCcw, Maximize2, Download, Settings2,
-  Loader2, AlertCircle, FolderOpen, Check, Monitor, MonitorOff,
-  ChevronLeft, ChevronRight, Send, Square, Type, MessageCircle,
-  Loader
-} from 'lucide-vue-next'
+import type { VNodeRef } from 'vue'
+import { Smile, Frown, Meh, Heart, Zap } from 'lucide-vue-next'
 import { useLuomiNestLive2D } from '@/composables/useLuomiNestLive2D'
 import { useAvatarTTS } from '@/composables/useAvatarTTS'
 import { useAvatarChat } from '@/composables/useAvatarChat'
@@ -17,10 +12,18 @@ import { useChatStore } from '@/stores/chat'
 import { useAgentStore } from '@/stores/agent'
 import { usePlatformStore } from '@/stores/platform'
 import { LUOMINEST_BUILTIN_MODELS, type LuomiNestModelInfo, resolveExpressionByModelUrl, getAvatarBinding } from '@/config/luominest-models'
+import AvatarHeader from '@/components/avatar/AvatarHeader.vue'
+import AvatarStage from '@/components/avatar/AvatarStage.vue'
+import AvatarControls from '@/components/avatar/AvatarControls.vue'
+import AvatarSkinSidebar from '@/components/avatar/AvatarSkinSidebar.vue'
+import type { AvatarMode, AvatarEmotion, IdleAnimation, SkinItem } from '@/components/avatar/types'
 import type { PetModelInfo } from '../vite-env.d'
-import type { AgentProfile, ChatStreamChunk } from '../types'
+import type { AgentProfile, ChatStreamChunk } from '@/types'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const setCanvasRef: VNodeRef = (el) => {
+  canvasRef.value = el as HTMLCanvasElement | null
+}
 const avatarControl = useAvatarControlStore()
 const modelStore = useModelStore()
 const chatStore = useChatStore()
@@ -34,7 +37,7 @@ const MAIN_AGENT_PROFILE: AgentProfile = {
   id: MAIN_AGENT_ID,
   name: '主智能体',
   description: 'LuomiNest 工作台主 Agent，驱动 Live2D、记忆、工具、MCP 和子 Agent',
-  color: '#147EBC',
+  color: 'var(--lumi-brand)',
   isMain: true,
   isActive: true,
 }
@@ -169,7 +172,7 @@ const importedModels = ref<LuomiNestModelInfo[]>([])
 const showImportSuccess = ref(false)
 const skinSidebarVisible = ref(true)
 
-const avatarModes = [
+const avatarModes: AvatarMode[] = [
   { id: 'live2d', label: 'Live2D', desc: 'Cubism 4/5', active: true },
   { id: 'vrm', label: 'VRM', desc: '3D Model', active: false },
   { id: 'pixel', label: 'PixelPet', desc: 'Q-version Pet', active: false }
@@ -177,12 +180,12 @@ const avatarModes = [
 
 const currentMode = ref('live2d')
 
-const emotions = [
-  { id: 'happy', icon: Smile, label: 'Happy', color: '#f59e0b' },
-  { id: 'sad', icon: Frown, label: 'Sad', color: '#6366f1' },
-  { id: 'neutral', icon: Meh, label: 'Neutral', color: '#8b5cf6' },
-  { id: 'love', icon: Heart, label: 'Love', color: '#ec4899' },
-  { id: 'surprise', icon: Zap, label: 'Surprise', color: '#22c55e' }
+const emotions: AvatarEmotion[] = [
+  { id: 'happy', icon: Smile, label: 'Happy', color: 'var(--lumi-amber)' },
+  { id: 'sad', icon: Frown, label: 'Sad', color: 'var(--lumi-indigo)' },
+  { id: 'neutral', icon: Meh, label: 'Neutral', color: 'var(--task-purple)' },
+  { id: 'love', icon: Heart, label: 'Love', color: 'var(--task-pink)' },
+  { id: 'surprise', icon: Zap, label: 'Surprise', color: 'var(--lumi-success)' }
 ]
 
 const currentEmotionLocal = ref(emotions[2])
@@ -194,14 +197,14 @@ const expressionValue = computed(() => {
   return map[currentEmotionLocal.value.id] ?? 0
 })
 
-const idleAnimations = computed(() => [
+const idleAnimations = computed<IdleAnimation[]>(() => [
   { name: 'Breath', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 65 : 0 },
   { name: 'Blink', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 40 : 0 },
   { name: 'Idle Motion', status: idleActive.value ? 'running' : 'paused', progress: idleActive.value ? 80 : 0 },
   { name: 'Head Track', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 50 : 0 }
 ])
 
-const skinList = computed(() => {
+const skinList = computed<SkinItem[]>(() => {
   const builtin = LUOMINEST_BUILTIN_MODELS.map(m => ({
     name: `${m.name}`,
     type: m.type === 'live2d' ? 'Live2D' : m.type === 'vrm' ? 'VRM' : 'PixelPet',
@@ -228,7 +231,7 @@ function selectMode(modeId: string) {
   currentMode.value = modeId
 }
 
-function selectEmotion(emo: typeof emotions[0]) {
+function selectEmotion(emo: AvatarEmotion) {
   currentEmotionLocal.value = emo
   if (isDesktopMode.value && isDesktopPetRunning.value) {
     const modelUrl = currentModelInfo.value?.url || ''
@@ -509,273 +512,71 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="avatar-view">
-    <div class="avatar-header">
-      <div class="header-left">
-        <Palette :size="20" />
-        <h2>Avatar Studio</h2>
-        <span class="header-badge">LuomiNest</span>
-      </div>
-      <div class="header-actions">
-        <div class="desktop-mode-toggle" :class="{ active: isDesktopMode, switching: isSwitchingMode }" @click="toggleDesktopMode" :title="isSwitchingMode ? 'Switching...' : (isDesktopMode ? 'Switch to Inline Mode' : 'Switch to Desktop Mode')">
-          <component :is="isSwitchingMode ? Loader : (isDesktopMode ? Monitor : MonitorOff)" :size="16" :class="{ spin: isSwitchingMode }" />
-          <span class="toggle-label">{{ isSwitchingMode ? '...' : (isDesktopMode ? 'Desktop' : 'Inline') }}</span>
-        </div>
-        <div class="header-divider"></div>
-        <button class="h-btn" title="Reset Pose" @click="handleResetPose"><RotateCcw :size="16" /></button>
-        <button class="h-btn" title="Fullscreen"><Maximize2 :size="16" /></button>
-        <button
-          :class="['h-btn', { active: ttsEnabled }]"
-          title="Toggle TTS"
-          @click="toggleTTS"
-        >
-          <Volume2 :size="16" />
-        </button>
-        <button
-          :class="['h-btn', { active: subtitleEnabled }]"
-          title="Subtitle"
-          @click="toggleSubtitle"
-        >
-          <Type :size="16" />
-        </button>
-        <button class="h-btn primary" title="Import Avatar" @click="handleImportClick">
-          <Download :size="16" /> Import
-        </button>
-        <button class="h-btn" title="Settings"><Settings2 :size="16" /></button>
-      </div>
-    </div>
+    <AvatarHeader
+      :is-desktop-mode="isDesktopMode"
+      :is-switching-mode="isSwitchingMode"
+      :tts-enabled="ttsEnabled"
+      :subtitle-enabled="subtitleEnabled"
+      @toggle-desktop-mode="toggleDesktopMode"
+      @reset-pose="handleResetPose"
+      @toggle-tts="toggleTTS"
+      @toggle-subtitle="toggleSubtitle"
+      @import-click="handleImportClick"
+    />
 
     <div class="avatar-body">
       <div class="avatar-stage animate-stage-appear">
-        <div class="stage-canvas" :class="{ 'desktop-mode-active': isDesktopMode }">
-          <template v-if="!isDesktopMode">
-            <canvas ref="canvasRef" class="live2d-canvas"></canvas>
-
-            <div v-if="isLoading" class="stage-loading">
-              <Loader2 :size="32" class="loading-spinner" />
-              <span class="loading-text">Loading LuomiNest Avatar...</span>
-            </div>
-
-            <div v-if="loadError" class="stage-error">
-              <AlertCircle :size="32" />
-              <span class="error-text">{{ loadError }}</span>
-              <span class="error-hint">Check model resources and try again</span>
-            </div>
-
-            <Transition name="subtitle-fade">
-              <div
-                v-if="subtitleEnabled && subtitleVisible && subtitleText"
-                class="subtitle-overlay"
-              >
-                <span class="subtitle-text">{{ subtitleText }}</span>
-              </div>
-            </Transition>
-
-            <div v-if="!isLoading && !loadError && !isModelReady" class="avatar-placeholder" :class="[`emotion-${currentEmotionLocal.id}`]">
-              <div class="avatar-ring"></div>
-              <div class="avatar-core">
-                <Sparkles :size="48" class="avatar-sparkle" />
-                <span class="avatar-label">{{ currentMode.toUpperCase() }}</span>
-              </div>
-              <div class="avatar-particles">
-                <span v-for="i in 6" :key="i" class="particle" :style="{ '--delay': `${i * 0.15}s` }"></span>
-              </div>
-            </div>
-          </template>
-
-          <div v-if="isDesktopMode" class="desktop-mode-hint">
-            <div class="hint-icon">
-              <Monitor :size="40" />
-            </div>
-            <div class="hint-content">
-              <h3>Desktop Pet Mode</h3>
-              <p>The model has been switched to the desktop. You can interact with it directly on your desktop.</p>
-              <p class="hint-sub">Right-click the desktop pet for more options. Use the toggle above to switch back.</p>
-            </div>
-            <button class="hint-back-btn" @click="toggleDesktopMode">
-              <MonitorOff :size="16" />
-              <span>Back to Inline</span>
-            </button>
-          </div>
-
-          <div class="stage-overlay">
-            <div class="overlay-tag mode-tag">
-              <Eye :size="12" /> {{ avatarModes.find(m => m.id === currentMode)?.label }}
-            </div>
-            <div v-if="isDesktopMode" class="overlay-tag desktop-tag">
-              <Monitor :size="12" /> Desktop
-            </div>
-            <div v-else class="overlay-tag emotion-tag" :style="{ borderColor: currentEmotionLocal.color }">
-              <component :is="currentEmotionLocal.icon" :size="12" />
-              {{ currentEmotionLocal.label }}
-            </div>
-            <div v-if="isModelReady && !isDesktopMode" class="overlay-tag status-tag">
-              <span class="status-dot"></span> LuomiNest Ready
-            </div>
-          </div>
-        </div>
-
-        <div v-if="!isDesktopMode" class="stage-controls">
-          <div class="controls-top-row">
-            <div class="mode-switcher">
-              <button
-                v-for="mode in avatarModes"
-                :key="mode.id"
-                :class="['mode-btn', { active: currentMode === mode.id }]"
-                @click="selectMode(mode.id)"
-              >
-                <span class="mode-name">{{ mode.label }}</span>
-                <span class="mode-desc">{{ mode.desc }}</span>
-              </button>
-            </div>
-
-            <div class="tts-inline">
-              <div class="chat-input-row">
-                <textarea
-                  v-model="chatText"
-                  class="chat-input"
-                  placeholder="Chat with avatar... (Enter to send)"
-                  rows="1"
-                  :disabled="isChatSynthesizing"
-                  @keydown="handleChatKeydown"
-                ></textarea>
-                <button
-                  :class="['chat-send-btn', { streaming: isChatStreaming, loading: isChatSynthesizing }]"
-                  :disabled="isChatSynthesizing || (!chatText.trim() && !isChatStreaming)"
-                  :title="isChatStreaming ? 'Stop' : 'Send'"
-                  @click="handleChatSend"
-                >
-                  <Square v-if="isChatStreaming" :size="14" />
-                  <Loader2 v-else-if="isChatSynthesizing" :size="14" class="tts-loading-spin" />
-                  <MessageCircle v-else :size="14" />
-                </button>
-              </div>
-              <div class="tts-status-row">
-                <MessageCircle :size="11" />
-                <span v-if="isChatStreaming" class="tts-status-text synthesizing">Streaming</span>
-                <span v-else-if="isChatSpeaking" class="tts-status-text speaking">Speaking</span>
-                <span v-else-if="isChatSynthesizing" class="tts-status-text synthesizing">Synthesizing</span>
-                <span v-else class="tts-status-text">Avatar Chat</span>
-                <span v-if="chatCurrentEmotion" class="tts-emotion-tag">{{ chatCurrentEmotion }}</span>
-              </div>
-              <div class="tts-input-row">
-                <textarea
-                  v-model="ttsText"
-                  class="tts-input"
-                  placeholder="Or type text to speak directly..."
-                  rows="1"
-                  :disabled="isAvatarSynthesizing"
-                  @keydown="handleTTSKeydown"
-                ></textarea>
-                <button
-                  :class="['tts-send-btn', { speaking: isAvatarSpeaking, loading: isAvatarSynthesizing }]"
-                  :disabled="isAvatarSynthesizing || (!ttsText.trim() && !isAvatarSpeaking)"
-                  :title="isAvatarSpeaking ? 'Stop' : 'Speak'"
-                  @click="handleTTSSend"
-                >
-                  <Square v-if="isAvatarSpeaking" :size="14" />
-                  <Loader2 v-else-if="isAvatarSynthesizing" :size="14" class="tts-loading-spin" />
-                  <Send v-else :size="14" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="controls-panels-row">
-            <div class="emotion-panel">
-              <div class="panel-title">
-                <Heart :size="14" />
-                <span>Emotion</span>
-                <span class="expression-value">PAD: {{ expressionValue > 0 ? '+' : '' }}{{ expressionValue.toFixed(1) }}</span>
-              </div>
-              <div class="emotion-grid">
-                <button
-                  v-for="emo in emotions"
-                  :key="emo.id"
-                  :class="['emo-btn', { active: currentEmotionLocal.id === emo.id }]"
-                  :style="{ '--emo-color': emo.color }"
-                  @click="selectEmotion(emo)"
-                >
-                  <component :is="emo.icon" :size="18" />
-                  <span>{{ emo.label }}</span>
-                </button>
-              </div>
-            </div>
-
-            <div class="idle-panel">
-              <div class="panel-title">
-                <Volume2 :size="14" />
-                <span>Idle Animation</span>
-              </div>
-              <div class="idle-list">
-                <div
-                  v-for="(anim, idx) in idleAnimations"
-                  :key="idx"
-                  class="idle-item"
-                >
-                  <div class="idle-info">
-                    <span class="idle-name">{{ anim.name }}</span>
-                    <span :class="['idle-status', anim.status]">{{ anim.status === 'running' ? 'Running' : 'Paused' }}</span>
-                  </div>
-                  <div class="idle-bar">
-                    <div
-                      class="idle-fill"
-                      :class="anim.status"
-                      :style="{ width: anim.progress + '%' }"
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AvatarStage
+          :set-canvas-ref="setCanvasRef"
+          :is-desktop-mode="isDesktopMode"
+          :is-loading="isLoading"
+          :load-error="loadError"
+          :is-model-ready="isModelReady"
+          :current-emotion-local="currentEmotionLocal"
+          :current-mode="currentMode"
+          :avatar-modes="avatarModes"
+          :subtitle-enabled="subtitleEnabled"
+          :subtitle-text="subtitleText"
+          :subtitle-visible="subtitleVisible"
+          @toggle-desktop-mode="toggleDesktopMode"
+        />
+        <AvatarControls
+          v-if="!isDesktopMode"
+          :current-mode="currentMode"
+          :avatar-modes="avatarModes"
+          :chat-text="chatText"
+          :is-chat-streaming="isChatStreaming"
+          :is-chat-synthesizing="isChatSynthesizing"
+          :is-chat-speaking="isChatSpeaking"
+          :chat-current-emotion="chatCurrentEmotion"
+          :tts-text="ttsText"
+          :is-avatar-speaking="isAvatarSpeaking"
+          :is-avatar-synthesizing="isAvatarSynthesizing"
+          :emotions="emotions"
+          :current-emotion-local="currentEmotionLocal"
+          :expression-value="expressionValue"
+          :idle-animations="idleAnimations"
+          @select-mode="selectMode"
+          @update:chat-text="chatText = $event"
+          @chat-send="handleChatSend"
+          @chat-keydown="handleChatKeydown"
+          @update:tts-text="ttsText = $event"
+          @tts-send="handleTTSSend"
+          @tts-keydown="handleTTSKeydown"
+          @select-emotion="selectEmotion"
+        />
       </div>
 
-      <div :class="['skin-sidebar', { 'sidebar-collapsed': !skinSidebarVisible }, 'animate-slide-right']">
-        <button class="sidebar-toggle" @click="toggleSkinSidebar" :title="skinSidebarVisible ? 'Hide Library' : 'Show Library'">
-          <component :is="skinSidebarVisible ? ChevronRight : ChevronLeft" :size="14" />
-        </button>
-
-        <template v-if="skinSidebarVisible">
-          <div class="sidebar-title">Avatar Library</div>
-
-          <div v-if="importError" class="import-error">
-            <AlertCircle :size="14" />
-            <span>{{ importError }}</span>
-          </div>
-
-          <div v-if="showImportSuccess" class="import-success">
-            <Check :size="14" />
-            <span>Model imported successfully</span>
-          </div>
-
-          <div class="skin-list">
-            <div
-              v-for="(skin, idx) in skinList"
-              :key="idx"
-              :class="['skin-card', { selected: selectedSkin === idx }]"
-              @click="handleSkinSelect(idx)"
-            >
-              <div class="skin-thumb">
-                <Palette :size="18" />
-              </div>
-              <div class="skin-info">
-                <div class="skin-name-row">
-                  <span class="skin-name">{{ skin.name }}</span>
-                  <span class="skin-type">{{ skin.type }}</span>
-                </div>
-                <div class="skin-tags">
-                  <span v-for="tag in skin.tags" :key="tag" class="skin-tag">{{ tag }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <button class="import-btn" @click="handleImportClick">
-            <FolderOpen :size="14" />
-            <span>Import .model3.json</span>
-          </button>
-        </template>
-      </div>
+      <AvatarSkinSidebar
+        :skin-sidebar-visible="skinSidebarVisible"
+        :import-error="importError"
+        :show-import-success="showImportSuccess"
+        :skin-list="skinList"
+        :selected-skin="selectedSkin"
+        @toggle-sidebar="toggleSkinSidebar"
+        @skin-select="handleSkinSelect"
+        @import-click="handleImportClick"
+      />
     </div>
   </div>
 </template>
@@ -788,140 +589,6 @@ onBeforeUnmount(() => {
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
-}
-
-.avatar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  flex-shrink: 0;
-  position: relative;
-}
-
-.avatar-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 24px;
-  right: 24px;
-  height: 1px;
-  background: var(--divider-soft);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-muted);
-}
-
-.header-left h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.header-badge {
-  font-size: 11px;
-  padding: 3px 10px;
-  border-radius: 20px;
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  font-weight: 500;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.header-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--divider-soft);
-  margin: 0 4px;
-}
-
-.desktop-mode-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-  background: var(--surface-hover);
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-  user-select: none;
-}
-
-.desktop-mode-toggle:hover {
-  color: var(--text);
-  background: var(--surface);
-  border-color: var(--lumi-primary);
-}
-
-.desktop-mode-toggle.active {
-  background: var(--lumi-primary-glow);
-  color: var(--lumi-primary);
-  border: 1px solid var(--lumi-primary-border);
-}
-
-.desktop-mode-toggle.switching {
-  opacity: 0.6;
-  cursor: wait;
-  pointer-events: none;
-}
-
-.desktop-mode-toggle .spin {
-  animation: luominest-spin 0.8s linear infinite;
-}
-
-@keyframes luominest-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.toggle-label {
-  font-weight: 600;
-}
-
-.h-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--text-muted);
-  transition: all 300ms ease-in-out;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.h-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.h-btn.primary {
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-}
-
-.h-btn.primary:hover {
-  background: var(--lumi-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px var(--lumi-primary-border);
-}
-
-.h-btn.active {
-  background: var(--lumi-primary-subtle);
-  color: var(--lumi-primary);
 }
 
 .avatar-body {
@@ -938,952 +605,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.stage-canvas {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 320px;
-  background:
-    radial-gradient(circle at 50% 50%, var(--lumi-primary-subtle) 0%, transparent 70%),
-    var(--surface);
-  overflow: hidden;
-}
-
-.stage-canvas.desktop-mode-active {
-  background:
-    radial-gradient(circle at 50% 50%, var(--lumi-primary-subtle) 0%, transparent 70%),
-    var(--surface);
-}
-
-.live2d-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-}
-
-.desktop-mode-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  padding: 40px;
-  z-index: 5;
-  text-align: center;
-  animation: hint-fade-in 500ms ease-in-out;
-}
-
-@keyframes hint-fade-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.hint-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  animation: hint-icon-pulse 3s ease-in-out infinite;
-}
-
-@keyframes hint-icon-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-primary-glow); }
-  50% { box-shadow: 0 0 0 12px transparent; }
-}
-
-.hint-content h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 8px;
-}
-
-.hint-content p {
-  font-size: 13px;
-  color: var(--text-muted);
-  line-height: 1.6;
-  max-width: 360px;
-}
-
-.hint-sub {
-  font-size: 12px !important;
-  opacity: 0.7;
-  margin-top: 4px;
-}
-
-.hint-back-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 20px;
-  border-radius: var(--radius-lg);
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-  margin-top: 8px;
-}
-
-.hint-back-btn:hover {
-  background: var(--lumi-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px var(--lumi-primary-border);
-}
-
-.stage-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  z-index: 10;
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
-  backdrop-filter: blur(4px);
-}
-
-[data-theme="dark"] .stage-loading {
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
-}
-
-.loading-spinner {
-  color: var(--lumi-primary);
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.loading-text {
-  font-size: 13px;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.stage-error {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  z-index: 10;
-  color: var(--lumi-accent);
-}
-
-.error-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.error-hint {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.subtitle-overlay {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 15;
-  max-width: 80%;
-  padding: 8px 20px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 2px 12px var(--shadow-color);
-  pointer-events: none;
-}
-
-.subtitle-text {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text);
-  text-align: center;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.subtitle-fade-enter-active {
-  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
-}
-
-.subtitle-fade-leave-active {
-  transition: opacity 800ms ease-in-out, transform 800ms ease-in-out;
-}
-
-.subtitle-fade-enter-from {
-  opacity: 0;
-  transform: translateX(-50%) translateY(6px);
-}
-
-.subtitle-fade-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(0);
-}
-
-.subtitle-fade-enter-to,
-.subtitle-fade-leave-from {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-.avatar-placeholder {
-  position: relative;
-  width: 260px;
-  height: 340px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-xl);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--surface) 6%, transparent), color-mix(in srgb, var(--surface) 2%, transparent));
-  border: 1px solid var(--border-light);
-  box-shadow: var(--shadow-inset);
-  transition: all 500ms ease-in-out;
-  z-index: 2;
-}
-
-.avatar-ring {
-  position: absolute;
-  width: 200px;
-  height: 200px;
-  border-radius: 50%;
-  border: 1.5px dashed var(--lumi-primary-border);
-  animation: ring-spin 12s linear infinite;
-}
-
-@keyframes ring-spin {
-  to { transform: rotate(360deg); }
-}
-
-.avatar-core {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  z-index: 1;
-}
-
-.avatar-sparkle {
-  color: var(--lumi-primary);
-  opacity: 0.6;
-  animation: sparkle-pulse 2s ease-in-out infinite;
-}
-
-@keyframes sparkle-pulse {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.9; transform: scale(1.1); }
-}
-
-.avatar-label {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 3px;
-  color: var(--text-muted);
-}
-
-.avatar-particles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.particle {
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--lumi-primary);
-  opacity: 0;
-  animation: particle-float 3s ease-in-out infinite;
-  animation-delay: var(--delay);
-}
-
-@keyframes particle-float {
-  0% { opacity: 0; transform: translateY(0) scale(0); }
-  30% { opacity: 0.6; }
-  100% { opacity: 0; transform: translateY(-120px) scale(1); }
-}
-
-.stage-overlay {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  display: flex;
-  gap: 8px;
-  z-index: 20;
-}
-
-.overlay-tag {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 500;
-  backdrop-filter: blur(8px);
-  background: var(--overlay-subtle);
-  border: 1px solid var(--border-light);
-  color: var(--text-inverse);
-}
-
-.emotion-tag {
-  border-color: var(--emo-color, var(--lumi-primary));
-  color: var(--emo-color, var(--lumi-primary));
-}
-
-.desktop-tag {
-  border-color: var(--lumi-primary-border);
-  color: var(--lumi-primary);
-}
-
-.status-tag {
-  border-color: var(--task-green-border);
-  color: var(--lumi-success);
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--lumi-success);
-  animation: dot-pulse 2s ease-in-out infinite;
-}
-
-@keyframes dot-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-
-.stage-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px 20px;
-  flex-shrink: 0;
-  position: relative;
-}
-
-.stage-controls::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 20px;
-  right: 20px;
-  height: 1px;
-  background: var(--divider-soft);
-}
-
-.controls-top-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.controls-panels-row {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-
-.mode-switcher {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.mode-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  padding: 8px 14px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-  white-space: nowrap;
-}
-
-.mode-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.mode-btn.active {
-  background: var(--lumi-primary-light);
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-}
-
-.mode-name {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.mode-desc {
-  font-size: 11px;
-  opacity: 0.55;
-}
-
-.emotion-panel,
-.idle-panel {
-  flex: 1;
-  min-width: 180px;
-}
-
-.tts-inline {
-  flex: 1;
-  min-width: 240px;
-  max-width: 420px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.tts-inline .tts-input-row {
-  display: flex;
-  gap: 6px;
-  align-items: flex-end;
-}
-
-.tts-inline .chat-input-row {
-  display: flex;
-  gap: 6px;
-  align-items: flex-end;
-  margin-bottom: 4px;
-}
-
-.tts-inline .chat-input {
-  flex: 1;
-  min-height: 32px;
-  max-height: 64px;
-  padding: 6px 10px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--lumi-primary-border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 12px;
-  font-family: var(--font-sans);
-  line-height: 1.4;
-  resize: none;
-  transition: border-color 300ms ease-in-out;
-  outline: none;
-}
-
-.tts-inline .chat-input::placeholder {
-  color: var(--text-muted);
-  opacity: 0.6;
-}
-
-.tts-inline .chat-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 2px var(--lumi-primary-subtle);
-}
-
-.tts-inline .chat-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.tts-inline .chat-send-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 300ms ease-in-out;
-}
-
-.tts-inline .chat-send-btn:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px var(--lumi-primary-border);
-}
-
-.tts-inline .chat-send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.tts-inline .chat-send-btn.streaming {
-  background: var(--lumi-accent);
-}
-
-.tts-inline .chat-send-btn.streaming:hover:not(:disabled) {
-  background: var(--lumi-danger-hover);
-}
-
-.tts-emotion-tag {
-  margin-left: auto;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  background: var(--lumi-primary-subtle);
-  color: var(--lumi-primary);
-  font-weight: 500;
-  text-transform: capitalize;
-}
-
-.tts-inline .tts-input {
-  flex: 1;
-  min-height: 32px;
-  max-height: 64px;
-  padding: 6px 10px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 12px;
-  font-family: var(--font-sans);
-  line-height: 1.4;
-  resize: none;
-  transition: border-color 300ms ease-in-out;
-  outline: none;
-}
-
-.tts-inline .tts-input::placeholder {
-  color: var(--text-muted);
-  opacity: 0.6;
-}
-
-.tts-inline .tts-input:focus {
-  border-color: var(--lumi-primary-border);
-  box-shadow: 0 0 0 2px var(--lumi-primary-subtle);
-}
-
-.tts-inline .tts-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.tts-inline .tts-send-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 300ms ease-in-out;
-}
-
-.tts-inline .tts-send-btn:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px var(--lumi-primary-border);
-}
-
-.tts-inline .tts-send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.tts-inline .tts-send-btn.speaking {
-  background: var(--lumi-accent);
-}
-
-.tts-inline .tts-send-btn.speaking:hover:not(:disabled) {
-  background: var(--lumi-danger-hover);
-}
-
-.tts-inline .tts-send-btn.loading {
-  background: var(--lumi-primary-soft);
-}
-
-.tts-loading-spin {
-  animation: spin 1s linear infinite;
-}
-
-.tts-status-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-muted);
-  padding: 0 2px;
-}
-
-.tts-status-text {
-  font-weight: 500;
-}
-
-.tts-status-text.speaking {
-  color: var(--lumi-success);
-}
-
-.tts-status-text.synthesizing {
-  color: var(--lumi-amber-dark);
-}
-
-.tts-inline .tts-error {
-  font-size: 10px;
-  color: var(--lumi-accent);
-  padding: 0 2px;
-}
-
-.panel-title {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
-.expression-value {
-  margin-left: auto;
-  font-family: monospace;
-  font-size: 12px;
-  color: var(--lumi-primary);
-  opacity: 0.7;
-}
-
-.emotion-grid {
-  display: flex;
-  gap: 6px;
-}
-
-.emo-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-  font-size: 11px;
-}
-
-.emo-btn:hover {
-  background: color-mix(in srgb, var(--emo-color, var(--text-muted)) 8%, transparent);
-  color: var(--text);
-  transform: translateY(-2px);
-}
-
-.emo-btn.active {
-  background: color-mix(in srgb, var(--emo-color, var(--text-muted)) 14%, transparent);
-  border-color: var(--emo-color, var(--lumi-primary));
-  color: var(--emo-color, var(--lumi-primary));
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--emo-color, var(--text-muted)) 18%, transparent);
-}
-
-.idle-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.idle-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px 0;
-}
-
-.idle-info {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 16px;
-}
-
-.idle-name {
-  font-size: 11px;
-  color: var(--text);
-  line-height: 1.2;
-}
-
-.idle-status {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  line-height: 1.4;
-}
-
-.idle-status.running {
-  background: var(--task-green-soft);
-  color: var(--lumi-success);
-}
-
-.idle-status.paused {
-  background: var(--overlay-subtle);
-  color: var(--text-muted);
-}
-
-.idle-bar {
-  height: 3px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.idle-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 1000ms ease-in-out;
-}
-
-.idle-fill.running {
-  background: linear-gradient(90deg, var(--lumi-primary), var(--lumi-success));
-  animation: bar-pulse 2s ease-in-out infinite;
-}
-
-@keyframes bar-pulse {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
-}
-
-.skin-sidebar {
-  width: 230px;
-  padding: 16px 12px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  flex-shrink: 0;
-  background: var(--surface);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  transition: width 300ms ease-in-out, padding 300ms ease-in-out;
-}
-
-.skin-sidebar.sidebar-collapsed {
-  width: 36px;
-  padding: 20px 6px;
-  overflow: hidden;
-}
-
-.skin-sidebar::before {
-  content: '';
-  position: absolute;
-  top: 16px;
-  bottom: 16px;
-  left: 0;
-  width: 1px;
-  background: var(--divider-vertical);
-}
-
-.sidebar-toggle {
-  position: absolute;
-  top: 50%;
-  left: -12px;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  color: var(--text-muted);
-  cursor: pointer;
-  z-index: 10;
-  transition: all 300ms ease-in-out;
-}
-
-.sidebar-toggle:hover {
-  background: var(--surface-hover);
-  color: var(--lumi-primary);
-  border-color: var(--lumi-primary);
-}
-
-.sidebar-title {
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 12px;
-  color: var(--text);
-  letter-spacing: 0.3px;
-}
-
-.import-error {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: var(--task-red-soft);
-  color: var(--lumi-danger);
-  font-size: 11px;
-  margin-bottom: 10px;
-}
-
-.import-success {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: var(--task-green-soft);
-  color: var(--lumi-success);
-  font-size: 11px;
-  margin-bottom: 10px;
-  animation: fade-in 300ms ease-in-out;
-}
-
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.skin-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1;
-  overflow-y: auto;
-  margin-right: 2px;
-  padding-right: 2px;
-}
-
-.skin-list::-webkit-scrollbar {
-  width: 3px;
-}
-
-.skin-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.skin-list::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
-
-.skin-list::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
-
-.skin-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
-  cursor: pointer;
-  transition: all 250ms ease-in-out;
-}
-
-.skin-card:hover {
-  background: var(--surface-hover);
-  border-color: var(--lumi-primary-border);
-}
-
-.skin-card.selected {
-  background: var(--lumi-primary-light);
-  border-color: var(--lumi-primary);
-}
-
-.skin-thumb {
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
-  background: var(--surface-hover);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.skin-info {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  flex: 1;
-  min-width: 0;
-}
-
-.skin-name-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.skin-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text);
-  line-height: 1.2;
-}
-
-.skin-type {
-  font-size: 11px;
-  color: var(--text-muted);
-  opacity: 0.75;
-  line-height: 1.2;
-}
-
-.skin-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-}
-
-.skin-tag {
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: var(--surface-hover);
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.import-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
-  border: 1px dashed var(--border-light);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 300ms ease-in-out;
-  font-size: 12px;
-  margin-top: 12px;
-  flex-shrink: 0;
-}
-
-.import-btn:hover {
-  border-color: var(--lumi-primary);
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-subtle);
-}
-
 @keyframes stage-appear {
   0% { opacity: 0; transform: scale(0.96); }
   100% { opacity: 1; transform: scale(1); }
@@ -1891,14 +612,5 @@ onBeforeUnmount(() => {
 
 .animate-stage-appear {
   animation: stage-appear 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes slide-right {
-  0% { opacity: 0; transform: translateX(30px); }
-  100% { opacity: 1; transform: translateX(0); }
-}
-
-.animate-slide-right {
-  animation: slide-right 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 </style>
