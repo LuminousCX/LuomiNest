@@ -111,8 +111,9 @@ class CxPluginHotReload:
                 key = prefix + fpath
                 try:
                     self._file_mtimes[key] = os.path.getmtime(fpath)
-                except OSError:
-                    pass
+                except OSError as e:
+                    # 文件可能在扫描期间被删除/替换；忽略该文件并继续扫描其他文件。
+                    logger.debug(f"[CxPlugin] Skip mtime snapshot for {fpath}: {e}")
 
     def snapshot_loaded_plugins(self) -> None:
         """为所有已加载插件建立 mtime 快照（加载完成后调用）。"""
