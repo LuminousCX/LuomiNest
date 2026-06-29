@@ -35,6 +35,19 @@ const ERR_CODE_MESSAGES: Record<string, string> = {
 const statusToMessage = (status: number): string =>
   HTTP_STATUS_MESSAGES[status] || `请求失败 (${status})`
 
+let cachedAuthToken: string | null | undefined
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  if (cachedAuthToken === undefined) {
+    try {
+      cachedAuthToken = await window.api.auth.getToken()
+    } catch {
+      cachedAuthToken = null
+    }
+  }
+  return cachedAuthToken ? { Authorization: `Bearer ${cachedAuthToken}` } : {}
+}
+
 const extractErrorMessage = (errData: any, status: number): string => {
   // 1. 优先处理 err_code（符合工作区规则 "API 响应必须包含错误码"）
   const errCode = errData?.err_code ?? errData?.error?.code
@@ -87,13 +100,19 @@ export const useApi = () => {
     error.value = null
     
     try {
+      const authHeaders = await getAuthHeaders()
+      const headers: Record<string, string> = { ...authHeaders }
+      if (body) {
+        headers['Content-Type'] = 'application/json'
+      }
+
       const fetchOptions: RequestInit = {
         method,
         signal: AbortSignal.timeout(timeout),
+        headers,
       }
-      
+
       if (body) {
-        fetchOptions.headers = { 'Content-Type': 'application/json' }
         fetchOptions.body = JSON.stringify(body)
       }
 
@@ -155,9 +174,10 @@ export const useApi = () => {
       : controller.signal
 
     try {
+      const authHeaders = await getAuthHeaders()
       const resp = await fetch(getApiUrl(path), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal,
       })
@@ -265,9 +285,10 @@ export const useApi = () => {
       : controller.signal
 
     try {
+      const authHeaders = await getAuthHeaders()
       const resp = await fetch(getApiUrl(path), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal,
       })

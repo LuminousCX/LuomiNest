@@ -3,6 +3,8 @@ from functools import lru_cache
 from loguru import logger
 from pydantic_settings import BaseSettings
 
+from app.security.crypto.secret_key_manager import is_placeholder, load_or_create_secret_key
+
 
 class Settings(BaseSettings):
     APP_NAME: str = "LuomiNest"
@@ -62,6 +64,9 @@ def get_settings() -> Settings:
     if s.LLM_MAX_CONCURRENT_REQUESTS < 1:
         logger.warning(f"LLM_MAX_CONCURRENT_REQUESTS={s.LLM_MAX_CONCURRENT_REQUESTS} is invalid, clamping to 1")
         s.LLM_MAX_CONCURRENT_REQUESTS = 1
+    if is_placeholder(s.SECRET_KEY):
+        s.SECRET_KEY = load_or_create_secret_key(s.DATA_DIR)
+        logger.success("[Config] SECRET_KEY loaded from persistent store")
     return s
 
 

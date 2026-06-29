@@ -5,6 +5,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from loguru import logger
 
 from app.core.config import settings
+from app.security.crypto.secret_key_manager import is_placeholder
 
 
 class LumiAesCipher:
@@ -16,9 +17,12 @@ class LumiAesCipher:
 
     def __init__(self, secret_key: str | None = None):
         key_source = secret_key or settings.SECRET_KEY
-        if not key_source or key_source == "change-me-in-production":
-            logger.warning("[AesCipher] SECRET_KEY is not set or using default, generating ephemeral key")
-            key_source = Fernet.generate_key().decode()
+        if is_placeholder(key_source):
+            raise RuntimeError(
+                "[AesCipher] SECRET_KEY is placeholder. "
+                "This should not happen after get_settings() persistence. "
+                "Check config initialization order."
+            )
 
         digest = hashlib.sha256(key_source.encode()).digest()
         self._fernet = Fernet(base64.urlsafe_b64encode(digest))

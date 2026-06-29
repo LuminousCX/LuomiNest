@@ -9,6 +9,8 @@ from app.core.config import settings
 from app.core.exceptions import LuomiNestError
 from app.api.v1.router import api_router
 from app.api.attachment_api import router as attachment_router
+from app.security.auth.local_token import load_auth_token
+from app.security.auth.middleware import luomi_auth_middleware
 
 
 @asynccontextmanager
@@ -215,6 +217,16 @@ def create_app() -> FastAPI:
             elapsed = time.time() - start_time
             logger.error(f"[HTTP] <-- {method} {path} 500 ({elapsed*1000:.1f}ms) ERROR: {e}")
             raise
+
+    auth_token = load_auth_token()
+    if auth_token:
+        logger.success("[AppFactory] Auth token loaded, API routes protected")
+    else:
+        logger.warning("[AppFactory] No auth token, API routes unprotected (dev mode)")
+
+    @app.middleware("http")
+    async def auth_middleware(request: Request, call_next):
+        return await luomi_auth_middleware(request, call_next)
 
     app.add_middleware(
         CORSMiddleware,

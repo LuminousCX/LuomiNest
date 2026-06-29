@@ -4,6 +4,7 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { platform } from 'os'
 import { PATHS } from '../paths'
+import { getLumiAuthToken } from './auth-token'
 
 let backendProcess: ChildProcess | null = null
 let backendReady = false
@@ -158,7 +159,8 @@ export const startBackend = async (): Promise<boolean> => {
     ...process.env,
     PYTHONUNBUFFERED: '1',
     PYTHONIOENCODING: 'utf-8',
-    LUOMINEST_DATA_DIR: PATHS.backendData
+    LUOMINEST_DATA_DIR: PATHS.backendData,
+    LUOMINEST_AUTH_TOKEN: getLumiAuthToken()
   }
 
   if (platform() === 'linux' || platform() === 'darwin') {

@@ -4,6 +4,7 @@ import time
 from typing import AsyncIterator
 from app.core.config import settings
 from app.core.exceptions import ProviderError
+from app.infrastructure.database.config_store import lumi_config_store
 from app.runtime.provider.llm.providers import (
     OpenAICompatibleProvider,
     PROVIDER_TEMPLATES,
@@ -11,37 +12,67 @@ from app.runtime.provider.llm.providers import (
 from loguru import logger
 
 
-CONFIG_DIR = settings.DATA_DIR
-CONFIG_FILE = os.path.join(CONFIG_DIR, "providers.json")
+PROVIDER_NAMESPACE = "llm.providers."
 
 
-def _ensure_config_dir():
-    os.makedirs(CONFIG_DIR, exist_ok=True)
+def _provider_key(provider_id: str, field: str) -> str:
+    return f"{PROVIDER_NAMESPACE}{provider_id}.{field}"
 
 
 def _load_saved_providers() -> list[dict]:
-    _ensure_config_dir()
-    if not os.path.exists(CONFIG_FILE):
-        logger.debug(f"[Adapter] Provider config file not found: {CONFIG_FILE}")
+    """从 LumiConfigStore 加载所有 provider 配置（api_key 自动解密）。"""
+    namespace = lumi_config_store.get_namespace(PROVIDER_NAMESPACE)
+    if not namespace:
         return []
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            logger.debug(f"[Adapter] Loaded {len(data)} saved providers from {CONFIG_FILE}")
-            return data
-    except Exception as e:
-        logger.warning(f"[Adapter] Failed to load provider config: {e}")
-        return []
+    providers: dict[str, dict] = {}
+    for key, value in namespace.items():
+        if not key.startswith(PROVIDER_NAMESPACE):
+            continue
+        rest = key[len(PROVIDER_NAMESPACE):]
+        if "." not in rest:
+            continue
+        provider_id, field = rest.split(".", 1)
+        if provider_id not in providers:
+            providers[provider_id] = {"id": provider_id}
+        providers[provider_id][field] = value
+    logger.debug(f"[Adapter] Loaded {len(providers)} saved providers from LumiConfigStore")
+    return list(providers.values())
 
 
 def _save_providers_config(providers_data: list[dict]):
-    _ensure_config_dir()
+    """保存所有 provider 配置到 LumiConfigStore（api_key 自动加密）。"""
+    lumi_config_store.delete_namespace(PROVIDER_NAMESPACE)
+    for cfg in providers_data:
+        provider_id = cfg.get("id", "")
+        if not provider_id:
+            continue
+        for field, value in cfg.items():
+            if field == "id":
+                continue
+            lumi_config_store.set(_provider_key(provider_id, field), value)
+    logger.success(f"[Adapter] Saved {len(providers_data)} providers to LumiConfigStore")
+
+
+def _migrate_legacy_plaintext():
+    """迁移旧版明文 providers.json 到 LumiConfigStore（仅执行一次）。"""
+    legacy_path = os.path.join(settings.DATA_DIR, "providers.json")
+    if not os.path.exists(legacy_path):
+        return
     try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(providers_data, f, ensure_ascii=False, indent=2)
-        logger.success(f"[Adapter] Saved {len(providers_data)} providers to {CONFIG_FILE}")
+        with open(legacy_path, "r", encoding="utf-8") as f:
+            legacy_data = json.load(f)
+        if not isinstance(legacy_data, list) or not legacy_data:
+            os.remove(legacy_path)
+            return
+        if _load_saved_providers():
+            logger.info("[Adapter] LumiConfigStore already has providers, removing legacy file")
+            os.remove(legacy_path)
+            return
+        _save_providers_config(legacy_data)
+        os.remove(legacy_path)
+        logger.success(f"[Adapter] Migrated {len(legacy_data)} providers from plaintext to encrypted store")
     except Exception as e:
-        logger.error(f"[Adapter] Failed to save provider config: {e}")
+        logger.warning(f"[Adapter] Legacy migration failed: {e}")
 
 
 def _create_provider_from_config(config: dict) -> OpenAICompatibleProvider:
@@ -82,6 +113,7 @@ class LLMAdapter:
         self.providers: dict[str, OpenAICompatibleProvider] = {}
         self._provider_configs: dict[str, dict] = {}
         self.default_provider = settings.LLM_DEFAULT_PROVIDER
+        _migrate_legacy_plaintext()
         self._init_providers()
         logger.success(f"[Adapter] LLMAdapter initialized with {len(self.providers)} providers, default={self.default_provider}")
 

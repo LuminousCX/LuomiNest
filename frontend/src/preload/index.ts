@@ -24,6 +24,10 @@ const api = {
     getPaths: () => ipcRenderer.invoke('app:getPaths'),
   },
 
+  auth: {
+    getToken: () => ipcRenderer.invoke('auth:getToken'),
+  },
+
   config: {
     getTheme: () => ipcRenderer.invoke('config:getTheme'),
     setTheme: (theme: 'light' | 'dark' | 'system') => ipcRenderer.invoke('config:setTheme', theme),
@@ -94,16 +98,48 @@ const api = {
   }
 }
 
+const ALLOWED_SEND_CHANNELS = new Set([
+  'desktop-pet:set-ignore-mouse-events',
+  'desktop-pet:resize-window',
+  'desktop-pet:start-drag',
+  'desktop-pet:drag-window',
+  'desktop-pet:end-drag',
+  'desktop-pet:model-capabilities-response',
+  'desktop-pet:show-context-menu',
+])
+
+const ALLOWED_ON_CHANNELS = new Set([
+  'desktop-pet:load-model',
+  'desktop-pet:trigger-motion',
+  'desktop-pet:trigger-expression',
+  'desktop-pet:lip-sync',
+  'desktop-pet:pad-emotion',
+  'desktop-pet:set-core-param',
+  'desktop-pet:get-model-capabilities',
+  'desktop-pet:subtitle',
+  'desktop-pet:subtitle-hide',
+])
+
 const electronBridge = {
   ipcRenderer: {
     on: (channel: string, listener: (event: any, ...args: any[]) => void) => {
-      ipcRenderer.on(channel, listener)
+      if (ALLOWED_ON_CHANNELS.has(channel)) {
+        ipcRenderer.on(channel, listener)
+      } else {
+        console.warn(`[Preload] Blocked ipcRenderer.on for unlisted channel: ${channel}`)
+      }
     },
     removeListener: (channel: string, listener: (...args: any[]) => void) => {
-      ipcRenderer.removeListener(channel, listener)
+      if (ALLOWED_ON_CHANNELS.has(channel)) {
+        ipcRenderer.removeListener(channel, listener)
+      }
     },
     send: (channel: string, ...args: any[]) => {
-      ipcRenderer.send(channel, ...args)
+      if (ALLOWED_SEND_CHANNELS.has(channel)) {
+        ipcRenderer.send(channel, ...args)
+      } else {
+        console.warn(`[Preload] Blocked ipcRenderer.send for unlisted channel: ${channel}`)
+      }
     }
   }
 }

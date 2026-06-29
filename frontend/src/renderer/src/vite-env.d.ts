@@ -91,6 +91,9 @@ export interface ElectronApi {
     getVersion: () => Promise<string>
     getName: () => Promise<string>
   }
+  auth: {
+    getToken: () => Promise<string | undefined>
+  }
   config: {
     getTheme: () => Promise<string>
     setTheme: (theme: 'light' | 'dark' | 'system') => Promise<void>

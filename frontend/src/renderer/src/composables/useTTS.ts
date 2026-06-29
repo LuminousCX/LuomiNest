@@ -65,9 +65,13 @@ async function speakWithEdgeTTS(text: string, messageId: string): Promise<boolea
   const timeoutId = setTimeout(() => controller.abort(), 30000)
 
   try {
+    const token = await window.api.auth.getToken()
     const response = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({
         text,
         voice,
