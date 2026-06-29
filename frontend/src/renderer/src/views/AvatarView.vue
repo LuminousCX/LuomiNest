@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import type { VNodeRef } from 'vue'
-import { Smile, Frown, Meh, Heart, Zap } from 'lucide-vue-next'
+import { Smile, Frown, Meh, Heart, Zap, Angry, Brain, Annoyed, Sparkles, Flower, PartyPopper, HelpCircle } from 'lucide-vue-next'
 import { useLuomiNestLive2D } from '@/composables/useLuomiNestLive2D'
 import { useAvatarTTS } from '@/composables/useAvatarTTS'
 import { useAvatarChat } from '@/composables/useAvatarChat'
@@ -182,17 +182,26 @@ const currentMode = ref('live2d')
 
 const emotions: AvatarEmotion[] = [
   { id: 'happy', icon: Smile, label: 'Happy', color: 'var(--lumi-amber)' },
-  { id: 'sad', icon: Frown, label: 'Sad', color: 'var(--lumi-indigo)' },
-  { id: 'neutral', icon: Meh, label: 'Neutral', color: 'var(--task-purple)' },
+  { id: 'excited', icon: PartyPopper, label: 'Excited', color: 'var(--lumi-amber)' },
   { id: 'love', icon: Heart, label: 'Love', color: 'var(--task-pink)' },
-  { id: 'surprise', icon: Zap, label: 'Surprise', color: 'var(--lumi-success)' }
+  { id: 'shy', icon: Flower, label: 'Shy', color: 'var(--task-pink)' },
+  { id: 'surprise', icon: Zap, label: 'Surprise', color: 'var(--lumi-success)' },
+  { id: 'curious', icon: Sparkles, label: 'Curious', color: 'var(--lumi-accent)' },
+  { id: 'neutral', icon: Meh, label: 'Neutral', color: 'var(--task-purple)' },
+  { id: 'think', icon: Brain, label: 'Think', color: 'var(--lumi-primary)' },
+  { id: 'sad', icon: Frown, label: 'Sad', color: 'var(--lumi-indigo)' },
+  { id: 'angry', icon: Angry, label: 'Angry', color: 'var(--lumi-danger)' },
+  { id: 'awkward', icon: Annoyed, label: 'Awkward', color: 'var(--lumi-warning)' },
+  { id: 'confused', icon: HelpCircle, label: 'Confused', color: 'var(--lumi-indigo)' }
 ]
 
-const currentEmotionLocal = ref(emotions[2])
+const currentEmotionLocal = ref(emotions[6])
 
 const expressionValue = computed(() => {
   const map: Record<string, number> = {
-    happy: 0.8, sad: -0.4, neutral: 0, love: 0.6, surprise: 0.7
+    happy: 0.8, excited: 0.9, love: 0.6, shy: 0.2, surprise: 0.7,
+    curious: 0.3, neutral: 0, think: 0.1, sad: -0.4, angry: -0.6,
+    awkward: -0.2, confused: -0.1
   }
   return map[currentEmotionLocal.value.id] ?? 0
 })

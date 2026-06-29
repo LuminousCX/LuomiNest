@@ -22,8 +22,6 @@ const activeCategory = computed(() => filter.value.category || 'all')
 
 const filteredItems = computed(() => store.filteredPluginItems)
 
-const featuredItems = computed(() => store.featuredPlugins)
-
 const selectCategory = (id: string) => {
   store.setFilter('plugin', { category: id === 'all' ? undefined : id })
 }
@@ -87,9 +85,9 @@ const resetFilters = () => {
 
       <main class="market-main">
         <MarketplaceBanner
-          v-if="featuredItems.length > 0 && activeCategory === 'all' && !store.searchQuery"
-          :items="featuredItems"
-          title="热门推荐"
+          v-if="store.installedPlugins.length > 0 && activeCategory === 'all' && !store.searchQuery"
+          :items="store.installedPlugins"
+          title="已安装插件"
           type="plugin"
         />
 

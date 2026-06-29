@@ -466,6 +466,7 @@ const emit = defineEmits<{
 
 .emotion-grid {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

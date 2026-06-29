@@ -135,6 +135,14 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     return skillItems.value.filter(i => i.installStatus === 'installed')
   })
 
+  const installedPlugins = computed(() => {
+    return pluginItems.value.filter(i => i.installStatus === 'installed')
+  })
+
+  const installedAgents = computed(() => {
+    return agentItems.value.filter(i => i.installStatus === 'installed')
+  })
+
   const filteredPluginItems = computed(() => {
     return applyFilters(pluginItems.value, pluginFilter.value)
   })
@@ -347,6 +355,13 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
                   }
                 }
               }
+              // 如果是 agent，自动创建真实 AgentProfile 到本地，使其出现在对话列表
+              {
+                const agentItem = agentItems.value.find(i => i.id === itemId)
+                if (agentItem) {
+                  _ensureAgentCreated(agentItem)
+                }
+              }
               // 同步后端统计数据 + 排行榜
               syncAllStats()
               setTimeout(() => {
@@ -387,6 +402,31 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     }
     setProgress(itemId, progress)
     simulateInstall(itemId)
+  }
+
+  // 安装 agent 后自动创建真实 AgentProfile，使其出现在对话列表
+  const _ensureAgentCreated = async (agentItem: MarketplaceItem) => {
+    try {
+      const { useAgentStore } = await import('./agent')
+      const agentStore = useAgentStore()
+      // 同名 agent 已存在则跳过
+      if (agentStore.agents.some(a => a.name === agentItem.name)) return
+      const tags = agentItem.tags?.map((t) => t.name || t).filter(Boolean).join('、')
+      await agentStore.createAgent({
+        name: agentItem.name,
+        description: agentItem.summary || agentItem.description,
+        systemPrompt: [
+          `你是${agentItem.name}。`,
+          agentItem.description,
+          tags ? `你擅长：${tags}。` : '',
+          '你的目标是帮助用户解决问题，提供专业、友好、准确的回答。',
+        ].filter(Boolean).join(''),
+        color: '#147EBC',
+        capabilities: ['chat'],
+      })
+    } catch (err) {
+      console.error('[MarketplaceStore] 自动创建智能体失败:', err)
+    }
   }
 
   const simulateInstall = (itemId: string) => {
@@ -448,6 +488,13 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
         updateInstalledItem(pluginItems.value)
         updateInstalledItem(skillItems.value)
         updateInstalledItem(agentItems.value)
+        // 如果是 agent，自动创建真实 AgentProfile 到本地，使其出现在对话列表
+        {
+          const agentItem = agentItems.value.find(i => i.id === itemId)
+          if (agentItem) {
+            _ensureAgentCreated(agentItem)
+          }
+        }
         // 同步后端统计数据 + 排行榜
         syncAllStats()
         setTimeout(() => {
@@ -852,6 +899,8 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     featuredSkills,
     featuredAgents,
     installedSkills,
+    installedPlugins,
+    installedAgents,
     filteredPluginItems,
     filteredSkillItems,
     filteredAgentItems,

@@ -22,8 +22,6 @@ const activeCategory = computed(() => filter.value.category || 'all')
 
 const filteredItems = computed(() => store.filteredSkillItems)
 
-const featuredItems = computed(() => store.featuredSkills)
-
 const selectCategory = (id: string) => {
   store.setFilter('skill', { category: id === 'all' ? undefined : id })
 }
@@ -87,9 +85,9 @@ const resetFilters = () => {
 
       <main class="market-main">
         <MarketplaceBanner
-          v-if="featuredItems.length > 0 && activeCategory === 'all' && !store.searchQuery"
-          :items="featuredItems"
-          title="热门推荐"
+          v-if="store.installedSkills.length > 0 && activeCategory === 'all' && !store.searchQuery"
+          :items="store.installedSkills"
+          title="已安装技能"
           type="skill"
         />
 

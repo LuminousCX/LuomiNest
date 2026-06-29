@@ -86,13 +86,10 @@ const filteredItems = computed(() => {
   return store.filteredAgentItems
 })
 
-const featuredItems = computed(() => {
-  if (useRemoteData.value && remoteItems.value.length > 0) {
-    return remoteItems.value.filter(i => i.featured).sort((a, b) => b.rating - a.rating)
-  }
-  if (activeTab.value === 'plugin') return store.featuredPlugins
-  if (activeTab.value === 'skill') return store.featuredSkills
-  return store.featuredAgents
+const installedBannerItems = computed(() => {
+  if (activeTab.value === 'plugin') return store.installedPlugins
+  if (activeTab.value === 'skill') return store.installedSkills
+  return store.installedAgents
 })
 
 const headerConfig = computed(() => {
@@ -238,9 +235,9 @@ function toggleFilters() {
         </div>
 
         <MarketplaceBanner
-          v-if="featuredItems.length > 0 && activeCategory === 'all' && !store.searchQuery"
-          :items="featuredItems"
-          :title="activeTab === 'plugin' ? '热门插件' : activeTab === 'skill' ? '热门技能' : '热门智能体'"
+          v-if="installedBannerItems.length > 0 && activeCategory === 'all' && !store.searchQuery"
+          :items="installedBannerItems"
+          :title="activeTab === 'plugin' ? '已安装插件' : activeTab === 'skill' ? '已安装技能' : '已安装智能体'"
           :type="activeTab"
         />
 

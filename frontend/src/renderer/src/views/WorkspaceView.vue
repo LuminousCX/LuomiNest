@@ -200,13 +200,6 @@ const selectAgent = async (agent: AgentProfile) => {
   chatTrashStore.fetchTrash(agent.id)
 }
 
-const handleMarketAgentInstalled = async (agentId: string) => {
-  const agent = agentStore.agents.find(a => a.id === agentId)
-  if (agent) {
-    await selectAgent(agent)
-  }
-}
-
 const selectGroup = (group: GroupInfo) => {
   selectedType.value = 'group'
   selectedGroupId.value = group.id
@@ -826,9 +819,7 @@ onMounted(async () => {
       socialStore.fetchAvailableAgents(),
       socialStore.fetchAgentRoles(),
     ])
-    if (agentStore.agents.length > 0) {
-      await selectAgent(agentStore.agents[0])
-    }
+    // 默认显示联系人列表，不自动进入某个 agent 的对话
   }
   document.addEventListener('click', handleClickOutsideModel)
   window.addEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
@@ -861,7 +852,6 @@ onBeforeUnmount(() => {
         @create-group="showCreateGroupDialog = true"
         @delete-group="deleteGroup"
         @edit-agent="openEditDialog"
-        @market-agent-installed="handleMarketAgentInstalled"
       />
       <WorkspaceAgentHistory
         v-else-if="selectedType === 'agent'"
