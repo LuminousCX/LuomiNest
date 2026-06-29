@@ -18,6 +18,7 @@ from loguru import logger
 
 from app.core.config import settings
 from app.infrastructure.database.json_store import JsonStore, repo_sources_store
+from app.security.net.safe_url import assert_url_safe, create_safe_async_client, UnsafeUrlError
 
 # 安装记录存储
 install_store = JsonStore("installed_items.json")
@@ -162,16 +163,11 @@ async def _download_from_url(item_id: str, url: str, dest_path: Path):
     """从 URL 下载文件，支持进度追踪"""
     state = _active_downloads[item_id]
 
-    async with httpx.AsyncClient(timeout=120.0, follow_redirects=False) as client:
+    # SSRF 预校验：快速拒绝不安全 URL（实际连接时的 DNS Rebinding 防护由 SafeAsyncHTTPTransport 提供）
+    await assert_url_safe(url)
+
+    async with create_safe_async_client(timeout=120.0) as client:
         async with client.stream("GET", url) as response:
-            # 手动处理重定向，确保重定向目标也通过 SSRF 校验
-            if response.status_code in (301, 302, 303, 307, 308):
-                location = response.headers.get("location", "")
-                if not location:
-                    raise Exception(f"重定向缺少 Location 头: HTTP {response.status_code}")
-                # 递归下载重定向目标（会再次触发 SSRF 校验）
-                await _download_from_url(item_id, location, dest_path)
-                return
             if response.status_code != 200:
                 raise Exception(f"下载失败: HTTP {response.status_code}")
 
@@ -288,7 +284,7 @@ async def _download_from_github_source(item_id: str, item_type: str, dest_path: 
     temp_dir.mkdir(parents=True)
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with create_safe_async_client(timeout=60.0) as client:
             await _download_github_dir(client, owner, repo, sub_path, branch, headers, temp_dir, state)
 
         # 打包为 zip
