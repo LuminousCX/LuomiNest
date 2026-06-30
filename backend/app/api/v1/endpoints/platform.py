@@ -812,11 +812,9 @@ async def update_main_agent_info(request: dict):
 
     前端可在此切换主 Agent 使用的供应商/模型，平台消息路由会自动复用新配置。
     """
-    import json
     from app.runtime.platform.main_agent_config import (
-        _MAIN_AGENT_CONFIG_FILE,
-        _ensure_config_dir,
         load_luominest_main_agent_config,
+        save_luominest_main_agent_config,
     )
 
     current = load_luominest_main_agent_config()
@@ -837,10 +835,8 @@ async def update_main_agent_info(request: dict):
     if not updated_fields:
         return {"error": None, "data": {"updated": False, "note": "no changes"}}
 
-    _ensure_config_dir()
     try:
-        with open(_MAIN_AGENT_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(current, f, ensure_ascii=False, indent=2)
+        save_luominest_main_agent_config(current)
         logger.info(f"[PlatformAPI] Main agent config updated: {updated_fields}")
     except Exception as e:
         from app.core.exceptions import LuomiNestError

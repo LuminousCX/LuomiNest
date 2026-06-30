@@ -1,6 +1,5 @@
 import uuid
 import os
-import json
 import shutil
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
@@ -8,12 +7,13 @@ from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.infrastructure.database.json_store import agents_store
+from app.infrastructure.database.facades.main_agent_config import (
+    load_luominest_main_agent_config,
+    save_luominest_main_agent_config,
+)
 from app.core.config import settings
 
 router = APIRouter(prefix="/agents", tags=["agents"])
-
-CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "data")
-MAIN_AGENT_CONFIG_FILE = os.path.join(CONFIG_DIR, "main_agent.json")
 
 
 class AgentCreate(BaseModel):
@@ -80,49 +80,10 @@ class MainAgentConfigResponse(BaseModel):
     max_tokens: int = Field(alias="maxTokens", default=4096)
 
 
-_DEFAULT_MAIN_AGENT_CONFIG = {
-    "provider": "",
-    "model": "",
-    "system_prompt": "你是 LuomiNest 的主控智能体，负责控制 Live2D 皮套的行为和表情。你需要根据对话内容做出恰当的情感反应，并保持角色的一致性。你的回答应该简洁自然，适合通过皮套形象表达。",
-    "temperature": 0.7,
-    "max_tokens": 4096,
-}
-
-
-def _ensure_config_dir():
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-
-
-def _load_main_agent_config() -> dict:
-    _ensure_config_dir()
-    if not os.path.exists(MAIN_AGENT_CONFIG_FILE):
-        logger.debug("Main agent config file not found, using defaults")
-        return dict(_DEFAULT_MAIN_AGENT_CONFIG)
-    try:
-        with open(MAIN_AGENT_CONFIG_FILE, "r", encoding="utf-8") as f:
-            config = json.load(f)
-            logger.debug(f"Loaded main agent config from {MAIN_AGENT_CONFIG_FILE}")
-            return config
-    except Exception as e:
-        logger.warning(f"Failed to load main agent config: {e}")
-        return dict(_DEFAULT_MAIN_AGENT_CONFIG)
-
-
-def _save_main_agent_config(config: dict):
-    _ensure_config_dir()
-    try:
-        with open(MAIN_AGENT_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-        logger.success(f"Saved main agent config to {MAIN_AGENT_CONFIG_FILE}")
-    except Exception as e:
-        logger.error(f"Failed to save main agent config: {e}")
-        raise
-
-
 @router.get("/main-agent/config", response_model=MainAgentConfigResponse)
 async def get_main_agent_config():
     logger.info("[API] GET /agents/main-agent/config - Fetching main agent config")
-    config = _load_main_agent_config()
+    config = load_luominest_main_agent_config()
     response = MainAgentConfigResponse(
         provider=config.get("provider", ""),
         model=config.get("model", ""),
@@ -137,7 +98,7 @@ async def get_main_agent_config():
 @router.patch("/main-agent/config", response_model=MainAgentConfigResponse)
 async def update_main_agent_config(request: MainAgentConfigUpdate):
     logger.info("[API] PATCH /agents/main-agent/config - Updating main agent config")
-    config = _load_main_agent_config()
+    config = load_luominest_main_agent_config()
     update_data = request.model_dump(exclude_unset=True, by_alias=False)
 
     updated_fields = []
@@ -153,7 +114,7 @@ async def update_main_agent_config(request: MainAgentConfigUpdate):
             config[key] = update_data[key]
             updated_fields.append(key)
 
-    _save_main_agent_config(config)
+    save_luominest_main_agent_config(config)
     logger.success(f"[API] PATCH /agents/main-agent/config - Updated fields: {updated_fields}")
 
     return MainAgentConfigResponse(

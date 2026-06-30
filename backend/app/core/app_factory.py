@@ -18,12 +18,37 @@ async def lifespan(app: FastAPI):
     logger.info(f"[LuomiNest] Starting application...")
     logger.info(f"[LuomiNest] Environment: {'Development' if settings.DEBUG else 'Production'}")
 
+    # 初始化 SQLite 数据库（Facade 层依赖，必须在任何 store 操作前完成）
     try:
-        from app.infrastructure.database.conversation_store import conversation_store
-        from app.infrastructure.database.json_store import conversations_store
-        conversation_store.migrate_from_json_store(conversations_store)
+        from app.infrastructure.database import init_db
+        await init_db()
     except Exception as e:
-        logger.warning(f"[LuomiNest] Conversation migration skipped: {e}")
+        logger.error(f"[LuomiNest] Database init failed: {e}")
+
+    # JSON → SQLite 幂等迁移（已迁移则跳过，旧文件不删除）
+    try:
+        from app.infrastructure.database.migration import migrate_all_json_to_sqlite
+        migration_results = await migrate_all_json_to_sqlite()
+        migrated_total = sum(v for v in migration_results.values() if v > 0)
+        if migrated_total > 0:
+            logger.success(f"[LuomiNest] Migrated {migrated_total} records from JSON to SQLite: {migration_results}")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] JSON→SQLite migration skipped: {e}")
+
+    # 懒加载 LLM providers（替代 adapter.py 的 import-time 加载，解耦模块加载与 DB init）
+    try:
+        from app.runtime.provider.llm.adapter import llm_adapter
+        llm_adapter.ensure_providers_loaded()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] LLM providers load skipped: {e}")
+
+    # 应用 model_config 到运行时（替代 model.py 的 import-time 调用；
+    # 须在 ensure_providers_loaded() 之后，以保证 model_config.default_provider 覆盖 provider is_default）
+    try:
+        from app.api.v1.endpoints.model import apply_model_config_from_db
+        apply_model_config_from_db()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Model config apply skipped: {e}")
 
     try:
         from app.engines.memory import init_memory
@@ -186,6 +211,13 @@ async def lifespan(app: FastAPI):
         await shutdown_memory()
     except Exception as e:
         logger.warning(f"[LuomiNest] Memory engine shutdown skipped: {e}")
+
+    # 关闭数据库引擎
+    try:
+        from app.infrastructure.database import dispose_db
+        await dispose_db()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Database dispose skipped: {e}")
 
     logger.info(f"[LuomiNest] Shutting down application...")
 

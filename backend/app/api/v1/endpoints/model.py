@@ -1,6 +1,4 @@
 import time
-import json
-import os
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
@@ -9,34 +7,33 @@ from app.runtime.provider.llm.adapter import llm_adapter, _create_provider_from_
 from app.runtime.provider.llm.providers import PROVIDER_TEMPLATES
 from app.core.config import settings
 from app.core.exceptions import NotFoundError, ValidationError
+from app.infrastructure.database.config_store import lumi_config_store
 
 router = APIRouter(prefix="/models", tags=["models"])
 
-MODEL_CONFIG_FILE = os.path.join(settings.DATA_DIR, "model_config.json")
-
 
 def _load_model_config() -> dict:
-    if not os.path.exists(MODEL_CONFIG_FILE):
-        return {}
-    try:
-        with open(MODEL_CONFIG_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.warning(f"[ModelConfig] Failed to load: {e}")
-        return {}
+    """从 config_items['model_config'] 加载模型配置。"""
+    saved = lumi_config_store.get("model_config", {})
+    return saved if isinstance(saved, dict) else {}
 
 
 def _save_model_config(config: dict):
-    os.makedirs(os.path.dirname(MODEL_CONFIG_FILE), exist_ok=True)
+    """保存模型配置到 config_items['model_config']。"""
     try:
-        with open(MODEL_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-        logger.success(f"[ModelConfig] Saved to {MODEL_CONFIG_FILE}")
+        lumi_config_store.set("model_config", config)
+        logger.success("[ModelConfig] Saved to config_items['model_config']")
     except Exception as e:
         logger.error(f"[ModelConfig] Failed to save: {e}")
 
 
-def _apply_model_config():
+def apply_model_config_from_db():
+    """从 DB 应用 model_config 到运行时（settings + llm_adapter.default_provider）。
+
+    替代原模块级 import-time 调用，由 lifespan 在 DB init + 迁移后显式调用。
+    调用顺序需在 llm_adapter.ensure_providers_loaded() 之后，以保证 model_config 的
+    default_provider 覆盖 provider 配置中的 is_default 标志（与原行为一致）。
+    """
     saved = _load_model_config()
     if not saved:
         return
@@ -51,9 +48,6 @@ def _apply_model_config():
     if saved.get("default_top_p") is not None:
         settings.LLM_DEFAULT_TOP_P = saved["default_top_p"]
     logger.info(f"[ModelConfig] Applied saved config: provider={saved.get('default_provider')}, model={saved.get('default_model')}")
-
-
-_apply_model_config()
 
 
 class ProviderCreate(BaseModel):

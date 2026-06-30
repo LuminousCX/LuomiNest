@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 import time
 from typing import AsyncIterator
 from app.core.config import settings
@@ -109,13 +110,31 @@ def _create_provider_from_config(config: dict) -> OpenAICompatibleProvider:
 
 class LLMAdapter:
     def __init__(self):
-        logger.info("[Adapter] Initializing LLMAdapter...")
+        logger.info("[Adapter] Initializing LLMAdapter (lazy load mode)...")
         self.providers: dict[str, OpenAICompatibleProvider] = {}
         self._provider_configs: dict[str, dict] = {}
         self.default_provider = settings.LLM_DEFAULT_PROVIDER
-        _migrate_legacy_plaintext()
-        self._init_providers()
-        logger.success(f"[Adapter] LLMAdapter initialized with {len(self.providers)} providers, default={self.default_provider}")
+        self._loaded = False
+        self._lock = threading.Lock()
+        logger.info(f"[Adapter] LLMAdapter created, default={self.default_provider} (providers will load on first access)")
+
+    def ensure_providers_loaded(self):
+        """懒加载 provider 配置。
+
+        首次调用时迁移旧版明文 providers.json 并从 LumiConfigStore 加载已保存的 providers。
+        后续调用无副作用。用 threading.Lock + _loaded 标志保证线程安全且只加载一次。
+        在 lifespan 中显式调用一次；各访问方法也会兜底调用以防遗漏。
+        """
+        if self._loaded:
+            return
+        with self._lock:
+            if self._loaded:
+                return
+            logger.info("[Adapter] Loading providers (first access)...")
+            _migrate_legacy_plaintext()
+            self._init_providers()
+            self._loaded = True
+            logger.success(f"[Adapter] Providers loaded: {len(self.providers)} providers, default={self.default_provider}")
 
     def _init_providers(self):
         saved = _load_saved_providers()
@@ -152,6 +171,7 @@ class LLMAdapter:
         _save_providers_config(configs)
 
     def register_provider(self, name: str, provider: OpenAICompatibleProvider, config: dict, set_default: bool = False):
+        self.ensure_providers_loaded()
         logger.info(f"[Adapter] Registering provider: {name}")
         self.providers[name] = provider
         self._provider_configs[name] = config
@@ -162,6 +182,7 @@ class LLMAdapter:
         logger.success(f"[Adapter] Provider registered: {name}")
 
     def update_provider(self, name: str, provider: OpenAICompatibleProvider, config: dict, set_default: bool = False):
+        self.ensure_providers_loaded()
         logger.info(f"[Adapter] Updating provider: {name}")
         self.providers[name] = provider
         self._provider_configs[name] = config
@@ -172,6 +193,7 @@ class LLMAdapter:
         logger.success(f"[Adapter] Provider updated: {name}")
 
     def remove_provider(self, name: str):
+        self.ensure_providers_loaded()
         logger.info(f"[Adapter] Removing provider: {name}")
         if name in self.providers:
             del self.providers[name]
@@ -185,6 +207,7 @@ class LLMAdapter:
         logger.success(f"[Adapter] Provider removed: {name}")
 
     def get_provider(self, name: str | None = None) -> OpenAICompatibleProvider:
+        self.ensure_providers_loaded()
         provider_name = name or self.default_provider
         provider = self.providers.get(provider_name)
         if not provider:
@@ -193,6 +216,7 @@ class LLMAdapter:
         return provider
 
     def get_provider_config(self, name: str) -> dict | None:
+        self.ensure_providers_loaded()
         return self._provider_configs.get(name)
 
     def supports_tool_calls(self, provider_name: str | None = None, model: str = "") -> bool:
@@ -241,6 +265,7 @@ class LLMAdapter:
         return_raw: bool = False,
         **kwargs
     ) -> str | dict | AsyncIterator[dict]:
+        self.ensure_providers_loaded()
         logger.warning("[LLM] Starting fallback chat...")
         provider_names = list(self.providers.keys())
         if self.default_provider in self.providers:
@@ -305,6 +330,7 @@ class LLMAdapter:
         return result
 
     async def list_models(self, provider_name: str | None = None) -> list[dict]:
+        self.ensure_providers_loaded()
         if provider_name:
             provider = self.get_provider(provider_name)
             logger.debug(f"[Adapter] Listing models for provider: {provider_name}")
@@ -327,6 +353,7 @@ class LLMAdapter:
         return all_models
 
     def list_providers(self) -> list[dict]:
+        self.ensure_providers_loaded()
         result = []
         for name, provider in self.providers.items():
             cfg = self._provider_configs.get(name, {})

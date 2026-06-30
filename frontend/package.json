@@ -239,5 +239,11 @@
       "**/*.png",
       "**/*.jpg"
     ]
+  },
+  "pnpm": {
+    "overrides": {
+      "lru-cache": "^6.0.0",
+      "yallist": "^4.0.0"
+    }
   }
 }
