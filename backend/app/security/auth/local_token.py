@@ -46,8 +46,10 @@ def generate_and_save_token(data_dir: str) -> str:
     token_path.write_text(token, encoding="utf-8")
     try:
         os.chmod(token_path, stat.S_IRUSR | stat.S_IWUSR)
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.warning(
+            f"[Auth] Failed to set secure permissions on token file {token_path}: {exc}"
+        )
     logger.success(f"[Auth] Generated local auth token at {token_path}")
     return token
 
