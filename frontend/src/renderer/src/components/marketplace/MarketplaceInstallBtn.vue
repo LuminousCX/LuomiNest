@@ -235,9 +235,11 @@ function handleRetry() {
 }
 
 .operating-btn {
-  color: var(--text-secondary);
-  background: var(--workspace-panel);
+  color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
+  border: 1px solid var(--lumi-brand);
   cursor: not-allowed;
+  opacity: 0.85;
 }
 
 .progress-pct {

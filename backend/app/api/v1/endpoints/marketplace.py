@@ -1,10 +1,6 @@
 """
 市场内容安装/卸载/下载/统计 API
 """
-import ipaddress
-import socket
-from urllib.parse import urlparse
-
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
@@ -27,41 +23,9 @@ from app.data.marketplace_catalog import (
     get_catalog_item,
     COMMON_TAGS,
 )
+from app.security.net.safe_url import assert_url_safe, UnsafeUrlError
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
-
-# 受信任的下载域名白名单
-_TRUSTED_DOWNLOAD_HOSTS = {
-    "github.com", "raw.githubusercontent.com", "api.github.com",
-    "objects.githubusercontent.com", "github-releases.githubusercontent.com",
-    "codeload.github.com",
-}
-
-
-def _validate_download_url(url: str) -> str:
-    """验证下载 URL 安全性，防止 SSRF 攻击"""
-    if not url:
-        return url
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"不支持的 URL 协议: {parsed.scheme}")
-    hostname = parsed.hostname
-    if not hostname:
-        raise ValueError("缺少主机名")
-    # 检查白名单
-    hostname_lower = hostname.lower()
-    if not any(hostname_lower == trusted or hostname_lower.endswith("." + trusted)
-               for trusted in _TRUSTED_DOWNLOAD_HOSTS):
-        # 不在白名单中，检查是否为私有/内部 IP
-        try:
-            addr = ipaddress.ip_address(socket.gethostbyname(hostname_lower))
-            if addr.is_private or addr.is_loopback or addr.is_link_local:
-                raise ValueError(f"禁止访问内部地址: {hostname}")
-        except ValueError:
-            raise
-        except socket.gaierror:
-            raise ValueError(f"无法解析主机名: {hostname}")
-    return url
 
 
 # ─── 目录查询接口（静态目录数据源） ─────────────────────────────
@@ -184,10 +148,11 @@ class UninstallRequest(BaseModel):
 async def _do_install(req: InstallRequest):
     """后台执行下载安装"""
     try:
-        safe_url = _validate_download_url(req.downloadUrl or "")
+        if req.downloadUrl:
+            await assert_url_safe(req.downloadUrl)
         result = await download_item(
             item_id=req.itemId,
-            download_url=safe_url,
+            download_url=req.downloadUrl,
             item_type=req.itemType,
             item_name=req.itemName,
             version=req.version,

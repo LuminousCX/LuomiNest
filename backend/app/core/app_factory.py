@@ -9,6 +9,8 @@ from app.core.config import settings
 from app.core.exceptions import LuomiNestError
 from app.api.v1.router import api_router
 from app.api.attachment_api import router as attachment_router
+from app.security.auth.local_token import load_auth_token
+from app.security.auth.middleware import luomi_auth_middleware
 
 
 @asynccontextmanager
@@ -47,6 +49,24 @@ async def lifespan(app: FastAPI):
         tool_registry.register(DelegateToSubagentTool())
         tool_registry.register(CreateScheduledTaskTool())
         tool_registry.register(CreateBrowserTabTool())
+
+        # Agent 集群调用工具：OpenAI 兼容 API 自回调
+        from app.core.agents.cluster.agent_tool import LuomiNestAgentCallTool
+        tool_registry.register(LuomiNestAgentCallTool())
+
+        # Agent 集群调用工具：A2A 协议跨服务调用（根据配置动态注册）
+        from app.core.agents.cluster.a2a_tool import get_luominest_a2a_tools
+        for a2a_tool in get_luominest_a2a_tools():
+            tool_registry.register(a2a_tool)
+
+        # 工作台多 Agent 协作工具：主 Agent 触发临时多 Agent 协作
+        from app.core.tools.builtin.collaboration_tool import LuomiNestStartCollaborationTool
+        tool_registry.register(LuomiNestStartCollaborationTool())
+
+        # 记忆主动搜索工具：群聊 Agent 主动查主 Agent 记忆（contextvar 权限控制）
+        from app.core.tools.builtin.memory_search_tool import LuomiNestMemorySearchTool
+        tool_registry.register(LuomiNestMemorySearchTool())
+
         logger.info(f"[LuomiNest] Registered {len(tool_registry.list_names())} tools: {', '.join(tool_registry.list_names())}")
     except Exception as e:
         logger.warning(f"[LuomiNest] Tool registration skipped: {e}")
@@ -215,6 +235,16 @@ def create_app() -> FastAPI:
             elapsed = time.time() - start_time
             logger.error(f"[HTTP] <-- {method} {path} 500 ({elapsed*1000:.1f}ms) ERROR: {e}")
             raise
+
+    auth_token = load_auth_token()
+    if auth_token:
+        logger.success("[AppFactory] Auth token loaded, API routes protected")
+    else:
+        logger.warning("[AppFactory] No auth token, API routes unprotected (dev mode)")
+
+    @app.middleware("http")
+    async def auth_middleware(request: Request, call_next):
+        return await luomi_auth_middleware(request, call_next)
 
     app.add_middleware(
         CORSMiddleware,

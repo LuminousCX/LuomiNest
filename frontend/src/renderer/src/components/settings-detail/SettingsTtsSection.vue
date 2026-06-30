@@ -29,7 +29,10 @@ const fetchTtsInfo = async () => {
   ttsLoading.value = true
   ttsError.value = null
   try {
-    const resp = await fetch(`${API_ENDPOINTS.V1}/chat/tts/engines`)
+    const token = await window.api.auth.getToken()
+    const resp = await fetch(`${API_ENDPOINTS.V1}/chat/tts/engines`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
     if (!resp.ok) {
       throw new Error(`请求失败 (${resp.status})`)
     }
@@ -130,9 +133,13 @@ const testTtsSynthesize = async () => {
   ttsConfigTesting.value = true
   ttsTestResult.value = null
   try {
+    const token = await window.api.auth.getToken()
     const resp = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({
         text: ttsTestText,
         voice: ttsConfigForm.value.voice || 'default',

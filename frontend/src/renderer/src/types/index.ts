@@ -376,6 +376,7 @@ export interface GroupMessage {
   timestamp: string
   role?: string
   collaboration?: MessageCollaboration
+  isStreaming?: boolean
 }
 
 export interface AgentRoleDefinition {

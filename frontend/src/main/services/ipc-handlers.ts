@@ -3,6 +3,7 @@ import { PATHS } from './paths'
 import { configStore } from './config-store'
 import { cacheManager } from './cache-manager'
 import { tabManager } from './browser'
+import { getLumiAuthToken } from './backend/auth-token'
 
 let _mainWindow: BrowserWindow | null = null
 
@@ -66,6 +67,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
       logs: PATHS.logs,
       live2d: PATHS.live2d,
     }
+  })
+
+  ipcMain.handle('auth:getToken', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return getLumiAuthToken()
   })
 
   ipcMain.handle('config:getTheme', (event: IpcMainInvokeEvent) => {

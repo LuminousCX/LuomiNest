@@ -166,44 +166,143 @@ class ChatService:
     ):
         chat_id = str(uuid.uuid4())
         parser = EmotionStreamParser()
+
+        # Agent 集群调用：子 Agent 请求设置递归深度 contextvar
+        is_sub_agent = getattr(request, "is_sub_agent", False)
+        depth_token = None
+        if is_sub_agent:
+            from app.core.agents.cluster.agent_tool import set_luominest_agent_call_depth
+            depth_token = set_luominest_agent_call_depth(getattr(request, "agent_depth", 0))
+
+        # 工具支持：获取工具列表并过滤 disable_tools
+        available_tools = tool_orchestrator.get_tools_for_llm() if tool_registry.list_names() else None
+        disable_tools = getattr(request, "disable_tools", None)
+        if available_tools and disable_tools:
+            available_tools = [
+                t for t in available_tools
+                if t.get("function", {}).get("name") not in disable_tools
+            ]
+            if not available_tools:
+                available_tools = None
+        use_tools = bool(available_tools) and llm_adapter.supports_tool_calls(provider, model)
+        if available_tools and not use_tools:
+            logger.info(f"[STREAM] stream_chat: Provider {provider}/{model} 不支持工具调用，纯对话模式")
+
+        # 工具循环需要可变的 messages 副本
+        working_messages = [dict(m) for m in messages]
+
         try:
-            async with self._llm_semaphore:
-                async for chunk in llm_adapter.chat_stream(
-                    messages=messages,
-                    provider_name=provider,
-                    model=model,
-                    temperature=request.temperature,
-                    max_tokens=request.max_tokens,
-                    top_p=request.top_p,
-                ):
-                    content = chunk.data.get("content", "")
-                    rc = chunk.data.get("reasoning", "")
-                    clean_content, emotion = parser.feed(content)
-                    data = ChatStreamChunk(
-                        id=chat_id, content=clean_content,
-                        reasoning_content=rc, model=model, provider=provider,
-                        emotion=emotion,
+            iteration = 0
+            while iteration <= tool_orchestrator.max_iterations:
+                collected_tool_calls: dict[int, dict] = {}
+                finish_reason: str | None = None
+                iteration_content = ""
+
+                async with self._llm_semaphore:
+                    async for chunk in llm_adapter.chat_stream(
+                        messages=working_messages,
+                        tools=available_tools if use_tools else None,
+                        provider_name=provider,
+                        model=model,
+                        temperature=request.temperature,
+                        max_tokens=request.max_tokens,
+                        top_p=request.top_p,
+                    ):
+                        if chunk.type == "usage":
+                            continue
+                        if chunk.type == "content":
+                            content = chunk.data.get("content", "")
+                            clean_content, emotion = parser.feed(content)
+                            if clean_content:
+                                iteration_content += clean_content
+                            yield f"data: {ChatStreamChunk(id=chat_id, content=clean_content, reasoning_content='', model=model, provider=provider, emotion=emotion).model_dump_json()}\n\n"
+                        elif chunk.type == "reasoning":
+                            rc = chunk.data.get("reasoning", "")
+                            yield f"data: {ChatStreamChunk(id=chat_id, content='', reasoning_content=rc, model=model, provider=provider).model_dump_json()}\n\n"
+                        elif chunk.type == "tool_call_delta":
+                            idx = chunk.data.get("index", 0)
+                            if idx not in collected_tool_calls:
+                                collected_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+                            if chunk.data.get("tool_call_id"):
+                                collected_tool_calls[idx]["id"] = chunk.data["tool_call_id"]
+                            if chunk.data.get("function_name"):
+                                collected_tool_calls[idx]["name"] = chunk.data["function_name"]
+                            if chunk.data.get("function_arguments"):
+                                collected_tool_calls[idx]["arguments"] += chunk.data["function_arguments"]
+                        elif chunk.type == "finish_reason":
+                            finish_reason = chunk.data.get("finish_reason")
+
+                # 组装本轮 tool_calls
+                tool_calls_list: list[dict] = []
+                if collected_tool_calls:
+                    for idx in sorted(collected_tool_calls.keys()):
+                        entry = collected_tool_calls[idx]
+                        tool_calls_list.append({
+                            "id": entry["id"] or f"call_{iteration}_{idx}",
+                            "type": "function",
+                            "function": {
+                                "name": entry["name"],
+                                "arguments": entry["arguments"],
+                            },
+                        })
+
+                # 无工具调用或未启用工具，结束循环
+                if not tool_calls_list or not use_tools:
+                    break
+
+                # 回填带 tool_calls 的 assistant 消息
+                assistant_msg = tool_orchestrator.build_assistant_message_with_tool_calls(
+                    iteration_content, tool_calls_list,
+                )
+                working_messages.append(assistant_msg)
+
+                # 依次执行工具调用
+                for tc in tool_calls_list:
+                    tool_name = tc["function"]["name"]
+                    logger.info(
+                        f"[STREAM] stream_chat 调用工具: {tool_name} "
+                        f"(iteration={iteration})"
                     )
-                    yield f"data: {data.model_dump_json()}\n\n"
+                    try:
+                        tool_msg = await tool_orchestrator.execute_tool_call(tc)
+                    except Exception as te:
+                        logger.error(
+                            f"[STREAM] stream_chat 工具 {tool_name} 执行失败: {te}",
+                            exc_info=True,
+                        )
+                        tool_msg = {
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": f"工具执行失败: {te}",
+                        }
+                    working_messages.append(tool_msg)
+
+                iteration += 1
+
+            done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
+            yield f"data: {done_data.model_dump_json()}\n\n"
         except Exception as e:
             logger.error(f"[STREAM] stream_chat error: {e}", exc_info=True)
             yield (
                 f"data: {ChatStreamChunk(id=chat_id, content='[Error] An internal error occurred', model=model, provider=provider).model_dump_json()}\n\n"
             )
-        finally:
             done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
             yield f"data: {done_data.model_dump_json()}\n\n"
-
-            # /chat/completions 流式模式写入记忆
-            try:
-                user_msgs = [m for m in messages if m.get("role") == "user"]
-                if user_msgs:
-                    await self._context.schedule_memory_update(
-                        messages, f"completions-{chat_id[:8]}", agent_id,
-                        llm_adapter=llm_adapter,
-                    )
-            except Exception as mem_err:
-                logger.warning(f"[STREAM] /chat/completions memory update failed: {mem_err}")
+        finally:
+            if depth_token is not None:
+                from app.core.agents.cluster.agent_tool import reset_luominest_agent_call_depth
+                reset_luominest_agent_call_depth(depth_token)
+            # /chat/completions 流式模式写入记忆（子 Agent 跳过，避免污染主 Agent 记忆）
+            if not is_sub_agent:
+                try:
+                    user_msgs = [m for m in messages if m.get("role") == "user"]
+                    if user_msgs:
+                        await self._context.schedule_memory_update(
+                            messages, f"completions-{chat_id[:8]}", agent_id,
+                            llm_adapter=llm_adapter,
+                        )
+                except Exception as mem_err:
+                    logger.warning(f"[STREAM] /chat/completions memory update failed: {mem_err}")
 
     async def stream_response(
         self,
@@ -231,6 +330,19 @@ class ChatService:
             suggested_questions: list[str] = []
             stream_usage: dict | None = None
             iteration = 0
+
+            # 设置记忆访问权限：主 Agent 可读写，联系人 Agent 无权限
+            from app.core.agents.memory_access import (
+                MEMORY_ACCESS_NONE,
+                MEMORY_ACCESS_READ_WRITE,
+                reset_luominest_memory_access,
+                set_luominest_memory_access,
+            )
+            from app.services.context_service import is_main_agent
+            mem_access_token = set_luominest_memory_access(
+                MEMORY_ACCESS_READ_WRITE if is_main_agent(agent_id) else MEMORY_ACCESS_NONE
+            )
+
             try:
                 # 工具调用循环（最多 max_iterations 次，防止无限循环）
                 while iteration <= tool_orchestrator.max_iterations:
@@ -317,8 +429,8 @@ class ChatService:
                         # 子 Agent 委派工具：流式推送子 Agent 执行事件
                         if tool_name == "delegate_to_subagent":
                             from app.core.tools.builtin.subagent_tool import (
-                                set_subagent_event_callback,
                                 reset_subagent_event_callback,
+                                set_subagent_event_callback,
                             )
 
                             event_queue: asyncio.Queue = asyncio.Queue()
@@ -363,8 +475,8 @@ class ChatService:
                         elif tool_name == "create_scheduled_task":
                             # 定时任务工具：通过 task_event 通道推送创建事件
                             from app.core.tools.builtin.subagent_tool import (
-                                set_subagent_event_callback,
                                 reset_subagent_event_callback,
+                                set_subagent_event_callback,
                             )
 
                             task_event_queue: asyncio.Queue = asyncio.Queue()
@@ -418,6 +530,52 @@ class ChatService:
                                 tool_msg = sched_task.result()
                             finally:
                                 reset_subagent_event_callback(task_cb_token)
+                        elif tool_name == "start_collaboration":
+                            # 多 Agent 协作工具：复用 subagent_event 通道转发协作事件
+                            # collaboration_tool 内部通过 emit_luominest_subagent_event 推送
+                            # {type: "collaboration", event: {...}} 形态的事件
+                            from app.core.tools.builtin.subagent_tool import (
+                                reset_subagent_event_callback,
+                                set_subagent_event_callback,
+                            )
+
+                            collab_event_queue: asyncio.Queue = asyncio.Queue()
+
+                            async def _luominest_collab_event_cb(event: dict) -> None:
+                                await collab_event_queue.put(event)
+
+                            collab_cb_token = set_subagent_event_callback(_luominest_collab_event_cb)
+                            try:
+                                collab_task = asyncio.ensure_future(
+                                    tool_orchestrator.execute_tool_call(tc)
+                                )
+                                while not collab_task.done():
+                                    queue_get = asyncio.ensure_future(collab_event_queue.get())
+                                    done, _pending = await asyncio.wait(
+                                        [collab_task, queue_get],
+                                        return_when=asyncio.FIRST_COMPLETED,
+                                    )
+                                    if queue_get in done:
+                                        event = queue_get.result()
+                                        yield self._sse_subagent_event(
+                                            chat_id, event, provider, model,
+                                        )
+                                    if collab_task in done:
+                                        if not queue_get.done():
+                                            queue_get.cancel()
+                                            try:
+                                                await queue_get
+                                            except asyncio.CancelledError:
+                                                pass
+                                        break
+                                while not collab_event_queue.empty():
+                                    event = collab_event_queue.get_nowait()
+                                    yield self._sse_subagent_event(
+                                        chat_id, event, provider, model,
+                                    )
+                                tool_msg = collab_task.result()
+                            finally:
+                                reset_subagent_event_callback(collab_cb_token)
                         else:
                             tool_msg = await tool_orchestrator.execute_tool_call(tc)
 
@@ -499,6 +657,12 @@ class ChatService:
                     await distillation_service.maybe_distill(agent_id, conv_id, conv["messages"], llm_adapter)
                 except Exception as distill_err:
                     logger.warning(f"[STREAM] Distillation failed: {distill_err}")
+
+                # 重置记忆访问权限 contextvar
+                try:
+                    reset_luominest_memory_access(mem_access_token)
+                except Exception as mem_reset_err:
+                    logger.debug(f"[STREAM] Memory access reset failed: {mem_reset_err}")
 
         return StreamingResponse(
             generator(),

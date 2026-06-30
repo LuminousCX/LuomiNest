@@ -160,9 +160,13 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
     error.value = null
 
     try {
+      const token = await window.api.auth.getToken()
       const response = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ text: cleanedText.trim(), voice }),
         signal: controller.signal,
       })

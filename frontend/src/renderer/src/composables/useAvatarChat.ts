@@ -190,9 +190,13 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
 
     try {
       const cfg = options.ttsConfig()
+      const token = await window.api.auth.getToken()
       const response = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           text: text.trim(),
           voice: options.voice(),

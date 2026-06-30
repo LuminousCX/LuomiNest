@@ -24,8 +24,10 @@ export function useFileUpload() {
       const formData = new FormData()
       formData.append('file', file)
 
+      const token = await window.api.auth.getToken()
       const resp = await fetch(API_ENDPOINTS.UPLOAD_FORWARD, {
         method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
         signal: currentUploadController.signal,
       })

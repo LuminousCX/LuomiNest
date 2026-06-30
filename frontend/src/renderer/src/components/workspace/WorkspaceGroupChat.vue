@@ -203,8 +203,11 @@ defineExpose({ scrollToBottom })
               {{ msg.collaboration.taskDescription?.slice(0, 8) }}...
             </span>
           </span>
-          <p class="msg-text">{{ msg.content }}</p>
-          <span class="msg-time">{{ formatGroupTime(msg.timestamp) }}</span>
+          <p class="msg-text">
+            {{ msg.content }}
+            <span v-if="msg.isStreaming" class="streaming-cursor">▋</span>
+          </p>
+          <span v-if="!msg.isStreaming" class="msg-time">{{ formatGroupTime(msg.timestamp) }}</span>
         </div>
         <div v-if="msg.senderType === 'user'" class="msg-avatar user-avatar">
           <User :size="16" />
@@ -514,6 +517,19 @@ defineExpose({ scrollToBottom })
 .msg-text {
   margin: 0;
   white-space: pre-wrap;
+}
+
+.streaming-cursor {
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--lumi-brand);
+  font-weight: 600;
+  animation: luominest-cursor-blink 1s ease-in-out infinite;
+}
+
+@keyframes luominest-cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }
 
 .msg-time {

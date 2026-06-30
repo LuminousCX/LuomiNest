@@ -367,7 +367,11 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   const setupFocus = (_model: Live2DModel) => {
     cleanupFocus()
 
-    const FOCUS_DAMPING = 0.15
+    // 较小的阻尼系数让头部跟随更平滑，避免鼠标移动时猛地转头
+    const FOCUS_DAMPING = 0.08
+    // 头部最大偏转角度（度），眼球最大偏移量
+    const MAX_HEAD_ANGLE = 10
+    const MAX_EYE_BALL = 0.6
 
     const onMouseMove = (e: MouseEvent) => {
       const parent = canvasRef.value?.parentElement
@@ -399,23 +403,19 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         const eyeBallXParam = coreModel.getParameterIndex('ParamEyeBallX')
         const eyeBallYParam = coreModel.getParameterIndex('ParamEyeBallY')
 
-        // 头部混合：保留原值 50% + 鼠标驱动 50%（最大 20 度）
+        // 直接用阻尼后的鼠标值驱动头部/眼球，不读取上一帧的参数值，
+        // 避免反馈循环导致角度在几帧内跃升到 2 倍目标值（猛地转头）。
         if (angleXParam >= 0) {
-          const base = coreModel.getParameterValueByIndex(angleXParam)
-          coreModel.setParameterValueByIndex(angleXParam, base * 0.5 + focusCurrentX * 20 * 0.5)
+          coreModel.setParameterValueByIndex(angleXParam, focusCurrentX * MAX_HEAD_ANGLE)
         }
         if (angleYParam >= 0) {
-          const base = coreModel.getParameterValueByIndex(angleYParam)
-          coreModel.setParameterValueByIndex(angleYParam, base * 0.5 + focusCurrentY * 20 * 0.5)
+          coreModel.setParameterValueByIndex(angleYParam, focusCurrentY * MAX_HEAD_ANGLE)
         }
-        // 眼球混合：保留原值 40% + 鼠标驱动 60%
         if (eyeBallXParam >= 0) {
-          const base = coreModel.getParameterValueByIndex(eyeBallXParam)
-          coreModel.setParameterValueByIndex(eyeBallXParam, base * 0.4 + focusCurrentX * 0.6)
+          coreModel.setParameterValueByIndex(eyeBallXParam, focusCurrentX * MAX_EYE_BALL)
         }
         if (eyeBallYParam >= 0) {
-          const base = coreModel.getParameterValueByIndex(eyeBallYParam)
-          coreModel.setParameterValueByIndex(eyeBallYParam, base * 0.4 + focusCurrentY * 0.6)
+          coreModel.setParameterValueByIndex(eyeBallYParam, focusCurrentY * MAX_EYE_BALL)
         }
       } catch {
       // intentionally ignored: expected non-fatal error

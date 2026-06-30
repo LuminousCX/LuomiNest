@@ -27,6 +27,10 @@ class ChatRequest(BaseModel):
     ] | None = None
     search_results: str | None = Field(default=None, max_length=100_000)
     versions: list[dict[str, Any]] | None = None
+    # Agent 集群调用内部字段（不暴露前端，仅供 agent_tool_call 递归守卫使用）
+    is_sub_agent: bool = False
+    disable_tools: list[str] | None = None
+    agent_depth: int = 0
 
 
 class ChatResponse(BaseModel):

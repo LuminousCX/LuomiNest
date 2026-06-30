@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { Star, Download, Heart, ArrowRight, Trophy } from 'lucide-vue-next'
+import { computed } from 'vue'
+import { Star, Download, Heart, ArrowRight, PackageCheck } from 'lucide-vue-next'
 import type { MarketplaceItem, MarketplaceType } from '../../types/marketplace'
 import { useRouter } from 'vue-router'
-import { useMarketplaceStore } from '../../stores/marketplace'
 import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
 import { formatCount } from '../../utils/format'
 import LumiCardIcon from '../common/LumiCardIcon.vue'
@@ -15,92 +14,15 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
-const store = useMarketplaceStore()
 
-const sortBy = ref<'composite' | 'downloads' | 'likes'>('composite')
+const displayItems = computed(() => props.items.slice(0, 10))
 
-// 根据 sortBy 排序 items
-const sortedItems = computed(() => {
-  const list = [...props.items]
-  if (sortBy.value === 'downloads') {
-    list.sort((a, b) => b.downloadCount - a.downloadCount)
-  } else if (sortBy.value === 'likes') {
-    list.sort((a, b) => b.likeCount - a.likeCount)
-  } else {
-    // 综合排序：downloadCount + likeCount * 3
-    list.sort((a, b) => (b.downloadCount + b.likeCount * 3) - (a.downloadCount + a.likeCount * 3))
-  }
-  return list.slice(0, 10)
-})
-
-// 排行榜数据：从后端获取
-const leaderboardLoading = ref(false)
-
-async function fetchLeaderboard() {
-  leaderboardLoading.value = true
-  try {
-    await store.fetchLeaderboard(props.type, sortBy.value, 10)
-  } finally {
-    leaderboardLoading.value = false
-  }
-}
-
-watch(() => props.type, () => {
-  fetchLeaderboard()
-})
-
-watch(sortBy, () => {
-  fetchLeaderboard()
-})
-
-onMounted(() => {
-  fetchLeaderboard()
-})
-
-// 合并排行榜后端数据与本地 item 信息
-// 始终使用 store 中已同步的 item 数据，确保与卡片/详情页一致
-const displayItems = computed(() => {
-  const lbItems = store.leaderboardItems
-  if (lbItems.length === 0) {
-    // 没有后端数据时使用本地排序
-    return sortedItems.value.map((item, index) => ({
-      ...item,
-      _rank: index + 1,
-    }))
-  }
-  // 有后端排行榜数据时，用排行榜排序，但统计数据取自 store 中已同步的 item
-  return lbItems.map((entry, index) => {
-    const item = props.items.find(i => i.id === entry.itemId)
-    return {
-      ...(item || {}),
-      id: entry.itemId,
-      name: item?.name || entry.name,
-      icon: item?.icon || entry.icon,
-      summary: item?.summary || entry.summary || '',
-      type: entry.type,
-      // 使用 store 中已同步的统计数据，确保与其他页面一致
-      downloadCount: item?.downloadCount ?? entry.downloadCount,
-      likeCount: item?.likeCount ?? entry.likeCount,
-      isLiked: item?.isLiked,
-      rating: item?.rating || 0,
-      _rank: index + 1,
-    } as (MarketplaceItem & { _rank: number })
-  })
-})
-
-function navigateToDetail(item: MarketplaceItem & { _rank?: number }) {
+function navigateToDetail(item: MarketplaceItem) {
   router.push(`/market/detail/${item.type}/${item.id}`)
 }
 
 function navigateToList() {
   router.push(`/market?tab=${props.type}`)
-}
-
-function getRankClass(rank: number): string {
-  if (rank === 1) return 'rank-gold'
-  if (rank === 2) return 'rank-silver'
-  if (rank === 3) return 'rank-bronze'
-  return ''
 }
 </script>
 
@@ -108,41 +30,22 @@ function getRankClass(rank: number): string {
   <div class="market-banner">
     <div class="banner-header">
       <div class="banner-title-row">
-        <Trophy :size="16" class="trophy-icon" />
+        <PackageCheck :size="16" class="installed-icon" />
         <h2 class="banner-title">{{ title }}</h2>
       </div>
-      <div class="banner-actions">
-        <div class="banner-sort">
-          <button
-            :class="['sort-btn', { active: sortBy === 'composite' }]"
-            @click="sortBy = 'composite'"
-          >综合</button>
-          <button
-            :class="['sort-btn', { active: sortBy === 'downloads' }]"
-            @click="sortBy = 'downloads'"
-          >下载</button>
-          <button
-            :class="['sort-btn', { active: sortBy === 'likes' }]"
-            @click="sortBy = 'likes'"
-          >喜欢</button>
-        </div>
-        <button class="view-all-btn" @click="navigateToList()">
-          查看全部
-          <ArrowRight :size="14" />
-        </button>
-      </div>
+      <button class="view-all-btn" @click="navigateToList()">
+        查看全部
+        <ArrowRight :size="14" />
+      </button>
     </div>
 
-    <div class="banner-scroll custom-scrollbar--thin">
+    <div v-if="displayItems.length > 0" class="banner-scroll custom-scrollbar--thin">
       <div
         v-for="entry in displayItems"
         :key="entry.id"
         class="banner-card"
         @click="navigateToDetail(entry)"
       >
-        <div :class="['banner-rank', getRankClass(entry._rank)]">
-          {{ entry._rank }}
-        </div>
         <LumiCardIcon
           :icon="ITEM_ICON_MAP[entry.icon] || DEFAULT_ICON"
           :size="20"
@@ -168,6 +71,10 @@ function getRankClass(rank: number): string {
         </div>
       </div>
     </div>
+    <div v-else class="banner-empty">
+      <PackageCheck :size="24" />
+      <p>暂无已安装的内容</p>
+    </div>
   </div>
 </template>
 
@@ -190,46 +97,14 @@ function getRankClass(rank: number): string {
   gap: var(--space-2);
 }
 
-.trophy-icon {
-  color: var(--lumi-amber);
+.installed-icon {
+  color: var(--lumi-success);
 }
 
 .banner-title {
   font-size: var(--text-xl);
   font-weight: var(--font-bold);
   color: var(--text-primary);
-}
-
-.banner-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.banner-sort {
-  display: flex;
-  gap: calc(var(--space-1) / 2);
-  padding: calc(var(--space-1) / 2);
-  background: var(--workspace-panel);
-  border-radius: var(--radius-sm);
-}
-
-.sort-btn {
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-xs);
-  font-size: var(--text-2xs);
-  font-weight: var(--font-medium);
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.sort-btn:hover {
-  color: var(--text-secondary);
-}
-
-.sort-btn.active {
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
 }
 
 .view-all-btn {
@@ -275,35 +150,6 @@ function getRankClass(rank: number): string {
   transform: translateY(-1px);
 }
 
-.banner-rank {
-  width: calc(var(--space-5) + var(--space-1) / 2);
-  height: calc(var(--space-5) + var(--space-1) / 2);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-xs);
-  font-weight: var(--font-bold);
-  color: var(--text-muted);
-  background: var(--workspace-panel);
-  flex-shrink: 0;
-}
-
-.rank-gold {
-  background: linear-gradient(135deg, var(--lumi-warning) 0%, var(--lumi-amber) 100%);
-  color: var(--text-inverse);
-}
-
-.rank-silver {
-  background: linear-gradient(135deg, var(--border) 0%, var(--text-muted) 100%);
-  color: var(--text-inverse);
-}
-
-.rank-bronze {
-  background: linear-gradient(135deg, var(--lumi-amber) 0%, var(--lumi-accent) 100%);
-  color: var(--text-inverse);
-}
-
 .banner-card-info {
   flex: 1;
   min-width: 0;
@@ -346,4 +192,13 @@ function getRankClass(rank: number): string {
   color: var(--lumi-accent);
 }
 
+.banner-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
 </style>

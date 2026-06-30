@@ -12,7 +12,7 @@ import type { McpStatus, SubagentActivity } from './types'
 
 const props = defineProps<{
   memoryFactCount: number
-  memoryProfileName: string
+  memoryProfileName?: string
   memorySummaryPreview: string
   mcpStatus: McpStatus
   platformInstances: PlatformInstance[]

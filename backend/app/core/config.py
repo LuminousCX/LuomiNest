@@ -3,6 +3,8 @@ from functools import lru_cache
 from loguru import logger
 from pydantic_settings import BaseSettings
 
+from app.security.crypto.secret_key_manager import is_placeholder, load_or_create_secret_key
+
 
 class Settings(BaseSettings):
     APP_NAME: str = "LuomiNest"
@@ -51,6 +53,12 @@ class Settings(BaseSettings):
 
     TTS_PROXY: str = ""
 
+    # Agent 集群调用配置
+    APP_SELF_BASE_URL: str = "http://localhost:8000"
+    A2A_SERVERS: list[dict] = []  # 每项: {name, url, enabled, api_key}
+    A2A_TIMEOUT_SECONDS: int = 60
+    A2A_MAX_DEPTH: int = 3
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -62,6 +70,9 @@ def get_settings() -> Settings:
     if s.LLM_MAX_CONCURRENT_REQUESTS < 1:
         logger.warning(f"LLM_MAX_CONCURRENT_REQUESTS={s.LLM_MAX_CONCURRENT_REQUESTS} is invalid, clamping to 1")
         s.LLM_MAX_CONCURRENT_REQUESTS = 1
+    if is_placeholder(s.SECRET_KEY):
+        s.SECRET_KEY = load_or_create_secret_key(s.DATA_DIR)
+        logger.success("[Config] SECRET_KEY loaded from persistent store")
     return s
 
 

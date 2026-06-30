@@ -1,0 +1,7 @@
+{
+  "id": "skill-docx",
+  "type": "skill",
+  "name": "skill-docx",
+  "version": "1.0.0",
+  "description": "skill package: skill-docx"
+}

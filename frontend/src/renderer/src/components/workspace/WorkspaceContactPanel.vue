@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import {
   Bot,
   Users,
@@ -9,11 +9,9 @@ import {
   Hash,
   MoreVertical,
   Trash2,
-  Store,
 } from 'lucide-vue-next'
 import type { AgentProfile, GroupInfo } from '../../types'
 import type { ContactType } from './types'
-import AgentMarketPanel from './AgentMarketPanel.vue'
 
 const props = defineProps<{
   agents: AgentProfile[]
@@ -35,8 +33,6 @@ const emit = defineEmits<{
   'market-agent-installed': [agentId: string]
 }>()
 
-const showAgentMarket = ref(false)
-
 const searchQueryModel = computed<string>({
   get: () => props.searchQuery,
   set: (value) => emit('update:searchQuery', value),
@@ -53,10 +49,6 @@ const filteredGroups = computed(() => {
   const q = props.searchQuery.toLowerCase()
   return props.groups.filter(g => g.name.toLowerCase().includes(q))
 })
-
-const handleMarketAgentInstalled = (agentId: string) => {
-  emit('market-agent-installed', agentId)
-}
 </script>
 
 <template>
@@ -68,9 +60,6 @@ const handleMarketAgentInstalled = (agentId: string) => {
       </div>
       <button class="contact-add-btn" title="新建 Agent" @click="emit('create-agent')">
         <Plus :size="14" />
-      </button>
-      <button class="contact-market-btn" title="智能体市场" @click="showAgentMarket = true">
-        <Store :size="14" />
       </button>
     </div>
 
@@ -141,12 +130,6 @@ const handleMarketAgentInstalled = (agentId: string) => {
         <p>{{ searchQuery ? '未找到匹配的联系人' : '暂无联系人' }}</p>
       </div>
     </div>
-
-    <!-- 智能体市场面板 -->
-    <AgentMarketPanel
-      v-model:visible="showAgentMarket"
-      @agent-installed="handleMarketAgentInstalled"
-    />
   </div>
 </template>
 
@@ -218,26 +201,6 @@ const handleMarketAgentInstalled = (agentId: string) => {
 }
 
 .contact-add-btn:hover {
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
-}
-
-.contact-market-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.contact-market-btn:hover {
   background: var(--lumi-brand-light);
   color: var(--lumi-brand);
 }

@@ -43,6 +43,7 @@ dependencies = [
     "edge-tts>=6.1.18",
     "mcp>=1.0.0",
     "apscheduler>=3.10.0",
+    "python-a2a>=0.5.0",
 ]
 
 [project.optional-dependencies]

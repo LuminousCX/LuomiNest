@@ -40,14 +40,24 @@ async def chat_completions(request: ChatRequest):
     logger.info(
         f"[API] POST /chat/completions - "
         f"provider={resolved_provider}, model={resolved_model}, "
-        f"stream={request.stream}, ts={request_ts}"
+        f"stream={request.stream}, ts={request_ts}, "
+        f"is_sub_agent={request.is_sub_agent}, agent_depth={request.agent_depth}"
     )
+
+    # Agent 集群调用递归守卫：防止 Agent A→B→A 无限循环
+    if request.agent_depth > 3:
+        raise HTTPException(
+            status_code=400,
+            detail="已达到最大 Agent 调用深度（3），无法继续递归调用",
+        )
 
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
     system_prompt = context_service.build_system_prompt(request.agent_id)
     messages = [{"role": "system", "content": system_prompt}] + messages
     messages = context_service.inject_timestamp_prompt(messages)
-    messages = await context_service.inject_memory(messages, request.agent_id, resolved_provider, llm_adapter=llm_adapter)
+    # 子 Agent 调用不注入主 Agent 记忆，避免污染独立上下文
+    if not request.is_sub_agent:
+        messages = await context_service.inject_memory(messages, request.agent_id, resolved_provider, llm_adapter=llm_adapter)
 
     if request.file_content:
         supports_vision = llm_adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
@@ -91,17 +101,18 @@ async def chat_completions(request: ChatRequest):
 
     result_content = gen_state["content"] or ""
 
-    # 非流式 /chat/completions 写入记忆
-    try:
-        user_msgs = [m for m in messages if m.get("role") == "user"]
-        if user_msgs:
-            thread_id = request.conversation_id or f"completions-{uuid.uuid4().hex[:8]}"
-            await context_service.schedule_memory_update(
-                messages, thread_id, request.agent_id,
-                llm_adapter=llm_adapter,
-            )
-    except Exception as mem_err:
-        logger.warning(f"[API] /chat/completions memory update failed: {mem_err}")
+    # 非流式 /chat/completions 写入记忆（子 Agent 调用跳过，避免污染主 Agent 记忆）
+    if not request.is_sub_agent:
+        try:
+            user_msgs = [m for m in messages if m.get("role") == "user"]
+            if user_msgs:
+                thread_id = request.conversation_id or f"completions-{uuid.uuid4().hex[:8]}"
+                await context_service.schedule_memory_update(
+                    messages, thread_id, request.agent_id,
+                    llm_adapter=llm_adapter,
+                )
+        except Exception as mem_err:
+            logger.warning(f"[API] /chat/completions memory update failed: {mem_err}")
 
     elapsed = time.time() - start_time
     logger.success(

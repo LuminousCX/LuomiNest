@@ -140,8 +140,10 @@ export const useSTT = () => {
     formData.append('engine', modelStore.sttConfig.engine || 'auto')
     formData.append('language', modelStore.sttConfig.language || 'auto')
 
+    const token = await window.api.auth.getToken()
     const resp = await fetch(`${API_ENDPOINTS.V1}/chat/stt/transcribe`, {
       method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
       signal: AbortSignal.timeout(60000),
     })

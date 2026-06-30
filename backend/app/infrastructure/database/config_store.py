@@ -1,4 +1,5 @@
 import asyncio
+import fnmatch
 import json
 import os
 import threading
@@ -67,12 +68,8 @@ class LumiConfigStore:
     def _is_encrypted_key(self, key: str) -> bool:
         """判断某个 key 是否需要加密存储。"""
         for pattern in self.ENCRYPTED_KEYS:
-            if pattern == key:
+            if fnmatch.fnmatch(key, pattern):
                 return True
-            if pattern.endswith(".*"):
-                prefix = pattern[:-2]
-                if key.startswith(prefix):
-                    return True
         return False
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -108,6 +105,17 @@ class LumiConfigStore:
             data.pop(f"{key}__updated_at", None)
             self._save()
             return True
+
+    def delete_namespace(self, prefix: str) -> int:
+        """删除某个命名空间下所有配置，返回删除数量。"""
+        with self._lock:
+            data = self._load()
+            keys_to_delete = [k for k in data if k.startswith(prefix)]
+            for key in keys_to_delete:
+                del data[key]
+            if keys_to_delete:
+                self._save()
+            return len(keys_to_delete)
 
     def get_namespace(self, prefix: str) -> dict[str, Any]:
         """获取某个命名空间下所有配置（自动解密）。"""
