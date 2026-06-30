@@ -47,10 +47,10 @@ async def _browser_navigate(args: dict[str, Any]) -> WorkflowTaskResult:
         return WorkflowTaskResult(success=False, error="Missing required parameter: url")
 
     try:
-        from app.core.tools.builtin.subagent_tool import _emit_subagent_event
+        from app.core.tools.builtin.subagent_tool import emit_luominest_subagent_event
 
         tab_id = f"tab_{uuid.uuid4().hex[:8]}"
-        await _emit_subagent_event({
+        await emit_luominest_subagent_event({
             "browser_action": True,
             "action": "create_tab",
             "tab_id": tab_id,
@@ -574,10 +574,10 @@ async def _browser_open_tab(args: dict[str, Any]) -> WorkflowTaskResult:
         return WorkflowTaskResult(success=False, error="Missing required parameter: url")
 
     try:
-        from app.core.tools.builtin.subagent_tool import _emit_subagent_event
+        from app.core.tools.builtin.subagent_tool import emit_luominest_subagent_event
 
         tab_id = f"tab_{uuid.uuid4().hex[:8]}"
-        await _emit_subagent_event({
+        await emit_luominest_subagent_event({
             "browser_action": True,
             "action": "open_tab",
             "tab_id": tab_id,
@@ -614,9 +614,9 @@ async def _browser_close_tab(args: dict[str, Any]) -> WorkflowTaskResult:
         return WorkflowTaskResult(success=False, error="Missing required parameter: tab_id")
 
     try:
-        from app.core.tools.builtin.subagent_tool import _emit_subagent_event
+        from app.core.tools.builtin.subagent_tool import emit_luominest_subagent_event
 
-        await _emit_subagent_event({
+        await emit_luominest_subagent_event({
             "browser_action": True,
             "action": "close_tab",
             "tab_id": tab_id,
@@ -650,8 +650,18 @@ async def _subagent_delegate(args: dict[str, Any]) -> WorkflowTaskResult:
 
     try:
         from app.core.agents.subagent_executor import subagent_executor
+        from app.core.tools.builtin.subagent_tool import get_subagent_event_callback
 
-        result = await subagent_executor.execute(task=task, context=context)
+        # 读取当前异步上下文的事件回调，与 DelegateToSubagentTool 行为一致
+        # 使 workflow 路径触发的子 Agent 委派也能推送 subagent_event 到 SSE 流
+        event_callback = get_subagent_event_callback()
+
+        result = await subagent_executor.execute(
+            task=task,
+            context=context,
+            depth=0,
+            event_callback=event_callback,
+        )
         return WorkflowTaskResult(
             success=True,
             output=result,

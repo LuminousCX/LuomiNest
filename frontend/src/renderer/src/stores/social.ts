@@ -117,7 +117,49 @@ export const useSocialStore = defineStore('social', () => {
         respondingAgentNames.value = (event.data?.agentNames || event.data?.agent_names || []) as string[]
         break
 
+      case 'agent_message_start': {
+        // 流式响应开始：推送空内容消息，标记 isStreaming
+        const msg = _normalizeMessage(event.data)
+        if (msg) {
+          msg.isStreaming = true
+          groupMessages.value.push(msg)
+        }
+        break
+      }
+
+      case 'agent_message_delta': {
+        // 流式增量：追加内容到正在响应的消息
+        const id = event.data?.id as string
+        const deltaContent = event.data?.content as string
+        if (!id || !deltaContent) break
+        const idx = groupMessages.value.findIndex(m => m.id === id)
+        if (idx >= 0) {
+          groupMessages.value[idx].content += deltaContent
+        }
+        break
+      }
+
+      case 'agent_message_end': {
+        // 流式响应结束：更新最终内容，清除 isStreaming
+        const id = event.data?.id as string
+        const finalContent = event.data?.content as string
+        if (!id) break
+        const idx = groupMessages.value.findIndex(m => m.id === id)
+        if (idx >= 0) {
+          groupMessages.value[idx].isStreaming = false
+          if (finalContent) {
+            groupMessages.value[idx].content = finalContent
+          }
+        } else {
+          // 兜底：未找到消息（可能丢失 start 事件），直接推送
+          const msg = _normalizeMessage(event.data)
+          if (msg) groupMessages.value.push(msg)
+        }
+        break
+      }
+
       case 'agent_message': {
+        // 兼容旧版非流式事件
         const msg = _validateMessageData(event.data)
         if (msg) groupMessages.value.push(msg)
         break

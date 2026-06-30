@@ -53,6 +53,12 @@ class Settings(BaseSettings):
 
     TTS_PROXY: str = ""
 
+    # Agent 集群调用配置
+    APP_SELF_BASE_URL: str = "http://localhost:8000"
+    A2A_SERVERS: list[dict] = []  # 每项: {name, url, enabled, api_key}
+    A2A_TIMEOUT_SECONDS: int = 60
+    A2A_MAX_DEPTH: int = 3
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

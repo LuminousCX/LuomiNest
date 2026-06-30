@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any
+
 from loguru import logger
 
 
@@ -191,7 +191,7 @@ BUILTIN_ROLES: dict[str, AgentRoleDefinition] = {
         execution_mode="parallel",
         max_concurrent_tasks=2,
         timeout_seconds=120,
-        color="#a855f7",
+        color="#10b981",
     ),
 }
 

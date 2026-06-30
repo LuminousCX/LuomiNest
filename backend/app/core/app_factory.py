@@ -49,6 +49,24 @@ async def lifespan(app: FastAPI):
         tool_registry.register(DelegateToSubagentTool())
         tool_registry.register(CreateScheduledTaskTool())
         tool_registry.register(CreateBrowserTabTool())
+
+        # Agent 集群调用工具：OpenAI 兼容 API 自回调
+        from app.core.agents.cluster.agent_tool import LuomiNestAgentCallTool
+        tool_registry.register(LuomiNestAgentCallTool())
+
+        # Agent 集群调用工具：A2A 协议跨服务调用（根据配置动态注册）
+        from app.core.agents.cluster.a2a_tool import get_luominest_a2a_tools
+        for a2a_tool in get_luominest_a2a_tools():
+            tool_registry.register(a2a_tool)
+
+        # 工作台多 Agent 协作工具：主 Agent 触发临时多 Agent 协作
+        from app.core.tools.builtin.collaboration_tool import LuomiNestStartCollaborationTool
+        tool_registry.register(LuomiNestStartCollaborationTool())
+
+        # 记忆主动搜索工具：群聊 Agent 主动查主 Agent 记忆（contextvar 权限控制）
+        from app.core.tools.builtin.memory_search_tool import LuomiNestMemorySearchTool
+        tool_registry.register(LuomiNestMemorySearchTool())
+
         logger.info(f"[LuomiNest] Registered {len(tool_registry.list_names())} tools: {', '.join(tool_registry.list_names())}")
     except Exception as e:
         logger.warning(f"[LuomiNest] Tool registration skipped: {e}")

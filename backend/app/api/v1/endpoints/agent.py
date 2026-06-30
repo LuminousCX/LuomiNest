@@ -25,6 +25,7 @@ class AgentCreate(BaseModel):
     color: str = "#0d9488"
     avatar: str | None = None
     capabilities: list[str] = Field(default_factory=lambda: ["chat"])
+    memory_access: str = "none"
 
 
 class AgentUpdate(BaseModel):
@@ -37,6 +38,7 @@ class AgentUpdate(BaseModel):
     avatar: str | None = None
     capabilities: list[str] | None = None
     is_active: bool | None = None
+    memory_access: str | None = None
 
 
 class AgentResponse(BaseModel):
@@ -51,6 +53,7 @@ class AgentResponse(BaseModel):
     color: str
     avatar: str | None = None
     capabilities: list[str] = Field(default_factory=lambda: ["chat"])
+    memory_access: str = Field(alias="memoryAccess", default="none")
     is_active: bool = Field(alias="isActive", default=True)
     is_main: bool = Field(alias="isMain", default=False)
     created_at: str = Field(alias="createdAt", default="")
@@ -194,6 +197,7 @@ async def create_agent(request: AgentCreate):
         "color": request.color,
         "avatar": request.avatar,
         "capabilities": request.capabilities,
+        "memory_access": request.memory_access,
         "is_active": True,
         "is_main": False,
         "created_at": now,

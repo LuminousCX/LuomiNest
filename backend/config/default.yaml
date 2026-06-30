@@ -1,0 +1,17 @@
+# LuomiNest 默认配置
+# 本文件提供默认值，实际运行时 .env 和环境变量优先级更高
+
+# Agent 集群调用 - A2A 协议配置
+a2a:
+  # A2A 远程服务器列表
+  # 每项: {name: 工具名后缀, url: A2A 服务端点, enabled: 是否启用, api_key: 可选鉴权}
+  servers: []
+  # 示例:
+  # - name: "remote-assistant"
+  #   url: "http://remote-host:8001/a2a"
+  #   enabled: true
+  #   api_key: ""
+  # A2A 调用超时（秒）
+  timeout_seconds: 60
+  # A2A 最大递归深度（跨服务调用链深度）
+  max_depth: 3

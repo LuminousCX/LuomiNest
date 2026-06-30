@@ -198,6 +198,7 @@ class AgentOrchestrator:
         group_id: str,
         user_message: str,
         sender_id: str = "user",
+        consensus_content: str | None = None,
     ) -> CollaborationSession:
         """执行一次完整的多 Agent 协作流程（非流式）。
 
@@ -249,7 +250,7 @@ class AgentOrchestrator:
             session.sub_tasks = sub_tasks
             session.phase = CollaborationPhase.EXECUTING
 
-            await self._execute_sub_tasks(sub_tasks, group, session)
+            await self._execute_sub_tasks(sub_tasks, group, session, consensus_content)
 
             session.phase = CollaborationPhase.SYNTHESIZING
             final_result = await self._synthesize_results(coordinator, group, session)
@@ -272,18 +273,24 @@ class AgentOrchestrator:
         group_id: str,
         user_message: str,
         sender_id: str = "user",
+        consensus_content: str | None = None,
+        group: dict | None = None,
     ) -> AsyncIterator[dict]:
         """执行一次多 Agent 协作流程（流式），逐步 yield 事件。
 
         Args:
-            group_id: 目标群组 ID
+            group_id: 目标群组 ID（临时 group 以 "temp_" 前缀标识，不持久化）
             user_message: 用户发送的消息内容
             sender_id: 发送者 ID，默认为 "user"
+            consensus_content: 共识规范（可选），注入工人系统提示词的【Luminous 共识规范】段
+            group: 临时 group dict（可选），用于工作台协作触发的非持久化协作；为 None 时从 groups_store 加载
 
         Returns:
             AsyncIterator[dict]: 事件流，包含 session_start、phase_change、task_started 等事件
         """
-        group = groups_store.get(group_id)
+        # 支持临时 group：工作台协作触发，不写入 groups_store
+        if group is None:
+            group = groups_store.get(group_id)
         if not group:
             yield {"type": "error", "data": {"message": f"Group {group_id} not found"}}
             return
@@ -395,7 +402,7 @@ class AgentOrchestrator:
                     break
 
                 for task in ready:
-                    async for event in self._execute_single_task_stream(task, group, session):
+                    async for event in self._execute_single_task_stream(task, group, session, consensus_content):
                         yield event
 
                 for t in ready:
@@ -534,6 +541,7 @@ class AgentOrchestrator:
         sub_tasks: list[SubTask],
         group: dict,
         session: CollaborationSession,
+        consensus_content: str | None = None,
     ) -> None:
         completed_ids: set[str] = set()
         max_iterations = len(sub_tasks) + 1
@@ -554,10 +562,10 @@ class AgentOrchestrator:
                 break
 
             if len(ready) == 1:
-                await self._execute_single_task(ready[0], group, session)
+                await self._execute_single_task(ready[0], group, session, consensus_content)
             else:
                 results = await asyncio.gather(*[
-                    self._execute_single_task(t, group, session)
+                    self._execute_single_task(t, group, session, consensus_content)
                     for t in ready
                 ], return_exceptions=True)
                 for i, result in enumerate(results):
@@ -572,6 +580,7 @@ class AgentOrchestrator:
         task: SubTask,
         group: dict,
         session: CollaborationSession,
+        consensus_content: str | None = None,
     ) -> None:
         task.status = TaskStatus.RUNNING
         task.started_at = datetime.now(timezone.utc).isoformat()
@@ -606,7 +615,7 @@ class AgentOrchestrator:
                     member_info = m
                     break
 
-            system_prompt = self._build_worker_prompt(agent, member_info, group, role_prompt)
+            system_prompt = self._build_worker_prompt(agent, member_info, group, role_prompt, consensus_content)
 
             context_parts = [f"用户原始需求: {session.user_message}"]
             if session.plan:
@@ -654,6 +663,7 @@ class AgentOrchestrator:
         task: SubTask,
         group: dict,
         session: CollaborationSession,
+        consensus_content: str | None = None,
     ) -> AsyncIterator[dict]:
         task.status = TaskStatus.RUNNING
         task.started_at = datetime.now(timezone.utc).isoformat()
@@ -714,7 +724,7 @@ class AgentOrchestrator:
                     member_info = m
                     break
 
-            system_prompt = self._build_worker_prompt(agent, member_info, group, role_prompt)
+            system_prompt = self._build_worker_prompt(agent, member_info, group, role_prompt, consensus_content)
 
             context_parts = [f"用户原始需求: {session.user_message}"]
             if session.plan:
@@ -839,6 +849,7 @@ class AgentOrchestrator:
         member: dict | None,
         group: dict,
         role_prompt: str,
+        consensus_content: str | None = None,
     ) -> str:
         role = member.get("role", "成员") if member else "成员"
         group_name = group.get("name", "")
@@ -852,10 +863,16 @@ class AgentOrchestrator:
         if agent.get("system_prompt"):
             prompt += f"\n\n额外指令：{agent['system_prompt']}"
 
+        if consensus_content:
+            prompt += f"\n\n【Luminous 共识规范】\n{consensus_content}\n"
+
         return prompt
 
     async def _save_messages(self, group: dict, session: CollaborationSession) -> None:
         group_id = group.get("id", "")
+        # 临时 group（工作台协作触发）不持久化到 groups_store
+        if group_id.startswith("temp_"):
+            return
         if group_id not in self._save_locks:
             self._save_locks[group_id] = asyncio.Lock()
         async with self._save_locks[group_id]:
