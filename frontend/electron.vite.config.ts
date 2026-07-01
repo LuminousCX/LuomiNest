@@ -1,37 +1,37 @@
 import { resolve } from 'path'
+import { rmSync } from 'fs'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 
+// Live2D 模型通过 luominest-avatar:// 协议 + extraResources 提供，
+// 不需要 Vite 把 public/live2d 复制到输出目录。构建后清理，避免重复打包与文件锁。
+const removeLive2DFromOutput = () => ({
+  name: 'luominest-remove-live2d-output',
+  closeBundle: () => {
+    try {
+      rmSync(resolve(__dirname, 'out/renderer/live2d'), { recursive: true, force: true })
+    } catch {
+      // 忽略：可能存在 OS 级文件锁（如 Defender 扫描），不影响打包（electron-builder files 已排除 live2d）
+    }
+  }
+})
+
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
-    build: {
-      rollupOptions: {
-        input: {
-          index: resolve(__dirname, 'src/main/index.ts'),
-          installer: resolve(__dirname, 'src/main/installer/index.ts')
-        }
-      }
-    }
+    plugins: [externalizeDepsPlugin()]
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
-    build: {
-      rollupOptions: {
-        input: {
-          index: resolve(__dirname, 'src/preload/index.ts'),
-          installer: resolve(__dirname, 'src/preload/installer.ts')
-        }
-      }
-    }
+    plugins: [externalizeDepsPlugin()]
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     build: {
+      // 不清空 out 目录：避免 OS 级文件锁（Defender/Search Indexer 持有 live2d 目录句柄）导致 EBUSY 失败。
+      // closeBundle 插件会在构建后清理 live2d 死代码，下次构建不会有残留。
+      emptyOutDir: false,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html'),
-          installer: resolve(__dirname, 'src/renderer/installer/index.html')
+          index: resolve(__dirname, 'src/renderer/index.html')
         },
         output: {
           manualChunks(id) {
@@ -44,7 +44,7 @@ export default defineConfig({
         }
       }
     },
-    plugins: [vue()],
+    plugins: [vue(), removeLive2DFromOutput()],
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src/renderer/src')
@@ -58,3 +58,4 @@ export default defineConfig({
     }
   }
 })
+

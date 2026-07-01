@@ -1,9 +1,9 @@
-import { app, BrowserWindow, shell, Menu, Tray, nativeImage, MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, shell, Menu, Tray, nativeImage, protocol, MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { platform } from 'os'
 import { tabManager } from './services/browser'
 import { setupNetworkConfig } from './services/browser/view'
-import { startBackend, stopBackend, getBackendUrl } from './services/backend'
+import { stopBackend, startBackendInBackground } from './services/backend'
 import { PATHS, initAppPaths } from './services/paths'
 import { configStore } from './services/config-store'
 import { registerIpcHandlers, setMainWindow } from './services/ipc-handlers'
@@ -16,6 +16,19 @@ if (platform() === 'win32') {
 }
 
 setupNetworkConfig()
+
+// 必须在 app.whenReady() 之前注册，使 luominest-avatar:// 成为 standard/secure scheme，
+// 否则 new URL('luominest-avatar://host/path') 的 hostname 为空，导致协议 handler 返回 400。
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'luominest-avatar',
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    corsEnabled: true,
+    stream: true
+  }
+}])
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -209,20 +222,14 @@ const createMenu = (): void => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-app.whenReady().then(async () => {
+app.whenReady().then(() => {
+  app.setAppUserModelId('com.luominest.desktop')
   initAppPaths()
 
   verifyAvatarResources()
   registerAvatarProtocol()
 
-  console.log('[Main] Starting backend service...')
-  const backendStarted = await startBackend()
-  if (!backendStarted) {
-    console.error('[Main] Failed to start backend service')
-  } else {
-    console.log('[Main] Backend service started at:', getBackendUrl())
-  }
-
+  // 先创建窗口让用户立即看到界面，后端在后台启动不阻塞窗口
   createWindow()
   createMenu()
   createTray()
@@ -230,6 +237,9 @@ app.whenReady().then(async () => {
   registerIpcHandlers(mainWindow)
   registerDesktopPetIpc(mainWindow)
   registerAvatarIpc()
+
+  console.log('[Main] Starting backend service in background...')
+  startBackendInBackground()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -9,6 +9,7 @@ import asyncio
 import io
 import os
 import shutil
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
@@ -20,8 +21,20 @@ from loguru import logger
 from app.runtime.provider.base import TTSProvider
 
 
-# 模型目录（相对于 backend 根目录）
-_DEFAULT_MODEL_DIR = Path(__file__).resolve().parents[4] / "models" / "tts" / "vits-melo-tts-zh_en"
+def _resolve_model_dir() -> Path:
+    # 解析 vits-melo-tts-zh_en 模型目录（按优先级）：
+    # 1. LUOMINEST_TTS_MODEL_DIR 环境变量（绝对路径覆盖，运维/测试用）
+    # 2. 打包态：sys.executable 指向 luominest-backend.exe，模型与其同级
+    # 3. 开发态：__file__ 在 backend/app/runtime/provider/tts/，parents[4] = backend/
+    env_dir = os.environ.get("LUOMINEST_TTS_MODEL_DIR")
+    if env_dir:
+        return Path(env_dir)
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent / "models" / "tts" / "vits-melo-tts-zh_en"
+    return Path(__file__).resolve().parents[4] / "models" / "tts" / "vits-melo-tts-zh_en"
+
+
+_DEFAULT_MODEL_DIR = _resolve_model_dir()
 
 # 模型下载地址（sherpa-onnx GitHub Releases）
 _MODEL_DOWNLOAD_URL = (

@@ -35,6 +35,22 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] JSON→SQLite migration skipped: {e}")
 
+    # 加载持久化平台实例到 registry（替代 platform.py 的 import-time 调用，须在 init_db 之后）
+    try:
+        from app.api.v1.endpoints.platform import _load_persisted_instances
+        _load_persisted_instances()
+        logger.info("[LuomiNest] Platform instances loaded from DB")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Platform instances load skipped: {e}")
+
+    # 初始化默认 repo sources（替代 repo_source.py 的 import-time 调用，须在 init_db 之后）
+    try:
+        from app.api.v1.endpoints.repo_source import _ensure_defaults
+        _ensure_defaults()
+        logger.info("[LuomiNest] Repo sources defaults ensured")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Repo sources init skipped: {e}")
+
     # 懒加载 LLM providers（替代 adapter.py 的 import-time 加载，解耦模块加载与 DB init）
     try:
         from app.runtime.provider.llm.adapter import llm_adapter
@@ -212,6 +228,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Memory engine shutdown skipped: {e}")
 
+    # 关闭 LLM provider httpx 客户端
+    try:
+        from app.runtime.provider.llm.adapter import llm_adapter
+        await llm_adapter.aclose()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] LLM adapter close skipped: {e}")
+
     # 关闭数据库引擎
     try:
         from app.infrastructure.database import dispose_db
@@ -228,7 +251,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="LuomiNest API",
         description="LuomiNest - AI Agent Platform Backend API",
-        version="0.7.0",
+        version=settings.APP_VERSION,
         docs_url="/docs" if settings.DEBUG else None,
         redoc_url="/redoc" if settings.DEBUG else None,
         lifespan=lifespan,
@@ -313,7 +336,7 @@ def create_app() -> FastAPI:
     async def root():
         return {
             "name": "LuomiNest",
-            "version": "0.7.0",
+            "version": settings.APP_VERSION,
             "docs": "/docs" if settings.DEBUG else "disabled",
         }
 

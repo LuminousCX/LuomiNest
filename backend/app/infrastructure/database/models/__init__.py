@@ -10,6 +10,7 @@ from app.infrastructure.database.models.marketplace_stat import MarketplaceStat
 from app.infrastructure.database.models.migration_meta import MigrationMeta
 from app.infrastructure.database.models.platform_instance import PlatformInstance
 from app.infrastructure.database.models.provider import Provider
+from app.infrastructure.database.models.provider_credential import ProviderCredential
 from app.infrastructure.database.models.repo_source import RepoSource
 from app.infrastructure.database.models.usage_record import UsageRecord
 
@@ -22,6 +23,7 @@ __all__ = [
     "MigrationMeta",
     "PlatformInstance",
     "Provider",
+    "ProviderCredential",
     "RepoSource",
     "UsageRecord",
 ]

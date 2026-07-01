@@ -109,6 +109,12 @@ llm_adapter._provider_configs = {}
 result = llm_adapter.list_providers()
 check("list_providers triggers lazy load", llm_adapter._loaded is True)
 check("list_providers returns providers", len(result) > 0, f"count={len(result)}")
+check("list_providers returns api_key_prefix field",
+      all("api_key_prefix" in p for p in result),
+      f"fields={[list(p.keys()) for p in result]}")
+check("list_providers returns api_key_set field",
+      all("api_key_set" in p for p in result),
+      f"fields={[list(p.keys()) for p in result]}")
 print(f"  list_providers() returned {len(result)} providers")
 
 

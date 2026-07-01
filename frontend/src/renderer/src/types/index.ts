@@ -205,6 +205,7 @@ export interface ModelProvider {
   vendor: string
   baseUrl: string
   apiKeySet: boolean
+  apiKeyPrefix: string
   isDefault: boolean
   defaultModel: string
   selectedModels: string[]

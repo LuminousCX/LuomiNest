@@ -158,9 +158,6 @@ def _load_persisted_instances():
             logger.warning(f"[PlatformAPI] Failed to load instance {inst_id}: {e}")
 
 
-_load_persisted_instances()
-
-
 @router.get("/types", response_model=list[PlatformTypeResponse])
 async def get_platform_types():
     logger.info("[API] GET /platforms/types - Listing platform adapter types")

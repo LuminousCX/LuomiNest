@@ -346,6 +346,8 @@ interface RawProvider {
   base_url?: string
   apiKeySet?: boolean
   api_key_set?: boolean
+  apiKeyPrefix?: string
+  api_key_prefix?: string
   defaultModel?: string
   default_model?: string
   isDefault?: boolean
@@ -510,6 +512,11 @@ export const useModelStore = defineStore('model', () => {
     defaultTemperature: 0.7,
     defaultMaxTokens: 4096,
     defaultTopP: 0.9,
+    reasonerProvider: '',
+    reasonerModel: '',
+    reasonerTemperature: undefined,
+    reasonerMaxTokens: undefined,
+    reasonerEffort: '',
   })
   const ttsConfig = ref<TTSConfig>({
     provider: '',
@@ -607,18 +614,22 @@ export const useModelStore = defineStore('model', () => {
     try {
       const result = await apiGet<RawProvider[]>('/models/providers')
       const raw = Array.isArray(result) ? result : []
-      providers.value = raw.map(p => ({
-        id: p.id,
-        name: p.name,
-        type: p.type || p.vendor || 'openai_compatible',
-        vendor: p.vendor || '',
-        baseUrl: p.baseUrl || p.base_url || '',
-        apiKeySet: p.apiKeySet || p.api_key_set || false,
-        defaultModel: p.defaultModel || p.default_model || '',
-        isDefault: p.isDefault || p.is_default || false,
-        selectedModels: p.selectedModels || p.selected_models || [],
-        models: (p.models || []) as { id: string; name: string }[],
-      }))
+      providers.value = raw.map(p => {
+        const prefix = p.apiKeyPrefix || p.api_key_prefix || ''
+        return {
+          id: p.id,
+          name: p.name,
+          type: p.type || p.vendor || 'openai_compatible',
+          vendor: p.vendor || '',
+          baseUrl: p.baseUrl || p.base_url || '',
+          apiKeyPrefix: prefix,
+          apiKeySet: Boolean(prefix) || p.apiKeySet || p.api_key_set || false,
+          defaultModel: p.defaultModel || p.default_model || '',
+          isDefault: p.isDefault || p.is_default || false,
+          selectedModels: p.selectedModels || p.selected_models || [],
+          models: (p.models || []) as { id: string; name: string }[],
+        }
+      })
 
       for (const provider of providers.value) {
         if (provider.id && provider.models.length === 0) {

@@ -1,79 +1,16 @@
-import json
-import os
 import threading
 import time
 from typing import AsyncIterator
+
+from loguru import logger
+
 from app.core.config import settings
 from app.core.exceptions import ProviderError
-from app.infrastructure.database.config_store import lumi_config_store
 from app.runtime.provider.llm.providers import (
     OpenAICompatibleProvider,
     PROVIDER_TEMPLATES,
 )
-from loguru import logger
-
-
-PROVIDER_NAMESPACE = "llm.providers."
-
-
-def _provider_key(provider_id: str, field: str) -> str:
-    return f"{PROVIDER_NAMESPACE}{provider_id}.{field}"
-
-
-def _load_saved_providers() -> list[dict]:
-    """从 LumiConfigStore 加载所有 provider 配置（api_key 自动解密）。"""
-    namespace = lumi_config_store.get_namespace(PROVIDER_NAMESPACE)
-    if not namespace:
-        return []
-    providers: dict[str, dict] = {}
-    for key, value in namespace.items():
-        if not key.startswith(PROVIDER_NAMESPACE):
-            continue
-        rest = key[len(PROVIDER_NAMESPACE):]
-        if "." not in rest:
-            continue
-        provider_id, field = rest.split(".", 1)
-        if provider_id not in providers:
-            providers[provider_id] = {"id": provider_id}
-        providers[provider_id][field] = value
-    logger.debug(f"[Adapter] Loaded {len(providers)} saved providers from LumiConfigStore")
-    return list(providers.values())
-
-
-def _save_providers_config(providers_data: list[dict]):
-    """保存所有 provider 配置到 LumiConfigStore（api_key 自动加密）。"""
-    lumi_config_store.delete_namespace(PROVIDER_NAMESPACE)
-    for cfg in providers_data:
-        provider_id = cfg.get("id", "")
-        if not provider_id:
-            continue
-        for field, value in cfg.items():
-            if field == "id":
-                continue
-            lumi_config_store.set(_provider_key(provider_id, field), value)
-    logger.success(f"[Adapter] Saved {len(providers_data)} providers to LumiConfigStore")
-
-
-def _migrate_legacy_plaintext():
-    """迁移旧版明文 providers.json 到 LumiConfigStore（仅执行一次）。"""
-    legacy_path = os.path.join(settings.DATA_DIR, "providers.json")
-    if not os.path.exists(legacy_path):
-        return
-    try:
-        with open(legacy_path, "r", encoding="utf-8") as f:
-            legacy_data = json.load(f)
-        if not isinstance(legacy_data, list) or not legacy_data:
-            os.remove(legacy_path)
-            return
-        if _load_saved_providers():
-            logger.info("[Adapter] LumiConfigStore already has providers, removing legacy file")
-            os.remove(legacy_path)
-            return
-        _save_providers_config(legacy_data)
-        os.remove(legacy_path)
-        logger.success(f"[Adapter] Migrated {len(legacy_data)} providers from plaintext to encrypted store")
-    except Exception as e:
-        logger.warning(f"[Adapter] Legacy migration failed: {e}")
+from app.runtime.provider.llm.types import LLMRequest, RouteHint
 
 
 def _create_provider_from_config(config: dict) -> OpenAICompatibleProvider:
@@ -116,12 +53,28 @@ class LLMAdapter:
         self.default_provider = settings.LLM_DEFAULT_PROVIDER
         self._loaded = False
         self._lock = threading.Lock()
+        # Repository 懒加载（避免 import 时触达 DB）
+        self._provider_repo = None
+        self._credential_repo = None
+        # 推理模型路由配置（从 model_config 加载）
+        self._reasoner_provider: str = ""
+        self._reasoner_model: str = ""
+        self._reasoner_temperature: float | None = None
+        self._reasoner_max_tokens: int | None = None
+        self._reasoner_effort: str = ""
         logger.info(f"[Adapter] LLMAdapter created, default={self.default_provider} (providers will load on first access)")
+
+    def _ensure_repos(self):
+        """懒加载 Repository（避免 import 时触达 DB）。"""
+        if self._provider_repo is None:
+            from app.infrastructure.database.repositories import ProviderRepository, ProviderCredentialRepository
+            self._provider_repo = ProviderRepository()
+            self._credential_repo = ProviderCredentialRepository()
 
     def ensure_providers_loaded(self):
         """懒加载 provider 配置。
 
-        首次调用时迁移旧版明文 providers.json 并从 LumiConfigStore 加载已保存的 providers。
+        首次调用时从 ProviderRepository 加载已保存的 providers（含解密 api_key）。
         后续调用无副作用。用 threading.Lock + _loaded 标志保证线程安全且只加载一次。
         在 lifespan 中显式调用一次；各访问方法也会兜底调用以防遗漏。
         """
@@ -131,23 +84,31 @@ class LLMAdapter:
             if self._loaded:
                 return
             logger.info("[Adapter] Loading providers (first access)...")
-            _migrate_legacy_plaintext()
+            self._ensure_repos()
             self._init_providers()
             self._loaded = True
             logger.success(f"[Adapter] Providers loaded: {len(self.providers)} providers, default={self.default_provider}")
 
     def _init_providers(self):
-        saved = _load_saved_providers()
+        """从 repo 加载 providers；无数据时走 fallback_chain 模板。"""
+        saved = self._provider_repo.get_all_ordered()
         if saved:
-            logger.info(f"[Adapter] Loading {len(saved)} saved providers...")
+            logger.info(f"[Adapter] Loading {len(saved)} saved providers from repo...")
             for cfg in saved:
                 try:
-                    provider = _create_provider_from_config(cfg)
-                    self.providers[cfg["id"]] = provider
-                    self._provider_configs[cfg["id"]] = cfg
+                    provider_id = cfg.get("id", "")
+                    if not provider_id:
+                        continue
+                    # 取活跃凭证（解密 api_key），注入 cfg 供 _create_provider_from_config 使用
+                    credential = self._credential_repo.get_active_credential(provider_id)
+                    cfg_with_key = dict(cfg)
+                    cfg_with_key["api_key"] = credential.get("api_key", "") if credential else ""
+                    provider = _create_provider_from_config(cfg_with_key)
+                    self.providers[provider_id] = provider
+                    self._provider_configs[provider_id] = cfg
                     if cfg.get("is_default"):
-                        self.default_provider = cfg["id"]
-                    logger.success(f"[Adapter] Loaded provider: {cfg['id']} ({cfg.get('name', cfg['id'])})")
+                        self.default_provider = provider_id
+                    logger.success(f"[Adapter] Loaded provider: {provider_id} ({cfg.get('name', provider_id)})")
                 except Exception as e:
                     logger.warning(f"[Adapter] Failed to load provider [{cfg.get('id')}]: {e}")
         else:
@@ -166,35 +127,54 @@ class LLMAdapter:
                     except Exception as e:
                         logger.warning(f"[Adapter] Failed to load provider [{name}]: {e}")
 
-    def _persist(self):
-        configs = list(self._provider_configs.values())
-        _save_providers_config(configs)
-
     def register_provider(self, name: str, provider: OpenAICompatibleProvider, config: dict, set_default: bool = False):
         self.ensure_providers_loaded()
         logger.info(f"[Adapter] Registering provider: {name}")
+        self._ensure_repos()
+
+        # 拆分元信息与凭证（api_key 不进 provider 表）
+        api_key = config.get("api_key", "")
+        meta = {k: v for k, v in config.items() if k != "api_key"}
+        self._provider_repo.save(name, meta)
+
+        if api_key:
+            self._credential_repo.save_credential(name, api_key)
+
         self.providers[name] = provider
         self._provider_configs[name] = config
         if set_default:
             self.default_provider = name
             logger.info(f"[Adapter] Set default provider to: {name}")
-        self._persist()
         logger.success(f"[Adapter] Provider registered: {name}")
 
     def update_provider(self, name: str, provider: OpenAICompatibleProvider, config: dict, set_default: bool = False):
         self.ensure_providers_loaded()
         logger.info(f"[Adapter] Updating provider: {name}")
+        self._ensure_repos()
+
+        api_key = config.get("api_key", "")
+        meta = {k: v for k, v in config.items() if k != "api_key"}
+        self._provider_repo.save(name, meta)
+
+        # api_key 为空字符串时不更新凭证（保留旧 key）
+        if api_key:
+            self._credential_repo.save_credential(name, api_key)
+
         self.providers[name] = provider
         self._provider_configs[name] = config
         if set_default:
             self.default_provider = name
             logger.info(f"[Adapter] Set default provider to: {name}")
-        self._persist()
         logger.success(f"[Adapter] Provider updated: {name}")
 
     def remove_provider(self, name: str):
         self.ensure_providers_loaded()
         logger.info(f"[Adapter] Removing provider: {name}")
+        self._ensure_repos()
+
+        self._provider_repo.delete(name)
+        self._credential_repo.delete_by_provider(name)
+
         if name in self.providers:
             del self.providers[name]
         if name in self._provider_configs:
@@ -203,7 +183,6 @@ class LLMAdapter:
             remaining = list(self.providers.keys())
             self.default_provider = remaining[0] if remaining else settings.LLM_DEFAULT_PROVIDER
             logger.info(f"[Adapter] Default provider changed to: {self.default_provider}")
-        self._persist()
         logger.success(f"[Adapter] Provider removed: {name}")
 
     def get_provider(self, name: str | None = None) -> OpenAICompatibleProvider:
@@ -217,7 +196,12 @@ class LLMAdapter:
 
     def get_provider_config(self, name: str) -> dict | None:
         self.ensure_providers_loaded()
-        return self._provider_configs.get(name)
+        self._ensure_repos()
+        # 优先从 repo 取（持久化数据），fallback chain 模板回退到内存
+        cfg = self._provider_repo.get(name)
+        if cfg is None:
+            return self._provider_configs.get(name)
+        return cfg
 
     def supports_tool_calls(self, provider_name: str | None = None, model: str = "") -> bool:
         try:
@@ -226,6 +210,26 @@ class LLMAdapter:
         except ProviderError:
             return False
 
+    def get_reasoner_provider(self) -> tuple[str, str, float | None, int | None, str] | None:
+        """返回 (provider_name, model, temperature, max_tokens, effort)，未配置返回 None。"""
+        if not self._reasoner_provider:
+            return None
+        return (
+            self._reasoner_provider,
+            self._reasoner_model,
+            self._reasoner_temperature,
+            self._reasoner_max_tokens,
+            self._reasoner_effort,
+        )
+
+    def apply_reasoner_config(self, config: dict):
+        """从 model_config 应用 reasoner_* 到内存。"""
+        self._reasoner_provider = config.get("reasoner_provider", "") or ""
+        self._reasoner_model = config.get("reasoner_model", "") or ""
+        self._reasoner_temperature = config.get("reasoner_temperature")
+        self._reasoner_max_tokens = config.get("reasoner_max_tokens")
+        self._reasoner_effort = config.get("reasoner_effort", "") or ""
+
     async def chat(
         self,
         messages: list[dict],
@@ -233,29 +237,57 @@ class LLMAdapter:
         stream: bool = False,
         provider_name: str | None = None,
         return_raw: bool = False,
+        route_hint: RouteHint = RouteHint.CHAT,
         **kwargs
     ) -> str | dict | AsyncIterator[dict]:
-        provider = self.get_provider(provider_name)
-        actual_provider = provider_name or self.default_provider
-        model = kwargs.get("model") or provider.default_model
-        logger.info(f"[LLM] Chat request: provider={actual_provider}, model={model}, messages={len(messages)}")
+        # 路由决策：未显式指定 provider_name 时按 route_hint 选择
+        actual_provider_name = provider_name
+        actual_model = kwargs.get("model")
+        if not provider_name:
+            if route_hint == RouteHint.REASONER and self._reasoner_provider:
+                actual_provider_name = self._reasoner_provider
+                actual_model = actual_model or self._reasoner_model
+                kwargs.setdefault("temperature", self._reasoner_temperature)
+                kwargs.setdefault("max_tokens", self._reasoner_max_tokens)
+                if self._reasoner_effort:
+                    kwargs.setdefault("reasoning_effort", self._reasoner_effort)
+            else:
+                # CHAT 和 AGENT 都走主模型（推理模型通常不支持工具调用）
+                actual_provider_name = self.default_provider
+
+        provider = self.get_provider(actual_provider_name)
+        model = actual_model or provider.default_model
+        logger.info(f"[LLM] Chat request: provider={actual_provider_name}, model={model}, messages={len(messages)}, route={route_hint.value}")
+
+        # 构建 LLMRequest（统一参数传递）
+        request = LLMRequest(
+            messages=messages,
+            tools=tools,
+            model=model,
+            temperature=kwargs.get("temperature"),
+            max_tokens=kwargs.get("max_tokens"),
+            top_p=kwargs.get("top_p"),
+            stream=stream,
+            return_raw=return_raw,
+            extra={k: v for k, v in kwargs.items() if k not in ("model", "temperature", "max_tokens", "top_p")},
+        )
 
         start_time = time.time()
         try:
-            result = await provider.chat(messages, tools, stream, return_raw=return_raw, **kwargs)
+            response = await provider.chat(request)
             elapsed = time.time() - start_time
-            if isinstance(result, str):
-                logger.success(f"[LLM] Chat response: provider={actual_provider}, elapsed={elapsed:.2f}s, len={len(result)}")
-            elif hasattr(result, '__aiter__'):
-                logger.info(f"[LLM] Chat stream started: provider={actual_provider}")
-            else:
-                reasoning_len = len(result.get("reasoning", "")) if isinstance(result, dict) else 0
-                logger.success(f"[LLM] Chat response: provider={actual_provider}, elapsed={elapsed:.2f}s, reasoning={reasoning_len}")
-            return result
+            logger.success(
+                f"[LLM] Chat response: provider={actual_provider_name}, elapsed={elapsed:.2f}s, "
+                f"content_len={len(response.content)}, reasoning_len={len(response.reasoning)}"
+            )
+            # 向后兼容：return_raw=True 返回 dict，否则返回 str
+            if return_raw:
+                return response.to_dict()
+            return response.content
         except Exception as e:
             elapsed = time.time() - start_time
-            logger.error(f"[LLM] Chat failed: provider={actual_provider}, elapsed={elapsed:.2f}s, error={e}")
-            return await self._fallback_chat(messages, tools, stream, return_raw=return_raw, **kwargs)
+            logger.error(f"[LLM] Chat failed: provider={actual_provider_name}, elapsed={elapsed:.2f}s, error={e}")
+            return await self._fallback_chat(messages, tools, stream, return_raw=return_raw, route_hint=route_hint, **kwargs)
 
     async def _fallback_chat(
         self,
@@ -263,6 +295,7 @@ class LLMAdapter:
         tools: list[dict] | None = None,
         stream: bool = False,
         return_raw: bool = False,
+        route_hint: RouteHint = RouteHint.CHAT,
         **kwargs
     ) -> str | dict | AsyncIterator[dict]:
         self.ensure_providers_loaded()
@@ -277,11 +310,25 @@ class LLMAdapter:
         for name in provider_names:
             try:
                 provider = self.providers[name]
+                model = kwargs.get("model") or provider.default_model
+                request = LLMRequest(
+                    messages=messages,
+                    tools=tools,
+                    model=model,
+                    temperature=kwargs.get("temperature"),
+                    max_tokens=kwargs.get("max_tokens"),
+                    top_p=kwargs.get("top_p"),
+                    stream=stream,
+                    return_raw=return_raw,
+                    extra={k: v for k, v in kwargs.items() if k not in ("model", "temperature", "max_tokens", "top_p")},
+                )
                 start_time = time.time()
-                result = await provider.chat(messages, tools, stream, return_raw=return_raw, **kwargs)
+                response = await provider.chat(request)
                 elapsed = time.time() - start_time
                 logger.success(f"[LLM] Fallback success: provider={name}, elapsed={elapsed:.2f}s")
-                return result
+                if return_raw:
+                    return response.to_dict()
+                return response.content
             except Exception as e:
                 last_error = e
                 logger.warning(f"[LLM] Fallback provider [{name}] failed: {e}")
@@ -299,24 +346,49 @@ class LLMAdapter:
         messages: list[dict],
         tools: list[dict] | None = None,
         provider_name: str | None = None,
+        route_hint: RouteHint = RouteHint.CHAT,
         **kwargs
-    ) -> AsyncIterator[dict]:
-        provider = self.get_provider(provider_name)
-        actual_provider = provider_name or self.default_provider
-        model = kwargs.get("model") or provider.default_model
-        logger.info(f"[LLM] Stream request: provider={actual_provider}, model={model}, messages={len(messages)}")
+    ) -> AsyncIterator:
+        # 路由决策：未显式指定 provider_name 时按 route_hint 选择
+        actual_provider_name = provider_name
+        actual_model = kwargs.get("model")
+        if not provider_name:
+            if route_hint == RouteHint.REASONER and self._reasoner_provider:
+                actual_provider_name = self._reasoner_provider
+                actual_model = actual_model or self._reasoner_model
+                kwargs.setdefault("temperature", self._reasoner_temperature)
+                kwargs.setdefault("max_tokens", self._reasoner_max_tokens)
+                if self._reasoner_effort:
+                    kwargs.setdefault("reasoning_effort", self._reasoner_effort)
+            else:
+                actual_provider_name = self.default_provider
+
+        provider = self.get_provider(actual_provider_name)
+        model = actual_model or provider.default_model
+        logger.info(f"[LLM] Stream request: provider={actual_provider_name}, model={model}, messages={len(messages)}, route={route_hint.value}")
+
+        request = LLMRequest(
+            messages=messages,
+            tools=tools,
+            model=model,
+            temperature=kwargs.get("temperature"),
+            max_tokens=kwargs.get("max_tokens"),
+            top_p=kwargs.get("top_p"),
+            stream=True,
+            extra={k: v for k, v in kwargs.items() if k not in ("model", "temperature", "max_tokens", "top_p")},
+        )
 
         chunk_count = 0
         start_time = time.time()
         try:
-            async for chunk in provider.chat_stream(messages, tools, **kwargs):
+            async for chunk in provider.chat_stream(request):
                 chunk_count += 1
                 yield chunk
             elapsed = time.time() - start_time
-            logger.success(f"[LLM] Stream completed: provider={actual_provider}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
+            logger.success(f"[LLM] Stream completed: provider={actual_provider_name}, chunks={chunk_count}, elapsed={elapsed:.2f}s")
         except Exception as e:
             elapsed = time.time() - start_time
-            logger.error(f"[LLM] Stream failed: provider={actual_provider}, elapsed={elapsed:.2f}s, error={e}")
+            logger.error(f"[LLM] Stream failed: provider={actual_provider_name}, elapsed={elapsed:.2f}s, error={e}")
             raise
 
     async def embed(self, text: str, provider_name: str | None = None) -> list[float]:
@@ -354,22 +426,28 @@ class LLMAdapter:
 
     def list_providers(self) -> list[dict]:
         self.ensure_providers_loaded()
+        self._ensure_repos()
         result = []
         for name, provider in self.providers.items():
             cfg = self._provider_configs.get(name, {})
-            api_key = getattr(provider, "api_key", "")
+            # 从凭证仓储取前缀（不暴露密文/明文）
+            try:
+                creds = self._credential_repo.list_credentials(name)
+                api_key_prefix = creds[0].get("api_key_prefix", "") if creds else ""
+            except Exception:
+                api_key_prefix = ""
             result.append({
                 "id": name,
                 "name": cfg.get("name", name),
                 "vendor": cfg.get("vendor", provider.provider_name),
                 "is_default": name == self.default_provider,
                 "base_url": getattr(provider, "base_url", ""),
-                "api_key_set": bool(api_key and api_key not in ("ollama", "lmstudio", "")),
+                "api_key_prefix": api_key_prefix,
+                "api_key_set": bool(api_key_prefix),
                 "default_model": getattr(provider, "default_model", ""),
                 "selected_models": cfg.get("selected_models", []),
             })
         return result
-
 
     async def test_provider(self, config: dict) -> dict:
         """临时构造 provider 并调用 list_models 检测 API/TOKEN 是否可用，不注册到全局。"""
@@ -390,6 +468,18 @@ class LLMAdapter:
                 "models": [],
                 "error": "Provider 测试失败，请检查配置或网络",
             }
+
+    async def aclose(self):
+        """关闭所有 provider 的 httpx client。"""
+        for provider in self.providers.values():
+            try:
+                await provider.aclose()
+            except Exception as e:
+                logger.warning(f"[Adapter] Failed to close provider: {e}")
+        self.providers.clear()
+        self._provider_configs.clear()
+        self._loaded = False
+        logger.info("[Adapter] All providers closed")
 
 
 llm_adapter = LLMAdapter()

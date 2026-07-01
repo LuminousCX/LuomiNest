@@ -4,6 +4,7 @@ import { Minus, Square, X, Minimize2 } from 'lucide-vue-next'
 import LumiBrandStar from './common/LumiBrandStar.vue'
 
 const isMaximized = ref(false)
+const appVersion = ref('')
 
 const handleMinimize = async () => {
   if (window.api) await window.api.window.minimize()
@@ -24,9 +25,16 @@ const checkMaximized = async () => {
   if (window.api) isMaximized.value = await window.api.window.isMaximized()
 }
 
-onMounted(() => {
+onMounted(async () => {
   checkMaximized()
   window.addEventListener('resize', checkMaximized)
+  if (window.api) {
+    try {
+      appVersion.value = await window.api.app.getVersion()
+    } catch {
+      appVersion.value = ''
+    }
+  }
 })
 
 onUnmounted(() => window.removeEventListener('resize', checkMaximized))
@@ -38,7 +46,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
       <div class="brand-mark">
         <LumiBrandStar :size="16" :animated="false" />
         <span class="brand-text lumi-gradient-text">LuomiNest</span>
-        <span class="brand-sub">LuminousChenXi v0.5.0</span>
+        <span class="brand-sub">LuminousChenXi{{ appVersion ? ` v${appVersion}` : '' }}</span>
       </div>
     </div>
     <div class="win-controls">

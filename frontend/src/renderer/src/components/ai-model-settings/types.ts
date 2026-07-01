@@ -29,6 +29,7 @@ export interface EditProviderForm {
   vendor: string
   baseUrl: string
   apiKey: string
+  apiKeyPrefix?: string
   defaultModel: string
   isDefault: boolean
 }
