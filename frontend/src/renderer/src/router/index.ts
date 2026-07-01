@@ -181,11 +181,53 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to) => {
+// 公开路由 allowlist — 无需登录态即可访问
+const PUBLIC_ROUTES = new Set(['Welcome', 'Splash', 'Login'])
+
+// Token 缓存：避免每次导航都走 IPC。登录/登出时通过 invalidateAuthToken() 清除
+let _cachedAuthToken: string | null | undefined
+
+const invalidateAuthToken = () => {
+  _cachedAuthToken = undefined
+}
+
+// 暴露给 LoginView 等组件在登录成功后调用，强制下次 beforeEach 重新读取 token
+if (typeof window !== 'undefined' && window.api?.auth) {
+  ;(window as any).__lumiInvalidateAuthToken = invalidateAuthToken
+}
+
+const hasAuthToken = async (): Promise<boolean> => {
+  if (_cachedAuthToken === undefined) {
+    try {
+      _cachedAuthToken = await window.api.auth.getToken() ?? null
+    } catch {
+      _cachedAuthToken = null
+    }
+  }
+  return _cachedAuthToken !== null
+}
+
+router.beforeEach(async (to) => {
   const title = to.meta.title as string | undefined
   if (title) {
     document.title = title
   }
+
+  // 公开路由直接放行
+  if (PUBLIC_ROUTES.has(to.name as string)) {
+    // 已登录用户访问 /login → 重定向到工作区，避免重复登录
+    if (to.name === 'Login' && await hasAuthToken()) {
+      return { name: 'Workspace' }
+    }
+    return true
+  }
+
+  // 受保护路由：无 token → 重定向到登录页，携带 redirect 参数
+  if (!(await hasAuthToken())) {
+    return { name: 'Login', query: { redirect: to.fullPath } }
+  }
+
+  return true
 })
 
 export default router

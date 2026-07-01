@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import {
   Monitor,
   ArrowRight,
@@ -17,6 +17,7 @@ import LumiInput from '../components/common/LumiInput.vue'
 import LumiCard from '../components/common/LumiCard.vue'
 
 const router = useRouter()
+const route = useRoute()
 
 type LoginMode = 'select' | 'local' | 'online'
 
@@ -35,13 +36,30 @@ const canOnlineLogin = computed(() =>
   onlineForm.value.email.trim().length > 0 && onlineForm.value.password.length > 0
 )
 
+// 登录成功后的目标路由：优先读取 redirect 查询参数，默认 /workspace
+const resolveRedirectTarget = (): string => {
+  const redirect = route.query.redirect
+  return typeof redirect === 'string' && redirect.startsWith('/')
+    ? redirect
+    : '/workspace'
+}
+
+// 通知路由守卫重新读取 token（Electron 主进程已自动生成，此处仅刷新缓存）
+const refreshAuthState = () => {
+  const invalidate = (window as any).__lumiInvalidateAuthToken
+  if (typeof invalidate === 'function') {
+    invalidate()
+  }
+}
+
 const handleLocalLogin = async () => {
   if (!canLocalLogin.value) return
   loginError.value = ''
   isLoggingIn.value = true
   setTimeout(() => {
     isLoggingIn.value = false
-    router.push('/workspace')
+    refreshAuthState()
+    router.push(resolveRedirectTarget())
   }, 800)
 }
 
@@ -56,7 +74,8 @@ const handleOnlineLogin = async () => {
 }
 
 const handleSkip = () => {
-  router.push('/workspace')
+  refreshAuthState()
+  router.push(resolveRedirectTarget())
 }
 
 const goBack = () => {

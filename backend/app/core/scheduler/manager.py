@@ -84,6 +84,26 @@ class LuomiSchedulerManager:
             logger.info("[LuomiScheduler] 调度器已关闭")
         self._started = False
 
+    def add_job(
+        self,
+        func: Callable[..., Any],
+        trigger: Any,
+        id: str,
+        replace_existing: bool = True,
+        **kwargs: Any,
+    ) -> bool:
+        """添加内部维护任务（非用户 scheduled_task），如周期清理。
+
+        供 app_factory 等外部模块调用，避免直接访问 _scheduler 私有属性。
+        返回 True 表示添加成功，False 表示调度器未运行。
+        """
+        if not self._scheduler or not self._scheduler.running:
+            logger.warning(f"[LuomiScheduler] add_job skipped (scheduler not running): id={id}")
+            return False
+        self._scheduler.add_job(func, trigger=trigger, id=id, replace_existing=replace_existing, **kwargs)
+        logger.info(f"[LuomiScheduler] Internal job added: id={id}")
+        return True
+
     async def _load_persisted_tasks(self) -> None:
         """从配置文件加载持久化任务"""
         if not self._config_file.exists():
