@@ -9,6 +9,7 @@ from .models import MemoryData, FactItem, FACT_CATEGORIES, _SUMMARY_SECTION_MAP,
 from .prompts import _FACT_EXTRACT_PROMPT, _DISTILL_PROMPT, _MERGE_SUMMARY_PROMPT, _SUMMARY_EXTRACT_PROMPT, _KNOWLEDGE_EXTRACT_PROMPT
 from .store import MemoryStore
 from .fact_manager import FactManager
+from app.runtime.provider.llm.types import RouteHint
 
 
 class MemoryExtractor:
@@ -54,6 +55,7 @@ class MemoryExtractor:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
                 max_tokens=500,
+                route_hint=RouteHint.REASONER,
             )
             response_text = (
                 result.strip() if isinstance(result, str) else str(result).strip()
@@ -176,6 +178,7 @@ class MemoryExtractor:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=2000,
+                route_hint=RouteHint.REASONER,
             )
             response_text = (
                 result.strip() if isinstance(result, str) else str(result).strip()
@@ -267,6 +270,7 @@ class MemoryExtractor:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=2000,
+                route_hint=RouteHint.REASONER,
             )
             response_text = (
                 result.strip() if isinstance(result, str) else str(result).strip()
@@ -297,6 +301,7 @@ class MemoryExtractor:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=1000,
+                route_hint=RouteHint.REASONER,
             )
             response_text = (
                 result.strip() if isinstance(result, str) else str(result).strip()
@@ -331,6 +336,7 @@ class MemoryExtractor:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=1500,
+                route_hint=RouteHint.REASONER,
             )
             response_text = (
                 result.strip() if isinstance(result, str) else str(result).strip()

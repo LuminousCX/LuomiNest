@@ -18,6 +18,7 @@ from app.runtime.platform.registry import get_adapter, get_instance, increment_m
 from app.runtime.platform.platform_logger import platform_logger
 from app.infrastructure.database.conversation_store import conversation_store
 from app.services.context_service import context_service
+from app.runtime.provider.llm.types import RouteHint
 
 
 class LuomiNestPlatformRouter:
@@ -258,6 +259,7 @@ class LuomiNestPlatformRouter:
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                route_hint=RouteHint.CHAT,
             )
         except Exception as e:
             error_tb = traceback.format_exc()

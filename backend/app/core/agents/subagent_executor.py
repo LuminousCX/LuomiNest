@@ -27,6 +27,7 @@ from app.core.agents.lifecycle import (
 )
 from app.core.tools.orchestrator import tool_orchestrator
 from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.types import RouteHint
 
 
 # 子 Agent 事件回调类型：接收事件字典，异步返回 None
@@ -326,7 +327,19 @@ class SubagentExecutor:
         consensus_content: str | None = None,
         cancel_event: asyncio.Event | None = None,
     ) -> str:
-        """运行子 Agent 的工具调用循环"""
+        """运行子 Agent 的工具调用循环（基于 AgentRunner.run_non_stream）。
+
+        通过 AgentRunner + 中间件管道实现：
+        - 取消检查由 SubagentCancelMiddleware（before_model）+ execute_fn 双重保障
+        - 循环边界由 LoopGuardMiddleware 检测
+        - 工具执行由 ToolExecutionMiddleware 处理
+        - usage 记录由 UsageTrackMiddleware 处理
+
+        事件回调（running/tool_call/tool_result）通过 llm_call_fn 和 execute_fn 闭包发射，
+        无需新建中间件。delegate_to_subagent 通过自定义 execute_fn 处理，保持嵌套深度传递。
+        """
+        from app.core.agents.middleware.base import AgentContext
+
         # 构建初始消息
         user_content = task
         if context:
@@ -337,7 +350,7 @@ class SubagentExecutor:
             {"role": "user", "content": user_content},
         ]
 
-        # 获取子 Agent 可用工具
+        # 获取子 Agent 可用工具（已按深度过滤）
         tools = self._get_tools_for_subagent(depth)
 
         # 解析 provider 和 model
@@ -348,135 +361,131 @@ class SubagentExecutor:
         # 检查 provider 是否支持工具调用
         use_tools = bool(tools) and llm_adapter.supports_tool_calls(actual_provider, model)
 
-        content = ""
-        for iteration in range(self.max_iterations):
-            # 协作式取消检查
+        # 构建 AgentContext
+        ctx = AgentContext(
+            messages=messages,
+            tools=tools if use_tools else None,
+            route_hint=RouteHint.AGENT,
+            state={"provider": actual_provider, "model": model},
+            extra={
+                "scene": "subagent",
+                "is_stream": False,
+                "cancel_event": cancel_event,
+                "subagent_id": subagent_id,
+                "agent_id": subagent_id,
+            },
+        )
+
+        # llm_call_fn：发射 running 事件 + 调用 LLM（非流式，return_raw=True）
+        async def llm_call_fn(ctx):
             if cancel_event is not None and cancel_event.is_set():
-                logger.info(
-                    f"[SubagentExecutor] 子 Agent {subagent_id} 在迭代 {iteration + 1} 被取消"
-                )
                 raise asyncio.CancelledError()
 
             logger.info(
-                f"[SubagentExecutor] 子 Agent {subagent_id} 第 {iteration + 1} 轮调用"
+                f"[SubagentExecutor] 子 Agent {subagent_id} 第 {ctx.iteration + 1} 轮调用"
             )
 
-            # 推送 running 事件（含当前迭代）
             await self._emit_event(event_callback, {
                 "subagent_id": subagent_id,
                 "status": "running",
                 "task": task,
                 "depth": depth,
-                "iteration": iteration,
-                "progress": f"第 {iteration + 1} 轮思考中",
+                "iteration": ctx.iteration,
+                "progress": f"第 {ctx.iteration + 1} 轮思考中",
             })
 
-            # 调用 LLM（非流式，return_raw=True 以获取 tool_calls）
-            try:
-                result = await llm_adapter.chat(
-                    messages=messages,
-                    tools=tools if use_tools else None,
-                    stream=False,
-                    return_raw=True,
-                    provider_name=actual_provider,
-                    model=model,
-                )
-            except Exception as e:
-                logger.error(
-                    f"[SubagentExecutor] LLM 调用失败: id={subagent_id}, error={e}"
-                )
-                return f"子 Agent LLM 调用失败: {e}"
+            return await llm_adapter.chat(
+                messages=ctx.messages,
+                tools=tools if use_tools else None,
+                stream=False,
+                return_raw=True,
+                provider_name=actual_provider,
+                model=model,
+                route_hint=RouteHint.AGENT,
+            )
 
-            # 解析响应
-            if isinstance(result, dict):
-                content = result.get("content", "")
-                tool_calls = result.get("tool_calls", [])
+        # 自定义 execute_fn：delegate_to_subagent 深度传递 + 事件发射
+        async def execute_fn(tool_call):
+            if cancel_event is not None and cancel_event.is_set():
+                raise asyncio.CancelledError()
+
+            tc_id = tool_call.get("id", "")
+            tc_function = tool_call.get("function", {})
+            tc_name = tc_function.get("name", "")
+            tc_args = tc_function.get("arguments", "{}")
+
+            logger.info(
+                f"[SubagentExecutor] 子 Agent {subagent_id} 调用工具: "
+                f"{tc_name} (iteration={ctx.iteration + 1})"
+            )
+
+            await self._emit_event(event_callback, {
+                "subagent_id": subagent_id,
+                "status": "running",
+                "task": task,
+                "depth": depth,
+                "iteration": ctx.iteration,
+                "tool_name": tc_name,
+                "tool_args": tc_args,
+                "progress": f"调用工具 {tc_name}",
+            })
+
+            if tc_name == "delegate_to_subagent":
+                tool_msg = await self._handle_nested_delegate(
+                    tc_args, depth, actual_provider, model, subagent_id, event_callback,
+                    consensus_content=consensus_content,
+                    cancel_event=cancel_event,
+                    tc_id=tc_id,
+                )
             else:
-                content = str(result)
-                tool_calls = []
+                tool_msg = await tool_orchestrator.execute_tool_call(tool_call)
 
-            # 无工具调用，返回最终结果
-            if not tool_calls or not use_tools:
-                logger.info(
-                    f"[SubagentExecutor] 子 Agent {subagent_id} 完成，"
-                    f"无更多工具调用，返回最终结果"
-                )
-                return content or "(子 Agent 未返回内容)"
+            tool_output = tool_msg.get("content", "") if isinstance(tool_msg, dict) else str(tool_msg)
 
-            # 有工具调用，执行工具
-            # 添加 assistant 消息（含 tool_calls）
-            messages.append({
-                "role": "assistant",
-                "content": content or "",
-                "tool_calls": tool_calls,
+            await self._emit_event(event_callback, {
+                "subagent_id": subagent_id,
+                "status": "running",
+                "task": task,
+                "depth": depth,
+                "iteration": ctx.iteration,
+                "tool_name": tc_name,
+                "tool_output": tool_output[:500] if tool_output else "",
+                "progress": f"工具 {tc_name} 完成",
             })
 
-            for tc in tool_calls:
-                # 工具调用前再次检查取消
-                if cancel_event is not None and cancel_event.is_set():
-                    raise asyncio.CancelledError()
+            logger.info(
+                f"[SubagentExecutor] 子 Agent {subagent_id} 工具 {tc_name} 完成"
+            )
+            return tool_msg
 
-                tc_id = tc.get("id", "")
-                tc_function = tc.get("function", {})
-                tc_name = tc_function.get("name", "")
-                tc_args = tc_function.get("arguments", "{}")
+        # 创建 runner（scene=subagent 自动包含 SubagentCancelMiddleware）
+        runner = tool_orchestrator.create_runner({
+            "scene": "subagent",
+            "is_stream": False,
+            "max_iterations": self.max_iterations,
+        })
+        runner._execute_fn = execute_fn
 
-                logger.info(
-                    f"[SubagentExecutor] 子 Agent {subagent_id} 调用工具: "
-                    f"{tc_name} (iteration={iteration + 1})"
-                )
+        state = await runner.run_non_stream(ctx, llm_call_fn)
 
-                # 推送 tool_call 事件
-                await self._emit_event(event_callback, {
-                    "subagent_id": subagent_id,
-                    "status": "running",
-                    "task": task,
-                    "depth": depth,
-                    "iteration": iteration,
-                    "tool_name": tc_name,
-                    "tool_args": tc_args,
-                    "progress": f"调用工具 {tc_name}",
-                })
+        # 被取消时抛 CancelledError（由 execute() 统一处理）
+        if state.get("aborted") and cancel_event is not None and cancel_event.is_set():
+            raise asyncio.CancelledError()
 
-                # 如果是委派工具，传递 depth + 1
-                if tc_name == "delegate_to_subagent":
-                    tool_msg = await self._handle_nested_delegate(
-                        tc_args, depth, actual_provider, model, subagent_id, event_callback,
-                        consensus_content=consensus_content,
-                        cancel_event=cancel_event,
-                        tc_id=tc_id,
-                    )
-                else:
-                    tool_msg = await tool_orchestrator.execute_tool_call(tc)
-
-                tool_output = tool_msg.get("content", "") if isinstance(tool_msg, dict) else str(tool_msg)
-                messages.append(tool_msg)
-
-                # 推送 tool_result 事件
-                await self._emit_event(event_callback, {
-                    "subagent_id": subagent_id,
-                    "status": "running",
-                    "task": task,
-                    "depth": depth,
-                    "iteration": iteration,
-                    "tool_name": tc_name,
-                    "tool_output": tool_output[:500] if tool_output else "",
-                    "progress": f"工具 {tc_name} 完成",
-                })
-
-                logger.info(
-                    f"[SubagentExecutor] 子 Agent {subagent_id} 工具 {tc_name} 完成"
-                )
+        content = state.get("content", "")
 
         # 达到最大迭代次数
-        logger.warning(
-            f"[SubagentExecutor] 子 Agent {subagent_id} 达到最大迭代次数 "
-            f"({self.max_iterations})"
-        )
-        return (
-            f"子 Agent 达到最大工具调用迭代次数 ({self.max_iterations})，"
-            f"最后内容: {content[:500] if content else '(空)'}"
-        )
+        if state.get("aborted") and ctx.iteration >= self.max_iterations:
+            logger.warning(
+                f"[SubagentExecutor] 子 Agent {subagent_id} 达到最大迭代次数 "
+                f"({self.max_iterations})"
+            )
+            return (
+                f"子 Agent 达到最大工具调用迭代次数 ({self.max_iterations})，"
+                f"最后内容: {content[:500] if content else '(空)'}"
+            )
+
+        return content or "(子 Agent 未返回内容)"
 
     async def _handle_nested_delegate(
         self,

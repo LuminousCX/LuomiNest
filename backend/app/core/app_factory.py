@@ -18,12 +18,11 @@ async def lifespan(app: FastAPI):
     logger.info(f"[LuomiNest] Starting application...")
     logger.info(f"[LuomiNest] Environment: {'Development' if settings.DEBUG else 'Production'}")
 
-    # 初始化 SQLite 数据库（Facade 层依赖，必须在任何 store 操作前完成）
-    try:
-        from app.infrastructure.database import init_db
-        await init_db()
-    except Exception as e:
-        logger.error(f"[LuomiNest] Database init failed: {e}")
+    # 初始化 SQLite 数据库（核心依赖，必须在任何 store 操作前完成）
+    # 失败直接 raise 让进程退出，避免"能访问但功能全坏"的半死状态
+    from app.infrastructure.database import init_db
+    await init_db()
+    logger.success("[LuomiNest] Database initialized")
 
     # JSON → SQLite 幂等迁移（已迁移则跳过，旧文件不删除）
     try:
@@ -177,13 +176,12 @@ async def lifespan(app: FastAPI):
             except Exception as cleanup_err:
                 logger.warning(f"[LuomiNest] Periodic cleanup failed: {cleanup_err}")
 
-        if luomi_scheduler._scheduler is not None:
-            luomi_scheduler._scheduler.add_job(
-                _periodic_cleanup,
-                trigger=IntervalTrigger(hours=24),
-                id="lumi_periodic_cleanup",
-                replace_existing=True,
-            )
+        if luomi_scheduler.add_job(
+            _periodic_cleanup,
+            trigger=IntervalTrigger(hours=24),
+            id="lumi_periodic_cleanup",
+            replace_existing=True,
+        ):
             logger.info(f"[LuomiNest] Periodic cleanup job registered (every 24h)")
     except Exception as e:
         logger.warning(f"[LuomiNest] Periodic cleanup registration skipped: {e}")
@@ -305,8 +303,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
 
     @app.exception_handler(LuomiNestError)
@@ -320,9 +318,11 @@ def create_app() -> FastAPI:
     @app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception):
         logger.error(f"[Exception] Unhandled exception: {exc}")
+        # 生产环境不泄露内部异常细节（路径/SQL/堆栈），仅开发环境返回详情辅助调试
+        message = str(exc) if settings.DEBUG else "服务器内部错误，请查看后端日志"
         return JSONResponse(
             status_code=500,
-            content={"error": {"code": "INTERNAL_ERROR", "message": str(exc)}},
+            content={"error": {"code": "INTERNAL_ERROR", "message": message}},
         )
 
     app.include_router(api_router, prefix="/api/v1")

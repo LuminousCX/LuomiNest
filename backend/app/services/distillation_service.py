@@ -5,6 +5,7 @@ from loguru import logger
 
 from app.engines.memory import get_memory_engine
 from app.engines.memory.prompts import _DISTILL_PROMPT_ROUND, _MERGE_SUMMARY_PROMPT
+from app.runtime.provider.llm.types import RouteHint
 
 # 主 Agent 唯一标识（与 context_service.MAIN_AGENT_ID 保持一致）
 _MAIN_AGENT_ID = "luominest_main_agent"
@@ -208,6 +209,7 @@ class DistillationService:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=500,
+                route_hint=RouteHint.CHAT,
             )
             response_text = (
                 result.strip() if isinstance(result, str) else str(result).strip()
@@ -240,6 +242,7 @@ class DistillationService:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=800,
+                route_hint=RouteHint.CHAT,
             )
             response_text = (
                 result.strip() if isinstance(result, str) else str(result).strip()

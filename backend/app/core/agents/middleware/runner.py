@@ -224,10 +224,11 @@ class AgentRunner:
         """
         if event.type == "content":
             content = event.data.get("content", "")
+            emotion = event.data.get("emotion")
             if content:
                 ctx.state["iteration_content"] += content
                 ctx.state["content"] = ctx.state.get("content", "") + content
-            return SSEEmitMiddleware.format_content_sse(ctx, content)
+            return SSEEmitMiddleware.format_content_sse(ctx, content, "", emotion)
 
         if event.type == "reasoning":
             rc = event.data.get("reasoning", "")

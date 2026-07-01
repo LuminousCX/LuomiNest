@@ -270,10 +270,7 @@ class MemoryEngine:
             if self._embedding_provider is None:
                 try:
                     from app.runtime.provider.llm.adapter import llm_adapter
-                    if hasattr(llm_adapter, "_provider"):
-                        self._embedding_provider = llm_adapter._provider
-                    else:
-                        logger.warning("[Memory] llm_adapter has no _provider attribute")
+                    self._embedding_provider = llm_adapter.get_provider()
                 except Exception as e:
                     logger.warning(f"[Memory] Failed to access llm_adapter for embedding provider: {e}")
 

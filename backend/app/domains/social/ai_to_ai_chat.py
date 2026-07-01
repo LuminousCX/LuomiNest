@@ -5,6 +5,7 @@ from loguru import logger
 
 from app.infrastructure.database.json_store import agents_store
 from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.types import RouteHint
 
 
 class AIToAIChat:
@@ -48,6 +49,7 @@ class AIToAIChat:
                     model=model,
                     temperature=0.8,
                     max_tokens=300,
+                    route_hint=RouteHint.CHAT,
                 )
 
                 now = datetime.now(timezone.utc).isoformat()
