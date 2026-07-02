@@ -16,6 +16,7 @@ from typing import Any
 
 from loguru import logger
 
+from app.runtime.provider.llm.types import RouteHint
 from app.core.context import ContextTruncator, TokenCounter
 
 # ===== 阈值常量 =====
@@ -199,6 +200,7 @@ class WorkflowContextManager:
                 model=model,
                 temperature=0.3,
                 max_tokens=HISTORY_SUMMARY_MAX_TOKENS,
+                route_hint=RouteHint.REASONER,
             )
 
             summary_content = ""

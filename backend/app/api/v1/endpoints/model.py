@@ -1,6 +1,4 @@
 import time
-import json
-import os
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
@@ -9,34 +7,33 @@ from app.runtime.provider.llm.adapter import llm_adapter, _create_provider_from_
 from app.runtime.provider.llm.providers import PROVIDER_TEMPLATES
 from app.core.config import settings
 from app.core.exceptions import NotFoundError, ValidationError
+from app.infrastructure.database.config_store import lumi_config_store
 
 router = APIRouter(prefix="/models", tags=["models"])
 
-MODEL_CONFIG_FILE = os.path.join(settings.DATA_DIR, "model_config.json")
-
 
 def _load_model_config() -> dict:
-    if not os.path.exists(MODEL_CONFIG_FILE):
-        return {}
-    try:
-        with open(MODEL_CONFIG_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.warning(f"[ModelConfig] Failed to load: {e}")
-        return {}
+    """从 config_items['model_config'] 加载模型配置。"""
+    saved = lumi_config_store.get("model_config", {})
+    return saved if isinstance(saved, dict) else {}
 
 
 def _save_model_config(config: dict):
-    os.makedirs(os.path.dirname(MODEL_CONFIG_FILE), exist_ok=True)
+    """保存模型配置到 config_items['model_config']。"""
     try:
-        with open(MODEL_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-        logger.success(f"[ModelConfig] Saved to {MODEL_CONFIG_FILE}")
+        lumi_config_store.set("model_config", config)
+        logger.success("[ModelConfig] Saved to config_items['model_config']")
     except Exception as e:
         logger.error(f"[ModelConfig] Failed to save: {e}")
 
 
-def _apply_model_config():
+def apply_model_config_from_db():
+    """从 DB 应用 model_config 到运行时（settings + llm_adapter.default_provider + reasoner_*）。
+
+    替代原模块级 import-time 调用，由 lifespan 在 DB init + 迁移后显式调用。
+    调用顺序需在 llm_adapter.ensure_providers_loaded() 之后，以保证 model_config 的
+    default_provider 覆盖 provider 配置中的 is_default 标志（与原行为一致）。
+    """
     saved = _load_model_config()
     if not saved:
         return
@@ -50,10 +47,9 @@ def _apply_model_config():
         settings.LLM_DEFAULT_MAX_TOKENS = saved["default_max_tokens"]
     if saved.get("default_top_p") is not None:
         settings.LLM_DEFAULT_TOP_P = saved["default_top_p"]
+    # 应用推理模型路由配置到 adapter 内存
+    llm_adapter.apply_reasoner_config(saved)
     logger.info(f"[ModelConfig] Applied saved config: provider={saved.get('default_provider')}, model={saved.get('default_model')}")
-
-
-_apply_model_config()
 
 
 class ProviderCreate(BaseModel):
@@ -88,7 +84,8 @@ class ProviderResponse(BaseModel):
     name: str
     vendor: str
     base_url: str = Field(alias="baseUrl")
-    api_key_set: bool = Field(alias="apiKeySet")
+    api_key_prefix: str = Field(alias="apiKeyPrefix", default="")
+    api_key_set: bool = Field(alias="apiKeySet", default=False)
     default_model: str = Field(alias="defaultModel")
     is_default: bool = Field(alias="isDefault")
     selected_models: list[str] = Field(alias="selectedModels", default_factory=list)
@@ -146,13 +143,27 @@ def _build_provider_response(provider_id: str) -> ProviderResponse:
     if not provider:
         raise NotFoundError(f"Provider [{provider_id}] not found")
 
-    api_key = getattr(provider, "api_key", "")
+    # 从凭证仓储取前缀（不暴露密文/明文）
+    api_key_prefix = ""
+    try:
+        llm_adapter._ensure_repos()
+        creds = llm_adapter._credential_repo.list_credentials(provider_id)
+        if creds:
+            api_key_prefix = creds[0].get("api_key_prefix", "")
+    except Exception as exc:
+        logger.warning(
+            "Failed to load credential prefix for provider [{}]: {}",
+            provider_id,
+            exc,
+        )
+
     return ProviderResponse(
         id=provider_id,
         name=cfg.get("name", provider_id),
         vendor=cfg.get("vendor", provider.provider_name),
         base_url=getattr(provider, "base_url", ""),
-        api_key_set=bool(api_key and api_key not in ("ollama", "lmstudio", "")),
+        api_key_prefix=api_key_prefix,
+        api_key_set=bool(api_key_prefix),
         default_model=getattr(provider, "default_model", ""),
         is_default=provider_id == llm_adapter.default_provider,
         selected_models=cfg.get("selected_models", []),
@@ -188,7 +199,8 @@ async def list_providers():
             name=p["name"],
             vendor=p["vendor"],
             base_url=p["base_url"],
-            api_key_set=p["api_key_set"],
+            api_key_prefix=p.get("api_key_prefix", ""),
+            api_key_set=p.get("api_key_set", False),
             default_model=p["default_model"],
             is_default=p["is_default"],
             selected_models=p.get("selected_models", []),
@@ -232,12 +244,23 @@ async def add_provider(request: ProviderCreate):
     except Exception as e:
         logger.warning(f"[API] POST /models/providers - Failed to fetch models: {e}")
 
+    # 从凭证仓储取前缀（register_provider 已保存凭证）
+    api_key_prefix = ""
+    try:
+        llm_adapter._ensure_repos()
+        creds = llm_adapter._credential_repo.list_credentials(request.id)
+        if creds:
+            api_key_prefix = creds[0].get("api_key_prefix", "")
+    except Exception:
+        pass
+
     return ProviderResponse(
         id=request.id,
         name=config["name"],
         vendor=config["vendor"],
         base_url=provider.base_url,
-        api_key_set=bool(config["api_key"] and config["api_key"] not in ("ollama", "lmstudio", "")),
+        api_key_prefix=api_key_prefix,
+        api_key_set=bool(api_key_prefix),
         default_model=provider.default_model,
         is_default=request.is_default,
         selected_models=config["selected_models"],
@@ -359,6 +382,15 @@ async def get_model_config():
         "default_max_tokens": settings.LLM_DEFAULT_MAX_TOKENS,
         "default_top_p": settings.LLM_DEFAULT_TOP_P,
     }
+    # 返回扩展字段（reasoner_*/tts_*/stt_*），从 model_config 读取
+    saved = _load_model_config()
+    for field in ["reasoner_provider", "reasoner_model", "reasoner_temperature",
+                   "reasoner_max_tokens", "reasoner_effort", "tts_provider",
+                   "tts_model", "tts_voice", "tts_speed", "stt_provider",
+                   "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay",
+                   "stt_engine"]:
+        if field in saved:
+            config[field] = saved[field]
     logger.success(f"[API] GET /models/config - Success: provider={config['default_provider']}, model={config['default_model']}")
     return {"error": None, "data": config}
 
@@ -434,6 +466,9 @@ async def update_model_config(request: ModelConfigUpdate):
         elif field in existing_config:
             config_to_save[field] = existing_config[field]
     _save_model_config(config_to_save)
+
+    # 应用 reasoner_* 到 adapter 内存（路由决策依赖）
+    llm_adapter.apply_reasoner_config(config_to_save)
 
     logger.success(f"[API] PATCH /models/config - Updated fields: {updated_fields}")
     return {

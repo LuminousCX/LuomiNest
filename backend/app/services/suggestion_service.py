@@ -3,6 +3,7 @@ import re
 from loguru import logger
 
 from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.types import RouteHint
 
 
 class SuggestionService:
@@ -61,6 +62,7 @@ class SuggestionService:
                 model=resolved_model,
                 temperature=0.7,
                 max_tokens=200,
+                route_hint=RouteHint.CHAT,
             )
 
             if isinstance(result, dict):

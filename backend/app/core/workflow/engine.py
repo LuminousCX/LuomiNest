@@ -21,6 +21,7 @@ from typing import Any, Awaitable, Callable
 
 from loguru import logger
 
+from app.runtime.provider.llm.types import RouteHint
 from app.core.workflow.event_emitter import WorkflowEventEmitter
 from app.core.workflow.internal_registry import internal_tool_registry
 from app.core.workflow.context_manager import workflow_context_manager
@@ -607,6 +608,7 @@ class WorkflowEngine:
             temperature=session.planning_temperature,
             max_tokens=session.planning_max_tokens,
             return_raw=True,
+            route_hint=RouteHint.REASONER,
         )
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} llm_adapter.chat returned, type={type(result).__name__}")
 
@@ -1019,9 +1021,10 @@ class WorkflowEngine:
             model=model,
             temperature=session.synthesis_temperature,
             max_tokens=1500,
+            route_hint=RouteHint.REASONER,
         )
 
-        return result.content if hasattr(result, "content") else str(result)
+        return str(result)
 
     async def _emit(
         self,

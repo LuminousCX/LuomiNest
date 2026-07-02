@@ -18,12 +18,52 @@ async def lifespan(app: FastAPI):
     logger.info(f"[LuomiNest] Starting application...")
     logger.info(f"[LuomiNest] Environment: {'Development' if settings.DEBUG else 'Production'}")
 
+    # 初始化 SQLite 数据库（核心依赖，必须在任何 store 操作前完成）
+    # 失败直接 raise 让进程退出，避免"能访问但功能全坏"的半死状态
+    from app.infrastructure.database import init_db
+    await init_db()
+    logger.success("[LuomiNest] Database initialized")
+
+    # JSON → SQLite 幂等迁移（已迁移则跳过，旧文件不删除）
     try:
-        from app.infrastructure.database.conversation_store import conversation_store
-        from app.infrastructure.database.json_store import conversations_store
-        conversation_store.migrate_from_json_store(conversations_store)
+        from app.infrastructure.database.migration import migrate_all_json_to_sqlite
+        migration_results = await migrate_all_json_to_sqlite()
+        migrated_total = sum(v for v in migration_results.values() if v > 0)
+        if migrated_total > 0:
+            logger.success(f"[LuomiNest] Migrated {migrated_total} records from JSON to SQLite: {migration_results}")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Conversation migration skipped: {e}")
+        logger.warning(f"[LuomiNest] JSON→SQLite migration skipped: {e}")
+
+    # 加载持久化平台实例到 registry（替代 platform.py 的 import-time 调用，须在 init_db 之后）
+    try:
+        from app.api.v1.endpoints.platform import _load_persisted_instances
+        _load_persisted_instances()
+        logger.info("[LuomiNest] Platform instances loaded from DB")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Platform instances load skipped: {e}")
+
+    # 初始化默认 repo sources（替代 repo_source.py 的 import-time 调用，须在 init_db 之后）
+    try:
+        from app.api.v1.endpoints.repo_source import _ensure_defaults
+        _ensure_defaults()
+        logger.info("[LuomiNest] Repo sources defaults ensured")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Repo sources init skipped: {e}")
+
+    # 懒加载 LLM providers（替代 adapter.py 的 import-time 加载，解耦模块加载与 DB init）
+    try:
+        from app.runtime.provider.llm.adapter import llm_adapter
+        llm_adapter.ensure_providers_loaded()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] LLM providers load skipped: {e}")
+
+    # 应用 model_config 到运行时（替代 model.py 的 import-time 调用；
+    # 须在 ensure_providers_loaded() 之后，以保证 model_config.default_provider 覆盖 provider is_default）
+    try:
+        from app.api.v1.endpoints.model import apply_model_config_from_db
+        apply_model_config_from_db()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Model config apply skipped: {e}")
 
     try:
         from app.engines.memory import init_memory
@@ -136,13 +176,12 @@ async def lifespan(app: FastAPI):
             except Exception as cleanup_err:
                 logger.warning(f"[LuomiNest] Periodic cleanup failed: {cleanup_err}")
 
-        if luomi_scheduler._scheduler is not None:
-            luomi_scheduler._scheduler.add_job(
-                _periodic_cleanup,
-                trigger=IntervalTrigger(hours=24),
-                id="lumi_periodic_cleanup",
-                replace_existing=True,
-            )
+        if luomi_scheduler.add_job(
+            _periodic_cleanup,
+            trigger=IntervalTrigger(hours=24),
+            id="lumi_periodic_cleanup",
+            replace_existing=True,
+        ):
             logger.info(f"[LuomiNest] Periodic cleanup job registered (every 24h)")
     except Exception as e:
         logger.warning(f"[LuomiNest] Periodic cleanup registration skipped: {e}")
@@ -187,6 +226,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Memory engine shutdown skipped: {e}")
 
+    # 关闭 LLM provider httpx 客户端
+    try:
+        from app.runtime.provider.llm.adapter import llm_adapter
+        await llm_adapter.aclose()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] LLM adapter close skipped: {e}")
+
+    # 关闭数据库引擎
+    try:
+        from app.infrastructure.database import dispose_db
+        await dispose_db()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Database dispose skipped: {e}")
+
     logger.info(f"[LuomiNest] Shutting down application...")
 
 
@@ -196,7 +249,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="LuomiNest API",
         description="LuomiNest - AI Agent Platform Backend API",
-        version="0.7.0",
+        version=settings.APP_VERSION,
         docs_url="/docs" if settings.DEBUG else None,
         redoc_url="/redoc" if settings.DEBUG else None,
         lifespan=lifespan,
@@ -250,8 +303,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
 
     @app.exception_handler(LuomiNestError)
@@ -265,9 +318,11 @@ def create_app() -> FastAPI:
     @app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception):
         logger.error(f"[Exception] Unhandled exception: {exc}")
+        # 生产环境不泄露内部异常细节（路径/SQL/堆栈），仅开发环境返回详情辅助调试
+        message = str(exc) if settings.DEBUG else "服务器内部错误，请查看后端日志"
         return JSONResponse(
             status_code=500,
-            content={"error": {"code": "INTERNAL_ERROR", "message": str(exc)}},
+            content={"error": {"code": "INTERNAL_ERROR", "message": message}},
         )
 
     app.include_router(api_router, prefix="/api/v1")
@@ -281,7 +336,7 @@ def create_app() -> FastAPI:
     async def root():
         return {
             "name": "LuomiNest",
-            "version": "0.7.0",
+            "version": settings.APP_VERSION,
             "docs": "/docs" if settings.DEBUG else "disabled",
         }
 

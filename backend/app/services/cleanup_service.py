@@ -48,12 +48,7 @@ class LumiCleanupService:
         if len(records) <= limit:
             return 0
 
-        excess = len(records) - limit
-        with usage_store._lock:
-            usage_store._load()
-            usage_store._records = usage_store._records[-limit:]
-            usage_store._save()
-
+        excess = usage_store.trim(limit)
         logger.info(f"[Cleanup] Trimmed {excess} old usage records (keeping latest {limit})")
         return excess
 

@@ -16,6 +16,7 @@ import { useAvatarControlStore } from '../stores/avatar-control'
 import { useTaskStreamStore } from '../stores/taskStream'
 import { useWorkflowStore } from '../stores/workflow'
 import { useStatsStore } from '../stores/stats'
+import { useTaskNavigation } from '../composables/useTaskNavigation'
 import type { ConversationSearchResult, ChatStreamChunk, SubagentEvent, AgentProfile } from '../types'
 import type {
   ToolActivity,
@@ -44,6 +45,7 @@ const taskStreamStore = useTaskStreamStore()
 const workflowStore = useWorkflowStore()
 const statsStore = useStatsStore()
 const avatarControl = useAvatarControlStore()
+const { navigateToTask } = useTaskNavigation()
 const { apiGet } = useApi()
 const toast = useToast()
 
@@ -508,6 +510,9 @@ const sendMessage = async () => {
       if (chunk.subagent_event) {
         handleSubagentEvent(chunk.subagent_event)
         taskStreamStore.handleSubagentEvent(chunk.subagent_event)
+        if (chunk.subagent_event.browser_action === 'open_tab') {
+          navigateToTask('browser')
+        }
       }
       if (chunk.task_event) {
         taskStreamStore.handleTaskEvent(chunk.task_event)
@@ -627,6 +632,9 @@ const submitWorkflowTask = async (
       onPhaseChange: (phase) => {
         console.info(`[Workbench] 工作流阶段: ${phase}`)
       },
+      onModuleAction: () => {
+        navigateToTask('workflow')
+      },
       onReasoning: (reasoningContent) => {
         const msgs = chatStore.convMessages[convId] || []
         const updatedMsgs = msgs.map((m) =>
@@ -700,6 +708,9 @@ const handleRegenerate = async (messageId: string) => {
       if (chunk.subagent_event) {
         handleSubagentEvent(chunk.subagent_event)
         taskStreamStore.handleSubagentEvent(chunk.subagent_event)
+        if (chunk.subagent_event.browser_action === 'open_tab') {
+          navigateToTask('browser')
+        }
       }
       if (chunk.task_event) {
         taskStreamStore.handleTaskEvent(chunk.task_event)

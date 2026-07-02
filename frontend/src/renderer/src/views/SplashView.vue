@@ -5,33 +5,68 @@ import { Zap } from 'lucide-vue-next'
 import { useApi } from '../composables/useApi'
 import LumiButton from '../components/common/LumiButton.vue'
 
+interface BackendStageData {
+  stage: string
+  detail?: string
+}
+
+interface LuomiNestApi {
+  api?: {
+    backend?: {
+      subscribeStage?: (callback: (data: BackendStageData) => void) => (() => void)
+    }
+  }
+}
+
 const router = useRouter()
 const { checkHealth } = useApi()
 
 const progressPercent = ref(0)
 const backendStatus = ref<'pending' | 'loading' | 'ready' | 'error'>('pending')
+const statusText = ref('正在启动 LuomiNest 后端服务...')
 const healthRetries = ref(0)
-const MAX_RETRIES = 30
+const MAX_RETRIES = 15
 let pollTimer: ReturnType<typeof setTimeout> | null = null
+let progressTimer: ReturnType<typeof setInterval> | null = null
 
-const startLoading = async () => {
-  progressPercent.value = 30
+const startProgressAnimation = (): void => {
+  if (progressTimer) return
+  progressTimer = setInterval(() => {
+    if (progressPercent.value < 90) {
+      progressPercent.value += 1
+    }
+  }, 600)
+}
+
+const stopProgressAnimation = (): void => {
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = null
+  }
+}
+
+const startLoading = async (): Promise<void> => {
   backendStatus.value = 'loading'
+  startProgressAnimation()
 
   await pollBackend()
 
   const status: string = backendStatus.value
   if (status === 'ready') {
+    stopProgressAnimation()
     progressPercent.value = 100
+    statusText.value = '后端服务已就绪'
     setTimeout(() => router.push('/login'), 400)
   } else {
+    stopProgressAnimation()
     progressPercent.value = 100
+    statusText.value = '后端服务未响应'
   }
 }
 
 const pollBackend = (): Promise<void> =>
   new Promise((resolve) => {
-    const tryCheck = async () => {
+    const tryCheck = async (): Promise<void> => {
       const ok = await checkHealth()
       if (ok) {
         backendStatus.value = 'ready'
@@ -49,24 +84,60 @@ const pollBackend = (): Promise<void> =>
     tryCheck()
   })
 
-const retryBackend = async () => {
+const retryBackend = async (): Promise<void> => {
   healthRetries.value = 0
   backendStatus.value = 'loading'
-  progressPercent.value = 30
+  progressPercent.value = 0
+  statusText.value = '正在重新连接后端服务...'
   await pollBackend()
   const status: string = backendStatus.value
   if (status === 'ready') {
+    stopProgressAnimation()
     progressPercent.value = 100
+    statusText.value = '后端服务已就绪'
     setTimeout(() => router.push('/login'), 400)
+  } else {
+    stopProgressAnimation()
+    progressPercent.value = 100
+    statusText.value = '后端服务未响应'
   }
 }
 
+const skipToLogin = (): void => {
+  if (pollTimer) clearTimeout(pollTimer)
+  stopProgressAnimation()
+  router.push('/login')
+}
+
+// 订阅主进程后端启动状态，实时更新文案
+const subscribeBackendStage = (() => {
+  const win = window as unknown as LuomiNestApi
+  return win.api?.backend?.subscribeStage
+    ? (cb: (data: BackendStageData) => void) => win.api!.backend!.subscribeStage!(cb)
+    : undefined
+})()
+
+let unsubscribe: (() => void) | undefined
+
 onMounted(() => {
+  if (subscribeBackendStage) {
+    unsubscribe = subscribeBackendStage((data) => {
+      const stageMap: Record<string, string> = {
+        spawning: '正在启动后端进程...',
+        waiting: '等待后端健康检查...',
+        ready: '后端服务已就绪',
+        failed: '后端服务启动失败'
+      }
+      statusText.value = stageMap[data.stage] ?? statusText.value
+    })
+  }
   startLoading()
 })
 
 onBeforeUnmount(() => {
   if (pollTimer) clearTimeout(pollTimer)
+  stopProgressAnimation()
+  if (unsubscribe) unsubscribe()
 })
 </script>
 
@@ -86,6 +157,8 @@ onBeforeUnmount(() => {
         <div class="bar-fill" :style="{ width: progressPercent + '%' }"></div>
       </div>
 
+      <p class="splash-status animate-fade-in">{{ statusText }}</p>
+
       <div v-if="backendStatus === 'error'" class="splash-error animate-fade-in">
         <p class="error-hint">后端服务未响应，请确认 LuomiNest 后端已启动</p>
         <div class="error-actions">
@@ -95,18 +168,17 @@ onBeforeUnmount(() => {
             </template>
             重新连接
           </LumiButton>
-          <LumiButton variant="ghost" size="sm" @click="router.push('/login')">
-            跳过
-          </LumiButton>
         </div>
       </div>
     </div>
 
     <div class="splash-footer">
-      <span class="footer-text">LuomiNest Engine Warming Up...</span>
       <div class="footer-bar">
         <div class="footer-bar-fill" :style="{ width: progressPercent + '%' }"></div>
       </div>
+      <LumiButton variant="ghost" size="sm" class="footer-skip" @click="skipToLogin">
+        跳过
+      </LumiButton>
     </div>
   </div>
 </template>
@@ -199,6 +271,14 @@ onBeforeUnmount(() => {
   transition: width var(--transition-normal);
 }
 
+/* 状态文案 */
+.splash-status {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-align: center;
+  margin: 0;
+}
+
 /* 错误状态 */
 .splash-error {
   display: flex;
@@ -229,16 +309,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   z-index: 1;
-}
-
-.footer-text {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  opacity: 0.5;
 }
 
 .footer-bar {
@@ -252,6 +324,15 @@ onBeforeUnmount(() => {
   height: 100%;
   background: var(--lumi-brand);
   transition: width var(--transition-normal);
+}
+
+.footer-skip {
+  opacity: 0.6;
+  transition: opacity var(--transition-normal);
+}
+
+.footer-skip:hover {
+  opacity: 1;
 }
 
 /* 动画 */

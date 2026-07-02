@@ -4,6 +4,7 @@ import { configStore } from './config-store'
 import { cacheManager } from './cache-manager'
 import { tabManager } from './browser'
 import { getLumiAuthToken } from './backend/auth-token'
+import { subscribeBackendStage } from './backend'
 
 let _mainWindow: BrowserWindow | null = null
 
@@ -199,5 +200,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (typeof url !== 'string' || !url.trim()) return
     const { fetchUrl } = await import('./browser')
     return await fetchUrl(url, getMainWindow())
+  })
+
+  ipcMain.handle('backend:subscribe', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return
+    const win = event.sender
+    const unsubscribe = subscribeBackendStage((stage, detail) => {
+      if (!win.isDestroyed()) {
+        win.send('backend:stage', { stage, detail })
+      }
+    })
+    win.once('destroyed', () => unsubscribe())
   })
 }

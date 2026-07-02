@@ -95,6 +95,10 @@ hiddenimports = [
     'edge_tts',
     'mcp',
 
+    # --- Sherpa-ONNX TTS（离线 TTS 引擎，含 native lib）---
+    'sherpa_onnx',
+    'soundfile',
+
     # --- App internal packages (dynamically imported in app_factory lifespan) ---
     'app.core.tools',
     'app.core.tools.builtin',
@@ -132,7 +136,6 @@ excludes = [
     'faster_whisper',
     'funasr',
     'modelscope',
-    'sherpa_onnx',
     'sounddevice',
     'pyaudio',
     # Optional DB drivers probed by SQLAlchemy's hook but not used here.

@@ -121,9 +121,6 @@ def _ensure_defaults():
         logger.info("[RepoSources] Initialized default repo sources")
 
 
-_ensure_defaults()
-
-
 def _to_response(source: dict) -> RepoSourceResponse:
     sub_markets = [
         SubMarketResponse(

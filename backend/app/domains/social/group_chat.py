@@ -1,3 +1,4 @@
+import json
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
@@ -7,6 +8,7 @@ from app.core.tools import tool_registry
 from app.core.tools.orchestrator import tool_orchestrator
 from app.infrastructure.database.json_store import groups_store, agents_store
 from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.types import RouteHint
 from app.services.avatar_manager import EmotionStreamParser, strip_emotion_tags
 
 
@@ -207,18 +209,14 @@ class GroupChatManager:
             }),
         }
 
-        # 设置记忆访问权限：群聊 Agent 可读主 Agent 记忆
-        from app.core.agents.memory_access import (
-            set_luominest_memory_access,
-            reset_luominest_memory_access,
-            MEMORY_ACCESS_READ_MAIN,
-        )
-        mem_token = set_luominest_memory_access(MEMORY_ACCESS_READ_MAIN)
+        # 记忆访问权限由 MemoryAccessMiddleware 通过 ctx.extra["memory_access"] 处理
 
         parser = EmotionStreamParser()
-        full_content = ""
 
         try:
+            from app.core.agents.middleware.base import AgentContext
+            from app.core.agents.memory_access import MEMORY_ACCESS_READ_MAIN
+
             system_prompt = self._build_agent_prompt(agent, member, group)
             working_messages: list[dict] = [
                 {"role": "system", "content": system_prompt},
@@ -239,101 +237,71 @@ class GroupChatManager:
                     f"不支持工具调用，纯对话模式"
                 )
 
-            iteration = 0
-            while iteration <= tool_orchestrator.max_iterations:
-                collected_tool_calls: dict[int, dict] = {}
-                iteration_content = ""
+            ctx = AgentContext(
+                messages=working_messages,
+                tools=available_tools if use_tools else None,
+                route_hint=RouteHint.CHAT,
+                state={"chat_id": message_id, "provider": provider_name, "model": model},
+                extra={
+                    "scene": "chat",
+                    "is_stream": True,
+                    "memory_access": MEMORY_ACCESS_READ_MAIN,
+                    "agent_id": agent.get("id"),
+                },
+            )
 
+            # llm_call_fn：流式调用 LLM，content 经 EmotionStreamParser 清洗
+            async def llm_call_fn(ctx):
                 async for chunk in llm_adapter.chat_stream(
-                    messages=working_messages,
-                    tools=available_tools if use_tools else None,
+                    messages=ctx.messages,
+                    tools=ctx.tools,
                     provider_name=provider_name,
                     model=model,
                     temperature=0.7,
                     max_tokens=500,
+                    route_hint=RouteHint.CHAT,
                 ):
-                    if chunk.type == "usage":
-                        continue
                     if chunk.type == "content":
                         raw_content = chunk.data.get("content", "")
                         clean_content, _emotion = parser.feed(raw_content)
-                        if clean_content:
-                            iteration_content += clean_content
-                            full_content += clean_content
-                            yield {
-                                "type": "agent_message_delta",
-                                "data": to_camel_case({
-                                    "id": message_id,
-                                    "content": clean_content,
-                                }),
-                            }
-                    elif chunk.type == "reasoning":
-                        # 群聊不推送推理过程，保持时间线简洁
-                        pass
-                    elif chunk.type == "tool_call_delta":
-                        idx = chunk.data.get("index", 0)
-                        if idx not in collected_tool_calls:
-                            collected_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
-                        if chunk.data.get("tool_call_id"):
-                            collected_tool_calls[idx]["id"] = chunk.data["tool_call_id"]
-                        if chunk.data.get("function_name"):
-                            collected_tool_calls[idx]["name"] = chunk.data["function_name"]
-                        if chunk.data.get("function_arguments"):
-                            collected_tool_calls[idx]["arguments"] += chunk.data["function_arguments"]
-                    elif chunk.type == "finish_reason":
-                        # 群聊不依赖 finish_reason 做逻辑判断，忽略
-                        pass
+                        chunk.data["content"] = clean_content
+                    yield chunk
 
-                # 组装本轮 tool_calls
-                tool_calls_list: list[dict] = []
-                if collected_tool_calls:
-                    for idx in sorted(collected_tool_calls.keys()):
-                        entry = collected_tool_calls[idx]
-                        tool_calls_list.append({
-                            "id": entry["id"] or f"call_{iteration}_{idx}",
-                            "type": "function",
-                            "function": {
-                                "name": entry["name"],
-                                "arguments": entry["arguments"],
-                            },
-                        })
+            runner = tool_orchestrator.create_runner({"scene": "chat", "is_stream": True})
 
-                # 无工具调用或未启用工具，结束循环
-                if not tool_calls_list or not use_tools:
-                    break
+            async for sse_str in runner.run_stream(ctx, llm_call_fn):
+                chunk_data = json.loads(sse_str[len("data: "):-2])
+                content = chunk_data.get("content", "")
+                # 跳过错误内容（aborted 时 runner 会 yield "[Error]..." content）
+                if content and not ctx.state.get("aborted"):
+                    yield {
+                        "type": "agent_message_delta",
+                        "data": to_camel_case({
+                            "id": message_id,
+                            "content": content,
+                        }),
+                    }
 
-                logger.info(
-                    f"[GroupChat] Agent {agent['name']} 调用工具: "
-                    f"{[tc['function']['name'] for tc in tool_calls_list]} "
-                    f"(iteration={iteration})"
-                )
-
-                # 回填带 tool_calls 的 assistant 消息
-                assistant_msg = tool_orchestrator.build_assistant_message_with_tool_calls(
-                    iteration_content, tool_calls_list,
-                )
-                working_messages.append(assistant_msg)
-
-                # 依次执行工具调用
-                for tc in tool_calls_list:
-                    tool_name = tc["function"]["name"]
-                    try:
-                        tool_msg = await tool_orchestrator.execute_tool_call(tc)
-                    except Exception as te:
-                        logger.error(
-                            f"[GroupChat] Agent {agent['name']} 工具 {tool_name} 执行失败: {te}",
-                            exc_info=True,
-                        )
-                        tool_msg = {
-                            "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": f"工具执行失败: {te}",
-                        }
-                    working_messages.append(tool_msg)
-
-                iteration += 1
+            # 流式结束后：检查是否异常终止
+            if ctx.state.get("aborted"):
+                error_content = ctx.state.get("content", "")
+                err_time = datetime.now(timezone.utc).isoformat()
+                yield {
+                    "type": "agent_error",
+                    "data": to_camel_case({
+                        "id": message_id,
+                        "sender_id": agent["id"],
+                        "sender_name": agent["name"],
+                        "sender_type": "agent",
+                        "content": f"[响应中断: {error_content[:100]}]" if error_content else "[响应中断]",
+                        "timestamp": err_time,
+                        "role": member.get("role", ""),
+                    }),
+                }
+                return
 
             # 最终内容（兜底过滤情绪标签）
+            full_content = ctx.state.get("content", "")
             final_content = strip_emotion_tags(full_content) if full_content else "[无响应内容]"
 
             end_time = datetime.now(timezone.utc).isoformat()
@@ -365,8 +333,6 @@ class GroupChatManager:
                     "role": member.get("role", ""),
                 }),
             }
-        finally:
-            reset_luominest_memory_access(mem_token)
 
     def _get_group_chat_tools(self) -> list[dict]:
         """获取群聊可用工具列表（白名单过滤）"""

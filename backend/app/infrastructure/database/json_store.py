@@ -148,9 +148,16 @@ class JsonStore:
         return await asyncio.to_thread(self.mutate, key, updater_fn)
 
 
-agents_store = JsonStore("agents.json")
-conversations_store = JsonStore("conversations.json")
-groups_store = JsonStore("groups.json")
-platforms_store = JsonStore("platforms.json")
-repo_sources_store = JsonStore("repo_sources.json")
-marketplace_stats_store = JsonStore("marketplace_stats.json")
+# ── 单例已迁移至 Facade 层（委托 Repository + SQLite）──
+# 保留导入兼容性：现有消费者 `from app.infrastructure.database.json_store import agents_store` 零改动
+from app.infrastructure.database.facades.json_store_facade import (  # noqa: E402, F401
+    agents_store,
+    groups_store,
+    platforms_store,
+    repo_sources_store,
+)
+from app.infrastructure.database.facades.marketplace_stats_store import (  # noqa: E402, F401
+    marketplace_stats_store,
+)
+# 注：原 conversations_store（JsonStore("conversations.json")）已废弃并删除，
+# 新对话存储统一使用 conversation_store（见 conversation_store.py）

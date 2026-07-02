@@ -5,8 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LuomiNest - LuminousChenXi Distributed AI Companion Platform</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <script src="./theme-init.js"></script>
-    <script src="./cubism-loader.js"></script>
+    <script>
+      ;(function () {
+        var t = localStorage.getItem('luominest-theme')
+        if (t !== 'dark') document.documentElement.setAttribute('data-theme', 'light')
+      })()
+    </script>
+    <script>
+      // cubism core 异步加载：cubism4 模块顶层在 window.Live2DCubismCore 未定义时同步 throw，
+      // 必须先注入 core 再动态 import。内联到 HTML 避免 Vite 不复制根目录经典脚本的问题。
+      window.__cubismCoreReady = new Promise(function (resolve, reject) {
+        var s = document.createElement('script')
+        s.src = 'luominest-avatar://cubism-core/live2dcubismcore.min.js'
+        s.onload = function () {
+          var core = window.Live2DCubismCore
+          if (core) resolve(core)
+          else reject(new Error('Live2DCubismCore not assigned after load'))
+        }
+        s.onerror = function () {
+          reject(new Error('Failed to load Live2DCubismCore script'))
+        }
+        document.head.appendChild(s)
+      })
+    </script>
   </head>
   <body>
     <div id="app"></div>

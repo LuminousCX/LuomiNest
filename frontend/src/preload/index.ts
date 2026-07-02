@@ -95,6 +95,15 @@ const api = {
     getModelCapabilities: () => ipcRenderer.invoke('desktop-pet:getModelCapabilities'),
     sendSubtitle: (text: string) => ipcRenderer.invoke('desktop-pet:sendSubtitle', text),
     hideSubtitle: () => ipcRenderer.invoke('desktop-pet:hideSubtitle')
+  },
+
+  backend: {
+    subscribeStage: (callback: (data: { stage: string; detail?: string }) => void): (() => void) => {
+      const handler = (_event: unknown, data: { stage: string; detail?: string }) => callback(data)
+      ipcRenderer.on('backend:stage', handler)
+      ipcRenderer.invoke('backend:subscribe')
+      return () => ipcRenderer.removeListener('backend:stage', handler)
+    }
   }
 }
 
@@ -118,6 +127,7 @@ const ALLOWED_ON_CHANNELS = new Set([
   'desktop-pet:get-model-capabilities',
   'desktop-pet:subtitle',
   'desktop-pet:subtitle-hide',
+  'backend:stage'
 ])
 
 const electronBridge = {

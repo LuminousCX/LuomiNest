@@ -1,5 +1,7 @@
 from loguru import logger
 
+from app.runtime.provider.llm.types import RouteHint
+
 
 class TokenCounter:
     def count_tokens(self, messages: list[dict], trusted_token_usage: int = 0) -> int:
@@ -231,6 +233,7 @@ class LLMSummaryCompressor:
                 provider_name=llm_adapter.default_provider,
                 temperature=0.3,
                 max_tokens=1024,
+                route_hint=RouteHint.CHAT,
             )
             summary_content = raw.get("content", "") if isinstance(raw, dict) else str(raw)
         except Exception as e:

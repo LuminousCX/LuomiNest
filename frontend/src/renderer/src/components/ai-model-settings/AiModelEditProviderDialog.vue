@@ -6,6 +6,8 @@ import {
   Loader2,
   Check,
   AlertCircle,
+  Eye,
+  EyeOff,
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
@@ -28,6 +30,7 @@ const editProviderLoading = ref(false)
 const editingProviderId = ref('')
 const editModelSelect = ref('')
 const shakingDialog = ref(false)
+const showApiKey = ref(false)
 
 const editProvider = ref<EditProviderForm>({
   name: '',
@@ -90,9 +93,11 @@ const openForProvider = (providerId: string) => {
     vendor: p.vendor,
     baseUrl: p.baseUrl,
     apiKey: '',
+    apiKeyPrefix: p.apiKeyPrefix || '',
     defaultModel: p.defaultModel,
     isDefault: p.isDefault,
   }
+  showApiKey.value = false
   const tmpl = modelStore.allTemplates.find(t => t.id === providerId)
   if (p.defaultModel && tmpl?.defaultModels?.includes(p.defaultModel)) {
     editModelSelect.value = p.defaultModel
@@ -184,7 +189,26 @@ watch(() => props.providerId, (providerId) => {
         </div>
         <div class="form-group">
           <label class="form-label">API Key</label>
-          <input v-model="editProvider.apiKey" type="password" class="form-input" placeholder="留空则不修改" />
+          <div v-if="editProvider.apiKeyPrefix" class="current-key-hint">
+            当前密钥: <code>{{ editProvider.apiKeyPrefix }}</code>
+          </div>
+          <div class="input-with-eye">
+            <input
+              v-model="editProvider.apiKey"
+              :type="showApiKey ? 'text' : 'password'"
+              class="form-input"
+              placeholder="留空则不修改"
+            />
+            <button
+              type="button"
+              class="eye-toggle"
+              :title="showApiKey ? '隐藏' : '显示'"
+              @click="showApiKey = !showApiKey"
+            >
+              <Eye v-if="!showApiKey" :size="16" />
+              <EyeOff v-else :size="16" />
+            </button>
+          </div>
           <span class="form-hint">留空表示不修改现有密钥</span>
         </div>
         <div class="form-group">
@@ -371,6 +395,55 @@ watch(() => props.providerId, (providerId) => {
 
 .form-input::placeholder {
   color: var(--text-muted);
+}
+
+.current-key-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-1);
+}
+
+.current-key-hint code {
+  font-family: var(--font-mono, 'Courier New', monospace);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--workspace-panel);
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
+.input-with-eye {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-eye .form-input {
+  padding-right: var(--space-8);
+}
+
+.eye-toggle {
+  position: absolute;
+  right: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-5);
+  height: var(--space-5);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.eye-toggle:hover {
+  color: var(--text-secondary);
+  background: var(--workspace-hover);
 }
 
 .toggle-row {

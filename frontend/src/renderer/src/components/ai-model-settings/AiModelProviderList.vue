@@ -116,6 +116,10 @@ const handleRemoveProvider = async (providerId: string) => {
               <span class="detail-text">{{ provider.baseUrl }}</span>
               <span class="detail-sep">|</span>
               <span class="detail-text">{{ provider.defaultModel || '未设置' }}</span>
+              <template v-if="provider.apiKeyPrefix">
+                <span class="detail-sep">|</span>
+                <span class="detail-text key-prefix-text">{{ provider.apiKeyPrefix }}</span>
+              </template>
             </div>
           </div>
           <div class="provider-item-actions">
@@ -407,6 +411,10 @@ const handleRemoveProvider = async (providerId: string) => {
 
 .detail-sep {
   opacity: 0.3;
+}
+
+.key-prefix-text {
+  font-family: var(--font-mono, 'Courier New', monospace);
 }
 
 .provider-item-actions {

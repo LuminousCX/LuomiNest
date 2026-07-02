@@ -12,6 +12,7 @@ from loguru import logger
 
 from app.infrastructure.database.json_store import groups_store, agents_store
 from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.types import RouteHint
 from app.domains.social.agent_role_registry import AgentRoleRegistry
 
 
@@ -471,9 +472,10 @@ class AgentOrchestrator:
             model=model,
             temperature=0.3,
             max_tokens=1500,
+            route_hint=RouteHint.REASONER,
         )
 
-        response_content = result.content if hasattr(result, "content") else str(result)
+        response_content = str(result)
         session.coordinator_response = response_content
 
         plan = _extract_json_plan(response_content)
@@ -646,9 +648,10 @@ class AgentOrchestrator:
                 model=model,
                 temperature=0.5,
                 max_tokens=800,
+                route_hint=RouteHint.AGENT,
             )
 
-            task.result = result.content if hasattr(result, "content") else str(result)
+            task.result = str(result)
             task.status = TaskStatus.COMPLETED
             task.completed_at = datetime.now(timezone.utc).isoformat()
 
@@ -755,9 +758,10 @@ class AgentOrchestrator:
                 model=model,
                 temperature=0.5,
                 max_tokens=800,
+                route_hint=RouteHint.AGENT,
             )
 
-            task.result = result.content if hasattr(result, "content") else str(result)
+            task.result = str(result)
             task.status = TaskStatus.COMPLETED
             task.completed_at = datetime.now(timezone.utc).isoformat()
 
@@ -839,9 +843,10 @@ class AgentOrchestrator:
             model=model,
             temperature=0.3,
             max_tokens=1200,
+            route_hint=RouteHint.REASONER,
         )
 
-        return result.content if hasattr(result, "content") else str(result)
+        return str(result)
 
     def _build_worker_prompt(
         self,

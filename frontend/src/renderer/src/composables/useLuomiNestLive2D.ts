@@ -1,10 +1,29 @@
 import '@pixi/unsafe-eval'
 import { ref, type Ref } from 'vue'
 import { Application, Ticker } from 'pixi.js'
-import { Live2DModel } from 'pixi-live2d-display-mulmotion/cubism4'
 import { validateLuomiNestModelUrl, resolveExpressionByModelUrl } from '@/config/luominest-models'
 
 const EXPRESSION_BLOCKLIST = ['水印', 'watermark', 'copyright', 'credit', 'logo']
+
+// 延迟加载 cubism4 模块：其顶层会在 window.Live2DCubismCore 未定义时同步 throw，
+// 必须先等待 index.html 内联脚本注入的 core 就绪 Promise 完成后再 import。
+type CubismLive2DModel = typeof import('pixi-live2d-display-mulmotion/cubism4').Live2DModel
+type Live2DModel = InstanceType<CubismLive2DModel>
+let Live2DModelCtor: CubismLive2DModel | null = null
+const loadCubism4Module = async (): Promise<CubismLive2DModel> => {
+  if (Live2DModelCtor) return Live2DModelCtor
+  const readyPromise = (window as any).__cubismCoreReady
+  if (readyPromise) {
+    try {
+      await readyPromise
+    } catch (e) {
+      console.warn('[WARN][LuomiNestLive2D] Cubism core load failed:', e)
+    }
+  }
+  const mod = await import('pixi-live2d-display-mulmotion/cubism4')
+  Live2DModelCtor = mod.Live2DModel
+  return Live2DModelCtor
+}
 
 const patchIsInteractive = (obj: any) => {
   if (!obj) return
@@ -263,7 +282,8 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       cleanupFocus()
       cleanupIdle()
 
-      const model = await Live2DModel.from(url, {
+      const CubismLive2DModel = await loadCubism4Module()
+      const model = await CubismLive2DModel.from(url, {
         autoHitTest: true,
         autoFocus: false,
         ticker: Ticker.shared

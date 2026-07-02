@@ -8,6 +8,34 @@ import { getLumiAuthToken } from './auth-token'
 
 let backendProcess: ChildProcess | null = null
 let backendReady = false
+
+type BackendStage = 'spawning' | 'waiting' | 'ready' | 'failed'
+let backendStage: BackendStage = 'spawning'
+const stageListeners = new Set<(stage: BackendStage, detail?: string) => void>()
+
+const emitStage = (stage: BackendStage, detail?: string): void => {
+  backendStage = stage
+  for (const listener of stageListeners) {
+    try {
+      listener(stage, detail)
+    } catch {
+      // ignore listener error
+    }
+  }
+}
+
+export const subscribeBackendStage = (listener: (stage: BackendStage, detail?: string) => void): (() => void) => {
+  stageListeners.add(listener)
+  try {
+    listener(backendStage)
+  } catch {
+    // ignore
+  }
+  return () => {
+    stageListeners.delete(listener)
+  }
+}
+
 const BACKEND_PORT = 18000
 const BACKEND_HOST = '127.0.0.1'
 const MAX_STARTUP_WAIT = 30000
@@ -108,19 +136,12 @@ export const waitForBackend = async (): Promise<boolean> => {
         signal: AbortSignal.timeout(CHECK_INTERVAL)
       })
       if (response.ok) {
-        // 拒绝 minimal mode：那是依赖缺失时的残废服务器，所有 /api/v1/* 都会 404
-        const data = await response.json().catch(() => ({} as any))
-        if (data?.mode === 'minimal') {
-          console.error('[BackendService] Backend is running in minimal mode (missing dependencies). Refusing to connect.')
-          return false
-        }
         backendReady = true
         console.log('[BackendService] Backend is ready!')
         return true
-      } else {
-        // 非 OK 状态同样需要等待，避免高频请求（busy-wait）
-        await new Promise(resolve => setTimeout(resolve, CHECK_INTERVAL))
       }
+      // 非 OK 状态同样需要等待，避免高频请求（busy-wait）
+      await new Promise(resolve => setTimeout(resolve, CHECK_INTERVAL))
     } catch {
       await new Promise(resolve => setTimeout(resolve, CHECK_INTERVAL))
     }
@@ -177,7 +198,8 @@ export const startBackend = async (): Promise<boolean> => {
     env,
     stdio: ['ignore', 'pipe', 'pipe']
   })
-  
+  emitStage('waiting', 'Backend process spawned, waiting for health check')
+
   backendProcess.stdout?.on('data', (data) => {
     routeBackendLog(data, 'stdout')
   })
@@ -250,4 +272,19 @@ export const restartBackend = async (): Promise<boolean> => {
   stopBackend()
   await new Promise(resolve => setTimeout(resolve, 1000))
   return startBackend()
+}
+
+export const startBackendInBackground = (): void => {
+  if (backendProcess) {
+    console.log('[BackendService] Backend already running')
+    return
+  }
+  emitStage('spawning')
+  void startBackend().then((ok) => {
+    if (ok) {
+      emitStage('ready')
+    } else {
+      emitStage('failed', 'Backend startup timeout or executable missing')
+    }
+  })
 }

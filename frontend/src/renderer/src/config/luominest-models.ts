@@ -26,14 +26,6 @@ export const LUOMINEST_BUILTIN_MODELS: LuomiNestModelInfo[] = [
     scale: 0.25,
     type: 'live2d',
     tags: ['Cubism4', 'Built-in']
-  },
-  {
-    id: 'shizuku',
-    name: 'Shizuku',
-    url: 'luominest-avatar://shizuku/shizuku.model3.json',
-    scale: 0.25,
-    type: 'live2d',
-    tags: ['Cubism4', 'Built-in']
   }
 ]
 
@@ -64,18 +56,6 @@ const HIYORI_EXPRESSION_MAP: Record<string, string> = {
   curious: 'curious'
 }
 
-const SHIZUKU_EXPRESSION_MAP: Record<string, string> = {
-  happy: 'happy',
-  sad: 'sad',
-  neutral: 'neutral',
-  love: 'love',
-  surprise: 'surprised',
-  angry: 'angry',
-  think: 'think',
-  awkward: 'awkward',
-  curious: 'curious'
-}
-
 export const LUOMINEST_AVATAR_BINDINGS: Record<string, LuomiNestAvatarBinding> = {
   llny: {
     modelId: 'llny',
@@ -89,13 +69,6 @@ export const LUOMINEST_AVATAR_BINDINGS: Record<string, LuomiNestAvatarBinding> =
     voice: 'zh-CN-XiaoxiaoNeural',
     voiceLang: 'zh',
     expressionMap: HIYORI_EXPRESSION_MAP,
-    defaultExpression: 'neutral'
-  },
-  shizuku: {
-    modelId: 'shizuku',
-    voice: 'zh-CN-XiaoxiaoNeural',
-    voiceLang: 'zh',
-    expressionMap: SHIZUKU_EXPRESSION_MAP,
     defaultExpression: 'neutral'
   }
 }

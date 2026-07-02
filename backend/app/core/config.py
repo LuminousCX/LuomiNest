@@ -1,3 +1,5 @@
+import os
+import sys
 from functools import lru_cache
 
 from loguru import logger
@@ -8,11 +10,12 @@ from app.security.crypto.secret_key_manager import is_placeholder, load_or_creat
 
 class Settings(BaseSettings):
     APP_NAME: str = "LuomiNest"
-    APP_VERSION: str = "0.7.0"
+    APP_VERSION: str = "0.7.5"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
-    DATABASE_URL: str = "sqlite+aiosqlite:///./luominest.db"
+    # 空字符串表示运行时根据 DATA_DIR 自动计算（见 get_settings）
+    DATABASE_URL: str = ""
     REDIS_URL: str = "redis://localhost:6379/0"
     MQTT_BROKER_HOST: str = "localhost"
     MQTT_BROKER_PORT: int = 1883
@@ -67,6 +70,20 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
+
+    # 将 DATA_DIR 解析为绝对路径（PyInstaller 兼容）
+    # frozen 模式下相对路径以 exe 所在目录为基准，避免工作目录不可控
+    if getattr(sys, "frozen", False) and not os.path.isabs(s.DATA_DIR):
+        s.DATA_DIR = os.path.join(os.path.dirname(sys.executable), s.DATA_DIR)
+    s.DATA_DIR = os.path.abspath(s.DATA_DIR)
+    os.makedirs(s.DATA_DIR, exist_ok=True)
+
+    # 若未显式配置 DATABASE_URL，则基于 DATA_DIR 自动生成 SQLite 路径
+    if not s.DATABASE_URL:
+        db_path = os.path.join(s.DATA_DIR, "luominest.db")
+        # Windows 反斜杠转换为正斜杠以兼容 SQLAlchemy URL 解析
+        s.DATABASE_URL = f"sqlite+aiosqlite:///{db_path.replace(os.sep, '/')}"
+
     if s.LLM_MAX_CONCURRENT_REQUESTS < 1:
         logger.warning(f"LLM_MAX_CONCURRENT_REQUESTS={s.LLM_MAX_CONCURRENT_REQUESTS} is invalid, clamping to 1")
         s.LLM_MAX_CONCURRENT_REQUESTS = 1

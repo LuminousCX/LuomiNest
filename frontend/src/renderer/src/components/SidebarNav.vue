@@ -27,9 +27,11 @@ import {
   Bot,
 } from 'lucide-vue-next'
 import LumiBrandStar from './common/LumiBrandStar.vue'
+import { useTaskStreamStore } from '../stores/taskStream'
 
 const route = useRoute()
 const router = useRouter()
+const taskStreamStore = useTaskStreamStore()
 
 const isNavCollapsed = ref(true)
 
@@ -144,7 +146,22 @@ watch(activeGroup, (groupId) => {
   }
 }, { immediate: true })
 
+const PENDING_NAV_TARGETS: Record<string, 'browser' | 'workflow'> = {
+  '/browser': 'browser',
+  '/workflow': 'workflow',
+}
+
+const isPathPending = (path: string): boolean => {
+  const target = PENDING_NAV_TARGETS[path]
+  if (!target) return false
+  return taskStreamStore.pendingNavigation[target]
+}
+
 const handleNavigate = (path: string) => {
+  const target = PENDING_NAV_TARGETS[path]
+  if (target) {
+    taskStreamStore.clearPendingNavigation(target)
+  }
   router.push(path)
 }
 </script>
@@ -219,6 +236,7 @@ const handleNavigate = (path: string) => {
                 </div>
                 <component :is="child.icon" :size="14" class="child-icon" />
                 <span class="child-label">{{ child.label }}</span>
+                <span v-if="isPathPending(child.id)" class="nav-pending-dot"></span>
               </div>
             </div>
           </Transition>
@@ -232,11 +250,12 @@ const handleNavigate = (path: string) => {
             v-for="item in navItems"
             :key="item.id"
             :class="['nav-item', { active: isItemActive(item) }]"
-            @click="router.push(item.route)"
+            @click="handleNavigate(item.route)"
           >
             <component :is="item.icon" :size="17" class="nav-item-icon" />
             <span class="nav-item-label">{{ item.label }}</span>
             <span v-if="item.badge" class="nav-item-badge">{{ item.badge }}</span>
+            <span v-if="isPathPending(item.route)" class="nav-pending-dot"></span>
           </button>
         </div>
       </div>
@@ -742,6 +761,25 @@ const handleNavigate = (path: string) => {
   font-weight: var(--font-semibold);
   position: relative;
   z-index: 1;
+}
+
+.nav-pending-dot {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  width: var(--radius-xs);
+  height: var(--radius-xs);
+  border-radius: var(--radius-full);
+  background: var(--lumi-accent);
+  box-shadow: 0 0 0 2px var(--surface);
+  z-index: 2;
+  animation: nav-pending-pulse 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes nav-pending-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 .nav-footer {

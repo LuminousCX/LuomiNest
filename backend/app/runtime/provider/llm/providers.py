@@ -1,13 +1,34 @@
-import re
-from typing import AsyncIterator
-from app.runtime.provider.base import LLMProvider
-from loguru import logger
-import httpx
-import json
+"""LuomiNest LLM 供应商实现。
 
+OpenAICompatibleProvider：统一的 OpenAI 兼容 API 供应商实现，
+支持 27 个预置模板（PROVIDER_TEMPLATES）。
+
+设计原则：
+1. 单一实现类，所有供应商共用，通过 base_url / api_key / default_model 区分
+2. httpx 客户端复用（每个 provider 实例持有独立 AsyncClient）
+3. chat 统一返回 LLMResponse，chat_stream 统一返回 StreamEvent 流
+4. 能力探测乐观默认，不硬编码模型能力表
+5. 重试机制仅对可重试错误（429/500/502/503/529/timeout/connection）生效
+"""
+import asyncio
+import json
+import re
+from collections import Counter
+from typing import AsyncIterator
+
+import httpx
+from loguru import logger
+
+from app.runtime.provider.base import LLMProvider
+from app.runtime.provider.llm.types import LLMRequest, LLMResponse, StreamEvent
+
+
+# ──────────────────────────────────────────────────────────────
+# 推理内容清理
+# ──────────────────────────────────────────────────────────────
 
 def _clean_reasoning_content(raw_reasoning: str) -> str:
-    """清理推理内容，去除模型名称、重复文本等噪声
+    """清理推理内容，去除模型名称、重复文本等噪声。
 
     Ollama 等本地模型可能在 reasoning 字段中返回模型标识符或元数据，
     此函数用于过滤这些非推理内容，确保只保留真正的思考过程。
@@ -23,40 +44,29 @@ def _clean_reasoning_content(raw_reasoning: str) -> str:
     text = raw_reasoning.strip()
 
     # 场景1：检测连续重复的模型名称模式（最常见的问题）
-    # 匹配类似 "qwen3-vl:8b" 或 "llama-3.1-8b" 的模式重复
     model_name_pattern = r'[a-zA-Z0-9]+(?:-[a-zA-Z0-9.]+)*:[a-zA-Z0-9._-]+'
-
-    # 检查是否整个文本主要由重复的模型名组成
     matches = re.findall(model_name_pattern, text)
     if matches:
-        # 计算模型名占总文本的比例
         total_model_chars = sum(len(m) for m in matches)
         ratio = total_model_chars / len(text) if text else 0
-
-        # 如果超过60%的字符都是模型名，认为是噪声
         if ratio > 0.6 and len(text) > 10:
-            logger.debug(f"[Provider] Filtered reasoning noise: model_name_ratio={ratio:.2f}, "
-                        f"text_length={len(text)}")
+            logger.debug(
+                f"[Provider] Filtered reasoning noise: model_name_ratio={ratio:.2f}, "
+                f"text_length={len(text)}"
+            )
             return ""
-
-        # 如果有多个相同的模型名重复出现（>=3次），也是噪声
-        from collections import Counter
         model_counts = Counter(matches)
         most_common_model, count = model_counts.most_common(1)[0] if model_counts else ("", 0)
         if count >= 3 and len(most_common_model) >= 5:
             logger.debug(f"[Provider] Filtered repeated model name: '{most_common_model}' x{count}")
             return ""
 
-    # 场景2：移除行首/行尾的模型名（保留中间的有效内容）
-    # 行首模型名
+    # 场景2：移除行首/行尾的模型名
     text = re.sub(r'^[a-zA-Z0-9_-]+:[a-zA-Z0-9._-]+\s*', '', text)
-    # 行尾模型名
     text = re.sub(r'\s*[a-zA-Z0-9_-]+:[a-zA-Z0-9._-]+$', '', text)
 
-    # 场景3：移除孤立的模型名片段（如 "vl:8b" 前后没有其他有意义的内容）
-    # 如果清理后内容太短且看起来像片段，直接清空
+    # 场景3：移除孤立的模型名片段
     if len(text.strip()) < 8:
-        # 检查是否还包含模型名特征
         if re.search(r':[a-zA-Z0-9._-]', text):
             logger.debug(f"[Provider] Filtered short fragment: length={len(text)}")
             return ""
@@ -64,7 +74,11 @@ def _clean_reasoning_content(raw_reasoning: str) -> str:
     return text.strip()
 
 
-PROVIDER_TEMPLATES = {
+# ──────────────────────────────────────────────────────────────
+# 供应商模板（27 个预置）
+# ──────────────────────────────────────────────────────────────
+
+PROVIDER_TEMPLATES: dict[str, dict] = {
     "openai": {
         "id": "openai",
         "name": "OpenAI",
@@ -301,84 +315,18 @@ PROVIDER_TEMPLATES = {
     },
 }
 
+
+# ──────────────────────────────────────────────────────────────
+# 错误分类与重试
+# ──────────────────────────────────────────────────────────────
+
 _RETRIABLE_STATUS_CODES = {429, 500, 502, 503, 529}
 _MAX_RETRIES = 2
 _RETRY_BASE_DELAY = 1.0
-_TOOL_CALL_ARGUMENTS_MAX_LEN = 100_000
-
-
-class LLMResponse:
-    __slots__ = ("content", "tool_calls", "finish_reason", "usage", "tool_results")
-
-    def __init__(
-        self,
-        content: str | None = None,
-        tool_calls: list[dict] | None = None,
-        finish_reason: str = "stop",
-        usage: dict | None = None,
-        tool_results: list[dict] | None = None,
-    ):
-        self.content = content or ""
-        self.tool_calls = tool_calls
-        self.finish_reason = finish_reason
-        self.usage = usage
-        self.tool_results = tool_results
-
-    def has_tool_calls(self) -> bool:
-        return bool(self.tool_calls)
-
-
-class StreamEvent:
-    __slots__ = ("type", "data")
-
-    def __init__(self, event_type: str, data: dict | None = None):
-        self.type = event_type
-        self.data = data or {}
-
-
-def _repair_tool_call_arguments(raw_args: str, tool_name: str = "?") -> str:
-    if not raw_args or not raw_args.strip():
-        return "{}"
-    if len(raw_args) > _TOOL_CALL_ARGUMENTS_MAX_LEN:
-        return "{}"
-    text = raw_args.strip()
-    if text in ("None", "null", "undefined"):
-        return "{}"
-    try:
-        json.loads(text)
-        return text
-    except json.JSONDecodeError:
-        pass
-    try:
-        return json.dumps(json.loads(text, strict=False))
-    except json.JSONDecodeError:
-        pass
-    cleaned = text.rstrip()
-    if cleaned.endswith(","):
-        cleaned = cleaned[:-1]
-    depth = 0
-    for ch in cleaned:
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-    if depth > 0:
-        cleaned += "}" * depth
-    elif depth < 0:
-        for _ in range(-depth):
-            idx = cleaned.rfind("}")
-            if idx >= 0:
-                cleaned = cleaned[:idx] + cleaned[idx + 1:]
-    try:
-        json.loads(cleaned)
-        return cleaned
-    except json.JSONDecodeError:
-        pass
-    logger.warning(f"[Provider] Failed to repair tool arguments for '{tool_name}', falling back to empty JSON")
-    return "{}"
 
 
 def _classify_error(exc: Exception) -> tuple[bool, str]:
+    """将异常分类为可重试/不可重试，并返回原因标签。"""
     msg = str(exc).lower()
     status = getattr(getattr(exc, "response", None), "status_code", None)
     if status in (401, 403):
@@ -398,35 +346,17 @@ def _classify_error(exc: Exception) -> tuple[bool, str]:
     return False, "unknown"
 
 
-_MODEL_CAPABILITIES = {
-    "gpt-4o": {"tool_calls": True, "multimodal": True},
-    "gpt-4o-mini": {"tool_calls": True, "multimodal": True},
-    "gpt-4-turbo": {"tool_calls": True, "multimodal": True},
-    "gpt-4-": {"tool_calls": True, "multimodal": False},
-    "o1": {"tool_calls": True, "multimodal": True},
-    "o3-mini": {"tool_calls": True, "multimodal": False},
-    "o3": {"tool_calls": True, "multimodal": False},
-    "deepseek-chat": {"tool_calls": True, "multimodal": False},
-    "deepseek-reasoner": {"tool_calls": False, "multimodal": False},
-    "gemini": {"tool_calls": True, "multimodal": True},
-    "mistral": {"tool_calls": True, "multimodal": False},
-    "codestral": {"tool_calls": False, "multimodal": False},
-    "llama-3.3-70b": {"tool_calls": True, "multimodal": False},
-    "llama-3.1-": {"tool_calls": True, "multimodal": False},
-    "grok": {"tool_calls": True, "multimodal": False},
-    "moonshot-v1": {"tool_calls": True, "multimodal": False},
-    "glm-4": {"tool_calls": True, "multimodal": True},
-    "qwen-plus": {"tool_calls": True, "multimodal": False},
-    "qwen-turbo": {"tool_calls": True, "multimodal": False},
-    "qwen-max": {"tool_calls": True, "multimodal": False},
-    "qwen2.5": {"tool_calls": True, "multimodal": False},
-    "qwen3": {"tool_calls": True, "multimodal": False},
-    "qwen2-vl": {"tool_calls": True, "multimodal": True},
-    "qwen3-vl": {"tool_calls": True, "multimodal": True},
-}
-
+# ──────────────────────────────────────────────────────────────
+# OpenAICompatibleProvider 实现
+# ──────────────────────────────────────────────────────────────
 
 class OpenAICompatibleProvider(LLMProvider):
+    """OpenAI 兼容 API 供应商实现。
+
+    所有 27 个预置模板均使用此类的同一实现，
+    通过 base_url / api_key / default_model 区分不同供应商。
+    """
+
     provider_name = "openai_compatible"
 
     def __init__(
@@ -442,53 +372,62 @@ class OpenAICompatibleProvider(LLMProvider):
         self.default_model = default_model
         self.provider_name = provider_name
         self.force_enable_tool_calls = force_enable_tool_calls
+        # 复用 httpx 客户端连接池
+        self._client: httpx.AsyncClient | None = None
+        # 运行时能力探测：记录已知不支持工具调用的模型
+        self._unsupported_tool_models: set[str] = set()
 
-    def _lookup_capability(self, model: str, cap_key: str) -> bool | None:
-        if not model:
-            return None
-        model_lower = model.lower()
-        for key, caps in _MODEL_CAPABILITIES.items():
-            if key in model_lower:
-                return caps.get(cap_key)
-        return None
+    @property
+    def client(self) -> httpx.AsyncClient:
+        """懒加载 httpx 客户端（复用连接池）。"""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=120.0)
+        return self._client
+
+    async def aclose(self) -> None:
+        """关闭 httpx 客户端。"""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     def supports_tool_calls(self, model: str = "") -> bool:
+        """是否支持工具调用。
+
+        优先使用 force_enable_tool_calls 强制开关；
+        其次检查运行时探测结果（_unsupported_tool_models）；
+        默认乐观 True（首次失败时记录并降级）。
+        """
         if self.force_enable_tool_calls is not None:
             return self.force_enable_tool_calls
-        result = self._lookup_capability(model or self.default_model, "tool_calls")
-        if result is not None:
-            return result
-        if self.provider_name == "ollama":
+        actual_model = model or self.default_model
+        if actual_model in self._unsupported_tool_models:
             return False
         return True
 
     def supports_multimodal(self, model: str = "") -> bool:
-        result = self._lookup_capability(model or self.default_model, "multimodal")
-        if result is not None:
-            return result
+        """是否支持多模态。乐观默认 False，由调用方按需覆盖。"""
         return False
 
-    async def chat(
-        self,
-        messages: list[dict],
-        tools: list[dict] | None = None,
-        stream: bool = False,
-        return_raw: bool = False,
-        **kwargs
-    ) -> str | dict | AsyncIterator[dict]:
-        """调用大模型聊天接口
+    def mark_unsupported_tool_calls(self, model: str) -> None:
+        """运行时探测：记录不支持工具调用的模型。"""
+        if model:
+            self._unsupported_tool_models.add(model)
+            logger.debug(f"[Provider] {self.provider_name} marked model '{model}' as tool-call unsupported")
 
-        参数:
-            messages: 对话消息列表
-            tools: OpenAI Function Calling 格式工具定义列表
-            stream: 是否使用流式响应
-            return_raw: 是否返回完整 API 响应（含 tool_calls / reasoning），默认 False 仅返回文本
+    # ── 非流式聊天 ──
+
+    async def chat(self, request: LLMRequest) -> LLMResponse:
+        """非流式聊天，统一返回 LLMResponse。
+
+        实现：
+        1. 构建 payload（含 tools / temperature / max_tokens / top_p）
+        2. POST /chat/completions（stream=False）
+        3. 解析 choices[0].message，提取 content / reasoning / tool_calls
+        4. 返回 LLMResponse
         """
-        if stream:
-            return await self._chat_via_stream(messages, tools, **kwargs)
-
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            payload = self._build_payload(messages, tools, stream=False, **kwargs)
+        payload = self._build_payload(request, stream=False)
+        client = httpx.AsyncClient(timeout=120.0) if self._client is None else self.client
+        try:
             resp = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers=self._build_headers(),
@@ -496,97 +435,49 @@ class OpenAICompatibleProvider(LLMProvider):
             )
             resp.raise_for_status()
             data = resp.json()
-            if return_raw:
-                message = data.get("choices", [{}])[0].get("message", {})
-                tool_calls = message.get("tool_calls", [])
-                raw_reasoning = message.get("reasoning", "") or message.get("reasoning_content", "")
-                # 清理推理内容
-                reasoning = _clean_reasoning_content(raw_reasoning)
-                return {
-                    "content": message.get("content", ""),
-                    "reasoning": reasoning,
-                    "tool_calls": tool_calls,
-                    "role": message.get("role", "assistant"),
-                }
-            return data["choices"][0]["message"]["content"]
+        finally:
+            if self._client is None:
+                await client.aclose()
 
-    async def _chat_via_stream(
-        self,
-        messages: list[dict],
-        tools: list[dict] | None = None,
-        **kwargs
-    ) -> AsyncIterator[dict]:
-        payload = self._build_payload(messages, tools, stream=True, **kwargs)
-        collected_tool_calls: dict[int, dict] = {}
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            async with client.stream(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                headers=self._build_headers(),
-                json=payload,
-            ) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    data_str = line[6:]
-                    if data_str.strip() == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(data_str)
-                        choice = data.get("choices", [{}])[0]
-                        delta = choice.get("delta", {})
-                        content = delta.get("content") or ""
-                        raw_reasoning = delta.get("reasoning") or delta.get("reasoning_content") or ""
+        choice = data.get("choices", [{}])[0]
+        message = choice.get("message", {})
+        content = message.get("content", "") or ""
+        raw_reasoning = message.get("reasoning", "") or message.get("reasoning_content", "")
+        reasoning = _clean_reasoning_content(raw_reasoning)
+        tool_calls = message.get("tool_calls")
+        finish_reason = choice.get("finish_reason", "stop")
+        usage = data.get("usage")
 
-                        reasoning = _clean_reasoning_content(raw_reasoning)
+        return LLMResponse(
+            content=content,
+            reasoning=reasoning,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
+            usage=usage,
+            raw=data,
+        )
 
-                        tool_calls_delta = delta.get("tool_calls")
-                        if tool_calls_delta:
-                            for tc in tool_calls_delta:
-                                idx = tc.get("index", 0)
-                                if idx not in collected_tool_calls:
-                                    collected_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
-                                if tc.get("id"):
-                                    collected_tool_calls[idx]["id"] = tc["id"]
-                                fn = tc.get("function", {})
-                                if fn.get("name"):
-                                    collected_tool_calls[idx]["name"] = fn["name"]
-                                if fn.get("arguments"):
-                                    collected_tool_calls[idx]["arguments"] += fn["arguments"]
+    # ── 流式聊天 ──
 
-                        result = {"content": content, "reasoning": reasoning}
-                        if content or reasoning:
-                            yield result
-                    except json.JSONDecodeError:
-                        continue
+    async def chat_stream(self, request: LLMRequest) -> AsyncIterator[StreamEvent]:
+        """流式聊天，统一返回 StreamEvent 流。
 
-        if collected_tool_calls:
-            merged = []
-            for idx in sorted(collected_tool_calls.keys()):
-                entry = collected_tool_calls[idx]
-                merged.append({
-                    "id": entry["id"] or f"call_{idx}",
-                    "type": "function",
-                    "function": {
-                        "name": entry["name"],
-                        "arguments": entry["arguments"],
-                    }
-                })
-            yield {"content": "", "reasoning": "", "tool_calls_complete": merged}
+        实现：
+        1. 构建 payload（stream=True）
+        2. 带重试机制（_MAX_RETRIES=2，仅对可重试错误生效）
+        3. 逐行解析 SSE data，发射 content / reasoning / tool_call_delta / finish_reason / usage / done 事件
+        4. 流结束后合并 tool_calls（如有）
+        """
+        payload = self._build_payload(request, stream=True)
+        enable_reasoning = request.extra.get("enable_reasoning", True)
 
-    async def chat_stream(
-        self,
-        messages: list[dict],
-        tools: list[dict] | None = None,
-        **kwargs
-    ) -> AsyncIterator[StreamEvent]:
-        payload = self._build_payload(messages, tools, stream=True, **kwargs)
-
-        last_error = None
+        last_error: Exception | None = None
         for attempt in range(_MAX_RETRIES + 1):
             try:
-                async with httpx.AsyncClient(timeout=180.0) as client:
+                collected_tool_calls: dict[int, dict] = {}
+                client = httpx.AsyncClient(timeout=180.0) if self._client is None else self.client
+                client_owned = self._client is None
+                try:
                     async with client.stream(
                         "POST",
                         f"{self.base_url}/chat/completions",
@@ -594,13 +485,15 @@ class OpenAICompatibleProvider(LLMProvider):
                         json=payload,
                     ) as resp:
                         resp.raise_for_status()
-
                         async for line in resp.aiter_lines():
                             if not line.startswith("data: "):
                                 continue
                             data_str = line[6:]
                             if data_str.strip() == "[DONE]":
                                 yield StreamEvent("done")
+                                # 流结束前合并 tool_calls
+                                if collected_tool_calls:
+                                    yield self._merge_tool_calls(collected_tool_calls)
                                 return
                             try:
                                 data = json.loads(data_str)
@@ -612,11 +505,12 @@ class OpenAICompatibleProvider(LLMProvider):
                                 if content:
                                     yield StreamEvent("content", {"content": content})
 
-                                raw_reasoning = delta.get("reasoning") or delta.get("reasoning_content") or ""
-                                if raw_reasoning:
-                                    reasoning = _clean_reasoning_content(raw_reasoning)
-                                    if reasoning:
-                                        yield StreamEvent("reasoning", {"reasoning": reasoning})
+                                if enable_reasoning:
+                                    raw_reasoning = delta.get("reasoning") or delta.get("reasoning_content") or ""
+                                    if raw_reasoning:
+                                        reasoning = _clean_reasoning_content(raw_reasoning)
+                                        if reasoning:
+                                            yield StreamEvent("reasoning", {"reasoning": reasoning})
 
                                 tc_deltas = delta.get("tool_calls")
                                 if tc_deltas:
@@ -630,6 +524,15 @@ class OpenAICompatibleProvider(LLMProvider):
                                             event_data["function_name"] = fn["name"]
                                         if fn.get("arguments"):
                                             event_data["function_arguments"] = fn["arguments"]
+                                        # 累积合并 tool_calls
+                                        if idx not in collected_tool_calls:
+                                            collected_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+                                        if event_data.get("tool_call_id"):
+                                            collected_tool_calls[idx]["id"] = event_data["tool_call_id"]
+                                        if event_data.get("function_name"):
+                                            collected_tool_calls[idx]["name"] = event_data["function_name"]
+                                        if event_data.get("function_arguments"):
+                                            collected_tool_calls[idx]["arguments"] += event_data["function_arguments"]
                                         yield StreamEvent("tool_call_delta", event_data)
 
                                 if finish_reason:
@@ -640,22 +543,48 @@ class OpenAICompatibleProvider(LLMProvider):
                                     yield StreamEvent("usage", {"usage": usage})
                             except json.JSONDecodeError:
                                 continue
-                return
+                    # 流正常结束（未收到 [DONE]），合并 tool_calls
+                    if collected_tool_calls:
+                        yield self._merge_tool_calls(collected_tool_calls)
+                    return
+                finally:
+                    if client_owned:
+                        await client.aclose()
             except Exception as e:
                 last_error = e
                 retriable, reason = _classify_error(e)
                 if not retriable or attempt >= _MAX_RETRIES:
                     break
-                import asyncio
                 delay = _RETRY_BASE_DELAY * (2 ** attempt)
-                logger.warning(f"[Provider] Stream retry ({reason}): attempt {attempt + 1}/{_MAX_RETRIES}, delay={delay}s")
+                logger.warning(
+                    f"[Provider] Stream retry ({reason}): attempt {attempt + 1}/{_MAX_RETRIES}, delay={delay}s"
+                )
                 await asyncio.sleep(delay)
 
         raise last_error
 
+    @staticmethod
+    def _merge_tool_calls(collected: dict[int, dict]) -> StreamEvent:
+        """合并流式累积的 tool_calls 为完整列表，发射 tool_calls_complete 事件。"""
+        merged = []
+        for idx in sorted(collected.keys()):
+            entry = collected[idx]
+            merged.append({
+                "id": entry["id"] or f"call_{idx}",
+                "type": "function",
+                "function": {
+                    "name": entry["name"],
+                    "arguments": entry["arguments"],
+                },
+            })
+        return StreamEvent("tool_calls_complete", {"tool_calls": merged})
+
+    # ── 嵌入 ──
+
     async def embed(self, text: str) -> list[float]:
         embed_model = self.default_model if "embed" in self.default_model.lower() else "text-embedding-3-small"
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        client = httpx.AsyncClient(timeout=30.0) if self._client is None else self.client
+        try:
             resp = await client.post(
                 f"{self.base_url}/embeddings",
                 headers=self._build_headers(),
@@ -663,27 +592,37 @@ class OpenAICompatibleProvider(LLMProvider):
             )
             resp.raise_for_status()
             return resp.json()["data"][0]["embedding"]
+        finally:
+            if self._client is None:
+                await client.aclose()
+
+    # ── 模型列表 ──
 
     async def list_models(self) -> list[dict]:
+        client = httpx.AsyncClient(timeout=30.0) if self._client is None else self.client
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.get(
-                    f"{self.base_url}/models",
-                    headers=self._build_headers(),
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return [
-                    {
-                        "id": m.get("id", ""),
-                        "name": m.get("id", ""),
-                        "owned_by": m.get("owned_by", ""),
-                    }
-                    for m in data.get("data", [])
-                ]
+            resp = await client.get(
+                f"{self.base_url}/models",
+                headers=self._build_headers(),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return [
+                {
+                    "id": m.get("id", ""),
+                    "name": m.get("id", ""),
+                    "owned_by": m.get("owned_by", ""),
+                }
+                for m in data.get("data", [])
+            ]
         except Exception as e:
-            logger.warning(f"Failed to list models from {self.provider_name}: {e}")
+            logger.warning(f"[Provider] Failed to list models from {self.provider_name}: {e}")
             return []
+        finally:
+            if self._client is None:
+                await client.aclose()
+
+    # ── 内部辅助 ──
 
     def _build_headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -691,60 +630,19 @@ class OpenAICompatibleProvider(LLMProvider):
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
-    def _build_payload(
-        self,
-        messages: list[dict],
-        tools: list[dict] | None,
-        stream: bool = False,
-        **kwargs
-    ) -> dict:
+    def _build_payload(self, request: LLMRequest, stream: bool = False) -> dict:
         payload = {
-            "model": kwargs.get("model", self.default_model),
-            "messages": messages,
+            "model": request.model or self.default_model,
+            "messages": request.messages,
             "stream": stream,
         }
-        if kwargs.get("temperature") is not None:
-            payload["temperature"] = kwargs["temperature"]
-        if kwargs.get("max_tokens") is not None:
-            payload["max_tokens"] = kwargs["max_tokens"]
-        if kwargs.get("top_p") is not None:
-            payload["top_p"] = kwargs["top_p"]
-        if tools:
-            payload["tools"] = tools
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.max_tokens is not None:
+            payload["max_tokens"] = request.max_tokens
+        if request.top_p is not None:
+            payload["top_p"] = request.top_p
+        if request.tools:
+            payload["tools"] = request.tools
             payload["tool_choice"] = "auto"
         return payload
-
-    @staticmethod
-    def _parse_response(data: dict) -> LLMResponse:
-        choice = data.get("choices", [{}])[0]
-        message = choice.get("message", {})
-        content = message.get("content") or ""
-        tool_calls = message.get("tool_calls")
-        finish_reason = choice.get("finish_reason", "stop")
-        usage = data.get("usage")
-
-        parsed_tool_calls = None
-        if tool_calls:
-            parsed_tool_calls = []
-            for tc in tool_calls:
-                args = tc.get("function", {}).get("arguments", "{}")
-                try:
-                    json.loads(args)
-                except json.JSONDecodeError:
-                    tool_name = tc.get("function", {}).get("name", "unknown")
-                    args = _repair_tool_call_arguments(args, tool_name)
-                parsed_tool_calls.append({
-                    "id": tc.get("id", ""),
-                    "type": tc.get("type", "function"),
-                    "function": {
-                        "name": tc.get("function", {}).get("name", ""),
-                        "arguments": args,
-                    },
-                })
-
-        return LLMResponse(
-            content=content,
-            tool_calls=parsed_tool_calls,
-            finish_reason=finish_reason,
-            usage=usage,
-        )

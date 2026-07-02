@@ -54,6 +54,12 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
     data: Record<string, unknown>
   }>>([])
 
+  // 待处理跳转提示（智能无感跳转被防打断策略拦截时，标记侧边栏红点）
+  const pendingNavigation = ref<{ browser: boolean; workflow: boolean }>({
+    browser: false,
+    workflow: false,
+  })
+
   // 浏览器任务统计
   const browserTaskCount = computed(() => browserTasks.value.length)
   const pendingBrowserTasks = computed(() =>
@@ -178,10 +184,26 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
     browserTasks.value = browserTasks.value.filter(t => t.status === 'pending')
   }
 
+  /**
+   * 标记目标页有待处理跳转（显示侧边栏红点提示）
+   * 由 useTaskNavigation 在防打断策略拦截时调用
+   */
+  const markPendingNavigation = (target: 'browser' | 'workflow') => {
+    pendingNavigation.value = { ...pendingNavigation.value, [target]: true }
+  }
+
+  /**
+   * 清除目标页的待处理跳转提示（用户手动点击导航项时调用）
+   */
+  const clearPendingNavigation = (target: 'browser' | 'workflow') => {
+    pendingNavigation.value = { ...pendingNavigation.value, [target]: false }
+  }
+
   return {
     browserTasks,
     scheduledTasks,
     recentEvents,
+    pendingNavigation,
     browserTaskCount,
     pendingBrowserTasks,
     scheduledTaskCount,
@@ -192,5 +214,7 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
     fetchScheduledTasks,
     removeScheduledTask,
     clearOpenedBrowserTasks,
+    markPendingNavigation,
+    clearPendingNavigation,
   }
 })
