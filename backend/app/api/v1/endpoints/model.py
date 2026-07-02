@@ -150,8 +150,12 @@ def _build_provider_response(provider_id: str) -> ProviderResponse:
         creds = llm_adapter._credential_repo.list_credentials(provider_id)
         if creds:
             api_key_prefix = creds[0].get("api_key_prefix", "")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Failed to load credential prefix for provider [{}]: {}",
+            provider_id,
+            exc,
+        )
 
     return ProviderResponse(
         id=provider_id,
