@@ -65,7 +65,7 @@ class TTSProvider(ABC):
 
     @abstractmethod
     async def synthesize(self, text: str, voice: str = "default") -> bytes:
-        ...
+        raise NotImplementedError
 
 
 class EmbeddingProvider(ABC):
