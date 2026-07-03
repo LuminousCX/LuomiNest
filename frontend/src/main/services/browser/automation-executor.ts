@@ -28,14 +28,17 @@ export interface HumanInputLayer {
 }
 
 type ActionHandler = (args: Record<string, any>, wc: WebContents) => Promise<{ success: boolean; data?: any; error?: string }>
+type TabActionHandler = (args: Record<string, any>) => Promise<AutomationResult>
 
 class LuomiAutomationExecutor {
   private handlers: Map<string, ActionHandler> = new Map()
+  private tabHandlers: Map<string, TabActionHandler> = new Map()
   private humanLayer: HumanInputLayer | null = null
   private domTreeInjected: WeakSet<WebContents> = new WeakSet()
 
   constructor() {
     this.registerHandlers()
+    this.registerTabHandlers()
     // 向 WS 客户端注册自己
     luomiBrowserWSClient.setHandler(this.execute.bind(this))
   }
@@ -47,6 +50,17 @@ class LuomiAutomationExecutor {
 
   /** 主入口：执行自动化动作 */
   async execute(action: string, args: Record<string, any>): Promise<AutomationResult> {
+    // 标签页管理类动作（不需要 webContents，直接操作 tabManager）
+    const tabHandler = this.tabHandlers.get(action)
+    if (tabHandler) {
+      try {
+        return await tabHandler(args)
+      } catch (e: any) {
+        console.error(`[AutomationExecutor] 动作 ${action} 执行异常:`, e)
+        return { success: false, error: e?.message || String(e) }
+      }
+    }
+
     const handler = this.handlers.get(action)
     if (!handler) {
       return { success: false, error: `未知自动化动作: ${action}` }
@@ -525,6 +539,46 @@ class LuomiAutomationExecutor {
         // getAll 不可用则仅返回可后退/前进状态
       }
       return { success: true, data }
+    })
+  }
+
+  private registerTabHandlers(): void {
+    // ===== 标签页管理类（不操作 webContents，直接操作 tabManager） =====
+    this.tabHandlers.set('get_tabs', async () => {
+      const tabs = tabManager.getAllTabs()
+      return {
+        success: true,
+        data: {
+          tabs: tabs.map(t => ({
+            id: t.id,
+            title: t.title,
+            url: t.url,
+            active: !!t.active,
+            sleeping: !!t.sleeping,
+            loading: !!t.loading
+          })),
+          activeTabId: tabs.find(t => t.active)?.id ?? null,
+          count: tabs.length
+        }
+      }
+    })
+
+    this.tabHandlers.set('switch_tab', async (args) => {
+      const tabId = args.tab_id as string
+      if (!tabId) return { success: false, error: '缺少 tab_id 参数' }
+
+      const tab = tabManager.getTab(tabId)
+      if (!tab) return { success: false, error: `标签页不存在: ${tabId}` }
+
+      await tabManager.activateTab(tabId)
+      return {
+        success: true,
+        data: {
+          tabId,
+          title: tab.title,
+          url: tab.url
+        }
+      }
     })
   }
 }

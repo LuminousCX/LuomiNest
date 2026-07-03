@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { X, Globe, Loader2, Moon, Plus } from 'lucide-vue-next'
 
 interface Tab {
@@ -12,7 +13,7 @@ interface Tab {
   sleeping?: boolean
 }
 
-defineProps<{
+const props = defineProps<{
   tabs: Tab[]
 }>()
 
@@ -21,6 +22,22 @@ const emit = defineEmits<{
   close: [tabId: string]
   add: []
 }>()
+
+const failedFavicons = ref<Set<string>>(new Set())
+
+const onFaviconError = (tabId: string): void => {
+  failedFavicons.value.add(tabId)
+}
+
+// tabs 变化时清理已关闭 tab 的失败标记
+watch(() => props.tabs, (newTabs) => {
+  const currentIds = new Set(newTabs.map(t => t.id))
+  const next = new Set<string>()
+  failedFavicons.value.forEach(id => {
+    if (currentIds.has(id)) next.add(id)
+  })
+  failedFavicons.value = next
+}, { deep: true })
 
 function getTabTooltip(tab: Tab): string {
   if (tab.sleeping) {
@@ -42,7 +59,14 @@ function getTabTooltip(tab: Tab): string {
       >
         <Loader2 v-if="tab.loading" :size="12" class="tab-spinner" />
         <Moon v-else-if="tab.sleeping" :size="12" class="tab-sleep-icon" />
-        <img v-else-if="tab.favicon" :src="tab.favicon" class="tab-favicon" alt="" />
+        <img
+          v-else-if="tab.favicon && !failedFavicons.has(tab.id)"
+          :src="tab.favicon"
+          class="tab-favicon"
+          alt=""
+          referrerpolicy="no-referrer"
+          @error="onFaviconError(tab.id)"
+        />
         <Globe v-else-if="tab.url" :size="12" class="tab-icon" />
         <span class="tab-title" :class="{ 'tab-title-sleeping': tab.sleeping }">{{ tab.title }}</span>
         <button class="tab-close" @click.stop="emit('close', tab.id)">

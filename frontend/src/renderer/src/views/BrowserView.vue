@@ -35,6 +35,7 @@ const screenshotLoading = ref(false)
 const toastMessage = ref('')
 const showToast = ref(false)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
+let sidebarResizeObserver: ResizeObserver | null = null
 const canGoBack = ref(false)
 const canGoForward = ref(false)
 
@@ -79,6 +80,20 @@ onMounted(async () => {
   window.electron?.ipcRenderer?.on('tab:updated', handleTabUpdated)
   window.electron?.ipcRenderer?.on('tab:new-tab-request', handleNewTabRequest)
   window.electron?.ipcRenderer?.on('tab:navigation-state', handleNavigationState)
+
+  // 监听 sidebar 宽度变化，同步到主进程 tabManager（修复浏览器覆盖左侧导航）
+  const sidebarEl = document.querySelector('.lumi-sidebar')
+  if (sidebarEl) {
+    const syncSidebarWidth = (): void => {
+      const width = Math.round(sidebarEl.getBoundingClientRect().width)
+      if (width > 0) {
+        window.api?.tab.setBoundsConfig({ sidebarWidth: width })
+      }
+    }
+    syncSidebarWidth()
+    sidebarResizeObserver = new ResizeObserver(syncSidebarWidth)
+    sidebarResizeObserver.observe(sidebarEl)
+  }
 })
 
 // 订阅 taskStream：主 Agent 通过 create_browser_tab 工具创建的标签页自动打开
@@ -100,6 +115,9 @@ onUnmounted(() => {
   window.electron?.ipcRenderer?.removeListener('tab:updated', handleTabUpdated)
   window.electron?.ipcRenderer?.removeListener('tab:new-tab-request', handleNewTabRequest)
   window.electron?.ipcRenderer?.removeListener('tab:navigation-state', handleNavigationState)
+
+  sidebarResizeObserver?.disconnect()
+  sidebarResizeObserver = null
 
   window.api?.tab.hideAll().catch(() => {})
   window.api?.tab.setBoundsConfig({ devPanelHeight: 0 }).catch(() => {})
@@ -246,31 +264,47 @@ async function selectTab(tabId: string) {
 }
 
 async function closeTab(tabId: string) {
-  if (tabs.value.length <= 1) return
-
   const idx = tabs.value.findIndex(t => t.id === tabId)
   if (idx === -1) return
 
-  try {
-    await window.api?.tab.close(tabId)
-  } catch (e) {
-    console.error('[ERROR][LuomiNestBrowser] Failed to close tab:', e)
+  const tab = tabs.value[idx]
+  const isHomeTab = !tab.url
+
+  if (!isHomeTab) {
+    try {
+      await window.api?.tab.close(tabId)
+    } catch (e) {
+      console.error('[ERROR][LuomiNestBrowser] Failed to close tab:', e)
+    }
   }
 
   tabs.value.splice(idx, 1)
 
-  if (tabs.value.length > 0) {
-    const newActiveIdx = Math.min(idx, tabs.value.length - 1)
-    const newActiveTab = tabs.value[newActiveIdx]
-    newActiveTab.active = true
+  // 无剩余标签页 → 回到默认首页
+  if (tabs.value.length === 0) {
+    tabs.value = [{ id: generateId('home'), title: '新标签页', url: '', active: true }]
+    showHomePage.value = true
+    addressBar.value = ''
+    canGoBack.value = false
+    canGoForward.value = false
+    await window.api?.tab.hideAll()
+    return
+  }
 
-    if (newActiveTab.url) {
-      await selectTab(newActiveTab.id)
-    } else {
-      showHomePage.value = true
-      addressBar.value = ''
-      await window.api?.tab.hideAll()
-    }
+  // 有剩余 → 切换到相邻标签
+  tabs.value.forEach(t => t.active = false)
+  const newActiveIdx = Math.min(idx, tabs.value.length - 1)
+  const newActiveTab = tabs.value[newActiveIdx]
+  newActiveTab.active = true
+
+  if (newActiveTab.url) {
+    await selectTab(newActiveTab.id)
+  } else {
+    showHomePage.value = true
+    addressBar.value = ''
+    canGoBack.value = false
+    canGoForward.value = false
+    await window.api?.tab.hideAll()
   }
 }
 

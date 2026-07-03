@@ -303,6 +303,7 @@ class TabManager {
       if (currentTab) {
         currentTab.active = false
         currentTab.lastActiveAt = Date.now()
+        this.onTabUpdate?.(this.activeTabId, { active: false })
 
         const currentView = this.views.get(this.activeTabId)
         if (currentView) {
@@ -339,7 +340,6 @@ class TabManager {
 
   closeTab(tabId: string): void {
     if (!this.window) return
-    if (this.tabs.size <= 1) return
 
     const tab = this.tabs.get(tabId)
     if (!tab) return

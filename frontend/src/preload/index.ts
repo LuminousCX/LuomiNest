@@ -132,7 +132,10 @@ const ALLOWED_ON_CHANNELS = new Set([
   'desktop-pet:get-model-capabilities',
   'desktop-pet:subtitle',
   'desktop-pet:subtitle-hide',
-  'backend:stage'
+  'backend:stage',
+  'tab:updated',
+  'tab:new-tab-request',
+  'tab:navigation-state'
 ])
 
 const electronBridge = {
