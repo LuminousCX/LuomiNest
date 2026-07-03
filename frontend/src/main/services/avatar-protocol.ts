@@ -10,10 +10,6 @@ const builtinBasePath = isDev
   ? join(app.getAppPath(), 'src/renderer/public/live2d')
   : join(process.resourcesPath, 'live2d')
 
-const cubismCoreBasePath = isDev
-  ? join(app.getAppPath(), 'resources/cubism-core')
-  : join(process.resourcesPath, 'cubism-core')
-
 const MIME_MAP: Record<string, string> = {
   json: 'application/json',
   moc3: 'application/octet-stream',
@@ -40,17 +36,6 @@ const isPathSafe = (baseDir: string, targetPath: string): boolean => {
 
 const resolveModelFile = (hostname: string, relativePath: string): string | null => {
   const decodedPath = decodeURIComponent(relativePath)
-
-  if (hostname === 'cubism-core') {
-    const filePath = resolve(cubismCoreBasePath, decodedPath)
-    if (!isPathSafe(cubismCoreBasePath, decodedPath)) {
-      console.warn(`[SECURITY][LuomiNestAvatar] Path traversal blocked: ${decodedPath}`)
-      return null
-    }
-    if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
-    console.warn(`[WARNING][LuomiNestAvatar] Cubism core not found: ${filePath}`)
-    return null
-  }
 
   const searchPaths: { label: string; base: string; sub: string }[] = [
     { label: 'imported', base: PATHS.live2d, sub: join(hostname, decodedPath) },
@@ -126,7 +111,6 @@ export function registerAvatarProtocol(): void {
 
   console.info(`[INFO][LuomiNestAvatar] Protocol "luominest-avatar" registered successfully`)
   console.info(`[INFO][LuomiNestAvatar]   builtinBasePath -> ${builtinBasePath}`)
-  console.info(`[INFO][LuomiNestAvatar]   cubismCoreBasePath -> ${cubismCoreBasePath}`)
   console.info(`[INFO][LuomiNestAvatar]   isPackaged -> ${app.isPackaged}`)
   console.info(`[INFO][LuomiNestAvatar]   resourcesPath -> ${process.resourcesPath}`)
 }
@@ -144,7 +128,6 @@ export function verifyAvatarResources(): void {
   }
 
   verifyResourcePath('Builtin Live2D', builtinBasePath, 'llny/llny.model3.json')
-  verifyResourcePath('Cubism Core', cubismCoreBasePath, 'live2dcubismcore.min.js')
 }
 
 export function registerAvatarIpc(): void {

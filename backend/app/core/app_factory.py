@@ -90,6 +90,11 @@ async def lifespan(app: FastAPI):
         tool_registry.register(CreateScheduledTaskTool())
         tool_registry.register(CreateBrowserTabTool())
 
+        # 浏览器自动化工具集（25 个，通过 WS 调用前端 Electron 执行）
+        from app.core.tools.builtin.browser_automation import get_luominest_browser_automation_tools
+        for _browser_tool in get_luominest_browser_automation_tools():
+            tool_registry.register(_browser_tool)
+
         # Agent 集群调用工具：OpenAI 兼容 API 自回调
         from app.core.agents.cluster.agent_tool import LuomiNestAgentCallTool
         tool_registry.register(LuomiNestAgentCallTool())
@@ -233,6 +238,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] LLM adapter close skipped: {e}")
 
+    # 关闭浏览器自动化 WS 管理器
+    try:
+        from app.api.ws import browser_ws_manager
+        await browser_ws_manager.shutdown()
+        logger.info(f"[LuomiNest] Browser WS manager closed")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Browser WS shutdown skipped: {e}")
+
     # 关闭数据库引擎
     try:
         from app.infrastructure.database import dispose_db
@@ -327,6 +340,10 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router, prefix="/api/v1")
     app.include_router(attachment_router, prefix="/api")
+
+    # 浏览器自动化 WebSocket 端点（前端 Electron Main 常驻连接）
+    from app.api.ws import ws_router
+    app.include_router(ws_router, prefix="/ws")
 
     @app.get("/health")
     async def health_check():

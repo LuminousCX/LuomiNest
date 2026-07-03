@@ -3,7 +3,9 @@ import { join } from 'path'
 import { platform } from 'os'
 import { tabManager } from './services/browser'
 import { setupNetworkConfig } from './services/browser/view'
-import { stopBackend, startBackendInBackground } from './services/backend'
+import { stopBackend, startBackendInBackground, subscribeBackendStage } from './services/backend'
+import { luomiBrowserWSClient } from './services/browser/ws-client'
+import { luomiAutomationExecutor, createLuminousHumanLayer } from './services/browser'
 import { PATHS, initAppPaths } from './services/paths'
 import { configStore } from './services/config-store'
 import { registerIpcHandlers, setMainWindow } from './services/ipc-handlers'
@@ -241,6 +243,18 @@ app.whenReady().then(() => {
   console.log('[Main] Starting backend service in background...')
   startBackendInBackground()
 
+  // 注入人类化输入层（不依赖后端就绪，executor 是 main 进程单例）
+  luomiAutomationExecutor.setHumanLayer(createLuminousHumanLayer('default'))
+
+  // 后端就绪后启动浏览器自动化 WS 客户端
+  subscribeBackendStage((stage) => {
+    if (stage === 'ready') {
+      luomiBrowserWSClient.start()
+    } else if (stage === 'failed') {
+      console.warn('[Main] Backend failed, browser WS will retry on reconnect')
+    }
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
@@ -260,6 +274,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   saveWindowState()
+  luomiBrowserWSClient.stop()
   tabManager.cleanup()
   stopBackend()
 })

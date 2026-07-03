@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow, IpcMainInvokeEvent, app } from 'electron'
 import { PATHS } from './paths'
 import { configStore } from './config-store'
 import { cacheManager } from './cache-manager'
-import { tabManager } from './browser'
+import { tabManager, luomiAutomationExecutor } from './browser'
 import { getLumiAuthToken } from './backend/auth-token'
 import { subscribeBackendStage } from './backend'
 
@@ -200,6 +200,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (typeof url !== 'string' || !url.trim()) return
     const { fetchUrl } = await import('./browser')
     return await fetchUrl(url, getMainWindow())
+  })
+
+  ipcMain.handle('browser:automation', async (event: IpcMainInvokeEvent, action: string, args: Record<string, any>) => {
+    if (!assertTrustedSender(event)) {
+      return { success: false, error: '未授权的调用方' }
+    }
+    if (typeof action !== 'string' || !action) {
+      return { success: false, error: '缺少 action 参数' }
+    }
+    return await luomiAutomationExecutor.execute(action, args || {})
   })
 
   ipcMain.handle('backend:subscribe', (event: IpcMainInvokeEvent) => {

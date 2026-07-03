@@ -69,6 +69,11 @@ const api = {
     fetchUrl: (url: string) => ipcRenderer.invoke('browser:fetchUrl', url)
   },
 
+  browserAutomation: {
+    execute: (action: string, args?: Record<string, any>) =>
+      ipcRenderer.invoke('browser:automation', action, args || {})
+  },
+
   avatar: {
     importModel: () => ipcRenderer.invoke('avatar:importModel'),
     listImportedModels: () => ipcRenderer.invoke('avatar:listImportedModels'),

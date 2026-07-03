@@ -5,20 +5,16 @@ import { validateLuomiNestModelUrl, resolveExpressionByModelUrl } from '@/config
 
 const EXPRESSION_BLOCKLIST = ['水印', 'watermark', 'copyright', 'credit', 'logo']
 
-// 延迟加载 cubism4 模块：其顶层会在 window.Live2DCubismCore 未定义时同步 throw，
-// 必须先等待 index.html 内联脚本注入的 core 就绪 Promise 完成后再 import。
+// 延迟加载 cubism4 模块：其顶层会在 window.Live2DCubismCore 未定义时同步 throw。
+// Cubism Core 由 index.html 的同步 <script src="./cubism-core/live2dcubismcore.min.js"> 加载，
+// 在 cubism4 模块 import 前已就绪。若脚本加载失败，此处主动抛出友好错误。
 type CubismLive2DModel = typeof import('pixi-live2d-display-mulmotion/cubism4').Live2DModel
 type Live2DModel = InstanceType<CubismLive2DModel>
 let Live2DModelCtor: CubismLive2DModel | null = null
 const loadCubism4Module = async (): Promise<CubismLive2DModel> => {
   if (Live2DModelCtor) return Live2DModelCtor
-  const readyPromise = (window as any).__cubismCoreReady
-  if (readyPromise) {
-    try {
-      await readyPromise
-    } catch (e) {
-      console.warn('[WARN][LuomiNestLive2D] Cubism core load failed:', e)
-    }
+  if (typeof (window as any).Live2DCubismCore === 'undefined') {
+    throw new Error('Live2DCubismCore 未加载，请检查 cubism-core/live2dcubismcore.min.js 是否存在')
   }
   const mod = await import('pixi-live2d-display-mulmotion/cubism4')
   Live2DModelCtor = mod.Live2DModel

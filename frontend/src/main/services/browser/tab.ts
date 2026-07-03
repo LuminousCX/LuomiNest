@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView } from 'electron'
+import { BrowserWindow, WebContentsView, WebContents } from 'electron'
 import { Tab, TabError, BoundsConfig, getErrorInfo, DEFAULT_BROWSER_CONFIG, NavigationState } from './types'
 import { initBrowserSession } from './session'
 import {
@@ -455,6 +455,41 @@ class TabManager {
   getActiveTab(): Tab | undefined {
     if (!this.activeTabId) return undefined
     return this.tabs.get(this.activeTabId)
+  }
+
+  /**
+   * 获取指定标签页的 WebContents（供自动化执行器使用）
+   * @param tabId 标签页 ID，默认当前活跃标签页
+   * @returns WebContents 实例；休眠/已销毁/不存在时返回 null
+   */
+  getWebContents(tabId?: string): WebContents | null {
+    const targetId = tabId || this.activeTabId
+    if (!targetId) return null
+
+    const tab = this.tabs.get(targetId)
+    if (!tab || tab.sleeping) return null
+
+    const view = this.views.get(targetId)
+    if (!view || isViewDestroyed(view)) return null
+
+    return view.webContents
+  }
+
+  /**
+   * 确保有活跃标签页：若当前无活跃 tab 则创建一个空白页
+   * @returns 活跃 Tab，窗口未初始化时返回 null
+   */
+  ensureActiveTab(): Tab | null {
+    if (!this.window) return null
+
+    if (this.activeTabId) {
+      const tab = this.tabs.get(this.activeTabId)
+      if (tab) return { ...tab }
+    }
+
+    // 无活跃标签页，创建一个
+    const tab = this.createTab(DEFAULT_BROWSER_CONFIG.defaultUrl)
+    return tab
   }
 
   getAllTabs(): Tab[] {

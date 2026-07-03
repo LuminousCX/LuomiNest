@@ -5,29 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LuomiNest - LuminousChenXi Distributed AI Companion Platform</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <script>
-      ;(function () {
-        var t = localStorage.getItem('luominest-theme')
-        if (t !== 'dark') document.documentElement.setAttribute('data-theme', 'light')
-      })()
-    </script>
-    <script>
-      // cubism core 异步加载：cubism4 模块顶层在 window.Live2DCubismCore 未定义时同步 throw，
-      // 必须先注入 core 再动态 import。内联到 HTML 避免 Vite 不复制根目录经典脚本的问题。
-      window.__cubismCoreReady = new Promise(function (resolve, reject) {
-        var s = document.createElement('script')
-        s.src = 'luominest-avatar://cubism-core/live2dcubismcore.min.js'
-        s.onload = function () {
-          var core = window.Live2DCubismCore
-          if (core) resolve(core)
-          else reject(new Error('Live2DCubismCore not assigned after load'))
-        }
-        s.onerror = function () {
-          reject(new Error('Failed to load Live2DCubismCore script'))
-        }
-        document.head.appendChild(s)
-      })
-    </script>
+    <!-- 主题检测：同步外部脚本，必须在 Vue 应用挂载前执行以避免主题闪烁 -->
+    <script src="./theme-init.js"></script>
+    <!-- Cubism Core：同步外部脚本，加载完成后 window.Live2DCubismCore 即就绪，
+         cubism4 模块 import 时不会再 throw "Could not find Cubism 4 runtime"。
+         参考 airi 项目方案：publicDir + 相对路径，无需自定义协议或 asarUnpack。 -->
+    <script src="./cubism-core/live2dcubismcore.min.js"></script>
   </head>
   <body>
     <div id="app"></div>

@@ -134,6 +134,13 @@ export interface ElectronApi {
     search: (query: string) => Promise<any[]>
     fetchUrl: (url: string) => Promise<string>
   }
+  browserAutomation: {
+    execute: (action: string, args?: Record<string, any>) => Promise<{
+      success: boolean
+      error?: string
+      data?: any
+    }>
+  }
   desktopPet: {
     open: (modelInfo?: PetModelInfo) => Promise<{ success: boolean }>
     close: () => Promise<{ success: boolean }>
