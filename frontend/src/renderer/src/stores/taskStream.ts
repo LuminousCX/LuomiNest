@@ -12,6 +12,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { SubagentEvent, TaskStreamEvent } from '../types'
+import type { ScheduledTask } from '../types/workflow'
 import { useApi } from '../composables/useApi'
 
 /** 浏览器标签页任务 */
@@ -41,12 +42,14 @@ export interface ScheduledTaskInfo {
 }
 
 export const useTaskStreamStore = defineStore('taskStream', () => {
-  const { apiGet, apiDelete } = useApi()
+  const { apiGet, apiPost, apiDelete } = useApi()
 
   // 浏览器标签页任务列表
   const browserTasks = ref<BrowserTabTask[]>([])
-  // 定时任务列表
+  // 定时任务列表（内存调度器，实际执行）
   const scheduledTasks = ref<ScheduledTaskInfo[]>([])
+  // 数据库持久化定时任务（循环任务，暂不执行）
+  const dbScheduledTasks = ref<ScheduledTask[]>([])
   // 最近的任务事件流（用于工作台展示）
   const recentEvents = ref<Array<{
     type: 'browser' | 'scheduled' | 'subagent'
@@ -55,9 +58,10 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
   }>>([])
 
   // 待处理跳转提示（智能无感跳转被防打断策略拦截时，标记侧边栏红点）
-  const pendingNavigation = ref<{ browser: boolean; workflow: boolean }>({
+  const pendingNavigation = ref<{ browser: boolean; workflow: boolean; tasks: boolean }>({
     browser: false,
     workflow: false,
+    tasks: false,
   })
 
   // 浏览器任务统计
@@ -68,6 +72,7 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
 
   // 定时任务统计
   const scheduledTaskCount = computed(() => scheduledTasks.value.length)
+  const dbScheduledTaskCount = computed(() => dbScheduledTasks.value.length)
   const activeScheduledTasks = computed(() =>
     scheduledTasks.value.filter(t => t.status === 'pending' || t.status === 'running')
   )
@@ -178,6 +183,67 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
   }
 
   /**
+   * 从数据库拉取持久化定时任务（循环任务）
+   * 与 scheduledTasks（内存调度器）分离：数据库任务为永久存储，调度器任务为运行时执行
+   */
+  const fetchDbScheduledTasks = async () => {
+    try {
+      const resp = await apiGet<{ tasks: ScheduledTask[]; count: number }>('/scheduled-tasks')
+      dbScheduledTasks.value = resp?.tasks ?? []
+    } catch (error) {
+      console.warn('[TaskStreamStore] Failed to fetch db scheduled tasks:', error)
+    }
+  }
+
+  /**
+   * 创建数据库持久化定时任务（循环任务）
+   * 支持每日/每周/每月循环，暂不实现执行逻辑（仅存储）
+   */
+  const createDbScheduledTask = async (payload: {
+    name: string
+    schedule_cron: string
+    schedule_type: 'cron' | 'interval' | 'once'
+    action: string
+    description?: string | null
+    context?: string | null
+    created_from?: 'manual' | 'workflow' | 'normal_chat'
+  }): Promise<string | null> => {
+    try {
+      const resp = await apiPost<{ success: boolean; task_id: string }>('/scheduled-tasks', {
+        name: payload.name,
+        schedule_cron: payload.schedule_cron,
+        schedule_type: payload.schedule_type,
+        action: payload.action,
+        description: payload.description ?? null,
+        context: payload.context ?? null,
+        created_from: payload.created_from ?? 'manual',
+      })
+      if (resp?.success && resp.task_id) {
+        await fetchDbScheduledTasks()
+        return resp.task_id
+      }
+      return null
+    } catch (error) {
+      console.warn('[TaskStreamStore] Failed to create db scheduled task:', error)
+      return null
+    }
+  }
+
+  /**
+   * 删除数据库持久化定时任务
+   */
+  const removeDbScheduledTask = async (taskId: string): Promise<boolean> => {
+    try {
+      await apiDelete(`/scheduled-tasks/${taskId}`)
+      dbScheduledTasks.value = dbScheduledTasks.value.filter(t => t.task_id !== taskId)
+      return true
+    } catch (error) {
+      console.warn('[TaskStreamStore] Failed to remove db scheduled task:', error)
+      return false
+    }
+  }
+
+  /**
    * 清空已完成的浏览器任务
    */
   const clearOpenedBrowserTasks = () => {
@@ -188,20 +254,22 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
    * 标记目标页有待处理跳转（显示侧边栏红点提示）
    * 由 useTaskNavigation 在防打断策略拦截时调用
    */
-  const markPendingNavigation = (target: 'browser' | 'workflow') => {
+  const markPendingNavigation = (target: 'browser' | 'workflow' | 'tasks') => {
     pendingNavigation.value = { ...pendingNavigation.value, [target]: true }
   }
 
   /**
    * 清除目标页的待处理跳转提示（用户手动点击导航项时调用）
    */
-  const clearPendingNavigation = (target: 'browser' | 'workflow') => {
+  const clearPendingNavigation = (target: 'browser' | 'workflow' | 'tasks') => {
     pendingNavigation.value = { ...pendingNavigation.value, [target]: false }
   }
 
   return {
     browserTasks,
     scheduledTasks,
+    dbScheduledTasks,
+    dbScheduledTaskCount,
     recentEvents,
     pendingNavigation,
     browserTaskCount,
@@ -213,6 +281,9 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
     markBrowserTabOpened,
     fetchScheduledTasks,
     removeScheduledTask,
+    fetchDbScheduledTasks,
+    createDbScheduledTask,
+    removeDbScheduledTask,
     clearOpenedBrowserTasks,
     markPendingNavigation,
     clearPendingNavigation,

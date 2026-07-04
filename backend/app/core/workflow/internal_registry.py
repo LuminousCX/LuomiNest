@@ -208,6 +208,34 @@ class InternalToolRegistry:
             })
         return list(modules.values())
 
+    def get_filtered_module_summary(
+        self, exclude_tools: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """获取过滤后的模块摘要，按模式裁剪工具列表。
+
+        Args:
+            exclude_tools: 需排除的工具名集合（如 STANDARD 模式排除 27 个 browser_action 工具）
+
+        Returns:
+            过滤后的模块摘要列表
+        """
+        exclude_set = exclude_tools or set()
+        modules: dict[str, dict[str, Any]] = {}
+        for entry in self._tools.values():
+            if entry.name in exclude_set:
+                continue
+            if entry.module not in modules:
+                modules[entry.module] = {
+                    "module": entry.module,
+                    "tools": [],
+                }
+            modules[entry.module]["tools"].append({
+                "name": entry.name,
+                "description": entry.description,
+                "parameters": entry.parameters_schema,
+            })
+        return list(modules.values())
+
 
 # 全局单例
 internal_tool_registry = InternalToolRegistry()

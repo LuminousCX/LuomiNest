@@ -18,11 +18,12 @@ import { useChatStore } from '../stores/chat'
 import { useWorkflowStore } from '../stores/workflow'
 import { useTaskStreamStore } from '../stores/taskStream'
 
-export type NavigationTarget = 'browser' | 'workflow'
+export type NavigationTarget = 'browser' | 'workflow' | 'tasks'
 
 const TARGET_PATHS: Record<NavigationTarget, string> = {
   browser: '/browser',
   workflow: '/workflow',
+  tasks: '/tasks',
 }
 
 /**

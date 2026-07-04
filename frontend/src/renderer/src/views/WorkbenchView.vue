@@ -24,7 +24,7 @@ import type {
   SubagentToolCall,
   McpServerStatus,
   McpStatus,
-  WorkflowModeLevel,
+  ChatModeLevel,
   WorkflowModeOption,
   WorkflowPendingPlan,
   TimeGroup,
@@ -379,15 +379,17 @@ const isStreaming = computed(() => chatStore.isStreaming || workflowStore.isRunn
 const isBackendReady = computed(() => chatStore.isBackendReady)
 const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
 
-// 工作流模式
-const workflowMode = ref(false)
-const workflowModeLevel = ref<WorkflowModeLevel>('standard')
-const WORKFLOW_MODE_OPTIONS: WorkflowModeOption[] = [
-  { value: 'flash', label: '闪电', title: '闪电模式：快速响应简单任务，跳过计划确认' },
-  { value: 'standard', label: '标准', title: '标准模式：平衡速度与深度，需确认计划' },
-  { value: 'pro', label: '专业', title: '专业模式：更多迭代与并发，适合中等复杂任务' },
-  { value: 'ultra', label: '超长', title: '超长模式：最大能力，适合复杂长任务' },
+// 对话模式（普通/标准/超长）
+// normal: 普通对话，工具最少（任务视图操作 + 表情操控）
+// standard: 工作流标准模式，排除细粒度浏览器自动化工具
+// ultra: 工作流超长模式，全部工具可用
+const chatMode = ref<ChatModeLevel>('normal')
+const CHAT_MODE_OPTIONS: WorkflowModeOption[] = [
+  { value: 'normal', label: '普通', title: '普通模式：非工作流，工具最少（任务视图操作 + 表情操控）' },
+  { value: 'standard', label: '标准', title: '标准模式：工作流，平衡速度与深度，排除细粒度浏览器工具' },
+  { value: 'ultra', label: '超长', title: '超长模式：工作流，最大能力，全部工具可用' },
 ]
+const isWorkflowMode = computed(() => chatMode.value !== 'normal')
 
 const REASONING_MODEL_KEYWORDS = ['reasoner', 'reason', 'o1', 'o3', 'o4', 'thinking', 'r1']
 const isReasoningModel = (modelId: string): boolean => {
@@ -443,11 +445,12 @@ const selectModel = async (providerId: string, modelId: string) => {
   showModelDropdown.value = false
 }
 
-const toggleWorkflowMode = () => {
-  workflowMode.value = !workflowMode.value
+const selectChatMode = (mode: ChatModeLevel) => {
+  chatMode.value = mode
   const options = availableModelOptions.value
   if (options.length === 0) return
-  if (workflowMode.value) {
+  // 工作流模式优先推理模型，普通模式优先快速模型
+  if (mode !== 'normal') {
     const reasoning = options.find((opt) => isReasoningModel(opt.modelId))
     if (reasoning) selectModel(reasoning.providerId, reasoning.modelId)
   } else {
@@ -485,7 +488,7 @@ const sendMessage = async () => {
 
   const resolved = modelStore.resolveModel
 
-  if (workflowMode.value) {
+  if (isWorkflowMode.value) {
     await submitWorkflowTask(content, resolved)
     return
   }
@@ -500,6 +503,7 @@ const sendMessage = async () => {
     temperature: modelStore.modelConfig.defaultTemperature,
     maxTokens: modelStore.modelConfig.defaultMaxTokens,
     topP: modelStore.modelConfig.defaultTopP,
+    chatMode: chatMode.value,
     onChunk: (chunk: ChatStreamChunk) => {
       statsStore.interceptChunk(chunk, chatStore.currentConvId)
 
@@ -628,7 +632,8 @@ const submitWorkflowTask = async (
     await workflowStore.submitWorkflow(content, {
       provider: resolved?.provider || undefined,
       model: resolved?.model || undefined,
-      mode: workflowModeLevel.value,
+      mode: chatMode.value === 'ultra' ? 'ultra' : 'standard',
+      conversationId: convId,
       onPhaseChange: (phase) => {
         console.info(`[Workbench] 工作流阶段: ${phase}`)
       },
@@ -640,6 +645,15 @@ const submitWorkflowTask = async (
         const updatedMsgs = msgs.map((m) =>
           m.id === assistantMsgId
             ? { ...m, reasoningContent: (m.reasoningContent || '') + reasoningContent }
+            : m
+        )
+        chatStore.convMessages = { ...chatStore.convMessages, [convId]: updatedMsgs }
+      },
+      onPlanCreated: (sessionId, taskCount) => {
+        const msgs = chatStore.convMessages[convId] || []
+        const updatedMsgs = msgs.map((m) =>
+          m.id === assistantMsgId
+            ? { ...m, workflowSessionId: sessionId, workflowTaskCount: taskCount }
             : m
         )
         chatStore.convMessages = { ...chatStore.convMessages, [convId]: updatedMsgs }
@@ -896,12 +910,13 @@ onBeforeUnmount(() => {
         @scroll-to-bottom="scrollToBottom(true)"
         @retry-backend="chatStore.checkBackend()"
         @set-input-text="(text) => inputText = text"
+        @navigate-to-workflow="navigateToTask('workflow')"
       />
 
       <WorkbenchInputArea
         ref="inputAreaRef"
         v-model:input-text="inputText"
-        v-model:workflow-mode-level="workflowModeLevel"
+        v-model:chat-mode="chatMode"
         v-model:selected-skill-ids="selectedSkillIds"
         :is-backend-ready="isBackendReady"
         :is-streaming="isStreaming"
@@ -911,13 +926,12 @@ onBeforeUnmount(() => {
         :current-provider-logo="currentProviderLogo"
         :available-model-options="availableModelOptions"
         :show-model-dropdown="showModelDropdown"
-        :workflow-mode="workflowMode"
-        :workflow-mode-options="WORKFLOW_MODE_OPTIONS"
+        :chat-mode-options="CHAT_MODE_OPTIONS"
         @send="sendMessage"
         @cancel="cancelStreaming"
         @toggle-model-dropdown="showModelDropdown = !showModelDropdown"
         @select-model="selectModel"
-        @toggle-workflow-mode="toggleWorkflowMode"
+        @select-chat-mode="selectChatMode"
       />
     </div>
 

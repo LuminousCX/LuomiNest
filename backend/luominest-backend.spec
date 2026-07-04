@@ -156,6 +156,11 @@ excludes = [
     'IPython',
     'notebook',
     'jupyter',
+    # PyGObject / GTK - not used by LuomiNest. PyInstaller's hook-gi.py
+    # unconditionally queries pygobject metadata at hook-load time and crashes
+    # when pygobject is absent. Excluding 'gi' prevents the hook from firing.
+    'gi',
+    'pygobject',
 ]
 
 # ---------------------------------------------------------------------------

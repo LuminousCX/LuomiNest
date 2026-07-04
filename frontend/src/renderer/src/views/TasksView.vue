@@ -177,8 +177,9 @@ watch(currentView, savePersistedData)
 
 onMounted(() => {
   loadPersistedData()
-  // 拉取后端定时任务
+  // 拉取后端定时任务（内存调度器 + 数据库持久化）
   taskStreamStore.fetchScheduledTasks()
+  taskStreamStore.fetchDbScheduledTasks()
 })
 
 const subTasks = ref([
@@ -547,7 +548,7 @@ const timeSlotOptions = [
       :tasks="tasks"
       :teamMembers="teamMembers"
       :colors="colors"
-      :activeScheduledCount="taskStreamStore.activeScheduledTasks.length"
+      :activeScheduledCount="taskStreamStore.activeScheduledTasks.length + taskStreamStore.dbScheduledTaskCount"
       @navigatePrev="navigatePrev"
       @navigateNext="navigateNext"
       @goToday="goToToday"
@@ -590,8 +591,12 @@ const timeSlotOptions = [
       <TasksScheduledView
         v-if="currentView === 'scheduled'"
         :scheduledTasks="taskStreamStore.scheduledTasks"
+        :dbScheduledTasks="taskStreamStore.dbScheduledTasks"
         @refresh="taskStreamStore.fetchScheduledTasks"
         @delete="taskStreamStore.removeScheduledTask"
+        @create-db-task="taskStreamStore.createDbScheduledTask"
+        @delete-db-task="taskStreamStore.removeDbScheduledTask"
+        @refresh-db="taskStreamStore.fetchDbScheduledTasks"
       />
     </TasksToolbar>
 

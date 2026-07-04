@@ -314,6 +314,7 @@ export const useChatStore = defineStore('chat', () => {
       fileContent?: string
       fileType?: string
       fileName?: string
+      chatMode?: 'normal' | 'standard' | 'ultra'
       _preserveVersions?: MessageVersion[]
       onChunk?: (chunk: ChatStreamChunk) => void
     }
@@ -414,6 +415,10 @@ export const useChatStore = defineStore('chat', () => {
 
     if (targetAgentId) {
       requestBody.agent_id = targetAgentId
+    }
+
+    if (options?.chatMode) {
+      requestBody.chat_mode = options.chatMode
     }
 
     if (options?.fileContent) {

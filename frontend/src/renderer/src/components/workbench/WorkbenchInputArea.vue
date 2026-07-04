@@ -9,7 +9,7 @@ import {
 import LumiButton from '../common/LumiButton.vue'
 import SkillsPicker from '../common/SkillsPicker.vue'
 import type { ProviderLogo } from '../../types'
-import type { WorkflowModeLevel, WorkflowModeOption } from './types'
+import type { ChatModeLevel, WorkflowModeOption } from './types'
 
 const props = defineProps<{
   inputText: string
@@ -27,9 +27,8 @@ const props = defineProps<{
     modelName: string
   }[]
   showModelDropdown: boolean
-  workflowMode: boolean
-  workflowModeLevel: WorkflowModeLevel
-  workflowModeOptions: WorkflowModeOption[]
+  chatMode: ChatModeLevel
+  chatModeOptions: WorkflowModeOption[]
   selectedSkillIds: string[]
 }>()
 
@@ -39,8 +38,8 @@ const emit = defineEmits<{
   cancel: []
   'toggle-model-dropdown': []
   'select-model': [providerId: string, modelId: string]
-  'toggle-workflow-mode': []
-  'update:workflowModeLevel': [value: WorkflowModeLevel]
+  'update:chatMode': [value: ChatModeLevel]
+  'select-chat-mode': [value: ChatModeLevel]
   'update:selectedSkillIds': [ids: string[]]
 }>()
 
@@ -51,10 +50,12 @@ const inputTextModel = computed<string>({
   set: (value) => emit('update:inputText', value),
 })
 
-const workflowModeLevelModel = computed<WorkflowModeLevel>({
-  get: () => props.workflowModeLevel,
-  set: (value) => emit('update:workflowModeLevel', value),
-})
+const isWorkflowMode = computed(() => props.chatMode !== 'normal')
+
+const selectMode = (value: ChatModeLevel) => {
+  emit('update:chatMode', value)
+  emit('select-chat-mode', value)
+}
 
 const resetTextareaHeight = () => {
   if (textareaRef.value) {
@@ -143,26 +144,25 @@ defineExpose({
             </Transition>
           </div>
           <LumiButton
-            :class="['workflow-toggle', { active: workflowMode }]"
+            :class="['workflow-toggle', { active: isWorkflowMode }]"
             variant="secondary"
             size="sm"
-            :title="workflowMode ? '工作流模式已开启：长任务将自动分解并调度内部模块' : '开启工作流模式：长任务自动分解执行'"
-            @click="emit('toggle-workflow-mode')"
+            :title="isWorkflowMode ? '工作流模式已开启：长任务将自动分解并调度内部模块' : '当前为普通模式：点击标准/超长开启工作流'"
           >
             <template #icon>
               <Wand2 :size="15" />
             </template>
-            <span class="workflow-toggle-text">{{ workflowMode ? '工作流' : '普通' }}</span>
+            <span class="workflow-toggle-text">{{ isWorkflowMode ? '工作流' : '普通' }}</span>
           </LumiButton>
-          <div v-if="workflowMode" class="workflow-mode-selector">
+          <div class="workflow-mode-selector">
             <LumiButton
-              v-for="opt in workflowModeOptions"
+              v-for="opt in chatModeOptions"
               :key="opt.value"
-              :class="['mode-chip', { active: workflowModeLevel === opt.value }]"
+              :class="['mode-chip', { active: chatMode === opt.value }]"
               variant="secondary"
               size="sm"
               :title="opt.title"
-              @click="workflowModeLevelModel = opt.value"
+              @click="selectMode(opt.value)"
             >
               {{ opt.label }}
             </LumiButton>

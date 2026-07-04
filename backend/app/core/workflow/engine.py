@@ -42,42 +42,44 @@ from app.core.workflow.models import (
 WorkflowEventCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 
-# 工作流系统提示模板
-_WORKFLOW_SYSTEM_PROMPT = """你是 LuomiNest 主 Agent 工作流引擎，负责将用户的长任务请求分解为可执行的子任务计划。
+# 工作流系统提示模板（英文）
+_WORKFLOW_SYSTEM_PROMPT = """You are the LuomiNest main Agent workflow engine. Your role is to decompose complex user tasks into executable subtask plans.
 
-你的职责：
-1. 分析用户任务，判断需要调用哪些内部模块
-2. 生成结构化的执行计划（JSON 格式）
-3. 每个子任务必须指定要调用的内部工具和参数
+Your responsibilities:
+1. Analyze the user's task and determine which internal modules to invoke
+2. Generate a structured execution plan (JSON format)
+3. Each subtask must specify the internal tool to call and its arguments
 
-可用的内部模块接口：
+Available internal module interfaces:
 {available_tools}
 
-【输出格式 - 严格遵守】
-你必须只输出一个 JSON 对象，不要输出任何其他文字、解释、markdown 标记或代码块。
-JSON 对象格式如下：
+OUTPUT FORMAT - STRICTLY FOLLOW:
+You must output ONLY a JSON object. Do NOT output any other text, explanations, markdown, or code blocks.
+The JSON object format is:
 {{
-  "analysis": "任务分析摘要（简短）",
-  "plan": "执行计划描述（简短）",
+  "analysis": "Brief task analysis",
+  "plan": "Brief execution plan description",
   "tasks": [
     {{
-      "title": "子任务标题",
-      "description": "子任务描述",
-      "tool_name": "内部工具名称（如 browser.navigate）",
+      "title": "Subtask title",
+      "description": "What this subtask does",
+      "tool_name": "Internal tool name (e.g. browser.navigate)",
       "arguments": {{}},
       "depends_on": [],
-      "priority": "normal|high|urgent|low"
+      "priority": "normal|high|urgent|low",
+      "node_type": "input|agent|tool|condition|output"
     }}
   ]
 }}
 
-注意事项：
-- tasks 数组中的子任务按依赖关系排序
-- depends_on 引用前面任务的 title
-- 如果任务不需要工具调用（纯文本回复、闲聊、简单问答），tasks 必须为空数组 []
-- 优先使用内部模块接口，而非通用工具
-- 不要将 JSON 包裹在 ```json``` 代码块中，直接输出纯 JSON
-- 即使是闲聊或简单问答，也必须返回合法的 JSON 对象"""
+Rules:
+- tasks array is ordered by dependency
+- depends_on references previous tasks' titles
+- If no tool call is needed (pure text reply, chat, simple Q&A), tasks MUST be an empty array []
+- Prefer internal module interfaces over generic tools
+- Do NOT wrap JSON in ```json``` code blocks; output pure JSON directly
+- Even for chat or simple Q&A, you must return a valid JSON object
+- node_type values: "input" for user request entry, "tool" for tool calls, "agent" for subagent delegation, "condition" for conditional branching, "output" for final result"""
 
 
 def _utc_now() -> str:
@@ -189,6 +191,7 @@ class WorkflowEngine:
         self,
         user_message: str,
         mode: WorkflowMode,
+        conversation_id: str | None = None,
     ) -> WorkflowSession:
         """根据执行模式创建工作流会话，注入 MODE_CONFIGS 中的参数
 
@@ -205,6 +208,7 @@ class WorkflowEngine:
             synthesis_temperature=config["synthesis_temperature"],
             planning_max_tokens=config["planning_max_tokens"],
             skip_confirmation=config["skip_confirmation"],
+            conversation_id=conversation_id,
         )
 
     async def submit(
@@ -214,6 +218,7 @@ class WorkflowEngine:
         model: str | None = None,
         event_callback: WorkflowEventCallback | None = None,
         mode: WorkflowMode = WorkflowMode.STANDARD,
+        conversation_id: str | None = None,
     ) -> WorkflowSession:
         """提交长任务到工作流引擎（非流式）
 
@@ -222,12 +227,13 @@ class WorkflowEngine:
             provider: LLM provider（默认使用系统配置）
             model: LLM model（默认使用系统配置）
             event_callback: 事件回调（可选），用于推送执行进度
-            mode: 工作流执行模式（flash/standard/pro/ultra）
+            mode: 工作流执行模式（standard/ultra）
+            conversation_id: 关联对话 ID（可选，用于持久化和前端跳转）
 
         Returns:
             WorkflowSession: 包含完整执行过程的会话对象
         """
-        session = self._create_session(user_message, mode)
+        session = self._create_session(user_message, mode, conversation_id)
         self._active_sessions[session.session_id] = session
         self._session_locks[session.session_id] = asyncio.Lock()
 
@@ -250,6 +256,7 @@ class WorkflowEngine:
         provider: str | None = None,
         model: str | None = None,
         mode: WorkflowMode = WorkflowMode.STANDARD,
+        conversation_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """提交长任务到工作流引擎（流式）
 
@@ -260,14 +267,15 @@ class WorkflowEngine:
             user_message: 用户的长任务请求
             provider: LLM provider
             model: LLM model
-            mode: 工作流执行模式（flash/standard/pro/ultra）
+            mode: 工作流执行模式（standard/ultra）
+            conversation_id: 关联对话 ID（可选，用于持久化和前端跳转）
 
         Yields:
             dict: 事件字典
         """
         from app.core.workflow.register_tools import set_emitter, remove_emitter
 
-        session = self._create_session(user_message, mode)
+        session = self._create_session(user_message, mode, conversation_id)
         self._active_sessions[session.session_id] = session
         self._session_locks[session.session_id] = asyncio.Lock()
 
@@ -414,6 +422,24 @@ class WorkflowEngine:
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} created {len(tasks)} WorkflowTask objects from plan")
         for i, t in enumerate(tasks):
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task[{i}]: id={t.task_id}, title={t.title}, tool={t.tool_name}, type={t.task_type.value}, priority={t.priority.value}, depends_on={t.depends_on}")
+
+        # 持久化会话和节点到数据库
+        try:
+            import json as _json
+            from app.services.workflow_persistence import save_workflow_session, save_workflow_nodes
+            await save_workflow_session(
+                session_id=session.session_id,
+                user_message=session.user_message,
+                mode=session.mode.value,
+                phase=session.phase.value,
+                analysis=plan.get("analysis"),
+                plan_json=_json.dumps(plan, ensure_ascii=False),
+                conversation_id=session.conversation_id,
+            )
+            await save_workflow_nodes(session.session_id, [t.to_dict() for t in tasks])
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} persisted to database")
+        except Exception as persist_err:
+            logger.warning(f"[WorkflowEngine] Persistence failed: {persist_err}")
 
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting plan_created: task_count={len(tasks)}")
         await self._emit(event_callback, {
@@ -565,7 +591,15 @@ class WorkflowEngine:
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} provider={provider}, model={model}")
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} user_message (len={len(session.user_message)}): {session.user_message[:300]}")
 
-        available_tools = internal_tool_registry.get_module_summary()
+        # 按模式过滤工具列表（STANDARD 排除 27 个细粒度 browser_action 工具）
+        from app.core.chat_mode import BROWSER_AUTOMATION_TOOL_NAMES
+        if session.mode == WorkflowMode.STANDARD:
+            exclude_tools = set(BROWSER_AUTOMATION_TOOL_NAMES)
+        else:
+            exclude_tools = set()
+        available_tools = internal_tool_registry.get_filtered_module_summary(
+            exclude_tools=exclude_tools,
+        )
         tools_text = json.dumps(available_tools, ensure_ascii=False, indent=2)
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} available_tools count={len(available_tools) if isinstance(available_tools, list) else 'N/A'}")
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} tools_text (len={len(tools_text)}): {tools_text[:500]}")
@@ -724,6 +758,7 @@ class WorkflowEngine:
                 arguments=task_def.get("arguments", {}),
                 depends_on=depends_on_ids,
                 priority=priority,
+                node_type=task_def.get("node_type", "tool"),
             )
             workflow_tasks.append(task)
 

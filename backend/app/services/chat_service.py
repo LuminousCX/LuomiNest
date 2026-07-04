@@ -190,11 +190,18 @@ class ChatService:
             from app.core.agents.cluster.agent_tool import set_luominest_agent_call_depth
             depth_token = set_luominest_agent_call_depth(getattr(request, "agent_depth", 0))
 
-        # 工具支持：获取工具列表（disable_tools 过滤由 ToolFilterMiddleware 处理）
+        # 工具支持：获取工具列表（disable_tools/tool_whitelist 过滤由 ToolFilterMiddleware 处理）
         available_tools = tool_orchestrator.get_tools_for_llm() if tool_registry.list_names() else None
         use_tools = bool(available_tools) and llm_adapter.supports_tool_calls(provider, model)
         if available_tools and not use_tools:
             logger.info(f"[STREAM] stream_chat: Provider {provider}/{model} 不支持工具调用，纯对话模式")
+
+        # 按对话模式设置工具白名单（NORMAL 模式仅允许任务视图操作工具）
+        chat_mode_str = getattr(request, "chat_mode", "normal")
+        tool_whitelist = None
+        if chat_mode_str == "normal":
+            from app.core.chat_mode import ChatMode, get_tool_config
+            tool_whitelist = get_tool_config(ChatMode.NORMAL).get("whitelist")
 
         # 构建 AgentContext
         ctx = AgentContext(
@@ -206,6 +213,7 @@ class ChatService:
                 "scene": "chat",
                 "is_stream": True,
                 "disable_tools": getattr(request, "disable_tools", None),
+                "tool_whitelist": tool_whitelist,
                 "agent_id": agent_id,
             },
         )
@@ -305,6 +313,13 @@ class ChatService:
         # 记忆访问权限：主 Agent 可读写，联系人 Agent 无权限
         memory_access = MEMORY_ACCESS_READ_WRITE if is_main_agent(agent_id) else MEMORY_ACCESS_NONE
 
+        # 按对话模式设置工具白名单（NORMAL 模式仅允许任务视图操作工具）
+        chat_mode_str = getattr(request, "chat_mode", "normal")
+        tool_whitelist = None
+        if chat_mode_str == "normal":
+            from app.core.chat_mode import ChatMode, get_tool_config
+            tool_whitelist = get_tool_config(ChatMode.NORMAL).get("whitelist")
+
         # 构建 AgentContext（all_messages 共享引用，runner 追加 assistant/tool 消息）
         ctx = AgentContext(
             messages=all_messages,
@@ -315,6 +330,7 @@ class ChatService:
                 "scene": "chat",
                 "is_stream": True,
                 "memory_access": memory_access,
+                "tool_whitelist": tool_whitelist,
                 "agent_id": agent_id,
                 "conv_id": conv_id,
             },

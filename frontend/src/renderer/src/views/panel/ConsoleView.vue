@@ -3,7 +3,8 @@ import { ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
 import {
   Terminal, Play, Square, Copy, ChevronRight, AlertTriangle, Info,
   CheckCircle2, XCircle, Maximize2, Minimize2, Upload, RotateCcw,
-  Clock, User, Filter, RefreshCw, ChevronDown, Server, Monitor
+  Clock, User, Filter, RefreshCw, ChevronDown, Server, Monitor,
+  Workflow, Wrench
 } from 'lucide-vue-next'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
@@ -16,26 +17,54 @@ import { formatTime, formatDuration } from '../../utils/format'
 
 const { apiGet, apiPost, apiDelete } = useApi()
 
-const activeTab = ref<'console' | 'logs'>('console')
+/** 工具调用记录列表项（来自 /workflow/tool-records） */
+interface ToolRecordListItem {
+  record_id: string
+  session_id: string | null
+  tool_name: string
+  success: boolean
+  duration_ms: number
+  created_at: string
+  result_preview: string
+}
+
+/** 工具调用记录详情（来自 /workflow/tool-records/{id}） */
+interface ToolRecordDetail extends ToolRecordListItem {
+  conversation_id: string | null
+  arguments: Record<string, unknown>
+  result: string
+}
+
+const activeTab = ref<'console' | 'logs' | 'workflow'>('console')
 const isExpanded = ref(false)
 const commandInput = ref('')
 
 const commands = ref<CommandRecord[]>([])
 const logs = ref<SystemLogEntry[]>([])
+const toolRecords = ref<ToolRecordListItem[]>([])
 const isLoadingCommands = ref(false)
 const isLoadingLogs = ref(false)
+const isLoadingToolRecords = ref(false)
 const isUploading = ref(false)
 const uploadResult = ref<string | null>(null)
 
 const logFilterSource = ref<'all' | 'frontend' | 'backend'>('all')
 const logFilterLevel = ref<'all' | 'info' | 'warn' | 'error' | 'success'>('all')
 const cmdFilterStatus = ref<'all' | 'success' | 'failed' | 'running'>('all')
+const toolFilterStatus = ref<'all' | 'success' | 'failed'>('all')
 
 const showCmdFilter = ref(false)
 const showLogFilter = ref(false)
+const showToolFilter = ref(false)
+
+/** 当前展开查看详情的工具记录 record_id */
+const expandedRecordId = ref<string | null>(null)
+const expandedRecordDetail = ref<ToolRecordDetail | null>(null)
+const isLoadingRecordDetail = ref(false)
 
 const logListRef = ref<HTMLElement | null>(null)
 const cmdListRef = ref<HTMLElement | null>(null)
+const toolListRef = ref<HTMLElement | null>(null)
 
 const filteredCommands = computed(() => {
   if (cmdFilterStatus.value === 'all') return commands.value
@@ -51,6 +80,11 @@ const filteredLogs = computed(() => {
     result = result.filter(l => l.level === logFilterLevel.value)
   }
   return result
+})
+
+const filteredToolRecords = computed(() => {
+  if (toolFilterStatus.value === 'all') return toolRecords.value
+  return toolRecords.value.filter(r => r.success === (toolFilterStatus.value === 'success'))
 })
 
 const statusLabel = (status: CommandRecord['status']) => {
@@ -95,6 +129,40 @@ const fetchLogs = async () => {
   }
 }
 
+const fetchToolRecords = async () => {
+  isLoadingToolRecords.value = true
+  try {
+    const resp = await apiGet<{ records: ToolRecordListItem[]; count: number }>('/workflow/tool-records?limit=100')
+    toolRecords.value = resp?.records ?? []
+    await nextTick()
+    if (toolListRef.value) toolListRef.value.scrollTop = 0
+  } catch {
+    toolRecords.value = []
+  } finally {
+    isLoadingToolRecords.value = false
+  }
+}
+
+/** 展开/折叠工具调用记录详情 */
+const toggleRecordDetail = async (recordId: string) => {
+  if (expandedRecordId.value === recordId) {
+    expandedRecordId.value = null
+    expandedRecordDetail.value = null
+    return
+  }
+  expandedRecordId.value = recordId
+  expandedRecordDetail.value = null
+  isLoadingRecordDetail.value = true
+  try {
+    const detail = await apiGet<ToolRecordDetail>(`/workflow/tool-records/${recordId}`)
+    expandedRecordDetail.value = detail
+  } catch {
+    expandedRecordDetail.value = null
+  } finally {
+    isLoadingRecordDetail.value = false
+  }
+}
+
 const uploadLogs = async () => {
   if (filteredLogs.value.length === 0) return
   isUploading.value = true
@@ -115,13 +183,20 @@ const uploadLogs = async () => {
 }
 
 const copyLogs = () => {
-  const entries = activeTab.value === 'console'
-    ? filteredCommands.value.map(c =>
-        `[${c.started_at}] [${c.status.toUpperCase()}] [${c.executed_by}] ${c.command} -> ${c.output || c.error || '-'}`
-      ).join('\n')
-    : filteredLogs.value.map(l =>
-        `[${l.timestamp}] [${l.level.toUpperCase()}] [${l.source}] [${l.module || '-'}] ${l.message}`
-      ).join('\n')
+  let entries = ''
+  if (activeTab.value === 'console') {
+    entries = filteredCommands.value.map(c =>
+      `[${c.started_at}] [${c.status.toUpperCase()}] [${c.executed_by}] ${c.command} -> ${c.output || c.error || '-'}`
+    ).join('\n')
+  } else if (activeTab.value === 'logs') {
+    entries = filteredLogs.value.map(l =>
+      `[${l.timestamp}] [${l.level.toUpperCase()}] [${l.source}] [${l.module || '-'}] ${l.message}`
+    ).join('\n')
+  } else {
+    entries = filteredToolRecords.value.map(r =>
+      `[${r.created_at}] [${r.success ? 'SUCCESS' : 'FAILED'}] [${r.tool_name}] (${r.duration_ms}ms) ${r.result_preview}`
+    ).join('\n')
+  }
   copyToClipboard(entries)
 }
 
@@ -141,16 +216,19 @@ const handleCommand = async () => {
   }
   if (cmd === 'refresh') {
     if (activeTab.value === 'console') fetchCommands()
-    else fetchLogs()
+    else if (activeTab.value === 'logs') fetchLogs()
+    else fetchToolRecords()
     return
   }
   if (cmd === 'clear') {
     if (activeTab.value === 'console') {
       await apiDelete('/console/commands').catch(() => {})
       commands.value = []
-    } else {
+    } else if (activeTab.value === 'logs') {
       await apiDelete('/console/logs').catch(() => {})
       logs.value = []
+    } else {
+      toolRecords.value = []
     }
     return
   }
@@ -182,9 +260,11 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
   fetchCommands()
   fetchLogs()
+  fetchToolRecords()
   pollTimer = setInterval(() => {
     if (activeTab.value === 'console') fetchCommands()
-    else fetchLogs()
+    else if (activeTab.value === 'logs') fetchLogs()
+    else fetchToolRecords()
   }, 30000)
 })
 
@@ -235,6 +315,10 @@ onBeforeUnmount(() => {
       <button :class="['tab-btn', { active: activeTab === 'logs' }]" @click="activeTab = 'logs'">
         <Info :size="14" />
         系统日志
+      </button>
+      <button :class="['tab-btn', { active: activeTab === 'workflow' }]" @click="activeTab = 'workflow'">
+        <Workflow :size="14" />
+        工作流
       </button>
     </div>
 
@@ -386,6 +470,95 @@ onBeforeUnmount(() => {
             v-if="filteredLogs.length === 0 && !isLoadingLogs"
             icon="file"
             title="暂无日志"
+            size="md"
+          />
+        </div>
+      </div>
+    </template>
+
+    <!-- 工作流 Tab（工具调用记录） -->
+    <template v-if="activeTab === 'workflow'">
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <div class="filter-group">
+            <button class="filter-btn" @click="showToolFilter = !showToolFilter">
+              <Filter :size="13" />
+              <span>{{ toolFilterStatus === 'all' ? '全部状态' : toolFilterStatus === 'success' ? '成功' : '失败' }}</span>
+              <ChevronDown :size="12" />
+            </button>
+            <div v-if="showToolFilter" class="filter-dropdown">
+              <button :class="['filter-option', { active: toolFilterStatus === 'all' }]" @click="toolFilterStatus = 'all'; showToolFilter = false">全部</button>
+              <button :class="['filter-option', { active: toolFilterStatus === 'success' }]" @click="toolFilterStatus = 'success'; showToolFilter = false">成功</button>
+              <button :class="['filter-option', { active: toolFilterStatus === 'failed' }]" @click="toolFilterStatus = 'failed'; showToolFilter = false">失败</button>
+            </div>
+          </div>
+          <span class="record-count">{{ filteredToolRecords.length }} 条记录</span>
+        </div>
+        <LumiButton
+          variant="ghost"
+          size="sm"
+          icon-only
+          :loading="isLoadingToolRecords"
+          aria-label="刷新"
+          @click="fetchToolRecords"
+        >
+          <template #icon><RefreshCw :size="14" /></template>
+        </LumiButton>
+      </div>
+
+      <div class="console-body">
+        <div ref="toolListRef" class="cmd-list">
+          <div
+            v-for="record in filteredToolRecords"
+            :key="record.record_id"
+            :class="['cmd-card', record.success ? 'success' : 'failed']"
+          >
+            <div class="cmd-card-header tool-record-header" @click="toggleRecordDetail(record.record_id)">
+              <div class="cmd-card-left">
+                <component
+                  :is="record.success ? CheckCircle2 : XCircle"
+                  :size="14"
+                  class="cmd-status-icon shrink-0"
+                />
+                <Wrench :size="12" class="tool-icon shrink-0" />
+                <code class="cmd-text">{{ record.tool_name }}</code>
+              </div>
+              <div class="tool-record-meta">
+                <span class="meta-item"><Clock :size="12" />{{ formatDuration(record.duration_ms) }}</span>
+                <span class="meta-item"><Clock :size="12" />{{ formatTime(record.created_at, { seconds: true }) }}</span>
+                <span :class="['cmd-badge', record.success ? 'success' : 'failed']">
+                  {{ record.success ? '成功' : '失败' }}
+                </span>
+              </div>
+            </div>
+
+            <div v-if="record.result_preview" class="cmd-card-body">
+              <div class="cmd-output">
+                <span class="output-label">预览:</span>
+                <code>{{ record.result_preview }}</code>
+              </div>
+            </div>
+
+            <!-- 展开详情 -->
+            <div v-if="expandedRecordId === record.record_id" class="tool-detail">
+              <div v-if="isLoadingRecordDetail" class="detail-loading">加载中...</div>
+              <template v-else-if="expandedRecordDetail">
+                <div class="detail-section">
+                  <span class="output-label">参数:</span>
+                  <pre class="detail-json">{{ JSON.stringify(expandedRecordDetail.arguments, null, 2) }}</pre>
+                </div>
+                <div class="detail-section">
+                  <span class="output-label">结果:</span>
+                  <pre class="detail-json">{{ expandedRecordDetail.result }}</pre>
+                </div>
+              </template>
+              <div v-else class="detail-loading">加载失败</div>
+            </div>
+          </div>
+          <LumiEmptyState
+            v-if="filteredToolRecords.length === 0 && !isLoadingToolRecords"
+            icon="file"
+            title="暂无工具调用记录"
             size="md"
           />
         </div>
@@ -942,6 +1115,63 @@ onBeforeUnmount(() => {
 
 .spinning {
   animation: spin 1s linear infinite;
+}
+
+/* ===== 工作流 Tab ===== */
+.tool-record-header {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.tool-record-header:hover {
+  background: var(--surface-hover);
+}
+
+.tool-icon {
+  color: var(--text-muted);
+}
+
+.tool-record-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.tool-detail {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.detail-json {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.detail-loading {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-2);
 }
 
 </style>

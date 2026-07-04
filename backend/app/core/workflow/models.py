@@ -50,44 +50,24 @@ class WorkflowPriority(str, Enum):
 
 
 class WorkflowMode(str, Enum):
-    """工作流执行模式
+    """工作流执行模式（仅工作流模式，普通模式见 ChatMode）
 
     不同模式调整迭代次数、并发度、温度等参数，适配不同复杂度的任务：
-    - flash: 闪电模式，快速响应简单任务（跳过计划确认）
-    - standard: 标准模式，平衡速度与深度（默认）
-    - pro: 专业模式，更多迭代与并发，适合中等复杂任务
-    - ultra: 超长模式，最大能力，适合复杂长任务
+    - standard: 标准模式，平衡速度与深度（默认），排除细粒度浏览器自动化工具
+    - ultra: 超长模式，最大能力，适合复杂长任务，全部工具可用
     """
-    FLASH = "flash"
     STANDARD = "standard"
-    PRO = "pro"
     ULTRA = "ultra"
 
 
 # 各模式的参数配置
 MODE_CONFIGS: dict[WorkflowMode, dict[str, Any]] = {
-    WorkflowMode.FLASH: {
-        "max_iterations": 5,
-        "max_concurrent": 2,
-        "planning_temperature": 0.2,
-        "synthesis_temperature": 0.3,
-        "planning_max_tokens": 1500,
-        "skip_confirmation": True,  # 闪电模式跳过计划确认
-    },
     WorkflowMode.STANDARD: {
         "max_iterations": 20,
         "max_concurrent": 3,
         "planning_temperature": 0.3,
         "synthesis_temperature": 0.4,
         "planning_max_tokens": 2000,
-        "skip_confirmation": False,
-    },
-    WorkflowMode.PRO: {
-        "max_iterations": 50,
-        "max_concurrent": 5,
-        "planning_temperature": 0.4,
-        "synthesis_temperature": 0.5,
-        "planning_max_tokens": 3000,
         "skip_confirmation": False,
     },
     WorkflowMode.ULTRA: {
@@ -133,6 +113,7 @@ class WorkflowTask:
     arguments: dict[str, Any] = field(default_factory=dict)
     depends_on: list[str] = field(default_factory=list)
     priority: WorkflowPriority = WorkflowPriority.NORMAL
+    node_type: str = "tool"
     status: WorkflowStatus = WorkflowStatus.PENDING
     result: str | None = None
     error: str | None = None
@@ -176,6 +157,7 @@ class WorkflowTask:
             "arguments": self.arguments,
             "depends_on": self.depends_on,
             "priority": self.priority.value,
+            "node_type": self.node_type,
             "status": self.status.value,
             "result": self.result,
             "error": self.error,
@@ -227,6 +209,8 @@ class WorkflowSession:
     synthesis_temperature: float = 0.4
     planning_max_tokens: int = 2000
     skip_confirmation: bool = False
+    # 关联对话 ID（用于持久化和前端跳转）
+    conversation_id: str | None = None
     # 计划确认机制（借鉴 deer-flow ClarificationMiddleware）
     confirmation_event: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
     confirmation_result: bool = False
@@ -291,6 +275,7 @@ class WorkflowSession:
             "error": self.error,
             "created_at": self.created_at,
             "completed_at": self.completed_at,
+            "conversation_id": self.conversation_id,
             "stats": {
                 "total": len(self.tasks),
                 "completed": self.completed_task_count,

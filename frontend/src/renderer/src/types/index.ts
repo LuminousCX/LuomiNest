@@ -51,6 +51,10 @@ export interface ChatMessage {
     totalTokens?: number
   }
   suggestedQuestions?: string[]
+  /** 关联的工作流会话 ID（当此消息触发工作流时设置，用于渲染"已创建工作流"卡片） */
+  workflowSessionId?: string
+  /** 工作流子任务数量（配合 workflowSessionId 使用） */
+  workflowTaskCount?: number
 }
 
 /** Raw message shape returned by the backend API (snake_case) */

@@ -75,6 +75,7 @@ class AgentRunner:
 
                 # 重置每轮状态
                 ctx.state["iteration_content"] = ""
+                ctx.state["iteration_reasoning"] = ""
                 ctx.state["tool_calls"] = []
                 ctx.state["_tool_call_deltas"] = {}
                 ctx.state["finish_reason"] = None
@@ -234,6 +235,7 @@ class AgentRunner:
             rc = event.data.get("reasoning", "")
             if rc:
                 ctx.state["reasoning"] = ctx.state.get("reasoning", "") + rc
+                ctx.state["iteration_reasoning"] = ctx.state.get("iteration_reasoning", "") + rc
             return SSEEmitMiddleware.format_content_sse(ctx, "", rc)
 
         if event.type == "tool_call_delta":

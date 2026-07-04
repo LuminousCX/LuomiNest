@@ -77,7 +77,9 @@ async def lifespan(app: FastAPI):
         from app.core.tools.builtin import (
             CliTool, ReadFileTool, WriteFileTool, ListFilesTool, SearchFilesTool,
             McpTool, ListMcpServersTool, DelegateToSubagentTool,
-            CreateScheduledTaskTool, CreateBrowserTabTool,
+            CreateScheduledTaskTool, ListScheduledTasksTool,
+            GetScheduledTaskTool, DeleteScheduledTaskTool,
+            CreateBrowserTabTool,
         )
         tool_registry.register(CliTool())
         tool_registry.register(ReadFileTool())
@@ -88,6 +90,9 @@ async def lifespan(app: FastAPI):
         tool_registry.register(ListMcpServersTool())
         tool_registry.register(DelegateToSubagentTool())
         tool_registry.register(CreateScheduledTaskTool())
+        tool_registry.register(ListScheduledTasksTool())
+        tool_registry.register(GetScheduledTaskTool())
+        tool_registry.register(DeleteScheduledTaskTool())
         tool_registry.register(CreateBrowserTabTool())
 
         # 浏览器自动化工具集（25 个，通过 WS 调用前端 Electron 执行）
