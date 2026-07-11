@@ -580,6 +580,41 @@ class LuomiAutomationExecutor {
         }
       }
     })
+
+    this.tabHandlers.set('open_tab', async (args) => {
+      const url = (args.url as string) || ''
+      const title = (args.title as string) || ''
+      try {
+        const tab = tabManager.createTab(url || undefined)
+        if (title) {
+          tab.title = title
+        }
+        return {
+          success: true,
+          data: {
+            tab_id: tab.id,
+            url: tab.url,
+            title: tab.title
+          }
+        }
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) }
+      }
+    })
+
+    this.tabHandlers.set('close_tab', async (args) => {
+      const tabId = args.tab_id as string
+      if (!tabId) return { success: false, error: '缺少 tab_id 参数' }
+
+      const tab = tabManager.getTab(tabId)
+      if (!tab) return { success: false, error: `标签页不存在: ${tabId}` }
+
+      tabManager.closeTab(tabId)
+      return {
+        success: true,
+        data: { closed_tab_id: tabId }
+      }
+    })
   }
 }
 

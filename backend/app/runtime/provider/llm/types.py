@@ -75,12 +75,18 @@ class LLMResponse:
         return bool(self.tool_calls)
 
     def to_dict(self) -> dict[str, Any]:
-        """转换为旧版 dict 格式（向后兼容 LLMAdapter.chat 的 return_raw=True 场景）。"""
+        """转换为旧版 dict 格式（向后兼容 LLMAdapter.chat 的 return_raw=True 场景）。
+
+        包含 finish_reason 和 usage，供调用方检测输出截断（finish_reason == "length"）
+        和统计 token 用量。
+        """
         return {
             "content": self.content,
             "reasoning": self.reasoning,
             "tool_calls": self.tool_calls or [],
             "role": "assistant",
+            "finish_reason": self.finish_reason,
+            "usage": self.usage,
         }
 
 

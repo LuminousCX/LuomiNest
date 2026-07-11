@@ -72,7 +72,7 @@ class InternalToolRegistry:
         """注册内部模块接口
 
         Args:
-            name: 接口唯一名称（如 "browser.navigate"）
+            name: 接口唯一名称（如 "browser.navigate"、"memory.search"）
             module: 所属模块（如 "browser", "schedule", "memory"）
             description: 接口描述
             handler: 异步执行器函数

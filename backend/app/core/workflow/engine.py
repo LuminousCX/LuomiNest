@@ -63,7 +63,7 @@ The JSON object format is:
     {{
       "title": "Subtask title",
       "description": "What this subtask does",
-      "tool_name": "Internal tool name (e.g. browser.navigate)",
+      "tool_name": "Internal tool name (e.g. browser.navigate, memory.search, schedule.create)",
       "arguments": {{}},
       "depends_on": [],
       "priority": "normal|high|urgent|low",
@@ -86,6 +86,91 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _repair_truncated_json(text: str) -> str | None:
+    """尝试修复因 token 限制截断的不完整 JSON。
+
+    当 LLM 输出因 finish_reason=length 被截断时，JSON 可能不完整。
+    策略：跟踪字符串上下文和括号栈，记录所有"安全截断点"（逗号后或闭合括号后），
+    从后往前尝试每个截断点，补全未闭合的括号后解析。
+
+    Returns:
+        修复后的 JSON 字符串（已验证可解析），或 None（无法修复）
+    """
+    text = text.strip()
+    if not text:
+        return None
+
+    # 定位第一个 { 开始位置
+    start = text.find("{")
+    if start == -1:
+        return None
+    text = text[start:]
+
+    in_string = False
+    escape = False
+    stack: list[str] = []
+    # 记录 (截断位置, 当时的栈状态快照)
+    safe_cuts: list[tuple[int, list[str]]] = []
+
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch in "{[":
+            stack.append(ch)
+        elif ch == "}":
+            if stack and stack[-1] == "{":
+                stack.pop()
+                if not stack:
+                    safe_cuts.append((i + 1, []))
+        elif ch == "]":
+            if stack and stack[-1] == "[":
+                stack.pop()
+                if stack:
+                    safe_cuts.append((i + 1, list(stack)))
+        elif ch == ",":
+            safe_cuts.append((i + 1, list(stack)))
+
+    # 如果栈为空，JSON 可能已经完整
+    if not stack:
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return text
+        except json.JSONDecodeError:
+            pass
+
+    # 从后往前尝试每个安全截断点
+    for cut_pos, cut_stack in reversed(safe_cuts):
+        if cut_stack:
+            # 仍有未闭合的括号，需截断并补全
+            repaired = text[:cut_pos].rstrip()
+            if repaired.endswith(","):
+                repaired = repaired[:-1]
+            for opener in reversed(cut_stack):
+                repaired += "]" if opener == "[" else "}"
+        else:
+            # 栈为空，截断点处是完整 JSON
+            repaired = text[:cut_pos]
+
+        try:
+            parsed = json.loads(repaired)
+            if isinstance(parsed, dict):
+                return repaired
+        except json.JSONDecodeError:
+            continue
+
+    return None
+
+
 def _extract_json_plan(text: str) -> dict[str, Any] | None:
     """从 LLM 响应中提取 JSON 执行计划
 
@@ -94,6 +179,7 @@ def _extract_json_plan(text: str) -> dict[str, Any] | None:
     2. ``` ... ``` 代码块
     3. 包含 "tasks" 的 JSON 片段
     4. 直接解析整个文本为 JSON
+    5. 截断修复（finish_reason=length 时 JSON 不完整）
     """
     # 策略 1-3：正则匹配
     patterns = [
@@ -109,7 +195,16 @@ def _extract_json_plan(text: str) -> dict[str, Any] | None:
                 if isinstance(parsed, dict) and "tasks" in parsed:
                     return parsed
             except json.JSONDecodeError:
-                continue
+                # 尝试修复截断的 JSON
+                repaired = _repair_truncated_json(match)
+                if repaired:
+                    try:
+                        parsed = json.loads(repaired)
+                        if isinstance(parsed, dict) and "tasks" in parsed:
+                            logger.warning("[WorkflowEngine] JSON plan repaired from truncated output")
+                            return parsed
+                    except json.JSONDecodeError:
+                        continue
 
     # 策略 4：直接尝试解析整个文本为 JSON
     try:
@@ -118,6 +213,17 @@ def _extract_json_plan(text: str) -> dict[str, Any] | None:
             return parsed
     except json.JSONDecodeError:
         pass
+
+    # 策略 5：截断修复
+    repaired = _repair_truncated_json(text)
+    if repaired:
+        try:
+            parsed = json.loads(repaired)
+            if isinstance(parsed, dict) and "tasks" in parsed:
+                logger.warning("[WorkflowEngine] JSON plan repaired from truncated output")
+                return parsed
+        except json.JSONDecodeError:
+            pass
 
     return None
 
@@ -192,11 +298,15 @@ class WorkflowEngine:
         user_message: str,
         mode: WorkflowMode,
         conversation_id: str | None = None,
+        skip_confirmation: bool | None = None,
     ) -> WorkflowSession:
         """根据执行模式创建工作流会话，注入 MODE_CONFIGS 中的参数
 
         P2 长任务执行模式：不同模式调整迭代次数、并发度、温度、max_tokens、
         是否跳过计划确认。配置在创建时固化到 session，运行时直接读取。
+
+        Args:
+            skip_confirmation: 覆盖模式默认的 skip_confirmation（None 表示使用模式默认值）
         """
         config = MODE_CONFIGS.get(mode, MODE_CONFIGS[WorkflowMode.STANDARD])
         return WorkflowSession(
@@ -207,7 +317,7 @@ class WorkflowEngine:
             planning_temperature=config["planning_temperature"],
             synthesis_temperature=config["synthesis_temperature"],
             planning_max_tokens=config["planning_max_tokens"],
-            skip_confirmation=config["skip_confirmation"],
+            skip_confirmation=skip_confirmation if skip_confirmation is not None else config["skip_confirmation"],
             conversation_id=conversation_id,
         )
 
@@ -219,6 +329,7 @@ class WorkflowEngine:
         event_callback: WorkflowEventCallback | None = None,
         mode: WorkflowMode = WorkflowMode.STANDARD,
         conversation_id: str | None = None,
+        skip_confirmation: bool | None = None,
     ) -> WorkflowSession:
         """提交长任务到工作流引擎（非流式）
 
@@ -229,11 +340,12 @@ class WorkflowEngine:
             event_callback: 事件回调（可选），用于推送执行进度
             mode: 工作流执行模式（standard/ultra）
             conversation_id: 关联对话 ID（可选，用于持久化和前端跳转）
+            skip_confirmation: 覆盖模式默认的 skip_confirmation（None 表示使用模式默认值）
 
         Returns:
             WorkflowSession: 包含完整执行过程的会话对象
         """
-        session = self._create_session(user_message, mode, conversation_id)
+        session = self._create_session(user_message, mode, conversation_id, skip_confirmation=skip_confirmation)
         self._active_sessions[session.session_id] = session
         self._session_locks[session.session_id] = asyncio.Lock()
 
@@ -257,6 +369,7 @@ class WorkflowEngine:
         model: str | None = None,
         mode: WorkflowMode = WorkflowMode.STANDARD,
         conversation_id: str | None = None,
+        skip_confirmation: bool | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """提交长任务到工作流引擎（流式）
 
@@ -269,13 +382,14 @@ class WorkflowEngine:
             model: LLM model
             mode: 工作流执行模式（standard/ultra）
             conversation_id: 关联对话 ID（可选，用于持久化和前端跳转）
+            skip_confirmation: 覆盖模式默认的 skip_confirmation（None 表示使用模式默认值）
 
         Yields:
             dict: 事件字典
         """
         from app.core.workflow.register_tools import set_emitter, remove_emitter
 
-        session = self._create_session(user_message, mode, conversation_id)
+        session = self._create_session(user_message, mode, conversation_id, skip_confirmation=skip_confirmation)
         self._active_sessions[session.session_id] = session
         self._session_locks[session.session_id] = asyncio.Lock()
 
@@ -646,17 +760,27 @@ class WorkflowEngine:
         )
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} llm_adapter.chat returned, type={type(result).__name__}")
 
-        # return_raw=True 返回 dict: {"content", "reasoning", "tool_calls", "role"}
+        # return_raw=True 返回 dict: {"content", "reasoning", "tool_calls", "role", "finish_reason", "usage"}
         if isinstance(result, dict):
             content = result.get("content", "") or ""
             reasoning = result.get("reasoning", "") or ""
             tool_calls = result.get("tool_calls", [])
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} response dict: content_len={len(content)}, reasoning_len={len(reasoning)}, tool_calls={len(tool_calls) if tool_calls else 0}")
+            finish_reason = result.get("finish_reason", "stop")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} response dict: content_len={len(content)}, reasoning_len={len(reasoning)}, tool_calls={len(tool_calls) if tool_calls else 0}, finish_reason={finish_reason}")
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} reasoning (first 500): {reasoning[:500]}")
+
+            # 检测 LLM 输出截断
+            if finish_reason == "length":
+                logger.warning(
+                    "[WorkflowEngine] Session {} LLM output truncated (finish_reason=length, "
+                    "max_tokens={}). Attempting JSON repair...",
+                    sid, session.planning_max_tokens,
+                )
         else:
             # 兜底：return_raw 未生效时返回字符串
             content = str(result)
             reasoning = ""
+            finish_reason = "stop"
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} response is string (return_raw not effective), content_len={len(content)}")
 
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} raw content (first 800): {content[:800]}")
@@ -720,6 +844,13 @@ class WorkflowEngine:
                 f"[WorkflowEngine] Session {sid} no structured plan, using direct response"
             )
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} falling back to direct response as analysis")
+            # 如果 LLM 输出被截断且 JSON 修复失败，在 analysis 中附加提示
+            if finish_reason == "length":
+                return {
+                    "analysis": content + "\n\n[注意：LLM 输出因 token 限制被截断，JSON 计划不完整。请考虑使用 ULTRA 模式或简化任务。]",
+                    "plan": "",
+                    "tasks": [],
+                }
             return {"analysis": content, "plan": "", "tasks": []}
 
         return plan

@@ -12,6 +12,8 @@
 from enum import Enum
 from typing import Any
 
+from app.core.tools.builtin.browser_automation import BROWSER_ACTION_SPECS
+
 
 class ChatMode(str, Enum):
     """对话模式枚举（顶层，涵盖工作流与非工作流）"""
@@ -20,37 +22,12 @@ class ChatMode(str, Enum):
     ULTRA = "ultra"
 
 
-# 27 个细粒度浏览器自动化工具名（STANDARD 模式排除，ULTRA 模式包含）
-# 来源：browser_automation.py BROWSER_ACTION_SPECS
-BROWSER_AUTOMATION_TOOL_NAMES: frozenset[str] = frozenset({
-    "browser_navigate",
-    "browser_go_back",
-    "browser_go_forward",
-    "browser_reload",
-    "browser_get_url",
-    "browser_get_page_title",
-    "browser_click",
-    "browser_double_click",
-    "browser_right_click",
-    "browser_hover",
-    "browser_type",
-    "browser_clear_input",
-    "browser_press_key",
-    "browser_select_option",
-    "browser_scroll",
-    "browser_get_dom_tree",
-    "browser_get_text",
-    "browser_get_attribute",
-    "browser_get_html",
-    "browser_screenshot",
-    "browser_wait_for_load",
-    "browser_wait_for_element",
-    "browser_wait_for_url",
-    "browser_execute_js",
-    "browser_get_history",
-    "browser_get_tabs",
-    "browser_switch_tab",
-})
+# 29 个细粒度浏览器自动化工具名（STANDARD 模式排除，ULTRA 模式包含）
+# 来源：browser_automation.py BROWSER_ACTION_SPECS，自动生成点号名
+# 命名规范：browser.{action}（如 browser.navigate），与 internal_tool_registry 一致
+BROWSER_AUTOMATION_TOOL_NAMES: frozenset[str] = frozenset(
+    f"browser.{spec['action']}" for spec in BROWSER_ACTION_SPECS.values()
+)
 
 
 # 各模式的工具配置

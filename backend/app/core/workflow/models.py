@@ -67,7 +67,7 @@ MODE_CONFIGS: dict[WorkflowMode, dict[str, Any]] = {
         "max_concurrent": 3,
         "planning_temperature": 0.3,
         "synthesis_temperature": 0.4,
-        "planning_max_tokens": 2000,
+        "planning_max_tokens": 8192,
         "skip_confirmation": False,
     },
     WorkflowMode.ULTRA: {
@@ -75,7 +75,7 @@ MODE_CONFIGS: dict[WorkflowMode, dict[str, Any]] = {
         "max_concurrent": 8,
         "planning_temperature": 0.5,
         "synthesis_temperature": 0.6,
-        "planning_max_tokens": 4000,
+        "planning_max_tokens": 16384,
         "skip_confirmation": False,
     },
 }
@@ -207,7 +207,7 @@ class WorkflowSession:
     # 模式专属配置（由 MODE_CONFIGS 注入，避免运行时反复查表）
     planning_temperature: float = 0.3
     synthesis_temperature: float = 0.4
-    planning_max_tokens: int = 2000
+    planning_max_tokens: int = 8192
     skip_confirmation: bool = False
     # 关联对话 ID（用于持久化和前端跳转）
     conversation_id: str | None = None
