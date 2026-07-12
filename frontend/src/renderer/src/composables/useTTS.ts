@@ -1,6 +1,9 @@
 import { ref } from 'vue'
 import { useModelStore } from '../stores/model'
 import { API_ENDPOINTS } from '../config/api'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('TTS')
 
 const isSpeaking = ref(false)
 const speakingMessageId = ref<string | null>(null)
@@ -105,9 +108,9 @@ async function speakWithEdgeTTS(text: string, messageId: string): Promise<boolea
   } catch (e) {
     clearTimeout(timeoutId)
     if (controller.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) {
-      console.warn('[TTS] Edge TTS request aborted')
+      logger.warn('Edge TTS request aborted')
     } else {
-      console.warn('[TTS] Edge TTS failed, falling back to Web Speech API:', e)
+      logger.warn('Edge TTS failed, falling back to Web Speech API:', e)
     }
     return false
   } finally {

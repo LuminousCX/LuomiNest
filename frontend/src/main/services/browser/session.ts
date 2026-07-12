@@ -1,5 +1,8 @@
 import { session } from 'electron'
 import { DEFAULT_BROWSER_CONFIG } from './types'
+import { createLuomiNestLogger } from '../luomi-logger'
+
+const logger = createLuomiNestLogger('Browser')
 
 const STEALTH_SCRIPT = `
 (function() {
@@ -261,7 +264,7 @@ export function initBrowserSession(): void {
   })
 
   initialized = true
-  console.info('[INFO][LuomiNestBrowser] Session initialized with stealth measures')
+  logger.info('Session initialized with stealth measures')
 }
 
 export function getStealthScript(): string {

@@ -13,6 +13,9 @@ import type {
 } from '../types'
 import { useApi } from '../composables/useApi'
 import { generateId } from '../utils/id'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Social')
 
 export const useSocialStore = defineStore('social', () => {
   const { apiGet, apiPost, apiDelete, apiSseStream } = useApi()
@@ -96,7 +99,7 @@ export const useSocialStore = defineStore('social', () => {
         { content, sender_id: 'user' },
         (event: { type?: string; data?: Record<string, unknown> }) => _handleMessageEvent({ type: event.type || 'unknown', data: event.data || {} }),
         async () => {},
-        (err: string) => console.error('Failed to send message:', err),
+        (err: string) => logger.error('Failed to send message:', err),
       )
     } finally {
       agentsResponding.value = false
@@ -192,7 +195,7 @@ export const useSocialStore = defineStore('social', () => {
         break
 
       case 'error':
-        console.error('Message stream error:', event.data?.message)
+        logger.error('Message stream error:', event.data?.message)
         break
     }
   }

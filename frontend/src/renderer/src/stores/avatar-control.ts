@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('AvatarControl')
 
 export type AvatarCoreParamId =
   | 'ParamAngleX' | 'ParamAngleY' | 'ParamAngleZ'
@@ -110,7 +113,7 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
       }
       return false
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] triggerMotion failed', { group, index, error })
+      logger.error('triggerMotion failed', { group, index, error })
       return false
     }
   }
@@ -127,7 +130,7 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
       }
       return false
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] triggerExpression failed', { name, intensity, error })
+      logger.error('triggerExpression failed', { name, intensity, error })
       return false
     }
   }
@@ -152,7 +155,7 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
       }
       return false
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] drivePadEmotion failed', { pleasure, arousal, dominance, error })
+      logger.error('drivePadEmotion failed', { pleasure, arousal, dominance, error })
       return false
     }
   }
@@ -170,14 +173,14 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
       }
       return false
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] driveLipSync failed', { value, error })
+      logger.error('driveLipSync failed', { value, error })
       return false
     }
   }
 
   const setCoreParam = async (paramId: AvatarCoreParamId | string, value: number): Promise<boolean> => {
     if (!AVATAR_CORE_PARAM_WHITELIST.has(paramId)) {
-      console.warn('[LuomiNestAvatarControl] setCoreParam rejected: param not in whitelist', { paramId })
+      logger.warn('setCoreParam rejected: param not in whitelist', { paramId })
       return false
     }
     try {
@@ -187,7 +190,7 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
       }
       return false
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] setCoreParam failed', { paramId, value, error })
+      logger.error('setCoreParam failed', { paramId, value, error })
       return false
     }
   }
@@ -200,7 +203,7 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
       }
       return false
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] setModelPosition failed', { x, y, error })
+      logger.error('setModelPosition failed', { x, y, error })
       return false
     }
   }
@@ -213,7 +216,7 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
       }
       return false
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] setModelScale failed', { scale, error })
+      logger.error('setModelScale failed', { scale, error })
       return false
     }
   }
@@ -226,7 +229,7 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
       }
       return res.success
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] openDesktopPet failed', { modelInfo, error })
+      logger.error('openDesktopPet failed', { modelInfo, error })
       isDesktopPetRunning.value = false
       return false
     }
@@ -240,7 +243,7 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
       }
       return res.success
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] closeDesktopPet failed', error)
+      logger.error('closeDesktopPet failed', error)
       isDesktopPetRunning.value = false
       return false
     }
@@ -250,7 +253,7 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
     try {
       isDesktopPetRunning.value = await window.api.desktopPet.isRunning()
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] checkDesktopPetStatus failed', error)
+      logger.error('checkDesktopPetStatus failed', error)
       isDesktopPetRunning.value = false
     }
   }
@@ -266,7 +269,7 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
         }
       }
     } catch (error: unknown) {
-      console.error('[LuomiNestAvatarControl] getModelCapabilities failed', error)
+      logger.error('getModelCapabilities failed', error)
     }
   }
 

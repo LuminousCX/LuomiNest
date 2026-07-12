@@ -2,6 +2,9 @@ import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { randomBytes } from 'crypto'
 import { PATHS } from '../paths'
+import { createLuomiNestLogger } from '../luomi-logger'
+
+const logger = createLuomiNestLogger('Backend')
 
 let cachedToken: string | null = null
 
@@ -19,6 +22,6 @@ export const getLumiAuthToken = (): string => {
   mkdirSync(configDir, { recursive: true })
   cachedToken = randomBytes(32).toString('base64url')
   writeFileSync(tokenPath, cachedToken, 'utf-8')
-  console.log('[BackendService] Generated local auth token at', tokenPath)
+  logger.info('Generated local auth token at', tokenPath)
   return cachedToken
 }

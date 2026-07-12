@@ -3,6 +3,9 @@ import { API_ENDPOINTS } from '../config/api'
 import { filterTtsText } from '../utils/ttsTextFilter'
 import { interceptEmotionTags } from '../utils/emotionTagInterceptor'
 import type { ChatStreamChunk } from '../types'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('AvatarChat')
 
 export interface AvatarChatOptions {
   /** Voice identifier passed to the TTS backend (e.g. 'zh-CN-XiaoxiaoNeural'). */
@@ -275,7 +278,7 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
 
         audioElement.play().catch((e) => {
           if (e.name !== 'AbortError') {
-            console.warn('[LuomiNest AvatarChat] Playback failed:', e)
+            logger.warn('Playback failed:', e)
           }
           cleanupAudio()
           resolve()
@@ -285,7 +288,7 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
       if (controller.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) {
         return
       }
-      console.warn('[LuomiNest AvatarChat] TTS error:', e)
+      logger.warn('TTS error:', e)
       isSynthesizing.value = false
       // 检测 TTS 引擎不可用（503 / 未安装引擎）：置位标志，清空队列，避免后续分段继续打 503
       const errMsg = e instanceof Error ? e.message : String(e)
@@ -294,7 +297,7 @@ export const useAvatarChat = (options: AvatarChatOptions) => {
         ttsQueue.length = 0
         textBuffer = ''
         streamActive = false
-        console.warn('[LuomiNest AvatarChat] TTS 引擎不可用，已停止后续 TTS 请求')
+        logger.warn('TTS 引擎不可用，已停止后续 TTS 请求')
       }
       // 节流：5 秒内只通知一次，避免每个分段都弹 toast
       const now = Date.now()

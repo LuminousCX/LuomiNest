@@ -3,6 +3,9 @@ import { join } from 'path'
 import { platform } from 'os'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { PATHS } from './paths'
+import { createLuomiNestLogger } from './luomi-logger'
+
+const logger = createLuomiNestLogger('DesktopPet')
 
 const isDev = !app.isPackaged
 const isMac = platform() === 'darwin'
@@ -226,9 +229,9 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
       } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err))
         if ('code' in error && (error as any).code === 'ERR_ABORTED') {
-          console.warn('[DesktopPet] Navigation aborted, hash route may have loaded correctly')
+          logger.warn('Navigation aborted, hash route may have loaded correctly')
         } else {
-          console.error('[DesktopPet] Failed to load URL:', error)
+          logger.error('Failed to load URL:', error)
         }
       }
     } else {

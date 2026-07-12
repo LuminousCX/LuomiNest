@@ -5,6 +5,9 @@ import { existsSync } from 'fs'
 import { platform } from 'os'
 import { PATHS } from '../paths'
 import { getLumiAuthToken } from './auth-token'
+import { createLuomiNestLogger } from '../luomi-logger'
+
+const logger = createLuomiNestLogger('Backend')
 
 let backendProcess: ChildProcess | null = null
 let backendReady = false
@@ -48,13 +51,13 @@ const routeBackendLog = (data: Buffer, source: 'stdout' | 'stderr') => {
   if (!text) return
 
   if (source === 'stdout') {
-    console.log('[Backend]', text)
+    logger.info(text)
     return
   }
 
   const match = text.match(LOG_LEVEL_PATTERN)
   if (!match) {
-    console.log('[Backend]', text)
+    logger.info(text)
     return
   }
 
@@ -63,17 +66,17 @@ const routeBackendLog = (data: Buffer, source: 'stdout' | 'stderr') => {
     case 'DEBUG':
     case 'INFO':
     case 'SUCCESS':
-      console.log('[Backend]', text)
+      logger.info(text)
       break
     case 'WARNING':
-      console.warn('[Backend Warning]', text)
+      logger.warn(text)
       break
     case 'ERROR':
     case 'CRITICAL':
-      console.error('[Backend Error]', text)
+      logger.error(text)
       break
     default:
-      console.log('[Backend]', text)
+      logger.info(text)
   }
 }
 
@@ -137,7 +140,7 @@ export const waitForBackend = async (): Promise<boolean> => {
       })
       if (response.ok) {
         backendReady = true
-        console.log('[BackendService] Backend is ready!')
+        logger.info('Backend is ready!')
         return true
       }
       // 非 OK 状态同样需要等待，避免高频请求（busy-wait）
@@ -147,13 +150,13 @@ export const waitForBackend = async (): Promise<boolean> => {
     }
   }
 
-  console.error('[BackendService] Backend startup timeout')
+  logger.error('Backend startup timeout')
   return false
 }
 
 export const startBackend = async (): Promise<boolean> => {
   if (backendProcess) {
-    console.log('[BackendService] Backend already running')
+    logger.info('Backend already running')
     return true
   }
   
@@ -163,14 +166,14 @@ export const startBackend = async (): Promise<boolean> => {
   const cwd = getBackendCwd()
   
   if (!existsSync(backendPath)) {
-    console.error('[BackendService] Backend executable not found:', backendPath)
+    logger.error('Backend executable not found:', backendPath)
     return false
   }
-  
-  console.log('[BackendService] Starting backend...')
-  console.log('[BackendService] Platform:', platform())
-  console.log('[BackendService] Executable:', backendPath)
-  console.log('[BackendService] Working directory:', cwd)
+
+  logger.info('Starting backend...')
+  logger.info('Platform:', platform())
+  logger.info('Executable:', backendPath)
+  logger.info('Working directory:', cwd)
   
   const args = isDev 
     ? [mainPath, '--host', BACKEND_HOST, '--port', String(BACKEND_PORT)]
@@ -209,13 +212,13 @@ export const startBackend = async (): Promise<boolean> => {
   })
   
   backendProcess.on('error', (err) => {
-    console.error('[BackendService] Process error:', err)
+    logger.error('Process error:', err)
     backendProcess = null
     backendReady = false
   })
-  
+
   backendProcess.on('exit', (code, signal) => {
-    console.log(`[BackendService] Process exited with code ${code}, signal ${signal}`)
+    logger.info(`Process exited with code ${code}, signal ${signal}`)
     backendProcess = null
     backendReady = false
   })
@@ -228,7 +231,7 @@ export const stopBackend = (): void => {
     return
   }
 
-  console.log('[BackendService] Stopping backend...')
+  logger.info('Stopping backend...')
 
   if (platform() === 'win32') {
     if (backendProcess.pid === undefined) {
@@ -242,21 +245,21 @@ export const stopBackend = (): void => {
     try {
       const tk = spawn('taskkill', ['/pid', String(pid), '/f', '/t'])
       tk.on('error', (err) => {
-        console.error('[BackendService] taskkill failed:', err.message)
+        logger.error('taskkill failed:', err.message)
         try { process.kill(pid) } catch {}
         backendProcess = null
         backendReady = false
       })
       tk.on('close', (exitCode) => {
         if (exitCode !== 0) {
-          console.error('[BackendService] taskkill exited with code:', exitCode)
+          logger.error('taskkill exited with code:', exitCode)
           try { process.kill(pid) } catch {}
         }
         backendProcess = null
         backendReady = false
       })
     } catch (err) {
-      console.error('[BackendService] taskkill spawn failed:', err)
+      logger.error('taskkill spawn failed:', err)
       try { process.kill(pid) } catch {}
       backendProcess = null
       backendReady = false
@@ -276,7 +279,7 @@ export const restartBackend = async (): Promise<boolean> => {
 
 export const startBackendInBackground = (): void => {
   if (backendProcess) {
-    console.log('[BackendService] Backend already running')
+    logger.info('Backend already running')
     return
   }
   emitStage('spawning')

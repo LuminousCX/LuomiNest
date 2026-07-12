@@ -2,6 +2,9 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { TrashListItem } from '../types'
 import { useApi } from '../composables/useApi'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('ChatTrash')
 
 export const useChatTrashStore = defineStore('chat-trash', () => {
   const { apiGet, apiPost, apiDelete } = useApi()
@@ -18,7 +21,7 @@ export const useChatTrashStore = defineStore('chat-trash', () => {
       const query = `?agent_id=${targetAgentId}`
       trashItems.value = await apiGet<TrashListItem[]>(`/chat/trash${query}`)
     } catch (error) {
-      console.warn('[ChatTrashStore] Failed to fetch trash:', error)
+      logger.warn('Failed to fetch trash:', error)
       trashItems.value = []
     }
   }
@@ -35,7 +38,7 @@ export const useChatTrashStore = defineStore('chat-trash', () => {
       if (onRefresh) await onRefresh()
       await fetchTrash(targetAgentId)
     } catch (error) {
-      console.warn('[ChatTrashStore] Batch soft delete failed:', error)
+      logger.warn('Batch soft delete failed:', error)
     }
   }
 
@@ -48,7 +51,7 @@ export const useChatTrashStore = defineStore('chat-trash', () => {
       if (onRefresh) await onRefresh()
       await fetchTrash(targetAgentId)
     } catch (error) {
-      console.warn('[ChatTrashStore] Failed to restore conversation:', error)
+      logger.warn('Failed to restore conversation:', error)
     }
   }
 
@@ -64,7 +67,7 @@ export const useChatTrashStore = defineStore('chat-trash', () => {
       if (onRefresh) await onRefresh()
       await fetchTrash(targetAgentId)
     } catch (error) {
-      console.warn('[ChatTrashStore] Batch restore failed:', error)
+      logger.warn('Batch restore failed:', error)
     }
   }
 
@@ -76,7 +79,7 @@ export const useChatTrashStore = defineStore('chat-trash', () => {
       await apiDelete(`/chat/trash/${convId}`)
       await fetchTrash(targetAgentId)
     } catch (error) {
-      console.warn('[ChatTrashStore] Failed to permanently delete conversation:', error)
+      logger.warn('Failed to permanently delete conversation:', error)
     }
   }
 
@@ -91,7 +94,7 @@ export const useChatTrashStore = defineStore('chat-trash', () => {
       })
       await fetchTrash(targetAgentId)
     } catch (error) {
-      console.warn('[ChatTrashStore] Batch permanent delete failed:', error)
+      logger.warn('Batch permanent delete failed:', error)
     }
   }
 
@@ -104,7 +107,7 @@ export const useChatTrashStore = defineStore('chat-trash', () => {
       await apiDelete(`/chat/trash${query}`)
       trashItems.value = []
     } catch (error) {
-      console.warn('[ChatTrashStore] Failed to empty trash:', error)
+      logger.warn('Failed to empty trash:', error)
     }
   }
 

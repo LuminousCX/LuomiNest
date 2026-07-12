@@ -20,6 +20,9 @@ import { useChatTrashStore } from '../stores/chat-trash'
 import { useDebouncedSearch } from '../composables/useDebouncedSearch'
 import type { ConversationListItem, ConversationSearchResult } from '../types'
 import { formatDateCalendar } from '../utils/format'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Sidebar')
 
 defineProps<{
   trashCount: number
@@ -103,7 +106,7 @@ const handleDeleteConversation = async (convId: string) => {
   try {
     await chatStore.deleteConversation(convId, agentStore.activeAgent?.id)
   } catch (e: unknown) {
-    console.error('Failed to delete conversation:', e)
+    logger.error('Failed to delete conversation:', e)
   }
 }
 
@@ -193,7 +196,7 @@ const handleBatchDelete = async () => {
     selectedIds.value = new Set()
     batchMode.value = false
   } catch (e: unknown) {
-    console.error('Failed to batch delete:', e)
+    logger.error('Failed to batch delete:', e)
   }
 }
 

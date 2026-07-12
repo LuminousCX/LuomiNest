@@ -1,6 +1,9 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
+import { createLuomiNestLogger } from './luomi-logger'
+
+const logger = createLuomiNestLogger('Paths')
 
 const APP_NAME = 'LuomiNest'
 
@@ -68,9 +71,9 @@ export const PATHS = {
 export const initAppPaths = (): void => {
   app.setAppLogsPath(PATHS.logs)
 
-  console.info(`[INFO][${APP_NAME}Paths] userData: ${PATHS.userData}`)
-  console.info(`[INFO][${APP_NAME}Paths] cache: ${PATHS.cache}`)
-  console.info(`[INFO][${APP_NAME}Paths] data: ${PATHS.data}`)
-  console.info(`[INFO][${APP_NAME}Paths] config: ${PATHS.config}`)
-  console.info(`[INFO][${APP_NAME}Paths] logs: ${PATHS.logs}`)
+  logger.info(`userData: ${PATHS.userData}`)
+  logger.info(`cache: ${PATHS.cache}`)
+  logger.info(`data: ${PATHS.data}`)
+  logger.info(`config: ${PATHS.config}`)
+  logger.info(`logs: ${PATHS.logs}`)
 }

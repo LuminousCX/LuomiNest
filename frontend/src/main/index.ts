@@ -11,6 +11,9 @@ import { configStore } from './services/config-store'
 import { registerIpcHandlers, setMainWindow } from './services/ipc-handlers'
 import { createDesktopPet, getDesktopPetWindow, registerDesktopPetIpc } from './services/desktop-pet'
 import { registerAvatarProtocol, verifyAvatarResources, registerAvatarIpc } from './services/avatar-protocol'
+import { createLuomiNestLogger } from './services/luomi-logger'
+
+const logger = createLuomiNestLogger('Main')
 
 if (platform() === 'win32') {
   // 启用 Windows 控制台 UTF-8 输出模式（ANSI 转义序列）
@@ -240,7 +243,7 @@ app.whenReady().then(() => {
   registerDesktopPetIpc(mainWindow)
   registerAvatarIpc()
 
-  console.log('[Main] Starting backend service in background...')
+  logger.info('Starting backend service in background...')
   startBackendInBackground()
 
   // 注入人类化输入层（不依赖后端就绪，executor 是 main 进程单例）
@@ -251,7 +254,7 @@ app.whenReady().then(() => {
     if (stage === 'ready') {
       luomiBrowserWSClient.start()
     } else if (stage === 'failed') {
-      console.warn('[Main] Backend failed, browser WS will retry on reconnect')
+      logger.warn('Backend failed, browser WS will retry on reconnect')
     }
   })
 

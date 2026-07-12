@@ -14,6 +14,9 @@ import {
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
+import { createLuomiNestRendererLogger } from '../../utils/logger'
+
+const logger = createLuomiNestRendererLogger('AiModel')
 
 const emit = defineEmits<{
   (e: 'add-provider'): void
@@ -74,7 +77,7 @@ const handleFetchModels = async (providerId: string) => {
     await modelStore.fetchProviderModels(providerId)
     toast.info('模型列表已刷新')
   } catch (e: any) {
-    console.error('Failed to fetch models:', e)
+    logger.error('Failed to fetch models:', e)
     toast.error(`获取模型列表失败：${e.message || '未知错误'}`)
   }
 }
@@ -85,7 +88,7 @@ const handleRemoveProvider = async (providerId: string) => {
     await modelStore.removeProvider(providerId)
     toast.success(`供应商「${p?.name || providerId}」已删除`)
   } catch (e: any) {
-    console.error('Failed to remove provider:', e)
+    logger.error('Failed to remove provider:', e)
     toast.error(`删除供应商失败：${e.message || '未知错误'}`)
   }
 }

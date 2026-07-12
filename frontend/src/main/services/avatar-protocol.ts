@@ -3,6 +3,9 @@ import { join, dirname, basename, resolve, sep } from 'path'
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, statSync, copyFileSync } from 'fs'
 import { PATHS } from './paths'
 import { ImportedModelRecord, loadImportedModels, saveImportedModels } from './desktop-pet'
+import { createLuomiNestLogger } from './luomi-logger'
+
+const logger = createLuomiNestLogger('Avatar')
 
 const isDev = !app.isPackaged
 
@@ -45,7 +48,7 @@ const resolveModelFile = (hostname: string, relativePath: string): string | null
   for (const sp of searchPaths) {
     try {
       if (!isPathSafe(sp.base, sp.sub)) {
-        console.warn(`[SECURITY][LuomiNestAvatar] Path traversal blocked: ${sp.label}:${sp.sub}`)
+        logger.warn(`Path traversal blocked: ${sp.label}:${sp.sub}`)
         continue
       }
       const filePath = resolve(sp.base, sp.sub)
@@ -55,8 +58,8 @@ const resolveModelFile = (hostname: string, relativePath: string): string | null
     }
   }
 
-  console.warn(`[WARNING][LuomiNestAvatar] Resource not found: ${hostname}/${relativePath}`)
-  console.warn(`[WARNING][LuomiNestAvatar]   Searched: ${searchPaths.map(s => s.label + ':' + resolve(s.base, s.sub)).join(' | ')}`)
+  logger.warn(`Resource not found: ${hostname}/${relativePath}`)
+  logger.warn(`  Searched: ${searchPaths.map(s => s.label + ':' + resolve(s.base, s.sub)).join(' | ')}`)
   return null
 }
 
@@ -87,7 +90,7 @@ export function registerAvatarProtocol(): void {
 
       const filePath = resolveModelFile(hostname, relativePath)
       if (!filePath) {
-        console.warn(`[WARNING][LuomiNestAvatar] 404: ${hostname}/${relativePath}`)
+        logger.warn(`404: ${hostname}/${relativePath}`)
         return new Response('Not Found', { status: 404 })
       }
 
@@ -104,15 +107,15 @@ export function registerAvatarProtocol(): void {
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
-      console.error(`[ERROR][LuomiNestAvatar] Protocol handler error:`, message)
+      logger.error('Protocol handler error:', message)
       return new Response('Internal Server Error', { status: 500 })
     }
   })
 
-  console.info(`[INFO][LuomiNestAvatar] Protocol "luominest-avatar" registered successfully`)
-  console.info(`[INFO][LuomiNestAvatar]   builtinBasePath -> ${builtinBasePath}`)
-  console.info(`[INFO][LuomiNestAvatar]   isPackaged -> ${app.isPackaged}`)
-  console.info(`[INFO][LuomiNestAvatar]   resourcesPath -> ${process.resourcesPath}`)
+  logger.info('Protocol "luominest-avatar" registered successfully')
+  logger.info(`  builtinBasePath -> ${builtinBasePath}`)
+  logger.info(`  isPackaged -> ${app.isPackaged}`)
+  logger.info(`  resourcesPath -> ${process.resourcesPath}`)
 }
 
 export function verifyAvatarResources(): void {
@@ -120,9 +123,9 @@ export function verifyAvatarResources(): void {
     const fullPath = join(path, sampleFile)
     const exists = existsSync(fullPath)
     if (!exists) {
-      console.warn(`[WARNING][LuomiNestAvatar] ${label} path check FAILED: ${path} (sample: ${fullPath})`)
+      logger.warn(`${label} path check FAILED: ${path} (sample: ${fullPath})`)
     } else {
-      console.info(`[INFO][LuomiNestAvatar] ${label} path OK: ${path}`)
+      logger.info(`${label} path OK: ${path}`)
     }
     return exists
   }
@@ -197,7 +200,7 @@ export function registerAvatarIpc(): void {
       }
       saveImportedModels(models)
 
-      console.info(`[INFO][LuomiNestAvatar] Model imported: ${modelName} -> ${destDir}`)
+      logger.info(`Model imported: ${modelName} -> ${destDir}`)
 
       return {
         success: true,
@@ -205,7 +208,7 @@ export function registerAvatarIpc(): void {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
-      console.error('[ERROR][LuomiNestAvatar] Import failed:', message)
+      logger.error('Import failed:', message)
       return { success: false, error: message }
     }
   })
@@ -228,11 +231,11 @@ export function registerAvatarIpc(): void {
       const filtered = models.filter(m => m.name !== modelName)
       saveImportedModels(filtered)
 
-      console.info(`[INFO][LuomiNestAvatar] Model deleted: ${modelName}`)
+      logger.info(`Model deleted: ${modelName}`)
       return { success: true }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
-      console.error('[ERROR][LuomiNestAvatar] Delete failed:', message)
+      logger.error('Delete failed:', message)
       return { success: false, error: message }
     }
   })

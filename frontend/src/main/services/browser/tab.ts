@@ -10,6 +10,9 @@ import {
   injectStealthScript,
   isViewDestroyed
 } from './view'
+import { createLuomiNestLogger } from '../luomi-logger'
+
+const logger = createLuomiNestLogger('Browser')
 
 type TabUpdateCallback = (tabId: string, updates: Partial<Tab>) => void
 type TabEventCallback = (event: string, data: any) => void
@@ -203,7 +206,7 @@ class TabManager {
     }
 
     this.notifyUpdate(tabId, { sleeping: true, loading: false })
-    console.info(`[INFO][LuomiNestBrowser] Tab "${tab.title}" has entered sleep mode to conserve resources`)
+    logger.info(`Tab "${tab.title}" has entered sleep mode to conserve resources`)
   }
 
   private async wakeTab(tabId: string): Promise<void> {
@@ -235,7 +238,7 @@ class TabManager {
       }
     }
 
-    console.info(`[INFO][LuomiNestBrowser] Tab "${tab.title}" has been awakened from sleep mode`)
+    logger.info(`Tab "${tab.title}" has been awakened from sleep mode`)
   }
 
   createTab(url: string = DEFAULT_BROWSER_CONFIG.defaultUrl): Tab {

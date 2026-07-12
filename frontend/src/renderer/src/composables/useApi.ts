@@ -1,6 +1,9 @@
 import { ref } from 'vue'
 import type { ChatStreamChunk } from '../types'
 import { API_ENDPOINTS } from '../config/api'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Api')
 
 const getApiUrl = (path: string) => `${API_ENDPOINTS.V1}${path}`
 
@@ -222,7 +225,7 @@ export const useApi = () => {
           onChunk(chunk)
           return chunk.done
         } catch (parseErr) {
-          console.warn('[API] Stream chunk parse failed:', dataStr, parseErr)
+          logger.warn('Stream chunk parse failed:', dataStr, parseErr)
           return false
         }
       }

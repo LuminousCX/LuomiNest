@@ -11,6 +11,10 @@
  * 3. 可插拔执行器：通过 setHandler 注册自动化执行回调
  */
 
+import { createLuomiNestLogger } from '../luomi-logger'
+
+const logger = createLuomiNestLogger('Browser')
+
 const WS_URL = 'ws://127.0.0.1:18000/ws/browser'
 const INITIAL_RECONNECT_DELAY = 1000
 const MAX_RECONNECT_DELAY = 30000
@@ -38,7 +42,7 @@ class LuomiBrowserWSClient {
   /** 启动 WS 客户端，开始连接后端 */
   start(): void {
     if (this.shouldReconnect) {
-      console.log('[BrowserWS] Client already started')
+      logger.info('Client already started')
       return
     }
     this.shouldReconnect = true
@@ -60,7 +64,7 @@ class LuomiBrowserWSClient {
       }
       this.ws = null
     }
-    console.log('[BrowserWS] Client stopped')
+    logger.info('Client stopped')
   }
 
   /** 当前是否已连接 */
@@ -69,18 +73,18 @@ class LuomiBrowserWSClient {
   }
 
   private connect(): void {
-    console.log(`[BrowserWS] Connecting to ${WS_URL}...`)
+    logger.info(`Connecting to ${WS_URL}...`)
 
     try {
       this.ws = new WebSocket(WS_URL)
     } catch (e) {
-      console.error('[BrowserWS] Failed to create WebSocket:', e)
+      logger.error('Failed to create WebSocket:', e)
       this.scheduleReconnect()
       return
     }
 
     this.ws.onopen = () => {
-      console.log('[BrowserWS] Connected to backend')
+      logger.info('Connected to backend')
       this.reconnectDelay = INITIAL_RECONNECT_DELAY
     }
 
@@ -89,11 +93,11 @@ class LuomiBrowserWSClient {
     }
 
     this.ws.onerror = (event: Event) => {
-      console.error('[BrowserWS] Connection error:', event)
+      logger.error('Connection error:', event)
     }
 
     this.ws.onclose = (event: CloseEvent) => {
-      console.log(`[BrowserWS] Disconnected (code=${event.code}, reason=${event.reason})`)
+      logger.info(`Disconnected (code=${event.code}, reason=${event.reason})`)
       this.ws = null
       if (this.shouldReconnect) {
         this.scheduleReconnect()
@@ -105,7 +109,7 @@ class LuomiBrowserWSClient {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
     }
-    console.log(`[BrowserWS] Reconnecting in ${this.reconnectDelay}ms...`)
+    logger.info(`Reconnecting in ${this.reconnectDelay}ms...`)
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       if (this.shouldReconnect) {
@@ -122,7 +126,7 @@ class LuomiBrowserWSClient {
     try {
       message = JSON.parse(raw)
     } catch {
-      console.warn('[BrowserWS] Received invalid JSON:', raw.slice(0, 100))
+      logger.warn('Received invalid JSON:', raw.slice(0, 100))
       return
     }
 
@@ -161,7 +165,7 @@ class LuomiBrowserWSClient {
       return
     }
 
-    console.warn('[BrowserWS] Unknown message type:', msgType)
+    logger.warn('Unknown message type:', msgType)
   }
 
   private send(message: any): void {
@@ -169,7 +173,7 @@ class LuomiBrowserWSClient {
       try {
         this.ws.send(JSON.stringify(message))
       } catch (e) {
-        console.error('[BrowserWS] Failed to send message:', e)
+        logger.error('Failed to send message:', e)
       }
     }
   }

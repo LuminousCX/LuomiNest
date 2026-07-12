@@ -2,6 +2,9 @@ import { ref, onBeforeUnmount } from 'vue'
 import { useModelStore } from '../stores/model'
 import { API_ENDPOINTS } from '../config/api'
 import { stripEmotionTags } from '../utils/emotionTagInterceptor'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('AvatarTTS')
 
 export interface AvatarTTSOptions {
   syncLipParam?: (value: number) => void
@@ -221,7 +224,7 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
 
         audioElement.play().catch((e) => {
           if (e.name !== 'AbortError') {
-            console.warn('[LuomiNest AvatarTTS] Playback failed:', e)
+            logger.warn('Playback failed:', e)
           }
           stopSpeaking()
           resolve()
@@ -232,7 +235,7 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
         return
       }
       error.value = e instanceof Error ? e.message : 'TTS failed'
-      console.warn('[LuomiNest AvatarTTS] TTS error:', e)
+      logger.warn('TTS error:', e)
       isSynthesizing.value = false
     } finally {
       if (currentAbortController === controller) {

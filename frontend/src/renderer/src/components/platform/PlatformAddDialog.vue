@@ -8,6 +8,9 @@ import type { PlatformAdapterType } from '../../types'
 import LumiModal from '../../components/common/LumiModal.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiInput from '../../components/common/LumiInput.vue'
+import { createLuomiNestRendererLogger } from '../../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Platform')
 
 const store = usePlatformStore()
 
@@ -54,7 +57,7 @@ const handleCreate = async () => {
     closeAddDialog()
     emit('created')
   } catch (e: any) {
-    console.error('Failed to create platform instance:', e)
+    logger.error('Failed to create platform instance:', e)
   }
 }
 

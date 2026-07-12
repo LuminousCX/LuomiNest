@@ -14,6 +14,9 @@ import { ref, computed } from 'vue'
 import type { SubagentEvent, TaskStreamEvent } from '../types'
 import type { ScheduledTask } from '../types/workflow'
 import { useApi } from '../composables/useApi'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('TaskStream')
 
 /** 浏览器标签页任务 */
 export interface BrowserTabTask {
@@ -166,7 +169,7 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
       const tasks = await apiGet<ScheduledTaskInfo[]>('/scheduler/tasks')
       scheduledTasks.value = tasks
     } catch (error) {
-      console.warn('[TaskStreamStore] Failed to fetch scheduled tasks:', error)
+      logger.warn('Failed to fetch scheduled tasks:', error)
     }
   }
 
@@ -178,7 +181,7 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
       await apiDelete(`/scheduler/tasks/${taskId}`)
       scheduledTasks.value = scheduledTasks.value.filter(t => t.id !== taskId)
     } catch (error) {
-      console.warn('[TaskStreamStore] Failed to remove task:', error)
+      logger.warn('Failed to remove task:', error)
     }
   }
 
@@ -191,7 +194,7 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
       const resp = await apiGet<{ tasks: ScheduledTask[]; count: number }>('/scheduled-tasks')
       dbScheduledTasks.value = resp?.tasks ?? []
     } catch (error) {
-      console.warn('[TaskStreamStore] Failed to fetch db scheduled tasks:', error)
+      logger.warn('Failed to fetch db scheduled tasks:', error)
     }
   }
 
@@ -224,7 +227,7 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
       }
       return null
     } catch (error) {
-      console.warn('[TaskStreamStore] Failed to create db scheduled task:', error)
+      logger.warn('Failed to create db scheduled task:', error)
       return null
     }
   }
@@ -238,7 +241,7 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
       dbScheduledTasks.value = dbScheduledTasks.value.filter(t => t.task_id !== taskId)
       return true
     } catch (error) {
-      console.warn('[TaskStreamStore] Failed to remove db scheduled task:', error)
+      logger.warn('Failed to remove db scheduled task:', error)
       return false
     }
   }

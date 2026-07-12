@@ -29,6 +29,9 @@ import {
 import { usePlatformStore } from '../../stores/platform'
 import { useModelStore } from '../../stores/model'
 import type { PlatformAdapterType, PlatformInstance } from '../../types'
+import { createLuomiNestRendererLogger } from '../../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Settings')
 
 const platformStore = usePlatformStore()
 const modelStore = useModelStore()
@@ -132,7 +135,7 @@ const handleCreatePlatform = async () => {
     })
     closeAddPlatformDialog()
   } catch (e) {
-    console.error('Failed to create platform instance:', e)
+    logger.error('Failed to create platform instance:', e)
   }
 }
 
@@ -157,7 +160,7 @@ const handleSavePlatformConfig = async () => {
     })
     closeEditPlatformDialog()
   } catch (e) {
-    console.error('Failed to update platform instance:', e)
+    logger.error('Failed to update platform instance:', e)
   }
 }
 
@@ -169,7 +172,7 @@ const handleTogglePlatform = async (instance: PlatformInstance) => {
       await platformStore.startInstance(instance.id)
     }
   } catch (e) {
-    console.error('Failed to toggle platform status:', e)
+    logger.error('Failed to toggle platform status:', e)
   }
 }
 
@@ -213,7 +216,7 @@ const handleSaveMainAgent = async () => {
     })
     closeMainAgentDialog()
   } catch (e) {
-    console.error('Failed to update main agent config:', e)
+    logger.error('Failed to update main agent config:', e)
   } finally {
     mainAgentSaving.value = false
   }

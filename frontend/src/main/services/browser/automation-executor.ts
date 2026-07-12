@@ -18,6 +18,9 @@ import { WebContents } from 'electron'
 import { tabManager } from './tab'
 import { luomiBrowserWSClient, AutomationResult } from './ws-client'
 import { LUOMI_DOM_TREE_SCRIPT, getDomTreeCallScript } from './luomi-dom-tree'
+import { createLuomiNestLogger } from '../luomi-logger'
+
+const logger = createLuomiNestLogger('Browser')
 
 // 人类化输入接口（Phase 3 实现，此处仅定义类型）
 export interface HumanInputLayer {
@@ -56,7 +59,7 @@ class LuomiAutomationExecutor {
       try {
         return await tabHandler(args)
       } catch (e: any) {
-        console.error(`[AutomationExecutor] 动作 ${action} 执行异常:`, e)
+        logger.error(`动作 ${action} 执行异常:`, e)
         return { success: false, error: e?.message || String(e) }
       }
     }
@@ -75,7 +78,7 @@ class LuomiAutomationExecutor {
     try {
       return await handler(args, wc)
     } catch (e: any) {
-      console.error(`[AutomationExecutor] 动作 ${action} 执行异常:`, e)
+      logger.error(`动作 ${action} 执行异常:`, e)
       return { success: false, error: e?.message || String(e) }
     }
   }

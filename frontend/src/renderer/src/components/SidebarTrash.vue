@@ -17,6 +17,9 @@ import { useChatStore } from '../stores/chat'
 import { useChatTrashStore } from '../stores/chat-trash'
 import type { TrashListItem } from '../types'
 import { formatDateTime } from '../utils/format'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('SidebarTrash')
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -62,7 +65,7 @@ const handleBatchRestore = async () => {
     trashSelectedIds.value = new Set()
     trashBatchMode.value = false
   } catch (e: unknown) {
-    console.error('Failed to batch restore:', e)
+    logger.error('Failed to batch restore:', e)
   }
 }
 
@@ -76,7 +79,7 @@ const handleRestoreItem = async (convId: string) => {
   try {
     await chatTrashStore.restoreConversation(convId, agentStore.activeAgent?.id, () => chatStore.fetchConversations(agentStore.activeAgent?.id))
   } catch (e: unknown) {
-    console.error('Failed to restore:', e)
+    logger.error('Failed to restore:', e)
   }
 }
 
@@ -114,7 +117,7 @@ const handleTrashConfirm = async () => {
       await chatTrashStore.permanentDeleteConversation(trashConfirmTargetId.value, agentStore.activeAgent?.id)
     }
   } catch (e: unknown) {
-    console.error('Failed to execute trash action:', e)
+    logger.error('Failed to execute trash action:', e)
   }
   showTrashConfirm.value = false
   trashConfirmAction.value = ''

@@ -1,6 +1,9 @@
 import { readdirSync, statSync, rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { PATHS } from './paths'
+import { createLuomiNestLogger } from './luomi-logger'
+
+const logger = createLuomiNestLogger('Cache')
 
 const CACHE_DIRS = [
   PATHS.live2dCache,
@@ -74,7 +77,7 @@ export const cacheManager = {
       emptyDir(dir)
       mkdirSync(dir, { recursive: true })
     }
-    console.info('[INFO][LuomiNestCache] All cache cleared')
+    logger.info('All cache cleared')
   },
 
   clearCacheDir: (dirName: string): boolean => {
@@ -82,7 +85,7 @@ export const cacheManager = {
     if (!target) return false
     emptyDir(target)
     mkdirSync(target, { recursive: true })
-    console.info(`[INFO][LuomiNestCache] Cache dir "${dirName}" cleared`)
+    logger.info(`Cache dir "${dirName}" cleared`)
     return true
   },
 

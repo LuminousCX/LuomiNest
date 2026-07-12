@@ -11,6 +11,9 @@ import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiInput from '../../components/common/LumiInput.vue'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
+import { createLuomiNestRendererLogger } from '../../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Platform')
 
 const store = usePlatformStore()
 
@@ -85,7 +88,7 @@ const handleToggleStatus = async (instance: PlatformInstance) => {
       await store.startInstance(instance.id)
     }
   } catch (e: any) {
-    console.error('Failed to toggle platform status:', e)
+    logger.error('Failed to toggle platform status:', e)
   }
 }
 

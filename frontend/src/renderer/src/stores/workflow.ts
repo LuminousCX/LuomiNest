@@ -23,6 +23,9 @@ import { useApi } from '../composables/useApi'
 import { useTaskStreamStore } from './taskStream'
 import { useMemoryStore } from './memory'
 import { generateId } from '../utils/id'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Workflow')
 
 /** 工作流阶段 */
 export type WorkflowPhase =
@@ -166,7 +169,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
   ): Promise<void> => {
     if (isRunning.value) {
-      console.warn('[WorkflowStore] 工作流正在执行中，请等待完成')
+      logger.warn('工作流正在执行中，请等待完成')
       return
     }
 
@@ -191,7 +194,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
         isRunning.value = false
       },
       (err: string) => {
-        console.error('[WorkflowStore] 工作流执行失败:', err)
+        logger.error('工作流执行失败:', err)
         isRunning.value = false
         progressLog.value.unshift({
           type: 'error',
@@ -569,7 +572,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
         timestamp: Date.now(),
       })
     } catch (err) {
-      console.error('[WorkflowStore] 取消工作流失败:', err)
+      logger.error('取消工作流失败:', err)
     }
   }
 
@@ -594,7 +597,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
         timestamp: Date.now(),
       })
     } catch (err) {
-      console.error('[WorkflowStore] 确认计划失败:', err)
+      logger.error('确认计划失败:', err)
     }
   }
 
@@ -619,7 +622,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
         timestamp: Date.now(),
       })
     } catch (err) {
-      console.error('[WorkflowStore] 拒绝计划失败:', err)
+      logger.error('拒绝计划失败:', err)
     }
   }
 

@@ -1,6 +1,9 @@
 import { WebContentsView, BrowserWindow } from 'electron'
 import { createBrowserView, isViewDestroyed } from './view'
 import { DEFAULT_BROWSER_CONFIG } from './types'
+import { createLuomiNestLogger } from '../luomi-logger'
+
+const logger = createLuomiNestLogger('Browser')
 
 export interface SearchResult {
   title: string
@@ -70,7 +73,7 @@ export async function browserSearch(
 
     return results || []
   } catch (err) {
-    console.warn('[BrowserSearch] Search failed:', err)
+    logger.warn('Search failed:', err)
     return []
   } finally {
     try {
@@ -141,7 +144,7 @@ export async function fetchUrl(
 
     return text || ''
   } catch (err) {
-    console.warn('[BrowserSearch] Fetch URL failed:', err)
+    logger.warn('Fetch URL failed:', err)
     return ''
   } finally {
     try {
