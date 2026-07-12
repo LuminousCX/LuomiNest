@@ -37,7 +37,6 @@ class LuomiAutomationExecutor {
   private handlers: Map<string, ActionHandler> = new Map()
   private tabHandlers: Map<string, TabActionHandler> = new Map()
   private humanLayer: HumanInputLayer | null = null
-  private domTreeInjected: WeakSet<WebContents> = new WeakSet()
 
   constructor() {
     this.registerHandlers()
@@ -92,9 +91,10 @@ class LuomiAutomationExecutor {
 
   /** 确保页面已注入 DOM 树构建脚本 */
   private async ensureDomTreeScript(wc: WebContents): Promise<void> {
-    if (this.domTreeInjected.has(wc)) return
+    // 运行时检查而非缓存：loadURL/reload 会重建 JS 上下文，window.buildLuomiDomTree 丢失
+    const injected = await wc.executeJavaScript('typeof window.buildLuomiDomTree === "function"')
+    if (injected) return
     await wc.executeJavaScript(LUOMI_DOM_TREE_SCRIPT)
-    this.domTreeInjected.add(wc)
   }
 
   /**
@@ -321,7 +321,8 @@ class LuomiAutomationExecutor {
     })
 
     this.handlers.set('wait_for_load', async (args, wc) => {
-      const timeout = Number(args.timeout) || 30000
+      // 统一 timeout 单位：args.timeout 为秒，* 1000 转毫秒（与 wait_for_element/wait_for_url 一致）
+      const timeout = Number(args.timeout) * 1000 || 30000
       // 若已在加载中，等待 did-finish-load；否则直接返回
       if (!wc.isLoading()) {
         return { success: true, data: { alreadyLoaded: true } }
@@ -330,7 +331,7 @@ class LuomiAutomationExecutor {
       return new Promise((resolve) => {
         const timer = setTimeout(() => {
           wc.removeListener('did-finish-load', onLoad)
-          resolve({ success: false, error: `等待页面加载超时 (${timeout}ms)` })
+          resolve({ success: false, error: `等待页面加载超时 (${timeout / 1000}s)` })
         }, timeout)
 
         const onLoad = () => {
@@ -509,6 +510,17 @@ class LuomiAutomationExecutor {
       const urlPattern = args.url_pattern as string | undefined
       const startUrl = wc.getURL()
 
+      // 预编译正则，避免每次导航回调重复构造，并在无效模式时提前报错
+      let regex: RegExp | null = null
+      if (urlPattern) {
+        try {
+          regex = new RegExp(urlPattern)
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e)
+          return { success: false, error: `无效的 URL 匹配模式: ${errMsg}` }
+        }
+      }
+
       return new Promise((resolve) => {
         const timer = setTimeout(() => {
           wc.removeListener('did-navigate', onNavigate)
@@ -516,7 +528,7 @@ class LuomiAutomationExecutor {
         }, timeout)
 
         const onNavigate = (_event: unknown, url: string) => {
-          if (!urlPattern || new RegExp(urlPattern).test(url)) {
+          if (!regex || regex.test(url)) {
             clearTimeout(timer)
             wc.removeListener('did-navigate', onNavigate)
             resolve({ success: true, data: { from: startUrl, to: url } })

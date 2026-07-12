@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import type { Component } from 'vue'
 import {
   Send,
@@ -68,18 +68,20 @@ const searchInput = ref('')
 const selectedEngine = ref<SearchEngine>(searchEngines[0])
 const showEngineDropdown = ref(false)
 const isSearching = ref(false)
+const searchBoxRef = ref<HTMLElement | null>(null)
+let searchResetTimer: ReturnType<typeof setTimeout> | null = null
 
 const emit = defineEmits<{
   search: [url: string]
   action: [action: string]
 }>()
 
-function selectEngine(engine: SearchEngine) {
+const selectEngine = (engine: SearchEngine) => {
   selectedEngine.value = engine
   showEngineDropdown.value = false
 }
 
-function handleSearch() {
+const handleSearch = () => {
   const query = searchInput.value.trim()
   if (!query) return
 
@@ -92,22 +94,40 @@ function handleSearch() {
     emit('search', url)
   }
 
-  setTimeout(() => {
+  if (searchResetTimer) clearTimeout(searchResetTimer)
+  searchResetTimer = setTimeout(() => {
     isSearching.value = false
     searchInput.value = ''
+    searchResetTimer = null
   }, 300)
 }
 
-function handleKeydown(e: KeyboardEvent) {
+const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     handleSearch()
   }
 }
 
-function handleWebsiteClick(url: string) {
+const handleWebsiteClick = (url: string) => {
   emit('search', url)
 }
+
+// 点击 .search-box 外部时关闭引擎下拉菜单
+const handleDocumentClick = (e: MouseEvent) => {
+  if (showEngineDropdown.value && searchBoxRef.value && !searchBoxRef.value.contains(e.target as Node)) {
+    showEngineDropdown.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleDocumentClick)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleDocumentClick)
+  if (searchResetTimer) clearTimeout(searchResetTimer)
+})
 </script>
 
 <template>
@@ -118,7 +138,7 @@ function handleWebsiteClick(url: string) {
         <span class="brand-lumi">Luomi</span><span class="brand-sub">Nest</span>
       </h1>
 
-      <div class="search-box">
+      <div ref="searchBoxRef" class="search-box">
         <div class="search-input-row">
           <button class="engine-selector" @click="showEngineDropdown = !showEngineDropdown">
             <component :is="selectedEngine.icon" :size="16" :style="{ color: selectedEngine.color }" />

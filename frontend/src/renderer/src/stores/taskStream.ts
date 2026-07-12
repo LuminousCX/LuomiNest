@@ -13,6 +13,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { SubagentEvent, TaskStreamEvent } from '../types'
 import type { ScheduledTask } from '../types/workflow'
+import type { NavigationTarget } from '../composables/useTaskNavigation'
 import { useApi } from '../composables/useApi'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 
@@ -61,7 +62,7 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
   }>>([])
 
   // 待处理跳转提示（智能无感跳转被防打断策略拦截时，标记侧边栏红点）
-  const pendingNavigation = ref<{ browser: boolean; workflow: boolean; tasks: boolean }>({
+  const pendingNavigation = ref<Record<NavigationTarget, boolean>>({
     browser: false,
     workflow: false,
     tasks: false,
@@ -257,14 +258,14 @@ export const useTaskStreamStore = defineStore('taskStream', () => {
    * 标记目标页有待处理跳转（显示侧边栏红点提示）
    * 由 useTaskNavigation 在防打断策略拦截时调用
    */
-  const markPendingNavigation = (target: 'browser' | 'workflow' | 'tasks') => {
+  const markPendingNavigation = (target: NavigationTarget) => {
     pendingNavigation.value = { ...pendingNavigation.value, [target]: true }
   }
 
   /**
    * 清除目标页的待处理跳转提示（用户手动点击导航项时调用）
    */
-  const clearPendingNavigation = (target: 'browser' | 'workflow' | 'tasks') => {
+  const clearPendingNavigation = (target: NavigationTarget) => {
     pendingNavigation.value = { ...pendingNavigation.value, [target]: false }
   }
 

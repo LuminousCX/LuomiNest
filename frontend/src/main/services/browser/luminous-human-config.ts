@@ -116,10 +116,10 @@ const PRESETS: Record<LuminousHumanPreset, LuminousHumanConfig> = {
   careful: CAREFUL_CONFIG,
 }
 
-export function resolveLuminousConfig(
+export const resolveLuminousConfig = (
   preset: LuminousHumanPreset = 'default',
   overrides?: Partial<LuminousHumanConfig>
-): LuminousHumanConfig {
+): LuminousHumanConfig => {
   const base = PRESETS[preset]
   if (!overrides) return { ...base }
   return { ...base, ...overrides }
@@ -127,22 +127,22 @@ export function resolveLuminousConfig(
 
 // ===== 工具函数 =====
 
-export function luminousRand(min: number, max: number): number {
+export const luminousRand = (min: number, max: number): number => {
   return min + Math.random() * (max - min)
 }
 
-export function luminousRandInt(min: number, max: number): number {
+export const luminousRandInt = (min: number, max: number): number => {
   return Math.floor(luminousRand(min, max + 1))
 }
 
-export function luminousRandRange(range: [number, number]): number {
+export const luminousRandRange = (range: [number, number]): number => {
   return luminousRand(range[0], range[1])
 }
 
-export function luminousRandIntRange(range: [number, number]): number {
+export const luminousRandIntRange = (range: [number, number]): number => {
   return luminousRandInt(range[0], range[1])
 }
 
-export function luminousSleep(ms: number): Promise<void> {
+export const luminousSleep = (ms: number): Promise<void> => {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }

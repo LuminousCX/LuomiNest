@@ -20,7 +20,13 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="workflow-created-card lumi-card" @click="emit('navigate')">
+  <div
+    class="workflow-created-card lumi-card"
+    role="button"
+    tabindex="0"
+    @click="emit('navigate')"
+    @keydown.enter="emit('navigate')"
+  >
     <div class="card-icon">
       <Workflow :size="18" />
     </div>

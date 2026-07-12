@@ -316,6 +316,18 @@ export const useWorkflowStore = defineStore('workflow', () => {
         break
       }
 
+      case 'plan_auto_confirmed': {
+        // 闪电模式：计划自动确认，无需用户干预
+        pendingPlan.value = null
+        confirmationFeedback.value = ''
+        progressLog.value.unshift({
+          type: 'plan_confirmed',
+          message: '计划已自动确认（闪电模式）',
+          timestamp: Date.now(),
+        })
+        break
+      }
+
       case 'plan_rejected': {
         pendingPlan.value = null
         progressLog.value.unshift({
