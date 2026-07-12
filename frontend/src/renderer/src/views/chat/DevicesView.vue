@@ -95,7 +95,7 @@ const fetchDevices = async () => {
     })
     devices.value = filtered.map(mapInstanceToDevice)
   } catch (e: unknown) {
-    error.value = (e instanceof Error ? e.message : String(e)) || '加载设备列表失败'
+    error.value = (e instanceof Error ? e.message : (e == null ? '' : String(e))) || '加载设备列表失败'
     devices.value = []
   } finally {
     loading.value = false

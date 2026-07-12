@@ -139,8 +139,9 @@ const handleEditProvider = async () => {
     close()
     toast.success(`供应商「${editProvider.value.name}」已更新`)
   } catch (e: unknown) {
-    editProviderError.value = (e instanceof Error ? e.message : String(e)) || '更新失败'
-    toast.error(`更新供应商失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
+    const errMsg = (e instanceof Error ? e.message : (e == null ? '' : String(e))) || '更新失败'
+    editProviderError.value = errMsg
+    toast.error(`更新供应商失败：${errMsg}`)
   } finally {
     editProviderLoading.value = false
   }

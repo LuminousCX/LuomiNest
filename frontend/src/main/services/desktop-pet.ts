@@ -176,6 +176,12 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     }
   }
 
+  const handleSetAlwaysOnTop = (_event: unknown, onTop: boolean) => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.setAlwaysOnTop(onTop, 'screen-saver')
+    }
+  }
+
   const handleShowContextMenu = () => {
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       petContextMenu.popup({ window: desktopPetWindow })
@@ -214,6 +220,7 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   }
 
   ipcMain.on('desktop-pet:set-ignore-mouse-events', handleSetIgnoreMouseEvents)
+  ipcMain.on('desktop-pet:set-always-on-top', handleSetAlwaysOnTop)
   ipcMain.on('desktop-pet:show-context-menu', handleShowContextMenu)
   ipcMain.on('desktop-pet:start-drag', handleStartDrag)
   ipcMain.on('desktop-pet:drag-window', handleDragWindow)
@@ -244,6 +251,7 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
 
   desktopPetWindow.on('closed', () => {
     ipcMain.removeListener('desktop-pet:set-ignore-mouse-events', handleSetIgnoreMouseEvents)
+    ipcMain.removeListener('desktop-pet:set-always-on-top', handleSetAlwaysOnTop)
     ipcMain.removeListener('desktop-pet:show-context-menu', handleShowContextMenu)
     ipcMain.removeListener('desktop-pet:start-drag', handleStartDrag)
     ipcMain.removeListener('desktop-pet:drag-window', handleDragWindow)

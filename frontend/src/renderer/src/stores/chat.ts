@@ -516,7 +516,7 @@ export const useChatStore = defineStore('chat', () => {
             reasoningContent: currentMsgList[lastIndex].reasoningContent + (chunk.reasoning_content || ''),
           }
           if (chunk.done) {
-            logger.info('done chunk suggestions:', chunk.suggested_questions)
+            logger.debug('done chunk suggestions:', chunk.suggested_questions)
             if (chunk.suggested_questions && chunk.suggested_questions.length > 0) {
               updatedMsg.suggestedQuestions = chunk.suggested_questions
             }

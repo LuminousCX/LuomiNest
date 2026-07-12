@@ -7,7 +7,7 @@
  * - useBrowserTabs：标签页 CRUD、IPC 事件、taskStream 监听
  * - useBrowserActions：DevPanel、截图、快速点击/填表、AI 搜索、toast、prompt 对话框
  */
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import TabBar from '../components/browser/TabBar.vue'
 import NavBar from '../components/browser/NavBar.vue'
 import BookmarkBar from '../components/browser/BookmarkBar.vue'
@@ -84,6 +84,16 @@ const bookmarks = [
   { name: 'MDN', url: 'https://developer.mozilla.org' },
   { name: 'Stack Overflow', url: 'https://stackoverflow.com' }
 ]
+
+// prompt 输入框 ref：v-if + Transition 下 autofocus 不可靠，改用 nextTick 聚焦
+const promptInputRef = ref<HTMLInputElement | null>(null)
+watch(promptState, (state) => {
+  if (state) {
+    nextTick(() => {
+      promptInputRef.value?.focus()
+    })
+  }
+})
 
 onMounted(async () => {
   await syncTabs()
@@ -194,11 +204,11 @@ onUnmounted(() => {
           </div>
           <div class="prompt-body">
             <input
+              ref="promptInputRef"
               v-model="promptInput"
               class="prompt-input"
               :placeholder="promptState.placeholder"
               type="text"
-              autofocus
               @keydown.enter="submitPrompt"
               @keydown.esc="cancelPrompt"
             />

@@ -218,6 +218,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutsideModel)
   window.removeEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
   window.removeEventListener('luominest:memory-chat-trigger', handleMemoryChatTrigger as EventListener)
+  ;(window as unknown as Record<string, unknown>).__memoryChatTrigger = undefined
   ttsStopSpeaking()
 })
 </script>

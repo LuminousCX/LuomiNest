@@ -114,7 +114,9 @@ const api = {
     subscribeStage: (callback: (data: BackendStageEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, data: BackendStageEvent) => callback(data)
       ipcRenderer.on('backend:stage', handler)
-      ipcRenderer.invoke('backend:subscribe')
+      ipcRenderer.invoke('backend:subscribe').catch((err: unknown) => {
+        console.error('[Preload] Failed to subscribe to backend stage:', err)
+      })
       return () => ipcRenderer.removeListener('backend:stage', handler as never)
     }
   }

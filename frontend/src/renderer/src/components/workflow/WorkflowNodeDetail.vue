@@ -19,7 +19,7 @@ defineEmits<{
   <aside class="node-detail-panel">
     <div class="panel-header">
       <span class="panel-title">节点详情</span>
-      <button class="panel-close" @click="$emit('close')">&times;</button>
+      <button class="panel-close" title="关闭" aria-label="关闭" @click="$emit('close')">&times;</button>
     </div>
     <div class="panel-body">
       <div class="detail-field">

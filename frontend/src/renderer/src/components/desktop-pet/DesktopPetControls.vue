@@ -29,19 +29,19 @@ const emit = defineEmits<{
   >
     <Transition name="controls-fade">
       <div v-if="visible" class="controls-panel">
-        <button class="control-btn" title="Reset Pose" @click="emit('reset-pose')">
+        <button class="control-btn" title="重置姿势" @click="emit('reset-pose')">
           <RotateCcw :size="16" />
         </button>
         <button
           class="control-btn"
           :class="{ active: isAlwaysOnTop }"
-          :title="isAlwaysOnTop ? 'Unpin' : 'Pin on Top'"
+          :title="isAlwaysOnTop ? '取消置顶' : '置顶'"
           @click="emit('toggle-always-on-top')"
         >
           <Pin v-if="isAlwaysOnTop" :size="16" />
           <PinOff v-else :size="16" />
         </button>
-        <button class="control-btn danger" title="Close Pet" @click="emit('close')">
+        <button class="control-btn danger" title="关闭宠物" @click="emit('close')">
           <X :size="16" />
         </button>
       </div>

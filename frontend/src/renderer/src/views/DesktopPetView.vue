@@ -92,7 +92,7 @@ const handleResetPose = async (): Promise<void> => {
 const handleToggleAlwaysOnTop = (): void => {
   showControls()
   isAlwaysOnTop.value = !isAlwaysOnTop.value
-  window.electron?.ipcRenderer.send('desktop-pet:set-ignore-mouse-events', !isAlwaysOnTop.value)
+  window.electron?.ipcRenderer.send('desktop-pet:set-always-on-top', isAlwaysOnTop.value)
   scheduleHideControls()
 }
 

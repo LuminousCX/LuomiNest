@@ -21,7 +21,7 @@ export interface PetModelInfo {
   name: string
   url: string
   scale: number
-  type: LuomiNestModelType | string
+  type: string
   tags: string[]
 }
 
@@ -195,6 +195,7 @@ export interface AppPathsInfo {
 export const DesktopPetIpcChannels = {
   SEND: [
     'desktop-pet:set-ignore-mouse-events',
+    'desktop-pet:set-always-on-top',
     'desktop-pet:resize-window',
     'desktop-pet:start-drag',
     'desktop-pet:drag-window',
