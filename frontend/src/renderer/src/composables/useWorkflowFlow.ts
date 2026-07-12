@@ -151,7 +151,7 @@ const buildFlowFromSession = (session: WorkflowSession | null): { nodes: Node[];
         } else {
           // 找不到依赖源，连接到输入节点
           edges.push({
-            id: `e-input-fallback-${task.task_id}`,
+            id: `e-input-fallback-${dep}-${task.task_id}`,
             source: 'wf-input',
             target: task.task_id,
             animated: task.status === 'running',
