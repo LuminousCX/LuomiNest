@@ -24,7 +24,8 @@ export const useBrowserNavigation = () => {
         canGoBack.value = state.canGoBack
         canGoForward.value = state.canGoForward
       }
-    } catch {
+    } catch (e: unknown) {
+      logger.error('Failed to sync navigation state:', e)
       canGoBack.value = false
       canGoForward.value = false
     }
