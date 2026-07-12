@@ -44,9 +44,9 @@ from app.infrastructure.database.facades.json_store_facade import (
     agents_store, groups_store, platforms_store, repo_sources_store,
 )
 from app.infrastructure.database.facades.marketplace_stats_store import marketplace_stats_store
-from app.infrastructure.database.facades.usage_store import usage_store
-from app.infrastructure.database.facades.conversation_store import conversation_store
-from app.infrastructure.database.facades.config_store import lumi_config_store
+from app.infrastructure.database.usage_store import usage_store
+from app.infrastructure.database.conversation_store import conversation_store
+from app.infrastructure.database.config_store import lumi_config_store
 
 check("agents_store exists", agents_store is not None)
 check("groups_store exists", groups_store is not None)
