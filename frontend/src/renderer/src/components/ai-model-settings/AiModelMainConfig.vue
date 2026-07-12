@@ -66,9 +66,9 @@ const handleFetchModels = async (providerId: string) => {
   try {
     await modelStore.fetchProviderModels(providerId)
     toast.info('模型列表已刷新')
-  } catch (e: any) {
+  } catch (e: unknown) {
     logger.error('Failed to fetch models:', e)
-    toast.error(`获取模型列表失败：${e.message || '未知错误'}`)
+    toast.error(`获取模型列表失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
   }
 }
 

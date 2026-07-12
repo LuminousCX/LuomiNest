@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import type { Component } from 'vue'
 import { Lightbulb, Thermometer, Droplets, Lock, Wifi, Power, Settings2, Wind, Eye, Plus, Activity } from 'lucide-vue-next'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiCard from '../../components/common/LumiCard.vue'
@@ -19,7 +20,7 @@ interface Device {
 interface Scene {
   id: string
   name: string
-  icon: any
+  icon: Component
   active: boolean
   desc: string
 }
@@ -29,7 +30,7 @@ interface Room {
   name: string
   devices: number
   active: number
-  icon: any
+  icon: Component
 }
 
 interface Automation {

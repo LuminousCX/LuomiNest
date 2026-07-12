@@ -56,7 +56,7 @@ const handleCreate = async () => {
     })
     closeAddDialog()
     emit('created')
-  } catch (e: any) {
+  } catch (e: unknown) {
     logger.error('Failed to create platform instance:', e)
   }
 }

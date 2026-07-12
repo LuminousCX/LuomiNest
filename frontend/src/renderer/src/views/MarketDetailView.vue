@@ -127,8 +127,8 @@ async function handleInstall() {
 
     downloadProgress.value = result
     startProgressPolling(item.value.id)
-  } catch (e: any) {
-    installError.value = e.message || '安装请求失败'
+  } catch (e: unknown) {
+    installError.value = (e instanceof Error ? e.message : String(e)) || '安装请求失败'
     errorType.value = 'install'
   } finally {
     installLoading.value = false
@@ -147,8 +147,8 @@ async function handleUninstall() {
       item.value.installStatus = 'none'
     }
     downloadProgress.value = null
-  } catch (e: any) {
-    installError.value = e.message || '卸载失败'
+  } catch (e: unknown) {
+    installError.value = (e instanceof Error ? e.message : String(e)) || '卸载失败'
     errorType.value = 'uninstall'
   } finally {
     uninstallLoading.value = false

@@ -201,7 +201,7 @@ export const usePlatformStore = defineStore('platform', () => {
         icon: t.icon,
         category: t.category,
         configTemplate: t.config_template || t.configTemplate || {},
-        configMetadata: t.config_metadata || t.configMetadata || {},
+        configMetadata: (t.config_metadata || t.configMetadata || {}) as PlatformAdapterType['configMetadata'],
         supportStreaming: t.support_streaming ?? t.supportStreaming ?? false,
         supportProactive: t.support_proactive ?? t.supportProactive ?? true,
       }))
@@ -422,9 +422,9 @@ export const usePlatformStore = defineStore('platform', () => {
       }
       mainAgentError.value = null
       _lastMainAgentToastMsg = null
-    } catch (e: any) {
+    } catch (e: unknown) {
       mainAgent.value = null
-      const msg = e?.message || '未知错误'
+      const msg = (e instanceof Error ? e.message : String(e)) || '未知错误'
       mainAgentError.value = msg
       // 仅当错误信息变化时弹 toast，避免页面切换时重复打扰
       if (_lastMainAgentToastMsg !== msg) {
@@ -446,8 +446,8 @@ export const usePlatformStore = defineStore('platform', () => {
       await apiPatch('/platforms/main_agent', body)
       await fetchMainAgent()
       toast.success('主 Agent 配置已更新')
-    } catch (e: any) {
-      toast.error(`更新失败：${e?.message || '未知错误'}`)
+    } catch (e: unknown) {
+      toast.error(`更新失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
       throw e
     }
   }

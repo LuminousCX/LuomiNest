@@ -479,6 +479,13 @@ export interface ExecuteCommandResponse {
   duration_ms: number
 }
 
+/** 平台适配器配置字段元数据（描述一个配置项的渲染方式） */
+export interface ConfigFieldMeta {
+  label?: string
+  type?: 'text' | 'password' | 'number'
+  [key: string]: unknown
+}
+
 export interface PlatformAdapterType {
   name: string
   displayName: string
@@ -486,7 +493,7 @@ export interface PlatformAdapterType {
   icon: string
   category: string
   configTemplate: Record<string, unknown>
-  configMetadata: Record<string, any>
+  configMetadata: Record<string, ConfigFieldMeta>
   supportStreaming: boolean
   supportProactive: boolean
 }

@@ -94,8 +94,8 @@ const fetchDevices = async () => {
       return SUPPORTED_ADAPTER_TYPES.includes(at)
     })
     devices.value = filtered.map(mapInstanceToDevice)
-  } catch (e: any) {
-    error.value = e?.message || '加载设备列表失败'
+  } catch (e: unknown) {
+    error.value = (e instanceof Error ? e.message : String(e)) || '加载设备列表失败'
     devices.value = []
   } finally {
     loading.value = false

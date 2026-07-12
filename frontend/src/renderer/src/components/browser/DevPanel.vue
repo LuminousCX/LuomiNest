@@ -23,6 +23,16 @@ const emit = defineEmits<{
 
 const MAX_OUTPUT = 8000
 
+/** 索引化 DOM 树节点（由 browserAutomation.execute('get_dom_tree') 返回） */
+interface DomTreeNode {
+  tag?: string
+  index?: number
+  role?: string
+  text?: string
+  children?: DomTreeNode[]
+  [key: string]: unknown
+}
+
 /** 截断过长输出，附加提示 */
 const truncate = (text: string): string => {
   if (text.length > MAX_OUTPUT) {
@@ -45,8 +55,8 @@ const executeScript = async (): Promise<void> => {
     } else {
       output.value = `[错误] ${result?.error || '脚本执行失败'}`
     }
-  } catch (e: any) {
-    output.value = `[错误] 浏览器脚本执行失败：${e?.message || e}`
+  } catch (e: unknown) {
+    output.value = `[错误] 浏览器脚本执行失败：${e instanceof Error ? e.message : String(e)}`
   } finally {
     loading.value = false
   }
@@ -63,19 +73,19 @@ const fetchDomTree = async (): Promise<void> => {
       const tree = result.data?.tree
       const total = result.data?.totalCount ?? 0
       const header = `共索引 ${total} 个可交互元素\n页面：${result.data?.title || ''}\n${result.data?.url || ''}\n${'─'.repeat(40)}\n`
-      output.value = truncate(header + formatDomTree(tree, 0))
+      output.value = truncate(header + formatDomTree(tree as DomTreeNode | undefined, 0))
     } else {
       output.value = `[错误] ${result?.error || '读取 DOM 失败'}`
     }
-  } catch (e: any) {
-    output.value = `[错误] DOM 读取失败：${e?.message || e}`
+  } catch (e: unknown) {
+    output.value = `[错误] DOM 读取失败：${e instanceof Error ? e.message : String(e)}`
   } finally {
     loading.value = false
   }
 }
 
 /** 递归格式化 DOM 树节点为缩进文本 */
-const formatDomTree = (node: any, depth: number): string => {
+const formatDomTree = (node: DomTreeNode | undefined, depth: number): string => {
   if (!node || typeof node !== 'object') return String(node ?? '')
   const indent = '  '.repeat(depth)
   const tag = node.tag || '?'

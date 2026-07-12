@@ -87,7 +87,7 @@ const handleToggleStatus = async (instance: PlatformInstance) => {
     } else {
       await store.startInstance(instance.id)
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     logger.error('Failed to toggle platform status:', e)
   }
 }

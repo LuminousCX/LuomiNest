@@ -51,30 +51,45 @@ const getAuthHeaders = async (): Promise<Record<string, string>> => {
   return cachedAuthToken ? { Authorization: `Bearer ${cachedAuthToken}` } : {}
 }
 
-const extractErrorMessage = (errData: any, status: number): string => {
+/** 后端错误响应体（兼容多种错误格式） */
+interface ApiErrorBody {
+  err_code?: string
+  error?: string | { code?: string; message?: string }
+  detail?: unknown
+  message?: string
+}
+
+const extractErrorMessage = (errData: unknown, status: number): string => {
+  const data = (errData ?? {}) as ApiErrorBody
   // 1. 优先处理 err_code（符合工作区规则 "API 响应必须包含错误码"）
-  const errCode = errData?.err_code ?? errData?.error?.code
+  const errCode = data.err_code ?? (typeof data.error === 'object' ? data.error?.code : undefined)
   if (errCode && ERR_CODE_MESSAGES[errCode]) {
     return ERR_CODE_MESSAGES[errCode]
   }
 
   // 2. 兼容 error 为字符串的情况（TTS 接口等）
-  let errMsg = ''
-  if (typeof errData?.error === 'string') {
-    errMsg = errData.error
+  let errMsg: unknown = ''
+  if (typeof data.error === 'string') {
+    errMsg = data.error
   } else {
-    errMsg = errData?.error?.message || errData?.detail || errData?.message || ''
+    errMsg = data.error?.message || data.detail || data.message || ''
   }
 
   // 3. 数组形式（FastAPI 校验错误）
   if (Array.isArray(errMsg)) {
-    errMsg = errMsg.map((e: any) => e.msg || e.message || JSON.stringify(e)).join('; ')
+    errMsg = errMsg.map((e: unknown) => {
+      if (typeof e === 'object' && e !== null) {
+        const obj = e as { msg?: string; message?: string }
+        return obj.msg || obj.message || JSON.stringify(e)
+      }
+      return JSON.stringify(e)
+    }).join('; ')
   } else if (typeof errMsg === 'object' && errMsg !== null) {
     errMsg = JSON.stringify(errMsg)
   }
 
   // 4. 无具体消息时，按 HTTP 状态码返回友好提示
-  return errMsg || statusToMessage(status)
+  return (typeof errMsg === 'string' ? errMsg : '') || statusToMessage(status)
 }
 
 export const useApi = () => {
@@ -93,7 +108,7 @@ export const useApi = () => {
     path: string,
     options: {
       method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-      body?: any
+      body?: unknown
       timeout?: number
     } = {}
   ): Promise<T> => {
@@ -133,8 +148,8 @@ export const useApi = () => {
       const text = await resp.text()
       if (!text) return undefined as T
       return JSON.parse(text)
-    } catch (e: any) {
-      error.value = e.message
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : String(e)
       throw e
     } finally {
       loading.value = false
@@ -143,13 +158,13 @@ export const useApi = () => {
 
   const apiGet = <T>(path: string): Promise<T> => request<T>(path)
 
-  const apiPost = <T>(path: string, body?: any): Promise<T> =>
+  const apiPost = <T>(path: string, body?: unknown): Promise<T> =>
     request<T>(path, { method: 'POST', body })
 
-  const apiPut = <T>(path: string, body: any): Promise<T> =>
+  const apiPut = <T>(path: string, body: unknown): Promise<T> =>
     request<T>(path, { method: 'PUT', body })
 
-  const apiPatch = <T>(path: string, body?: any): Promise<T> =>
+  const apiPatch = <T>(path: string, body?: unknown): Promise<T> =>
     request<T>(path, { method: 'PATCH', body })
 
   const apiDelete = <T = void>(path: string): Promise<T | void> =>
@@ -163,7 +178,7 @@ export const useApi = () => {
 
   const apiStream = async (
     path: string,
-    body: any,
+    body: unknown,
     onChunk: (chunk: ChatStreamChunk) => void,
     onDone: () => void | Promise<void>,
     onError: (err: string) => void,
@@ -262,11 +277,11 @@ export const useApi = () => {
       }
 
       await onDone()
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') {
         return
       }
-      onError(e.message)
+      onError(e instanceof Error ? e.message : String(e))
     } finally {
       abortController.value = null
     }

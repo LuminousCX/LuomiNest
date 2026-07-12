@@ -93,7 +93,7 @@ const handleSaveConfig = async () => {
     }
     closeConfigDialog()
     emit('saved')
-  } catch (e: any) {
+  } catch (e: unknown) {
     logger.error('Failed to update platform instance:', e)
   }
 }
@@ -116,7 +116,7 @@ const handleResetModelConfig = async () => {
       temperature: null,
       maxTokens: null,
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     logger.error('Failed to reset model config:', e)
   } finally {
     modelConfigSaving.value = false
@@ -153,7 +153,7 @@ const loadInstanceConfig = async (instance: PlatformInstance) => {
         maxTokens: cfg.instanceConfig.maxTokens ?? null,
       }
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     logger.error('Failed to load model config:', e)
   } finally {
     modelConfigLoading.value = false

@@ -65,8 +65,8 @@ const saveSelectedModels = async (providerId: string) => {
     await modelStore.updateProvider(providerId, { selectedModels: selected })
     toast.success(`已保存 ${selected.length} 个模型`)
     expandedModelPicker.value = ''
-  } catch (e: any) {
-    toast.error(`保存失败：${e.message || '未知错误'}`)
+  } catch (e: unknown) {
+    toast.error(`保存失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
   } finally {
     savingSelectedModels.value = ''
   }
@@ -76,9 +76,9 @@ const handleFetchModels = async (providerId: string) => {
   try {
     await modelStore.fetchProviderModels(providerId)
     toast.info('模型列表已刷新')
-  } catch (e: any) {
+  } catch (e: unknown) {
     logger.error('Failed to fetch models:', e)
-    toast.error(`获取模型列表失败：${e.message || '未知错误'}`)
+    toast.error(`获取模型列表失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
   }
 }
 
@@ -87,9 +87,9 @@ const handleRemoveProvider = async (providerId: string) => {
     const p = providers.value.find(pr => pr.id === providerId)
     await modelStore.removeProvider(providerId)
     toast.success(`供应商「${p?.name || providerId}」已删除`)
-  } catch (e: any) {
+  } catch (e: unknown) {
     logger.error('Failed to remove provider:', e)
-    toast.error(`删除供应商失败：${e.message || '未知错误'}`)
+    toast.error(`删除供应商失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
   }
 }
 </script>

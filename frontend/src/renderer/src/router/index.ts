@@ -193,7 +193,7 @@ const invalidateAuthToken = () => {
 
 // 暴露给 LoginView 等组件在登录成功后调用，强制下次 beforeEach 重新读取 token
 if (typeof window !== 'undefined' && window.api?.auth) {
-  ;(window as any).__lumiInvalidateAuthToken = invalidateAuthToken
+  window.__lumiInvalidateAuthToken = invalidateAuthToken
 }
 
 const hasAuthToken = async (): Promise<boolean> => {

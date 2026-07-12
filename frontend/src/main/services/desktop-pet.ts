@@ -101,7 +101,7 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
 
   if (isMac) {
     windowConfig.titleBarStyle = 'hidden'
-    ;(windowConfig as any).type = 'panel'
+    ;(windowConfig as Electron.BrowserWindowConstructorOptions & { type?: string }).type = 'panel'
   }
 
   desktopPetWindow = new BrowserWindow(windowConfig)
@@ -166,7 +166,7 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     petContextMenu.popup()
   })
 
-  const handleSetIgnoreMouseEvents = (_event: any, ignore: boolean) => {
+  const handleSetIgnoreMouseEvents = (_event: unknown, ignore: boolean) => {
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       if (isMac) {
         desktopPetWindow.setIgnoreMouseEvents(ignore)
@@ -182,7 +182,7 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     }
   }
 
-  const handleResizeWindow = (_event: any, width: number, height: number) => {
+  const handleResizeWindow = (_event: unknown, width: number, height: number) => {
     if (!desktopPetWindow || desktopPetWindow.isDestroyed()) return
     const clampedW = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(width)))
     const clampedH = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(height)))
@@ -192,14 +192,14 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   let dragOffsetX = 0
   let dragOffsetY = 0
 
-  const handleStartDrag = (_event: any, mouseX: number, mouseY: number) => {
+  const handleStartDrag = (_event: unknown, mouseX: number, mouseY: number) => {
     if (!desktopPetWindow || desktopPetWindow.isDestroyed()) return
     const [x, y] = desktopPetWindow.getPosition()
     dragOffsetX = mouseX - x
     dragOffsetY = mouseY - y
   }
 
-  const handleDragWindow = (_event: any, mouseX: number, mouseY: number) => {
+  const handleDragWindow = (_event: unknown, mouseX: number, mouseY: number) => {
     if (!desktopPetWindow || desktopPetWindow.isDestroyed()) return
     desktopPetWindow.setPosition(mouseX - dragOffsetX, mouseY - dragOffsetY)
   }
@@ -228,7 +228,7 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
         await desktopPetWindow!.loadURL(`${url}/#/desktop-pet`)
       } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err))
-        if ('code' in error && (error as any).code === 'ERR_ABORTED') {
+        if ('code' in error && (error as { code?: string }).code === 'ERR_ABORTED') {
           logger.warn('Navigation aborted, hash route may have loaded correctly')
         } else {
           logger.error('Failed to load URL:', error)
@@ -279,7 +279,7 @@ export const isDesktopPetRunning = (): boolean => {
   return desktopPetWindow !== null && !desktopPetWindow.isDestroyed()
 }
 
-export const sendToDesktopPet = (channel: string, ...args: any[]): boolean => {
+export const sendToDesktopPet = (channel: string, ...args: unknown[]): boolean => {
   if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
     desktopPetWindow.webContents.send(channel, ...args)
     return true
@@ -445,7 +445,7 @@ export function registerDesktopPetIpc(mainWindow: BrowserWindow | null): void {
       return new Promise((resolve) => {
         const requestId = `cap-${Date.now()}`
         let handled = false
-        const handler = (_event: any, id: string, capabilities: any) => {
+        const handler = (_event: unknown, id: string, capabilities: unknown) => {
           if (id === requestId && !handled) {
             handled = true
             ipcMain.removeListener('desktop-pet:model-capabilities-response', handler)

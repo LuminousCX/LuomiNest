@@ -118,7 +118,14 @@ const handleEditProvider = async () => {
   editProviderError.value = ''
   editProviderLoading.value = true
   try {
-    const updates: any = {
+    const updates: {
+      name?: string
+      vendor?: string
+      baseUrl?: string
+      apiKey?: string
+      defaultModel?: string
+      isDefault?: boolean
+    } = {
       name: editProvider.value.name,
       vendor: editProvider.value.vendor,
       baseUrl: editProvider.value.baseUrl,
@@ -131,9 +138,9 @@ const handleEditProvider = async () => {
     await modelStore.updateProvider(editingProviderId.value, updates)
     close()
     toast.success(`供应商「${editProvider.value.name}」已更新`)
-  } catch (e: any) {
-    editProviderError.value = e.message || '更新失败'
-    toast.error(`更新供应商失败：${e.message || '未知错误'}`)
+  } catch (e: unknown) {
+    editProviderError.value = (e instanceof Error ? e.message : String(e)) || '更新失败'
+    toast.error(`更新供应商失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
   } finally {
     editProviderLoading.value = false
   }

@@ -231,12 +231,12 @@ export type DesktopPetOnChannel = (typeof DesktopPetIpcChannels.ON)[number]
  *
  * 注意：on/removeListener/send 都会在白名单内校验 channel，非白名单 channel 会被静默拦截。
  *
- * TODO(阶段4): 将 listener 的 ...args: any[] 收紧为 unknown[]，并更新所有调用方
- * 使用类型守卫或断言处理 IPC 数据。当前保留 any 以避免破坏现有调用方。
+ * listener 的 ...args 已收紧为 unknown[]（通过泛型 T 约束），调用方可使用具体类型注册监听器，
+ * 编译期由 TS 推断 T，运行期仍需对 IPC 数据使用类型守卫或断言。
  */
 export interface ExposedIpcRenderer {
-  on: (channel: string, listener: (event: unknown, ...args: any[]) => void) => void
-  removeListener: (channel: string, listener: (event: unknown, ...args: any[]) => void) => void
+  on: <T extends unknown[]>(channel: string, listener: (event: unknown, ...args: T) => void) => void
+  removeListener: <T extends unknown[]>(channel: string, listener: (event: unknown, ...args: T) => void) => void
   send: (channel: string, ...args: unknown[]) => void
 }
 

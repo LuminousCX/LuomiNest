@@ -731,7 +731,7 @@ export const useModelStore = defineStore('model', () => {
       apiKey: payload.apiKey,
       defaultModel: payload.defaultModel || '',
     })
-    const data = unwrapData(result as any)
+    const data = unwrapData<{ success: boolean; models: ModelInfo[]; error: string | null }>(result)
     return data
   }
 

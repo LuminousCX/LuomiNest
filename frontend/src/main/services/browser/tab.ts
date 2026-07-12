@@ -15,7 +15,7 @@ import { createLuomiNestLogger } from '../luomi-logger'
 const logger = createLuomiNestLogger('Browser')
 
 type TabUpdateCallback = (tabId: string, updates: Partial<Tab>) => void
-type TabEventCallback = (event: string, data: any) => void
+type TabEventCallback = (event: string, data: unknown) => void
 
 const CAPTCHA_PATTERNS = [
   /google\.com\/sorry\//i,
@@ -231,9 +231,11 @@ class TabManager {
 
     try {
       await view.webContents.loadURL(tab.url)
-    } catch (err: any) {
-      if (!err.message?.includes('ERR_ABORTED')) {
-        const error = getErrorInfo(typeof err.code === 'number' ? err.code : -1)
+    } catch (err: unknown) {
+      const errMessage = err instanceof Error ? err.message : String(err)
+      if (!errMessage?.includes('ERR_ABORTED')) {
+        const errCode = (err instanceof Error && 'code' in err) ? (err as { code?: unknown }).code : undefined
+        const error = getErrorInfo(typeof errCode === 'number' ? errCode : -1)
         this.notifyUpdate(tabId, { loading: false, error, title: error.title })
       }
     }

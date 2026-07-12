@@ -21,11 +21,11 @@ const MAX_RECONNECT_DELAY = 30000
 
 export interface AutomationResult {
   success: boolean
-  data?: any
+  data?: unknown
   error?: string
 }
 
-export type AutomationHandler = (action: string, args: Record<string, any>) => Promise<AutomationResult>
+export type AutomationHandler = (action: string, args: Record<string, unknown>) => Promise<AutomationResult>
 
 class LuomiBrowserWSClient {
   private ws: WebSocket | null = null
@@ -122,7 +122,7 @@ class LuomiBrowserWSClient {
   }
 
   private async handleMessage(raw: string): Promise<void> {
-    let message: any
+    let message: unknown
     try {
       message = JSON.parse(raw)
     } catch {
@@ -130,7 +130,8 @@ class LuomiBrowserWSClient {
       return
     }
 
-    const msgType = message.type
+    const msg = message as { type: string; request_id?: string; action?: string; args?: Record<string, unknown> }
+    const msgType = msg.type
 
     // 心跳：后端 ping → 前端 pong
     if (msgType === 'ping') {
@@ -140,16 +141,19 @@ class LuomiBrowserWSClient {
 
     // 自动化请求：分发到执行器
     if (msgType === 'automation_request') {
-      const requestId = message.request_id
-      const action = message.action
-      const args = message.args || {}
+      const requestId = msg.request_id
+      const action = msg.action
+      const args = msg.args || {}
 
       let result: AutomationResult
-      if (this.handler) {
+      if (!action) {
+        result = { success: false, error: '自动化请求缺少 action 字段' }
+      } else if (this.handler) {
         try {
           result = await this.handler(action, args)
-        } catch (e: any) {
-          result = { success: false, error: e?.message || String(e) }
+        } catch (e: unknown) {
+          const errMsg = e instanceof Error ? e.message : String(e)
+          result = { success: false, error: errMsg }
         }
       } else {
         result = { success: false, error: '自动化执行器尚未初始化' }
@@ -168,7 +172,7 @@ class LuomiBrowserWSClient {
     logger.warn('Unknown message type:', msgType)
   }
 
-  private send(message: any): void {
+  private send(message: unknown): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify(message))

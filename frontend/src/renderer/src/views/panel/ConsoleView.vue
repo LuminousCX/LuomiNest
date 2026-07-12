@@ -174,8 +174,8 @@ const uploadLogs = async () => {
       session_id: generateId('session'),
     })
     uploadResult.value = `上传成功 (ID: ${resp.upload_id}, 共 ${resp.received_count} 条)`
-  } catch (e: any) {
-    uploadResult.value = `上传失败: ${e.message}`
+  } catch (e: unknown) {
+    uploadResult.value = `上传失败: ${e instanceof Error ? e.message : String(e)}`
   } finally {
     isUploading.value = false
     setTimeout(() => { uploadResult.value = null }, 4000)
@@ -247,8 +247,8 @@ const handleCommand = async () => {
       executeResult.value = `执行失败: ${resp.error || '未知错误'}`
     }
     await fetchCommands()
-  } catch (e: any) {
-    executeResult.value = `执行失败: ${e.message || e}`
+  } catch (e: unknown) {
+    executeResult.value = `执行失败: ${e instanceof Error ? e.message : String(e)}`
   } finally {
     isExecuting.value = false
     setTimeout(() => { executeResult.value = null }, 5000)

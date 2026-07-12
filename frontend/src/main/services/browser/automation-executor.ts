@@ -30,7 +30,7 @@ export interface HumanInputLayer {
   hover: (webContents: WebContents, x: number, y: number) => Promise<void>
 }
 
-type ActionHandler = (args: Record<string, any>, wc: WebContents) => Promise<{ success: boolean; data?: any; error?: string }>
+type ActionHandler = (args: Record<string, unknown>, wc: WebContents) => Promise<{ success: boolean; data?: unknown; error?: string }>
 type TabActionHandler = (args: Record<string, any>) => Promise<AutomationResult>
 
 class LuomiAutomationExecutor {
@@ -58,9 +58,10 @@ class LuomiAutomationExecutor {
     if (tabHandler) {
       try {
         return await tabHandler(args)
-      } catch (e: any) {
+      } catch (e: unknown) {
         logger.error(`动作 ${action} 执行异常:`, e)
-        return { success: false, error: e?.message || String(e) }
+        const errMsg = e instanceof Error ? e.message : String(e)
+        return { success: false, error: errMsg }
       }
     }
 
@@ -77,9 +78,10 @@ class LuomiAutomationExecutor {
 
     try {
       return await handler(args, wc)
-    } catch (e: any) {
+    } catch (e: unknown) {
       logger.error(`动作 ${action} 执行异常:`, e)
-      return { success: false, error: e?.message || String(e) }
+      const errMsg = e instanceof Error ? e.message : String(e)
+      return { success: false, error: errMsg }
     }
   }
 
@@ -533,10 +535,10 @@ class LuomiAutomationExecutor {
       }
       // 尝试获取历史条目（Electron 36+ navigationHistory.getAll）
       try {
-        const entries = (wc.navigationHistory as any).getAll()
+        const entries = (wc.navigationHistory as unknown as { getAll: () => Array<{ url: string }> }).getAll()
         if (Array.isArray(entries)) {
           data.entries = entries.slice(-20)
-          data.activeIndex = entries.findIndex((e: any) => e.url === wc.getURL())
+          data.activeIndex = entries.findIndex((e: { url: string }) => e.url === wc.getURL())
         }
       } catch {
         // getAll 不可用则仅返回可后退/前进状态
@@ -600,8 +602,9 @@ class LuomiAutomationExecutor {
             title: tab.title
           }
         }
-      } catch (e: any) {
-        return { success: false, error: e?.message || String(e) }
+      } catch (e: unknown) {
+        const errMsg = e instanceof Error ? e.message : String(e)
+        return { success: false, error: errMsg }
       }
     })
 

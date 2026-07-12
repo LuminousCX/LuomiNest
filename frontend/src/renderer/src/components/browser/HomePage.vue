@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import type { Component } from 'vue'
 import {
   Send,
   ChevronDown,
@@ -17,13 +18,13 @@ import {
 interface SearchEngine {
   id: string
   name: string
-  icon: any
+  icon: Component
   url: string
   color: string
 }
 
 interface QuickAction {
-  icon: any
+  icon: Component
   label: string
   color: string
   action: string

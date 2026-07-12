@@ -49,8 +49,8 @@ export function useFileUpload() {
       isUploading.value = false
       currentUploadController = null
       return content
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') {
         return ''
       }
       uploadingFile.value = { name: file.name, status: 'failed', error: '网络错误，请检查后端服务' }

@@ -435,12 +435,12 @@ onMounted(() => {
             <label class="platform-form-label">连接配置</label>
             <div class="platform-config-fields">
               <div v-for="(meta, key) in selectedAdapterType.configMetadata" :key="key" class="platform-config-field">
-                <label class="platform-config-label">{{ (meta as any).label || key }}</label>
+                <label class="platform-config-label">{{ meta.label || key }}</label>
                 <input
                   v-model="newPlatformConfig[key]"
-                  :type="(meta as any).type === 'password' ? 'password' : (meta as any).type === 'number' ? 'number' : 'text'"
+                  :type="meta.type === 'password' ? 'password' : meta.type === 'number' ? 'number' : 'text'"
                   class="platform-form-input"
-                  :placeholder="(meta as any).label || key"
+                  :placeholder="meta.label || key"
                 />
               </div>
             </div>

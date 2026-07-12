@@ -5,6 +5,7 @@ import { cacheManager } from './cache-manager'
 import { tabManager, luomiAutomationExecutor } from './browser'
 import { getLumiAuthToken } from './backend/auth-token'
 import { subscribeBackendStage } from './backend'
+import type { TTSConfig, STTConfig } from '@shared/ipc-types'
 
 let _mainWindow: BrowserWindow | null = null
 
@@ -87,7 +88,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getTTSConfig()
   })
-  ipcMain.handle('config:setTTS', (event: IpcMainInvokeEvent, updates: any) => {
+  ipcMain.handle('config:setTTS', (event: IpcMainInvokeEvent, updates: Partial<TTSConfig>) => {
     if (!assertTrustedSender(event)) return
     configStore.setTTSConfig(updates)
   })
@@ -95,7 +96,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getSTTConfig()
   })
-  ipcMain.handle('config:setSTT', (event: IpcMainInvokeEvent, updates: any) => {
+  ipcMain.handle('config:setSTT', (event: IpcMainInvokeEvent, updates: Partial<STTConfig>) => {
     if (!assertTrustedSender(event)) return
     configStore.setSTTConfig(updates)
   })
