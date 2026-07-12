@@ -384,9 +384,14 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     resetCodeBlockFilter()
     toolActivities.value = []
     subagentActivities.value = []
-    await chatStore.regenerateMessage(messageId, {
-      onChunk: createChunkHandler(true),
-    })
+    try {
+      await chatStore.regenerateMessage(messageId, {
+        onChunk: createChunkHandler(true),
+      })
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e)
+      toast.error(`重新生成失败：${errMsg}`)
+    }
     await nextTick()
     scrollToBottom(true)
   }
