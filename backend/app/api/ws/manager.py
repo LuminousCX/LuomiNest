@@ -190,8 +190,8 @@ class LuomiNestBrowserWSManager:
         if self._connection is not None:
             try:
                 await self._connection.close(code=1001, reason="Server shutting down")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[BrowserWS] 关闭连接时发生异常（忽略并继续清理）: {e}")
             self._connection = None
 
         for req_id, future in list(self._pending.items()):
