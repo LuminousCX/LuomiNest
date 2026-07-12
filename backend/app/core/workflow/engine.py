@@ -145,8 +145,8 @@ def _repair_truncated_json(text: str) -> str | None:
             parsed = json.loads(text)
             if isinstance(parsed, dict):
                 return text
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            logger.debug("Initial JSON parse failed, will try safe-cut repair: {}", e)
 
     # 从后往前尝试每个安全截断点
     for cut_pos, cut_stack in reversed(safe_cuts):
