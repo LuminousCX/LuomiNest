@@ -17,7 +17,7 @@ import AvatarStage from '@/components/avatar/AvatarStage.vue'
 import AvatarControls from '@/components/avatar/AvatarControls.vue'
 import AvatarSkinSidebar from '@/components/avatar/AvatarSkinSidebar.vue'
 import type { AvatarMode, AvatarEmotion, IdleAnimation, SkinItem } from '@/components/avatar/types'
-import type { PetModelInfo } from '../vite-env.d'
+import type { PetModelInfo } from '@shared/ipc-types'
 import type { AgentProfile, ChatStreamChunk } from '@/types'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)

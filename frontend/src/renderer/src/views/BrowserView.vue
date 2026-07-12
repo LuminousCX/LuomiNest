@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import type { TabInfo } from '../vite-env.d'
+import type { TabInfo } from '@shared/ipc-types'
 import TabBar from '../components/browser/TabBar.vue'
 import NavBar from '../components/browser/NavBar.vue'
 import BookmarkBar from '../components/browser/BookmarkBar.vue'
@@ -413,7 +413,7 @@ async function captureScreenshot(): Promise<void> {
   try {
     const result = await window.api?.browserAutomation?.execute('screenshot')
     if (result?.success && result.data?.screenshot) {
-      screenshotUrl.value = result.data.screenshot
+      screenshotUrl.value = String(result.data.screenshot)
       displayToast('截图已生成')
     } else {
       displayToast(`截图失败：${result?.error || '未知错误'}`)

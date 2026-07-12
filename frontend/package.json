@@ -29,6 +29,7 @@
     "cronstrue": "^2.50.0",
     "dagre": "^0.8.5",
     "dompurify": "^3.4.11",
+    "electron-log": "^5.2.0",
     "marked": "^18.0.1",
     "pinia": "^3.0.4",
     "pixi-live2d-display-mulmotion": "0.5.0-mm-6",

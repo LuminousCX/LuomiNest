@@ -11,11 +11,13 @@
     "skipLibCheck": true,
     "outDir": "./out/main",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shared/*": ["./src/shared/*"]
     }
   },
   "include": [
     "src/main/**/*",
-    "src/preload/**/*"
+    "src/preload/**/*",
+    "src/shared/**/*.ts"
   ]
 }
