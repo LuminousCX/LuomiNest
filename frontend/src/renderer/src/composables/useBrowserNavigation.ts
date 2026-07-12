@@ -65,7 +65,9 @@ export const useBrowserNavigation = () => {
     const syncSidebarWidth = (): void => {
       const width = Math.round(sidebarEl.getBoundingClientRect().width)
       if (width > 0) {
-        window.api?.tab.setBoundsConfig({ sidebarWidth: width })
+        window.api?.tab.setBoundsConfig({ sidebarWidth: width })?.catch((e: unknown) => {
+          logger.error('Failed to sync sidebar width:', e)
+        })
       }
     }
     syncSidebarWidth()
