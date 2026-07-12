@@ -15,15 +15,21 @@
  * - [BrowserWS] / [AutomationExecutor] → scope 'Browser'
  */
 import { join } from 'path'
+import { mkdirSync } from 'fs'
 import log from 'electron-log'
 import { app } from 'electron'
 
-import { PATHS } from './paths'
-
 const isDev = !app.isPackaged
 
-// 显式指定日志文件路径，确保即使 initAppPaths() 尚未调用也能写入正确位置
-log.transports.file.resolvePathFn = () => join(PATHS.logs, 'main.log')
+// 内联计算日志路径，避免与 paths.ts 形成循环依赖
+// （paths.ts 依赖 createLuomiNestLogger，若此处再依赖 PATHS 则成环）
+const getLogsDir = (): string => {
+  const dir = join(app.getPath('userData'), 'Logs')
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+log.transports.file.resolvePathFn = () => join(getLogsDir(), 'main.log')
 log.transports.file.level = isDev ? 'debug' : 'info'
 log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] [{scope}] {text}'
 
