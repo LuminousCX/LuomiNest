@@ -173,8 +173,8 @@ class LuomiNestBrowserWSManager:
                     logger.warning("[BrowserWS] 心跳超时，主动断开连接")
                     try:
                         await self._connection.close(code=1001, reason="Heartbeat timeout")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"[BrowserWS] 心跳超时后关闭连接失败（可忽略）: {e}")
                     break
 
                 await self._connection.send_json({"type": "ping"})
