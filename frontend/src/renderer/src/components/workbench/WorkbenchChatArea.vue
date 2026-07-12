@@ -22,6 +22,7 @@ import {
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 import LumiEmptyState from '../common/LumiEmptyState.vue'
+import WorkflowCreatedCard from '../chat/WorkflowCreatedCard.vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { useClipboard } from '../../composables/useClipboard'
 import type { ChatMessage } from '../../types'
@@ -59,6 +60,7 @@ const emit = defineEmits<{
   'scroll-to-bottom': []
   'retry-backend': []
   'set-input-text': [text: string]
+  'navigate-to-workflow': []
 }>()
 
 const messagesContainer = ref<HTMLElement | null>(null)
@@ -418,6 +420,13 @@ defineExpose({
                   </div>
                 </div>
               </div>
+
+              <WorkflowCreatedCard
+                v-if="msg.role === 'assistant' && msg.workflowSessionId"
+                :session-id="msg.workflowSessionId"
+                :task-count="msg.workflowTaskCount || 0"
+                @navigate="emit('navigate-to-workflow')"
+              />
 
               <div v-if="msg.role === 'assistant' && msg.content && msg.content !== '[已中断]'" class="message-content markdown-body">
                 <div v-html="renderMarkdown(msg.content)"></div>

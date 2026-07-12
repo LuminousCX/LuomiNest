@@ -41,10 +41,15 @@ export interface McpStatus {
   totalTools: number
 }
 
-export type WorkflowModeLevel = 'flash' | 'standard' | 'pro' | 'ultra'
+/** 对话模式（普通/标准/超长）
+ * - normal: 普通模式，非工作流，工具最少（任务视图操作 + 表情操控）
+ * - standard: 标准模式，工作流，排除细粒度浏览器自动化工具
+ * - ultra: 超长模式，工作流，全部工具可用
+ */
+export type ChatModeLevel = 'normal' | 'standard' | 'ultra'
 
 export interface WorkflowModeOption {
-  value: WorkflowModeLevel
+  value: ChatModeLevel
   label: string
   title: string
 }

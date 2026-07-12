@@ -3,6 +3,9 @@ import { ref, onMounted } from 'vue'
 import { Brain, Check, AlertCircle, Save, Loader2 } from 'lucide-vue-next'
 import { usePlatformStore } from '../../stores/platform'
 import { useModelStore } from '../../stores/model'
+import { createLuomiNestRendererLogger } from '../../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Settings')
 
 const platformStore = usePlatformStore()
 const modelStore = useModelStore()
@@ -35,7 +38,7 @@ const loadMainAgentConfig = async () => {
       }
     }
   } catch (e) {
-    console.error('Failed to load main agent config:', e)
+    logger.error('Failed to load main agent config:', e)
   } finally {
     mainAgentLoading.value = false
   }

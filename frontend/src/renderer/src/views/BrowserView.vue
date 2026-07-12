@@ -1,37 +1,83 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import type { TabInfo } from '../vite-env.d'
+/**
+ * LuomiNest 内置浏览器视图
+ *
+ * 通过 3 个 composable 解耦关注点：
+ * - useBrowserNavigation：地址栏、前进/后退、侧栏宽度同步
+ * - useBrowserTabs：标签页 CRUD、IPC 事件、taskStream 监听
+ * - useBrowserActions：DevPanel、截图、快速点击/填表、AI 搜索、toast、prompt 对话框
+ */
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import TabBar from '../components/browser/TabBar.vue'
 import NavBar from '../components/browser/NavBar.vue'
 import BookmarkBar from '../components/browser/BookmarkBar.vue'
 import HomePage from '../components/browser/HomePage.vue'
 import ErrorPage from '../components/browser/ErrorPage.vue'
 import DevPanel from '../components/browser/DevPanel.vue'
-import { useTaskStreamStore } from '../stores/taskStream'
-import { generateId } from '../utils/id'
+import { useBrowserNavigation } from '../composables/useBrowserNavigation'
+import { useBrowserTabs } from '../composables/useBrowserTabs'
+import { useBrowserActions, type DevPanelHandle } from '../composables/useBrowserActions'
+import { X, Camera } from 'lucide-vue-next'
 
-const taskStreamStore = useTaskStreamStore()
+// 导航状态：地址栏 + 前进/后退 + 侧栏宽度同步
+const {
+  addressBar,
+  canGoBack,
+  canGoForward,
+  syncNavigationState,
+  resetNavigation,
+  setNavigationFlags,
+  goBack,
+  goForward,
+  setupSidebarObserver,
+  teardownSidebarObserver,
+} = useBrowserNavigation()
 
-interface Tab {
-  id: string
-  title: string
-  url: string
-  favicon?: string
-  loading?: boolean
-  error?: { code: number; title: string; message: string }
-  active?: boolean
-  captchaDetected?: boolean
-  sleeping?: boolean
-}
+// 标签页管理：CRUD + IPC + taskStream 监听
+const {
+  tabs,
+  showHomePage,
+  activeTab,
+  showCaptchaBanner,
+  syncTabs,
+  createTab,
+  selectTab,
+  closeTab,
+  navigateToUrl,
+  refreshTab,
+  restoreActiveTab,
+  handleTabUpdated,
+  handleNewTabRequest,
+  handleNavigationState,
+} = useBrowserTabs({
+  addressBar,
+  syncNavigationState,
+  resetNavigation,
+  setNavigationFlags,
+})
 
-const tabs = ref<Tab[]>([])
-const addressBar = ref('')
-const showHomePage = ref(true)
-const showDevPanel = ref(false)
-const devOutput = ref('')
-const canGoBack = ref(false)
-const canGoForward = ref(false)
+// DevPanel 组件实例 ref（view 定义，供 template ref 与 composable 共享）
+const devPanelRef = ref<DevPanelHandle | null>(null)
 
+// 快捷操作：DevPanel + 截图 + 快速点击/填表 + AI 搜索 + toast + prompt
+const {
+  showDevPanel,
+  screenshotUrl,
+  toastMessage,
+  showToast,
+  promptState,
+  promptInput,
+  closeScreenshot,
+  handleQuickAction,
+  submitPrompt,
+  cancelPrompt,
+  cleanup,
+} = useBrowserActions({
+  getActiveTab: () => activeTab.value,
+  devPanelRef,
+})
+
+// 静态书签数据
 const bookmarks = [
   { name: 'GitHub', url: 'https://github.com' },
   { name: 'Google', url: 'https://google.com' },
@@ -39,323 +85,38 @@ const bookmarks = [
   { name: 'Stack Overflow', url: 'https://stackoverflow.com' }
 ]
 
-const activeTab = computed(() => tabs.value.find(t => t.active))
-const showCaptchaBanner = computed(() => activeTab.value?.captchaDetected && !activeTab.value?.loading)
-
-watch(showDevPanel, async (show) => {
-  try {
-    await window.api?.tab.setBoundsConfig({
-      devPanelHeight: show ? 220 : 0
+// prompt 输入框 ref：v-if + Transition 下 autofocus 不可靠，改用 nextTick 聚焦
+const promptInputRef = ref<HTMLInputElement | null>(null)
+watch(promptState, (state) => {
+  if (state) {
+    nextTick(() => {
+      promptInputRef.value?.focus()
     })
-  } catch (e) {
-    console.error('[ERROR][LuomiNestBrowser] Failed to set panel height:', e)
   }
 })
 
 onMounted(async () => {
   await syncTabs()
-
-  const active = tabs.value.find(t => t.active)
-  if (active?.url && !active.sleeping) {
-    try {
-      await window.api?.tab.showActive()
-    } catch (e) {
-      console.error('[ERROR][LuomiNestBrowser] Failed to restore active tab:', e)
-    }
-  } else if (active?.url && active.sleeping) {
-    try {
-      await window.api?.tab.activate(active.id)
-    } catch (e) {
-      console.error('[ERROR][LuomiNestBrowser] Failed to wake up tab:', e)
-    }
-  }
+  await restoreActiveTab()
 
   window.electron?.ipcRenderer?.on('tab:updated', handleTabUpdated)
   window.electron?.ipcRenderer?.on('tab:new-tab-request', handleNewTabRequest)
   window.electron?.ipcRenderer?.on('tab:navigation-state', handleNavigationState)
-})
 
-// 订阅 taskStream：主 Agent 通过 create_browser_tab 工具创建的标签页自动打开
-watch(
-  () => taskStreamStore.pendingBrowserTasks,
-  (pendingTasks) => {
-    for (const task of pendingTasks) {
-      if (task.url) {
-        console.info(`[LuomiNestBrowser] 主 Agent 请求打开标签页: ${task.url}`)
-        createTab(task.url)
-        taskStreamStore.markBrowserTabOpened(task.tab_id)
-      }
-    }
-  },
-  { deep: true }
-)
+  setupSidebarObserver()
+})
 
 onUnmounted(() => {
   window.electron?.ipcRenderer?.removeListener('tab:updated', handleTabUpdated)
   window.electron?.ipcRenderer?.removeListener('tab:new-tab-request', handleNewTabRequest)
   window.electron?.ipcRenderer?.removeListener('tab:navigation-state', handleNavigationState)
 
+  teardownSidebarObserver()
+  cleanup()
+
   window.api?.tab.hideAll().catch(() => {})
   window.api?.tab.setBoundsConfig({ devPanelHeight: 0 }).catch(() => {})
 })
-
-function handleTabUpdated(_event: any, data: { tabId: string; updates: Partial<Tab> }) {
-  const tab = tabs.value.find(t => t.id === data.tabId)
-  if (tab) {
-    Object.assign(tab, data.updates)
-    if (tab.active && data.updates.url !== undefined) {
-      addressBar.value = data.updates.url
-    }
-    if (data.updates.sleeping !== undefined && !data.updates.sleeping && tab.active) {
-      syncNavigationState()
-    }
-  }
-}
-
-function handleNewTabRequest(_event: any, data: { url: string }) {
-  createTab(data.url)
-}
-
-function handleNavigationState(_event: any, data: { tabId: string; canGoBack: boolean; canGoForward: boolean }) {
-  const tab = tabs.value.find(t => t.id === data.tabId)
-  if (tab?.active) {
-    canGoBack.value = data.canGoBack
-    canGoForward.value = data.canGoForward
-  }
-}
-
-async function syncNavigationState() {
-  try {
-    const state = await window.api?.tab.getNavigationState()
-    if (state) {
-      canGoBack.value = state.canGoBack
-      canGoForward.value = state.canGoForward
-    }
-  } catch {
-    canGoBack.value = false
-    canGoForward.value = false
-  }
-}
-
-async function syncTabs() {
-  try {
-    const allTabs = await window.api?.tab.getAll() || []
-    if (allTabs.length === 0) {
-      tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
-      showHomePage.value = true
-    } else {
-      tabs.value = allTabs.map((t: TabInfo) => ({
-        id: t.id,
-        title: t.title || '加载中...',
-        url: t.url,
-        active: t.active,
-        loading: t.loading,
-        favicon: t.favicon,
-        error: t.error,
-        captchaDetected: t.captchaDetected,
-        sleeping: t.sleeping
-      }))
-      const active = tabs.value.find(t => t.active)
-      if (active?.url) {
-        showHomePage.value = false
-        addressBar.value = active.url
-        if (!active.sleeping) {
-          await syncNavigationState()
-        }
-      }
-    }
-  } catch (e) {
-    tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
-  }
-}
-
-async function createTab(url: string = '') {
-  tabs.value.forEach(t => t.active = false)
-
-  if (!url) {
-    tabs.value.push({ id: generateId('home'), title: '新标签页', url: '', active: true })
-    showHomePage.value = true
-    addressBar.value = ''
-    canGoBack.value = false
-    canGoForward.value = false
-    await window.api?.tab.hideAll()
-    return
-  }
-
-  showHomePage.value = false
-  addressBar.value = url
-
-  try {
-    const newTab = await window.api?.tab.create(url)
-    if (newTab) {
-      tabs.value.push({
-        id: newTab.id,
-        title: newTab.title || '加载中...',
-        url: newTab.url,
-        active: true,
-        loading: newTab.loading,
-        error: newTab.error,
-        captchaDetected: newTab.captchaDetected,
-        sleeping: newTab.sleeping
-      })
-    }
-  } catch (e: any) {
-    console.error('[ERROR][LuomiNestBrowser] Failed to create tab:', e.message)
-    tabs.value.push({
-      id: generateId('error'),
-      title: '加载失败',
-      url,
-      active: true,
-      error: { code: -1, title: '加载失败', message: e.message }
-    })
-  }
-}
-
-async function selectTab(tabId: string) {
-  const tab = tabs.value.find(t => t.id === tabId)
-  if (!tab) return
-
-  tabs.value.forEach(t => t.active = t.id === tabId)
-
-  if (tab.url) {
-    try {
-      if (tab.sleeping) {
-        tab.sleeping = false
-        tab.loading = true
-      }
-      await window.api?.tab.activate(tabId)
-      showHomePage.value = false
-      addressBar.value = tab.url
-      await syncNavigationState()
-    } catch (e) {
-      console.error('[ERROR][LuomiNestBrowser] Failed to switch tab:', e)
-    }
-  } else {
-    showHomePage.value = true
-    addressBar.value = ''
-    canGoBack.value = false
-    canGoForward.value = false
-    await window.api?.tab.hideAll()
-  }
-}
-
-async function closeTab(tabId: string) {
-  if (tabs.value.length <= 1) return
-
-  const idx = tabs.value.findIndex(t => t.id === tabId)
-  if (idx === -1) return
-
-  try {
-    await window.api?.tab.close(tabId)
-  } catch (e) {
-    console.error('[ERROR][LuomiNestBrowser] Failed to close tab:', e)
-  }
-
-  tabs.value.splice(idx, 1)
-
-  if (tabs.value.length > 0) {
-    const newActiveIdx = Math.min(idx, tabs.value.length - 1)
-    const newActiveTab = tabs.value[newActiveIdx]
-    newActiveTab.active = true
-
-    if (newActiveTab.url) {
-      await selectTab(newActiveTab.id)
-    } else {
-      showHomePage.value = true
-      addressBar.value = ''
-      await window.api?.tab.hideAll()
-    }
-  }
-}
-
-async function navigateToUrl(url: string) {
-  if (!url.trim()) return
-
-  let normalizedUrl = url.trim()
-  if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
-    normalizedUrl = 'https://' + normalizedUrl
-  }
-
-  const tab = activeTab.value
-  if (tab && !tab.url) {
-    const idx = tabs.value.findIndex(t => t.id === tab.id)
-    if (idx !== -1) {
-      tabs.value.splice(idx, 1)
-    }
-  }
-
-  await createTab(normalizedUrl)
-}
-
-async function refreshTab() {
-  const tab = activeTab.value
-  if (!tab?.url) return
-
-  try {
-    if (tab.sleeping) {
-      tab.sleeping = false
-      tab.loading = true
-    }
-    await window.api?.tab.reload(tab.id)
-  } catch (e) {
-    console.error('[ERROR][LuomiNestBrowser] Failed to reload tab:', e)
-  }
-}
-
-async function goBack() {
-  try {
-    await window.api?.tab.goBack()
-  } catch (e) {
-    console.error('[ERROR][LuomiNestBrowser] Failed to go back:', e)
-  }
-}
-
-async function goForward() {
-  try {
-    await window.api?.tab.goForward()
-  } catch (e) {
-    console.error('[ERROR][LuomiNestBrowser] Failed to go forward:', e)
-  }
-}
-
-function handleBookmarkSelect(url: string) {
-  navigateToUrl(url)
-}
-
-function handleSearch(url: string) {
-  navigateToUrl(url)
-}
-
-async function handleQuickAction(action: string) {
-  const tab = activeTab.value
-  if (!tab?.url) {
-    devOutput.value = '[提示] 请先打开一个网页'
-    showDevPanel.value = true
-    return
-  }
-
-  switch (action) {
-    case 'script':
-      showDevPanel.value = !showDevPanel.value
-      break
-    case 'screenshot':
-      devOutput.value = '[提示] 截图功能开发中...'
-      showDevPanel.value = true
-      break
-    case 'dom':
-      devOutput.value = '[提示] DOM 读取功能开发中...'
-      showDevPanel.value = true
-      break
-    case 'click':
-      devOutput.value = '[提示] 请输入 CSS 选择器'
-      showDevPanel.value = true
-      break
-    case 'fill':
-      devOutput.value = '[提示] 格式: selector|value'
-      showDevPanel.value = true
-      break
-  }
-}
 </script>
 
 <template>
@@ -381,7 +142,7 @@ async function handleQuickAction(action: string) {
 
     <BookmarkBar
       :bookmarks="bookmarks"
-      @select="handleBookmarkSelect"
+      @select="navigateToUrl"
     />
 
     <div v-if="showCaptchaBanner" class="captcha-banner">
@@ -404,15 +165,68 @@ async function handleQuickAction(action: string) {
 
       <HomePage
         v-else-if="showHomePage"
-        @search="handleSearch"
+        @search="navigateToUrl"
         @action="handleQuickAction"
       />
     </div>
 
     <DevPanel
       v-if="showDevPanel"
+      ref="devPanelRef"
       @close="showDevPanel = false"
     />
+
+    <!-- 截图预览弹层 -->
+    <div v-if="screenshotUrl" class="screenshot-overlay" @click="closeScreenshot">
+      <div class="screenshot-modal" @click.stop>
+        <div class="screenshot-header">
+          <div class="screenshot-title">
+            <Camera :size="16" />
+            <span>页面截图</span>
+          </div>
+          <button class="screenshot-close" @click="closeScreenshot" aria-label="关闭">
+            <X :size="18" />
+          </button>
+        </div>
+        <img :src="screenshotUrl" class="screenshot-image" alt="页面截图" />
+      </div>
+    </div>
+
+    <!-- 应用内 prompt 对话框（CodeRabbit #5 替代 window.prompt） -->
+    <Transition name="prompt-fade">
+      <div v-if="promptState" class="prompt-overlay" @click="cancelPrompt">
+        <div class="prompt-modal" @click.stop>
+          <div class="prompt-header">
+            <span class="prompt-title">{{ promptState.title }}</span>
+            <button class="prompt-close" @click="cancelPrompt" aria-label="取消">
+              <X :size="16" />
+            </button>
+          </div>
+          <div class="prompt-body">
+            <input
+              ref="promptInputRef"
+              v-model="promptInput"
+              class="prompt-input"
+              :placeholder="promptState.placeholder"
+              type="text"
+              @keydown.enter="submitPrompt"
+              @keydown.esc="cancelPrompt"
+            />
+          </div>
+          <div class="prompt-actions">
+            <button class="prompt-btn prompt-btn-cancel" @click="cancelPrompt">取消</button>
+            <button class="prompt-btn prompt-btn-confirm" @click="submitPrompt">确定</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 操作反馈 toast -->
+    <Transition name="toast-fade">
+      <div v-if="showToast" class="toast-notification">
+        <span>{{ toastMessage }}</span>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -474,5 +288,219 @@ async function handleQuickAction(action: string) {
 
 .browser-content.with-panel.with-captcha {
   height: calc(100% - 256px);
+}
+
+.screenshot-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal, 1000);
+  animation: lumi-fade-in var(--duration-normal) var(--ease-in-out);
+}
+
+.screenshot-modal {
+  max-width: 90%;
+  max-height: 90%;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.screenshot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.screenshot-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+}
+
+.screenshot-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-7);
+  height: var(--space-7);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.screenshot-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.screenshot-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(90vh - 60px);
+  object-fit: contain;
+}
+
+.prompt-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal, 1000);
+  animation: lumi-fade-in var(--duration-normal) var(--ease-in-out);
+}
+
+.prompt-modal {
+  width: 420px;
+  max-width: 90vw;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+
+.prompt-title {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.prompt-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.prompt-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.prompt-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  outline: none;
+  transition: border-color var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.prompt-body {
+  padding: 0 var(--space-4) var(--space-2);
+}
+
+.prompt-input:focus {
+  border-color: var(--lumi-primary);
+}
+
+.prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.prompt-btn {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  border: none;
+  transition: all var(--transition-fast);
+}
+
+.prompt-btn-cancel {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.prompt-btn-cancel:hover {
+  background: var(--surface-active);
+}
+
+.prompt-btn-confirm {
+  background: var(--lumi-primary);
+  color: var(--text-inverse);
+}
+
+.prompt-btn-confirm:hover {
+  opacity: 0.9;
+}
+
+.prompt-fade-enter-active,
+.prompt-fade-leave-active {
+  transition: opacity var(--duration-normal) var(--ease-in-out);
+}
+
+.prompt-fade-enter-from,
+.prompt-fade-leave-to {
+  opacity: 0;
+}
+
+.toast-notification {
+  position: fixed;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--text);
+  color: var(--text-inverse);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm);
+  z-index: var(--z-modal, 1000);
+}
+
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: all var(--duration-normal) var(--ease-in-out);
+}
+
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, var(--space-2));
+}
+
+@keyframes lumi-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 </style>

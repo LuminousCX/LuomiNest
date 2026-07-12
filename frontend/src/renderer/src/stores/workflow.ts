@@ -23,6 +23,9 @@ import { useApi } from '../composables/useApi'
 import { useTaskStreamStore } from './taskStream'
 import { useMemoryStore } from './memory'
 import { generateId } from '../utils/id'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Workflow')
 
 /** 工作流阶段 */
 export type WorkflowPhase =
@@ -34,13 +37,11 @@ export type WorkflowPhase =
   | 'completed'
   | 'failed'
 
-/** 工作流执行模式（P2：长任务执行模式）
- * - flash: 闪电模式，快速响应简单任务（跳过计划确认）
- * - standard: 标准模式，平衡速度与深度（默认）
- * - pro: 专业模式，更多迭代与并发，适合中等复杂任务
- * - ultra: 超长模式，最大能力，适合复杂长任务
+/** 工作流执行模式（仅工作流模式，普通模式见 ChatMode）
+ * - standard: 标准模式，平衡速度与深度（默认），排除细粒度浏览器自动化工具
+ * - ultra: 超长模式，最大能力，适合复杂长任务，全部工具可用
  */
-export type WorkflowMode = 'flash' | 'standard' | 'pro' | 'ultra'
+export type WorkflowMode = 'standard' | 'ultra'
 
 /** 工作流子任务状态 */
 export type WorkflowTaskStatus =
@@ -60,7 +61,8 @@ export interface WorkflowTask {
   tool_name: string
   arguments: Record<string, unknown>
   depends_on: string[]
-  priority: string
+  priority: 'normal' | 'high' | 'urgent' | 'low'
+  node_type: 'input' | 'agent' | 'tool' | 'condition' | 'output'
   status: WorkflowTaskStatus
   result: string | null
   error: string | null
@@ -107,6 +109,7 @@ export interface WorkflowSessionState {
   error: string | null
   created_at: string
   completed_at: string | null
+  conversation_id: string | null
 }
 
 export const useWorkflowStore = defineStore('workflow', () => {
@@ -156,15 +159,17 @@ export const useWorkflowStore = defineStore('workflow', () => {
       provider?: string
       model?: string
       mode?: WorkflowMode
+      conversationId?: string
       onPhaseChange?: (phase: WorkflowPhase) => void
       onModuleAction?: (event: ModuleActionEvent) => void
       onReasoning?: (content: string, phase: string) => void
+      onPlanCreated?: (sessionId: string, taskCount: number) => void
       onFinalResult?: (result: string) => void
       externalAbortSignal?: AbortSignal
     }
   ): Promise<void> => {
     if (isRunning.value) {
-      console.warn('[WorkflowStore] 工作流正在执行中，请等待完成')
+      logger.warn('工作流正在执行中，请等待完成')
       return
     }
 
@@ -180,6 +185,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
         provider: options?.provider,
         model: options?.model,
         mode: options?.mode ?? 'standard',
+        conversation_id: options?.conversationId,
       },
       (event: Record<string, unknown>) => {
         handleWorkflowEvent(event, options)
@@ -188,7 +194,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
         isRunning.value = false
       },
       (err: string) => {
-        console.error('[WorkflowStore] 工作流执行失败:', err)
+        logger.error('工作流执行失败:', err)
         isRunning.value = false
         progressLog.value.unshift({
           type: 'error',
@@ -209,6 +215,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
       onPhaseChange?: (phase: WorkflowPhase) => void
       onModuleAction?: (event: ModuleActionEvent) => void
       onReasoning?: (content: string, phase: string) => void
+      onPlanCreated?: (sessionId: string, taskCount: number) => void
       onFinalResult?: (result: string) => void
     }
   ) => {
@@ -226,6 +233,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
           error: null,
           created_at: new Date().toISOString(),
           completed_at: null,
+          conversation_id: (data.conversation_id as string | null) ?? null,
         }
         break
       }
@@ -275,6 +283,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
           message: `执行计划已创建，共 ${data.task_count} 个子任务`,
           timestamp: Date.now(),
         })
+        options?.onPlanCreated?.(
+          currentSession.value?.session_id ?? '',
+          (data.task_count as number) || 0
+        )
         break
       }
 
@@ -305,12 +317,12 @@ export const useWorkflowStore = defineStore('workflow', () => {
       }
 
       case 'plan_auto_confirmed': {
-        // 闪电模式自动确认（P2：skip_confirmation=True）
+        // 闪电模式：计划自动确认，无需用户干预
         pendingPlan.value = null
         confirmationFeedback.value = ''
         progressLog.value.unshift({
-          type: 'plan_auto_confirmed',
-          message: `闪电模式自动确认执行计划（共 ${(data.task_count as number) || 0} 个子任务）`,
+          type: 'plan_confirmed',
+          message: '计划已自动确认（闪电模式）',
           timestamp: Date.now(),
         })
         break
@@ -572,7 +584,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
         timestamp: Date.now(),
       })
     } catch (err) {
-      console.error('[WorkflowStore] 取消工作流失败:', err)
+      logger.error('取消工作流失败:', err)
     }
   }
 
@@ -597,7 +609,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
         timestamp: Date.now(),
       })
     } catch (err) {
-      console.error('[WorkflowStore] 确认计划失败:', err)
+      logger.error('确认计划失败:', err)
     }
   }
 
@@ -622,7 +634,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
         timestamp: Date.now(),
       })
     } catch (err) {
-      console.error('[WorkflowStore] 拒绝计划失败:', err)
+      logger.error('拒绝计划失败:', err)
     }
   }
 

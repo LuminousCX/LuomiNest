@@ -24,6 +24,9 @@ import {
 import { useRepoSourceStore } from './repo-source'
 import { getItem, setItem } from '../utils/storage'
 import { generateId } from '../utils/id'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Marketplace')
 
 const SEARCH_HISTORY_KEY = 'luominest-marketplace-search-history'
 const FAVORITES_KEY = 'luominest-marketplace-favorites'
@@ -425,7 +428,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
         capabilities: ['chat'],
       })
     } catch (err) {
-      console.error('[MarketplaceStore] 自动创建智能体失败:', err)
+      logger.error('自动创建智能体失败:', err)
     }
   }
 

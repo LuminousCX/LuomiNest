@@ -33,8 +33,9 @@ class WorkflowSubmitRequest(BaseModel):
     model: str | None = Field(None, description="LLM model（可选）")
     mode: WorkflowMode = Field(
         WorkflowMode.STANDARD,
-        description="工作流执行模式：flash(闪电)/standard(标准)/pro(专业)/ultra(超长)",
+        description="工作流执行模式：standard(标准)/ultra(超长)",
     )
+    conversation_id: str | None = Field(None, description="关联对话 ID（可选）")
 
 
 class PlanConfirmationRequest(BaseModel):
@@ -54,6 +55,7 @@ async def submit_workflow(req: WorkflowSubmitRequest):
             provider=req.provider,
             model=req.model,
             mode=req.mode,
+            conversation_id=req.conversation_id,
         )
         return session.to_dict()
     except Exception as e:
@@ -74,6 +76,7 @@ async def submit_workflow_stream(req: WorkflowSubmitRequest):
                 provider=req.provider,
                 model=req.model,
                 mode=req.mode,
+                conversation_id=req.conversation_id,
             ):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as e:
@@ -159,3 +162,48 @@ async def list_internal_tools():
         "tools": [t.to_dict() for t in internal_tool_registry.list_tools()],
         "modules": internal_tool_registry.get_module_summary(),
     }
+
+
+# ─── 数据库持久化会话端点 ───
+
+
+@router.get("/db/sessions")
+async def list_db_sessions(limit: int = 20):
+    """列出数据库中的工作流会话（历史记录）"""
+    from app.services.workflow_persistence import list_workflow_sessions
+    sessions = await list_workflow_sessions(limit=limit)
+    return {"sessions": sessions, "count": len(sessions)}
+
+
+@router.get("/db/sessions/{session_id}")
+async def get_db_session(session_id: str):
+    """获取数据库中的工作流会话详情（含节点）"""
+    from app.services.workflow_persistence import get_workflow_session
+    session = await get_workflow_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"会话 {session_id} 不存在")
+    return session
+
+
+# ─── 工具调用记录端点（控制台日志展示） ───
+
+
+@router.get("/tool-records")
+async def list_tool_records(limit: int = 50, session_id: str | None = None):
+    """列出工具调用记录（审计日志）
+
+    供前端 ConsoleView 工作流日志 Tab 展示工具调用历史。
+    """
+    from app.services.tool_call_recorder import list_tool_call_records
+    records = await list_tool_call_records(session_id=session_id, limit=limit)
+    return {"records": records, "count": len(records)}
+
+
+@router.get("/tool-records/{record_id}")
+async def get_tool_record(record_id: str):
+    """获取工具调用记录详情（含完整参数与结果）"""
+    from app.services.tool_call_recorder import get_tool_call_record
+    record = await get_tool_call_record(record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"记录 {record_id} 不存在")
+    return record

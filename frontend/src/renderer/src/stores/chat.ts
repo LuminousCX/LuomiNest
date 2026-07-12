@@ -30,6 +30,9 @@ import { useAgentStore } from './agent'
 import { useChatTrashStore } from './chat-trash'
 import { detectSearchIntent, extractSearchQuery } from '../utils/searchIntent'
 import { generateId } from '../utils/id'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Chat')
 
 export const useChatStore = defineStore('chat', () => {
   const { apiGet, apiPost, apiPatch, apiDelete, apiStream, checkHealth } = useApi()
@@ -101,7 +104,7 @@ export const useChatStore = defineStore('chat', () => {
         [targetAgentId]: convs
       }
     } catch (error: unknown) {
-      console.warn('[ChatStore] Failed to fetch conversations:', error)
+      logger.warn('Failed to fetch conversations:', error)
       agentConversations.value = {
         ...agentConversations.value,
         [targetAgentId]: []
@@ -254,7 +257,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       return true
     } catch (error) {
-      console.warn('[ChatStore] Failed to rename conversation:', error)
+      logger.warn('Failed to rename conversation:', error)
       return false
     }
   }
@@ -296,7 +299,7 @@ export const useChatStore = defineStore('chat', () => {
       if (targetAgentId) query += `&agent_id=${targetAgentId}`
       return await apiGet<ConversationSearchResult[]>(`/chat/conversations/search${query}`)
     } catch (error) {
-      console.warn('[ChatStore] Search failed:', error)
+      logger.warn('Search failed:', error)
       return []
     }
   }
@@ -314,6 +317,7 @@ export const useChatStore = defineStore('chat', () => {
       fileContent?: string
       fileType?: string
       fileName?: string
+      chatMode?: 'normal' | 'standard' | 'ultra'
       _preserveVersions?: MessageVersion[]
       onChunk?: (chunk: ChatStreamChunk) => void
     }
@@ -416,6 +420,10 @@ export const useChatStore = defineStore('chat', () => {
       requestBody.agent_id = targetAgentId
     }
 
+    if (options?.chatMode) {
+      requestBody.chat_mode = options.chatMode
+    }
+
     if (options?.fileContent) {
       requestBody.file_content = options.fileContent
       if (options.fileName) requestBody.file_name = options.fileName
@@ -435,7 +443,7 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
     } catch (err) {
-      console.warn('[ChatStore] Browser search failed, continuing without search results:', err)
+      logger.warn('Browser search failed, continuing without search results:', err)
     }
 
     // URL 检测：如果用户消息包含 URL，自动 fetch 页面内容
@@ -486,7 +494,7 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
     } catch (err) {
-      console.warn('[ChatStore] Fetch URL failed, continuing without page content:', err)
+      logger.warn('Fetch URL failed, continuing without page content:', err)
     }
 
     const controller = new AbortController()
@@ -508,7 +516,7 @@ export const useChatStore = defineStore('chat', () => {
             reasoningContent: currentMsgList[lastIndex].reasoningContent + (chunk.reasoning_content || ''),
           }
           if (chunk.done) {
-            console.log('[Regen] done chunk suggestions:', chunk.suggested_questions)
+            logger.debug('done chunk suggestions:', chunk.suggested_questions)
             if (chunk.suggested_questions && chunk.suggested_questions.length > 0) {
               updatedMsg.suggestedQuestions = chunk.suggested_questions
             }
@@ -627,7 +635,7 @@ export const useChatStore = defineStore('chat', () => {
         current_version: versionIndex,
       })
     } catch (error) {
-      console.warn('[ChatStore] Failed to persist version switch:', error)
+      logger.warn('Failed to persist version switch:', error)
     }
   }
 
@@ -802,7 +810,7 @@ export const useChatStore = defineStore('chat', () => {
     try {
       await apiPost(`/chat/conversations/${convId}/leave`)
     } catch (error) {
-      console.warn('[ChatStore] Failed to leave conversation:', error)
+      logger.warn('Failed to leave conversation:', error)
     }
   }
 
@@ -858,7 +866,7 @@ export const useChatStore = defineStore('chat', () => {
           try {
             await loadConversation(latestConv.id)
           } catch (error) {
-            console.warn(`[ChatStore] Failed to load latest conversation for agent ${newAgentId}:`, error)
+            logger.warn(`Failed to load latest conversation for agent ${newAgentId}:`, error)
           }
         }
       }

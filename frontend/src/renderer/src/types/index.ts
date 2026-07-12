@@ -51,6 +51,10 @@ export interface ChatMessage {
     totalTokens?: number
   }
   suggestedQuestions?: string[]
+  /** 关联的工作流会话 ID（当此消息触发工作流时设置，用于渲染"已创建工作流"卡片） */
+  workflowSessionId?: string
+  /** 工作流子任务数量（配合 workflowSessionId 使用） */
+  workflowTaskCount?: number
 }
 
 /** Raw message shape returned by the backend API (snake_case) */
@@ -475,6 +479,13 @@ export interface ExecuteCommandResponse {
   duration_ms: number
 }
 
+/** 平台适配器配置字段元数据（描述一个配置项的渲染方式） */
+export interface ConfigFieldMeta {
+  label?: string
+  type?: 'text' | 'password' | 'number'
+  [key: string]: unknown
+}
+
 export interface PlatformAdapterType {
   name: string
   displayName: string
@@ -482,7 +493,7 @@ export interface PlatformAdapterType {
   icon: string
   category: string
   configTemplate: Record<string, unknown>
-  configMetadata: Record<string, any>
+  configMetadata: Record<string, ConfigFieldMeta>
   supportStreaming: boolean
   supportProactive: boolean
 }

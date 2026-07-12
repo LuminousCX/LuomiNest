@@ -154,8 +154,8 @@ def get_github_token() -> Optional[str]:
     try:
         from app.core.config import settings
         token = getattr(settings, "GITHUB_TOKEN", "")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"[GitHubSync] Failed to read GITHUB_TOKEN from settings: {e}")
     return token or None
 
 
@@ -326,8 +326,8 @@ def get_cached_items(source_id: str, sub_market_id: str) -> Optional[SyncResult]
             if elapsed > DEFAULT_CACHE_TTL:
                 logger.debug(f"[GitHubSync] Cache expired for {cache_key}")
                 return None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[GitHubSync] Cache TTL check failed for {cache_key}: {e}")
 
     return SyncResult(
         source_id=cached.get("sourceId", source_id),
@@ -395,8 +395,8 @@ async def fetch_sub_manifest(
             resp = await client.get(raw_url, headers=headers)
             if resp.status_code == 200:
                 return resp.json()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[GitHubSync] Raw URL fetch failed for {owner}/{repo}: {e}")
 
         # 回退到 API
         api_url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{sub_dir}/{MANIFEST_FILENAME}?ref={branch}"
@@ -409,8 +409,8 @@ async def fetch_sub_manifest(
                 if data.get("encoding") == "base64" and content:
                     decoded = base64.b64decode(content).decode("utf-8")
                     return json.loads(decoded)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[GitHubSync] API fetch failed for {owner}/{repo}: {e}")
 
     return None
 

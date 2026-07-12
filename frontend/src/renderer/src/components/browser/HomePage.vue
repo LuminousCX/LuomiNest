@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import type { Component } from 'vue'
 import {
   Send,
-  Paperclip,
-  MessageSquare,
-  AtSign,
   ChevronDown,
   Globe,
   MousePointerClick,
@@ -13,22 +11,30 @@ import {
   Bot,
   Tv,
   Video,
-  Search
+  Search,
+  ArrowRight
 } from 'lucide-vue-next'
 
 interface SearchEngine {
   id: string
   name: string
-  icon: any
+  icon: Component
   url: string
   color: string
 }
 
 interface QuickAction {
-  icon: any
+  icon: Component
   label: string
   color: string
   action: string
+}
+
+interface Website {
+  name: string
+  initial: string
+  url: string
+  className: string
 }
 
 const searchEngines: SearchEngine[] = [
@@ -37,6 +43,17 @@ const searchEngines: SearchEngine[] = [
   { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=', color: 'var(--lumi-sky)' },
   { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: 'var(--lumi-danger)' },
   { id: 'ai', name: 'AI', icon: Bot, url: '', color: 'var(--task-purple)' }
+]
+
+const websites: Website[] = [
+  { name: 'GitHub', initial: 'G', url: 'https://github.com', className: 'ws-github' },
+  { name: 'Google', initial: 'G', url: 'https://google.com', className: 'ws-google' },
+  { name: 'MDN', initial: 'M', url: 'https://developer.mozilla.org', className: 'ws-mdn' },
+  { name: 'Stack Overflow', initial: 'S', url: 'https://stackoverflow.com', className: 'ws-stack' },
+  { name: 'Bing', initial: 'B', url: 'https://www.bing.com', className: 'ws-bing' },
+  { name: 'Bilibili', initial: 'B', url: 'https://www.bilibili.com', className: 'ws-bili' },
+  { name: 'YouTube', initial: 'Y', url: 'https://www.youtube.com', className: 'ws-youtube' },
+  { name: '知乎', initial: '知', url: 'https://www.zhihu.com', className: 'ws-zhihu' }
 ]
 
 const quickActions: QuickAction[] = [
@@ -51,127 +68,160 @@ const searchInput = ref('')
 const selectedEngine = ref<SearchEngine>(searchEngines[0])
 const showEngineDropdown = ref(false)
 const isSearching = ref(false)
+const searchBoxRef = ref<HTMLElement | null>(null)
+let searchResetTimer: ReturnType<typeof setTimeout> | null = null
 
 const emit = defineEmits<{
   search: [url: string]
   action: [action: string]
 }>()
 
-function selectEngine(engine: SearchEngine) {
+const selectEngine = (engine: SearchEngine) => {
   selectedEngine.value = engine
   showEngineDropdown.value = false
 }
 
-function handleSearch() {
+const handleSearch = () => {
   const query = searchInput.value.trim()
   if (!query) return
-  
+
   isSearching.value = true
-  
+
   if (selectedEngine.value.id === 'ai') {
     emit('action', 'ai-search')
   } else {
     const url = selectedEngine.value.url + encodeURIComponent(query)
     emit('search', url)
   }
-  
-  setTimeout(() => {
+
+  if (searchResetTimer) clearTimeout(searchResetTimer)
+  searchResetTimer = setTimeout(() => {
     isSearching.value = false
     searchInput.value = ''
+    searchResetTimer = null
   }, 300)
 }
 
-function handleKeydown(e: KeyboardEvent) {
+const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     handleSearch()
   }
 }
+
+const handleWebsiteClick = (url: string) => {
+  emit('search', url)
+}
+
+// 点击 .search-box 外部时关闭引擎下拉菜单
+const handleDocumentClick = (e: MouseEvent) => {
+  if (showEngineDropdown.value && searchBoxRef.value && !searchBoxRef.value.contains(e.target as Node)) {
+    showEngineDropdown.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleDocumentClick)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleDocumentClick)
+  if (searchResetTimer) clearTimeout(searchResetTimer)
+})
 </script>
 
 <template>
   <div class="home-page">
-    <div class="brand-area">
+    <!-- 顶部品牌 + 搜索框 -->
+    <header class="home-header">
       <h1 class="brand-title">
         <span class="brand-lumi">Luomi</span><span class="brand-sub">Nest</span>
       </h1>
-      <p class="brand-tagline">copilot · browser powered</p>
-    </div>
 
-    <div class="search-section">
-      <div class="search-box">
-        <div class="engine-bar">
+      <div ref="searchBoxRef" class="search-box">
+        <div class="search-input-row">
           <button class="engine-selector" @click="showEngineDropdown = !showEngineDropdown">
             <component :is="selectedEngine.icon" :size="16" :style="{ color: selectedEngine.color }" />
             <span class="engine-name">{{ selectedEngine.name }}</span>
             <ChevronDown :size="14" class="engine-arrow" :class="{ rotated: showEngineDropdown }" />
           </button>
-          <Transition name="dropdown">
-            <div v-if="showEngineDropdown" class="engine-dropdown">
-              <button
-                v-for="engine in searchEngines"
-                :key="engine.id"
-                :class="['engine-option', { active: engine.id === selectedEngine.id }]"
-                @click="selectEngine(engine)"
-              >
-                <component :is="engine.icon" :size="15" :style="{ color: engine.color }" />
-                <span>{{ engine.name }}</span>
-              </button>
-            </div>
-          </Transition>
-        </div>
-        
-        <textarea
-          v-model="searchInput"
-          :placeholder="selectedEngine.id === 'ai' ? '向 AI 提问...' : `在 ${selectedEngine.name} 中搜索...`"
-          rows="2"
-          class="search-textarea"
-          @keydown="handleKeydown"
-        ></textarea>
-        
-        <div class="search-actions">
-          <div class="actions-left">
-            <button class="tool-btn">
-              <MessageSquare :size="16" />
-              <span>对话模式</span>
-              <ChevronDown :size="13" />
-            </button>
-            <button class="tool-btn icon-only">
-              <AtSign :size="16" />
-            </button>
-          </div>
-          <div class="actions-right">
-            <button class="tool-btn icon-only">
-              <Paperclip :size="16" />
-            </button>
-            <button
-              class="send-btn"
-              :class="{ loading: isSearching }"
-              :disabled="!searchInput.trim() || isSearching"
-              @click="handleSearch"
-            >
-              <Send v-if="!isSearching" :size="17" />
-              <div v-else class="loading-spinner" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <div class="quick-actions">
-      <button
-        v-for="action in quickActions"
-        :key="action.label"
-        class="qa-card"
-        :style="{ '--qa-color': action.color }"
-        @click="emit('action', action.action)"
-      >
-        <div class="qa-icon">
-          <component :is="action.icon" :size="22" />
+          <input
+            v-model="searchInput"
+            :placeholder="selectedEngine.id === 'ai' ? '向 AI 提问...' : `在 ${selectedEngine.name} 中搜索...`"
+            class="search-input"
+            @keydown="handleKeydown"
+          />
+
+          <button
+            class="send-btn"
+            :class="{ loading: isSearching }"
+            :disabled="!searchInput.trim() || isSearching"
+            @click="handleSearch"
+            aria-label="搜索"
+          >
+            <ArrowRight v-if="!isSearching" :size="18" />
+            <div v-else class="loading-spinner" />
+          </button>
         </div>
-        <span class="qa-label">{{ action.label }}</span>
-      </button>
-    </div>
+
+        <Transition name="dropdown">
+          <div v-if="showEngineDropdown" class="engine-dropdown">
+            <button
+              v-for="engine in searchEngines"
+              :key="engine.id"
+              :class="['engine-option', { active: engine.id === selectedEngine.id }]"
+              @click="selectEngine(engine)"
+            >
+              <component :is="engine.icon" :size="15" :style="{ color: engine.color }" />
+              <span>{{ engine.name }}</span>
+            </button>
+          </div>
+        </Transition>
+      </div>
+    </header>
+
+    <!-- 常用网站 -->
+    <section class="content-section">
+      <h2 class="section-title">
+        <span class="title-bar"></span>
+        常用网站
+      </h2>
+      <div class="websites-grid">
+        <button
+          v-for="ws in websites"
+          :key="ws.name"
+          class="website-tile"
+          :title="ws.name"
+          @click="handleWebsiteClick(ws.url)"
+        >
+          <div :class="['website-icon', ws.className]">{{ ws.initial }}</div>
+          <span class="website-name">{{ ws.name }}</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 开发者工具 -->
+    <section class="content-section">
+      <h2 class="section-title">
+        <span class="title-bar"></span>
+        开发者工具
+      </h2>
+      <div class="tools-grid">
+        <button
+          v-for="action in quickActions"
+          :key="action.label"
+          class="tool-card"
+          :style="{ '--tool-color': action.color }"
+          @click="emit('action', action.action)"
+        >
+          <div class="tool-icon">
+            <component :is="action.icon" :size="20" />
+          </div>
+          <span class="tool-label">{{ action.label }}</span>
+        </button>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -181,18 +231,24 @@ function handleKeydown(e: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--space-8);
+  padding: var(--space-8) var(--space-6) var(--space-6);
   gap: var(--space-7);
-  background: linear-gradient(180deg, var(--bg) 0%, var(--lumi-brand-subtle) 50%, var(--bg-secondary) 100%);
+  background: linear-gradient(180deg, var(--bg) 0%, var(--lumi-brand-subtle) 60%, var(--bg-secondary) 100%);
+  overflow-y: auto;
 }
 
-.brand-area {
-  text-align: center;
+/* ===== 顶部品牌 + 搜索框 ===== */
+.home-header {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
 }
 
 .brand-title {
-  font-size: var(--text-5xl);
+  font-size: var(--text-3xl);
   font-weight: var(--font-semibold);
   letter-spacing: -0.02em;
   margin: 0;
@@ -206,56 +262,41 @@ function handleKeydown(e: KeyboardEvent) {
   color: var(--text-muted);
 }
 
-.brand-tagline {
-  margin-top: var(--space-2);
-  font-size: var(--text-md);
-  color: var(--text-muted);
-}
-
-.search-section {
-  width: 100%;
-  max-width: 600px;
-}
-
 .search-box {
+  width: 100%;
+  position: relative;
+}
+
+.search-input-row {
+  display: flex;
+  align-items: center;
+  height: var(--space-10);
   background: var(--surface);
   border-radius: var(--radius-xl);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm), var(--shadow-inset);
-  overflow: hidden;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  gap: var(--space-2);
   transition: all var(--transition-normal);
 }
 
-.search-box:focus-within {
+.search-input-row:focus-within {
   border-color: var(--lumi-brand-border);
   box-shadow: var(--shadow-md), 0 0 0 3px var(--lumi-brand-light);
-}
-
-.engine-bar {
-  padding: var(--space-3) var(--space-4);
-  position: relative;
-}
-
-.engine-bar::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: var(--space-4);
-  right: var(--space-4);
-  height: 1px;
-  background: linear-gradient(90deg, transparent 0%, var(--bg-secondary) 15%, var(--bg-secondary) 85%, transparent 100%);
 }
 
 .engine-selector {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
   border: none;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  height: calc(var(--space-8) - var(--space-1));
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
 }
 
 .engine-selector:hover {
@@ -263,7 +304,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .engine-name {
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
@@ -276,124 +317,42 @@ function handleKeydown(e: KeyboardEvent) {
   transform: rotate(180deg);
 }
 
-.engine-dropdown {
-  position: absolute;
-  top: 100%;
-  left: var(--space-3);
-  margin-top: var(--space-1);
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
-  overflow: hidden;
-  z-index: var(--z-dropdown);
-}
-
-.engine-option {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-2) var(--space-4);
+.search-input {
+  flex: 1;
+  border: none;
   background: transparent;
-  border: none;
-  cursor: pointer;
   font-size: var(--text-base);
-  color: var(--text-secondary);
-  transition: background var(--transition-fast);
-}
-
-.engine-option:hover {
-  background: var(--bg-secondary);
-}
-
-.engine-option.active {
-  background: var(--bg);
-}
-
-.search-textarea {
-  width: 100%;
-  min-height: 60px;
-  padding: var(--space-4);
-  border: none;
-  font-size: var(--text-lg);
   color: var(--text);
-  resize: none;
   outline: none;
+  height: 100%;
 }
 
-.search-textarea::placeholder {
+.search-input::placeholder {
   color: var(--text-muted);
-}
-
-.search-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-3) var(--space-4);
-  position: relative;
-}
-
-.search-actions::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: var(--space-4);
-  right: var(--space-4);
-  height: 1px;
-  background: linear-gradient(90deg, transparent 0%, var(--bg-secondary) 15%, var(--bg-secondary) 85%, transparent 100%);
-}
-
-.actions-left,
-.actions-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.tool-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.tool-btn:hover {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-}
-
-.tool-btn.icon-only {
-  padding: var(--space-1);
 }
 
 .send-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: calc(var(--space-8) - var(--space-1));
-  height: calc(var(--space-8) - var(--space-1));
+  width: var(--space-8);
+  height: var(--space-8);
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, var(--text), var(--text-secondary));
   border: none;
   cursor: pointer;
   color: var(--text-inverse);
+  flex-shrink: 0;
   transition: all var(--transition-fast);
 }
 
 .send-btn:hover:not(:disabled) {
   background: var(--text-secondary);
+  transform: scale(1.05);
 }
 
 .send-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
@@ -406,19 +365,82 @@ function handleKeydown(e: KeyboardEvent) {
   animation: spin calc(var(--duration-normal) * 3 + var(--duration-fast)) linear infinite;
 }
 
-.quick-actions {
-  display: flex;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  justify-content: center;
+.engine-dropdown {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  z-index: var(--z-dropdown);
+  min-width: 160px;
 }
 
-.qa-card {
+.engine-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  transition: background var(--transition-fast);
+}
+
+.engine-option:hover {
+  background: var(--bg-secondary);
+}
+
+.engine-option.active {
+  background: var(--bg);
+}
+
+/* ===== 内容分区通用 ===== */
+.content-section {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.title-bar {
+  display: inline-block;
+  width: 3px;
+  height: var(--space-4);
+  background: var(--lumi-brand);
+  border-radius: var(--radius-xs);
+}
+
+/* ===== 常用网站磁贴 ===== */
+.websites-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+}
+
+.website-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-2);
   border-radius: var(--radius-lg);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -426,28 +448,99 @@ function handleKeydown(e: KeyboardEvent) {
   transition: all var(--transition-fast);
 }
 
-.qa-card:hover {
-  border-color: var(--qa-color);
-  box-shadow: var(--shadow-md), 0 0 0 1px var(--lumi-brand-subtle);
+.website-tile:hover {
+  border-color: var(--ws-color, var(--lumi-brand-border));
+  box-shadow: var(--shadow-md);
   transform: translateY(calc(var(--space-1) / -2));
 }
 
-.qa-icon {
+.website-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--space-8) + var(--space-1));
+  height: calc(var(--space-8) + var(--space-1));
+  border-radius: var(--radius-md);
+  background: var(--ws-color, var(--lumi-brand));
+  color: var(--text-inverse);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  transition: transform var(--transition-fast);
+}
+
+.website-tile:hover .website-icon {
+  transform: scale(1.08);
+}
+
+.website-name {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* 网站品牌色（通过 CSS 变量定义，避免硬编码） */
+.ws-github { --ws-color: #24292e; }
+.ws-google { --ws-color: #4285f4; }
+.ws-mdn { --ws-color: #1a1a1a; }
+.ws-stack { --ws-color: #f48024; }
+.ws-bing { --ws-color: #008373; }
+.ws-bili { --ws-color: #fb7299; }
+.ws-youtube { --ws-color: #ff0000; }
+.ws-zhihu { --ws-color: #0084ff; }
+
+/* ===== 开发者工具卡片 ===== */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-3);
+}
+
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tool-card:hover {
+  border-color: var(--tool-color);
+  box-shadow: var(--shadow-md);
+  transform: translateY(calc(var(--space-1) / -2));
+}
+
+.tool-icon {
   display: flex;
   align-items: center;
   justify-content: center;
   width: var(--space-8);
   height: var(--space-8);
-  border-radius: calc(var(--radius-md) - var(--space-1) / 2);
-  background: linear-gradient(135deg, var(--qa-color), color-mix(in srgb, var(--qa-color) 70%, var(--text-inverse)));
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--tool-color), color-mix(in srgb, var(--tool-color) 70%, var(--text-inverse)));
   color: var(--text-inverse);
+  transition: transform var(--transition-fast);
 }
 
-.qa-label {
-  font-size: var(--text-sm);
+.tool-card:hover .tool-icon {
+  transform: scale(1.08);
+}
+
+.tool-label {
+  font-size: var(--text-xs);
   color: var(--text-secondary);
+  text-align: center;
 }
 
+/* ===== 动画 ===== */
 .dropdown-enter-active,
 .dropdown-leave-active {
   transition: all var(--transition-fast);
@@ -459,4 +552,17 @@ function handleKeydown(e: KeyboardEvent) {
   transform: translateY(calc(var(--space-1) * -2));
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 640px) {
+  .websites-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .tools-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
 </style>

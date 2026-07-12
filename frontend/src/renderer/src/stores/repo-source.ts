@@ -3,6 +3,9 @@ import { ref, computed } from 'vue'
 import type { RepoSource, RepoSourceType, MarketplaceItem } from '../types/marketplace'
 import { useApi } from '../composables/useApi'
 import { getStringItem, setStringItem } from '../utils/storage'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('RepoSource')
 
 const REPO_SOURCES_KEY = 'luominest-repo-sources-active'
 
@@ -196,7 +199,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       syncedItems.value = { ...syncedItems.value, [sourceId]: result.items || [] }
     } catch (e: unknown) {
       // 静默失败，不影响用户体验
-      console.warn('[RepoSource] Failed to fetch source items:', getErrorMessage(e))
+      logger.warn('Failed to fetch source items:', getErrorMessage(e))
     }
   }
 
@@ -209,7 +212,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       const result = await api.apiGet<SyncedItemsResult>(`/repo-sources/${sourceId}/items?type=${type}`)
       return result.items || []
     } catch (e: unknown) {
-      console.warn('[RepoSource] Failed to fetch source items by type:', getErrorMessage(e))
+      logger.warn('Failed to fetch source items by type:', getErrorMessage(e))
       return []
     }
   }

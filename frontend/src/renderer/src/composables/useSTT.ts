@@ -25,7 +25,7 @@ export const useSTT = () => {
   let mediaRecorder: MediaRecorder | null = null
   let audioChunks: Blob[] = []
   let audioStream: MediaStream | null = null
-  let recognition: any = null
+  let recognition: SpeechRecognitionInstance | null = null
 
   const getSTTMode = (): 'backend' | 'browser' => {
     const engine = modelStore.sttConfig.engine || 'auto'
@@ -162,19 +162,19 @@ export const useSTT = () => {
 
   const startBrowserRecognition = (): boolean => {
     const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      window.SpeechRecognition || window.webkitSpeechRecognition
 
     if (!SpeechRecognition) {
       toast.error('浏览器不支持语音识别，请使用后端引擎')
       return false
     }
 
-    recognition = new SpeechRecognition()
-    recognition.continuous = false
-    recognition.interimResults = true
-    recognition.lang = modelStore.sttConfig.language || 'zh-CN'
+    const rec = new SpeechRecognition()
+    rec.continuous = false
+    rec.interimResults = true
+    rec.lang = modelStore.sttConfig.language || 'zh-CN'
 
-    recognition.onresult = (event: any) => {
+    rec.onresult = (event: SpeechRecognitionEvent) => {
       let interim = ''
       let final = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -191,16 +191,17 @@ export const useSTT = () => {
       }
     }
 
-    recognition.onerror = (event: any) => {
+    rec.onerror = (event: SpeechRecognitionErrorEvent) => {
       toast.error(`语音识别错误：${event.error}`)
       isRecording.value = false
     }
 
-    recognition.onend = () => {
+    rec.onend = () => {
       isRecording.value = false
     }
 
-    recognition.start()
+    rec.start()
+    recognition = rec
     isRecording.value = true
     return true
   }

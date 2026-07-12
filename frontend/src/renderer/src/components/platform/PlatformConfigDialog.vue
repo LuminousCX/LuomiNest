@@ -10,6 +10,9 @@ import type { PlatformInstance, PlatformModelConfig } from '../../types'
 import LumiModal from '../../components/common/LumiModal.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiInput from '../../components/common/LumiInput.vue'
+import { createLuomiNestRendererLogger } from '../../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Platform')
 
 const store = usePlatformStore()
 const modelStore = useModelStore()
@@ -90,8 +93,8 @@ const handleSaveConfig = async () => {
     }
     closeConfigDialog()
     emit('saved')
-  } catch (e: any) {
-    console.error('Failed to update platform instance:', e)
+  } catch (e: unknown) {
+    logger.error('Failed to update platform instance:', e)
   }
 }
 
@@ -113,8 +116,8 @@ const handleResetModelConfig = async () => {
       temperature: null,
       maxTokens: null,
     }
-  } catch (e: any) {
-    console.error('Failed to reset model config:', e)
+  } catch (e: unknown) {
+    logger.error('Failed to reset model config:', e)
   } finally {
     modelConfigSaving.value = false
   }
@@ -150,8 +153,8 @@ const loadInstanceConfig = async (instance: PlatformInstance) => {
         maxTokens: cfg.instanceConfig.maxTokens ?? null,
       }
     }
-  } catch (e: any) {
-    console.error('Failed to load model config:', e)
+  } catch (e: unknown) {
+    logger.error('Failed to load model config:', e)
   } finally {
     modelConfigLoading.value = false
   }

@@ -12,7 +12,7 @@
 """
 from loguru import logger
 
-from app.infrastructure.database.facades.config_store import lumi_config_store
+from app.infrastructure.database.config_store import lumi_config_store
 
 
 _CONFIG_KEY = "main_agent.config"

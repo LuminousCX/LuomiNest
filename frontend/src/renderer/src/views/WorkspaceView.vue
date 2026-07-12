@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
-import { AlertTriangle, MessageCircle } from 'lucide-vue-next'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { MessageCircle } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
@@ -8,14 +8,12 @@ import { useModelStore } from '../stores/model'
 import { useSocialStore } from '../stores/social'
 import { useChatTrashStore } from '../stores/chat-trash'
 import { useTTS } from '../composables/useTTS'
-import { useDebouncedSearch } from '../composables/useDebouncedSearch'
 import FilePreview from '../components/FilePreview.vue'
 import { useFileUpload } from '../composables/useFileUpload'
-import { useApi } from '../composables/useApi'
 import { useClipboard } from '../composables/useClipboard'
 import { useFileDrop } from '../composables/useFileDrop'
+import { useToast } from '../composables/useToast'
 import { isUploadAllowed } from '../utils/file'
-import { getProviderLogo } from '../config/provider-logos'
 import WorkspaceContactPanel from '../components/workspace/WorkspaceContactPanel.vue'
 import WorkspaceAgentHistory from '../components/workspace/WorkspaceAgentHistory.vue'
 import WorkspaceGroupInfo from '../components/workspace/WorkspaceGroupInfo.vue'
@@ -23,8 +21,11 @@ import WorkspaceAgentChat from '../components/workspace/WorkspaceAgentChat.vue'
 import WorkspaceGroupChat from '../components/workspace/WorkspaceGroupChat.vue'
 import WorkspaceDialogs from '../components/workspace/WorkspaceDialogs.vue'
 import WorkspaceDropOverlay from '../components/workspace/WorkspaceDropOverlay.vue'
-import type { ConversationListItem, ConversationSearchResult, GroupInfo, AgentProfile } from '../types'
-import { generateId } from '../utils/id'
+import type { GroupInfo, AgentProfile } from '../types'
+import { useWorkspaceAgentDialogs } from '../composables/useWorkspaceAgentDialogs'
+import { useWorkspaceGroupChat } from '../composables/useWorkspaceGroupChat'
+import { useWorkspaceConvList } from '../composables/useWorkspaceConvList'
+import { useWorkspaceMessages } from '../composables/useWorkspaceMessages'
 
 const router = useRouter()
 const chatStore = useChatStore()
@@ -32,164 +33,24 @@ const agentStore = useAgentStore()
 const modelStore = useModelStore()
 const socialStore = useSocialStore()
 const chatTrashStore = useChatTrashStore()
+const toast = useToast()
 const { isSpeaking: isTTSSpeaking, speakingMessageId: ttsSpeakingMsgId, speak: ttsSpeak, stopSpeaking: ttsStopSpeaking } = useTTS()
 
+// —— 文件上传 ——
 const { isUploading, uploadingFile, parsedContent, fileType, fileName, uploadAndForward, clearUploadState } = useFileUpload()
-const { truncateMessages, deleteMessage } = useApi()
 const { copiedId, copy: copyMessage } = useClipboard()
+
+// —— 子组件 ref ——
 const agentChatRef = ref<InstanceType<typeof WorkspaceAgentChat> | null>(null)
+const groupChatRef = ref<InstanceType<typeof WorkspaceGroupChat> | null>(null)
 
-const inputText = ref('')
-const selectedSkillIds = ref<string[]>([])
-const showModelDropdown = ref(false)
-const showReasoning = ref<Record<string, boolean>>({})
-
-const { showOverlay: showGlobalDropOverlay } = useFileDrop({
-  isUploading,
-  isAllowed: isUploadAllowed,
-  onUpload: (file: File) => uploadAndForward(file),
-  onError: (message: string) => displayToast(message),
-})
-
-const showFilePreview = ref(false)
-const previewFile = ref<{ name: string; type?: string; content?: string } | null>(null)
-
-const openFilePreview = (file: { name: string; type?: string; content?: string }) => {
-  previewFile.value = file
-  showFilePreview.value = true
-}
-
-const closeFilePreview = () => {
-  showFilePreview.value = false
-  previewFile.value = null
-}
-
-const showCreateDialog = ref(false)
-const newAgentForm = ref({
-  name: '',
-  description: '',
-  systemPrompt: '',
-  color: 'var(--lumi-brand)',
-})
-const createDialogError = ref('')
-const agentColors = ['var(--lumi-brand)', 'var(--lumi-indigo)', 'var(--lumi-amber)', 'var(--lumi-accent)', 'var(--task-purple)', 'var(--lumi-sky)', 'var(--lumi-success)', 'var(--task-pink)']
-
-const showConfirmDialog = ref(false)
-const confirmDialogMessage = ref('')
-const confirmDialogCallback = ref<(() => void) | null>(null)
-const confirmDialogIsDanger = ref(false)
-
-const openConfirmDialog = (message: string, callback: () => void, isDanger = false) => {
-  confirmDialogMessage.value = message
-  confirmDialogCallback.value = callback
-  confirmDialogIsDanger.value = isDanger
-  showConfirmDialog.value = true
-}
-
-const handleConfirmDialogConfirm = () => {
-  if (confirmDialogCallback.value) {
-    confirmDialogCallback.value()
-  }
-  showConfirmDialog.value = false
-  confirmDialogCallback.value = null
-}
-
-const handleConfirmDialogCancel = () => {
-  showConfirmDialog.value = false
-  confirmDialogCallback.value = null
-}
-
-const handleCreateAgent = async () => {
-  if (!newAgentForm.value.name.trim()) return
-  createDialogError.value = ''
-  try {
-    await agentStore.createAgent({
-      name: newAgentForm.value.name.trim(),
-      description: newAgentForm.value.description.trim(),
-      systemPrompt: newAgentForm.value.systemPrompt.trim(),
-      color: newAgentForm.value.color,
-    })
-    showCreateDialog.value = false
-    newAgentForm.value = { name: '', description: '', systemPrompt: '', color: 'var(--lumi-brand)' }
-  } catch (e: any) {
-    createDialogError.value = e.response?.data?.detail || e.message || '创建 Agent 失败'
-  }
-}
-
-const showEditDialog = ref(false)
-const editingAgentId = ref<string | null>(null)
-const editAgentForm = ref({
-  name: '',
-  description: '',
-  systemPrompt: '',
-  color: 'var(--lumi-brand)',
-})
-
-const openEditDialog = (agent: AgentProfile, e?: Event) => {
-  if (e) e.stopPropagation()
-  editingAgentId.value = agent.id
-  editAgentForm.value = {
-    name: agent.name || '',
-    description: agent.description || '',
-    systemPrompt: agent.systemPrompt || '',
-    color: agent.color || 'var(--lumi-brand)',
-  }
-  showEditDialog.value = true
-}
-
-const handleUpdateAgent = async () => {
-  if (!editingAgentId.value || !editAgentForm.value.name.trim()) return
-  try {
-    await agentStore.updateAgent(editingAgentId.value, {
-      name: editAgentForm.value.name.trim(),
-      description: editAgentForm.value.description.trim(),
-      systemPrompt: editAgentForm.value.systemPrompt.trim(),
-      color: editAgentForm.value.color,
-    })
-    showEditDialog.value = false
-    editingAgentId.value = null
-  } catch (e: any) {
-    displayToast(e?.message || '更新 Agent 失败')
-  }
-}
-
-const handleDeleteAgent = async () => {
-  if (!editingAgentId.value) return
-  const deletedId = editingAgentId.value
-  try {
-    await agentStore.deleteAgent(deletedId)
-    showEditDialog.value = false
-    editingAgentId.value = null
-    if (localSelectedAgent.value?.id === deletedId) {
-      selectedType.value = null
-      localSelectedAgent.value = null
-      localSelectedConvId.value = null
-    }
-  } catch (e: any) {
-    displayToast(e?.message || '删除 Agent 失败')
-  }
-}
-
-const toastMessage = ref('')
-const showToast = ref(false)
-let toastTimer: ReturnType<typeof setTimeout> | null = null
-
-const displayToast = (msg: string) => {
-  if (toastTimer) clearTimeout(toastTimer)
-  toastMessage.value = msg
-  showToast.value = true
-  toastTimer = setTimeout(() => {
-    showToast.value = false
-    toastTimer = null
-  }, 3000)
-}
-
+// —— 联系人选择状态（视图持有，供 composable 共享） ——
 type ContactType = 'agent' | 'group'
 const selectedType = ref<ContactType | null>(null)
 const contactSearchQuery = ref('')
-
 const localSelectedAgent = ref<AgentProfile | null>(null)
 const localSelectedConvId = ref<string | null>(null)
+const selectedGroupId = ref<string | null>(null)
 
 const selectAgent = async (agent: AgentProfile) => {
   localSelectedAgent.value = agent
@@ -212,576 +73,104 @@ const backToContacts = () => {
   localSelectedAgent.value = null
   localSelectedConvId.value = null
   selectedGroupId.value = null
-  batchMode.value = false
-  selectedIds.value = new Set()
+  convList.resetBatchState()
 }
 
-const selectedGroupId = ref<string | null>(null)
-const groupChatInput = ref('')
-const sendingGroupMessage = ref(false)
-const collaborationMode = ref(false)
-const showAddAgentDialog = ref(false)
-const showCreateGroupDialog = ref(false)
-const addAgentRole = ref('')
-const addAgentId = ref('')
-const newGroupName = ref('')
-const newGroupDesc = ref('')
-
-const selectedGroup = computed(() => {
-  if (!selectedGroupId.value) return null
-  return socialStore.groups.find(g => g.id === selectedGroupId.value) || null
+// —— 文件拖放 ——
+const { showOverlay: showGlobalDropOverlay } = useFileDrop({
+  isUploading,
+  isAllowed: isUploadAllowed,
+  onUpload: (file: File) => uploadAndForward(file),
+  onError: (message: string) => toast.error(message),
 })
 
-const groupMessages = computed(() => socialStore.groupMessages)
+// —— 文件预览 ——
+const showFilePreview = ref(false)
+const previewFile = ref<{ name: string; type?: string; content?: string } | null>(null)
 
-const availableAgentsForGroup = computed(() => {
-  if (!selectedGroup.value) return agentStore.agents
-  const memberIds = selectedGroup.value.members.map(m => m.agent_id)
-  return agentStore.agents.filter(a => !memberIds.includes(a.id))
-})
-
-const collaborationPhase = computed(() => socialStore.collaborationPhase)
-const collaborationActive = computed(() => socialStore.collaborationActive)
-const collaborationTasks = computed(() => socialStore.collaborationTasks)
-const agentsResponding = computed(() => socialStore.agentsResponding)
-const respondingAgentNames = computed(() => socialStore.respondingAgentNames)
-
-const sendGroupMessage = async () => {
-  if (!groupChatInput.value.trim() || !selectedGroupId.value) return
-  sendingGroupMessage.value = true
-  const userContent = groupChatInput.value
-  groupChatInput.value = ''
-
-  try {
-    if (collaborationMode.value) {
-      socialStore.groupMessages.push({
-        id: generateId('user'),
-        groupId: selectedGroupId.value,
-        senderId: 'user',
-        senderType: 'user',
-        content: userContent,
-        timestamp: new Date().toISOString(),
-      })
-
-      await socialStore.collaborateStream(
-        selectedGroupId.value,
-        userContent,
-        () => {},
-        (err) => { console.error('Collaboration error:', err) },
-        () => {},
-      )
-    } else {
-      await socialStore.sendGroupMessage(selectedGroupId.value, userContent)
-    }
-    await nextTick()
-    if (groupChatRef.value) {
-      groupChatRef.value.scrollToBottom()
-    }
-  } catch (e) {
-    console.error('Failed to send message:', e)
-  } finally {
-    sendingGroupMessage.value = false
-  }
+const openFilePreview = (file: { name: string; type?: string; content?: string }) => {
+  previewFile.value = file
+  showFilePreview.value = true
 }
 
-const groupChatRef = ref<InstanceType<typeof WorkspaceGroupChat> | null>(null)
-
-const createGroup = async () => {
-  if (!newGroupName.value.trim()) return
-  try {
-    const group = await socialStore.createGroup(newGroupName.value.trim(), newGroupDesc.value.trim())
-    newGroupName.value = ''
-    newGroupDesc.value = ''
-    showCreateGroupDialog.value = false
-    if (group) {
-      selectGroup(group)
-    }
-  } catch (e) {
-    console.error('Failed to create group:', e)
-  }
+const closeFilePreview = () => {
+  showFilePreview.value = false
+  previewFile.value = null
 }
 
-const deleteGroup = async (groupId: string) => {
-  try {
-    await socialStore.deleteGroup(groupId)
-    if (selectedGroupId.value === groupId) {
-      selectedGroupId.value = null
+// —— composable 集成 ——
+const agentDialogs = useWorkspaceAgentDialogs({
+  onAgentDeleted: (deletedId: string) => {
+    if (localSelectedAgent.value?.id === deletedId) {
       selectedType.value = null
-    }
-  } catch (e) {
-    console.error('Failed to delete group:', e)
-  }
-}
-
-const addAgentToGroup = async () => {
-  if (!addAgentId.value || !selectedGroupId.value) return
-  try {
-    await socialStore.addAgentToGroup(selectedGroupId.value, addAgentId.value, addAgentRole.value || '成员')
-    addAgentId.value = ''
-    addAgentRole.value = ''
-    showAddAgentDialog.value = false
-  } catch (e) {
-    console.error('Failed to add agent:', e)
-  }
-}
-
-const removeAgentFromGroup = async (groupId: string, agentId: string) => {
-  try {
-    await socialStore.removeAgentFromGroup(groupId, agentId)
-  } catch (e) {
-    console.error('Failed to remove agent:', e)
-  }
-}
-
-const convSearchQuery = ref('')
-const { results: searchResults, isSearching } = useDebouncedSearch<ConversationSearchResult[]>(
-  convSearchQuery,
-  (q) => chatStore.searchConversations(q),
-  300,
-)
-
-const isSearchMode = computed(() => convSearchQuery.value.trim().length > 0)
-
-interface TimeGroup {
-  label: string
-  items: ConversationListItem[]
-}
-
-const timeGroups = computed<TimeGroup[]>(() => {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-
-  const groups: TimeGroup[] = [
-    { label: '今天', items: [] },
-    { label: '昨天', items: [] },
-    { label: '近7天', items: [] },
-    { label: '更早', items: [] }
-  ]
-
-  const convs = localSelectedAgent.value
-    ? (chatStore.agentConversations[localSelectedAgent.value.id] || [])
-    : []
-  for (const conv of convs) {
-    const d = new Date(conv.updated_at)
-    const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-    const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
-
-    if (diffDays <= 0) groups[0].items.push(conv)
-    else if (diffDays === 1) groups[1].items.push(conv)
-    else if (diffDays <= 7) groups[2].items.push(conv)
-    else groups[3].items.push(conv)
-  }
-
-  return groups.filter(g => g.items.length > 0)
-})
-
-const selectConversation = (convId: string, searchKeyword?: string) => {
-  if (searchKeyword) {
-    chatStore.pendingSearchKeyword = searchKeyword
-    chatStore.searchScrollTarget = { convId, keyword: searchKeyword }
-  }
-  if (localSelectedAgent.value) {
-    chatStore.loadConversation(convId, localSelectedAgent.value.id)
-    localSelectedConvId.value = convId
-  }
-}
-
-const handleDeleteConversation = async (convId: string) => {
-  try {
-    await chatStore.deleteConversation(convId, localSelectedAgent.value?.id)
-    if (localSelectedConvId.value === convId) {
+      localSelectedAgent.value = null
       localSelectedConvId.value = null
     }
-  } catch (e: unknown) {
-    console.error('Failed to delete conversation:', e)
-  }
-}
-
-const handleNewConversation = () => {
-  const prevConvId = localSelectedConvId.value
-  if (prevConvId) {
-    chatStore.leaveCurrentConversation(prevConvId).catch(() => {})
-  }
-  if (localSelectedAgent.value) {
-    chatStore.clearMessages(localSelectedAgent.value.id)
-  }
-  localSelectedConvId.value = null
-}
-
-const batchMode = ref(false)
-const selectedIds = ref<Set<string>>(new Set())
-
-const renamingConvId = ref<string | null>(null)
-const renamingTitle = ref('')
-
-const startRename = (convId: string, currentTitle: string) => {
-  renamingConvId.value = convId
-  renamingTitle.value = currentTitle
-  nextTick(() => {
-    const input = document.querySelector('.conv-item-rename-input') as HTMLInputElement
-    if (input) {
-      input.focus()
-      input.select()
-    }
-  })
-}
-
-const confirmRename = async () => {
-  if (!renamingConvId.value) return
-  const newTitle = renamingTitle.value.trim()
-  if (!newTitle) {
-    renamingConvId.value = null
-    return
-  }
-  if (newTitle.length > 200) {
-    return
-  }
-  const success = await chatStore.renameConversation(renamingConvId.value, newTitle, localSelectedAgent.value?.id)
-  if (success) {
-    renamingConvId.value = null
-    renamingTitle.value = ''
-  }
-}
-
-const cancelRename = () => {
-  renamingConvId.value = null
-  renamingTitle.value = ''
-}
-
-const toggleBatchMode = () => {
-  batchMode.value = !batchMode.value
-  if (!batchMode.value) {
-    selectedIds.value = new Set()
-  }
-}
-
-const toggleSelect = (convId: string) => {
-  const next = new Set(selectedIds.value)
-  if (next.has(convId)) {
-    next.delete(convId)
-  } else {
-    next.add(convId)
-  }
-  selectedIds.value = next
-}
-
-const selectAll = () => {
-  const convs = localSelectedAgent.value
-    ? (chatStore.agentConversations[localSelectedAgent.value.id] || [])
-    : []
-  const allIds = convs.map((c: ConversationListItem) => c.id)
-  if (selectedIds.value.size === allIds.length) {
-    selectedIds.value = new Set()
-  } else {
-    selectedIds.value = new Set(allIds)
-  }
-}
-
-const handleBatchDelete = async () => {
-  if (selectedIds.value.size === 0) return
-  try {
-    const agentId = localSelectedAgent.value?.id
-    await chatTrashStore.batchSoftDelete(Array.from(selectedIds.value), agentId, () => chatStore.fetchConversations(agentId))
-    selectedIds.value = new Set()
-    batchMode.value = false
-  } catch (e: unknown) {
-    console.error('Failed to batch delete:', e)
-  }
-}
-
-const messages = computed(() => {
-  if (!localSelectedConvId.value) return []
-  return chatStore.convMessages[localSelectedConvId.value] || []
-})
-const isStreaming = computed(() => {
-  if (!localSelectedConvId.value) return false
-  return !!chatStore.convStreaming[localSelectedConvId.value]
-})
-const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
-const isBackendReady = computed(() => chatStore.isBackendReady)
-
-const currentConvId = computed(() => localSelectedConvId.value || '')
-
-const currentModel = computed(() => {
-  const agent = localSelectedAgent.value
-  if (agent?.model) return agent.model
-  const resolved = modelStore.resolveModel
-  return resolved?.model || '未配置模型'
+  },
 })
 
-const currentProvider = computed(() => {
-  const agent = localSelectedAgent.value
-  if (agent?.provider) return agent.provider
-  const resolved = modelStore.resolveModel
-  return resolved?.provider || ''
+const groupChat = useWorkspaceGroupChat({
+  selectedGroupId,
+  selectGroup,
+  onCurrentGroupDeleted: () => {
+    selectedGroupId.value = null
+    selectedType.value = null
+  },
+  groupChatRef,
 })
 
-const currentProviderLogo = computed(() => getProviderLogo(currentProvider.value))
-
-const hasProvider = computed(() => modelStore.providers.length > 0)
-
-const availableModelOptions = computed(() => {
-  const options: { providerId: string; providerName: string; providerLogo: ReturnType<typeof getProviderLogo>; modelId: string; modelName: string }[] = []
-  for (const provider of modelStore.providers) {
-    const logo = getProviderLogo(provider.id)
-    const modelIds = provider.selectedModels.length > 0
-      ? provider.selectedModels
-      : (provider.defaultModel ? [provider.defaultModel] : [])
-    for (const modelId of modelIds) {
-      options.push({
-        providerId: provider.id,
-        providerName: provider.name,
-        providerLogo: logo,
-        modelId,
-        modelName: modelId,
-      })
-    }
-  }
-  return options
+const convList = useWorkspaceConvList({
+  localSelectedAgent,
+  localSelectedConvId,
 })
 
-const selectModel = (providerId: string, modelId: string) => {
-  if (localSelectedAgent.value) {
-    agentStore.updateAgent(localSelectedAgent.value.id, {
-      provider: providerId,
-      model: modelId,
-    })
-  }
-  showModelDropdown.value = false
-}
-
-const canSend = computed(() => {
-  if (!isBackendReady.value) return false
-  if (isUploading.value) return false
-  return inputText.value.trim().length > 0 || !!parsedContent.value || !!chatStore.quotedMessage
+const messages_ = useWorkspaceMessages({
+  localSelectedAgent,
+  localSelectedConvId,
+  agentChatRef,
+  fileUpload: { isUploading, parsedContent, fileName, fileType, uploadingFile, clearUploadState },
+  openConfirmDialog: agentDialogs.openConfirmDialog,
 })
 
-const sendMessage = async () => {
-  if (!canSend.value) return
+// 从 composable 解构常用项（template 直接引用）
+const {
+  agentColors, showCreateDialog, newAgentForm, createDialogError,
+  showConfirmDialog, confirmDialogMessage, confirmDialogIsDanger,
+  showEditDialog, editAgentForm,
+  handleConfirmDialogConfirm, handleConfirmDialogCancel,
+  handleCreateAgent, openEditDialog, handleUpdateAgent, handleDeleteAgent,
+  openConfirmDialog,
+} = agentDialogs
 
-  let content = inputText.value.trim()
-  const fileContent = parsedContent.value
-  const currentFileName = fileName.value
-  const currentFileType = fileType.value
+const {
+  groupChatInput, sendingGroupMessage, collaborationMode,
+  showAddAgentDialog, showCreateGroupDialog, addAgentRole, addAgentId,
+  newGroupName, newGroupDesc,
+  selectedGroup, groupMessages, availableAgentsForGroup,
+  collaborationPhase, collaborationActive, collaborationTasks,
+  agentsResponding, respondingAgentNames,
+  sendGroupMessage, createGroup, deleteGroup, addAgentToGroup, removeAgentFromGroup,
+} = groupChat
 
-  if (!content && fileContent) {
-    content = '请帮我分析上传的文件'
-  }
-  if (!content && chatStore.quotedMessage) {
-    content = '请看上面的引用内容'
-  }
+const {
+  convSearchQuery, searchResults, isSearching, isSearchMode,
+  timeGroups, batchMode, selectedIds, renamingConvId, renamingTitle,
+  selectConversation, handleDeleteConversation, handleNewConversation,
+  toggleBatchMode, toggleSelect, selectAll, handleBatchDelete,
+  startRename, confirmRename, cancelRename,
+} = convList
 
-  inputText.value = ''
-  agentChatRef.value?.resetTextareaHeight()
-  clearUploadState()
+const {
+  inputText, selectedSkillIds, showModelDropdown, showReasoning,
+  messages, isStreaming, isLoadingCurrentConv, isBackendReady, currentConvId,
+  currentModel, currentProvider, currentProviderLogo, hasProvider, availableModelOptions,
+  selectModel, canSend, sendMessage, cancelStreaming,
+  contextUsage, contextPercent, currentSuggestionMessageId,
+  handleSwitchVersion, handleSuggestionClick, handleRegenerate,
+  handleDeleteMessage, handleGoBackToStart, handleQuoteMessage, toggleReasoning,
+} = messages_
 
-  const agent = localSelectedAgent.value
-  const resolved = modelStore.resolveModel
-
-  const options: any = {
-    model: agent?.model || resolved?.model || undefined,
-    provider: agent?.provider || resolved?.provider || undefined,
-    temperature: modelStore.modelConfig.defaultTemperature,
-    maxTokens: modelStore.modelConfig.defaultMaxTokens,
-    topP: modelStore.modelConfig.defaultTopP,
-  }
-  if (agent?.systemPrompt) options.systemPrompt = agent.systemPrompt
-  if (agent?.id) options.agentId = agent.id
-
-  if (fileContent) {
-    options.fileContent = fileContent
-    options.fileType = currentFileType
-    options.fileName = currentFileName
-  }
-
-  await chatStore.sendMessage(content, options)
-  await nextTick()
-  agentChatRef.value?.scrollToBottom(true)
-}
-
-const cancelStreaming = () => {
-  chatStore.cancelCurrentRequest()
-}
-
-const contextUsage = computed(() => {
-  const lastAssistantMsg = messages.value.findLast(m => m.role === 'assistant' && m.done)
-  return lastAssistantMsg?.usage || chatStore.lastUsage || null
-})
-
-const currentSuggestionMessageId = computed(() => chatStore.currentSuggestionMessageId)
-
-const handleSwitchVersion = (messageId: string, versionIndex: number) => {
-  const convId = currentConvId.value
-  if (!convId) return
-  chatStore.switchVersion(convId, messageId, versionIndex)
-}
-
-const handleSuggestionClick = (question: string) => {
-  inputText.value = question
-  nextTick(() => sendMessage())
-}
-
-const handleRegenerate = async (messageId: string) => {
-  await chatStore.regenerateMessage(messageId, {
-    convId: localSelectedConvId.value || undefined,
-    agentId: localSelectedAgent.value?.id,
-  })
-  await nextTick()
-  agentChatRef.value?.scrollToBottom(true)
-}
-
-function computeDeleteRange(msgs: any[], messageId: string): { startIndex: number; deleteCount: number } {
-  const index = msgs.findIndex((m: any) => m.id === messageId)
-  if (index === -1) return { startIndex: -1, deleteCount: 0 }
-
-  let startIndex = index
-  if (msgs[startIndex].role === 'assistant') {
-    for (let i = startIndex - 1; i >= 0; i--) {
-      if (msgs[i].role === 'user') {
-        startIndex = i
-        break
-      }
-    }
-  }
-
-  let deleteCount = 1
-  if (msgs[startIndex].role === 'user') {
-    for (let i = startIndex + 1; i < msgs.length; i++) {
-      if (msgs[i].role === 'assistant') {
-        deleteCount++
-      } else {
-        break
-      }
-    }
-  }
-
-  return { startIndex, deleteCount }
-}
-
-const handleDeleteMessage = (messageId: string) => {
-  const convId = currentConvId.value
-  if (!convId) return
-  const msgs = chatStore.convMessages[convId]
-  if (!msgs) return
-
-  const { startIndex } = computeDeleteRange(msgs, messageId)
-  if (startIndex === -1) return
-
-  openConfirmDialog(
-    '确定删除这条消息及其关联回复？此操作不可撤销。',
-    async () => {
-      const currentConvIdLocal = currentConvId.value
-      if (!currentConvIdLocal) return
-      const currentMsgs = chatStore.convMessages[currentConvIdLocal]
-      if (!currentMsgs) return
-
-      const { startIndex: reStart, deleteCount: reCount } = computeDeleteRange(currentMsgs, messageId)
-      if (reStart === -1) return
-
-      if (reStart + reCount === currentMsgs.length) {
-        await truncateMessages(currentConvIdLocal, reStart)
-        chatStore.convMessages[currentConvIdLocal] = currentMsgs.slice(0, reStart)
-      } else {
-        const idsToDelete = currentMsgs.slice(reStart, reStart + reCount).map((m: any) => m.id)
-        for (const id of idsToDelete) {
-          await deleteMessage(currentConvIdLocal, id)
-        }
-        chatStore.convMessages[currentConvIdLocal] = currentMsgs.slice(0, reStart).concat(currentMsgs.slice(reStart + reCount))
-      }
-
-      if (chatStore.currentSuggestionMessageId === messageId) {
-        chatStore.currentSuggestionMessageId = null
-      }
-    },
-    true,
-  )
-}
-
-const handleGoBackToStart = (msg: any) => {
-  openConfirmDialog(
-    '确定回退这条消息？该消息及之后的所有消息将被删除，内容将恢复到输入框。',
-    async () => {
-      const convId = currentConvId.value
-      if (!convId) return
-      const msgs = chatStore.convMessages[convId]
-      if (!msgs) return
-
-      inputText.value = msg.content || ''
-
-      if (msg.files && msg.files.length > 0) {
-        const file = msg.files[0]
-        parsedContent.value = file.content || ''
-        fileName.value = file.name || ''
-        fileType.value = file.type || 'text'
-        uploadingFile.value = {
-          name: file.name || 'file',
-          status: 'success',
-          type: file.type,
-          result: file.content,
-        }
-        isUploading.value = false
-      } else {
-        clearUploadState()
-      }
-
-      const index = msgs.findIndex((m: any) => m.id === msg.id)
-      if (index !== -1) {
-        const keepCount = index
-        await truncateMessages(convId, keepCount)
-        chatStore.convMessages[convId] = msgs.slice(0, keepCount)
-        chatStore.currentSuggestionMessageId = null
-      }
-
-      nextTick(() => {
-        agentChatRef.value?.focusTextarea()
-        agentChatRef.value?.autoResize()
-      })
-    },
-    true,
-  )
-}
-
-const handleQuoteMessage = (msg: any) => {
-  chatStore.quotedMessage = msg
-}
-
-const contextPercent = computed(() => {
-  if (!contextUsage.value?.totalTokens || !modelStore.modelConfig.defaultMaxTokens) return 0
-  return Math.min(100, Math.round((contextUsage.value.totalTokens / modelStore.modelConfig.defaultMaxTokens) * 100))
-})
-
-const toggleReasoning = (msgId: string) => {
-  showReasoning.value = {
-    ...showReasoning.value,
-    [msgId]: !showReasoning.value[msgId]
-  }
-}
-
-watch(isLoadingCurrentConv, (loading) => {
-  if (!loading) {
-    const keyword = chatStore.pendingSearchKeyword
-    if (keyword) {
-      chatStore.pendingSearchKeyword = ''
-      nextTick(() => {
-        agentChatRef.value?.scrollToSearchResult(keyword)
-      })
-    } else {
-      nextTick(() => {
-        agentChatRef.value?.scrollToBottom(true)
-      })
-    }
-  }
-})
-
-watch(() => chatStore.pendingSearchKeyword, (keyword) => {
-  if (keyword && !chatStore.isLoadingCurrentConversation && messages.value.length > 0) {
-    chatStore.pendingSearchKeyword = ''
-    nextTick(() => {
-      agentChatRef.value?.scrollToSearchResult(keyword)
-    })
-  }
-})
-
+// —— 外部点击与触发器 ——
 const handleClickOutsideModel = (e: MouseEvent) => {
   const target = e.target as HTMLElement
   if (!target.closest('.model-dropdown-container')) {
@@ -806,7 +195,7 @@ function handleMemoryChatTriggerDirect(text: string) {
   inputText.value = `关于我之前提到的「${text.slice(0, 80)}」，请帮我进一步分析。`
 }
 
-(window as any).__memoryChatTrigger = handleMemoryChatTriggerDirect
+(window as unknown as Record<string, unknown>).__memoryChatTrigger = handleMemoryChatTriggerDirect
 
 onMounted(async () => {
   await chatStore.checkBackend()
@@ -819,7 +208,6 @@ onMounted(async () => {
       socialStore.fetchAvailableAgents(),
       socialStore.fetchAgentRoles(),
     ])
-    // 默认显示联系人列表，不自动进入某个 agent 的对话
   }
   document.addEventListener('click', handleClickOutsideModel)
   window.addEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
@@ -830,6 +218,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutsideModel)
   window.removeEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
   window.removeEventListener('luominest:memory-chat-trigger', handleMemoryChatTrigger as EventListener)
+  ;(window as unknown as Record<string, unknown>).__memoryChatTrigger = undefined
   ttsStopSpeaking()
 })
 </script>
@@ -970,13 +359,6 @@ onBeforeUnmount(() => {
 
     <WorkspaceDropOverlay :visible="showGlobalDropOverlay" />
 
-    <Transition name="toast-fade">
-      <div v-if="showToast" class="toast-notification">
-        <AlertTriangle :size="16" />
-        <span>{{ toastMessage }}</span>
-      </div>
-    </Transition>
-
     <FilePreview
       :visible="showFilePreview"
       :file-name="previewFile?.name || ''"
@@ -1096,38 +478,5 @@ onBeforeUnmount(() => {
 @keyframes lumi-pulse {
   0%, 100% { transform: scale(1); opacity: 0.9; }
   50% { transform: scale(1.05); opacity: 1; }
-}
-
-.toast-notification {
-  position: fixed;
-  bottom: 100px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  background: var(--workspace-card);
-  border: 1px solid var(--divider-soft);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  color: var(--text-primary);
-  font-size: var(--text-md);
-  z-index: 2000;
-}
-
-.toast-notification svg {
-  color: var(--lumi-brand);
-}
-
-.toast-fade-enter-active,
-.toast-fade-leave-active {
-  transition: all var(--duration-normal) var(--ease-default);
-}
-
-.toast-fade-enter-from,
-.toast-fade-leave-to {
-  opacity: 0;
-  transform: translateY(20px);
 }
 </style>

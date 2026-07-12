@@ -12,7 +12,11 @@ from app.infrastructure.database.models.platform_instance import PlatformInstanc
 from app.infrastructure.database.models.provider import Provider
 from app.infrastructure.database.models.provider_credential import ProviderCredential
 from app.infrastructure.database.models.repo_source import RepoSource
+from app.infrastructure.database.models.scheduled_task import ScheduledTaskORM
+from app.infrastructure.database.models.tool_call_record import ToolCallRecordORM
 from app.infrastructure.database.models.usage_record import UsageRecord
+from app.infrastructure.database.models.workflow_node import WorkflowNodeORM
+from app.infrastructure.database.models.workflow_session import WorkflowSessionORM
 
 __all__ = [
     "Agent",
@@ -25,5 +29,9 @@ __all__ = [
     "Provider",
     "ProviderCredential",
     "RepoSource",
+    "ScheduledTaskORM",
+    "ToolCallRecordORM",
     "UsageRecord",
+    "WorkflowNodeORM",
+    "WorkflowSessionORM",
 ]

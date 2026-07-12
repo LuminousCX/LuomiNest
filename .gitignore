@@ -27,6 +27,10 @@ frontend/build/*
 # 后端打包输出
 backend/dist/
 backend/build/
+
+# 根目录 PyInstaller 构建产物
+build/
+
 # frontend/resources/backend 是 PyInstaller COLLECT 输出目录
 # 包含 exe + 大量依赖文件（_internal/、*.dll、*.so），不应入库
 frontend/resources/backend/
@@ -121,6 +125,9 @@ desktop.ini
 # ============================================================
 # 后端数据目录
 backend/data/
+
+# 根目录运行时数据（secret_key、插件状态等）
+data/
 
 # TTS/ASR 等大模型文件（由后端自动下载，不纳入版本控制）
 backend/models/

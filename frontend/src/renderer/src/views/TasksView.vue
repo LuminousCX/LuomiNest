@@ -100,28 +100,28 @@ const DEFAULT_TASKS: LuomiNestTask[] = [
 
 const tasks = ref<LuomiNestTask[]>([...DEFAULT_TASKS])
 
-const normalizeTask = (raw: any, fallbackId: number): LuomiNestTask => ({
+const normalizeTask = (raw: Record<string, unknown>, fallbackId: number): LuomiNestTask => ({
   id: typeof raw.id === 'number' ? raw.id : fallbackId,
   title: typeof raw.title === 'string' ? raw.title : '',
   desc: typeof raw.desc === 'string' ? raw.desc : '',
-  priority: ['high', 'medium', 'low'].includes(raw.priority) ? raw.priority : 'medium',
-  status: ['done', 'progress', 'pending'].includes(raw.status) ? raw.status : 'pending',
+  priority: typeof raw.priority === 'string' && ['high', 'medium', 'low'].includes(raw.priority) ? raw.priority as LuomiNestTask['priority'] : 'medium',
+  status: typeof raw.status === 'string' && ['done', 'progress', 'pending'].includes(raw.status) ? raw.status as LuomiNestTask['status'] : 'pending',
   dueDate: typeof raw.dueDate === 'string' ? raw.dueDate : formatDateStr(new Date()),
-  assignees: Array.isArray(raw.assignees) ? raw.assignees.filter((a: any) => typeof a === 'string') : [],
-  tags: Array.isArray(raw.tags) ? raw.tags.filter((t: any) => typeof t === 'string') : [],
+  assignees: Array.isArray(raw.assignees) ? raw.assignees.filter((a: unknown): a is string => typeof a === 'string') : [],
+  tags: Array.isArray(raw.tags) ? raw.tags.filter((t: unknown): t is string => typeof t === 'string') : [],
   progress: typeof raw.progress === 'number' ? Math.max(0, Math.min(100, raw.progress)) : 0,
   colorVar: typeof raw.colorVar === 'string' ? raw.colorVar : '--task-blue',
   timeSlot: typeof raw.timeSlot === 'string' ? raw.timeSlot : '待安排',
 })
 
-const normalizeTasks = (rawList: any[]): LuomiNestTask[] => {
+const normalizeTasks = (rawList: unknown[]): LuomiNestTask[] => {
   if (!Array.isArray(rawList)) return [...DEFAULT_TASKS]
   const result: LuomiNestTask[] = []
   for (let i = 0; i < rawList.length; i++) {
     const item = rawList[i]
     if (typeof item !== 'object' || item === null) continue
     try {
-      result.push(normalizeTask(item, i + 1))
+      result.push(normalizeTask(item as Record<string, unknown>, i + 1))
     } catch {
       continue
     }
@@ -130,7 +130,7 @@ const normalizeTasks = (rawList: any[]): LuomiNestTask[] => {
 }
 
 interface PersistedTaskState {
-  tasks?: any[]
+  tasks?: unknown[]
   nextId?: number
   viewDate?: string
   currentView?: ViewMode
@@ -177,8 +177,9 @@ watch(currentView, savePersistedData)
 
 onMounted(() => {
   loadPersistedData()
-  // 拉取后端定时任务
+  // 拉取后端定时任务（内存调度器 + 数据库持久化）
   taskStreamStore.fetchScheduledTasks()
+  taskStreamStore.fetchDbScheduledTasks()
 })
 
 const subTasks = ref([
@@ -547,7 +548,7 @@ const timeSlotOptions = [
       :tasks="tasks"
       :teamMembers="teamMembers"
       :colors="colors"
-      :activeScheduledCount="taskStreamStore.activeScheduledTasks.length"
+      :activeScheduledCount="taskStreamStore.activeScheduledTasks.length + taskStreamStore.dbScheduledTaskCount"
       @navigatePrev="navigatePrev"
       @navigateNext="navigateNext"
       @goToday="goToToday"
@@ -590,8 +591,12 @@ const timeSlotOptions = [
       <TasksScheduledView
         v-if="currentView === 'scheduled'"
         :scheduledTasks="taskStreamStore.scheduledTasks"
+        :dbScheduledTasks="taskStreamStore.dbScheduledTasks"
         @refresh="taskStreamStore.fetchScheduledTasks"
         @delete="taskStreamStore.removeScheduledTask"
+        @create-db-task="taskStreamStore.createDbScheduledTask"
+        @delete-db-task="taskStreamStore.removeDbScheduledTask"
+        @refresh-db="taskStreamStore.fetchDbScheduledTasks"
       />
     </TasksToolbar>
 

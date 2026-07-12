@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView } from 'electron'
+import { BrowserWindow, WebContentsView, WebContents } from 'electron'
 import { Tab, TabError, BoundsConfig, getErrorInfo, DEFAULT_BROWSER_CONFIG, NavigationState } from './types'
 import { initBrowserSession } from './session'
 import {
@@ -10,9 +10,12 @@ import {
   injectStealthScript,
   isViewDestroyed
 } from './view'
+import { createLuomiNestLogger } from '../luomi-logger'
+
+const logger = createLuomiNestLogger('Browser')
 
 type TabUpdateCallback = (tabId: string, updates: Partial<Tab>) => void
-type TabEventCallback = (event: string, data: any) => void
+type TabEventCallback = (event: string, data: unknown) => void
 
 const CAPTCHA_PATTERNS = [
   /google\.com\/sorry\//i,
@@ -203,7 +206,7 @@ class TabManager {
     }
 
     this.notifyUpdate(tabId, { sleeping: true, loading: false })
-    console.info(`[INFO][LuomiNestBrowser] Tab "${tab.title}" has entered sleep mode to conserve resources`)
+    logger.info(`Tab "${tab.title}" has entered sleep mode to conserve resources`)
   }
 
   private async wakeTab(tabId: string): Promise<void> {
@@ -228,14 +231,16 @@ class TabManager {
 
     try {
       await view.webContents.loadURL(tab.url)
-    } catch (err: any) {
-      if (!err.message?.includes('ERR_ABORTED')) {
-        const error = getErrorInfo(typeof err.code === 'number' ? err.code : -1)
+    } catch (err: unknown) {
+      const errMessage = err instanceof Error ? err.message : String(err)
+      if (!errMessage?.includes('ERR_ABORTED')) {
+        const errCode = (err instanceof Error && 'code' in err) ? (err as { code?: unknown }).code : undefined
+        const error = getErrorInfo(typeof errCode === 'number' ? errCode : -1)
         this.notifyUpdate(tabId, { loading: false, error, title: error.title })
       }
     }
 
-    console.info(`[INFO][LuomiNestBrowser] Tab "${tab.title}" has been awakened from sleep mode`)
+    logger.info(`Tab "${tab.title}" has been awakened from sleep mode`)
   }
 
   createTab(url: string = DEFAULT_BROWSER_CONFIG.defaultUrl): Tab {
@@ -303,6 +308,7 @@ class TabManager {
       if (currentTab) {
         currentTab.active = false
         currentTab.lastActiveAt = Date.now()
+        this.onTabUpdate?.(this.activeTabId, { active: false })
 
         const currentView = this.views.get(this.activeTabId)
         if (currentView) {
@@ -339,7 +345,6 @@ class TabManager {
 
   closeTab(tabId: string): void {
     if (!this.window) return
-    if (this.tabs.size <= 1) return
 
     const tab = this.tabs.get(tabId)
     if (!tab) return
@@ -455,6 +460,41 @@ class TabManager {
   getActiveTab(): Tab | undefined {
     if (!this.activeTabId) return undefined
     return this.tabs.get(this.activeTabId)
+  }
+
+  /**
+   * 获取指定标签页的 WebContents（供自动化执行器使用）
+   * @param tabId 标签页 ID，默认当前活跃标签页
+   * @returns WebContents 实例；休眠/已销毁/不存在时返回 null
+   */
+  getWebContents(tabId?: string): WebContents | null {
+    const targetId = tabId || this.activeTabId
+    if (!targetId) return null
+
+    const tab = this.tabs.get(targetId)
+    if (!tab || tab.sleeping) return null
+
+    const view = this.views.get(targetId)
+    if (!view || isViewDestroyed(view)) return null
+
+    return view.webContents
+  }
+
+  /**
+   * 确保有活跃标签页：若当前无活跃 tab 则创建一个空白页
+   * @returns 活跃 Tab，窗口未初始化时返回 null
+   */
+  ensureActiveTab(): Tab | null {
+    if (!this.window) return null
+
+    if (this.activeTabId) {
+      const tab = this.tabs.get(this.activeTabId)
+      if (tab) return { ...tab }
+    }
+
+    // 无活跃标签页，创建一个
+    const tab = this.createTab(DEFAULT_BROWSER_CONFIG.defaultUrl)
+    return tab
   }
 
   getAllTabs(): Tab[] {

@@ -46,7 +46,7 @@ const resolveRedirectTarget = (): string => {
 
 // 通知路由守卫重新读取 token（Electron 主进程已自动生成，此处仅刷新缓存）
 const refreshAuthState = () => {
-  const invalidate = (window as any).__lumiInvalidateAuthToken
+  const invalidate = window.__lumiInvalidateAuthToken
   if (typeof invalidate === 'function') {
     invalidate()
   }

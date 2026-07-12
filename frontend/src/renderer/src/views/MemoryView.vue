@@ -24,6 +24,9 @@ import MemoryFactsTab from '../components/memory/MemoryFactsTab.vue'
 import MemoryKnowledgeTab from '../components/memory/MemoryKnowledgeTab.vue'
 import MemoryHistoryTab from '../components/memory/MemoryHistoryTab.vue'
 import type { ConfirmAction, LayerTab } from '../components/memory/types'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+
+const logger = createLuomiNestRendererLogger('Memory')
 
 const memoryStore = useMemoryStore()
 const toast = useToast()
@@ -398,7 +401,7 @@ let executeConfirm = async () => {
     showConfirm.value = false
     confirmAction.value = null
   } catch (error) {
-    console.error('操作失败:', error)
+    logger.error('操作失败:', error)
     toast.error('操作失败，请重试')
   } finally {
     isProcessing.value = false

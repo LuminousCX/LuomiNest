@@ -269,7 +269,7 @@ class LoopGuardMiddleware(AgentMiddleware):
     """检测工具调用循环边界，防止无限循环。
 
     - ctx.iteration >= max_iterations 时设 ctx.state["aborted"]=True 终止循环
-    - 无进展（iteration_content 为空且无 tool_calls）时记录 warning
+    - 无进展（本轮无 content、无 reasoning、无 tool_calls）时记录 warning
     """
 
     def __init__(self, max_iterations: int = 10) -> None:
@@ -286,9 +286,10 @@ class LoopGuardMiddleware(AgentMiddleware):
             return
 
         iteration_content = ctx.state.get("iteration_content", "")
+        iteration_reasoning = ctx.state.get("iteration_reasoning", "")
         tool_calls = ctx.state.get("tool_calls") or []
-        if not iteration_content and not tool_calls:
-            logger.warning("[LoopGuard] 无进展（空内容且无工具调用），终止循环")
+        if not iteration_content and not iteration_reasoning and not tool_calls:
+            logger.warning("[LoopGuard] 无进展（无内容、无推理、无工具调用），终止循环")
             ctx.state["aborted"] = True
 
 

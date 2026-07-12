@@ -165,13 +165,14 @@ const handleTestProvider = async () => {
     } else {
       toast.error(`检测失败：${result.error || '未知错误'}`)
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errMsg = (e instanceof Error ? e.message : String(e)) || '网络错误'
     testResult.value = {
       success: false,
       modelCount: 0,
-      error: e.message || '网络错误',
+      error: errMsg,
     }
-    toast.error(`检测失败：${e.message || '网络错误'}`)
+    toast.error(`检测失败：${errMsg}`)
   } finally {
     testingProvider.value = false
   }
@@ -197,9 +198,9 @@ const handleAddProvider = async () => {
     })
     close()
     toast.success(`供应商「${newProvider.value.name.trim() || newProvider.value.id.trim()}」添加成功`)
-  } catch (e: any) {
-    addProviderError.value = e.message || '添加失败'
-    toast.error(`添加供应商失败：${e.message || '未知错误'}`)
+  } catch (e: unknown) {
+    addProviderError.value = (e instanceof Error ? e.message : String(e)) || '添加失败'
+    toast.error(`添加供应商失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
   } finally {
     addProviderLoading.value = false
   }

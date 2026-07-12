@@ -42,46 +42,133 @@ from app.core.workflow.models import (
 WorkflowEventCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 
-# 工作流系统提示模板
-_WORKFLOW_SYSTEM_PROMPT = """你是 LuomiNest 主 Agent 工作流引擎，负责将用户的长任务请求分解为可执行的子任务计划。
+# 工作流系统提示模板（英文）
+_WORKFLOW_SYSTEM_PROMPT = """You are the LuomiNest main Agent workflow engine. Your role is to decompose complex user tasks into executable subtask plans.
 
-你的职责：
-1. 分析用户任务，判断需要调用哪些内部模块
-2. 生成结构化的执行计划（JSON 格式）
-3. 每个子任务必须指定要调用的内部工具和参数
+Your responsibilities:
+1. Analyze the user's task and determine which internal modules to invoke
+2. Generate a structured execution plan (JSON format)
+3. Each subtask must specify the internal tool to call and its arguments
 
-可用的内部模块接口：
+Available internal module interfaces:
 {available_tools}
 
-【输出格式 - 严格遵守】
-你必须只输出一个 JSON 对象，不要输出任何其他文字、解释、markdown 标记或代码块。
-JSON 对象格式如下：
+OUTPUT FORMAT - STRICTLY FOLLOW:
+You must output ONLY a JSON object. Do NOT output any other text, explanations, markdown, or code blocks.
+The JSON object format is:
 {{
-  "analysis": "任务分析摘要（简短）",
-  "plan": "执行计划描述（简短）",
+  "analysis": "Brief task analysis",
+  "plan": "Brief execution plan description",
   "tasks": [
     {{
-      "title": "子任务标题",
-      "description": "子任务描述",
-      "tool_name": "内部工具名称（如 browser.navigate）",
+      "title": "Subtask title",
+      "description": "What this subtask does",
+      "tool_name": "Internal tool name (e.g. browser.navigate, memory.search, schedule.create)",
       "arguments": {{}},
       "depends_on": [],
-      "priority": "normal|high|urgent|low"
+      "priority": "normal|high|urgent|low",
+      "node_type": "input|agent|tool|condition|output"
     }}
   ]
 }}
 
-注意事项：
-- tasks 数组中的子任务按依赖关系排序
-- depends_on 引用前面任务的 title
-- 如果任务不需要工具调用（纯文本回复、闲聊、简单问答），tasks 必须为空数组 []
-- 优先使用内部模块接口，而非通用工具
-- 不要将 JSON 包裹在 ```json``` 代码块中，直接输出纯 JSON
-- 即使是闲聊或简单问答，也必须返回合法的 JSON 对象"""
+Rules:
+- tasks array is ordered by dependency
+- depends_on references previous tasks' titles
+- If no tool call is needed (pure text reply, chat, simple Q&A), tasks MUST be an empty array []
+- Prefer internal module interfaces over generic tools
+- Do NOT wrap JSON in ```json``` code blocks; output pure JSON directly
+- Even for chat or simple Q&A, you must return a valid JSON object
+- node_type values: "input" for user request entry, "tool" for tool calls, "agent" for subagent delegation, "condition" for conditional branching, "output" for final result"""
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _repair_truncated_json(text: str) -> str | None:
+    """尝试修复因 token 限制截断的不完整 JSON。
+
+    当 LLM 输出因 finish_reason=length 被截断时，JSON 可能不完整。
+    策略：跟踪字符串上下文和括号栈，记录所有"安全截断点"（逗号后或闭合括号后），
+    从后往前尝试每个截断点，补全未闭合的括号后解析。
+
+    Returns:
+        修复后的 JSON 字符串（已验证可解析），或 None（无法修复）
+    """
+    text = text.strip()
+    if not text:
+        return None
+
+    # 定位第一个 { 开始位置
+    start = text.find("{")
+    if start == -1:
+        return None
+    text = text[start:]
+
+    in_string = False
+    escape = False
+    stack: list[str] = []
+    # 记录 (截断位置, 当时的栈状态快照)
+    safe_cuts: list[tuple[int, list[str]]] = []
+
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch in "{[":
+            stack.append(ch)
+        elif ch == "}":
+            if stack and stack[-1] == "{":
+                stack.pop()
+                if not stack:
+                    safe_cuts.append((i + 1, []))
+        elif ch == "]":
+            if stack and stack[-1] == "[":
+                stack.pop()
+                if stack:
+                    safe_cuts.append((i + 1, list(stack)))
+        elif ch == ",":
+            safe_cuts.append((i + 1, list(stack)))
+
+    # 如果栈为空，JSON 可能已经完整
+    if not stack:
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return text
+        except json.JSONDecodeError as e:
+            logger.debug("Initial JSON parse failed, will try safe-cut repair: {}", e)
+
+    # 从后往前尝试每个安全截断点
+    for cut_pos, cut_stack in reversed(safe_cuts):
+        if cut_stack:
+            # 仍有未闭合的括号，需截断并补全
+            repaired = text[:cut_pos].rstrip()
+            if repaired.endswith(","):
+                repaired = repaired[:-1]
+            for opener in reversed(cut_stack):
+                repaired += "]" if opener == "[" else "}"
+        else:
+            # 栈为空，截断点处是完整 JSON
+            repaired = text[:cut_pos]
+
+        try:
+            parsed = json.loads(repaired)
+            if isinstance(parsed, dict):
+                return repaired
+        except json.JSONDecodeError:
+            continue
+
+    return None
 
 
 def _extract_json_plan(text: str) -> dict[str, Any] | None:
@@ -92,6 +179,7 @@ def _extract_json_plan(text: str) -> dict[str, Any] | None:
     2. ``` ... ``` 代码块
     3. 包含 "tasks" 的 JSON 片段
     4. 直接解析整个文本为 JSON
+    5. 截断修复（finish_reason=length 时 JSON 不完整）
     """
     # 策略 1-3：正则匹配
     patterns = [
@@ -107,7 +195,16 @@ def _extract_json_plan(text: str) -> dict[str, Any] | None:
                 if isinstance(parsed, dict) and "tasks" in parsed:
                     return parsed
             except json.JSONDecodeError:
-                continue
+                # 尝试修复截断的 JSON
+                repaired = _repair_truncated_json(match)
+                if repaired:
+                    try:
+                        parsed = json.loads(repaired)
+                        if isinstance(parsed, dict) and "tasks" in parsed:
+                            logger.warning("[WorkflowEngine] JSON plan repaired from truncated output")
+                            return parsed
+                    except json.JSONDecodeError:
+                        continue
 
     # 策略 4：直接尝试解析整个文本为 JSON
     try:
@@ -116,6 +213,17 @@ def _extract_json_plan(text: str) -> dict[str, Any] | None:
             return parsed
     except json.JSONDecodeError:
         pass
+
+    # 策略 5：截断修复
+    repaired = _repair_truncated_json(text)
+    if repaired:
+        try:
+            parsed = json.loads(repaired)
+            if isinstance(parsed, dict) and "tasks" in parsed:
+                logger.warning("[WorkflowEngine] JSON plan repaired from truncated output")
+                return parsed
+        except json.JSONDecodeError:
+            pass
 
     return None
 
@@ -189,11 +297,16 @@ class WorkflowEngine:
         self,
         user_message: str,
         mode: WorkflowMode,
+        conversation_id: str | None = None,
+        skip_confirmation: bool | None = None,
     ) -> WorkflowSession:
         """根据执行模式创建工作流会话，注入 MODE_CONFIGS 中的参数
 
         P2 长任务执行模式：不同模式调整迭代次数、并发度、温度、max_tokens、
         是否跳过计划确认。配置在创建时固化到 session，运行时直接读取。
+
+        Args:
+            skip_confirmation: 覆盖模式默认的 skip_confirmation（None 表示使用模式默认值）
         """
         config = MODE_CONFIGS.get(mode, MODE_CONFIGS[WorkflowMode.STANDARD])
         return WorkflowSession(
@@ -204,7 +317,8 @@ class WorkflowEngine:
             planning_temperature=config["planning_temperature"],
             synthesis_temperature=config["synthesis_temperature"],
             planning_max_tokens=config["planning_max_tokens"],
-            skip_confirmation=config["skip_confirmation"],
+            skip_confirmation=skip_confirmation if skip_confirmation is not None else config["skip_confirmation"],
+            conversation_id=conversation_id,
         )
 
     async def submit(
@@ -214,6 +328,8 @@ class WorkflowEngine:
         model: str | None = None,
         event_callback: WorkflowEventCallback | None = None,
         mode: WorkflowMode = WorkflowMode.STANDARD,
+        conversation_id: str | None = None,
+        skip_confirmation: bool | None = None,
     ) -> WorkflowSession:
         """提交长任务到工作流引擎（非流式）
 
@@ -222,12 +338,14 @@ class WorkflowEngine:
             provider: LLM provider（默认使用系统配置）
             model: LLM model（默认使用系统配置）
             event_callback: 事件回调（可选），用于推送执行进度
-            mode: 工作流执行模式（flash/standard/pro/ultra）
+            mode: 工作流执行模式（standard/ultra）
+            conversation_id: 关联对话 ID（可选，用于持久化和前端跳转）
+            skip_confirmation: 覆盖模式默认的 skip_confirmation（None 表示使用模式默认值）
 
         Returns:
             WorkflowSession: 包含完整执行过程的会话对象
         """
-        session = self._create_session(user_message, mode)
+        session = self._create_session(user_message, mode, conversation_id, skip_confirmation=skip_confirmation)
         self._active_sessions[session.session_id] = session
         self._session_locks[session.session_id] = asyncio.Lock()
 
@@ -250,6 +368,8 @@ class WorkflowEngine:
         provider: str | None = None,
         model: str | None = None,
         mode: WorkflowMode = WorkflowMode.STANDARD,
+        conversation_id: str | None = None,
+        skip_confirmation: bool | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """提交长任务到工作流引擎（流式）
 
@@ -260,14 +380,16 @@ class WorkflowEngine:
             user_message: 用户的长任务请求
             provider: LLM provider
             model: LLM model
-            mode: 工作流执行模式（flash/standard/pro/ultra）
+            mode: 工作流执行模式（standard/ultra）
+            conversation_id: 关联对话 ID（可选，用于持久化和前端跳转）
+            skip_confirmation: 覆盖模式默认的 skip_confirmation（None 表示使用模式默认值）
 
         Yields:
             dict: 事件字典
         """
         from app.core.workflow.register_tools import set_emitter, remove_emitter
 
-        session = self._create_session(user_message, mode)
+        session = self._create_session(user_message, mode, conversation_id, skip_confirmation=skip_confirmation)
         self._active_sessions[session.session_id] = session
         self._session_locks[session.session_id] = asyncio.Lock()
 
@@ -414,6 +536,24 @@ class WorkflowEngine:
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} created {len(tasks)} WorkflowTask objects from plan")
         for i, t in enumerate(tasks):
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task[{i}]: id={t.task_id}, title={t.title}, tool={t.tool_name}, type={t.task_type.value}, priority={t.priority.value}, depends_on={t.depends_on}")
+
+        # 持久化会话和节点到数据库
+        try:
+            import json as _json
+            from app.services.workflow_persistence import save_workflow_session, save_workflow_nodes
+            await save_workflow_session(
+                session_id=session.session_id,
+                user_message=session.user_message,
+                mode=session.mode.value,
+                phase=session.phase.value,
+                analysis=plan.get("analysis"),
+                plan_json=_json.dumps(plan, ensure_ascii=False),
+                conversation_id=session.conversation_id,
+            )
+            await save_workflow_nodes(session.session_id, [t.to_dict() for t in tasks])
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} persisted to database")
+        except Exception as persist_err:
+            logger.warning(f"[WorkflowEngine] Persistence failed: {persist_err}")
 
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting plan_created: task_count={len(tasks)}")
         await self._emit(event_callback, {
@@ -565,7 +705,15 @@ class WorkflowEngine:
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} provider={provider}, model={model}")
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} user_message (len={len(session.user_message)}): {session.user_message[:300]}")
 
-        available_tools = internal_tool_registry.get_module_summary()
+        # 按模式过滤工具列表（STANDARD 排除 27 个细粒度 browser_action 工具）
+        from app.core.chat_mode import BROWSER_AUTOMATION_TOOL_NAMES
+        if session.mode == WorkflowMode.STANDARD:
+            exclude_tools = set(BROWSER_AUTOMATION_TOOL_NAMES)
+        else:
+            exclude_tools = set()
+        available_tools = internal_tool_registry.get_filtered_module_summary(
+            exclude_tools=exclude_tools,
+        )
         tools_text = json.dumps(available_tools, ensure_ascii=False, indent=2)
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} available_tools count={len(available_tools) if isinstance(available_tools, list) else 'N/A'}")
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} tools_text (len={len(tools_text)}): {tools_text[:500]}")
@@ -612,17 +760,27 @@ class WorkflowEngine:
         )
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} llm_adapter.chat returned, type={type(result).__name__}")
 
-        # return_raw=True 返回 dict: {"content", "reasoning", "tool_calls", "role"}
+        # return_raw=True 返回 dict: {"content", "reasoning", "tool_calls", "role", "finish_reason", "usage"}
         if isinstance(result, dict):
             content = result.get("content", "") or ""
             reasoning = result.get("reasoning", "") or ""
             tool_calls = result.get("tool_calls", [])
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} response dict: content_len={len(content)}, reasoning_len={len(reasoning)}, tool_calls={len(tool_calls) if tool_calls else 0}")
+            finish_reason = result.get("finish_reason", "stop")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} response dict: content_len={len(content)}, reasoning_len={len(reasoning)}, tool_calls={len(tool_calls) if tool_calls else 0}, finish_reason={finish_reason}")
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} reasoning (first 500): {reasoning[:500]}")
+
+            # 检测 LLM 输出截断
+            if finish_reason == "length":
+                logger.warning(
+                    "[WorkflowEngine] Session {} LLM output truncated (finish_reason=length, "
+                    "max_tokens={}). Attempting JSON repair...",
+                    sid, session.planning_max_tokens,
+                )
         else:
             # 兜底：return_raw 未生效时返回字符串
             content = str(result)
             reasoning = ""
+            finish_reason = "stop"
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} response is string (return_raw not effective), content_len={len(content)}")
 
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} raw content (first 800): {content[:800]}")
@@ -686,6 +844,13 @@ class WorkflowEngine:
                 f"[WorkflowEngine] Session {sid} no structured plan, using direct response"
             )
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} falling back to direct response as analysis")
+            # 如果 LLM 输出被截断且 JSON 修复失败，在 analysis 中附加提示
+            if finish_reason == "length":
+                return {
+                    "analysis": content + "\n\n[注意：LLM 输出因 token 限制被截断，JSON 计划不完整。请考虑使用 ULTRA 模式或简化任务。]",
+                    "plan": "",
+                    "tasks": [],
+                }
             return {"analysis": content, "plan": "", "tasks": []}
 
         return plan
@@ -724,6 +889,7 @@ class WorkflowEngine:
                 arguments=task_def.get("arguments", {}),
                 depends_on=depends_on_ids,
                 priority=priority,
+                node_type=task_def.get("node_type", "tool"),
             )
             workflow_tasks.append(task)
 

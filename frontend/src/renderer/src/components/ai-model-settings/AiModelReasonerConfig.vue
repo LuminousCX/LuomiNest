@@ -11,6 +11,9 @@ import {
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
 import type { ReasonerModelConfig } from './types'
+import { createLuomiNestRendererLogger } from '../../utils/logger'
+
+const logger = createLuomiNestRendererLogger('AiModel')
 
 const modelStore = useModelStore()
 const toast = useToast()
@@ -57,9 +60,9 @@ const handleFetchModels = async (providerId: string) => {
   try {
     await modelStore.fetchProviderModels(providerId)
     toast.info('模型列表已刷新')
-  } catch (e: any) {
-    console.error('Failed to fetch models:', e)
-    toast.error(`获取模型列表失败：${e.message || '未知错误'}`)
+  } catch (e: unknown) {
+    logger.error('Failed to fetch models:', e)
+    toast.error(`获取模型列表失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
   }
 }
 

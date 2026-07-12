@@ -50,8 +50,8 @@ async function handleInstall() {
 
     // 开始轮询进度
     store.startProgressPolling(props.item.id)
-  } catch (e: any) {
-    error.value = e.message || '安装请求失败'
+  } catch (e: unknown) {
+    error.value = (e instanceof Error ? e.message : String(e)) || '安装请求失败'
     store.setInstallProgress(props.item.id, { itemId: props.item.id, status: 'error', progress: 0, error: error.value ?? undefined })
   } finally {
     loading.value = false
@@ -64,8 +64,8 @@ async function handleUninstall() {
   try {
     await api.apiPost('/marketplace/uninstall', { itemId: props.item.id })
     store.uninstallItem(props.item.id)
-  } catch (e: any) {
-    error.value = e.message || '卸载失败'
+  } catch (e: unknown) {
+    error.value = (e instanceof Error ? e.message : String(e)) || '卸载失败'
     // 保持当前安装状态不变
   } finally {
     loading.value = false

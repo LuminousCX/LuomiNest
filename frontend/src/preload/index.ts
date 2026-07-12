@@ -1,4 +1,12 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import { DesktopPetIpcChannels } from '@shared/ipc-types'
+import type {
+  TTSConfig,
+  STTConfig,
+  PetModelInfo,
+  BrowserAutomationAction,
+  BackendStageEvent,
+} from '@shared/ipc-types'
 
 export interface Tab {
   id: string
@@ -32,9 +40,9 @@ const api = {
     getTheme: () => ipcRenderer.invoke('config:getTheme'),
     setTheme: (theme: 'light' | 'dark' | 'system') => ipcRenderer.invoke('config:setTheme', theme),
     getTTS: () => ipcRenderer.invoke('config:getTTS'),
-    setTTS: (updates: any) => ipcRenderer.invoke('config:setTTS', updates),
+    setTTS: (updates: Partial<TTSConfig>) => ipcRenderer.invoke('config:setTTS', updates),
     getSTT: () => ipcRenderer.invoke('config:getSTT'),
-    setSTT: (updates: any) => ipcRenderer.invoke('config:setSTT', updates),
+    setSTT: (updates: Partial<STTConfig>) => ipcRenderer.invoke('config:setSTT', updates),
     getAll: () => ipcRenderer.invoke('config:getAll'),
   },
 
@@ -69,6 +77,11 @@ const api = {
     fetchUrl: (url: string) => ipcRenderer.invoke('browser:fetchUrl', url)
   },
 
+  browserAutomation: {
+    execute: (action: BrowserAutomationAction, args?: Record<string, unknown>) =>
+      ipcRenderer.invoke('browser:automation', action, args || {})
+  },
+
   avatar: {
     importModel: () => ipcRenderer.invoke('avatar:importModel'),
     listImportedModels: () => ipcRenderer.invoke('avatar:listImportedModels'),
@@ -77,10 +90,10 @@ const api = {
   },
 
   desktopPet: {
-    open: (modelInfo?: any) => ipcRenderer.invoke('desktop-pet:open', modelInfo),
+    open: (modelInfo?: PetModelInfo) => ipcRenderer.invoke('desktop-pet:open', modelInfo),
     close: () => ipcRenderer.invoke('desktop-pet:close'),
     isRunning: () => ipcRenderer.invoke('desktop-pet:isRunning'),
-    loadModel: (modelInfo: any) => ipcRenderer.invoke('desktop-pet:loadModel', modelInfo),
+    loadModel: (modelInfo: PetModelInfo) => ipcRenderer.invoke('desktop-pet:loadModel', modelInfo),
     show: () => ipcRenderer.invoke('desktop-pet:show'),
     hide: () => ipcRenderer.invoke('desktop-pet:hide'),
     triggerMotion: (group: string, index: number) => ipcRenderer.invoke('desktop-pet:triggerMotion', group, index),
@@ -98,53 +111,36 @@ const api = {
   },
 
   backend: {
-    subscribeStage: (callback: (data: { stage: string; detail?: string }) => void): (() => void) => {
-      const handler = (_event: unknown, data: { stage: string; detail?: string }) => callback(data)
+    subscribeStage: (callback: (data: BackendStageEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, data: BackendStageEvent) => callback(data)
       ipcRenderer.on('backend:stage', handler)
-      ipcRenderer.invoke('backend:subscribe')
-      return () => ipcRenderer.removeListener('backend:stage', handler)
+      ipcRenderer.invoke('backend:subscribe').catch((err: unknown) => {
+        console.error('[Preload] Failed to subscribe to backend stage:', err)
+      })
+      return () => ipcRenderer.removeListener('backend:stage', handler as never)
     }
   }
 }
 
-const ALLOWED_SEND_CHANNELS = new Set([
-  'desktop-pet:set-ignore-mouse-events',
-  'desktop-pet:resize-window',
-  'desktop-pet:start-drag',
-  'desktop-pet:drag-window',
-  'desktop-pet:end-drag',
-  'desktop-pet:model-capabilities-response',
-  'desktop-pet:show-context-menu',
-])
+const ALLOWED_SEND_CHANNELS: Set<string> = new Set(DesktopPetIpcChannels.SEND)
 
-const ALLOWED_ON_CHANNELS = new Set([
-  'desktop-pet:load-model',
-  'desktop-pet:trigger-motion',
-  'desktop-pet:trigger-expression',
-  'desktop-pet:lip-sync',
-  'desktop-pet:pad-emotion',
-  'desktop-pet:set-core-param',
-  'desktop-pet:get-model-capabilities',
-  'desktop-pet:subtitle',
-  'desktop-pet:subtitle-hide',
-  'backend:stage'
-])
+const ALLOWED_ON_CHANNELS: Set<string> = new Set(DesktopPetIpcChannels.ON)
 
 const electronBridge = {
   ipcRenderer: {
-    on: (channel: string, listener: (event: any, ...args: any[]) => void) => {
+    on: (channel: string, listener: (event: IpcRendererEvent, ...args: unknown[]) => void) => {
       if (ALLOWED_ON_CHANNELS.has(channel)) {
         ipcRenderer.on(channel, listener)
       } else {
         console.warn(`[Preload] Blocked ipcRenderer.on for unlisted channel: ${channel}`)
       }
     },
-    removeListener: (channel: string, listener: (...args: any[]) => void) => {
+    removeListener: (channel: string, listener: (event: IpcRendererEvent, ...args: unknown[]) => void) => {
       if (ALLOWED_ON_CHANNELS.has(channel)) {
-        ipcRenderer.removeListener(channel, listener)
+        ipcRenderer.removeListener(channel, listener as never)
       }
     },
-    send: (channel: string, ...args: any[]) => {
+    send: (channel: string, ...args: unknown[]) => {
       if (ALLOWED_SEND_CHANNELS.has(channel)) {
         ipcRenderer.send(channel, ...args)
       } else {
@@ -162,8 +158,7 @@ if (process.contextIsolated) {
     console.error('[ERROR][LuomiNestPreload] Failed to expose electron bridge:', error)
   }
 } else {
-  // @ts-ignore
-  window.api = api
-  // @ts-ignore
-  window.electron = electronBridge
+  const globalObj = globalThis as Record<string, unknown>
+  globalObj.api = api
+  globalObj.electron = electronBridge
 }

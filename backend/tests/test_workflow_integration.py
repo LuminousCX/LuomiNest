@@ -4,7 +4,7 @@
 直接调用 WorkflowEngine.submit_stream() 测试整个工作流流程。
 
 测试覆盖：
-- P0: 计划确认机制（使用 flash 模式跳过确认，自动执行）
+- P0: 计划确认机制（使用 ultra 模式 + skip_confirmation=True 跳过确认，自动执行）
 - P1: 记忆工具调用
 - P2: 执行模式参数注入
 - P3: 记忆自动注入 + 工具结果压缩
@@ -69,7 +69,7 @@ async def run_workflow_test():
     print("=" * 80)
     print()
     print(f"任务描述: {MOCK_LONG_TASK[:100]}...")
-    print(f"执行模式: flash（闪电模式，跳过计划确认）")
+    print(f"执行模式: ultra（超长模式，skip_confirmation=True 用于无人值守测试）")
     print(f"Provider: deepseek")
     print()
     print("-" * 80)
@@ -80,13 +80,14 @@ async def run_workflow_test():
     start_time = time.time()
 
     try:
-        # 使用 flash 模式（skip_confirmation=True），自动执行不需用户确认
+        # 使用 ultra 模式 + skip_confirmation=True，自动执行不需用户确认
         # 这样测试脚本可以无人值守运行
         async for event in workflow_engine.submit_stream(
             user_message=MOCK_LONG_TASK,
             provider="deepseek",
             model="deepseek-chat",
-            mode=WorkflowMode.FLASH,
+            mode=WorkflowMode.ULTRA,
+            skip_confirmation=True,
         ):
             events.append(event)
             event_type = event.get("type", "unknown")
@@ -124,7 +125,7 @@ async def run_workflow_test():
 
             elif event_type == "plan_auto_confirmed":
                 task_count = data.get("task_count", 0)
-                print(f"[事件] 计划自动确认(flash模式): {task_count} 个子任务")
+                print(f"[事件] 计划自动确认(skip_confirmation): {task_count} 个子任务")
                 event_summary.append("plan_auto_confirmed")
 
             elif event_type == "plan_pending_confirmation":
@@ -207,9 +208,9 @@ async def run_workflow_test():
     has_plan = any(e["type"] == "plan_created" for e in events)
     checks.append(("计划创建", has_plan))
 
-    # 4. flash 模式自动确认
+    # 4. skip_confirmation 自动确认
     has_auto_confirm = any(e["type"] == "plan_auto_confirmed" for e in events)
-    checks.append(("Flash自动确认(P2)", has_auto_confirm))
+    checks.append(("Skip确认(P2)", has_auto_confirm))
 
     # 5. 任务执行
     has_task_started = any(e["type"] == "task_started" for e in events)

@@ -1,169 +1,53 @@
 /// <reference types="vite/client" />
 
-export interface TabInfo {
-  id: string
-  title: string
-  url: string
-  active: boolean
-  loading?: boolean
-  favicon?: string
-  error?: TabErrorInfo
-  captchaDetected?: boolean
-  sleeping?: boolean
-}
-
-export interface TabErrorInfo {
-  code: number
-  title: string
-  message: string
-}
-
-export interface CookieInfo {
-  name: string
-  value: string
-  domain?: string
-  path?: string
-  secure?: boolean
-  httpOnly?: boolean
-  expirationDate?: number
-}
-
-export interface NavigationStateInfo {
-  canGoBack: boolean
-  canGoForward: boolean
-}
-
-export interface PetModelInfo {
-  id: string
-  name: string
-  url: string
-  scale: number
-  type: string
-  tags: string[]
-}
-
-export interface ModelCapabilities {
-  motions: string[]
-  expressions: string[]
-  modelName: string
-  isReady: boolean
-}
-
-export interface TTSConfig {
-  provider?: string
-  model?: string
-  voice?: string
-  speed?: number
-}
-
-export interface STTConfig {
-  provider?: string
-  model?: string
-  language?: string
-  autoSend?: boolean
-  autoSendDelay?: number
-}
-
-export interface AppConfig {
-  theme?: string
-  provider?: string
-  model?: string
-  temperature?: number
-  maxTokens?: number
-  topP?: number
-  reasonerProvider?: string
-  reasonerModel?: string
-  reasonerTemperature?: number
-  reasonerMaxTokens?: number
-  reasonerEffort?: string
-  tts?: TTSConfig
-  stt?: STTConfig
-}
-
-export interface ElectronApi {
-  window: {
-    minimize: () => Promise<void>
-    maximize: () => Promise<void>
-    close: () => Promise<void>
-    isMaximized: () => Promise<boolean>
-  }
-  app: {
-    getVersion: () => Promise<string>
-    getName: () => Promise<string>
-  }
-  auth: {
-    getToken: () => Promise<string | undefined>
-  }
-  config: {
-    getTheme: () => Promise<string>
-    setTheme: (theme: 'light' | 'dark' | 'system') => Promise<void>
-    getTTS: () => Promise<TTSConfig>
-    setTTS: (updates: Partial<TTSConfig>) => Promise<void>
-    getSTT: () => Promise<STTConfig>
-    setSTT: (updates: Partial<STTConfig>) => Promise<void>
-    getAll: () => Promise<AppConfig>
-  }
-  tab: {
-    create: (url?: string) => Promise<TabInfo>
-    activate: (tabId: string) => Promise<void>
-    close: (tabId: string) => Promise<void>
-    getAll: () => Promise<TabInfo[]>
-    getActive: () => Promise<TabInfo | undefined>
-    reload: (tabId?: string) => Promise<void>
-    goBack: (tabId?: string) => Promise<void>
-    goForward: (tabId?: string) => Promise<void>
-    getNavigationState: (tabId?: string) => Promise<NavigationStateInfo>
-    hideAll: () => Promise<void>
-    showActive: () => Promise<void>
-    setBoundsConfig: (config: { sidebarWidth?: number; devPanelHeight?: number }) => Promise<void>
-    cleanup: () => Promise<void>
-    getCookies: () => Promise<CookieInfo[]>
-    clearData: () => Promise<void>
-  }
-  avatar: {
-    importModel: () => Promise<{
-      success: boolean
-      error?: string
-      modelInfo?: PetModelInfo
-    }>
-    listImportedModels: () => Promise<PetModelInfo[]>
-    deleteModel: (modelName: string) => Promise<{ success: boolean; error?: string }>
-    getImportedModelsPath: () => Promise<string>
-  }
-  browserSearch: {
-    search: (query: string) => Promise<any[]>
-    fetchUrl: (url: string) => Promise<string>
-  }
-  desktopPet: {
-    open: (modelInfo?: PetModelInfo) => Promise<{ success: boolean }>
-    close: () => Promise<{ success: boolean }>
-    isRunning: () => Promise<boolean>
-    loadModel: (modelInfo: PetModelInfo) => Promise<{ success: boolean; error?: string }>
-    show: () => Promise<{ success: boolean }>
-    hide: () => Promise<{ success: boolean }>
-    triggerMotion: (group: string, index: number) => Promise<{ success: boolean }>
-    triggerExpression: (name: string) => Promise<{ success: boolean }>
-    setPosition: (x: number, y: number) => Promise<{ success: boolean }>
-    setScale: (scale: number) => Promise<{ success: boolean }>
-    driveLipSync: (value: number) => Promise<{ success: boolean }>
-    drivePadEmotion: (pleasure: number, arousal: number, dominance: number) => Promise<{ success: boolean }>
-    setCoreParam: (paramId: string, value: number) => Promise<{ success: boolean }>
-    getModelCapabilities: () => Promise<ModelCapabilities | null>
-    sendSubtitle: (text: string) => Promise<{ success: boolean }>
-    hideSubtitle: () => Promise<{ success: boolean }>
-  }
-}
+import type { ElectronApi, ExposedIpcRenderer } from '@shared/ipc-types'
 
 declare global {
   interface Window {
-    Live2DCubismCore: any
+    /** Live2D Cubism Core 原生库（第三方，无 TypeScript 类型声明） */
+    Live2DCubismCore: { [key: string]: unknown }
+    /** preload 通过 contextBridge 暴露的 API */
     api: ElectronApi
+    /** preload 通过 contextBridge 暴露的受限 ipcRenderer */
     electron?: {
-      ipcRenderer: {
-        on: (channel: string, listener: (event: any, ...args: any[]) => void) => void
-        removeListener: (channel: string, listener: (...args: any[]) => void) => void
-        send: (channel: string, ...args: any[]) => void
-      }
+      ipcRenderer: ExposedIpcRenderer
     }
+    /** 认证 token 失效时的回調（由 router 注入） */
+    __lumiInvalidateAuthToken?: () => void
+    /** Web Speech API 语音识别构造器（标准前缀） */
+    SpeechRecognition?: new () => SpeechRecognitionInstance
+    /** Web Speech API 语音识别构造器（WebKit 前缀） */
+    webkitSpeechRecognition?: new () => SpeechRecognitionInstance
+  }
+
+  /** Web Speech API 语音识别结果项 */
+  interface SpeechRecognitionResult {
+    isFinal: boolean
+    0: { transcript: string }
+    length: number
+  }
+
+  /** Web Speech API 语音识别事件 */
+  interface SpeechRecognitionEvent {
+    resultIndex: number
+    results: { length: number; [index: number]: SpeechRecognitionResult }
+  }
+
+  /** Web Speech API 语音识别错误事件 */
+  interface SpeechRecognitionErrorEvent {
+    error: string
+  }
+
+  /** Web Speech API 语音识别实例 */
+  interface SpeechRecognitionInstance {
+    lang: string
+    continuous: boolean
+    interimResults: boolean
+    start: () => void
+    stop: () => void
+    abort: () => void
+    onresult: ((event: SpeechRecognitionEvent) => void) | null
+    onerror: ((event: SpeechRecognitionErrorEvent) => void) | null
+    onend: (() => void) | null
   }
 }

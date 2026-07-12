@@ -7,14 +7,15 @@ internal_tool_registry，供工作流引擎调度。
 执行后通过 WorkflowEventEmitter 推送结构化事件到前端。
 """
 import json
-import uuid
 from typing import Any
 
 from loguru import logger
 
+from app.core.tools.builtin.browser_automation import BROWSER_ACTION_SPECS, _format_output
 from app.core.workflow.event_emitter import WorkflowEventEmitter
 from app.core.workflow.internal_registry import internal_tool_registry
 from app.core.workflow.models import WorkflowTaskResult
+from app.services.browser_automation_client import execute_browser_action
 
 # 当前活跃的事件推送器（由 WorkflowEngine 在执行前设置）
 # key: session_id, value: WorkflowEventEmitter
@@ -39,48 +40,42 @@ def _get_emitter() -> WorkflowEventEmitter | None:
     return list(_active_emitters.values())[-1]
 
 
-async def _browser_navigate(args: dict[str, Any]) -> WorkflowTaskResult:
-    """浏览器导航：在工作台打开指定 URL"""
-    url = args.get("url", "")
-    title = args.get("title", "")
-    if not url:
-        return WorkflowTaskResult(success=False, error="Missing required parameter: url")
+def _make_browser_bridge_handler(tool_name: str, action: str, timeout: float):
+    """创建浏览器自动化桥接 handler
 
-    try:
-        from app.core.tools.builtin.subagent_tool import emit_luominest_subagent_event
+    将工作流引擎的工具调用桥接到 execute_browser_action，
+    通过 WebSocket 调用前端 Electron Main 的 LuomiAutomationExecutor 执行真实操作。
 
-        tab_id = f"tab_{uuid.uuid4().hex[:8]}"
-        await emit_luominest_subagent_event({
-            "browser_action": True,
-            "action": "create_tab",
-            "tab_id": tab_id,
-            "url": url,
-            "title": title or url,
-        })
-
-        # 推送工作流事件
-        emitter = _get_emitter()
-        if emitter:
-            await emitter.emit_browser_action(
-                action="navigate",
-                url=url,
-                title=title or url,
-                tab_id=tab_id,
+    Args:
+        tool_name: 工具名（如 browser_navigate，用于日志和输出格式化）
+        action: 前端动作名（如 navigate）
+        timeout: 超时秒数
+    """
+    async def handler(args: dict[str, Any]) -> WorkflowTaskResult:
+        try:
+            data = await execute_browser_action(action, args, timeout=timeout)
+            output = _format_output(tool_name, data)
+            logger.info(f"[Workflow:{tool_name}] action={action} 执行成功")
+            return WorkflowTaskResult(
+                success=True,
+                output=output,
+                metadata=data,
             )
-
-        logger.info(f"[Workflow:browser.navigate] tab={tab_id}, url={url}")
-        return WorkflowTaskResult(
-            success=True,
-            output=f"已在浏览器中打开: {url}",
-            metadata={"tab_id": tab_id, "url": url},
-        )
-    except Exception as e:
-        logger.error("[Workflow:browser.navigate] Failed: {}", str(e), exc_info=True)
-        return WorkflowTaskResult(success=False, error=str(e))
+        except ConnectionError as e:
+            logger.warning(f"[Workflow:{tool_name}] 浏览器未连接: {e}")
+            return WorkflowTaskResult(success=False, error=str(e))
+        except Exception as e:
+            logger.error(f"[Workflow:{tool_name}] Failed: {e}", exc_info=True)
+            return WorkflowTaskResult(success=False, error=str(e))
+    return handler
 
 
 async def _browser_search(args: dict[str, Any]) -> WorkflowTaskResult:
-    """浏览器搜索：在工作台打开搜索结果"""
+    """浏览器搜索：在浏览器中打开搜索结果页
+
+    高层语义工具，构建搜索 URL 后调用 execute_browser_action("navigate") 导航。
+    不属于 29 个细粒度浏览器自动化工具，STANDARD 模式下可用。
+    """
     query = args.get("query", "")
     engine = args.get("engine", "google")
     if not query:
@@ -94,7 +89,20 @@ async def _browser_search(args: dict[str, Any]) -> WorkflowTaskResult:
     base_url = engine_urls.get(engine, engine_urls["google"])
     url = f"{base_url}{query}"
 
-    return await _browser_navigate({"url": url, "title": f"搜索: {query}"})
+    try:
+        await execute_browser_action("navigate", {"url": url})
+        logger.info(f"[Workflow:browser.search] query={query}, engine={engine}")
+        return WorkflowTaskResult(
+            success=True,
+            output=f"已在浏览器中搜索「{query}」（{engine}）: {url}",
+            metadata={"url": url, "engine": engine, "action": "navigate"},
+        )
+    except ConnectionError as e:
+        logger.warning(f"[Workflow:browser.search] 浏览器未连接: {e}")
+        return WorkflowTaskResult(success=False, error=str(e))
+    except Exception as e:
+        logger.error("[Workflow:browser.search] Failed: {}", str(e), exc_info=True)
+        return WorkflowTaskResult(success=False, error=str(e))
 
 
 async def _schedule_create(args: dict[str, Any]) -> WorkflowTaskResult:
@@ -562,81 +570,6 @@ async def _schedule_delete(args: dict[str, Any]) -> WorkflowTaskResult:
         )
     except Exception as e:
         logger.error("[Workflow:schedule.delete] Failed: {}", str(e), exc_info=True)
-        return WorkflowTaskResult(success=False, error=str(e))
-
-
-async def _browser_open_tab(args: dict[str, Any]) -> WorkflowTaskResult:
-    """浏览器打开新标签页（与 navigate 区分：open_tab 始终新开标签）"""
-    url = args.get("url", "")
-    title = args.get("title", "")
-    purpose = args.get("purpose", "")
-    if not url:
-        return WorkflowTaskResult(success=False, error="Missing required parameter: url")
-
-    try:
-        from app.core.tools.builtin.subagent_tool import emit_luominest_subagent_event
-
-        tab_id = f"tab_{uuid.uuid4().hex[:8]}"
-        await emit_luominest_subagent_event({
-            "browser_action": True,
-            "action": "open_tab",
-            "tab_id": tab_id,
-            "url": url,
-            "title": title or url,
-            "purpose": purpose,
-        })
-
-        emitter = _get_emitter()
-        if emitter:
-            await emitter.emit_browser_action(
-                action="open_tab",
-                url=url,
-                title=title or url,
-                tab_id=tab_id,
-                purpose=purpose,
-            )
-
-        logger.info(f"[Workflow:browser.open_tab] tab={tab_id}, url={url}")
-        return WorkflowTaskResult(
-            success=True,
-            output=f"已在新标签页打开: {url}",
-            metadata={"tab_id": tab_id, "url": url},
-        )
-    except Exception as e:
-        logger.error("[Workflow:browser.open_tab] Failed: {}", str(e), exc_info=True)
-        return WorkflowTaskResult(success=False, error=str(e))
-
-
-async def _browser_close_tab(args: dict[str, Any]) -> WorkflowTaskResult:
-    """浏览器关闭指定标签页"""
-    tab_id = args.get("tab_id", "")
-    if not tab_id:
-        return WorkflowTaskResult(success=False, error="Missing required parameter: tab_id")
-
-    try:
-        from app.core.tools.builtin.subagent_tool import emit_luominest_subagent_event
-
-        await emit_luominest_subagent_event({
-            "browser_action": True,
-            "action": "close_tab",
-            "tab_id": tab_id,
-        })
-
-        emitter = _get_emitter()
-        if emitter:
-            await emitter.emit_browser_action(
-                action="close_tab",
-                tab_id=tab_id,
-            )
-
-        logger.info(f"[Workflow:browser.close_tab] tab={tab_id}")
-        return WorkflowTaskResult(
-            success=True,
-            output=f"已关闭标签页: {tab_id}",
-            metadata={"tab_id": tab_id},
-        )
-    except Exception as e:
-        logger.error("[Workflow:browser.close_tab] Failed: {}", str(e), exc_info=True)
         return WorkflowTaskResult(success=False, error=str(e))
 
 
@@ -1353,27 +1286,27 @@ async def register_internal_tools() -> None:
 
     在应用启动时调用（app_factory.py lifespan）。
     """
-    # 浏览器模块
-    await internal_tool_registry.register(
-        name="browser.navigate",
-        module="browser",
-        description="在 LuomiNest 浏览器页面中打开指定 URL",
-        handler=_browser_navigate,
-        parameters_schema={
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "要打开的 URL"},
-                "title": {"type": "string", "description": "标签页标题（可选）"},
-            },
-            "required": ["url"],
-        },
-        is_concurrent_safe=True,
-    )
+    # ─── 浏览器自动化模块（29 个真实工具，桥接到 execute_browser_action）───
+    # 通过 WebSocket 调用前端 Electron Main 的 LuomiAutomationExecutor 执行真实操作
+    # 命名规范：browser.{action}（如 browser.navigate），与 BROWSER_AUTOMATION_TOOL_NAMES 一致
+    for _tool_name, _spec in BROWSER_ACTION_SPECS.items():
+        _action = _spec["action"]
+        _internal_name = f"browser.{_action}"
+        await internal_tool_registry.register(
+            name=_internal_name,
+            module="browser",
+            description=_spec["description"],
+            handler=_make_browser_bridge_handler(_tool_name, _action, _spec.get("timeout", 30.0)),
+            parameters_schema=_spec["parameters"],
+            is_concurrent_safe=True,
+            timeout_seconds=int(_spec.get("timeout", 30.0)) + 5,
+        )
 
+    # ─── 浏览器语义工具（高层封装，STANDARD 模式可用）───
     await internal_tool_registry.register(
         name="browser.search",
         module="browser",
-        description="在浏览器中执行搜索",
+        description="在浏览器中执行搜索（构建搜索 URL 并导航）",
         handler=_browser_search,
         parameters_schema={
             "type": "object",
@@ -1546,39 +1479,6 @@ async def register_internal_tools() -> None:
             "required": ["task_id"],
         },
         is_concurrent_safe=False,
-    )
-
-    # ─── 浏览器模块（补充标签页管理）───
-    await internal_tool_registry.register(
-        name="browser.open_tab",
-        module="browser",
-        description="在浏览器中打开新标签页（始终新开标签，不在当前标签导航）",
-        handler=_browser_open_tab,
-        parameters_schema={
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "要打开的 URL"},
-                "title": {"type": "string", "description": "标签页标题（可选）"},
-                "purpose": {"type": "string", "description": "打开目的说明（可选，用于展示）"},
-            },
-            "required": ["url"],
-        },
-        is_concurrent_safe=True,
-    )
-
-    await internal_tool_registry.register(
-        name="browser.close_tab",
-        module="browser",
-        description="关闭浏览器中指定的标签页",
-        handler=_browser_close_tab,
-        parameters_schema={
-            "type": "object",
-            "properties": {
-                "tab_id": {"type": "string", "description": "要关闭的标签页 ID"},
-            },
-            "required": ["tab_id"],
-        },
-        is_concurrent_safe=True,
     )
 
     # ─── 记忆中枢模块（补充 facts CRUD + 摘要/知识/画像/蒸馏）───
