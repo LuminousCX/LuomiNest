@@ -90,7 +90,7 @@ async def _browser_search(args: dict[str, Any]) -> WorkflowTaskResult:
     url = f"{base_url}{query}"
 
     try:
-        data = await execute_browser_action("navigate", {"url": url})
+        await execute_browser_action("navigate", {"url": url})
         logger.info(f"[Workflow:browser.search] query={query}, engine={engine}")
         return WorkflowTaskResult(
             success=True,
