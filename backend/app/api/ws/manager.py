@@ -42,8 +42,8 @@ class LuomiNestBrowserWSManager:
         if self._connection is not None:
             try:
                 await self._connection.close(code=1000, reason="Replaced by new connection")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"[BrowserWS] 关闭旧连接失败，继续使用新连接: {e}")
             logger.info("[BrowserWS] 旧连接被新连接顶替")
 
         self._connection = ws
