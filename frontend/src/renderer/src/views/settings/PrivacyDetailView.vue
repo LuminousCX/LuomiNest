@@ -155,6 +155,9 @@ const sectionIconMap: Record<string, typeof Shield> = {
 
 const sectionIcon = (title: string) => sectionIconMap[title] ?? Shield
 
+const regionSection = sections.find((s) => s.regions)
+const regionCount = regionSection?.regions?.length ?? 0
+
 const visibleSections = ref<Set<number>>(new Set([0]))
 let observer: IntersectionObserver | null = null
 
@@ -207,6 +210,22 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
             LuomiNest 由 LuminousChenXi 团队开发。我们深知隐私的重要性，致力于保护用户的数据安全。
             本隐私政策详细说明了本应用如何收集、使用、存储和保护您的信息。
           </p>
+          <div class="lumi-settings-hero__stats">
+            <div class="lumi-settings-hero__stat">
+              <span class="lumi-settings-hero__stat-value">{{ sections.length }}</span>
+              <span class="lumi-settings-hero__stat-label">核心原则</span>
+            </div>
+            <div class="lumi-settings-hero__divider"></div>
+            <div class="lumi-settings-hero__stat">
+              <span class="lumi-settings-hero__stat-value">{{ regionCount }}</span>
+              <span class="lumi-settings-hero__stat-label">合规地区</span>
+            </div>
+            <div class="lumi-settings-hero__divider"></div>
+            <div class="lumi-settings-hero__stat">
+              <span class="lumi-settings-hero__stat-value">AES-256</span>
+              <span class="lumi-settings-hero__stat-label">加密标准</span>
+            </div>
+          </div>
         </div>
       </section>
 

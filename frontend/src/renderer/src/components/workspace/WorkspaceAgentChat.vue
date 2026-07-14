@@ -683,7 +683,7 @@ defineExpose({
   font-weight: 500;
   color: var(--lumi-accent);
   background: var(--lumi-accent-light);
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -790,7 +790,7 @@ defineExpose({
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
-  transition: all var(--duration-normal) var(--ease-in-out);
+  transition: background-color var(--duration-normal) var(--ease-in-out), color var(--duration-normal) var(--ease-in-out);
 }
 
 .message-row:hover .user-message {
@@ -815,7 +815,7 @@ defineExpose({
   font-size: var(--text-sm);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--duration-leave);
+  transition: background-color var(--duration-leave), color var(--duration-leave), border-color var(--duration-leave);
 }
 
 .message-file-item:hover {
@@ -985,7 +985,7 @@ defineExpose({
   border: 1px solid transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
   padding: 0;
 }
 
@@ -1063,7 +1063,7 @@ defineExpose({
   color: var(--text-muted);
   cursor: pointer;
   padding: 0;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .v-btn:hover:not(:disabled) {
@@ -1154,7 +1154,7 @@ defineExpose({
   align-items: center;
   justify-content: center;
   z-index: var(--z-sticky);
-  transition: all var(--duration-normal) var(--ease-in-out);
+  transition: background-color var(--duration-normal) var(--ease-in-out), color var(--duration-normal) var(--ease-in-out), box-shadow var(--duration-normal) var(--ease-in-out), opacity var(--duration-normal) var(--ease-in-out);
 }
 
 .scroll-to-bottom-btn:hover {
@@ -1191,7 +1191,7 @@ defineExpose({
   color: var(--text-secondary);
   background: var(--workspace-card);
   box-shadow: var(--shadow-xs);
-  transition: all var(--duration-normal) var(--ease-in-out);
+  transition: background-color var(--duration-normal) var(--ease-in-out), color var(--duration-normal) var(--ease-in-out), box-shadow var(--duration-normal) var(--ease-in-out);
   cursor: pointer;
 }
 
@@ -1217,7 +1217,7 @@ defineExpose({
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm), var(--shadow-inset);
   overflow: visible;
-  transition: all var(--duration-normal) var(--ease-in-out);
+  transition: box-shadow var(--duration-normal) var(--ease-in-out), background-color var(--duration-normal) var(--ease-in-out);
 }
 
 .input-skills-picker {
@@ -1282,7 +1282,7 @@ defineExpose({
   font-size: var(--text-sm);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all var(--duration-normal) var(--ease-in-out);
+  transition: background-color var(--duration-normal) var(--ease-in-out), color var(--duration-normal) var(--ease-in-out);
   white-space: nowrap;
 }
 
@@ -1354,7 +1354,7 @@ defineExpose({
   padding: var(--space-2) 10px;
   border-radius: var(--radius-md);
   text-align: left;
-  transition: all var(--duration-normal) var(--ease-in-out);
+  transition: background-color var(--duration-normal) var(--ease-in-out), color var(--duration-normal) var(--ease-in-out);
 }
 
 .dropdown-item:hover {
@@ -1430,7 +1430,7 @@ defineExpose({
   background: var(--lumi-brand);
   color: var(--text-inverse);
   cursor: pointer;
-  transition: all var(--duration-normal) var(--ease-in-out);
+  transition: background-color var(--duration-normal) var(--ease-in-out), color var(--duration-normal) var(--ease-in-out), box-shadow var(--duration-normal) var(--ease-in-out);
   margin-left: var(--space-1);
 }
 
@@ -1737,7 +1737,7 @@ defineExpose({
 }
 
 .msg-appear-enter-active {
-  transition: all var(--duration-enter) var(--ease-out-expo);
+  transition: opacity var(--duration-enter) var(--ease-out-expo), transform var(--duration-enter) var(--ease-out-expo);
 }
 
 .msg-appear-enter-from {

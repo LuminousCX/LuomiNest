@@ -1,6 +1,6 @@
 /* =========================================================
    Settings / About / Privacy / License 页面共享布局
-   抽取自 LoliMeow 主题的卡片、标签、Hero 视觉语言，
+   设置页面共享的卡片、标签、Hero 视觉语言，
    全部使用现有 CSS 变量，禁止硬编码颜色。
    ========================================================= */
 
@@ -9,7 +9,7 @@
    由 LumiSettingsBackground 组件使用。
    ------------------------------------------------------- */
 :root {
-  --lumi-settings-bg-image: url('/images/lolimeow-background.svg');
+  --lumi-settings-bg-image: url('/images/settings-side-decoration.svg');
   --lumi-settings-bg-opacity: 0.18;
   --lumi-settings-bg-width: 180px;
 }
@@ -115,7 +115,7 @@
 }
 
 /* -------------------------------------------------------
-   区块标题（LoliMeow widget-title 风格）
+   区块标题（widget-title 风格）
    ------------------------------------------------------- */
 .lumi-settings-section {
   position: relative;
@@ -157,7 +157,7 @@
 }
 
 /* -------------------------------------------------------
-   标签（LoliMeow tag-cloud 风格）
+   标签（tag-cloud 风格）
    ------------------------------------------------------- */
 .lumi-settings-tag {
   display: inline-flex;

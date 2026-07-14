@@ -99,6 +99,17 @@ export interface ModuleActionEvent {
   command?: string
 }
 
+/** 类型守卫：验证 data 是否为 ModuleActionEvent */
+function isModuleActionEvent(data: unknown): data is ModuleActionEvent {
+  if (typeof data !== 'object' || data === null) return false
+  const d = data as Record<string, unknown>
+  return (
+    typeof d.module === 'string' &&
+    typeof d.action === 'string' &&
+    typeof d.success === 'boolean'
+  )
+}
+
 /** 工作流会话状态 */
 export interface WorkflowSessionState {
   session_id: string
@@ -395,7 +406,11 @@ export const useWorkflowStore = defineStore('workflow', () => {
       }
 
       case 'module_action': {
-        const moduleEvent = data as unknown as ModuleActionEvent
+        if (!isModuleActionEvent(data)) {
+          console.warn('[Workflow] Invalid module_action event, missing required fields:', data)
+          break
+        }
+        const moduleEvent = data
         moduleActions.value.push(moduleEvent)
         // 限制事件数量
         if (moduleActions.value.length > 100) {

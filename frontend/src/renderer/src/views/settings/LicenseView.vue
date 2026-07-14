@@ -460,6 +460,14 @@ const referenceProjects = [
     license: 'MIT',
     description: 'AI 驱动的浏览器自动化框架，支持自然语言控制浏览器、结构化数据提取与多模式 AI Agent。',
     url: 'https://github.com/browserbase/stagehand'
+  },
+  {
+    name: 'LoliMeow',
+    version: '13.12',
+    author: '专收爆米花',
+    license: 'GPL-2.0+',
+    description: 'WordPress 博客主题，本页面背景装饰与卡片视觉风格受其启发。',
+    url: 'https://www.boxmoe.com'
   }
 ]
 

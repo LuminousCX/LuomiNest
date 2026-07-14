@@ -36,6 +36,14 @@ class LuomiNestPlatformRouter:
     def __init__(self) -> None:
         self._processing_locks: dict[str, asyncio.Lock] = {}
         self._locks_guard = asyncio.Lock()
+        self._background_tasks: set[asyncio.Task] = set()
+
+    def _spawn_background_task(self, coro) -> asyncio.Task:
+        """启动后台任务并保存引用，防止被 GC 回收。"""
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
 
     async def _get_session_lock(self, session_key: str) -> asyncio.Lock:
         if session_key in self._processing_locks:
@@ -322,7 +330,7 @@ class LuomiNestPlatformRouter:
             },
         )
 
-        asyncio.create_task(self._schedule_memory_update(messages, conv_id, assistant_text))
+        self._spawn_background_task(self._schedule_memory_update(messages, conv_id, assistant_text))
 
         return PlatformResponse(
             content=assistant_text,

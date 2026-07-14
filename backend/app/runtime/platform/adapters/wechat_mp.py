@@ -35,6 +35,7 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
         self._token_expires: float = 0
         self._token_lock = asyncio.Lock()
         self._crypto: LuomiNestWeChatCrypto | None = None
+        self._background_tasks: set[asyncio.Task] = set()
 
     def initialize(self, config: dict[str, Any]) -> None:
         super().initialize(config)
@@ -150,7 +151,9 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
         if msg_type == "event":
             return ""
 
-        asyncio.create_task(self._process_message(msg_data))
+        _task = asyncio.create_task(self._process_message(msg_data))
+        self._background_tasks.add(_task)
+        _task.add_done_callback(self._background_tasks.discard)
         return ""
 
     async def _process_message(self, msg_data: dict[str, str]) -> None:

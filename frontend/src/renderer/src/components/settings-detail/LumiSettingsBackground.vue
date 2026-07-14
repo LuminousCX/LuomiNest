@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const DAMPING_FACTOR = 0.35
+const DAMPING_FACTOR = 0.3
 
 const leftRef = ref<HTMLDivElement>()
 const rightRef = ref<HTMLDivElement>()
@@ -10,8 +10,8 @@ let bodyEl: HTMLElement | null = null
 const handleScroll = () => {
   if (!bodyEl || !leftRef.value || !rightRef.value) return
   const offset = bodyEl.scrollTop * DAMPING_FACTOR
-  leftRef.value.style.transform = `translateY(${offset}px)`
-  rightRef.value.style.transform = `translateY(${offset}px) scaleX(-1)`
+  leftRef.value.style.transform = `translateY(-${offset}px)`
+  rightRef.value.style.transform = `translateY(-${offset}px) scaleX(-1)`
 }
 
 onMounted(() => {
@@ -49,10 +49,10 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   width: var(--lumi-settings-bg-width);
-  height: 100%;
+  height: 300%;
   background-image: var(--lumi-settings-bg-image);
-  background-repeat: no-repeat;
-  background-size: contain;
+  background-repeat: repeat-y;
+  background-size: 100% auto;
   background-position: center top;
   opacity: var(--lumi-settings-bg-opacity);
   will-change: transform;
