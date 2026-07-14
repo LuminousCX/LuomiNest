@@ -153,6 +153,7 @@ def load_or_create_secret_key(data_dir: str) -> str:
                     )
                     return plaintext
             except Exception:
+                # 旧版明文解析失败：继续走后续统一错误处理（既非有效密文也非有效明文）
                 pass
 
             # 3. 既非有效密文也非有效明文
