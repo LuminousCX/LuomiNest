@@ -80,7 +80,7 @@ class SuggestionService:
             return questions[:3]
 
         except Exception as e:
-            logger.warning(f"[SuggestedQuestions] Failed to generate: {e}")
+            logger.warning(f"[SuggestedQuestions] Failed to generate: {e}", exc_info=True)
             return []
 
     async def generate_suggestions_for_conv(
@@ -108,7 +108,7 @@ class SuggestionService:
             logger.debug(f"[SuggestedQuestions] Task cancelled for conv={conv_id}")
             return []
         except Exception as e:
-            logger.warning(f"[SuggestedQuestions] Task failed for conv={conv_id}: {e}")
+            logger.warning(f"[SuggestedQuestions] Task failed for conv={conv_id}: {e}", exc_info=True)
             return []
         finally:
             if self._pending_tasks.get(conv_id) is task:

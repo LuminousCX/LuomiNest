@@ -31,10 +31,22 @@ sync_session_factory = sessionmaker(
 
 
 @asynccontextmanager
-async def get_async_session() -> AsyncIterator[AsyncSession]:
+async def get_async_session(
+    *, auto_commit: bool = True,
+) -> AsyncIterator[AsyncSession]:
     """获取 async session 的上下文管理器。
 
-    自动管理 session 生命周期（关闭），调用方负责 commit/rollback。
+    自动管理 session 生命周期（关闭 + commit/rollback）。
+
+    Args:
+        auto_commit: True（默认）时，正常退出自动 commit、异常自动 rollback；
+                     False 时由调用方显式 commit/rollback。
     """
     async with async_session_factory() as session:
-        yield session
+        try:
+            yield session
+            if auto_commit:
+                await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

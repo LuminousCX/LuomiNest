@@ -263,6 +263,12 @@ export function initBrowserSession(): void {
     callback(allowed.includes(permission))
   })
 
+  // 仅浏览器自动化 partition 绕过证书验证（自动化场景需要访问自签名证书站点）。
+  // 作用域仅限 persist:luominest-browser，不影响主窗口、桌面宠物等其他 session。
+  browserSession.setCertificateVerifyProc((_request, callback) => {
+    callback(0)
+  })
+
   initialized = true
   logger.info('Session initialized with stealth measures')
 }

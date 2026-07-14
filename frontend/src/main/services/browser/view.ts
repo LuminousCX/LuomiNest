@@ -79,11 +79,12 @@ export function isViewDestroyed(view: WebContentsView): boolean {
 }
 
 export function setupNetworkConfig(): void {
-  app.commandLine.appendSwitch('ignore-certificate-errors')
-  app.commandLine.appendSwitch('ignore-certificate-errors-spki-list')
-  app.commandLine.appendSwitch('disable-web-security')
-  app.commandLine.appendSwitch('allow-running-insecure-content')
-  app.commandLine.appendSwitch('disable-features', 'IsolateOrigins,site-per-process,AutomationControlled')
+  // 注意：全局安全开关（ignore-certificate-errors / disable-web-security /
+  // allow-running-insecure-content / disable-features=IsolateOrigins,site-per-process）
+  // 已移除——它们会全局影响主窗口、桌面宠物等所有窗口的安全态势。
+  // 证书验证绕过已改为仅对浏览器自动化 session partition 生效，见 session.ts 的 initBrowserSession()。
+
+  // 以下为隐蔽/自动化检测开关，不涉及安全特性，保留
   app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
   app.commandLine.appendSwitch('excludeSwitches', 'enable-automation')
   app.commandLine.appendSwitch('disable-extensions-except', '')

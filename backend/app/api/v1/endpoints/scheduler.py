@@ -58,7 +58,12 @@ async def create_task(config: ScheduledTaskConfig):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"[SchedulerAPI] 创建任务失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        from app.core.exceptions import LuomiNestError
+        raise LuomiNestError(
+            "定时任务创建失败，请稍后重试",
+            code="SCHEDULER_TASK_CREATE_FAILED",
+            status_code=500,
+        )
 
 
 @router.delete("/tasks/{task_id}")

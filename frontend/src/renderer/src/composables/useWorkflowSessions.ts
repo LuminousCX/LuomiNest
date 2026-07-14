@@ -83,7 +83,18 @@ export const useWorkflowSessions = () => {
     isLoadingSessions.value = true
     try {
       const data = await apiGet<{ sessions: WorkflowSession[] }>('/workflow/db/sessions?limit=20')
-      sessions.value = data.sessions || []
+      sessions.value = (data.sessions || []).map((session) => {
+        const tasks = session.tasks || []
+        return {
+          ...session,
+          tasks,
+          stats: session.stats || {
+            total: tasks.length,
+            completed: tasks.filter((t) => t.status === 'completed').length,
+            failed: tasks.filter((t) => t.status === 'failed').length,
+          },
+        }
+      })
     } catch (err: unknown) {
       logger.error('Failed to load workflow sessions:', err)
     } finally {

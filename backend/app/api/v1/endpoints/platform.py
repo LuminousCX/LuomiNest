@@ -104,8 +104,8 @@ class PlatformModelConfigUpdate(BaseModel):
     provider: str | None = None
     model: str | None = None
     system_prompt: str | None = None
-    temperature: float | None = None
-    max_tokens: int | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(default=None, ge=1, le=128_000)
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -804,7 +804,7 @@ async def get_main_agent_info():
 
 
 @router.patch("/main_agent")
-async def update_main_agent_info(request: dict):
+async def update_main_agent_info(request: PlatformModelConfigUpdate):
     """更新主 Agent 的 LLM 配置（系统提示词、温度、最大 tokens、provider、model）。
 
     前端可在此切换主 Agent 使用的供应商/模型，平台消息路由会自动复用新配置。
@@ -817,14 +817,11 @@ async def update_main_agent_info(request: dict):
     current = load_luominest_main_agent_config()
     updated_fields: list[str] = []
 
+    # Pydantic 已做类型转换和范围校验，直接遍历已设置字段
+    update_data = request.model_dump(exclude_unset=True)
     for key in ("provider", "model", "system_prompt", "temperature", "max_tokens"):
-        if key in request and request[key] is not None:
-            new_val = request[key]
-            if key in ("temperature", "max_tokens") and new_val is not None:
-                try:
-                    new_val = float(new_val) if key == "temperature" else int(new_val)
-                except (TypeError, ValueError):
-                    continue
+        if key in update_data and update_data[key] is not None:
+            new_val = update_data[key]
             if current.get(key) != new_val:
                 current[key] = new_val
                 updated_fields.append(key)

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { ArrowLeft, ExternalLink, AlertTriangle, Scale, Heart } from 'lucide-vue-next'
+import LicenseSectionHeader from '../../components/settings-detail/LicenseSectionHeader.vue'
+import LumiSettingsBackground from '../../components/settings-detail/LumiSettingsBackground.vue'
 
 const router = useRouter()
 
@@ -497,893 +499,259 @@ const collaborators = [
 </script>
 
 <template>
-  <div class="license-view">
-    <header class="license-header page-header">
-      <div class="page-header__main">
-        <button class="page-header__back" @click="router.push('/settings')">
-          <ArrowLeft :size="18" />
-        </button>
-        <div>
-          <h1 class="page-header__title">开源协议</h1>
-          <p class="page-subtitle">LuomiNest 依赖的开源项目及其许可证</p>
-        </div>
+  <div class="lumi-settings-page license-view">
+    <LumiSettingsBackground />
+    <header class="lumi-settings-page__header lumi-settings-animate-fade">
+      <button class="lumi-settings-page__back" @click="router.push('/settings')">
+        <ArrowLeft :size="18" />
+      </button>
+      <div>
+        <h1 class="lumi-settings-page__title">开源协议</h1>
+        <p class="lumi-settings-page__subtitle">LuomiNest 依赖的开源项目及其许可证</p>
       </div>
     </header>
 
-    <main class="license-body">
-      <section class="hero-section">
-        <div class="hero-card">
-          <Scale :size="28" class="hero-icon" />
-          <h2 class="hero-title">AGPL-3.0</h2>
-          <p class="hero-desc">
-            LuomiNest 基于 <strong>GNU Affero General Public License v3.0</strong> 开源。
-            你可以自由使用、修改和分发本软件的源代码。
-          </p>
-          <div class="hero-stats">
-            <div class="stat-item">
-              <span class="stat-value">{{ frontendLicenses.length }}</span>
-              <span class="stat-label">前端依赖</span>
-            </div>
-            <div class="stat-divider"></div>
-            <div class="stat-item">
-              <span class="stat-value">{{ backendLicenses.length }}</span>
-              <span class="stat-label">后端依赖</span>
-            </div>
-            <div class="stat-divider"></div>
-            <div class="stat-item">
-              <span class="stat-value">{{ specialLicenses.length }}</span>
-              <span class="stat-label">特殊许可</span>
-            </div>
-            <div class="stat-divider"></div>
-            <div class="stat-item">
-              <span class="stat-value">{{ collaborators.length }}</span>
-              <span class="stat-label">前期合作者</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="content-section">
-        <div class="section-header">
-          <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary">
-            <ExternalLink :size="16" />
-          </div>
-          <div>
-            <h3 class="section-title">前端依赖</h3>
-            <p class="section-desc">Electron 桌面客户端直接依赖的主要开源库</p>
-          </div>
-        </div>
-
-        <div class="license-grid">
-          <a
-            v-for="(lib, index) in frontendLicenses"
-            :key="lib.name"
-            :href="lib.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="license-card"
-            :style="{ animationDelay: `${index * 40}ms` }"
-          >
-            <div class="card-shine"></div>
-            <div class="card-top">
-              <div class="card-name-row">
-                <span class="card-name">{{ lib.name }}</span>
-                <ExternalLink :size="12" class="card-link-icon" />
+    <main class="lumi-settings-page__body">
+      <div class="lumi-settings-page__content">
+        <section class="license-hero lumi-settings-animate-slide">
+          <div class="license-hero__content">
+            <Scale :size="28" class="license-hero__icon" />
+            <h2 class="license-hero__title">AGPL-3.0</h2>
+            <p class="license-hero__desc">
+              LuomiNest 基于 <strong>GNU Affero General Public License v3.0</strong> 开源。
+              你可以自由使用、修改和分发本软件的源代码。
+            </p>
+            <div class="license-hero__stats">
+              <div class="license-hero__stat">
+                <span class="license-hero__stat-value">{{ frontendLicenses.length }}</span>
+                <span class="license-hero__stat-label">前端依赖</span>
               </div>
-              <span class="card-version">v{{ lib.version }}</span>
-            </div>
-            <p class="card-desc">{{ lib.description }}</p>
-            <div class="card-footer">
-              <span class="license-badge">{{ lib.license }}</span>
-              <span class="card-author">{{ lib.author }}</span>
-            </div>
-          </a>
-        </div>
-      </section>
-
-      <section class="content-section">
-        <div class="section-header">
-          <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary">
-            <ExternalLink :size="16" />
-          </div>
-          <div>
-            <h3 class="section-title">后端依赖</h3>
-            <p class="section-desc">Python 后端服务直接依赖的主要开源库</p>
-          </div>
-        </div>
-
-        <div class="license-grid">
-          <a
-            v-for="(lib, index) in backendLicenses"
-            :key="lib.name"
-            :href="lib.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="license-card"
-            :style="{ animationDelay: `${index * 40}ms` }"
-          >
-            <div class="card-shine"></div>
-            <div class="card-top">
-              <div class="card-name-row">
-                <span class="card-name">{{ lib.name }}</span>
-                <ExternalLink :size="12" class="card-link-icon" />
+              <div class="license-hero__divider" />
+              <div class="license-hero__stat">
+                <span class="license-hero__stat-value">{{ backendLicenses.length }}</span>
+                <span class="license-hero__stat-label">后端依赖</span>
               </div>
-              <span class="card-version">v{{ lib.version }}</span>
-            </div>
-            <p class="card-desc">{{ lib.description }}</p>
-            <div class="card-footer">
-              <span class="license-badge">{{ lib.license }}</span>
-              <span class="card-author">{{ lib.author }}</span>
-            </div>
-          </a>
-        </div>
-      </section>
-
-      <section class="content-section">
-        <div class="section-header">
-          <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary">
-            <ExternalLink :size="16" />
-          </div>
-          <div>
-            <h3 class="section-title">参考项目</h3>
-            <p class="section-desc">在项目研发过程中参考和学习的优秀开源项目</p>
-          </div>
-        </div>
-
-        <div class="license-grid">
-          <a
-            v-for="(lib, index) in referenceProjects"
-            :key="lib.name"
-            :href="lib.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="license-card"
-            :style="{ animationDelay: `${index * 40}ms` }"
-          >
-            <div class="card-shine"></div>
-            <div class="card-top">
-              <div class="card-name-row">
-                <span class="card-name">{{ lib.name }}</span>
-                <ExternalLink :size="12" class="card-link-icon" />
+              <div class="license-hero__divider" />
+              <div class="license-hero__stat">
+                <span class="license-hero__stat-value">{{ specialLicenses.length }}</span>
+                <span class="license-hero__stat-label">特殊许可</span>
               </div>
-              <span class="card-version">v{{ lib.version }}</span>
-            </div>
-            <p class="card-desc">{{ lib.description }}</p>
-            <div class="card-footer">
-              <span class="license-badge">{{ lib.license }}</span>
-              <span class="card-author">{{ lib.author }}</span>
-            </div>
-          </a>
-        </div>
-      </section>
-
-      <section class="content-section">
-        <div class="section-header">
-          <div class="lumi-icon-wrap lumi-icon-wrap--md license-section-warning">
-            <AlertTriangle :size="16" />
-          </div>
-          <div>
-            <h3 class="section-title">特殊许可证</h3>
-            <p class="section-desc">包含专有组件或商业使用限制的非标准开源许可</p>
-          </div>
-        </div>
-
-        <div class="special-list">
-          <div
-            v-for="(lib, index) in specialLicenses"
-            :key="lib.name"
-            class="special-card"
-            :style="{ animationDelay: `${index * 80}ms` }"
-          >
-            <div class="special-card-header">
-              <div class="special-card-title">
-                <a
-                  :href="lib.url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="special-name"
-                >
-                  {{ lib.name }}
-                  <ExternalLink :size="14" />
-                </a>
-                <span class="special-version">v{{ lib.version }}</span>
-              </div>
-              <span class="special-author">{{ lib.author }}</span>
-            </div>
-
-            <p class="special-desc">{{ lib.description }}</p>
-
-            <div class="special-tags">
-              <div class="special-tag">
-                <span class="tag-label">组件</span>
-                <span class="tag-value">{{ lib.license }}</span>
-              </div>
-              <div class="special-tag proprietary">
-                <span class="tag-label">核心库</span>
-                <span class="tag-value">{{ lib.coreLicense }}</span>
+              <div class="license-hero__divider" />
+              <div class="license-hero__stat">
+                <span class="license-hero__stat-value">{{ collaborators.length }}</span>
+                <span class="license-hero__stat-label">前期合作者</span>
               </div>
             </div>
+          </div>
+        </section>
 
-            <div class="special-alert">
-              <AlertTriangle :size="14" />
-              <span>{{ lib.note }}</span>
+        <section class="license-section lumi-settings-animate-slide">
+          <LicenseSectionHeader
+            :icon="ExternalLink"
+            title="前端依赖"
+            desc="Electron 桌面客户端直接依赖的主要开源库"
+          />
+          <div class="license-grid">
+            <a
+              v-for="(lib, index) in frontendLicenses"
+              :key="lib.name"
+              :href="lib.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="license-card"
+              :style="{ animationDelay: `${index * 40}ms` }"
+            >
+              <div class="license-card__shine" />
+              <div class="license-card__top">
+                <div class="license-card__name-row">
+                  <span class="license-card__name">{{ lib.name }}</span>
+                  <ExternalLink :size="12" class="license-card__link-icon" />
+                </div>
+                <span class="license-card__version">v{{ lib.version }}</span>
+              </div>
+              <p class="license-card__desc">{{ lib.description }}</p>
+              <div class="license-card__footer">
+                <span class="license-badge">{{ lib.license }}</span>
+                <span class="license-card__author">{{ lib.author }}</span>
+              </div>
+            </a>
+          </div>
+        </section>
+
+        <section class="license-section lumi-settings-animate-slide">
+          <LicenseSectionHeader
+            :icon="ExternalLink"
+            title="后端依赖"
+            desc="Python 后端服务直接依赖的主要开源库"
+          />
+          <div class="license-grid">
+            <a
+              v-for="(lib, index) in backendLicenses"
+              :key="lib.name"
+              :href="lib.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="license-card"
+              :style="{ animationDelay: `${index * 40}ms` }"
+            >
+              <div class="license-card__shine" />
+              <div class="license-card__top">
+                <div class="license-card__name-row">
+                  <span class="license-card__name">{{ lib.name }}</span>
+                  <ExternalLink :size="12" class="license-card__link-icon" />
+                </div>
+                <span class="license-card__version">v{{ lib.version }}</span>
+              </div>
+              <p class="license-card__desc">{{ lib.description }}</p>
+              <div class="license-card__footer">
+                <span class="license-badge">{{ lib.license }}</span>
+                <span class="license-card__author">{{ lib.author }}</span>
+              </div>
+            </a>
+          </div>
+        </section>
+
+        <section class="license-section lumi-settings-animate-slide">
+          <LicenseSectionHeader
+            :icon="ExternalLink"
+            title="参考项目"
+            desc="在项目研发过程中参考和学习的优秀开源项目"
+          />
+          <div class="license-grid">
+            <a
+              v-for="(lib, index) in referenceProjects"
+              :key="lib.name"
+              :href="lib.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="license-card"
+              :style="{ animationDelay: `${index * 40}ms` }"
+            >
+              <div class="license-card__shine" />
+              <div class="license-card__top">
+                <div class="license-card__name-row">
+                  <span class="license-card__name">{{ lib.name }}</span>
+                  <ExternalLink :size="12" class="license-card__link-icon" />
+                </div>
+                <span class="license-card__version">v{{ lib.version }}</span>
+              </div>
+              <p class="license-card__desc">{{ lib.description }}</p>
+              <div class="license-card__footer">
+                <span class="license-badge">{{ lib.license }}</span>
+                <span class="license-card__author">{{ lib.author }}</span>
+              </div>
+            </a>
+          </div>
+        </section>
+
+        <section class="license-section lumi-settings-animate-slide">
+          <LicenseSectionHeader
+            :icon="AlertTriangle"
+            title="特殊许可证"
+            desc="包含专有组件或商业使用限制的非标准开源许可"
+            theme="warning"
+          />
+          <div class="license-special-list">
+            <div
+              v-for="(lib, index) in specialLicenses"
+              :key="lib.name"
+              class="license-special-card"
+              :style="{ animationDelay: `${index * 80}ms` }"
+            >
+              <div class="license-special-card__header">
+                <div class="license-special-card__title">
+                  <a
+                    :href="lib.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="license-special-card__name"
+                  >
+                    {{ lib.name }}
+                    <ExternalLink :size="14" />
+                  </a>
+                  <span class="license-special-card__version">v{{ lib.version }}</span>
+                </div>
+                <span class="license-special-card__author">{{ lib.author }}</span>
+              </div>
+
+              <p class="license-special-card__desc">{{ lib.description }}</p>
+
+              <div class="license-special-card__tags">
+                <div class="license-special-tag">
+                  <span class="license-special-tag__label">组件</span>
+                  <span class="license-special-tag__value">{{ lib.license }}</span>
+                </div>
+                <div class="license-special-tag license-special-tag--proprietary">
+                  <span class="license-special-tag__label">核心库</span>
+                  <span class="license-special-tag__value">{{ lib.coreLicense }}</span>
+                </div>
+              </div>
+
+              <div class="license-special-alert">
+                <AlertTriangle :size="14" />
+                <span>{{ lib.note }}</span>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="content-section">
-        <div class="section-header">
-          <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary">
-            <Scale :size="16" />
+        <section class="license-section lumi-settings-animate-slide">
+          <LicenseSectionHeader
+            :icon="Scale"
+            title="AGPL-3.0 协议概要"
+            desc="LuomiNest 所采用的开源许可证核心条款"
+          />
+          <div class="license-agpl-card">
+            <ul class="license-agpl-list">
+              <li>你可以自由使用、修改和分发本软件的源代码。</li>
+              <li>任何对本软件的修改版本必须以相同的 AGPL-3.0 许可证发布。</li>
+              <li>如果你通过网络向用户提供本软件的服务（例如 SaaS），你必须向用户提供该软件完整源代码的获取途径。</li>
+              <li>分发时必须保留原始版权声明和许可证声明。</li>
+            </ul>
+            <a
+              href="https://www.gnu.org/licenses/agpl-3.0.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="license-agpl-link"
+            >
+              阅读完整协议文本
+              <ExternalLink :size="12" />
+            </a>
           </div>
-          <div>
-            <h3 class="section-title">AGPL-3.0 协议概要</h3>
-            <p class="section-desc">LuomiNest 所采用的开源许可证核心条款</p>
+        </section>
+
+        <section class="license-section lumi-settings-animate-slide">
+          <LicenseSectionHeader
+            :icon="Heart"
+            title="前期合作者"
+            desc="为 LuomiNest 做出贡献的伙伴们"
+            theme="accent"
+          />
+          <div class="license-collab-grid">
+            <a
+              v-for="(person, index) in collaborators"
+              :key="person.name"
+              :href="person.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="license-collab-card"
+              :style="{ animationDelay: `${index * 80}ms` }"
+            >
+              <img :src="person.avatar" :alt="person.name" class="license-collab-card__avatar" />
+              <div class="license-collab-card__info">
+                <span class="license-collab-card__name">{{ person.name }}</span>
+                <span class="license-collab-card__role">{{ person.role }}</span>
+              </div>
+            </a>
           </div>
-        </div>
+        </section>
 
-        <div class="agpl-card">
-          <ul class="agpl-list">
-            <li>你可以自由使用、修改和分发本软件的源代码。</li>
-            <li>任何对本软件的修改版本必须以相同的 AGPL-3.0 许可证发布。</li>
-            <li>如果你通过网络向用户提供本软件的服务（例如 SaaS），你必须向用户提供该软件完整源代码的获取途径。</li>
-            <li>分发时必须保留原始版权声明和许可证声明。</li>
-          </ul>
-          <a
-            href="https://www.gnu.org/licenses/agpl-3.0.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="agpl-link"
-          >
-            阅读完整协议文本
-            <ExternalLink :size="12" />
-          </a>
-        </div>
-      </section>
-
-      <section class="content-section">
-        <div class="section-header">
-          <div class="lumi-icon-wrap lumi-icon-wrap--md license-section-heart">
-            <Heart :size="16" />
-          </div>
-          <div>
-            <h3 class="section-title">前期合作者</h3>
-            <p class="section-desc">为 LuomiNest 做出贡献的伙伴们</p>
-          </div>
-        </div>
-
-        <div class="collab-grid">
-          <a
-            v-for="(person, index) in collaborators"
-            :key="person.name"
-            :href="person.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="collab-card"
-            :style="{ animationDelay: `${index * 80}ms` }"
-          >
-            <img :src="person.avatar" :alt="person.name" class="collab-avatar" />
-            <div class="collab-info">
-              <span class="collab-name">{{ person.name }}</span>
-              <span class="collab-role">{{ person.role }}</span>
-            </div>
-          </a>
-        </div>
-      </section>
-
-      <footer class="license-footer">
-        <p>Made with LuomiNest · 感谢所有开源贡献者</p>
-      </footer>
+        <footer class="license-footer">
+          <p>Made with LuomiNest · 感谢所有开源贡献者</p>
+        </footer>
+      </div>
     </main>
   </div>
 </template>
 
-<style scoped>
-.license-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--workspace-bg);
-  overflow: hidden;
-}
-
-.license-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-5) var(--space-7);
-  border-bottom: 1px solid var(--workspace-border);
-  flex-shrink: 0;
-  background: var(--workspace-card);
-  margin-bottom: 0;
-}
-
-.page-subtitle {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  margin-top: 1px;
-}
-
-.license-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-7) var(--space-6) var(--space-10);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-9);
-}
-
-/* ── Hero section ── */
-
-.hero-section {
-  width: 100%;
-  max-width: 960px;
-  margin: 0 auto;
-  animation: fadeInUp var(--duration-enter) var(--ease-out-expo) both;
-}
-
-.hero-card {
-  position: relative;
-  background: linear-gradient(135deg, var(--lumi-primary) 0%, var(--lumi-primary-hover) 100%);
-  border-radius: var(--radius-2xl);
-  padding: var(--space-8) var(--space-7);
-  color: var(--text-inverse);
-  overflow: hidden;
-  box-shadow: 0 var(--space-3) var(--space-8) color-mix(in srgb, var(--lumi-primary) 25%, transparent);
-}
-
-.hero-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--text-inverse) 0.12, transparent) 0%, transparent 40%),
-    radial-gradient(circle at 80% 70%, color-mix(in srgb, var(--text-inverse) 0.08, transparent) 0%, transparent 40%);
-  pointer-events: none;
-}
-
-.hero-icon {
-  position: relative;
-  margin-bottom: var(--space-4);
-  opacity: 0.9;
-}
-
-.hero-title {
-  position: relative;
-  font-size: var(--text-4xl);
-  font-weight: 800;
-  margin-bottom: var(--space-2);
-  letter-spacing: -0.5px;
-}
-
-.hero-desc {
-  position: relative;
-  font-size: var(--text-md);
-  line-height: 1.7;
-  opacity: 0.92;
-  max-width: 560px;
-  margin-bottom: var(--space-7);
-}
-
-.hero-desc strong {
-  font-weight: 700;
-}
-
-.hero-stats {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.stat-value {
-  font-size: var(--text-3xl);
-  font-weight: 800;
-  line-height: 1;
-}
-
-.stat-label {
-  font-size: var(--text-sm);
-  opacity: 0.8;
-}
-
-.stat-divider {
-  width: 1px;
-  height: var(--space-8);
-  background: color-mix(in srgb, var(--text-inverse) 0.25, transparent);
-}
-
-/* ── Content sections ── */
-
-.content-section {
-  width: 100%;
-  max-width: 960px;
-  margin: 0 auto;
-  animation: fadeInUp var(--duration-enter) var(--ease-out-expo) both;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-6);
-  animation: fadeInLeft var(--duration-slow) var(--ease-out-expo) both;
-}
-
-.license-section-warning {
-  background: color-mix(in srgb, var(--lumi-warning) 12%, transparent);
-  color: var(--lumi-warning);
-}
-
-.license-section-heart {
-  background: color-mix(in srgb, var(--lumi-danger) 12%, transparent);
-  color: var(--lumi-danger);
-}
-
-.section-title {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: var(--space-1);
-}
-
-.section-desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-}
-
-/* ── License grid ── */
-
-.license-grid {
-  display: grid;
-  grid-template-columns: repeat(1, 1fr);
-  gap: var(--space-4);
-}
-
-.license-card {
-  position: relative;
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  text-decoration: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  overflow: hidden;
-  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) both;
-  transition:
-    transform var(--transition-normal),
-    box-shadow var(--transition-normal),
-    border-color var(--transition-normal);
-}
-
-.license-card:hover {
-  transform: translateY(calc(var(--space-1) * -1));
-  border-color: color-mix(in srgb, var(--lumi-primary) 30%, var(--workspace-border));
-  box-shadow: var(--shadow-lg);
-}
-
-.card-shine {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 40%,
-    color-mix(in srgb, var(--lumi-primary) 4%, transparent) 45%,
-    transparent 50%
-  );
-  transform: translateX(-100%);
-  transition: transform var(--duration-enter) var(--ease-in-out);
-  pointer-events: none;
-}
-
-.license-card:hover .card-shine {
-  transform: translateX(100%);
-}
-
-.card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.card-name-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.card-name {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color var(--transition-fast);
-}
-
-.license-card:hover .card-name {
-  color: var(--lumi-primary);
-}
-
-.card-link-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-  transition: color var(--transition-fast);
-}
-
-.license-card:hover .card-link-icon {
-  color: var(--lumi-primary);
-}
-
-.card-version {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  font-family: monospace;
-  flex-shrink: 0;
-}
-
-.card-desc {
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  line-height: 1.6;
-  flex: 1;
-}
-
-.card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-top: auto;
-}
-
-.license-badge {
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-xl);
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-  white-space: nowrap;
-}
-
-.card-author {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ── Special licenses ── */
-
-.special-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.special-card {
-  background: var(--workspace-card);
-  border: 1px solid color-mix(in srgb, var(--lumi-warning) 25%, var(--workspace-border));
-  border-radius: var(--radius-xl);
-  padding: var(--space-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) both;
-  transition:
-    transform var(--transition-normal),
-    box-shadow var(--transition-normal);
-}
-
-.special-card:hover {
-  transform: translateY(calc(var(--space-1) * -1));
-  box-shadow: 0 var(--space-3) var(--space-7) color-mix(in srgb, var(--lumi-warning) 12%, transparent);
-}
-
-.special-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.special-card-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.special-name {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--text-primary);
-  text-decoration: none;
-  transition: color var(--transition-fast);
-}
-
-.special-name:hover {
-  color: var(--lumi-primary);
-}
-
-.special-version {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  font-family: monospace;
-}
-
-.special-author {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.special-desc {
-  font-size: var(--text-md);
-  color: var(--text-secondary);
-  line-height: 1.7;
-}
-
-.special-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.special-tag {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: var(--workspace-bg);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--workspace-border);
-}
-
-.special-tag.proprietary {
-  border-color: color-mix(in srgb, var(--lumi-warning) 25%, var(--workspace-border));
-  background: color-mix(in srgb, var(--lumi-warning) 5%, var(--workspace-bg));
-}
-
-.tag-label {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.tag-value {
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.special-alert {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  background: color-mix(in srgb, var(--lumi-warning) 8%, transparent);
-  border-radius: var(--radius-md);
-  border-left: var(--space-1) solid var(--lumi-warning);
-  color: var(--text-secondary);
-  font-size: var(--text-base);
-  line-height: 1.6;
-}
-
-.special-alert svg {
-  color: var(--lumi-warning);
-  flex-shrink: 0;
-  margin-top: var(--space-1);
-}
-
-/* ── AGPL card ── */
-
-.agpl-card {
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-7);
-  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) both;
-  transition:
-    transform var(--transition-normal),
-    box-shadow var(--transition-normal);
-}
-
-.agpl-card:hover {
-  transform: translateY(calc(var(--space-1) * -1));
-  box-shadow: var(--shadow-md);
-}
-
-.agpl-list {
-  padding-left: var(--space-5);
-  margin-bottom: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.agpl-list li {
-  font-size: var(--text-md);
-  color: var(--text-secondary);
-  line-height: 1.7;
-}
-
-.agpl-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--lumi-primary);
-  text-decoration: none;
-  padding: var(--space-2) var(--space-3);
-  background: var(--lumi-primary-light);
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
-}
-
-.agpl-link:hover {
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-}
-
-/* ── Collaborators ── */
-
-.collab-grid {
-  display: grid;
-  grid-template-columns: repeat(1, 1fr);
-  gap: var(--space-3);
-}
-
-.collab-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-4);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-lg);
-  text-decoration: none;
-  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) both;
-  transition:
-    transform var(--transition-normal),
-    box-shadow var(--transition-normal),
-    border-color var(--transition-normal);
-}
-
-.collab-card:hover {
-  transform: translateY(calc(var(--space-1) * -1));
-  border-color: color-mix(in srgb, var(--lumi-primary) 30%, var(--workspace-border));
-  box-shadow: var(--shadow-md);
-}
-
-.collab-avatar {
-  width: var(--space-9);
-  height: var(--space-9);
-  border-radius: var(--radius-full);
-  object-fit: cover;
-  border: var(--space-1) solid var(--workspace-border);
-  transition: border-color var(--transition-fast);
-}
-
-.collab-card:hover .collab-avatar {
-  border-color: var(--lumi-primary);
-}
-
-.collab-info {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.collab-name {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.collab-role {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-/* ── Footer ── */
-
-.license-footer {
-  width: 100%;
-  max-width: 960px;
-  margin: 0 auto;
-  text-align: center;
-  padding-top: var(--space-6);
-  animation: fadeIn var(--duration-enter) var(--ease-out-expo) both;
-}
-
-.license-footer p {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-/* ── Animations ── */
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(var(--space-6));
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fadeInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(calc(var(--space-4) * -1));
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-/* ── Responsive ── */
-
-@media (min-width: 640px) {
-  .license-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .collab-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .license-body {
-    padding: var(--space-8) var(--space-7) var(--space-10);
-  }
-}
-
-@media (min-width: 900px) {
-  .license-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (min-width: 1200px) {
-  .license-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-
-  .collab-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-</style>
+<style scoped src="../../styles/views/license-view.css"></style>

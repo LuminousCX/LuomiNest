@@ -9,7 +9,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, delete as sa_delete, update as sa_update
 
 from app.infrastructure.database.models.conversation import Conversation
 from app.infrastructure.database.repositories.base import BaseRepository, orm_to_dict, utcnow_iso
@@ -84,6 +84,17 @@ class ConversationRepository(BaseRepository):
                 result.append(d)
             return result
 
+    def count_messages(self, agent_id: Optional[str] = None) -> int:
+        """统计所有非删除对话的消息总数（DB 层聚合，避免 N+1）。"""
+        with sync_session_factory() as session:
+            stmt = select(
+                func.sum(func.json_array_length(Conversation.messages))
+            ).where(Conversation.deleted_at.is_(None))
+            if agent_id:
+                stmt = stmt.where(Conversation.agent_id == agent_id)
+            result = session.execute(stmt).scalar()
+            return result or 0
+
     def search(self, keyword: str, agent_id: Optional[str] = None) -> list[dict]:
         if not keyword or not keyword.strip():
             return []
@@ -151,21 +162,52 @@ class ConversationRepository(BaseRepository):
         return self.delete(conv_id)
 
     def empty_trash(self, agent_id: Optional[str] = None) -> int:
-        trash = self.list_trash(agent_id)
-        count = 0
-        for item in trash:
-            if self.delete(item["id"]):
-                count += 1
-        return count
+        """批量清空回收站（单次 DELETE）。"""
+        with sync_session_factory() as session:
+            stmt = sa_delete(Conversation).where(Conversation.deleted_at.is_not(None))
+            if agent_id:
+                stmt = stmt.where(Conversation.agent_id == agent_id)
+            result = session.execute(stmt)
+            session.commit()
+            return result.rowcount or 0
 
     def batch_soft_delete(self, conv_ids: list[str]) -> int:
-        return sum(1 for cid in conv_ids if self.soft_delete(cid))
+        """批量软删除（单次 UPDATE）。"""
+        if not conv_ids:
+            return 0
+        with sync_session_factory() as session:
+            stmt = (
+                sa_update(Conversation)
+                .where(Conversation.id.in_(conv_ids), Conversation.deleted_at.is_(None))
+                .values(deleted_at=utcnow_iso(), updated_at=utcnow_iso())
+            )
+            result = session.execute(stmt)
+            session.commit()
+            return result.rowcount or 0
 
     def batch_restore(self, conv_ids: list[str]) -> int:
-        return sum(1 for cid in conv_ids if self.restore(cid))
+        """批量恢复（单次 UPDATE）。"""
+        if not conv_ids:
+            return 0
+        with sync_session_factory() as session:
+            stmt = (
+                sa_update(Conversation)
+                .where(Conversation.id.in_(conv_ids), Conversation.deleted_at.is_not(None))
+                .values(deleted_at=None, updated_at=utcnow_iso())
+            )
+            result = session.execute(stmt)
+            session.commit()
+            return result.rowcount or 0
 
     def batch_permanent_delete(self, conv_ids: list[str]) -> int:
-        return sum(1 for cid in conv_ids if self.permanent_delete(cid))
+        """批量永久删除（单次 DELETE）。"""
+        if not conv_ids:
+            return 0
+        with sync_session_factory() as session:
+            stmt = sa_delete(Conversation).where(Conversation.id.in_(conv_ids))
+            result = session.execute(stmt)
+            session.commit()
+            return result.rowcount or 0
 
     def rename(self, conv_id: str, new_title: str) -> bool:
         with sync_session_factory() as session:
@@ -178,8 +220,12 @@ class ConversationRepository(BaseRepository):
             return True
 
     def delete_by_agent_id(self, agent_id: str) -> int:
-        convs = self.list_meta(agent_id)
-        return sum(1 for c in convs if self.delete(c["id"]))
+        """批量删除某 agent 的所有对话（单次 DELETE）。"""
+        with sync_session_factory() as session:
+            stmt = sa_delete(Conversation).where(Conversation.agent_id == agent_id)
+            result = session.execute(stmt)
+            session.commit()
+            return result.rowcount or 0
 
     # ── Async wrappers ──
 

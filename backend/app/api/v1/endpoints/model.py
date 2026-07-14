@@ -117,18 +117,18 @@ class ModelConfigUpdate(BaseModel):
 
     provider: str | None = None
     model: str | None = None
-    temperature: float | None = None
-    max_tokens: int | None = Field(alias="maxTokens", default=None)
-    top_p: float | None = Field(alias="topP", default=None)
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(alias="maxTokens", default=None, ge=1, le=128_000)
+    top_p: float | None = Field(alias="topP", default=None, ge=0.0, le=1.0)
     reasoner_provider: str | None = Field(alias="reasonerProvider", default=None)
     reasoner_model: str | None = Field(alias="reasonerModel", default=None)
-    reasoner_temperature: float | None = Field(alias="reasonerTemperature", default=None)
-    reasoner_max_tokens: int | None = Field(alias="reasonerMaxTokens", default=None)
+    reasoner_temperature: float | None = Field(alias="reasonerTemperature", default=None, ge=0.0, le=2.0)
+    reasoner_max_tokens: int | None = Field(alias="reasonerMaxTokens", default=None, ge=1, le=128_000)
     reasoner_effort: str | None = Field(alias="reasonerEffort", default=None)
     tts_provider: str | None = Field(alias="ttsProvider", default=None)
     tts_model: str | None = Field(alias="ttsModel", default=None)
     tts_voice: str | None = Field(alias="ttsVoice", default=None)
-    tts_speed: float | None = Field(alias="ttsSpeed", default=None)
+    tts_speed: float | None = Field(alias="ttsSpeed", default=None, ge=0.25, le=4.0)
     stt_provider: str | None = Field(alias="sttProvider", default=None)
     stt_model: str | None = Field(alias="sttModel", default=None)
     stt_language: str | None = Field(alias="sttLanguage", default=None)

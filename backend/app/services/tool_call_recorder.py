@@ -77,7 +77,6 @@ async def record_tool_call(
             created_at=_utc_now(),
         )
         await db.execute(stmt)
-        await db.commit()
 
     logger.debug(
         f"[ToolCallRecorder] Recorded: id={record_id}, tool={tool_name}, "

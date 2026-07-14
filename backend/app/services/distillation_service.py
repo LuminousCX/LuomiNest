@@ -187,7 +187,7 @@ class DistillationService:
                 from app.runtime.provider.llm.adapter import llm_adapter as default_adapter
                 llm_adapter = default_adapter
             except Exception as e:
-                logger.warning(f"[Distill] No LLM adapter available: {e}")
+                logger.warning(f"[Distill] No LLM adapter available: {e}", exc_info=True)
                 return None
 
         last_5_turns = DistillationService.get_last_n_turns(messages, 5)
@@ -218,7 +218,7 @@ class DistillationService:
             return response_text
 
         except Exception as e:
-            logger.warning(f"[Distill] Round distillation failed: {e}")
+            logger.warning(f"[Distill] Round distillation failed: {e}", exc_info=True)
             return None
 
     @staticmethod
@@ -229,7 +229,7 @@ class DistillationService:
                 from app.runtime.provider.llm.adapter import llm_adapter as default_adapter
                 llm_adapter = default_adapter
             except Exception as e:
-                logger.warning(f"[Distill] No LLM adapter available: {e}")
+                logger.warning(f"[Distill] No LLM adapter available: {e}", exc_info=True)
                 return None
 
         prompt = _MERGE_SUMMARY_PROMPT.format(
@@ -297,7 +297,7 @@ class DistillationService:
             return True
 
         except Exception as e:
-            logger.error(f"[Distill] distill_and_merge failed: {e}")
+            logger.error(f"[Distill] distill_and_merge failed: {e}", exc_info=True)
             return False
 
     @staticmethod

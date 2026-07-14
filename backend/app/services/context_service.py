@@ -387,7 +387,7 @@ Examples:
 
             return new_messages
         except Exception as e:
-            logger.warning(f"[Memory] Failed to inject memory: {e}")
+            logger.warning(f"[Memory] Failed to inject memory: {e}", exc_info=True)
             return messages
 
     @staticmethod
@@ -445,7 +445,7 @@ Examples:
 
             # 蒸馏统一由 distillation_service 处理，此处不再内嵌蒸馏
         except Exception as e:
-            logger.warning(f"[Memory] Failed to update memory from conversation: {e}")
+            logger.warning(f"[Memory] Failed to update memory from conversation: {e}", exc_info=True)
 
     _background_tasks: set = set()
 

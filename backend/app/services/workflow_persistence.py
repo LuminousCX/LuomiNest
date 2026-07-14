@@ -59,7 +59,6 @@ async def save_workflow_session(
             },
         )
         await db.execute(stmt)
-        await db.commit()
         logger.debug(f"[WorkflowPersistence] Session {session_id} saved (phase={phase})")
 
 
@@ -98,7 +97,6 @@ async def save_workflow_nodes(
                 },
             )
             await db.execute(stmt)
-        await db.commit()
         logger.debug(f"[WorkflowPersistence] {len(tasks)} nodes saved for session {session_id}")
 
 

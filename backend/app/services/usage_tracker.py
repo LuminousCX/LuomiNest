@@ -40,11 +40,7 @@ class UsageTracker:
         conv_list = conversation_store.list_conversations(agent_id)
         total_conversations = len(conv_list)
 
-        total_messages = 0
-        for meta in conv_list:
-            conv = conversation_store.get(meta.get("id", ""))
-            if conv:
-                total_messages += len(conv.get("messages", []))
+        total_messages = conversation_store.count_messages(agent_id)
 
         agents_count = agents_store.count()
 

@@ -31,6 +31,8 @@ class LuomiNestBrowserWSManager:
         self._heartbeat_task: asyncio.Task[None] | None = None
         # 最近一次收到 pong 的时间（用于检测连接健康）
         self._last_pong: float = 0.0
+        # 保护连接注册/注销等生命周期操作的锁
+        self._lock = asyncio.Lock()
 
     @property
     def is_connected(self) -> bool:
@@ -39,30 +41,32 @@ class LuomiNestBrowserWSManager:
 
     async def register_connection(self, ws: WebSocket) -> None:
         """注册新的 WS 连接（新连接会顶替旧连接）"""
-        if self._connection is not None:
-            try:
-                await self._connection.close(code=1000, reason="Replaced by new connection")
-            except Exception as e:
-                logger.warning(f"[BrowserWS] 关闭旧连接失败，继续使用新连接: {e}")
-            logger.info("[BrowserWS] 旧连接被新连接顶替")
+        async with self._lock:
+            if self._connection is not None:
+                try:
+                    await self._connection.close(code=1000, reason="Replaced by new connection")
+                except Exception as e:
+                    logger.warning(f"[BrowserWS] 关闭旧连接失败，继续使用新连接: {e}")
+                logger.info("[BrowserWS] 旧连接被新连接顶替")
 
-        self._connection = ws
-        self._last_pong = asyncio.get_event_loop().time()
-        logger.success("[BrowserWS] 前端 Electron Main 已连接")
+            self._connection = ws
+            self._last_pong = asyncio.get_running_loop().time()
+            logger.success("[BrowserWS] 前端 Electron Main 已连接")
 
-        # 启动心跳
+        # 启动心跳（锁外执行，避免持锁时间过长）
         self._start_heartbeat()
 
     async def unregister_connection(self) -> None:
         """注销当前 WS 连接，并使所有 pending 请求失败"""
-        self._connection = None
-        self._stop_heartbeat()
+        async with self._lock:
+            self._connection = None
+            self._stop_heartbeat()
 
-        # 让所有等待中的请求失败
-        for req_id, future in list(self._pending.items()):
-            if not future.done():
-                future.set_exception(ConnectionError("浏览器连接已断开"))
-        self._pending.clear()
+            # 让所有等待中的请求失败
+            for req_id, future in list(self._pending.items()):
+                if not future.done():
+                    future.set_exception(ConnectionError("浏览器连接已断开"))
+            self._pending.clear()
         logger.info("[BrowserWS] 前端连接已断开")
 
     async def send_request(
@@ -90,7 +94,7 @@ class LuomiNestBrowserWSManager:
             raise ConnectionError("浏览器未连接，请先打开 LuomiNest 桌面端")
 
         request_id = f"req_{uuid.uuid4().hex[:12]}"
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future[dict[str, Any]] = loop.create_future()
         self._pending[request_id] = future
 
@@ -101,8 +105,14 @@ class LuomiNestBrowserWSManager:
             "args": args or {},
         }
 
+        # 快照连接引用：即使 _connection 在 await 期间被置 None，发送仍使用快照
+        conn = self._connection
+        if conn is None:
+            self._pending.pop(request_id, None)
+            raise ConnectionError("浏览器未连接，请先打开 LuomiNest 桌面端")
+
         try:
-            await self._connection.send_json(message)
+            await conn.send_json(message)
             logger.debug(f"[BrowserWS] → {action} (req={request_id[:8]})")
         except Exception as e:
             self._pending.pop(request_id, None)
@@ -139,7 +149,7 @@ class LuomiNestBrowserWSManager:
             logger.debug(f"[BrowserWS] ← 响应 req={request_id[:8]} success={success}")
 
         elif msg_type == "pong":
-            self._last_pong = asyncio.get_event_loop().time()
+            self._last_pong = asyncio.get_running_loop().time()
 
         elif msg_type == "event":
             # 前端单向事件（如 tab_updated），目前仅记录日志
@@ -167,14 +177,17 @@ class LuomiNestBrowserWSManager:
                 if self._connection is None:
                     break
 
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 # 若超过 50s 未收到 pong，主动关闭连接
                 if loop.time() - self._last_pong > 50:
                     logger.warning("[BrowserWS] 心跳超时，主动断开连接")
-                    try:
-                        await self._connection.close(code=1001, reason="Heartbeat timeout")
-                    except Exception as e:
-                        logger.debug(f"[BrowserWS] 心跳超时后关闭连接失败（可忽略）: {e}")
+                    async with self._lock:
+                        if self._connection is not None:
+                            try:
+                                await self._connection.close(code=1001, reason="Heartbeat timeout")
+                            except Exception as e:
+                                logger.debug(f"[BrowserWS] 心跳超时后关闭连接失败（可忽略）: {e}")
+                    await self.unregister_connection()
                     break
 
                 await self._connection.send_json({"type": "ping"})
@@ -182,6 +195,7 @@ class LuomiNestBrowserWSManager:
                 break
             except Exception as e:
                 logger.warning(f"[BrowserWS] 心跳发送失败: {e}")
+                await self.unregister_connection()
                 break
 
     async def shutdown(self) -> None:

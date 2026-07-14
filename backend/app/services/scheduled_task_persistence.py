@@ -57,7 +57,6 @@ async def save_scheduled_task(
             },
         )
         await db.execute(stmt)
-        await db.commit()
         logger.debug(f"[ScheduledTaskPersistence] Task {task_id} saved (name={name})")
 
 
@@ -95,7 +94,6 @@ async def delete_scheduled_task(task_id: str) -> bool:
         result = await db.execute(
             sql_delete(ScheduledTaskORM).where(ScheduledTaskORM.task_id == task_id)
         )
-        await db.commit()
         deleted = result.rowcount > 0
         if deleted:
             logger.debug(f"[ScheduledTaskPersistence] Task {task_id} deleted")
@@ -119,4 +117,3 @@ async def update_last_run(task_id: str) -> None:
             set_={"last_run_at": _utc_now()},
         )
         await db.execute(stmt)
-        await db.commit()

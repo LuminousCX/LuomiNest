@@ -1,306 +1,276 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { ArrowLeft, Mail, Globe, Heart, Code, Palette, Sparkles } from 'lucide-vue-next'
+import {
+  ArrowLeft,
+  Mail,
+  Globe,
+  Heart,
+  Code,
+  Palette,
+  Sparkles,
+  MapPin,
+  Clock,
+  Github,
+  Twitter,
+  ExternalLink,
+  Award,
+  BookOpen,
+  Zap,
+  Cpu
+} from 'lucide-vue-next'
 import logoImage from '../../assets/images/Luminous_chenxi.png'
+import LumiSettingsBackground from '../../components/settings-detail/LumiSettingsBackground.vue'
 
 const router = useRouter()
 
+const profileStats = [
+  { icon: Github, label: 'Followers', value: '65+' },
+  { icon: Heart, label: 'Following', value: '140' },
+  { icon: MapPin, label: 'Location', value: 'China' },
+  { icon: Clock, label: 'Timezone', value: 'UTC+8' }
+]
+
+const socialLinks = [
+  { icon: Github, label: 'GitHub', url: 'https://github.com/luminous-ChenXi' },
+  { icon: Twitter, label: 'X / Twitter', url: 'https://x.com/luminous_chenxi' },
+  { icon: Mail, label: 'Email', url: 'mailto:luminouschenxi@outlook.com' },
+  { icon: Globe, label: 'Blog', url: 'https://luminouschenxi.com' },
+  { icon: Globe, label: 'Project', url: 'https://luminouschenxi.net' }
+]
+
+const pinnedProjects = [
+  {
+    name: 'LuomiNest',
+    owner: 'LuminousCX',
+    desc: '分布式 AI 伴侣桌面平台，LuomiNest 本体项目。',
+    url: 'https://github.com/LuminousCX/LuomiNest',
+    tags: ['Vue 3', 'Electron', 'FastAPI']
+  },
+  {
+    name: 'LuomiBlog',
+    owner: 'luminous-ChenXi',
+    desc: 'AI 知识库博客系统，支持 Astro / Vue 双前端。',
+    url: 'https://github.com/luminous-ChenXi/LuomiBlog',
+    tags: ['Astro', 'Vue', 'Spring Boot']
+  },
+  {
+    name: 'AsrNest',
+    owner: 'luminous-ChenXi',
+    desc: '现代全媒体 / 图床管理平台，AI 预审、CDN 加速。',
+    url: 'https://github.com/luminous-ChenXi/AsrNest',
+    tags: ['Spring Boot', 'Vue 3', 'AI']
+  },
+  {
+    name: 'AsrNest Backend',
+    owner: 'luminous-ChenXi',
+    desc: 'AsrNest 后端服务，负责图片处理与业务 API。',
+    url: 'https://github.com/luminous-ChenXi/AsrNest-Backend',
+    tags: ['Java', 'MySQL', 'Redis']
+  }
+]
+
 const techStacks = [
-  { category: '后端/运维', icon: Code, items: ['Java', 'Python', 'Node.js', 'Nginx', 'Docker', 'K8s', 'MySQL', 'MongoDB'] },
-  { category: '前端/建站', icon: Globe, items: ['Vue', 'HTML/CSS', 'TypeScript', 'WordPress'] },
-  { category: '创作/设计', icon: Palette, items: ['UE5', 'Blender', 'AE', 'PS'] }
+  { category: '后端 / 运维', icon: Code, items: ['Java', 'Python', 'Node.js', 'Nginx', 'Docker', 'K8s', 'MySQL', 'MongoDB'] },
+  { category: '前端 / 建站', icon: Globe, items: ['Vue', 'Astro', 'HTML/CSS', 'TypeScript', 'WordPress'] },
+  { category: '创作 / 设计', icon: Palette, items: ['UE5', 'Blender', 'AE', 'PS'] }
 ]
 </script>
 
 <template>
-  <div class="about-view">
-    <header class="about-header page-header animate-fade-in">
-      <div class="page-header__main">
-        <button class="page-header__back" @click="router.push('/settings')">
-          <ArrowLeft :size="18" />
-        </button>
-        <div>
-          <h1 class="page-header__title">关于开发者</h1>
-          <p class="page-subtitle">LuomiNest 项目主导者</p>
-        </div>
+  <div class="lumi-settings-page about-view">
+    <LumiSettingsBackground />
+    <header class="lumi-settings-page__header lumi-settings-animate-fade">
+      <button class="lumi-settings-page__back" @click="router.push('/settings')">
+        <ArrowLeft :size="18" />
+      </button>
+      <div>
+        <h1 class="lumi-settings-page__title">关于开发者</h1>
+        <p class="lumi-settings-page__subtitle">LuomiNest 项目主导者</p>
       </div>
     </header>
 
-    <div class="about-body">
-      <div class="profile-card animate-slide-up">
-        <div class="profile-banner">
-          <img :src="logoImage" alt="LuminousChenXi" class="profile-logo" />
-          <div class="profile-identity">
-            <h2 class="profile-name">Chenxi / 辰汐</h2>
-            <p class="profile-role">Full-Stack Developer & Digital Creative Explorer</p>
-            <p class="profile-alias">Luminous-ChenXi Qiushui / 辰汐秋水</p>
-          </div>
-        </div>
+    <div class="lumi-settings-page__body">
+      <div class="lumi-settings-page__content">
+        <!-- Profile Hero -->
+        <section class="about-hero lumi-settings-animate-slide">
+          <div class="about-profile">
+            <div class="about-logo">
+              <img :src="logoImage" alt="LuminousChenXi" />
+            </div>
+            <div class="about-identity">
+              <h2 class="about-name">Chenxi / 辰汐</h2>
+              <p class="about-role">Full-Stack Developer & Digital Creative Explorer</p>
+              <p class="about-motto">
+                “Nothing but youth and dreams can live up to the future!”<br />
+                唯有青春与梦想，不可辜负。
+              </p>
 
-        <div class="profile-section">
-          <h3 class="profile-h3"><Sparkles :size="14" /> About Me / 关于我</h3>
-          <p>
-            我是一名<strong>全栈开发者与数字创意探索者</strong>，热衷于将前沿技术（AI、云原生）与创意构想（二次元、游戏开发）相结合。
-            我的目标是构建既技术扎实又富有创意的实用项目。LuomiNest 由我主导设计与开发。
-          </p>
-        </div>
-
-        <div class="profile-section">
-          <h3 class="profile-h3"><Code :size="14" /> Tech Stack / 技术栈</h3>
-          <div class="tech-grid">
-            <div v-for="stack in techStacks" :key="stack.category" class="tech-row">
-              <div class="tech-label">
-                <component :is="stack.icon" :size="13" />
-                <span>{{ stack.category }}</span>
+              <div class="about-stats">
+                <div v-for="stat in profileStats" :key="stat.label" class="about-stat">
+                  <component :is="stat.icon" :size="14" />
+                  <span>{{ stat.value }} {{ stat.label }}</span>
+                </div>
               </div>
-              <div class="tech-tags">
-                <span v-for="item in stack.items" :key="item" class="tech-tag">{{ item }}</span>
+
+              <div class="about-social">
+                <a
+                  v-for="link in socialLinks"
+                  :key="link.label"
+                  :href="link.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="about-social__link"
+                >
+                  <component :is="link.icon" :size="14" />
+                  <span>{{ link.label }}</span>
+                </a>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="profile-section">
-          <h3 class="profile-h3"><Globe :size="14" /> Core Project / 核心项目</h3>
-          <p>
-            主导开发 <a href="https://luminouschenxi.net" target="_blank" rel="noopener noreferrer">LuminousChenXi</a> ——
-            基于 Spring Boot & Vue 3 的现代图床平台。核心功能：AI 预审、CDN 加速、便捷上传。
-          </p>
-          <p>
-            技术博客 <a href="https://luminouschenxi.com" target="_blank" rel="noopener noreferrer">luminouschenxi.com</a> ——
-            分享网络配置、开源协议等技术心得。
-          </p>
-        </div>
+        <!-- About Me -->
+        <section class="lumi-settings-section lumi-settings-animate-slide">
+          <div class="lumi-settings-section__header">
+            <Sparkles :size="14" />
+            <span>About Me / 关于我</span>
+          </div>
+          <div class="about-section">
+            <p class="about-section__text">
+              我是一名<strong>全栈开发者与数字创意探索者</strong>，热衷于将前沿技术（AI、云原生）与创意构想（二次元、游戏开发）相结合。
+              我的目标是构建既技术扎实又富有创意的实用项目。LuomiNest 由我主导设计与开发。
+            </p>
+            <p class="about-section__text">
+              I am a Full-Stack Developer & Digital Creative Explorer, passionately bridging the gap between
+              cutting-edge technology (AI, Cloud-Native) and imaginative creation (Anime, Game Dev).
+              My mission is to build practical, innovative projects that are both technically robust and creatively engaging.
+            </p>
+          </div>
+        </section>
 
-        <div class="profile-section">
-          <h3 class="profile-h3"><Mail :size="14" /> Contact / 联系方式</h3>
-          <div class="contact-links">
-            <a href="mailto:chenxi@luminouschenxi.net" class="contact-item">
-              <Mail :size="13" />
+        <!-- Technical Focus -->
+        <section class="lumi-settings-section lumi-settings-animate-slide">
+          <div class="lumi-settings-section__header">
+            <Cpu :size="14" />
+            <span>Technical Focus / 技术聚焦</span>
+          </div>
+          <div class="about-section">
+            <p class="about-section__text">
+              全栈开发（Java / Spring Boot / Vue）· 云原生（Docker / Nginx / K8s）·
+              内容创作工具链（UE5 / Blender / AE / PS）· AI Agent 与桌面端工程。
+            </p>
+          </div>
+        </section>
+
+        <!-- Creative Practice -->
+        <section class="lumi-settings-section lumi-settings-animate-slide">
+          <div class="lumi-settings-section__header">
+            <Palette :size="14" />
+            <span>Creative Practice / 创意实践</span>
+          </div>
+          <div class="about-section">
+            <p class="about-section__text">
+              绘画与视觉设计 · 探索 AIGC 辅助工作流 · 二次元角色与 Live2D 互动呈现 ·
+              独立游戏原型与数字资产创作。
+            </p>
+          </div>
+        </section>
+
+        <!-- Pinned Projects -->
+        <section class="lumi-settings-section lumi-settings-animate-slide">
+          <div class="lumi-settings-section__header">
+            <Zap :size="14" />
+            <span>Core Projects / 核心项目</span>
+          </div>
+          <div class="about-projects">
+            <a
+              v-for="project in pinnedProjects"
+              :key="project.name"
+              :href="project.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="about-project-card"
+            >
+              <div class="about-project__header">
+                <span class="about-project__name">{{ project.name }}</span>
+                <ExternalLink :size="12" />
+              </div>
+              <span class="about-project__owner">{{ project.owner }}</span>
+              <p class="about-project__desc">{{ project.desc }}</p>
+              <div class="about-project__tags">
+                <span v-for="tag in project.tags" :key="tag" class="lumi-settings-tag">{{ tag }}</span>
+              </div>
+            </a>
+          </div>
+        </section>
+
+        <!-- Tech Stack -->
+        <section class="lumi-settings-section lumi-settings-animate-slide">
+          <div class="lumi-settings-section__header">
+            <Code :size="14" />
+            <span>Tech Stack / 技术栈</span>
+          </div>
+          <div class="about-tech">
+            <div v-for="stack in techStacks" :key="stack.category" class="about-tech__row">
+              <div class="about-tech__label">
+                <component :is="stack.icon" :size="13" />
+                <span>{{ stack.category }}</span>
+              </div>
+              <div class="about-tech__tags">
+                <span v-for="item in stack.items" :key="item" class="lumi-settings-tag">{{ item }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Contact -->
+        <section class="lumi-settings-section lumi-settings-animate-slide">
+          <div class="lumi-settings-section__header">
+            <Mail :size="14" />
+            <span>Contact / 联系方式</span>
+          </div>
+          <div class="about-contact">
+            <a href="mailto:luminouschenxi@outlook.com" class="about-contact__item">
+              <Mail :size="14" />
+              <span>luminouschenxi@outlook.com</span>
+            </a>
+            <a href="mailto:chenxi@luminouschenxi.net" class="about-contact__item">
+              <Mail :size="14" />
               <span>chenxi@luminouschenxi.net</span>
             </a>
-            <a href="https://luminouschenxi.com" target="_blank" rel="noopener noreferrer" class="contact-item">
-              <Globe :size="13" />
+            <a href="https://luminouschenxi.com" target="_blank" rel="noopener noreferrer" class="about-contact__item">
+              <BookOpen :size="14" />
               <span>luminouschenxi.com</span>
             </a>
-            <a href="https://luminouschenxi.net" target="_blank" rel="noopener noreferrer" class="contact-item">
-              <Globe :size="13" />
+            <a href="https://luminouschenxi.net" target="_blank" rel="noopener noreferrer" class="about-contact__item">
+              <Globe :size="14" />
               <span>luminouschenxi.net</span>
             </a>
           </div>
-        </div>
+        </section>
 
-        <div class="profile-support">
-          <Heart :size="13" class="support-icon" />
-          <span>如果你觉得我的项目对你有帮助，欢迎通过</span>
-          <a href="https://afdian.com/a/luminous_chenxi" target="_blank" rel="noopener noreferrer">爱发电</a>
-          <span>支持我</span>
-        </div>
+        <!-- Support -->
+        <section class="lumi-settings-card lumi-settings-animate-slide">
+          <div class="about-support">
+            <Heart :size="14" class="about-support__icon" />
+            <span>如果你觉得我的项目对你有帮助，欢迎通过</span>
+            <a href="https://afdian.com/a/luminous_chenxi" target="_blank" rel="noopener noreferrer">爱发电</a>
+            <span>支持我</span>
+          </div>
+        </section>
+
+        <!-- Achievements hint -->
+        <section class="lumi-settings-card lumi-settings-animate-slide">
+          <div class="about-section">
+            <p class="about-section__text">
+              <Award :size="14" class="about-award-icon" />
+              GitHub Achievements · Open Source Contributor · LuomiNest / LuomiBlog / AsrNest Maintainer
+            </p>
+          </div>
+        </section>
       </div>
     </div>
   </div>
 </template>
 
-<style scoped>
-.about-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--workspace-bg);
-  overflow: hidden;
-}
-
-.about-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-5) var(--space-7);
-  border-bottom: 1px solid var(--workspace-border);
-  flex-shrink: 0;
-  margin-bottom: 0;
-}
-
-.page-subtitle {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  margin-top: 1px;
-}
-
-.about-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-6) var(--space-7);
-}
-
-.profile-card {
-  background: var(--workspace-card);
-  border-radius: var(--radius-lg);
-  padding: var(--space-7);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
-
-.profile-banner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-}
-
-.profile-logo {
-  width: 170px;
-  height: 170px;
-  border-radius: var(--radius-lg);
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-.profile-identity {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.profile-name {
-  font-size: var(--text-3xl);
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.3px;
-}
-
-.profile-role {
-  font-size: var(--text-base);
-  color: var(--lumi-primary);
-  font-weight: 500;
-}
-
-.profile-alias {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-.profile-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.profile-h3 {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--text-primary);
-  opacity: 0.85;
-}
-
-.profile-section p {
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  line-height: 1.75;
-}
-
-.profile-section strong {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.profile-section a {
-  color: var(--lumi-primary);
-  text-decoration: none;
-  font-weight: 500;
-  transition: color var(--transition-fast);
-}
-
-.profile-section a:hover {
-  color: var(--lumi-primary-hover);
-  text-decoration: underline;
-}
-
-.tech-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.tech-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.tech-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-  min-width: 90px;
-  flex-shrink: 0;
-}
-
-.tech-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.tech-tag {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-}
-
-.contact-links {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.contact-item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: color var(--transition-fast);
-}
-
-.contact-item:hover {
-  color: var(--lumi-primary);
-}
-
-.profile-support {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--divider-soft);
-}
-
-.support-icon {
-  color: var(--lumi-accent);
-  flex-shrink: 0;
-}
-
-.profile-support a {
-  color: var(--lumi-primary);
-  text-decoration: none;
-  font-weight: 500;
-  transition: color var(--transition-fast);
-}
-
-.profile-support a:hover {
-  color: var(--lumi-primary-hover);
-  text-decoration: underline;
-}
-
-</style>
+<style scoped src="../../styles/views/about-view.css"></style>
