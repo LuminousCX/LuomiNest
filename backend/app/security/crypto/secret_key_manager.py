@@ -79,8 +79,8 @@ def _get_machine_fingerprint() -> str:
                 content = Path(path).read_text(encoding="utf-8").strip()
                 if content:
                     return f"linux-{content}"
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(f"读取机器指纹文件失败: {path}, err={exc}")
 
     # 兜底：MAC 地址 + 主机名
     mac = uuid_mod.getnode()
