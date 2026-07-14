@@ -54,6 +54,17 @@ const renamingTitleModel = computed<string>({
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
+const MODE_LABELS: Record<string, string> = {
+  normal: '普通',
+  standard: '标准',
+  ultra: '超长',
+}
+
+const modeLabel = (chatMode?: string): string => {
+  if (!chatMode || chatMode === 'normal') return ''
+  return MODE_LABELS[chatMode] || ''
+}
+
 const formatTime = (dateStr: string) => {
   const d = new Date(dateStr)
   const now = new Date()
@@ -183,7 +194,10 @@ const onStartRename = (convId: string, currentTitle: string) => {
                       />
                     </template>
                     <template v-else>
-                      <span class="history-item-title">{{ conv.title }}</span>
+                      <span class="history-item-title">
+                        {{ conv.title }}
+                        <span v-if="modeLabel(conv.chat_mode)" :class="['mode-tag', `mode-tag-${conv.chat_mode}`]">{{ modeLabel(conv.chat_mode) }}</span>
+                      </span>
                       <span class="history-item-time">{{ formatTime(conv.updated_at) }}</span>
                     </template>
                   </div>
@@ -357,6 +371,28 @@ button:focus-visible {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.mode-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 5px;
+  margin-left: 4px;
+  border-radius: 3px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.mode-tag-standard {
+  color: var(--primary-color, var(--text-link));
+  background: var(--primary-bg, rgba(0, 122, 255, 0.1));
+}
+
+.mode-tag-ultra {
+  color: var(--warning-color, #e8a317);
+  background: var(--warning-bg, rgba(232, 163, 23, 0.1));
 }
 
 .history-item-time {

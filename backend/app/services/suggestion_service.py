@@ -3,6 +3,7 @@ import re
 from loguru import logger
 
 from app.runtime.provider.llm.adapter import llm_adapter
+from app.core.utils import extract_text_from_content
 from app.runtime.provider.llm.types import RouteHint
 
 
@@ -33,14 +34,7 @@ class SuggestionService:
             conversation_text = ""
             for msg in recent_messages:
                 role = msg.get("role", "")
-                content = msg.get("content", "")
-                if isinstance(content, list):
-                    text_parts = [
-                        p.get("text", "")
-                        for p in content
-                        if isinstance(p, dict) and p.get("type") == "text"
-                    ]
-                    content = " ".join(text_parts)
+                content = extract_text_from_content(msg.get("content", ""))
                 if role == "user":
                     conversation_text += f"用户: {content}\n"
                 elif role == "assistant":

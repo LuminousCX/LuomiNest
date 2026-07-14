@@ -5,6 +5,8 @@ from functools import lru_cache
 from loguru import logger
 from pydantic_settings import BaseSettings
 
+from app.core.hardware import get_hardware_profile
+
 from app.security.crypto.secret_key_manager import is_placeholder, load_or_create_secret_key
 
 
@@ -39,7 +41,7 @@ class Settings(BaseSettings):
     LLM_DEFAULT_TEMPERATURE: float = 0.7
     LLM_DEFAULT_MAX_TOKENS: int = 4096
     LLM_DEFAULT_TOP_P: float = 0.9
-    LLM_MAX_CONCURRENT_REQUESTS: int = 3
+    LLM_MAX_CONCURRENT_REQUESTS: int = 0  # 0 表示根据硬件自动计算
 
     LIVE2D_MODEL_PATH: str = "./models/live2d"
     VRM_MODEL_PATH: str = "./models/vrm"
@@ -84,6 +86,11 @@ def get_settings() -> Settings:
         # Windows 反斜杠转换为正斜杠以兼容 SQLAlchemy URL 解析
         s.DATABASE_URL = f"sqlite+aiosqlite:///{db_path.replace(os.sep, '/')}"
 
+    # LLM_MAX_CONCURRENT_REQUESTS: 0 表示自动计算
+    if s.LLM_MAX_CONCURRENT_REQUESTS <= 0:
+        profile = get_hardware_profile()
+        s.LLM_MAX_CONCURRENT_REQUESTS = max(2, profile.cpu_count // 2)
+        logger.info(f"[Config] LLM_MAX_CONCURRENT_REQUESTS auto-tuned to {s.LLM_MAX_CONCURRENT_REQUESTS} (CPU={profile.cpu_count})")
     if s.LLM_MAX_CONCURRENT_REQUESTS < 1:
         logger.warning(f"LLM_MAX_CONCURRENT_REQUESTS={s.LLM_MAX_CONCURRENT_REQUESTS} is invalid, clamping to 1")
         s.LLM_MAX_CONCURRENT_REQUESTS = 1

@@ -45,21 +45,21 @@ target/
 *.ear
 
 # ============================================================
-# 构建输出 - Firmware / ESP-IDF
+# Firmware 构建输出
 # ============================================================
-# ESP-IDF 构建输出
 firmware/**/build/
 firmware/**/sdkconfig
 firmware/**/sdkconfig.old
-
-# ESP-IDF 组件管理器
 firmware/**/managed_components/
 firmware/**/dependencies.lock
-
-# Firmware 二进制和固件文件
 firmware/**/*.elf
 firmware/**/*.map
 firmware/**/*.hex
+
+# ============================================================
+# Live2D 模型文件（体积大且独立管理，不纳入版本控制）
+# ============================================================
+deploy/images/live2d-server/models/
 
 # ============================================================
 # Python 虚拟环境和缓存

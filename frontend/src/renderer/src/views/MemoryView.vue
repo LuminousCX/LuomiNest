@@ -25,6 +25,7 @@ import MemoryKnowledgeTab from '../components/memory/MemoryKnowledgeTab.vue'
 import MemoryHistoryTab from '../components/memory/MemoryHistoryTab.vue'
 import type { ConfirmAction, LayerTab } from '../components/memory/types'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { MAIN_AGENT_ID } from '../constants'
 
 const logger = createLuomiNestRendererLogger('Memory')
 
@@ -281,7 +282,7 @@ async function handleAddDaily() {
 }
 
 const isSaving = ref(false)
-const selectedAgentId = ref<string | null>('luominest_main_agent')
+const selectedAgentId = ref<string | null>(MAIN_AGENT_ID)
 
 async function switchConversation(convId: string | null) {
   selectedConversationId.value = convId
@@ -539,7 +540,7 @@ window.addEventListener('click', closeMenu)
           <Upload :size="15" />
         </button>
         <button class="h-btn" @click="loadData">
-          <RefreshCw :size="15" :class="{ spinning: memoryStore.loading }" />
+          <RefreshCw :size="15" :class="{ 'spin-animation': memoryStore.loading }" />
         </button>
         <button class="h-btn" @click="toggleMenu">
           <MoreVertical :size="15" />
@@ -582,7 +583,7 @@ window.addEventListener('click', closeMenu)
     />
 
     <div v-if="memoryStore.loading && !profile.name && memoryStore.facts.length === 0" class="memory-loading">
-      <Loader2 :size="24" class="spinning" />
+      <Loader2 :size="24" class="spin-animation" />
       <span>加载记忆数据...</span>
     </div>
 
@@ -730,7 +731,6 @@ window.addEventListener('click', closeMenu)
   font-size: var(--text-md);
 }
 
-.spinning { animation: spin 1s linear infinite; }
 
 .memory-header {
   display: flex;
@@ -768,30 +768,6 @@ window.addEventListener('click', closeMenu)
   align-items: center;
   gap: var(--space-2);
 }
-
-.h-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: var(--radius-xs);
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-slow);
-  white-space: nowrap;
-}
-
-.h-btn:hover { background: var(--surface-hover); color: var(--text); }
-
-.h-btn.primary {
-  color: var(--text);
-  background: var(--task-purple-soft);
-  border: 1px solid var(--task-purple-border);
-}
-
-.h-btn.primary:hover { background: var(--task-purple-soft); }
-.h-btn:disabled { opacity: 0.5; cursor: default; }
 
 .memory-body {
   display: flex;

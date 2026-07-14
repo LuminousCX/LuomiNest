@@ -6,6 +6,7 @@ from loguru import logger
 from app.runtime.provider.llm.adapter import llm_adapter, _create_provider_from_config
 from app.runtime.provider.llm.providers import PROVIDER_TEMPLATES
 from app.core.config import settings
+from app.core.utils import ok
 from app.core.exceptions import NotFoundError, ValidationError
 from app.infrastructure.database.config_store import lumi_config_store
 
@@ -323,7 +324,7 @@ async def remove_provider(provider_id: str):
 
     llm_adapter.remove_provider(provider_id)
     logger.success(f"[API] DELETE /models/providers/{provider_id} - Provider removed")
-    return {"error": None, "data": {"deleted": True, "id": provider_id}}
+    return ok({"deleted": True, "id": provider_id})
 
 
 @router.get("/providers/{provider_id}/models")
@@ -334,7 +335,7 @@ async def list_provider_models(provider_id: str):
         models = await llm_adapter.list_models(provider_id)
         elapsed = time.time() - start_time
         logger.success(f"[API] GET /models/providers/{provider_id}/models - Success: {len(models)} models, elapsed={elapsed:.2f}s")
-        return {"error": None, "data": models}
+        return ok(models)
     except Exception as e:
         elapsed = time.time() - start_time
         logger.error(f"[API] GET /models/providers/{provider_id}/models - Failed: elapsed={elapsed:.2f}s, error={e}")
@@ -359,7 +360,7 @@ async def test_provider(request: ProviderTestRequest):
         logger.success(f"[API] POST /models/providers/test - Success: {len(result['models'])} models, elapsed={elapsed:.2f}s")
     else:
         logger.warning(f"[API] POST /models/providers/test - Failed: elapsed={elapsed:.2f}s, error={result['error']}")
-    return {"error": None, "data": result}
+    return ok(result)
 
 
 @router.get("/list")
@@ -369,8 +370,8 @@ async def list_all_models():
     models = await llm_adapter.list_models()
     elapsed = time.time() - start_time
     logger.success(f"[API] GET /models/list - Success: {len(models)} models, elapsed={elapsed:.2f}s")
-    return {"error": None, "data": models}
-
+    return ok(models)
+    
 
 @router.get("/config")
 async def get_model_config():
@@ -392,7 +393,7 @@ async def get_model_config():
         if field in saved:
             config[field] = saved[field]
     logger.success(f"[API] GET /models/config - Success: provider={config['default_provider']}, model={config['default_model']}")
-    return {"error": None, "data": config}
+    return ok(config)
 
 
 @router.patch("/config")

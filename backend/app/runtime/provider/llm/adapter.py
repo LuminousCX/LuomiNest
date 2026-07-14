@@ -1,3 +1,4 @@
+import asyncio
 import threading
 import time
 from typing import AsyncIterator
@@ -52,6 +53,11 @@ class LLMAdapter:
         self._provider_configs: dict[str, dict] = {}
         self.default_provider = settings.LLM_DEFAULT_PROVIDER
         self._loaded = False
+        # NOTE: 此处使用 threading.Lock 而非 asyncio.Lock，原因：
+        # 1. ensure_providers_loaded() 是同步方法，被大量同步方法调用（get_provider, register_provider 等）
+        # 2. get_provider() 在代码库中被 25+ 处同步代码调用（chat endpoints, platform_router, memory_engine 等）
+        # 3. 转换为 asyncio.Lock 需要级联修改数十个文件的所有调用链
+        # 4. 该锁仅保护一次性初始化（_loaded 标志），初始化完成后无竞争，threading.Lock 在此场景完全适用
         self._lock = threading.Lock()
         # Repository 懒加载（避免 import 时触达 DB）
         self._provider_repo = None

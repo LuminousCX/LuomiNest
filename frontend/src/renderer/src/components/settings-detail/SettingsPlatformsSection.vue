@@ -272,7 +272,7 @@ onMounted(() => {
           </div>
         </div>
         <div v-else class="main-agent-empty">
-          <Loader2 :size="16" class="tts-spin" />
+          <Loader2 :size="16" class="spin-animation" />
           <span>正在加载主 Agent 配置...</span>
         </div>
         <div class="main-agent-hint">
@@ -311,7 +311,7 @@ onMounted(() => {
         <span class="platform-card-title">平台实例</span>
         <div class="platform-header-actions">
           <button class="platform-header-btn" @click="handleRefreshPlatforms" :disabled="platformStore.loading">
-            <RefreshCw :size="13" :class="{ spinning: platformStore.loading }" />
+            <RefreshCw :size="13" :class="{ 'spin-animation': platformStore.loading }" />
             <span>刷新</span>
           </button>
           <button class="platform-header-btn primary" @click="openAddPlatformDialog()">
@@ -966,15 +966,6 @@ onMounted(() => {
 
 .platform-empty-btn:hover {
   background: var(--lumi-primary-hover);
-}
-
-.tts-spin {
-  animation: tts-spin 1s linear infinite;
-  color: var(--lumi-primary);
-}
-
-@keyframes tts-spin {
-  to { transform: rotate(360deg); }
 }
 
 .platform-dialog-overlay {

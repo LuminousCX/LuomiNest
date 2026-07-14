@@ -7,14 +7,10 @@
 - invalidate() 为 no-op（SQL 始终读取最新）
 """
 import asyncio
-from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
+from app.core.utils import utc_now
 from app.infrastructure.database.repositories.base import BaseRepository
-
-
-def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 class JsonStoreFacade:
@@ -62,7 +58,7 @@ class JsonStoreFacade:
 
     def update(self, key: str, updates: dict) -> None:
         """部分更新，自动设置 updated_at（与 JsonStore 一致）。"""
-        updates_with_ts = {**updates, "updated_at": _utcnow_iso()}
+        updates_with_ts = {**updates, "updated_at": utc_now()}
         self._repo.update(key, updates_with_ts)
 
     def mutate(self, key: str, updater_fn: Callable) -> Optional[dict]:

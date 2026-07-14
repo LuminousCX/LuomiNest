@@ -7,12 +7,12 @@
 - mutate() 在单事务内完成读-改-写，保证原子性
 """
 import asyncio
-from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.utils import utc_now
 from app.infrastructure.database.session import sync_session_factory
 
 
@@ -25,9 +25,8 @@ def orm_to_dict(obj) -> Optional[dict]:
     return d
 
 
-def utcnow_iso() -> str:
-    """当前 UTC 时间的 ISO 8601 字符串（与现有数据格式一致）。"""
-    return datetime.now(timezone.utc).isoformat()
+# Re-export for backward compatibility
+utcnow_iso = utc_now
 
 
 class BaseRepository:

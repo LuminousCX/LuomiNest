@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.exceptions import LuomiNestError
+from app.core.hardware import get_hardware_profile
 from app.api.v1.router import api_router
 from app.api.attachment_api import router as attachment_router
 from app.security.auth.local_token import load_auth_token
@@ -17,6 +18,18 @@ from app.security.auth.middleware import luomi_auth_middleware
 async def lifespan(app: FastAPI):
     logger.info(f"[LuomiNest] Starting application...")
     logger.info(f"[LuomiNest] Environment: {'Development' if settings.DEBUG else 'Production'}")
+
+    # 硬件检测日志
+    try:
+        profile = get_hardware_profile()
+        logger.info(
+            f"[LuomiNest] 硬件概况: CPU={profile.cpu_count}核, "
+            f"内存={profile.total_memory_gb:.1f}GB, "
+            f"GPU={profile.gpu_type.value}, "
+            f"低端设备={'是' if profile.is_low_end else '否'}"
+        )
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Hardware detection failed: {e}")
 
     # 初始化 SQLite 数据库（核心依赖，必须在任何 store 操作前完成）
     # 失败直接 raise 让进程退出，避免"能访问但功能全坏"的半死状态

@@ -71,6 +71,17 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     }
   })
 
+  ipcMain.handle('app:getWelcomeCompleted', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return configStore.getWelcomeCompleted()
+  })
+
+  ipcMain.handle('app:setWelcomeCompleted', (event: IpcMainInvokeEvent, value: boolean) => {
+    if (!assertTrustedSender(event)) return
+    if (typeof value !== 'boolean') return
+    configStore.setWelcomeCompleted(value)
+  })
+
   ipcMain.handle('auth:getToken', (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return getLumiAuthToken()

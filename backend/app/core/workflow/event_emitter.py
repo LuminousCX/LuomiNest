@@ -17,9 +17,7 @@ from typing import Any
 
 from loguru import logger
 
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from app.core.utils import utc_now
 
 
 class WorkflowEventEmitter:
@@ -39,7 +37,7 @@ class WorkflowEventEmitter:
             "type": event_type,
             "data": data,
             "session_id": self.session_id,
-            "timestamp": _utc_now(),
+            "timestamp": utc_now(),
         }
         await self._queue.put(event)
         logger.debug(f"[WorkflowEmitter] {event_type}: {data.get('module', '')}")

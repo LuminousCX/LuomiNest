@@ -4,16 +4,39 @@ import re
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
 from loguru import logger
 
+from app.core.utils import utc_now
 from app.infrastructure.database.json_store import groups_store, agents_store
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
 from app.domains.social.agent_role_registry import AgentRoleRegistry
+
+
+def resolve_provider(agent: dict) -> str:
+    """解析 agent 应使用的 LLM provider。"""
+    agent_provider = agent.get("provider", "")
+    if agent_provider and agent_provider in llm_adapter.providers:
+        return agent_provider
+    if llm_adapter.default_provider in llm_adapter.providers:
+        return llm_adapter.default_provider
+    for provider_key in llm_adapter.providers:
+        return provider_key
+    return ""
+
+
+def resolve_model(agent: dict, provider_name: str) -> str:
+    """解析 agent 应使用的 LLM model。"""
+    agent_model = agent.get("model", "")
+    if agent_model:
+        return agent_model
+    provider = llm_adapter.providers.get(provider_name)
+    if provider:
+        return provider.default_model
+    return ""
 
 
 class TaskStatus(str, Enum):
@@ -57,7 +80,7 @@ class CollaborationSession:
     sub_tasks: list[SubTask] = field(default_factory=list)
     final_result: str | None = None
     coordinator_response: str | None = None
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: utc_now())
     completed_at: str | None = None
 
 
@@ -175,25 +198,6 @@ class AgentOrchestrator:
         self._active_sessions: dict[str, CollaborationSession] = {}
         self._save_locks: dict[str, asyncio.Lock] = {}
 
-    def _resolve_provider(self, agent: dict) -> str:
-        agent_provider = agent.get("provider", "")
-        if agent_provider and agent_provider in llm_adapter.providers:
-            return agent_provider
-        if llm_adapter.default_provider in llm_adapter.providers:
-            return llm_adapter.default_provider
-        for provider_key in llm_adapter.providers:
-            return provider_key
-        return ""
-
-    def _resolve_model(self, agent: dict, provider_name: str) -> str:
-        agent_model = agent.get("model", "")
-        if agent_model:
-            return agent_model
-        provider = llm_adapter.providers.get(provider_name)
-        if provider:
-            return provider.default_model
-        return ""
-
     async def orchestrate(
         self,
         group_id: str,
@@ -257,7 +261,7 @@ class AgentOrchestrator:
             final_result = await self._synthesize_results(coordinator, group, session)
             session.final_result = final_result
             session.phase = CollaborationPhase.COMPLETED
-            session.completed_at = datetime.now(timezone.utc).isoformat()
+            session.completed_at = utc_now()
 
             await self._save_messages(group, session)
 
@@ -265,7 +269,7 @@ class AgentOrchestrator:
             logger.error(f"[Orchestrator] Session {session.session_id} failed: {e}")
             session.phase = CollaborationPhase.FAILED
             session.final_result = f"协作过程出错: {str(e)}"
-            session.completed_at = datetime.now(timezone.utc).isoformat()
+            session.completed_at = utc_now()
 
         return session
 
@@ -398,7 +402,7 @@ class AgentOrchestrator:
                         for t in stuck:
                             t.status = TaskStatus.FAILED
                             t.error = "Unresolvable dependency"
-                            t.completed_at = datetime.now(timezone.utc).isoformat()
+                            t.completed_at = utc_now()
                             completed_ids.add(t.task_id)
                     break
 
@@ -423,7 +427,7 @@ class AgentOrchestrator:
             final_result = await self._synthesize_results(coordinator, group, session)
             session.final_result = final_result
             session.phase = CollaborationPhase.COMPLETED
-            session.completed_at = datetime.now(timezone.utc).isoformat()
+            session.completed_at = utc_now()
 
             yield {
                 "type": "final_result",
@@ -461,8 +465,8 @@ class AgentOrchestrator:
             {"role": "user", "content": f"群组上下文:\n{group_context}\n\n用户消息: {user_message}"},
         ]
 
-        provider = self._resolve_provider(coordinator)
-        model = self._resolve_model(coordinator, provider)
+        provider = resolve_provider(coordinator)
+        model = resolve_model(coordinator, provider)
 
         logger.info(f"[Orchestrator] Coordinator calling LLM: provider={provider}, model={model}")
 
@@ -559,7 +563,7 @@ class AgentOrchestrator:
                     for t in stuck:
                         t.status = TaskStatus.FAILED
                         t.error = "Unresolvable dependency"
-                        t.completed_at = datetime.now(timezone.utc).isoformat()
+                        t.completed_at = utc_now()
                         completed_ids.add(t.task_id)
                 break
 
@@ -585,7 +589,7 @@ class AgentOrchestrator:
         consensus_content: str | None = None,
     ) -> None:
         task.status = TaskStatus.RUNNING
-        task.started_at = datetime.now(timezone.utc).isoformat()
+        task.started_at = utc_now()
 
         try:
             agent = None
@@ -637,8 +641,8 @@ class AgentOrchestrator:
                 {"role": "user", "content": context},
             ]
 
-            provider = self._resolve_provider(agent)
-            model = self._resolve_model(agent, provider)
+            provider = resolve_provider(agent)
+            model = resolve_model(agent, provider)
 
             logger.info(f"[Orchestrator] Task {task.task_id} calling LLM: agent={agent['name']}, provider={provider}, model={model}")
 
@@ -653,13 +657,13 @@ class AgentOrchestrator:
 
             task.result = str(result)
             task.status = TaskStatus.COMPLETED
-            task.completed_at = datetime.now(timezone.utc).isoformat()
+            task.completed_at = utc_now()
 
         except Exception as e:
             logger.error(f"[Orchestrator] Task {task.task_id} failed: {e}")
             task.status = TaskStatus.FAILED
             task.error = str(e)
-            task.completed_at = datetime.now(timezone.utc).isoformat()
+            task.completed_at = utc_now()
 
     async def _execute_single_task_stream(
         self,
@@ -669,7 +673,7 @@ class AgentOrchestrator:
         consensus_content: str | None = None,
     ) -> AsyncIterator[dict]:
         task.status = TaskStatus.RUNNING
-        task.started_at = datetime.now(timezone.utc).isoformat()
+        task.started_at = utc_now()
 
         yield {
             "type": "task_started",
@@ -747,8 +751,8 @@ class AgentOrchestrator:
                 {"role": "user", "content": context},
             ]
 
-            provider = self._resolve_provider(agent)
-            model = self._resolve_model(agent, provider)
+            provider = resolve_provider(agent)
+            model = resolve_model(agent, provider)
 
             logger.info(f"[Orchestrator] Stream task {task.task_id}: agent={agent_name}, provider={provider}, model={model}")
 
@@ -763,7 +767,7 @@ class AgentOrchestrator:
 
             task.result = str(result)
             task.status = TaskStatus.COMPLETED
-            task.completed_at = datetime.now(timezone.utc).isoformat()
+            task.completed_at = utc_now()
 
             yield {
                 "type": "task_completed",
@@ -780,7 +784,7 @@ class AgentOrchestrator:
             logger.error(f"[Orchestrator] Task {task.task_id} failed: {e}")
             task.status = TaskStatus.FAILED
             task.error = str(e)
-            task.completed_at = datetime.now(timezone.utc).isoformat()
+            task.completed_at = utc_now()
             yield {
                 "type": "task_failed",
                 "data": {
@@ -834,8 +838,8 @@ class AgentOrchestrator:
             {"role": "user", "content": "请综合以上结果，给出最终回复。"},
         ]
 
-        provider = self._resolve_provider(coordinator)
-        model = self._resolve_model(coordinator, provider)
+        provider = resolve_provider(coordinator)
+        model = resolve_model(coordinator, provider)
 
         result = await llm_adapter.chat(
             messages=messages,
@@ -889,7 +893,7 @@ class AgentOrchestrator:
             if "messages" not in fresh_group:
                 fresh_group["messages"] = []
 
-            now = datetime.now(timezone.utc).isoformat()
+            now = utc_now()
 
             user_msg = {
                 "id": str(uuid.uuid4()),

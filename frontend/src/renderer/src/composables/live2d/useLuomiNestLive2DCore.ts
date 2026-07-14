@@ -15,7 +15,8 @@
  *
  * 约束：保持动态 import cubism4（静态 import 会在 Live2DCubismCore 未就绪时抛错）。
  */
-import { Ticker } from 'pixi.js'
+import { Ticker, Application } from 'pixi.js'
+import type { Ref } from 'vue'
 
 /* ============================================================================
  * 常量
@@ -263,6 +264,13 @@ export const setupLuomiNestIdleAnimation = (
 ): { cleanup: () => void } => {
   const startTime = Date.now()
 
+  // Cache parameter indices outside the per-frame callback to avoid repeated string lookups
+  let param14Index = -1
+  let bodyAngleXIndex = -1
+  let bodyAngleYIndex = -1
+  let bodyAngleZIndex = -1
+  let indicesCached = false
+
   const callback = () => {
     const model = getModel()
     if (!model) return
@@ -272,26 +280,31 @@ export const setupLuomiNestIdleAnimation = (
     try {
       const { coreModel } = access
 
+      // Lazily cache parameter indices on first frame with a valid model
+      if (!indicesCached) {
+        param14Index = coreModel.getParameterIndex('Param14')
+        bodyAngleXIndex = coreModel.getParameterIndex('ParamBodyAngleX')
+        bodyAngleYIndex = coreModel.getParameterIndex('ParamBodyAngleY')
+        bodyAngleZIndex = coreModel.getParameterIndex('ParamBodyAngleZ')
+        indicesCached = true
+      }
+
       // Keep watermark hidden every frame (Param14 = 1)
-      const param14Idx = coreModel.getParameterIndex('Param14')
-      if (param14Idx >= 0) {
-        coreModel.setParameterValueByIndex(param14Idx, 1)
+      if (param14Index >= 0) {
+        coreModel.setParameterValueByIndex(param14Index, 1)
       }
 
       // Gentle body sway using layered sine waves for natural idle movement
       const t = (Date.now() - startTime) / 1000
-      const bodyXIdx = coreModel.getParameterIndex('ParamBodyAngleX')
-      const bodyYIdx = coreModel.getParameterIndex('ParamBodyAngleY')
-      const bodyZIdx = coreModel.getParameterIndex('ParamBodyAngleZ')
 
-      if (bodyXIdx >= 0) {
-        coreModel.setParameterValueByIndex(bodyXIdx, Math.sin(t * 0.6) * 3 + Math.sin(t * 1.2) * 0.8)
+      if (bodyAngleXIndex >= 0) {
+        coreModel.setParameterValueByIndex(bodyAngleXIndex, Math.sin(t * 0.6) * 3 + Math.sin(t * 1.2) * 0.8)
       }
-      if (bodyYIdx >= 0) {
-        coreModel.setParameterValueByIndex(bodyYIdx, Math.sin(t * 0.4 + 1.5) * 2.5)
+      if (bodyAngleYIndex >= 0) {
+        coreModel.setParameterValueByIndex(bodyAngleYIndex, Math.sin(t * 0.4 + 1.5) * 2.5)
       }
-      if (bodyZIdx >= 0) {
-        coreModel.setParameterValueByIndex(bodyZIdx, Math.sin(t * 0.5 + 3) * 2)
+      if (bodyAngleZIndex >= 0) {
+        coreModel.setParameterValueByIndex(bodyAngleZIndex, Math.sin(t * 0.5 + 3) * 2)
       }
     } catch {
       // intentionally ignored: expected non-fatal error
@@ -336,4 +349,349 @@ export const mapLuomiNestPadToEmotion = (
   if (arousal > 0.2 && arousal <= 0.5 && pleasure > -0.1) return 'curious'
   if (pleasure > -0.1 && arousal < -0.2) return 'think'
   return 'neutral'
+}
+
+/* ============================================================================
+ * GPU 检测
+ * ========================================================================== */
+
+export type LuomiNestGpuType = 'discrete' | 'integrated' | 'software' | 'unknown'
+
+export interface LuomiNestGpuInfo {
+  type: LuomiNestGpuType
+  renderer: string
+  webglAvailable: boolean
+}
+
+/**
+ * 检测当前设备的 GPU 类型与 WebGL 可用性。
+ *
+ * 通过创建临时 WebGL context 读取 UNMASKED_RENDERER 字符串判断：
+ * - discrete: 独立显卡（NVIDIA / AMD / Radeon / GeForce / Quadro）
+ * - integrated: 核显（Intel HD/UHD/Iris、Apple M、Mali、Adreno、PowerVR）
+ * - software: 软件渲染（SwiftShader / LLVMpipe / Microsoft Basic Render）
+ * - unknown: 无法识别（按核显处理）
+ *
+ * Live2D（pixi-live2d-display）强依赖 WebGL，PixiJS 7 已移除 Canvas 2D 渲染器，
+ * 纯软件渲染无法正常运行。
+ *
+ * @returns GPU 信息
+ */
+export const detectLuomiNestGpu = (): LuomiNestGpuInfo => {
+  try {
+    const canvas = document.createElement('canvas')
+    const gl = (canvas.getContext('webgl2') || canvas.getContext('webgl')) as WebGLRenderingContext | null
+    if (!gl) return { type: 'software', renderer: 'No WebGL context', webglAvailable: false }
+
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
+    const renderer = debugInfo
+      ? String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL))
+      : String(gl.getParameter(gl.RENDERER) || 'Unknown')
+
+    const lower = renderer.toLowerCase()
+    let type: LuomiNestGpuType = 'unknown'
+
+    if (
+      lower.includes('swiftshader') ||
+      lower.includes('llvmpipe') ||
+      lower.includes('software') ||
+      lower.includes('microsoft basic')
+    ) {
+      type = 'software'
+    } else if (
+      lower.includes('nvidia') ||
+      lower.includes('amd') ||
+      lower.includes('radeon') ||
+      lower.includes('geforce') ||
+      lower.includes('quadro')
+    ) {
+      type = 'discrete'
+    } else if (
+      lower.includes('intel') ||
+      lower.includes('hd graphics') ||
+      lower.includes('uhd graphics') ||
+      lower.includes('iris') ||
+      lower.includes('apple m') ||
+      lower.includes('mali') ||
+      lower.includes('adreno') ||
+      lower.includes('powervr')
+    ) {
+      type = 'integrated'
+    }
+
+    return { type, renderer, webglAvailable: true }
+  } catch {
+    return { type: 'software', renderer: 'Detection failed', webglAvailable: false }
+  }
+}
+
+/* ============================================================================
+ * PixiJS Application 初始化（GPU 检测 + 智能降级）
+ * ========================================================================== */
+
+export interface InitPixiOptions {
+  canvasRef: Ref<HTMLCanvasElement | null>
+  /** 额外配置（如 resizeTo、preserveDrawingBuffer） */
+  extraConfig?: Record<string, unknown>
+  /** 错误回调：设置外部 error ref */
+  onError?: (msg: string) => void
+  /** 日志 logger */
+  logger?: { info: (msg: string) => void; warn: (msg: string, err?: unknown) => void; error: (msg: string) => void }
+}
+
+/**
+ * 初始化 PixiJS Application（GPU 检测 + 智能降级）。
+ *
+ * 策略：
+ * 1. 检测 GPU 类型（独显/核显/软件渲染）与 WebGL 可用性
+ * 2. Live2D 依赖 WebGL：若 WebGL 不可用，直接报错（PixiJS 7 无 Canvas 2D 渲染器，无法降级）
+ * 3. powerPreference：独显用 high-performance 优先调用独显；核显/未知用 default，
+ *    避免在核显设备上强制切换独显造成的延迟与功耗
+ * 4. 性能优化：软件渲染时降低 resolution（1x）并关闭 antialias 减轻 CPU 负担；
+ *    正常设备 resolution 上限 2x（devicePixelRatio）
+ *
+ * 两个 Live2D composable 共享此逻辑。
+ */
+export const initLuomiNestPixiApp = (
+  existingApp: Application | null,
+  opts: InitPixiOptions
+): Application | null => {
+  if (existingApp) return existingApp
+  if (!opts.canvasRef.value) {
+    opts.logger?.error('Canvas element not found')
+    opts.onError?.('Canvas element not available')
+    return null
+  }
+
+  const gpu = detectLuomiNestGpu()
+
+  // Live2D（pixi-live2d-display）强依赖 WebGL，PixiJS 7 已移除 Canvas 2D 渲染器，
+  // 若 WebGL 不可用则无法渲染，直接报错而非无效降级。
+  if (!gpu.webglAvailable) {
+    const msg = '当前设备不支持 WebGL，Live2D 无法渲染，请检查显卡驱动或硬件加速是否开启。'
+    opts.onError?.(msg)
+    opts.logger?.error('WebGL not available:', gpu.renderer)
+    return null
+  }
+
+  // 独显用 high-performance 优先调用独显；核显/未知用 default 避免切换独显的延迟
+  const powerPreference: 'high-performance' | 'default' =
+    gpu.type === 'discrete' ? 'high-performance' : 'default'
+
+  // 软件渲染降级画质（降低 resolution、关闭抗锯齿），减轻 CPU 负担
+  const isSoftware = gpu.type === 'software'
+  const resolution = isSoftware ? 1 : Math.min(window.devicePixelRatio || 1, 2)
+  const antialias = !isSoftware
+
+  const baseConfig = {
+    view: opts.canvasRef.value,
+    autoStart: true,
+    backgroundAlpha: 0,
+    antialias,
+    resolution,
+    autoDensity: true,
+    ...opts.extraConfig,
+  }
+
+  try {
+    const app = new Application({
+      ...baseConfig,
+      powerPreference,
+    } as Partial<ConstructorParameters<typeof Application>[0]>)
+    opts.logger?.info(`PixiJS initialized (GPU: ${gpu.type} / ${gpu.renderer})`)
+    return app
+  } catch (webglErr) {
+    opts.logger?.warn(
+      'WebGL init failed, retry without powerPreference:',
+      webglErr instanceof Error ? webglErr.message : webglErr
+    )
+    try {
+      const app = new Application(baseConfig as Partial<ConstructorParameters<typeof Application>[0]>)
+      opts.logger?.info(`PixiJS initialized (fallback, GPU: ${gpu.type} / ${gpu.renderer})`)
+      return app
+    } catch (canvasErr) {
+      const message = canvasErr instanceof Error ? canvasErr.message : 'Unknown error'
+      opts.onError?.(`图形初始化失败：${message}`)
+      opts.logger?.error('PixiJS init failed:', message)
+      return null
+    }
+  }
+}
+
+/* ============================================================================
+ * Focus Tracking（焦点跟踪）
+ * ========================================================================== */
+
+export interface FocusTrackerOptions {
+  /** 阻尼系数（越小越平滑，canvas 模式 0.08，窗口模式 0.12） */
+  damping: number
+  /** 头部最大角度（canvas 模式 10，窗口模式 15） */
+  maxHeadAngle: number
+  /** 眼球最大偏移（canvas 模式 0.6，窗口模式 0.5） */
+  maxEyeBall: number
+  /** 是否混合原参数值（窗口模式用 true，避免覆盖模型自身 idle 动画） */
+  blend: boolean
+  /** 获取当前模型 */
+  getModel: () => LuomiNestLive2DModel | null
+  /** 获取目标焦点（归一化 [-1, 1]，鼠标离开时返回 {0,0} 平滑回归中心） */
+  getTarget: () => { x: number; y: number }
+}
+
+export interface LuomiNestFocusTracker {
+  /** 移除 ticker（调用后焦点跟踪停止） */
+  cleanup: () => void
+}
+
+/**
+ * 创建焦点跟踪器。
+ *
+ * 每帧根据目标焦点值，阻尼插值后驱动头部角度与眼球偏移：
+ * - blend=false（canvas 模式）：直接设置参数值，避免反馈循环导致角度跃升
+ * - blend=true（窗口模式）：混合原值（头部 60%+40%，眼球 50%+50%），
+ *   避免覆盖模型自身的 idle 动画
+ *
+ * 两个 Live2D composable 共享此逻辑，仅 damping/maxAngle/blend 配置不同。
+ * 鼠标离开交互区时，getTarget 返回 {0,0} 使头部平滑回归中心。
+ *
+ * @returns tracker，含 cleanup 方法
+ */
+export const createLuomiNestFocusTracker = (opts: FocusTrackerOptions): LuomiNestFocusTracker => {
+  let currentX = 0
+  let currentY = 0
+
+  // Cache parameter indices outside the per-frame callback
+  let angleXIndex = -1
+  let angleYIndex = -1
+  let eyeBallXIndex = -1
+  let eyeBallYIndex = -1
+  let indicesCached = false
+
+  const callback = (): void => {
+    const model = opts.getModel()
+    if (!model) return
+
+    const target = opts.getTarget()
+    currentX += (target.x - currentX) * opts.damping
+    currentY += (target.y - currentY) * opts.damping
+
+    const access = getLuomiNestCoreModel(model)
+    if (!access) return
+
+    try {
+      const { coreModel } = access
+
+      // Lazily cache parameter indices on first frame with a valid model
+      if (!indicesCached) {
+        angleXIndex = coreModel.getParameterIndex('ParamAngleX')
+        angleYIndex = coreModel.getParameterIndex('ParamAngleY')
+        eyeBallXIndex = coreModel.getParameterIndex('ParamEyeBallX')
+        eyeBallYIndex = coreModel.getParameterIndex('ParamEyeBallY')
+        indicesCached = true
+      }
+
+      if (opts.blend) {
+        // 窗口模式：混合原值，避免覆盖模型 idle 动画
+        if (angleXIndex >= 0) {
+          const base = coreModel.getParameterValueByIndex(angleXIndex)
+          coreModel.setParameterValueByIndex(angleXIndex, base * 0.6 + currentX * opts.maxHeadAngle * 0.4)
+        }
+        if (angleYIndex >= 0) {
+          const base = coreModel.getParameterValueByIndex(angleYIndex)
+          coreModel.setParameterValueByIndex(angleYIndex, base * 0.6 + currentY * opts.maxHeadAngle * 0.4)
+        }
+        if (eyeBallXIndex >= 0) {
+          const base = coreModel.getParameterValueByIndex(eyeBallXIndex)
+          coreModel.setParameterValueByIndex(eyeBallXIndex, base * 0.5 + currentX * 0.5)
+        }
+        if (eyeBallYIndex >= 0) {
+          const base = coreModel.getParameterValueByIndex(eyeBallYIndex)
+          coreModel.setParameterValueByIndex(eyeBallYIndex, base * 0.5 + currentY * 0.5)
+        }
+      } else {
+        // canvas 模式：直接设置，避免反馈循环导致角度跃升到 2 倍目标值
+        if (angleXIndex >= 0) {
+          coreModel.setParameterValueByIndex(angleXIndex, currentX * opts.maxHeadAngle)
+        }
+        if (angleYIndex >= 0) {
+          coreModel.setParameterValueByIndex(angleYIndex, currentY * opts.maxHeadAngle)
+        }
+        if (eyeBallXIndex >= 0) {
+          coreModel.setParameterValueByIndex(eyeBallXIndex, currentX * opts.maxEyeBall)
+        }
+        if (eyeBallYIndex >= 0) {
+          coreModel.setParameterValueByIndex(eyeBallYIndex, currentY * opts.maxEyeBall)
+        }
+      }
+    } catch {
+      // intentionally ignored: expected non-fatal error
+    }
+  }
+
+  Ticker.shared.add(callback)
+
+  return {
+    cleanup: () => {
+      Ticker.shared.remove(callback)
+    }
+  }
+}
+
+/* ============================================================================
+ * 通用模型操作工具函数
+ * ========================================================================== */
+
+/** 触发模型动作（忽略非致命错误） */
+export const triggerLuomiNestMotion = async (
+  model: LuomiNestLive2DModel | null,
+  group: string,
+  index: number = 0
+): Promise<void> => {
+  if (!model || isLuomiNestModelDestroyed(model)) return
+  try {
+    await model.motion(group, index)
+  } catch {
+    // intentionally ignored: expected non-fatal error
+  }
+}
+
+/** 触发模型表情（忽略非致命错误，空名称跳过） */
+export const triggerLuomiNestExpression = async (
+  model: LuomiNestLive2DModel | null,
+  name: string
+): Promise<void> => {
+  if (!model || isLuomiNestModelDestroyed(model)) return
+  if (!name || !name.trim()) return
+  try {
+    await model.expression(name)
+  } catch {
+    // intentionally ignored: expression switch failure is non-fatal
+  }
+}
+
+/** 设置模型核心参数（按 ID） */
+export const setLuomiNestCoreParam = (
+  model: LuomiNestLive2DModel | null,
+  paramId: string,
+  value: number
+): void => {
+  if (!model) return
+  const access = getLuomiNestCoreModel(model)
+  if (!access) return
+  try {
+    if (typeof access.coreModel.setParameterValueById === 'function') {
+      access.coreModel.setParameterValueById(paramId, value)
+    }
+  } catch {
+    // intentionally ignored: expected non-fatal error
+  }
+}
+
+/** 重置姿势（回到 Idle 动作 + 隐藏水印） */
+export const resetLuomiNestPose = async (
+  model: LuomiNestLive2DModel | null
+): Promise<void> => {
+  await triggerLuomiNestMotion(model, 'Idle', 0)
+  if (model) {
+    hideLuomiNestWatermark(model)
+  }
 }

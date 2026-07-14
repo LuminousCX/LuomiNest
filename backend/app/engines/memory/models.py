@@ -1,7 +1,8 @@
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+
+from app.core.utils import utc_now
 
 
 FACT_CATEGORIES = ("preference", "knowledge", "context", "behavior", "goal", "correction")
@@ -33,7 +34,7 @@ class ArchivedFact(BaseModel):
     content: str
     category: str = ""
     confidence: float = 0.0
-    archived_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    archived_at: str = Field(default_factory=lambda: utc_now())
     reason: str = ""  # 归档原因：superseded / conflict / expired / manual
 
 
@@ -42,7 +43,7 @@ class FactItem(BaseModel):
     content: str
     category: str = "context"
     confidence: float = 0.8
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = Field(default_factory=lambda: utc_now())
     source: str = "conversation"
     source_error: str = ""
     # 时间衰减：可选的过期时间，None = 永不过期
@@ -73,7 +74,7 @@ class SummaryData(BaseModel):
 
 class MemoryData(BaseModel):
     version: str = "2.0"
-    last_updated: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    last_updated: str = Field(default_factory=lambda: utc_now())
     profile: ProfileData = Field(default_factory=ProfileData)
     facts: list[FactItem] = Field(default_factory=list)
     summaries: SummaryData = Field(default_factory=SummaryData)

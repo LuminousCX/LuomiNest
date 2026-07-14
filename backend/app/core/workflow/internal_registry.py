@@ -9,11 +9,11 @@
 """
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
 from loguru import logger
 
+from app.core.utils import utc_now
 from app.core.workflow.models import WorkflowTaskResult
 
 
@@ -31,7 +31,7 @@ class InternalToolEntry:
     parameters_schema: dict[str, Any] = field(default_factory=dict)
     is_concurrent_safe: bool = False
     timeout_seconds: int = 60
-    registered_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    registered_at: str = field(default_factory=lambda: utc_now())
 
     def to_dict(self) -> dict[str, Any]:
         return {

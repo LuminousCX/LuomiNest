@@ -2,11 +2,13 @@ import json
 import re
 import shutil
 import threading
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from loguru import logger
+
+from app.core.utils import utc_now
 
 from app.core.config import settings
 from .models import MemoryData, _SUMMARY_SECTION_MAP
@@ -19,6 +21,10 @@ class MemoryStore:
         self._path = Path(storage_path)
         self._path.mkdir(parents=True, exist_ok=True)
         (self._path / "daily").mkdir(exist_ok=True)
+        # NOTE: 使用 threading.RLock 而非 asyncio.Lock，原因：
+        # MemoryStore 的所有数据读写方法（load_data, save_data 等）均为同步方法，
+        # 在 async 上下文中通过 asyncio.to_thread 包装调用，to_thread 在独立线程中执行，
+        # threading.RLock 在此场景下是正确的选择（asyncio.Lock 不能在非 async 函数中使用）。
         self._lock = threading.RLock()
         self._cache: MemoryData | None = None
         self._auto_migrate()
@@ -88,11 +94,11 @@ class MemoryStore:
                 )
                 if name_match:
                     data.profile.name = name_match.group(1).strip()
-                    data.profile.updated_at = datetime.now(timezone.utc).isoformat()
+                    data.profile.updated_at = utc_now()
 
             if old_summary.exists():
                 content = old_summary.read_text(encoding="utf-8")
-                now = datetime.now(timezone.utc).isoformat()
+                now = utc_now()
                 for cn_name, attr_name in _SUMMARY_SECTION_MAP.items():
                     pattern = rf"##\s*{re.escape(cn_name)}\s*\n(.*?)(?=\n##\s|\Z)"
                     match = re.search(pattern, content, re.DOTALL)
@@ -153,7 +159,7 @@ class MemoryStore:
 
     def save_data(self, data: MemoryData) -> None:
         with self._lock:
-            data.last_updated = datetime.now(timezone.utc).isoformat()
+            data.last_updated = utc_now()
             self._write(self._memory_file(), data.model_dump_json(indent=2))
             self._cache = data
 

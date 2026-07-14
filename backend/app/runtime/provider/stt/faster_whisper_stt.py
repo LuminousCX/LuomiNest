@@ -7,6 +7,7 @@
 
 import asyncio
 import io
+import os
 from pathlib import Path
 
 import numpy as np
@@ -19,8 +20,9 @@ from app.runtime.provider.base import STTProvider
 # 模型根目录（backend/models/stt/）
 _MODEL_ROOT = Path(__file__).resolve().parents[4] / "models" / "stt"
 
-# 默认模型大小
-_DEFAULT_MODEL_SIZE = "large-v3"
+# 默认模型大小（可通过 STT_MODEL_SIZE 环境变量覆盖）
+# 默认从 large-v3 (~1.5GB) 改为 medium (~500MB)，降低内存占用
+_DEFAULT_MODEL_SIZE = os.getenv("STT_MODEL_SIZE", "medium")
 
 # 采样率
 _SAMPLE_RATE = 16000

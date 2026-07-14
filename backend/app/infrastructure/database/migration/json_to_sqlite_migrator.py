@@ -13,10 +13,11 @@
 import asyncio
 import json
 import os
-from datetime import datetime, timezone
 from typing import Callable
 
 from loguru import logger
+
+from app.core.utils import utc_now
 
 from app.core.config import settings
 from app.infrastructure.database.facades.json_store_facade import (
@@ -47,7 +48,7 @@ def _is_migrated(source: str) -> bool:
 
 def _mark_migrated(source: str, record_count: int) -> None:
     """标记数据源为已迁移。"""
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
     with sync_session_factory() as session:
         meta = session.get(MigrationMeta, source)
         if meta is None:

@@ -34,7 +34,7 @@ const emit = defineEmits<{
           @click="emit('confirm')"
           :disabled="isProcessing"
         >
-          <Loader2 v-if="isProcessing" :size="14" class="spinning" />
+          <Loader2 v-if="isProcessing" :size="14" class="spin-animation" />
           <span v-else>确定</span>
         </button>
       </div>
@@ -100,35 +100,6 @@ const emit = defineEmits<{
   justify-content: flex-end;
   gap: var(--space-2);
 }
-
-.h-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: var(--radius-xs);
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-slow);
-  white-space: nowrap;
-}
-
-.h-btn:hover { background: var(--surface-hover); color: var(--text); }
-
-.h-btn.danger {
-  background: var(--lumi-danger-light);
-  border: 1px solid var(--lumi-danger-border);
-  color: var(--lumi-danger);
-}
-
-.h-btn.danger:hover {
-  background: var(--lumi-danger-light);
-}
-
-.h-btn:disabled { opacity: 0.5; cursor: default; }
-
-.spinning { animation: spin 1s linear infinite; }
 
 @media (max-width: 768px) {
   .confirm-dialog {

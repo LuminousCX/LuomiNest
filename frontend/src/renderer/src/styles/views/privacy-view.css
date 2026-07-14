@@ -9,6 +9,11 @@
   gap: var(--space-4);
 }
 
+.privacy-view .lumi-settings-page__body > .lumi-settings-hero,
+.privacy-view .lumi-settings-page__body > .privacy-intro {
+  flex-shrink: 0;
+}
+
 /* -------------------------------------------------------
    导语：平铺显示，仅保留底部细线分隔
    ------------------------------------------------------- */

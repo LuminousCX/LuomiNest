@@ -14,7 +14,7 @@ import { useWorkbenchSidebar } from '../composables/useWorkbenchSidebar'
 import { useWorkbenchHistory } from '../composables/useWorkbenchHistory'
 import { useWorkbenchMessages } from '../composables/useWorkbenchMessages'
 import { LUOMINEST_BUILTIN_MODELS } from '../config/luominest-models'
-import type { AgentProfile } from '../types'
+import { MAIN_AGENT_ID, MAIN_AGENT_PROFILE } from '../constants'
 import type { WorkflowPendingPlan } from '../components/workbench/types'
 import WorkbenchHistoryPanel from '../components/workbench/WorkbenchHistoryPanel.vue'
 import WorkbenchChatArea from '../components/workbench/WorkbenchChatArea.vue'
@@ -34,17 +34,6 @@ const { navigateToTask } = useTaskNavigation()
 
 // 桌面宠物模式：通过全局 store 状态统一管理，与 AvatarView 共享同一状态源
 const isDesktopMode = computed(() => avatarControl.isDesktopPetRunning)
-
-// 主 Agent 固定标识
-const MAIN_AGENT_ID = 'luominest_main_agent'
-const MAIN_AGENT_PROFILE: AgentProfile = {
-  id: MAIN_AGENT_ID,
-  name: '主智能体',
-  description: 'LuomiNest 工作台主 Agent，驱动 Live2D、记忆、工具、MCP 和子 Agent',
-  color: 'var(--lumi-brand)',
-  isMain: true,
-  isActive: true,
-}
 
 // 5 个 composable 组合（解构到顶层，确保 template 中 ref 自动解包）
 const {
@@ -190,8 +179,13 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   chatAreaRef.value?.teardownResizeObserver()
   document.removeEventListener('click', handleClickOutsideModel)
-  stopTts()
-  teardownLive2D()
+  // 桌宠模式下 TTS 引擎是全局 store，不随 WorkbenchView 卸载而停止（陪伴优先）；
+  // 普通模式下 TTS 随页面切换中断（原有行为）。
+  // teardownLive2D 在桌宠模式下已是 no-op（watch isDesktopMode 已卸载 canvas）。
+  if (!isDesktopMode.value) {
+    stopTts()
+    teardownLive2D()
+  }
 })
 </script>
 

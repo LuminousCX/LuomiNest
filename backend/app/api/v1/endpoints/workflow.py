@@ -10,13 +10,12 @@
 - POST   /workflow/sessions/{id}/reject  拒绝执行计划
 - GET    /workflow/tools           列出已注册的内部工具
 """
-import json
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from app.core.exceptions import LuomiNestError
+from app.core.utils import sse_response, sse_data
 from app.core.workflow import (
     WorkflowMode,
     WorkflowPhase,
@@ -85,20 +84,14 @@ async def submit_workflow_stream(req: WorkflowSubmitRequest):
                 mode=req.mode,
                 conversation_id=req.conversation_id,
             ):
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                yield sse_data(event)
         except Exception as e:
             logger.error("[WorkflowAPI] Stream failed: {}", str(e), exc_info=True)
             error_event = {"type": "error", "data": {"message": "工作流执行失败，请稍后重试"}}
-            yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+            yield sse_data(error_event)
 
-    return StreamingResponse(
+    return sse_response(
         _event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
     )
 
 

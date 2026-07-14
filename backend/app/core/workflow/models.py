@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
+from app.core.utils import utc_now
+
 
 class WorkflowStatus(str, Enum):
     """工作流任务执行状态"""
@@ -95,10 +97,6 @@ class WorkflowTaskType(str, Enum):
     CUSTOM = "custom"
 
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
 @dataclass
 class WorkflowTask:
     """工作流子任务
@@ -123,21 +121,21 @@ class WorkflowTask:
 
     def mark_running(self) -> None:
         self.status = WorkflowStatus.RUNNING
-        self.started_at = _utc_now()
+        self.started_at = utc_now()
 
     def mark_completed(self, result: str) -> None:
         self.status = WorkflowStatus.COMPLETED
         self.result = result
-        self.completed_at = _utc_now()
+        self.completed_at = utc_now()
 
     def mark_failed(self, error: str) -> None:
         self.status = WorkflowStatus.FAILED
         self.error = error
-        self.completed_at = _utc_now()
+        self.completed_at = utc_now()
 
     def mark_cancelled(self) -> None:
         self.status = WorkflowStatus.CANCELLED
-        self.completed_at = _utc_now()
+        self.completed_at = utc_now()
 
     def is_terminal(self) -> bool:
         return self.status in (
@@ -197,7 +195,7 @@ class WorkflowSession:
     tasks: list[WorkflowTask] = field(default_factory=list)
     final_result: str | None = None
     error: str | None = None
-    created_at: str = field(default_factory=_utc_now)
+    created_at: str = field(default_factory=utc_now)
     completed_at: str | None = None
     max_iterations: int = 20
     max_concurrent: int = 3

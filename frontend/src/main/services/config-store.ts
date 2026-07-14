@@ -37,6 +37,10 @@ interface AppConfig {
   installPath: string
   installed: boolean
   installDate: string
+  /** 欢迎向导是否已完成（首次启动显示一次，之后跳过） */
+  welcomeCompleted: boolean
+  /** 关闭窗口最小化到托盘的首次提示是否已展示 */
+  closeToTrayPrompted: boolean
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -71,6 +75,8 @@ const DEFAULT_CONFIG: AppConfig = {
   installPath: '',
   installed: false,
   installDate: '',
+  welcomeCompleted: false,
+  closeToTrayPrompted: false,
 }
 
 let cachedConfig: AppConfig | null = null
@@ -142,6 +148,16 @@ export const configStore = {
   getWindowState: (): WindowBounds => loadConfig().window,
   setWindowState: (state: WindowBounds): void => {
     configStore.set('window', state)
+  },
+
+  getWelcomeCompleted: (): boolean => loadConfig().welcomeCompleted,
+  setWelcomeCompleted: (value: boolean): void => {
+    configStore.set('welcomeCompleted', value)
+  },
+
+  getCloseToTrayPrompted: (): boolean => loadConfig().closeToTrayPrompted,
+  setCloseToTrayPrompted: (value: boolean): void => {
+    configStore.set('closeToTrayPrompted', value)
   },
 
   getAll: (): AppConfig => loadConfig(),

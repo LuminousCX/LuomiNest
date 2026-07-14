@@ -1,8 +1,8 @@
 import uuid
 import time
-from datetime import datetime, timezone
 from loguru import logger
 
+from app.core.utils import utc_now
 from app.infrastructure.database.json_store import agents_store
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
@@ -52,7 +52,7 @@ class AIToAIChat:
                     route_hint=RouteHint.CHAT,
                 )
 
-                now = datetime.now(timezone.utc).isoformat()
+                now = utc_now()
                 messages_log.append({
                     "id": str(uuid.uuid4()),
                     "sender_id": current_speaker["id"],

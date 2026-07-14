@@ -11,13 +11,10 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from app.core.utils import utc_now
 from app.infrastructure.database.models.workflow_node import WorkflowNodeORM
 from app.infrastructure.database.models.workflow_session import WorkflowSessionORM
 from app.infrastructure.database.session import get_async_session
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 async def save_workflow_session(
@@ -44,7 +41,7 @@ async def save_workflow_session(
             final_result=final_result,
             error=error,
             conversation_id=conversation_id,
-            created_at=_utc_now(),
+            created_at=utc_now(),
             completed_at=completed_at,
         )
         stmt = stmt.on_conflict_do_update(

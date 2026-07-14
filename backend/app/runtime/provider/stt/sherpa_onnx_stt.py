@@ -8,6 +8,7 @@
 
 import asyncio
 import io
+import os
 import re
 import shutil
 import tarfile
@@ -44,8 +45,8 @@ _MAX_RETRIES = 3
 _SAMPLE_RATE = 16000
 
 
-def _download_sense_voice_model(target_dir: Path) -> None:
-    """自动下载并解压 SenseVoice 模型（同步版本）.
+async def _download_sense_voice_model(target_dir: Path) -> None:
+    """自动下载并解压 SenseVoice 模型.
 
     Args:
         target_dir: 模型目标目录
@@ -60,7 +61,7 @@ def _download_sense_voice_model(target_dir: Path) -> None:
 
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            _download_and_extract_once(target_dir)
+            await _download_and_extract_once(target_dir)
             logger.info(f"[SherpaOnnxSTT] 模型下载完成（第 {attempt} 次尝试）")
             return
         except Exception as e:
@@ -68,8 +69,7 @@ def _download_sense_voice_model(target_dir: Path) -> None:
             logger.warning(f"[SherpaOnnxSTT] 下载失败（第 {attempt}/{_MAX_RETRIES} 次）: {e}")
             if attempt < _MAX_RETRIES:
                 logger.info(f"[SherpaOnnxSTT] 等待 3 秒后重试...")
-                import time
-                time.sleep(3)
+                await asyncio.sleep(3)
 
     raise RuntimeError(
         f"模型自动下载失败（已重试 {_MAX_RETRIES} 次）: {last_error}. "
@@ -77,21 +77,21 @@ def _download_sense_voice_model(target_dir: Path) -> None:
     )
 
 
-def _download_and_extract_once(target_dir: Path) -> None:
+async def _download_and_extract_once(target_dir: Path) -> None:
     """执行一次下载+解压流程."""
     with tempfile.TemporaryDirectory(prefix="sherpa_stt_") as tmp_dir:
         tmp_path = Path(tmp_dir)
         archive_path = tmp_path / "sense-voice.tar.bz2"
 
-        with httpx.Client(timeout=_DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
-            with client.stream("GET", _SENSE_VOICE_URL) as resp:
+        async with httpx.AsyncClient(timeout=_DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
+            async with client.stream("GET", _SENSE_VOICE_URL) as resp:
                 resp.raise_for_status()
                 total = int(resp.headers.get("content-length", 0))
                 downloaded = 0
                 last_log_pct = 0
 
                 with open(archive_path, "wb") as f:
-                    for chunk in resp.iter_bytes(chunk_size=65536):
+                    async for chunk in resp.aiter_bytes(chunk_size=65536):
                         f.write(chunk)
                         downloaded += len(chunk)
                         if total > 0:
@@ -143,6 +143,7 @@ class SherpaOnnxSTTProvider(STTProvider):
 
     默认使用 SenseVoice 模型，支持中英日韩粤多语言识别.
     首次使用时自动下载模型（约 220MB），后续直接加载.
+    模型采用懒加载模式，首次 transcribe() 时才真正加载到内存.
     """
 
     provider_name = "sherpa-onnx"
@@ -162,51 +163,75 @@ class SherpaOnnxSTTProvider(STTProvider):
         model_type: str = "sense_voice",
         model_dir: str | Path | None = None,
         language: str = "auto",
-        num_threads: int = 2,
+        num_threads: int = 0,
         use_itn: bool = True,
     ):
-        if self._recognizer is not None:
+        # 单例：仅首次调用时保存参数
+        if getattr(self, "_initialized", False):
             return
+        self._initialized = True
 
-        import sherpa_onnx
+        # num_threads 自适应：0 表示自动计算
+        if num_threads <= 0:
+            self._num_threads = min(4, os.cpu_count() or 2)
+        else:
+            self._num_threads = num_threads
 
         self._model_type = model_type
         self._language = language
         self._use_itn = use_itn
+        self._recognizer_ready = False
 
+        # 设置模型目录（不加载模型）
         if model_type == "sense_voice":
-            self._init_sense_voice(sherpa_onnx, model_dir, num_threads)
+            self._model_dir = Path(model_dir) if model_dir else _SENSE_VOICE_DIR
         elif model_type == "paraformer":
-            self._init_paraformer(sherpa_onnx, model_dir, num_threads)
+            self._model_dir = Path(model_dir) if model_dir else _MODEL_ROOT / "sherpa-onnx-paraformer"
         elif model_type == "whisper":
-            self._init_whisper(sherpa_onnx, model_dir, num_threads)
+            self._model_dir = Path(model_dir) if model_dir else _MODEL_ROOT / "sherpa-onnx-whisper"
         else:
             raise ValueError(
                 f"不支持的模型类型: {model_type}，支持: {self.SUPPORTED_MODEL_TYPES}"
             )
 
         logger.info(
-            f"[SherpaOnnxSTT] Initialized: model_type={model_type}, "
-            f"language={language}, threads={num_threads}"
+            f"[SherpaOnnxSTT] Initialized (lazy): model_type={model_type}, "
+            f"language={language}, threads={self._num_threads}"
         )
 
-    def _init_sense_voice(self, sherpa_onnx, model_dir, num_threads: int):
-        """初始化 SenseVoice 模型."""
-        model_dir = Path(model_dir) if model_dir else _SENSE_VOICE_DIR
-        self._model_dir = model_dir
+    def _ensure_model_loaded_sync(self) -> None:
+        """同步确保 recognizer 已加载（用于 _recognize_sync 等同步路径）."""
+        if self._recognizer_ready:
+            return
+        raise RuntimeError(
+            "Recognizer not loaded. Call _ensure_recognizer_ready() first."
+        )
 
-        # 查找模型文件（优先 int8 量化版）
-        model_path = model_dir / "model.int8.onnx"
-        if not model_path.exists():
-            model_path = model_dir / "model.onnx"
-        if not model_path.exists():
-            logger.info(f"[SherpaOnnxSTT] SenseVoice 模型未找到，开始自动下载...")
-            _download_sense_voice_model(model_dir)
-            model_path = model_dir / "model.int8.onnx"
+    async def _ensure_recognizer_ready(self) -> None:
+        """确保 recognizer 已加载（首次调用时可能触发模型下载）."""
+        if self._recognizer_ready:
+            return
+        import sherpa_onnx
+
+        if self._model_type == "sense_voice":
+            model_path = self._model_dir / "model.int8.onnx"
             if not model_path.exists():
-                model_path = model_dir / "model.onnx"
+                model_path = self._model_dir / "model.onnx"
+            if not model_path.exists():
+                logger.info(f"[SherpaOnnxSTT] SenseVoice 模型未找到，开始自动下载...")
+                await _download_sense_voice_model(self._model_dir)
+                model_path = self._model_dir / "model.int8.onnx"
+                if not model_path.exists():
+                    model_path = self._model_dir / "model.onnx"
+            self._load_sense_voice_recognizer(sherpa_onnx, model_path)
+        elif self._model_type == "paraformer":
+            self._init_paraformer_sync(sherpa_onnx)
+        elif self._model_type == "whisper":
+            self._init_whisper_sync(sherpa_onnx)
 
-        tokens_path = model_dir / "tokens.txt"
+    def _load_sense_voice_recognizer(self, sherpa_onnx, model_path: Path) -> None:
+        """加载 SenseVoice recognizer（同步，需要模型文件已就绪）."""
+        tokens_path = self._model_dir / "tokens.txt"
         if not tokens_path.exists():
             raise FileNotFoundError(f"tokens.txt 未找到: {tokens_path}")
 
@@ -218,7 +243,7 @@ class SherpaOnnxSTTProvider(STTProvider):
                     use_itn=self._use_itn,
                 ),
                 tokens=str(tokens_path),
-                num_threads=num_threads,
+                num_threads=self._num_threads,
                 provider="cpu",
                 debug=False,
             )
@@ -228,10 +253,15 @@ class SherpaOnnxSTTProvider(STTProvider):
             raise ValueError("Sherpa-ONNX STT (SenseVoice) config validation failed")
 
         self._recognizer = sherpa_onnx.OfflineRecognizer(recognizer_config)
+        self._recognizer_ready = True
+        logger.info(
+            f"[SherpaOnnxSTT] SenseVoice loaded: model={model_path.name}, "
+            f"threads={self._num_threads}"
+        )
 
-    def _init_paraformer(self, sherpa_onnx, model_dir, num_threads: int):
-        """初始化 Paraformer 模型."""
-        model_dir = Path(model_dir) if model_dir else _MODEL_ROOT / "sherpa-onnx-paraformer"
+    def _init_paraformer_sync(self, sherpa_onnx) -> None:
+        """初始化 Paraformer 模型（懒加载路径）."""
+        model_dir = self._model_dir
         self._model_dir = model_dir
 
         model_path = model_dir / "model.int8.onnx"
@@ -253,7 +283,7 @@ class SherpaOnnxSTTProvider(STTProvider):
                     model=str(model_path),
                 ),
                 tokens=str(tokens_path),
-                num_threads=num_threads,
+                num_threads=self._num_threads,
                 provider="cpu",
                 debug=False,
             )
@@ -263,11 +293,12 @@ class SherpaOnnxSTTProvider(STTProvider):
             raise ValueError("Sherpa-ONNX STT (Paraformer) config validation failed")
 
         self._recognizer = sherpa_onnx.OfflineRecognizer(recognizer_config)
+        self._recognizer_ready = True
+        logger.info(f"[SherpaOnnxSTT] Paraformer loaded: threads={self._num_threads}")
 
-    def _init_whisper(self, sherpa_onnx, model_dir, num_threads: int):
-        """初始化 Whisper 模型."""
-        model_dir = Path(model_dir) if model_dir else _MODEL_ROOT / "sherpa-onnx-whisper"
-        self._model_dir = model_dir
+    def _init_whisper_sync(self, sherpa_onnx) -> None:
+        """初始化 Whisper 模型（懒加载路径）."""
+        model_dir = self._model_dir
 
         encoder_path = model_dir / "tiny-encoder.onnx"
         decoder_path = model_dir / "tiny-decoder.onnx"
@@ -290,7 +321,7 @@ class SherpaOnnxSTTProvider(STTProvider):
                     task="transcribe",
                 ),
                 tokens=str(tokens_path),
-                num_threads=num_threads,
+                num_threads=self._num_threads,
                 provider="cpu",
                 debug=False,
             )
@@ -300,10 +331,15 @@ class SherpaOnnxSTTProvider(STTProvider):
             raise ValueError("Sherpa-ONNX STT (Whisper) config validation failed")
 
         self._recognizer = sherpa_onnx.OfflineRecognizer(recognizer_config)
+        self._recognizer_ready = True
+        logger.info(f"[SherpaOnnxSTT] Whisper loaded: threads={self._num_threads}")
 
     async def transcribe(self, audio_data: bytes, format: str = "wav") -> str:
         if not audio_data:
             return ""
+
+        # 确保 recognizer 已就绪（首次调用时可能触发模型下载）
+        await self._ensure_recognizer_ready()
 
         # 解码音频为 numpy 数组
         audio_np = await asyncio.to_thread(self._decode_audio, audio_data, format)

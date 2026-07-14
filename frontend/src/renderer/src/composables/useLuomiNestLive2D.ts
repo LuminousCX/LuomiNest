@@ -7,10 +7,15 @@ import {
   loadCubism4Module,
   patchIsInteractive,
   getLuomiNestCoreModel,
-  isLuomiNestModelDestroyed,
   scanLuomiNestModelCapabilities,
   hideLuomiNestWatermark,
   setupLuomiNestIdleAnimation,
+  initLuomiNestPixiApp,
+  createLuomiNestFocusTracker,
+  triggerLuomiNestMotion,
+  triggerLuomiNestExpression,
+  setLuomiNestCoreParam,
+  resetLuomiNestPose,
   type LuomiNestLive2DModel
 } from './live2d/useLuomiNestLive2DCore'
 
@@ -47,9 +52,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   let currentModel: LuomiNestLive2DModel | null = null
   let focusTargetX = 0
   let focusTargetY = 0
-  let focusCurrentX = 0
-  let focusCurrentY = 0
-  let focusTickerCallback: (() => void) | null = null
+  let focusTrackerCleanup: (() => void) | null = null
   let focusMouseMoveHandler: ((e: MouseEvent) => void) | null = null
   let focusMouseLeaveHandler: (() => void) | null = null
   let focusParentEl: HTMLElement | null = null
@@ -62,9 +65,9 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   let idleCleanup: (() => void) | null = null
 
   const cleanupFocus = (): void => {
-    if (focusTickerCallback) {
-      Ticker.shared.remove(focusTickerCallback)
-      focusTickerCallback = null
+    if (focusTrackerCleanup) {
+      focusTrackerCleanup()
+      focusTrackerCleanup = null
     }
     if (focusMouseMoveHandler && focusParentEl) {
       focusParentEl.removeEventListener('mousemove', focusMouseMoveHandler)
@@ -86,40 +89,14 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   }
 
   const initPixi = async (): Promise<Application | null> => {
-    if (pixiApp) return pixiApp
-    if (!canvasRef.value) {
-      logger.error('Canvas element not found')
-      error.value = 'Canvas element not available'
-      return null
-    }
-
-    const baseConfig = {
-      view: canvasRef.value,
-      autoStart: true,
-      backgroundAlpha: 0,
-      antialias: true,
-      resizeTo: canvasRef.value.parentElement ?? undefined,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
-      autoDensity: true
-    }
-
-    try {
-      pixiApp = new Application({ ...baseConfig, powerPreference: 'high-performance' } as Partial<ConstructorParameters<typeof Application>[0]>)
-      logger.info('PixiJS initialized successfully (WebGL)')
-      return pixiApp
-    } catch (webglErr) {
-      logger.warn('WebGL init failed, trying canvas fallback:', webglErr instanceof Error ? webglErr.message : webglErr)
-      try {
-        pixiApp = new Application(baseConfig as Partial<ConstructorParameters<typeof Application>[0]>)
-        logger.info('PixiJS initialized successfully (Canvas fallback)')
-        return pixiApp
-      } catch (canvasErr) {
-        const message = canvasErr instanceof Error ? canvasErr.message : 'Unknown error'
-        error.value = `Graphics initialization failed: ${message}`
-        logger.error('Both WebGL and Canvas failed:', message)
-        return null
-      }
-    }
+    return initLuomiNestPixiApp(pixiApp, {
+      canvasRef,
+      extraConfig: {
+        resizeTo: canvasRef.value?.parentElement ?? undefined,
+      },
+      onError: (msg) => { error.value = msg },
+      logger,
+    })
   }
 
   const loadModel = async (url: string, scale: number = 0.25): Promise<void> => {
@@ -266,9 +243,16 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     cleanupFocus()
 
     // 较小的阻尼系数让头部跟随更平滑，避免鼠标移动时猛地转头
-    const FOCUS_DAMPING = 0.08
-    const MAX_HEAD_ANGLE = 10
-    const MAX_EYE_BALL = 0.6
+    // canvas 模式：直接设置参数值，避免反馈循环导致角度跃升
+    const tracker = createLuomiNestFocusTracker({
+      damping: 0.08,
+      maxHeadAngle: 10,
+      maxEyeBall: 0.6,
+      blend: false,
+      getModel: () => currentModel,
+      getTarget: () => ({ x: focusTargetX, y: focusTargetY })
+    })
+    focusTrackerCleanup = tracker.cleanup
 
     const onMouseMove = (e: MouseEvent): void => {
       const parent = canvasRef.value?.parentElement
@@ -285,47 +269,12 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     focusMouseMoveHandler = onMouseMove
     focusMouseLeaveHandler = onMouseLeave
 
-    focusTickerCallback = () => {
-      if (!currentModel) return
-      focusCurrentX += (focusTargetX - focusCurrentX) * FOCUS_DAMPING
-      focusCurrentY += (focusTargetY - focusCurrentY) * FOCUS_DAMPING
-
-      const access = getLuomiNestCoreModel(currentModel)
-      if (!access) return
-
-      try {
-        const { coreModel } = access
-        const angleXParam = coreModel.getParameterIndex('ParamAngleX')
-        const angleYParam = coreModel.getParameterIndex('ParamAngleY')
-        const eyeBallXParam = coreModel.getParameterIndex('ParamEyeBallX')
-        const eyeBallYParam = coreModel.getParameterIndex('ParamEyeBallY')
-
-        // 直接用阻尼后的鼠标值驱动头部/眼球，不读取上一帧的参数值，
-        // 避免反馈循环导致角度在几帧内跃升到 2 倍目标值（猛地转头）。
-        if (angleXParam >= 0) {
-          coreModel.setParameterValueByIndex(angleXParam, focusCurrentX * MAX_HEAD_ANGLE)
-        }
-        if (angleYParam >= 0) {
-          coreModel.setParameterValueByIndex(angleYParam, focusCurrentY * MAX_HEAD_ANGLE)
-        }
-        if (eyeBallXParam >= 0) {
-          coreModel.setParameterValueByIndex(eyeBallXParam, focusCurrentX * MAX_EYE_BALL)
-        }
-        if (eyeBallYParam >= 0) {
-          coreModel.setParameterValueByIndex(eyeBallYParam, focusCurrentY * MAX_EYE_BALL)
-        }
-      } catch {
-        // intentionally ignored: expected non-fatal error
-      }
-    }
-
     const parent = canvasRef.value?.parentElement
     if (parent) {
       focusParentEl = parent
       parent.addEventListener('mousemove', onMouseMove)
       parent.addEventListener('mouseleave', onMouseLeave)
     }
-    Ticker.shared.add(focusTickerCallback)
   }
 
   const setupWheel = (model: LuomiNestLive2DModel): void => {
@@ -343,23 +292,11 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   }
 
   const triggerMotion = async (group: string, index: number = 0): Promise<void> => {
-    if (!currentModel || isLuomiNestModelDestroyed(currentModel)) return
-    try {
-      await currentModel.motion(group, index)
-    } catch {
-      // intentionally ignored: expected non-fatal error
-    }
+    await triggerLuomiNestMotion(currentModel, group, index)
   }
 
   const triggerExpression = async (name: string): Promise<void> => {
-    if (!currentModel || isLuomiNestModelDestroyed(currentModel)) return
-    // 空表达式名跳过，避免触发无效文件加载
-    if (!name || !name.trim()) return
-    try {
-      await currentModel.expression(name)
-    } catch {
-      // intentionally ignored: expression switch failure is non-fatal
-    }
+    await triggerLuomiNestExpression(currentModel, name)
   }
 
   const driveEmotion = async (emotionId: string): Promise<void> => {
@@ -451,29 +388,11 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   }
 
   const setCoreParam = (paramId: string, value: number): void => {
-    if (!currentModel) return
-    const access = getLuomiNestCoreModel(currentModel)
-    if (!access) return
-    try {
-      const { coreModel } = access
-      if (typeof coreModel.setParameterValueById === 'function') {
-        coreModel.setParameterValueById(paramId, value)
-      }
-    } catch {
-      // intentionally ignored: expected non-fatal error
-    }
+    setLuomiNestCoreParam(currentModel, paramId, value)
   }
 
   const resetPose = async (): Promise<void> => {
-    if (!currentModel) return
-    try {
-      await currentModel.motion('Idle', 0)
-    } catch {
-      // intentionally ignored: expected non-fatal error
-    }
-    if (currentModel) {
-      hideLuomiNestWatermark(currentModel)
-    }
+    await resetLuomiNestPose(currentModel)
   }
 
   const destroy = (): void => {

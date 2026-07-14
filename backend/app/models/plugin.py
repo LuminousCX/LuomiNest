@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+
+from app.core.utils import utc_now
 
 
 class CxPluginStatus(str, Enum):
@@ -102,7 +103,7 @@ class CxPluginMetadata:
     module_path: str
     plugin_dir: str
     status: CxPluginStatus = CxPluginStatus.UNLOADED
-    loaded_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    loaded_at: str = field(default_factory=utc_now)
     error_message: str = ""
     reserved: bool = False
 
@@ -123,4 +124,4 @@ class CxHandlerEntry:
     event_type: CxEventType
     handler: Any
     priority: int = 0
-    registered_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    registered_at: str = field(default_factory=utc_now)

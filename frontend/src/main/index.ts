@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, Menu, Tray, nativeImage, protocol, MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, shell, Menu, Tray, nativeImage, protocol, MenuItemConstructorOptions, dialog } from 'electron'
 import { join } from 'path'
 import { platform } from 'os'
 import { tabManager } from './services/browser'
@@ -38,8 +38,29 @@ protocol.registerSchemesAsPrivileged([{
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 
+// 标记应用是否正在真正退出（区别于"关闭窗口最小化到托盘"）
+// 只有从托盘菜单/系统命令退出时才置为 true，关闭主窗口仅最小化到托盘
+let isQuitting = false
+
 const isDev = !app.isPackaged
 const isMac = platform() === 'darwin'
+
+// 单实例锁：禁止多开（包括 Windows 11 多桌面环境，requestSingleInstanceLock 是系统级锁）
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  logger.info('Another LuomiNest instance is already running, exiting...')
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    // 第二个实例尝试启动时，聚焦到已有主窗口
+    logger.info('Second instance detected, focusing existing window...')
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      if (!mainWindow.isVisible()) mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+}
 
 if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
@@ -61,6 +82,32 @@ const saveWindowState = (): void => {
       isMaximized,
     })
   } catch {
+  }
+}
+
+/**
+ * 处理关闭窗口按钮：最小化到托盘而非退出。
+ * 首次关闭时弹框告知用户，之后不再提示。
+ */
+const handleCloseToTray = async (): Promise<void> => {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.hide()
+
+  if (!configStore.getCloseToTrayPrompted()) {
+    configStore.setCloseToTrayPrompted(true)
+    try {
+      await dialog.showMessageBox({
+        type: 'info',
+        title: 'LuomiNest',
+        message: 'LuomiNest 已最小化到托盘',
+        detail: '程序将继续在后台运行。如需完全退出，请右键托盘图标选择「退出」。',
+        buttons: ['知道了'],
+        defaultId: 0,
+        noLink: true,
+      })
+    } catch {
+      // 对话框失败不应影响主流程
+    }
   }
 }
 
@@ -122,8 +169,13 @@ const createWindow = (): void => {
     tabManager.handleResize()
   })
 
-  mainWindow.on('close', () => {
+  mainWindow.on('close', (event) => {
     saveWindowState()
+    // 非真正退出时，拦截关闭事件，改为最小化到托盘
+    if (!isQuitting) {
+      event.preventDefault()
+      handleCloseToTray()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details: { url: string }) => {
@@ -168,7 +220,15 @@ const createTray = (): void => {
     { label: '显示桌面宠物', click: () => { createDesktopPet(mainWindow) } },
     { label: '隐藏桌面宠物', click: () => { const pet = getDesktopPetWindow(); if (pet && !pet.isDestroyed()) pet.hide() } },
     { type: 'separator' },
-    { label: '退出', click: () => { tray?.destroy(); app.quit() } }
+    {
+      label: '退出',
+      click: () => {
+        // 标记真正退出，使 close 事件不再拦截
+        isQuitting = true
+        tray?.destroy()
+        app.quit()
+      }
+    }
   ])
   tray.setToolTip('LuomiNest')
   tray.setContextMenu(contextMenu)
@@ -206,8 +266,7 @@ const createMenu = (): void => {
       label: '帮助',
       submenu: [{
         label: '关于 LuomiNest',
-        click: async () => {
-          const { dialog } = await import('electron')
+        click: () => {
           dialog.showMessageBox(mainWindow!, {
             type: 'info',
             title: '关于 LuomiNest',
@@ -267,7 +326,9 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (platform() !== 'darwin') {
+  // 因主窗口 close 被拦截为最小化到托盘，正常不会触发此事件。
+  // 仅在 macOS 上遵循惯例保持运行；其他平台若真的所有窗口被销毁且非退出流程，则退出。
+  if (platform() !== 'darwin' && isQuitting) {
     tabManager.cleanup()
     stopBackend()
     tray?.destroy()
@@ -276,6 +337,8 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  // 系统关机、任务管理器结束、app.quit() 等触发真正退出时，标记并执行清理
+  isQuitting = true
   saveWindowState()
   luomiBrowserWSClient.stop()
   tabManager.cleanup()

@@ -18,6 +18,7 @@ from loguru import logger
 
 from app.runtime.provider.llm.types import RouteHint
 from app.core.context import ContextTruncator, TokenCounter
+from app.core.utils import extract_text_from_content
 
 # ===== 阈值常量 =====
 # Layer 1: 工具结果压缩阈值
@@ -261,12 +262,7 @@ class WorkflowContextManager:
         lines: list[str] = []
         for msg in messages:
             role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            if isinstance(content, list):
-                content = " ".join(
-                    part.get("text", "") for part in content
-                    if isinstance(part, dict) and part.get("type") == "text"
-                )
+            content = extract_text_from_content(msg.get("content", ""))
             content_str = str(content)[:500]
             lines.append(f"[{role}] {content_str}")
         return "\n".join(lines)

@@ -156,11 +156,6 @@ defineEmits<{
   animation: spin 1.2s linear infinite;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--focus-ring);

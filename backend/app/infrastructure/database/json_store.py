@@ -2,10 +2,10 @@ import asyncio
 import json
 import os
 import threading
-from datetime import datetime, timezone
 from typing import Optional
 from loguru import logger
 from app.core.config import settings
+from app.core.utils import utc_now
 
 
 class JsonStore:
@@ -93,7 +93,7 @@ class JsonStore:
             data = self._load()
             if key in data and isinstance(data[key], dict):
                 data[key].update(updates)
-                data[key]["updated_at"] = datetime.now(timezone.utc).isoformat()
+                data[key]["updated_at"] = utc_now()
                 self._save()
             elif key in data:
                 data[key] = updates

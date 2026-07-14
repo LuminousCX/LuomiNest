@@ -179,7 +179,7 @@ onMounted(() => {
 <template>
   <div class="tts-panel animate-slide-up">
     <div v-if="ttsLoading" class="tts-loading">
-      <Loader2 :size="20" class="tts-spin" />
+      <Loader2 :size="20" class="spin-animation" />
       <span>正在检测 TTS 引擎与设备...</span>
     </div>
 
@@ -297,7 +297,7 @@ onMounted(() => {
               :disabled="ttsConfigTesting"
               @click="testTtsSynthesize"
             >
-              <Loader2 v-if="ttsConfigTesting" :size="14" class="tts-spin" />
+              <Loader2 v-if="ttsConfigTesting" :size="14" class="spin-animation" />
               <Play v-else :size="14" />
               <span>{{ ttsConfigTesting ? '测试中...' : '测试语音' }}</span>
             </button>
@@ -426,15 +426,6 @@ onMounted(() => {
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   border-radius: var(--radius-lg);
-}
-
-.tts-spin {
-  animation: tts-spin 1s linear infinite;
-  color: var(--lumi-primary);
-}
-
-@keyframes tts-spin {
-  to { transform: rotate(360deg); }
 }
 
 .tts-error {

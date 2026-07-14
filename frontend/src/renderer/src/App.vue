@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import TitleBar from './components/TitleBar.vue'
 import LumiSidebar from './components/LumiSidebar.vue'
 import ToastContainer from './components/common/ToastContainer.vue'
+import { useDesktopPetChatBridge } from './composables/useDesktopPetChatBridge'
 
 const route = useRoute()
 
@@ -20,6 +21,13 @@ watch(isDesktopPetPage, (val) => {
     document.documentElement.classList.remove('desktop-pet')
   }
 }, { immediate: true })
+
+// 桌宠聊天桥接：监听桌宠窗口转发的聊天请求，调用主 Agent (MAIN_AGENT_ID) 的 LLM 流式输出，
+// TTS 全局 Store 驱动桌宠窗口的 Live2D（陪伴优先：任意页面都能与桌宠对话）。
+// 仅在主应用窗口（非桌宠窗口、非登录/欢迎页）初始化。
+if (!isDesktopPetPage.value && !isWelcomePage.value && !isLoginPage.value && !isSplashPage.value) {
+  useDesktopPetChatBridge()
+}
 </script>
 
 <template>

@@ -1,12 +1,12 @@
 import json
 import os
 import threading
-from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
 
 from app.core.config import settings
+from app.core.utils import utc_now
 
 
 class PlatformLogEntry:
@@ -126,7 +126,7 @@ class PlatformLogger:
 
         entry = {
             "id": str(uuid.uuid4())[:8],
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": utc_now(),
             "level": level,
             "event": event,
             "message": message,

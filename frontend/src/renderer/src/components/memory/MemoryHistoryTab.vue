@@ -106,7 +106,7 @@ function getWeekday(dateStr: string): string {
               @keydown.enter="emit('handleAddDaily')"
             />
             <button class="h-btn primary" @click="emit('handleAddDaily')" :disabled="isAddingDaily || !newDailyContent.trim()">
-              <Loader2 v-if="isAddingDaily" :size="14" class="spinning" />
+              <Loader2 v-if="isAddingDaily" :size="14" class="spin-animation" />
               <Plus v-else :size="14" />
             </button>
           </div>
@@ -129,44 +129,7 @@ function getWeekday(dateStr: string): string {
   color: var(--text);
 }
 
-.h-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: var(--radius-xs);
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-slow);
-  white-space: nowrap;
-}
-
-.h-btn:hover { background: var(--surface-hover); color: var(--text); }
-
-.h-btn.primary {
-  color: var(--text);
-  background: var(--task-purple-soft);
-  border: 1px solid var(--task-purple-border);
-}
-
-.h-btn.primary:hover { background: var(--task-purple-soft); }
-.h-btn:disabled { opacity: 0.5; cursor: default; }
-
-.spinning { animation: spin 1s linear infinite; }
-
-.empty-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-8) var(--space-5);
-  color: var(--text-muted);
-}
-
 .empty-section.small { padding: var(--space-5); }
-.empty-section svg { margin-bottom: var(--space-3); opacity: 0.5; }
-.empty-section p { font-size: var(--text-md); margin-bottom: var(--space-1); }
 
 .section-title {
   font-size: var(--text-base);

@@ -14,6 +14,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from app.core.utils import utc_now
 from app.infrastructure.database.models.tool_call_record import ToolCallRecordORM
 from app.infrastructure.database.session import get_async_session
 
@@ -22,10 +23,6 @@ LUMINOUS_PERSIST_THRESHOLD = 2000
 
 # 占位符模板
 _PERSISTED_OUTPUT_TEMPLATE = '<luminous-persisted-output id="{record_id}"/>'
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def should_persist(result_text: str) -> bool:
@@ -74,7 +71,7 @@ async def record_tool_call(
             result_json=result_json,
             success=success,
             duration_ms=duration_ms,
-            created_at=_utc_now(),
+            created_at=utc_now(),
         )
         await db.execute(stmt)
 

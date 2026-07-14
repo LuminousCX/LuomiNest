@@ -59,7 +59,7 @@ onMounted(() => {
       </div>
       <div class="header-actions">
         <LumiButton variant="secondary" size="sm" :disabled="store.loading" @click="handleRefresh">
-          <template #icon><RefreshCw :size="15" :class="{ spinning: store.loading }" /></template>
+          <template #icon><RefreshCw :size="15" :class="{ 'spin-animation': store.loading }" /></template>
           刷新
         </LumiButton>
         <LumiButton variant="primary" size="sm" @click="showAddDialog = true">
@@ -178,9 +178,6 @@ onMounted(() => {
   gap: var(--space-2);
 }
 
-.spinning {
-  animation: spin 1s linear infinite;
-}
 
 .platform-stats {
   display: flex;

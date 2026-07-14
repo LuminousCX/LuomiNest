@@ -1113,10 +1113,6 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
-.spinning {
-  animation: spin 1s linear infinite;
-}
-
 /* ===== 工作流 Tab ===== */
 .tool-record-header {
   cursor: pointer;

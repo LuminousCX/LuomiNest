@@ -21,6 +21,7 @@ from typing import Any, Awaitable, Callable
 
 from loguru import logger
 
+from app.core.utils import utc_now
 from app.runtime.provider.llm.types import RouteHint
 from app.core.workflow.event_emitter import WorkflowEventEmitter
 from app.core.workflow.internal_registry import internal_tool_registry
@@ -80,10 +81,6 @@ Rules:
 - Do NOT wrap JSON in ```json``` code blocks; output pure JSON directly
 - Even for chat or simple Q&A, you must return a valid JSON object
 - node_type values: "input" for user request entry, "tool" for tool calls, "agent" for subagent delegation, "condition" for conditional branching, "output" for final result"""
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _repair_truncated_json(text: str) -> str | None:
@@ -370,7 +367,7 @@ class WorkflowEngine:
             )
             session.phase = WorkflowPhase.FAILED
             session.error = str(e)
-            session.completed_at = _utc_now()
+            session.completed_at = utc_now()
 
         return session
 
@@ -424,6 +421,19 @@ class WorkflowEngine:
         async def _run():
             forwarder = None
             try:
+                # 保存用户消息到 conversation_store（工作流模式复用普通对话的持久化机制）
+                if session.conversation_id:
+                    try:
+                        from app.infrastructure.database.conversation_store import conversation_store
+                        from app.services.chat_service import ChatService
+                        conv = await conversation_store.get_async(session.conversation_id)
+                        if conv:
+                            ChatService.save_user_message(conv, session.user_message)
+                            await ChatService.persist_conv(session.conversation_id, conv)
+                            logger.debug(f"[WorkflowEngine][DEBUG] Session {session.session_id} user message saved to conversation {session.conversation_id}")
+                    except Exception as save_err:
+                        logger.warning(f"[WorkflowEngine] Save user message failed: {save_err}")
+
                 # 启动 emitter 事件转发任务
                 async def _forward_emitter_events():
                     async for event in emitter.stream():
@@ -436,6 +446,23 @@ class WorkflowEngine:
                 logger.debug(f"[WorkflowEngine][DEBUG] Session {session.session_id} calling _run_workflow...")
                 await self._run_workflow(session, provider, model, _callback)
                 logger.debug(f"[WorkflowEngine][DEBUG] Session {session.session_id} _run_workflow completed")
+
+                # 工作流完成后，保存 assistant 消息到 conversation_store
+                if session.conversation_id and session.final_result:
+                    try:
+                        from app.infrastructure.database.conversation_store import conversation_store
+                        from app.services.chat_service import ChatService
+                        conv = await conversation_store.get_async(session.conversation_id)
+                        if conv:
+                            ChatService.save_assistant_message(conv, {
+                                "content": session.final_result,
+                                "reasoning": "",
+                                "aborted": session.phase == WorkflowPhase.FAILED,
+                            })
+                            await ChatService.persist_conv(session.conversation_id, conv)
+                            logger.debug(f"[WorkflowEngine][DEBUG] Session {session.session_id} assistant message saved to conversation {session.conversation_id}")
+                    except Exception as save_err:
+                        logger.warning(f"[WorkflowEngine] Save assistant message failed: {save_err}")
 
                 # 工作流完成后，结束 emitter
                 await emitter.finish()
@@ -450,7 +477,22 @@ class WorkflowEngine:
                 logger.debug(f"[WorkflowEngine][DEBUG] Session {session.session_id} _run exception: {type(e).__name__}: {e}")
                 session.phase = WorkflowPhase.FAILED
                 session.error = str(e)
-                session.completed_at = _utc_now()
+                session.completed_at = utc_now()
+                # 异常时也保存 assistant 消息（记录错误信息），避免聊天记录丢失
+                if session.conversation_id:
+                    try:
+                        from app.infrastructure.database.conversation_store import conversation_store
+                        from app.services.chat_service import ChatService
+                        conv = await conversation_store.get_async(session.conversation_id)
+                        if conv:
+                            ChatService.save_assistant_message(conv, {
+                                "content": f"工作流执行失败：{e}",
+                                "reasoning": "",
+                                "aborted": True,
+                            })
+                            await ChatService.persist_conv(session.conversation_id, conv)
+                    except Exception as save_err:
+                        logger.warning(f"[WorkflowEngine] Save error assistant message failed: {save_err}")
                 await event_queue.put({
                     "type": "error",
                     "data": {"message": str(e)},
@@ -532,7 +574,7 @@ class WorkflowEngine:
                 logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} appended available tools to direct response")
             session.phase = WorkflowPhase.COMPLETED
             session.final_result = final_result
-            session.completed_at = _utc_now()
+            session.completed_at = utc_now()
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting final_result (direct): content_len={len(session.final_result)}")
             await self._emit(event_callback, {
                 "type": "final_result",
@@ -616,7 +658,7 @@ class WorkflowEngine:
             if not session.confirmation_result:
                 # 用户拒绝执行
                 session.phase = WorkflowPhase.COMPLETED
-                session.completed_at = _utc_now()
+                session.completed_at = utc_now()
                 reject_msg = f"用户拒绝了执行计划。{f' 反馈: {session.confirmation_feedback}' if session.confirmation_feedback else ''}"
                 session.final_result = reject_msg
                 logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} plan rejected, emitting final_result")
@@ -657,7 +699,7 @@ class WorkflowEngine:
         # 阶段 3: 直接汇总结果（不调用 LLM，避免上下文膨胀）
         # LLM 只负责输出计划，工具执行结果由前端拼接展示
         session.phase = WorkflowPhase.COMPLETED
-        session.completed_at = _utc_now()
+        session.completed_at = utc_now()
 
         # P3 Layer 1：压缩超长工具结果，避免最终摘要上下文膨胀
         # 前端已通过 task_completed 事件收到完整结果，此处仅压缩存储版本
@@ -759,44 +801,57 @@ class WorkflowEngine:
             "data": {"message": "正在分析任务并生成执行计划..."},
         })
 
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} calling llm_adapter.chat with return_raw=True...")
-        result = await llm_adapter.chat(
+        # 流式调用 LLM，实时推送 reasoning 和 content_delta 事件
+        # 改造原因：原非流式 llm_adapter.chat 导致分析阶段无流式输出，用户长时间等待无反馈
+        content = ""
+        reasoning = ""
+        finish_reason = "stop"
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} calling llm_adapter.chat_stream...")
+        async for chunk in llm_adapter.chat_stream(
             messages=messages,
             provider_name=actual_provider,
             model=model,
             temperature=session.planning_temperature,
             max_tokens=session.planning_max_tokens,
-            return_raw=True,
             route_hint=RouteHint.REASONER,
-        )
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} llm_adapter.chat returned, type={type(result).__name__}")
+        ):
+            if chunk.type == "content":
+                delta = chunk.data.get("content", "")
+                if delta:
+                    content += delta
+                    # 实时推送 content_delta 事件（前端用于流式显示直接回复）
+                    await self._emit(event_callback, {
+                        "type": "content_delta",
+                        "data": {"content": delta},
+                    })
+            elif chunk.type == "reasoning":
+                delta = chunk.data.get("reasoning", "")
+                if delta:
+                    reasoning += delta
+                    # 实时推送 reasoning 事件（思考过程增量）
+                    await self._emit(event_callback, {
+                        "type": "reasoning",
+                        "data": {
+                            "content": delta,
+                            "phase": "planning",
+                        },
+                    })
+            elif chunk.type == "finish_reason":
+                finish_reason = chunk.data.get("finish_reason", "stop")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} chat_stream completed: content_len={len(content)}, reasoning_len={len(reasoning)}, finish_reason={finish_reason}")
 
-        # return_raw=True 返回 dict: {"content", "reasoning", "tool_calls", "role", "finish_reason", "usage"}
-        if isinstance(result, dict):
-            content = result.get("content", "") or ""
-            reasoning = result.get("reasoning", "") or ""
-            tool_calls = result.get("tool_calls", [])
-            finish_reason = result.get("finish_reason", "stop")
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} response dict: content_len={len(content)}, reasoning_len={len(reasoning)}, tool_calls={len(tool_calls) if tool_calls else 0}, finish_reason={finish_reason}")
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} reasoning (first 500): {reasoning[:500]}")
-
-            # 检测 LLM 输出截断
-            if finish_reason == "length":
-                logger.warning(
-                    "[WorkflowEngine] Session {} LLM output truncated (finish_reason=length, "
-                    "max_tokens={}). Attempting JSON repair...",
-                    sid, session.planning_max_tokens,
-                )
-        else:
-            # 兜底：return_raw 未生效时返回字符串
-            content = str(result)
-            reasoning = ""
-            finish_reason = "stop"
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} response is string (return_raw not effective), content_len={len(content)}")
+        # 检测 LLM 输出截断
+        if finish_reason == "length":
+            logger.warning(
+                "[WorkflowEngine] Session {} LLM output truncated (finish_reason=length, "
+                "max_tokens={}). Attempting JSON repair...",
+                sid, session.planning_max_tokens,
+            )
 
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} raw content (first 800): {content[:800]}")
 
         # 检测并提取 <think></think> 标签中的思考过程
+        # 部分模型（DeepSeek-R1、Qwen3）将思考过程嵌入 content 的 <think> 标签中
         has_think_tag = "<think>" in content.lower() or "</think>" in content.lower()
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} has_think_tag_in_content={has_think_tag}")
 
@@ -807,30 +862,18 @@ class WorkflowEngine:
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} extracted think_content (len={len(think_content)}): {think_content[:500]}")
             logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} content after think removal (len={len(content)}, before={content_before_len}): {content[:500]}")
 
-        # 合并 reasoning 字段和 <think> 标签内容
-        combined_reasoning = ""
-        if reasoning:
-            combined_reasoning = reasoning
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} using reasoning field as thinking process")
+        # 如果有 think 标签内容，推送为 reasoning 事件（流式过程中未作为 reasoning 推送）
         if think_content:
-            if combined_reasoning:
-                combined_reasoning = combined_reasoning + "\n" + think_content
-            else:
-                combined_reasoning = think_content
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} appended think_content to reasoning, combined_len={len(combined_reasoning)}")
-
-        # 推送思考过程到前端 SSE 流
-        if combined_reasoning:
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting reasoning event (len={len(combined_reasoning)})")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting think_content as reasoning (len={len(think_content)})")
             await self._emit(event_callback, {
                 "type": "reasoning",
                 "data": {
-                    "content": combined_reasoning,
+                    "content": think_content,
                     "phase": "planning",
                 },
             })
-        else:
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} no reasoning/think content to emit")
+
+        combined_reasoning = reasoning + ("\n" + think_content if think_content else "")
 
         logger.info(
             "[WorkflowEngine] Session {} LLM response: content_len={}, reasoning_len={}, think_tag={}",

@@ -2,6 +2,14 @@
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Multi-architecture build (amd64 + arm64):
+#   cd docker/backend
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     -t luominest/backend:latest --push .
+#
+# Single-arch build for current platform:
+#   docker compose build backend
 version: "3.8"
 
 services:
@@ -63,6 +71,9 @@ services:
     build:
       context: ../backend
       dockerfile: ../docker/backend/Dockerfile
+    platforms:
+      - linux/amd64
+      - linux/arm64
     container_name: luominest-backend
     restart: unless-stopped
     environment:

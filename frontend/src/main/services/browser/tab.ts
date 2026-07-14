@@ -84,6 +84,14 @@ class TabManager {
   private setupViewEvents(view: WebContentsView, tabId: string): void {
     const webContents = view.webContents
 
+    // contextIsolation: true 时 preload 无法修改页面原型链，
+    // 改为在每次导航开始时通过 executeJavaScript 将 stealth 脚本注入到 main world
+    webContents.on('did-start-navigation', (_e, _url, isInPlace, isMainFrame) => {
+      if (isMainFrame && !isInPlace) {
+        injectStealthScript(view).catch(() => {})
+      }
+    })
+
     webContents.on('page-title-updated', (_e, title) => {
       if (title && title !== 'about:blank') {
         this.notifyUpdate(tabId, { title })

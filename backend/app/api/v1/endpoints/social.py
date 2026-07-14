@@ -1,13 +1,12 @@
 import uuid
-import json
-from datetime import datetime, timezone
 from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from loguru import logger
 
+from app.core.utils import utc_now, sse_response, sse_data, require_store, to_camel_case, ok
+from app.core.exceptions import ValidationError
 from app.infrastructure.database.json_store import groups_store, agents_store
-from app.domains.social.group_chat import GroupChatManager, to_camel_case
+from app.domains.social.group_chat import GroupChatManager
 from app.domains.social.ai_to_ai_chat import AIToAIChat
 from app.domains.social.agent_orchestrator import agent_orchestrator
 from app.domains.social.agent_role_registry import AgentRoleRegistry
@@ -80,14 +79,14 @@ async def list_groups():
             "created_at": g.get("created_at", ""),
             "updated_at": g.get("updated_at", ""),
         }))
-    return {"error": None, "data": result}
+    return ok(result)
 
 
 @router.post("/groups")
 async def create_group(request: GroupCreate):
     logger.info(f"[API] POST /social/groups - Creating group: {request.name}")
     group_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
     group = {
         "id": group_id,
         "name": request.name,
@@ -99,58 +98,45 @@ async def create_group(request: GroupCreate):
         "updated_at": now,
     }
     await groups_store.set_async(group_id, group)
-    return {"error": None, "data": to_camel_case(group)}
-
+    return ok(to_camel_case(group))
+    
 
 @router.get("/groups/{group_id}")
 async def get_group(group_id: str):
     logger.info(f"[API] GET /social/groups/{group_id} - Fetching group")
-    group = await groups_store.get_async(group_id)
-    if not group:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Group {group_id} not found")
+    group = await require_store(groups_store, group_id, "Group")
 
     group_data = to_camel_case(dict(group))
-    return {"error": None, "data": group_data}
+    return ok(group_data)
 
 
 @router.patch("/groups/{group_id}")
 async def update_group(group_id: str, request: GroupUpdate):
     logger.info(f"[API] PATCH /social/groups/{group_id} - Updating group")
-    group = await groups_store.get_async(group_id)
-    if not group:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Group {group_id} not found")
+    group = await require_store(groups_store, group_id, "Group")
     update_data = request.model_dump(exclude_unset=True)
     group.update(update_data)
-    group["updated_at"] = datetime.now(timezone.utc).isoformat()
+    group["updated_at"] = utc_now()
     await groups_store.set_async(group_id, group)
-    return {"error": None, "data": to_camel_case(group)}
-
+    return ok(to_camel_case(group))
+    
 
 @router.delete("/groups/{group_id}")
 async def delete_group(group_id: str):
     logger.info(f"[API] DELETE /social/groups/{group_id} - Deleting group")
     await groups_store.delete_async(group_id)
-    return {"error": None, "data": {"deleted": True}}
+    return ok({"deleted": True})
 
 
 @router.post("/groups/{group_id}/members")
 async def add_group_member(group_id: str, request: GroupMemberAdd):
     logger.info(f"[API] POST /social/groups/{group_id}/members - Adding member")
-    group = await groups_store.get_async(group_id)
-    if not group:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Group {group_id} not found")
+    group = await require_store(groups_store, group_id, "Group")
 
-    agent = await agents_store.get_async(request.agent_id)
-    if not agent:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Agent {request.agent_id} not found")
+    agent = await require_store(agents_store, request.agent_id, "Agent")
 
     members = group.get("members", [])
     if any(m.get("agent_id") == request.agent_id for m in members):
-        from app.core.exceptions import ValidationError
         raise ValidationError(f"Agent {request.agent_id} is already a member")
 
     members.append({
@@ -161,33 +147,27 @@ async def add_group_member(group_id: str, request: GroupMemberAdd):
         "color": agent.get("color", "#0d9488"),
     })
     group["members"] = members
-    group["updated_at"] = datetime.now(timezone.utc).isoformat()
+    group["updated_at"] = utc_now()
     await groups_store.set_async(group_id, group)
-    return {"error": None, "data": to_camel_case(group)}
-
+    return ok(to_camel_case(group))
+    
 
 @router.delete("/groups/{group_id}/members/{agent_id}")
 async def remove_group_member(group_id: str, agent_id: str):
     logger.info(f"[API] DELETE /social/groups/{group_id}/members/{agent_id} - Removing member")
-    group = await groups_store.get_async(group_id)
-    if not group:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Group {group_id} not found")
+    group = await require_store(groups_store, group_id, "Group")
 
     members = group.get("members", [])
     group["members"] = [m for m in members if m.get("agent_id") != agent_id]
-    group["updated_at"] = datetime.now(timezone.utc).isoformat()
+    group["updated_at"] = utc_now()
     await groups_store.set_async(group_id, group)
-    return {"error": None, "data": to_camel_case(group)}
-
+    return ok(to_camel_case(group))
+    
 
 @router.post("/groups/{group_id}/messages")
 async def send_group_message(group_id: str, request: GroupMessageSend):
     logger.info(f"[API] POST /social/groups/{group_id}/messages - Sending message (stream)")
-    group = await groups_store.get_async(group_id)
-    if not group:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Group {group_id} not found")
+    group = await require_store(groups_store, group_id, "Group")
 
     if request.sender_id != "user":
         members = group.get("members", [])
@@ -196,11 +176,9 @@ async def send_group_message(group_id: str, request: GroupMessageSend):
             for m in members
         )
         if not is_member:
-            from app.core.exceptions import ValidationError
             raise ValidationError(f"Sender {request.sender_id} is not a member of group {group_id}")
 
     if not request.content or not request.content.strip():
-        from app.core.exceptions import ValidationError
         raise ValidationError("Message content cannot be empty")
 
     async def message_stream():
@@ -210,26 +188,17 @@ async def send_group_message(group_id: str, request: GroupMessageSend):
             sender_type="user" if request.sender_id == "user" else "agent",
             content=request.content,
         ):
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            yield sse_data(event)
 
-    return StreamingResponse(
+    return sse_response(
         message_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
     )
 
 
 @router.post("/groups/{group_id}/collaborate")
 async def collaborate(group_id: str, request: CollaborationRequest):
     logger.info(f"[API] POST /social/groups/{group_id}/collaborate - Multi-agent collaboration")
-    group = await groups_store.get_async(group_id)
-    if not group:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Group {group_id} not found")
+    group = await require_store(groups_store, group_id, "Group")
 
     if request.stream:
         async def event_stream():
@@ -238,16 +207,10 @@ async def collaborate(group_id: str, request: CollaborationRequest):
                 user_message=request.content,
                 sender_id=request.sender_id,
             ):
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                yield sse_data(event)
 
-        return StreamingResponse(
+        return sse_response(
             event_stream(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
         )
 
     session = await agent_orchestrator.orchestrate(
@@ -311,7 +274,7 @@ async def ai_to_ai_chat(request: AIChatRequest):
         topic=request.topic,
         rounds=request.rounds,
     )
-    return {"error": None, "data": results}
+    return ok(results)
 
 
 
@@ -331,4 +294,4 @@ async def list_available_agents():
             "avatar": a.get("avatar"),
             "is_main": a.get("is_main", False),
         })
-    return {"error": None, "data": safe_agents}
+    return ok(safe_agents)

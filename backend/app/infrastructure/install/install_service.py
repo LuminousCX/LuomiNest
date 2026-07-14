@@ -9,7 +9,6 @@ import os
 import shutil
 import time
 import zipfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -17,6 +16,7 @@ import httpx
 from loguru import logger
 
 from app.core.config import settings
+from app.core.utils import utc_now
 from app.infrastructure.database.json_store import JsonStore, repo_sources_store
 from app.security.net.safe_url import assert_url_safe, create_safe_async_client, UnsafeUrlError
 
@@ -459,7 +459,7 @@ async def install_from_archive(
                         shutil.copyfileobj(src, dst)
 
         # 记录安装信息
-        now = datetime.now(timezone.utc).isoformat()
+        now = utc_now()
         install_record = {
             "id": item_id,
             "type": item_type,

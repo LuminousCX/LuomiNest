@@ -147,12 +147,12 @@ defineExpose({
             :class="['workflow-toggle', { active: isWorkflowMode }]"
             variant="secondary"
             size="sm"
-            :title="isWorkflowMode ? '工作流模式已开启：长任务将自动分解并调度内部模块' : '当前为普通模式：点击标准/超长开启工作流'"
+            :title="isWorkflowMode ? '专业模式已开启：长任务将自动分解并调度内部模块' : '当前为普通模式：点击标准/超长开启专业模式'"
           >
             <template #icon>
               <Wand2 :size="15" />
             </template>
-            <span class="workflow-toggle-text">{{ isWorkflowMode ? '工作流' : '普通' }}</span>
+            <span class="workflow-toggle-text">{{ isWorkflowMode ? '专业' : '普通' }}</span>
           </LumiButton>
           <div class="workflow-mode-selector">
             <LumiButton

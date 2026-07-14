@@ -2,8 +2,9 @@
 /**
  * LuomiNest 桌面宠物视图（独立窗口）
  *
- * 仅负责组合：canvas + 3 个 composable + 2 个子组件 + 生命周期。
+ * 仅负责组合：canvas + 3 个 composable + 3 个子组件 + 生命周期。
  * 所有 Live2D 逻辑在 useDesktopPetLive2D，IPC 在 useDesktopPetIpc，字幕在 useDesktopPetSubtitle。
+ * 输入区通过 window.api.desktopPetChat 将消息转发到主应用窗口（useDesktopPetChatBridge 接收）。
  */
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { LUOMINEST_BUILTIN_MODELS } from '@/config/luominest-models'
@@ -13,10 +14,13 @@ import { useDesktopPetIpc } from '@/composables/useDesktopPetIpc'
 import { useDesktopPetSubtitle } from '@/composables/useDesktopPetSubtitle'
 import DesktopPetControls from '@/components/desktop-pet/DesktopPetControls.vue'
 import DesktopPetSubtitle from '@/components/desktop-pet/DesktopPetSubtitle.vue'
+import DesktopPetInput from '@/components/desktop-pet/DesktopPetInput.vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const isControlsVisible = ref(false)
 const isAlwaysOnTop = ref(true)
+// 桌宠窗口本地的流式状态（由主应用通过 IPC 反馈，用于输入区的发送/取消切换）
+const isStreaming = ref(false)
 
 const {
   isModelReady,
@@ -34,6 +38,7 @@ const {
   setCoreParam,
   resetPose,
   handleResize,
+  setVisibility,
   close,
   destroy
 } = useDesktopPetLive2D(canvasRef)
@@ -65,8 +70,19 @@ const { setupIpc, cleanupIpc } = useDesktopPetIpc({
     })
   },
   onSubtitle: (text) => showSubtitle(text),
-  onSubtitleHide: () => hideSubtitle()
+  onSubtitleHide: () => hideSubtitle(),
+  onStreamingState: (streaming) => { isStreaming.value = streaming },
+  onVisibilityChanged: (visible) => setVisibility(visible)
 })
+
+// 桌宠窗口输入区：发送消息到主应用窗口（由 useDesktopPetChatBridge 接收）
+const handleSend = (text: string): void => {
+  window.api.desktopPetChat.sendMessage(text)
+}
+
+const handleCancel = (): void => {
+  window.api.desktopPetChat.cancel()
+}
 
 // 控制面板计时器（view 私有）
 let controlsHideTimer: ReturnType<typeof setTimeout> | null = null
@@ -187,6 +203,12 @@ onBeforeUnmount(() => {
       @close="handleClose"
       @mouseenter="showControls"
       @mouseleave="scheduleHideControls"
+    />
+
+    <DesktopPetInput
+      :is-streaming="isStreaming"
+      @send="handleSend"
+      @cancel="handleCancel"
     />
   </div>
 </template>

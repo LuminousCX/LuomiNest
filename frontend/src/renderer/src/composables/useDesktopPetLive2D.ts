@@ -24,11 +24,16 @@ import { createLuomiNestRendererLogger } from '@/utils/logger'
 import {
   loadCubism4Module,
   patchIsInteractive,
-  getLuomiNestCoreModel,
   scanLuomiNestModelCapabilities,
   hideLuomiNestWatermark,
   setupLuomiNestIdleAnimation,
   mapLuomiNestPadToEmotion,
+  initLuomiNestPixiApp,
+  createLuomiNestFocusTracker,
+  triggerLuomiNestMotion,
+  triggerLuomiNestExpression,
+  setLuomiNestCoreParam,
+  resetLuomiNestPose,
   type LuomiNestLive2DModel
 } from './live2d/useLuomiNestLive2DCore'
 
@@ -40,8 +45,6 @@ const MIN_PET_WIDTH = 280
 const MIN_PET_HEIGHT = 400
 const MAX_PET_WIDTH = 1200
 const MAX_PET_HEIGHT = 1600
-/** 焦点跟踪阻尼（窗口模式 0.12，比 canvas 模式 0.08 略大，手感更稳） */
-const FOCUS_DAMPING = 0.12
 
 /** IPC SEND 通道字面量（类型见 DesktopPetIpcChannels.SEND） */
 const IPC_RESIZE_WINDOW = 'desktop-pet:resize-window'
@@ -67,12 +70,15 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
   let idleCleanup: (() => void) | null = null
   let modelOriginalBounds: { width: number; height: number } | null = null
 
+  // 可见性状态：窗口隐藏时降低帧率以节省资源
+  let isWindowVisible = true
+  const LOW_FPS = 5
+  let savedMinFps = 0
+
   // 焦点跟踪 + 鼠标穿透共享状态（必须在同一闭包内）
   let focusTargetX = 0
   let focusTargetY = 0
-  let focusCurrentX = 0
-  let focusCurrentY = 0
-  let focusTickerCallback: (() => void) | null = null
+  let focusTrackerCleanup: (() => void) | null = null
   let isMouseIgnored = false
   let isDraggingWindow = false
 
@@ -89,43 +95,14 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
   }
 
   const initPixi = (): Application | null => {
-    if (pixiApp) return pixiApp
-    if (!canvasRef.value) {
-      logger.error('Canvas element not found')
-      loadError.value = 'Canvas element not available'
-      return null
-    }
-
-    const baseConfig = {
-      view: canvasRef.value,
-      autoStart: true,
-      backgroundAlpha: 0,
-      antialias: true,
-      preserveDrawingBuffer: true,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
-      autoDensity: true
-    }
-
-    try {
-      pixiApp = new Application({
-        ...baseConfig,
-        powerPreference: 'high-performance'
-      } as Partial<ConstructorParameters<typeof Application>[0]>)
-      logger.info('PixiJS initialized successfully (WebGL)')
-      return pixiApp
-    } catch (webglErr) {
-      logger.warn('WebGL init failed, trying canvas fallback:', webglErr instanceof Error ? webglErr.message : webglErr)
-      try {
-        pixiApp = new Application(baseConfig as Partial<ConstructorParameters<typeof Application>[0]>)
-        logger.info('PixiJS initialized successfully (Canvas fallback)')
-        return pixiApp
-      } catch (canvasErr) {
-        const message = canvasErr instanceof Error ? canvasErr.message : 'Unknown error'
-        loadError.value = `Graphics initialization failed: ${message}`
-        logger.error('Both WebGL and Canvas failed:', message)
-        return null
-      }
-    }
+    return initLuomiNestPixiApp(pixiApp, {
+      canvasRef,
+      extraConfig: {
+        preserveDrawingBuffer: true,
+      },
+      onError: (msg) => { loadError.value = msg },
+      logger,
+    })
   }
 
   const fitModelToWindow = (model: LuomiNestLive2DModel): void => {
@@ -355,57 +332,23 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
 
   /** 鼠标跟踪：头部和眼球跟随鼠标，鼠标离开模型时平滑回归中心 */
   const setupWindowFocusTracking = (): void => {
-    if (focusTickerCallback) {
-      Ticker.shared.remove(focusTickerCallback)
+    if (focusTrackerCleanup) {
+      focusTrackerCleanup()
+      focusTrackerCleanup = null
     }
 
-    focusTickerCallback = () => {
-      if (!currentModel) return
-
-      // 鼠标不在模型上时，回归中心
-      if (isMouseIgnored) {
-        focusTargetX = 0
-        focusTargetY = 0
-      }
-
-      // 阻尼平滑插值
-      focusCurrentX += (focusTargetX - focusCurrentX) * FOCUS_DAMPING
-      focusCurrentY += (focusTargetY - focusCurrentY) * FOCUS_DAMPING
-
-      const access = getLuomiNestCoreModel(currentModel)
-      if (!access) return
-
-      try {
-        const { coreModel } = access
-        const angleXParam = coreModel.getParameterIndex('ParamAngleX')
-        const angleYParam = coreModel.getParameterIndex('ParamAngleY')
-        const eyeBallXParam = coreModel.getParameterIndex('ParamEyeBallX')
-        const eyeBallYParam = coreModel.getParameterIndex('ParamEyeBallY')
-
-        // 头部混合：原值 60% + 鼠标 40%（最大 15 度）
-        if (angleXParam >= 0) {
-          const base = coreModel.getParameterValueByIndex(angleXParam)
-          coreModel.setParameterValueByIndex(angleXParam, base * 0.6 + focusCurrentX * 15 * 0.4)
-        }
-        if (angleYParam >= 0) {
-          const base = coreModel.getParameterValueByIndex(angleYParam)
-          coreModel.setParameterValueByIndex(angleYParam, base * 0.6 + focusCurrentY * 15 * 0.4)
-        }
-        // 眼球混合：原值 50% + 鼠标 50%
-        if (eyeBallXParam >= 0) {
-          const base = coreModel.getParameterValueByIndex(eyeBallXParam)
-          coreModel.setParameterValueByIndex(eyeBallXParam, base * 0.5 + focusCurrentX * 0.5)
-        }
-        if (eyeBallYParam >= 0) {
-          const base = coreModel.getParameterValueByIndex(eyeBallYParam)
-          coreModel.setParameterValueByIndex(eyeBallYParam, base * 0.5 + focusCurrentY * 0.5)
-        }
-      } catch {
-        // intentionally ignored
-      }
-    }
-
-    Ticker.shared.add(focusTickerCallback)
+    // 窗口模式：阻尼 0.12（比 canvas 模式 0.08 略大，手感更稳），
+    // 混合原值（头部 60%+40%，眼球 50%+50%）避免覆盖模型自身 idle 动画。
+    // isMouseIgnored 为 true 时（鼠标在模型外），getTarget 返回 {0,0} 使头部平滑回归中心。
+    const tracker = createLuomiNestFocusTracker({
+      damping: 0.12,
+      maxHeadAngle: 15,
+      maxEyeBall: 0.5,
+      blend: true,
+      getModel: () => currentModel,
+      getTarget: () => isMouseIgnored ? { x: 0, y: 0 } : { x: focusTargetX, y: focusTargetY }
+    })
+    focusTrackerCleanup = tracker.cleanup
   }
 
   const setupCanvasDrag = (): void => {
@@ -446,33 +389,16 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
   }
 
   const setCoreParam = (paramId: string, value: number): void => {
-    if (!currentModel) return
-    const access = getLuomiNestCoreModel(currentModel)
-    if (!access) return
-    try {
-      access.coreModel.setParameterValueById(paramId, value)
-    } catch {
-      // intentionally ignored
-    }
+    setLuomiNestCoreParam(currentModel, paramId, value)
   }
 
   const triggerMotion = async (group: string, index: number): Promise<void> => {
-    if (!currentModel) return
-    try {
-      await currentModel.motion(group, index)
-    } catch {
-      // intentionally ignored
-    }
+    await triggerLuomiNestMotion(currentModel, group, index)
   }
 
   const triggerExpression = async (emotionId: string): Promise<void> => {
-    if (!currentModel) return
     const resolved = resolveEmotionForCurrentModel(emotionId)
-    try {
-      await currentModel.expression(resolved)
-    } catch {
-      // intentionally ignored
-    }
+    await triggerLuomiNestExpression(currentModel, resolved)
   }
 
   const drivePadEmotion = (pleasure: number, arousal: number, dominance: number): void => {
@@ -487,13 +413,7 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
   }
 
   const resetPose = async (): Promise<void> => {
-    if (!currentModel) return
-    try {
-      await currentModel.motion('Idle', 0)
-    } catch {
-      // intentionally ignored
-    }
-    hideLuomiNestWatermark(currentModel)
+    await resetLuomiNestPose(currentModel)
   }
 
   const handleResize = (): void => {
@@ -507,8 +427,34 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
     }
   }
 
+  /**
+   * 窗口可见性控制：隐藏时降低 PixiJS Ticker 帧率，显示时恢复。
+   * 由 useDesktopPetIpc 的 onVisibilityChanged 回调调用。
+   */
+  const setVisibility = (visible: boolean): void => {
+    isWindowVisible = visible
+    const app = pixiAppRef.value
+    if (!app) return
+
+    if (visible) {
+      // 恢复正常帧率
+      Ticker.shared.minFPS = savedMinFps > 0 ? savedMinFps : 60
+      logger.info(`Visibility restored, Ticker minFPS = ${Ticker.shared.minFPS}`)
+    } else {
+      // 保存当前 minFPS 并降低帧率
+      if (savedMinFps === 0) {
+        savedMinFps = Ticker.shared.minFPS
+      }
+      Ticker.shared.minFPS = LOW_FPS
+      logger.info(`Window hidden, Ticker minFPS reduced to ${LOW_FPS}`)
+    }
+  }
+
   const close = (): void => {
-    window.api.desktopPet.close()
+    // 桌宠窗口自身关闭：window.api.desktopPet.close() 是 invoke('desktop-pet:close')，
+    // 其 handler 的 assertTrustedSender 仅允许 mainWindow 调用，桌宠窗口会被拦截。
+    // 直接调用 window.close() 关闭自身 BrowserWindow（Electron renderer 标准行为）。
+    window.close()
   }
 
   const destroy = (): void => {
@@ -546,9 +492,9 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
       mouseMoveHandler = null
     }
 
-    if (focusTickerCallback) {
-      Ticker.shared.remove(focusTickerCallback)
-      focusTickerCallback = null
+    if (focusTrackerCleanup) {
+      focusTrackerCleanup()
+      focusTrackerCleanup = null
     }
 
     if (currentModel) {
@@ -558,6 +504,12 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
     if (pixiApp) {
       pixiApp.destroy(true)
       pixiApp = null
+    }
+
+    // 恢复 Ticker 帧率（以防窗口隐藏状态下销毁）
+    if (!isWindowVisible && savedMinFps > 0) {
+      Ticker.shared.minFPS = savedMinFps
+      savedMinFps = 0
     }
   }
 
@@ -577,6 +529,7 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
     setCoreParam,
     resetPose,
     handleResize,
+    setVisibility,
     close,
     destroy
   }

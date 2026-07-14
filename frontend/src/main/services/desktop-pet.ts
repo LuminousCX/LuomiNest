@@ -95,7 +95,7 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      backgroundThrottling: false
+      backgroundThrottling: true
     }
   }
 
@@ -227,6 +227,21 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   ipcMain.on('desktop-pet:end-drag', handleEndDrag)
   ipcMain.on('desktop-pet:resize-window', handleResizeWindow)
 
+  // 桌宠窗口 → 主进程 → 主应用窗口：转发聊天消息
+  // 桌宠窗口的 webContents !== mainWindow.webContents，无法通过 invoke 的 assertTrustedSender 校验，
+  // 故用 ipcMain.on（单向）接收，再通过 mainWindow.webContents.send 转发给主应用。
+  const handleSendChatMessage = (_event: unknown, text: string) => {
+    if (typeof text !== 'string' || !text.trim()) return
+    mainWindow?.webContents.send('desktop-pet:chat-message', text)
+  }
+
+  const handleCancelChat = () => {
+    mainWindow?.webContents.send('desktop-pet:chat-cancel')
+  }
+
+  ipcMain.on('desktop-pet:send-chat-message', handleSendChatMessage)
+  ipcMain.on('desktop-pet:cancel-chat', handleCancelChat)
+
   const loadPetWindow = async () => {
     if (isDev && process.env['ELECTRON_RENDERER_URL']) {
       const baseUrl = process.env['ELECTRON_RENDERER_URL']
@@ -257,6 +272,8 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     ipcMain.removeListener('desktop-pet:drag-window', handleDragWindow)
     ipcMain.removeListener('desktop-pet:end-drag', handleEndDrag)
     ipcMain.removeListener('desktop-pet:resize-window', handleResizeWindow)
+    ipcMain.removeListener('desktop-pet:send-chat-message', handleSendChatMessage)
+    ipcMain.removeListener('desktop-pet:cancel-chat', handleCancelChat)
     desktopPetWindow = null
   })
 
@@ -268,6 +285,24 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
       }, 800)
     }
   })
+
+  // 窗口可见性检测：隐藏时通知渲染进程降低帧率，显示时恢复正常帧率
+  const handleWindowShow = () => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:visibility-changed', { visible: true })
+      logger.info('Desktop pet window shown, notifying renderer to resume full FPS')
+    }
+  }
+
+  const handleWindowHide = () => {
+    if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+      desktopPetWindow.webContents.send('desktop-pet:visibility-changed', { visible: false })
+      logger.info('Desktop pet window hidden, notifying renderer to reduce FPS')
+    }
+  }
+
+  desktopPetWindow.on('show', handleWindowShow)
+  desktopPetWindow.on('hide', handleWindowHide)
 
   desktopPetWindow.webContents.on('did-finish-load', () => {
     if (modelInfo) {
@@ -394,6 +429,13 @@ export function registerDesktopPetIpc(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('desktop-pet:hideSubtitle', async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
     return sendToDesktopPet('desktop-pet:subtitle-hide')
+      ? { success: true }
+      : { success: false, error: 'Desktop pet window not running' }
+  })
+
+  ipcMain.handle('desktop-pet:setStreamingState', async (event: IpcMainInvokeEvent, isStreaming: boolean) => {
+    if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
+    return sendToDesktopPet('desktop-pet:streaming-state', isStreaming)
       ? { success: true }
       : { success: false, error: 'Desktop pet window not running' }
   })

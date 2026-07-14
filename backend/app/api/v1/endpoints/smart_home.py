@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from app.runtime.platform.base import PlatformResponse
 from app.runtime.platform.registry import get_instance, list_instances
 from app.runtime.platform.platform_logger import platform_logger
+from app.core.exceptions import LuomiNestError, ValidationError
 
 
 router = APIRouter(prefix="/smart-home", tags=["smart-home"])
@@ -83,14 +84,12 @@ async def control_device(device_id: str, req: DeviceControlRequest):
     )
 
     if req.action not in ALLOWED_ACTIONS:
-        from app.core.exceptions import ValidationError
         raise ValidationError(
             f"Invalid action '{req.action}', allowed: {', '.join(ALLOWED_ACTIONS)}"
         )
 
     iot_instances = _list_iot_instances()
     if not iot_instances:
-        from app.core.exceptions import LuomiNestError
         raise LuomiNestError(
             "未找到已注册的 IoT 平台实例，请先在平台管理中配置并启动智能家居适配器",
             code="SMART_HOME_NO_IOT_INSTANCE",
@@ -144,7 +143,6 @@ async def control_device(device_id: str, req: DeviceControlRequest):
             )
 
     if not success:
-        from app.core.exceptions import LuomiNestError
         raise LuomiNestError(
             f"命令发送失败: {last_error or '所有 IoT 实例均未能成功发送命令'}",
             code="SMART_HOME_COMMAND_FAILED",

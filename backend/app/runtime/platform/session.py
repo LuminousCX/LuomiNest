@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime, timezone
 from loguru import logger
 
+from app.core.utils import utc_now
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.json_store import JsonStore
 
@@ -36,7 +36,7 @@ async def get_or_create_conversation(
             return conv_id
 
     conv_id = f"plat-{uuid.uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
     title_prefix = "群聊" if is_group else "私聊"
     title = f"[{platform_name}] {title_prefix} {sender_name or session_id}"[:60]
 

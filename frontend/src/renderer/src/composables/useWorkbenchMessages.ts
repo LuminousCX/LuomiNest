@@ -93,11 +93,21 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   // 对话模式（普通/标准/超长）
   const chatMode = ref<ChatModeLevel>('normal')
   const CHAT_MODE_OPTIONS: WorkflowModeOption[] = [
-    { value: 'normal', label: '普通', title: '普通模式：非工作流，工具最少（任务视图操作 + 表情操控）' },
-    { value: 'standard', label: '标准', title: '标准模式：工作流，平衡速度与深度，排除细粒度浏览器工具' },
-    { value: 'ultra', label: '超长', title: '超长模式：工作流，最大能力，全部工具可用' },
+    { value: 'normal', label: '普通', title: '普通模式：工具最少（任务视图操作 + 表情操控）' },
+    { value: 'standard', label: '标准', title: '专业模式·标准：平衡速度与深度，排除细粒度浏览器工具' },
+    { value: 'ultra', label: '超长', title: '专业模式·超长：最大能力，全部工具可用，适合复杂长任务' },
   ]
   const isWorkflowMode = computed(() => chatMode.value !== 'normal')
+
+  // 切换对话时同步 chatMode（从对话存储的 chat_mode 字段读取）
+  // 监听 currentConversation?.chat_mode 确保异步加载完成后也能同步
+  watch(
+    () => chatStore.currentConversation?.chat_mode,
+    (newMode) => {
+      chatMode.value = (newMode as ChatModeLevel) || 'normal'
+    },
+    { immediate: true },
+  )
 
   const REASONING_MODEL_KEYWORDS = ['reasoner', 'reason', 'o1', 'o3', 'o4', 'thinking', 'r1']
   const isReasoningModel = (modelId: string): boolean => {
@@ -185,10 +195,21 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   }
 
   const selectChatMode = (mode: ChatModeLevel): void => {
+    // 上下文隔离：如果当前对话已有消息，切换模式需要新建对话
+    const currentConvId = chatStore.currentConvId
+    if (currentConvId) {
+      const currentMessages = chatStore.convMessages[currentConvId] || []
+      if (currentMessages.length > 0 && chatMode.value !== mode) {
+        // 已有消息的对话不允许切换模式，提示用户新建对话
+        toast.warning('切换模式需要新建对话，以隔离上下文避免膨胀')
+        return
+      }
+    }
+
     chatMode.value = mode
     const opts = availableModelOptions.value
     if (opts.length === 0) return
-    // 工作流模式优先推理模型，普通模式优先快速模型
+    // 专业模式优先推理模型，普通模式优先快速模型
     if (mode !== 'normal') {
       const reasoning = opts.find((opt) => isReasoningModel(opt.modelId))
       if (reasoning) selectModel(reasoning.providerId, reasoning.modelId)
@@ -256,6 +277,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
           agentId,
           resolved?.model,
           resolved?.provider,
+          chatMode.value,
         )
         convId = conv?.id || ''
       } catch (e: unknown) {
@@ -299,6 +321,35 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     await nextTick()
     scrollToBottom(true)
 
+    // 更新 assistantMessage 的辅助函数（不可变更新，触发 Vue 响应式）
+    const updateAssistantMsg = (updater: (m: typeof assistantMessage) => typeof assistantMessage): void => {
+      const msgs = chatStore.convMessages[convId] || []
+      chatStore.convMessages = {
+        ...chatStore.convMessages,
+        [convId]: msgs.map((m) => (m.id === assistantMsgId ? updater(m) : m)),
+      }
+    }
+
+    // 标记完成并触发 TTS 的辅助函数
+    const finalizeAssistant = (finalContent: string): void => {
+      updateAssistantMsg((m) => ({ ...m, content: finalContent, done: true }))
+      if (finalContent) {
+        try {
+          feedChunk({
+            id: generateId('workflow'),
+            content: finalContent,
+            reasoning_content: '',
+            model: resolved?.model || '',
+            provider: resolved?.provider || '',
+            done: true,
+          } as ChatStreamChunk)
+        } catch (ttsErr) {
+          logger.warn('TTS 播报失败，消息已正常显示:', ttsErr)
+        }
+      }
+      finishStream()
+    }
+
     try {
       await workflowStore.submitWorkflow(content, {
         provider: resolved?.provider || undefined,
@@ -312,60 +363,43 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
           navigateToTask('workflow')
         },
         onReasoning: (reasoningContent: string) => {
-          const msgs = chatStore.convMessages[convId] || []
-          const updatedMsgs = msgs.map((m) =>
-            m.id === assistantMsgId
-              ? { ...m, reasoningContent: (m.reasoningContent || '') + reasoningContent }
-              : m
-          )
-          chatStore.convMessages = { ...chatStore.convMessages, [convId]: updatedMsgs }
+          updateAssistantMsg((m) => ({
+            ...m,
+            reasoningContent: (m.reasoningContent || '') + reasoningContent,
+          }))
+        },
+        onContent: (delta: string) => {
+          // 流式追加 content（LLM 输出增量，可能含 JSON 计划或 think 标签，final_result 时会覆盖）
+          updateAssistantMsg((m) => ({
+            ...m,
+            content: (m.content || '') + delta,
+          }))
+          nextTick(() => {
+            if (isNearBottom.value) scrollToBottom()
+          })
         },
         onPlanCreated: (sessionId: string, taskCount: number) => {
-          const msgs = chatStore.convMessages[convId] || []
-          const updatedMsgs = msgs.map((m) =>
-            m.id === assistantMsgId
-              ? { ...m, workflowSessionId: sessionId, workflowTaskCount: taskCount }
-              : m
-          )
-          chatStore.convMessages = { ...chatStore.convMessages, [convId]: updatedMsgs }
+          // 收到执行计划后清空 content（之前流式显示的是 JSON 计划，不是用户回复）
+          updateAssistantMsg((m) => ({
+            ...m,
+            content: '',
+            workflowSessionId: sessionId,
+            workflowTaskCount: taskCount,
+          }))
         },
         onFinalResult: (result: string) => {
-          const msgs = chatStore.convMessages[convId] || []
-          const updatedMsgs = msgs.map((m) =>
-            m.id === assistantMsgId
-              ? { ...m, content: result || '工作流执行完成', done: true }
-              : m
-          )
-          chatStore.convMessages = { ...chatStore.convMessages, [convId]: updatedMsgs }
-
-          if (result) {
-            try {
-              feedChunk({
-                id: generateId('workflow'),
-                content: result,
-                reasoning_content: '',
-                model: resolved?.model || '',
-                provider: resolved?.provider || '',
-                done: true,
-              } as ChatStreamChunk)
-            } catch (ttsErr) {
-              logger.warn('TTS 播报失败，消息已正常显示:', ttsErr)
-            }
-          }
-          finishStream()
+          // final_result 覆盖 content（后端已清理 think 标签，是干净的最终回复）
+          finalizeAssistant(result || '工作流执行完成')
+        },
+        onError: (errMsg: string) => {
+          // SSE 连接错误或工作流引擎错误：更新 assistantMessage 为错误状态，避免 UI 卡住
+          finalizeAssistant(`工作流执行失败：${errMsg}`)
         },
       })
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e)
       toast.error(`工作流执行失败：${errMsg}`)
-      const msgs = chatStore.convMessages[convId] || []
-      const updatedMsgs = msgs.map((m) =>
-        m.id === assistantMsgId
-          ? { ...m, content: `工作流执行失败：${errMsg}`, done: true }
-          : m
-      )
-      chatStore.convMessages = { ...chatStore.convMessages, [convId]: updatedMsgs }
-      finishStream()
+      finalizeAssistant(`工作流执行失败：${errMsg}`)
     }
     await nextTick()
     scrollToBottom(true)
