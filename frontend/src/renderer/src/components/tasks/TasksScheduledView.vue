@@ -983,12 +983,6 @@ const SOURCE_LABELS: Record<string, string> = {
   cursor: not-allowed;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

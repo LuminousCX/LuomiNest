@@ -1,10 +1,10 @@
 import asyncio
 import json
 import re
-from datetime import datetime, timezone
 
 from loguru import logger
 
+from app.core.utils import utc_now, extract_llm_text
 from .models import MemoryData, FactItem, FACT_CATEGORIES, _SUMMARY_SECTION_MAP, summaries_to_markdown
 from .prompts import _FACT_EXTRACT_PROMPT, _DISTILL_PROMPT, _MERGE_SUMMARY_PROMPT, _SUMMARY_EXTRACT_PROMPT, _KNOWLEDGE_EXTRACT_PROMPT
 from .store import MemoryStore
@@ -57,9 +57,7 @@ class MemoryExtractor:
                 max_tokens=500,
                 route_hint=RouteHint.REASONER,
             )
-            response_text = (
-                result.strip() if isinstance(result, str) else str(result).strip()
-            )
+            response_text = extract_llm_text(result)
             logger.info(f"[Memory] LLM fact extract response: {response_text}")
 
             parsed = self._parse_llm_json(response_text)
@@ -96,7 +94,7 @@ class MemoryExtractor:
             if profile_name:
                 old_name = data.profile.name
                 data.profile.name = profile_name
-                data.profile.updated_at = datetime.now(timezone.utc).isoformat()
+                data.profile.updated_at = utc_now()
                 updates["name"] = profile_name
 
                 if old_name and old_name != profile_name:
@@ -180,16 +178,14 @@ class MemoryExtractor:
                 max_tokens=2000,
                 route_hint=RouteHint.REASONER,
             )
-            response_text = (
-                result.strip() if isinstance(result, str) else str(result).strip()
-            )
+            response_text = extract_llm_text(result)
             logger.info(f"[Memory] Distill response: {response_text[:300]}")
 
             parsed = self._parse_llm_json(response_text)
             if parsed is None:
                 return None
 
-            now = datetime.now(timezone.utc).isoformat()
+            now = utc_now()
 
             profile_name = parsed.get("profile_name", "").strip()
             valid_facts = self._parse_facts_from_raw(parsed.get("facts", []), source="distill", conversation_id=conversation_id)
@@ -272,9 +268,7 @@ class MemoryExtractor:
                 max_tokens=2000,
                 route_hint=RouteHint.REASONER,
             )
-            response_text = (
-                result.strip() if isinstance(result, str) else str(result).strip()
-            )
+            response_text = extract_llm_text(result)
             logger.info(f"[Memory] Merge response: {response_text[:300]}")
 
             return response_text
@@ -303,9 +297,7 @@ class MemoryExtractor:
                 max_tokens=1000,
                 route_hint=RouteHint.REASONER,
             )
-            response_text = (
-                result.strip() if isinstance(result, str) else str(result).strip()
-            )
+            response_text = extract_llm_text(result)
             logger.info(f"[Memory] Summary sections extract response: {response_text[:300]}")
 
             parsed = self._parse_llm_json(response_text)
@@ -338,9 +330,7 @@ class MemoryExtractor:
                 max_tokens=1500,
                 route_hint=RouteHint.REASONER,
             )
-            response_text = (
-                result.strip() if isinstance(result, str) else str(result).strip()
-            )
+            response_text = extract_llm_text(result)
             logger.info(f"[Memory] Knowledge extract response: {response_text[:300]}")
 
             return response_text

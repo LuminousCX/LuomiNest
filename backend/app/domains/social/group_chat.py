@@ -1,11 +1,12 @@
 import json
 import uuid
 from collections.abc import AsyncIterator
-from datetime import datetime, timezone
 from loguru import logger
 
 from app.core.tools import tool_registry
 from app.core.tools.orchestrator import tool_orchestrator
+from app.core.utils import utc_now, to_camel_case
+from app.domains.social.agent_orchestrator import resolve_provider, resolve_model
 from app.infrastructure.database.json_store import groups_store, agents_store
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
@@ -19,19 +20,6 @@ GROUP_CHAT_TOOL_WHITELIST = frozenset({
     "list_files",
     "search_files",
 })
-
-
-def to_camel_case(data: dict) -> dict:
-    out = {}
-    for k, v in data.items():
-        parts = k.split("_")
-        camel = parts[0] + "".join(p.capitalize() for p in parts[1:])
-        if isinstance(v, dict):
-            v = to_camel_case(v)
-        elif isinstance(v, list):
-            v = [to_camel_case(i) if isinstance(i, dict) else i for i in v]
-        out[camel] = v
-    return out
 
 
 class GroupChatManager:
@@ -58,7 +46,7 @@ class GroupChatManager:
             yield {"type": "error", "data": {"message": f"Group {group_id} not found"}}
             return
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = utc_now()
         message = {
             "id": str(uuid.uuid4()),
             "sender_id": sender_id,
@@ -117,14 +105,14 @@ class GroupChatManager:
                         if "messages" not in fresh_group:
                             fresh_group["messages"] = []
                         fresh_group["messages"].append(persist_msg)
-                        fresh_group["updated_at"] = datetime.now(timezone.utc).isoformat()
+                        fresh_group["updated_at"] = utc_now()
                         groups_store.set(group_id, fresh_group)
                         # 更新 recent_context，让下一个 Agent 能看到本轮回复
                         recent_context = self._build_recent_context(fresh_group)
 
             except Exception as e:
                 logger.error(f"[GroupChat] Agent {member.get('name')} 响应异常: {e}", exc_info=True)
-                now_err = datetime.now(timezone.utc).isoformat()
+                now_err = utc_now()
                 error_msg = {
                     "id": str(uuid.uuid4()),
                     "sender_id": member.get("agent_id", "agent"),
@@ -159,7 +147,7 @@ class GroupChatManager:
         """
         agent = agents_store.get(member.get("agent_id", ""))
         if not agent or not agent.get("is_active", True):
-            now = datetime.now(timezone.utc).isoformat()
+            now = utc_now()
             yield {
                 "type": "agent_error",
                 "data": to_camel_case({
@@ -174,9 +162,9 @@ class GroupChatManager:
             }
             return
 
-        provider_name = self._resolve_provider(agent)
+        provider_name = resolve_provider(agent)
         if not provider_name:
-            now = datetime.now(timezone.utc).isoformat()
+            now = utc_now()
             yield {
                 "type": "agent_error",
                 "data": to_camel_case({
@@ -191,10 +179,10 @@ class GroupChatManager:
             }
             return
 
-        model = self._resolve_model(agent, provider_name)
+        model = resolve_model(agent, provider_name)
 
         message_id = str(uuid.uuid4())
-        start_time = datetime.now(timezone.utc).isoformat()
+        start_time = utc_now()
 
         yield {
             "type": "agent_message_start",
@@ -285,7 +273,7 @@ class GroupChatManager:
             # 流式结束后：检查是否异常终止
             if ctx.state.get("aborted"):
                 error_content = ctx.state.get("content", "")
-                err_time = datetime.now(timezone.utc).isoformat()
+                err_time = utc_now()
                 yield {
                     "type": "agent_error",
                     "data": to_camel_case({
@@ -304,7 +292,7 @@ class GroupChatManager:
             full_content = ctx.state.get("content", "")
             final_content = strip_emotion_tags(full_content) if full_content else "[无响应内容]"
 
-            end_time = datetime.now(timezone.utc).isoformat()
+            end_time = utc_now()
             yield {
                 "type": "agent_message_end",
                 "data": to_camel_case({
@@ -320,7 +308,7 @@ class GroupChatManager:
 
         except Exception as e:
             logger.error(f"[GroupChat] Agent {agent.get('name', '未知')} 流式响应异常: {e}", exc_info=True)
-            err_time = datetime.now(timezone.utc).isoformat()
+            err_time = utc_now()
             yield {
                 "type": "agent_error",
                 "data": to_camel_case({
@@ -343,25 +331,6 @@ class GroupChatManager:
             t for t in all_tools
             if t.get("function", {}).get("name") in GROUP_CHAT_TOOL_WHITELIST
         ]
-
-    def _resolve_provider(self, agent: dict) -> str:
-        agent_provider = agent.get("provider", "")
-        if agent_provider and agent_provider in llm_adapter.providers:
-            return agent_provider
-        if llm_adapter.default_provider in llm_adapter.providers:
-            return llm_adapter.default_provider
-        for provider_key in llm_adapter.providers:
-            return provider_key
-        return ""
-
-    def _resolve_model(self, agent: dict, provider_name: str) -> str:
-        agent_model = agent.get("model", "")
-        if agent_model:
-            return agent_model
-        provider = llm_adapter.providers.get(provider_name)
-        if provider:
-            return provider.default_model
-        return ""
 
     @staticmethod
     def _build_recent_context(group: dict, max_messages: int = 10) -> str:

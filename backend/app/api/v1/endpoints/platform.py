@@ -1,9 +1,10 @@
 import uuid
-from datetime import datetime, timezone
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
+from app.core.utils import utc_now, require_value, ok
+from app.core.exceptions import NotFoundError, LuomiNestError, ValidationError
 from app.infrastructure.database.json_store import platforms_store
 from app.runtime.platform.registry import (
     PlatformStatus,
@@ -190,11 +191,10 @@ async def create_platform_instance(request: PlatformInstanceCreate):
     logger.info(f"[API] POST /platforms/instances - Creating: adapter_type={request.adapter_type}, name={request.name}")
     at = get_adapter_type(request.adapter_type)
     if not at:
-        from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Adapter type '{request.adapter_type}' not found")
 
     instance_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
 
     config = {**request.config, "enable": request.enable}
 
@@ -223,7 +223,7 @@ async def create_platform_instance(request: PlatformInstanceCreate):
         await start_instance(instance_id)
         await platforms_store.update_async(instance_id, {
             "status": inst.status.value,
-            "last_sync": datetime.now(timezone.utc).isoformat(),
+            "last_sync": utc_now(),
         })
 
     logger.success(f"[API] POST /platforms/instances - Created: id={instance_id}")
@@ -233,23 +233,17 @@ async def create_platform_instance(request: PlatformInstanceCreate):
 @router.get("/instances/{instance_id}", response_model=PlatformInstanceResponse)
 async def get_platform_instance(instance_id: str):
     logger.info(f"[API] GET /platforms/instances/{instance_id}")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
     return _instance_to_response(inst)
 
 
 @router.patch("/instances/{instance_id}", response_model=PlatformInstanceResponse)
 async def update_platform_instance(instance_id: str, request: PlatformInstanceUpdate):
     logger.info(f"[API] PATCH /platforms/instances/{instance_id}")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     update_data = request.model_dump(exclude_unset=True, by_alias=False)
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
 
     if "name" in update_data and update_data["name"] is not None:
         inst.name = update_data["name"]
@@ -282,10 +276,7 @@ async def update_platform_instance(instance_id: str, request: PlatformInstanceUp
 @router.delete("/instances/{instance_id}")
 async def delete_platform_instance(instance_id: str):
     logger.info(f"[API] DELETE /platforms/instances/{instance_id}")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     if inst.status == PlatformStatus.RUNNING:
         await stop_instance(instance_id)
@@ -293,27 +284,23 @@ async def delete_platform_instance(instance_id: str):
     remove_instance(instance_id)
     await platforms_store.delete_async(instance_id)
     logger.success(f"[API] DELETE /platforms/instances/{instance_id} - Deleted")
-    return {"error": None, "data": {"deleted": True}}
+    return ok({"deleted": True})
 
 
 @router.post("/instances/{instance_id}/start", response_model=PlatformInstanceResponse)
 async def start_platform_instance(instance_id: str):
     logger.info(f"[API] POST /platforms/instances/{instance_id}/start")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     success = await start_instance(instance_id)
     if not success:
-        from app.core.exceptions import LuomiNestError
         raise LuomiNestError(
             f"Failed to start instance: {inst.error_message}",
             code="PLATFORM_START_FAILED",
             status_code=500,
         )
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
     inst.last_sync = now
     await platforms_store.update_async(instance_id, {
         "status": PlatformStatus.RUNNING.value,
@@ -326,10 +313,7 @@ async def start_platform_instance(instance_id: str):
 @router.post("/instances/{instance_id}/stop", response_model=PlatformInstanceResponse)
 async def stop_platform_instance(instance_id: str):
     logger.info(f"[API] POST /platforms/instances/{instance_id}/stop")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     await stop_instance(instance_id)
     await platforms_store.update_async(instance_id, {
@@ -342,10 +326,7 @@ async def stop_platform_instance(instance_id: str):
 @router.get("/instances/{instance_id}/conversations", response_model=list[PlatformConversationResponse])
 async def get_platform_conversations(instance_id: str):
     logger.info(f"[API] GET /platforms/instances/{instance_id}/conversations")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     from app.runtime.platform.session import list_platform_sessions
     from app.infrastructure.database.conversation_store import conversation_store
@@ -390,21 +371,16 @@ async def get_platform_conversations(instance_id: str):
 async def get_platform_conversation_messages(instance_id: str, conversation_id: str):
     """获取平台实例下指定对话的详细消息列表（含图片消息）。"""
     logger.info(f"[API] GET /platforms/instances/{instance_id}/conversations/{conversation_id}/messages")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     from app.infrastructure.database.conversation_store import conversation_store
 
     conv = await conversation_store.get_async(conversation_id)
     if not conv:
-        from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conversation_id} not found")
 
     conv_platform = conv.get("platform", {}) or {}
     if conv_platform.get("instance_id") != instance_id:
-        from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Conversation {conversation_id} does not belong to instance {instance_id}")
 
     messages = []
@@ -452,10 +428,7 @@ async def get_platform_conversation_messages(instance_id: str, conversation_id: 
 async def get_platform_model_config(instance_id: str):
     """获取平台实例的模型配置（含主 Agent 默认值回退信息）。"""
     logger.info(f"[API] GET /platforms/instances/{instance_id}/model_config")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     from app.runtime.platform.main_agent_config import (
         load_luominest_main_agent_config,
@@ -526,10 +499,7 @@ async def get_platform_model_config(instance_id: str):
 async def update_platform_model_config(instance_id: str, request: PlatformModelConfigUpdate):
     """更新平台实例的模型配置（空值表示继承主 Agent）。"""
     logger.info(f"[API] PATCH /platforms/instances/{instance_id}/model_config")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     model_cfg = inst.config.get("model_config", {}) or {}
     updates = request.model_dump(exclude_unset=True)
@@ -541,7 +511,7 @@ async def update_platform_model_config(instance_id: str, request: PlatformModelC
             model_cfg[key] = val
 
     inst.config["model_config"] = model_cfg
-    inst.updated_at = datetime.now(timezone.utc).isoformat()
+    inst.updated_at = utc_now()
 
     persist_data = await platforms_store.get_async(instance_id, {})
     persist_data.setdefault("config", {})
@@ -556,7 +526,7 @@ async def update_platform_model_config(instance_id: str, request: PlatformModelC
         details={"model_config": model_cfg, "is_overridden": bool(model_cfg.get("provider") or model_cfg.get("model"))},
     )
 
-    return {"error": None, "data": {"updated": True, "model_config": model_cfg}}
+    return ok({"updated": True, "model_config": model_cfg})
 
 
 class PlatformLogResponse(BaseModel):
@@ -575,10 +545,7 @@ async def get_platform_instance_logs(
     offset: int = 0,
 ):
     logger.info(f"[API] GET /platforms/instances/{instance_id}/logs")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     result = platform_logger.get_logs(
         instance_id=instance_id,
@@ -587,7 +554,7 @@ async def get_platform_instance_logs(
         limit=min(limit, 500),
         offset=offset,
     )
-    return {"error": None, "data": result}
+    return ok(result)
 
 
 @router.get("/logs")
@@ -604,26 +571,23 @@ async def get_all_platform_logs(
         limit=min(limit, 500),
         offset=offset,
     )
-    return {"error": None, "data": result}
+    return ok(result)
 
 
 @router.delete("/instances/{instance_id}/logs")
 async def clear_platform_instance_logs(instance_id: str):
     logger.info(f"[API] DELETE /platforms/instances/{instance_id}/logs")
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     success = platform_logger.clear_logs(instance_id)
-    return {"error": None, "data": {"cleared": success}}
+    return ok({"cleared": success})
 
 
 @router.get("/logs/summary")
 async def get_platform_logs_summary():
     logger.info("[API] GET /platforms/logs/summary")
     summary = platform_logger.get_summary()
-    return {"error": None, "data": summary}
+    return ok(summary)
 
 
 @router.get("/stats")
@@ -633,14 +597,11 @@ async def get_platform_stats():
     total = len(instances)
     active = sum(1 for i in instances if i.status == PlatformStatus.RUNNING)
     total_messages = sum(i.message_count for i in instances)
-    return {
-        "error": None,
-        "data": {
+    return ok({
             "totalPlatforms": total,
             "activeConnections": active,
             "totalMessages": total_messages,
-        },
-    }
+        })
 
 
 @router.get("/instances/{instance_id}/webhook")
@@ -656,9 +617,8 @@ async def platform_webhook_verify(
     from fastapi import Request
     from fastapi.responses import PlainTextResponse
 
-    inst = get_instance(instance_id)
-    if not inst or not inst.adapter:
-        from app.core.exceptions import NotFoundError
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
+    if not inst.adapter:
         raise NotFoundError(f"Platform instance {instance_id} not found")
 
     adapter = inst.adapter
@@ -680,9 +640,8 @@ async def platform_webhook_receive(instance_id: str, request: dict):
     请求体由 FastAPI 解析为 dict（JSON）或由调用方传入 XML 解析后的 dict。
     对于企业微信/公众号的 XML 格式，前端代理层需先转换为 JSON 或直接调用适配器。
     """
-    inst = get_instance(instance_id)
-    if not inst or not inst.adapter:
-        from app.core.exceptions import NotFoundError
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
+    if not inst.adapter:
         raise NotFoundError(f"Platform instance {instance_id} not found")
 
     adapter = inst.adapter
@@ -691,22 +650,22 @@ async def platform_webhook_receive(instance_id: str, request: dict):
     try:
         if adapter_type == "qq_official" and hasattr(adapter, "handle_webhook"):
             await adapter.handle_webhook(request)
-            return {"error": None, "data": {"received": True}}
+            return ok({"received": True})
 
         if adapter_type == "wechat_work" and hasattr(adapter, "handle_webhook"):
             body = request.get("body", "")
             if not body:
-                return {"error": None, "data": {"received": True, "note": "empty body"}}
+                return ok({"received": True, "note": "empty body"})
             msg_signature = request.get("msg_signature", "")
             timestamp = request.get("timestamp", "")
             nonce = request.get("nonce", "")
             await adapter.handle_webhook(msg_signature, timestamp, nonce, body)
-            return {"error": None, "data": {"received": True}}
+            return ok({"received": True})
 
         if adapter_type == "wechat_mp" and hasattr(adapter, "handle_webhook"):
             body = request.get("body", "")
             if not body:
-                return {"error": None, "data": {"received": True, "note": "empty body"}}
+                return ok({"received": True, "note": "empty body"})
             signature = request.get("signature", "")
             timestamp = request.get("timestamp", "")
             nonce = request.get("nonce", "")
@@ -714,10 +673,9 @@ async def platform_webhook_receive(instance_id: str, request: dict):
             from fastapi.responses import PlainTextResponse
             return PlainTextResponse(content=reply or "")
 
-        return {"error": None, "data": {"received": True, "note": "adapter does not support webhook"}}
+        return ok({"received": True, "note": "adapter does not support webhook"})
     except Exception as e:
         logger.error(f"[API] Webhook handling failed for {instance_id}: {e}")
-        from app.core.exceptions import LuomiNestError
         raise LuomiNestError(f"Webhook handling failed: {e}", code="PLATFORM_WEBHOOK_FAILED", status_code=500)
 
 
@@ -731,18 +689,14 @@ async def send_platform_message(
     from app.services.platform_router import send_platform_response
     from app.runtime.platform.base import PlatformResponse
 
-    inst = get_instance(instance_id)
-    if not inst:
-        from app.core.exceptions import NotFoundError
-        raise NotFoundError(f"Platform instance {instance_id} not found")
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     if not target or not content:
-        from app.core.exceptions import ValidationError
         raise ValidationError("target and content are required")
 
     response = PlatformResponse(content=content, message_type="text")
     success = await send_platform_response(instance_id, target, response)
-    return {"error": None, "data": {"sent": success}}
+    return ok({"sent": success})
 
 
 @router.get("/instances/{instance_id}/sessions")
@@ -752,11 +706,10 @@ async def list_platform_sessions(instance_id: str):
 
     inst = get_instance(instance_id)
     if not inst:
-        from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Platform instance {instance_id} not found")
 
     sessions = list_sessions(instance_id)
-    return {"error": None, "data": sessions}
+    return ok(sessions)
 
 
 @router.get("/main_agent")
@@ -827,17 +780,16 @@ async def update_main_agent_info(request: PlatformModelConfigUpdate):
                 updated_fields.append(key)
 
     if not updated_fields:
-        return {"error": None, "data": {"updated": False, "note": "no changes"}}
+        return ok({"updated": False, "note": "no changes"})
 
     try:
         save_luominest_main_agent_config(current)
         logger.info(f"[PlatformAPI] Main agent config updated: {updated_fields}")
     except Exception as e:
-        from app.core.exceptions import LuomiNestError
         raise LuomiNestError(
             f"Failed to persist main agent config: {e}",
             code="MAIN_AGENT_CONFIG_PERSIST_FAILED",
             status_code=500,
         )
 
-    return {"error": None, "data": {"updated": True, "fields": updated_fields}}
+    return ok({"updated": True, "fields": updated_fields})

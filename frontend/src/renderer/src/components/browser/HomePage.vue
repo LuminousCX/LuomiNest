@@ -552,10 +552,6 @@ onBeforeUnmount(() => {
   transform: translateY(calc(var(--space-1) * -2));
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
 /* ===== 响应式 ===== */
 @media (max-width: 640px) {
   .websites-grid {

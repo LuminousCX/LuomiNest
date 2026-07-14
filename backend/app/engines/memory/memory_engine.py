@@ -4,11 +4,14 @@ import asyncio
 import re
 import shutil
 import threading
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
+
+from app.core.utils import utc_now
 
 from app.core.config import settings
 from .models import (
@@ -82,7 +85,7 @@ class MemoryEngine:
         )
         if name_match:
             data.profile.name = name_match.group(1).strip()
-            data.profile.updated_at = datetime.now(timezone.utc).isoformat()
+            data.profile.updated_at = utc_now()
             self._store.save_data(data)
 
     # --- 档案 ---
@@ -430,7 +433,7 @@ class MemoryEngine:
 
     @staticmethod
     def _markdown_to_summaries(data: MemoryData, content: str) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = utc_now()
         for cn_name, attr_name in _SUMMARY_SECTION_MAP.items():
             pattern = rf"##\s*{re.escape(cn_name)}\s*\n(.*?)(?=\n##\s|\Z)"
             match = re.search(pattern, content, re.DOTALL)
@@ -472,7 +475,33 @@ def _migrate_legacy() -> None:
     logger.info("[Memory] Legacy migration completed")
 
 
-_conversation_stores: dict[str, MemoryStore] = {}
+class _LRUDict(OrderedDict):
+    """简单的 LRU 字典，超限时自动淘汰最久未使用的条目."""
+
+    def __init__(self, maxsize: int = 100):
+        super().__init__()
+        self.maxsize = maxsize
+
+    def __setitem__(self, key, value):
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        while len(self) > self.maxsize:
+            oldest_key, oldest_val = self.popitem(last=False)
+            # 清理被淘汰的 store
+            if hasattr(oldest_val, "close"):
+                try:
+                    oldest_val.close()
+                except Exception:
+                    pass
+            logger.debug(f"[Memory] LRU evicted conversation store: {oldest_key}")
+
+    def __getitem__(self, key):
+        self.move_to_end(key)
+        return super().__getitem__(key)
+
+
+_conversation_stores: _LRUDict = _LRUDict(maxsize=100)
 
 
 def get_conversation_store(agent_id: str | None, conversation_id: str) -> MemoryStore:

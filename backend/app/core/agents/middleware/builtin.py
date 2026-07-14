@@ -19,6 +19,8 @@ from typing import Any, Awaitable, Callable
 
 from loguru import logger
 
+from app.core.utils import sse_data
+
 from app.core.agents.middleware.base import AgentContext, AgentMiddleware
 from app.runtime.provider.llm.types import LLMResponse
 from app.schemas.chat import ChatStreamChunk
@@ -257,7 +259,7 @@ class SpecialToolMiddleware(AgentMiddleware):
             chunk = ChatStreamChunk(
                 id=chat_id, model=model, provider=provider, subagent_event=event,
             )
-        return f"data: {chunk.model_dump_json()}\n\n"
+        return sse_data(chunk)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -389,7 +391,7 @@ class SSEEmitMiddleware(AgentMiddleware):
             provider=provider,
             emotion=emotion,
         )
-        return f"data: {chunk.model_dump_json()}\n\n"
+        return sse_data(chunk)
 
     @staticmethod
     def format_tool_calls_sse(
@@ -407,7 +409,7 @@ class SSEEmitMiddleware(AgentMiddleware):
             tool_calls=tool_calls,
             iteration=ctx.iteration,
         )
-        return f"data: {chunk.model_dump_json()}\n\n"
+        return sse_data(chunk)
 
     @staticmethod
     def format_tool_event_sse(
@@ -432,7 +434,7 @@ class SSEEmitMiddleware(AgentMiddleware):
             tool_event=tool_event,
             iteration=ctx.iteration,
         )
-        return f"data: {chunk.model_dump_json()}\n\n"
+        return sse_data(chunk)
 
     async def after_model(
         self, ctx: AgentContext, response: LLMResponse | dict | None

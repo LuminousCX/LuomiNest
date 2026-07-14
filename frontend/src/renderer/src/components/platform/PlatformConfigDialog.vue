@@ -199,7 +199,7 @@ watch(() => props.instance, async (instance) => {
         </label>
 
         <div v-if="modelConfigLoading" class="model-config-loading">
-          <RefreshCw :size="14" class="spinning" />
+          <RefreshCw :size="14" class="spin-animation" />
           <span>加载模型配置...</span>
         </div>
 
@@ -378,9 +378,6 @@ watch(() => props.instance, async (instance) => {
   border-radius: var(--radius-sm);
 }
 
-.spinning {
-  animation: spin 1s linear infinite;
-}
 
 .model-config-section {
   display: flex;

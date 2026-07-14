@@ -376,11 +376,6 @@ onMounted(() => {
   animation: spin 1.2s linear infinite;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 /* 节点详情面板过渡 */
 .panel-slide-right-enter-active,
 .panel-slide-right-leave-active {

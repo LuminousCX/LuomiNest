@@ -1,9 +1,9 @@
 import asyncio
 import uuid
-from datetime import datetime, timezone
 from loguru import logger
 
 from app.core.config import settings
+from app.core.utils import utc_now, sse_response, sse_data
 from app.core.tools import tool_registry
 from app.core.tools.orchestrator import tool_orchestrator
 from app.runtime.provider.llm.adapter import llm_adapter
@@ -17,8 +17,6 @@ from app.services.suggestion_service import SuggestionService
 from app.services.usage_tracker import usage_tracker
 from app.services.distillation_service import distillation_service
 
-from fastapi.responses import StreamingResponse
-
 
 class ChatService:
     def __init__(self, context: ContextService, suggestions: SuggestionService):
@@ -28,7 +26,7 @@ class ChatService:
 
     @staticmethod
     async def persist_conv(conv_id: str, conv: dict) -> None:
-        conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+        conv["updated_at"] = utc_now()
         await conversation_store.set_async(conv_id, conv)
 
     @staticmethod
@@ -249,14 +247,12 @@ class ChatService:
                 yield sse_str
 
             done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
-            yield f"data: {done_data.model_dump_json()}\n\n"
+            yield sse_data(done_data)
         except Exception as e:
             logger.error(f"[STREAM] stream_chat error: {e}", exc_info=True)
-            yield (
-                f"data: {ChatStreamChunk(id=chat_id, content='[Error] An internal error occurred', model=model, provider=provider).model_dump_json()}\n\n"
-            )
+            yield sse_data(ChatStreamChunk(id=chat_id, content='[Error] An internal error occurred', model=model, provider=provider))
             done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
-            yield f"data: {done_data.model_dump_json()}\n\n"
+            yield sse_data(done_data)
         finally:
             if depth_token is not None:
                 from app.core.agents.cluster.agent_tool import reset_luominest_agent_call_depth
@@ -374,7 +370,7 @@ class ChatService:
                     id=chat_id, content="[Error] An internal error occurred",
                     model=model, provider=provider,
                 )
-                yield f"data: {error_chunk.model_dump_json()}\n\n"
+                yield sse_data(error_chunk)
             finally:
                 # 同步 ctx.state → state（供持久化使用）
                 state["content"] = ctx.state.get("content", "")
@@ -412,7 +408,7 @@ class ChatService:
                         id=chat_id, content="", model=model, provider=provider,
                         done=True, suggested_questions=suggested_questions or None,
                     )
-                    yield f"data: {done_chunk.model_dump_json()}\n\n"
+                    yield sse_data(done_chunk)
                 except Exception as done_err:
                     logger.debug(f"[STREAM] Done event send failed (client may have disconnected): {done_err}")
 
@@ -431,8 +427,6 @@ class ChatService:
                 except Exception as distill_err:
                     logger.warning(f"[STREAM] Distillation failed: {distill_err}")
 
-        return StreamingResponse(
+        return sse_response(
             generator(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
         )

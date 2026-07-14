@@ -1,11 +1,11 @@
 import { WebContentsView, BrowserWindow, app } from 'electron'
-import { join } from 'path'
 import { DEFAULT_BROWSER_CONFIG, BROWSER_LAYOUT, BrowserBounds, BoundsConfig } from './types'
+import { getStealthScript } from './session'
 
 export function createBrowserView(): WebContentsView {
   const view = new WebContentsView({
     webPreferences: {
-      contextIsolation: false,
+      contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
       webSecurity: true,
@@ -18,8 +18,6 @@ export function createBrowserView(): WebContentsView {
       experimentalFeatures: false,
       enablePreferredSizeMode: false,
       navigateOnDragDrop: false,
-      // stealth 脚本在页面 JS 执行前注入（preload 时机最早）
-      preload: join(__dirname, 'stealth-preload.js'),
     }
   })
 

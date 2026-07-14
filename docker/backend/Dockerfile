@@ -1,5 +1,17 @@
 # LuomiNest Backend Dockerfile
+# Multi-architecture build support (linux/amd64, linux/arm64)
+# Build command:
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     -t luominest/backend:latest --push .
+#
+# Single-arch local build:
+#   docker buildx build --platform linux/arm64 -t luominest/backend:arm64 --load .
+
 FROM python:3.12-slim AS base
+
+# TARGETARCH is automatically set by buildx (amd64 | arm64)
+ARG TARGETPLATFORM=linux/amd64
+ARG TARGETARCH
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -8,6 +20,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Install system dependencies; add platform-specific packages here if needed
+# e.g., ARM64 may require different binary packages for certain native extensions
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         gcc \

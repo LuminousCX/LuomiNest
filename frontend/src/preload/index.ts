@@ -30,6 +30,8 @@ const api = {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getName: () => ipcRenderer.invoke('app:getName'),
     getPaths: () => ipcRenderer.invoke('app:getPaths'),
+    getWelcomeCompleted: () => ipcRenderer.invoke('app:getWelcomeCompleted'),
+    setWelcomeCompleted: (value: boolean) => ipcRenderer.invoke('app:setWelcomeCompleted', value),
   },
 
   auth: {
@@ -108,7 +110,28 @@ const api = {
       ipcRenderer.invoke('desktop-pet:setCoreParam', paramId, value),
     getModelCapabilities: () => ipcRenderer.invoke('desktop-pet:getModelCapabilities'),
     sendSubtitle: (text: string) => ipcRenderer.invoke('desktop-pet:sendSubtitle', text),
-    hideSubtitle: () => ipcRenderer.invoke('desktop-pet:hideSubtitle')
+    hideSubtitle: () => ipcRenderer.invoke('desktop-pet:hideSubtitle'),
+    setStreamingState: (isStreaming: boolean) => ipcRenderer.invoke('desktop-pet:setStreamingState', isStreaming),
+  },
+
+  // 桌宠窗口内的聊天：桌宠窗口 → 主进程 → 主应用窗口
+  // 主应用窗口通过 onDesktopPetChatMessage / onDesktopPetChatCancel 监听。
+  desktopPetChat: {
+    sendMessage: (text: string) => ipcRenderer.send('desktop-pet:send-chat-message', text),
+    cancel: () => ipcRenderer.send('desktop-pet:cancel-chat'),
+  },
+
+  // 主应用窗口监听桌宠窗口转发的聊天请求
+  onDesktopPetChatMessage: (callback: (text: string) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, text: string) => callback(text)
+    ipcRenderer.on('desktop-pet:chat-message', handler)
+    return () => ipcRenderer.removeListener('desktop-pet:chat-message', handler as never)
+  },
+
+  onDesktopPetChatCancel: (callback: () => void): (() => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('desktop-pet:chat-cancel', handler)
+    return () => ipcRenderer.removeListener('desktop-pet:chat-cancel', handler as never)
   },
 
   backend: {

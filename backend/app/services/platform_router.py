@@ -2,9 +2,9 @@ import asyncio
 import time
 import traceback
 import uuid
-from datetime import datetime, timezone
 from loguru import logger
 
+from app.core.utils import utc_now
 from app.runtime.platform.base import PlatformMessage, PlatformResponse
 from app.runtime.platform.session import (
     MAIN_AGENT_ID,
@@ -458,7 +458,7 @@ class LuomiNestPlatformRouter:
 
     @staticmethod
     async def _persist_conv(conv_id: str, conv: dict) -> None:
-        conv["updated_at"] = datetime.now(timezone.utc).isoformat()
+        conv["updated_at"] = utc_now()
         await conversation_store.set_async(conv_id, conv)
 
     @staticmethod

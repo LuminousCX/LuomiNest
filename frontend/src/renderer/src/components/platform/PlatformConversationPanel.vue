@@ -125,7 +125,7 @@ const handleBackToConversationList = () => {
       </div>
 
       <div v-if="store.conversationLoading" class="conv-loading">
-        <RefreshCw :size="20" class="spinning" />
+        <RefreshCw :size="20" class="spin-animation" />
         <span>加载消息中...</span>
       </div>
 
@@ -381,9 +381,6 @@ const handleBackToConversationList = () => {
   font-size: var(--text-base);
 }
 
-.spinning {
-  animation: spin 1s linear infinite;
-}
 
 .conv-messages {
   flex: 1;

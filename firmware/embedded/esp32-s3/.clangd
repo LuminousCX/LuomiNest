@@ -1,0 +1,17 @@
+CompileFlags:
+  Remove:
+    - -mlongcalls
+    - -mdisable-hardware-atomics
+    - -fno-shrink-wrap
+    - -fstrict-volatile-bitfields
+    - -fno-tree-switch-conversion
+  CompilationDatabase: build
+
+Diagnostics:
+  Suppress:
+    - pp_file_not_found
+    - drv_unknown_argument_with_suggestion
+    - drv_unknown_argument
+    - unused-includes
+    - misc-unused-includes
+    - deprecated-declarations

@@ -148,12 +148,6 @@ const {
   animation-delay: -9s;
 }
 
-@keyframes orb-float {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(20px, -15px) scale(1.05); }
-  66% { transform: translate(-10px, 10px) scale(0.97); }
-}
-
 .skip-btn {
   position: absolute;
   top: var(--space-5);

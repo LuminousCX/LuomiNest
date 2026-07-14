@@ -1,0 +1,14 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "wifi_mgr.c"
+        "app_mqtt.c"
+        "lcd_parallel.c"
+        "lvgl_port.c"
+        "avatar_engine.c"
+        "web_config.c"
+        "sd_card.c"
+        "frame_player.c"
+    INCLUDE_DIRS
+        "."
+)

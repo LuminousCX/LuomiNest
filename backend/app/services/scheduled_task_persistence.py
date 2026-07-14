@@ -11,12 +11,9 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from app.core.utils import utc_now
 from app.infrastructure.database.models.scheduled_task import ScheduledTaskORM
 from app.infrastructure.database.session import get_async_session
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 async def save_scheduled_task(
@@ -42,7 +39,7 @@ async def save_scheduled_task(
             context=context,
             created_from=created_from,
             is_active=is_active,
-            created_at=_utc_now(),
+            created_at=utc_now(),
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["task_id"],
@@ -109,11 +106,11 @@ async def update_last_run(task_id: str) -> None:
             schedule_cron="",
             schedule_type="cron",
             action="",
-            created_at=_utc_now(),
-            last_run_at=_utc_now(),
+            created_at=utc_now(),
+            last_run_at=utc_now(),
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["task_id"],
-            set_={"last_run_at": _utc_now()},
+            set_={"last_run_at": utc_now()},
         )
         await db.execute(stmt)

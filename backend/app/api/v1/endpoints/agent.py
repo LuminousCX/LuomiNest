@@ -1,7 +1,6 @@
 import uuid
 import os
 import shutil
-from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
@@ -12,6 +11,8 @@ from app.infrastructure.database.facades.main_agent_config import (
     save_luominest_main_agent_config,
 )
 from app.core.config import settings
+from app.core.utils import utc_now, ok
+from app.core.exceptions import NotFoundError
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -147,7 +148,7 @@ async def create_agent(request: AgentCreate):
             raise HTTPException(status_code=400, detail=f"Agent 名称 '{request.name}' 已存在")
     
     agent_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
     agent = {
         "id": agent_id,
         "name": request.name,
@@ -175,7 +176,6 @@ async def get_agent(agent_id: str):
     agent = await agents_store.get_async(agent_id)
     if not agent:
         logger.error(f"[API] GET /agents/{agent_id} - Agent not found")
-        from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Agent {agent_id} not found")
     logger.success(f"[API] GET /agents/{agent_id} - Success: name={agent['name']}")
     return AgentResponse(**agent)
@@ -187,7 +187,6 @@ async def update_agent(agent_id: str, request: AgentUpdate):
     agent = await agents_store.get_async(agent_id)
     if not agent:
         logger.error(f"[API] PATCH /agents/{agent_id} - Agent not found")
-        from app.core.exceptions import NotFoundError
         raise NotFoundError(f"Agent {agent_id} not found")
 
     update_data = request.model_dump(exclude_unset=True)
@@ -200,7 +199,7 @@ async def update_agent(agent_id: str, request: AgentUpdate):
                 raise HTTPException(status_code=400, detail=f"Agent 名称 '{new_name}' 已存在")
     updated_fields = list(update_data.keys())
     agent.update(update_data)
-    agent["updated_at"] = datetime.now(timezone.utc).isoformat()
+    agent["updated_at"] = utc_now()
     await agents_store.set_async(agent_id, agent)
 
     logger.success(f"[API] PATCH /agents/{agent_id} - Updated fields: {updated_fields}")
@@ -226,4 +225,4 @@ async def delete_agent(agent_id: str):
         shutil.rmtree(agent_memory_dir)
         logger.info(f"[API] DELETE /agents/{agent_id} - Memory directory removed")
     
-    return {"error": None, "data": {"deleted": True}}
+    return ok({"deleted": True})

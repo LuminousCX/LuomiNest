@@ -102,7 +102,7 @@ function formatExpiresAt(iso: string): string {
         <option v-for="cat in FACT_CATEGORIES" :key="cat" :value="cat">{{ CATEGORY_LABELS[cat] }}</option>
       </select>
       <button class="h-btn primary" @click="emit('confirmAddFact')" :disabled="!newFactContent.trim() || saving">
-        <Loader2 v-if="saving" :size="14" class="spinning" />
+        <Loader2 v-if="saving" :size="14" class="spin-animation" />
         <Save v-else :size="14" />
       </button>
       <button class="h-btn" @click="emit('cancelAddFact')"><X :size="14" /></button>
@@ -216,19 +216,7 @@ function formatExpiresAt(iso: string): string {
 .h-btn.primary:hover { background: var(--task-purple-soft); }
 .h-btn:disabled { opacity: 0.5; cursor: default; }
 
-.spinning { animation: spin 1s linear infinite; }
 
-.empty-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-8) var(--space-5);
-  color: var(--text-muted);
-}
-
-.empty-section svg { margin-bottom: var(--space-3); opacity: 0.5; }
-.empty-section p { font-size: var(--text-md); margin-bottom: var(--space-1); }
 .empty-hint { font-size: var(--text-sm) !important; opacity: 0.7; }
 
 .facts-search-bar {

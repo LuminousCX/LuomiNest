@@ -72,7 +72,7 @@ onMounted(() => {
 <template>
   <div class="main-agent-panel animate-slide-up">
     <div v-if="mainAgentLoading" class="main-agent-loading">
-      <Loader2 :size="20" class="tts-spin" />
+      <Loader2 :size="20" class="spin-animation" />
       <span>正在加载主智能体配置...</span>
     </div>
 
@@ -123,15 +123,6 @@ onMounted(() => {
   justify-content: center;
   color: var(--text-muted);
   font-size: var(--text-base);
-}
-
-.tts-spin {
-  animation: tts-spin 1s linear infinite;
-  color: var(--lumi-primary);
-}
-
-@keyframes tts-spin {
-  to { transform: rotate(360deg); }
 }
 
 .main-agent-card {

@@ -202,12 +202,28 @@ export const useWelcomeWizard = () => {
     if (currentStep.value > 0) currentStep.value--
   }
 
-  const startApp = (): void => {
+  /**
+   * 标记欢迎向导已完成并跳转到 splash。
+   * 持久化到主进程 config，使后续启动直接跳过欢迎页。
+   */
+  const completeAndEnterApp = async (): Promise<void> => {
+    try {
+      await window.api?.app?.setWelcomeCompleted?.(true)
+    } catch (e: unknown) {
+      logger.warn('Failed to persist welcomeCompleted:', e)
+    }
+    // 刷新路由缓存，避免本次会话再次被 beforeEach 重定向
+    const invalidate = (window as unknown as { __lumiInvalidateWelcome?: () => void }).__lumiInvalidateWelcome
+    if (typeof invalidate === 'function') invalidate()
     router.push('/splash')
   }
 
+  const startApp = (): void => {
+    completeAndEnterApp()
+  }
+
   const skipWizard = (): void => {
-    router.push('/splash')
+    completeAndEnterApp()
   }
 
   // --- AI Model Step ---

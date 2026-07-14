@@ -298,17 +298,6 @@ function toggleFilters() {
   gap: var(--space-4);
 }
 
-.page-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-}
-
-.page-subtitle {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  margin-top: calc(var(--space-1) / 2);
-}
 
 .market-switch {
   display: flex;
@@ -343,22 +332,8 @@ function toggleFilters() {
   box-shadow: var(--shadow-xs), 0 0 0 1px var(--lumi-primary-glow);
 }
 
-.market-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-7);
-}
-
 .market-toolbar > :deep(.market-search) {
   flex: 1;
-}
-
-.market-content {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-  min-height: 0;
 }
 
 .market-sidebar {
@@ -409,10 +384,6 @@ function toggleFilters() {
   color: var(--lumi-primary);
 }
 
-.sidebar-filters {
-  padding-top: var(--space-2);
-}
-
 .sidebar-repo-source {
   padding-top: var(--space-2);
   border-top: 1px solid var(--workspace-border);
@@ -432,29 +403,6 @@ function toggleFilters() {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-
-.close-filters {
-  width: var(--space-6);
-  height: var(--space-6);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.close-filters:hover {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-}
-
-.market-main {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 var(--space-7) var(--space-7) var(--space-4);
-  min-width: 0;
 }
 
 /* 远程数据源指示器 */
@@ -483,32 +431,9 @@ function toggleFilters() {
   opacity: 0.7;
 }
 
-.items-section {
-  margin-top: var(--space-5);
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-4);
-}
-
-.section-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-}
-
 .section-count {
   font-size: var(--text-sm);
   color: var(--text-muted);
-}
-
-.items-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--space-4);
 }
 
 .items-grid > * {
@@ -527,11 +452,4 @@ function toggleFilters() {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.filter-slide-enter-active {
-  animation: lumi-fade-in var(--duration-normal) var(--ease-out-expo);
-}
-
-.filter-slide-leave-active {
-  animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
-}
 </style>

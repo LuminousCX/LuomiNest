@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from loguru import logger
 
 from app.infrastructure.database.json_store import agents_store
+from app.core.utils import extract_text_from_content
 from app.engines.memory import get_memory_engine
 from app.engines.memory.memory_engine import (
     _CORRECTION_HINT,
@@ -46,14 +47,7 @@ class ContextService:
 
     @staticmethod
     def _extract_user_text(msg: dict) -> str:
-        content = msg.get("content", "")
-        if isinstance(content, list):
-            return " ".join(
-                c.get("text", "")
-                for c in content
-                if isinstance(c, dict) and c.get("type") == "text"
-            )
-        return str(content)
+        return extract_text_from_content(msg.get("content", ""))
 
     @staticmethod
     def get_user_query(messages: list[dict]) -> str:
@@ -280,8 +274,7 @@ Examples:
 
         if is_image:
             if isinstance(content, list):
-                text_parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
-                text = " ".join(text_parts)
+                text = extract_text_from_content(content)
             else:
                 text = str(content) if content else ""
 

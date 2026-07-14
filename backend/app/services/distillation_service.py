@@ -3,6 +3,7 @@ import hashlib
 from datetime import datetime, timezone
 from loguru import logger
 
+from app.core.utils import extract_llm_text
 from app.engines.memory import get_memory_engine
 from app.engines.memory.prompts import _DISTILL_PROMPT_ROUND, _MERGE_SUMMARY_PROMPT
 from app.runtime.provider.llm.types import RouteHint
@@ -211,9 +212,7 @@ class DistillationService:
                 max_tokens=500,
                 route_hint=RouteHint.CHAT,
             )
-            response_text = (
-                result.strip() if isinstance(result, str) else str(result).strip()
-            )
+            response_text = extract_llm_text(result)
             logger.info(f"[Distill] Round distillation result: {response_text[:200]}")
             return response_text
 
@@ -244,15 +243,49 @@ class DistillationService:
                 max_tokens=800,
                 route_hint=RouteHint.CHAT,
             )
-            response_text = (
-                result.strip() if isinstance(result, str) else str(result).strip()
-            )
+            response_text = extract_llm_text(result)
             logger.info(f"[Distill] Merge result: {response_text[:200]}")
             return response_text
 
         except Exception as e:
             logger.warning(f"[Distill] Summary merge failed: {e}")
             return None
+
+    @staticmethod
+    async def _merge_observation(agent_id: str, conversation_id: str, new_observation: str, llm_adapter) -> None:
+        """将新观察合并到对话级和 Agent 级摘要中。"""
+        engine = get_memory_engine(agent_id)
+
+        # 对话级摘要：独立合并
+        conv_summary = ""
+        if conversation_id:
+            from app.engines.memory.memory_engine import get_conversation_store
+            conv_store = get_conversation_store(agent_id, conversation_id)
+            conv_data = conv_store.load_data()
+            from app.engines.memory.models import summaries_to_markdown
+            conv_summary = summaries_to_markdown(conv_data)
+
+        if conv_summary and conv_summary.strip():
+            logger.info("[Distill] Merging with existing conversation summary")
+            merged_conv = await DistillationService.merge_summaries(conv_summary, new_observation, llm_adapter)
+            if merged_conv:
+                engine.save_summary(merged_conv, conversation_id=conversation_id)
+            else:
+                logger.warning("[Distill] Conversation merge failed, keeping original")
+        elif conversation_id:
+            engine.save_summary(new_observation, conversation_id=conversation_id)
+
+        # Agent级摘要：独立合并
+        agent_summary = engine.load_summary()
+        if agent_summary and agent_summary.strip():
+            logger.info("[Distill] Merging with existing agent summary")
+            merged_agent = await DistillationService.merge_summaries(agent_summary, new_observation, llm_adapter)
+            if merged_agent:
+                engine.save_summary(merged_agent)
+            else:
+                logger.warning("[Distill] Agent merge failed, keeping original")
+        else:
+            engine.save_summary(new_observation)
 
     @staticmethod
     async def distill_and_merge(agent_id: str, conversation_id: str, messages: list, llm_adapter=None) -> bool:
@@ -263,37 +296,7 @@ class DistillationService:
                 logger.warning("[Distill] No new observation from distillation")
                 return False
 
-            engine = get_memory_engine(agent_id)
-
-            # 对话级摘要：独立合并
-            conv_summary = engine.load_summary() if conversation_id else ""
-            if conversation_id:
-                from app.engines.memory.memory_engine import get_conversation_store
-                conv_store = get_conversation_store(agent_id, conversation_id)
-                conv_data = conv_store.load_data()
-                from app.engines.memory.models import summaries_to_markdown
-                conv_summary = summaries_to_markdown(conv_data)
-
-            if conv_summary and conv_summary.strip():
-                logger.info("[Distill] Merging with existing conversation summary")
-                merged_conv = await DistillationService.merge_summaries(conv_summary, new_observation, llm_adapter)
-                if merged_conv:
-                    engine.save_summary(merged_conv, conversation_id=conversation_id)
-                else:
-                    logger.warning("[Distill] Conversation merge failed, keeping original")
-
-            # Agent级摘要：独立合并
-            agent_summary = engine.load_summary()
-            if agent_summary and agent_summary.strip():
-                logger.info("[Distill] Merging with existing agent summary")
-                merged_agent = await DistillationService.merge_summaries(agent_summary, new_observation, llm_adapter)
-                if merged_agent:
-                    engine.save_summary(merged_agent)
-                else:
-                    logger.warning("[Distill] Agent merge failed, keeping original")
-            else:
-                engine.save_summary(new_observation)
-
+            await DistillationService._merge_observation(agent_id, conversation_id, new_observation, llm_adapter)
             return True
 
         except Exception as e:
@@ -323,36 +326,7 @@ class DistillationService:
         unprocessed_turns = DistillationService.get_last_n_turns(messages, full_turns - last_distilled)
         new_observation = await DistillationService.distill_rounds(unprocessed_turns if unprocessed_turns else messages, llm_adapter)
         if new_observation:
-            engine = get_memory_engine(agent_id)
-
-            # 对话级摘要：独立合并
-            conv_summary = ""
-            if conversation_id:
-                from app.engines.memory.memory_engine import get_conversation_store
-                conv_store = get_conversation_store(agent_id, conversation_id)
-                conv_data = conv_store.load_data()
-                from app.engines.memory.models import summaries_to_markdown
-                conv_summary = summaries_to_markdown(conv_data)
-
-            if conv_summary and conv_summary.strip():
-                merged_conv = await DistillationService.merge_summaries(conv_summary, new_observation, llm_adapter)
-                if merged_conv:
-                    engine.save_summary(merged_conv, conversation_id=conversation_id)
-                else:
-                    logger.warning("[Distill] Final conversation merge failed")
-            elif conversation_id:
-                engine.save_summary(new_observation, conversation_id=conversation_id)
-
-            # Agent级摘要：独立合并
-            agent_summary = engine.load_summary()
-            if agent_summary and agent_summary.strip():
-                merged_agent = await DistillationService.merge_summaries(agent_summary, new_observation, llm_adapter)
-                if merged_agent:
-                    engine.save_summary(merged_agent)
-                else:
-                    logger.warning("[Distill] Final agent merge failed")
-            else:
-                engine.save_summary(new_observation)
+            await DistillationService._merge_observation(agent_id, conversation_id, new_observation, llm_adapter)
 
         DistillationService._last_distilled_turns.pop(conversation_id, None)
 

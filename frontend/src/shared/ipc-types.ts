@@ -202,6 +202,9 @@ export const DesktopPetIpcChannels = {
     'desktop-pet:end-drag',
     'desktop-pet:model-capabilities-response',
     'desktop-pet:show-context-menu',
+    // 桌宠窗口 → 主进程 → 主应用窗口：聊天消息转发
+    'desktop-pet:send-chat-message',
+    'desktop-pet:cancel-chat',
   ] as const,
   ON: [
     'desktop-pet:load-model',
@@ -213,6 +216,13 @@ export const DesktopPetIpcChannels = {
     'desktop-pet:get-model-capabilities',
     'desktop-pet:subtitle',
     'desktop-pet:subtitle-hide',
+    // 主进程 → 桌宠窗口：窗口可见性变化（隐藏时降低帧率 / 显示时恢复）
+    'desktop-pet:visibility-changed',
+    // 主进程 → 主应用窗口：转发桌宠窗口的聊天请求
+    'desktop-pet:chat-message',
+    'desktop-pet:chat-cancel',
+    // 主进程 → 桌宠窗口：流式状态反馈（输入区切换发送/取消按钮）
+    'desktop-pet:streaming-state',
     'backend:stage',
     'tab:updated',
     'tab:new-tab-request',
@@ -272,6 +282,8 @@ export interface ElectronApi {
     getVersion: () => Promise<string>
     getName: () => Promise<string>
     getPaths: () => Promise<AppPathsInfo>
+    getWelcomeCompleted: () => Promise<boolean>
+    setWelcomeCompleted: (value: boolean) => Promise<void>
   }
   auth: {
     getToken: () => Promise<string | undefined>
@@ -339,7 +351,16 @@ export interface ElectronApi {
     getModelCapabilities: () => Promise<ModelCapabilities | null>
     sendSubtitle: (text: string) => Promise<DesktopPetResult>
     hideSubtitle: () => Promise<DesktopPetResult>
+    setStreamingState: (isStreaming: boolean) => Promise<DesktopPetResult>
   }
+  /** 桌宠窗口内的聊天发送（桌宠窗口 → 主进程 → 主应用窗口） */
+  desktopPetChat: {
+    sendMessage: (text: string) => void
+    cancel: () => void
+  }
+  /** 主应用窗口监听桌宠转发的聊天请求 */
+  onDesktopPetChatMessage: (callback: (text: string) => void) => () => void
+  onDesktopPetChatCancel: (callback: () => void) => () => void
   backend: {
     subscribeStage: (callback: (data: BackendStageEvent) => void) => () => void
   }

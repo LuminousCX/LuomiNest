@@ -31,6 +31,9 @@ export interface DesktopPetIpcHandlers {
   onGetModelCapabilities: (requestId: string) => void
   onSubtitle: (text: string) => void
   onSubtitleHide: () => void
+  onStreamingState: (isStreaming: boolean) => void
+  /** 窗口可见性变化：visible=false 时降低帧率，visible=true 时恢复正常帧率 */
+  onVisibilityChanged: (visible: boolean) => void
 }
 
 /** 通道名与对应 handler 的映射条目 */
@@ -80,6 +83,14 @@ export const useDesktopPetIpc = (handlers: DesktopPetIpcHandlers) => {
       {
         channel: 'desktop-pet:subtitle-hide',
         listener: () => { handlers.onSubtitleHide() }
+      },
+      {
+        channel: 'desktop-pet:streaming-state',
+        listener: (_e, ...args) => { handlers.onStreamingState(args[0] as boolean) }
+      },
+      {
+        channel: 'desktop-pet:visibility-changed',
+        listener: (_e, ...args) => { handlers.onVisibilityChanged((args[0] as { visible: boolean }).visible) }
       }
     ]
 

@@ -182,7 +182,10 @@ const router = createRouter({
 })
 
 // 公开路由 allowlist — 无需登录态即可访问
-const PUBLIC_ROUTES = new Set(['Welcome', 'Splash', 'Login'])
+// DesktopPet 为独立展示窗口：仅渲染 Live2D + IPC send 通信，不依赖 auth token，
+// 且其 webContents !== mainWindow.webContents，无法通过 assertTrustedSender 校验，
+// 故加入公开路由 allowlist，避免被路由守卫重定向到登录页（导致桌宠窗口显示主页面而非 Live2D）。
+const PUBLIC_ROUTES = new Set(['Welcome', 'Splash', 'Login', 'DesktopPet'])
 
 // Token 缓存：避免每次导航都走 IPC。登录/登出时通过 invalidateAuthToken() 清除
 let _cachedAuthToken: string | null | undefined
@@ -207,10 +210,36 @@ const hasAuthToken = async (): Promise<boolean> => {
   return _cachedAuthToken !== null
 }
 
+// 欢迎向导完成状态缓存（启动时读取一次，完成向导后由 useWelcomeWizard 调用 invalidate）
+let _welcomeCompleted: boolean | undefined
+
+const isWelcomeCompleted = async (): Promise<boolean> => {
+  if (_welcomeCompleted === undefined) {
+    try {
+      _welcomeCompleted = (await window.api.app?.getWelcomeCompleted?.()) === true
+    } catch {
+      _welcomeCompleted = false
+    }
+  }
+  return _welcomeCompleted === true
+}
+
+// 供 useWelcomeWizard 在完成/跳过向导后调用，刷新缓存
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { __lumiInvalidateWelcome?: () => void }).__lumiInvalidateWelcome = () => {
+    _welcomeCompleted = undefined
+  }
+}
+
 router.beforeEach(async (to) => {
   const title = to.meta.title as string | undefined
   if (title) {
     document.title = title
+  }
+
+  // 已完成欢迎向导的用户访问 /welcome → 跳过到 /splash
+  if (to.name === 'Welcome' && await isWelcomeCompleted()) {
+    return { name: 'Splash' }
   }
 
   // 公开路由直接放行

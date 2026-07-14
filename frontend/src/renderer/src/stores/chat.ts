@@ -188,7 +188,7 @@ export const useChatStore = defineStore('chat', () => {
     return isBackendReady.value
   }
 
-  const createConversation = async (title?: string, agentId?: string, model?: string, provider?: string) => {
+  const createConversation = async (title?: string, agentId?: string, model?: string, provider?: string, chatMode?: string) => {
     const targetAgentId = agentId || activeAgentId.value
     if (!targetAgentId) return null
 
@@ -197,6 +197,7 @@ export const useChatStore = defineStore('chat', () => {
       agent_id: targetAgentId,
       model,
       provider,
+      chat_mode: chatMode || 'normal',
     })
     convData.value = { ...convData.value, [conv.id]: conv }
     agentCurrentConvId.value = { ...agentCurrentConvId.value, [targetAgentId]: conv.id }
@@ -335,7 +336,8 @@ export const useChatStore = defineStore('chat', () => {
         content.slice(0, 30),
         targetAgentId,
         options?.model,
-        options?.provider
+        options?.provider,
+        options?.chatMode
       )
       convId = conv?.id || null
       if (!convId) return

@@ -70,6 +70,7 @@ class ConversationCreate(BaseModel):
     agent_id: str | None = None
     model: str | None = None
     provider: str | None = None
+    chat_mode: str | None = None
 
 
 class ConversationResponse(BaseModel):
@@ -78,6 +79,7 @@ class ConversationResponse(BaseModel):
     agent_id: str | None = None
     model: str | None = None
     provider: str | None = None
+    chat_mode: str | None = None
     messages: list[dict[str, Any]] = []
     created_at: str
     updated_at: str
@@ -89,6 +91,7 @@ class ConversationListResponse(BaseModel):
     agent_id: str | None = None
     model: str | None = None
     provider: str | None = None
+    chat_mode: str | None = None
     last_message: str | None = None
     created_at: str
     updated_at: str

@@ -36,7 +36,7 @@ const emit = defineEmits<{
       <template v-else>
         <button class="h-btn" @click="emit('cancelEditSummary')"><X :size="14" /> 取消</button>
         <button class="h-btn primary" @click="emit('saveEditSummary')" :disabled="isSaving || !summaryHasChanges">
-          <Loader2 v-if="isSaving" :size="14" class="spinning" />
+          <Loader2 v-if="isSaving" :size="14" class="spin-animation" />
           <Save v-else :size="14" /> 保存
         </button>
       </template>
@@ -120,32 +120,6 @@ const emit = defineEmits<{
   display: flex;
   gap: var(--space-2);
 }
-
-.h-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: var(--radius-xs);
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-slow);
-  white-space: nowrap;
-}
-
-.h-btn:hover { background: var(--surface-hover); color: var(--text); }
-
-.h-btn.primary {
-  color: var(--text);
-  background: var(--task-purple-soft);
-  border: 1px solid var(--task-purple-border);
-}
-
-.h-btn.primary:hover { background: var(--task-purple-soft); }
-.h-btn:disabled { opacity: 0.5; cursor: default; }
-
-.spinning { animation: spin 1s linear infinite; }
 
 .profile-card {
   padding: var(--space-4);
@@ -291,17 +265,6 @@ const emit = defineEmits<{
   margin-bottom: 2px;
 }
 
-.empty-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-8) var(--space-5);
-  color: var(--text-muted);
-}
-
-.empty-section svg { margin-bottom: var(--space-3); opacity: 0.5; }
-.empty-section p { font-size: var(--text-md); margin-bottom: var(--space-1); }
 .empty-hint { font-size: var(--text-sm) !important; opacity: 0.7; }
 
 .empty-section.summary-empty {

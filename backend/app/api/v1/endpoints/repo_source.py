@@ -1,10 +1,11 @@
 import uuid
-from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
+from app.core.utils import utc_now, require_store, ok
+from app.core.exceptions import LuomiNestError
 from app.infrastructure.database.json_store import repo_sources_store
 
 router = APIRouter(prefix="/repo-sources", tags=["repo-sources"])
@@ -158,7 +159,7 @@ async def list_repo_sources():
 async def create_repo_source(request: RepoSourceCreate):
     logger.info(f"[API] POST /repo-sources - Creating repo source: name={request.name}")
     source_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
     sub_markets = []
     for sm in request.sub_markets:
         sub_markets.append({
@@ -191,18 +192,14 @@ async def create_repo_source(request: RepoSourceCreate):
 @router.get("/{source_id}", response_model=RepoSourceResponse)
 async def get_repo_source(source_id: str):
     logger.info(f"[API] GET /repo-sources/{source_id}")
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
     return _to_response(source)
 
 
 @router.patch("/{source_id}", response_model=RepoSourceResponse)
 async def update_repo_source(source_id: str, request: RepoSourceUpdate):
     logger.info(f"[API] PATCH /repo-sources/{source_id}")
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
 
     update_data = request.model_dump(exclude_unset=True)
     if "sub_markets" in update_data and update_data["sub_markets"] is not None:
@@ -221,7 +218,7 @@ async def update_repo_source(source_id: str, request: RepoSourceUpdate):
             for sm in update_data["sub_markets"]
         ]
     source.update(update_data)
-    source["updated_at"] = datetime.now(timezone.utc).isoformat()
+    source["updated_at"] = utc_now()
     await repo_sources_store.set_async(source_id, source)
     # 清除该来源的同步缓存，防止子市场 URL 变更后返回旧数据
     try:
@@ -236,22 +233,18 @@ async def update_repo_source(source_id: str, request: RepoSourceUpdate):
 @router.delete("/{source_id}")
 async def delete_repo_source(source_id: str):
     logger.info(f"[API] DELETE /repo-sources/{source_id}")
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
     await repo_sources_store.delete_async(source_id)
     logger.success(f"[API] DELETE /repo-sources/{source_id} - Deleted")
-    return {"error": None, "data": {"deleted": True}}
+    return ok({"deleted": True})
 
 
 @router.post("/{source_id}/toggle", response_model=RepoSourceResponse)
 async def toggle_repo_source(source_id: str):
     logger.info(f"[API] POST /repo-sources/{source_id}/toggle")
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
     source["enabled"] = not source.get("enabled", True)
-    source["updated_at"] = datetime.now(timezone.utc).isoformat()
+    source["updated_at"] = utc_now()
     await repo_sources_store.set_async(source_id, source)
     logger.success(f"[API] POST /repo-sources/{source_id}/toggle - enabled={source['enabled']}")
     return _to_response(source)
@@ -260,9 +253,7 @@ async def toggle_repo_source(source_id: str):
 @router.patch("/{source_id}/sub-markets/{sub_market_id}/unlink")
 async def unlink_sub_market(source_id: str, sub_market_id: str):
     logger.info(f"[API] PATCH /repo-sources/{source_id}/sub-markets/{sub_market_id}/unlink")
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
 
     sub_markets = source.get("sub_markets", [])
     found = False
@@ -275,7 +266,7 @@ async def unlink_sub_market(source_id: str, sub_market_id: str):
         raise HTTPException(status_code=404, detail=f"Sub-market {sub_market_id} not found")
 
     source["sub_markets"] = sub_markets
-    source["updated_at"] = datetime.now(timezone.utc).isoformat()
+    source["updated_at"] = utc_now()
     await repo_sources_store.set_async(source_id, source)
     logger.success(f"[API] Unlinked sub-market {sub_market_id}")
     return _to_response(source)
@@ -284,9 +275,7 @@ async def unlink_sub_market(source_id: str, sub_market_id: str):
 @router.patch("/{source_id}/sub-markets/{sub_market_id}/link")
 async def link_sub_market(source_id: str, sub_market_id: str):
     logger.info(f"[API] PATCH /repo-sources/{source_id}/sub-markets/{sub_market_id}/link")
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
 
     sub_markets = source.get("sub_markets", [])
     found = False
@@ -299,7 +288,7 @@ async def link_sub_market(source_id: str, sub_market_id: str):
         raise HTTPException(status_code=404, detail=f"Sub-market {sub_market_id} not found")
 
     source["sub_markets"] = sub_markets
-    source["updated_at"] = datetime.now(timezone.utc).isoformat()
+    source["updated_at"] = utc_now()
     await repo_sources_store.set_async(source_id, source)
     logger.success(f"[API] Linked sub-market {sub_market_id}")
     return _to_response(source)
@@ -308,9 +297,7 @@ async def link_sub_market(source_id: str, sub_market_id: str):
 @router.post("/{source_id}/sync", response_model=RepoSourceResponse)
 async def sync_repo_source(source_id: str, force: bool = False):
     logger.info(f"[API] POST /repo-sources/{source_id}/sync")
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
 
     source["status"] = "loading"
     source["error_message"] = ""
@@ -334,8 +321,8 @@ async def sync_repo_source(source_id: str, force: bool = False):
             source["status"] = "loaded"
             source["error_message"] = ""
 
-        source["last_synced_at"] = datetime.now(timezone.utc).isoformat()
-        source["updated_at"] = datetime.now(timezone.utc).isoformat()
+        source["last_synced_at"] = utc_now()
+        source["updated_at"] = utc_now()
         await repo_sources_store.set_async(source_id, source)
         logger.success(f"[API] POST /repo-sources/{source_id}/sync - Success ({len(results)} sub-markets)")
     except Exception as e:
@@ -351,9 +338,7 @@ async def sync_repo_source(source_id: str, force: bool = False):
 async def sync_sub_market(source_id: str, sub_market_id: str, force: bool = False):
     """同步单个子市场"""
     logger.info(f"[API] POST /repo-sources/{source_id}/sub-markets/{sub_market_id}/sync")
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
 
     sub_market = None
     for sm in source.get("sub_markets", []):
@@ -369,7 +354,6 @@ async def sync_sub_market(source_id: str, sub_market_id: str, force: bool = Fals
         return result.to_dict()
     except Exception as e:
         logger.error(f"[API] Sync sub-market failed: {e}", exc_info=True)
-        from app.core.exceptions import LuomiNestError
         raise LuomiNestError(
             "子市场同步失败，请稍后重试",
             code="REPO_SYNC_FAILED",
@@ -381,9 +365,7 @@ async def sync_sub_market(source_id: str, sub_market_id: str, force: bool = Fals
 async def get_source_items(source_id: str, type: Optional[str] = None):
     """获取仓库来源下的所有已缓存市场条目"""
     logger.info(f"[API] GET /repo-sources/{source_id}/items")
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
 
     from app.infrastructure.sync.github_sync import get_all_cached_items
     items = get_all_cached_items(source_id, source)
@@ -398,9 +380,7 @@ async def get_source_items(source_id: str, type: Optional[str] = None):
 @router.get("/{source_id}/sub-markets/{sub_market_id}/items")
 async def get_sub_market_items(source_id: str, sub_market_id: str):
     """获取子市场下的已缓存市场条目"""
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
 
     from app.infrastructure.sync.github_sync import get_cached_items
     cached = get_cached_items(source_id, sub_market_id)
@@ -412,10 +392,8 @@ async def get_sub_market_items(source_id: str, sub_market_id: str):
 @router.delete("/{source_id}/cache")
 async def clear_source_cache(source_id: str, sub_market_id: Optional[str] = None):
     """清除仓库来源的缓存"""
-    source = await repo_sources_store.get_async(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail=f"Repo source {source_id} not found")
+    source = await require_store(repo_sources_store, source_id, "Repo source")
 
     from app.infrastructure.sync.github_sync import clear_cache
     clear_cache(source_id=source_id, sub_market_id=sub_market_id)
-    return {"error": None, "data": {"cleared": True}}
+    return ok({"cleared": True})

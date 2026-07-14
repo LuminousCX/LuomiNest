@@ -72,7 +72,10 @@ if ($Platform -eq "win") {
     Stop-Process -Name "electron" -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
     Write-Host "Pre-check: Cleaning old release directory..." -ForegroundColor Gray
-    Remove-Item -Recurse -Force (Join-Path $FrontendDir "release") -ErrorAction SilentlyContinue
+    # 使用 Node.js fs.rmSync（支持 maxRetries 处理文件锁）
+    Push-Location $FrontendDir
+    & node -e "const fs=require('fs');const p='release';try{fs.rmSync(p,{recursive:true,force:true,maxRetries:5,retryDelay:200});console.log('release/ cleaned')}catch(e){console.warn('clean warning:',e.message)}"
+    Pop-Location
 }
 
 # 清理陈旧 PyInstaller 产物，避免 _internal 残留与当前 spec 不一致

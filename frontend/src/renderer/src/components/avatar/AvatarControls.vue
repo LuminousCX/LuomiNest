@@ -4,11 +4,12 @@ import {
   Volume2,
   Send,
   Square,
-  MessageCircle
+  MessageCircle,
+  Play
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 import LumiCard from '../common/LumiCard.vue'
-import type { AvatarEmotion, AvatarMode, IdleAnimation } from './types'
+import type { AvatarEmotion, AvatarMode, AvatarMotion, IdleAnimation } from './types'
 
 const props = defineProps<{
   currentMode: string
@@ -22,8 +23,9 @@ const props = defineProps<{
   isAvatarSpeaking: boolean
   isAvatarSynthesizing: boolean
   emotions: AvatarEmotion[]
-  currentEmotionLocal: AvatarEmotion
-  expressionValue: number
+  currentEmotionLocal: AvatarEmotion | null
+  motions: AvatarMotion[]
+  currentMotionLocal: AvatarMotion | null
   idleAnimations: IdleAnimation[]
 }>()
 
@@ -36,6 +38,7 @@ const emit = defineEmits<{
   'tts-send': []
   'tts-keydown': [event: KeyboardEvent]
   'select-emotion': [emotion: AvatarEmotion]
+  'select-motion': [motion: AvatarMotion]
 }>()
 </script>
 
@@ -120,19 +123,40 @@ const emit = defineEmits<{
       <LumiCard class="emotion-panel" padding="md">
         <div class="panel-title">
           <Heart :size="14" />
-          <span>Emotion</span>
-          <span class="expression-value">PAD: {{ props.expressionValue > 0 ? '+' : '' }}{{ props.expressionValue.toFixed(1) }}</span>
+          <span>Expression</span>
+          <span v-if="props.emotions.length" class="panel-count">{{ props.emotions.length }}</span>
         </div>
-        <div class="emotion-grid">
+        <div v-if="!props.emotions.length" class="empty-hint">该模型无可用表情</div>
+        <div v-else class="emotion-grid">
           <button
             v-for="emo in props.emotions"
             :key="emo.id"
-            :class="['emo-btn', { active: props.currentEmotionLocal.id === emo.id }]"
+            :class="['emo-btn', { active: props.currentEmotionLocal?.id === emo.id }]"
             :style="{ '--emo-color': emo.color }"
             @click="emit('select-emotion', emo)"
           >
-            <component :is="emo.icon" :size="18" />
+            <component :is="emo.icon" v-if="emo.icon" :size="18" />
             <span>{{ emo.label }}</span>
+          </button>
+        </div>
+      </LumiCard>
+
+      <LumiCard class="motion-panel" padding="md">
+        <div class="panel-title">
+          <Play :size="14" />
+          <span>Motion</span>
+          <span v-if="props.motions.length" class="panel-count">{{ props.motions.length }}</span>
+        </div>
+        <div v-if="!props.motions.length" class="empty-hint">该模型无可用动作</div>
+        <div v-else class="motion-grid">
+          <button
+            v-for="motion in props.motions"
+            :key="motion.id"
+            :class="['emo-btn', 'motion-btn', { active: props.currentMotionLocal?.id === motion.id }]"
+            @click="emit('select-motion', motion)"
+          >
+            <Play :size="16" />
+            <span>{{ motion.label }}</span>
           </button>
         </div>
       </LumiCard>
@@ -243,6 +267,7 @@ const emit = defineEmits<{
 }
 
 .emotion-panel,
+.motion-panel,
 .idle-panel {
   flex: 1;
   min-width: 180px;
@@ -456,18 +481,47 @@ const emit = defineEmits<{
   margin-bottom: var(--space-2);
 }
 
-.expression-value {
+.panel-count {
   margin-left: auto;
-  font-family: monospace;
-  font-size: var(--text-sm);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--lumi-primary-subtle);
   color: var(--lumi-primary);
-  opacity: 0.7;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+
+.empty-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  opacity: 0.6;
+  padding: var(--space-2) 0;
+  text-align: center;
+  font-style: italic;
 }
 
 .emotion-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.motion-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.motion-btn {
+  flex-direction: row;
+  gap: 4px;
+  padding: var(--space-1) 10px;
+}
+
+.motion-btn.active {
+  --emo-color: var(--lumi-primary);
 }
 
 .emo-btn {

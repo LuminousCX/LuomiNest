@@ -29,6 +29,9 @@ export const LUOMINEST_BUILTIN_MODELS: LuomiNestModelInfo[] = [
   }
 ]
 
+// llny 语义情绪ID → 模型原生表情名映射
+// 用于 LLM 对话输出的 <exp:happy> 等语义标签驱动模型表情
+// 模型原生表情名见 llny.model3.json 的 FileReferences.Expressions
 const LLNY_EXPRESSION_MAP: Record<string, string> = {
   happy: '星星',
   sad: '哭',
@@ -44,17 +47,9 @@ const LLNY_EXPRESSION_MAP: Record<string, string> = {
   confused: '荷包蛋'
 }
 
-const HIYORI_EXPRESSION_MAP: Record<string, string> = {
-  happy: 'happy',
-  sad: 'sad',
-  neutral: 'neutral',
-  love: 'love',
-  surprise: 'surprised',
-  angry: 'angry',
-  think: 'think',
-  awkward: 'awkward',
-  curious: 'curious'
-}
+// hiyori 模型没有 expressions 定义（见 Hiyori.model3.json），
+// LLM 语义情绪无法映射到表情，只能通过 PAD 面部参数微调
+const HIYORI_EXPRESSION_MAP: Record<string, string> = {}
 
 export const LUOMINEST_AVATAR_BINDINGS: Record<string, LuomiNestAvatarBinding> = {
   llny: {
@@ -69,7 +64,7 @@ export const LUOMINEST_AVATAR_BINDINGS: Record<string, LuomiNestAvatarBinding> =
     voice: 'zh-CN-XiaoxiaoNeural',
     voiceLang: 'zh',
     expressionMap: HIYORI_EXPRESSION_MAP,
-    defaultExpression: 'neutral'
+    defaultExpression: ''
   }
 }
 
@@ -77,15 +72,17 @@ export const getAvatarBinding = (modelId: string): LuomiNestAvatarBinding | null
   return LUOMINEST_AVATAR_BINDINGS[modelId] ?? null
 }
 
+// 语义情绪ID → 模型原生表情名
+// 若模型无该表情映射，返回空字符串（调用方据此跳过表情触发）
 export const resolveExpression = (modelId: string, emotionId: string): string => {
   const binding = LUOMINEST_AVATAR_BINDINGS[modelId]
-  if (!binding) return emotionId
+  if (!binding) return ''
   return binding.expressionMap[emotionId] ?? binding.defaultExpression
 }
 
 export const resolveExpressionByModelUrl = (modelUrl: string, emotionId: string): string => {
   const model = LUOMINEST_BUILTIN_MODELS.find(m => m.url === modelUrl)
-  if (!model) return emotionId
+  if (!model) return ''
   return resolveExpression(model.id, emotionId)
 }
 

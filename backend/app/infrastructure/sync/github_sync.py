@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 import httpx
 from loguru import logger
 
+from app.core.utils import utc_now
 from app.infrastructure.database.json_store import JsonStore
 
 # ---------------------------------------------------------------------------
@@ -259,7 +260,7 @@ def parse_manifest_to_items(manifest: dict, repo_url: str) -> list[dict]:
         items = manifest
 
     result = []
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
     for raw in items:
         if not isinstance(raw, dict):
             continue
@@ -469,7 +470,7 @@ def parse_single_manifest(manifest: dict, repo_url: str) -> Optional[dict]:
         return None
 
     item = ManifestItem(manifest)
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
 
     if not item.id:
         return None
@@ -550,13 +551,13 @@ async def sync_sub_market(
             sub_market_id=sub_market_id,
             items=[],
             total=0,
-            synced_at=datetime.now(timezone.utc).isoformat(),
+            synced_at=utc_now(),
             error=error_msg,
         )
 
     owner, repo = parsed
     token = get_github_token()
-    now = datetime.now(timezone.utc).isoformat()
+    now = utc_now()
 
     # 3. 先尝试根目录的 manifest.json
     try:
@@ -683,7 +684,7 @@ async def sync_source(source_id: str, source_data: dict, force: bool = False) ->
                 sub_market_id=sm.get("id", ""),
                 items=[],
                 total=0,
-                synced_at=datetime.now(timezone.utc).isoformat(),
+                synced_at=utc_now(),
                 error=str(r),
             ))
         else:

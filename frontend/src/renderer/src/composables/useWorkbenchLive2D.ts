@@ -4,13 +4,16 @@
  * 从 WorkbenchView.vue 拆分：收纳 Live2D 加载/销毁、TTS 语音合成、字幕显示、
  * 模型切换、模型下拉选择等逻辑。桌面宠物模式与内嵌模式通过 isDesktopMode 切换。
  * 消息/工作流 composable 通过 feedChunk/finishStream/filterCodeForTts 驱动 TTS。
+ *
+ * TTS 引擎已迁移至全局 Pinia store（useTtsEngineStore），桌宠模式下切换页面时
+ * TTS 不中断（陪伴优先）。驱动回调与配置由本 composable 按模式动态设置。
  */
 import { ref, computed, watch, nextTick, type ComputedRef, type VNodeRef } from 'vue'
 import { useModelStore } from '../stores/model'
 import { usePlatformStore } from '../stores/platform'
 import { useAvatarControlStore } from '../stores/avatar-control'
+import { useTtsEngineStore } from '../stores/tts-engine'
 import { useLuomiNestLive2D } from './useLuomiNestLive2D'
-import { useAvatarChat } from './useAvatarChat'
 import { useToast } from './useToast'
 import { getProviderLogo } from '../config/provider-logos'
 import { LUOMINEST_BUILTIN_MODELS, getAvatarBinding, resolveExpressionByModelUrl } from '../config/luominest-models'
@@ -33,6 +36,7 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
   const modelStore = useModelStore()
   const platformStore = usePlatformStore()
   const avatarControl = useAvatarControlStore()
+  const ttsEngine = useTtsEngineStore()
   const toast = useToast()
 
   // Live2D 画布引用
@@ -79,16 +83,8 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
     inCodeBlock = false
   }
 
-  const {
-    isSpeaking,
-    isSynthesizing,
-    subtitleText,
-    subtitleVisible,
-    feedChunk,
-    finishStream,
-    stop: stopTts,
-    dismissSubtitle,
-  } = useAvatarChat({
+  // ── 配置全局 TTS 引擎（voice / engine / ttsConfig / 开关） ──
+  ttsEngine.setConfig({
     voice: () => currentBinding.value?.voice || 'zh-CN-XiaoxiaoNeural',
     engine: () => modelStore.ttsConfig.provider || modelStore.ttsConfig.engine || 'auto',
     ttsConfig: () => ({
@@ -97,35 +93,48 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
       apiKey: modelStore.ttsConfig.apiKey,
       baseUrl: modelStore.ttsConfig.baseUrl,
     }),
-    driveEmotion: (emotionId: string) => {
-      if (isDesktopMode.value) {
-        const modelUrl = currentModelInfo.value.url
-        const resolved = resolveExpressionByModelUrl(modelUrl, emotionId)
-        avatarControl.triggerExpression(resolved)
-      } else {
-        driveEmotion(emotionId)
-      }
-    },
-    syncLipParam: (value: number) => {
-      if (isDesktopMode.value) {
-        avatarControl.driveLipSync(value)
-      } else {
-        syncLipParam(value)
-      }
-    },
     ttsEnabled: () => ttsEnabled.value,
     subtitleEnabled: () => subtitleEnabled.value,
-    onTtsError: (err: Error) => toast.warning(`语音合成失败：${err.message}`),
   })
 
+  // ── 驱动回调：按 isDesktopMode 路由到 canvas 或桌宠 IPC ──
+  const updateTtsDrivers = (): void => {
+    ttsEngine.setDrivers({
+      driveEmotion: (emotionId: string) => {
+        if (isDesktopMode.value) {
+          const modelUrl = currentModelInfo.value.url
+          const resolved = resolveExpressionByModelUrl(modelUrl, emotionId)
+          avatarControl.triggerExpression(resolved)
+        } else {
+          driveEmotion(emotionId)
+        }
+      },
+      syncLipParam: (value: number) => {
+        if (isDesktopMode.value) {
+          avatarControl.driveLipSync(value)
+        } else {
+          syncLipParam(value)
+        }
+      },
+      onTtsError: (err: Error) => toast.warning(`语音合成失败：${err.message}`),
+    })
+  }
+
+  updateTtsDrivers()
+
   // 桌面宠物模式字幕同步
-  watch([subtitleVisible, subtitleText, isDesktopMode], ([visible, text, desktopMode]) => {
+  watch([() => ttsEngine.subtitleVisible, () => ttsEngine.subtitleText, isDesktopMode], ([visible, text, desktopMode]) => {
     if (!desktopMode) return
     if (visible && text) {
       window.api.desktopPet.sendSubtitle(text)
     } else {
       window.api.desktopPet.hideSubtitle()
     }
+  })
+
+  // 模式切换时更新驱动回调（canvas ↔ 桌宠 IPC）
+  watch(isDesktopMode, () => {
+    updateTtsDrivers()
   })
 
   // 模型切换（Live2D 内嵌模式加载到画布，桌面宠物模式通过 IPC 通知）
@@ -206,18 +215,18 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
     loadError,
     loadModel,
     teardownLive2D,
-    // TTS / 字幕
+    // TTS / 字幕（来自全局 store）
     ttsEnabled,
     subtitleEnabled,
     currentModelInfo,
-    isSpeaking,
-    isSynthesizing,
-    subtitleText,
-    subtitleVisible,
-    feedChunk,
-    finishStream,
-    stopTts,
-    dismissSubtitle,
+    isSpeaking: computed(() => ttsEngine.isSpeaking),
+    isSynthesizing: computed(() => ttsEngine.isSynthesizing),
+    subtitleText: computed(() => ttsEngine.subtitleText),
+    subtitleVisible: computed(() => ttsEngine.subtitleVisible),
+    feedChunk: ttsEngine.feedChunk,
+    finishStream: ttsEngine.finishStream,
+    stopTts: ttsEngine.stop,
+    dismissSubtitle: ttsEngine.dismissSubtitle,
     filterCodeForTts,
     resetCodeBlockFilter,
     // 模型切换

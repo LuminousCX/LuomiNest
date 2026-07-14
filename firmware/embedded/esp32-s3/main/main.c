@@ -1,0 +1,224 @@
+#include <string.h>
+#include "esp_log.h"
+#include "esp_heap_caps.h"
+#include "esp_task_wdt.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#include "pin_config.h"
+#include "lcd_parallel.h"
+#include "lvgl_port.h"
+#include "wifi_mgr.h"
+#include "app_mqtt.h"
+#include "avatar_engine.h"
+#include "web_config.h"
+#include "sd_card.h"
+#include "lvgl.h"
+
+static const char *TAG = "main";
+
+#define DEFAULT_WIFI_SSID      CONFIG_LN_WIFI_SSID
+#define DEFAULT_WIFI_PASS      CONFIG_LN_WIFI_PASSWORD
+#define DEFAULT_MQTT_BROKER    CONFIG_LN_MQTT_BROKER
+#define DEFAULT_MQTT_CLIENT_ID CONFIG_LN_MQTT_CLIENT_ID
+
+#define TOPIC_CMD      "luominest/s3/cmd"
+#define TOPIC_STATUS   "luominest/s3/status"
+
+#define STATUS_INTERVAL_MS (CONFIG_LN_STATUS_INTERVAL_SEC * 1000)
+
+static lcd_parallel_handle_t s_lcd = {0};
+static lvgl_port_t s_lvgl_port = {0};
+static ln_config_t s_device_config = {0};
+
+static void on_mqtt_command(const char *topic, const char *data, int data_len)
+{
+    if (strcmp(topic, TOPIC_CMD) != 0) return;
+
+    ESP_LOGI(TAG, "CMD: %.*s", data_len, data);
+
+    if (strstr(data, "happy")) {
+        avatar_engine_play_state(AVATAR_STATE_HAPPY);
+    } else if (strstr(data, "sad")) {
+        avatar_engine_play_state(AVATAR_STATE_SAD);
+    } else if (strstr(data, "angry")) {
+        avatar_engine_play_state(AVATAR_STATE_ANGRY);
+    } else if (strstr(data, "surprised")) {
+        avatar_engine_play_state(AVATAR_STATE_SURPRISED);
+    } else if (strstr(data, "wave")) {
+        avatar_engine_play_state(AVATAR_STATE_WAVE);
+    } else if (strstr(data, "nod")) {
+        avatar_engine_play_state(AVATAR_STATE_NOD);
+    } else if (strstr(data, "think")) {
+        avatar_engine_play_state(AVATAR_STATE_THINK);
+    } else if (strstr(data, "sleep")) {
+        avatar_engine_play_state(AVATAR_STATE_SLEEP);
+    } else if (strstr(data, "talk")) {
+        avatar_engine_play_state(AVATAR_STATE_TALK);
+    } else if (strstr(data, "idle")) {
+        avatar_engine_play_state(AVATAR_STATE_IDLE);
+    } else if (strstr(data, "stop")) {
+        avatar_engine_stop();
+    }
+}
+
+static void on_mqtt_connected(void)
+{
+    ESP_LOGI(TAG, "MQTT connected, subscribing...");
+    app_mqtt_subscribe(TOPIC_CMD, 1);
+}
+
+static void on_mqtt_disconnected(void)
+{
+    ESP_LOGW(TAG, "MQTT disconnected, will auto-reconnect");
+}
+
+static void on_wifi_connected(void)
+{
+    ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
+    const char *broker = s_device_config.mqtt_broker[0] ? s_device_config.mqtt_broker : DEFAULT_MQTT_BROKER;
+    const char *client = s_device_config.mqtt_client[0] ? s_device_config.mqtt_client : DEFAULT_MQTT_CLIENT_ID;
+    app_mqtt_init(broker, client);
+    app_mqtt_register_message_cb(on_mqtt_command);
+    app_mqtt_register_connected_cb(on_mqtt_connected);
+    app_mqtt_register_disconnected_cb(on_mqtt_disconnected);
+}
+
+static void on_wifi_disconnected(void)
+{
+    ESP_LOGW(TAG, "WiFi disconnected");
+}
+
+static void lvgl_task(void *pvParameter)
+{
+#if CONFIG_LN_ENABLE_WATCHDOG
+    esp_task_wdt_add(NULL);
+#endif
+    while (1) {
+#if CONFIG_LN_ENABLE_WATCHDOG
+        esp_task_wdt_reset();
+#endif
+        lvgl_port_lock();
+        lv_timer_handler();
+        lvgl_port_unlock();
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+}
+
+static void status_task(void *pvParameter)
+{
+    char status_buf[256];
+    while (1) {
+        if (app_mqtt_is_connected()) {
+            const avatar_stats_t *stats = avatar_engine_get_stats();
+            int8_t rssi = wifi_mgr_get_rssi();
+            uint32_t free_heap = esp_get_free_heap_size();
+            uint32_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+
+            snprintf(status_buf, sizeof(status_buf),
+                     "{\"state\":\"%s\",\"rssi\":%d,\"heap\":%u,\"psram\":%u,"
+                     "\"frames\":%u,\"frame_ms\":%u}",
+                     avatar_engine_state_name(avatar_engine_get_state()),
+                     rssi, (unsigned)free_heap, (unsigned)free_psram,
+                     (unsigned)stats->local_frames_played,
+                     (unsigned)stats->last_frame_ms);
+
+            app_mqtt_publish(TOPIC_STATUS, status_buf, strlen(status_buf), 1);
+        }
+        vTaskDelay(pdMS_TO_TICKS(STATUS_INTERVAL_MS));
+    }
+}
+
+static void load_device_config(void)
+{
+    if (web_config_load(&s_device_config) == ESP_OK && web_config_has_saved()) {
+        ESP_LOGI(TAG, "Loaded config from NVS: SSID=%s, Broker=%s",
+                 s_device_config.wifi_ssid, s_device_config.mqtt_broker);
+    } else {
+        ESP_LOGI(TAG, "No saved config, using defaults from menuconfig");
+        strncpy(s_device_config.wifi_ssid, DEFAULT_WIFI_SSID, sizeof(s_device_config.wifi_ssid) - 1);
+        strncpy(s_device_config.wifi_pass, DEFAULT_WIFI_PASS, sizeof(s_device_config.wifi_pass) - 1);
+        strncpy(s_device_config.mqtt_broker, DEFAULT_MQTT_BROKER, sizeof(s_device_config.mqtt_broker) - 1);
+        strncpy(s_device_config.mqtt_client, DEFAULT_MQTT_CLIENT_ID, sizeof(s_device_config.mqtt_client) - 1);
+        web_config_save(&s_device_config);
+    }
+}
+
+void app_main(void)
+{
+    ESP_LOGI(TAG, "LuomiNest ESP32-S3 starting...");
+
+#if CONFIG_LN_ENABLE_WATCHDOG
+    esp_task_wdt_config_t wdt_config = {
+        .timeout_ms = CONFIG_LN_WATCHDOG_TIMEOUT_SEC * 1000,
+        .idle_core_mask = 0,
+        .trigger_panic = true,
+    };
+    esp_task_wdt_deinit();
+    ESP_ERROR_CHECK(esp_task_wdt_init(&wdt_config));
+    ESP_LOGI(TAG, "Watchdog enabled (timeout=%ds)", CONFIG_LN_WATCHDOG_TIMEOUT_SEC);
+#endif
+
+    lcd_parallel_config_t lcd_cfg = {
+        .rst_pin = ILI9486_RST_PIN,
+        .cs_pin  = ILI9486_CS_PIN,
+        .rs_pin  = ILI9486_RS_PIN,
+        .wr_pin  = ILI9486_WR_PIN,
+        .rd_pin  = ILI9486_RD_PIN,
+        .d0_pin  = ILI9486_D0_PIN,
+        .d1_pin  = ILI9486_D1_PIN,
+        .d2_pin  = ILI9486_D2_PIN,
+        .d3_pin  = ILI9486_D3_PIN,
+        .d4_pin  = ILI9486_D4_PIN,
+        .d5_pin  = ILI9486_D5_PIN,
+        .d6_pin  = ILI9486_D6_PIN,
+        .d7_pin  = ILI9486_D7_PIN,
+        .width   = ILI9486_WIDTH,
+        .height  = ILI9486_HEIGHT,
+        .madctl  = ILI9486_MADCTL,
+        .pclk_hz = ILI9486_PCLK_HZ,
+    };
+
+    ESP_ERROR_CHECK(lcd_parallel_init(&lcd_cfg, &s_lcd));
+
+    esp_err_t sd_ret = sd_card_init();
+    if (sd_ret == ESP_OK) {
+        ESP_LOGI(TAG, "SD card initialized, local frames available");
+        sd_card_info_t sd_info = {0};
+        sd_card_info(&sd_info);
+        ESP_LOGI(TAG, "SD card: total=%llu MB, free=%llu MB",
+                 sd_info.total_bytes / (1024 * 1024),
+                 sd_info.free_bytes / (1024 * 1024));
+    } else {
+        ESP_LOGW(TAG, "SD card not available, local playback disabled");
+    }
+
+    ESP_ERROR_CHECK(lvgl_port_init(&s_lcd, &s_lvgl_port));
+    ESP_ERROR_CHECK(avatar_engine_init(s_lvgl_port.screen, &s_lcd));
+
+    avatar_engine_play_state(AVATAR_STATE_IDLE);
+
+    xTaskCreatePinnedToCore(lvgl_task, "lvgl", 8192, NULL, 5, NULL, 0);
+
+    wifi_mgr_register_connected_cb(on_wifi_connected);
+    wifi_mgr_register_disconnected_cb(on_wifi_disconnected);
+    wifi_mgr_init();
+
+    load_device_config();
+
+    ESP_LOGI(TAG, "WiFi SSID: %s", s_device_config.wifi_ssid);
+
+    esp_err_t wifi_result = wifi_mgr_connect(s_device_config.wifi_ssid, s_device_config.wifi_pass);
+
+    if (wifi_result != ESP_OK) {
+        ESP_LOGW(TAG, "WiFi connection failed, starting AP config portal...");
+        web_config_start_ap();
+    } else {
+        xTaskCreatePinnedToCore(status_task, "status", 4096, NULL, 2, NULL, 0);
+    }
+
+    ESP_LOGI(TAG, "LuomiNest ESP32-S3 ready! (heap=%u, psram=%u, sd=%s)",
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+             sd_card_is_mounted() ? "ok" : "none");
+}

@@ -1,9 +1,11 @@
 """LuomiNest 对话模式定义。
 
-三种对话模式，语义分离工作流与非工作流：
-- NORMAL: 普通对话模式（非工作流），工具最少，仅任务视图操作 + 表情操控
-- STANDARD: 标准工作流模式，均衡裁剪，排除细粒度浏览器自动化工具
-- ULTRA: 超长工作流模式，全部工具传给 LLM
+两种顶层模式，专业模式再分为标准/超长：
+- NORMAL: 普通模式，工具最少，仅任务视图操作 + 表情操控
+- STANDARD: 专业模式·标准，均衡裁剪，排除细粒度浏览器自动化工具
+- ULTRA: 专业模式·超长，全部工具传给 LLM，适合复杂长任务
+
+上下文隔离：切换模式需新建对话，不同模式的对话各自独立，避免上下文膨胀。
 
 工具系统路由：
 - NORMAL → tool_registry（function calling）+ tool_whitelist 过滤
@@ -16,7 +18,7 @@ from app.core.tools.builtin.browser_automation import BROWSER_ACTION_SPECS
 
 
 class ChatMode(str, Enum):
-    """对话模式枚举（顶层，涵盖工作流与非工作流）"""
+    """对话模式枚举（normal=普通，standard/ultra=专业模式）"""
     NORMAL = "normal"
     STANDARD = "standard"
     ULTRA = "ultra"
@@ -61,8 +63,13 @@ def get_tool_config(mode: ChatMode) -> dict[str, Any]:
 
 
 def is_workflow_mode(mode: ChatMode) -> bool:
-    """判断是否为工作流模式"""
+    """判断是否为专业模式（底层仍使用工作流引擎）"""
     return CHAT_MODE_TOOL_CONFIGS.get(mode, {}).get("is_workflow", False)
+
+
+def is_professional_mode(mode: ChatMode) -> bool:
+    """判断是否为专业模式（standard/ultra）"""
+    return mode in (ChatMode.STANDARD, ChatMode.ULTRA)
 
 
 def chat_mode_to_workflow_mode(mode: ChatMode):

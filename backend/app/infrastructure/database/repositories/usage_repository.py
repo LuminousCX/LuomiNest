@@ -8,12 +8,9 @@ from typing import Optional
 
 from sqlalchemy import delete as sa_delete, func, select
 
+from app.core.utils import utc_now
 from app.infrastructure.database.models.usage_record import UsageRecord
 from app.infrastructure.database.session import sync_session_factory
-
-
-def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 class UsageRepository:
@@ -34,7 +31,7 @@ class UsageRepository:
     ) -> dict:
         """记录一次用量。"""
         entry = UsageRecord(
-            timestamp=_utcnow_iso(),
+            timestamp=utc_now(),
             provider=provider,
             model=model,
             prompt_tokens=prompt_tokens,
@@ -68,7 +65,7 @@ class UsageRepository:
         with sync_session_factory() as session:
             for rec in records:
                 entry = UsageRecord(
-                    timestamp=rec.get("timestamp", _utcnow_iso()),
+                    timestamp=rec.get("timestamp", utc_now()),
                     provider=rec.get("provider", ""),
                     model=rec.get("model", ""),
                     prompt_tokens=rec.get("prompt_tokens", 0),

@@ -9,19 +9,15 @@
 import asyncio
 import fnmatch
 import json
-from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import delete as sa_delete, select
 from loguru import logger
 
+from app.core.utils import utc_now
 from app.infrastructure.database.models.config_item import ConfigItem
 from app.infrastructure.database.session import sync_session_factory
 from app.security.crypto.aes_cipher import get_cipher
-
-
-def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 class ConfigRepository:
@@ -71,13 +67,13 @@ class ConfigRepository:
         with sync_session_factory() as session:
             obj = session.get(ConfigItem, key)
             if obj is None:
-                obj = ConfigItem(key=key, value=stored, value_type=vtype, encrypted=encrypted, updated_at=_utcnow_iso())
+                obj = ConfigItem(key=key, value=stored, value_type=vtype, encrypted=encrypted, updated_at=utc_now())
                 session.add(obj)
             else:
                 obj.value = stored
                 obj.value_type = vtype
                 obj.encrypted = encrypted
-                obj.updated_at = _utcnow_iso()
+                obj.updated_at = utc_now()
             session.commit()
 
     def delete(self, key: str) -> bool:

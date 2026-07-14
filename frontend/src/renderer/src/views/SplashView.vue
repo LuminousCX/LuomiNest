@@ -228,11 +228,6 @@ onBeforeUnmount(() => {
   animation-delay: -12s;
 }
 
-@keyframes orb-drift {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(20px, -15px) scale(1.05); }
-}
-
 .splash-content {
   position: relative;
   z-index: 1;

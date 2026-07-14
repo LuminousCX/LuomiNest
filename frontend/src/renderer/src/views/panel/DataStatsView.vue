@@ -248,7 +248,7 @@ watch(period, () => { loadData() })
           <button :class="['period-btn', { active: period === 90 }]" @click="period = 90">90天</button>
         </div>
         <LumiButton variant="ghost" size="sm" icon-only aria-label="刷新" @click="handleRefresh">
-          <template #icon><RefreshCw :size="14" :class="{ spinning: isRefreshing }" /></template>
+          <template #icon><RefreshCw :size="14" :class="{ 'spin-animation': isRefreshing }" /></template>
         </LumiButton>
       </div>
     </div>
@@ -1209,8 +1209,5 @@ watch(period, () => { loadData() })
   white-space: nowrap;
 }
 
-.spinning {
-  animation: spin 1s linear infinite;
-}
 
 </style>

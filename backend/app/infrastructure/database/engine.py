@@ -57,7 +57,7 @@ event.listen(async_engine.sync_engine, "connect", _apply_sqlite_pragmas)
 
 
 async def init_db() -> None:
-    """初始化数据库：创建所有表（幂等，已存在的表不会重建）。
+    """初始化数据库：创建所有表（幂等，已存在的表不会重建）+ 列迁移。
 
     应在应用 lifespan 启动时调用一次。
     """
@@ -65,7 +65,27 @@ async def init_db() -> None:
     from app.infrastructure.database import models  # noqa: F401
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # 列迁移：create_all 不会为已有表添加新列，需手动 ALTER TABLE
+        await _migrate_columns(conn)
     logger.success(f"[DB] Database initialized at {settings.DATABASE_URL}")
+
+
+async def _migrate_columns(conn) -> None:
+    """为已有表添加缺失列（SQLite ALTER TABLE ADD COLUMN，幂等）。"""
+    from sqlalchemy import text, inspect
+
+    def _do_migrate(sync_conn):
+        inspector = inspect(sync_conn)
+        # conversations 表添加 chat_mode 列
+        if "conversations" in inspector.get_table_names():
+            existing_cols = {c["name"] for c in inspector.get_columns("conversations")}
+            if "chat_mode" not in existing_cols:
+                sync_conn.execute(
+                    text("ALTER TABLE conversations ADD COLUMN chat_mode VARCHAR(32) DEFAULT 'normal'")
+                )
+                logger.info("[DB] Migrated conversations table: added chat_mode column")
+
+    await conn.run_sync(_do_migrate)
 
 
 async def dispose_db() -> None:

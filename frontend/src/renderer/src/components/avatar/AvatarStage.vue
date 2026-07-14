@@ -17,7 +17,7 @@ const props = defineProps<{
   isLoading: boolean
   loadError: string | null
   isModelReady: boolean
-  currentEmotionLocal: AvatarEmotion
+  currentEmotionLocal: AvatarEmotion | null
   currentMode: string
   avatarModes: AvatarMode[]
   subtitleEnabled: boolean
@@ -55,7 +55,7 @@ const emit = defineEmits<{
         </div>
       </Transition>
 
-      <div v-if="!props.isLoading && !props.loadError && !props.isModelReady" class="avatar-placeholder" :class="[`emotion-${props.currentEmotionLocal.id}`]">
+      <div v-if="!props.isLoading && !props.loadError && !props.isModelReady" class="avatar-placeholder" :class="[props.currentEmotionLocal ? `emotion-${props.currentEmotionLocal.id}` : 'emotion-none']">
         <div class="avatar-ring"></div>
         <div class="avatar-core">
           <Sparkles :size="48" class="avatar-sparkle" />
@@ -89,7 +89,7 @@ const emit = defineEmits<{
       <div v-if="props.isDesktopMode" class="overlay-tag desktop-tag">
         <Monitor :size="12" /> Desktop
       </div>
-      <div v-else class="overlay-tag emotion-tag" :style="{ borderColor: props.currentEmotionLocal.color }">
+      <div v-else-if="props.currentEmotionLocal" class="overlay-tag emotion-tag" :style="{ borderColor: props.currentEmotionLocal.color }">
         <component :is="props.currentEmotionLocal.icon" :size="12" />
         {{ props.currentEmotionLocal.label }}
       </div>

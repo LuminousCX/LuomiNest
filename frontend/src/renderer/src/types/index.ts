@@ -172,6 +172,7 @@ export interface Conversation {
   agent_id?: string
   model?: string
   provider?: string
+  chat_mode?: string
   messages: ApiMessage[]
   created_at: string
   updated_at: string
@@ -183,6 +184,7 @@ export interface ConversationListItem {
   agent_id?: string
   model?: string
   provider?: string
+  chat_mode?: string
   last_message?: string
   created_at: string
   updated_at: string

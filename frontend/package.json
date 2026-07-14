@@ -10,9 +10,10 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
-    "build:win": "pnpm run build && electron-builder --win",
-    "build:win-nsis": "pnpm run build && electron-builder --win nsis",
-    "build:win-portable": "pnpm run build && electron-builder --win portable",
+    "clean:dist": "node -e \"const fs=require('fs');const p='release/dist';try{fs.rmSync(p,{recursive:true,force:true,maxRetries:5,retryDelay:200});console.log('Cleaned release/dist')}catch(e){if(e.code!=='ENOENT')console.warn('Clean warning:',e.message)}\"",
+    "build:win": "pnpm run clean:dist && pnpm run build && electron-builder --win",
+    "build:win-nsis": "pnpm run clean:dist && pnpm run build && electron-builder --win nsis",
+    "build:win-portable": "pnpm run clean:dist && pnpm run build && electron-builder --win portable",
     "build:linux": "pnpm run build && electron-builder --linux",
     "build:linux-appimage": "pnpm run build && electron-builder --linux AppImage",
     "build:linux-deb": "pnpm run build && electron-builder --linux deb",
@@ -104,7 +105,8 @@
         {
           "target": "dir",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         }
       ],
@@ -117,19 +119,22 @@
         {
           "target": "AppImage",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         },
         {
           "target": "deb",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         },
         {
           "target": "tar.gz",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         }
       ],

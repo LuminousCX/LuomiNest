@@ -174,8 +174,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
       onPhaseChange?: (phase: WorkflowPhase) => void
       onModuleAction?: (event: ModuleActionEvent) => void
       onReasoning?: (content: string, phase: string) => void
+      onContent?: (delta: string) => void
       onPlanCreated?: (sessionId: string, taskCount: number) => void
       onFinalResult?: (result: string) => void
+      onError?: (errMsg: string) => void
       externalAbortSignal?: AbortSignal
     }
   ): Promise<void> => {
@@ -212,6 +214,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
           message: err,
           timestamp: Date.now(),
         })
+        // SSE 连接级错误通知前端更新 UI，避免 assistantMessage 卡在空白状态
+        options?.onError?.(err)
       },
       options?.externalAbortSignal
     )
@@ -226,8 +230,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
       onPhaseChange?: (phase: WorkflowPhase) => void
       onModuleAction?: (event: ModuleActionEvent) => void
       onReasoning?: (content: string, phase: string) => void
+      onContent?: (delta: string) => void
       onPlanCreated?: (sessionId: string, taskCount: number) => void
       onFinalResult?: (result: string) => void
+      onError?: (errMsg: string) => void
     }
   ) => {
     const eventType = event.type as string
@@ -281,6 +287,15 @@ export const useWorkflowStore = defineStore('workflow', () => {
           timestamp: Date.now(),
         })
         options?.onReasoning?.(content, phase)
+        break
+      }
+
+      case 'content_delta': {
+        // LLM 流式输出的内容增量（用于无任务时的直接回复流式显示）
+        const delta = (data.content as string) || ''
+        if (delta) {
+          options?.onContent?.(delta)
+        }
         break
       }
 
@@ -453,6 +468,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
           message: errMsg,
           timestamp: Date.now(),
         })
+        // 工作流引擎级错误通知前端更新 UI，避免 assistantMessage 卡在空白状态
+        options?.onError?.(errMsg)
         break
       }
     }

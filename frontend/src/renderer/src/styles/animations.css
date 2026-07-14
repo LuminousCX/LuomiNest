@@ -67,6 +67,12 @@
   animation: spin 1s linear infinite;
 }
 
+.animate-fade-in,
+.animate-slide-up,
+.animate-scale-in {
+  will-change: transform, opacity;
+}
+
 .animate-fade-in {
   animation: lumi-fade-in 0.4s ease-out both;
 }
@@ -85,4 +91,16 @@
 
 .wizard-backdrop {
   animation: lumi-fade-in 0.25s ease-out both;
+}
+
+/* Orbital background animations */
+@keyframes orb-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(20px, -15px) scale(1.05); }
+  66% { transform: translate(-10px, 10px) scale(0.97); }
+}
+
+@keyframes orb-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(20px, -15px) scale(1.05); }
 }

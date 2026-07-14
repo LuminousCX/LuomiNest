@@ -1,0 +1,124 @@
+{
+    "llny": {
+        "expressions": {
+            "idle": null,
+            "happy": "比心",
+            "sad": "哭",
+            "angry": "生气",
+            "surprised": "星星",
+            "wave": "比心",
+            "nod": null,
+            "think": "- -",
+            "sleep": null,
+            "talk": null
+        },
+        "params": {
+            "happy": {"ParamEyeLSmile": 1.0, "ParamEyeRSmile": 1.0, "ParamMouthForm": 1.0, "Param13": 1.0},
+            "sad": {"ParamBrowLY": -1.0, "ParamBrowRY": -1.0, "ParamBrowLAngle": -1.0, "ParamBrowRAngle": -1.0, "ParamMouthForm": -1.0},
+            "angry": {"ParamBrowLY": 1.0, "ParamBrowRY": 1.0, "ParamBrowLAngle": -1.0, "ParamBrowRAngle": -1.0, "ParamMouthForm": -1.0},
+            "surprised": {"ParamEyeLOpen": 1.0, "ParamEyeROpen": 1.0, "ParamMouthOpenY": 1.0, "ParamBrowLY": 1.0, "ParamBrowRY": 1.0},
+            "think": {"ParamEyeBallX": -1.0, "ParamMouthForm": -0.5, "ParamBrowLY": 0.5},
+            "sleep": {"ParamEyeLOpen": 0.0, "ParamEyeROpen": 0.0, "ParamBrowLY": -0.3, "ParamBrowRY": -0.3},
+            "talk": {"ParamMouthOpenY": 0.5, "ParamMouthForm": 0.3}
+        }
+    },
+    "cat": {
+        "expressions": {
+            "idle": null,
+            "happy": "cat.exp3.json",
+            "sad": "3.exp3.json",
+            "angry": "2.exp3.json",
+            "surprised": "4.exp3.json",
+            "wave": "cat.exp3.json",
+            "nod": null,
+            "think": null,
+            "sleep": null,
+            "talk": "sing.exp3.json"
+        },
+        "params": {
+            "happy": {"ParamMouthForm": 1.0},
+            "sad": {"ParamBrowLY": -1.0, "ParamBrowRY": -1.0, "ParamMouthForm": -1.0},
+            "angry": {"ParamBrowLY": 1.0, "ParamBrowRY": 1.0, "ParamBrowLAngle": -1.0, "ParamBrowRAngle": -1.0},
+            "surprised": {"ParamEyeLOpen": 1.0, "ParamEyeROpen": 1.0, "ParamMouthOpenY": 1.0},
+            "think": {"ParamEyeBallX": -1.0},
+            "sleep": {"ParamEyeLOpen": 0.0, "ParamEyeROpen": 0.0},
+            "talk": {"ParamMouthOpenY": 0.5}
+        }
+    },
+    "Hiyori": {
+        "expressions": {
+            "idle": null,
+            "happy": null,
+            "sad": null,
+            "angry": null,
+            "surprised": null,
+            "wave": null,
+            "nod": null,
+            "think": null,
+            "sleep": null,
+            "talk": null
+        },
+        "params": {
+            "happy": {"ParamEyeLSmile": 1.0, "ParamEyeRSmile": 1.0, "ParamMouthForm": 1.0},
+            "sad": {"ParamBrowLY": -1.0, "ParamBrowRY": -1.0, "ParamMouthForm": -1.0},
+            "angry": {"ParamBrowLY": 1.0, "ParamBrowRY": 1.0, "ParamBrowLAngle": -1.0, "ParamBrowRAngle": -1.0},
+            "surprised": {"ParamEyeLOpen": 1.0, "ParamEyeROpen": 1.0, "ParamMouthOpenY": 1.0},
+            "think": {"ParamEyeBallX": -1.0},
+            "sleep": {"ParamEyeLOpen": 0.0, "ParamEyeROpen": 0.0},
+            "talk": {"ParamMouthOpenY": 0.5}
+        }
+    },
+    "Natori": {
+        "expressions": {
+            "idle": "Normal",
+            "happy": "Smile",
+            "sad": "Sad",
+            "angry": "Angry",
+            "surprised": "Surprised",
+            "wave": "Smile",
+            "nod": "Normal",
+            "think": "Normal",
+            "sleep": "Normal",
+            "talk": "Normal"
+        },
+        "params": {}
+    },
+    "Mao": {
+        "expressions": {
+            "idle": null,
+            "happy": "exp_01",
+            "sad": "exp_02",
+            "angry": "exp_03",
+            "surprised": "exp_04",
+            "wave": "exp_05",
+            "nod": null,
+            "think": "exp_06",
+            "sleep": null,
+            "talk": null
+        },
+        "params": {}
+    },
+    "Haru": {
+        "expressions": {
+            "idle": null,
+            "happy": null,
+            "sad": null,
+            "angry": null,
+            "surprised": null,
+            "wave": null,
+            "nod": null,
+            "think": null,
+            "sleep": null,
+            "talk": null
+        },
+        "params": {
+            "happy": {"ParamEyeLSmile": 1.0, "ParamEyeRSmile": 1.0, "ParamMouthForm": 1.0},
+            "sad": {"ParamBrowLY": -1.0, "ParamBrowRY": -1.0, "ParamMouthForm": -1.0},
+            "angry": {"ParamBrowLY": 1.0, "ParamBrowRY": 1.0, "ParamBrowLAngle": -1.0, "ParamBrowRAngle": -1.0},
+            "surprised": {"ParamEyeLOpen": 1.0, "ParamEyeROpen": 1.0, "ParamMouthOpenY": 1.0},
+            "think": {"ParamEyeBallX": -1.0},
+            "sleep": {"ParamEyeLOpen": 0.0, "ParamEyeROpen": 0.0},
+            "talk": {"ParamMouthOpenY": 0.5}
+        }
+    }
+}
