@@ -69,8 +69,9 @@ def _get_machine_fingerprint() -> str:
                     parts = line.split('"')
                     if len(parts) >= 4:
                         return f"mac-{parts[-2]}"
-        except Exception:
-            pass
+        except Exception as e:
+            # Darwin 平台指纹探测失败时允许降级到后续方案，避免影响启动流程。
+            logger.debug("Failed to read Darwin IOPlatformUUID, fallback to next fingerprint source: {}", e)
 
     if system == "Linux":
         for path in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
