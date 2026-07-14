@@ -135,8 +135,9 @@ def load_or_create_secret_key(data_dir: str) -> str:
                 secret_key = machine_fernet.decrypt(raw).decode("utf-8").strip()
                 if secret_key:
                     return secret_key
-            except Exception:
-                pass
+            except Exception as e:
+                # 预期回退路径：可能是旧版明文格式或密文已损坏，继续走明文兼容迁移分支
+                logger.debug(f"[SecretKey] 密文解密失败，将尝试旧版明文兼容读取: {e}")
 
             # 2. 尝试作为旧版明文读取（兼容迁移）
             try:
