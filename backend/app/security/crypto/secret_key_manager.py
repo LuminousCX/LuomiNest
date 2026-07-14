@@ -51,8 +51,8 @@ def _get_machine_fingerprint() -> str:
                 guid, _ = winreg.QueryValueEx(key, "MachineGuid")
                 if guid:
                     return f"win-{guid}"
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(f"读取 Windows MachineGuid 失败，继续使用其他指纹来源: {exc}")
 
     if system == "Darwin":
         try:
