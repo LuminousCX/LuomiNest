@@ -149,6 +149,7 @@ def load_or_create_secret_key(data_dir: str) -> str:
                     try:
                         os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)
                     except OSError:
+                        # Windows 上 chmod 语义不同，best-effort
                         pass
                     logger.success(
                         "[SecretKey] 已将旧版明文 SECRET_KEY 迁移为机器绑定加密格式"
