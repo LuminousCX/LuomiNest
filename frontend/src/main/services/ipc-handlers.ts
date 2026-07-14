@@ -150,6 +150,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (!assertTrustedSender(event)) return
     return tabManager.reloadTab(tabId)
   })
+  ipcMain.handle('tab:navigate', async (event: IpcMainInvokeEvent, url: string, tabId?: string) => {
+    if (!assertTrustedSender(event)) return
+    return tabManager.navigateTo(url, tabId)
+  })
   ipcMain.handle('tab:goBack', async (event: IpcMainInvokeEvent, tabId?: string) => {
     if (!assertTrustedSender(event)) return
     return tabManager.goBack(tabId)

@@ -368,8 +368,13 @@ async def sync_sub_market(source_id: str, sub_market_id: str, force: bool = Fals
         result = await do_sync(source_id, sub_market_id, sub_market.get("url", ""), force=force)
         return result.to_dict()
     except Exception as e:
-        logger.error(f"[API] Sync sub-market failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[API] Sync sub-market failed: {e}", exc_info=True)
+        from app.core.exceptions import LuomiNestError
+        raise LuomiNestError(
+            "子市场同步失败，请稍后重试",
+            code="REPO_SYNC_FAILED",
+            status_code=500,
+        )
 
 
 @router.get("/{source_id}/items")

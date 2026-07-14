@@ -106,9 +106,11 @@ class LocalTTSProvider(TTSProvider):
                 f"lang map={self._voice_id_by_lang}"
             )
         except Exception as e:
-            logger.warning(f"[LocalTTS] Voice enumeration failed: {e}")
-        finally:
-            self._initialized = True
+            logger.warning(f"[LocalTTS] Voice enumeration failed: {e}", exc_info=True)
+            self._initialized = False
+            return
+
+        self._initialized = True
 
     async def synthesize(self, text: str, voice: str = "default") -> bytes:
         if not text.strip():

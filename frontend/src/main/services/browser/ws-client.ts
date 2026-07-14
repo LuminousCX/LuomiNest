@@ -12,6 +12,7 @@
  */
 
 import { createLuomiNestLogger } from '../luomi-logger'
+import { getLumiAuthToken } from '../backend/auth-token'
 
 const logger = createLuomiNestLogger('Browser')
 
@@ -73,10 +74,16 @@ class LuomiBrowserWSClient {
   }
 
   private connect(): void {
+    // 附加本地认证令牌到 WS URL（后端握手阶段验证，防止未授权进程远程操控浏览器）
+    const token = getLumiAuthToken()
+    const wsUrl = token
+      ? `${WS_URL}?token=${encodeURIComponent(token)}`
+      : WS_URL
+
     logger.info(`Connecting to ${WS_URL}...`)
 
     try {
-      this.ws = new WebSocket(WS_URL)
+      this.ws = new WebSocket(wsUrl)
     } catch (e) {
       logger.error('Failed to create WebSocket:', e)
       this.scheduleReconnect()

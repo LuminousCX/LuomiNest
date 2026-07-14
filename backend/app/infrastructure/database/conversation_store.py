@@ -35,6 +35,9 @@ class ConversationFacade:
     def list_conversations(self, agent_id: Optional[str] = None) -> list[dict]:
         return self._repo.list_meta(agent_id)
 
+    def count_messages(self, agent_id: Optional[str] = None) -> int:
+        return self._repo.count_messages(agent_id)
+
     def search_conversations(self, keyword: str, agent_id: Optional[str] = None) -> list[dict]:
         return self._repo.search(keyword, agent_id)
 
@@ -110,6 +113,9 @@ class ConversationFacade:
 
     async def list_conversations_async(self, agent_id: Optional[str] = None) -> list[dict]:
         return await asyncio.to_thread(self.list_conversations, agent_id)
+
+    async def count_messages_async(self, agent_id: Optional[str] = None) -> int:
+        return await asyncio.to_thread(self.count_messages, agent_id)
 
     async def search_conversations_async(self, keyword: str, agent_id: Optional[str] = None) -> list[dict]:
         return await asyncio.to_thread(self.search_conversations, keyword, agent_id)

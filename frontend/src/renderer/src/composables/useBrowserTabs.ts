@@ -216,19 +216,29 @@ export const useBrowserTabs = (options: UseBrowserTabsOptions) => {
 
     let normalizedUrl = url.trim()
     if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
-      normalizedUrl = 'https://' + normalizedUrl
-    }
-
-    const tab = activeTab.value
-    if (tab && !tab.url) {
-      // 当前活动标签是首页空标签 → 移除后新建
-      const idx = tabs.value.findIndex(t => t.id === tab.id)
-      if (idx !== -1) {
-        tabs.value.splice(idx, 1)
+      // 判断是搜索词还是 URL
+      const looksLikeUrl = /^[\w-]+(\.[\w-]+)+/.test(normalizedUrl) || normalizedUrl.startsWith('localhost')
+      if (!looksLikeUrl) {
+        normalizedUrl = `https://www.bing.com/search?q=${encodeURIComponent(normalizedUrl)}`
+      } else {
+        normalizedUrl = 'https://' + normalizedUrl
       }
     }
 
-    await createTab(normalizedUrl)
+    const tab = activeTab.value
+    if (tab && tab.url) {
+      // 当前标签已有页面 → 在当前标签导航
+      await window.api?.tab.navigate(normalizedUrl)
+    } else {
+      // 当前标签是首页空标签 → 移除后新建
+      if (tab) {
+        const idx = tabs.value.findIndex(t => t.id === tab.id)
+        if (idx !== -1) {
+          tabs.value.splice(idx, 1)
+        }
+      }
+      await createTab(normalizedUrl)
+    }
   }
 
   /** 刷新当前活动标签页 */

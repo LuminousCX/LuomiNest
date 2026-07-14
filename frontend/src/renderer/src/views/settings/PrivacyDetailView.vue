@@ -1,7 +1,21 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { ArrowLeft } from 'lucide-vue-next'
+import {
+  ArrowLeft,
+  Shield,
+  Database,
+  HardDrive,
+  Wifi,
+  Puzzle,
+  UserCheck,
+  Lock,
+  Users,
+  Globe,
+  FileText,
+  Mail
+} from 'lucide-vue-next'
 import { ref, onMounted, onUnmounted } from 'vue'
+import LumiSettingsBackground from '../../components/settings-detail/LumiSettingsBackground.vue'
 
 const router = useRouter()
 
@@ -127,6 +141,23 @@ const sections = [
   }
 ]
 
+const sectionIconMap: Record<string, typeof Shield> = {
+  '数据收集': Database,
+  '数据存储': HardDrive,
+  '数据传输': Wifi,
+  '第三方服务': Puzzle,
+  '用户权利': UserCheck,
+  '安全措施': Lock,
+  '未成年人保护': Users,
+  '各地区合规说明': Globe,
+  '政策更新': FileText
+}
+
+const sectionIcon = (title: string) => sectionIconMap[title] ?? Shield
+
+const regionSection = sections.find((s) => s.regions)
+const regionCount = regionSection?.regions?.length ?? 0
+
 const visibleSections = ref<Set<number>>(new Set([0]))
 let observer: IntersectionObserver | null = null
 
@@ -156,216 +187,97 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 </script>
 
 <template>
-  <div class="privacy-detail-view">
-    <header class="privacy-header page-header animate-fade-in">
-      <div class="page-header__main">
-        <button class="page-header__back" @click="router.push('/settings')">
+  <div class="lumi-settings-page privacy-view">
+    <LumiSettingsBackground />
+    <header class="lumi-settings-page__header lumi-settings-animate-fade">
+      <div class="lumi-settings-page__main">
+        <button class="lumi-settings-page__back" @click="router.push('/settings')">
           <ArrowLeft :size="18" />
         </button>
         <div>
-          <h1 class="page-header__title">用户隐私政策</h1>
-          <p class="page-subtitle">LuomiNest 如何保护您的数据与隐私</p>
+          <h1 class="lumi-settings-page__title">用户隐私政策</h1>
+          <p class="lumi-settings-page__subtitle">LuomiNest 如何保护您的数据与隐私</p>
         </div>
       </div>
     </header>
 
-    <div class="privacy-body">
-      <article class="privacy-document animate-slide-up">
-        <p class="doc-lead">
-          LuomiNest（以下简称"本应用"）由 LuminousChenXi 团队开发。
-          我们深知隐私的重要性，致力于保护用户的数据安全。
-          本隐私政策详细说明了本应用如何收集、使用、存储和保护您的信息。
-        </p>
-
-        <section
-          v-for="(section, sIdx) in sections"
-          :key="section.title"
-          :data-section-idx="sIdx"
-          :class="['doc-section', { visible: isVisible(sIdx) }]"
-        >
-          <h2 class="doc-h2">{{ section.title }}</h2>
-          <p
-            v-for="(para, pIdx) in section.content"
-            :key="pIdx"
-            class="doc-paragraph"
-          >{{ para }}</p>
-          <div v-if="section.regions" class="region-grid">
-            <div v-for="region in section.regions" :key="region.name" class="region-card">
-              <h3 class="region-name">{{ region.name }}</h3>
-              <p class="region-law">{{ region.law }}</p>
-              <ul class="doc-list">
-                <li v-for="(item, iIdx) in region.items" :key="iIdx">{{ item }}</li>
-              </ul>
+    <div class="lumi-settings-page__body">
+      <section class="lumi-settings-hero lumi-settings-animate-slide">
+        <div class="lumi-settings-hero__content">
+          <Shield :size="28" class="lumi-settings-hero__icon" />
+          <h2 class="lumi-settings-hero__title">隐私优先</h2>
+          <p class="lumi-settings-hero__desc">
+            LuomiNest 由 LuminousChenXi 团队开发。我们深知隐私的重要性，致力于保护用户的数据安全。
+            本隐私政策详细说明了本应用如何收集、使用、存储和保护您的信息。
+          </p>
+          <div class="lumi-settings-hero__stats">
+            <div class="lumi-settings-hero__stat">
+              <span class="lumi-settings-hero__stat-value">{{ sections.length }}</span>
+              <span class="lumi-settings-hero__stat-label">核心原则</span>
+            </div>
+            <div class="lumi-settings-hero__divider"></div>
+            <div class="lumi-settings-hero__stat">
+              <span class="lumi-settings-hero__stat-value">{{ regionCount }}</span>
+              <span class="lumi-settings-hero__stat-label">合规地区</span>
+            </div>
+            <div class="lumi-settings-hero__divider"></div>
+            <div class="lumi-settings-hero__stat">
+              <span class="lumi-settings-hero__stat-value">AES-256</span>
+              <span class="lumi-settings-hero__stat-label">加密标准</span>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section
-          :data-section-idx="sections.length"
-          :class="['doc-section', { visible: isVisible(sections.length) }]"
-        >
-          <h2 class="doc-h2">联系我们</h2>
-          <p class="doc-paragraph">如果您对本隐私政策有任何疑问、建议或投诉，请通过以下方式联系我们：</p>
-          <ul class="doc-list">
-            <li>GitHub Issues：<a href="https://github.com/LuminousCX/LuomiNest/issues" target="_blank" rel="noopener noreferrer">LuminousCX/LuomiNest</a></li>
-            <li>项目主页：<a href="https://github.com/LuminousCX/LuomiNest" target="_blank" rel="noopener noreferrer">github.com/LuminousCX/LuomiNest</a></li>
-          </ul>
-        </section>
-      </article>
+      <section class="privacy-intro lumi-settings-animate-slide">
+        <p class="privacy-lead">
+          LuomiNest 优先采用本地化数据处理策略，默认将对话记录、个人设置和偏好数据保存在您的本地设备上。
+          当您使用在线服务时，数据通过加密连接传输，且不会在 LuomiNest 服务器上保留副本。
+        </p>
+      </section>
+
+      <section
+        v-for="(section, sIdx) in sections"
+        :key="section.title"
+        :data-section-idx="sIdx"
+        :class="['privacy-section', { visible: isVisible(sIdx) }]"
+      >
+        <h2 class="privacy-section__title">
+          <component :is="sectionIcon(section.title)" :size="14" />
+          {{ section.title }}
+        </h2>
+        <p
+          v-for="(para, pIdx) in section.content"
+          :key="pIdx"
+          class="privacy-paragraph"
+        >{{ para }}</p>
+        <div v-if="section.regions" class="privacy-region-grid">
+          <div v-for="region in section.regions" :key="region.name" class="privacy-region-card">
+            <h3 class="privacy-region__name">{{ region.name }}</h3>
+            <p class="privacy-region__law">{{ region.law }}</p>
+            <ul class="privacy-list">
+              <li v-for="(item, iIdx) in region.items" :key="iIdx">{{ item }}</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section
+        :data-section-idx="sections.length"
+        :class="['privacy-section privacy-contact-card', { visible: isVisible(sections.length) }]"
+      >
+        <h2 class="privacy-section__title">
+          <Mail :size="14" />
+          联系我们
+        </h2>
+        <p class="privacy-paragraph">如果您对本隐私政策有任何疑问、建议或投诉，请通过以下方式联系我们：</p>
+        <ul class="privacy-list">
+          <li>GitHub Issues：<a href="https://github.com/LuminousCX/LuomiNest/issues" target="_blank" rel="noopener noreferrer">LuminousCX/LuomiNest</a></li>
+          <li>项目主页：<a href="https://github.com/LuminousCX/LuomiNest" target="_blank" rel="noopener noreferrer">github.com/LuminousCX/LuomiNest</a></li>
+        </ul>
+      </section>
     </div>
   </div>
 </template>
 
-<style scoped>
-.privacy-detail-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--workspace-bg);
-  overflow: hidden;
-}
-
-.privacy-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-5) var(--space-7);
-  border-bottom: 1px solid var(--workspace-border);
-  flex-shrink: 0;
-  margin-bottom: 0;
-}
-
-.page-subtitle {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  margin-top: 1px;
-}
-
-/* ── Single document container ── */
-
-.privacy-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-7) var(--space-7) var(--space-8);
-}
-
-.privacy-document {
-  background: var(--workspace-card);
-  border-radius: var(--radius-lg);
-  padding: var(--space-7) var(--space-7) var(--space-8);
-}
-
-/* ── Lead paragraph ── */
-
-.doc-lead {
-  font-size: var(--text-md);
-  color: var(--text-secondary);
-  line-height: 1.8;
-  margin-bottom: var(--space-7);
-  padding-bottom: var(--space-6);
-  border-bottom: 1px solid var(--divider-soft);
-}
-
-/* ── Section with scroll-reveal ── */
-
-.doc-section {
-  margin-top: var(--space-7);
-  padding-top: var(--space-1);
-  opacity: 0;
-  transform: translateY(var(--space-4));
-  transition: opacity var(--duration-enter) var(--ease-in-out), transform var(--duration-enter) var(--ease-in-out);
-}
-
-.doc-section.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* ── Markdown-like typography ── */
-
-.doc-h2 {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: var(--space-3);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--divider-soft);
-  letter-spacing: -0.2px;
-}
-
-.doc-paragraph {
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  line-height: 1.85;
-  margin-bottom: var(--space-2);
-}
-
-.doc-paragraph:last-child {
-  margin-bottom: 0;
-}
-
-.doc-list {
-  padding-left: var(--space-6);
-  margin-top: var(--space-2);
-}
-
-.doc-list li {
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  line-height: 1.85;
-  margin-bottom: var(--space-2);
-}
-
-.doc-list a {
-  color: var(--lumi-primary);
-  text-decoration: none;
-  transition: color var(--transition-fast);
-}
-
-.doc-list a:hover {
-  color: var(--lumi-primary-hover);
-  text-decoration: underline;
-}
-
-/* ── Regional compliance cards ── */
-
-.region-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
-  margin-top: var(--space-3);
-}
-
-.region-card {
-  background: var(--workspace-bg);
-  border-radius: var(--radius-md);
-  padding: var(--space-4) var(--space-4);
-}
-
-.region-name {
-  font-size: var(--text-md);
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: var(--space-1);
-}
-
-.region-law {
-  font-size: var(--text-xs);
-  color: var(--lumi-primary);
-  font-weight: 500;
-  margin-bottom: var(--space-2);
-  line-height: 1.5;
-}
-
-.region-card .doc-list {
-  padding-left: var(--space-4);
-  margin-top: 0;
-}
-
-.region-card .doc-list li {
-  font-size: var(--text-sm);
-  line-height: 1.75;
-  margin-bottom: var(--space-2);
-}
-
-</style>
+<style scoped src="../../styles/views/privacy-view.css"></style>

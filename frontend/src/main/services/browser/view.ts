@@ -1,27 +1,30 @@
 import { WebContentsView, BrowserWindow, app } from 'electron'
+import { join } from 'path'
 import { DEFAULT_BROWSER_CONFIG, BROWSER_LAYOUT, BrowserBounds, BoundsConfig } from './types'
-import { getStealthScript } from './session'
 
 export function createBrowserView(): WebContentsView {
   const view = new WebContentsView({
     webPreferences: {
-      contextIsolation: true,
+      contextIsolation: false,
       nodeIntegration: false,
       sandbox: false,
-      webSecurity: false,
+      webSecurity: true,
       partition: DEFAULT_BROWSER_CONFIG.sessionPartition,
       webgl: true,
       plugins: true,
       enableWebSQL: false,
       spellcheck: false,
-      allowRunningInsecureContent: true,
+      allowRunningInsecureContent: false,
       experimentalFeatures: false,
-      enablePreferredSizeMode: false
+      enablePreferredSizeMode: false,
+      navigateOnDragDrop: false,
+      // stealth 脚本在页面 JS 执行前注入（preload 时机最早）
+      preload: join(__dirname, 'stealth-preload.js'),
     }
   })
-  
+
   view.webContents.setVisualZoomLevelLimits(1, 3)
-  
+
   return view
 }
 
@@ -79,11 +82,12 @@ export function isViewDestroyed(view: WebContentsView): boolean {
 }
 
 export function setupNetworkConfig(): void {
-  app.commandLine.appendSwitch('ignore-certificate-errors')
-  app.commandLine.appendSwitch('ignore-certificate-errors-spki-list')
-  app.commandLine.appendSwitch('disable-web-security')
-  app.commandLine.appendSwitch('allow-running-insecure-content')
-  app.commandLine.appendSwitch('disable-features', 'IsolateOrigins,site-per-process,AutomationControlled')
+  // 注意：全局安全开关（ignore-certificate-errors / disable-web-security /
+  // allow-running-insecure-content / disable-features=IsolateOrigins,site-per-process）
+  // 已移除——它们会全局影响主窗口、桌面宠物等所有窗口的安全态势。
+  // 证书验证绕过已改为仅对浏览器自动化 session partition 生效，见 session.ts 的 initBrowserSession()。
+
+  // 以下为隐蔽/自动化检测开关，不涉及安全特性，保留
   app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
   app.commandLine.appendSwitch('excludeSwitches', 'enable-automation')
   app.commandLine.appendSwitch('disable-extensions-except', '')

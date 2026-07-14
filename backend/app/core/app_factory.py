@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
         if migrated_total > 0:
             logger.success(f"[LuomiNest] Migrated {migrated_total} records from JSON to SQLite: {migration_results}")
     except Exception as e:
-        logger.warning(f"[LuomiNest] JSON→SQLite migration skipped: {e}")
+        logger.warning(f"[LuomiNest] JSON→SQLite migration skipped: {e}", exc_info=True)
 
     # 加载持久化平台实例到 registry（替代 platform.py 的 import-time 调用，须在 init_db 之后）
     try:
@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
         _load_persisted_instances()
         logger.info("[LuomiNest] Platform instances loaded from DB")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Platform instances load skipped: {e}")
+        logger.warning(f"[LuomiNest] Platform instances load skipped: {e}", exc_info=True)
 
     # 初始化默认 repo sources（替代 repo_source.py 的 import-time 调用，须在 init_db 之后）
     try:
@@ -48,14 +48,15 @@ async def lifespan(app: FastAPI):
         _ensure_defaults()
         logger.info("[LuomiNest] Repo sources defaults ensured")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Repo sources init skipped: {e}")
+        logger.warning(f"[LuomiNest] Repo sources init skipped: {e}", exc_info=True)
 
     # 懒加载 LLM providers（替代 adapter.py 的 import-time 加载，解耦模块加载与 DB init）
     try:
         from app.runtime.provider.llm.adapter import llm_adapter
         llm_adapter.ensure_providers_loaded()
     except Exception as e:
-        logger.warning(f"[LuomiNest] LLM providers load skipped: {e}")
+        logger.error(f"[LuomiNest] LLM providers load failed (critical): {e}", exc_info=True)
+        raise
 
     # 应用 model_config 到运行时（替代 model.py 的 import-time 调用；
     # 须在 ensure_providers_loaded() 之后，以保证 model_config.default_provider 覆盖 provider is_default）
@@ -63,13 +64,13 @@ async def lifespan(app: FastAPI):
         from app.api.v1.endpoints.model import apply_model_config_from_db
         apply_model_config_from_db()
     except Exception as e:
-        logger.warning(f"[LuomiNest] Model config apply skipped: {e}")
+        logger.warning(f"[LuomiNest] Model config apply skipped: {e}", exc_info=True)
 
     try:
         from app.engines.memory import init_memory
         await init_memory()
     except Exception as e:
-        logger.warning(f"[LuomiNest] Memory engine init skipped: {e}")
+        logger.warning(f"[LuomiNest] Memory engine init skipped: {e}", exc_info=True)
 
     # 注册内置工具
     try:
@@ -119,14 +120,15 @@ async def lifespan(app: FastAPI):
 
         logger.info(f"[LuomiNest] Registered {len(tool_registry.list_names())} tools: {', '.join(tool_registry.list_names())}")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Tool registration skipped: {e}")
+        logger.error(f"[LuomiNest] Tool registration failed (critical): {e}", exc_info=True)
+        raise
 
     # 注册工作流内部模块接口
     try:
         from app.core.workflow.register_tools import register_internal_tools
         await register_internal_tools()
     except Exception as e:
-        logger.warning(f"[LuomiNest] Workflow internal tools registration skipped: {e}")
+        logger.warning(f"[LuomiNest] Workflow internal tools registration skipped: {e}", exc_info=True)
 
     # 加载 CxPlugin 插件系统
     try:
@@ -136,7 +138,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"[LuomiNest] Loaded {plugin_count} CxPlugin(s)")
         init_hot_reload()
     except Exception as e:
-        logger.warning(f"[LuomiNest] CxPlugin loading skipped: {e}")
+        logger.warning(f"[LuomiNest] CxPlugin loading skipped: {e}", exc_info=True)
 
     # 启动定时任务调度器（APScheduler）
     try:
@@ -144,7 +146,7 @@ async def lifespan(app: FastAPI):
         await luomi_scheduler.init()
         logger.info(f"[LuomiNest] Scheduler started, tasks: {len(luomi_scheduler.list_tasks())}")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Scheduler init skipped: {e}")
+        logger.warning(f"[LuomiNest] Scheduler init skipped: {e}", exc_info=True)
 
     # 初始化 MCP 管理器（加载配置并自动连接）
     try:
@@ -156,7 +158,7 @@ async def lifespan(app: FastAPI):
         else:
             logger.info(f"[LuomiNest] No MCP servers configured")
     except Exception as e:
-        logger.warning(f"[LuomiNest] MCP manager init skipped: {e}")
+        logger.warning(f"[LuomiNest] MCP manager init skipped: {e}", exc_info=True)
 
     # 启动平台消息路由器（QQ/微信/Minecraft/游戏等）
     try:
@@ -164,7 +166,7 @@ async def lifespan(app: FastAPI):
         attach_router_to_instances()
         logger.info(f"[LuomiNest] Platform router attached to instances")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Platform router init skipped: {e}")
+        logger.warning(f"[LuomiNest] Platform router init skipped: {e}", exc_info=True)
 
     # 启动时清理临时文件
     try:
@@ -173,7 +175,7 @@ async def lifespan(app: FastAPI):
         if temp_cleaned > 0:
             logger.info(f"[LuomiNest] Cleaned {temp_cleaned} temp files on startup")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Startup cleanup skipped: {e}")
+        logger.warning(f"[LuomiNest] Startup cleanup skipped: {e}", exc_info=True)
 
     # 注册定时清理任务（每24小时执行一次）
     try:
@@ -194,7 +196,7 @@ async def lifespan(app: FastAPI):
         ):
             logger.info(f"[LuomiNest] Periodic cleanup job registered (every 24h)")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Periodic cleanup registration skipped: {e}")
+        logger.warning(f"[LuomiNest] Periodic cleanup registration skipped: {e}", exc_info=True)
 
     yield
 
@@ -204,7 +206,7 @@ async def lifespan(app: FastAPI):
         await shutdown_hot_reload()
         logger.info(f"[LuomiNest] CxPlugin hot reload stopped")
     except Exception as e:
-        logger.warning(f"[LuomiNest] CxPlugin shutdown skipped: {e}")
+        logger.warning(f"[LuomiNest] CxPlugin shutdown skipped: {e}", exc_info=True)
 
     # 停止所有平台实例
     try:
@@ -212,7 +214,7 @@ async def lifespan(app: FastAPI):
         await stop_all_instances()
         logger.info(f"[LuomiNest] Platform instances stopped")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Platform shutdown skipped: {e}")
+        logger.warning(f"[LuomiNest] Platform shutdown skipped: {e}", exc_info=True)
 
     # 断开所有 MCP 连接
     try:
@@ -220,7 +222,7 @@ async def lifespan(app: FastAPI):
         await mcp_manager.disconnect_all()
         logger.info(f"[LuomiNest] MCP connections closed")
     except Exception as e:
-        logger.warning(f"[LuomiNest] MCP shutdown skipped: {e}")
+        logger.warning(f"[LuomiNest] MCP shutdown skipped: {e}", exc_info=True)
 
     # 关闭定时任务调度器
     try:
@@ -228,20 +230,20 @@ async def lifespan(app: FastAPI):
         await luomi_scheduler.shutdown()
         logger.info(f"[LuomiNest] Scheduler stopped")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Scheduler shutdown skipped: {e}")
+        logger.warning(f"[LuomiNest] Scheduler shutdown skipped: {e}", exc_info=True)
 
     try:
         from app.engines.memory import shutdown_memory
         await shutdown_memory()
     except Exception as e:
-        logger.warning(f"[LuomiNest] Memory engine shutdown skipped: {e}")
+        logger.warning(f"[LuomiNest] Memory engine shutdown skipped: {e}", exc_info=True)
 
     # 关闭 LLM provider httpx 客户端
     try:
         from app.runtime.provider.llm.adapter import llm_adapter
         await llm_adapter.aclose()
     except Exception as e:
-        logger.warning(f"[LuomiNest] LLM adapter close skipped: {e}")
+        logger.warning(f"[LuomiNest] LLM adapter close skipped: {e}", exc_info=True)
 
     # 关闭浏览器自动化 WS 管理器
     try:
@@ -249,14 +251,14 @@ async def lifespan(app: FastAPI):
         await browser_ws_manager.shutdown()
         logger.info(f"[LuomiNest] Browser WS manager closed")
     except Exception as e:
-        logger.warning(f"[LuomiNest] Browser WS shutdown skipped: {e}")
+        logger.warning(f"[LuomiNest] Browser WS shutdown skipped: {e}", exc_info=True)
 
     # 关闭数据库引擎
     try:
         from app.infrastructure.database import dispose_db
         await dispose_db()
     except Exception as e:
-        logger.warning(f"[LuomiNest] Database dispose skipped: {e}")
+        logger.warning(f"[LuomiNest] Database dispose skipped: {e}", exc_info=True)
 
     logger.info(f"[LuomiNest] Shutting down application...")
 

@@ -12,12 +12,13 @@ router = APIRouter(prefix="/console", tags=["console"])
 
 
 # 命令白名单（允许执行的主命令）
+# 安全原则：不包含可执行任意代码的解释器/下载器/容器引擎
+# （python/node/curl/wget/docker/pip/redis-cli/sqlite3 已移除，如需使用请直接在系统终端操作）
 ALLOWED_COMMANDS = {
-    "git", "npm", "pnpm", "yarn", "node", "python", "python3", "pip", "pip3",
+    "git", "npm", "pnpm", "yarn",
     "ls", "dir", "cat", "type", "echo", "pwd", "cd", "mkdir", "md", "rmdir",
     "cp", "copy", "mv", "move", "touch", "find", "grep", "rg", "head", "tail",
-    "wc", "curl", "wget", "ping", "nslookup", "ipconfig", "netstat",
-    "docker", "docker-compose", "redis-cli", "sqlite3",
+    "wc", "ping", "nslookup", "ipconfig", "netstat",
     "tasklist", "systeminfo", "where", "which",
 }
 
@@ -28,7 +29,14 @@ DANGEROUS_PATTERNS = {
     "format ", "shutdown", "reboot", ":(){:|:&};:",
     "mkfs", "dd if=", "> /dev/sda", "> /dev/hda",
     "chmod -R 777 /", "chown -R",
+    # 包管理器可执行任意包/脚本的子命令
+    "npm exec", "npx ", "pnpm exec", "pnpm dlx", "yarn dlx",
+    # git alias 可绑定任意命令
+    "git config alias",
 }
+
+# shell 元字符（exec 模式下这些字符会被当字面参数，导致命令行为异常，需在入口拦截）
+SHELL_METACHARACTERS = {"|", "&", ";", ">", "<", "`"}
 
 # 默认命令超时（秒）
 DEFAULT_COMMAND_TIMEOUT = 30
@@ -175,25 +183,38 @@ _console_handler = ConsoleLogHandler()
 logger.add(_console_handler, level="INFO", format="{message}")
 
 
-def _validate_command(command: str) -> tuple[bool, str]:
-    """验证命令是否安全：白名单 + 危险模式检查"""
+def _validate_command(command: str) -> tuple[bool, str, list[str]]:
+    """验证命令是否安全：白名单 + 危险模式 + shell 元字符检查
+
+    Returns:
+        (is_valid, error_msg, parsed_parts)
+        parsed_parts 为 shlex.split 解析后的参数列表（验证失败时为空列表）
+    """
     if not command or not command.strip():
-        return False, "命令不能为空"
+        return False, "命令不能为空", []
+
+    # 检查 shell 元字符（本接口使用 create_subprocess_exec 不经过 shell，
+    # 这些字符会被当字面参数导致命令行为异常，在入口直接拒绝给出清晰提示）
+    found_meta = [c for c in SHELL_METACHARACTERS if c in command]
+    if found_meta:
+        return False, f"命令包含 shell 元字符（{' '.join(found_meta)}），本接口不支持管道和重定向", []
+    if "$(" in command:
+        return False, "命令包含命令替换 $(...)，本接口不支持", []
 
     # 检查危险模式
     for pattern in DANGEROUS_PATTERNS:
         if pattern in command:
-            return False, f"命令包含危险操作: {pattern}"
+            return False, f"命令包含危险操作: {pattern}", []
 
     # 解析命令
     try:
         posix_mode = os.name != "nt"
         parts = shlex.split(command, posix=posix_mode)
     except ValueError as e:
-        return False, f"命令解析失败: {e}"
+        return False, f"命令解析失败: {e}", []
 
     if not parts:
-        return False, "命令不能为空"
+        return False, "命令不能为空", []
 
     # 提取主命令（处理路径和 .exe 后缀）
     main_cmd = os.path.basename(parts[0]).lower()
@@ -202,20 +223,24 @@ def _validate_command(command: str) -> tuple[bool, str]:
 
     if main_cmd not in ALLOWED_COMMANDS:
         allowed = ", ".join(sorted(ALLOWED_COMMANDS))
-        return False, f"命令 '{main_cmd}' 不在白名单中。允许的命令: {allowed}"
+        return False, f"命令 '{main_cmd}' 不在白名单中。允许的命令: {allowed}", []
 
-    return True, ""
+    return True, "", parts
 
 
 async def _execute_command_async(
-    command: str, working_dir: str | None, timeout: int
+    parts: list[str], working_dir: str | None, timeout: int
 ) -> tuple[int, str, str]:
-    """异步执行命令，返回 (exit_code, stdout, stderr)"""
+    """异步执行命令（不经过 shell），返回 (exit_code, stdout, stderr)
+
+    使用 create_subprocess_exec 直接执行解析后的参数列表，
+    避免经过 shell 导致管道/重定向/命令注入。
+    """
     try:
         cwd = working_dir if working_dir and os.path.isdir(working_dir) else None
 
-        process = await asyncio.create_subprocess_shell(
-            command,
+        process = await asyncio.create_subprocess_exec(
+            *parts,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
@@ -264,8 +289,8 @@ async def execute_command(req: ExecuteCommandRequest):
     """执行命令（带白名单 + 超时 + 工作目录限制）"""
     command = req.command.strip()
 
-    # 验证命令安全性
-    is_valid, error_msg = _validate_command(command)
+    # 验证命令安全性（同时获取解析后的参数列表）
+    is_valid, error_msg, parts = _validate_command(command)
     if not is_valid:
         logger.warning(f"[Console] Command rejected: {command} - {error_msg}")
         return ExecuteCommandResponse(
@@ -296,9 +321,9 @@ async def execute_command(req: ExecuteCommandRequest):
     )
     _add_command(record)
 
-    # 执行命令
+    # 执行命令（使用解析后的参数列表，不经过 shell）
     exit_code, stdout, stderr = await _execute_command_async(
-        command, req.working_dir, timeout
+        parts, req.working_dir, timeout
     )
 
     finished_at = datetime.now(timezone.utc)

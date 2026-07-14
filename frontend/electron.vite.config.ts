@@ -1,5 +1,5 @@
 import { resolve } from 'path'
-import { rmSync } from 'fs'
+import { rmSync, copyFileSync, mkdirSync } from 'fs'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 
@@ -16,9 +16,26 @@ const removeLive2DFromOutput = () => ({
   }
 })
 
+// 将 stealth-preload.js 复制到 out/main/ 目录，
+// 供 WebContentsView 的 webPreferences.preload 使用
+const copyStealthPreload = () => ({
+  name: 'luominest-copy-stealth-preload',
+  closeBundle: () => {
+    try {
+      const src = resolve(__dirname, 'src/main/services/browser/stealth-preload.js')
+      const destDir = resolve(__dirname, 'out/main')
+      const dest = resolve(destDir, 'stealth-preload.js')
+      mkdirSync(destDir, { recursive: true })
+      copyFileSync(src, dest)
+    } catch {
+      // 忽略：开发模式下文件可能已存在
+    }
+  }
+})
+
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), copyStealthPreload()],
     resolve: {
       alias: {
         '@shared': resolve(__dirname, 'src/shared')

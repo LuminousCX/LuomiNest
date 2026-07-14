@@ -89,6 +89,7 @@ class SubagentExecutor:
         self.default_timeout = default_timeout
         # 显式信号量替代原 _active_count 计数，确保并发安全
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._background_tasks: set[asyncio.Task] = set()
 
     def _build_system_prompt(
         self,
@@ -207,7 +208,9 @@ class SubagentExecutor:
                     if cancel_event is not None:
                         await cancel_event.wait()
                         record.request_cancel()
-                asyncio.create_task(_bridge_cancel())
+                _bridge_task = asyncio.create_task(_bridge_cancel())
+                self._background_tasks.add(_bridge_task)
+                _bridge_task.add_done_callback(self._background_tasks.discard)
 
         logger.info(
             f"[SubagentExecutor] 启动子 Agent: id={task_id}, "

@@ -292,6 +292,19 @@ class WorkflowEngine:
         self.synthesis_temperature = synthesis_temperature
         self._active_sessions: dict[str, WorkflowSession] = {}
         self._session_locks: dict[str, asyncio.Lock] = {}
+        self._dict_lock = asyncio.Lock()
+
+    async def _register_session(self, session: WorkflowSession) -> None:
+        """注册会话到字典（加锁保护，防止并发 submit 竞态）"""
+        async with self._dict_lock:
+            self._active_sessions[session.session_id] = session
+            self._session_locks[session.session_id] = asyncio.Lock()
+
+    async def _unregister_session(self, session_id: str) -> None:
+        """从字典移除会话（加锁保护）"""
+        async with self._dict_lock:
+            self._active_sessions.pop(session_id, None)
+            self._session_locks.pop(session_id, None)
 
     def _create_session(
         self,
@@ -346,8 +359,7 @@ class WorkflowEngine:
             WorkflowSession: 包含完整执行过程的会话对象
         """
         session = self._create_session(user_message, mode, conversation_id, skip_confirmation=skip_confirmation)
-        self._active_sessions[session.session_id] = session
-        self._session_locks[session.session_id] = asyncio.Lock()
+        await self._register_session(session)
 
         try:
             await self._run_workflow(session, provider, model, event_callback)
@@ -390,8 +402,7 @@ class WorkflowEngine:
         from app.core.workflow.register_tools import set_emitter, remove_emitter
 
         session = self._create_session(user_message, mode, conversation_id, skip_confirmation=skip_confirmation)
-        self._active_sessions[session.session_id] = session
-        self._session_locks[session.session_id] = asyncio.Lock()
+        await self._register_session(session)
 
         logger.debug(f"[WorkflowEngine][DEBUG] submit_stream START: session_id={session.session_id}")
         logger.debug(f"[WorkflowEngine][DEBUG] submit_stream: provider={provider}, model={model}, mode={mode.value}")
@@ -1279,12 +1290,11 @@ class WorkflowEngine:
         logger.info(f"[WorkflowEngine] Session {session_id} rejected by user")
         return True
 
-    def cleanup_session(self, session_id: str) -> None:
+    async def cleanup_session(self, session_id: str) -> None:
         """清理已完成的会话"""
         session = self._active_sessions.get(session_id)
         if session and session.is_terminal:
-            self._active_sessions.pop(session_id, None)
-            self._session_locks.pop(session_id, None)
+            await self._unregister_session(session_id)
 
 
 # 全局单例

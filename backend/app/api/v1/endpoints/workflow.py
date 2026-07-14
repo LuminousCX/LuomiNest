@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from app.core.exceptions import LuomiNestError
 from app.core.workflow import (
     WorkflowMode,
     WorkflowPhase,
@@ -58,9 +59,15 @@ async def submit_workflow(req: WorkflowSubmitRequest):
             conversation_id=req.conversation_id,
         )
         return session.to_dict()
+    except LuomiNestError:
+        raise
     except Exception as e:
         logger.error("[WorkflowAPI] Submit failed: {}", str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise LuomiNestError(
+            "工作流执行失败，请稍后重试",
+            code="WORKFLOW_SUBMIT_FAILED",
+            status_code=500,
+        )
 
 
 @router.post("/submit/stream")
@@ -81,7 +88,7 @@ async def submit_workflow_stream(req: WorkflowSubmitRequest):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as e:
             logger.error("[WorkflowAPI] Stream failed: {}", str(e), exc_info=True)
-            error_event = {"type": "error", "data": {"message": str(e)}}
+            error_event = {"type": "error", "data": {"message": "工作流执行失败，请稍后重试"}}
             yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(

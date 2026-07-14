@@ -76,7 +76,7 @@ defineEmits<{
           <div class="session-item-info">
             <span class="session-item-title">{{ session.user_message?.slice(0, 30) || '未命名工作流' }}</span>
             <span class="session-item-meta">
-              {{ formatWorkflowTime(session.created_at) }} · {{ session.stats.total }} 个任务
+              {{ formatWorkflowTime(session.created_at) }} · {{ session.stats?.total ?? 0 }} 个任务
             </span>
           </div>
         </button>

@@ -298,6 +298,7 @@ export interface ElectronApi {
     getAll: () => Promise<TabInfo[]>
     getActive: () => Promise<TabInfo | undefined>
     reload: (tabId?: string) => Promise<void>
+    navigate: (url: string, tabId?: string) => Promise<void>
     goBack: (tabId?: string) => Promise<void>
     goForward: (tabId?: string) => Promise<void>
     getNavigationState: (tabId?: string) => Promise<NavigationStateInfo>

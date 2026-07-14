@@ -219,14 +219,14 @@ function getUserAgent(): string {
     osInfo = 'X11; Linux x86_64'
   }
 
-  return `Mozilla/5.0 (${osInfo}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion} Safari/537.36 Edg/${chromeVersion}`
+  return `Mozilla/5.0 (${osInfo}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion} Safari/537.36`
 }
 
 function getSecChUa(): string {
   const chromeVersion = process.versions.chrome || '131.0.0.0'
   const majorVersion = chromeVersion.split('.')[0]
   const notBrandVersion = Math.floor(Math.random() * 20) + 8
-  return `"Chromium";v="${majorVersion}", "Microsoft Edge";v="${majorVersion}", "Not?A_Brand";v="${notBrandVersion}"`
+  return `"Chromium";v="${majorVersion}", "Google Chrome";v="${majorVersion}", "Not?A_Brand";v="${notBrandVersion}"`
 }
 
 function getSecChUaPlatform(): string {
@@ -247,20 +247,49 @@ export function initBrowserSession(): void {
 
   const browserSession = session.fromPartition(DEFAULT_BROWSER_CONFIG.sessionPartition)
 
-  browserSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    details.requestHeaders['User-Agent'] = USER_AGENT
-    details.requestHeaders['Accept-Language'] = 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
-    details.requestHeaders['sec-ch-ua'] = SEC_CH_UA
-    details.requestHeaders['sec-ch-ua-mobile'] = '?0'
-    details.requestHeaders['sec-ch-ua-platform'] = SEC_CH_UA_PLATFORM
-    callback({ requestHeaders: details.requestHeaders })
-  })
-
+  // 仅修改 User-Agent，不干预其他请求头（避免破坏 B站等网站的 API 签名验证）
   browserSession.setUserAgent(USER_AGENT)
 
   browserSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    const allowed = ['notifications', 'clipboard-read', 'clipboard-write', 'geolocation']
+    const allowed = ['notifications', 'clipboard-read', 'clipboard-write', 'geolocation', 'media']
     callback(allowed.includes(permission))
+  })
+
+  // 仅对主文档请求注入 sec-ch-ua 头（导航请求），不影响 XHR/fetch API 请求
+  browserSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    const headers = { ...details.requestHeaders }
+    // 仅对主框架导航请求注入客户端提示头，子资源请求保持原样
+    if (details.resourceType === 'mainFrame') {
+      headers['sec-ch-ua'] = SEC_CH_UA
+      headers['sec-ch-ua-mobile'] = '?0'
+      headers['sec-ch-ua-platform'] = SEC_CH_UA_PLATFORM
+      headers['Accept-Language'] = 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
+    }
+    callback({ requestHeaders: headers })
+  })
+
+  // 仅浏览器自动化 partition 绕过证书验证
+  browserSession.setCertificateVerifyProc((_request, callback) => {
+    callback(0)
+  })
+
+  // 移除响应中的 CSP 头，允许内嵌浏览器渲染所有限制 CSP 的网站（如 B站）
+  // 同时保留其他响应头不变
+  browserSession.webRequest.onHeadersReceived((details, callback) => {
+    const headers: Record<string, string | string[]> = {}
+    let modified = false
+    for (const [key, value] of Object.entries(details.responseHeaders || {})) {
+      const lowerKey = key.toLowerCase()
+      if (
+        lowerKey === 'content-security-policy' ||
+        lowerKey === 'content-security-policy-report-only'
+      ) {
+        modified = true
+        continue
+      }
+      headers[key] = value as string | string[]
+    }
+    callback(modified ? { responseHeaders: headers } : {})
   })
 
   initialized = true

@@ -120,7 +120,6 @@ class TabManager {
 
     webContents.on('did-finish-load', async () => {
       this.notifyUpdate(tabId, { loading: false })
-      await injectStealthScript(view)
       this.emitNavigationState(tabId)
     })
 
@@ -386,6 +385,43 @@ class TabManager {
       view.webContents.reload()
     }
   }
+
+  /** 在当前标签页导航到新 URL（不创建新标签） */
+  navigateTo(url: string, tabId?: string): void {
+    const targetId = tabId || this.activeTabId
+    if (!targetId) return
+
+    const tab = this.tabs.get(targetId)
+    if (!tab) return
+
+    // 休眠中的标签：直接更新 URL，唤醒时会自动加载
+    if (tab.sleeping) {
+      tab.url = url
+      tab.loading = true
+      tab.error = undefined
+      this.notifyUpdate(targetId, { url, loading: true, error: undefined })
+      this.wakeTab(targetId)
+      return
+    }
+
+    const view = this.views.get(targetId)
+    if (!view || isViewDestroyed(view)) return
+
+    tab.url = url
+    tab.loading = true
+    tab.error = undefined
+    this.notifyUpdate(targetId, { url, loading: true, error: undefined })
+
+    view.webContents.loadURL(url).catch((err: unknown) => {
+      const errMessage = err instanceof Error ? err.message : String(err)
+      if (!errMessage?.includes('ERR_ABORTED')) {
+        const errCode = (err instanceof Error && 'code' in err) ? (err as { code?: unknown }).code : undefined
+        const error = getErrorInfo(typeof errCode === 'number' ? errCode : -1)
+        this.notifyUpdate(targetId, { loading: false, error, title: error.title })
+      }
+    })
+  }
+
 
   goBack(tabId?: string): void {
     const targetId = tabId || this.activeTabId
