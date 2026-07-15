@@ -90,7 +90,7 @@ static TaskHandle_t  s_mock_task_h    = NULL;
 /* === 统计: 每 1s 打印一次 (跟 app_status 同步) === */
 static int64_t s_last_stat_us = 0;
 
-#if !APP_AVATAR_USE_SPI_SOURCE
+`#if` 0
 /* === mock producer: 周期性灌 test_400x540_jpg 到队列 === */
 static void avatar_mock_task(void *arg)
 {
@@ -127,7 +127,7 @@ static void avatar_mock_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(AVATAR_PERIOD_MS));
     }
 }
-#endif /* !APP_AVATAR_USE_SPI_SOURCE */
+`#endif` /* !APP_AVATAR_USE_SPI_SOURCE */
 
 /* === consumer: 拉队列 → 去重 → 解码 → LVGL (切片 9 路径, 不动) === */
 static void avatar_decode_task(void *arg)
