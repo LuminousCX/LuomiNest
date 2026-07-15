@@ -493,13 +493,13 @@ const collaborators = [
   },
   {
     name: 'kipbbsjsjs',
-    role: '记忆模块开发 · 本地用户数据管理 · 功能贡献',
+    role: '核心记忆模块开发 · 本地用户数据管理 · 功能贡献',
     url: 'https://github.com/kipbbsjsjs',
     avatar: 'https://github.com/kipbbsjsjs.png'
   },
   {
     name: 'NoobL696',
-    role: '测试与反馈 · Fork 维护',
+    role: '测试与反馈 · 建议贡献',
     url: 'https://github.com/NoobL696',
     avatar: 'https://github.com/NoobL696.png'
   }
@@ -514,7 +514,7 @@ const collaborators = [
         <ArrowLeft :size="18" />
       </button>
       <div>
-        <h1 class="lumi-settings-page__title">开源协议</h1>
+        <h1 class="lumi-settings-page__title">项目参考</h1>
         <p class="lumi-settings-page__subtitle">LuomiNest 依赖的开源项目及其许可证</p>
       </div>
     </header>
