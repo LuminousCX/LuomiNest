@@ -433,7 +433,7 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
    */
   const setVisibility = (visible: boolean): void => {
     isWindowVisible = visible
-    const app = pixiAppRef.value
+    const app = pixiApp
     if (!app) return
 
     if (visible) {

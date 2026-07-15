@@ -109,8 +109,8 @@ def _detect_memory_windows() -> float:
     except Exception as e:
         logger.debug(f"[Hardware] wmic memory detection failed: {e}")
 
-    logger.warning("[Hardware] Windows memory detection failed, defaulting to 4.0 GB")
-    return 4.0
+    logger.warning("[Hardware] Windows memory detection failed, defaulting to 8.0 GB")
+    return 8.0
 
 
 def _detect_memory_linux() -> float:
@@ -140,8 +140,8 @@ def _detect_memory_linux() -> float:
     except Exception as e:
         logger.debug(f"[Hardware] free command detection failed: {e}")
 
-    logger.warning("[Hardware] Linux memory detection failed, defaulting to 4.0 GB")
-    return 4.0
+    logger.warning("[Hardware] Linux memory detection failed, defaulting to 8.0 GB")
+    return 8.0
 
 
 def _detect_memory_macos() -> float:
@@ -157,8 +157,8 @@ def _detect_memory_macos() -> float:
     except Exception as e:
         logger.debug(f"[Hardware] sysctl memory detection failed: {e}")
 
-    logger.warning("[Hardware] macOS memory detection failed, defaulting to 4.0 GB")
-    return 4.0
+    logger.warning("[Hardware] macOS memory detection failed, defaulting to 8.0 GB")
+    return 8.0
 
 
 def _detect_memory_fallback() -> float:
@@ -173,8 +173,8 @@ def _detect_memory_fallback() -> float:
     except Exception:
         pass
 
-    logger.warning("[Hardware] Memory detection failed on unknown OS, defaulting to 4.0 GB")
-    return 4.0
+    logger.warning("[Hardware] Memory detection failed on unknown OS, defaulting to 8.0 GB")
+    return 8.0
 
 
 def _detect_gpu_type() -> GpuType:
@@ -205,8 +205,8 @@ def _detect_hardware() -> HardwareProfile:
     total_memory_gb = _detect_total_memory_gb()
     gpu_type = _detect_gpu_type()
 
-    # 低端设备判定：内存 <= 4GB 或 CPU <= 2 核
-    is_low_end = total_memory_gb <= 4.0 or cpu_count <= 2
+    # 低端设备判定：内存 < 8GB 或 CPU < 4 核
+    is_low_end = total_memory_gb < 8.0 or cpu_count < 4
 
     return HardwareProfile(
         cpu_count=cpu_count,
@@ -225,5 +225,5 @@ def get_hardware_profile() -> HardwareProfile:
 
 
 def is_low_end_device() -> bool:
-    """判断当前设备是否为低端设备（内存 <= 4GB 或 CPU <= 2 核）."""
+    """判断当前设备是否为低端设备（内存 < 8GB 或 CPU < 4 核）."""
     return get_hardware_profile().is_low_end

@@ -1,0 +1,9 @@
+## LuomiNest P4 顶层组件依赖
+## 阶段 1 (Hello World) 不需要外部依赖
+## 后续切片会按需加:
+##   - lvgl/lvgl            -> app 组件 (气泡 UI)
+##   - espressif/esp_jpeg   -> drivers 组件 (硬解)
+##   - esp_lcd_touch_gt911  -> bsp 组件 (触摸)
+##   - espressif/mqtt       -> drivers 组件 (C6 端用, P4 端不开)
+dependencies:
+  idf: ">=5.0"

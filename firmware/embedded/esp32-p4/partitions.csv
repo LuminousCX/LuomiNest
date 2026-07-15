@@ -1,5 +1,10 @@
-# Name,    Type, SubType,  Offset,   Size,    Flags
-nvs,       data, nvs,      0x9000,   0x6000,
-phy_init,  data, phy,      0xf000,   0x1000,
-factory,   app,  factory,  0x10000,  0x400000,
-storage,   data, fat,      0x410000, 0x20000,
+# LuomiNest P4 分区表
+# 详细说明见 D:\luominest\firmware\CLAUDE.md
+# 布局原则: app 类型分区必须 0x10000 (64K) 对齐
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x10000,
+phy_init, data, phy,     0x1D000,  0x3000,
+factory,  app,  factory, 0x20000,  0x180000,
+ota_0,    app,  ota_0,   0x1A0000, 0x180000,
+ota_1,    app,  ota_1,   0x320000, 0x180000,
+storage,  data, fat,     0x4A0000, 0xC0000,
