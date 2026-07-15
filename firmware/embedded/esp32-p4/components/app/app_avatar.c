@@ -230,6 +230,7 @@ esp_err_t app_avatar_init(lv_obj_t *parent)
                                              LV_COLOR_FORMAT_RGB565, LV_STRIDE_AUTO);
         if (s_frame_bufs[i] == NULL) {
             ESP_LOGE(TAG, "lv_draw_buf_create[%d] failed", i);
+            app_avatar_deinit();
             return ESP_ERR_NO_MEM;
         }
         /* 初始化黑色 (避免首帧前出现随机像素) */
@@ -240,6 +241,7 @@ esp_err_t app_avatar_init(lv_obj_t *parent)
     s_avatar_img = lv_image_create(parent);
     if (s_avatar_img == NULL) {
         ESP_LOGE(TAG, "lv_image_create failed");
+        app_avatar_deinit();
         return ESP_ERR_NO_MEM;
     }
     lv_obj_set_size(s_avatar_img, AVATAR_W, AVATAR_H);
@@ -250,6 +252,7 @@ esp_err_t app_avatar_init(lv_obj_t *parent)
     s_jpg_queue = xQueueCreate(JPG_QUEUE_DEPTH, sizeof(jpg_entry_t));
     if (s_jpg_queue == NULL) {
         ESP_LOGE(TAG, "xQueueCreate jpg_queue failed");
+        app_avatar_deinit();
         return ESP_ERR_NO_MEM;
     }
 
