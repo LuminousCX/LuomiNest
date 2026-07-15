@@ -82,12 +82,9 @@ esp_err_t bsp_spi_p4_transfer(const uint8_t *tx, uint8_t *rx, size_t len)
         return ESP_FAIL;
     }
 
-    /* spi_device_polling_transmit 强制 tx/rx 至少一个非空.
-     * 我们允许 tx 或 rx 为 NULL (半双工), 内部填 dummy. */
-    uint8_t dummy = 0xFF;
     spi_transaction_t t = {
         .length    = len * 8,
-        .tx_buffer = (tx != NULL) ? tx : &dummy,
+        .tx_buffer = tx,
         .rx_buffer = rx,
     };
 
