@@ -25,9 +25,16 @@ async def lifespan(app: FastAPI):
         logger.info(
             f"[LuomiNest] 硬件概况: CPU={profile.cpu_count}核, "
             f"内存={profile.total_memory_gb:.1f}GB, "
-            f"GPU={profile.gpu_type.value}, "
-            f"低端设备={'是' if profile.is_low_end else '否'}"
+            f"GPU={profile.gpu_type.value}"
         )
+        if profile.is_low_end:
+            logger.warning("=" * 60)
+            logger.warning(f"  ⚠ 系统资源不足")
+            logger.warning(f"  CPU: {profile.cpu_count} 核 | 内存: {profile.total_memory_gb:.1f} GB")
+            logger.warning(f"  LuomiNest 需要至少 4 核 CPU + 8 GB 内存以保证稳定运行。")
+            logger.warning(f"  当前配置下可能出现响应缓慢、功能受限等问题。")
+            logger.warning(f"  建议升级硬件后重试。")
+            logger.warning("=" * 60)
     except Exception as e:
         logger.warning(f"[LuomiNest] Hardware detection failed: {e}")
 

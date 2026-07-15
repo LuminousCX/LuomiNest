@@ -1,0 +1,9 @@
+## bsp 组件 - 板级支持包
+## 分层铁律: 不调 JPEG/MQTT/SPI 协议, 只做"引脚 + 初始化序列"
+## 详细分层见 D:\luominest\firmware\CLAUDE.md §7
+## 注意: idf_component.yml 只能写外部 registry 组件,
+##       IDF 内部组件 (driver / esp_lcd / ...) 在 CMakeLists.txt REQUIRES 写
+dependencies:
+  idf: ">=5.0"
+  espressif/esp_lcd_jd9165: "^1.0"
+  espressif/esp_lcd_touch_gt911: "^1.1.0"

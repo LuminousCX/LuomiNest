@@ -1,10 +1,4 @@
+## main 组件 - 启动入口
+## 切片 9 重构: 加 esp_lvgl_port 依赖 (main/app_main.c 调 lvgl_port_init + lvgl_port_add_disp_dsi)
 dependencies:
-  lvgl/lvgl: "~9.2"
-  espressif/esp_lcd_jd9165: "^1"
-  espressif/esp_jpeg: "^1.0"
-  espressif/esp_lvgl_port: "^2"
-  espressif/esp_lcd_touch_gt911: "^1"
-  espressif/esp_wifi_remote:
-    version: "*"
-    rules:
-    - if: target in [esp32p4]
+  espressif/esp_lvgl_port: "^2.8.0"

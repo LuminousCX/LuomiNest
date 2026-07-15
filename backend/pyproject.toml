@@ -1,6 +1,6 @@
 [project]
 name = "luominest"
-version = "0.7.5"
+version = "0.7.6"
 description = "LuomiNest - Distributed Whole-House AI Companion System"
 requires-python = ">=3.12"
 license = {text = "MIT"}

@@ -1,0 +1,14 @@
+## app 组件 - 业务层
+## 分层铁律: app/ 严禁 include driver/esp_lcd/gpio.h, 只调 bsp + drivers
+## 详细分层见 D:\luominest\firmware\CLAUDE.md §7
+##
+## 注意: idf_component.yml 只写外部 registry 组件 (espressif/lvgl 等)
+##       本项目内部组件 (bsp / drivers) 在 CMakeLists.txt 的 REQUIRES 写.
+##
+## 切片 9 重构: 引入 espressif/esp_lvgl_port 让 LVGL 成为 DSI 唯一生产者
+##              彻底解决双生产者 (avatar + LVGL chat) 写 DSI fb 的撕裂
+dependencies:
+  idf: ">=5.0"
+  lvgl/lvgl: "^9.3.0"
+  espressif/esp_lvgl_port: "^2.8.0"   # 切片 9 重构: LVGL 单生产者
+  # mqtt 和 cJSON 是 ESP-IDF 内置组件, 不需要在此声明, CMakeLists.txt PRIV_REQUIRES 即可

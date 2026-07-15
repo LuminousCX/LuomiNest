@@ -1,0 +1,8 @@
+## drivers 组件 - 通用协议/IPC 层
+## 分层铁律: 只接 bsp 导出的句柄, 不知道引脚接哪
+## 详细分层见 D:\luominest\firmware\CLAUDE.md §7
+## 注意: idf_component.yml 只能写外部 registry 组件,
+##       IDF 内部组件 (driver / esp_lcd / ...) 在 CMakeLists.txt REQUIRES 写
+dependencies:
+  idf: ">=5.0"
+  espressif/esp_jpeg: "^1.2.0"

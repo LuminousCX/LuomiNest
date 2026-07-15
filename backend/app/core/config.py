@@ -12,7 +12,7 @@ from app.security.crypto.secret_key_manager import is_placeholder, load_or_creat
 
 class Settings(BaseSettings):
     APP_NAME: str = "LuomiNest"
-    APP_VERSION: str = "0.7.5"
+    APP_VERSION: str = "0.7.6"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
