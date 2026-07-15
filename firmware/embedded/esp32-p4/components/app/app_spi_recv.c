@@ -32,6 +32,7 @@ static const char *TAG = "spi_recv";
 #define RECV_TASK_STACK    4096
 
 static TaskHandle_t s_recv_task_h = NULL;
+static volatile bool s_running = false;
 
 static void spi_recv_task(void *arg)
 {
@@ -44,12 +45,13 @@ static void spi_recv_task(void *arg)
     if (payload == NULL) {
         ESP_LOGE(TAG, "payload malloc %u failed, task exit",
                  (unsigned)RECV_PAYLOAD_CAP);
+        s_recv_task_h = NULL;
         vTaskDelete(NULL);  /* 永不返回 */
     }
 
     uint32_t recv_cnt = 0, err_cnt = 0;
 
-    while (1) {
+    while (s_running) {
         uint8_t  type = 0;
         uint16_t len  = 0;
         esp_err_t ret = drv_spi_recv_frame(&type, payload, RECV_PAYLOAD_CAP,
@@ -111,29 +113,37 @@ static void spi_recv_task(void *arg)
             break;
         }
     }
+
+    free(payload);
+    s_recv_task_h = NULL;
+    vTaskDelete(NULL);
 }
 
 esp_err_t app_spi_recv_init(void)
 {
-#if APP_AVATAR_USE_SPI_SOURCE
+`#if` APP_AVATAR_USE_SPI_SOURCE
     if (s_recv_task_h) return ESP_OK;
+    s_running = true;
     BaseType_t ok = xTaskCreate(spi_recv_task, "spi_recv", RECV_TASK_STACK,
                                 NULL, RECV_TASK_PRIO, &s_recv_task_h);
-    if (ok != pdPASS) return ESP_ERR_NO_MEM;
+    if (ok != pdPASS) {
+        s_running = false;
+        return ESP_ERR_NO_MEM;
+    }
     ESP_LOGI(TAG, "init ok (SPI source mode)");
     return ESP_OK;
-#else
+`#else`
     /* mock 模式下不启动 task, 避免空转 50ms 轮询浪费 CPU.
      * 用户切换到 SPI 模式时, 改 app_avatar.h 的宏 + clean build 即可. */
     ESP_LOGW(TAG, "skip init (APP_AVATAR_USE_SPI_SOURCE=0, mock source active)");
     return ESP_OK;
-#endif
+`#endif`
 }
 
 void app_spi_recv_deinit(void)
 {
-    if (s_recv_task_h) {
-        vTaskDelete(s_recv_task_h);
-        s_recv_task_h = NULL;
+    s_running = false;
+    while (s_recv_task_h != NULL) {
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
