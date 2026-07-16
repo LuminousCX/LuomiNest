@@ -28,7 +28,36 @@ const MIME_MAP: Record<string, string> = {
   userdata3: 'application/json',
   js: 'application/javascript',
   wasm: 'application/wasm',
-  txt: 'text/plain'
+  txt: 'text/plain',
+  // 多模型扩展：VRM / Spine / glTF 支持
+  vrm: 'application/octet-stream',
+  glb: 'model/gltf-binary',
+  gltf: 'model/gltf+json',
+  atlas: 'text/plain',
+  skel: 'application/octet-stream',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  svg: 'image/svg+xml'
+}
+
+// 已知的模型类型前缀（用于 hostname 路由）
+const MODEL_TYPE_PREFIXES = ['live2d', 'vrm', 'pixel', 'spine', 'png'] as const
+type ModelTypePrefix = typeof MODEL_TYPE_PREFIXES[number]
+
+const isModelTypePrefix = (s: string): s is ModelTypePrefix => {
+  return (MODEL_TYPE_PREFIXES as readonly string[]).includes(s)
+}
+
+// 各模型类型的 builtin 基础路径（相对于 public/ 或 resourcesPath/）
+const getBuiltinBasePath = (type: ModelTypePrefix): string => {
+  return isDev
+    ? join(app.getAppPath(), 'src/renderer/public', type)
+    : join(process.resourcesPath, type)
+}
+
+// 各模型类型的 imported 基础路径（userData/avatar/{type}/）
+const getImportedBasePath = (type: ModelTypePrefix): string => {
+  return join(PATHS.avatar, type)
 }
 
 const isPathSafe = (baseDir: string, targetPath: string): boolean => {
@@ -40,6 +69,34 @@ const isPathSafe = (baseDir: string, targetPath: string): boolean => {
 const resolveModelFile = (hostname: string, relativePath: string): string | null => {
   const decodedPath = decodeURIComponent(relativePath)
 
+  // 新格式：hostname 是模型类型前缀（live2d/vrm/pixel/spine/png）
+  // 例如：luominest-avatar://pixel/default-pet/manifest.json
+  if (isModelTypePrefix(hostname)) {
+    const typeBase = hostname
+    const searchPaths: { label: string; base: string; sub: string }[] = [
+      { label: `imported-${typeBase}`, base: getImportedBasePath(typeBase), sub: decodedPath },
+      { label: `builtin-${typeBase}`, base: getBuiltinBasePath(typeBase), sub: decodedPath }
+    ]
+    for (const sp of searchPaths) {
+      try {
+        if (!isPathSafe(sp.base, sp.sub)) {
+          logger.warn(`Path traversal blocked: ${sp.label}:${sp.sub}`)
+          continue
+        }
+        const filePath = resolve(sp.base, sp.sub)
+        if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
+      } catch {
+        continue
+      }
+    }
+    logger.warn(`Resource not found: ${hostname}/${relativePath}`)
+    logger.warn(`  Searched: ${searchPaths.map(s => s.label + ':' + resolve(s.base, s.sub)).join(' | ')}`)
+    return null
+  }
+
+  // 旧格式回退：hostname 是 Live2D 模型名（如 llny / hiyori）
+  // 例如：luominest-avatar://llny/llny.model3.json
+  // 保留原逻辑以确保现有 Live2D 模型 URL 完全不受影响
   const searchPaths: { label: string; base: string; sub: string }[] = [
     { label: 'imported', base: PATHS.live2d, sub: join(hostname, decodedPath) },
     { label: 'builtin', base: builtinBasePath, sub: join(hostname, decodedPath) }

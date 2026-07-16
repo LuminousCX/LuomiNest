@@ -3,6 +3,7 @@ import uuid
 from loguru import logger
 
 from app.core.config import settings
+from app.core.context import get_context_manager
 from app.core.utils import utc_now, sse_response, sse_data
 from app.core.tools import tool_registry
 from app.core.tools.orchestrator import tool_orchestrator
@@ -246,7 +247,17 @@ class ChatService:
             async for sse_str in runner.run_stream(ctx, llm_call_fn):
                 yield sse_str
 
-            done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
+            # 计算压缩后 token 数：使用 runner 执行后的 ctx.messages（已压缩，反映实际上下文使用量）
+            try:
+                ctx_mgr = get_context_manager(provider, model)
+                context_tokens = ctx_mgr.token_counter.count_tokens(ctx.messages)
+            except Exception:
+                context_tokens = None
+
+            done_data = ChatStreamChunk(
+                id=chat_id, content="", model=model, provider=provider,
+                done=True, context_tokens=context_tokens,
+            )
             yield sse_data(done_data)
         except Exception as e:
             logger.error(f"[STREAM] stream_chat error: {e}", exc_info=True)
@@ -404,9 +415,18 @@ class ChatService:
 
                 # done 事件
                 try:
+                    # 计算压缩后 token 数：使用 ctx.messages（已压缩，反映实际上下文使用量）
+                    # 而非 conv["messages"]（未压缩的存储版本，会导致 context_tokens 远大于实际值）
+                    try:
+                        ctx_mgr = get_context_manager(provider, model)
+                        context_tokens = ctx_mgr.token_counter.count_tokens(ctx.messages)
+                    except Exception:
+                        context_tokens = None
+
                     done_chunk = ChatStreamChunk(
                         id=chat_id, content="", model=model, provider=provider,
                         done=True, suggested_questions=suggested_questions or None,
+                        context_tokens=context_tokens,
                     )
                     yield sse_data(done_chunk)
                 except Exception as done_err:

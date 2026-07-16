@@ -8,6 +8,7 @@ from app.core.utils import utc_now
 from app.runtime.platform.base import PlatformMessage, PlatformResponse
 from app.runtime.platform.session import (
     MAIN_AGENT_ID,
+    create_new_conversation,
     get_or_create_conversation,
 )
 from app.runtime.platform.main_agent_config import (
@@ -18,6 +19,7 @@ from app.runtime.platform.registry import get_adapter, get_instance, increment_m
 from app.runtime.platform.platform_logger import platform_logger
 from app.infrastructure.database.conversation_store import conversation_store
 from app.services.context_service import context_service
+from app.core.context import get_context_manager
 from app.runtime.provider.llm.types import RouteHint
 
 
@@ -126,6 +128,29 @@ class LuomiNestPlatformRouter:
 
         async with lock:
             try:
+                # /new 命令：为当前平台会话创建新对话（参考 AstrBot 流程）
+                if (message.content or "").strip() == "/new":
+                    session_id = message.session_id or message.user_id
+                    try:
+                        await create_new_conversation(instance_id, session_id or "")
+                        platform_logger.log(
+                            instance_id, "success", "new_conversation_created",
+                            f"已为会话 {session_id} 创建新对话",
+                            adapter_type=adapter_type,
+                            details={"session": session_key, "command": "/new"},
+                        )
+                        return PlatformResponse(
+                            content="[LuomiNest] 已为您开启新对话，之前的上下文已保留在历史记录中。",
+                            message_type="text",
+                        )
+                    except Exception as e:
+                        # 服务端日志保留完整异常；对平台用户只返回固定提示，不暴露内部错误
+                        logger.error(f"[PlatformRouter] /new command failed: {e}", exc_info=True)
+                        return PlatformResponse(
+                            content="[LuomiNest] 新建对话失败，请稍后重试",
+                            message_type="text",
+                        )
+
                 response = await self._route_to_main_agent(message, instance_id, receive_time)
                 if response and response.content:
                     platform_logger.log(
@@ -191,7 +216,7 @@ class LuomiNestPlatformRouter:
             )
             return None
 
-        provider, model, system_prompt, temperature, max_tokens = self._resolve_instance_model(instance_id)
+        provider, model, _system_prompt, temperature, max_tokens = self._resolve_instance_model(instance_id)
 
         try:
             provider_inst = llm_adapter.get_provider(provider)
@@ -217,8 +242,10 @@ class LuomiNestPlatformRouter:
                 },
             )
 
+        # 使用 context_service 的完整系统提示词构建流程（含人设、身份、规则）
+        base_system = context_service.build_system_prompt(MAIN_AGENT_ID)
         platform_context = self._build_platform_context(message)
-        full_system = self._assemble_system_prompt(system_prompt, platform_context, message)
+        full_system = f"{base_system}\n\n{platform_context}"
 
         history_messages = self._load_history_messages(conv)
         user_message = self._build_user_message(message, supports_vision)
@@ -232,6 +259,11 @@ class LuomiNestPlatformRouter:
             thread_id=conv_id,
             llm_adapter=llm_adapter,
         )
+
+        # 平台对话使用更激进的 70% 压缩阈值
+        ctx_mgr = get_context_manager(provider, model, threshold_override=0.70)
+        process_result = await ctx_mgr.process(messages, chat_mode="platform")
+        messages = process_result["messages"]
 
         self._save_user_message(conv, message, user_message)
 

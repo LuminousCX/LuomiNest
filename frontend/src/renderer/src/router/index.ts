@@ -76,7 +76,7 @@ const routes: RouteRecordRaw[] = [
     path: '/settings/license',
     name: 'SettingsLicense',
     component: () => import('../views/settings/LicenseView.vue'),
-    meta: { title: '开源协议 - LuomiNest' }
+    meta: { title: '项目参考 - LuomiNest' }
   },
   {
     path: '/settings/privacy-detail',

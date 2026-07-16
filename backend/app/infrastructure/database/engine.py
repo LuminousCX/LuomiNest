@@ -84,6 +84,11 @@ async def _migrate_columns(conn) -> None:
                     text("ALTER TABLE conversations ADD COLUMN chat_mode VARCHAR(32) DEFAULT 'normal'")
                 )
                 logger.info("[DB] Migrated conversations table: added chat_mode column")
+            if "is_hidden" not in existing_cols:
+                sync_conn.execute(
+                    text("ALTER TABLE conversations ADD COLUMN is_hidden BOOLEAN DEFAULT 0")
+                )
+                logger.info("[DB] Migrated conversations table: added is_hidden column")
 
     await conn.run_sync(_do_migrate)
 

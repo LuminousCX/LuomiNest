@@ -40,7 +40,7 @@ const settingGroups = ref([
 
 const footerLinks = [
   { label: '关于开发者', route: '/settings/about' },
-  { label: '开源协议', route: '/settings/license' },
+  { label: '项目参考', route: '/settings/license' },
   { label: '用户隐私', route: '/settings/privacy-detail' }
 ]
 

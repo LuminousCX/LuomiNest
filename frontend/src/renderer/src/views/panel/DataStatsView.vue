@@ -22,11 +22,13 @@ import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
 import { useMemoryStore } from '../../stores/memory'
 import { useStatsStore } from '../../stores/stats'
+import { useModelStore } from '../../stores/model'
 import { formatTime } from '../../utils/format'
 import { generateAreaChartPaths, calculateTrend, aggregateByDay } from '../../utils/chart'
 
 const memoryStore = useMemoryStore()
 const statsStore = useStatsStore()
+const modelStore = useModelStore()
 
 const period = ref<7 | 30 | 90>(7)
 
@@ -103,11 +105,12 @@ const contextMetrics = computed(() => {
   const conv = statsStore.totalConversations
   const msg = statsStore.totalMessages
   const tok = statsStore.totalTokens
-  const windowSize = 32768
-  const avgCtx = conv > 0 ? Math.min(windowSize, Math.round(tok / conv)) : 0
+  // 读取上下文窗口大小（用户在设置页配置，0 = 自动检测），区别于生成 token 上限 defaultMaxTokens
+  const windowSize = modelStore.modelConfig.contextWindowSize || 32768
+  const totalCtx = tok
   return [
-    { label: '当前上下文', value: avgCtx, unit: 'tokens', max: windowSize },
-    { label: '窗口使用率', value: Math.min(100, Math.round((avgCtx / windowSize) * 100)), unit: '%', max: 100 },
+    { label: '累计上下文使用量', value: totalCtx, unit: 'tokens', max: Math.max(totalCtx, windowSize) },
+    { label: '窗口使用率', value: windowSize > 0 ? Math.min(100, Math.round((totalCtx / windowSize) * 100)) : 0, unit: '%', max: 100 },
     { label: '对话轮次', value: msg, unit: '轮', max: Math.max(msg * 2, 100) },
     { label: '对话数', value: conv, unit: '个', max: Math.max(conv * 2, 50) },
   ]

@@ -126,6 +126,9 @@ const {
   sendMessage,
   cancelStreaming,
   handleRegenerate,
+  contextTokens,
+  isCompressing,
+  handleCompressContext,
 } = useWorkbenchMessages({
   agentId: MAIN_AGENT_ID,
   handleSubagentEvent,
@@ -229,6 +232,8 @@ onBeforeUnmount(() => {
         :confirmation-feedback="workflowStore.confirmationFeedback"
         :is-near-bottom="isNearBottom"
         :show-scroll-to-bottom-btn="showScrollToBottomBtn"
+        :context-tokens="contextTokens"
+        :is-compressing="isCompressing"
         @toggle-reasoning="(id: string) => { showReasoning = { ...showReasoning, [id]: !showReasoning[id] } }"
         @regenerate="handleRegenerate"
         @toggle-tool-output="toggleToolOutput"
@@ -242,6 +247,7 @@ onBeforeUnmount(() => {
         @retry-backend="chatStore.checkBackend()"
         @set-input-text="(text: string) => inputText = text"
         @navigate-to-workflow="navigateToTask('workflow')"
+        @compress-context="handleCompressContext"
       />
 
       <WorkbenchInputArea

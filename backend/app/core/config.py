@@ -9,10 +9,12 @@ from app.core.hardware import get_hardware_profile
 
 from app.security.crypto.secret_key_manager import is_placeholder, load_or_create_secret_key
 
+from app import __version__
+
 
 class Settings(BaseSettings):
     APP_NAME: str = "LuomiNest"
-    APP_VERSION: str = "0.7.6"
+    APP_VERSION: str = __version__
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
@@ -42,6 +44,14 @@ class Settings(BaseSettings):
     LLM_DEFAULT_MAX_TOKENS: int = 4096
     LLM_DEFAULT_TOP_P: float = 0.9
     LLM_MAX_CONCURRENT_REQUESTS: int = 0  # 0 表示根据硬件自动计算
+
+    # LLM 上下文压缩配置
+    LLM_COMPRESS_ENABLED: bool = False
+    LLM_COMPRESSION_THRESHOLD: float = 0.82
+    LLM_SUMMARY_MODEL: str = ""
+    LLM_SUMMARY_PROVIDER: str = ""
+    LLM_SUMMARY_MAX_TOKENS: int = 512
+    LLM_CONTEXT_WINDOW_SIZE: int = 0  # 0 表示自动从 provider 获取
 
     LIVE2D_MODEL_PATH: str = "./models/live2d"
     VRM_MODEL_PATH: str = "./models/vrm"

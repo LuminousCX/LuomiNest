@@ -19,6 +19,7 @@ import {
   Check,
   Copy,
   X,
+  Minimize2,
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 import LumiEmptyState from '../common/LumiEmptyState.vue'
@@ -44,6 +45,8 @@ const props = defineProps<{
   confirmationFeedback: string
   isNearBottom: boolean
   showScrollToBottomBtn: boolean
+  contextTokens: number
+  isCompressing: boolean
 }>()
 
 const emit = defineEmits<{
@@ -61,6 +64,7 @@ const emit = defineEmits<{
   'retry-backend': []
   'set-input-text': [text: string]
   'navigate-to-workflow': []
+  'compress-context': []
 }>()
 
 const messagesContainer = ref<HTMLElement | null>(null)
@@ -463,6 +467,26 @@ defineExpose({
                   @click="emit('regenerate', msg.id)"
                 >
                   <RotateCcw :size="14" />
+                </LumiButton>
+              </div>
+
+              <div v-if="msg.role === 'assistant' && msg.done && isLastAssistantMessage(msg.id)" class="context-tokens-bar">
+                <span v-if="contextTokens > 0" class="context-tokens-text">
+                  当前上下文已使用 {{ contextTokens }} tokens
+                </span>
+                <span v-else class="context-tokens-text">
+                  上下文压缩
+                </span>
+                <LumiButton
+                  variant="ghost"
+                  size="sm"
+                  class="compress-btn"
+                  :disabled="isCompressing"
+                  @click="emit('compress-context')"
+                >
+                  <Loader2 v-if="isCompressing" :size="12" class="spin-animation" />
+                  <Minimize2 v-else :size="12" />
+                  <span>{{ isCompressing ? '压缩中...' : '压缩上下文' }}</span>
                 </LumiButton>
               </div>
 
@@ -1441,18 +1465,17 @@ button:focus-visible {
   display: flex;
   gap: var(--space-1);
   margin-top: var(--space-2);
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.message-row.assistant:hover .assistant-msg-actions {
-  opacity: 1;
 }
 
 .u-btn {
   width: 26px;
   height: 26px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
+}
+
+.u-btn :deep(svg) {
+  color: inherit;
+  stroke: currentColor;
 }
 
 .u-btn:hover {
@@ -1552,5 +1575,40 @@ button:focus-visible {
 .scroll-btn-fade-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(10px);
+}
+
+.context-tokens-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--surface-hover);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+
+.context-tokens-text {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.compress-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--lumi-primary);
+  margin-left: auto;
+}
+
+.compress-btn:hover:not(:disabled) {
+  color: var(--lumi-primary-hover, var(--lumi-primary));
+  background: var(--lumi-primary-light);
+}
+
+.compress-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

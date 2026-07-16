@@ -89,6 +89,8 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   const isStreaming = computed(() => chatStore.isStreaming || workflowStore.isRunning)
   const isBackendReady = computed(() => chatStore.isBackendReady)
   const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
+  const contextTokens = computed(() => chatStore.currentContextTokens)
+  const isCompressing = ref(false)
 
   // 对话模式（普通/标准/超长）
   const chatMode = ref<ChatModeLevel>('normal')
@@ -430,6 +432,23 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     scrollToBottom(true)
   }
 
+  const handleCompressContext = async (): Promise<void> => {
+    const convId = chatStore.currentConvId
+    if (!convId || isCompressing.value) return
+    isCompressing.value = true
+    try {
+      const result = await chatStore.compressConversation(convId)
+      if (result.compressed) {
+        toast.success(`上下文压缩成功：${result.tokens_before} → ${result.tokens_after} tokens`)
+      }
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e)
+      toast.error(`上下文压缩失败：${errMsg}`)
+    } finally {
+      isCompressing.value = false
+    }
+  }
+
   // watch: 初始化 showReasoning
   watch(
     () => messages.value,
@@ -480,6 +499,8 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     isLoadingCurrentConv,
     isWorkflowMode,
     canSend,
+    contextTokens,
+    isCompressing,
     // 子组件引用
     chatAreaRef,
     // 方法
@@ -489,5 +510,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     sendMessage,
     cancelStreaming,
     handleRegenerate,
+    handleCompressContext,
   }
 }

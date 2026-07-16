@@ -13,7 +13,7 @@ FRONTEND_DIR    := $(PROJECT_ROOT)/frontend
 BACKEND_DIR     := $(PROJECT_ROOT)/backend
 DIST_DIR        := $(PROJECT_ROOT)/dist
 
-VERSION         := 0.7.6
+VERSION         := $(shell $(PYTHON) -c "import re; c=open('$(BACKEND_DIR)/pyproject.toml').read(); m=re.search(r'version\s*=\s*\"([^\"]+)\"', c); print(m.group(1) if m else '0.0.0')")
 
 ifeq ($(OS),Windows_NT)
   ACTIVATE      := .venv\Scripts\activate &&

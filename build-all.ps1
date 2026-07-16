@@ -32,6 +32,17 @@ if ($Platform -eq "win") {
     $BackendExe = Join-Path $BackendDir "dist/luominest-backend/luominest-backend"
 }
 
+# ── 版本号统一入口 ──────────────────────────────────────────
+# 版本唯一来源：backend/pyproject.toml
+# build-all.ps1 自动同步到 frontend/package.json（electron-builder/app.getVersion）
+# 以及 INNO Setup（ISCC -D 参数），确保所有位置版本一致。
+$PyProjectPath = Join-Path $BackendDir "pyproject.toml"
+$AppVersion = if (Test-Path $PyProjectPath) {
+    $content = Get-Content $PyProjectPath -Raw
+    if ($content -match 'version\s*=\s*"([^"]+)"') { $matches[1] } else { "0.0.0" }
+} else { "0.0.0" }
+Write-Host "AppVersion: $AppVersion (from pyproject.toml)" -ForegroundColor Green
+
 # Mirror acceleration for China users
 $env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
 $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://npmmirror.com/mirrors/electron-builder-binaries/"
@@ -82,6 +93,20 @@ if ($Platform -eq "win") {
 Write-Host "Pre-check: Cleaning stale PyInstaller output..." -ForegroundColor Gray
 Remove-Item -Recurse -Force (Join-Path $BackendDir "dist") -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force (Join-Path $BackendDir "build") -ErrorAction SilentlyContinue
+
+# 同步版本到 frontend/package.json（electron-builder 和 app.getVersion 从此读取）
+$PkgJsonPath = Join-Path $FrontendDir "package.json"
+# 显式 UTF-8 读取，避免 PS5.1 默认 GBK 编码导致中文乱码 → JSON 解析失败
+$PkgJson = [System.IO.File]::ReadAllText($PkgJsonPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+if ($PkgJson.version -ne $AppVersion) {
+    $PkgJson.version = $AppVersion
+    $jsonStr = $PkgJson | ConvertTo-Json -Depth 10
+    # 使用 BOM-free UTF-8 写入，否则 Node.js / electron-builder 解析 JSON 失败
+    [System.IO.File]::WriteAllText($PkgJsonPath, $jsonStr, (New-Object System.Text.UTF8Encoding $false))
+    Write-Host "Synced package.json version to $AppVersion" -ForegroundColor Yellow
+} else {
+    Write-Host "package.json version is already $AppVersion, no update needed" -ForegroundColor Gray
+}
 
 # ============================================================
 # Step 1: Build backend with PyInstaller
@@ -203,7 +228,7 @@ if ($Platform -eq "win") {
     }
     Write-Host "Compiling INNO Setup installer..." -ForegroundColor Yellow
     Set-Location $FrontendDir
-    & $Iscc "build\luominest.iss"
+    & $Iscc "-DLuomiNestAppVersion=$AppVersion" "build\luominest.iss"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERROR] INNO Setup compile failed" -ForegroundColor Red
         exit 1

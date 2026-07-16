@@ -1,6 +1,6 @@
 import uuid
 import time
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException
 from typing import Any
@@ -74,7 +74,8 @@ async def chat_completions(request: ChatRequest):
                 break
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
-    messages = await ctx_mgr.process(messages)
+    process_result = await ctx_mgr.process(messages)
+    messages = process_result["messages"]
 
     if request.stream:
         logger.info("[API] POST /chat/completions - Starting stream response")
@@ -123,9 +124,12 @@ async def chat_completions(request: ChatRequest):
 
 
 @router.get("/conversations", response_model=list[ConversationListResponse])
-async def list_conversations(agent_id: str | None = None):
-    logger.info(f"[API] GET /chat/conversations - Listing conversations, agent_id={agent_id}")
-    conv_list = await conversation_store.list_conversations_async(agent_id)
+async def list_conversations(
+    agent_id: str | None = None,
+    include_hidden: bool = Query(default=False, description="是否包含隐藏对话"),
+):
+    logger.info(f"[API] GET /chat/conversations - Listing conversations, agent_id={agent_id}, include_hidden={include_hidden}")
+    conv_list = await conversation_store.list_conversations_async(agent_id, include_hidden=include_hidden)
     result = []
     for meta in conv_list:
         conv_id = meta.get("id")
@@ -139,6 +143,7 @@ async def list_conversations(agent_id: str | None = None):
             model=meta.get("model"),
             provider=meta.get("provider"),
             chat_mode=meta.get("chat_mode", "normal"),
+            is_hidden=bool(meta.get("is_hidden", False)),
             last_message=meta.get("last_message"),
             created_at=meta.get("created_at", ""),
             updated_at=meta.get("updated_at", ""),
@@ -186,6 +191,7 @@ async def create_conversation(request: ConversationCreate):
         "model": request.model,
         "provider": request.provider,
         "chat_mode": request.chat_mode or "normal",
+        "is_hidden": request.is_hidden,
         "messages": [],
         "created_at": now,
         "updated_at": now,
@@ -381,7 +387,8 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
     )
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
-    all_messages = await ctx_mgr.process(all_messages)
+    process_result = await ctx_mgr.process(all_messages)
+    all_messages = process_result["messages"]
 
     gen_state: dict = {
         "content": "",
@@ -573,7 +580,8 @@ async def add_message(conv_id: str, request: ChatRequest):
                 break
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
-    all_messages = await ctx_mgr.process(all_messages)
+    process_result = await ctx_mgr.process(all_messages)
+    all_messages = process_result["messages"]
 
     gen_state: dict = {
         "content": "",
@@ -715,6 +723,50 @@ async def batch_soft_delete(request: BatchIdsRequest):
     logger.success(f"[API] POST /chat/conversations/batch-delete - Moved {count} to trash")
     return ok({"deleted_count": count})
     
+
+@router.post("/conversations/{conv_id}/compress")
+async def compress_conversation(conv_id: str):
+    """手动压缩对话上下文。"""
+    logger.info(f"[API] POST /chat/conversations/{conv_id}/compress - Compressing conversation")
+    conv = await require_store(conversation_store, conv_id, "Conversation")
+
+    agent_id = await _resolve_agent_id(conv)
+    resolved_provider = conv.get("provider") or llm_adapter.default_provider
+    resolved_model = conv.get("model") or llm_adapter.get_provider(resolved_provider).default_model
+
+    # 构建完整消息列表
+    system_prompt = context_service.build_system_prompt(agent_id)
+    all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    for m in conv["messages"]:
+        all_messages.append({"role": m["role"], "content": m["content"]})
+
+    ctx_mgr = get_context_manager(resolved_provider, resolved_model)
+
+    # 计算压缩前 token 数
+    tokens_before = ctx_mgr.token_counter.count_tokens(all_messages)
+
+    # 强制压缩：通过 force_compression 参数触发，避免修改共享的 compressor.compression_threshold
+    # （共享对象在并发请求中会被复用，直接修改 threshold 会导致其他请求的阈值判断失效）
+    process_result = await ctx_mgr.process(all_messages, chat_mode="compress", force_compression=True)
+    compressed_messages = process_result["messages"]
+
+    tokens_after = ctx_mgr.token_counter.count_tokens(compressed_messages)
+
+    # 回写 conversation（去除 system 消息后存储）
+    non_system_messages = [m for m in compressed_messages if m.get("role") != "system"]
+    # 将摘要消息写回
+    conv["messages"] = non_system_messages
+    await _chat_service.persist_conv(conv_id, conv)
+
+    logger.success(
+        f"[API] POST /chat/conversations/{conv_id}/compress - "
+        f"Done: {tokens_before} -> {tokens_after} tokens"
+    )
+    return ok({
+        "compressed": True,
+        "tokens_before": tokens_before,
+        "tokens_after": tokens_after,
+    })
 
 class TTSRequest(BaseModel):
     text: str = Field(..., max_length=2000)

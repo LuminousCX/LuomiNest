@@ -68,10 +68,14 @@ class ConversationRepository(BaseRepository):
 
     # ── List / Search ──
 
-    def list_meta(self, agent_id: Optional[str] = None) -> list[dict]:
+    def list_meta(self, agent_id: Optional[str] = None, include_hidden: bool = False) -> list[dict]:
         """列表查询（不含 messages/search_text），按 updated_at 降序。"""
         with sync_session_factory() as session:
             stmt = select(Conversation).where(Conversation.deleted_at.is_(None))
+            if not include_hidden:
+                stmt = stmt.where(
+                    or_(Conversation.is_hidden.is_(False), Conversation.is_hidden.is_(None))
+                )
             if agent_id:
                 stmt = stmt.where(Conversation.agent_id == agent_id)
             stmt = stmt.order_by(Conversation.updated_at.desc())
@@ -229,8 +233,8 @@ class ConversationRepository(BaseRepository):
 
     # ── Async wrappers ──
 
-    async def list_meta_async(self, agent_id: Optional[str] = None) -> list[dict]:
-        return await asyncio.to_thread(self.list_meta, agent_id)
+    async def list_meta_async(self, agent_id: Optional[str] = None, include_hidden: bool = False) -> list[dict]:
+        return await asyncio.to_thread(self.list_meta, agent_id, include_hidden)
 
     async def search_async(self, keyword: str, agent_id: Optional[str] = None) -> list[dict]:
         return await asyncio.to_thread(self.search, keyword, agent_id)
