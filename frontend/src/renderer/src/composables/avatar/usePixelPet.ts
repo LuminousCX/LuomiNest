@@ -411,7 +411,6 @@ export function usePixelPet(
   let pixiApp: Application | null = null
   let currentSprite: AnimatedSprite | null = null
   let stateTextures: Map<string, Texture[]> = new Map()
-  let idleTimer: ReturnType<typeof setTimeout> | null = null
 
   // ------------------------------------------------------------------
   // 生命周期
@@ -457,10 +456,6 @@ export function usePixelPet(
   }
 
   const destroy = (): void => {
-    if (idleTimer) {
-      clearTimeout(idleTimer)
-      idleTimer = null
-    }
     if (currentSprite) {
       pixiApp?.stage.removeChild(currentSprite)
       currentSprite.destroy()
