@@ -409,6 +409,16 @@ interface RawModelConfig {
   stt_auto_send_delay?: number
   sttEngine?: string
   stt_engine?: string
+  contextWindowSize?: number
+  context_window_size?: number
+  compressionThreshold?: number
+  compression_threshold?: number
+  llmCompressEnabled?: boolean
+  llm_compress_enabled?: boolean
+  summaryModel?: string
+  summary_model?: string
+  summaryProvider?: string
+  summary_provider?: string
 }
 
 const TTS_VOICES = [
@@ -771,6 +781,11 @@ export const useModelStore = defineStore('model', () => {
           sttAutoSend: config.sttAutoSend ?? config.stt_auto_send ?? false,
           sttAutoSendDelay: config.sttAutoSendDelay ?? config.stt_auto_send_delay ?? 2000,
           sttEngine: config.sttEngine || config.stt_engine || 'auto',
+          contextWindowSize: config.contextWindowSize ?? config.context_window_size ?? 0,
+          compressionThreshold: config.compressionThreshold ?? config.compression_threshold ?? 0.82,
+          llmCompressEnabled: config.llmCompressEnabled ?? config.llm_compress_enabled ?? false,
+          summaryModel: config.summaryModel || config.summary_model || '',
+          summaryProvider: config.summaryProvider || config.summary_provider || '',
         }
       }
     } catch {
@@ -805,6 +820,11 @@ export const useModelStore = defineStore('model', () => {
       if (config.sttAutoSend !== undefined) body.sttAutoSend = config.sttAutoSend
       if (config.sttAutoSendDelay !== undefined) body.sttAutoSendDelay = config.sttAutoSendDelay
       if (config.sttEngine !== undefined) body.sttEngine = config.sttEngine
+      if (config.contextWindowSize !== undefined) body.contextWindowSize = config.contextWindowSize
+      if (config.compressionThreshold !== undefined) body.compressionThreshold = config.compressionThreshold
+      if (config.llmCompressEnabled !== undefined) body.llmCompressEnabled = config.llmCompressEnabled
+      if (config.summaryModel !== undefined) body.summaryModel = config.summaryModel
+      if (config.summaryProvider !== undefined) body.summaryProvider = config.summaryProvider
 
       try {
         await apiPatch('/models/config', body)

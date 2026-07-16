@@ -136,6 +136,12 @@ class ModelConfigUpdate(BaseModel):
     stt_auto_send: bool | None = Field(alias="sttAutoSend", default=None)
     stt_auto_send_delay: int | None = Field(alias="sttAutoSendDelay", default=None)
     stt_engine: str | None = Field(alias="sttEngine", default=None)
+    # LLM 上下文窗口与压缩配置
+    context_window_size: int | None = Field(alias="contextWindowSize", default=None, ge=0, le=1_000_000)
+    compression_threshold: float | None = Field(alias="compressionThreshold", default=None, ge=0.5, le=0.95)
+    llm_compress_enabled: bool | None = Field(alias="llmCompressEnabled", default=None)
+    summary_model: str | None = Field(alias="summaryModel", default=None)
+    summary_provider: str | None = Field(alias="summaryProvider", default=None)
 
 
 def _build_provider_response(provider_id: str) -> ProviderResponse:
@@ -389,9 +395,22 @@ async def get_model_config():
                    "reasoner_max_tokens", "reasoner_effort", "tts_provider",
                    "tts_model", "tts_voice", "tts_speed", "stt_provider",
                    "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay",
-                   "stt_engine"]:
+                   "stt_engine", "context_window_size", "compression_threshold",
+                   "llm_compress_enabled", "summary_model", "summary_provider"]:
         if field in saved:
             config[field] = saved[field]
+    # 上下文配置也可从 settings 读取默认值
+    for field in ["context_window_size", "compression_threshold", "llm_compress_enabled", "summary_model", "summary_provider"]:
+        if field not in config:
+            settings_key = {
+                "context_window_size": "LLM_CONTEXT_WINDOW_SIZE",
+                "compression_threshold": "LLM_COMPRESSION_THRESHOLD",
+                "llm_compress_enabled": "LLM_COMPRESS_ENABLED",
+                "summary_model": "LLM_SUMMARY_MODEL",
+                "summary_provider": "LLM_SUMMARY_PROVIDER",
+            }.get(field)
+            if settings_key:
+                config[field] = getattr(settings, settings_key)
     logger.success(f"[API] GET /models/config - Success: provider={config['default_provider']}, model={config['default_model']}")
     return ok(config)
 
@@ -446,6 +465,22 @@ async def update_model_config(request: ModelConfigUpdate):
         updated_fields.append("stt_auto_send_delay")
     if request.stt_engine is not None:
         updated_fields.append("stt_engine")
+    # 上下文窗口与压缩配置
+    if request.context_window_size is not None:
+        settings.LLM_CONTEXT_WINDOW_SIZE = request.context_window_size
+        updated_fields.append("context_window_size")
+    if request.compression_threshold is not None:
+        settings.LLM_COMPRESSION_THRESHOLD = request.compression_threshold
+        updated_fields.append("compression_threshold")
+    if request.llm_compress_enabled is not None:
+        settings.LLM_COMPRESS_ENABLED = request.llm_compress_enabled
+        updated_fields.append("llm_compress_enabled")
+    if request.summary_model is not None:
+        settings.LLM_SUMMARY_MODEL = request.summary_model
+        updated_fields.append("summary_model")
+    if request.summary_provider is not None:
+        settings.LLM_SUMMARY_PROVIDER = request.summary_provider
+        updated_fields.append("summary_provider")
 
     existing_config = _load_model_config()
     config_to_save = {
@@ -460,7 +495,8 @@ async def update_model_config(request: ModelConfigUpdate):
                    "reasoner_max_tokens", "reasoner_effort", "tts_provider",
                    "tts_model", "tts_voice", "tts_speed", "stt_provider",
                    "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay",
-                   "stt_engine"]:
+                   "stt_engine", "context_window_size", "compression_threshold",
+                   "llm_compress_enabled", "summary_model", "summary_provider"]:
         val = getattr(request, field, None)
         if val is not None:
             config_to_save[field] = val

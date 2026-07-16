@@ -47,6 +47,10 @@ export const useChatStore = defineStore('chat', () => {
   const convAbortControllers = ref<Record<string, AbortController>>({})
   const convLoading = ref<Record<string, boolean>>({})
   const convData = ref<Record<string, Conversation>>({})
+  const convContextTokens = ref<Record<string, number>>({})
+
+  // 桌宠专属隐藏对话 ID（全局共享，桌宠窗口 / 皮套工坊 / 工作台三入口共用）
+  const desktopPetConvId = ref<string | null>(null)
 
   // 搜索跳转：点击搜索结果时暂存关键词，加载完对话后滚动到匹配消息
   const pendingSearchKeyword = ref('')
@@ -80,6 +84,12 @@ export const useChatStore = defineStore('chat', () => {
 
   const currentMessages = computed(() => messages.value)
 
+  const currentContextTokens = computed(() => {
+    const convId = currentConvId.value
+    if (!convId) return 0
+    return convContextTokens.value[convId] || 0
+  })
+
   const isConversationStreaming = (convId: string) => !!convStreaming.value[convId]
 
   const fetchConversations = async (agentId?: string) => {
@@ -96,12 +106,15 @@ export const useChatStore = defineStore('chat', () => {
         model: conv.model,
         provider: conv.provider,
         last_message: conv.last_message,
+        is_hidden: (conv as any).is_hidden,
         created_at: conv.created_at || conv.createdAt || '',
         updated_at: conv.updated_at || conv.updatedAt || '',
       }))
+      // 二次过滤：排除 is_hidden=True 的对话（后端已过滤，前端做兜底）
+      const visibleConvs = convs.filter(c => !c.is_hidden)
       agentConversations.value = {
         ...agentConversations.value,
-        [targetAgentId]: convs
+        [targetAgentId]: visibleConvs
       }
     } catch (error: unknown) {
       logger.warn('Failed to fetch conversations:', error)
@@ -188,7 +201,7 @@ export const useChatStore = defineStore('chat', () => {
     return isBackendReady.value
   }
 
-  const createConversation = async (title?: string, agentId?: string, model?: string, provider?: string, chatMode?: string) => {
+  const createConversation = async (title?: string, agentId?: string, model?: string, provider?: string, chatMode?: string, isHidden?: boolean) => {
     const targetAgentId = agentId || activeAgentId.value
     if (!targetAgentId) return null
 
@@ -198,6 +211,7 @@ export const useChatStore = defineStore('chat', () => {
       model,
       provider,
       chat_mode: chatMode || 'normal',
+      is_hidden: isHidden || false,
     })
     convData.value = { ...convData.value, [conv.id]: conv }
     agentCurrentConvId.value = { ...agentCurrentConvId.value, [targetAgentId]: conv.id }
@@ -321,15 +335,20 @@ export const useChatStore = defineStore('chat', () => {
       chatMode?: 'normal' | 'standard' | 'ultra'
       _preserveVersions?: MessageVersion[]
       onChunk?: (chunk: ChatStreamChunk) => void
+      targetConvId?: string
     }
   ) => {
     const targetAgentId = options?.agentId || activeAgentId.value
     if (!targetAgentId) return
 
+    // 空消息守卫：内容为空时不触发自动创建对话
+    if (!content.trim()) return
+
     // 发送消息时立即清除推荐
     currentSuggestionMessageId.value = null
 
-    let convId = agentCurrentConvId.value[targetAgentId]
+    // 优先使用调用方指定的对话 ID（桌宠/皮套工坊场景）
+    let convId = options?.targetConvId || agentCurrentConvId.value[targetAgentId]
 
     if (!convId) {
       const conv = await createConversation(
@@ -521,6 +540,9 @@ export const useChatStore = defineStore('chat', () => {
             logger.debug('done chunk suggestions:', chunk.suggested_questions)
             if (chunk.suggested_questions && chunk.suggested_questions.length > 0) {
               updatedMsg.suggestedQuestions = chunk.suggested_questions
+            }
+            if (chunk.context_tokens !== undefined) {
+              convContextTokens.value = { ...convContextTokens.value, [streamingConvId]: chunk.context_tokens }
             }
           } else {
             updatedMsg.suggestedQuestions = undefined
@@ -719,6 +741,9 @@ export const useChatStore = defineStore('chat', () => {
           if (chunk.done && chunk.suggested_questions && chunk.suggested_questions.length > 0) {
             streamDoneSuggestions = chunk.suggested_questions
           }
+          if (chunk.done && chunk.context_tokens !== undefined) {
+            convContextTokens.value = { ...convContextTokens.value, [streamingConvId]: chunk.context_tokens }
+          }
           const updatedMsg: ChatMessage = {
             ...existing,
             content: existing.content + (chunk.content || ''),
@@ -808,6 +833,22 @@ export const useChatStore = defineStore('chat', () => {
     lastError.value = null
   }
 
+  const compressConversation = async (convId: string): Promise<{ compressed: boolean; tokens_before: number; tokens_after: number }> => {
+    try {
+      const result = await apiPost<{ compressed: boolean; tokens_before: number; tokens_after: number }>(
+        `/chat/conversations/${convId}/compress`,
+        {}
+      )
+      if (result.compressed) {
+        convContextTokens.value = { ...convContextTokens.value, [convId]: result.tokens_after }
+      }
+      return result
+    } catch (error) {
+      logger.warn('Failed to compress conversation:', error)
+      throw error
+    }
+  }
+
   const leaveCurrentConversation = async (convId: string) => {
     try {
       await apiPost(`/chat/conversations/${convId}/leave`)
@@ -863,7 +904,15 @@ export const useChatStore = defineStore('chat', () => {
           await loadConversation(currentId)
         }
       } else if (agentConversations.value[newAgentId].length > 0) {
-        const latestConv = agentConversations.value[newAgentId][0]
+        // 优先选择最近有消息的对话（按 updated_at 降序，跳过空对话）
+        const sortedConvs = [...agentConversations.value[newAgentId]]
+          .filter(c => c.last_message && c.last_message.trim())
+          .sort((a, b) => {
+            const ta = a.updated_at ? new Date(a.updated_at).getTime() : 0
+            const tb = b.updated_at ? new Date(b.updated_at).getTime() : 0
+            return tb - ta
+          })
+        const latestConv = sortedConvs[0] || agentConversations.value[newAgentId][0]
         if (latestConv?.id) {
           try {
             await loadConversation(latestConv.id)
@@ -910,5 +959,9 @@ export const useChatStore = defineStore('chat', () => {
     quotedMessage,
     switchVersion,
     regenerateMessage,
+    convContextTokens,
+    currentContextTokens,
+    compressConversation,
+    desktopPetConvId,
   }
 })

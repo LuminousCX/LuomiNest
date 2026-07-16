@@ -5,7 +5,9 @@ from app.core.utils import utc_now
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.json_store import JsonStore
 
-MAIN_AGENT_ID = "main"
+# 主 Agent 唯一标识，与 context_service.py 中的 MAIN_AGENT_ID 保持一致
+# 注意：旧数据中 agent_id 为 "main"，context_service.is_main_agent() 已做兼容
+MAIN_AGENT_ID = "luominest_main_agent"
 
 _platform_sessions_store = JsonStore("platform_sessions.json")
 
@@ -84,6 +86,59 @@ def list_platform_sessions(instance_id: str | None = None) -> list[dict]:
     if instance_id:
         return [s for s in all_sessions if s.get("instance_id") == instance_id]
     return all_sessions
+
+
+async def create_new_conversation(instance_id: str, session_id: str) -> dict:
+    """为指定的平台实例和会话创建全新的对话（/new 命令）。
+
+    清除旧的会话映射，创建新的 conversation，返回新对话信息。
+    """
+    key = _session_key(instance_id, session_id)
+    old_mapping = _platform_sessions_store.get(key, {})
+
+    # 从旧映射中保留平台元信息
+    platform_name = old_mapping.get("platform_name", "unknown")
+    sender_name = old_mapping.get("sender_name", "")
+    is_group = old_mapping.get("is_group", False)
+
+    conv_id = f"plat-{uuid.uuid4().hex[:12]}"
+    now = utc_now()
+    title_prefix = "群聊" if is_group else "私聊"
+    title = f"[{platform_name}] {title_prefix} {sender_name or session_id}"[:60]
+
+    conv = {
+        "id": conv_id,
+        "title": title,
+        "agent_id": MAIN_AGENT_ID,
+        "messages": [],
+        "created_at": now,
+        "updated_at": now,
+        "platform": {
+            "instance_id": instance_id,
+            "session_id": session_id,
+            "platform_name": platform_name,
+            "sender_name": sender_name,
+            "is_group": is_group,
+        },
+    }
+    await conversation_store.set_async(conv_id, conv)
+
+    _platform_sessions_store.set(key, {
+        "conversation_id": conv_id,
+        "instance_id": instance_id,
+        "session_id": session_id,
+        "platform_name": platform_name,
+        "sender_name": sender_name,
+        "is_group": is_group,
+        "created_at": now,
+        "updated_at": now,
+    })
+    logger.info(f"[PlatformSession] Created new conversation {conv_id} for {key} (replacing old mapping)")
+    return {
+        "id": conv_id,
+        "title": title,
+        "created_at": now,
+    }
 
 
 def remove_platform_session(instance_id: str, session_id: str) -> bool:

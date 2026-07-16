@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     LLM_DEFAULT_TOP_P: float = 0.9
     LLM_MAX_CONCURRENT_REQUESTS: int = 0  # 0 表示根据硬件自动计算
 
+    # LLM 上下文压缩配置
+    LLM_COMPRESS_ENABLED: bool = False
+    LLM_COMPRESSION_THRESHOLD: float = 0.82
+    LLM_SUMMARY_MODEL: str = ""
+    LLM_SUMMARY_PROVIDER: str = ""
+    LLM_SUMMARY_MAX_TOKENS: int = 512
+    LLM_CONTEXT_WINDOW_SIZE: int = 0  # 0 表示自动从 provider 获取
+
     LIVE2D_MODEL_PATH: str = "./models/live2d"
     VRM_MODEL_PATH: str = "./models/vrm"
 

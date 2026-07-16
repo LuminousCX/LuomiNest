@@ -7,12 +7,14 @@ import {
   Zap,
   Atom,
   Plus,
+  Settings2,
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
 import AiModelMainConfig from '../../components/ai-model-settings/AiModelMainConfig.vue'
 import AiModelReasonerConfig from '../../components/ai-model-settings/AiModelReasonerConfig.vue'
 import AiModelAddProviderDialog from '../../components/ai-model-settings/AiModelAddProviderDialog.vue'
 import AiModelEditProviderDialog from '../../components/ai-model-settings/AiModelEditProviderDialog.vue'
+import AiModelContextConfig from '../../components/ai-model-settings/AiModelContextConfig.vue'
 
 const router = useRouter()
 const modelStore = useModelStore()
@@ -27,6 +29,7 @@ const activeTile = ref(props.initialTile || (route.meta?.initialTile as string) 
 const modelTiles = [
   { id: 'main', label: '主模型', icon: Zap, tag: '快速响应' },
   { id: 'reasoner', label: '推理模型', icon: Atom, tag: 'Agent' },
+  { id: 'context', label: '高级设置', icon: Settings2, tag: '上下文' },
 ]
 
 const showAddDialog = ref(false)
@@ -99,6 +102,9 @@ onMounted(async () => {
         />
         <AiModelReasonerConfig
           v-if="activeTile === 'reasoner'"
+        />
+        <AiModelContextConfig
+          v-if="activeTile === 'context'"
         />
       </div>
     </div>

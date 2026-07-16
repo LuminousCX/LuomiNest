@@ -164,6 +164,8 @@ export interface ChatStreamChunk {
   subagent_event?: SubagentEvent
   task_event?: TaskStreamEvent
   iteration?: number
+  /** 当前上下文已使用的 token 数（仅 done=True 的 chunk 携带） */
+  context_tokens?: number
 }
 
 export interface Conversation {
@@ -186,6 +188,7 @@ export interface ConversationListItem {
   provider?: string
   chat_mode?: string
   last_message?: string
+  is_hidden?: boolean
   created_at: string
   updated_at: string
 }
@@ -239,6 +242,16 @@ export interface ModelConfig {
   sttAutoSend?: boolean
   sttAutoSendDelay?: number
   sttEngine?: string
+  /** LLM 上下文窗口大小（0 = 自动从 provider 获取） */
+  contextWindowSize?: number
+  /** 压缩阈值（0.5 - 0.95） */
+  compressionThreshold?: number
+  /** 是否启用 LLM 摘要压缩 */
+  llmCompressEnabled?: boolean
+  /** 摘要模型 */
+  summaryModel?: string
+  /** 摘要供应商 */
+  summaryProvider?: string
 }
 
 export interface Skill {

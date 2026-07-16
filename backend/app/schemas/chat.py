@@ -58,6 +58,8 @@ class ChatStreamChunk(BaseModel):
     subagent_event: dict[str, Any] | None = None
     # 定时任务事件（主 Agent 通过 create_scheduled_task 工具创建任务时推送）
     task_event: dict[str, Any] | None = None
+    # 压缩后上下文 token 数（done 时回填）
+    context_tokens: int | None = None
 
     @field_validator("content", "reasoning_content", mode="before")
     @classmethod
@@ -71,6 +73,7 @@ class ConversationCreate(BaseModel):
     model: str | None = None
     provider: str | None = None
     chat_mode: str | None = None
+    is_hidden: bool = False
 
 
 class ConversationResponse(BaseModel):
@@ -80,6 +83,7 @@ class ConversationResponse(BaseModel):
     model: str | None = None
     provider: str | None = None
     chat_mode: str | None = None
+    is_hidden: bool = False
     messages: list[dict[str, Any]] = []
     created_at: str
     updated_at: str
@@ -92,6 +96,7 @@ class ConversationListResponse(BaseModel):
     model: str | None = None
     provider: str | None = None
     chat_mode: str | None = None
+    is_hidden: bool = False
     last_message: str | None = None
     created_at: str
     updated_at: str

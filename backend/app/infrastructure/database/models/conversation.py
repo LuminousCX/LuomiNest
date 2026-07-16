@@ -7,7 +7,7 @@ chat_mode 标记对话模式（normal/standard/ultra），切换模式需新建�
 """
 from typing import Optional
 
-from sqlalchemy import Index, String, Text, JSON
+from sqlalchemy import Boolean, Index, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base
@@ -25,6 +25,7 @@ class Conversation(Base):
     messages: Mapped[list] = mapped_column(JSON, default=list)
     last_message: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     search_text: Mapped[str] = mapped_column(Text, default="")
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     deleted_at: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[str] = mapped_column(String(64), default="")
     updated_at: Mapped[str] = mapped_column(String(64), default="", index=True)

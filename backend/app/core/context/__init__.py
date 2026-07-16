@@ -194,9 +194,15 @@ class LLMSummaryCompressor:
         keep_recent: int = 4,
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
+        summary_provider: str | None = None,
+        summary_model: str | None = None,
+        max_tokens: int = 512,
     ) -> None:
         self.keep_recent = keep_recent
         self.compression_threshold = compression_threshold
+        self.summary_provider = summary_provider
+        self.summary_model = summary_model
+        self.max_tokens = max_tokens
 
         self.instruction_text = instruction_text or (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
@@ -228,13 +234,19 @@ class LLMSummaryCompressor:
 
         try:
             from app.runtime.provider.llm.adapter import llm_adapter
-            raw = await llm_adapter.chat(
-                messages=llm_payload,
-                provider_name=llm_adapter.default_provider,
-                temperature=0.3,
-                max_tokens=1024,
-                route_hint=RouteHint.CHAT,
-            )
+            chat_kwargs: dict = {
+                "messages": llm_payload,
+                "temperature": 0.3,
+                "max_tokens": self.max_tokens,
+                "route_hint": RouteHint.CHAT,
+            }
+            if self.summary_provider:
+                chat_kwargs["provider_name"] = self.summary_provider
+            else:
+                chat_kwargs["provider_name"] = llm_adapter.default_provider
+            if self.summary_model:
+                chat_kwargs["model"] = self.summary_model
+            raw = await llm_adapter.chat(**chat_kwargs)
             summary_content = raw.get("content", "") if isinstance(raw, dict) else str(raw)
         except Exception as e:
             logger.error(f"[Compressor] LLM summary failed: {e}")
@@ -267,6 +279,9 @@ class ContextManager:
         llm_compress: bool = False,
         llm_compress_keep_recent: int = 4,
         llm_compress_instruction: str | None = None,
+        summary_provider: str | None = None,
+        summary_model: str | None = None,
+        summary_max_tokens: int = 512,
     ) -> None:
         self.max_context_tokens = max_context_tokens
         self.enforce_max_turns = enforce_max_turns
@@ -280,6 +295,9 @@ class ContextManager:
                 keep_recent=llm_compress_keep_recent,
                 instruction_text=llm_compress_instruction,
                 compression_threshold=compression_threshold,
+                summary_provider=summary_provider,
+                summary_model=summary_model,
+                max_tokens=summary_max_tokens,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(
@@ -287,7 +305,14 @@ class ContextManager:
                 compression_threshold=compression_threshold,
             )
 
-    async def process(self, messages: list[dict], trusted_token_usage: int = 0) -> list[dict]:
+    async def process(
+        self, messages: list[dict], trusted_token_usage: int = 0, chat_mode: str = "normal",
+    ) -> dict:
+        """处理上下文：截断 + 压缩。
+
+        Returns:
+            dict: {"messages": list[dict], "context_tokens": int}
+        """
         try:
             result = messages
 
@@ -305,10 +330,16 @@ class ContextManager:
                 if self.compressor.should_compress(result, total_tokens, self.max_context_tokens):
                     result = await self._run_compression(result, total_tokens)
 
-            return result
+            context_tokens = self.token_counter.count_tokens(result)
+            logger.debug(
+                f"[Compressor] process done: chat_mode={chat_mode}, "
+                f"messages={len(result)}, context_tokens={context_tokens}"
+            )
+            return {"messages": result, "context_tokens": context_tokens}
         except Exception as e:
             logger.error(f"[Compressor] Context processing error: {e}", exc_info=True)
-            return messages
+            context_tokens = self.token_counter.count_tokens(messages)
+            return {"messages": messages, "context_tokens": context_tokens}
 
     async def _run_compression(self, messages: list[dict], prev_tokens: int) -> list[dict]:
         logger.info(f"[Compressor] Compression triggered: {prev_tokens} tokens")
@@ -332,36 +363,55 @@ class ContextManager:
 _context_managers: dict[str, ContextManager] = {}
 
 
-def get_context_manager(provider_name: str | None = None, model: str = "") -> ContextManager:
+def get_context_manager(
+    provider_name: str | None = None,
+    model: str = "",
+    threshold_override: float | None = None,
+) -> ContextManager:
+    from app.core.config import settings
     from app.runtime.provider.llm.adapter import llm_adapter
 
-    key = f"{provider_name}:{model}"
+    # 从 settings 读取配置
+    llm_compress = settings.LLM_COMPRESS_ENABLED
+    compression_threshold = threshold_override if threshold_override is not None else settings.LLM_COMPRESSION_THRESHOLD
+    context_window = settings.LLM_CONTEXT_WINDOW_SIZE
+
+    # 复合缓存 key（包含 threshold 和 llm_compress）
+    key = f"{provider_name}:{model}:t{compression_threshold}:c{int(llm_compress)}"
 
     if key in _context_managers:
         return _context_managers[key]
 
-    context_window = 0
-    try:
-        provider = llm_adapter.get_provider(provider_name)
-        context_window = getattr(provider, "context_window", 0) or 0
-    except Exception:
-        pass
+    # context_window 未配置时从 provider 获取
+    if context_window <= 0:
+        try:
+            provider = llm_adapter.get_provider(provider_name)
+            context_window = getattr(provider, "context_window", 0) or 0
+        except Exception:
+            pass
 
     if context_window <= 0:
         context_window = 128000
 
-    max_context_tokens = int(context_window * 0.82)
+    max_context_tokens = int(context_window * compression_threshold)
 
     manager = ContextManager(
         max_context_tokens=max_context_tokens,
         enforce_max_turns=-1,
         truncate_turns=1,
-        compression_threshold=0.82,
-        llm_compress=False,
+        compression_threshold=compression_threshold,
+        llm_compress=llm_compress,
         llm_compress_keep_recent=4,
+        summary_provider=settings.LLM_SUMMARY_PROVIDER or None,
+        summary_model=settings.LLM_SUMMARY_MODEL or None,
+        summary_max_tokens=settings.LLM_SUMMARY_MAX_TOKENS,
     )
 
     _context_managers[key] = manager
-    logger.info(f"[Compressor] Created ContextManager for {key}: max_tokens={max_context_tokens}")
+    logger.info(
+        f"[Compressor] Created ContextManager for {key}: "
+        f"max_tokens={max_context_tokens}, llm_compress={llm_compress}, "
+        f"threshold={compression_threshold}"
+    )
 
     return manager

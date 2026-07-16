@@ -201,8 +201,7 @@ const handleConfig = (instance: PlatformInstance) => {
 
 <style scoped>
 .platform-list-panel {
-  width: 360px;
-  flex-shrink: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

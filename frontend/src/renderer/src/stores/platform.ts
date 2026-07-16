@@ -452,6 +452,18 @@ export const usePlatformStore = defineStore('platform', () => {
     }
   }
 
+  const createNewConversation = async (instanceId: string) => {
+    try {
+      await apiPost(`/platforms/instances/${instanceId}/conversations/new`, {})
+      await fetchConversations(instanceId)
+    } catch (e: unknown) {
+      const toast = useToast()
+      const msg = (e instanceof Error ? e.message : String(e)) || '未知错误'
+      toast.error(`创建对话失败：${msg}`)
+      throw e
+    }
+  }
+
   const clearLogs = async (instanceId: string) => {
     await apiDelete(`/platforms/instances/${instanceId}/logs`)
     await fetchLogs(instanceId)
@@ -575,6 +587,7 @@ export const usePlatformStore = defineStore('platform', () => {
     fetchLogSummary,
     fetchMainAgent,
     updateMainAgent,
+    createNewConversation,
     clearLogs,
     createInstance,
     updateInstance,

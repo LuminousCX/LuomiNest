@@ -411,6 +411,9 @@ async function handleChatSend() {
   const mainAgent = platformStore.mainAgent
   const resolved = modelStore.resolveModel
 
+  // 皮套工坊使用桌宠隐藏对话（与桌宠窗口、工作台共享同一 convId）
+  const targetConvId = chatStore.desktopPetConvId || undefined
+
   const options: {
     agentId: string
     model?: string
@@ -418,6 +421,7 @@ async function handleChatSend() {
     temperature?: number
     maxTokens?: number
     topP?: number
+    targetConvId?: string
     onChunk: (chunk: ChatStreamChunk) => void
   } = {
     agentId: MAIN_AGENT_ID,
@@ -426,6 +430,7 @@ async function handleChatSend() {
     temperature: mainAgent?.temperature ?? modelStore.modelConfig.defaultTemperature,
     maxTokens: mainAgent?.maxTokens ?? modelStore.modelConfig.defaultMaxTokens,
     topP: modelStore.modelConfig.defaultTopP,
+    targetConvId,
     onChunk: (chunk: ChatStreamChunk) => {
       if (chunk.done) {
         finishStream()
@@ -456,7 +461,11 @@ async function handleChatSend() {
 }
 
 function stopChatStream() {
-  chatStore.cancelCurrentRequest()
+  if (chatStore.desktopPetConvId) {
+    chatStore.cancelConversationRequest(chatStore.desktopPetConvId)
+  } else {
+    chatStore.cancelCurrentRequest()
+  }
   stopAvatarChat()
   finishStream()
   isChatStreaming.value = false

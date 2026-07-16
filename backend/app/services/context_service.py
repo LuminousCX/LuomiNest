@@ -20,11 +20,16 @@ from app.services.distillation_service import distillation_service
 
 # 主 Agent 唯一标识：记忆系统仅对主 Agent 生效，联系人 Agent 不读写记忆
 MAIN_AGENT_ID = "luominest_main_agent"
+# 旧版平台数据中使用的 agent_id，保留以兼容历史会话
+_LEGACY_MAIN_AGENT_ID = "main"
 
 
 def is_main_agent(agent_id: str | None) -> bool:
-    """判断给定 agent_id 是否为主 Agent（工作台）。"""
-    return agent_id == MAIN_AGENT_ID
+    """判断给定 agent_id 是否为主 Agent（工作台或平台）。
+
+    同时匹配新版 "luominest_main_agent" 和旧版 "main"，确保历史会话数据兼容。
+    """
+    return agent_id == MAIN_AGENT_ID or agent_id == _LEGACY_MAIN_AGENT_ID
 
 
 class ContextService:
