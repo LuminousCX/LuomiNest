@@ -393,8 +393,12 @@ def get_context_manager(
         try:
             provider = llm_adapter.get_provider(provider_name)
             context_window = getattr(provider, "context_window", 0) or 0
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                f"[Compressor] Failed to load provider context_window for "
+                f"provider={provider_name}, model={model}. "
+                f"Using fallback context window. error={e}"
+            )
 
     if context_window <= 0:
         context_window = 128000
