@@ -36,7 +36,7 @@ const summaryAvailableModels = computed(() => {
 const isContextWindowValid = computed(() => {
   const val = contextWindowSize.value
   if (val === 0) return { valid: true, error: '' }
-  if (val < 4096) return { valid: false, error: '上下文窗口大小不能至少为 4096 tokens' }
+  if (val < 4096) return { valid: false, error: '上下文窗口大小不能小于 4096 tokens' }
   if (val > 1000000) return { valid: false, error: '上下文窗口大小不能超过 1,000,000 tokens' }
   return { valid: true, error: '' }
 })

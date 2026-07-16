@@ -49,11 +49,13 @@ const emit = defineEmits<{
         <button
           v-for="mode in props.avatarModes"
           :key="mode.id"
-          :class="['mode-btn', { active: props.currentMode === mode.id }]"
-          @click="emit('select-mode', mode.id)"
+          :class="['mode-btn', { active: props.currentMode === mode.id, disabled: !mode.implemented }]"
+          :disabled="!mode.implemented"
+          :title="!mode.implemented ? `${mode.label} 渲染器开发中，敬请期待` : mode.desc"
+          @click="mode.implemented && emit('select-mode', mode.id)"
         >
           <span class="mode-name">{{ mode.label }}</span>
-          <span class="mode-desc">{{ mode.desc }}</span>
+          <span class="mode-desc">{{ mode.implemented ? mode.desc : 'Soon' }}</span>
         </button>
       </div>
 
@@ -245,7 +247,7 @@ const emit = defineEmits<{
   white-space: nowrap;
 }
 
-.mode-btn:hover {
+.mode-btn:hover:not(.disabled) {
   background: var(--surface-hover);
   color: var(--text);
 }
@@ -254,6 +256,11 @@ const emit = defineEmits<{
   background: var(--lumi-primary-light);
   border-color: var(--lumi-primary);
   color: var(--lumi-primary);
+}
+
+.mode-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .mode-name {

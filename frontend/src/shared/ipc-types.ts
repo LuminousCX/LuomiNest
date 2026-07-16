@@ -205,6 +205,8 @@ export const DesktopPetIpcChannels = {
     // 桌宠窗口 → 主进程 → 主应用窗口：聊天消息转发
     'desktop-pet:send-chat-message',
     'desktop-pet:cancel-chat',
+    // 多模型扩展：渲染器向主进程上报就绪状态（向后兼容，旧版不发送无影响）
+    'desktop-pet:renderer-ready',
   ] as const,
   ON: [
     'desktop-pet:load-model',
@@ -223,6 +225,8 @@ export const DesktopPetIpcChannels = {
     'desktop-pet:chat-cancel',
     // 主进程 → 桌宠窗口：流式状态反馈（输入区切换发送/取消按钮）
     'desktop-pet:streaming-state',
+    // 多模型扩展：主进程通知渲染器模型能力变更（向后兼容，旧版忽略）
+    'desktop-pet:capability-changed',
     'backend:stage',
     'tab:updated',
     'tab:new-tab-request',

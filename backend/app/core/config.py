@@ -9,10 +9,12 @@ from app.core.hardware import get_hardware_profile
 
 from app.security.crypto.secret_key_manager import is_placeholder, load_or_create_secret_key
 
+from app import __version__
+
 
 class Settings(BaseSettings):
     APP_NAME: str = "LuomiNest"
-    APP_VERSION: str = "0.7.6"
+    APP_VERSION: str = __version__
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 

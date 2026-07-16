@@ -144,9 +144,10 @@ class LuomiNestPlatformRouter:
                             message_type="text",
                         )
                     except Exception as e:
-                        logger.error(f"[PlatformRouter] /new command failed: {e}")
+                        # 服务端日志保留完整异常；对平台用户只返回固定提示，不暴露内部错误
+                        logger.error(f"[PlatformRouter] /new command failed: {e}", exc_info=True)
                         return PlatformResponse(
-                            content=f"[LuomiNest] 新建对话失败：{e}",
+                            content="[LuomiNest] 新建对话失败，请稍后重试",
                             message_type="text",
                         )
 

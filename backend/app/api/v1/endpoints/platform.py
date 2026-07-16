@@ -389,12 +389,13 @@ async def create_new_platform_conversation(instance_id: str, request: NewConvers
     try:
         result = await create_new_conversation(instance_id, session_id)
     except Exception as e:
-        logger.error(f"[API] Failed to create new conversation: {e}")
+        # 服务端日志保留完整异常信息用于诊断；对外只暴露固定错误消息，避免泄漏内部细节
+        logger.error(f"[API] Failed to create new conversation: {e}", exc_info=True)
         raise LuomiNestError(
-            f"Failed to create new conversation: {e}",
+            "Failed to create new conversation",
             code="CONVERSATION_CREATE_FAILED",
             status_code=500,
-        )
+        ) from e
 
     return ok({
         "id": result["id"],

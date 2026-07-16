@@ -74,7 +74,7 @@ class ConversationRepository(BaseRepository):
             stmt = select(Conversation).where(Conversation.deleted_at.is_(None))
             if not include_hidden:
                 stmt = stmt.where(
-                    or_(Conversation.is_hidden == False, Conversation.is_hidden.is_(None))
+                    or_(Conversation.is_hidden.is_(False), Conversation.is_hidden.is_(None))
                 )
             if agent_id:
                 stmt = stmt.where(Conversation.agent_id == agent_id)

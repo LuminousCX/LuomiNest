@@ -188,6 +188,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Platform router init skipped: {e}", exc_info=True)
 
+    # 初始化 Avatar Manifest Manager（多模型清单系统，P0 基础）
+    # 必须在 chat_service 调用 get_avatar_binding 之前完成（chat_service 使用同步回退）
+    try:
+        from app.services.avatar_manifest import avatar_manifest_manager
+        await avatar_manifest_manager.init()
+        logger.info(f"[LuomiNest] Avatar manifest manager initialized")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Avatar manifest init skipped: {e}", exc_info=True)
+
     # 启动时清理临时文件
     try:
         from app.services.cleanup_service import lumi_cleanup_service

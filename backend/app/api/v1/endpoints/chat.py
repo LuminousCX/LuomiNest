@@ -745,14 +745,10 @@ async def compress_conversation(conv_id: str):
     # 计算压缩前 token 数
     tokens_before = ctx_mgr.token_counter.count_tokens(all_messages)
 
-    # 强制压缩：临时降低阈值以触发压缩
-    original_threshold = ctx_mgr.compressor.compression_threshold
-    ctx_mgr.compressor.compression_threshold = 0.0  # 强制触发
-    try:
-        process_result = await ctx_mgr.process(all_messages, chat_mode="compress")
-        compressed_messages = process_result["messages"]
-    finally:
-        ctx_mgr.compressor.compression_threshold = original_threshold
+    # 强制压缩：通过 force_compression 参数触发，避免修改共享的 compressor.compression_threshold
+    # （共享对象在并发请求中会被复用，直接修改 threshold 会导致其他请求的阈值判断失效）
+    process_result = await ctx_mgr.process(all_messages, chat_mode="compress", force_compression=True)
+    compressed_messages = process_result["messages"]
 
     tokens_after = ctx_mgr.token_counter.count_tokens(compressed_messages)
 

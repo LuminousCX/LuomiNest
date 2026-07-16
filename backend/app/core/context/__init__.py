@@ -307,8 +307,13 @@ class ContextManager:
 
     async def process(
         self, messages: list[dict], trusted_token_usage: int = 0, chat_mode: str = "normal",
+        force_compression: bool = False,
     ) -> dict:
         """处理上下文：截断 + 压缩。
+
+        Args:
+            force_compression: 强制触发压缩，忽略 should_compress 阈值判断。
+                用于手动压缩端点，避免修改共享的 compressor.compression_threshold。
 
         Returns:
             dict: {"messages": list[dict], "context_tokens": int}
@@ -327,13 +332,14 @@ class ContextManager:
             if self.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(result, trusted_token_usage)
 
-                if self.compressor.should_compress(result, total_tokens, self.max_context_tokens):
+                if force_compression or self.compressor.should_compress(result, total_tokens, self.max_context_tokens):
                     result = await self._run_compression(result, total_tokens)
 
             context_tokens = self.token_counter.count_tokens(result)
             logger.debug(
                 f"[Compressor] process done: chat_mode={chat_mode}, "
-                f"messages={len(result)}, context_tokens={context_tokens}"
+                f"messages={len(result)}, context_tokens={context_tokens}, "
+                f"forced={force_compression}"
             )
             return {"messages": result, "context_tokens": context_tokens}
         except Exception as e:
@@ -393,7 +399,10 @@ def get_context_manager(
     if context_window <= 0:
         context_window = 128000
 
-    max_context_tokens = int(context_window * compression_threshold)
+    # 注意：max_context_tokens 传入完整的上下文窗口容量，不预乘 compression_threshold。
+    # should_compress 内部会用 current_tokens / max_tokens > threshold 判断，
+    # 若此处预先乘以 threshold，会导致实际触发阈值变为 threshold²（如 0.82²=0.67）。
+    max_context_tokens = int(context_window)
 
     manager = ContextManager(
         max_context_tokens=max_context_tokens,

@@ -1,0 +1,47 @@
+{
+  "id": "builtin-pixel-default",
+  "name": "Pixel Pet",
+  "fps": 8,
+  "states": {
+    "idle": {
+      "frames": 6,
+      "loop": true,
+      "next": null
+    },
+    "walk": {
+      "frames": 8,
+      "loop": true,
+      "next": null
+    },
+    "think": {
+      "frames": 6,
+      "loop": true,
+      "next": null
+    },
+    "talk": {
+      "frames": 4,
+      "loop": true,
+      "next": null
+    },
+    "happy": {
+      "frames": 6,
+      "loop": false,
+      "next": "idle"
+    },
+    "sad": {
+      "frames": 6,
+      "loop": true,
+      "next": null
+    },
+    "sleep": {
+      "frames": 6,
+      "loop": true,
+      "next": null
+    },
+    "alert": {
+      "frames": 4,
+      "loop": false,
+      "next": "idle"
+    }
+  }
+}

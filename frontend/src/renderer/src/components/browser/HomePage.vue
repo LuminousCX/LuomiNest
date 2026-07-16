@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import {
+  ref,
+  computed,
+  watch,
+  nextTick,
+  onMounted,
+  onBeforeUnmount
+} from 'vue'
 import type { Component } from 'vue'
 import {
   Send,
@@ -15,6 +22,7 @@ import {
   ArrowRight
 } from 'lucide-vue-next'
 
+// --- 类型定义 ---
 interface SearchEngine {
   id: string
   name: string
@@ -37,12 +45,13 @@ interface Website {
   className: string
 }
 
+// --- 数据 ---
 const searchEngines: SearchEngine[] = [
   { id: 'bing', name: 'Bing', icon: Search, url: 'https://www.bing.com/search?q=', color: 'var(--lumi-brand)' },
   { id: 'google', name: 'Google', icon: Globe, url: 'https://www.google.com/search?q=', color: 'var(--lumi-info)' },
   { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=', color: 'var(--lumi-sky)' },
   { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: 'var(--lumi-danger)' },
-  { id: 'ai', name: 'AI', icon: Bot, url: '', color: 'var(--task-purple)' }
+  { id: 'ai', name: 'AI', icon: Bot, url: '', color: 'var(--lumi-accent)' }
 ]
 
 const websites: Website[] = [
@@ -64,17 +73,85 @@ const quickActions: QuickAction[] = [
   { icon: Send, label: '填表单', color: 'var(--lumi-accent)', action: 'fill' }
 ]
 
+// --- 状态 ---
 const searchInput = ref('')
-const selectedEngine = ref<SearchEngine>(searchEngines[0])
+const selectedEngine = ref(searchEngines[0])
 const showEngineDropdown = ref(false)
 const isSearching = ref(false)
+const isSearchFocused = ref(false)
 const searchBoxRef = ref<HTMLElement | null>(null)
+const engineBtnRef = ref<HTMLElement | null>(null)
+const dropdownPos = ref({ left: 0, top: 0 })
 let searchResetTimer: ReturnType<typeof setTimeout> | null = null
 
+// 时钟
+const currentTime = ref('')
+const currentDate = ref('')
+const currentWeek = ref('')
+let clockTimer: ReturnType<typeof setInterval> | null = null
+const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+
+const greeting = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 6) return '夜深了'
+  if (hour < 9) return '早上好'
+  if (hour < 12) return '上午好'
+  if (hour < 14) return '中午好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+})
+
+// --- 网站品牌色 ---
+const wsColorMap: Record<string, string> = {
+  'ws-github': '#24292e',
+  'ws-google': '#4285f4',
+  'ws-mdn': '#1a1a1a',
+  'ws-stack': '#f48024',
+  'ws-bing': '#008373',
+  'ws-bili': '#fb7299',
+  'ws-youtube': '#ff0000',
+  'ws-zhihu': '#0084ff'
+}
+
+const getWsColor = (className: string): string => wsColorMap[className] ?? 'var(--lumi-brand)'
+
+// --- 事件 ---
 const emit = defineEmits<{
   search: [url: string]
   action: [action: string]
 }>()
+
+const updateClock = () => {
+  const now = new Date()
+  currentTime.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  currentDate.value = `${now.getMonth() + 1}月${now.getDate()}日`
+  currentWeek.value = weekDays[now.getDay()]
+}
+
+const updateDropdownPos = () => {
+  if (!engineBtnRef.value) return
+  const rect = engineBtnRef.value.getBoundingClientRect()
+  dropdownPos.value = {
+    left: rect.left,
+    top: rect.bottom + 8
+  }
+}
+
+const dropdownStyle = computed(() => ({
+  left: `${dropdownPos.value.left}px`,
+  top: `${dropdownPos.value.top}px`
+}))
+
+watch(showEngineDropdown, (show) => {
+  if (show) {
+    nextTick(updateDropdownPos)
+    window.addEventListener('resize', updateDropdownPos)
+    window.addEventListener('scroll', updateDropdownPos, true)
+  } else {
+    window.removeEventListener('resize', updateDropdownPos)
+    window.removeEventListener('scroll', updateDropdownPos, true)
+  }
+})
 
 const selectEngine = (engine: SearchEngine) => {
   selectedEngine.value = engine
@@ -84,18 +161,16 @@ const selectEngine = (engine: SearchEngine) => {
 const handleSearch = () => {
   const query = searchInput.value.trim()
   if (!query) return
-
   isSearching.value = true
 
   if (selectedEngine.value.id === 'ai') {
     emit('action', 'ai-search')
   } else {
-    const url = selectedEngine.value.url + encodeURIComponent(query)
-    emit('search', url)
+    emit('search', selectedEngine.value.url + encodeURIComponent(query))
   }
 
   if (searchResetTimer) clearTimeout(searchResetTimer)
-  searchResetTimer = setTimeout(() => {
+  searchResetTimer = window.setTimeout(() => {
     isSearching.value = false
     searchInput.value = ''
     searchResetTimer = null
@@ -109,456 +184,175 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 }
 
-const handleWebsiteClick = (url: string) => {
-  emit('search', url)
-}
+const handleWebsiteClick = (url: string) => emit('search', url)
 
-// 点击 .search-box 外部时关闭引擎下拉菜单
 const handleDocumentClick = (e: MouseEvent) => {
-  if (showEngineDropdown.value && searchBoxRef.value && !searchBoxRef.value.contains(e.target as Node)) {
+  if (
+    showEngineDropdown.value &&
+    searchBoxRef.value &&
+    !searchBoxRef.value.contains(e.target as Node)
+  ) {
     showEngineDropdown.value = false
   }
 }
 
+// --- 生命周期 ---
 onMounted(() => {
+  updateClock()
+  clockTimer = setInterval(updateClock, 1000)
   document.addEventListener('click', handleDocumentClick)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocumentClick)
+  window.removeEventListener('resize', updateDropdownPos)
+  window.removeEventListener('scroll', updateDropdownPos, true)
   if (searchResetTimer) clearTimeout(searchResetTimer)
+  if (clockTimer) clearInterval(clockTimer)
 })
 </script>
 
 <template>
   <div class="home-page">
-    <!-- 顶部品牌 + 搜索框 -->
-    <header class="home-header">
-      <h1 class="brand-title">
-        <span class="brand-lumi">Luomi</span><span class="brand-sub">Nest</span>
-      </h1>
+    <!-- 沉浸式背景 -->
+    <div class="home-bg" aria-hidden="true">
+      <div class="home-glow home-glow--top" />
+      <div class="home-glow home-glow--bottom" />
+    </div>
 
-      <div ref="searchBoxRef" class="search-box">
-        <div class="search-input-row">
-          <button class="engine-selector" @click="showEngineDropdown = !showEngineDropdown">
-            <component :is="selectedEngine.icon" :size="16" :style="{ color: selectedEngine.color }" />
-            <span class="engine-name">{{ selectedEngine.name }}</span>
-            <ChevronDown :size="14" class="engine-arrow" :class="{ rotated: showEngineDropdown }" />
-          </button>
+    <!-- 内容滚动区域 -->
+    <div class="home-scroll">
+      <div class="home-content">
+        <!-- ==================== 英雄区域 ==================== -->
+        <header class="hero-area home-stagger-enter">
+          <h1 class="hero-logo">
+            <span class="hero-logo-main">Luomi</span>
+            <span class="hero-logo-dim">Nest</span>
+          </h1>
+          <div class="hero-greeting">
+            <span class="hero-greeting-text">{{ greeting }}</span>
+            <span class="hero-greeting-dot" />
+            <time class="hero-greeting-time">{{ currentTime }}</time>
+          </div>
+          <p class="hero-date">{{ currentDate }} · {{ currentWeek }}</p>
+        </header>
 
-          <input
-            v-model="searchInput"
-            :placeholder="selectedEngine.id === 'ai' ? '向 AI 提问...' : `在 ${selectedEngine.name} 中搜索...`"
-            class="search-input"
-            @keydown="handleKeydown"
-          />
-
-          <button
-            class="send-btn"
-            :class="{ loading: isSearching }"
-            :disabled="!searchInput.trim() || isSearching"
-            @click="handleSearch"
-            aria-label="搜索"
+        <!-- ==================== 搜索框 ==================== -->
+        <div ref="searchBoxRef" class="search-wrap home-stagger-enter" style="animation-delay: 80ms">
+          <div
+            class="search-row"
+            :class="{ 'search-row--focus': isSearchFocused || showEngineDropdown }"
           >
-            <ArrowRight v-if="!isSearching" :size="18" />
-            <div v-else class="loading-spinner" />
-          </button>
-        </div>
-
-        <Transition name="dropdown">
-          <div v-if="showEngineDropdown" class="engine-dropdown">
+            <!-- 引擎选择 -->
             <button
-              v-for="engine in searchEngines"
-              :key="engine.id"
-              :class="['engine-option', { active: engine.id === selectedEngine.id }]"
-              @click="selectEngine(engine)"
+              ref="engineBtnRef"
+              class="search-engine-btn"
+              aria-haspopup="listbox"
+              :aria-expanded="showEngineDropdown"
+              @click="showEngineDropdown = !showEngineDropdown"
             >
-              <component :is="engine.icon" :size="15" :style="{ color: engine.color }" />
-              <span>{{ engine.name }}</span>
+              <component :is="selectedEngine.icon" :size="16" :style="{ color: selectedEngine.color }" />
+              <span class="search-engine-name">{{ selectedEngine.name }}</span>
+              <ChevronDown :size="13" class="search-engine-arrow" :class="{ 'is-open': showEngineDropdown }" />
+            </button>
+
+            <input
+              v-model="searchInput"
+              :placeholder="selectedEngine.id === 'ai' ? '向 AI 提问...' : `在 ${selectedEngine.name} 中搜索...`"
+              class="search-input"
+              @focus="isSearchFocused = true"
+              @blur="isSearchFocused = false"
+              @keydown="handleKeydown"
+            />
+
+            <button
+              class="search-submit"
+              :disabled="!searchInput.trim() || isSearching"
+              aria-label="搜索"
+              @click="handleSearch"
+            >
+              <ArrowRight v-if="!isSearching" :size="18" />
+              <span v-else class="search-submit-spinner" />
             </button>
           </div>
-        </Transition>
-      </div>
-    </header>
 
-    <!-- 常用网站 -->
-    <section class="content-section">
-      <h2 class="section-title">
-        <span class="title-bar"></span>
-        常用网站
-      </h2>
-      <div class="websites-grid">
-        <button
-          v-for="ws in websites"
-          :key="ws.name"
-          class="website-tile"
-          :title="ws.name"
-          @click="handleWebsiteClick(ws.url)"
-        >
-          <div :class="['website-icon', ws.className]">{{ ws.initial }}</div>
-          <span class="website-name">{{ ws.name }}</span>
-        </button>
-      </div>
-    </section>
+          <!-- 引擎下拉面板：Teleport 到 body，fixed 定位，避免被父容器裁剪 -->
+          <Teleport to="body">
+            <Transition name="dropdown">
+              <div
+                v-if="showEngineDropdown"
+                class="engine-dropdown"
+                role="listbox"
+                :style="dropdownStyle"
+              >
+                <button
+                  v-for="engine in searchEngines"
+                  :key="engine.id"
+                  class="engine-dropdown-item"
+                  :class="{ 'is-active': engine.id === selectedEngine.id }"
+                  role="option"
+                  :aria-selected="engine.id === selectedEngine.id"
+                  @click="selectEngine(engine)"
+                >
+                  <component :is="engine.icon" :size="15" :style="{ color: engine.color }" />
+                  <span>{{ engine.name }}</span>
+                </button>
+              </div>
+            </Transition>
+          </Teleport>
+        </div>
 
-    <!-- 开发者工具 -->
-    <section class="content-section">
-      <h2 class="section-title">
-        <span class="title-bar"></span>
-        开发者工具
-      </h2>
-      <div class="tools-grid">
-        <button
-          v-for="action in quickActions"
-          :key="action.label"
-          class="tool-card"
-          :style="{ '--tool-color': action.color }"
-          @click="emit('action', action.action)"
-        >
-          <div class="tool-icon">
-            <component :is="action.icon" :size="20" />
+        <!-- ==================== 常用网站 ==================== -->
+        <section class="home-section home-stagger-enter" style="animation-delay: 160ms">
+          <header class="section-head">
+            <span class="section-marker" />
+            <h2 class="section-label">常用网站</h2>
+          </header>
+          <div class="home-card">
+            <div class="tiles-grid tiles-grid--4">
+              <button
+                v-for="ws in websites"
+                :key="ws.name"
+                class="home-tile"
+                :style="{ '--tile-accent': getWsColor(ws.className) }"
+                :title="ws.name"
+                @click="handleWebsiteClick(ws.url)"
+              >
+                <span class="home-tile-icon" :class="ws.className">{{ ws.initial }}</span>
+                <span class="home-tile-label">{{ ws.name }}</span>
+              </button>
+            </div>
           </div>
-          <span class="tool-label">{{ action.label }}</span>
-        </button>
+        </section>
+
+        <!-- ==================== 开发者工具 ==================== -->
+        <section class="home-section home-stagger-enter" style="animation-delay: 240ms">
+          <header class="section-head">
+            <span class="section-marker section-marker--accent" />
+            <h2 class="section-label">开发者工具</h2>
+          </header>
+          <div class="home-card">
+            <div class="tiles-grid tiles-grid--5">
+              <button
+                v-for="action in quickActions"
+                :key="action.label"
+                class="home-tile"
+                :style="{ '--tile-accent': action.color }"
+                @click="emit('action', action.action)"
+              >
+                <span class="home-tile-icon home-tile-icon--gradient" :style="{ '--tile-accent': action.color }">
+                  <component :is="action.icon" :size="18" />
+                </span>
+                <span class="home-tile-label">{{ action.label }}</span>
+              </button>
+            </div>
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.home-page {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--space-8) var(--space-6) var(--space-6);
-  gap: var(--space-7);
-  background: linear-gradient(180deg, var(--bg) 0%, var(--lumi-brand-subtle) 60%, var(--bg-secondary) 100%);
-  overflow-y: auto;
-}
-
-/* ===== 顶部品牌 + 搜索框 ===== */
-.home-header {
-  width: 100%;
-  max-width: 720px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-5);
-}
-
-.brand-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-semibold);
-  letter-spacing: -0.02em;
-  margin: 0;
-}
-
-.brand-lumi {
-  color: var(--text);
-}
-
-.brand-sub {
-  color: var(--text-muted);
-}
-
-.search-box {
-  width: 100%;
-  position: relative;
-}
-
-.search-input-row {
-  display: flex;
-  align-items: center;
-  height: var(--space-10);
-  background: var(--surface);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm), var(--shadow-inset);
-  padding: 0 var(--space-2) 0 var(--space-3);
-  gap: var(--space-2);
-  transition: all var(--transition-normal);
-}
-
-.search-input-row:focus-within {
-  border-color: var(--lumi-brand-border);
-  box-shadow: var(--shadow-md), 0 0 0 3px var(--lumi-brand-light);
-}
-
-.engine-selector {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  border: none;
-  cursor: pointer;
-  height: calc(var(--space-8) - var(--space-1));
-  flex-shrink: 0;
-  transition: background var(--transition-fast);
-}
-
-.engine-selector:hover {
-  background: var(--border);
-}
-
-.engine-name {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.engine-arrow {
-  color: var(--text-muted);
-  transition: transform var(--transition-fast);
-}
-
-.engine-arrow.rotated {
-  transform: rotate(180deg);
-}
-
-.search-input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  font-size: var(--text-base);
-  color: var(--text);
-  outline: none;
-  height: 100%;
-}
-
-.search-input::placeholder {
-  color: var(--text-muted);
-}
-
-.send-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--text), var(--text-secondary));
-  border: none;
-  cursor: pointer;
-  color: var(--text-inverse);
-  flex-shrink: 0;
-  transition: all var(--transition-fast);
-}
-
-.send-btn:hover:not(:disabled) {
-  background: var(--text-secondary);
-  transform: scale(1.05);
-}
-
-.send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.loading-spinner {
-  width: var(--space-4);
-  height: var(--space-4);
-  border: 2px solid color-mix(in srgb, var(--text-inverse) 30%, transparent);
-  border-top-color: var(--text-inverse);
-  border-radius: var(--radius-full);
-  animation: spin calc(var(--duration-normal) * 3 + var(--duration-fast)) linear infinite;
-}
-
-.engine-dropdown {
-  position: absolute;
-  top: calc(100% + var(--space-1));
-  left: 0;
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
-  overflow: hidden;
-  z-index: var(--z-dropdown);
-  min-width: 160px;
-}
-
-.engine-option {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-2) var(--space-4);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  transition: background var(--transition-fast);
-}
-
-.engine-option:hover {
-  background: var(--bg-secondary);
-}
-
-.engine-option.active {
-  background: var(--bg);
-}
-
-/* ===== 内容分区通用 ===== */
-.content-section {
-  width: 100%;
-  max-width: 720px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--text-muted);
-  margin: 0;
-  letter-spacing: 0.02em;
-}
-
-.title-bar {
-  display: inline-block;
-  width: 3px;
-  height: var(--space-4);
-  background: var(--lumi-brand);
-  border-radius: var(--radius-xs);
-}
-
-/* ===== 常用网站磁贴 ===== */
-.websites-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
-}
-
-.website-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-2);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.website-tile:hover {
-  border-color: var(--ws-color, var(--lumi-brand-border));
-  box-shadow: var(--shadow-md);
-  transform: translateY(calc(var(--space-1) / -2));
-}
-
-.website-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: calc(var(--space-8) + var(--space-1));
-  height: calc(var(--space-8) + var(--space-1));
-  border-radius: var(--radius-md);
-  background: var(--ws-color, var(--lumi-brand));
-  color: var(--text-inverse);
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  transition: transform var(--transition-fast);
-}
-
-.website-tile:hover .website-icon {
-  transform: scale(1.08);
-}
-
-.website-name {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-/* 网站品牌色（通过 CSS 变量定义，避免硬编码） */
-.ws-github { --ws-color: #24292e; }
-.ws-google { --ws-color: #4285f4; }
-.ws-mdn { --ws-color: #1a1a1a; }
-.ws-stack { --ws-color: #f48024; }
-.ws-bing { --ws-color: #008373; }
-.ws-bili { --ws-color: #fb7299; }
-.ws-youtube { --ws-color: #ff0000; }
-.ws-zhihu { --ws-color: #0084ff; }
-
-/* ===== 开发者工具卡片 ===== */
-.tools-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: var(--space-3);
-}
-
-.tool-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-2);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.tool-card:hover {
-  border-color: var(--tool-color);
-  box-shadow: var(--shadow-md);
-  transform: translateY(calc(var(--space-1) / -2));
-}
-
-.tool-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--tool-color), color-mix(in srgb, var(--tool-color) 70%, var(--text-inverse)));
-  color: var(--text-inverse);
-  transition: transform var(--transition-fast);
-}
-
-.tool-card:hover .tool-icon {
-  transform: scale(1.08);
-}
-
-.tool-label {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-/* ===== 动画 ===== */
-.dropdown-enter-active,
-.dropdown-leave-active {
-  transition: all var(--transition-fast);
-}
-
-.dropdown-enter-from,
-.dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(calc(var(--space-1) * -2));
-}
-
-/* ===== 响应式 ===== */
-@media (max-width: 640px) {
-  .websites-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .tools-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
+/* 仅保留本组件强相关的局部覆盖，公共样式已全部迁移至 components.css */
 </style>

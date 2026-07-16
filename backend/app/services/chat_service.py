@@ -247,10 +247,10 @@ class ChatService:
             async for sse_str in runner.run_stream(ctx, llm_call_fn):
                 yield sse_str
 
-            # 计算压缩后 token 数
+            # 计算压缩后 token 数：使用 runner 执行后的 ctx.messages（已压缩，反映实际上下文使用量）
             try:
                 ctx_mgr = get_context_manager(provider, model)
-                context_tokens = ctx_mgr.token_counter.count_tokens(messages)
+                context_tokens = ctx_mgr.token_counter.count_tokens(ctx.messages)
             except Exception:
                 context_tokens = None
 
@@ -415,12 +415,11 @@ class ChatService:
 
                 # done 事件
                 try:
-                    # 计算压缩后 token 数
+                    # 计算压缩后 token 数：使用 ctx.messages（已压缩，反映实际上下文使用量）
+                    # 而非 conv["messages"]（未压缩的存储版本，会导致 context_tokens 远大于实际值）
                     try:
                         ctx_mgr = get_context_manager(provider, model)
-                        context_tokens = ctx_mgr.token_counter.count_tokens(
-                            [dict(m) for m in conv["messages"]]
-                        )
+                        context_tokens = ctx_mgr.token_counter.count_tokens(ctx.messages)
                     except Exception:
                         context_tokens = None
 

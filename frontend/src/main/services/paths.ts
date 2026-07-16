@@ -39,6 +39,10 @@ export const PATHS = {
   get live2d() {
     return ensureDir(join(this.userData, 'live2d'))
   },
+  get avatar() {
+    // 多模型统一目录：userData/avatar/{live2d|vrm|pixel|spine|png}/
+    return ensureDir(join(this.userData, 'avatar'))
+  },
   get live2dCache() {
     return ensureDir(join(this.cache, 'live2d'))
   },

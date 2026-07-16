@@ -63,6 +63,36 @@
   background-clip: text;
 }
 
+/* ============================================================
+   浏览器首页入场动画（参考 clawhub fade-up stagger）
+   ============================================================ */
+.home-stagger-enter {
+  opacity: 0;
+  animation: home-stagger-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes home-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 光晕呼吸动画 */
+@keyframes home-glow-breathe {
+  0%, 100% { opacity: 0.35; transform: translateX(-50%) scale(1); }
+  50% { opacity: 0.55; transform: translateX(-50%) scale(1.08); }
+}
+
+@keyframes home-glow-breathe-reverse {
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.1); }
+}
+
 .spin-animation {
   animation: spin 1s linear infinite;
 }
