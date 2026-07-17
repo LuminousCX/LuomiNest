@@ -599,8 +599,14 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
             if self._ws is not None:
                 try:
                     await self._ws.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    # 关闭旧连接失败不应阻断重连流程，但需要记录以便排查。
+                    self._log(
+                        "debug",
+                        "ws_close_failed_during_reconnect",
+                        f"关闭旧 WebSocket 失败，继续重连: {e}",
+                        details={"error": str(e)},
+                    )
                 self._ws = None
 
             # 停止旧心跳
