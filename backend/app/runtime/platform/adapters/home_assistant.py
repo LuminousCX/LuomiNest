@@ -177,6 +177,7 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
             try:
                 await self._ws_task
             except asyncio.CancelledError:
+                # 任务由 stop() 主动取消；CancelledError 属于预期收尾流程。
                 pass
             self._ws_task = None
 
