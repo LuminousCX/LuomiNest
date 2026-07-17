@@ -567,8 +567,10 @@ class CxSkillImprovementService:
             for old in backups[keep:]:
                 try:
                     os.remove(old)
-                except OSError:
-                    pass
+                except OSError as e:
+                    logger.debug(
+                        f"[CxSkillImprove] Skip removing old backup {old}: {e}"
+                    )
         except Exception as e:
             logger.debug(f"[CxSkillImprove] Backup cleanup failed: {e}")
 
