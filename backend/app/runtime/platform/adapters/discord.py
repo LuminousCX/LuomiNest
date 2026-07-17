@@ -196,6 +196,8 @@ class DiscordAdapter(ReconnectMixin, BasePlatformAdapter):
             try:
                 await self._heartbeat_task
             except asyncio.CancelledError:
+                # 任务在停止流程中被主动取消，这是预期行为。
+                # 忽略该异常以继续执行清理逻辑。
                 pass
             self._heartbeat_task = None
 
@@ -204,6 +206,8 @@ class DiscordAdapter(ReconnectMixin, BasePlatformAdapter):
             try:
                 await self._gateway_task
             except asyncio.CancelledError:
+                # 任务在停止流程中被主动取消，这是预期行为。
+                # 忽略该异常以继续执行清理逻辑。
                 pass
             self._gateway_task = None
 
