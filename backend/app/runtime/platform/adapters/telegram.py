@@ -395,7 +395,12 @@ class TelegramAdapter(BasePlatformAdapter):
             try:
                 params["reply_parameters"] = {"message_id": int(reply_to)}
             except (ValueError, TypeError):
-                pass
+                self._log(
+                    "warning",
+                    "invalid_reply_to",
+                    f"reply_to 非法，已忽略回复参数: {reply_to}",
+                    details={"chat_id": chat_id, "reply_to": reply_to},
+                )
 
         try:
             await self._api_request("sendPhoto", params)
