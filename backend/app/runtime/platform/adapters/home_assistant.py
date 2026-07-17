@@ -167,8 +167,8 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
         if self._ws is not None:
             try:
                 await self._ws.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"关闭 Home Assistant WebSocket 时出现异常，已忽略: {e}")
             self._ws = None
 
         # 取消 WebSocket 任务
