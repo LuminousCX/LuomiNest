@@ -51,7 +51,11 @@ class _RateLimiter:
                     # 恢复默认
                     self._min_interval = 1.0 / self._max_per_second
             except ValueError:
-                pass
+                # 响应头格式异常时忽略动态调整，回退到默认速率，避免中断主流程。
+                self._min_interval = 1.0 / self._max_per_second
+                logger.debug(
+                    "[QQOfficial] Invalid rate limit headers, fallback to default interval."
+                )
 
 
 class RateLimitError(Exception):
