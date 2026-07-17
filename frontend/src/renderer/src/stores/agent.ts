@@ -40,6 +40,8 @@ interface RawMainAgentConfig {
   temperature?: number
   maxTokens?: number
   max_tokens?: number
+  color?: string
+  avatar?: string | null
 }
 
 export const useAgentStore = defineStore('agent', () => {
@@ -54,6 +56,8 @@ export const useAgentStore = defineStore('agent', () => {
     systemPrompt: '',
     temperature: 0.7,
     maxTokens: 4096,
+    color: '',
+    avatar: null,
   })
 
   const activeAgents = computed(() => agents.value.filter(a => a.isActive))
@@ -96,6 +100,7 @@ export const useAgentStore = defineStore('agent', () => {
     model?: string
     provider?: string
     color?: string
+    avatar?: string
     capabilities?: string[]
   }) => {
     const result = await apiPost<RawAgentCreateResponse>('/agents', {
@@ -105,6 +110,7 @@ export const useAgentStore = defineStore('agent', () => {
       model: agent.model,
       provider: agent.provider,
       color: agent.color || '#147EBC',
+      avatar: agent.avatar || '',
       capabilities: agent.capabilities || ['chat'],
     })
     await fetchAgents()
@@ -123,6 +129,7 @@ export const useAgentStore = defineStore('agent', () => {
     if (updates.model !== undefined) body.model = updates.model
     if (updates.provider !== undefined) body.provider = updates.provider
     if (updates.color !== undefined) body.color = updates.color
+    if (updates.avatar !== undefined) body.avatar = updates.avatar
     if (updates.capabilities !== undefined) body.capabilities = updates.capabilities
     if (updates.isActive !== undefined) body.is_active = updates.isActive
 
@@ -158,6 +165,8 @@ export const useAgentStore = defineStore('agent', () => {
         systemPrompt: result.systemPrompt || result.system_prompt || '',
         temperature: result.temperature ?? 0.7,
         maxTokens: result.maxTokens || result.max_tokens || 4096,
+        color: result.color || '',
+        avatar: result.avatar || null,
       }
     } catch {
       // use defaults
@@ -171,6 +180,8 @@ export const useAgentStore = defineStore('agent', () => {
     if (updates.systemPrompt !== undefined) body.systemPrompt = updates.systemPrompt
     if (updates.temperature !== undefined) body.temperature = updates.temperature
     if (updates.maxTokens !== undefined) body.maxTokens = updates.maxTokens
+    if (updates.color !== undefined) body.color = updates.color
+    if (updates.avatar !== undefined) body.avatar = updates.avatar
 
     const result = await apiPatch<RawMainAgentConfig>('/agents/main-agent/config', body)
     mainAgentConfig.value = {
@@ -179,6 +190,8 @@ export const useAgentStore = defineStore('agent', () => {
       systemPrompt: result.systemPrompt || result.system_prompt || '',
       temperature: result.temperature ?? 0.7,
       maxTokens: result.maxTokens || result.max_tokens || 4096,
+      color: result.color || '',
+      avatar: result.avatar || null,
     }
     return result
   }

@@ -401,37 +401,53 @@ export const usePlatformStore = defineStore('platform', () => {
     temperature?: number
     max_tokens?: number
     maxTokens?: number
+    color?: string
+    avatar?: string | null
   }
 
   // 模块级标记：记录上次已弹 toast 的错误信息，避免页面切换时重复弹窗
   let _lastMainAgentToastMsg: string | null = null
+  /** 共享的 fetch Promise，用于并发去重 */
+  let _mainAgentFetchPromise: Promise<void> | null = null
 
-  const fetchMainAgent = async () => {
+  const fetchMainAgent = async (force = false) => {
+    // 缓存：已加载且非强制刷新时直接返回
+    if (!force && mainAgent.value !== null) return
+
+    // 并发请求去重：多个调用方共享同一个 fetch
+    if (_mainAgentFetchPromise) return _mainAgentFetchPromise
+
     const toast = useToast()
-    try {
-      const result = await apiGet<{ data?: RawMainAgentInfo } | RawMainAgentInfo>('/platforms/main_agent')
-      const data = (result as { data?: RawMainAgentInfo })?.data || (result as RawMainAgentInfo)
-      mainAgent.value = {
-        provider: data.provider || '',
-        providerName: data.provider_name || data.providerName || data.provider || '',
-        model: data.model || '',
-        supportsMultimodal: data.supports_multimodal ?? data.supportsMultimodal ?? false,
-        systemPrompt: data.system_prompt || data.systemPrompt || '',
-        temperature: data.temperature ?? 0.7,
-        maxTokens: data.max_tokens ?? data.maxTokens ?? 4096,
+    _mainAgentFetchPromise = (async () => {
+      try {
+        const result = await apiGet<{ data?: RawMainAgentInfo } | RawMainAgentInfo>('/platforms/main_agent')
+        const data = (result as { data?: RawMainAgentInfo })?.data || (result as RawMainAgentInfo)
+        mainAgent.value = {
+          provider: data.provider || '',
+          providerName: data.provider_name || data.providerName || data.provider || '',
+          model: data.model || '',
+          supportsMultimodal: data.supports_multimodal ?? data.supportsMultimodal ?? false,
+          systemPrompt: data.system_prompt || data.systemPrompt || '',
+          temperature: data.temperature ?? 0.7,
+          maxTokens: data.max_tokens ?? data.maxTokens ?? 4096,
+          color: data.color || '',
+          avatar: data.avatar || null,
+        }
+        mainAgentError.value = null
+        _lastMainAgentToastMsg = null
+      } catch (e: unknown) {
+        mainAgent.value = null
+        const msg = (e instanceof Error ? e.message : String(e)) || '未知错误'
+        mainAgentError.value = msg
+        if (_lastMainAgentToastMsg !== msg) {
+          _lastMainAgentToastMsg = msg
+          toast.warning(`主 Agent 配置加载失败：${msg}。请在设置中检查 AI 模型配置。`, 5000)
+        }
+      } finally {
+        _mainAgentFetchPromise = null
       }
-      mainAgentError.value = null
-      _lastMainAgentToastMsg = null
-    } catch (e: unknown) {
-      mainAgent.value = null
-      const msg = (e instanceof Error ? e.message : String(e)) || '未知错误'
-      mainAgentError.value = msg
-      // 仅当错误信息变化时弹 toast，避免页面切换时重复打扰
-      if (_lastMainAgentToastMsg !== msg) {
-        _lastMainAgentToastMsg = msg
-        toast.warning(`主 Agent 配置加载失败：${msg}。请在设置中检查 AI 模型配置。`, 5000)
-      }
-    }
+    })()
+    return _mainAgentFetchPromise
   }
 
   const updateMainAgent = async (updates: Partial<MainAgentInfo>) => {
@@ -442,9 +458,11 @@ export const usePlatformStore = defineStore('platform', () => {
     if (updates.systemPrompt !== undefined) body.system_prompt = updates.systemPrompt
     if (updates.temperature !== undefined) body.temperature = updates.temperature
     if (updates.maxTokens !== undefined) body.max_tokens = updates.maxTokens
+    if (updates.color !== undefined) body.color = updates.color
+    if (updates.avatar !== undefined) body.avatar = updates.avatar
     try {
       await apiPatch('/platforms/main_agent', body)
-      await fetchMainAgent()
+      await fetchMainAgent(true)  // force: true, 确保 settings 保存后工作台显示最新头像
       toast.success('主 Agent 配置已更新')
     } catch (e: unknown) {
       toast.error(`更新失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)

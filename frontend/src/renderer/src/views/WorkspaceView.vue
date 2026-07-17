@@ -134,7 +134,7 @@ const messages_ = useWorkspaceMessages({
 
 // 从 composable 解构常用项（template 直接引用）
 const {
-  agentColors, showCreateDialog, newAgentForm, createDialogError,
+  agentColors, presetAvatars, showCreateDialog, newAgentForm, createDialogError,
   showConfirmDialog, confirmDialogMessage, confirmDialogIsDanger,
   showEditDialog, editAgentForm,
   handleConfirmDialogConfirm, handleConfirmDialogCancel,
@@ -384,6 +384,7 @@ onBeforeUnmount(() => {
       :add-agent-role="addAgentRole"
       :available-agents-for-group="availableAgentsForGroup"
       :agent-colors="agentColors"
+      :preset-avatars="presetAvatars"
       :agent-roles="socialStore.agentRoles"
       @update:show-create-dialog="showCreateDialog = $event"
       @update:create-form="newAgentForm = $event"

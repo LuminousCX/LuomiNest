@@ -26,8 +26,13 @@ import LumiEmptyState from '../common/LumiEmptyState.vue'
 import WorkflowCreatedCard from '../chat/WorkflowCreatedCard.vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { useClipboard } from '../../composables/useClipboard'
+import { usePlatformStore } from '../../stores/platform'
 import type { ChatMessage } from '../../types'
 import type { ToolActivity, SubagentActivity, WorkflowPendingPlan } from './types'
+
+const platformStore = usePlatformStore()
+const mainAgentAvatar = computed(() => platformStore.mainAgent?.avatar || null)
+const mainAgentColor = computed(() => platformStore.mainAgent?.color || 'var(--lumi-primary)')
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -190,7 +195,8 @@ defineExpose({
           >
             <div v-if="msg.role === 'assistant'" class="message-avatar shrink-0">
               <div class="avatar-assistant">
-                <Bot :size="16" />
+                <img v-if="mainAgentAvatar" :src="mainAgentAvatar" class="chat-avatar-img" alt="主智能体" />
+                <Bot v-else :size="16" />
               </div>
             </div>
             <div class="message-body">
@@ -662,11 +668,19 @@ button:focus-visible {
   width: var(--space-7);
   height: var(--space-7);
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-inverse);
+  color: var(--lumi-primary);
+  overflow: hidden;
+}
+
+.chat-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .message-body {

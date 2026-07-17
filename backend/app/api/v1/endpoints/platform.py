@@ -107,6 +107,8 @@ class PlatformModelConfigUpdate(BaseModel):
     system_prompt: str | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=None, ge=1, le=128_000)
+    color: str | None = None
+    avatar: str | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -789,6 +791,8 @@ async def get_main_agent_info():
             "system_prompt": config.get("system_prompt", ""),
             "temperature": config.get("temperature", 0.7),
             "max_tokens": config.get("max_tokens", 4096),
+            "color": config.get("color", ""),
+            "avatar": config.get("avatar"),
         },
     }
 
@@ -809,7 +813,7 @@ async def update_main_agent_info(request: PlatformModelConfigUpdate):
 
     # Pydantic 已做类型转换和范围校验，直接遍历已设置字段
     update_data = request.model_dump(exclude_unset=True)
-    for key in ("provider", "model", "system_prompt", "temperature", "max_tokens"):
+    for key in ("provider", "model", "system_prompt", "temperature", "max_tokens", "color", "avatar"):
         if key in update_data and update_data[key] is not None:
             new_val = update_data[key]
             if current.get(key) != new_val:

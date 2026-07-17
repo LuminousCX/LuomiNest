@@ -33,8 +33,8 @@ _BUILTIN_RULES: list[tuple[str, str, str]] = [
     # Bot Token / 通用 Token（常见格式: 字母数字+点号+字母数字）
     (
         "bot_token",
-        r"(?i)(?:bot[_\s-]?token|token)[\s:=]+['\"]?([A-Za-z0-9_\-]{20,})['\"]?",
-        r"\g<0>[:=] ***",
+        r"(?i)((?:bot[_\s-]?token|token)[\s:=]+['\"]?)[A-Za-z0-9_\-]{20,}['\"]?",
+        r"\g<1>***",
     ),
     # 手机号（中国大陆 11 位）
     (
@@ -51,14 +51,14 @@ _BUILTIN_RULES: list[tuple[str, str, str]] = [
     # API Key（常见格式: sk-xxx, key-xxx, 或长串字母数字）
     (
         "api_key",
-        r"(?i)(?:api[_\s-]?key|apikey)[\s:=]+['\"]?([A-Za-z0-9_\-]{16,})['\"]?",
-        r"\g<0>[:=] ***",
+        r"(?i)((?:api[_\s-]?key|apikey)[\s:=]+['\"]?)[A-Za-z0-9_\-]{16,}['\"]?",
+        r"\g<1>***",
     ),
     # 密码字段（password=xxx, passwd=xxx 等）
     (
         "password",
-        r"(?i)(?:password|passwd|pwd|secret)[\s:=]+['\"]?([^\s'\"]{3,})['\"]?",
-        r"\g<0>[:=] ***",
+        r"(?i)((?:password|passwd|pwd|secret)[\s:=]+['\"]?)[^\s'\"]{3,}['\"]?",
+        r"\g<1>***",
     ),
     # Bearer Token
     (

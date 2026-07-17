@@ -59,9 +59,11 @@ const emit = defineEmits<{
               :key="avatar.id"
               :class="['avatar-item', { selected: formData.selectedAvatarId === avatar.id }]"
               :style="{ '--avatar-color': avatar.color }"
+              :title="avatar.imageUrl ? avatar.imageUrl.split('/').pop()?.replace('.png','') : ''"
               @click="emit('select-avatar', avatar.id)"
             >
-              <span class="avatar-emoji">{{ avatar.emoji }}</span>
+              <img v-if="avatar.imageUrl" :src="avatar.imageUrl" class="avatar-img" :alt="avatar.id" />
+              <span v-else class="avatar-emoji">{{ avatar.emoji }}</span>
             </button>
             <button class="avatar-item upload-avatar" title="上传自定义头像">
               <Upload :size="18" />
@@ -121,7 +123,8 @@ const emit = defineEmits<{
           class="preview-avatar-ring"
           :style="{ '--avatar-color': selectedAvatar.color }"
         >
-          <span class="preview-avatar-emoji">{{ selectedAvatar.emoji }}</span>
+          <img v-if="selectedAvatar.imageUrl" :src="selectedAvatar.imageUrl" class="preview-avatar-img" />
+          <span v-else class="preview-avatar-emoji">{{ selectedAvatar.emoji }}</span>
         </div>
         <h3 class="preview-name">{{ formData.name || '未命名智能体' }}</h3>
         <p class="preview-badge">{{ STYLE_TAGS.find(t => t.id === formData.selectedStyle)?.label || '风格' }} · 已验证</p>
@@ -219,6 +222,14 @@ const emit = defineEmits<{
   cursor: pointer;
   transition: all var(--transition-normal);
   background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .avatar-item:hover {
@@ -349,6 +360,14 @@ const emit = defineEmits<{
   justify-content: center;
   background: linear-gradient(135deg, var(--avatar-color, var(--lumi-brand)), color-mix(in srgb, var(--avatar-color, var(--lumi-brand)) 60%, transparent));
   box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.preview-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .preview-avatar-emoji {

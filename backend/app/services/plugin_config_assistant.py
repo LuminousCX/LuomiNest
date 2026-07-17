@@ -671,9 +671,11 @@ class CxPluginConfigAssistant:
         # 根据能力决定要导入的基类
         needs_tool = "tool_register" in capabilities
 
-        tool_section = ""
+        tool_call = "self._register_tools()" if needs_tool else "pass"
+        tool_method = ""
         if needs_tool:
-            tool_section = f'''
+            tool_method = f'''
+
     def _register_tools(self) -> None:
         """注册插件提供的工具（capability=tool_register 时启用）。"""
         from app.runtime.tool.base import ToolBase, ToolResult
@@ -702,8 +704,7 @@ class CxPluginConfigAssistant:
                 input_text = kwargs.get("input", "")
                 return ToolResult(success=True, output=f"Echo: {{input_text}}")
 
-        self._context.register_tool(_ExampleTool())
-'''
+        self._context.register_tool(_ExampleTool())'''
 
         return f'''"""CxPlugin {plugin_id} — {name} 插件入口。
 
@@ -724,16 +725,16 @@ class {self._pascal_case(plugin_id)}Plugin(CxPluginBase):
 
     PLUGIN_ID = "{plugin_id}"
 
-    async def initialize(self, context: CxPluginContext) -> None:
+    async def initialize(self) -> None:
         """插件初始化（加载时调用）。"""
-        self._context = context
+        self._context = self.context
         logger.info(f"[CxPlugin:{{self.PLUGIN_ID}}] Initialized")
 
         # 注册事件处理器
-        context.on(CxEventType.ON_CHAT_MESSAGE, self.handle_chat_message)
+        self.context.on(CxEventType.ON_CHAT_MESSAGE, self.handle_chat_message)
 
         # 注册工具（若声明了 tool_register 能力）
-        {tool_section.strip() or "pass"}
+        {tool_call}{tool_method}
 
     async def handle_chat_message(self, instance: Any, event_data: dict[str, Any]) -> None:
         """处理 ON_CHAT_MESSAGE 事件（示例，请按需修改）。"""

@@ -3,15 +3,18 @@ import { rmSync, copyFileSync, mkdirSync } from 'fs'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 
-// Live2D 模型通过 luominest-avatar:// 协议 + extraResources 提供，
-// 不需要 Vite 把 public/live2d 复制到输出目录。构建后清理，避免重复打包与文件锁。
-const removeLive2DFromOutput = () => ({
-  name: 'luominest-remove-live2d-output',
+// Live2D / pixel / png 等自定义协议模型通过 extraResources 提供，
+// 不需要 Vite 把 public 下的这些目录复制到输出。构建后清理，避免重复打包与文件锁。
+const removeExtraResourcesFromOutput = () => ({
+  name: 'luominest-remove-extra-resources',
   closeBundle: () => {
-    try {
-      rmSync(resolve(__dirname, 'out/renderer/live2d'), { recursive: true, force: true })
-    } catch {
-      // 忽略：可能存在 OS 级文件锁（如 Defender 扫描），不影响打包（electron-builder files 已排除 live2d）
+    const dirsToRemove = ['live2d', 'pixel', 'png']
+    for (const dir of dirsToRemove) {
+      try {
+        rmSync(resolve(__dirname, `out/renderer/${dir}`), { recursive: true, force: true })
+      } catch {
+        // 忽略：可能存在 OS 级文件锁（如 Defender 扫描），不影响打包（electron-builder files 已排除）
+      }
     }
   }
 })
@@ -71,7 +74,7 @@ export default defineConfig({
         }
       }
     },
-    plugins: [vue(), removeLive2DFromOutput()],
+    plugins: [vue(), removeExtraResourcesFromOutput()],
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src/renderer/src'),

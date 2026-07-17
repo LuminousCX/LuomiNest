@@ -245,19 +245,6 @@ class LuomiNestQQOfficialAdapter(BasePlatformAdapter):
         headers = {"Authorization": f"QQBot {token}"}
 
         try:
-            # 下载图片
-            async with httpx.AsyncClient(timeout=30) as client:
-                img_resp = await client.get(image_url)
-                if img_resp.status_code != 200:
-                    logger.error(
-                        f"[QQOfficial] Failed to download image: "
-                        f"{img_resp.status_code}"
-                    )
-                    return ""
-
-                # 验证图片可下载（实际上传用 URL 方式）
-                img_resp.raise_for_status()
-
             # 判断文件类型
             srv_send_type = 1 if target_type == "group" else 0
             file_type = 1  # 图片

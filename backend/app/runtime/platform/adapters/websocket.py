@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from loguru import logger
@@ -73,19 +72,6 @@ class WebSocketAdapter(BasePlatformAdapter):
         self._receive_task: asyncio.Task[None] | None = None
         self._authenticated: bool = False
 
-        # 消息处理器（由 set_message_handler 注入）
-        self._message_handler: Callable[[PlatformMessage], Awaitable[PlatformResponse | None]] | None = None
-
-    def set_message_handler(
-        self, handler: Callable[[PlatformMessage], Awaitable[PlatformResponse | None]]
-    ) -> None:
-        """设置消息处理器回调。
-
-        Args:
-            handler: 接收 PlatformMessage 并返回 PlatformResponse 的异步回调。
-        """
-        self._message_handler = handler
-
     def initialize(self, config: dict[str, Any]) -> None:
         """解析配置并初始化资源。"""
         super().initialize(config)
@@ -122,7 +108,7 @@ class WebSocketAdapter(BasePlatformAdapter):
         self.update_status(AdapterStatus.STOPPING)
         self._log("info", "adapter_stopping", "WebSocket 适配器停止中")
 
-        await self._cancel_receive_task()
+        self._cancel_receive_task()
 
         if self._ws is not None:
             try:
@@ -276,29 +262,15 @@ class WebSocketAdapter(BasePlatformAdapter):
                 "content_preview": platform_msg.content[:80],
             })
 
-            await self._emit_message(platform_msg)
+            response = await super()._emit_message(platform_msg)
+            if response is not None:
+                await self.send_message(
+                    response,
+                    platform_msg.session_id or platform_msg.user_id,
+                )
             return
 
         logger.debug(f"[WebSocket] 忽略未知消息类型: {msg_type}")
-
-    async def _emit_message(self, message: PlatformMessage) -> PlatformResponse | None:
-        """将消息透传给消息处理器（主 Agent 负责业务逻辑与回复）。
-
-        Args:
-            message: 入站平台消息。
-
-        Returns:
-            消息处理器的返回值，或 None。
-        """
-        if not self._message_handler:
-            logger.warning("[WebSocket] 消息处理器未设置，丢弃消息")
-            return None
-        try:
-            return await self._message_handler(message)
-        except Exception as e:
-            logger.error(f"[WebSocket] 消息处理器执行失败: {e}")
-            self.record_error(str(e))
-            return None
 
     # ------------------------------------------------------------------
     # 消息构建
