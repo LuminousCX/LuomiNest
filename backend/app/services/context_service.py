@@ -179,7 +179,7 @@ class ContextService:
         return messages
 
     @staticmethod
-    def build_system_prompt(agent_id: str | None) -> str:
+    def build_system_prompt(agent_id: str | None, user_context: str = "") -> str:
         agent_name = "LuomiNest AI"
         agent_description = "an intelligent companion powered by the LuminousCX platform"
         base_prompt = ""
@@ -208,6 +208,10 @@ class ContextService:
 
         now = datetime.now(ZoneInfo("Asia/Shanghai"))
         weekday_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+        # 注入 Skills：始终注入轻量 <skill_index>；若 user_context 匹配到技能，再注入完整 <available_skills>
+        skills_index_block = ContextService._build_skills_index_block()
+        skills_body_block = ContextService._build_skills_body_block(user_context)
 
         return f"""<identity>
 Your name is {agent_name}, {agent_description}.
@@ -265,7 +269,31 @@ Examples:
 <exp:confused>嗯...这个地方我有点不太明白。<exp:think>让我再仔细分析一下。
 </avatar_emotion>
 
-{base_prompt}"""
+{base_prompt}
+{skills_index_block}
+{skills_body_block}"""
+
+    @staticmethod
+    def _build_skills_index_block() -> str:
+        """构建 <skill_index> 块 — 始终注入，让 AI 知道当前可用技能列表。"""
+        try:
+            from app.services.skill_service import cx_skill_service
+            return cx_skill_service.get_skills_index_prompt()
+        except Exception as e:
+            logger.debug(f"[ContextService] skill_index injection skipped: {e}")
+            return ""
+
+    @staticmethod
+    def _build_skills_body_block(user_context: str) -> str:
+        """构建 <available_skills> 块 — 按用户上下文匹配技能后注入完整 body。"""
+        if not user_context:
+            return ""
+        try:
+            from app.services.skill_service import cx_skill_service
+            return cx_skill_service.get_skills_prompt_for_injection(context=user_context)
+        except Exception as e:
+            logger.debug(f"[ContextService] available_skills injection skipped: {e}")
+            return ""
 
     @staticmethod
     def build_content_with_file(

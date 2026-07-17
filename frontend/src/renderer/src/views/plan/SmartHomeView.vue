@@ -53,15 +53,15 @@ const fetchData = async () => {
   error.value = null
   try {
     const [devicesRes, scenesRes, roomsRes, automationsRes] = await Promise.all([
-      apiGet<{ devices: Device[] }>('/smart-home/devices'),
-      apiGet<{ scenes: Scene[] }>('/smart-home/scenes'),
-      apiGet<{ rooms: Room[] }>('/smart-home/rooms'),
-      apiGet<{ automations: Automation[] }>('/smart-home/automations'),
+      apiGet<{ data: { devices: Device[] } }>('/smart-home/devices'),
+      apiGet<{ data: { scenes: Scene[] } }>('/smart-home/scenes'),
+      apiGet<{ data: { rooms: Room[] } }>('/smart-home/rooms'),
+      apiGet<{ data: { automations: Automation[] } }>('/smart-home/automations'),
     ])
-    deviceList.value = devicesRes?.devices || []
-    scenes.value = scenesRes?.scenes || []
-    rooms.value = roomsRes?.rooms || []
-    automations.value = automationsRes?.automations || []
+    deviceList.value = devicesRes?.data?.devices || []
+    scenes.value = scenesRes?.data?.scenes || []
+    rooms.value = roomsRes?.data?.rooms || []
+    automations.value = automationsRes?.data?.automations || []
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : '加载失败'
   } finally {

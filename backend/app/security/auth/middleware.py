@@ -32,7 +32,12 @@ async def luomi_auth_middleware(request: Request, call_next):
         logger.warning(f"[Auth] Rejected unauthenticated request: {request.method} {path}")
         return JSONResponse(
             status_code=401,
-            content={"error": {"code": "AUTH_FAILED", "message": "未授权，请检查认证令牌"}},
+            content={
+                "code": 1,
+                "message": "未授权，请检查认证令牌",
+                "error": {"code": "AUTH_FAILED", "message": "未授权，请检查认证令牌"},
+                "data": None,
+            },
         )
 
     return await call_next(request)

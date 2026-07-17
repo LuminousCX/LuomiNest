@@ -160,6 +160,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] CxPlugin loading skipped: {e}", exc_info=True)
 
+    # 初始化 CxSkill 技能系统（在 CxPlugin 之后，确保 plugin 类型条目已被 loader 跳过）
+    try:
+        from app.services.skill_service import cx_skill_service
+        skill_count = await cx_skill_service.init()
+        logger.info(f"[LuomiNest] Loaded {skill_count} CxSkill(s)")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] CxSkill loading skipped: {e}", exc_info=True)
+
     # 启动定时任务调度器（APScheduler）
     try:
         from app.core.scheduler import luomi_scheduler
@@ -361,7 +369,12 @@ def create_app() -> FastAPI:
         logger.error(f"[Exception] LuomiNestError: {exc.message} (code={exc.code})")
         return JSONResponse(
             status_code=exc.status_code,
-            content={"error": {"code": exc.code, "message": exc.message}},
+            content={
+                "code": 1,
+                "message": exc.message,
+                "error": {"code": exc.code, "message": exc.message},
+                "data": None,
+            },
         )
 
     @app.exception_handler(Exception)
@@ -371,7 +384,12 @@ def create_app() -> FastAPI:
         message = str(exc) if settings.DEBUG else "服务器内部错误，请查看后端日志"
         return JSONResponse(
             status_code=500,
-            content={"error": {"code": "INTERNAL_ERROR", "message": message}},
+            content={
+                "code": 1,
+                "message": message,
+                "error": {"code": "INTERNAL_ERROR", "message": message},
+                "data": None,
+            },
         )
 
     app.include_router(api_router, prefix="/api/v1")

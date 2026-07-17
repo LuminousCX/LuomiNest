@@ -6,6 +6,10 @@ from loguru import logger
 from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
 from app.runtime.platform.adapters.wechat_crypto import LuomiNestWeChatCrypto
 
+# 用户信息缓存：{openid: (nickname, expire_timestamp)}
+_user_info_cache: dict[str, tuple[str, float]] = {}
+_USER_INFO_TTL = 300  # 5 分钟
+
 
 class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
     """微信公众号适配器：通过公众号 API 收发消息。
@@ -36,6 +40,7 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
         self._token_lock = asyncio.Lock()
         self._crypto: LuomiNestWeChatCrypto | None = None
         self._background_tasks: set[asyncio.Task] = set()
+        self._welcome_message: str = "感谢关注！有什么可以帮你的吗？"
 
     def initialize(self, config: dict[str, Any]) -> None:
         super().initialize(config)
@@ -45,6 +50,7 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
         self._encoding_aes_key = config.get("encoding_aes_key", "")
         self._enable_text = bool(config.get("enable_text", True))
         self._enable_image = bool(config.get("enable_image", True))
+        self._welcome_message = config.get("welcome_message", self._welcome_message)
 
         if self._token and self._encoding_aes_key and self._app_id:
             if LuomiNestWeChatCrypto.is_available():
@@ -68,6 +74,15 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
         logger.info(f"[WeChatMP] Adapter stopped")
 
     async def send_message(self, response: PlatformResponse, target: str) -> bool:
+        # 如果 extra 中包含 template_id，使用模板消息发送
+        if response.extra and response.extra.get("template_id"):
+            return await self.send_template_message(
+                target,
+                template_id=response.extra["template_id"],
+                data=response.extra.get("template_data", {}),
+                url=response.extra.get("template_url", ""),
+            )
+
         token = await self._ensure_access_token()
         if not token:
             return False
@@ -94,6 +109,51 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
                 return False
         except Exception as e:
             logger.error(f"[WeChatMP] Send exception: {e}")
+            return False
+
+    async def send_template_message(
+        self,
+        openid: str,
+        template_id: str,
+        data: dict[str, Any],
+        url: str = "",
+    ) -> bool:
+        """发送模板消息。
+
+        Args:
+            openid: 接收者的 openid
+            template_id: 模板消息 ID
+            data: 模板数据，格式如 {"first": {"value": "xxx", "color": "#173177"}}
+            url: 点击模板消息跳转的链接（可选）
+        """
+        token = await self._ensure_access_token()
+        if not token:
+            return False
+
+        import httpx
+
+        api_url = f"{self.API_BASE}/message/template/send?access_token={token}"
+        payload: dict[str, Any] = {
+            "touser": openid,
+            "template_id": template_id,
+            "data": data,
+        }
+        if url:
+            payload["url"] = url
+
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(api_url, json=payload)
+                if resp.status_code == 200:
+                    result = resp.json()
+                    if result.get("errcode") == 0:
+                        logger.info(f"[WeChatMP] Template message sent to {openid}, template={template_id}")
+                        return True
+                    logger.error(f"[WeChatMP] Template message failed: {result.get('errmsg')}")
+                    return False
+                return False
+        except Exception as e:
+            logger.error(f"[WeChatMP] Template message exception: {e}")
             return False
 
     async def verify_url(self, signature: str, timestamp: str, nonce: str, echostr: str) -> str | None:
@@ -149,12 +209,125 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
 
         msg_type = msg_data.get("MsgType", "")
         if msg_type == "event":
+            event = msg_data.get("Event", "")
+            if event in ("subscribe", "unsubscribe", "SCAN", "LOCATION", "CLICK", "VIEW"):
+                _task = asyncio.create_task(self._process_event(msg_data))
+                self._background_tasks.add(_task)
+                _task.add_done_callback(self._background_tasks.discard)
             return ""
 
         _task = asyncio.create_task(self._process_message(msg_data))
         self._background_tasks.add(_task)
         _task.add_done_callback(self._background_tasks.discard)
         return ""
+
+    async def _process_event(self, msg_data: dict[str, str]) -> None:
+        """处理事件消息。"""
+        event = msg_data.get("Event", "").lower()
+        from_user = msg_data.get("FromUserName", "")
+
+        if event == "subscribe":
+            logger.info(f"[WeChatMP] User subscribed: {from_user}")
+            # 发送欢迎消息
+            import httpx
+            token = await self._ensure_access_token()
+            if token:
+                url = f"{self.API_BASE}/message/custom/send?access_token={token}"
+                payload = {
+                    "touser": from_user,
+                    "msgtype": "text",
+                    "text": {"content": self._welcome_message},
+                }
+                try:
+                    async with httpx.AsyncClient(timeout=15) as client:
+                        await client.post(url, json=payload)
+                except Exception as e:
+                    logger.error(f"[WeChatMP] Welcome message failed: {e}")
+
+        elif event == "unsubscribe":
+            logger.info(f"[WeChatMP] User unsubscribed: {from_user}")
+
+        elif event == "scan":
+            scan_content = msg_data.get("EventKey", "").strip()
+            if scan_content:
+                sender_name = await self._get_sender_name(from_user)
+                platform_msg = PlatformMessage(
+                    platform=self.platform_name,
+                    user_id=from_user,
+                    content=scan_content,
+                    session_id=from_user,
+                    message_id=msg_data.get("Ticket", ""),
+                    sender_name=sender_name,
+                    is_group=False,
+                    raw=msg_data,
+                )
+                response = await self._emit_message(platform_msg)
+                if response and response.content:
+                    await self.send_message(response, from_user)
+
+        elif event == "location":
+            latitude = msg_data.get("Latitude", "")
+            longitude = msg_data.get("Longitude", "")
+            logger.info(f"[WeChatMP] Location update from {from_user}: lat={latitude}, lng={longitude}")
+
+        elif event == "click":
+            menu_key = msg_data.get("EventKey", "").strip()
+            if menu_key:
+                sender_name = await self._get_sender_name(from_user)
+                platform_msg = PlatformMessage(
+                    platform=self.platform_name,
+                    user_id=from_user,
+                    content=f"[菜单] {menu_key}",
+                    session_id=from_user,
+                    message_id="",
+                    sender_name=sender_name,
+                    is_group=False,
+                    raw=msg_data,
+                )
+                response = await self._emit_message(platform_msg)
+                if response and response.content:
+                    await self.send_message(response, from_user)
+
+        elif event == "view":
+            view_url = msg_data.get("EventKey", "")
+            logger.info(f"[WeChatMP] User {from_user} clicked menu link: {view_url}")
+
+    async def _get_sender_name(self, openid: str) -> str:
+        """获取用户昵称，优先从缓存获取，失败时回退到 openid。"""
+        global _user_info_cache
+        now = time.time()
+
+        # 检查缓存
+        cached = _user_info_cache.get(openid)
+        if cached:
+            nickname, expire_at = cached
+            if now < expire_at:
+                return nickname
+            # 过期，移除
+            del _user_info_cache[openid]
+
+        # 调用微信用户信息 API
+        token = await self._ensure_access_token()
+        if not token:
+            return openid
+
+        import httpx
+        url = f"{self.API_BASE}/user/info?openid={openid}&lang=zh_CN"
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    nickname = data.get("nickname", "")
+                    if nickname:
+                        _user_info_cache[openid] = (nickname, now + _USER_INFO_TTL)
+                        return nickname
+                    logger.debug(f"[WeChatMP] User info has no nickname for {openid}")
+                    return openid
+                return openid
+        except Exception as e:
+            logger.debug(f"[WeChatMP] Get user info failed with exception: {e}")
+            return openid
 
     async def _process_message(self, msg_data: dict[str, str]) -> None:
         msg_type = msg_data.get("MsgType", "")
@@ -181,13 +354,14 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
             if pic_url:
                 image_urls.append(pic_url)
 
+        sender_name = await self._get_sender_name(from_user)
         platform_msg = PlatformMessage(
             platform=self.platform_name,
             user_id=from_user,
             content=content,
             session_id=from_user,
             message_id=msg_id,
-            sender_name=from_user,
+            sender_name=sender_name,
             is_group=False,
             image_urls=image_urls,
             raw=msg_data,

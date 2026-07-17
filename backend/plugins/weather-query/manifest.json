@@ -1,0 +1,33 @@
+{
+  "id": "weather-query",
+  "type": "plugin",
+  "name": "天气查询",
+  "version": "1.0.0",
+  "description": "注册天气查询工具，并监听聊天消息中的天气相关关键词，为 AI 提供实时天气数据支持",
+  "author": "LuminousCX",
+  "license": "MIT",
+  "entry": "main",
+  "minAppVersion": "0.7.6",
+  "platform": "backend",
+  "category": "tool",
+  "tags": ["weather", "tool", "lifestyle"],
+  "icon": "CloudSun",
+  "permissions": ["network", "tool_register"],
+  "dependencies": {
+    "python": ">=3.12",
+    "pip": []
+  },
+  "settings": {
+    "api_endpoint": {
+      "type": "string",
+      "default": "https://wttr.in",
+      "description": "天气查询 API 端点（默认使用 wttr.in 免费服务）"
+    },
+    "default_language": {
+      "type": "string",
+      "default": "zh",
+      "description": "默认返回语言（zh/en）"
+    }
+  },
+  "hooks": {}
+}

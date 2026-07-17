@@ -1,6 +1,9 @@
 """
 市场内容安装/卸载/下载/统计 API
 """
+import json
+import os
+
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
@@ -91,6 +94,205 @@ async def list_catalog_items(
         result.append(item)
 
     return {"items": result, "total": len(result)}
+
+
+@router.get("/local-items")
+async def list_local_items(
+    type: Optional[str] = Query(None, description="按类型过滤: plugin / skill"),
+):
+    """扫描本地 skills/ 与 plugins/ 目录，返回本地已存在的条目列表。
+
+    与远程市场目录不同，本地条目直接来自文件系统扫描，便于用户发现
+    手动放入目录的 skill/plugin。返回的条目会合并注册表运行时状态
+    （loaded/disabled 等），便于前端展示当前是否生效。
+    """
+    from app.core.config import settings
+    from app.runtime.plugin.skill.registry import cx_skill_registry
+    from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+
+    items: list[dict] = []
+
+    # 扫描 skills 目录
+    if not type or type == "skill":
+        skill_dir = settings.SKILL_DIR
+        if os.path.isdir(skill_dir):
+            for entry in os.listdir(skill_dir):
+                entry_path = os.path.join(skill_dir, entry)
+                if not os.path.isdir(entry_path):
+                    continue
+                if entry.startswith(".") or entry.startswith("_"):
+                    continue
+                skill_md_path = os.path.join(entry_path, "SKILL.md")
+                manifest_json_path = os.path.join(entry_path, "manifest.json")
+                if not os.path.isfile(skill_md_path) and not os.path.isfile(manifest_json_path):
+                    continue
+                item = _scan_local_skill(entry, entry_path)
+                if item:
+                    items.append(item)
+
+    # 扫描 plugins 目录
+    if not type or type == "plugin":
+        plugin_dir_root = settings.PLUGIN_DIR
+        if os.path.isdir(plugin_dir_root):
+            for entry in os.listdir(plugin_dir_root):
+                entry_path = os.path.join(plugin_dir_root, entry)
+                if not os.path.isdir(entry_path):
+                    continue
+                if entry.startswith(".") or entry.startswith("_"):
+                    continue
+                manifest_json_path = os.path.join(entry_path, "manifest.json")
+                if not os.path.isfile(manifest_json_path):
+                    continue
+                item = _scan_local_plugin(entry, entry_path)
+                if item:
+                    items.append(item)
+
+    return {"items": items, "total": len(items)}
+
+
+def _scan_local_skill(skill_id: str, skill_dir: str) -> Optional[dict]:
+    """扫描单个本地 skill 目录，返回条目字典。"""
+    from app.runtime.plugin.skill.registry import cx_skill_registry
+    from app.runtime.plugin.skill.models import SkillStatus
+
+    skill = cx_skill_registry.get(skill_id)
+    runtime_status = skill.status.value if skill else "not_loaded"
+
+    # 尝试读取 SKILL.md / manifest.json 提取元数据
+    name = skill_id
+    description = ""
+    version = "0.0.0"
+    author = ""
+    license_str = ""
+    tags: list = []
+    category = ""
+    icon = ""
+    trigger_keywords: list = []
+
+    skill_md_path = os.path.join(skill_dir, "SKILL.md")
+    manifest_json_path = os.path.join(skill_dir, "manifest.json")
+
+    # 优先从已加载的注册表读取
+    if skill is not None:
+        name = skill.name or skill_id
+        description = skill.description
+        version = skill.version
+        author = skill.author
+        license_str = skill.license
+        tags = skill.tags
+        category = skill.category
+        icon = skill.icon
+        trigger_keywords = skill.trigger_keywords
+    else:
+        # 未加载时尝试解析文件
+        try:
+            if os.path.isfile(skill_md_path):
+                import yaml
+                with open(skill_md_path, encoding="utf-8") as f:
+                    content = f.read()
+                if content.startswith("---"):
+                    parts = content.split("---", 2)
+                    if len(parts) >= 3:
+                        fm = yaml.safe_load(parts[1]) or {}
+                        if isinstance(fm, dict):
+                            name = str(fm.get("name") or name)
+                            description = str(fm.get("description") or "")
+                            version = str(fm.get("version") or version)
+                            author = str(fm.get("author") or "")
+                            license_str = str(fm.get("license") or "")
+                            tags = fm.get("tags") or []
+                            category = str(fm.get("category") or "")
+                            icon = str(fm.get("icon") or "")
+                            trigger_keywords = fm.get("trigger_keywords") or []
+            elif os.path.isfile(manifest_json_path):
+                with open(manifest_json_path, encoding="utf-8") as f:
+                    data = json.load(f)
+                name = str(data.get("name") or name)
+                description = str(data.get("description") or "")
+                version = str(data.get("version") or version)
+                author = str(data.get("author") or "")
+                license_str = str(data.get("license") or "")
+                tags = data.get("tags") or []
+                category = str(data.get("category") or "")
+                icon = str(data.get("icon") or "")
+        except Exception as e:
+            logger.warning(f"[MarketplaceAPI] Failed to scan local skill {skill_id}: {e}")
+
+    return {
+        "id": skill_id,
+        "type": "skill",
+        "name": name,
+        "description": description,
+        "summary": description[:60] + "..." if len(description) > 60 else description,
+        "version": version,
+        "author": {"id": "local", "name": author or "本地", "avatar": "", "verified": False},
+        "category": category,
+        "tags": [{"id": t, "name": t, "color": "#888"} for t in tags],
+        "icon": icon,
+        "license": license_str,
+        "localPath": skill_dir,
+        "runtimeStatus": runtime_status,
+        "installStatus": "installed",
+        "source": "local",
+        "trigger_keywords": trigger_keywords,
+    }
+
+
+def _scan_local_plugin(plugin_id: str, plugin_dir: str) -> Optional[dict]:
+    """扫描单个本地 plugin 目录，返回条目字典。"""
+    from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+
+    meta = cx_plugin_registry.get_plugin(plugin_id)
+    runtime_status = meta.status.value if meta else "not_loaded"
+
+    name = plugin_id
+    description = ""
+    version = "0.0.0"
+    author = ""
+    license_str = ""
+    tags: list = []
+    category = ""
+    icon = ""
+    capabilities: list = []
+    permissions: list = []
+
+    manifest_json_path = os.path.join(plugin_dir, "manifest.json")
+    try:
+        if os.path.isfile(manifest_json_path):
+            with open(manifest_json_path, encoding="utf-8") as f:
+                data = json.load(f)
+            name = str(data.get("name") or plugin_id)
+            description = str(data.get("description") or "")
+            version = str(data.get("version") or version)
+            author = str(data.get("author") or "")
+            license_str = str(data.get("license") or "")
+            tags = data.get("tags") or []
+            category = str(data.get("category") or "")
+            icon = str(data.get("icon") or "")
+            capabilities = data.get("capabilities") or []
+            permissions = data.get("permissions") or []
+    except Exception as e:
+        logger.warning(f"[MarketplaceAPI] Failed to scan local plugin {plugin_id}: {e}")
+
+    return {
+        "id": plugin_id,
+        "type": "plugin",
+        "name": name,
+        "description": description,
+        "summary": description[:60] + "..." if len(description) > 60 else description,
+        "version": version,
+        "author": {"id": "local", "name": author or "本地", "avatar": "", "verified": False},
+        "category": category,
+        "tags": [{"id": t, "name": t, "color": "#888"} for t in tags],
+        "icon": icon,
+        "license": license_str,
+        "localPath": plugin_dir,
+        "runtimeStatus": runtime_status,
+        "installStatus": "installed",
+        "source": "local",
+        "capabilities": capabilities,
+        "permissions": permissions,
+    }
 
 
 @router.get("/items/{item_id}")
@@ -214,7 +416,7 @@ async def uninstall_marketplace_item(req: UninstallRequest):
     result = await uninstall_item(req.itemId)
     if not result.get("success"):
         raise HTTPException(status_code=404, detail=result.get("error", "卸载失败"))
-    return result
+    return {"code": 0, "message": "ok", "error": None, "data": result}
 
 
 @router.get("/install-status")

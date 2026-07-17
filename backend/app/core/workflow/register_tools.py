@@ -566,10 +566,11 @@ async def _smart_home_control(args: dict[str, Any]) -> WorkflowTaskResult:
         )
 
     try:
-        from app.runtime.platform.platform_manager import platform_manager
+        from app.runtime.platform.registry import list_instances
+        from app.runtime.platform.base import PlatformResponse
 
         # 查找包含该设备 ID 的 IoT 平台实例
-        instances = platform_manager.list_instances()
+        instances = list_instances()
         iot_instances = [
             inst for inst in instances
             if inst.adapter_type in ("mqtt_terminal", "home_assistant", "xiaomi_iot")
@@ -589,10 +590,18 @@ async def _smart_home_control(args: dict[str, Any]) -> WorkflowTaskResult:
             "params": params,
         }
 
-        success = await platform_manager.send_to_instance(
-            instance_id=target.instance_id,
-            message=json.dumps(command_payload, ensure_ascii=False),
+        adapter = target.adapter
+        if not adapter:
+            return WorkflowTaskResult(
+                success=False,
+                error=f"实例 {target.instance_id} 没有可用的适配器",
+            )
+
+        response = PlatformResponse(
+            content=json.dumps(command_payload, ensure_ascii=False),
+            message_type="text",
         )
+        success = await adapter.send_message(response, target=device_id)
 
         # 推送工作流事件
         emitter = _get_emitter()

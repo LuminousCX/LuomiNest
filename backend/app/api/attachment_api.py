@@ -1,9 +1,9 @@
 import base64
 import logging
 from fastapi import APIRouter, UploadFile, File
-from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.utils import fail, ok
 
 logger = logging.getLogger(__name__)
 
@@ -82,19 +82,22 @@ def _extract_docx_text(file_bytes: bytes) -> tuple[str | None, str]:
 
 @router.post("/forward")
 async def forward_file(file: UploadFile = File(...)):
+    """文件上传转发，提取文本/图片内容并统一信封返回。
+
+    成功: {"code": 0, "message": "ok", "error": null, "data": {content, type, filename}}
+    失败: {"code": 1, "message": "...", "error": {code, message}, "data": null}
+    """
     try:
         file_bytes = await file.read()
     except Exception as e:
         logger.warning(f"[UploadForward] 文件读取失败: {e}")
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": "文件读取失败，请重新上传"},
-        )
+        return fail("文件读取失败，请重新上传", err_code="UPLOAD_READ_FAILED", status_code=400)
 
     if len(file_bytes) > settings.FILE_MAX_SIZE:
-        return JSONResponse(
+        return fail(
+            f"文件大小超过限制 ({settings.FILE_MAX_SIZE // 1024 // 1024}MB)",
+            err_code="UPLOAD_TOO_LARGE",
             status_code=400,
-            content={"status": "error", "message": f"文件大小超过限制 ({settings.FILE_MAX_SIZE // 1024 // 1024}MB)"},
         )
 
     try:
@@ -119,39 +122,38 @@ async def forward_file(file: UploadFile = File(...)):
             b64 = base64.b64encode(file_bytes).decode('utf-8')
             mime = f"image/{ext if ext != 'jpg' else 'jpeg'}"
             content = f"data:{mime};base64,{b64}"
-            return {
-                "status": "success",
+            return ok({
                 "content": content,
                 "type": "image",
                 "filename": filename,
-            }
+            })
 
         if ext == 'pdf':
             text, error = _extract_pdf_text(file_bytes)
             if text:
-                return {
-                    "status": "success",
+                return ok({
                     "content": text,
                     "type": "text",
                     "filename": filename,
-                }
-            return JSONResponse(
+                })
+            return fail(
+                error or "无法提取PDF文本内容",
+                err_code="PDF_EXTRACT_FAILED",
                 status_code=400,
-                content={"status": "error", "message": error or "无法提取PDF文本内容"},
             )
 
         if ext in ('docx', 'doc'):
             text, error = _extract_docx_text(file_bytes)
             if text:
-                return {
-                    "status": "success",
+                return ok({
                     "content": text,
                     "type": "text",
                     "filename": filename,
-                }
-            return JSONResponse(
+                })
+            return fail(
+                error or "无法提取Word文档文本内容",
+                err_code="DOCX_EXTRACT_FAILED",
                 status_code=400,
-                content={"status": "error", "message": error or "无法提取Word文档文本内容"},
             )
 
         text_extensions = {'txt', 'md', 'csv', 'json', 'xml', 'html', 'css', 'js', 'py', 'java', 'cpp', 'c', 'h', 'go', 'rs', 'ts', 'sql', 'yaml', 'yml'}
@@ -163,21 +165,18 @@ async def forward_file(file: UploadFile = File(...)):
                     text = file_bytes.decode('gbk')
                 except UnicodeDecodeError:
                     text = file_bytes.decode('utf-8', errors='ignore')
-            return {
-                "status": "success",
+            return ok({
                 "content": text,
                 "type": "text",
                 "filename": filename,
-            }
+            })
 
-        return JSONResponse(
+        return fail(
+            f"不支持的文件类型: .{ext}",
+            err_code="UNSUPPORTED_FILE_TYPE",
             status_code=400,
-            content={"status": "error", "message": f"不支持的文件类型: .{ext}"},
         )
 
     except Exception as e:
         logger.warning(f"[UploadForward] 文件处理失败: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": "文件上传处理失败，请稍后重试"},
-        )
+        return fail("文件上传处理失败，请稍后重试", err_code="UPLOAD_PROCESS_FAILED")

@@ -452,10 +452,15 @@ export const usePlatformStore = defineStore('platform', () => {
     }
   }
 
-  const createNewConversation = async (instanceId: string) => {
+  const createNewConversation = async (instanceId: string, senderName = 'Web 用户'): Promise<string | null> => {
     try {
-      await apiPost(`/platforms/instances/${instanceId}/conversations/new`, {})
+      const result = await apiPost<{ data?: { conversation_id?: string; conversationId?: string }; conversation_id?: string; conversationId?: string }>(
+        `/platforms/instances/${instanceId}/conversations/new`,
+        { sender_name: senderName },
+      )
       await fetchConversations(instanceId)
+      const d = result?.data || result
+      return d?.conversation_id || d?.conversationId || null
     } catch (e: unknown) {
       const toast = useToast()
       const msg = (e instanceof Error ? e.message : String(e)) || '未知错误'

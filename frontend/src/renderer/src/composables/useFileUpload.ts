@@ -34,18 +34,20 @@ export function useFileUpload() {
 
       const data = await resp.json()
 
-      if (!resp.ok || data.status === 'error') {
-        uploadingFile.value = { name: file.name, status: 'failed', error: data.message || '上传失败' }
+      if (!resp.ok || data.code !== 0) {
+        const errMsg = data?.message || data?.error?.message || '上传失败'
+        uploadingFile.value = { name: file.name, status: 'failed', error: errMsg }
         isUploading.value = false
         currentUploadController = null
         return ''
       }
 
-      const content = data.content || ''
+      const payload = data.data || {}
+      const content = payload.content || ''
       parsedContent.value = content
-      fileType.value = data.type || 'text'
+      fileType.value = payload.type || 'text'
       fileName.value = file.name
-      uploadingFile.value = { name: file.name, status: 'success', type: data.type, result: content }
+      uploadingFile.value = { name: file.name, status: 'success', type: payload.type, result: content }
       isUploading.value = false
       currentUploadController = null
       return content

@@ -53,11 +53,22 @@ async def chat_completions(request: ChatRequest):
         )
 
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
-    system_prompt = context_service.build_system_prompt(request.agent_id)
-    messages = [{"role": "system", "content": system_prompt}] + messages
+
+    # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
+    _conv_chat_mode = None
+    if request.conversation_id:
+        _conv = await conversation_store.get_async(request.conversation_id)
+        if _conv:
+            _conv_chat_mode = _conv.get("chat_mode")
+    if _conv_chat_mode != "ultra":
+        user_query = context_service.get_user_query(messages)
+        system_prompt = context_service.build_system_prompt(request.agent_id, user_context=user_query)
+        messages = [{"role": "system", "content": system_prompt}] + messages
+
     messages = context_service.inject_timestamp_prompt(messages)
     # 子 Agent 调用不注入主 Agent 记忆，避免污染独立上下文
-    if not request.is_sub_agent:
+    # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
+    if not request.is_sub_agent and _conv_chat_mode != "ultra":
         messages = await context_service.inject_memory(messages, request.agent_id, resolved_provider, llm_adapter=llm_adapter)
 
     if request.file_content:
@@ -363,8 +374,13 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
         or llm_adapter.get_provider(resolved_provider).default_model
     )
 
-    system_prompt = context_service.build_system_prompt(conv.get("agent_id"))
-    all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
+    if conv.get("chat_mode") != "ultra":
+        user_query = context_service.get_user_query(conv["messages"])
+        system_prompt = context_service.build_system_prompt(conv.get("agent_id"), user_context=user_query)
+        all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    else:
+        all_messages: list[dict] = []
 
     supports_vision = llm_adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
 
@@ -381,10 +397,12 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
     all_messages = context_service.inject_timestamp_prompt(all_messages)
     # 始终以对话存储的 agent_id 为准，确保记忆读写一致
     agent_id = await _resolve_agent_id(conv, request.agent_id)
-    all_messages = await context_service.inject_memory(
-        all_messages, agent_id, resolved_provider, conv_id,
-        llm_adapter=llm_adapter,
-    )
+    # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
+    if conv.get("chat_mode") != "ultra":
+        all_messages = await context_service.inject_memory(
+            all_messages, agent_id, resolved_provider, conv_id,
+            llm_adapter=llm_adapter,
+        )
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
     process_result = await ctx_mgr.process(all_messages)
@@ -550,8 +568,13 @@ async def add_message(conv_id: str, request: ChatRequest):
         or llm_adapter.get_provider(resolved_provider).default_model
     )
 
-    system_prompt = context_service.build_system_prompt(conv.get("agent_id"))
-    all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
+    if conv.get("chat_mode") != "ultra":
+        user_query = context_service.get_user_query(conv["messages"])
+        system_prompt = context_service.build_system_prompt(conv.get("agent_id"), user_context=user_query)
+        all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    else:
+        all_messages: list[dict] = []
 
     supports_vision = llm_adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
 
@@ -568,10 +591,12 @@ async def add_message(conv_id: str, request: ChatRequest):
     all_messages = context_service.inject_timestamp_prompt(all_messages)
     # 始终以对话存储的 agent_id 为准，确保记忆读写一致
     agent_id = await _resolve_agent_id(conv, request.agent_id)
-    all_messages = await context_service.inject_memory(
-        all_messages, agent_id, resolved_provider, conv_id,
-        llm_adapter=llm_adapter,
-    )
+    # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
+    if conv.get("chat_mode") != "ultra":
+        all_messages = await context_service.inject_memory(
+            all_messages, agent_id, resolved_provider, conv_id,
+            llm_adapter=llm_adapter,
+        )
 
     if request.search_results:
         for i in range(len(all_messages) - 1, -1, -1):
@@ -735,7 +760,8 @@ async def compress_conversation(conv_id: str):
     resolved_model = conv.get("model") or llm_adapter.get_provider(resolved_provider).default_model
 
     # 构建完整消息列表
-    system_prompt = context_service.build_system_prompt(agent_id)
+    user_query = context_service.get_user_query(conv.get("messages", []))
+    system_prompt = context_service.build_system_prompt(agent_id, user_context=user_query)
     all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
     for m in conv["messages"]:
         all_messages.append({"role": m["role"], "content": m["content"]})

@@ -28,12 +28,25 @@ import {
 } from 'lucide-vue-next'
 import LumiBrandStar from './common/LumiBrandStar.vue'
 import { useTaskStreamStore } from '../stores/taskStream'
+import { cxContributionRegistry } from '../plugins'
+import { resolvePluginIcon } from '../plugins/plugin-icons'
 
 const route = useRoute()
 const router = useRouter()
 const taskStreamStore = useTaskStreamStore()
 
 const isNavCollapsed = ref(true)
+
+// 插件贡献的侧边栏视图（响应式，插件激活/停用时自动更新）
+const pluginSidebarViews = computed(() => cxContributionRegistry.sidebarPluginViews.value)
+
+const isPluginViewActive = (fullPath: string) => {
+  return route.path === fullPath || route.path.startsWith(fullPath + '/')
+}
+
+const handlePluginNavigate = (fullPath: string) => {
+  router.push(fullPath)
+}
 
 interface NavChild {
   id: string
@@ -256,6 +269,21 @@ const handleNavigate = (path: string) => {
             <span class="nav-item-label">{{ item.label }}</span>
             <span v-if="item.badge" class="nav-item-badge">{{ item.badge }}</span>
             <span v-if="isPathPending(item.route)" class="nav-pending-dot"></span>
+          </button>
+        </div>
+      </div>
+
+      <div v-if="!isNavCollapsed && pluginSidebarViews.length" class="nav-section">
+        <div class="section-label">插件</div>
+        <div class="nav-items">
+          <button
+            v-for="pview in pluginSidebarViews"
+            :key="pview.fullName"
+            :class="['nav-item', { active: isPluginViewActive(pview.fullPath) }]"
+            @click="handlePluginNavigate(pview.fullPath)"
+          >
+            <component :is="resolvePluginIcon(pview.icon)" :size="17" class="nav-item-icon" />
+            <span class="nav-item-label">{{ pview.title }}</span>
           </button>
         </div>
       </div>

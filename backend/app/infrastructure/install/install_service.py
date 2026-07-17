@@ -477,8 +477,15 @@ async def install_from_archive(
         if backup_dir and backup_dir.exists():
             shutil.rmtree(backup_dir)
 
+        # 安装后自动 reload 对应的注册表
+        reload_result = await _post_install_reload(item_id, item_type, str(target_dir))
+
         logger.success(f"[InstallService] Installed {item_type}/{item_id} v{version} to {target_dir}")
-        return {"success": True, "installPath": str(target_dir)}
+        return {
+            "success": True,
+            "installPath": str(target_dir),
+            "reload_result": reload_result,
+        }
 
     except Exception as e:
         # 恢复备份
@@ -490,6 +497,51 @@ async def install_from_archive(
 
         logger.error(f"[InstallService] Install failed for {item_id}: {e}")
         return {"success": False, "error": str(e)}
+
+
+async def _post_install_reload(item_id: str, item_type: str, install_path: str) -> dict:
+    """安装成功后自动 reload 对应的注册表，让新内容立即生效。
+
+    Args:
+        item_id: 条目 id
+        item_type: 条目类型（plugin/skill/agent）
+        install_path: 安装目录绝对路径
+
+    Returns:
+        reload 结果字典
+    """
+    result = {"attempted": False, "success": False, "error": ""}
+    try:
+        if item_type == "skill":
+            result["attempted"] = True
+            from app.runtime.plugin.skill.loader import cx_skill_loader
+            # 若已加载，先卸载
+            if item_id in cx_skill_loader.get_loaded_ids():
+                await cx_skill_loader.unload_single(item_id)
+            ok = await cx_skill_loader.load_single(install_path)
+            result["success"] = ok
+            if ok:
+                logger.info(f"[InstallService] Auto-reloaded skill: {item_id}")
+            else:
+                result["error"] = "load_single returned False"
+        elif item_type == "plugin":
+            result["attempted"] = True
+            from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
+            from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+            # 若已加载，先卸载
+            if cx_plugin_registry.get_plugin(item_id) is not None:
+                await cx_plugin_loader.unload_single(item_id)
+            ok = await cx_plugin_loader.load_single(install_path)
+            result["success"] = ok
+            if ok:
+                logger.info(f"[InstallService] Auto-reloaded plugin: {item_id}")
+            else:
+                result["error"] = "load_single returned False"
+        # agent 类型暂无运行时注册表，跳过
+    except Exception as e:
+        result["error"] = str(e)
+        logger.warning(f"[InstallService] Post-install reload failed for {item_type}/{item_id}: {e}")
+    return result
 
 
 async def uninstall_item(item_id: str) -> dict:
@@ -510,6 +562,9 @@ async def uninstall_item(item_id: str) -> dict:
     item_type = record.get("type", "")
 
     try:
+        # 先从注册表卸载（避免文件被删后引用悬空）
+        await _post_uninstall_unload(item_id, item_type)
+
         # 删除安装目录
         if install_path and Path(install_path).exists():
             shutil.rmtree(Path(install_path))
@@ -540,6 +595,39 @@ async def uninstall_item(item_id: str) -> dict:
     except Exception as e:
         logger.error(f"[InstallService] Uninstall failed for {item_id}: {e}")
         return {"success": False, "error": str(e)}
+
+
+async def _post_uninstall_unload(item_id: str, item_type: str) -> dict:
+    """卸载前从对应注册表移除条目。
+
+    Args:
+        item_id: 条目 id
+        item_type: 条目类型
+
+    Returns:
+        unload 结果字典
+    """
+    result = {"attempted": False, "success": False, "error": ""}
+    try:
+        if item_type == "skill":
+            result["attempted"] = True
+            from app.runtime.plugin.skill.loader import cx_skill_loader
+            if item_id in cx_skill_loader.get_loaded_ids():
+                ok = await cx_skill_loader.unload_single(item_id)
+                result["success"] = ok
+                logger.info(f"[InstallService] Unloaded skill before uninstall: {item_id}")
+        elif item_type == "plugin":
+            result["attempted"] = True
+            from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
+            from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+            if cx_plugin_registry.get_plugin(item_id) is not None:
+                ok = await cx_plugin_loader.unload_single(item_id)
+                result["success"] = ok
+                logger.info(f"[InstallService] Unloaded plugin before uninstall: {item_id}")
+    except Exception as e:
+        result["error"] = str(e)
+        logger.warning(f"[InstallService] Pre-uninstall unload failed for {item_type}/{item_id}: {e}")
+    return result
 
 
 def get_all_install_status() -> dict[str, str]:

@@ -21,6 +21,7 @@ import AvatarSkinSidebar from '@/components/avatar/AvatarSkinSidebar.vue'
 import type { AvatarMode, AvatarEmotion, AvatarMotion, IdleAnimation, ManifestSkinItem } from '@/components/avatar/types'
 import type { AvatarRendererType, AvatarManifestModel } from '@/types/avatar'
 import type { ChatStreamChunk } from '@/types'
+import type { PetModelInfo } from '@shared/ipc-types'
 import { MAIN_AGENT_ID, MAIN_AGENT_PROFILE } from '@/constants'
 
 // ===========================================================================
@@ -64,10 +65,12 @@ const stageRenderer = useAvatarStageRenderer()
 // 桌面宠物模式状态
 // ===========================================================================
 
-const isDesktopPetRunning = ref(false)
 const isSwitchingDisplayMode = ref(false)
 
 const isDesktopMode = computed(() => displayMode.value === 'desktop')
+
+// 桌宠运行状态：直接复用 avatarControl store 的单一真相源，避免状态重复
+const isDesktopPetRunning = computed(() => avatarControl.isDesktopPetRunning)
 
 // ===========================================================================
 // Live2D 渲染器（仅 Live2D 模式使用，不修改原 composable）
@@ -488,6 +491,27 @@ async function handleImportClick() {
 // 桌面宠物模式切换
 // ===========================================================================
 
+/**
+ * 从当前 manifest 模型构建纯对象 PetModelInfo
+ *
+ * 关键：必须显式复制字段（尤其是 tags 数组），去除 Vue Proxy 包装。
+ * Electron IPC 使用结构化克隆算法，Vue Proxy 不可克隆会导致
+ * "An object could not be cloned." 错误。
+ */
+function buildPetModelInfo(model: AvatarManifestModel | null): PetModelInfo | null {
+  if (!model) return null
+  const loadInfo = resolveModelLoadInfo(model)
+  if (!loadInfo) return null
+  return {
+    id: String(model.id),
+    name: String(model.name),
+    url: String(loadInfo.url),
+    scale: Number(loadInfo.scale),
+    type: String(model.type),
+    tags: Array.isArray(model.tags) ? model.tags.map((t: string) => String(t)) : [],
+  }
+}
+
 async function toggleDesktopMode() {
   if (isSwitchingDisplayMode.value) return
   if (isDesktopMode.value) {
@@ -497,48 +521,73 @@ async function toggleDesktopMode() {
   }
 }
 
+/**
+ * 切换到桌宠模式
+ *
+ * 流程顺序很重要：
+ * 1. 先释放内联 Live2D 资源
+ * 2. 通过 IPC 打开桌宠窗口（store 内部已防御性复制参数）
+ * 3. 仅当 IPC 成功后才切换 displayMode（避免状态不一致）
+ * 4. 失败时 toast 提示并保持内联模式
+ */
 async function switchToDesktopMode() {
+  if (isSwitchingDisplayMode.value) return
   isSwitchingDisplayMode.value = true
   try {
+    // 1. 释放内联 Live2D 资源（避免 canvas 移除后 ticker 继续运行）
     if (currentMode.value === 'live2d') {
       teardown()
     }
-    await workshop.switchDisplayMode('desktop')
 
-    // 构建桌宠加载信息
-    const model = currentModel.value
-    let petModelInfo = null
-    if (model) {
-      const loadInfo = resolveModelLoadInfo(model)
-      if (loadInfo) {
-        petModelInfo = {
-          id: model.id,
-          name: model.name,
-          url: loadInfo.url,
-          scale: loadInfo.scale,
-          type: model.type as 'live2d' | 'vrm' | 'pixel',
-          tags: model.tags,
-        }
-      }
+    // 2. 构建桌宠加载信息（纯对象，去除 Vue Proxy）
+    const petModelInfo = buildPetModelInfo(currentModel.value)
+
+    // 3. 通过 store 打开桌宠窗口（内部已防御性复制 + 错误处理）
+    const opened = await avatarControl.openDesktopPet(petModelInfo ?? undefined)
+    if (!opened) {
+      toast.error('桌宠窗口打开失败，请重试')
+      return // 保持内联模式，不切换 displayMode
     }
 
-    await window.api.desktopPet.open(petModelInfo ?? undefined)
-    await avatarControl.checkDesktopPetStatus()
-    isDesktopPetRunning.value = avatarControl.isDesktopPetRunning
+    // 4. IPC 成功后再切换 displayMode（确保状态一致）
+    await workshop.switchDisplayMode('desktop')
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    toast.error(`切换桌宠模式失败：${msg}`)
+    // 回滚：确保 displayMode 与实际窗口状态一致
+    await workshop.switchDisplayMode('inline')
   } finally {
     isSwitchingDisplayMode.value = false
   }
 }
 
+/**
+ * 切回内联模式
+ *
+ * 流程顺序：
+ * 1. 先关闭桌宠窗口
+ * 2. 切换 displayMode 回 inline
+ * 3. 重新加载内联模型
+ */
 async function switchToInlineMode() {
+  if (isSwitchingDisplayMode.value) return
   isSwitchingDisplayMode.value = true
   try {
+    // 1. 关闭桌宠窗口
+    const closed = await avatarControl.closeDesktopPet()
+    if (!closed) {
+      toast.warning('桌宠窗口关闭失败，可能需要手动关闭')
+    }
+
+    // 2. 切换 displayMode
     await workshop.switchDisplayMode('inline')
-    await window.api.desktopPet.close()
-    await avatarControl.checkDesktopPetStatus()
-    isDesktopPetRunning.value = avatarControl.isDesktopPetRunning
+
+    // 3. 重新加载内联模型
     await nextTick()
     await loadCurrentModel()
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    toast.error(`切回内联模式失败：${msg}`)
   } finally {
     isSwitchingDisplayMode.value = false
   }
@@ -664,24 +713,16 @@ function toggleSkinSidebar() {
 // 生命周期
 // ===========================================================================
 
-const checkDesktopPetStatus = async () => {
-  try {
-    isDesktopPetRunning.value = await window.api.desktopPet.isRunning()
-  } catch {
-    isDesktopPetRunning.value = false
-  }
-}
-
 onMounted(async () => {
   agentStore.setActiveAgent(MAIN_AGENT_PROFILE)
 
   // 初始化工坊：拉取 manifest + 导入列表
   await workshop.init()
 
-  await checkDesktopPetStatus()
+  // 同步桌宠运行状态（store 是单一真相源，computed 自动反映）
   await avatarControl.checkDesktopPetStatus()
 
-  // 同步桌宠运行状态
+  // 如果桌宠已在运行（如上次未关闭），同步 displayMode
   if (isDesktopPetRunning.value) {
     await workshop.switchDisplayMode('desktop')
   }

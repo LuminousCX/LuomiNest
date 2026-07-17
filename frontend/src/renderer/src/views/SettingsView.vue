@@ -33,7 +33,8 @@ const settingGroups = ref([
   {
     title: '连接与扩展',
     items: [
-      { label: '消息平台', desc: 'QQ / 微信 / Discord 等', route: '/settings/platforms' }
+      { label: '消息平台', desc: 'QQ / 微信 / Discord 等', route: '/settings/platforms' },
+      { label: '插件与技能', desc: '前端插件 / 后端插件 / 技能管理', route: '/settings/plugins' }
     ]
   }
 ])

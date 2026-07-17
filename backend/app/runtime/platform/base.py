@@ -1,6 +1,17 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any, Awaitable, Callable
+
+
+class AdapterStatus(StrEnum):
+    PENDING = "pending"
+    STARTING = "starting"
+    RUNNING = "running"
+    RECONNECTING = "reconnecting"
+    ERROR = "error"
+    STOPPING = "stopping"
+    STOPPED = "stopped"
 
 
 MessageHandler = Callable[["PlatformMessage", str], Awaitable["PlatformResponse | None"]]
@@ -71,6 +82,11 @@ class BasePlatformAdapter(ABC):
         self._config: dict[str, Any] = {}
         self._instance_id: str = ""
         self._message_handler: MessageHandler | None = None
+        self._status: AdapterStatus = AdapterStatus.PENDING
+        self._started_at: float | None = None
+        self._last_error: str | None = None
+        self._error_count: int = 0
+        self._message_count: int = 0
 
     def set_instance_id(self, instance_id: str) -> None:
         self._instance_id = instance_id
@@ -112,18 +128,59 @@ class BasePlatformAdapter(ABC):
         pass
 
     async def start(self) -> None:
-        pass
+        self._status = AdapterStatus.STARTING
 
     async def stop(self) -> None:
-        pass
+        self._status = AdapterStatus.STOPPING
+        self._status = AdapterStatus.STOPPED
 
     async def _emit_message(self, message: PlatformMessage) -> PlatformResponse | None:
         """触发消息回调，将消息路由到主 Agent。"""
         if not self._message_handler:
             return None
         try:
-            return await self._message_handler(message, self._instance_id)
+            result = await self._message_handler(message, self._instance_id)
+            self._message_count += 1
+            return result
         except Exception as e:
             from loguru import logger
             logger.error(f"[{self.platform_name}] Message handler failed: {e}")
+            self.record_error(str(e))
             return None
+
+    async def health_check(self) -> dict:
+        """健康检查，返回适配器状态信息。子类可重写。"""
+        import time
+        uptime = (time.time() - self._started_at) if self._started_at else 0.0
+        return {
+            "healthy": self._status == AdapterStatus.RUNNING,
+            "status": self._status.value,
+            "last_error": self._last_error,
+            "uptime": uptime,
+            "message_count": self._message_count,
+            "error_count": self._error_count,
+        }
+
+    def get_status(self) -> dict:
+        """获取适配器当前状态快照。"""
+        import time
+        return {
+            "status": self._status.value,
+            "uptime": (time.time() - self._started_at) if self._started_at else 0.0,
+            "message_count": self._message_count,
+            "error_count": self._error_count,
+            "last_error": self._last_error,
+        }
+
+    def record_error(self, error: str) -> None:
+        """记录错误信息。"""
+        self._last_error = error
+        self._error_count += 1
+        self._status = AdapterStatus.ERROR
+
+    def update_status(self, status: AdapterStatus) -> None:
+        """更新适配器状态。"""
+        self._status = status
+        if status == AdapterStatus.RUNNING:
+            import time
+            self._started_at = time.time()

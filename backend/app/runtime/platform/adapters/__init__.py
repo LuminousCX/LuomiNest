@@ -1,154 +1,21 @@
-import json
-from typing import Any
-from loguru import logger
+"""平台适配器包 - 导入所有适配器并注册。"""
 
-from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
+from app.runtime.platform.adapters.discord import DiscordAdapter
+from app.runtime.platform.adapters.game_websocket import LuomiNestGameWebSocketAdapter
+from app.runtime.platform.adapters.home_assistant import HomeAssistantAdapter
+from app.runtime.platform.adapters.minecraft import LuomiNestMinecraftAdapter
+from app.runtime.platform.adapters.mqtt_terminal import MQTTTerminalAdapter
+from app.runtime.platform.adapters.qq_official import LuomiNestQQOfficialAdapter
+
+# 已有的独立文件适配器
+from app.runtime.platform.adapters.qq_onebot import LuomiNestQQOneBotAdapter
+from app.runtime.platform.adapters.rest_api import RESTPlatformAdapter
+from app.runtime.platform.adapters.telegram import TelegramAdapter
+from app.runtime.platform.adapters.websocket import WebSocketAdapter
+from app.runtime.platform.adapters.wechat_mp import LuomiNestWeChatMPAdapter
+from app.runtime.platform.adapters.wechat_work import LuomiNestWeComAdapter
+from app.runtime.platform.adapters.xiaomi_iot import LuomiNestXiaomiIoTAdapter as XiaomiIoTAdapter
 from app.runtime.platform.registry import register_adapter_type
-from app.infrastructure.mqtt import mqtt_client
-
-
-class MQTTTerminalAdapter(BasePlatformAdapter):
-    platform_name = "mqtt_terminal"
-
-    TOPIC_STATUS = "luominestai/device/{device_id}/status"
-    TOPIC_COMMAND = "luominestai/device/{device_id}/command"
-    TOPIC_AUDIO = "luominestai/device/{device_id}/audio"
-    TOPIC_LOCATION = "luominestai/device/{device_id}/location"
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._subscribed_devices: set[str] = set()
-
-    async def start(self) -> None:
-        if mqtt_client:
-            await mqtt_client.subscribe("luominestai/device/+/status")
-            await mqtt_client.subscribe("luominestai/device/+/audio")
-            await mqtt_client.subscribe("luominestai/device/+/location")
-        logger.info(f"[{self.platform_name}] MQTT Terminal adapter started")
-
-    async def send_message(self, response: PlatformResponse, target: str) -> bool:
-        if not mqtt_client:
-            return False
-        topic = self.TOPIC_COMMAND.format(device_id=target)
-        payload = {
-            "type": response.message_type,
-            "content": response.content,
-            **(response.extra or {}),
-        }
-        await mqtt_client.publish(topic, json.dumps(payload), qos=1)
-        return True
-
-    async def handle_event(self, event: dict[str, Any]) -> PlatformMessage | None:
-        topic = event.get("topic", "")
-        payload = event.get("payload", {})
-
-        if "/status" in topic:
-            device_id = self._extract_device_id(topic)
-            return PlatformMessage(
-                platform=self.platform_name,
-                user_id=device_id,
-                content=json.dumps(payload),
-                raw=payload,
-            )
-        elif "/audio" in topic:
-            device_id = self._extract_device_id(topic)
-            return PlatformMessage(
-                platform=self.platform_name,
-                user_id=device_id,
-                content=f"[AUDIO] {len(payload.get('data', b''))} bytes",
-                raw=payload,
-            )
-        return None
-
-    def _extract_device_id(self, topic: str) -> str:
-        parts = topic.split("/")
-        for i, part in enumerate(parts):
-            if part == "device" and i + 1 < len(parts):
-                return parts[i + 1]
-        return "unknown"
-
-
-class WebSocketPlatformAdapter(BasePlatformAdapter):
-    platform_name = "websocket"
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._connections: dict[str, Any] = {}
-
-    async def send_message(self, response: PlatformResponse, target: str) -> bool:
-        conn = self._connections.get(target)
-        if conn and hasattr(conn, 'send_json'):
-            await conn.send_json({"type": "message", "data": {"content": response.content}})
-            return True
-        return False
-
-    async def handle_event(self, event: dict[str, Any]) -> PlatformMessage | None:
-        ws = event.get("ws")
-        data = event.get("data", {})
-        conn_id = event.get("conn_id", "")
-        if ws:
-            self._connections[conn_id] = ws
-        return PlatformMessage(
-            platform=self.platform_name,
-            user_id=conn_id,
-            content=data.get("content", ""),
-            raw=data,
-        ) if data.get("content") else None
-
-
-class RESTPlatformAdapter(BasePlatformAdapter):
-    platform_name = "rest_api"
-
-    async def send_message(self, response: PlatformResponse, target: str) -> bool:
-        return True
-
-    async def handle_event(self, event: dict[str, Any]) -> PlatformMessage | None:
-        return PlatformMessage(
-            platform=self.platform_name,
-            user_id=event.get("user_id", "anonymous"),
-            content=event.get("content", ""),
-            raw=event,
-        )
-
-
-class TelegramAdapter(BasePlatformAdapter):
-    platform_name = "telegram"
-
-    async def send_message(self, response: PlatformResponse, target: str) -> bool:
-        return False
-
-    async def handle_event(self, event: dict[str, Any]) -> PlatformMessage | None:
-        return None
-
-
-class DiscordAdapter(BasePlatformAdapter):
-    platform_name = "discord"
-
-    async def send_message(self, response: PlatformResponse, target: str) -> bool:
-        return False
-
-    async def handle_event(self, event: dict[str, Any]) -> PlatformMessage | None:
-        return None
-
-
-class HomeAssistantAdapter(BasePlatformAdapter):
-    platform_name = "home_assistant"
-
-    async def send_message(self, response: PlatformResponse, target: str) -> bool:
-        return False
-
-    async def handle_event(self, event: dict[str, Any]) -> PlatformMessage | None:
-        return None
-
-
-class XiaomiIoTAdapter(BasePlatformAdapter):
-    platform_name = "xiaomi_iot"
-
-    async def send_message(self, response: PlatformResponse, target: str) -> bool:
-        return False
-
-    async def handle_event(self, event: dict[str, Any]) -> PlatformMessage | None:
-        return None
 
 
 def _register_all_adapter_types():
@@ -177,7 +44,7 @@ def _register_all_adapter_types():
         name="websocket",
         display_name="WebSocket 连接",
         description="通过 WebSocket 协议实现双向实时通信，适用于自定义客户端接入",
-        adapter_cls=WebSocketPlatformAdapter,
+        adapter_cls=WebSocketAdapter,
         config_template={
             "endpoint": "/ws/platform",
         },
@@ -206,8 +73,6 @@ def _register_all_adapter_types():
         category="general",
         support_proactive=True,
     )
-
-    from app.runtime.platform.adapters.qq_onebot import LuomiNestQQOneBotAdapter
     register_adapter_type(
         name="qq_onebot",
         display_name="QQ OneBot v11",
@@ -232,8 +97,6 @@ def _register_all_adapter_types():
         support_streaming=False,
         support_proactive=True,
     )
-
-    from app.runtime.platform.adapters.qq_official import LuomiNestQQOfficialAdapter
     register_adapter_type(
         name="qq_official",
         display_name="QQ 官方机器人",
@@ -258,8 +121,6 @@ def _register_all_adapter_types():
         support_streaming=False,
         support_proactive=True,
     )
-
-    from app.runtime.platform.adapters.wechat_work import LuomiNestWeComAdapter
     register_adapter_type(
         name="wechat_work",
         display_name="企业微信",
@@ -288,8 +149,6 @@ def _register_all_adapter_types():
         support_streaming=False,
         support_proactive=True,
     )
-
-    from app.runtime.platform.adapters.wechat_mp import LuomiNestWeChatMPAdapter
     register_adapter_type(
         name="wechat_mp",
         display_name="微信公众号",
@@ -316,8 +175,6 @@ def _register_all_adapter_types():
         support_streaming=False,
         support_proactive=True,
     )
-
-    from app.runtime.platform.adapters.minecraft import LuomiNestMinecraftAdapter
     register_adapter_type(
         name="minecraft",
         display_name="Minecraft",
@@ -350,8 +207,6 @@ def _register_all_adapter_types():
         support_streaming=False,
         support_proactive=True,
     )
-
-    from app.runtime.platform.adapters.game_websocket import LuomiNestGameWebSocketAdapter
     register_adapter_type(
         name="game_websocket",
         display_name="游戏 WebSocket 网关",
@@ -374,7 +229,6 @@ def _register_all_adapter_types():
         support_streaming=True,
         support_proactive=True,
     )
-
     register_adapter_type(
         name="telegram",
         display_name="Telegram",

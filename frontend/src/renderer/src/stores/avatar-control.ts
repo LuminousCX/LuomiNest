@@ -221,13 +221,36 @@ export const useAvatarControlStore = defineStore('avatarControl', () => {
     }
   }
 
+  /**
+   * 打开桌宠窗口
+   *
+   * 防御性复制 modelInfo：去除 Vue Proxy 包装，确保 Electron IPC 结构化克隆成功。
+   * 否则会抛出 "An object could not be cloned."（Vue Proxy 不在 structuredClone 可克隆类型中）。
+   */
   const openDesktopPet = async (modelInfo?: PetModelInfo): Promise<boolean> => {
     try {
-      const res = await window.api.desktopPet.open(modelInfo)
-      if (res.success) {
+      // 显式构建纯对象，去除所有 Vue Proxy 包装
+      const plainModelInfo: PetModelInfo | undefined = modelInfo
+        ? {
+            id: String(modelInfo.id),
+            name: String(modelInfo.name),
+            url: String(modelInfo.url),
+            scale: Number(modelInfo.scale),
+            type: String(modelInfo.type),
+            tags: Array.isArray(modelInfo.tags)
+              ? modelInfo.tags.map((t: unknown) => String(t))
+              : [],
+          }
+        : undefined
+
+      const res = await window.api.desktopPet.open(plainModelInfo)
+      if (res?.success) {
         isDesktopPetRunning.value = await window.api.desktopPet.isRunning()
+        return true
       }
-      return res.success
+      logger.error('openDesktopPet returned failure', { res })
+      isDesktopPetRunning.value = false
+      return false
     } catch (error: unknown) {
       logger.error('openDesktopPet failed', { modelInfo, error })
       isDesktopPetRunning.value = false
