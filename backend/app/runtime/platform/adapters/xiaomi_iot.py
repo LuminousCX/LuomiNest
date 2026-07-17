@@ -141,6 +141,7 @@ class LuomiNestXiaomiIoTAdapter(BasePlatformAdapter):
             try:
                 await self._polling_task
             except asyncio.CancelledError:
+                # 任务被 cancel 后 await 抛出 CancelledError 属于预期关闭流程，这里显式忽略。
                 pass
             self._polling_task = None
 
