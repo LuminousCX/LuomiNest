@@ -615,6 +615,7 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
                 try:
                     await self._heartbeat_task
                 except asyncio.CancelledError:
+                    # 任务被 cancel 后 await 抛出 CancelledError 属于预期行为，这里有意忽略。
                     pass
                 self._heartbeat_task = None
 
