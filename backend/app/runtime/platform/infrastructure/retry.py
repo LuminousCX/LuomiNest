@@ -141,3 +141,6 @@ async def _execute_with_retry(
     # 理论上不会到这里，但保险起见
     if last_exception is not None:
         raise last_exception
+
+    # 显式兜底，避免隐式返回 None（满足静态分析规则）
+    raise RuntimeError("Unexpected retry flow: no result returned and no exception captured")
