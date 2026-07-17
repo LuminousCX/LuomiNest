@@ -342,7 +342,12 @@ class TelegramAdapter(BasePlatformAdapter):
             try:
                 params["reply_parameters"] = {"message_id": int(reply_to)}
             except (ValueError, TypeError):
-                pass
+                self._log(
+                    "debug",
+                    "invalid_reply_to_ignored",
+                    f"reply_to 无效，已忽略回复参数: {reply_to}",
+                    details={"reply_to": str(reply_to), "chat_id": chat_id},
+                )
 
         try:
             await self._api_request("sendMessage", params)
