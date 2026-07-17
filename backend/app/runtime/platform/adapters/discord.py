@@ -214,8 +214,8 @@ class DiscordAdapter(ReconnectMixin, BasePlatformAdapter):
         if self._ws:
             try:
                 await self._ws.close(1000, "Adapter stopping")
-            except Exception:
-                pass
+            except Exception as exc:
+                self._log("warning", "ws_close_failed", f"关闭 WebSocket 失败（已忽略）: {exc}")
             self._ws = None
 
         if self._http_client:
