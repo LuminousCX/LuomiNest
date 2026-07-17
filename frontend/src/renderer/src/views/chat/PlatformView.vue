@@ -50,6 +50,20 @@ const handleSelectConversation = (conversationId: string) => {
   store.selectConversation(conversationId)
 }
 
+const creatingConversation = ref(false)
+const handleCreateConversation = async () => {
+  if (!store.selectedInstanceId || creatingConversation.value) return
+  creatingConversation.value = true
+  try {
+    const newId = await store.createNewConversation(store.selectedInstanceId)
+    if (newId) {
+      store.selectConversation(newId)
+    }
+  } finally {
+    creatingConversation.value = false
+  }
+}
+
 const formatMessageTime = (ts: string) => {
   if (!ts) return ''
   try {
@@ -185,15 +199,23 @@ onMounted(() => {
             </div>
           </div>
     
-          <!-- Conversations tab: vertical split (list top + detail bottom) -->
+          <!-- Conversations tab: horizontal split (list left + detail right) -->
           <div v-if="rightTab === 'conversations'" class="conv-split">
-            <!-- Conv list (top, compact) -->
+            <!-- Conv list (left) -->
             <div class="conv-sub-panel">
               <div class="conv-section-header">
                 <MessageCircle :size="12" />
                 <span>{{ store.selectedInstance.name }}</span>
                 <span class="conv-section-count">{{ store.selectedConversations.length }} 个对话</span>
               </div>
+              <button
+                class="conv-new-btn"
+                :disabled="creatingConversation"
+                @click="handleCreateConversation"
+              >
+                <Plus :size="13" />
+                <span>{{ creatingConversation ? '创建中...' : '新建对话' }}</span>
+              </button>
               <div class="conv-list">
                 <div v-if="store.selectedConversations.length === 0" class="conv-list-empty-wrap">
                   <LumiEmptyState
@@ -225,7 +247,7 @@ onMounted(() => {
               </div>
               </div>
             </div>
-            <!-- Conv detail (bottom) -->
+            <!-- Conv detail (right) -->
             <div class="conv-detail-sub-panel">
               <div class="detail-notice">
                 <Eye :size="14" />
@@ -236,7 +258,7 @@ onMounted(() => {
                 <LumiEmptyState
                   :icon="Eye"
                   title="选择对话查看详情"
-                  description="从上方对话列表中选择一个对话，查看消息内容"
+                  description="从左侧对话列表中选择一个对话，查看消息内容"
                   size="sm"
                 />
               </div>
@@ -365,6 +387,34 @@ onMounted(() => {
   font-weight: var(--font-medium);
 }
 
+.conv-new-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  width: calc(100% - var(--space-4));
+  margin: var(--space-2) auto;
+  padding: var(--space-1) var(--space-3);
+  border: 1px dashed var(--lumi-brand);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--lumi-brand);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.conv-new-btn:hover:not(:disabled) {
+  background: var(--lumi-brand-light);
+}
+
+.conv-new-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .conv-list {
   flex: 1;
   overflow-y: auto;
@@ -379,7 +429,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 80px;
+  min-height: 120px;
 }
 
 .conv-item {
@@ -457,11 +507,11 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* Conversations tab: vertical split layout (list top + detail bottom) */
+/* Conversations tab: horizontal split layout (list left + detail right) */
 .conv-split {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   min-height: 0;
   overflow: hidden;
 }
@@ -469,10 +519,9 @@ onMounted(() => {
 .conv-sub-panel {
   display: flex;
   flex-direction: column;
-  flex: 0 0 35%;
-  min-height: 100px;
-  max-height: 45%;
-  border-bottom: 2px solid var(--border-light);
+  flex: 0 0 33.33%;
+  min-width: 200px;
+  border-right: 2px solid var(--border-light);
   overflow: hidden;
   background: var(--bg-secondary);
 }
@@ -481,6 +530,7 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -502,7 +552,7 @@ onMounted(() => {
   background: var(--bg-secondary);
   color: var(--text-muted);
   font-size: var(--text-xs);
-  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
 

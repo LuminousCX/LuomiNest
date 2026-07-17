@@ -9,6 +9,7 @@ from app.runtime.platform.base import PlatformResponse
 from app.runtime.platform.registry import get_instance, list_instances
 from app.runtime.platform.platform_logger import platform_logger
 from app.core.exceptions import LuomiNestError, ValidationError
+from app.core.utils import ok
 
 
 router = APIRouter(prefix="/smart-home", tags=["smart-home"])
@@ -51,28 +52,28 @@ async def list_devices():
         f"{[inst.instance_id for inst in iot_instances]}"
     )
 
-    return {"error": None, "code": 0, "devices": [], "total": 0}
+    return ok({"devices": [], "total": 0})
 
 
 @router.get("/scenes")
 async def list_scenes():
     """返回智能家居场景列表（适配器尚未实现，暂返回空列表）"""
     logger.info("[API] GET /smart-home/scenes - Listing scenes")
-    return {"error": None, "code": 0, "scenes": [], "total": 0}
+    return ok({"scenes": [], "total": 0})
 
 
 @router.get("/rooms")
 async def list_rooms():
     """返回智能家居房间列表（适配器尚未实现，暂返回空列表）"""
     logger.info("[API] GET /smart-home/rooms - Listing rooms")
-    return {"error": None, "code": 0, "rooms": [], "total": 0}
+    return ok({"rooms": [], "total": 0})
 
 
 @router.get("/automations")
 async def list_automations():
     """返回智能家居自动化规则列表（适配器尚未实现，暂返回空列表）"""
     logger.info("[API] GET /smart-home/automations - Listing automations")
-    return {"error": None, "code": 0, "automations": [], "total": 0}
+    return ok({"automations": [], "total": 0})
 
 
 @router.post("/devices/{device_id}/control")
@@ -149,9 +150,4 @@ async def control_device(device_id: str, req: DeviceControlRequest):
             status_code=500,
         )
 
-    return {
-        "error": None,
-        "code": 0,
-        "success": True,
-        "message": "命令已发送",
-    }
+    return ok({"success": True, "message": "命令已发送"})

@@ -9,7 +9,8 @@ import {
   Globe,
   Settings,
   Volume2,
-  Brain
+  Brain,
+  Puzzle
 } from 'lucide-vue-next'
 import SettingsAppearanceSection from '../../components/settings-detail/SettingsAppearanceSection.vue'
 import SettingsNotificationsSection from '../../components/settings-detail/SettingsNotificationsSection.vue'
@@ -18,6 +19,7 @@ import SettingsTtsSection from '../../components/settings-detail/SettingsTtsSect
 import SettingsPlatformsSection from '../../components/settings-detail/SettingsPlatformsSection.vue'
 import SettingsMainAgentSection from '../../components/settings-detail/SettingsMainAgentSection.vue'
 import SettingsMcpSection from '../../components/settings-detail/SettingsMcpSection.vue'
+import SettingsPluginsSection from '../../components/settings-detail/SettingsPluginsSection.vue'
 import type { SectionItem } from '../../components/settings-detail/types'
 
 const route = useRoute()
@@ -92,6 +94,12 @@ const sectionMap: Record<string, { label: string; icon: typeof Palette; desc: st
     icon: Volume2,
     desc: '本地/在线 TTS 引擎与设备检测',
     items: []
+  },
+  plugins: {
+    label: '插件与技能',
+    icon: Puzzle,
+    desc: '前端插件 / 后端插件 / 技能管理',
+    items: []
   }
 }
 
@@ -106,6 +114,7 @@ const sectionComponent = computed(() => {
     case 'mcp': return SettingsMcpSection
     case 'main-agent': return SettingsMainAgentSection
     case 'tts': return SettingsTtsSection
+    case 'plugins': return SettingsPluginsSection
     default: return null
   }
 })

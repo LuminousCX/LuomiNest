@@ -69,6 +69,8 @@ class MainAgentConfigUpdate(BaseModel):
     system_prompt: str | None = Field(alias="systemPrompt", default=None)
     temperature: float | None = None
     max_tokens: int | None = Field(alias="maxTokens", default=None)
+    color: str | None = None
+    avatar: str | None = None
 
 
 class MainAgentConfigResponse(BaseModel):
@@ -79,6 +81,8 @@ class MainAgentConfigResponse(BaseModel):
     system_prompt: str = Field(alias="systemPrompt", default="")
     temperature: float = 0.7
     max_tokens: int = Field(alias="maxTokens", default=4096)
+    color: str = ""
+    avatar: str | None = None
 
 
 @router.get("/main-agent/config", response_model=MainAgentConfigResponse)
@@ -91,6 +95,8 @@ async def get_main_agent_config():
         system_prompt=config.get("system_prompt", ""),
         temperature=config.get("temperature", 0.7),
         max_tokens=config.get("max_tokens", 4096),
+        color=config.get("color", ""),
+        avatar=config.get("avatar"),
     )
     logger.success(f"[API] GET /agents/main-agent/config - Success: provider={response.provider}, model={response.model}")
     return response
@@ -110,7 +116,7 @@ async def update_main_agent_config(request: MainAgentConfigUpdate):
         config["max_tokens"] = update_data["max_tokens"]
         updated_fields.append("max_tokens")
 
-    for key in ("provider", "model", "temperature"):
+    for key in ("provider", "model", "temperature", "color", "avatar"):
         if key in update_data and update_data[key] is not None:
             config[key] = update_data[key]
             updated_fields.append(key)
@@ -124,6 +130,8 @@ async def update_main_agent_config(request: MainAgentConfigUpdate):
         system_prompt=config.get("system_prompt", ""),
         temperature=config.get("temperature", 0.7),
         max_tokens=config.get("max_tokens", 4096),
+        color=config.get("color", ""),
+        avatar=config.get("avatar"),
     )
 
 

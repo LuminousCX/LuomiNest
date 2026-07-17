@@ -53,7 +53,8 @@ const enabledSkills = computed(() =>
             class="confirm-avatar-lg"
             :style="{ '--avatar-color': selectedAvatar.color }"
           >
-            <span class="confirm-avatar-emoji">{{ selectedAvatar.emoji }}</span>
+            <img v-if="selectedAvatar.imageUrl" :src="selectedAvatar.imageUrl" class="confirm-avatar-img" />
+            <span v-else class="confirm-avatar-emoji">{{ selectedAvatar.emoji }}</span>
           </div>
           <div>
             <h2 class="confirm-name">{{ formData.name }}</h2>
@@ -151,6 +152,14 @@ const enabledSkills = computed(() =>
   flex-shrink: 0;
   background: linear-gradient(135deg, var(--avatar-color, var(--lumi-brand)), color-mix(in srgb, var(--avatar-color, var(--lumi-brand)) 60%, transparent));
   box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.confirm-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .confirm-avatar-emoji {

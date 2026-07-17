@@ -21,13 +21,28 @@ export interface AvatarOption {
   id: string
   emoji: string
   color: string
+  /** PNG 图片的 luominest-avatar:// 协议 URL（可选，用于预设头像） */
+  imageUrl?: string
 }
+
+/** 预设智能体默认头像列表，PNG 文件存放在 public/png/agents/ */
+const PRESET_AGENT_AVATARS: AvatarOption[] = [
+  { id: 'pa1', emoji: '', color: 'var(--lumi-brand)', imageUrl: 'luominest-avatar://png/agents/programming-assistant.png' },
+  { id: 'pa2', emoji: '', color: 'var(--lumi-info)', imageUrl: 'luominest-avatar://png/agents/info-researcher.png' },
+  { id: 'pa3', emoji: '', color: 'var(--lumi-sky)', imageUrl: 'luominest-avatar://png/agents/inspiration-assistant.png' },
+  { id: 'pa4', emoji: '', color: 'var(--task-purple)', imageUrl: 'luominest-avatar://png/agents/task-planner.png' },
+  { id: 'pa5', emoji: '', color: 'var(--lumi-accent)', imageUrl: 'luominest-avatar://png/agents/psychology-expert.png' },
+  { id: 'pa6', emoji: '', color: 'var(--task-blue)', imageUrl: 'luominest-avatar://png/agents/info-collector.png' },
+  { id: 'pa7', emoji: '', color: 'var(--lumi-success)', imageUrl: 'luominest-avatar://png/agents/learning-helper.png' },
+  { id: 'pa8', emoji: '', color: 'var(--lumi-amber)', imageUrl: 'luominest-avatar://png/agents/daily-assistant.png' }
+]
 
 export const STEP_TITLES = ['身份与模型', '技能配置', '高级设置', '确认创建']
 export const STEP_SUBTITLES = ['定义智能体基础信息', '选择并配置能力模块', '调整行为参数', '预览并完成创建']
 export const TOTAL_STEPS = 4
 
 export const AVATAR_CATEGORIES = [
+  { id: 'presets', label: '预设' },
   { id: 'classic', label: '经典' },
   { id: 'cute', label: '萌系' },
   { id: 'tech', label: '科技' },
@@ -35,6 +50,7 @@ export const AVATAR_CATEGORIES = [
 ]
 
 export const AVATAR_OPTIONS: Record<string, AvatarOption[]> = {
+  presets: PRESET_AGENT_AVATARS,
   classic: [
     { id: 'c1', emoji: '\u{1F9D4}', color: 'var(--lumi-brand)' },
     { id: 'c2', emoji: '\u{1F9D3}', color: 'var(--lumi-info)' },
@@ -154,18 +170,21 @@ export interface AgentFormData {
   systemPrompt: string
 }
 
+const presetIds = PRESET_AGENT_AVATARS.map(a => a.id)
+const randomPresetId = presetIds[Math.floor(Math.random() * presetIds.length)]
+
 export const useAgentCreateForm = () => {
   const router = useRouter()
   const agentStore = useAgentStore()
 
   const currentStep = ref(0)
-  const activeAvatarCategory = ref('classic')
+  const activeAvatarCategory = ref('presets')
   const errorMessage = ref('')
 
   const formData = reactive<AgentFormData>({
     name: '',
     description: '',
-    selectedAvatarId: 'c1',
+    selectedAvatarId: randomPresetId,
     selectedStyle: 'professional',
     selectedModel: 'auto',
     skills: {} as Record<string, boolean>,

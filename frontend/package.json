@@ -59,7 +59,9 @@
     },
     "files": [
       "out/**/*",
-      "!out/renderer/live2d/**"
+      "!out/renderer/live2d/**",
+      "!out/renderer/pixel/**",
+      "!out/renderer/png/**"
     ],
     "extraResources": [
       {
@@ -87,6 +89,20 @@
           "**/*.userdata3.json",
           "**/*.png",
           "**/*.jpg"
+        ]
+      },
+      {
+        "from": "src/renderer/public/pixel",
+        "to": "pixel",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "src/renderer/public/png",
+        "to": "png",
+        "filter": [
+          "**/*"
         ]
       },
       {

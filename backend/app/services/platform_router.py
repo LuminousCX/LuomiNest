@@ -243,7 +243,8 @@ class LuomiNestPlatformRouter:
             )
 
         # 使用 context_service 的完整系统提示词构建流程（含人设、身份、规则）
-        base_system = context_service.build_system_prompt(MAIN_AGENT_ID)
+        user_text = message.content or ""
+        base_system = context_service.build_system_prompt(MAIN_AGENT_ID, user_context=user_text)
         platform_context = self._build_platform_context(message)
         full_system = f"{base_system}\n\n{platform_context}"
 

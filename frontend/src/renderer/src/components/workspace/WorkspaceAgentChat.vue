@@ -314,8 +314,9 @@ defineExpose({
               :class="['message-row', msg.role]"
             >
               <div class="message-avatar" v-if="msg.role === 'assistant'">
-                <div class="avatar-assistant">
-                  <Bot :size="16" />
+                <div class="avatar-assistant" :style="agent?.avatar ? {} : { background: `color-mix(in srgb, ${agent?.color || 'var(--lumi-brand)'} 10%, transparent)`, color: agent?.color || 'var(--lumi-brand)' }">
+                  <img v-if="agent?.avatar" :src="agent.avatar" class="chat-avatar-img" :alt="agent?.name || ''" />
+                  <Bot v-else :size="16" />
                 </div>
               </div>
               <div class="message-body">
@@ -747,6 +748,14 @@ defineExpose({
   align-items: center;
   justify-content: center;
   transition: transform var(--duration-normal) var(--ease-in-out);
+  overflow: hidden;
+}
+
+.chat-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .message-row:hover .avatar-assistant {

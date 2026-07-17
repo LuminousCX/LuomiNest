@@ -299,6 +299,8 @@ export interface MainAgentConfig {
   systemPrompt: string
   temperature: number
   maxTokens: number
+  color: string
+  avatar?: string | null
 }
 
 export interface ModelInfo {
@@ -630,6 +632,8 @@ export interface MainAgentInfo {
   systemPrompt: string
   temperature: number
   maxTokens: number
+  color?: string
+  avatar?: string | null
 }
 
 export {}

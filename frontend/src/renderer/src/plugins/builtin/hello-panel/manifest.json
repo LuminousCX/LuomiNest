@@ -1,0 +1,33 @@
+{
+  "id": "hello-panel",
+  "type": "frontend-plugin",
+  "name": "示例面板插件",
+  "version": "1.0.0",
+  "description": "LuomiNest 前端插件系统示例 — 贡献一个简单面板页面与命令，用于验证贡献点机制",
+  "author": "LuminousCX",
+  "license": "MIT",
+  "icon": "Sparkles",
+  "category": "ui",
+  "tags": ["sample", "demo"],
+  "minAppVersion": "0.7.6",
+  "permissions": ["basic"],
+  "contributes": {
+    "views": [
+      {
+        "path": "panel",
+        "name": "panel",
+        "title": "示例面板",
+        "icon": "Sparkles",
+        "showInSidebar": true,
+        "sidebarGroup": "bottom"
+      }
+    ],
+    "commands": [
+      {
+        "id": "say-hello",
+        "title": "示例：打个招呼",
+        "keybinding": "CmdOrCtrl+Shift+H"
+      }
+    ]
+  }
+}

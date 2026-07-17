@@ -78,7 +78,8 @@ const filteredGroups = computed(() => {
           @click="emit('select-agent', agent)"
         >
           <div class="contact-avatar" :style="{ background: `color-mix(in srgb, ${agent.color} 10%, transparent)`, color: agent.color }">
-            <Bot :size="16" />
+            <img v-if="agent.avatar" :src="agent.avatar" class="contact-avatar-img" :alt="agent.name" />
+            <Bot v-else :size="16" />
           </div>
           <div class="contact-info">
             <span class="contact-name">{{ agent.name }}</span>
@@ -285,6 +286,14 @@ const filteredGroups = computed(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.contact-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .contact-avatar.group-avatar {

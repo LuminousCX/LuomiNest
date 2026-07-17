@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 
 def utc_now() -> str:
@@ -99,6 +99,38 @@ def require_value(value: Any, label: str, key: str) -> Any:
     return value
 
 
-def ok(data: Any = None) -> dict:
-    """统一成功响应信封。"""
-    return {"error": None, "data": data}
+def ok(data: Any = None, message: str = "ok") -> dict:
+    """统一成功响应信封。
+
+    格式: {"code": 0, "message": "...", "error": None, "data": ...}
+    - code: 0 表示成功（数字状态码，满足"API 响应必须包含错误码"硬性规则）
+    - message: 用户可读消息
+    - error: None 表示无错误（与历史格式兼容，前端 response.data 仍可取到数据）
+    - data: 业务数据负载
+    """
+    return {"code": 0, "message": message, "error": None, "data": data}
+
+
+def fail(
+    message: str,
+    err_code: str = "INTERNAL_ERROR",
+    status_code: int = 500,
+    data: Any = None,
+) -> JSONResponse:
+    """统一失败响应信封。
+
+    格式: {"code": 1, "message": "...", "error": {"code": "...", "message": "..."}, "data": null}
+    - code: 非 0 表示失败
+    - message: 顶层用户可读消息（与 error.message 保持一致）
+    - error: 包含字符串错误码 err_code 和详细 message（前端 extractErrorMessage 解析 error.code）
+    - data: 失败时通常为 None
+    """
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "code": 1,
+            "message": message,
+            "error": {"code": err_code, "message": message},
+            "data": data,
+        },
+    )

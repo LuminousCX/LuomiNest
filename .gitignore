@@ -112,6 +112,7 @@ log.log
 .codebuddy/
 .notion/
 .cursor/
+.workbuddy/
 .qoder/
 
 # ============================================================

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { Bot, AlertTriangle } from 'lucide-vue-next'
 import type { AgentProfile, AgentRoleDefinition } from '../../types'
+import type { PresetAvatar } from '../../composables/useWorkspaceAgentDialogs'
 
 const props = defineProps<{
   showCreateDialog: boolean
@@ -9,8 +10,8 @@ const props = defineProps<{
   showConfirmDialog: boolean
   showCreateGroupDialog: boolean
   showAddAgentDialog: boolean
-  createForm: { name: string; description: string; systemPrompt: string; color: string }
-  editForm: { name: string; description: string; systemPrompt: string; color: string }
+  createForm: { name: string; description: string; systemPrompt: string; color: string; avatarMode: string; avatarUrl: string }
+  editForm: { name: string; description: string; systemPrompt: string; color: string; avatarMode: string; avatarUrl: string }
   createError: string
   confirmMessage: string
   confirmIsDanger: boolean
@@ -20,6 +21,7 @@ const props = defineProps<{
   addAgentRole: string
   availableAgentsForGroup: AgentProfile[]
   agentColors: string[]
+  presetAvatars: PresetAvatar[]
   agentRoles: AgentRoleDefinition[]
 }>()
 
@@ -64,6 +66,16 @@ const createColor = computed({
   set: (v) => emit('update:createForm', { ...props.createForm, color: v }),
 })
 
+const createAvatarMode = computed({
+  get: () => props.createForm.avatarMode as 'color' | 'preset',
+  set: (v) => emit('update:createForm', { ...props.createForm, avatarMode: v }),
+})
+
+const createAvatarUrl = computed({
+  get: () => props.createForm.avatarUrl,
+  set: (v) => emit('update:createForm', { ...props.createForm, avatarUrl: v }),
+})
+
 const editName = computed({
   get: () => props.editForm.name,
   set: (v) => emit('update:editForm', { ...props.editForm, name: v }),
@@ -82,6 +94,16 @@ const editSystemPrompt = computed({
 const editColor = computed({
   get: () => props.editForm.color,
   set: (v) => emit('update:editForm', { ...props.editForm, color: v }),
+})
+
+const editAvatarMode = computed({
+  get: () => props.editForm.avatarMode as 'color' | 'preset',
+  set: (v) => emit('update:editForm', { ...props.editForm, avatarMode: v }),
+})
+
+const editAvatarUrl = computed({
+  get: () => props.editForm.avatarUrl,
+  set: (v) => emit('update:editForm', { ...props.editForm, avatarUrl: v }),
 })
 
 const newGroupNameModel = computed({
@@ -147,8 +169,18 @@ const addAgentRoleModel = computed({
           ></textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">颜色</label>
-          <div class="color-picker">
+          <label class="form-label">头像</label>
+          <div class="avatar-mode-toggle">
+            <button
+              :class="['mode-btn', { active: createAvatarMode === 'color' }]"
+              @click="createAvatarMode = 'color'"
+            >颜色</button>
+            <button
+              :class="['mode-btn', { active: createAvatarMode === 'preset' }]"
+              @click="createAvatarMode = 'preset'"
+            >预设头像</button>
+          </div>
+          <div v-if="createAvatarMode === 'color'" class="color-picker">
             <button
               v-for="color in agentColors"
               :key="color"
@@ -156,6 +188,17 @@ const addAgentRoleModel = computed({
               :style="{ background: color }"
               @click="createColor = color"
             ></button>
+          </div>
+          <div v-else class="preset-avatar-grid">
+            <button
+              v-for="avatar in presetAvatars"
+              :key="avatar.id"
+              :class="['preset-avatar-item', { selected: createAvatarUrl === avatar.url }]"
+              :title="avatar.name"
+              @click="createAvatarUrl = avatar.url"
+            >
+              <img :src="avatar.url" :alt="avatar.name" class="preset-avatar-img" />
+            </button>
           </div>
         </div>
         <div class="dialog-actions">
@@ -197,8 +240,18 @@ const addAgentRoleModel = computed({
           ></textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">颜色</label>
-          <div class="color-picker">
+          <label class="form-label">头像</label>
+          <div class="avatar-mode-toggle">
+            <button
+              :class="['mode-btn', { active: editAvatarMode === 'color' }]"
+              @click="editAvatarMode = 'color'"
+            >颜色</button>
+            <button
+              :class="['mode-btn', { active: editAvatarMode === 'preset' }]"
+              @click="editAvatarMode = 'preset'"
+            >预设头像</button>
+          </div>
+          <div v-if="editAvatarMode === 'color'" class="color-picker">
             <button
               v-for="color in agentColors"
               :key="color"
@@ -206,6 +259,17 @@ const addAgentRoleModel = computed({
               :style="{ background: color }"
               @click="editColor = color"
             ></button>
+          </div>
+          <div v-else class="preset-avatar-grid">
+            <button
+              v-for="avatar in presetAvatars"
+              :key="avatar.id"
+              :class="['preset-avatar-item', { selected: editAvatarUrl === avatar.url }]"
+              :title="avatar.name"
+              @click="editAvatarUrl = avatar.url"
+            >
+              <img :src="avatar.url" :alt="avatar.name" class="preset-avatar-img" />
+            </button>
           </div>
         </div>
         <div class="dialog-actions">
@@ -288,7 +352,8 @@ const addAgentRoleModel = computed({
             @click="addAgentIdModel = agent.id"
           >
             <div class="agent-select-avatar" :style="{ background: `color-mix(in srgb, ${agent.color} 8%, transparent)`, color: agent.color }">
-              <Bot :size="18" />
+              <img v-if="agent.avatar" :src="agent.avatar" class="agent-select-avatar-img" :alt="agent.name" />
+              <Bot v-else :size="18" />
             </div>
             <div class="agent-select-info">
               <span class="agent-select-name">{{ agent.name }}</span>
@@ -405,6 +470,68 @@ const addAgentRoleModel = computed({
   transform: scale(1.1);
 }
 
+.avatar-mode-toggle {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  background: var(--workspace-panel);
+  border-radius: var(--radius-md);
+  padding: 3px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 7px var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.mode-btn.active {
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+.preset-avatar-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.preset-avatar-item {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.preset-avatar-item:hover {
+  transform: scale(1.08);
+}
+
+.preset-avatar-item.selected {
+  border-color: var(--lumi-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lumi-brand) 20%, transparent);
+}
+
+.preset-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
 .dialog-btn {
   padding: 10px var(--space-5);
   border-radius: var(--radius-md);
@@ -516,6 +643,14 @@ const addAgentRoleModel = computed({
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.agent-select-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .agent-select-info {

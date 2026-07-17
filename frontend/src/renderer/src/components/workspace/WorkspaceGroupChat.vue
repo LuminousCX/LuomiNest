@@ -18,7 +18,17 @@ import {
   Play,
   Layers,
 } from 'lucide-vue-next'
-import type { GroupInfo, GroupMessage, CollaborationPhase, CollaborationSubTask } from '../../types'
+import { useAgentStore } from '../../stores/agent'
+import type { GroupInfo, GroupMessage, CollaborationPhase, CollaborationSubTask, AgentProfile } from '../../types'
+
+const agentStore = useAgentStore()
+
+/** 根据 senderId 查找 agent 的头像 URL */
+const getSenderAvatar = (msg: GroupMessage): string | undefined => {
+  if (msg.senderType !== 'agent' || !msg.senderId) return undefined
+  const agent = agentStore.agents.find((a: AgentProfile) => a.id === msg.senderId)
+  return agent?.avatar || undefined
+}
 
 const props = defineProps<{
   group: GroupInfo | null
@@ -186,7 +196,8 @@ defineExpose({ scrollToBottom })
             class="avatar-agent"
             :style="msg.role === '调度员' ? { background: 'var(--lumi-brand-light)', color: 'var(--lumi-brand)' } : {}"
           >
-            <Bot :size="14" />
+            <img v-if="getSenderAvatar(msg)" :src="getSenderAvatar(msg)" class="group-msg-avatar-img" :alt="msg.senderName || ''" />
+            <Bot v-else :size="14" />
           </div>
         </div>
         <div :class="['msg-bubble', msg.senderType, { 'synthesis-bubble': msg.collaboration?.type === 'synthesis' }]">
@@ -461,6 +472,14 @@ defineExpose({ scrollToBottom })
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.group-msg-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .msg-bubble {
