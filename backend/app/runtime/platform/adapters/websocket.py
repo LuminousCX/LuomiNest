@@ -113,8 +113,8 @@ class WebSocketAdapter(BasePlatformAdapter):
         if self._ws is not None:
             try:
                 await self._ws.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(f"[WebSocket] 关闭连接时发生异常，继续停止流程: {exc}")
             self._ws = None
 
         self._authenticated = False
