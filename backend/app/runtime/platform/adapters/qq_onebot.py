@@ -289,7 +289,8 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
                     details={"target": dropped["target"]},
                 )
             except asyncio.QueueEmpty:
-                pass
+                # 并发竞争下队列可能在 full() 与 get_nowait() 之间被其他协程取空，忽略即可。
+                logger.debug("[qq_onebot] 队列满时尝试丢弃最旧消息，但队列已为空")
         try:
             self._send_queue.put_nowait(item)
             self._log(
