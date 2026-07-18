@@ -20,7 +20,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 
 from loguru import logger
 
-from app.core.agents.middleware.base import AgentContext
+from app.core.agents.middleware.base import AgentContext, HookRegistry
 from app.core.agents.middleware.builtin import SSEEmitMiddleware
 from app.core.agents.middleware.pipeline import MiddlewarePipeline
 from app.core.tools.orchestrator import tool_orchestrator
@@ -35,16 +35,19 @@ class AgentRunner:
         pipeline: MiddlewarePipeline,
         max_iterations: int = 10,
         execute_fn: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
+        hook_registry: HookRegistry | None = None,
     ) -> None:
         """
         Args:
             pipeline: 中间件管道
             max_iterations: 最大工具调用循环次数
             execute_fn: 工具执行函数（默认 tool_orchestrator.execute_tool_call，测试可注入 mock）
+            hook_registry: 观察者模式钩子注册表（可选）
         """
         self._pipeline = pipeline
         self._max_iterations = max_iterations
         self._execute_fn = execute_fn or tool_orchestrator.execute_tool_call
+        self._hook_registry = hook_registry
 
     async def run_stream(
         self,
@@ -80,10 +83,42 @@ class AgentRunner:
                 ctx.state["_tool_call_deltas"] = {}
                 ctx.state["finish_reason"] = None
 
+                # 消息组装钩子：LLM 调用前通过管道执行
+                ctx.messages = await self._pipeline.run_on_before_message_composed(
+                    ctx, ctx.messages,
+                )
+                if self._hook_registry:
+                    await self._hook_registry.emit(
+                        HookRegistry.ON_BEFORE_MESSAGE_COMPOSED,
+                        ctx=ctx, messages=ctx.messages,
+                    )
+                ctx.messages = await self._pipeline.run_on_after_message_composed(
+                    ctx, ctx.messages,
+                )
+                if self._hook_registry:
+                    await self._hook_registry.emit(
+                        HookRegistry.ON_AFTER_MESSAGE_COMPOSED,
+                        ctx=ctx, messages=ctx.messages,
+                    )
+
                 # 流式消费 LLM 输出（content/reasoning 直接 yield）
                 try:
                     async for event in llm_call_fn(ctx):
                         sse = self._process_stream_event(ctx, event)
+
+                        # 流式 token 通知
+                        if event.type in ("content", "reasoning"):
+                            token = event.data.get("content", "") or event.data.get("reasoning", "")
+                            if token:
+                                await self._pipeline.run_on_stream_token(
+                                    ctx, token, event.type,
+                                )
+                                if self._hook_registry:
+                                    await self._hook_registry.emit(
+                                        HookRegistry.ON_STREAM_TOKEN,
+                                        ctx=ctx, token=token, token_type=event.type,
+                                    )
+
                         if sse:
                             yield sse
                 except Exception as e:
@@ -133,6 +168,21 @@ class AgentRunner:
                     ctx.messages.append(result)
 
                 ctx.iteration += 1
+
+            # 回合完成通知
+            turn_result = {
+                "output": ctx.state.get("content", ""),
+                "output_text": ctx.state.get("content", ""),
+                "tool_calls": ctx.state.get("tool_calls") or [],
+                "usage": ctx.state.get("usage"),
+                "iterations": ctx.iteration,
+            }
+            await self._pipeline.run_on_chat_turn_complete(ctx, turn_result)
+            if self._hook_registry:
+                await self._hook_registry.emit(
+                    HookRegistry.ON_CHAT_TURN_COMPLETE,
+                    ctx=ctx, result=turn_result,
+                )
         finally:
             ctx.sse_emitter = original_emitter
             await self._pipeline.run_after_agent(ctx)
@@ -157,6 +207,24 @@ class AgentRunner:
                 ctx.state["iteration_content"] = ""
                 ctx.state["tool_calls"] = []
                 ctx.state["finish_reason"] = None
+
+                # 消息组装钩子：LLM 调用前通过管道执行
+                ctx.messages = await self._pipeline.run_on_before_message_composed(
+                    ctx, ctx.messages,
+                )
+                if self._hook_registry:
+                    await self._hook_registry.emit(
+                        HookRegistry.ON_BEFORE_MESSAGE_COMPOSED,
+                        ctx=ctx, messages=ctx.messages,
+                    )
+                ctx.messages = await self._pipeline.run_on_after_message_composed(
+                    ctx, ctx.messages,
+                )
+                if self._hook_registry:
+                    await self._hook_registry.emit(
+                        HookRegistry.ON_AFTER_MESSAGE_COMPOSED,
+                        ctx=ctx, messages=ctx.messages,
+                    )
 
                 # 非流式调用 LLM
                 try:
@@ -207,6 +275,21 @@ class AgentRunner:
                     ctx.messages.append(result)
 
                 ctx.iteration += 1
+
+            # 回合完成通知
+            turn_result = {
+                "output": ctx.state.get("content", ""),
+                "output_text": ctx.state.get("content", ""),
+                "tool_calls": ctx.state.get("tool_calls") or [],
+                "usage": ctx.state.get("usage"),
+                "iterations": ctx.iteration,
+            }
+            await self._pipeline.run_on_chat_turn_complete(ctx, turn_result)
+            if self._hook_registry:
+                await self._hook_registry.emit(
+                    HookRegistry.ON_CHAT_TURN_COMPLETE,
+                    ctx=ctx, result=turn_result,
+                )
         finally:
             await self._pipeline.run_after_agent(ctx)
 

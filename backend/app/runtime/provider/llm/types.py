@@ -90,6 +90,25 @@ class LLMResponse:
         }
 
 
+@dataclass
+class ProviderCapabilities:
+    """Provider 能力声明。
+
+    集中描述一个 LLM 供应商支持的功能集合，
+    供 Provider 实例、Adapter、中间件链查询并按能力路由。
+    """
+    supports_tool_calls: bool = True
+    supports_streaming: bool = True
+    supports_vision: bool = False
+    supports_response_format: bool = False  # JSON mode / structured output
+    supports_thinking: bool = False  # extended thinking / reasoning
+    supports_prompt_caching: bool = False  # Anthropic-style prompt caching
+    supports_stream_options: bool = False  # stream_options for usage in streaming
+    thinking_style: str | None = None  # "deepseek" | "dashscope" | "minimax" | "anthropic" | None
+    default_context_window: int = 16384
+    known_unsupported_models: list[str] = field(default_factory=list)
+
+
 class StreamEvent:
     """LLM 流式事件。
 

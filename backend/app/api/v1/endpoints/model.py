@@ -6,6 +6,7 @@ from loguru import logger
 from app.runtime.provider.llm.adapter import llm_adapter, _create_provider_from_config
 from app.runtime.provider.llm.providers import PROVIDER_TEMPLATES
 from app.core.config import settings
+from app.core.context import invalidate_context_cache
 from app.core.utils import ok
 from app.core.exceptions import NotFoundError, ValidationError
 from app.infrastructure.database.config_store import lumi_config_store
@@ -508,6 +509,7 @@ async def update_model_config(request: ModelConfigUpdate):
     llm_adapter.apply_reasoner_config(config_to_save)
 
     logger.success(f"[API] PATCH /models/config - Updated fields: {updated_fields}")
+    invalidate_context_cache()  # 清空所有缓存（可能改了默认 provider/model）
     return {
         "error": None,
         "data": {

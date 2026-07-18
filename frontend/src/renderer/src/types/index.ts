@@ -166,6 +166,8 @@ export interface ChatStreamChunk {
   iteration?: number
   /** 当前上下文已使用的 token 数（仅 done=True 的 chunk 携带） */
   context_tokens?: number
+  /** 上下文窗口容量（仅 done=True 的 chunk 携带，前端用于计算使用百分比） */
+  context_max_tokens?: number
 }
 
 export interface Conversation {

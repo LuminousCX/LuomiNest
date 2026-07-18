@@ -1,5 +1,7 @@
 import asyncio
+import time
 import uuid
+from typing import Any
 from loguru import logger
 
 from app.core.config import settings
@@ -8,7 +10,7 @@ from app.core.utils import utc_now, sse_response, sse_data
 from app.core.tools import tool_registry
 from app.core.tools.orchestrator import tool_orchestrator
 from app.runtime.provider.llm.adapter import llm_adapter
-from app.runtime.provider.llm.types import RouteHint
+from app.runtime.provider.llm.types import RouteHint, StreamEvent
 from app.runtime.provider.llm.providers import LLMResponse
 from app.infrastructure.database.conversation_store import conversation_store
 from app.schemas.chat import ChatStreamChunk
@@ -17,6 +19,128 @@ from app.services.context_service import ContextService
 from app.services.suggestion_service import SuggestionService
 from app.services.usage_tracker import usage_tracker
 from app.services.distillation_service import distillation_service
+from app.core.agents.middleware.base import HookRegistry
+
+
+# ──────────────────────────────────────────────────────────────
+# 流式 chunk 合并器
+# ──────────────────────────────────────────────────────────────
+
+class StreamCoalescer:
+    """流式 chunk 合并器 - 合并小 chunk 减少 UI 更新频率。
+
+    借鉴 DeepTutor 的 stream_coalesce_chars / stream_coalesce_seconds 设计。
+    """
+
+    def __init__(self, coalesce_chars: int = 64, coalesce_seconds: float = 0.04):
+        self.coalesce_chars = coalesce_chars
+        self.coalesce_seconds = coalesce_seconds
+        self._buffer: str = ""
+        self._last_flush_time: float = 0
+
+    async def feed(self, token: str) -> str | None:
+        """输入一个 token，返回合并后的 chunk（如果达到阈值），否则返回 None。"""
+        self._buffer += token
+        now = time.monotonic()
+        if len(self._buffer) >= self.coalesce_chars or \
+           (now - self._last_flush_time) >= self.coalesce_seconds:
+            return self.flush()
+        return None
+
+    def flush(self) -> str:
+        """强制输出缓冲区内容。"""
+        result = self._buffer
+        self._buffer = ""
+        self._last_flush_time = time.monotonic()
+        return result
+
+
+# ──────────────────────────────────────────────────────────────
+# Thinking 标签管理器
+# ──────────────────────────────────────────────────────────────
+
+class ThinkingTagManager:
+    """Thinking 标签管理器 - 在流式中检测 <think>/</think> 标签并正确分流。"""
+
+    def __init__(self):
+        self._in_thinking = False
+        self._tag_buffer = ""  # 用于处理标签跨 chunk 的情况
+
+    def process(self, text: str) -> tuple[str, str]:
+        """处理文本，返回 (content_text, reasoning_text)。"""
+        content_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        i = 0
+        combined = self._tag_buffer + text
+        self._tag_buffer = ""
+
+        while i < len(combined):
+            if not self._in_thinking:
+                think_start = combined.find("<think>", i)
+                if think_start == -1:
+                    content_parts.append(combined[i:])
+                    break
+                else:
+                    content_parts.append(combined[i:think_start])
+                    self._in_thinking = True
+                    i = think_start + len("<think>")
+            else:
+                think_end = combined.find("</think>", i)
+                if think_end == -1:
+                    # 检查是否是不完整的标签在末尾
+                    remaining = combined[i:]
+                    if remaining.endswith("<") or remaining.endswith("</") or \
+                       remaining.endswith("</t") or remaining.endswith("</th") or \
+                       remaining.endswith("</thi") or remaining.endswith("</thin") or \
+                       remaining.endswith("</think"):
+                        # 可能是不完整标签，缓存等待下一个 chunk
+                        self._tag_buffer = remaining
+                        break
+                    reasoning_parts.append(remaining)
+                    break
+                else:
+                    reasoning_parts.append(combined[i:think_end])
+                    self._in_thinking = False
+                    i = think_end + len("</think>")
+
+        return "".join(content_parts), "".join(reasoning_parts)
+
+
+# ──────────────────────────────────────────────────────────────
+# 全局钩子注册表
+# ──────────────────────────────────────────────────────────────
+
+# 全局钩子注册表：用于运行时动态注册的观察者回调
+chat_hook_registry = HookRegistry()
+
+
+async def _on_chat_turn_complete_usage(
+    ctx: "AgentContext", result: dict[str, Any],
+) -> None:
+    """默认 on_chat_turn_complete 钩子：记录回合级 usage 日志。"""
+    usage = result.get("usage")
+    if usage:
+        logger.debug(
+            f"[HookRegistry] 回合完成: iterations={result.get('iterations', 0)}, "
+            f"usage={usage}"
+        )
+
+
+async def _on_stream_token_counter(
+    ctx: "AgentContext", token: str, token_type: str,
+) -> None:
+    """默认 on_stream_token 钩子：累计流式 token 数。"""
+    counter_key = f"_stream_token_count_{token_type}"
+    ctx.state[counter_key] = ctx.state.get(counter_key, 0) + 1
+
+
+# 注册默认钩子
+chat_hook_registry.register(
+    HookRegistry.ON_CHAT_TURN_COMPLETE, _on_chat_turn_complete_usage,
+)
+chat_hook_registry.register(
+    HookRegistry.ON_STREAM_TOKEN, _on_stream_token_counter,
+)
 
 
 class ChatService:
@@ -190,7 +314,7 @@ class ChatService:
             depth_token = set_luominest_agent_call_depth(getattr(request, "agent_depth", 0))
 
         # 工具支持：获取工具列表（disable_tools/tool_whitelist 过滤由 ToolFilterMiddleware 处理）
-        available_tools = tool_orchestrator.get_tools_for_llm() if tool_registry.list_names() else None
+        available_tools = tool_orchestrator.get_tools_for_llm(provider, model) if tool_registry.list_names() else None
         use_tools = bool(available_tools) and llm_adapter.supports_tool_calls(provider, model)
         if available_tools and not use_tools:
             logger.info(f"[STREAM] stream_chat: Provider {provider}/{model} 不支持工具调用，纯对话模式")
@@ -217,7 +341,10 @@ class ChatService:
             },
         )
 
-        # llm_call_fn：信号量内调用 LLM，content 经 EmotionStreamParser 清洗后传给 runner
+        # llm_call_fn：信号量内调用 LLM，content 经 EmotionStreamParser + ThinkingTagManager 清洗
+        thinking_mgr = ThinkingTagManager()
+        coalescer = StreamCoalescer()
+
         async def llm_call_fn(ctx):
             async with self._llm_semaphore:
                 async for chunk in llm_adapter.chat_stream(
@@ -232,15 +359,53 @@ class ChatService:
                 ):
                     if chunk.type == "content":
                         content = chunk.data.get("content", "")
-                        clean_content, emotion = parser.feed(content)
-                        chunk.data["content"] = clean_content
-                        if emotion:
-                            chunk.data["emotion"] = emotion
+                        # Thinking 标签分流
+                        content_text, reasoning_text = thinking_mgr.process(content)
+                        if reasoning_text:
+                            # 通过钩子通知 reasoning token
+                            try:
+                                await chat_hook_registry.notify(
+                                    HookRegistry.ON_STREAM_TOKEN, ctx, reasoning_text, "reasoning",
+                                )
+                            except Exception:
+                                pass
+                        # 流式 chunk 合并
+                        if content_text:
+                            merged = await coalescer.feed(content_text)
+                            if merged:
+                                clean_content, emotion = parser.feed(merged)
+                                chunk.data["content"] = clean_content
+                                if emotion:
+                                    chunk.data["emotion"] = emotion
+                                # 通过钩子通知 content token
+                                try:
+                                    await chat_hook_registry.notify(
+                                        HookRegistry.ON_STREAM_TOKEN, ctx, merged, "content",
+                                    )
+                                except Exception:
+                                    pass
+                            else:
+                                continue  # 缓冲区未达阈值，跳过本次发射
+                        else:
+                            continue  # 纯 thinking 内容，不发射 content 事件
                     yield chunk
+                # 流结束后 flush 缓冲区
+                remaining = coalescer.flush()
+                if remaining:
+                    clean_content, emotion = parser.feed(remaining)
+                    if clean_content:
+                        yield StreamEvent("content", {"content": clean_content, **({"emotion": emotion} if emotion else {})})
+                        try:
+                            await chat_hook_registry.notify(
+                                HookRegistry.ON_STREAM_TOKEN, ctx, remaining, "content",
+                            )
+                        except Exception:
+                            pass
 
         runner = tool_orchestrator.create_runner({
             "scene": "chat",
             "is_stream": True,
+            "hook_registry": chat_hook_registry,
         })
 
         try:
@@ -251,12 +416,15 @@ class ChatService:
             try:
                 ctx_mgr = get_context_manager(provider, model)
                 context_tokens = ctx_mgr.token_counter.count_tokens(ctx.messages)
+                context_max_tokens = ctx_mgr.max_context_tokens or None
             except Exception:
                 context_tokens = None
+                context_max_tokens = None
 
             done_data = ChatStreamChunk(
                 id=chat_id, content="", model=model, provider=provider,
                 done=True, context_tokens=context_tokens,
+                context_max_tokens=context_max_tokens,
             )
             yield sse_data(done_data)
         except Exception as e:
@@ -312,7 +480,7 @@ class ChatService:
         parser = EmotionStreamParser()
 
         # 工具支持
-        available_tools = tool_orchestrator.get_tools_for_llm() if tool_registry.list_names() else None
+        available_tools = tool_orchestrator.get_tools_for_llm(provider, model) if tool_registry.list_names() else None
         use_tools = bool(available_tools) and llm_adapter.supports_tool_calls(provider, model)
         if available_tools and not use_tools:
             logger.info(f"[STREAM] Provider {provider}/{model} 不支持工具调用，本次以纯对话模式运行")
@@ -343,7 +511,10 @@ class ChatService:
             },
         )
 
-        # llm_call_fn：信号量内调用 LLM，content 经 EmotionStreamParser 清洗
+        # llm_call_fn：信号量内调用 LLM，content 经 EmotionStreamParser + ThinkingTagManager 清洗
+        thinking_mgr = ThinkingTagManager()
+        coalescer = StreamCoalescer()
+
         async def llm_call_fn(ctx):
             async with self._llm_semaphore:
                 async for chunk in llm_adapter.chat_stream(
@@ -358,15 +529,53 @@ class ChatService:
                 ):
                     if chunk.type == "content":
                         content = chunk.data.get("content", "")
-                        clean_content, emotion = parser.feed(content)
-                        chunk.data["content"] = clean_content
-                        if emotion:
-                            chunk.data["emotion"] = emotion
+                        # Thinking 标签分流
+                        content_text, reasoning_text = thinking_mgr.process(content)
+                        if reasoning_text:
+                            # 积累 reasoning 到 ctx.state
+                            ctx.state["reasoning"] = ctx.state.get("reasoning", "") + reasoning_text
+                            try:
+                                await chat_hook_registry.notify(
+                                    HookRegistry.ON_STREAM_TOKEN, ctx, reasoning_text, "reasoning",
+                                )
+                            except Exception:
+                                pass
+                        # 流式 chunk 合并
+                        if content_text:
+                            merged = await coalescer.feed(content_text)
+                            if merged:
+                                clean_content, emotion = parser.feed(merged)
+                                chunk.data["content"] = clean_content
+                                if emotion:
+                                    chunk.data["emotion"] = emotion
+                                try:
+                                    await chat_hook_registry.notify(
+                                        HookRegistry.ON_STREAM_TOKEN, ctx, merged, "content",
+                                    )
+                                except Exception:
+                                    pass
+                            else:
+                                continue
+                        else:
+                            continue
                     yield chunk
+                # 流结束后 flush 缓冲区
+                remaining = coalescer.flush()
+                if remaining:
+                    clean_content, emotion = parser.feed(remaining)
+                    if clean_content:
+                        yield StreamEvent("content", {"content": clean_content, **({"emotion": emotion} if emotion else {})})
+                        try:
+                            await chat_hook_registry.notify(
+                                HookRegistry.ON_STREAM_TOKEN, ctx, remaining, "content",
+                            )
+                        except Exception:
+                            pass
 
         runner = tool_orchestrator.create_runner({
             "scene": "chat",
             "is_stream": True,
+            "hook_registry": chat_hook_registry,
         })
 
         async def generator():
@@ -420,13 +629,16 @@ class ChatService:
                     try:
                         ctx_mgr = get_context_manager(provider, model)
                         context_tokens = ctx_mgr.token_counter.count_tokens(ctx.messages)
+                        context_max_tokens = ctx_mgr.max_context_tokens or None
                     except Exception:
                         context_tokens = None
+                        context_max_tokens = None
 
                     done_chunk = ChatStreamChunk(
                         id=chat_id, content="", model=model, provider=provider,
                         done=True, suggested_questions=suggested_questions or None,
                         context_tokens=context_tokens,
+                        context_max_tokens=context_max_tokens,
                     )
                     yield sse_data(done_chunk)
                 except Exception as done_err:

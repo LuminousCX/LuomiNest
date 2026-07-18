@@ -6,9 +6,8 @@
 3. 间隔执行任务（interval）
 
 任务执行时通过事件回调通知前端（SSE）和主 Agent。
-配置持久化到 {DATA_DIR}/scheduled_tasks.json。
+配置持久化到 scheduled_tasks 数据库表。
 """
-import asyncio
 import json
 import uuid
 from datetime import datetime
@@ -42,7 +41,6 @@ class LuomiSchedulerManager:
         self._scheduler: AsyncIOScheduler | None = None
         self._tasks: dict[str, dict[str, Any]] = {}  # task_id -> task info dict
         self._event_callbacks: list[TaskEventCallback] = []
-        self._config_file: Path = Path(settings.DATA_DIR) / "scheduled_tasks.json"
         self._started = False
 
     @property
@@ -105,21 +103,44 @@ class LuomiSchedulerManager:
         return True
 
     async def _load_persisted_tasks(self) -> None:
-        """从配置文件加载持久化任务"""
-        if not self._config_file.exists():
-            return
+        """从数据库加载持久化任务，DB 失败或为空时 fallback 到 JSON 文件。"""
+        count = 0
 
+        # 优先从 DB 加载
         try:
-            data = json.loads(self._config_file.read_text(encoding="utf-8"))
-            count = 0
+            from app.services.scheduled_task_persistence import list_scheduled_tasks
+
+            db_tasks = await list_scheduled_tasks()
+            if db_tasks:
+                for t in db_tasks:
+                    if not t.get("is_active", False):
+                        continue
+                    task_id = t.get("task_id", "")
+                    if not task_id:
+                        continue
+                    try:
+                        config = self._db_task_to_config(t)
+                        await self._reschedule_task(task_id, config)
+                        count += 1
+                    except Exception as e:
+                        logger.warning(f"[LuomiScheduler] 从 DB 恢复任务 {task_id} 失败: {e}")
+                logger.info(f"[LuomiScheduler] 从 DB 恢复 {count} 个持久化任务")
+                return
+        except Exception as e:
+            logger.warning(f"[LuomiScheduler] 从 DB 加载任务失败，尝试 JSON fallback: {e}")
+
+        # Fallback: 从 JSON 文件加载（兼容首次启动或 DB 为空）
+        config_file = Path(settings.DATA_DIR) / "scheduled_tasks.json"
+        if not config_file.exists():
+            return
+        try:
+            data = json.loads(config_file.read_text(encoding="utf-8"))
             for task_data in data.get("tasks", []):
                 task_id = task_data.get("id", "")
                 if not task_id:
                     continue
-                # 跳过已完成的 date 类型任务
                 if task_data.get("status") in (LuomiTaskStatus.COMPLETED.value, LuomiTaskStatus.REMOVED.value):
                     continue
-                # 重新调度
                 config = ScheduledTaskConfig(
                     name=task_data.get("name", ""),
                     description=task_data.get("description", ""),
@@ -141,42 +162,98 @@ class LuomiSchedulerManager:
                     await self._reschedule_task(task_id, config)
                     count += 1
                 except Exception as e:
-                    logger.warning(f"[LuomiScheduler] 恢复任务 {task_id} 失败: {e}")
-            logger.info(f"[LuomiScheduler] 恢复 {count} 个持久化任务")
+                    logger.warning(f"[LuomiScheduler] 从 JSON 恢复任务 {task_id} 失败: {e}")
+            logger.info(f"[LuomiScheduler] 从 JSON fallback 恢复 {count} 个持久化任务")
         except Exception as e:
-            logger.warning(f"[LuomiScheduler] 加载持久化任务失败: {e}")
+            logger.warning(f"[LuomiScheduler] 加载 JSON 持久化任务失败: {e}")
+
+    @staticmethod
+    def _db_task_to_config(t: dict[str, Any]) -> ScheduledTaskConfig:
+        """将 DB 记录转换为 ScheduledTaskConfig。"""
+        schedule_type = t.get("schedule_type", "date")
+        schedule_cron = t.get("schedule_cron", "")
+        action = t.get("action", "")
+        context = t.get("context", "")
+        payload: dict[str, Any] = {}
+        if action:
+            payload["instruction"] = action
+        if context:
+            payload["context"] = context
+
+        task_type = LuomiTaskType.DATE
+        run_date = None
+        cron_year = cron_month = cron_day = cron_week = None
+        cron_day_of_week = cron_hour = cron_minute = cron_second = None
+        interval_seconds = None
+
+        if schedule_type == LuomiTaskType.CRON.value:
+            task_type = LuomiTaskType.CRON
+            parts = schedule_cron.split()
+            if len(parts) >= 5:
+                cron_minute, cron_hour, cron_day, cron_month, cron_day_of_week = parts[:5]
+        elif schedule_type == LuomiTaskType.INTERVAL.value:
+            task_type = LuomiTaskType.INTERVAL
+            # DB 未存储 interval_seconds，fallback 默认 3600s
+            interval_seconds = 3600
+        else:
+            # date 类型：DB 未存储 run_date，跳过无法恢复的任务
+            if not schedule_cron:
+                raise ValueError("date 类型任务缺少 run_date 信息，无法从 DB 恢复")
+            run_date = schedule_cron
+
+        return ScheduledTaskConfig(
+            name=t.get("name", ""),
+            description=t.get("description", "") or "",
+            task_type=task_type,
+            run_date=run_date,
+            cron_year=cron_year,
+            cron_month=cron_month,
+            cron_day=cron_day,
+            cron_week=cron_week,
+            cron_day_of_week=cron_day_of_week,
+            cron_hour=cron_hour,
+            cron_minute=cron_minute,
+            cron_second=cron_second,
+            interval_seconds=interval_seconds,
+            payload=payload,
+            source=t.get("created_from", "main_agent"),
+        )
 
     async def _persist_tasks(self) -> None:
-        """持久化任务配置到文件"""
+        """将内存中的任务状态同步到数据库（不再写入 JSON 文件）。"""
         try:
-            self._config_file.parent.mkdir(parents=True, exist_ok=True)
-            tasks_data = []
+            from app.services.scheduled_task_persistence import save_scheduled_task
+
             for task_id, info in self._tasks.items():
-                tasks_data.append({
-                    "id": task_id,
-                    "name": info.get("name", ""),
-                    "description": info.get("description", ""),
-                    "task_type": info.get("task_type", LuomiTaskType.DATE.value),
-                    "status": info.get("status", LuomiTaskStatus.PENDING.value),
-                    "run_date": info.get("run_date"),
-                    "cron_year": info.get("cron_year"),
-                    "cron_month": info.get("cron_month"),
-                    "cron_day": info.get("cron_day"),
-                    "cron_week": info.get("cron_week"),
-                    "cron_day_of_week": info.get("cron_day_of_week"),
-                    "cron_hour": info.get("cron_hour"),
-                    "cron_minute": info.get("cron_minute"),
-                    "cron_second": info.get("cron_second"),
-                    "interval_seconds": info.get("interval_seconds"),
-                    "payload": info.get("payload", {}),
-                    "source": info.get("source", "main_agent"),
-                })
-            self._config_file.write_text(
-                json.dumps({"tasks": tasks_data}, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+                # 构建 cron 表达式
+                cron_parts = [
+                    info.get("cron_minute") or "*",
+                    info.get("cron_hour") or "*",
+                    info.get("cron_day") or "*",
+                    info.get("cron_month") or "*",
+                    info.get("cron_day_of_week") or "*",
+                ]
+                schedule_cron = " ".join(cron_parts)
+                payload = info.get("payload", {})
+                action = payload.get("instruction", "") if payload else ""
+                context_val = payload.get("context", "") if payload else ""
+                is_active = info.get("status") not in (
+                    LuomiTaskStatus.COMPLETED.value,
+                    LuomiTaskStatus.REMOVED.value,
+                )
+                await save_scheduled_task(
+                    task_id=task_id,
+                    name=info.get("name", ""),
+                    schedule_cron=schedule_cron,
+                    schedule_type=info.get("task_type", LuomiTaskType.DATE.value),
+                    action=action,
+                    description=info.get("description", ""),
+                    context=context_val,
+                    created_from=info.get("source", "main_agent"),
+                    is_active=is_active,
+                )
         except Exception as e:
-            logger.warning(f"[LuomiScheduler] 持久化任务失败: {e}")
+            logger.warning(f"[LuomiScheduler] 同步任务到 DB 失败: {e}")
 
     def _build_trigger(self, config: ScheduledTaskConfig):
         """根据配置构建 APScheduler trigger"""
@@ -426,6 +503,14 @@ class LuomiSchedulerManager:
 
         del self._tasks[task_id]
         await self._persist_tasks()
+
+        # 同步从数据库删除
+        try:
+            from app.services.scheduled_task_persistence import delete_scheduled_task
+            await delete_scheduled_task(task_id)
+        except Exception as e:
+            logger.warning(f"[LuomiScheduler] DB 删除任务失败: {e}")
+
         return True
 
     def list_tasks(self) -> list[ScheduledTaskInfo]:

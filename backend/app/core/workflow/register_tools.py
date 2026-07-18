@@ -386,25 +386,18 @@ async def _console_execute(args: dict[str, Any]) -> WorkflowTaskResult:
         return WorkflowTaskResult(success=False, error="Missing required parameter: command")
 
     try:
-        from app.api.v1.endpoints.console import _validate_command, _execute_command_async
+        from app.api.v1.endpoints.console import (
+            _execute_command_via_sandbox,
+            _get_console_sandbox,
+        )
 
-        # 验证命令安全性
-        is_valid, error_msg = _validate_command(command)
-        if not is_valid:
-            emitter = _get_emitter()
-            if emitter:
-                await emitter.emit_console_output(
-                    command=command,
-                    output=error_msg,
-                    success=False,
-                )
-            return WorkflowTaskResult(success=False, error=error_msg)
+        # 获取沙盒实例（内置白名单验证）
+        sandbox = _get_console_sandbox()
 
         # 执行命令（沙盒环境：白名单 + 超时 + 输出截断）
-        working_dir = args.get("working_dir")
         timeout = min(args.get("timeout", 30), 120)
-        exit_code, stdout, stderr = await _execute_command_async(
-            command, working_dir, timeout
+        exit_code, stdout, stderr = await _execute_command_via_sandbox(
+            sandbox, command, timeout
         )
 
         success = exit_code == 0

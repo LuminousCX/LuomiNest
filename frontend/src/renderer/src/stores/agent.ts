@@ -129,7 +129,7 @@ export const useAgentStore = defineStore('agent', () => {
     if (updates.model !== undefined) body.model = updates.model
     if (updates.provider !== undefined) body.provider = updates.provider
     if (updates.color !== undefined) body.color = updates.color
-    if (updates.avatar !== undefined) body.avatar = updates.avatar
+    if (updates.avatar !== undefined) body.avatar = updates.avatar || ''
     if (updates.capabilities !== undefined) body.capabilities = updates.capabilities
     if (updates.isActive !== undefined) body.is_active = updates.isActive
 
@@ -181,7 +181,7 @@ export const useAgentStore = defineStore('agent', () => {
     if (updates.temperature !== undefined) body.temperature = updates.temperature
     if (updates.maxTokens !== undefined) body.maxTokens = updates.maxTokens
     if (updates.color !== undefined) body.color = updates.color
-    if (updates.avatar !== undefined) body.avatar = updates.avatar
+    if (updates.avatar !== undefined) body.avatar = updates.avatar || ''
 
     const result = await apiPatch<RawMainAgentConfig>('/agents/main-agent/config', body)
     mainAgentConfig.value = {

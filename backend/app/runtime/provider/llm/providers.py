@@ -11,6 +11,8 @@ OpenAICompatibleProvider：统一的 OpenAI 兼容 API 供应商实现，
 5. 重试机制仅对可重试错误（429/500/502/503/529/timeout/connection）生效
 """
 import asyncio
+import copy
+import hashlib
 import json
 import re
 from collections import Counter
@@ -20,7 +22,8 @@ import httpx
 from loguru import logger
 
 from app.runtime.provider.base import LLMProvider
-from app.runtime.provider.llm.types import LLMRequest, LLMResponse, StreamEvent
+from app.runtime.provider.llm.types import LLMRequest, LLMResponse, ProviderCapabilities, StreamEvent
+from app.runtime.provider.llm.capabilities import get_capabilities as _get_capabilities
 
 
 # ──────────────────────────────────────────────────────────────
@@ -395,6 +398,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
         优先使用 force_enable_tool_calls 强制开关；
         其次检查运行时探测结果（_unsupported_tool_models）；
+        再查能力表（PROVIDER_CAPABILITIES）；
         默认乐观 True（首次失败时记录并降级）。
         """
         if self.force_enable_tool_calls is not None:
@@ -402,11 +406,26 @@ class OpenAICompatibleProvider(LLMProvider):
         actual_model = model or self.default_model
         if actual_model in self._unsupported_tool_models:
             return False
-        return True
+        caps = self.get_capabilities(actual_model)
+        return caps.supports_tool_calls
 
     def supports_multimodal(self, model: str = "") -> bool:
-        """是否支持多模态。乐观默认 False，由调用方按需覆盖。"""
-        return False
+        """是否支持多模态（视觉）。从能力表查询。"""
+        actual_model = model or self.default_model
+        caps = self.get_capabilities(actual_model)
+        return caps.supports_vision
+
+    def get_capabilities(self, model: str | None = None) -> ProviderCapabilities:
+        """获取当前 provider 的能力声明（含模型级覆盖）。
+
+        委托给 capabilities.get_capabilities()，以 provider_name 为 key 查询。
+        """
+        return _get_capabilities(self.provider_name, model)
+
+    def get_context_window(self, model: str) -> int:
+        """返回给定模型的上下文窗口大小，从能力表获取。"""
+        caps = self.get_capabilities(model)
+        return caps.default_context_window
 
     def mark_unsupported_tool_calls(self, model: str) -> None:
         """运行时探测：记录不支持工具调用的模型。"""
@@ -414,17 +433,118 @@ class OpenAICompatibleProvider(LLMProvider):
             self._unsupported_tool_models.add(model)
             logger.debug(f"[Provider] {self.provider_name} marked model '{model}' as tool-call unsupported")
 
+    # ── 消息清洗管道 ──
+
+    def _sanitize_empty_content(self, messages: list[dict]) -> list[dict]:
+        """清理空 content 消息。
+
+        规则：
+        - 保留 system 消息和有 tool_calls 的 assistant 消息
+        - 跳过 content 为 None 或空字符串的消息
+        """
+        sanitized = []
+        for msg in messages:
+            content = msg.get("content")
+            # 保留 system 消息和有 tool_calls 的 assistant 消息
+            if msg.get("role") == "system" or msg.get("tool_calls"):
+                sanitized.append(msg)
+                continue
+            # 跳过 content 为空的消息
+            if content is None or (isinstance(content, str) and content.strip() == ""):
+                continue
+            sanitized.append(msg)
+        return sanitized
+
+    def _normalize_tool_call_id(self, tool_call_id: str) -> str:
+        """标准化 tool_call_id（过长时哈希截断，兼容严格 provider）。"""
+        if len(tool_call_id) <= 9:
+            return tool_call_id
+        return hashlib.sha256(tool_call_id.encode()).hexdigest()[:9]
+
+    def _sanitize_request_messages(self, messages: list[dict]) -> list[dict]:
+        """确保消息列表格式正确：user/system 开头，tool 消息配对完整。
+
+        规则：
+        1. 确保以 user 或 system 开头
+        2. 标准化 tool_call_id
+        3. 检测并移除孤立的 tool result（没有对应的 assistant tool_calls）
+        """
+        if not messages:
+            return messages
+
+        # 确保以 user 或 system 开头
+        if messages[0].get("role") == "assistant":
+            messages.insert(0, {"role": "user", "content": ""})
+
+        # 收集所有 assistant 消息中的 tool_call ids
+        assistant_tool_call_ids: set[str] = set()
+        for msg in messages:
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                for tc in msg["tool_calls"]:
+                    tc_id = tc.get("id")
+                    if tc_id:
+                        assistant_tool_call_ids.add(tc_id)
+
+        # 检测孤立的 tool result
+        orphan_tool_ids: set[str] = set()
+        for msg in messages:
+            if msg.get("role") == "tool":
+                tc_id = msg.get("tool_call_id")
+                if tc_id and tc_id not in assistant_tool_call_ids:
+                    orphan_tool_ids.add(tc_id)
+
+        if orphan_tool_ids:
+            logger.debug(
+                f"[Provider] _sanitize_request_messages: 移除 {len(orphan_tool_ids)} 个孤立 tool result"
+            )
+            messages = [
+                msg for msg in messages
+                if not (msg.get("role") == "tool" and msg.get("tool_call_id") in orphan_tool_ids)
+            ]
+
+        # 标准化 tool_call_id（过长时哈希截断）
+        id_mapping: dict[str, str] = {}
+        for msg in messages:
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                for tc in msg["tool_calls"]:
+                    original_id = tc.get("id", "")
+                    if original_id and len(original_id) > 9:
+                        normalized = self._normalize_tool_call_id(original_id)
+                        id_mapping[original_id] = normalized
+                        tc["id"] = normalized
+
+        # 同步更新 tool result 的 tool_call_id
+        if id_mapping:
+            for msg in messages:
+                if msg.get("role") == "tool":
+                    original_id = msg.get("tool_call_id", "")
+                    if original_id in id_mapping:
+                        msg["tool_call_id"] = id_mapping[original_id]
+
+        return messages
+
+    def _sanitize_messages_pipeline(self, messages: list[dict]) -> list[dict]:
+        """执行完整消息清洗管道（使用副本，不修改原始列表）。"""
+        # 深拷贝以避免修改原始消息（tool_calls 等嵌套结构需要 deepcopy）
+        msgs = copy.deepcopy(messages)
+        msgs = self._sanitize_empty_content(msgs)
+        msgs = self._sanitize_request_messages(msgs)
+        return msgs
+
     # ── 非流式聊天 ──
 
     async def chat(self, request: LLMRequest) -> LLMResponse:
         """非流式聊天，统一返回 LLMResponse。
 
         实现：
-        1. 构建 payload（含 tools / temperature / max_tokens / top_p）
-        2. POST /chat/completions（stream=False）
-        3. 解析 choices[0].message，提取 content / reasoning / tool_calls
-        4. 返回 LLMResponse
+        1. 消息清洗管道（空内容清理 + 格式校验）
+        2. 构建 payload（含 tools / temperature / max_tokens / top_p）
+        3. POST /chat/completions（stream=False）
+        4. 解析 choices[0].message，提取 content / reasoning / tool_calls
+        5. 返回 LLMResponse
         """
+        # 消息清洗管道
+        request.messages = self._sanitize_messages_pipeline(request.messages)
         payload = self._build_payload(request, stream=False)
         client = httpx.AsyncClient(timeout=120.0) if self._client is None else self.client
         try:
@@ -468,6 +588,8 @@ class OpenAICompatibleProvider(LLMProvider):
         3. 逐行解析 SSE data，发射 content / reasoning / tool_call_delta / finish_reason / usage / done 事件
         4. 流结束后合并 tool_calls（如有）
         """
+        # 消息清洗管道
+        request.messages = self._sanitize_messages_pipeline(request.messages)
         payload = self._build_payload(request, stream=True)
         enable_reasoning = request.extra.get("enable_reasoning", True)
 

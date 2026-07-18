@@ -74,7 +74,7 @@ const handleSaveMainAgentConfig = async () => {
       temperature: mainAgentEdit.value.temperature,
       maxTokens: mainAgentEdit.value.maxTokens,
       color: mainAgentEdit.value.avatarMode === 'color' ? mainAgentEdit.value.color : '',
-      avatar: mainAgentEdit.value.avatarMode === 'preset' ? mainAgentEdit.value.avatar : null,
+      avatar: mainAgentEdit.value.avatarMode === 'preset' ? (mainAgentEdit.value.avatar || '') : '',
     })
     mainAgentSaveMsg.value = { type: 'success', text: '主智能体配置已保存' }
     setTimeout(() => { mainAgentSaveMsg.value = null }, 3000)

@@ -459,7 +459,7 @@ export const usePlatformStore = defineStore('platform', () => {
     if (updates.temperature !== undefined) body.temperature = updates.temperature
     if (updates.maxTokens !== undefined) body.max_tokens = updates.maxTokens
     if (updates.color !== undefined) body.color = updates.color
-    if (updates.avatar !== undefined) body.avatar = updates.avatar
+    if (updates.avatar !== undefined) body.avatar = updates.avatar || ''
     try {
       await apiPatch('/platforms/main_agent', body)
       await fetchMainAgent(true)  // force: true, 确保 settings 保存后工作台显示最新头像

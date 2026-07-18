@@ -66,6 +66,10 @@ if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 }
 
+// 必须在 app.whenReady() 之前设置，确保 Windows 任务栏、通知中心、
+// 任务管理器等系统 UI 使用正确的 AppUserModelId 而非 Electron 默认值。
+app.setAppUserModelId('com.luominest.desktop')
+
 const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
 const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
 
@@ -287,7 +291,6 @@ const createMenu = (): void => {
 }
 
 app.whenReady().then(() => {
-  app.setAppUserModelId('com.luominest.desktop')
   initAppPaths()
 
   verifyAvatarResources()

@@ -60,6 +60,8 @@ class ChatStreamChunk(BaseModel):
     task_event: dict[str, Any] | None = None
     # 压缩后上下文 token 数（done 时回填）
     context_tokens: int | None = None
+    # 上下文窗口容量（done 时回填，前端用于计算使用百分比）
+    context_max_tokens: int | None = None
 
     @field_validator("content", "reasoning_content", mode="before")
     @classmethod

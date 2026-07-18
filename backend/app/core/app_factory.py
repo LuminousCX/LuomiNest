@@ -303,12 +303,15 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     logger.info("[AppFactory] Creating FastAPI application...")
 
+    # API 文档在 DEBUG 模式或显式启用 API_DOCS_ENABLED 时暴露
+    _docs_enabled = settings.DEBUG or settings.API_DOCS_ENABLED
+
     app = FastAPI(
         title="LuomiNest API",
         description="LuomiNest - AI Agent Platform Backend API",
         version=settings.APP_VERSION,
-        docs_url="/docs" if settings.DEBUG else None,
-        redoc_url="/redoc" if settings.DEBUG else None,
+        docs_url="/docs" if _docs_enabled else None,
+        redoc_url="/redoc" if _docs_enabled else None,
         lifespan=lifespan,
     )
 
@@ -361,7 +364,8 @@ def create_app() -> FastAPI:
         allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID",
+                        "X-LuomiNest-Internal-Token", "X-LuomiNest-Owner-User-Id"],
     )
 
     @app.exception_handler(LuomiNestError)
@@ -408,7 +412,7 @@ def create_app() -> FastAPI:
         return {
             "name": "LuomiNest",
             "version": settings.APP_VERSION,
-            "docs": "/docs" if settings.DEBUG else "disabled",
+            "docs": "/docs" if _docs_enabled else "disabled",
         }
 
     logger.success("[AppFactory] FastAPI application created successfully")

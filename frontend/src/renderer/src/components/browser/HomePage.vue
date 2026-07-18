@@ -123,7 +123,7 @@ const emit = defineEmits<{
 
 const updateClock = () => {
   const now = new Date()
-  currentTime.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  currentTime.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
   currentDate.value = `${now.getMonth() + 1}月${now.getDate()}日`
   currentWeek.value = weekDays[now.getDay()]
 }

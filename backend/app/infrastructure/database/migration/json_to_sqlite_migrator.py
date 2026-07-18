@@ -316,13 +316,461 @@ def _migrate_conversations() -> int:
     return count
 
 
+def _migrate_providers_from_config_items() -> int:
+    """迁移 config_items 中 llm.providers.* 旧格式数据到 providers + provider_credentials 表。
+
+    旧系统将每个 provider 的每个字段存为独立的 config_item（如 llm.providers.ollama.name），
+    新系统使用 providers 表和 provider_credentials 表（凭证加密存储）。
+
+    幂等设计：
+    - 已存在于 providers 表的 provider 跳过（不覆盖）
+    - 已存在于 provider_credentials 的凭证跳过
+    - 使用独立迁移 key providers_from_config_items（与旧的 providers_config 无关）
+    """
+    if _is_migrated("providers_from_config_items"):
+        return 0
+
+    from sqlalchemy import select as sa_select
+    from app.infrastructure.database.models.config_item import ConfigItem
+    from app.infrastructure.database.models.provider import Provider
+    from app.infrastructure.database.models.provider_credential import ProviderCredential
+    from app.security.crypto.aes_cipher import get_cipher
+    import hashlib
+    import uuid
+
+    # 1. 读取所有 llm.providers.* config_items
+    with sync_session_factory() as session:
+        items = session.execute(
+            sa_select(ConfigItem).where(ConfigItem.key.like("llm.providers.%"))
+        ).scalars().all()
+
+        if not items:
+            _mark_migrated("providers_from_config_items", 0)
+            logger.info("[Migration] providers_from_config_items: no legacy entries found")
+            return 0
+
+    # 2. 按 provider_id 分组
+    provider_data: dict[str, dict[str, str]] = {}
+    for item in items:
+        # key 格式: llm.providers.{provider_id}.{field}
+        parts = item.key.split(".", 3)  # ['llm', 'providers', '{id}', '{field}']
+        if len(parts) != 4:
+            continue
+        provider_id = parts[2]
+        field = parts[3]
+        if provider_id not in provider_data:
+            provider_data[provider_id] = {}
+        # 反序列化值（config_items 存的是 JSON 编码的字符串）
+        try:
+            value = json.loads(item.value) if item.value else ""
+        except (json.JSONDecodeError, TypeError):
+            value = item.value or ""
+        provider_data[provider_id][field] = value
+
+    # 3. 逐个 provider 写入 providers 表 + provider_credentials 表
+    count = 0
+    cipher = get_cipher()
+
+    for provider_id, fields in provider_data.items():
+        name = fields.get("name", provider_id)
+        vendor = fields.get("vendor", "openai_compatible")
+        base_url = fields.get("base_url", "")
+        default_model = fields.get("default_model", "")
+        is_default_raw = fields.get("is_default", False)
+        is_default = is_default_raw is True or (isinstance(is_default_raw, str) and is_default_raw.lower() == "true")
+        description = fields.get("description", "")
+        api_key_encrypted = fields.get("api_key", "")  # 已加密的 api_key
+
+        with sync_session_factory() as session:
+            # 检查 providers 表是否已有该 provider
+            existing = session.get(Provider, provider_id)
+            if existing is None:
+                now = utc_now()
+                provider = Provider(
+                    id=provider_id,
+                    name=name,
+                    vendor=vendor,
+                    base_url=base_url,
+                    default_model=default_model,
+                    is_default=is_default,
+                    selected_models=[],
+                    enabled=True,
+                    sort_order=count,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(provider)
+                logger.info(f"[Migration] Created provider: {provider_id} ({name})")
+            else:
+                logger.debug(f"[Migration] Provider {provider_id} already exists, skipping")
+
+            # 迁移 api_key 到 provider_credentials
+            if api_key_encrypted and len(api_key_encrypted) > 10:
+                # 检查是否已有凭证
+                existing_cred = session.execute(
+                    sa_select(ProviderCredential).where(
+                        ProviderCredential.provider_id == provider_id,
+                        ProviderCredential.is_active == True,  # noqa: E712
+                    )
+                ).scalars().first()
+
+                if existing_cred is None:
+                    # 解密旧 api_key
+                    try:
+                        api_key_plain = cipher.decrypt(api_key_encrypted)
+                    except Exception:
+                        api_key_plain = ""
+
+                    if api_key_plain:
+                        # 计算前缀和 hash
+                        if len(api_key_plain) > 10:
+                            prefix = api_key_plain[:6] + "..." + api_key_plain[-4:]
+                        else:
+                            prefix = api_key_plain[:4] + "..."
+                        key_hash = hashlib.sha256(api_key_plain.encode("utf-8")).hexdigest()
+
+                        cred = ProviderCredential(
+                            id=uuid.uuid4().hex,
+                            provider_id=provider_id,
+                            api_key_encrypted=cipher.encrypt(api_key_plain),
+                            api_key_prefix=prefix,
+                            api_key_hash=key_hash,
+                            label="",
+                            is_active=True,
+                            last_used_at="",
+                            created_at=utc_now(),
+                        )
+                        session.add(cred)
+                        logger.info(f"[Migration] Migrated credential for provider: {provider_id}")
+
+            session.commit()
+        count += 1
+
+    _mark_migrated("providers_from_config_items", count)
+    logger.success(f"[Migration] providers_from_config_items: migrated {count} providers")
+    return count
+
+
+def _migrate_agents_json_file() -> int:
+    """补充迁移：将 agents.json 中缺失的 agent 写入 agents 表。
+
+    原始 agents 迁移使用 agents_store facade（已指向 SQLite），
+    但部分环境下 JSON 文件数据可能未完全同步到 DB。
+    本函数直接读取 JSON 文件，将缺失的 agent 插入 DB（幂等：已存在则跳过）。
+    """
+    if _is_migrated("agents_json_file"):
+        return 0
+
+    from app.infrastructure.database.models.agent import Agent
+
+    path = os.path.join(settings.DATA_DIR, "store", "agents.json")
+    data = _read_json_file(path)
+    if not data or not isinstance(data, dict):
+        _mark_migrated("agents_json_file", 0)
+        logger.info("[Migration] agents_json_file: no JSON data found")
+        return 0
+
+    count = 0
+    for agent_id, agent_data in data.items():
+        if not isinstance(agent_data, dict) or not agent_id:
+            continue
+        with sync_session_factory() as session:
+            existing = session.get(Agent, agent_id)
+            if existing is not None:
+                continue
+            now = utc_now()
+            agent = Agent(
+                id=agent_id,
+                name=agent_data.get("name", "Unknown"),
+                description=agent_data.get("description", ""),
+                system_prompt=agent_data.get("system_prompt", ""),
+                model=agent_data.get("model"),
+                provider=agent_data.get("provider"),
+                color=agent_data.get("color", "#0d9488"),
+                avatar=agent_data.get("avatar"),
+                capabilities=agent_data.get("capabilities", ["chat"]),
+                memory_access=agent_data.get("memory_access", "none"),
+                is_active=agent_data.get("is_active", True),
+                is_main=agent_data.get("is_main", False),
+                created_at=agent_data.get("created_at", now),
+                updated_at=agent_data.get("updated_at", now),
+            )
+            session.add(agent)
+            session.commit()
+            logger.info(f"[Migration] Created agent from JSON: {agent_id} ({agent.name})")
+        count += 1
+
+    _mark_migrated("agents_json_file", count)
+    logger.success(f"[Migration] agents_json_file: migrated {count} agents")
+    return count
+
+
+def _migrate_scheduled_tasks() -> int:
+    """迁移 scheduled_tasks.json → scheduled_tasks 表。
+
+    旧调度器将任务存储在 JSON 文件中，新系统使用 scheduled_tasks 表。
+    迁移时将 JSON 中的 cron 字段拼接后写入 DB，并标记 is_active=True。
+
+    幂等设计：已存在于 DB 的 task_id 跳过。
+    """
+    if _is_migrated("scheduled_tasks"):
+        return 0
+
+    from app.infrastructure.database.models.scheduled_task import ScheduledTaskORM
+
+    path = os.path.join(settings.DATA_DIR, "scheduled_tasks.json")
+    data = _read_json_file(path)
+    if not data or not isinstance(data, dict):
+        _mark_migrated("scheduled_tasks", 0)
+        logger.info("[Migration] scheduled_tasks: no JSON file found")
+        return 0
+
+    tasks = data.get("tasks", [])
+    if not isinstance(tasks, list) or not tasks:
+        _mark_migrated("scheduled_tasks", 0)
+        logger.info("[Migration] scheduled_tasks: empty task list")
+        return 0
+
+    count = 0
+    for task_data in tasks:
+        if not isinstance(task_data, dict):
+            continue
+        task_id = task_data.get("id", "")
+        if not task_id:
+            continue
+
+        # 跳过已完成/已移除的任务
+        status = task_data.get("status", "")
+        if status in ("completed", "removed"):
+            continue
+
+        # 构建 cron 表达式
+        cron_parts = [
+            task_data.get("cron_minute") or "*",
+            task_data.get("cron_hour") or "*",
+            task_data.get("cron_day") or "*",
+            task_data.get("cron_month") or "*",
+            task_data.get("cron_day_of_week") or "*",
+        ]
+        schedule_cron = " ".join(cron_parts)
+
+        # 确定调度类型
+        task_type = task_data.get("task_type", "cron")
+        schedule_type = task_type if task_type in ("cron", "interval", "date") else "cron"
+
+        # 提取 action（从 payload.instruction）
+        payload = task_data.get("payload", {})
+        action = payload.get("instruction", "") if isinstance(payload, dict) else ""
+        context = payload.get("context", "") if isinstance(payload, dict) else ""
+
+        with sync_session_factory() as session:
+            existing = session.get(ScheduledTaskORM, task_id)
+            if existing is not None:
+                continue
+            task = ScheduledTaskORM(
+                task_id=task_id,
+                name=task_data.get("name", ""),
+                schedule_cron=schedule_cron,
+                schedule_type=schedule_type,
+                action=action,
+                description=task_data.get("description", ""),
+                context=context,
+                created_from=task_data.get("source", "main_agent"),
+                is_active=True,
+                created_at=utc_now(),
+            )
+            session.add(task)
+            session.commit()
+            logger.info(f"[Migration] Created scheduled task: {task_id} ({task.name})")
+        count += 1
+
+    _mark_migrated("scheduled_tasks", count)
+    logger.success(f"[Migration] scheduled_tasks: migrated {count} tasks")
+    return count
+
+
 # ──────────────────────────────────────────────────────────────────
 # 主入口
 # ──────────────────────────────────────────────────────────────────
 
+def _migrate_from_standalone_db() -> int:
+    """从独立后端 DB 迁移数据到 Electron DB（跨数据目录迁移）。
+
+    场景：用户先通过 `python main.py`（standalone）运行后端并完成了 JSON→SQLite 迁移，
+    然后通过 Electron 启动应用。Electron 使用不同的 DATA_DIR（%APPDATA%/luominest-desktop/Data/backend/），
+    其 DB 是空的，需要把 standalone DB 的数据复制过来。
+
+    幂等设计：检查当前 DB 是否已有 providers/conversations 数据，
+    若已有则跳过（避免覆盖 Electron 模式下的新数据）。
+    """
+    if _is_migrated("standalone_db"):
+        return 0
+
+    # 定位 standalone DB 路径
+    # 当前 DATA_DIR 是 Electron 模式时，standalone DB 在项目根目录 backend/data/ 下
+    current_data_dir = os.path.normpath(settings.DATA_DIR)
+    # 尝试多个可能的 standalone 数据目录
+    candidates = []
+    # 1. 项目根目录下的 backend/data（开发模式）
+    # 从当前文件向上查找
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = script_dir
+    for _ in range(10):  # 最多向上 10 级
+        if os.path.exists(os.path.join(project_root, "backend", "data", "luominest.db")):
+            candidates.append(os.path.join(project_root, "backend", "data", "luominest.db"))
+            break
+        parent = os.path.dirname(project_root)
+        if parent == project_root:
+            break
+        project_root = parent
+    # 2. 相对路径（兜底）
+    candidates.append(os.path.join("backend", "data", "luominest.db"))
+
+    standalone_db = None
+    for candidate in candidates:
+        abs_candidate = os.path.abspath(candidate)
+        if os.path.exists(abs_candidate) and os.path.normpath(abs_candidate) != current_data_dir:
+            # 确认不是同一个文件
+            if not os.path.samefile(abs_candidate, os.path.join(current_data_dir, "luominest.db")):
+                standalone_db = abs_candidate
+                break
+
+    if not standalone_db:
+        logger.debug("[Migration] standalone_db: no standalone DB found, skipping")
+        _mark_migrated("standalone_db", 0)
+        return 0
+
+    logger.info(f"[Migration] Found standalone DB: {standalone_db}")
+
+    # 检查当前 DB 是否已有数据（如果有数据则跳过，避免覆盖）
+    import sqlite3
+    try:
+        with sync_session_factory() as session:
+            from sqlalchemy import text as sa_text
+            result = session.execute(sa_text("SELECT COUNT(*) FROM providers")).scalar()
+            if result and result > 0:
+                logger.info(f"[Migration] standalone_db: current DB already has {result} providers, skipping")
+                _mark_migrated("standalone_db", 0)
+                return 0
+    except Exception:
+        pass
+
+    # 从 standalone DB 复制数据
+    import sqlite3
+    count = 0
+    try:
+        src = sqlite3.connect(standalone_db)
+        src.row_factory = sqlite3.Row
+
+        # 需要复制的表列表（按依赖顺序）
+        tables_to_copy = [
+            "providers",
+            "provider_credentials",
+            "agents",
+            "conversations",
+            "config_items",
+            "platform_instances",
+            "scheduled_tasks",
+            "usage_records",
+            "workflow_sessions",
+            "workflow_nodes",
+            "groups",
+            "repo_sources",
+            "marketplace_stats",
+            "tool_call_records",
+            "audit_logs",
+        ]
+
+        with sync_session_factory() as dst_session:
+            from sqlalchemy import text as sa_text
+            for table in tables_to_copy:
+                try:
+                    # 检查源表是否有数据
+                    src_rows = src.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+                    if not src_rows or src_rows[0] == 0:
+                        continue
+
+                    # 检查目标表是否已有数据
+                    dst_count = dst_session.execute(sa_text(f"SELECT COUNT(*) FROM {table}")).scalar()
+                    if dst_count and dst_count > 0:
+                        logger.debug(f"[Migration] standalone_db: {table} already has {dst_count} rows, skipping")
+                        continue
+
+                    # 获取列名
+                    cols_info = src.execute(f"PRAGMA table_info({table})").fetchall()
+                    col_names = [c[1] for c in cols_info]
+
+                    # 读取源数据
+                    rows = src.execute(f"SELECT * FROM {table}").fetchall()
+
+                    # 逐行插入
+                    for row in rows:
+                        placeholders = ", ".join(["?" for _ in col_names])
+                        col_list = ", ".join(col_names)
+                        values = tuple(row[c] for c in range(len(col_names)))
+                        dst_session.execute(
+                            sa_text(f"INSERT OR IGNORE INTO {table} ({col_list}) VALUES ({placeholders})"),
+                            dict(zip(col_names, values))
+                        )
+                    dst_session.commit()
+                    migrated = len(rows)
+                    count += migrated
+                    logger.info(f"[Migration] standalone_db: copied {migrated} rows from {table}")
+                except Exception as e:
+                    logger.warning(f"[Migration] standalone_db: failed to copy {table}: {e}")
+
+        src.close()
+    except Exception as e:
+        logger.error(f"[Migration] standalone_db: failed to open standalone DB: {e}")
+        _mark_migrated("standalone_db", -1)
+        return -1
+
+    _mark_migrated("standalone_db", count)
+    logger.success(f"[Migration] standalone_db: migrated {count} total records from standalone DB")
+    return count
+
+
+def _migrate_plugin_states() -> int:
+    """迁移 cx_plugin_states.json → config_items['plugins.states']。"""
+    if _is_migrated("plugin_states"):
+        return 0
+
+    path = os.path.join(settings.DATA_DIR, "store", "cx_plugin_states.json")
+    data = _read_json_file(path)
+    if data is None:
+        _mark_migrated("plugin_states", 0)
+        logger.info("[Migration] plugin_states: no JSON file found, marked as migrated (0 records)")
+        return 0
+
+    lumi_config_store.set("plugins.states", data)
+    _mark_migrated("plugin_states", 1)
+    logger.success("[Migration] plugin_states: migrated to config_items['plugins.states']")
+    return 1
+
+
+def _migrate_skill_disabled() -> int:
+    """迁移 cx_skill_disabled.json → config_items['skills.disabled_ids']。"""
+    if _is_migrated("skill_disabled"):
+        return 0
+
+    path = os.path.join(settings.DATA_DIR, "store", "cx_skill_disabled.json")
+    data = _read_json_file(path)
+    if data is None:
+        _mark_migrated("skill_disabled", 0)
+        logger.info("[Migration] skill_disabled: no JSON file found, marked as migrated (0 records)")
+        return 0
+
+    lumi_config_store.set("skills.disabled_ids", data)
+    _mark_migrated("skill_disabled", 1)
+    logger.success("[Migration] skill_disabled: migrated to config_items['skills.disabled_ids']")
+    return 1
+
+
 # 数据源注册表：(名称, 迁移函数)
 _MIGRATION_SOURCES: list[tuple[str, Callable[[], int]]] = [
+    ("standalone_db", _migrate_from_standalone_db),  # 最先执行：跨 DB 数据迁移
     ("agents", _migrate_agents),
+    ("agents_json_file", _migrate_agents_json_file),
     ("groups", _migrate_groups),
     ("platforms", _migrate_platforms),
     ("repo_sources", _migrate_repo_sources),
@@ -332,6 +780,10 @@ _MIGRATION_SOURCES: list[tuple[str, Callable[[], int]]] = [
     ("main_agent", _migrate_main_agent),
     ("model_config", _migrate_model_config),
     ("conversations", _migrate_conversations),
+    ("providers_from_config_items", _migrate_providers_from_config_items),
+    ("scheduled_tasks", _migrate_scheduled_tasks),
+    ("plugin_states", _migrate_plugin_states),
+    ("skill_disabled", _migrate_skill_disabled),
 ]
 
 

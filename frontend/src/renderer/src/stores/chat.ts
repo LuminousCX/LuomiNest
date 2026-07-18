@@ -31,6 +31,7 @@ import { useChatTrashStore } from './chat-trash'
 import { detectSearchIntent, extractSearchQuery } from '../utils/searchIntent'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { MAIN_AGENT_ID } from '../constants'
 
 const logger = createLuomiNestRendererLogger('Chat')
 
@@ -48,9 +49,12 @@ export const useChatStore = defineStore('chat', () => {
   const convLoading = ref<Record<string, boolean>>({})
   const convData = ref<Record<string, Conversation>>({})
   const convContextTokens = ref<Record<string, number>>({})
+  // 每个对话的上下文窗口容量（max_tokens），用于前端计算使用百分比
+  const convContextMaxTokens = ref<Record<string, number>>({})
 
-  // 桌宠专属隐藏对话 ID（全局共享，桌宠窗口 / 皮套工坊 / 工作台三入口共用）
-  const desktopPetConvId = ref<string | null>(null)
+  // 三端（工作台 / 桌宠 / 皮套工坊）共享 MAIN_AGENT 的当前对话，
+  // 通过 agentCurrentConvId[MAIN_AGENT_ID] 获取，无需单独的"桌宠对话 ID"
+  // 启动时不创建对话，第一次发消息时自动创建（按需创建，避免空对话堆积）
 
   // 搜索跳转：点击搜索结果时暂存关键词，加载完对话后滚动到匹配消息
   const pendingSearchKeyword = ref('')
@@ -88,6 +92,22 @@ export const useChatStore = defineStore('chat', () => {
     const convId = currentConvId.value
     if (!convId) return 0
     return convContextTokens.value[convId] || 0
+  })
+
+  // 当前对话的上下文窗口容量
+  const currentContextMaxTokens = computed(() => {
+    const convId = currentConvId.value
+    if (!convId) return 0
+    return convContextMaxTokens.value[convId] || 0
+  })
+
+  // 当前对话的上下文使用百分比（0-100，未配置 max 时为 0）
+  const currentContextPercent = computed(() => {
+    const max = currentContextMaxTokens.value
+    if (!max || max <= 0) return 0
+    const used = currentContextTokens.value
+    if (!used || used <= 0) return 0
+    return Math.min(100, Math.round((used / max) * 100))
   })
 
   const isConversationStreaming = (convId: string) => !!convStreaming.value[convId]
@@ -348,6 +368,8 @@ export const useChatStore = defineStore('chat', () => {
     currentSuggestionMessageId.value = null
 
     // 优先使用调用方指定的对话 ID（桌宠/皮套工坊场景）
+    // 三端共享：工作台/桌宠/皮套工坊都用 agentCurrentConvId[MAIN_AGENT_ID]
+    // 启动时为 null，第一次发消息时自动创建新对话（按需创建，避免空对话堆积）
     let convId = options?.targetConvId || agentCurrentConvId.value[targetAgentId]
 
     if (!convId) {
@@ -543,6 +565,9 @@ export const useChatStore = defineStore('chat', () => {
             }
             if (chunk.context_tokens !== undefined) {
               convContextTokens.value = { ...convContextTokens.value, [streamingConvId]: chunk.context_tokens }
+            }
+            if (chunk.context_max_tokens !== undefined && chunk.context_max_tokens > 0) {
+              convContextMaxTokens.value = { ...convContextMaxTokens.value, [streamingConvId]: chunk.context_max_tokens }
             }
           } else {
             updatedMsg.suggestedQuestions = undefined
@@ -744,6 +769,9 @@ export const useChatStore = defineStore('chat', () => {
           if (chunk.done && chunk.context_tokens !== undefined) {
             convContextTokens.value = { ...convContextTokens.value, [streamingConvId]: chunk.context_tokens }
           }
+          if (chunk.done && chunk.context_max_tokens !== undefined && chunk.context_max_tokens > 0) {
+            convContextMaxTokens.value = { ...convContextMaxTokens.value, [streamingConvId]: chunk.context_max_tokens }
+          }
           const updatedMsg: ChatMessage = {
             ...existing,
             content: existing.content + (chunk.content || ''),
@@ -900,11 +928,14 @@ export const useChatStore = defineStore('chat', () => {
 
       const currentId = agentCurrentConvId.value[newAgentId]
       if (currentId) {
+        // 已有当前对话（如用户点击左侧列表后切换 agent 再切回），加载它
         if (!convMessages.value[currentId] || convMessages.value[currentId].length === 0) {
           await loadConversation(currentId)
         }
-      } else if (agentConversations.value[newAgentId].length > 0) {
-        // 优先选择最近有消息的对话（按 updated_at 降序，跳过空对话）
+      } else if (newAgentId !== MAIN_AGENT_ID && agentConversations.value[newAgentId].length > 0) {
+        // 非主 Agent：优先选择最近有消息的对话（Bug2 逻辑）
+        // 主 Agent：不自动选择，保留空对话页面，等用户发消息时按需创建（方案 B）
+        // 桌宠/皮套工坊创建的对话会出现在左侧列表，用户可点击查看
         const sortedConvs = [...agentConversations.value[newAgentId]]
           .filter(c => c.last_message && c.last_message.trim())
           .sort((a, b) => {
@@ -921,6 +952,7 @@ export const useChatStore = defineStore('chat', () => {
           }
         }
       }
+      // 主 Agent 且无 currentId：保持空对话页面，第一次发消息时由 sendMessage 自动创建
     }
   }, { immediate: true })
 
@@ -960,8 +992,11 @@ export const useChatStore = defineStore('chat', () => {
     switchVersion,
     regenerateMessage,
     convContextTokens,
+    convContextMaxTokens,
     currentContextTokens,
+    currentContextMaxTokens,
+    currentContextPercent,
     compressConversation,
-    desktopPetConvId,
+    agentCurrentConvId,
   }
 })

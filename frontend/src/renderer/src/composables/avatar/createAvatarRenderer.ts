@@ -57,10 +57,9 @@ export async function createAvatarRenderer(
     }
 
     case 'png': {
-      // PNG Tuber：P2 阶段实现
-      // const { usePngTuber } = await import('./usePngTuber')
-      // return usePngTuber(canvasRef, options.modelId)
-      throw new Error('[createAvatarRenderer] PNG Tuber renderer not implemented yet (P2)')
+      // PNG Tuber：基于 pixi.js AnimatedSprite 切换 spritesheet 行（参照 Codex Pet 格式）
+      const { usePngTuber } = await import('./usePngTuber')
+      return usePngTuber(canvasRef, options.modelId)
     }
 
     default: {

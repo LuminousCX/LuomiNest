@@ -36,7 +36,7 @@ const emit = defineEmits<{
   'stop-tts': []
   'dismiss-subtitle': []
 }>()
-
+// 此页面方便用户切换角色形象
 const statusText = computed(() => {
   if (props.isSpeaking) return '正在说话'
   if (props.isSynthesizing) return '合成语音中'
@@ -117,8 +117,10 @@ const statusText = computed(() => {
           :class="['ctrl-btn', { active: ttsEnabled }]"
           @click="emit('toggle-tts')"
         >
-          <Volume2 v-if="ttsEnabled" :size="15" />
-          <VolumeX v-else :size="15" />
+          <template #icon>
+            <Volume2 v-if="ttsEnabled" :size="15" />
+            <VolumeX v-else :size="15" />
+          </template>
         </LumiButton>
         <LumiButton
           variant="outline"
@@ -128,7 +130,9 @@ const statusText = computed(() => {
           :class="['ctrl-btn', { active: subtitleEnabled }]"
           @click="emit('toggle-subtitle')"
         >
-          <Subtitles :size="15" />
+          <template #icon>
+            <Subtitles :size="15" />
+          </template>
         </LumiButton>
         <LumiButton
           v-if="isSpeaking || isSynthesizing"
@@ -139,7 +143,9 @@ const statusText = computed(() => {
           class="ctrl-btn stop-btn"
           @click="emit('stop-tts')"
         >
-          <StopCircle :size="15" />
+          <template #icon>
+            <StopCircle :size="15" />
+          </template>
         </LumiButton>
       </div>
       <p class="avatar-tip">主 Agent 工作台 · 支持工具调用与子 Agent 协作</p>

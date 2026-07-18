@@ -6,7 +6,7 @@
 设计原则：
 - 单例模式：全局 cx_skill_service，避免多次实例化导致的状态不一致
 - 轻量委托：本层不持有运行时数据，仅做参数校验与转发
-- 持久化禁用偏好：使用 JsonStore 保存用户禁用的 skill_id，重启后自动恢复
+- 持久化禁用偏好：使用 lumi_config_store（SQLite config_items 表）保存用户禁用的 skill_id，重启后自动恢复
 - 错误透明：异常抛出给调用方，由 API 层统一包装为 ApiResponse
 """
 from __future__ import annotations
@@ -15,12 +15,16 @@ from typing import Any
 
 from loguru import logger
 
+from app.infrastructure.database.config_store import lumi_config_store
 from app.infrastructure.database.json_store import JsonStore
 from app.runtime.plugin.skill.loader import cx_skill_loader
 from app.runtime.plugin.skill.registry import cx_skill_registry
 
 
-# 禁用偏好持久化（id 列表）
+# DB 存储 key
+_DB_KEY = "skills.disabled_ids"
+
+# 禁用偏好持久化（id 列表）—— 保留作为 fallback / 备份
 _disabled_store = JsonStore("cx_skill_disabled.json")
 
 
@@ -42,8 +46,10 @@ class CxSkillService:
         Returns:
             成功加载的技能数量
         """
-        # 恢复用户的禁用偏好
-        disabled_ids = _disabled_store.get("disabled_ids", [])
+        # 恢复用户的禁用偏好（优先 DB，fallback JSON）
+        disabled_ids = lumi_config_store.get(_DB_KEY)
+        if disabled_ids is None:
+            disabled_ids = _disabled_store.get("disabled_ids", [])
         if isinstance(disabled_ids, list) and disabled_ids:
             cx_skill_registry.set_disabled_ids([str(i) for i in disabled_ids])
             logger.info(f"[CxSkillService] Restored {len(disabled_ids)} disabled skill id(s)")
@@ -92,9 +98,13 @@ class CxSkillService:
         return ok
 
     def _persist_disabled(self) -> None:
-        """将当前禁用列表持久化到 JsonStore。"""
+        """将当前禁用列表持久化到 DB，同时保留 JSON 文件备份。"""
         disabled_ids = cx_skill_registry.get_disabled_ids()
-        _disabled_store.set("disabled_ids", disabled_ids)
+        lumi_config_store.set(_DB_KEY, disabled_ids)
+        try:
+            _disabled_store.set("disabled_ids", disabled_ids)
+        except Exception as e:
+            logger.warning(f"[CxSkillService] Failed to write JSON backup: {e}")
 
     # ------------------------------------------------------------------
     # 重载

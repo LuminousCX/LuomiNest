@@ -1,6 +1,3 @@
-import asyncio
-import os
-import shlex
 import uuid
 from datetime import datetime, timezone
 
@@ -8,12 +5,21 @@ from fastapi import APIRouter, Query
 from loguru import logger
 from pydantic import BaseModel
 
+from app.security.sandbox import (
+    SandboxCommandError,
+    SandboxPermissionError,
+    SandboxProvider,
+    SandboxTimeoutError,
+)
+from app.security.sandbox.local_sandbox import LocalSandbox
+
 router = APIRouter(prefix="/console", tags=["console"])
 
 
 # 命令白名单（允许执行的主命令）
 # 安全原则：不包含可执行任意代码的解释器/下载器/容器引擎
 # （python/node/curl/wget/docker/pip/redis-cli/sqlite3 已移除，如需使用请直接在系统终端操作）
+# 白名单由沙盒 CommandValidator 执行，替代原有的手动检查
 ALLOWED_COMMANDS = {
     "git", "npm", "pnpm", "yarn",
     "ls", "dir", "cat", "type", "echo", "pwd", "cd", "mkdir", "md", "rmdir",
@@ -22,30 +28,16 @@ ALLOWED_COMMANDS = {
     "tasklist", "systeminfo", "where", "which",
 }
 
-# 危险命令模式（即使主命令在白名单中，包含这些模式也拒绝）
-DANGEROUS_PATTERNS = {
-    "rm -rf /", "rm -rf ~", "rm -rf *", "rm -rf .",
-    "del /f /s /q C:\\", "del /f /s /q c:\\",
-    "format ", "shutdown", "reboot", ":(){:|:&};:",
-    "mkfs", "dd if=", "> /dev/sda", "> /dev/hda",
-    "chmod -R 777 /", "chown -R",
-    # 包管理器可执行任意包/脚本的子命令
-    "npm exec", "npx ", "pnpm exec", "pnpm dlx", "yarn dlx",
-    # git alias 可绑定任意命令
-    "git config alias",
-}
-
-# shell 元字符（exec 模式下这些字符会被当字面参数，导致命令行为异常，需在入口拦截）
-SHELL_METACHARACTERS = {"|", "&", ";", ">", "<", "`"}
-
 # 默认命令超时（秒）
 DEFAULT_COMMAND_TIMEOUT = 30
 # 最大命令超时（秒）
 MAX_COMMAND_TIMEOUT = 120
-# 最大输出长度（字符）
+# 最大输出长度（字符）— 用于 API 响应截断（沙盒本身有更大的捕获限制）
 MAX_OUTPUT_LENGTH = 10000
 # 存储上限
 MAX_STORE_SIZE = 500
+# 控制台专用沙盒会话 ID
+_CONSOLE_SESSION_ID = "__console__"
 
 
 class CommandRecord(BaseModel):
@@ -183,83 +175,39 @@ _console_handler = ConsoleLogHandler()
 logger.add(_console_handler, level="INFO", format="{message}")
 
 
-def _validate_command(command: str) -> tuple[bool, str, list[str]]:
-    """验证命令是否安全：白名单 + 危险模式 + shell 元字符检查
+def _get_console_sandbox() -> LocalSandbox:
+    """获取控制台专用沙盒实例（带白名单配置）。
 
-    Returns:
-        (is_valid, error_msg, parsed_parts)
-        parsed_parts 为 shlex.split 解析后的参数列表（验证失败时为空列表）
+    使用固定的 console session，首次获取时配置 CommandValidator 白名单模式。
     """
-    if not command or not command.strip():
-        return False, "命令不能为空", []
+    provider = SandboxProvider.get_instance()
+    sandbox = provider.acquire(_CONSOLE_SESSION_ID)
 
-    # 检查 shell 元字符（本接口使用 create_subprocess_exec 不经过 shell，
-    # 这些字符会被当字面参数导致命令行为异常，在入口直接拒绝给出清晰提示）
-    found_meta = [c for c in SHELL_METACHARACTERS if c in command]
-    if found_meta:
-        return False, f"命令包含 shell 元字符（{' '.join(found_meta)}），本接口不支持管道和重定向", []
-    if "$(" in command:
-        return False, "命令包含命令替换 $(...)，本接口不支持", []
+    # 配置白名单模式（仅首次需要）
+    if not sandbox.validator.whitelist_mode:
+        sandbox.validator.whitelist_mode = True
+        sandbox.validator.allowed_commands = ALLOWED_COMMANDS
 
-    # 检查危险模式
-    for pattern in DANGEROUS_PATTERNS:
-        if pattern in command:
-            return False, f"命令包含危险操作: {pattern}", []
-
-    # 解析命令
-    try:
-        posix_mode = os.name != "nt"
-        parts = shlex.split(command, posix=posix_mode)
-    except ValueError as e:
-        return False, f"命令解析失败: {e}", []
-
-    if not parts:
-        return False, "命令不能为空", []
-
-    # 提取主命令（处理路径和 .exe 后缀）
-    main_cmd = os.path.basename(parts[0]).lower()
-    if main_cmd.endswith(".exe"):
-        main_cmd = main_cmd[:-4]
-
-    if main_cmd not in ALLOWED_COMMANDS:
-        allowed = ", ".join(sorted(ALLOWED_COMMANDS))
-        return False, f"命令 '{main_cmd}' 不在白名单中。允许的命令: {allowed}", []
-
-    return True, "", parts
+    return sandbox
 
 
-async def _execute_command_async(
-    parts: list[str], working_dir: str | None, timeout: int
+async def _execute_command_via_sandbox(
+    sandbox: LocalSandbox, command: str, timeout: int
 ) -> tuple[int, str, str]:
-    """异步执行命令（不经过 shell），返回 (exit_code, stdout, stderr)
+    """通过沙盒执行命令，返回 (exit_code, stdout, stderr)。
 
-    使用 create_subprocess_exec 直接执行解析后的参数列表，
-    避免经过 shell 导致管道/重定向/命令注入。
+    沙盒负责命令验证（白名单 + 危险模式 + shell 元字符）、
+    超时控制和输出路径遮蔽。
     """
     try:
-        cwd = working_dir if working_dir and os.path.isdir(working_dir) else None
-
-        process = await asyncio.create_subprocess_exec(
-            *parts,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=cwd,
-        )
-
-        try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                process.communicate(),
-                timeout=timeout,
-            )
-        except asyncio.TimeoutError:
-            process.kill()
-            await process.wait()
-            return -1, "", f"命令执行超时（{timeout}秒）"
-
-        stdout = stdout_bytes.decode("utf-8", errors="replace")[:MAX_OUTPUT_LENGTH]
-        stderr = stderr_bytes.decode("utf-8", errors="replace")[:MAX_OUTPUT_LENGTH]
-
-        return process.returncode or 0, stdout, stderr
+        result = await sandbox.execute_command(command, timeout=timeout)
+        return result.exit_code, result.stdout, result.stderr
+    except SandboxPermissionError as e:
+        return -1, "", e.message
+    except SandboxTimeoutError as e:
+        return -1, "", e.message
+    except SandboxCommandError as e:
+        return -1, "", e.message
     except Exception as e:
         return -1, "", str(e)
 
@@ -286,19 +234,30 @@ async def create_command_record(record: CommandRecord):
 
 @router.post("/execute", response_model=ExecuteCommandResponse)
 async def execute_command(req: ExecuteCommandRequest):
-    """执行命令（带白名单 + 超时 + 工作目录限制）"""
+    """执行命令（通过沙盒，带白名单 + 超时 + 路径遮蔽）"""
     command = req.command.strip()
 
-    # 验证命令安全性（同时获取解析后的参数列表）
-    is_valid, error_msg, parts = _validate_command(command)
-    if not is_valid:
-        logger.warning(f"[Console] Command rejected: {command} - {error_msg}")
+    if not command:
         return ExecuteCommandResponse(
             command_id=str(uuid.uuid4())[:8],
             status="failed",
             exit_code=-1,
             output=None,
-            error=error_msg,
+            error="命令不能为空",
+            duration_ms=0,
+        )
+
+    # 获取沙盒实例（内置 CommandValidator 白名单验证）
+    try:
+        sandbox = _get_console_sandbox()
+    except Exception as e:
+        logger.error(f"[Console] 沙盒初始化失败: {e}")
+        return ExecuteCommandResponse(
+            command_id=str(uuid.uuid4())[:8],
+            status="failed",
+            exit_code=-1,
+            output=None,
+            error=f"沙盒初始化失败: {e}",
             duration_ms=0,
         )
 
@@ -321,10 +280,16 @@ async def execute_command(req: ExecuteCommandRequest):
     )
     _add_command(record)
 
-    # 执行命令（使用解析后的参数列表，不经过 shell）
-    exit_code, stdout, stderr = await _execute_command_async(
-        parts, req.working_dir, timeout
+    # 通过沙盒执行命令（验证 + 执行 + 路径遮蔽一体化）
+    exit_code, stdout, stderr = await _execute_command_via_sandbox(
+        sandbox, command, timeout
     )
+
+    # API 响应截断（沙盒捕获上限更大，这里限制返回给前端的长度）
+    if stdout and len(stdout) > MAX_OUTPUT_LENGTH:
+        stdout = stdout[:MAX_OUTPUT_LENGTH] + "\n... [truncated]"
+    if stderr and len(stderr) > MAX_OUTPUT_LENGTH:
+        stderr = stderr[:MAX_OUTPUT_LENGTH] + "\n... [truncated]"
 
     finished_at = datetime.now(timezone.utc)
     duration_ms = int((finished_at - started_at).total_seconds() * 1000)

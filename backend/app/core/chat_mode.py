@@ -41,6 +41,7 @@ CHAT_MODE_TOOL_CONFIGS: dict[ChatMode, dict[str, Any]] = {
             "list_scheduled_tasks",
             "get_scheduled_task",
             "delete_scheduled_task",
+            "cli",
         ],
         "is_workflow": False,
     },

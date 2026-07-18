@@ -38,7 +38,6 @@ const emit = defineEmits<{
   cancel: []
   'toggle-model-dropdown': []
   'select-model': [providerId: string, modelId: string]
-  'update:chatMode': [value: ChatModeLevel]
   'select-chat-mode': [value: ChatModeLevel]
   'update:selectedSkillIds': [ids: string[]]
 }>()
@@ -53,8 +52,15 @@ const inputTextModel = computed<string>({
 const isWorkflowMode = computed(() => props.chatMode !== 'normal')
 
 const selectMode = (value: ChatModeLevel) => {
-  emit('update:chatMode', value)
   emit('select-chat-mode', value)
+}
+
+const toggleWorkflowMode = () => {
+  if (isWorkflowMode.value) {
+    emit('select-chat-mode', 'normal')
+  } else {
+    emit('select-chat-mode', 'standard')
+  }
 }
 
 const resetTextareaHeight = () => {
@@ -147,14 +153,15 @@ defineExpose({
             :class="['workflow-toggle', { active: isWorkflowMode }]"
             variant="secondary"
             size="sm"
-            :title="isWorkflowMode ? '专业模式已开启：长任务将自动分解并调度内部模块' : '当前为普通模式：点击标准/超长开启专业模式'"
+            :title="isWorkflowMode ? '专业模式已开启：长任务将自动分解并调度内部模块' : '当前为普通模式：点击切换专业模式'"
+            @click="toggleWorkflowMode"
           >
             <template #icon>
               <Wand2 :size="15" />
             </template>
             <span class="workflow-toggle-text">{{ isWorkflowMode ? '专业' : '普通' }}</span>
           </LumiButton>
-          <div class="workflow-mode-selector">
+          <div v-if="isWorkflowMode" class="workflow-mode-selector">
             <LumiButton
               v-for="opt in chatModeOptions"
               :key="opt.value"
@@ -178,7 +185,9 @@ defineExpose({
             class="send-btn stop"
             @click="emit('cancel')"
           >
-            <Square :size="16" />
+            <template #icon>
+              <Square :size="16" />
+            </template>
           </LumiButton>
           <LumiButton
             v-else
@@ -190,7 +199,9 @@ defineExpose({
             :disabled="!canSend"
             @click="emit('send')"
           >
-            <Send :size="17" />
+            <template #icon>
+              <Send :size="17" />
+            </template>
           </LumiButton>
         </div>
       </div>

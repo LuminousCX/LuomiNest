@@ -1,6 +1,7 @@
 """CxPlugin 生命周期管理 — 启用/禁用/卸载/重载 + 状态持久化。
 
-使用 JsonStore 持久化插件启用/禁用状态，参照 PlatformRegistry 的状态管理模式。
+使用 lumi_config_store（SQLite config_items 表）持久化插件启用/禁用状态，
+保留 JsonStore 作为 fallback / 备份（过渡期兼容）。
 """
 
 from __future__ import annotations
@@ -9,10 +10,14 @@ import asyncio
 
 from loguru import logger
 
+from app.infrastructure.database.config_store import lumi_config_store
 from app.infrastructure.database.json_store import JsonStore
 from app.models.plugin import CxPluginStatus
 from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
 from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+
+# DB 存储 key
+_DB_KEY = "plugins.states"
 
 
 class CxPluginLifecycle:
@@ -23,15 +28,34 @@ class CxPluginLifecycle:
         self._lock = asyncio.Lock()
         self._init_store()
 
+    # ------------------------------------------------------------------
+    # 内部读写辅助
+    # ------------------------------------------------------------------
+
+    def _read_disabled_plugins(self) -> list[str]:
+        """从 DB 读取禁用列表，DB 无数据时 fallback 到 JSON 文件。"""
+        data = lumi_config_store.get(_DB_KEY)
+        if data is not None:
+            return data if isinstance(data, list) else []
+        # fallback: JSON 文件
+        return self._store.get("disabled_plugins", [])
+
+    def _write_disabled_plugins(self, disabled: list[str]) -> None:
+        """写入 DB，同时保留 JSON 文件备份。"""
+        lumi_config_store.set(_DB_KEY, disabled)
+        try:
+            self._store.set("disabled_plugins", disabled)
+        except Exception as e:
+            logger.warning(f"[CxPlugin] Failed to write JSON backup: {e}")
+
     def _init_store(self) -> None:
         """初始化持久化存储。"""
-        data = self._store.get("disabled_plugins")
-        if data is None:
-            self._store.set("disabled_plugins", [])
+        disabled = self._read_disabled_plugins()
+        self._write_disabled_plugins(disabled)
 
     def get_disabled_plugins(self) -> list[str]:
         """获取已禁用的插件 ID 列表。"""
-        return self._store.get("disabled_plugins", [])
+        return self._read_disabled_plugins()
 
     async def enable_plugin(self, plugin_id: str) -> bool:
         """启用插件。"""
@@ -44,7 +68,7 @@ class CxPluginLifecycle:
             disabled = self.get_disabled_plugins()
             if plugin_id in disabled:
                 disabled.remove(plugin_id)
-                self._store.set("disabled_plugins", disabled)
+                self._write_disabled_plugins(disabled)
 
             cx_plugin_registry.update_status(plugin_id, CxPluginStatus.ENABLED)
             logger.info(f"[CxPlugin] Enabled: {plugin_id}")
@@ -60,7 +84,7 @@ class CxPluginLifecycle:
             disabled = self.get_disabled_plugins()
             if plugin_id not in disabled:
                 disabled.append(plugin_id)
-                self._store.set("disabled_plugins", disabled)
+                self._write_disabled_plugins(disabled)
 
             cx_plugin_registry.update_status(plugin_id, CxPluginStatus.DISABLED)
             logger.info(f"[CxPlugin] Disabled: {plugin_id}")

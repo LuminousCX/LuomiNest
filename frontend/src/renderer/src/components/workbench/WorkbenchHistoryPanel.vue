@@ -124,7 +124,9 @@ const onStartRename = (convId: string, currentTitle: string) => {
             class="history-collapse-btn"
             @click="emit('collapse')"
           >
-            <PanelLeftClose :size="15" />
+            <template #icon>
+              <PanelLeftClose :size="15" />
+            </template>
           </LumiButton>
         </div>
 
@@ -210,7 +212,9 @@ const onStartRename = (convId: string, currentTitle: string) => {
                       class="history-item-rename"
                       @click.stop="onStartRename(conv.id, conv.title)"
                     >
-                      <Pencil :size="13" />
+                      <template #icon>
+                        <Pencil :size="13" />
+                      </template>
                     </LumiButton>
                     <LumiButton
                       variant="danger-ghost"
@@ -220,7 +224,9 @@ const onStartRename = (convId: string, currentTitle: string) => {
                       class="history-item-delete"
                       @click.stop="emit('delete-conversation', conv.id)"
                     >
-                      <Trash2 :size="13" />
+                      <template #icon>
+                        <Trash2 :size="13" />
+                      </template>
                     </LumiButton>
                   </template>
                 </div>
@@ -245,7 +251,9 @@ const onStartRename = (convId: string, currentTitle: string) => {
       class="history-expand-toggle"
       @click="emit('expand')"
     >
-      <PanelLeftOpen :size="15" />
+      <template #icon>
+        <PanelLeftOpen :size="15" />
+      </template>
     </LumiButton>
   </div>
 </template>

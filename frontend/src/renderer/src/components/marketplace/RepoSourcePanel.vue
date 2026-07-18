@@ -151,7 +151,9 @@ const getSubMarketItemCount = (sourceId: string, subMarketType: string): number 
         title="添加自定义来源"
         @click="showAddDialog = true"
       >
-        <Plus :size="14" />
+        <template #icon>
+          <Plus :size="14" />
+        </template>
       </LumiButton>
     </div>
 

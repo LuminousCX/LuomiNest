@@ -62,35 +62,11 @@ export const useDesktopPetChatBridge = (): void => {
 
   let isProcessing = false
 
-  // ── 桌宠专属隐藏对话：每次启动创建新对话，与工作台隔离 ──
-  const ensureDesktopPetConversation = async (): Promise<void> => {
-    // 确保主 Agent 已激活
-    if (!agentStore.activeAgent || agentStore.activeAgent.id !== MAIN_AGENT_ID) {
-      agentStore.setActiveAgent(MAIN_AGENT_PROFILE)
-    }
-
-    const mainAgent = platformStore.mainAgent
-    const resolved = modelStore.resolveModel
-    const model = mainAgent?.model || resolved?.model || undefined
-    const provider = mainAgent?.provider || resolved?.provider || undefined
-
-    try {
-      const conv = await chatStore.createConversation(
-        '桌宠陪伴',
-        MAIN_AGENT_ID,
-        model,
-        provider,
-        'normal',
-        true // isHidden: 隐藏对话，不在工作台左侧列表显示
-      )
-      if (conv?.id) {
-        chatStore.desktopPetConvId = conv.id
-        logger.info('Created new hidden desktop pet conversation:', conv.id)
-      }
-    } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e)
-      logger.error('Failed to create desktop pet conversation:', errMsg)
-    }
+  // 三端（工作台/桌宠/皮套工坊）共享 MAIN_AGENT 的当前对话
+  // 方案 B：启动时不创建对话，第一次发消息时由 chatStore.sendMessage 自动创建
+  // 后续发消息都用这个对话；重启后重复上述过程
+  const getMainAgentConvId = (): string | null => {
+    return chatStore.agentCurrentConvId[MAIN_AGENT_ID] || null
   }
 
   // ── TTS 驱动路由：桌宠模式下始终路由到 avatarControl IPC ──
@@ -163,16 +139,6 @@ export const useDesktopPetChatBridge = (): void => {
     // 空消息守卫
     if (!text.trim()) return
 
-    // 确保桌宠隐藏对话已创建
-    if (!chatStore.desktopPetConvId) {
-      await ensureDesktopPetConversation()
-      if (!chatStore.desktopPetConvId) {
-        logger.error('Failed to create desktop pet conversation, cannot send message')
-        toast.error('桌宠对话初始化失败')
-        return
-      }
-    }
-
     // 确保主 Agent 已激活（chatStore 的 computed 依赖 activeAgentId）
     if (!agentStore.activeAgent || agentStore.activeAgent.id !== MAIN_AGENT_ID) {
       agentStore.setActiveAgent(MAIN_AGENT_PROFILE)
@@ -188,6 +154,8 @@ export const useDesktopPetChatBridge = (): void => {
     const mainAgent = platformStore.mainAgent
     const resolved = modelStore.resolveModel
 
+    // 方案 B：如果当前没有共享对话，chatStore.sendMessage 会自动创建
+    // targetConvId 传 undefined，sendMessage 内部会调用 createConversation
     const options = {
       agentId: MAIN_AGENT_ID,
       model: mainAgent?.model || resolved?.model || undefined,
@@ -196,7 +164,7 @@ export const useDesktopPetChatBridge = (): void => {
       maxTokens: mainAgent?.maxTokens ?? modelStore.modelConfig.defaultMaxTokens,
       topP: modelStore.modelConfig.defaultTopP,
       chatMode: 'normal' as const,
-      targetConvId: chatStore.desktopPetConvId, // 使用桌宠专属隐藏对话
+      targetConvId: getMainAgentConvId() || undefined, // 三端共享的 MAIN_AGENT 对话
       onChunk: (chunk: ChatStreamChunk) => {
         if (chunk.done) {
           ttsEngine.finishStream()
@@ -226,8 +194,9 @@ export const useDesktopPetChatBridge = (): void => {
 
   // ── 取消当前请求 ──
   const cancelRequest = (): void => {
-    if (chatStore.desktopPetConvId) {
-      chatStore.cancelConversationRequest(chatStore.desktopPetConvId)
+    const mainConvId = getMainAgentConvId()
+    if (mainConvId) {
+      chatStore.cancelConversationRequest(mainConvId)
     } else {
       chatStore.cancelCurrentRequest()
     }
@@ -252,8 +221,11 @@ export const useDesktopPetChatBridge = (): void => {
       cancelRequest()
     })
 
-    // 启动时始终创建新的隐藏对话
-    await ensureDesktopPetConversation()
+    // 方案 B：启动时不创建对话，仅确保主 Agent 已激活
+    // 第一次发消息时由 chatStore.sendMessage 自动创建共享对话
+    if (!agentStore.activeAgent || agentStore.activeAgent.id !== MAIN_AGENT_ID) {
+      agentStore.setActiveAgent(MAIN_AGENT_PROFILE)
+    }
 
     // 如果启动时桌宠已在运行，立即设置 TTS 驱动
     if (avatarControl.isDesktopPetRunning) {

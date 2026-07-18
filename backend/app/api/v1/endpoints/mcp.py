@@ -2,6 +2,7 @@
 
 提供 MCP 服务器的增删改查、连接管理、工具列表查询等接口。
 """
+import os
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -12,6 +13,56 @@ from app.core.tools.mcp.manager import mcp_manager
 from app.core.tools.mcp.models import McpServerConfig, McpTransportType
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
+
+
+# ------------------------------------------------------------------
+# MCP 子进程安全环境变量
+# ------------------------------------------------------------------
+
+# 安全环境变量白名单（允许传递给 MCP 子进程）
+SAFE_ENV_VARS: set[str] = {
+    "PATH", "HOME", "USERPROFILE", "SYSTEMROOT", "WINDIR",
+    "TEMP", "TMP", "LANG", "LC_ALL",
+    "PYTHONPATH", "VIRTUAL_ENV", "CONDA_PREFIX",
+}
+
+# 环境变量前缀白名单（匹配的变量也允许传递）
+SAFE_ENV_PREFIX: tuple[str, ...] = ("XDG_", "LC_", "LANG_")
+
+# 敏感环境变量关键字（即使匹配白名单也要排除）
+_SENSITIVE_KEYWORDS: tuple[str, ...] = (
+    "KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL",
+)
+
+
+def _build_safe_env(environ: dict[str, str] | None = None) -> dict[str, str]:
+    """构建安全的子进程环境变量。
+
+    仅保留白名单内的环境变量，并排除所有包含敏感关键字的变量
+    （如 API Key、Token 等）。
+
+    Args:
+        environ: 源环境变量，默认使用 os.environ。
+
+    Returns:
+        过滤后的安全环境变量字典。
+    """
+    if environ is None:
+        environ = dict(os.environ)
+
+    safe: dict[str, str] = {}
+    for key, value in environ.items():
+        # 排除包含敏感关键字的变量
+        upper_key = key.upper()
+        if any(kw in upper_key for kw in _SENSITIVE_KEYWORDS):
+            continue
+        # 精确白名单匹配
+        if key in SAFE_ENV_VARS:
+            safe[key] = value
+        # 前缀白名单匹配
+        elif any(key.startswith(prefix) for prefix in SAFE_ENV_PREFIX):
+            safe[key] = value
+    return safe
 
 
 # ------------------------------------------------------------------

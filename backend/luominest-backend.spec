@@ -17,6 +17,11 @@ block_cipher = None
 # Project root (backend/)
 PROJECT_ROOT = Path(SPECPATH)
 
+# 后端 exe 图标（Windows），使任务管理器/通知显示项目图标而非默认图标
+ICON_PATH = str(PROJECT_ROOT.parent / 'frontend' / 'resources' / 'icon.ico')
+if not Path(ICON_PATH).exists():
+    ICON_PATH = None
+
 # ---------------------------------------------------------------------------
 # Hidden imports - modules that PyInstaller's static analysis can't detect
 # because they are imported dynamically via importlib / importlib.import_module
@@ -212,6 +217,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=ICON_PATH,
 )
 
 coll = COLLECT(

@@ -127,6 +127,8 @@ const {
   cancelStreaming,
   handleRegenerate,
   contextTokens,
+  contextMaxTokens,
+  contextPercent,
   isCompressing,
   handleCompressContext,
 } = useWorkbenchMessages({
@@ -233,6 +235,8 @@ onBeforeUnmount(() => {
         :is-near-bottom="isNearBottom"
         :show-scroll-to-bottom-btn="showScrollToBottomBtn"
         :context-tokens="contextTokens"
+        :context-max-tokens="contextMaxTokens"
+        :context-percent="contextPercent"
         :is-compressing="isCompressing"
         @toggle-reasoning="(id: string) => { showReasoning = { ...showReasoning, [id]: !showReasoning[id] } }"
         @regenerate="handleRegenerate"
@@ -253,7 +257,7 @@ onBeforeUnmount(() => {
       <WorkbenchInputArea
         ref="inputAreaRef"
         v-model:input-text="inputText"
-        v-model:chat-mode="chatMode"
+        :chat-mode="chatMode"
         v-model:selected-skill-ids="selectedSkillIds"
         :is-backend-ready="isBackendReady"
         :is-streaming="isStreaming"

@@ -1,7 +1,7 @@
 """LuomiNest 定时任务持久化服务。
 
-将定时任务持久化到数据库，替代 scheduler 的 JSON 文件存储。
-与 luomi_scheduler 双写：数据库为主（历史回溯），JSON/内存为辅（运行时调度）。
+将定时任务持久化到数据库 scheduled_tasks 表，是唯一的任务存储源。
+JSON 文件仅作为启动时的 fallback 读取。
 """
 import json
 from datetime import datetime, timezone

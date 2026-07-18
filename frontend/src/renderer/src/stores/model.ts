@@ -782,7 +782,7 @@ export const useModelStore = defineStore('model', () => {
           sttAutoSendDelay: config.sttAutoSendDelay ?? config.stt_auto_send_delay ?? 2000,
           sttEngine: config.sttEngine || config.stt_engine || 'auto',
           contextWindowSize: config.contextWindowSize ?? config.context_window_size ?? 0,
-          compressionThreshold: config.compressionThreshold ?? config.compression_threshold ?? 0.82,
+          compressionThreshold: config.compressionThreshold ?? config.compression_threshold ?? 0.70,
           llmCompressEnabled: config.llmCompressEnabled ?? config.llm_compress_enabled ?? false,
           summaryModel: config.summaryModel || config.summary_model || '',
           summaryProvider: config.summaryProvider || config.summary_provider || '',

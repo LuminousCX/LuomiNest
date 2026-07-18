@@ -4,7 +4,7 @@ from fastapi import APIRouter, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException
 from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from loguru import logger
 
 from app.schemas.chat import (
@@ -800,8 +800,15 @@ class TTSRequest(BaseModel):
     engine: str = Field(default="auto")
     model: str = Field(default="")
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
-    apiKey: str = Field(default="")
-    baseUrl: str = Field(default="")
+    apiKey: str = Field(default="", max_length=500)
+    baseUrl: str = Field(default="", pattern=r"^$|^https?://.*")
+
+    @field_validator("baseUrl")
+    @classmethod
+    def _validate_base_url(cls, v: str) -> str:
+        if v and not v.startswith(("http://", "https://")):
+            raise ValueError("baseUrl 必须是有效的 HTTP/HTTPS URL")
+        return v
 
 
 @router.post("/tts/synthesize")

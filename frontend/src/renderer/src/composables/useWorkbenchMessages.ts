@@ -90,6 +90,8 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   const isBackendReady = computed(() => chatStore.isBackendReady)
   const isLoadingCurrentConv = computed(() => chatStore.isLoadingCurrentConversation)
   const contextTokens = computed(() => chatStore.currentContextTokens)
+  const contextMaxTokens = computed(() => chatStore.currentContextMaxTokens)
+  const contextPercent = computed(() => chatStore.currentContextPercent)
   const isCompressing = ref(false)
 
   // 对话模式（普通/标准/超长）
@@ -197,13 +199,12 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   }
 
   const selectChatMode = (mode: ChatModeLevel): void => {
-    // 上下文隔离：如果当前对话已有消息，切换模式需要新建对话
+    // 上下文隔离：如果当前对话已有消息，禁止切换模式，三种模式间不允许相互切换
     const currentConvId = chatStore.currentConvId
     if (currentConvId) {
       const currentMessages = chatStore.convMessages[currentConvId] || []
       if (currentMessages.length > 0 && chatMode.value !== mode) {
-        // 已有消息的对话不允许切换模式，提示用户新建对话
-        toast.warning('切换模式需要新建对话，以隔离上下文避免膨胀')
+        toast.warning('当前对话已有内容，无法切换模式。请新建对话后再选择所需模式。')
         return
       }
     }
@@ -500,6 +501,8 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     isWorkflowMode,
     canSend,
     contextTokens,
+    contextMaxTokens,
+    contextPercent,
     isCompressing,
     // 子组件引用
     chatAreaRef,

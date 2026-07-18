@@ -16,6 +16,7 @@ import { useAvatarStageRenderer, type StageDriver, type Live2DDriver } from '@/c
 import AvatarHeader from '@/components/avatar/AvatarHeader.vue'
 import AvatarStage from '@/components/avatar/AvatarStage.vue'
 import PixelPetStage from '@/components/avatar/PixelPetStage.vue'
+import PngTuberStage from '@/components/avatar/PngTuberStage.vue'
 import AvatarControls from '@/components/avatar/AvatarControls.vue'
 import AvatarSkinSidebar from '@/components/avatar/AvatarSkinSidebar.vue'
 import type { AvatarMode, AvatarEmotion, AvatarMotion, IdleAnimation, ManifestSkinItem } from '@/components/avatar/types'
@@ -120,17 +121,34 @@ const setPixelStageRef = (el: unknown): void => {
   stageRenderer.setStageRef(el as StageDriver | null)
 }
 
+// PNG Tuber Stage 组件 ref
+const setPngTuberStageRef = (el: unknown): void => {
+  stageRenderer.setStageRef(el as StageDriver | null)
+}
+
+// PNG Tuber manifest URL（从 currentModel.path 解析）
+const pngManifestUrl = computed(() => {
+  const model = currentModel.value
+  if (!model || model.type !== 'png') return ''
+  return manifestPathToAvatarUrl(model.path)
+})
+
 // ===========================================================================
 // Manifest 路径 → 模型加载 URL 转换
 // ===========================================================================
 
 const LUOMINEST_DEFAULT_SCALE = 0.25
 
-/** 将 manifest 中的相对路径转换为 Live2D 可加载的 luominest-avatar:// URL */
+/** 将 manifest 中的相对路径转换为 luominest-avatar:// URL */
 function manifestPathToAvatarUrl(path: string): string {
   // builtin Live2D: "live2d/{name}/{file}.model3.json" → "luominest-avatar://{name}/{file}.model3.json"
   if (path.startsWith('live2d/')) {
     return 'luominest-avatar://' + path.slice('live2d/'.length)
+  }
+  // PNG Tuber: "png/{model}/manifest.json" → "luominest-avatar://png/{model}/manifest.json"
+  // 新格式：hostname 是模型类型前缀，avatar-protocol.ts 已支持
+  if (path.startsWith('png/')) {
+    return 'luominest-avatar://' + path
   }
   return path
 }
@@ -629,7 +647,7 @@ async function handleChatSend() {
   const mainAgent = platformStore.mainAgent
   const resolved = modelStore.resolveModel
 
-  const targetConvId = chatStore.desktopPetConvId || undefined
+  const targetConvId = chatStore.agentCurrentConvId[MAIN_AGENT_ID] || undefined
 
   const options: {
     agentId: string
@@ -677,8 +695,9 @@ async function handleChatSend() {
 }
 
 function stopChatStream() {
-  if (chatStore.desktopPetConvId) {
-    chatStore.cancelConversationRequest(chatStore.desktopPetConvId)
+  const mainConvId = chatStore.agentCurrentConvId[MAIN_AGENT_ID]
+  if (mainConvId) {
+    chatStore.cancelConversationRequest(mainConvId)
   } else {
     chatStore.cancelCurrentRequest()
   }
@@ -796,6 +815,21 @@ onBeforeUnmount(() => {
           :subtitle-enabled="subtitleEnabled"
           :subtitle-text="subtitleText"
           :subtitle-visible="subtitleVisible"
+          @toggle-desktop-mode="toggleDesktopMode"
+        />
+
+        <!-- PNG Tuber Stage -->
+        <PngTuberStage
+          v-else-if="currentMode === 'png'"
+          :ref="setPngTuberStageRef"
+          :is-desktop-mode="isDesktopMode"
+          :current-emotion-local="currentEmotionLocal"
+          :current-mode="currentMode"
+          :avatar-modes="avatarModes"
+          :subtitle-enabled="subtitleEnabled"
+          :subtitle-text="subtitleText"
+          :subtitle-visible="subtitleVisible"
+          :manifest-url="pngManifestUrl"
           @toggle-desktop-mode="toggleDesktopMode"
         />
 

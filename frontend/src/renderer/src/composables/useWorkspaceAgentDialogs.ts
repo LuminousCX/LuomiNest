@@ -120,7 +120,7 @@ export const useWorkspaceAgentDialogs = (options: UseWorkspaceAgentDialogsOption
         description: newAgentForm.value.description.trim(),
         systemPrompt: newAgentForm.value.systemPrompt.trim(),
         color: newAgentForm.value.color,
-        avatar: newAgentForm.value.avatarMode === 'preset' ? newAgentForm.value.avatarUrl : undefined,
+        avatar: newAgentForm.value.avatarMode === 'preset' ? newAgentForm.value.avatarUrl : '',
       })
       showCreateDialog.value = false
       newAgentForm.value = createEmptyForm()
@@ -156,7 +156,7 @@ export const useWorkspaceAgentDialogs = (options: UseWorkspaceAgentDialogsOption
         description: editAgentForm.value.description.trim(),
         systemPrompt: editAgentForm.value.systemPrompt.trim(),
         color: editAgentForm.value.color,
-        avatar: editAgentForm.value.avatarMode === 'preset' ? editAgentForm.value.avatarUrl : undefined,
+        avatar: editAgentForm.value.avatarMode === 'preset' ? editAgentForm.value.avatarUrl : '',
       })
       showEditDialog.value = false
       editingAgentId.value = null

@@ -27,6 +27,14 @@ class ConfigRepository:
         "llm.api_key",
         "llm.providers.*.api_key",
         "system.secret_key",
+        # 平台适配器敏感字段
+        "platform.*.secret",
+        "platform.*.app_secret",
+        "platform.*.encoding_aes_key",
+        "platform.*.token",
+        "platform.*.api_key",
+        # MQTT
+        "mqtt.password",
     }
 
     def _is_encrypted_key(self, key: str) -> bool:

@@ -473,6 +473,55 @@ Examples:
         except Exception as e:
             logger.warning(f"[Memory] Failed to update memory from conversation: {e}", exc_info=True)
 
+    @staticmethod
+    async def compress_context(
+        messages: list[dict],
+        provider_name: str | None = None,
+        model: str = "",
+        force_rebuild: bool = False,
+    ) -> tuple[list[dict], dict]:
+        """对消息列表执行预算感知的上下文压缩。
+
+        封装 get_context_manager + process，提供统一的压缩入口。
+
+        Args:
+            messages: 完整消息列表（含 system）
+            provider_name: LLM provider 名称
+            model: 模型名称
+            force_rebuild: 强制重建完整摘要（忽略增量水位线）
+
+        Returns:
+            (compressed_messages, info_dict)
+            info_dict 包含 context_tokens, tokens_before 等元信息
+        """
+        from app.core.context import get_context_manager
+
+        ctx_mgr = get_context_manager(provider_name, model)
+        tokens_before = ctx_mgr.token_counter.count_tokens(messages)
+
+        result = await ctx_mgr.process(
+            messages,
+            chat_mode="compress",
+            force_compression=True,
+        )
+
+        compressed = result["messages"]
+        context_tokens = result["context_tokens"]
+
+        logger.info(
+            f"[ContextService] compress_context: "
+            f"{tokens_before} -> {context_tokens} tokens, "
+            f"messages={len(messages)} -> {len(compressed)}, "
+            f"force_rebuild={force_rebuild}"
+        )
+
+        return compressed, {
+            "tokens_before": tokens_before,
+            "context_tokens": context_tokens,
+            "messages_before": len(messages),
+            "messages_after": len(compressed),
+        }
+
     _background_tasks: set = set()
 
     @staticmethod

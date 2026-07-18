@@ -739,10 +739,10 @@ defineExpose({
 }
 
 .avatar-assistant {
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-sm);
-  background: var(--lumi-brand-light);
+  background: transparent;
   color: var(--lumi-brand);
   display: flex;
   align-items: center;

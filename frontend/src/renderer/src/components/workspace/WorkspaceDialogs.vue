@@ -636,8 +636,8 @@ const addAgentRoleModel = computed({
 }
 
 .agent-select-avatar {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;

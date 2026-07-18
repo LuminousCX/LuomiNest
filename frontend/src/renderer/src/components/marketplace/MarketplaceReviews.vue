@@ -188,7 +188,9 @@ function submitReply(reviewId: string) {
               :disabled="!replyContent.trim()"
               @click="submitReply(review.id)"
             >
-              <Send :size="12" />
+              <template #icon>
+                <Send :size="12" />
+              </template>
             </LumiButton>
           </div>
         </Transition>

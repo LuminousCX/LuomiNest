@@ -96,7 +96,7 @@ const highlightSnippet = (snippet: string): string => {
         <ChevronLeft :size="16" />
       </button>
       <div class="left-panel-title">
-        <div class="left-panel-avatar" :style="{ background: `color-mix(in srgb, ${agent?.color} 10%, transparent)`, color: agent?.color }">
+        <div class="left-panel-avatar" :style="{ color: agent?.color }">
           <img v-if="agent?.avatar" :src="agent.avatar" class="left-panel-avatar-img" :alt="agent?.name || ''" />
           <Bot v-else :size="14" />
         </div>
@@ -267,8 +267,8 @@ const highlightSnippet = (snippet: string): string => {
 }
 
 .left-panel-avatar {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-xs);
   display: flex;
   align-items: center;

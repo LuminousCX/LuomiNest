@@ -77,7 +77,7 @@ const filteredGroups = computed(() => {
           :class="['contact-item', { active: selectedType === 'agent' && selectedAgentId === agent.id }]"
           @click="emit('select-agent', agent)"
         >
-          <div class="contact-avatar" :style="{ background: `color-mix(in srgb, ${agent.color} 10%, transparent)`, color: agent.color }">
+          <div class="contact-avatar" :style="{ color: agent.color }">
             <img v-if="agent.avatar" :src="agent.avatar" class="contact-avatar-img" :alt="agent.name" />
             <Bot v-else :size="16" />
           </div>

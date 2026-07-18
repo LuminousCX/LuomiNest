@@ -1,7 +1,7 @@
 """LuomiNest 中间件管道。
 
 按顺序执行中间件钩子：
-- before_agent / before_model：正序（0→N）
+- before_agent / before_model / on_before_message_composed / on_after_message_composed / on_stream_token / on_chat_turn_complete：正序（0→N）
 - after_model / after_tool_call / after_agent：反序（N→0）
 - wrap_tool_call：洋葱式（idx=0 最外层，idx=N 调 execute_fn）
 
@@ -58,6 +58,38 @@ class MiddlewarePipeline:
         """反序执行 after_agent 钩子（N→0）。"""
         for mw in reversed(self._middlewares):
             await mw.after_agent(ctx)
+
+    async def run_on_before_message_composed(
+        self, ctx: AgentContext, messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """正序执行 on_before_message_composed 钩子（0→N），链式传递 messages。"""
+        result = messages
+        for mw in self._middlewares:
+            result = await mw.on_before_message_composed(ctx, result)
+        return result
+
+    async def run_on_after_message_composed(
+        self, ctx: AgentContext, messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """正序执行 on_after_message_composed 钩子（0→N），链式传递 messages。"""
+        result = messages
+        for mw in self._middlewares:
+            result = await mw.on_after_message_composed(ctx, result)
+        return result
+
+    async def run_on_stream_token(
+        self, ctx: AgentContext, token: str, token_type: str,
+    ) -> None:
+        """正序执行 on_stream_token 钩子（0→N）。"""
+        for mw in self._middlewares:
+            await mw.on_stream_token(ctx, token, token_type)
+
+    async def run_on_chat_turn_complete(
+        self, ctx: AgentContext, result: dict[str, Any],
+    ) -> None:
+        """正序执行 on_chat_turn_complete 钩子（0→N）。"""
+        for mw in self._middlewares:
+            await mw.on_chat_turn_complete(ctx, result)
 
     async def run_tool_call(
         self,

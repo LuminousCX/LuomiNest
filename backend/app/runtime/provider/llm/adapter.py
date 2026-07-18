@@ -11,7 +11,8 @@ from app.runtime.provider.llm.providers import (
     OpenAICompatibleProvider,
     PROVIDER_TEMPLATES,
 )
-from app.runtime.provider.llm.types import LLMRequest, RouteHint
+from app.runtime.provider.llm.types import LLMRequest, ProviderCapabilities, RouteHint
+from app.runtime.provider.llm.capabilities import get_capabilities as _get_capabilities
 
 
 def _create_provider_from_config(config: dict) -> OpenAICompatibleProvider:
@@ -96,7 +97,10 @@ class LLMAdapter:
             logger.success(f"[Adapter] Providers loaded: {len(self.providers)} providers, default={self.default_provider}")
 
     def _init_providers(self):
-        """从 repo 加载 providers；无数据时走 fallback_chain 模板。"""
+        """从 repo 加载 providers；无数据时走 fallback_chain 模板。
+
+        fallback 供应商仅存在于内存，不写入 DB；通过 dismissed 列表防止重建。
+        """
         saved = self._provider_repo.get_all_ordered()
         if saved:
             logger.info(f"[Adapter] Loading {len(saved)} saved providers from repo...")
@@ -119,9 +123,13 @@ class LLMAdapter:
                     logger.warning(f"[Adapter] Failed to load provider [{cfg.get('id')}]: {e}")
         else:
             logger.info("[Adapter] No saved providers, loading from fallback chain...")
+            dismissed = self._get_dismissed_providers()
             fallback_chain = settings.LLM_FALLBACK_CHAIN.split(",")
             for name in fallback_chain:
                 name = name.strip()
+                if name in dismissed:
+                    logger.info(f"[Adapter] Skipping dismissed fallback provider: {name}")
+                    continue
                 template = PROVIDER_TEMPLATES.get(name)
                 if template:
                     try:
@@ -132,6 +140,30 @@ class LLMAdapter:
                         logger.success(f"[Adapter] Loaded provider from template: {name}")
                     except Exception as e:
                         logger.warning(f"[Adapter] Failed to load provider [{name}]: {e}")
+
+    def _get_dismissed_providers(self) -> list[str]:
+        """从 config_items 读取用户已主动删除的默认供应商列表。"""
+        from app.infrastructure.database.config_store import lumi_config_store
+        dismissed = lumi_config_store.get("providers.dismissed_defaults")
+        return dismissed if isinstance(dismissed, list) else []
+
+    def _add_dismissed_provider(self, name: str):
+        """记录用户已主动删除的默认供应商。"""
+        from app.infrastructure.database.config_store import lumi_config_store
+        dismissed = self._get_dismissed_providers()
+        if name not in dismissed:
+            dismissed.append(name)
+            lumi_config_store.set("providers.dismissed_defaults", dismissed)
+            logger.info(f"[Adapter] Added dismissed provider: {name}")
+
+    def _remove_dismissed_provider(self, name: str):
+        """用户重新手动添加同名供应商时，从 dismissed 列表移除。"""
+        from app.infrastructure.database.config_store import lumi_config_store
+        dismissed = self._get_dismissed_providers()
+        if name in dismissed:
+            dismissed.remove(name)
+            lumi_config_store.set("providers.dismissed_defaults", dismissed)
+            logger.info(f"[Adapter] Removed dismissed provider: {name}")
 
     def register_provider(self, name: str, provider: OpenAICompatibleProvider, config: dict, set_default: bool = False):
         self.ensure_providers_loaded()
@@ -146,12 +178,18 @@ class LLMAdapter:
         if api_key:
             self._credential_repo.save_credential(name, api_key)
 
+        # 用户手动添加同名供应商时，从 dismissed 列表移除（防止 fallback 重建冲突）
+        self._remove_dismissed_provider(name)
         self.providers[name] = provider
         self._provider_configs[name] = config
         if set_default:
             self.default_provider = name
             logger.info(f"[Adapter] Set default provider to: {name}")
         logger.success(f"[Adapter] Provider registered: {name}")
+
+        # 注册变更后失效该 provider 的上下文缓存
+        from app.core.context import invalidate_context_cache
+        invalidate_context_cache(provider=name)
 
     def update_provider(self, name: str, provider: OpenAICompatibleProvider, config: dict, set_default: bool = False):
         self.ensure_providers_loaded()
@@ -173,6 +211,10 @@ class LLMAdapter:
             logger.info(f"[Adapter] Set default provider to: {name}")
         logger.success(f"[Adapter] Provider updated: {name}")
 
+        # 配置变更后失效该 provider 的上下文缓存
+        from app.core.context import invalidate_context_cache
+        invalidate_context_cache(provider=name)
+
     def remove_provider(self, name: str):
         self.ensure_providers_loaded()
         logger.info(f"[Adapter] Removing provider: {name}")
@@ -187,9 +229,22 @@ class LLMAdapter:
             del self._provider_configs[name]
         if self.default_provider == name:
             remaining = list(self.providers.keys())
-            self.default_provider = remaining[0] if remaining else settings.LLM_DEFAULT_PROVIDER
+            if remaining:
+                self.default_provider = remaining[0]
+            elif settings.LLM_DEFAULT_PROVIDER in self.providers:
+                self.default_provider = settings.LLM_DEFAULT_PROVIDER
+            else:
+                self.default_provider = ""
             logger.info(f"[Adapter] Default provider changed to: {self.default_provider}")
+        # 若删除的是 fallback chain 中的默认供应商，记录到 dismissed 列表防止重建
+        fallback_chain = [n.strip() for n in settings.LLM_FALLBACK_CHAIN.split(",")]
+        if name in fallback_chain:
+            self._add_dismissed_provider(name)
         logger.success(f"[Adapter] Provider removed: {name}")
+
+        # provider 删除后失效相关上下文缓存
+        from app.core.context import invalidate_context_cache
+        invalidate_context_cache(provider=name)
 
     def get_provider(self, name: str | None = None) -> OpenAICompatibleProvider:
         self.ensure_providers_loaded()
@@ -215,6 +270,23 @@ class LLMAdapter:
             return provider.supports_tool_calls(model)
         except ProviderError:
             return False
+
+    def get_capabilities(
+        self,
+        provider_name: str | None = None,
+        model: str | None = None,
+    ) -> ProviderCapabilities:
+        """获取当前或指定 provider 的能力声明。
+
+        优先使用 provider 实例的 get_capabilities（含运行时探测结果），
+        provider 不存在时回退到 capabilities 模块的静态查询。
+        """
+        name = provider_name or self.default_provider
+        try:
+            provider = self.get_provider(name)
+            return provider.get_capabilities(model)
+        except ProviderError:
+            return _get_capabilities(name, model)
 
     def get_reasoner_provider(self) -> tuple[str, str, float | None, int | None, str] | None:
         """返回 (provider_name, model, temperature, max_tokens, effort)，未配置返回 None。"""

@@ -1300,7 +1300,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--space-10) var(--space-6) var(--space-8);
+  padding: calc(var(--space-10) + var(--space-4)) var(--space-6) var(--space-8);
   gap: var(--space-8);
 }
 
@@ -1344,7 +1344,7 @@
 }
 
 .hero-greeting-text {
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-weight: var(--font-medium);
   color: var(--text);
   letter-spacing: -0.02em;
@@ -1359,7 +1359,7 @@
 }
 
 .hero-greeting-time {
-  font-size: var(--text-2xl);
+  font-size: var(--text-4xl);
   font-weight: var(--font-semibold);
   color: var(--lumi-brand);
   font-variant-numeric: tabular-nums;

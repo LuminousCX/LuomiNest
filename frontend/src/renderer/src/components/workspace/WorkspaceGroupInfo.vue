@@ -136,8 +136,8 @@ const emit = defineEmits<{
 }
 
 .left-panel-avatar {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-xs);
   display: flex;
   align-items: center;

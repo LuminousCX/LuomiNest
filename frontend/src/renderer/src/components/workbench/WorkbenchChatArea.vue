@@ -51,6 +51,8 @@ const props = defineProps<{
   isNearBottom: boolean
   showScrollToBottomBtn: boolean
   contextTokens: number
+  contextMaxTokens: number
+  contextPercent: number
   isCompressing: boolean
 }>()
 
@@ -98,6 +100,32 @@ const formatToolArgs = (args: string): string => {
 const handleCopyMessage = async (msgId: string, content: string) => {
   await copyMessage(msgId, content)
   emit('copy-message', msgId, content)
+}
+
+// 上下文压缩进度环参数（SVG 圆环）
+const RING_RADIUS = 9
+const RING_STROKE = 2.5
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
+const RING_VIEWBOX = 24
+
+// 进度环偏移量（0% 满，100% 空）
+const contextRingDashoffset = computed(() => {
+  const percent = Math.max(0, Math.min(100, props.contextPercent))
+  return RING_CIRCUMFERENCE * (1 - percent / 100)
+})
+
+// 根据使用率返回颜色变量名（绿/黄/红 三档警示）
+const contextRingColorVar = computed(() => {
+  const p = props.contextPercent
+  if (p >= 90) return 'var(--lumi-danger, #ef4444)'
+  if (p >= 70) return 'var(--lumi-warning, #f59e0b)'
+  return 'var(--lumi-success, #10b981)'
+})
+
+// 格式化 token 数（带千分位）
+const formatTokens = (n: number): string => {
+  if (!n || n <= 0) return '0'
+  return n.toLocaleString('en-US')
 }
 
 const isLastAssistantMessage = (msgId: string) => {
@@ -194,7 +222,10 @@ defineExpose({
             :class="['message-row', msg.role]"
           >
             <div v-if="msg.role === 'assistant'" class="message-avatar shrink-0">
-              <div class="avatar-assistant">
+              <div
+                class="avatar-assistant"
+                :style="!mainAgentAvatar ? { background: `color-mix(in srgb, ${mainAgentColor} 10%, transparent)`, color: mainAgentColor } : {}"
+              >
                 <img v-if="mainAgentAvatar" :src="mainAgentAvatar" class="chat-avatar-img" alt="主智能体" />
                 <Bot v-else :size="16" />
               </div>
@@ -460,8 +491,10 @@ defineExpose({
                   :aria-label="copiedId === msg.id ? '已复制' : '复制'"
                   @click="handleCopyMessage(msg.id, msg.content)"
                 >
-                  <Check v-if="copiedId === msg.id" :size="14" />
-                  <Copy v-else :size="14" />
+                  <template #icon>
+                    <Check v-if="copiedId === msg.id" :size="14" />
+                    <Copy v-else :size="14" />
+                  </template>
                 </LumiButton>
                 <LumiButton
                   v-if="isLastAssistantMessage(msg.id)"
@@ -472,13 +505,61 @@ defineExpose({
                   class="u-btn"
                   @click="emit('regenerate', msg.id)"
                 >
-                  <RotateCcw :size="14" />
+                  <template #icon>
+                    <RotateCcw :size="14" />
+                  </template>
                 </LumiButton>
               </div>
 
               <div v-if="msg.role === 'assistant' && msg.done && isLastAssistantMessage(msg.id)" class="context-tokens-bar">
+                <!-- 上下文使用率进度环图标（带百分比 tooltip） -->
+                <div
+                  v-if="contextTokens > 0"
+                  class="context-ring-wrapper"
+                  :title="`当前对话上下文使用率：${contextPercent}%（${formatTokens(contextTokens)} / ${formatTokens(contextMaxTokens)} tokens）`"
+                >
+                  <svg
+                    class="context-ring-svg"
+                    :width="RING_VIEWBOX"
+                    :height="RING_VIEWBOX"
+                    :viewBox="`0 0 ${RING_VIEWBOX} ${RING_VIEWBOX}`"
+                  >
+                    <!-- 背景圆环 -->
+                    <circle
+                      :cx="RING_VIEWBOX / 2"
+                      :cy="RING_VIEWBOX / 2"
+                      :r="RING_RADIUS"
+                      :stroke-width="RING_STROKE"
+                      fill="none"
+                      class="context-ring-bg"
+                    />
+                    <!-- 进度圆环 -->
+                    <circle
+                      :cx="RING_VIEWBOX / 2"
+                      :cy="RING_VIEWBOX / 2"
+                      :r="RING_RADIUS"
+                      :stroke-width="RING_STROKE"
+                      fill="none"
+                      :stroke="contextRingColorVar"
+                      stroke-linecap="round"
+                      :stroke-dasharray="RING_CIRCUMFERENCE"
+                      :stroke-dashoffset="contextRingDashoffset"
+                      transform="rotate(-90 12 12)"
+                      class="context-ring-progress"
+                    />
+                    <!-- 中心百分比文字 -->
+                    <text
+                      :x="RING_VIEWBOX / 2"
+                      :y="RING_VIEWBOX / 2"
+                      text-anchor="middle"
+                      dominant-baseline="central"
+                      class="context-ring-text"
+                      :fill="contextRingColorVar"
+                    >{{ contextPercent }}%</text>
+                  </svg>
+                </div>
                 <span v-if="contextTokens > 0" class="context-tokens-text">
-                  当前上下文已使用 {{ contextTokens }} tokens
+                  当前对话上下文已使用 {{ formatTokens(contextTokens) }} tokens
                 </span>
                 <span v-else class="context-tokens-text">
                   上下文压缩
@@ -506,8 +587,10 @@ defineExpose({
                     :aria-label="copiedId === msg.id ? '已复制' : '复制'"
                     @click="handleCopyMessage(msg.id, msg.content)"
                   >
-                    <Check v-if="copiedId === msg.id" :size="14" />
-                    <Copy v-else :size="14" />
+                    <template #icon>
+                      <Check v-if="copiedId === msg.id" :size="14" />
+                      <Copy v-else :size="14" />
+                    </template>
                   </LumiButton>
                 </div>
                 <div class="message-content user-message">
@@ -551,7 +634,9 @@ defineExpose({
         class="scroll-to-bottom-btn"
         @click="emit('scroll-to-bottom')"
       >
-        <ChevronDown :size="18" />
+        <template #icon>
+          <ChevronDown :size="18" />
+        </template>
       </LumiButton>
     </Transition>
 
@@ -1605,6 +1690,41 @@ button:focus-visible {
 .context-tokens-text {
   color: var(--text-muted);
   font-family: var(--font-mono);
+}
+
+/* 上下文使用率进度环 */
+.context-ring-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+.context-ring-svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  overflow: visible;
+}
+
+.context-ring-bg {
+  stroke: var(--border-light, rgba(0, 0, 0, 0.08));
+}
+
+.context-ring-progress {
+  transition: stroke-dashoffset 0.4s ease-in-out, stroke 0.3s ease-in-out;
+}
+
+.context-ring-text {
+  font-size: 7px;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  user-select: none;
+  pointer-events: none;
+  dominant-baseline: central;
 }
 
 .compress-btn {

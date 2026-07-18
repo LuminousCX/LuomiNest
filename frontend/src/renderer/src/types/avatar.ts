@@ -190,16 +190,16 @@ export interface ModelTypeInfo {
  * implemented 字段必须与 createAvatarRenderer.ts 中的 case 分支保持同步：
  * - live2d: true（Live2DRendererAdapter 已实现）
  * - pixel: true（usePixelPet 已实现）
+ * - png: true（usePngTuber 已实现，参照 Codex Pet spritesheet 格式）
  * - vrm: false（P1 阶段）
  * - spine: false（P2 阶段）
- * - png: false（P2 阶段）
  */
 export const AVATAR_MODEL_TYPES: ModelTypeInfo[] = [
   { type: 'live2d', label: 'Live2D', desc: 'Cubism 4/5', implemented: true },
   { type: 'pixel', label: 'PixelPet', desc: 'Q-version Pet', implemented: true },
+  { type: 'png', label: 'PNG Tuber', desc: 'Codex Pet', implemented: true },
   { type: 'vrm', label: 'VRM', desc: '3D Model', implemented: false },
   { type: 'spine', label: 'Spine', desc: 'Skeletal Anim', implemented: false },
-  { type: 'png', label: 'PNG Tuber', desc: 'Static Image', implemented: false },
 ]
 
 /**
