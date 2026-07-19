@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { PATHS } from './paths'
+import type { ThemeConfig } from '@shared/ipc-types'
 
 interface WindowBounds {
   x?: number
@@ -129,6 +130,22 @@ export const configStore = {
   getTheme: (): string => loadConfig().theme,
   setTheme: (theme: 'light' | 'dark' | 'system'): void => {
     configStore.set('theme', theme)
+  },
+
+  getThemeConfig: (): ThemeConfig | null => {
+    const filePath = PATHS.themeConfigFilePath
+    if (!existsSync(filePath)) return null
+    try {
+      const raw = readFileSync(filePath, 'utf-8')
+      return JSON.parse(raw) as ThemeConfig
+    } catch {
+      return null
+    }
+  },
+
+  setThemeConfig: (config: ThemeConfig): void => {
+    mkdirSync(PATHS.config, { recursive: true })
+    writeFileSync(PATHS.themeConfigFilePath, JSON.stringify(config, null, 2), 'utf-8')
   },
 
   getTTSConfig: () => loadConfig().tts,

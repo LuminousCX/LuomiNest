@@ -328,6 +328,16 @@
 
   /* Glass / Toast */
   --glass-shadow: var(--shadow-lg);
+
+  /* ========== 辅色（三色主题系统） ========== */
+  --lumi-secondary: #5BA4D4;
+  --lumi-secondary-hover: #4A93C3;
+  --lumi-secondary-light: rgba(91, 164, 212, 0.1);
+
+  /* ========== 全局背景变量 ========== */
+  --app-bg-image: none;
+  --app-bg-blur: 0px;
+  --app-bg-opacity: 1;
 }
 
 /* =========================================================
@@ -473,6 +483,10 @@
   --nav-item-hover-bg: var(--surface-hover);
 
   --glass-shadow: var(--shadow-lg);
+
+  --lumi-secondary: #7BBCE4;
+  --lumi-secondary-hover: #8FC8EC;
+  --lumi-secondary-light: rgba(123, 188, 228, 0.12);
 }
 
 /* =========================================================

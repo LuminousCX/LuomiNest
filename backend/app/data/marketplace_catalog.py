@@ -209,7 +209,56 @@ CATALOG_PLUGINS: list[dict[str, Any]] = [
         "likeCount": 3800, "installStatus": "none", "isFavorite": True, "featured": True, "license": "MIT",
         "createdAt": "2025-11-15", "updatedAt": "2026-04-08", "size": 3584,
     },
+    {
+        "id": "cxp-pdf-reader", "type": "plugin", "name": "CxPlugin PDF 智能阅读器",
+        "description": "LuomiNest 首个学术阅读插件，支持 PDF/Word/TXT 文档阅读，内置 AI 助手可对文档进行总结、翻译、关键信息提取与问答。基于 CxPlugin 双轨架构:前端 Vue 提供阅读界面,后端 Python 提供 PDF/Word 解析与 LLM 调用。复用主项目 LLM Provider,无需单独配置 API。",
+        "summary": "PDF/Word/TXT 学术阅读插件", "icon": "FileText", "author": _A["a1"], "category": "tool",
+        "tags": [_T["official"], _T["free"], _T["new"]], "version": "1.0.0", "versions": [
+            {"version": "1.0.0", "changelog": "首个版本:支持 PDF/Word/TXT 阅读、AI 总结/翻译/问答、多标签、大纲导航、全文搜索", "releasedAt": "2026-07-19", "size": 2048},
+        ], "screenshots": [], "rating": 0.0, "ratingCount": 0, "downloadCount": 0, "installedCount": 0,
+        "likeCount": 0, "installStatus": "none", "isFavorite": False, "featured": True, "license": "MIT",
+        "homepage": "https://github.com/LuminousCX/LuomiNest", "minAppVersion": "0.7.6",
+        "createdAt": "2026-07-19", "updatedAt": "2026-07-19", "size": 2048,
+        "source": "local", "downloadUrl": None, "platform": "fullstack",
+        "capabilities": ["document-reading", "ai-summary", "ai-translate", "ai-qa", "outline", "search"],
+        "permissions": ["file_read", "file_write", "network", "admin_api", "tool_register"],
+    },
 ]
+
+
+# ─── 本地插件库清单 ─────────────────────────────────────────────
+# 用户从市场"安装"本地插件时,install_service 会从此清单读取插件包路径。
+# 当前所有插件均以源码形式存在于 backend/plugins/{plugin_id}/ 目录,
+# 安装动作等价于"启用":前端 builtin 插件调用 enableFrontendPlugin,
+# 后端插件由 cx_plugin_loader 扫描目录加载。
+# 后期上传到 GitHub/云端时,只需将 downloadUrl 改为远程 URL,
+# install_service 会自动下载 zip 并解压到 PLUGIN_DIR。
+
+LOCAL_PLUGIN_REPO: list[dict[str, Any]] = [
+    {
+        "id": "cxp-pdf-reader",
+        "name": "CxPlugin PDF 智能阅读器",
+        "version": "1.0.0",
+        "source": "local",
+        "localPath": "plugins/cxp-pdf-reader",
+        "downloadUrl": None,
+        "description": "本地内置 PDF/Word/TXT 阅读插件,安装后自动启用",
+        "platform": "fullstack",
+        "frontendBuiltin": True,
+    },
+]
+
+
+def get_local_builtin_plugin(item_id: str) -> dict[str, Any] | None:
+    """根据 item_id 查找本地内置插件清单条目。
+
+    用于 install 流程识别 builtin 插件,跳过远程下载,
+    直接走"启用"路径(前端 enableFrontendPlugin + 后端 cx_plugin_lifecycle.enable_plugin)。
+    """
+    for entry in LOCAL_PLUGIN_REPO:
+        if entry.get("id") == item_id:
+            return entry
+    return None
 
 
 # ─── Skill 技能目录 ────────────────────────────────────────────

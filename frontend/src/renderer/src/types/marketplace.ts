@@ -90,6 +90,10 @@ export interface MarketplaceItem {
   createdAt: string
   updatedAt: string
   size: number
+  /** 来源: "local" 表示本地内置插件,卸载时仅禁用不删文件 */
+  source?: string
+  /** 平台: fullstack / frontend / backend */
+  platform?: string
 }
 
 export interface MarketplaceReview {
@@ -141,6 +145,8 @@ export interface InstallProgress {
   eta?: number         // 预计剩余时间 (秒)
   downloadedBytes?: number
   totalBytes?: number
+  /** 本地内置插件标记:安装即启用,无需下载 */
+  frontendBuiltin?: boolean
 }
 
 export interface ItemStats {

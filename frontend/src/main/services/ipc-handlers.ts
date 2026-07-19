@@ -1,11 +1,14 @@
-import { ipcMain, BrowserWindow, IpcMainInvokeEvent, app } from 'electron'
+import { ipcMain, BrowserWindow, IpcMainInvokeEvent, app, dialog } from 'electron'
 import { PATHS } from './paths'
+import { toBackgroundUrl } from './bg-protocol'
 import { configStore } from './config-store'
 import { cacheManager } from './cache-manager'
 import { tabManager, luomiAutomationExecutor } from './browser'
 import { getLumiAuthToken } from './backend/auth-token'
 import { subscribeBackendStage } from './backend'
-import type { TTSConfig, STTConfig } from '@shared/ipc-types'
+import type { TTSConfig, STTConfig, ThemeConfig } from '@shared/ipc-types'
+import * as fs from 'fs'
+import * as path from 'path'
 
 let _mainWindow: BrowserWindow | null = null
 
@@ -94,6 +97,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('config:setTheme', (event: IpcMainInvokeEvent, theme: 'light' | 'dark' | 'system') => {
     if (!assertTrustedSender(event)) return
     configStore.setTheme(theme)
+  })
+  ipcMain.handle('config:getThemeConfig', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return null
+    return configStore.getThemeConfig()
+  })
+  ipcMain.handle('config:setThemeConfig', (event: IpcMainInvokeEvent, config: ThemeConfig) => {
+    if (!assertTrustedSender(event)) return
+    configStore.setThemeConfig(config)
   })
   ipcMain.handle('config:getTTS', (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
@@ -226,6 +237,25 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
       return { success: false, error: '缺少 action 参数' }
     }
     return await luomiAutomationExecutor.execute(action, args || {})
+  })
+
+  ipcMain.handle('dialog:selectBackgroundImage', async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return null
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+
+    const sourcePath = result.filePaths[0]
+    const bgDir = PATHS.backgrounds
+    const ext = path.extname(sourcePath)
+    const destName = `bg-${Date.now()}${ext}`
+    const destPath = path.join(bgDir, destName)
+    fs.copyFileSync(sourcePath, destPath)
+
+    // 返回 luominest-bg: 协议 URL，前端可直接用于 CSS background-image
+    return toBackgroundUrl(destName)
   })
 
   ipcMain.handle('backend:subscribe', (event: IpcMainInvokeEvent) => {

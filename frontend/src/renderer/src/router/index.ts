@@ -82,7 +82,7 @@ const routes: RouteRecordRaw[] = [
     path: '/settings/privacy-detail',
     name: 'SettingsPrivacyDetail',
     component: () => import('../views/settings/PrivacyDetailView.vue'),
-    meta: { title: '用户隐私 - LuomiNest' }
+    meta: { title: '隐私与合规 - LuomiNest' }
   },
   {
     path: '/avatar',

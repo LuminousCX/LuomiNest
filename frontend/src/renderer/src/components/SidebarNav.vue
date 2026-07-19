@@ -140,8 +140,11 @@ const toggleGroup = (groupId: string) => {
   }
   const next = new Set(expandedGroups.value)
   if (next.has(groupId)) {
+    // 已展开则收缩
     next.delete(groupId)
   } else {
+    // 严格手风琴:展开新分组时,自动收缩其他已展开分组
+    next.clear()
     next.add(groupId)
   }
   expandedGroups.value = next
@@ -155,7 +158,8 @@ watch(isNavCollapsed, (collapsed) => {
 
 watch(activeGroup, (groupId) => {
   if (groupId && !expandedGroups.value.has(groupId)) {
-    expandedGroups.value = new Set([...expandedGroups.value, groupId])
+    // 严格手风琴:路由进入某分组子项时,仅展开该分组,收缩其他
+    expandedGroups.value = new Set([groupId])
   }
 }, { immediate: true })
 

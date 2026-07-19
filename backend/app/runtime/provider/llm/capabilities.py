@@ -167,6 +167,32 @@ PROVIDER_CAPABILITIES: dict[str, ProviderCapabilities] = {
         supports_streaming=True,
         default_context_window=128_000,
     ),
+    "volcengine": ProviderCapabilities(
+        supports_tool_calls=True,
+        supports_streaming=True,
+        default_context_window=32_768,
+    ),
+    "aihubmix": ProviderCapabilities(
+        supports_tool_calls=True,
+        supports_streaming=True,
+        default_context_window=128_000,
+    ),
+    "qianfan": ProviderCapabilities(
+        supports_tool_calls=True,
+        supports_streaming=True,
+        default_context_window=128_000,
+    ),
+    "xiaomimimo": ProviderCapabilities(
+        supports_tool_calls=True,
+        supports_streaming=True,
+        default_context_window=32_768,
+    ),
+    "azure": ProviderCapabilities(
+        supports_tool_calls=True,
+        supports_streaming=True,
+        supports_vision=True,
+        default_context_window=128_000,
+    ),
     "custom": ProviderCapabilities(
         supports_tool_calls=True,
         supports_streaming=True,

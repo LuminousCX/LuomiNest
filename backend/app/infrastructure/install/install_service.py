@@ -91,6 +91,19 @@ async def download_item(
     """
     _ensure_dirs()
 
+    # 本地内置插件短路:不走下载流程,直接走"启用"路径。
+    # 前端 builtin 插件由 MarketView 调用 enableFrontendPlugin 启用,
+    # 后端插件由 cx_plugin_loader.load_single + lifecycle.enable_plugin 启用。
+    from app.data.marketplace_catalog import get_local_builtin_plugin
+    local_entry = get_local_builtin_plugin(item_id)
+    if local_entry is not None:
+        return await install_local_builtin_plugin(
+            item_id=item_id,
+            item_name=item_name or local_entry.get("name", item_id),
+            version=version or local_entry.get("version", "1.0.0"),
+            local_entry=local_entry,
+        )
+
     # 如果已在下载中，返回当前状态
     if item_id in _active_downloads and _active_downloads[item_id].get("status") == "downloading":
         return _active_downloads[item_id]
@@ -157,6 +170,108 @@ async def download_item(
         _active_downloads[item_id]["message"] = f"下载失败: {str(e)}"
         _active_downloads[item_id]["error"] = str(e)
         return _active_downloads[item_id]
+
+
+async def install_local_builtin_plugin(
+    item_id: str,
+    item_name: str,
+    version: str,
+    local_entry: dict,
+) -> dict:
+    """安装本地内置插件 — 不下载,仅启用后端 + 写入安装记录。
+
+    用于 LOCAL_PLUGIN_REPO 中 source="local" 且 frontendBuiltin=True 的插件。
+    后端插件目录已存在于 settings.PLUGIN_DIR/{item_id},此处只需:
+    1. 调用 cx_plugin_loader.load_single 加载后端插件
+    2. 调用 cx_plugin_lifecycle.enable_plugin 启用
+    3. 写入 install_store 记录,标记 source="builtin" 与 frontendBuiltin=True
+    4. 同步 _active_downloads 状态,前端轮询 download-progress 时能拿到 installed
+
+    Args:
+        item_id: 插件 ID
+        item_name: 插件名称(用于日志与安装记录)
+        version: 版本号
+        local_entry: LOCAL_PLUGIN_REPO 中的条目 dict
+
+    Returns:
+        与 download_item 相同结构的进度 dict,但 status 直接为 installed
+    """
+    from app.core.config import settings
+    from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
+    from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+    from app.runtime.plugin.cxplugin.lifecycle import cx_plugin_lifecycle
+
+    # 初始化进度状态(供前端轮询)
+    _active_downloads[item_id] = {
+        "itemId": item_id,
+        "status": "installing",
+        "progress": 30,
+        "message": "正在启用本地插件...",
+        "speed": 0,
+        "eta": 0,
+        "downloadedBytes": 0,
+        "totalBytes": 0,
+        "startTime": time.time(),
+        "frontendBuiltin": True,
+    }
+
+    plugin_dir = Path(settings.PLUGIN_DIR) / item_id
+    try:
+        # 后端插件若未加载,先 load_single
+        if cx_plugin_registry.get_plugin(item_id) is None:
+            ok = await cx_plugin_loader.load_single(str(plugin_dir))
+            if not ok:
+                logger.warning(
+                    f"[InstallService] Builtin plugin load_single failed: {item_id} "
+                    f"(dir={plugin_dir}). 仅启用前端,后端可能未提供。"
+                )
+
+        # 启用插件(若已加载)
+        if cx_plugin_registry.get_plugin(item_id) is not None:
+            await cx_plugin_lifecycle.enable_plugin(item_id)
+            # 动态挂载插件 API 路由到运行中的 app（必须先 load_single 成功）
+            # 未挂载时前端调用 /api/v1/plugins/{id}/extract 会 404
+            try:
+                applied = cx_plugin_loader.apply_routes_for_plugin(item_id)
+                if applied > 0:
+                    logger.info(
+                        f"[InstallService] Builtin plugin routes applied: "
+                        f"{item_id} ({applied} routes)"
+                    )
+            except Exception as route_err:
+                logger.warning(
+                    f"[InstallService] apply_routes_for_plugin failed for {item_id}: "
+                    f"{route_err}. 插件 API 暂不可用,需重启后端。"
+                )
+
+        # 写入安装记录
+        now = utc_now()
+        install_record = {
+            "id": item_id,
+            "type": "plugin",
+            "name": item_name,
+            "version": version,
+            "installedAt": now,
+            "installPath": str(plugin_dir),
+            "status": "installed",
+            "source": "builtin",
+            "frontendBuiltin": True,
+        }
+        install_store.set(item_id, install_record)
+
+        _active_downloads[item_id]["status"] = "installed"
+        _active_downloads[item_id]["progress"] = 100
+        _active_downloads[item_id]["message"] = "安装完成"
+        logger.success(
+            f"[InstallService] Builtin plugin enabled: {item_id} v{version} at {plugin_dir}"
+        )
+    except Exception as e:
+        logger.error(f"[InstallService] Builtin plugin install failed for {item_id}: {e}")
+        _active_downloads[item_id]["status"] = "error"
+        _active_downloads[item_id]["message"] = f"启用失败: {e}"
+        _active_downloads[item_id]["error"] = str(e)
+
+    return _active_downloads[item_id]
 
 
 async def _download_from_url(item_id: str, url: str, dest_path: Path):
@@ -535,6 +650,19 @@ async def _post_install_reload(item_id: str, item_type: str, install_path: str) 
             result["success"] = ok
             if ok:
                 logger.info(f"[InstallService] Auto-reloaded plugin: {item_id}")
+                # 动态挂载插件 API 路由到运行中的 app
+                try:
+                    applied = cx_plugin_loader.apply_routes_for_plugin(item_id)
+                    if applied > 0:
+                        logger.info(
+                            f"[InstallService] Plugin routes applied: "
+                            f"{item_id} ({applied} routes)"
+                        )
+                except Exception as route_err:
+                    logger.warning(
+                        f"[InstallService] apply_routes_for_plugin failed for {item_id}: "
+                        f"{route_err}. 插件 API 暂不可用,需重启后端。"
+                    )
             else:
                 result["error"] = "load_single returned False"
         # agent 类型暂无运行时注册表，跳过
@@ -548,6 +676,9 @@ async def uninstall_item(item_id: str) -> dict:
     """
     卸载已安装的条目，清除所有相关文件。
 
+    对于本地内置插件(source="builtin"),仅禁用 + 移除安装记录,
+    不删除插件目录文件(避免破坏随发行版分发的源码)。
+
     Args:
         item_id: 条目 ID
 
@@ -560,22 +691,32 @@ async def uninstall_item(item_id: str) -> dict:
 
     install_path = record.get("installPath")
     item_type = record.get("type", "")
+    is_builtin = record.get("source") == "builtin" or record.get("frontendBuiltin") is True
 
     try:
-        # 先从注册表卸载（避免文件被删后引用悬空）
-        await _post_uninstall_unload(item_id, item_type)
+        if is_builtin:
+            # 内置插件:仅禁用后端插件,不删除文件,不卸载注册表
+            try:
+                from app.runtime.plugin.cxplugin.lifecycle import cx_plugin_lifecycle
+                await cx_plugin_lifecycle.disable_plugin(item_id)
+            except Exception as e:
+                logger.warning(f"[InstallService] Builtin disable failed for {item_id}: {e}")
+            logger.info(f"[InstallService] Builtin plugin disabled (files kept): {item_id}")
+        else:
+            # 先从注册表卸载（避免文件被删后引用悬空）
+            await _post_uninstall_unload(item_id, item_type)
 
-        # 删除安装目录
-        if install_path and Path(install_path).exists():
-            shutil.rmtree(Path(install_path))
-            logger.info(f"[InstallService] Removed install dir: {install_path}")
+            # 删除安装目录
+            if install_path and Path(install_path).exists():
+                shutil.rmtree(Path(install_path))
+                logger.info(f"[InstallService] Removed install dir: {install_path}")
 
-        # 也尝试从标准安装目录删除
-        install_dir = INSTALL_DIRS.get(item_type)
-        if install_dir:
-            std_path = install_dir / item_id
-            if std_path.exists():
-                shutil.rmtree(std_path)
+            # 也尝试从标准安装目录删除
+            install_dir = INSTALL_DIRS.get(item_type)
+            if install_dir:
+                std_path = install_dir / item_id
+                if std_path.exists():
+                    shutil.rmtree(std_path)
 
         # 删除安装记录
         install_store.delete(item_id)
@@ -589,8 +730,8 @@ async def uninstall_item(item_id: str) -> dict:
             if f.is_file():
                 f.unlink()
 
-        logger.success(f"[InstallService] Uninstalled {item_id}")
-        return {"success": True}
+        logger.success(f"[InstallService] Uninstalled {item_id} (builtin={is_builtin})")
+        return {"success": True, "builtin": is_builtin}
 
     except Exception as e:
         logger.error(f"[InstallService] Uninstall failed for {item_id}: {e}")

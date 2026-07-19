@@ -1,0 +1,16 @@
+{
+  "presets": [
+    { "id": "blue", "name": "默认蓝", "preview": "/themes/previews/blue.svg" },
+    { "id": "purple", "name": "紫罗兰", "preview": "/themes/previews/purple.svg" },
+    { "id": "red", "name": "中国红", "preview": "/themes/previews/red.svg" },
+    { "id": "green", "name": "翡翠绿", "preview": "/themes/previews/green.svg" },
+    { "id": "orange", "name": "暖橘橙", "preview": "/themes/previews/orange.svg" }
+  ],
+  "backgrounds": [
+    { "id": "gradient-blue", "name": "蓝色渐变", "theme": "blue", "type": "css-gradient" },
+    { "id": "gradient-purple", "name": "紫色渐变", "theme": "purple", "type": "css-gradient" },
+    { "id": "gradient-red", "name": "红色渐变", "theme": "red", "type": "css-gradient" },
+    { "id": "gradient-green", "name": "绿色渐变", "theme": "green", "type": "css-gradient" },
+    { "id": "gradient-orange", "name": "橙色渐变", "theme": "orange", "type": "css-gradient" }
+  ]
+}

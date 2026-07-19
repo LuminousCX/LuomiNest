@@ -78,6 +78,61 @@ export interface AppConfig {
 }
 
 /* ============================================================================
+ * 主题配置（完整持久化）
+ * ========================================================================== */
+
+/** 色彩主题定义 */
+export interface ColorTheme {
+  id: string
+  name: string
+  type: 'preset' | 'custom'
+  /** 三色主调 - 浅色模式 */
+  light: ThemeColorSet
+  /** 三色主调 - 深色模式 */
+  dark: ThemeColorSet
+}
+
+/** 每个主题的三色配色集 */
+export interface ThemeColorSet {
+  /** 主色 - 品牌/导航/按钮 */
+  primary: string
+  /** 辅色 - 辅助元素/卡片边框 */
+  secondary: string
+  /** 强调色 - 高亮/徽章 */
+  accent: string
+  primaryHover: string
+  /** 半透明浅色版本 */
+  primaryLight: string
+  secondaryHover: string
+  secondaryLight: string
+  accentHover: string
+  accentLight: string
+  /** 阴影色（用主色调的半透明） */
+  shadowBrand: string
+  /** 渐变 */
+  gradientBrand: string
+}
+
+/** 背景配置 */
+export interface BackgroundConfig {
+  /** 背景图片路径（相对路径或 null） */
+  image: string | null
+  /** 模糊度 0-20 */
+  blur: number
+  /** 透明度 0-100 */
+  opacity: number
+}
+
+/** 完整主题配置（持久化用） */
+export interface ThemeConfig {
+  activeColorThemeId: string
+  activeMode: 'light' | 'dark' | 'system'
+  background: BackgroundConfig
+  /** 自定义主题，最多 5 个 */
+  customThemes: ColorTheme[]
+}
+
+/* ============================================================================
  * 浏览器 / 标签页
  * ========================================================================== */
 
@@ -295,6 +350,8 @@ export interface ElectronApi {
   config: {
     getTheme: () => Promise<string>
     setTheme: (theme: 'light' | 'dark' | 'system') => Promise<void>
+    getThemeConfig: () => Promise<ThemeConfig | null>
+    setThemeConfig: (config: ThemeConfig) => Promise<void>
     getTTS: () => Promise<TTSConfig>
     setTTS: (updates: Partial<TTSConfig>) => Promise<void>
     getSTT: () => Promise<STTConfig>
@@ -367,5 +424,8 @@ export interface ElectronApi {
   onDesktopPetChatCancel: (callback: () => void) => () => void
   backend: {
     subscribeStage: (callback: (data: BackendStageEvent) => void) => () => void
+  }
+  dialog: {
+    selectBackgroundImage: () => Promise<string | null>
   }
 }

@@ -165,8 +165,8 @@ def load_or_create_secret_key(data_dir: str) -> str:
                 "若硬件已变更，删除该文件后重启可重新生成（已加密的 API Key 需重新输入）。"
             )
             raise RuntimeError(
-                "SECRET_KEY 解密失败：机器指纹不匹配或文件损坏。"
-                "请删除 data/config/secret_key 后重启应用。"
+                f"SECRET_KEY 解密失败：机器指纹不匹配或文件损坏。"
+                f"请删除 {key_path} 后重启应用。"
             )
 
     # 4. 文件不存在或为空：生成新密钥并用机器指纹加密后存储

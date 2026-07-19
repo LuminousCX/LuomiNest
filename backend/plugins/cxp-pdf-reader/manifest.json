@@ -1,0 +1,43 @@
+{
+  "id": "cxp-pdf-reader",
+  "type": "plugin",
+  "name": "CxPlugin PDF 智能阅读器",
+  "version": "1.0.0",
+  "description": "PDF/Word/TXT 文档阅读与 AI 总结/翻译/问答插件",
+  "author": "LuminousCX",
+  "license": "MIT",
+  "entry": "main",
+  "minAppVersion": "0.7.6",
+  "platform": "fullstack",
+  "category": "tool",
+  "tags": ["pdf", "document", "ai", "reader", "academic"],
+  "icon": "FileText",
+  "permissions": ["file_read", "file_write", "network", "admin_api", "tool_register"],
+  "dependencies": {
+    "python": ">=3.12",
+    "pip": ["pymupdf", "python-docx"]
+  },
+  "settings": {
+    "max_file_size_mb": {
+      "type": "integer",
+      "default": 50,
+      "description": "上传文件大小上限（MB）"
+    },
+    "max_pages_per_extract": {
+      "type": "integer",
+      "default": 30,
+      "description": "单次提取的最大页数（防止超大文档耗尽内存）"
+    },
+    "default_summary_lang": {
+      "type": "string",
+      "default": "zh",
+      "description": "默认总结语言（zh/en/ja 等）"
+    },
+    "default_translate_target": {
+      "type": "string",
+      "default": "zh",
+      "description": "默认翻译目标语言代码"
+    }
+  },
+  "hooks": {}
+}

@@ -24,7 +24,14 @@ from app.data.marketplace_catalog import (
     get_all_catalog_items,
     get_categories_by_type,
     get_catalog_item,
+    CATALOG_PLUGINS,
     COMMON_TAGS,
+)
+from app.infrastructure.sync.registry_sync import (
+    sync_registry,
+    merge_remote_with_local,
+    get_cached_plugins,
+    is_cache_fresh,
 )
 from app.security.net.safe_url import assert_url_safe, UnsafeUrlError
 
@@ -46,11 +53,26 @@ async def list_catalog_items(
 
     支持按 type / category / featured / search 过滤。
     返回的 installStatus 会与本地安装状态合并，确保前端展示一致。
+    插件类型会自动合并远程注册表数据（缓存 6 小时）。
     """
     if type and type in ("plugin", "skill", "agent"):
-        items = get_catalog_by_type(type)
+        items = list(get_catalog_by_type(type))
     else:
         items = get_all_catalog_items()
+
+    # 插件类型：合并远程注册表数据
+    if not type or type == "plugin":
+        remote_plugins = await sync_registry()  # 缓存未过期时直接返回
+        if remote_plugins:
+            local_plugins = list(CATALOG_PLUGINS)
+            merged = merge_remote_with_local(remote_plugins, local_plugins)
+            # 替换 items 中的插件部分
+            if type == "plugin":
+                items = merged
+            else:
+                # 全量查询时，替换 items 中的插件
+                non_plugin_items = [i for i in items if i.get("type") != "plugin"]
+                items = merged + non_plugin_items
 
     # 合并本地安装状态
     installed_records = get_installed_items()

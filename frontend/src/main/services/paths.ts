@@ -77,6 +77,12 @@ export const PATHS = {
   get importedModelsPath() {
     return join(this.live2d, 'imported-models.json')
   },
+  get backgrounds() {
+    return ensureDir(join(app.getPath('userData'), 'Backgrounds'))
+  },
+  get themeConfigFilePath() {
+    return join(this.config, 'theme-config.json')
+  },
 } as const
 
 export const initAppPaths = (): void => {

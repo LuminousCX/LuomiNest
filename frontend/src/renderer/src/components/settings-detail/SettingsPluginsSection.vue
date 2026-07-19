@@ -627,8 +627,8 @@ const summary = computed(() => ({
 }
 
 .status-badge.active {
-  background: rgba(34, 197, 94, 0.12);
-  color: rgb(22, 163, 74);
+  background: var(--lumi-success-light, rgba(34, 197, 94, 0.12));
+  color: var(--lumi-success-hover, rgb(22, 163, 74));
 }
 
 .status-badge.inactive {
@@ -637,13 +637,13 @@ const summary = computed(() => ({
 }
 
 .status-badge.error {
-  background: rgba(239, 68, 68, 0.12);
-  color: rgb(220, 38, 38);
+  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.12));
+  color: var(--lumi-danger-hover, rgb(220, 38, 38));
 }
 
 .status-badge.discovered {
-  background: rgba(59, 130, 246, 0.12);
-  color: rgb(37, 99, 235);
+  background: var(--lumi-info-light, rgba(59, 130, 246, 0.12));
+  color: var(--lumi-info-hover, rgb(37, 99, 235));
 }
 
 .error-message {
@@ -652,8 +652,8 @@ const summary = computed(() => ({
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: rgba(239, 68, 68, 0.08);
-  color: rgb(220, 38, 38);
+  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.08));
+  color: var(--lumi-danger-hover, rgb(220, 38, 38));
   font-size: var(--text-xs);
 }
 

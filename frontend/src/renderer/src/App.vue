@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import TitleBar from './components/TitleBar.vue'
 import LumiSidebar from './components/LumiSidebar.vue'
 import ToastContainer from './components/common/ToastContainer.vue'
+import AppBackgroundOverlay from '@/components/AppBackgroundOverlay.vue'
 import { useDesktopPetChatBridge } from './composables/useDesktopPetChatBridge'
 
 const route = useRoute()
@@ -32,6 +33,7 @@ if (!isDesktopPetPage.value && !isWelcomePage.value && !isLoginPage.value && !is
 
 <template>
   <div class="lumi-app" :class="{ 'welcome-mode': isWelcomePage, 'desktop-pet-mode': isDesktopPetPage }">
+    <AppBackgroundOverlay />
     <TitleBar v-if="!isMinimalLayout" title="LuomiNest" />
     <div class="lumi-body" v-if="!isMinimalLayout">
       <LumiSidebar />

@@ -152,10 +152,16 @@ async def lifespan(app: FastAPI):
 
     # 加载 CxPlugin 插件系统
     try:
-        from app.services.plugin_service import cx_plugin_service
         from app.runtime.plugin.cxplugin import init_hot_reload
+        from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
+        from app.services.plugin_service import cx_plugin_service
         plugin_count = await cx_plugin_service.initialize()
-        logger.info(f"[LuomiNest] Loaded {plugin_count} CxPlugin(s)")
+        # 将已加载插件注册的 API 路由挂载到 app（/api/v1/plugins/{plugin_id}/{path}）
+        # 同时缓存 app 引用，供后续 install_local_builtin_plugin 动态挂载新插件路由
+        applied_routes = cx_plugin_loader.apply_routes_to_app(app)
+        logger.info(
+            f"[LuomiNest] Loaded {plugin_count} CxPlugin(s), applied {applied_routes} API route(s)"
+        )
         init_hot_reload()
     except Exception as e:
         logger.warning(f"[LuomiNest] CxPlugin loading skipped: {e}", exc_info=True)

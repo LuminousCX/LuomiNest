@@ -24,13 +24,19 @@ from app.runtime.provider.base import TTSProvider
 def _resolve_model_dir() -> Path:
     # 解析 vits-melo-tts-zh_en 模型目录（按优先级）：
     # 1. LUOMINEST_TTS_MODEL_DIR 环境变量（绝对路径覆盖，运维/测试用）
-    # 2. 打包态：sys.executable 指向 luominest-backend.exe，模型与其同级
-    # 3. 开发态：__file__ 在 backend/app/runtime/provider/tts/，parents[4] = backend/
+    # 2. 打包态：sys.executable 同级（内置模型，只读），仅在目录存在时使用
+    # 3. 打包态回退：settings.DATA_DIR / "models" / "tts" / "vits-melo-tts-zh_en"（可写，用于自动下载）
+    # 4. 开发态：__file__ 在 backend/app/runtime/provider/tts/，parents[4] = backend/
     env_dir = os.environ.get("LUOMINEST_TTS_MODEL_DIR")
     if env_dir:
         return Path(env_dir)
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent / "models" / "tts" / "vits-melo-tts-zh_en"
+        builtin_dir = Path(sys.executable).parent / "models" / "tts" / "vits-melo-tts-zh_en"
+        if builtin_dir.exists():
+            return builtin_dir
+        # 打包态未内置 TTS 模型（精简安装），下载到用户数据目录避免写入只读的 Program Files
+        from app.core.config import settings
+        return Path(settings.DATA_DIR) / "models" / "tts" / "vits-melo-tts-zh_en"
     return Path(__file__).resolve().parents[4] / "models" / "tts" / "vits-melo-tts-zh_en"
 
 

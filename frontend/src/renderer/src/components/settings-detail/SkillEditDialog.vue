@@ -323,18 +323,18 @@ watch(
 }
 
 .validate-badge.valid {
-  color: rgb(22, 163, 74);
+  color: var(--lumi-success-hover, rgb(22, 163, 74));
 }
 
 .validate-badge.invalid {
-  color: rgb(220, 38, 38);
+  color: var(--lumi-danger-hover, rgb(220, 38, 38));
 }
 
 .error-list {
   margin: 0;
   padding-left: var(--space-4);
   font-size: var(--text-xs);
-  color: rgb(220, 38, 38);
+  color: var(--lumi-danger-hover, rgb(220, 38, 38));
 }
 
 .error-message {
@@ -343,8 +343,8 @@ watch(
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: rgba(239, 68, 68, 0.08);
-  color: rgb(220, 38, 38);
+  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.08));
+  color: var(--lumi-danger-hover, rgb(220, 38, 38));
   font-size: var(--text-xs);
 }
 

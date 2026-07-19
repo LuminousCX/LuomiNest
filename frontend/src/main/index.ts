@@ -11,6 +11,7 @@ import { configStore } from './services/config-store'
 import { registerIpcHandlers, setMainWindow } from './services/ipc-handlers'
 import { createDesktopPet, getDesktopPetWindow, registerDesktopPetIpc } from './services/desktop-pet'
 import { registerAvatarProtocol, verifyAvatarResources, registerAvatarIpc } from './services/avatar-protocol'
+import { registerBackgroundProtocol } from './services/bg-protocol'
 import { createLuomiNestLogger } from './services/luomi-logger'
 
 const logger = createLuomiNestLogger('Main')
@@ -24,16 +25,28 @@ setupNetworkConfig()
 
 // 必须在 app.whenReady() 之前注册，使 luominest-avatar:// 成为 standard/secure scheme，
 // 否则 new URL('luominest-avatar://host/path') 的 hostname 为空，导致协议 handler 返回 400。
-protocol.registerSchemesAsPrivileged([{
-  scheme: 'luominest-avatar',
-  privileges: {
-    standard: true,
-    secure: true,
-    supportFetchAPI: true,
-    corsEnabled: true,
-    stream: true
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'luominest-avatar',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true
+    }
+  },
+  {
+    scheme: 'luominest-bg',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true
+    }
   }
-}])
+])
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -70,8 +83,8 @@ if (isDev) {
 // 任务管理器等系统 UI 使用正确的 AppUserModelId 而非 Electron 默认值。
 app.setAppUserModelId('com.luominest.desktop')
 
-const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
-const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+const CSP_DEV = "default-src 'self' luominest-avatar: luominest-bg:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar: luominest-bg:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+const CSP_PROD = "default-src 'self' luominest-avatar: luominest-bg:; script-src 'self' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar: luominest-bg:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
 
 const saveWindowState = (): void => {
   if (!mainWindow || mainWindow.isDestroyed()) return
@@ -295,6 +308,7 @@ app.whenReady().then(() => {
 
   verifyAvatarResources()
   registerAvatarProtocol()
+  registerBackgroundProtocol()
 
   // 先创建窗口让用户立即看到界面，后端在后台启动不阻塞窗口
   createWindow()

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { Heart, Download, Check, Loader2, RefreshCw, Trash2, AlertCircle } from 'lucide-vue-next'
 import type { MarketplaceItem, InstallProgress } from '../../types/marketplace'
 import { useMarketplaceStore } from '../../stores/marketplace'
+import { usePluginsStore } from '../../stores/plugins'
 import { useApi } from '../../composables/useApi'
 
 const props = defineProps<{
@@ -11,6 +12,7 @@ const props = defineProps<{
 }>()
 
 const store = useMarketplaceStore()
+const pluginsStore = usePluginsStore()
 const api = useApi()
 
 const loading = ref(false)
@@ -48,8 +50,16 @@ async function handleInstall() {
     // 用后端返回的状态更新 store
     store.setInstallProgress(props.item.id, result)
 
-    // 开始轮询进度
-    store.startProgressPolling(props.item.id)
+    // 本地内置插件:后端已直接启用,无需轮询进度。
+    // 同步启用前端 builtin 插件,使其视图立即出现在导航栏/工具分类。
+    if (result.frontendBuiltin) {
+      await pluginsStore.enableFrontendPlugin(props.item.id)
+      // 标记为已安装,触发 UI 刷新
+      store.markInstalled(props.item.id)
+    } else {
+      // 远程/普通插件:开始轮询下载进度
+      store.startProgressPolling(props.item.id)
+    }
   } catch (e: unknown) {
     error.value = (e instanceof Error ? e.message : String(e)) || '安装请求失败'
     store.setInstallProgress(props.item.id, { itemId: props.item.id, status: 'error', progress: 0, error: error.value ?? undefined })
@@ -63,6 +73,10 @@ async function handleUninstall() {
   error.value = null
   try {
     await api.apiPost('/marketplace/uninstall', { itemId: props.item.id })
+    // 内置插件卸载后,同步禁用前端 builtin 插件,从导航栏移除视图
+    if (props.item.source === 'local') {
+      await pluginsStore.disableFrontendPlugin(props.item.id)
+    }
     store.uninstallItem(props.item.id)
   } catch (e: unknown) {
     error.value = (e instanceof Error ? e.message : String(e)) || '卸载失败'
