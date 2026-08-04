@@ -244,8 +244,12 @@ async def install_local_builtin_plugin(
                     f"{route_err}. 插件 API 暂不可用,需重启后端。"
                 )
 
-        # 写入安装记录
+        # 写入安装记录（source="builtin" + frontendBuiltin 标记，
+        # localPath 为相对路径 "plugins/{item_id}"，便于 dev/打包版统一引用）
         now = utc_now()
+        # builtin 插件目录位于 settings.PLUGIN_DIR/{item_id}，对应 localPath 为
+        # "plugins/{item_id}"（type=plugin）或 "skills/{item_id}"（type=skill）
+        # builtin 当前只支持 plugin 类型
         install_record = {
             "id": item_id,
             "type": "plugin",
@@ -253,6 +257,7 @@ async def install_local_builtin_plugin(
             "version": version,
             "installedAt": now,
             "installPath": str(plugin_dir),
+            "localPath": f"plugins/{item_id}",
             "status": "installed",
             "source": "builtin",
             "frontendBuiltin": True,
@@ -573,8 +578,13 @@ async def install_from_archive(
                     with zf.open(entry) as src, open(dest_path, "wb") as dst:
                         shutil.copyfileobj(src, dst)
 
-        # 记录安装信息
+        # 写入安装记录（含 source/frontendBuiltin/localPath，便于前端区分
+        # builtin 启用与远程下载，且 localPath 为相对路径，dev/打包版均可移植）
         now = utc_now()
+        # 计算 localPath：相对 PLUGIN_DIR/SKILL_DIR 的子目录名（如 "cxp-pdf-reader"）
+        # 这样无论 dev 模式（backend/plugins/）还是打包模式（DATA_DIR/plugins/）
+        # 都能通过 settings.PLUGIN_DIR/{localPath} 拼出真实路径。
+        relative_path = item_id
         install_record = {
             "id": item_id,
             "type": item_type,
@@ -582,7 +592,10 @@ async def install_from_archive(
             "version": version,
             "installedAt": now,
             "installPath": str(target_dir),
+            "localPath": relative_path,
             "status": "installed",
+            "source": "remote",  # 远程 zip 下载安装
+            "frontendBuiltin": False,
         }
 
         # 保存安装记录
@@ -775,3 +788,54 @@ def get_all_install_status() -> dict[str, str]:
     """获取所有条目的安装状态"""
     all_items = install_store.list_all()
     return {k: "installed" for k in all_items.keys()}
+
+
+def resolve_install_path(local_path: str) -> str:
+    """将相对 localPath（如 "plugins/cxp-pdf-reader"）解析为绝对路径。
+
+    用于跨 dev/打包模式还原安装目录：
+    - dev 模式: settings.PLUGIN_DIR = backend/plugins/，解析为 backend/plugins/cxp-pdf-reader/
+    - 打包模式: settings.PLUGIN_DIR = %APPDATA%/.../Data/backend/plugins/，
+      解析为 %APPDATA%/.../Data/backend/plugins/cxp-pdf-reader/
+
+    Args:
+        local_path: 相对路径，形如 "plugins/{id}" 或 "skills/{id}"
+
+    Returns:
+        绝对路径字符串；无法识别时返回空字符串
+    """
+    if not local_path:
+        return ""
+    parts = Path(local_path).parts
+    if not parts:
+        return ""
+    # 第一段为 "plugins" / "skills" / "agents"
+    top = parts[0]
+    sub = "/".join(parts[1:]) if len(parts) > 1 else ""
+    base_map = {
+        "plugins": settings.PLUGIN_DIR,
+        "skills": settings.SKILL_DIR,
+        "agents": str(Path(settings.DATA_DIR) / "agents"),
+    }
+    base = base_map.get(top)
+    if not base:
+        return ""
+    return str(Path(base) / sub) if sub else str(base)
+
+
+def get_installed_records_resolved() -> list[dict]:
+    """返回所有已安装条目，installPath 已根据当前运行模式重新解析。
+
+    用于前端展示「已安装插件列表」时，即使从其他模式迁移过来的 install_store
+    也能返回当前模式下有效的绝对路径，避免悬空引用。
+    """
+    items = install_store.all()
+    result = []
+    for record in items:
+        local_path = record.get("localPath", "")
+        if local_path:
+            resolved = resolve_install_path(local_path)
+            if resolved:
+                record = {**record, "installPath": resolved}
+        result.append(record)
+    return result

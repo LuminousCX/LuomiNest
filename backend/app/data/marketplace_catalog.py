@@ -235,6 +235,11 @@ CATALOG_PLUGINS: list[dict[str, Any]] = [
 # install_service 会自动下载 zip 并解压到 PLUGIN_DIR。
 
 LOCAL_PLUGIN_REPO: list[dict[str, Any]] = [
+    # cxp-pdf-reader: 前后端一体(fullstack)插件
+    # - 前端代码: frontend/src/renderer/src/plugins/builtin/cxp-pdf-reader/
+    #   (Vite 构建时打包进 renderer,无需远程下载)
+    # - 后端代码: backend/plugins/cxp-pdf-reader/ (Python)
+    # 安装动作: 启用前端 builtin + 后端 cx_plugin_lifecycle.enable_plugin
     {
         "id": "cxp-pdf-reader",
         "name": "CxPlugin PDF 智能阅读器",
@@ -245,6 +250,21 @@ LOCAL_PLUGIN_REPO: list[dict[str, Any]] = [
         "description": "本地内置 PDF/Word/TXT 阅读插件,安装后自动启用",
         "platform": "fullstack",
         "frontendBuiltin": True,
+    },
+    # weather-query: 纯后端(backend)插件,仅注册天气查询工具
+    # - 后端代码: backend/plugins/weather-query/ (Python)
+    # 无前端 builtin 代码,MarketplaceInstallBtn 走"远程下载"路径
+    # 安装动作: cx_plugin_lifecycle.enable_plugin(若未自动加载则先 load_single)
+    {
+        "id": "weather-query",
+        "name": "天气查询",
+        "version": "1.0.0",
+        "source": "local",
+        "localPath": "plugins/weather-query",
+        "downloadUrl": None,
+        "description": "本地内置天气查询工具插件,安装后自动启用",
+        "platform": "backend",
+        "frontendBuiltin": False,
     },
 ]
 

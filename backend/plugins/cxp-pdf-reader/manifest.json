@@ -13,6 +13,8 @@
   "tags": ["pdf", "document", "ai", "reader", "academic"],
   "icon": "FileText",
   "permissions": ["file_read", "file_write", "network", "admin_api", "tool_register"],
+  "homepage": "https://github.com/luminous-ChenXi/LuomiNest-cxp-PDF_reader",
+  "repository": "https://github.com/luminous-ChenXi/LuomiNest-cxp-PDF_reader.git",
   "dependencies": {
     "python": ">=3.12",
     "pip": ["pymupdf", "python-docx"]

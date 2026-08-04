@@ -13,6 +13,7 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.exceptions import AuthenticationError, ValidationError
+from app.core.utils import ok
 from app.infrastructure.database.models.user import User
 from app.infrastructure.database.session import async_session_factory
 from app.security.auth.jwt_handler import (
@@ -20,7 +21,6 @@ from app.security.auth.jwt_handler import (
     create_refresh_token,
     verify_token as jwt_verify_token,
     TokenError,
-    TokenErrorKind,
 )
 from app.security.auth.password import hash_password, verify_password
 
@@ -117,14 +117,13 @@ async def register(request: RegisterRequest):
 
         logger.success(f"[Auth] 新用户注册成功: username={request.username}, id={user.id}")
 
-        return {
-            "code": 0,
-            "message": "注册成功",
-            "data": {
+        return ok(
+            {
                 "user_id": user.id,
                 "username": user.username,
             },
-        }
+            message="注册成功",
+        )
 
 
 @router.post("/login")
@@ -162,15 +161,14 @@ async def login(request: LoginRequest):
 
     logger.success(f"[Auth] 用户登录成功: username={request.username}")
 
-    return {
-        "code": 0,
-        "message": "登录成功",
-        "data": {
+    return ok(
+        {
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "bearer",
         },
-    }
+        message="登录成功",
+    )
 
 
 @router.post("/refresh")
@@ -215,14 +213,13 @@ async def refresh_token(request: RefreshRequest):
         token_version=user.token_version,
     )
 
-    return {
-        "code": 0,
-        "message": "刷新成功",
-        "data": {
+    return ok(
+        {
             "access_token": access_token,
             "token_type": "bearer",
         },
-    }
+        message="刷新成功",
+    )
 
 
 @router.post("/logout")
@@ -238,20 +235,14 @@ async def logout(user: User = Depends(get_current_user)):
 
     logger.success(f"[Auth] 用户登出成功: username={user.username}, new_version={user.token_version}")
 
-    return {
-        "code": 0,
-        "message": "登出成功",
-        "data": None,
-    }
+    return ok(None, message="登出成功")
 
 
 @router.get("/me")
 async def get_me(user: User = Depends(get_current_user)):
     """获取当前用户信息（不含 password_hash）。"""
-    return {
-        "code": 0,
-        "message": "ok",
-        "data": {
+    return ok(
+        {
             "user_id": user.id,
             "username": user.username,
             "display_name": user.display_name,
@@ -259,5 +250,5 @@ async def get_me(user: User = Depends(get_current_user)):
             "token_version": user.token_version,
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "updated_at": user.updated_at.isoformat() if user.updated_at else None,
-        },
-    }
+        }
+    )

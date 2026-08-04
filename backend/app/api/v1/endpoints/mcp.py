@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.core.tools.mcp.manager import mcp_manager
 from app.core.tools.mcp.models import McpServerConfig, McpTransportType
+from app.core.utils import ok
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
@@ -251,7 +252,7 @@ async def list_resources(name: str):
     if name not in {s["name"] for s in mcp_manager.list_servers()}:
         raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
     resources = await mcp_manager.list_resources(name)
-    return {"success": True, "resources": resources, "count": len(resources)}
+    return ok({"resources": resources, "count": len(resources)})
 
 
 @router.get("/servers/{name}/prompts")
@@ -260,4 +261,4 @@ async def list_prompts(name: str):
     if name not in {s["name"] for s in mcp_manager.list_servers()}:
         raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
     prompts = await mcp_manager.list_prompts(name)
-    return {"success": True, "prompts": prompts, "count": len(prompts)}
+    return ok({"prompts": prompts, "count": len(prompts)})

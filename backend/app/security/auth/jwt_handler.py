@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import secrets
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 
@@ -15,6 +14,10 @@ from jose.exceptions import ExpiredSignatureError, JWSSignatureError
 from loguru import logger
 
 from app.core.config import settings
+from app.security.crypto.secret_key_manager import (
+    JWT_SECRET_KEY_FILE_NAME,
+    load_or_create_secret_key,
+)
 
 
 # ── 异常 ─────────────────────────────────────────────────────────────────────
@@ -39,16 +42,17 @@ class TokenError(Exception):
 # ── 内部工具 ──────────────────────────────────────────────────────────────────
 
 def _ensure_jwt_secret() -> str:
-    """获取 JWT 签名密钥，若未配置则自动生成并持久化。"""
+    """获取 JWT 签名密钥，若未配置则从持久化存储加载或生成。
+
+    与 SECRET_KEY 一致采用机器指纹绑定加密存储（``data/config/jwt_secret_key``），
+    确保重启后密钥不变，已签发的 Refresh Token 在 30 天有效期内持续可用。
+    显式通过环境变量 ``JWT_SECRET_KEY`` 配置时优先使用配置值。
+    """
     secret = settings.JWT_SECRET_KEY
     if not secret:
-        secret = secrets.token_urlsafe(64)
-        # 写入运行时属性，避免重启前重复生成
+        secret = load_or_create_secret_key(settings.DATA_DIR, JWT_SECRET_KEY_FILE_NAME)
         settings.JWT_SECRET_KEY = secret
-        logger.warning(
-            "[JWT] JWT_SECRET_KEY 未配置，已自动生成临时密钥。"
-            "请在 .env 中设置 JWT_SECRET_KEY 以确保持久化。"
-        )
+        logger.success("[JWT] JWT_SECRET_KEY loaded from persistent store")
     return secret
 
 

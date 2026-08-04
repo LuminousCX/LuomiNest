@@ -4,6 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
 from contextlib import asynccontextmanager
+import os
+import sys
+import shutil
 
 from app.core.config import settings
 from app.core.exceptions import LuomiNestError
@@ -12,6 +15,128 @@ from app.api.v1.router import api_router
 from app.api.attachment_api import router as attachment_router
 from app.security.auth.local_token import load_auth_token
 from app.security.auth.middleware import luomi_auth_middleware
+
+
+def _sync_bundled_plugin_resources() -> None:
+    """打包模式下首次启动时把 _internal/{plugins,skills}/ 复制到可写的 DATA_DIR 下。
+
+    背景：PyInstaller spec 将 backend/plugins、backend/skills 作为 datas 打包，
+    运行时被解压到 <exe_dir>/_internal/{plugins,skills}/（只读）。
+    config.py 在 frozen 模式下把 PLUGIN_DIR/SKILL_DIR 指向 DATA_DIR 下的可写副本，
+    但首次启动时该副本目录为空，导致 cx_plugin_loader 扫描不到任何插件。
+
+    本函数完成"首次复制 + 增量同步"：
+    - 对每个内置插件/技能目录，若目标不存在则整目录复制；
+    - 若目标已存在但 manifest.json 版本不同，则更新（保留用户的 data/ 子目录）；
+    - 若目标已存在且版本相同，跳过（避免每次启动都覆盖用户改动）。
+
+    dev 模式下（IS_FROZEN=False）直接 return，由源码目录加载。
+    """
+    if not settings.IS_FROZEN:
+        return
+
+    # PyInstaller 运行时资源根：sys._MEIPASS 指向解压临时目录（即 _internal/）
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if not bundle_root:
+        # 某些 onefile 模式可能无 _MEIPASS，退回到 exe 同级 _internal/
+        bundle_root = os.path.join(os.path.dirname(sys.executable), "_internal")
+
+    bundle_pairs = [
+        (os.path.join(bundle_root, "plugins"), settings.PLUGIN_DIR, "plugin"),
+        (os.path.join(bundle_root, "skills"), settings.SKILL_DIR, "skill"),
+    ]
+
+    for src_root, dst_root, label in bundle_pairs:
+        if not os.path.isdir(src_root):
+            logger.debug(f"[BundledSync] {label} source not found: {src_root}, skip")
+            continue
+        os.makedirs(dst_root, exist_ok=True)
+
+        for entry in os.listdir(src_root):
+            if entry.startswith(".") or entry.startswith("_"):
+                continue
+            src_dir = os.path.join(src_root, entry)
+            dst_dir = os.path.join(dst_root, entry)
+            if not os.path.isdir(src_dir):
+                continue
+
+            # 读取源 manifest 版本
+            src_manifest = os.path.join(src_dir, "manifest.json")
+            src_skill_md = os.path.join(src_dir, "SKILL.md")
+            src_version = ""
+            if os.path.isfile(src_manifest):
+                try:
+                    import json
+                    with open(src_manifest, encoding="utf-8") as f:
+                        src_version = str(json.load(f).get("version", ""))
+                except Exception as e:
+                    logger.debug(f"[BundledSync] Failed to read src manifest {src_manifest}: {e}")
+            elif os.path.isfile(src_skill_md):
+                try:
+                    with open(src_skill_md, encoding="utf-8") as f:
+                        content = f.read()
+                    if content.startswith("---"):
+                        import yaml
+                        parts = content.split("---", 2)
+                        if len(parts) >= 3:
+                            fm = yaml.safe_load(parts[1]) or {}
+                            src_version = str(fm.get("version", ""))
+                except Exception as e:
+                    logger.debug(f"[BundledSync] Failed to read src SKILL.md {src_skill_md}: {e}")
+
+            # 目标已存在：比较版本决定是否更新
+            if os.path.isdir(dst_dir):
+                dst_version = ""
+                dst_manifest = os.path.join(dst_dir, "manifest.json")
+                dst_skill_md = os.path.join(dst_dir, "SKILL.md")
+                if os.path.isfile(dst_manifest):
+                    try:
+                        import json
+                        with open(dst_manifest, encoding="utf-8") as f:
+                            dst_version = str(json.load(f).get("version", ""))
+                    except Exception:
+                        pass
+                elif os.path.isfile(dst_skill_md):
+                    try:
+                        with open(dst_skill_md, encoding="utf-8") as f:
+                            content = f.read()
+                        if content.startswith("---"):
+                            import yaml
+                            parts = content.split("---", 2)
+                            if len(parts) >= 3:
+                                fm = yaml.safe_load(parts[1]) or {}
+                                dst_version = str(fm.get("version", ""))
+                    except Exception:
+                        pass
+
+                if dst_version and src_version and dst_version == src_version:
+                    # 版本相同，跳过（保留用户改动与 data/ 子目录）
+                    continue
+
+                # 版本不同：先备份旧目录（含用户 data/），再覆盖
+                logger.info(
+                    f"[BundledSync] Updating {label}/{entry}: "
+                    f"v{dst_version} -> v{src_version}"
+                )
+                # 保留用户的 data/ 子目录
+                user_data_dir = os.path.join(dst_dir, "data")
+                temp_data_dir = None
+                if os.path.isdir(user_data_dir):
+                    temp_data_dir = os.path.join(dst_root, f".{entry}.data.tmp")
+                    if os.path.isdir(temp_data_dir):
+                        shutil.rmtree(temp_data_dir)
+                    shutil.move(user_data_dir, temp_data_dir)
+
+                shutil.rmtree(dst_dir, ignore_errors=True)
+                shutil.copytree(src_dir, dst_dir)
+
+                # 恢复用户 data/ 子目录
+                if temp_data_dir and os.path.isdir(temp_data_dir):
+                    shutil.move(temp_data_dir, os.path.join(dst_dir, "data"))
+            else:
+                # 首次复制
+                logger.info(f"[BundledSync] Copying builtin {label}/{entry} v{src_version}")
+                shutil.copytree(src_dir, dst_dir)
 
 
 @asynccontextmanager
@@ -155,6 +280,9 @@ async def lifespan(app: FastAPI):
         from app.runtime.plugin.cxplugin import init_hot_reload
         from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
         from app.services.plugin_service import cx_plugin_service
+        # 打包模式下首次启动：将 _internal/{plugins,skills}/ 复制到可写的 DATA_DIR 下
+        # 让用户安装/启用的内置插件可被运行时找到（dev 模式直接从源码目录加载，无需复制）
+        _sync_bundled_plugin_resources()
         plugin_count = await cx_plugin_service.initialize()
         # 将已加载插件注册的 API 路由挂载到 app（/api/v1/plugins/{plugin_id}/{path}）
         # 同时缓存 app 引用，供后续 install_local_builtin_plugin 动态挂载新插件路由
@@ -355,15 +483,19 @@ def create_app() -> FastAPI:
             logger.error(f"[HTTP] <-- {method} {path} 500 ({elapsed*1000:.1f}ms) ERROR: {e}")
             raise
 
-    auth_token = load_auth_token()
-    if auth_token:
-        logger.success("[AppFactory] Auth token loaded, API routes protected")
+    no_auth = os.environ.get("LUOMINEST_NO_AUTH", "").strip().lower() in ("1", "true", "yes")
+    if no_auth:
+        logger.warning("[AppFactory] LUOMINEST_NO_AUTH enabled, API routes unprotected (desktop launch)")
     else:
-        logger.warning("[AppFactory] No auth token, API routes unprotected (dev mode)")
+        auth_token = load_auth_token()
+        if auth_token:
+            logger.success("[AppFactory] Auth token loaded, API routes protected")
+        else:
+            logger.warning("[AppFactory] No auth token, API routes unprotected (dev mode)")
 
-    @app.middleware("http")
-    async def auth_middleware(request: Request, call_next):
-        return await luomi_auth_middleware(request, call_next)
+        @app.middleware("http")
+        async def auth_middleware(request: Request, call_next):
+            return await luomi_auth_middleware(request, call_next)
 
     app.add_middleware(
         CORSMiddleware,

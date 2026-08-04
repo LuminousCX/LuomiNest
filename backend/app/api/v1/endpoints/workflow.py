@@ -15,7 +15,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from app.core.exceptions import LuomiNestError
-from app.core.utils import sse_response, sse_data
+from app.core.utils import ok, sse_response, sse_data
 from app.core.workflow import (
     WorkflowMode,
     WorkflowPhase,
@@ -120,7 +120,7 @@ async def cancel_session(session_id: str):
             status_code=404,
             detail=f"会话 {session_id} 不存在或已完成",
         )
-    return {"success": True, "session_id": session_id}
+    return ok({"session_id": session_id})
 
 
 @router.post("/sessions/{session_id}/confirm")
@@ -136,7 +136,7 @@ async def confirm_session(session_id: str, req: PlanConfirmationRequest):
             status_code=404,
             detail=f"会话 {session_id} 不存在或不在等待确认状态",
         )
-    return {"success": True, "session_id": session_id}
+    return ok({"session_id": session_id})
 
 
 @router.post("/sessions/{session_id}/reject")
@@ -152,7 +152,7 @@ async def reject_session(session_id: str, req: PlanConfirmationRequest):
             status_code=404,
             detail=f"会话 {session_id} 不存在或不在等待确认状态",
         )
-    return {"success": True, "session_id": session_id}
+    return ok({"session_id": session_id})
 
 
 @router.get("/tools")

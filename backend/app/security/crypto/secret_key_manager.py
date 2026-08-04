@@ -22,11 +22,17 @@ from loguru import logger
 
 DEFAULT_PLACEHOLDER = "change-me-in-production"
 SECRET_KEY_FILE_NAME = "secret_key"
+JWT_SECRET_KEY_FILE_NAME = "jwt_secret_key"
 
 
-def get_secret_key_path(data_dir: str) -> Path:
-    """返回 SECRET_KEY 持久化文件路径。"""
-    return Path(data_dir) / "config" / SECRET_KEY_FILE_NAME
+def get_secret_key_path(data_dir: str, file_name: str = SECRET_KEY_FILE_NAME) -> Path:
+    """返回密钥持久化文件路径。
+
+    Args:
+        data_dir: 数据目录。
+        file_name: 密钥文件名（默认 ``secret_key``，JWT 密钥用 ``jwt_secret_key``）。
+    """
+    return Path(data_dir) / "config" / file_name
 
 
 def _get_machine_fingerprint() -> str:
@@ -108,8 +114,8 @@ def _is_valid_fernet_key(key_str: str) -> bool:
         return False
 
 
-def load_or_create_secret_key(data_dir: str) -> str:
-    """加载或生成持久化 SECRET_KEY（机器指纹绑定加密存储）。
+def load_or_create_secret_key(data_dir: str, file_name: str = SECRET_KEY_FILE_NAME) -> str:
+    """加载或生成持久化密钥（机器指纹绑定加密存储）。
 
     流程：
     1. 文件存在 → 尝试用机器指纹解密
@@ -118,9 +124,13 @@ def load_or_create_secret_key(data_dir: str) -> str:
     4. 文件不存在 → 生成新密钥，加密后写入文件（0600）
 
     注意：若机器硬件变更导致指纹变化，且文件不是旧明文格式，解密会失败并抛出 RuntimeError。
-    此时需删除 secret_key 文件重新生成（已加密的 API Key 需重新输入）。
+    此时需删除密钥文件重新生成（已加密的 API Key 需重新输入）。
+
+    Args:
+        data_dir: 数据目录。
+        file_name: 密钥文件名（默认 ``secret_key``，JWT 密钥用 ``jwt_secret_key``）。
     """
-    key_path = get_secret_key_path(data_dir)
+    key_path = get_secret_key_path(data_dir, file_name)
     key_path.parent.mkdir(parents=True, exist_ok=True)
 
     fingerprint = _get_machine_fingerprint()

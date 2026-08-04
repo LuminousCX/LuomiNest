@@ -17,6 +17,7 @@ from app.infrastructure.install.install_service import (
     is_installed,
     get_download_status,
     get_all_install_status,
+    get_installed_records_resolved,
 )
 from app.infrastructure.database.json_store import marketplace_stats_store
 from app.data.marketplace_catalog import (
@@ -31,7 +32,17 @@ from app.infrastructure.sync.registry_sync import (
     sync_registry,
     merge_remote_with_local,
     get_cached_plugins,
+    get_cached_skills,
     is_cache_fresh,
+    publish_local_plugins_to_registry,
+    write_local_index_snapshot,
+    build_registry_index,
+)
+from app.infrastructure.sync.registry_sources import (
+    get_registry_sources,
+    get_active_source_id,
+    set_active_source_id,
+    ping_all_sources,
 )
 from app.security.net.safe_url import assert_url_safe, UnsafeUrlError
 
@@ -60,9 +71,19 @@ async def list_catalog_items(
     else:
         items = get_all_catalog_items()
 
-    # 插件类型：合并远程注册表数据
+    # 插件类型：合并远程注册表数据（远程拉取失败时降级到本地缓存/静态目录）
     if not type or type == "plugin":
-        remote_plugins = await sync_registry()  # 缓存未过期时直接返回
+        try:
+            sync_result = await sync_registry()  # 缓存未过期时直接返回
+            # sync_registry 返回 {"plugins": [...], "skills": [...]}，
+            # 此处仅需插件列表；空列表视为无远程插件（跳过合并）
+            remote_plugins = (
+                sync_result.get("plugins") if isinstance(sync_result, dict) else None
+            )
+        except Exception as e:
+            logger.warning(f"[MarketplaceAPI] sync_registry failed, falling back to local: {e}")
+            remote_plugins = None
+
         if remote_plugins:
             local_plugins = list(CATALOG_PLUGINS)
             merged = merge_remote_with_local(remote_plugins, local_plugins)
@@ -478,8 +499,15 @@ async def get_download_progress(item_id: str):
 async def list_installed_items(
     type: Optional[str] = Query(None, description="按类型过滤"),
 ):
-    """列出所有已安装的条目"""
-    items = get_installed_items()
+    """列出所有已安装的条目。
+
+    返回字段包含 source（builtin/remote）、frontendBuiltin、localPath（相对路径，
+    如 "plugins/cxp-pdf-reader"）以及 installPath（按当前运行模式解析后的绝对路径）。
+    前端可据此区分内置插件启用与远程下载安装，并展示「已安装」徽章。
+    dev 与打包模式下 install_store 物理路径不同（DATA_DIR 不同），
+    但 localPath 可移植，跨模式迁移时仍可正确解析。
+    """
+    items = get_installed_records_resolved()
     if type and type in ("plugin", "skill", "agent"):
         items = [i for i in items if i.get("type") == type]
     return {"items": items, "total": len(items)}
@@ -643,3 +671,168 @@ async def get_leaderboard(
         items.sort(key=lambda x: x["score"], reverse=True)
 
     return {"leaderboard": items[:limit], "total": len(items)}
+
+
+# ─── 远程注册表同步与发布 ────────────────────────────────────
+
+
+@router.post("/registry/sync")
+async def force_sync_registry(
+    background_tasks: BackgroundTasks,
+):
+    """强制刷新远程注册表缓存。
+
+    立即返回当前缓存内容，后台异步触发 sync_registry(force=True)。
+    前端可轮询 /marketplace/items 或 /marketplace/registry/cached 拉取最新数据。
+    """
+    async def _do_sync():
+        try:
+            await sync_registry(force=True)
+        except Exception as e:
+            logger.error(f"[MarketplaceAPI] Force sync registry failed: {e}")
+
+    background_tasks.add_task(_do_sync)
+    return {
+        "code": 0,
+        "message": "syncing in background",
+        "cached_plugins": len(get_cached_plugins()),
+        "cached_skills": len(get_cached_skills()),
+        "cache_fresh": is_cache_fresh(),
+    }
+
+
+@router.get("/registry/cached")
+async def get_cached_registry():
+    """返回本地缓存的远程注册表条目（不触发远程拉取）。
+
+    供前端"已安装 vs 可更新"对比、离线场景下展示远程条目。
+    """
+    return {
+        "plugins": get_cached_plugins(),
+        "skills": get_cached_skills(),
+        "cache_fresh": is_cache_fresh(),
+    }
+
+
+@router.post("/registry/publish-local")
+async def publish_local_registry(
+    background_tasks: BackgroundTasks,
+    github_token: Optional[str] = Query(None, description="可选 GitHub Token，覆盖 settings.GITHUB_TOKEN"),
+):
+    """将本地 backend/plugins 与 backend/skills 中的插件/技能元数据推送到远程
+    cxp-registry 仓库的 index.json。
+
+    需要 GitHub PAT 有 luminous-ChenXi/LuomiNest-cxp-registry 仓库的 contents:write 权限。
+    异步后台执行，立即返回任务 ID 供前端轮询。
+
+    安全说明：token 仅在本次请求中使用，不持久化。
+    """
+    async def _do_publish():
+        try:
+            result = await publish_local_plugins_to_registry(github_token=github_token)
+            logger.info(f"[MarketplaceAPI] Publish result: {result}")
+        except Exception as e:
+            logger.error(f"[MarketplaceAPI] Publish local registry failed: {e}")
+
+    background_tasks.add_task(_do_publish)
+    return {
+        "code": 0,
+        "message": "publishing in background",
+        "note": (
+            "后台正在将本地插件/技能元数据推送到 LuomiNest-cxp-registry/index.json。"
+            "需在 settings.GITHUB_TOKEN 或 LUOMINEST_GITHUB_TOKEN 环境变量配置有写入权限的 PAT。"
+        ),
+    }
+
+
+@router.post("/registry/build-snapshot")
+async def build_local_snapshot():
+    """根据本地 plugins/skills 目录生成 index.json 快照文件。
+
+    输出位置：backend/app/data/cxp-registry-index.json
+    用于：
+    1. 本地预览将要推送到远程的 index.json 内容
+    2. CI/CD 在 release 时自动生成并提交到 cxp-registry 仓库
+    3. 离线场景作为本地 fallback
+    """
+    try:
+        output_path = write_local_index_snapshot()
+        index_data = build_registry_index()
+        return {
+            "code": 0,
+            "message": "snapshot built",
+            "output_path": output_path,
+            "plugins_count": len(index_data["plugins"]),
+            "skills_count": len(index_data["skills"]),
+        }
+    except Exception as e:
+        logger.error(f"[MarketplaceAPI] Build snapshot failed: {e}")
+        raise HTTPException(status_code=500, detail=f"生成快照失败: {e}")
+
+
+@router.get("/registry/sources")
+async def list_registry_sources(
+    ping: bool = Query(True, description="是否并发测试每个发布源的延迟"),
+    timeout: float = Query(5.0, ge=1.0, le=30.0, description="单个源延迟测试超时时间（秒）"),
+):
+    """获取插件市场发布源列表，可选并发测试延迟。
+
+    返回每个源的基础信息 + 当前活跃状态 + 延迟/健康状态。
+    不可用的源（healthy=False 或 enabled=False）不应在前端被选中。
+    """
+    if ping:
+        try:
+            sources = await ping_all_sources(timeout=timeout)
+        except Exception as e:
+            logger.error(f"[MarketplaceAPI] Ping registry sources failed: {e}")
+            sources = [
+                {**s, "latencyMs": 9999, "healthy": False, "statusCode": None, "error": f"测试失败: {e}"}
+                for s in get_registry_sources()
+            ]
+    else:
+        sources = [
+            {**s, "latencyMs": -1, "healthy": True, "statusCode": None, "error": None}
+            for s in get_registry_sources()
+        ]
+        active_id = get_active_source_id()
+        for s in sources:
+            s["active"] = s["id"] == active_id
+
+    return {
+        "activeSourceId": get_active_source_id(),
+        "sources": sources,
+    }
+
+
+@router.post("/registry/source/{source_id}")
+async def switch_registry_source(source_id: str):
+    """切换当前活跃的插件市场发布源。
+
+    仅允许切换到 enabled=True 且实际可访问的源。
+    切换成功后会影响后续 /marketplace/items 中远程条目的拉取 URL。
+    """
+    from app.infrastructure.sync.registry_sources import get_source_by_id, ping_source
+
+    source = get_source_by_id(source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail=f"发布源 {source_id} 不存在")
+    if not source.get("enabled"):
+        raise HTTPException(status_code=400, detail=f"发布源 {source_id} 已禁用，无法切换")
+
+    # 切换前快速 ping 一次，避免切到不可用的源
+    ping = await ping_source(source, timeout=3.0)
+    if not ping["healthy"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"发布源 {source_id} 当前不可用: {ping.get('error') or ping.get('statusCode')}",
+        )
+
+    if not set_active_source_id(source_id):
+        raise HTTPException(status_code=500, detail=f"切换发布源 {source_id} 失败")
+
+    return {
+        "code": 0,
+        "message": "source switched",
+        "activeSourceId": source_id,
+        "latencyMs": ping["latencyMs"],
+    }
