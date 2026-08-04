@@ -198,8 +198,6 @@ def get_settings() -> Settings:
             s.PLUGIN_DIR = os.path.join(s.DATA_DIR, "plugins")
         if not os.path.isabs(s.SKILL_DIR):
             s.SKILL_DIR = os.path.join(s.DATA_DIR, "skills")
-        for d in [s.UPLOAD_DIR, s.AVATAR_DIR, s.PLUGIN_DIR, s.SKILL_DIR]:
-            os.makedirs(d, exist_ok=True)
 
         # Electron 桌面端渲染进程从 file:// 加载页面，Origin 为 null，
         # 必须追加到 CORS 白名单否则所有 API 调用被浏览器拦截
@@ -214,12 +212,14 @@ def get_settings() -> Settings:
             val = getattr(s, attr)
             if not os.path.isabs(val):
                 setattr(s, attr, os.path.abspath(val))
-        for d in [s.UPLOAD_DIR, s.AVATAR_DIR, s.PLUGIN_DIR, s.SKILL_DIR]:
-            os.makedirs(d, exist_ok=True)
 
-    # 暴露运行模式标志，供其他模块（如 install_service、app_factory）使用：
-    # - LUOMINEST_IS_FROZEN: 是否为 PyInstaller 打包模式
-    # - LUOMINEST_DEV_MODE:  是否为开发模式（!frozen）
+    # 统一确保数据/插件/技能等目录存在（frozen 与 dev 分支均已解析为绝对路径）
+    for d in [s.UPLOAD_DIR, s.AVATAR_DIR, s.PLUGIN_DIR, s.SKILL_DIR]:
+        os.makedirs(d, exist_ok=True)
+
+    # 暴露运行模式标志（Settings 字段，非环境变量），供 install_service、app_factory 等模块使用：
+    # - IS_FROZEN:  是否为 PyInstaller 打包模式（sys.frozen）
+    # - DEV_MODE:   是否为开发模式（!IS_FROZEN）
     s.IS_FROZEN = is_frozen
     s.DEV_MODE = not is_frozen
     s.DATA_DIR_INJECTED = env_data_dir_set

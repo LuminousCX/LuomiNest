@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import httpx
+import yaml
 from loguru import logger
 
 from app.core.config import settings
@@ -33,10 +34,10 @@ CACHE_TTL_SECONDS = 6 * 60 * 60
 # cxp-registry 仓库的 GitHub API 写入端点（用于 publish_local_plugins 推送 index.json）
 # 命名规则：每个插件一个独立 GitHub 仓库 LuomiNest-cxp-<plugin-name>，
 # registry 仓库仅维护 index.json 聚合元数据。
-REGISTRY_REPO_OWNER = "luminous-ChenXi"
-REGISTRY_REPO_NAME = "LuomiNest-cxp-registry"
-REGISTRY_INDEX_PATH = "index.json"
-REGISTRY_BRANCH = "main"
+REGISTRY_REPO_OWNER = settings.REGISTRY_REPO_OWNER
+REGISTRY_REPO_NAME = settings.REGISTRY_REPO_NAME
+REGISTRY_INDEX_PATH = settings.REGISTRY_INDEX_PATH
+REGISTRY_BRANCH = settings.REGISTRY_BRANCH
 
 # 本地缓存存储
 _registry_cache_store = JsonStore("registry_cache.json")
@@ -323,7 +324,7 @@ def _collect_local_plugin_metadata(plugin_dir: str) -> list[dict[str, Any]]:
             "minAppVersion": str(manifest.get("minAppVersion", "")),
             "repo": repo_url,
             "downloadUrl": download_url,
-            "createdAt": today,
+            "createdAt": "",
             "updatedAt": today,
         })
 
@@ -355,10 +356,16 @@ def _collect_local_skill_metadata(skill_dir: str) -> list[dict[str, Any]]:
                 with open(skill_md_path, encoding="utf-8") as f:
                     content = f.read()
                 if content.startswith("---"):
-                    import yaml
                     parts = content.split("---", 2)
                     if len(parts) >= 3:
-                        meta = yaml.safe_load(parts[1]) or {}
+                        fm = yaml.safe_load(parts[1])
+                        if not isinstance(fm, dict):
+                            logger.warning(
+                                f"[RegistrySync] SKILL.md frontmatter 非字典: {skill_md_path} "
+                                f"(type={type(fm).__name__})，跳过该技能"
+                            )
+                            continue
+                        meta = fm
             except Exception as e:
                 logger.warning(f"[RegistrySync] Failed to parse SKILL.md {skill_md_path}: {e}")
                 continue
@@ -418,7 +425,7 @@ def _collect_local_skill_metadata(skill_dir: str) -> list[dict[str, Any]]:
             "license": str(meta.get("license", "")),
             "repo": repo_url,
             "downloadUrl": download_url,
-            "createdAt": today,
+            "createdAt": "",
             "updatedAt": today,
         })
 
@@ -480,6 +487,22 @@ def write_local_index_snapshot(output_path: Optional[str] = None) -> str:
         f"({len(index_data['plugins'])} plugins, {len(index_data['skills'])} skills)"
     )
     return output_path
+
+
+def _preserve_created_at(
+    local_item: dict[str, Any],
+    remote_item: Optional[dict[str, Any]],
+) -> None:
+    """合并时保留远程条目已有的 createdAt，避免每次发布用当天时间重置。
+
+    - 远程已有 createdAt → 覆盖本地值（本地采集时留空）
+    - 远程无/不存在且本地也缺失 → 以本次发布时间回填（全新插件）
+    """
+    remote_created = (remote_item or {}).get("createdAt", "")
+    if remote_created:
+        local_item["createdAt"] = remote_created
+    elif not local_item.get("createdAt"):
+        local_item["createdAt"] = time.strftime("%Y-%m-%d", time.gmtime())
 
 
 async def publish_local_plugins_to_registry(
@@ -559,12 +582,14 @@ async def publish_local_plugins_to_registry(
         p.get("id", ""): p for p in existing_index.get("plugins", []) if p.get("id")
     }
     for p in local_plugins:
+        _preserve_created_at(p, merged_plugins.get(p["id"]))
         merged_plugins[p["id"]] = p
 
     merged_skills: dict[str, dict[str, Any]] = {
         s.get("id", ""): s for s in existing_index.get("skills", []) if s.get("id")
     }
     for s in local_skills:
+        _preserve_created_at(s, merged_skills.get(s["id"]))
         merged_skills[s["id"]] = s
 
     new_index = {

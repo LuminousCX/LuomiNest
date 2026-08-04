@@ -767,7 +767,7 @@ async def build_local_snapshot():
         }
     except Exception as e:
         logger.error(f"[MarketplaceAPI] Build snapshot failed: {e}")
-        raise HTTPException(status_code=500, detail=f"生成快照失败: {e}")
+        raise HTTPException(status_code=500, detail="生成快照失败，请查看后端日志") from e
 
 
 @router.get("/registry/sources")
@@ -789,9 +789,14 @@ async def list_registry_sources(
                 {**s, "latencyMs": 9999, "healthy": False, "statusCode": None, "error": f"测试失败: {e}"}
                 for s in get_registry_sources()
             ]
+            # ping_all_sources 整体失败时仍需标注 active 源，否则前端收到 active 为 undefined
+            active_id = get_active_source_id()
+            for s in sources:
+                s["active"] = s["id"] == active_id
     else:
         sources = [
-            {**s, "latencyMs": -1, "healthy": True, "statusCode": None, "error": None}
+            # healthy=None 表示未实测，区别于 True（已测可用）与 False（已测不可用）
+            {**s, "latencyMs": -1, "healthy": None, "statusCode": None, "error": None}
             for s in get_registry_sources()
         ]
         active_id = get_active_source_id()

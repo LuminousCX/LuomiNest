@@ -128,20 +128,21 @@ def set_custom_source_base_url(base_url: str) -> bool:
     """设置自定义发布源的 baseUrl（仅开发者/高级用户）。
 
     不启用该源，仅更新配置中的 URL。启用仍需要手动切换。
+
+    仅持久化 custom-cdn 条目的覆盖值，不写入其他默认源，确保后续配置升级
+    或修改 settings.REGISTRY_SOURCES 时默认源地址能正常生效。
     """
-    sources = get_registry_sources()
-    updated = False
-    for s in sources:
-        if s["id"] == "custom-cdn":
-            s["baseUrl"] = base_url.strip().rstrip("/")
-            # 没有 URL 时保持 disabled
-            s["enabled"] = bool(s["baseUrl"])
-            updated = True
-            break
-    if updated:
-        _source_store.set("custom_sources", sources)
-        logger.info(f"[RegistrySource] Custom CDN baseUrl updated: {base_url}")
-    return updated
+    clean_url = base_url.strip().rstrip("/")
+    # 读取已有的持久化覆盖列表（仅 custom-cdn 及未来其他自定义源）
+    custom_overrides = _source_store.get("custom_sources") or []
+    if not isinstance(custom_overrides, list):
+        custom_overrides = []
+    # 移除旧的 custom-cdn 条目，保留其他自定义源覆盖
+    others = [s for s in custom_overrides if isinstance(s, dict) and s.get("id") != "custom-cdn"]
+    others.append({"id": "custom-cdn", "baseUrl": clean_url})
+    _source_store.set("custom_sources", others)
+    logger.info(f"[RegistrySource] Custom CDN baseUrl updated: {clean_url}")
+    return True
 
 
 async def ping_source(source: dict[str, Any], timeout: float = 5.0) -> dict[str, Any]:
@@ -196,7 +197,11 @@ async def ping_source(source: dict[str, Any], timeout: float = 5.0) -> dict[str,
 
 
 async def ping_all_sources(timeout: float = 5.0) -> list[dict[str, Any]]:
-    """并发测试所有启用的发布源延迟。"""
+    """并发测试所有发布源（含已禁用）的延迟。
+
+    与 ``get_registry_sources()`` 行为一致，返回完整列表供 marketplace.py 展示与选择；
+    前端依据 ``enabled`` / ``healthy`` 字段决定是否可选。
+    """
     sources = get_registry_sources()
 
     async def _wrap(s: dict[str, Any]) -> dict[str, Any]:

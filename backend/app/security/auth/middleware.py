@@ -6,6 +6,8 @@
 
 /health 和 / 路由不受保护。
 """
+from functools import lru_cache
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -34,8 +36,13 @@ _JWT_EXEMPT_PATHS_DOCS = {
 _LOCAL_EXEMPT_PATHS = {"/health", "/"}
 
 
+@lru_cache(maxsize=1)
 def _get_jwt_exempt_paths() -> set[str]:
-    """根据配置返回当前 JWT 白名单（合并始终放行与文档条件放行）。"""
+    """根据配置返回当前 JWT 白名单（合并始终放行与文档条件放行）。
+
+    使用 lru_cache 缓存：白名单仅依赖不可变的 DEBUG / API_DOCS_ENABLED 配置，
+    进程内构造一次即可，避免认证热路径上重复计算。
+    """
     if settings.DEBUG or settings.API_DOCS_ENABLED:
         return _JWT_EXEMPT_PATHS_ALWAYS | _JWT_EXEMPT_PATHS_DOCS
     return _JWT_EXEMPT_PATHS_ALWAYS

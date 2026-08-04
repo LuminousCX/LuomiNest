@@ -32,6 +32,14 @@ INSTALL_DIRS = {
     "agent": Path(settings.DATA_DIR) / "agents",
 }
 
+# localPath 前缀映射（与 resolve_install_path 的 base_map 保持一致）
+# 用于在安装记录中写入可移植的相对路径，如 "plugins/cxp-pdf-reader"
+_LOCAL_PATH_PREFIX = {
+    "plugin": "plugins",
+    "skill": "skills",
+    "agent": "agents",
+}
+
 # 内存中的下载任务状态
 _active_downloads: dict[str, dict] = {}
 
@@ -202,6 +210,8 @@ async def install_local_builtin_plugin(
     from app.runtime.plugin.cxplugin.lifecycle import cx_plugin_lifecycle
 
     # 初始化进度状态(供前端轮询)
+    # frontendBuiltin 从 local_entry 读取，决定前端是否同步启用 builtin 视图
+    _frontend_builtin = bool(local_entry.get("frontendBuiltin", True))
     _active_downloads[item_id] = {
         "itemId": item_id,
         "status": "installing",
@@ -212,7 +222,7 @@ async def install_local_builtin_plugin(
         "downloadedBytes": 0,
         "totalBytes": 0,
         "startTime": time.time(),
-        "frontendBuiltin": True,
+        "frontendBuiltin": _frontend_builtin,
     }
 
     plugin_dir = Path(settings.PLUGIN_DIR) / item_id
@@ -245,11 +255,14 @@ async def install_local_builtin_plugin(
                 )
 
         # 写入安装记录（source="builtin" + frontendBuiltin 标记，
-        # localPath 为相对路径 "plugins/{item_id}"，便于 dev/打包版统一引用）
+        # localPath 从 local_entry 读取，便于支持 backend-only 本地插件）
         now = utc_now()
-        # builtin 插件目录位于 settings.PLUGIN_DIR/{item_id}，对应 localPath 为
-        # "plugins/{item_id}"（type=plugin）或 "skills/{item_id}"（type=skill）
-        # builtin 当前只支持 plugin 类型
+        # localPath 优先取 LOCAL_PLUGIN_REPO 条目中的值（如 "plugins/weather-query"），
+        # 兜底为 "plugins/{item_id}"（builtin 当前只支持 plugin 类型）
+        local_path = local_entry.get("localPath") or f"plugins/{item_id}"
+        # frontendBuiltin 从 local_entry 读取：fullstack/frontend 插件为 True，
+        # 纯 backend 插件（如 weather-query）为 False，前端据此决定是否启用 builtin 视图
+        frontend_builtin = bool(local_entry.get("frontendBuiltin", True))
         install_record = {
             "id": item_id,
             "type": "plugin",
@@ -257,10 +270,10 @@ async def install_local_builtin_plugin(
             "version": version,
             "installedAt": now,
             "installPath": str(plugin_dir),
-            "localPath": f"plugins/{item_id}",
+            "localPath": local_path,
             "status": "installed",
             "source": "builtin",
-            "frontendBuiltin": True,
+            "frontendBuiltin": frontend_builtin,
         }
         install_store.set(item_id, install_record)
 
@@ -581,10 +594,11 @@ async def install_from_archive(
         # 写入安装记录（含 source/frontendBuiltin/localPath，便于前端区分
         # builtin 启用与远程下载，且 localPath 为相对路径，dev/打包版均可移植）
         now = utc_now()
-        # 计算 localPath：相对 PLUGIN_DIR/SKILL_DIR 的子目录名（如 "cxp-pdf-reader"）
-        # 这样无论 dev 模式（backend/plugins/）还是打包模式（DATA_DIR/plugins/）
-        # 都能通过 settings.PLUGIN_DIR/{localPath} 拼出真实路径。
-        relative_path = item_id
+        # 计算 localPath：带类型前缀的相对路径（如 "plugins/cxp-pdf-reader"）
+        # 与 install_local_builtin_plugin 的 "plugins/{item_id}" 格式保持一致，
+        # 使 get_installed_records_resolved → resolve_install_path 能跨 dev/打包模式解析。
+        prefix = _LOCAL_PATH_PREFIX.get(item_type, item_type)
+        relative_path = f"{prefix}/{item_id}"
         install_record = {
             "id": item_id,
             "type": item_type,

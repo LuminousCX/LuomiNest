@@ -109,8 +109,13 @@ def _sync_bundled_plugin_resources() -> None:
                     except Exception:
                         pass
 
-                if dst_version and src_version and dst_version == src_version:
-                    # 版本相同，跳过（保留用户改动与 data/ 子目录）
+                if dst_version and src_version:
+                    if dst_version == src_version:
+                        # 版本相同，跳过（保留用户改动与 data/ 子目录）
+                        continue
+                    # 两侧版本均可读且不一致 → 继续走更新流程
+                else:
+                    # 版本不可比较但目标已存在：保守跳过，避免盲目覆盖用户改动
                     continue
 
                 # 版本不同：先备份旧目录（含用户 data/），再覆盖
@@ -127,12 +132,18 @@ def _sync_bundled_plugin_resources() -> None:
                         shutil.rmtree(temp_data_dir)
                     shutil.move(user_data_dir, temp_data_dir)
 
-                shutil.rmtree(dst_dir, ignore_errors=True)
-                shutil.copytree(src_dir, dst_dir)
-
-                # 恢复用户 data/ 子目录
-                if temp_data_dir and os.path.isdir(temp_data_dir):
-                    shutil.move(temp_data_dir, os.path.join(dst_dir, "data"))
+                try:
+                    shutil.rmtree(dst_dir, ignore_errors=True)
+                    shutil.copytree(src_dir, dst_dir)
+                finally:
+                    # 无论复制成功与否，只要 data 已被移出就恢复回去，避免用户数据丢失
+                    if temp_data_dir and os.path.isdir(temp_data_dir):
+                        dst_data_dir = os.path.join(dst_dir, "data")
+                        # copytree 失败时 dst_dir 可能不存在，确保父目录存在以放回用户数据
+                        os.makedirs(dst_dir, exist_ok=True)
+                        if os.path.isdir(dst_data_dir):
+                            shutil.rmtree(dst_data_dir, ignore_errors=True)
+                        shutil.move(temp_data_dir, dst_data_dir)
             else:
                 # 首次复制
                 logger.info(f"[BundledSync] Copying builtin {label}/{entry} v{src_version}")
@@ -162,6 +173,16 @@ async def lifespan(app: FastAPI):
             logger.warning("=" * 60)
     except Exception as e:
         logger.warning(f"[LuomiNest] Hardware detection failed: {e}")
+
+    # JWT 模式：启动时预加载密钥，密钥不可用则 fail-fast 阻止启动
+    if settings.AUTH_MODE == "jwt":
+        try:
+            from app.security.auth.jwt_handler import ensure_jwt_secret
+            ensure_jwt_secret()
+            logger.success("[LuomiNest] JWT secret prewarmed successfully")
+        except RuntimeError as e:
+            logger.error(f"[LuomiNest] JWT secret unavailable, cannot start in jwt mode: {e}")
+            raise
 
     # 初始化 SQLite 数据库（核心依赖，必须在任何 store 操作前完成）
     # 失败直接 raise 让进程退出，避免"能访问但功能全坏"的半死状态

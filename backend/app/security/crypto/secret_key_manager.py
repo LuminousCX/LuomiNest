@@ -25,6 +25,13 @@ SECRET_KEY_FILE_NAME = "secret_key"
 JWT_SECRET_KEY_FILE_NAME = "jwt_secret_key"
 
 
+def _diagnostic_name(file_name: str) -> str:
+    """根据密钥文件名返回日志/异常中使用的诊断名称。"""
+    if file_name == JWT_SECRET_KEY_FILE_NAME:
+        return "JWT_SECRET_KEY"
+    return "SECRET_KEY"
+
+
 def get_secret_key_path(data_dir: str, file_name: str = SECRET_KEY_FILE_NAME) -> Path:
     """返回密钥持久化文件路径。
 
@@ -132,6 +139,7 @@ def load_or_create_secret_key(data_dir: str, file_name: str = SECRET_KEY_FILE_NA
     """
     key_path = get_secret_key_path(data_dir, file_name)
     key_path.parent.mkdir(parents=True, exist_ok=True)
+    name = _diagnostic_name(file_name)
 
     fingerprint = _get_machine_fingerprint()
     machine_key = _derive_machine_key(fingerprint)
@@ -162,7 +170,7 @@ def load_or_create_secret_key(data_dir: str, file_name: str = SECRET_KEY_FILE_NA
                         # Windows 上 chmod 语义不同，best-effort
                         pass
                     logger.success(
-                        "[SecretKey] 已将旧版明文 SECRET_KEY 迁移为机器绑定加密格式"
+                        f"[SecretKey] 已将旧版明文 {name} 迁移为机器绑定加密格式"
                     )
                     return plaintext
             except Exception:
@@ -175,7 +183,7 @@ def load_or_create_secret_key(data_dir: str, file_name: str = SECRET_KEY_FILE_NA
                 "若硬件已变更，删除该文件后重启可重新生成（已加密的 API Key 需重新输入）。"
             )
             raise RuntimeError(
-                f"SECRET_KEY 解密失败：机器指纹不匹配或文件损坏。"
+                f"{name} 解密失败：机器指纹不匹配或文件损坏。"
                 f"请删除 {key_path} 后重启应用。"
             )
 
@@ -189,7 +197,7 @@ def load_or_create_secret_key(data_dir: str, file_name: str = SECRET_KEY_FILE_NA
         # Windows 上 chmod 语义不同，best-effort
         pass
 
-    logger.success(f"[SecretKey] Generated machine-bound SECRET_KEY at {key_path}")
+    logger.success(f"[SecretKey] Generated machine-bound {name} at {key_path}")
     return new_key
 
 

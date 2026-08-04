@@ -56,6 +56,16 @@ def _ensure_jwt_secret() -> str:
     return secret
 
 
+def ensure_jwt_secret() -> None:
+    """启动时预加载 JWT 密钥（fail-fast）。
+
+    在 ``AUTH_MODE == "jwt"`` 时于应用启动阶段调用，确保密钥文件可读；
+    若密钥不可用（机器指纹不匹配或文件损坏），立即抛出 RuntimeError 阻止启动，
+    避免运行期以 per-request 500 形式暴露。
+    """
+    _ensure_jwt_secret()
+
+
 # ── 签发 ──────────────────────────────────────────────────────────────────────
 
 def create_access_token(

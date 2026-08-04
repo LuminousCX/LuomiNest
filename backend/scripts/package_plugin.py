@@ -11,7 +11,7 @@
     python -m scripts.package_plugin cxp-pdf-reader               # 打包 plugins/cxp-pdf-reader
     python -m scripts.package_plugin weather-query --output dist   # 自定义输出目录
     python -m scripts.package_plugin cxp-pdf-reader --version 1.0.0 --tag  # 加版本号到文件名
-    python -m scripts.package_plugin --path /abs/path/to/plugin    # 通过绝对路径打包
+    python -m scripts.package_plugin /abs/path/to/plugin           # 通过绝对路径打包
     python -m scripts.package_plugin cxp-pdf-reader --dry-run      # 仅预览将打包的文件
 
 输出:
@@ -22,6 +22,8 @@
 安全:
     - 不打包 __pycache__/、.pyc、.DS_Store、*.tmp、data/ 子目录（运行时数据）
     - 不打包 .git/ 子目录
+    - 不打包指向插件目录外的符号链接（防止打入外部文件）
+    - 不打包输出 zip 自身（当 output_path 落在 plugin_dir 内时自动排除）
     - 强制包含 manifest.json 与入口文件
 """
 from __future__ import annotations
@@ -107,10 +109,14 @@ def load_manifest(plugin_dir: Path) -> dict:
             return json.load(f)
     except json.JSONDecodeError as e:
         raise ValueError(f"manifest.json 解析失败: {manifest_path} - {e}") from e
+    except UnicodeDecodeError as e:
+        raise ValueError(f"manifest.json 编码错误（需 UTF-8）: {manifest_path} - {e}") from e
+    except (PermissionError, OSError) as e:
+        raise ValueError(f"manifest.json 读取失败: {manifest_path} - {e}") from e
 
 
-def validate_manifest(manifest: dict, plugin_dir: Path) -> tuple[str, str]:
-    """校验 manifest 必填字段，返回 (plugin_id, version)。
+def validate_manifest(manifest: dict, plugin_dir: Path) -> tuple[str, str, str]:
+    """校验 manifest 必填字段，返回 (plugin_id, version, entry_field)。
 
     同时检查入口文件是否存在。
     """
@@ -129,16 +135,25 @@ def validate_manifest(manifest: dict, plugin_dir: Path) -> tuple[str, str]:
         raise FileNotFoundError(
             f"入口文件不存在: {entry_file}（manifest.entry={entry_field!r}）"
         )
-    return plugin_id, version
+    return plugin_id, version, entry_field
 
 
 def iter_pack_files(plugin_dir: Path) -> Iterable[Path]:
     """遍历插件目录，返回应打包的文件列表。
 
     应用排除规则：__pycache__/data 子目录、.pyc/.tmp 等后缀、.DS_Store 等文件名。
+    安全：跳过符号链接（文件或符号链接目录内的文件）解析到插件目录外的条目，
+    防止将插件目录外的内容打入包内。
     """
+    plugin_root_resolved = plugin_dir.resolve()
     for path in plugin_dir.rglob("*"):
         if not path.is_file():
+            continue
+        # 安全：符号链接（含符号链接目录下的文件）若解析到插件目录外则跳过
+        try:
+            resolved = path.resolve()
+            resolved.relative_to(plugin_root_resolved)
+        except (OSError, ValueError):
             continue
 
         rel = path.relative_to(plugin_dir)
@@ -162,6 +177,7 @@ def iter_pack_files(plugin_dir: Path) -> Iterable[Path]:
 def build_zip(
     plugin_dir: Path,
     output_path: Path,
+    entry_field: str = "main",
     dry_run: bool = False,
 ) -> tuple[Path, list[Path]]:
     """将插件目录打包为 zip（平铺结构）。
@@ -169,14 +185,28 @@ def build_zip(
     Args:
         plugin_dir: 插件源目录
         output_path: 输出 zip 路径
+        entry_field: manifest.entry 字段，用于校验入口文件未被排除规则过滤
         dry_run: True 时仅返回将要打包的文件列表，不写入 zip
 
     Returns:
         (output_path, packed_files)
     """
+    output_resolved = output_path.resolve()
     packed_files: list[Path] = []
     for src in iter_pack_files(plugin_dir):
+        # 排除输出 zip 自身：当 output_path 落在 plugin_dir 内时，避免把它打入包
+        if src.resolve() == output_resolved:
+            continue
         packed_files.append(src)
+
+    # 校验入口文件未被排除规则过滤（如 entry=data/main → data/main.py，但 data/ 被排除）
+    entry_rel = Path(f"{entry_field}.py")
+    packed_rel = {src.relative_to(plugin_dir) for src in packed_files}
+    if entry_rel not in packed_rel:
+        raise ValueError(
+            f"入口文件 {entry_rel.as_posix()} 被打包排除规则过滤，"
+            f"运行时 manifest.entry 导入将失败（入口不得位于 data/、__pycache__/ 等排除目录）"
+        )
 
     if dry_run:
         return output_path, packed_files
@@ -243,7 +273,7 @@ def main() -> int:
 
     try:
         manifest = load_manifest(plugin_dir)
-        plugin_id, manifest_version = validate_manifest(manifest, plugin_dir)
+        plugin_id, manifest_version, entry_field = validate_manifest(manifest, plugin_dir)
     except (FileNotFoundError, ValueError) as e:
         print(f"[Error] {e}", file=sys.stderr)
         return 1
@@ -261,7 +291,9 @@ def main() -> int:
     output_path = output_dir / zip_name
 
     try:
-        result_path, packed_files = build_zip(plugin_dir, output_path, dry_run=args.dry_run)
+        result_path, packed_files = build_zip(
+            plugin_dir, output_path, entry_field=entry_field, dry_run=args.dry_run
+        )
     except Exception as e:
         print(f"[Error] 打包失败: {e}", file=sys.stderr)
         return 1
@@ -284,7 +316,7 @@ def main() -> int:
     print()
     print("下一步:")
     print(f"  1. 创建 GitHub Release: gh release create v{version} --title v{version} {result_path}")
-    print(f"  2. 提交 PR 到 LuomiNest-cxp-registry/index.json 添加条目")
+    print("  2. 提交 PR 到 LuomiNest-cxp-registry/index.json 添加条目")
     return 0
 
 
