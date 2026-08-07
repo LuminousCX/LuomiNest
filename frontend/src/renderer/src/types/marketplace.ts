@@ -27,6 +27,21 @@ export interface RepoSource {
   errorMessage?: string
 }
 
+export interface RegistrySource {
+  id: string
+  name: string
+  type: 'github' | 'cdn' | 'custom'
+  baseUrl: string
+  urlPattern: 'raw' | 'gh'
+  enabled: boolean
+  /** 延迟测试后填充 */
+  latencyMs?: number
+  healthy?: boolean
+  statusCode?: number | null
+  error?: string | null
+  active?: boolean
+}
+
 export interface MarketplaceCategory {
   id: string
   name: string

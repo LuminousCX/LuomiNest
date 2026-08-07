@@ -209,6 +209,12 @@ export const useDesktopPetChatBridge = (): void => {
   let unsubCancel: (() => void) | null = null
 
   onMounted(async () => {
+    // 非 Electron 环境（如浏览器调试）没有 IPC 通道，直接跳过
+    if (!window.api?.onDesktopPetChatMessage || !window.api?.desktopPet) {
+      logger.info('Desktop pet bridge skipped: not running in Electron')
+      return
+    }
+
     // 监听桌宠窗口转发的聊天消息
     unsubMessage = window.api.onDesktopPetChatMessage((text: string) => {
       logger.info('Received chat message from desktop pet window:', text.slice(0, 50))

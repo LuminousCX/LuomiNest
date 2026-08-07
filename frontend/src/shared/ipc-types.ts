@@ -123,6 +123,31 @@ export interface BackgroundConfig {
   opacity: number
 }
 
+/** 背景适配方式 */
+export type BackgroundFit = 'cover' | 'contain' | 'center' | 'right'
+
+/** 皮肤包：一套完整的视觉方案 */
+export interface Skin {
+  id: string
+  name: string
+  type: 'preset' | 'custom'
+  /** 关联的色彩主题 ID */
+  colorThemeId: string
+  /** 主题模式 */
+  mode: 'light' | 'dark' | 'system'
+  /** 背景配置 */
+  background: BackgroundConfig & {
+    /** 背景适配方式（仅图片/渐变有效） */
+    fit?: BackgroundFit
+  }
+  /** 毛玻璃强度 0-100 */
+  glassIntensity: number
+  /** 氛围光强度 0-100 */
+  ambientIntensity: number
+  /** 圆角倾向 0-100（影响卡片圆角） */
+  radiusTendency?: number
+}
+
 /** 完整主题配置（持久化用） */
 export interface ThemeConfig {
   activeColorThemeId: string
@@ -130,6 +155,12 @@ export interface ThemeConfig {
   background: BackgroundConfig
   /** 自定义主题，最多 5 个 */
   customThemes: ColorTheme[]
+  /** 兼容旧配置：仅有 light/dark 布尔值时使用 */
+  isDark?: boolean
+  /** 新增：当前激活的皮肤包 ID */
+  activeSkinId?: string
+  /** 新增：自定义皮肤包 */
+  customSkins?: Skin[]
 }
 
 /* ============================================================================
@@ -426,6 +457,10 @@ export interface ElectronApi {
     subscribeStage: (callback: (data: BackendStageEvent) => void) => () => void
   }
   dialog: {
-    selectBackgroundImage: () => Promise<string | null>
+    selectBackgroundImage: () => Promise<
+      { success: true; url: string; width: number; height: number; warning?: string } |
+      { success: false; error: string }
+    >
+    deleteBackgroundImage: (imageUrl: string) => Promise<{ success: boolean; error?: string }>
   }
 }

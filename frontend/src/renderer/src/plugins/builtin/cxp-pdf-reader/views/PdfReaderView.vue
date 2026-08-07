@@ -201,8 +201,18 @@ const openFile = async (file: File) => {
     if (tab.fileType === 'pdf') {
       store.pdfData = fileBytes
     } else {
-      // Word/TXT 使用后端提取的文本预览作为正文（简化版）
-      store.text = extractResult.textPreview ?? ''
+      // Word/TXT：textPreview 仅有 500 字预览，通过 getPageText 逐页拉取完整正文
+      const pageCount = extractResult.pageCount || 0
+      if (pageCount > 0 && extractResult.fileId) {
+        const pageTexts = await Promise.all(
+          Array.from({ length: pageCount }, (_, i) =>
+            cxPdfApi.getPageText(extractResult.fileId, i + 1).then((p) => p.text || ''),
+          ),
+        )
+        store.text = pageTexts.join('\n\n')
+      } else {
+        store.text = extractResult.textPreview ?? ''
+      }
     }
 
     tabs.value.push(tab)

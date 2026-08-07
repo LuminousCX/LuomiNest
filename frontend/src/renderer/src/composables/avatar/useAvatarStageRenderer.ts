@@ -26,7 +26,7 @@
  * stageRenderer.syncLipParam(0.8)
  * ```
  */
-import { ref, shallowRef, type Ref, type ShallowRef } from 'vue'
+import { ref, shallowRef, type ShallowRef } from 'vue'
 import { createLuomiNestRendererLogger } from '@/utils/logger'
 import type { AvatarRendererType } from '@/types/avatar'
 

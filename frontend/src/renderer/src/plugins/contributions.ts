@@ -14,6 +14,7 @@
  */
 
 import { computed, reactive, readonly } from 'vue'
+import type { ComputedRef } from 'vue'
 import type { RouteRecordRaw } from 'vue-router'
 import type {
   CxViewContribution,
@@ -214,7 +215,27 @@ function getAllViewRoutes(): RouteRecordRaw[] {
     .map(viewEntryToRoute)
 }
 
-export const cxContributionRegistry = {
+interface CxContributionRegistry {
+  registerView: typeof registerView
+  unregisterView: typeof unregisterView
+  unregisterAllViews: typeof unregisterAllViews
+  registerCommand: typeof registerCommand
+  unregisterCommand: typeof unregisterCommand
+  unregisterAllCommands: typeof unregisterAllCommands
+  registerTheme: typeof registerTheme
+  unregisterTheme: typeof unregisterTheme
+  unregisterAllThemes: typeof unregisterAllThemes
+  unregisterAllByPlugin: typeof unregisterAllByPlugin
+  pluginViews: Readonly<CxViewRegistryEntry[]>
+  pluginCommands: Readonly<CxCommandRegistryEntry[]>
+  pluginThemes: Readonly<CxThemeRegistryEntry[]>
+  sidebarPluginViews: ComputedRef<Readonly<CxViewRegistryEntry[]>>
+  executeCommand: typeof executeCommand
+  getAllViewRoutes: typeof getAllViewRoutes
+  viewEntryToRoute: typeof viewEntryToRoute
+}
+
+export const cxContributionRegistry: CxContributionRegistry = {
   // 注册/注销
   registerView,
   unregisterView,
@@ -227,14 +248,14 @@ export const cxContributionRegistry = {
   unregisterAllThemes,
   unregisterAllByPlugin,
   // 查询
-  pluginViews,
-  pluginCommands,
-  pluginThemes,
-  sidebarPluginViews,
+  pluginViews: pluginViews as Readonly<CxViewRegistryEntry[]>,
+  pluginCommands: pluginCommands as Readonly<CxCommandRegistryEntry[]>,
+  pluginThemes: pluginThemes as Readonly<CxThemeRegistryEntry[]>,
+  sidebarPluginViews: sidebarPluginViews as ComputedRef<Readonly<CxViewRegistryEntry[]>>,
   executeCommand,
   getAllViewRoutes,
   viewEntryToRoute,
 }
 
-export type CxContributionRegistry = typeof cxContributionRegistry
+export type { CxContributionRegistry }
 export type { CxViewRegistryEntry, CxCommandRegistryEntry, CxThemeRegistryEntry }

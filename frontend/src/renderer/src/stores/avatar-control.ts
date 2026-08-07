@@ -39,19 +39,13 @@ export interface AvatarPadVector {
   dominance: number
 }
 
-export interface PetModelInfo {
-  id: string
-  name: string
-  url: string
-  scale: number
-  type: 'live2d' | 'vrm' | 'pixel'
-  tags: string[]
-}
+import type { PetModelInfo } from '@shared/ipc-types'
+export type { PetModelInfo }
 
 export const AVATAR_EMOTIONS = [
   { id: 'happy', label: 'Happy', color: '#f59e0b' },
   { id: 'sad', label: 'Sad', color: '#6366f1' },
-  { id: 'neutral', label: 'Neutral', color: '#8b5cf6' },
+  { id: 'neutral', label: 'Neutral', color: '#0ea5e9' },
   { id: 'love', label: 'Love', color: '#ec4899' },
   { id: 'surprise', label: 'Surprise', color: '#22c55e' },
   { id: 'angry', label: 'Angry', color: '#ef4444' },

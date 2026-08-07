@@ -1,4 +1,4 @@
-import type { PetModelInfo } from '@/stores/avatar-control'
+import type { PetModelInfo } from '@shared/ipc-types'
 
 export type LuomiNestModelInfo = PetModelInfo
 

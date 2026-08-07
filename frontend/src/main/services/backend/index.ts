@@ -4,7 +4,6 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { platform } from 'os'
 import { PATHS } from '../paths'
-import { getLumiAuthToken } from './auth-token'
 import { createLuomiNestLogger } from '../luomi-logger'
 
 const logger = createLuomiNestLogger('Backend')
@@ -184,7 +183,7 @@ export const startBackend = async (): Promise<boolean> => {
     PYTHONUNBUFFERED: '1',
     PYTHONIOENCODING: 'utf-8',
     LUOMINEST_DATA_DIR: PATHS.backendData,
-    LUOMINEST_AUTH_TOKEN: getLumiAuthToken()
+    LUOMINEST_NO_AUTH: '1'
   }
 
   if (platform() === 'linux' || platform() === 'darwin') {

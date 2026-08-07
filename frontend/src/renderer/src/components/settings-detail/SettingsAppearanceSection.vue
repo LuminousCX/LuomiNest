@@ -1,415 +1,248 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Sun, Moon, Monitor, Plus, Pencil, Trash2, Upload, Check, X, Palette, Image, Type, Sparkles } from 'lucide-vue-next'
+import {
+  Palette,
+  Sparkles
+} from 'lucide-vue-next'
 import { useThemeStore } from '../../stores/theme'
-import { MAX_CUSTOM_THEMES } from '../../stores/theme-types'
-import type { ColorTheme } from '../../stores/theme-types'
-import ThemePresetSelector from '../theme/ThemePresetSelector.vue'
-import ThemeCustomEditor from '../theme/ThemeCustomEditor.vue'
+import type { Skin } from '../../stores/theme-types'
+import { PRESET_THEME_IDS } from '../../stores/theme-types'
+import { presetThemeNames, presetThemeColors } from '../../stores/theme-presets'
+import ThemeSkinSelector from '../theme/ThemeSkinSelector.vue'
+import ThemeSkinEditor from '../theme/ThemeSkinEditor.vue'
+import { useToast } from '../../composables/useToast'
 import '../../styles/views/theme-settings.css'
+import '../../styles/views/settings-shared.css'
 
 const themeStore = useThemeStore()
+const toast = useToast()
 
-// ─── Theme Mode ────────────────────────────────
-type ThemeMode = 'light' | 'dark' | 'system'
-
-const themeMode = computed<ThemeMode>(() => {
-  // We only have isDark boolean; 'system' is not tracked separately yet
-  return themeStore.isDark ? 'dark' : 'light'
-})
-
-function setMode(mode: ThemeMode) {
-  if (mode === 'system') {
-    // Follow system preference
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    themeStore.setTheme(prefersDark)
-  } else {
-    themeStore.setTheme(mode === 'dark')
-  }
-}
-
-// ─── Custom Theme Editor ───────────────────────
+// ─── Skin Editor ─────────────────────────────
 const editorVisible = ref(false)
-const editingTheme = ref<ColorTheme | null>(null)
+const editingSkin = ref<Skin | null>(null)
+const editorMode = ref<'edit' | 'create'>('create')
 
-function openNewEditor() {
-  editingTheme.value = null
+function openSkinEditor(id: string) {
+  const skin = themeStore.allSkins.find((s) => s.id === id)
+  if (!skin) return
+
+  if (skin.type === 'preset') {
+    // 编辑预设皮肤：以此为基础创建自定义皮肤副本
+    editingSkin.value = {
+      ...skin,
+      id: `custom-skin-${Date.now()}`,
+      type: 'custom',
+      name: `${skin.name} 副本`
+    }
+    editorMode.value = 'create'
+  } else {
+    editingSkin.value = skin
+    editorMode.value = 'edit'
+  }
   editorVisible.value = true
 }
 
-function openEditEditor(theme: ColorTheme) {
-  editingTheme.value = theme
+function openNewSkinEditor() {
+  editingSkin.value = null
+  editorMode.value = 'create'
   editorVisible.value = true
+}
+
+function handleApplySkin(id: string) {
+  themeStore.setSkin(id)
+  toast.success('皮肤已应用')
 }
 
 function closeEditor() {
   editorVisible.value = false
-  editingTheme.value = null
+  editingSkin.value = null
 }
 
-function handleSaveTheme(theme: ColorTheme) {
-  if (editingTheme.value) {
-    // Update existing
-    themeStore.updateCustomTheme(theme.id, {
-      name: theme.name,
-      light: theme.light,
-      dark: theme.dark
-    })
+function handleSaveSkin(skin: Skin) {
+  if (editorMode.value === 'edit' && skin.type === 'custom') {
+    themeStore.updateCustomSkin(skin.id, skin)
+    toast.success('皮肤已保存')
   } else {
-    // Add new
-    themeStore.addCustomTheme(theme)
+    themeStore.addCustomSkin(skin)
+    toast.success('皮肤已创建')
   }
-  themeStore.setColorTheme(theme.id)
   closeEditor()
 }
 
-function handleDeleteTheme(id: string) {
-  themeStore.deleteCustomTheme(id)
+function handleDeleteSkin(id: string) {
+  themeStore.deleteCustomSkin(id)
+  toast.info('皮肤已删除')
 }
 
-// ─── Background ────────────────────────────────
-const presetBackgrounds = [
-  { id: 'none', label: '无', class: '' },
-  { id: 'blue', label: '蓝', class: 'theme-bg-blue' },
-  { id: 'purple', label: '紫', class: 'theme-bg-purple' },
-  { id: 'red', label: '红', class: 'theme-bg-red' },
-  { id: 'green', label: '绿', class: 'theme-bg-green' },
-  { id: 'orange', label: '橙', class: 'theme-bg-orange' }
-]
-
-const activeBgId = computed(() => {
-  if (!themeStore.background.image) return 'none'
-  // Check if it matches a known gradient class
-  for (const bg of presetBackgrounds) {
-    if (bg.class && themeStore.background.image.includes(bg.class)) return bg.id
-  }
-  return 'custom'
-})
-
-function selectBackground(id: string) {
-  if (id === 'none') {
-    themeStore.setBackgroundImage(null)
+// ─── Color Theme ─────────────────────────────
+function handleColorThemeSelect(id: string) {
+  const activeSkin = themeStore.activeSkin
+  if (activeSkin?.type === 'custom') {
+    themeStore.updateCustomSkin(activeSkin.id, { colorThemeId: id })
+    toast.success('已更新皮肤配色')
   } else {
-    // Use a CSS gradient as background image
-    const gradients: Record<string, string> = {
-      blue: 'linear-gradient(135deg, #147EBC 0%, #5BA4D4 50%, #0d5f8a 100%)',
-      purple: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 50%, #5B21B6 100%)',
-      red: 'linear-gradient(135deg, #C0392B 0%, #E74C3C 50%, #922B21 100%)',
-      green: 'linear-gradient(135deg, #059669 0%, #34D399 50%, #047857 100%)',
-      orange: 'linear-gradient(135deg, #EA580C 0%, #FB923C 50%, #C2410C 100%)'
-    }
-    themeStore.setBackgroundImage(gradients[id] ?? null)
+    themeStore.setColorTheme(id)
   }
 }
 
-async function triggerFileUpload() {
-  const imagePath = await window.api.dialog.selectBackgroundImage()
-  if (imagePath) {
-    themeStore.setBackgroundImage(imagePath)
+function getSkinPreviewStyle(skin?: Skin): Record<string, string> {
+  if (!skin) return { background: 'var(--surface-hover)' }
+  const image = skin.background.image
+  if (!image) return { background: 'var(--surface-hover)' }
+  if (/^(?:linear|radial|conic)-gradient\(/.test(image)) {
+    return { background: image }
+  }
+  return {
+    backgroundImage: `url('${image}')`,
+    backgroundSize: skin.background.fit === 'contain' ? 'contain' : 'cover',
+    backgroundPosition: skin.background.fit === 'right' ? 'right center' : 'center',
+    backgroundRepeat: 'no-repeat'
   }
 }
 
-const canAddCustom = computed(() => themeStore.customThemes.length < MAX_CUSTOM_THEMES)
+const activeColorThemeName = computed(() => {
+  const theme = themeStore.activeTheme
+  return theme?.name ?? '默认蓝'
+})
 </script>
 
 <template>
-  <div class="main-agent-panel animate-slide-up">
-    <!-- ── 主题模式 ─────────────────────────── -->
-    <div class="main-agent-card">
-      <div class="main-agent-card-header">
-        <Sun :size="18" />
-        <span class="main-agent-card-title">主题模式</span>
-      </div>
-      <div class="main-agent-card-body">
-        <span class="platform-form-hint" style="margin-bottom: var(--space-3); margin-top: 0; display: block;">选择浅色或深色外观，或跟随系统自动切换</span>
-        <div class="theme-mode-selector" role="radiogroup" aria-label="主题模式">
-          <button
-            :class="['mode-btn', { active: themeMode === 'light' }]"
-            @click="setMode('light')"
-            role="radio"
-            :aria-checked="themeMode === 'light'"
-            aria-label="浅色模式"
-          >
-            <Sun :size="16" />
-            <span>浅色</span>
-          </button>
-          <button
-            :class="['mode-btn', { active: themeMode === 'dark' }]"
-            @click="setMode('dark')"
-            role="radio"
-            :aria-checked="themeMode === 'dark'"
-            aria-label="深色模式"
-          >
-            <Moon :size="16" />
-            <span>深色</span>
-          </button>
-          <button
-            :class="['mode-btn', { active: themeMode === 'system' }]"
-            @click="setMode('system')"
-            role="radio"
-            :aria-checked="themeMode === 'system'"
-            aria-label="跟随系统"
-          >
-            <Monitor :size="16" />
-            <span>跟随系统</span>
-          </button>
+  <div class="settings-panel appearance-panel">
+    <!-- Hero -->
+    <div class="appearance-hero">
+      <div
+        class="appearance-hero__preview"
+        :style="getSkinPreviewStyle(themeStore.activeSkin)"
+      >
+        <div v-if="themeStore.activeSkin?.background.image" class="appearance-hero__overlay" />
+        <div class="appearance-hero__glass">
+          <h2 class="appearance-hero__title">{{ themeStore.activeSkin?.name ?? '默认蓝' }}</h2>
+          <p class="appearance-hero__desc">
+            {{ themeStore.activeSkin?.type === 'preset' ? '预设皮肤' : '自定义皮肤' }} ·
+            {{ themeStore.isDark ? '深色' : '浅色' }}模式 ·
+            配色：{{ activeColorThemeName }}
+          </p>
         </div>
       </div>
     </div>
 
-    <!-- ── 色彩主题 ─────────────────────────── -->
-    <div class="main-agent-card">
-      <div class="main-agent-card-header">
-        <Palette :size="18" />
-        <span class="main-agent-card-title">色彩主题</span>
-      </div>
-      <div class="main-agent-card-body">
-        <span class="platform-form-hint" style="margin-bottom: var(--space-3); margin-top: 0; display: block;">选择界面的配色方案</span>
-
-        <!-- 预设主题 -->
-        <ThemePresetSelector v-model="themeStore.activeColorThemeId" />
-
-        <!-- 自定义主题列表 -->
-        <div v-if="themeStore.customThemes.length > 0" class="theme-custom-list">
-          <div
-            v-for="ct in themeStore.customThemes"
-            :key="ct.id"
-            :class="['theme-custom-card', { 'theme-custom-card--active': themeStore.activeColorThemeId === ct.id }]"
-            @click="themeStore.setColorTheme(ct.id)"
-          >
-            <div class="theme-custom-card__colors">
-              <span class="theme-custom-card__dot" :style="{ background: ct.light.primary }" />
-              <span class="theme-custom-card__dot" :style="{ background: ct.light.secondary }" />
-              <span class="theme-custom-card__dot" :style="{ background: ct.light.accent }" />
-            </div>
-            <span class="theme-custom-card__name">{{ ct.name }}</span>
-            <div class="theme-custom-card__actions">
-              <button class="theme-custom-card__btn" @click.stop="openEditEditor(ct)">
-                <Pencil :size="14" />
-              </button>
-              <button class="theme-custom-card__btn theme-custom-card__btn--danger" @click.stop="handleDeleteTheme(ct.id)">
-                <Trash2 :size="14" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 新建自定义主题 -->
-        <button v-if="canAddCustom" class="theme-add-btn" @click="openNewEditor">
-          <Plus :size="14" />
-          <span>新建自定义主题</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- ── 背景图片 ─────────────────────────── -->
-    <div class="main-agent-card">
-      <div class="main-agent-card-header">
-        <Image :size="18" />
-        <span class="main-agent-card-title">背景图片</span>
-      </div>
-      <div class="main-agent-card-body">
-        <span class="platform-form-hint" style="margin-bottom: var(--space-3); margin-top: 0; display: block;">设置工作台背景</span>
-
-        <!-- 预设背景选项 -->
-        <div class="background-grid">
-          <button
-            v-for="bg in presetBackgrounds"
-            :key="bg.id"
-            :class="['background-option', { 'background-option--active': activeBgId === bg.id }]"
-            @click="selectBackground(bg.id)"
-          >
-            <div v-if="bg.class" :class="['background-option__thumb', bg.class]" />
-            <div v-else class="background-option__none">
-              <X :size="16" />
-            </div>
-            <div v-if="activeBgId === bg.id" class="background-option__check">
-              <Check :size="10" />
-            </div>
-          </button>
-        </div>
-
-        <!-- 自定义上传 -->
-        <button class="background-upload-btn" @click="triggerFileUpload">
-          <Upload :size="14" />
-          <span>上传自定义背景</span>
-        </button>
-
-        <!-- 模糊度滑块 -->
-        <div class="theme-slider-row">
-          <span class="theme-slider-row__label">模糊度</span>
-          <input
-            type="range"
-            class="theme-slider-row__input"
-            min="0"
-            max="20"
-            :value="themeStore.background.blur"
-            @input="themeStore.setBackgroundBlur(Number(($event.target as HTMLInputElement).value))"
-          />
-          <span class="theme-slider-row__value">{{ themeStore.background.blur }}px</span>
-        </div>
-
-        <!-- 透明度滑块 -->
-        <div class="theme-slider-row">
-          <span class="theme-slider-row__label">透明度</span>
-          <input
-            type="range"
-            class="theme-slider-row__input"
-            min="0"
-            max="100"
-            :value="themeStore.background.opacity"
-            @input="themeStore.setBackgroundOpacity(Number(($event.target as HTMLInputElement).value))"
-          />
-          <span class="theme-slider-row__value">{{ themeStore.background.opacity }}%</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── 字体大小（占位符） ──────────────── -->
-    <div class="main-agent-card">
-      <div class="main-agent-card-header">
-        <Type :size="18" />
-        <span class="main-agent-card-title">字体大小</span>
-      </div>
-      <div class="main-agent-card-body">
-        <div class="theme-placeholder-row">
-          <div>
-            <div class="theme-placeholder-row__label">调整界面文字大小</div>
-          </div>
-          <span class="theme-placeholder-row__control">即将推出</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── 动画效果（占位符） ──────────────── -->
-    <div class="main-agent-card">
-      <div class="main-agent-card-header">
+    <!-- 皮肤包 -->
+    <section class="settings-card">
+      <div class="settings-card__header">
         <Sparkles :size="18" />
-        <span class="main-agent-card-title">动画效果</span>
+        <span class="settings-card__title">皮肤包</span>
       </div>
-      <div class="main-agent-card-body">
-        <div class="theme-placeholder-row">
-          <div>
-            <div class="theme-placeholder-row__label">开启或关闭界面动画</div>
-          </div>
-          <span class="theme-placeholder-row__control">即将推出</span>
+      <div class="settings-card__body">
+        <p class="settings-card__hint">点击预设皮肤直接应用；悬浮到当前预设可点击编辑。自定义皮肤点击即可编辑。</p>
+        <ThemeSkinSelector
+          :model-value="themeStore.activeSkinId"
+          @apply="handleApplySkin"
+          @edit="openSkinEditor"
+          @create="openNewSkinEditor"
+        />
+      </div>
+    </section>
+
+    <!-- 色彩主题 -->
+    <section class="settings-card">
+      <div class="settings-card__header">
+        <Palette :size="18" />
+        <span class="settings-card__title">色彩主题</span>
+      </div>
+      <div class="settings-card__body">
+        <p class="settings-card__hint">快速切换当前皮肤的配色方案</p>
+        <div class="theme-preset-grid">
+          <button
+            v-for="id in PRESET_THEME_IDS"
+            :key="id"
+            :class="[
+              'theme-preset-card',
+              { 'theme-preset-card--active': themeStore.activeColorThemeId === id }
+            ]"
+            :aria-label="`选择${presetThemeNames[id]}主题`"
+            @click="handleColorThemeSelect(id)"
+          >
+            <div class="theme-preset-card__preview">
+              <span
+                v-for="(color, idx) in presetThemeColors[id]"
+                :key="idx"
+                class="theme-preset-card__dot"
+                :style="{ background: color }"
+              />
+            </div>
+            <span class="theme-preset-card__name">{{ presetThemeNames[id] }}</span>
+          </button>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- ── 自定义主题编辑器弹窗 ────────────── -->
-    <ThemeCustomEditor
+    <!-- 皮肤编辑器 -->
+    <ThemeSkinEditor
       v-if="editorVisible"
-      :theme="editingTheme"
-      @save="handleSaveTheme"
+      :skin="editingSkin"
+      :mode="editorMode"
+      @save="handleSaveSkin"
+      @delete="handleDeleteSkin"
       @cancel="closeEditor"
     />
   </div>
 </template>
 
 <style scoped>
-/* ── 复用主智能体页面的卡片布局模式 ── */
-.main-agent-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-6) var(--space-7);
-  overflow-y: auto;
-  flex: 1;
+.appearance-panel {
+  max-width: 960px;
+  margin: 0 auto;
 }
 
-.main-agent-card {
+/* ── 顶栏摘要 ── */
+.appearance-hero {
+  position: relative;
   background: var(--workspace-card);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
-  box-shadow: var(--shadow-xs);
 }
 
-.main-agent-card-header {
+.appearance-hero__preview {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  background-size: cover;
+  background-position: center;
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--divider-soft);
-  color: var(--lumi-primary);
-}
-
-.main-agent-card-title {
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.main-agent-card-body {
+  align-items: flex-end;
   padding: var(--space-4);
 }
 
-.platform-form-hint {
-  display: block;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-top: var(--space-2);
-  line-height: 1.4;
+.appearance-hero__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.35) 100%);
 }
 
-/* ── 主题模式选择器 — 复用 avatar-mode-toggle 模式 ── */
-.theme-mode-selector {
-  display: flex;
-  gap: var(--space-1);
-  margin-bottom: var(--space-3);
-  background: var(--workspace-panel);
-  border-radius: var(--radius-md);
-  padding: 3px;
-}
-
-.mode-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: 7px var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.mode-btn.active {
-  background: var(--surface);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-xs);
-}
-
-/* ── 占位符行 ── */
-.theme-placeholder-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.appearance-hero__glass {
+  position: relative;
+  z-index: 1;
   padding: var(--space-3) var(--space-4);
-  background: var(--workspace-panel);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in srgb, var(--surface) 60%, var(--border-light));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
-.theme-placeholder-row__label {
-  font-size: var(--text-sm);
-  font-weight: 500;
+.appearance-hero__title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
+  letter-spacing: -0.3px;
 }
 
-.theme-placeholder-row__control {
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  font-size: var(--text-xs);
+.appearance-hero__desc {
+  font-size: var(--text-sm);
   color: var(--text-muted);
-  font-weight: 500;
+  margin-top: 2px;
 }
 </style>

@@ -318,7 +318,7 @@ onBeforeUnmount(() => {
   display: flex;
   width: 100%;
   height: 100%;
-  background: var(--bg);
+  background: transparent;
   overflow: hidden;
   position: relative;
 }
@@ -328,7 +328,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: var(--bg);
+  background: transparent;
   position: relative;
 }
 
@@ -337,9 +337,18 @@ onBeforeUnmount(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   border-left: 1px solid var(--border-light);
   flex-shrink: 0;
   overflow: hidden;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  transition: background-color 0.45s ease-in-out;
+}
+
+/* 有全局背景壁纸时，右侧面板使用更强的毛玻璃表面 */
+.lumi-app.has-background .workbench-avatar {
+  background: var(--glass-surface);
+  border-left-color: var(--glass-border);
 }
 </style>

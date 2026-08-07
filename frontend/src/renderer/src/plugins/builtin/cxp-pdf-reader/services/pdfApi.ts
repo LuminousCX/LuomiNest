@@ -1,11 +1,9 @@
 /**
  * pdfApi — CxPlugin PDF 智能阅读器后端 API 封装。
  *
- * 复用主项目 useApi 的 apiGet/apiPost，统一加 /plugins/cxp-pdf-reader 前缀。
- * 错误码由后端 ApiResponse 包装（符合工作区规则：API 响应必须包含错误码）。
+ * 统一加 /plugins/cxp-pdf-reader 前缀，并解析后端 ApiResponse 信封
+ * （{code, message, data}，code===0 表示成功，符合工作区规则：API 响应必须包含错误码）。
  */
-
-import { useApi } from '../../../../composables/useApi'
 
 // 插件专属 API 路径前缀（与后端 endpoint 对齐）
 const PLUGIN_API_BASE = '/plugins/cxp-pdf-reader'
@@ -87,43 +85,102 @@ export interface CxPdfHealthResult {
 }
 
 // ---------------------------------------------------------------------------
-// API 调用函数
+// 统一请求与 ApiResponse 信封解析
 // ---------------------------------------------------------------------------
 
-/**
- * 提交文件到后端进行文本/大纲提取。
- * 使用 multipart/form-data，因此直接走 fetch（不使用 apiPost 的 JSON body）。
- */
-const extractDocument = async (file: File): Promise<CxPdfExtractResult> => {
-  const { API_ENDPOINTS } = await import('../../../../config/api')
-  const formData = new FormData()
-  formData.append('file', file)
+/** 后端 ApiResponse 信封（{code, message, data}，code===0 表示成功） */
+interface CxPdfApiResponse<T> {
+  code: number
+  message?: string
+  data?: T
+}
 
-  // 获取 token（与 useApi 内部逻辑保持一致）
-  let authHeaders: Record<string, string> = {}
+/** 成功码（与后端 CODE_OK 对齐） */
+const PDF_API_SUCCESS_CODE = 0
+
+/**
+ * 统一 PDF 插件请求：附带鉴权头并解析 ApiResponse 信封。
+ *
+ * - HTTP 非 2xx：抛出友好错误信息（保留 HTTP 错误处理）
+ * - 信封 code===0：返回 data 负载
+ * - 信封 code!==0：抛出 message（即使 HTTP 状态为 200）
+ * - 非信封格式：原样返回（向后兼容）
+ */
+const pdfRequest = async <T>(
+  path: string,
+  options: {
+    method?: 'GET' | 'POST'
+    json?: unknown
+    form?: FormData
+    timeout?: number
+  } = {},
+): Promise<T> => {
+  const { method = 'GET', json, form, timeout = 15000 } = options
+  const { API_ENDPOINTS } = await import('../../../../config/api')
+
+  // 鉴权头（与 useApi 内部逻辑保持一致）
+  const headers: Record<string, string> = {}
   try {
     const token = await window.api?.auth?.getToken()
-    if (token) authHeaders = { Authorization: `Bearer ${token}` }
+    if (token) headers['Authorization'] = `Bearer ${token}`
   } catch {
     // ignore — 未登录情况下不带 token
   }
 
-  const resp = await fetch(`${API_ENDPOINTS.V1}${PLUGIN_API_BASE}/extract`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: formData,
-    signal: AbortSignal.timeout(60000),
+  let body: BodyInit | undefined
+  if (form) {
+    body = form
+  } else if (json !== undefined) {
+    headers['Content-Type'] = 'application/json'
+    body = JSON.stringify(json)
+  }
+
+  const resp = await fetch(`${API_ENDPOINTS.V1}${PLUGIN_API_BASE}${path}`, {
+    method,
+    headers,
+    body,
+    signal: AbortSignal.timeout(timeout),
   })
 
   if (!resp.ok) {
     const errData = await resp.json().catch(() => null)
     const msg = (errData as { detail?: string; message?: string })?.detail
       || (errData as { message?: string })?.message
-      || `文件提取失败 (${resp.status})`
+      || `请求失败 (${resp.status})`
     throw new Error(msg)
   }
 
-  return resp.json()
+  const parsed = (await resp.json()) as CxPdfApiResponse<T> | T
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    typeof (parsed as CxPdfApiResponse<T>).code === 'number'
+  ) {
+    const envelope = parsed as CxPdfApiResponse<T>
+    if (envelope.code === PDF_API_SUCCESS_CODE) {
+      return envelope.data as T
+    }
+    throw new Error(envelope.message || `操作失败 (code: ${envelope.code})`)
+  }
+  return parsed as T
+}
+
+// ---------------------------------------------------------------------------
+// API 调用函数
+// ---------------------------------------------------------------------------
+
+/**
+ * 提交文件到后端进行文本/大纲提取。
+ * 使用 multipart/form-data，提取结果直接暴露 fileId/fileName/pageCount 等字段。
+ */
+const extractDocument = (file: File): Promise<CxPdfExtractResult> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return pdfRequest<CxPdfExtractResult>('/extract', {
+    method: 'POST',
+    form: formData,
+    timeout: 60000,
+  })
 }
 
 /** 调用 AI 总结文档 */
@@ -131,10 +188,9 @@ const summarizeDocument = (
   fileId: string,
   maxLength?: number,
 ): Promise<CxPdfSummarizeResult> => {
-  const { apiPost } = useApi()
   const body: Record<string, unknown> = { file_id: fileId }
   if (typeof maxLength === 'number') body.max_length = maxLength
-  return apiPost<CxPdfSummarizeResult>(`${PLUGIN_API_BASE}/summarize`, body)
+  return pdfRequest<CxPdfSummarizeResult>('/summarize', { method: 'POST', json: body })
 }
 
 /** 调用 AI 翻译文档 */
@@ -143,13 +199,12 @@ const translateDocument = (
   targetLang: string,
   pageRange?: string,
 ): Promise<CxPdfTranslateResult> => {
-  const { apiPost } = useApi()
   const body: Record<string, unknown> = {
     file_id: fileId,
     target_lang: targetLang,
   }
   if (pageRange) body.page_range = pageRange
-  return apiPost<CxPdfTranslateResult>(`${PLUGIN_API_BASE}/translate`, body)
+  return pdfRequest<CxPdfTranslateResult>('/translate', { method: 'POST', json: body })
 }
 
 /** 与文档进行问答对话 */
@@ -158,44 +213,37 @@ const chatWithDocument = (
   question: string,
   history?: CxPdfChatMessage[],
 ): Promise<CxPdfChatResult> => {
-  const { apiPost } = useApi()
   const body: Record<string, unknown> = {
     file_id: fileId,
     question,
   }
   if (history && history.length > 0) body.history = history
-  return apiPost<CxPdfChatResult>(`${PLUGIN_API_BASE}/chat`, body)
+  return pdfRequest<CxPdfChatResult>('/chat', { method: 'POST', json: body })
 }
 
 /** 获取文档大纲 */
-const getOutline = (fileId: string): Promise<CxPdfOutlineResult> => {
-  const { apiGet } = useApi()
-  return apiGet<CxPdfOutlineResult>(`${PLUGIN_API_BASE}/outline/${fileId}`)
-}
+const getOutline = (fileId: string): Promise<CxPdfOutlineResult> =>
+  pdfRequest<CxPdfOutlineResult>(`/outline/${fileId}`)
 
 /** 在文档中搜索文本 */
 const searchInDocument = (
   fileId: string,
   query: string,
-): Promise<CxPdfSearchResult> => {
-  const { apiPost } = useApi()
-  return apiPost<CxPdfSearchResult>(`${PLUGIN_API_BASE}/search`, {
-    file_id: fileId,
-    query,
+): Promise<CxPdfSearchResult> =>
+  pdfRequest<CxPdfSearchResult>('/search', {
+    method: 'POST',
+    json: { file_id: fileId, query },
   })
-}
 
 /** 获取指定页的纯文本 */
 const getPageText = (
   fileId: string,
   pageNum: number,
-): Promise<CxPdfPageTextResult> => {
-  const { apiPost } = useApi()
-  return apiPost<CxPdfPageTextResult>(`${PLUGIN_API_BASE}/page-text`, {
-    file_id: fileId,
-    page_num: pageNum,
+): Promise<CxPdfPageTextResult> =>
+  pdfRequest<CxPdfPageTextResult>('/page-text', {
+    method: 'POST',
+    json: { file_id: fileId, page_num: pageNum },
   })
-}
 
 /** 健康检查（不走 useApi，使用更短超时） */
 const healthCheck = async (): Promise<CxPdfHealthResult> => {

@@ -183,7 +183,7 @@ export const presetThemes: ColorTheme[] = [
 
 /** 预设主题 ID → 名称映射 */
 export const presetThemeNames: Record<string, string> = {
-  blue: '默认蓝',
+  blue: '辰汐蓝',
   purple: '紫罗兰',
   red: '中国红',
   green: '翡翠绿',
@@ -197,4 +197,9 @@ export const presetThemeColors: Record<string, [string, string, string]> = {
   red:    ['#C0392B', '#E74C3C', '#F59E0B'],
   green:  ['#059669', '#34D399', '#8B5CF6'],
   orange: ['#EA580C', '#FB923C', '#0EA5E9']
+}
+
+/** 获取色彩主题的预览色 */
+export function getThemePreviewColors(themeId: string): [string, string, string] {
+  return presetThemeColors[themeId] ?? ['#147EBC', '#5BA4D4', '#f43f5e']
 }

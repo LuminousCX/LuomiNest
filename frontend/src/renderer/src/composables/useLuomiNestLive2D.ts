@@ -4,6 +4,16 @@ import { Application, Ticker } from 'pixi.js'
 import { validateLuomiNestModelUrl, resolveExpressionByModelUrl } from '@/config/luominest-models'
 import { createLuomiNestRendererLogger } from '@/utils/logger'
 import {
+  LUOMINEST_DEFAULT_MODEL_SCALE,
+  LUOMINEST_MIN_MODEL_SCALE,
+  LUOMINEST_MAX_MODEL_SCALE,
+  LUOMINEST_MAX_INITIAL_MODEL_SCALE,
+  LUOMINEST_MODEL_MAX_RETRIES,
+  LUOMINEST_MODEL_RETRY_BASE_DELAY_MS,
+  LUOMINEST_CANVAS_READY_TIMEOUT_MS,
+  LUOMINEST_MODEL_ANCHOR_Y_RATIO,
+} from '@/constants'
+import {
   loadCubism4Module,
   patchIsInteractive,
   getLuomiNestCoreModel,
@@ -36,7 +46,40 @@ export interface LuomiNestLive2DState {
   availableExpressions: string[]
 }
 
-const MAX_RETRIES = 3
+const isCanvasReady = (canvas: HTMLCanvasElement | null): boolean =>
+  Boolean(canvas && canvas.isConnected && canvas.parentElement)
+
+const waitForCanvas = (
+  canvasRef: Ref<HTMLCanvasElement | null>,
+  timeoutMs = LUOMINEST_CANVAS_READY_TIMEOUT_MS
+): Promise<HTMLCanvasElement | null> => {
+  return new Promise((resolve) => {
+    const canvas = canvasRef.value
+    if (isCanvasReady(canvas)) {
+      resolve(canvas)
+      return
+    }
+
+    const start = performance.now()
+    let rafId: number | null = null
+
+    const check = () => {
+      const c = canvasRef.value
+      if (isCanvasReady(c)) {
+        if (rafId !== null) cancelAnimationFrame(rafId)
+        resolve(c)
+        return
+      }
+      if (performance.now() - start >= timeoutMs) {
+        resolve(null)
+        return
+      }
+      rafId = requestAnimationFrame(check)
+    }
+
+    rafId = requestAnimationFrame(check)
+  })
+}
 
 export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => {
   const isReady = ref(false)
@@ -63,6 +106,9 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   let retryTimerId: ReturnType<typeof setTimeout> | null = null
   let currentLoadToken = 0
   let idleCleanup: (() => void) | null = null
+  let visibilityHandler: (() => void) | null = null
+  let lastRequestedUrl = ''
+  let lastRequestedScale = LUOMINEST_DEFAULT_MODEL_SCALE
 
   const cleanupFocus = (): void => {
     if (focusTrackerCleanup) {
@@ -88,6 +134,26 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     idleActive.value = false
   }
 
+  /**
+   * 根据页面可见性暂停/恢复 Pixi ticker，减少后台标签页的 GPU/CPU 占用。
+   * PixiJS 的 Application 默认使用 Ticker.shared，暂停渲染循环可降低
+   * requestAnimationFrame  handler 耗时。
+   */
+  const setupVisibilityControl = (app: Application): void => {
+    if (visibilityHandler) {
+      document.removeEventListener('visibilitychange', visibilityHandler)
+    }
+
+    visibilityHandler = () => {
+      if (document.hidden) {
+        app.ticker.stop()
+      } else {
+        app.ticker.start()
+      }
+    }
+    document.addEventListener('visibilitychange', visibilityHandler)
+  }
+
   const initPixi = async (): Promise<Application | null> => {
     return initLuomiNestPixiApp(pixiApp, {
       canvasRef,
@@ -99,7 +165,14 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     })
   }
 
-  const loadModel = async (url: string, scale: number = 0.25): Promise<void> => {
+  const loadModel = async (url: string, scale: number = LUOMINEST_DEFAULT_MODEL_SCALE): Promise<void> => {
+    // 去重：正在加载同一模型时跳过，避免页面切换/多 watcher 触发重复加载
+    if (isLoading.value && url === lastRequestedUrl && scale === lastRequestedScale) {
+      return
+    }
+    lastRequestedUrl = url
+    lastRequestedScale = scale
+
     if (retryTimerId !== null) {
       clearTimeout(retryTimerId)
       retryTimerId = null
@@ -117,13 +190,28 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       return
     }
 
+    // 等待 canvas 真正挂载到 DOM，避免在 v-if 切换或页面过渡期间初始化失败
+    const readyCanvas = await waitForCanvas(canvasRef)
+    if (!readyCanvas) {
+      if (loadToken === currentLoadToken) {
+        error.value = 'Canvas element not available'
+        isLoading.value = false
+      }
+      return
+    }
+
     try {
       const app = await initPixi()
-      if (!app) {
-        throw new Error(error.value || 'PixiJS Application not initialized. Please check graphics drivers and restart.')
+      if (!app || loadToken !== currentLoadToken) {
+        if (loadToken === currentLoadToken) {
+          throw new Error(error.value || 'PixiJS Application not initialized. Please check graphics drivers and restart.')
+        }
+        return
       }
 
       if (loadToken !== currentLoadToken) return
+
+      setupVisibilityControl(app)
 
       if (currentModel) {
         app.stage.removeChild(currentModel)
@@ -146,15 +234,15 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         return
       }
 
-      const clampedScale = Math.max(0.05, Math.min(2.0, scale))
+      const clampedScale = Math.max(LUOMINEST_MIN_MODEL_SCALE, Math.min(LUOMINEST_MAX_INITIAL_MODEL_SCALE, scale))
       model.scale.set(clampedScale)
       model.anchor.set(0.5, 0.5)
 
       const parent = canvasRef.value?.parentElement
       if (parent) {
         model.x = parent.clientWidth / 2
-        // 模型中心下移至容器 65% 处，让头、肩、胸、肚子露出
-        model.y = parent.clientHeight * 0.90
+        // 模型中心下移至容器底部附近，让头、肩、胸、肚子露出
+        model.y = parent.clientHeight * LUOMINEST_MODEL_ANCHOR_Y_RATIO
       }
 
       hideLuomiNestWatermark(model)
@@ -194,14 +282,14 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       error.value = message
       logger.error('Load error:', message)
 
-      if (retryCount < MAX_RETRIES) {
+      if (retryCount < LUOMINEST_MODEL_MAX_RETRIES) {
         retryCount++
-        logger.info(`Retrying (${retryCount}/${MAX_RETRIES})...`)
+        logger.info(`Retrying (${retryCount}/${LUOMINEST_MODEL_MAX_RETRIES})...`)
         retryTimerId = setTimeout(async () => {
           retryTimerId = null
           if (loadToken !== currentLoadToken) return
           await loadModel(url, scale)
-        }, 1000 * retryCount)
+        }, LUOMINEST_MODEL_RETRY_BASE_DELAY_MS * retryCount)
       }
     } finally {
       if (loadToken === currentLoadToken) {
@@ -285,7 +373,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       if (!model) return
       e.preventDefault()
       const scaleFactor = e.deltaY > 0 ? 0.95 : 1.05
-      const newScale = Math.max(0.05, Math.min(3.0, model.scale.x * scaleFactor))
+      const newScale = Math.max(LUOMINEST_MIN_MODEL_SCALE, Math.min(LUOMINEST_MAX_MODEL_SCALE, model.scale.x * scaleFactor))
       model.scale.set(newScale)
     }
     canvasRef.value?.addEventListener('wheel', wheelHandler, { passive: false })
@@ -403,6 +491,10 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     currentLoadToken++
     cleanupFocus()
     cleanupIdle()
+    if (visibilityHandler) {
+      document.removeEventListener('visibilitychange', visibilityHandler)
+      visibilityHandler = null
+    }
     if (wheelHandler) {
       canvasRef.value?.removeEventListener('wheel', wheelHandler)
       wheelHandler = null
@@ -417,6 +509,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
     }
     isReady.value = false
     currentModelUrl.value = ''
+    lastRequestedUrl = ''
   }
 
   return {

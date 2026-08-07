@@ -260,9 +260,13 @@ export const hideLuomiNestWatermark = (model: LuomiNestLive2DModel): void => {
  * @returns cleanup 函数（移除 ticker）
  */
 export const setupLuomiNestIdleAnimation = (
-  getModel: () => LuomiNestLive2DModel | null
+  getModel: () => LuomiNestLive2DModel | null,
+  fps: number = 30
 ): { cleanup: () => void } => {
   const startTime = Date.now()
+  const targetFps = Ticker.targetFPMS ? 1 / Ticker.targetFPMS : 60
+  const frameSkip = Math.max(1, Math.round(targetFps / fps))
+  let frameCount = 0
 
   // Cache parameter indices outside the per-frame callback to avoid repeated string lookups
   let param14Index = -1
@@ -272,6 +276,9 @@ export const setupLuomiNestIdleAnimation = (
   let indicesCached = false
 
   const callback = () => {
+    frameCount++
+    if (frameCount % frameSkip !== 0) return
+
     const model = getModel()
     if (!model) return
     const access = getLuomiNestCoreModel(model)
@@ -452,13 +459,30 @@ export interface InitPixiOptions {
  *
  * 两个 Live2D composable 共享此逻辑。
  */
+const isCanvasConnected = (canvas: HTMLCanvasElement | null | undefined): boolean =>
+  Boolean(canvas && canvas.isConnected && canvas.parentElement)
+
 export const initLuomiNestPixiApp = (
   existingApp: Application | null,
   opts: InitPixiOptions
 ): Application | null => {
+  const canvas = opts.canvasRef.value
+
+  // 如果已有 App 但 canvas 已被移除（页面切换/条件渲染），必须销毁旧 App 重新创建，
+  // 否则 Pixi 会尝试在一个已脱离 DOM 的 canvas 上渲染，导致后续所有模型加载失败。
+  if (existingApp && !isCanvasConnected(existingApp.view as HTMLCanvasElement | undefined)) {
+    try {
+      existingApp.destroy(true)
+    } catch {
+      // intentionally ignored
+    }
+    existingApp = null
+  }
+
   if (existingApp) return existingApp
-  if (!opts.canvasRef.value) {
-    opts.logger?.error('Canvas element not found')
+
+  if (!isCanvasConnected(canvas)) {
+    opts.logger?.error('Canvas element not found or not attached to DOM')
     opts.onError?.('Canvas element not available')
     return null
   }
@@ -470,7 +494,7 @@ export const initLuomiNestPixiApp = (
   if (!gpu.webglAvailable) {
     const msg = '当前设备不支持 WebGL，Live2D 无法渲染，请检查显卡驱动或硬件加速是否开启。'
     opts.onError?.(msg)
-    opts.logger?.error('WebGL not available:', gpu.renderer)
+    opts.logger?.error(`WebGL not available: ${gpu.renderer}`)
     return null
   }
 
@@ -512,7 +536,7 @@ export const initLuomiNestPixiApp = (
     } catch (canvasErr) {
       const message = canvasErr instanceof Error ? canvasErr.message : 'Unknown error'
       opts.onError?.(`图形初始化失败：${message}`)
-      opts.logger?.error('PixiJS init failed:', message)
+      opts.logger?.error(`PixiJS init failed: ${message}`)
       return null
     }
   }
@@ -555,9 +579,15 @@ export interface LuomiNestFocusTracker {
  *
  * @returns tracker，含 cleanup 方法
  */
-export const createLuomiNestFocusTracker = (opts: FocusTrackerOptions): LuomiNestFocusTracker => {
+export const createLuomiNestFocusTracker = (
+  opts: FocusTrackerOptions,
+  fps: number = 30
+): LuomiNestFocusTracker => {
   let currentX = 0
   let currentY = 0
+  const targetFps = Ticker.targetFPMS ? 1 / Ticker.targetFPMS : 60
+  const frameSkip = Math.max(1, Math.round(targetFps / fps))
+  let frameCount = 0
 
   // Cache parameter indices outside the per-frame callback
   let angleXIndex = -1
@@ -567,6 +597,9 @@ export const createLuomiNestFocusTracker = (opts: FocusTrackerOptions): LuomiNes
   let indicesCached = false
 
   const callback = (): void => {
+    frameCount++
+    if (frameCount % frameSkip !== 0) return
+
     const model = opts.getModel()
     if (!model) return
 

@@ -7,6 +7,8 @@ export type {
   ThemeColorSet,
   BackgroundConfig,
   ThemeConfig,
+  Skin,
+  BackgroundFit,
 } from '@shared/ipc-types'
 
 /** 预设主题 ID 常量 */
@@ -15,3 +17,6 @@ export type PresetThemeId = typeof PRESET_THEME_IDS[number]
 
 /** 自定义主题数量上限 */
 export const MAX_CUSTOM_THEMES = 5
+
+/** 自定义皮肤数量上限 */
+export const MAX_CUSTOM_SKINS = 5

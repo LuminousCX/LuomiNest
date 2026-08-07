@@ -71,7 +71,7 @@ export const PROVIDER_LOGOS: Record<string, ProviderLogo> = {
   nvidia: { id: 'nvidia', name: 'NVIDIA NIM', color: '#76b900', initials: 'NV', svgIcon: SVG_NVIDIA },
   stepfun: { id: 'stepfun', name: 'StepFun', color: '#0160FF', initials: 'SF', svgIcon: SVG_STEPFUN },
   huggingface: { id: 'huggingface', name: 'HuggingFace', color: '#ff9d00', initials: 'HF' },
-  arcee: { id: 'arcee', name: 'Arcee AI', color: '#8b5cf6', initials: 'AR' },
+  arcee: { id: 'arcee', name: 'Arcee AI', color: '#0ea5e9', initials: 'AR' },
   gmi: { id: 'gmi', name: 'GMI', color: '#0ea5e9', initials: 'GM' },
   minimax: { id: 'minimax', name: 'MiniMax', color: '#ec4899', initials: 'MM', svgIcon: SVG_MINIMAX },
   vercel: { id: 'vercel', name: 'Vercel AI', color: '#000000', initials: 'VC' },

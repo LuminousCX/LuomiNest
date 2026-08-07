@@ -2,7 +2,6 @@
 import { useRouter } from 'vue-router'
 import { ArrowLeft, ExternalLink, AlertTriangle, Scale, Heart } from 'lucide-vue-next'
 import LicenseSectionHeader from '../../components/settings-detail/LicenseSectionHeader.vue'
-import LumiSettingsBackground from '../../components/settings-detail/LumiSettingsBackground.vue'
 
 const router = useRouter()
 
@@ -508,7 +507,6 @@ const collaborators = [
 
 <template>
   <div class="lumi-settings-page license-view">
-    <LumiSettingsBackground />
     <header class="lumi-settings-page__header lumi-settings-animate-fade">
       <button class="lumi-settings-page__back" @click="router.push('/settings')">
         <ArrowLeft :size="18" />
@@ -763,3 +761,9 @@ const collaborators = [
 </template>
 
 <style scoped src="../../styles/views/license-view.css"></style>
+
+<style scoped>
+.license-view {
+  background: var(--surface);
+}
+</style>

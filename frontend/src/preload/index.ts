@@ -126,6 +126,7 @@ const api = {
 
   dialog: {
     selectBackgroundImage: () => ipcRenderer.invoke('dialog:selectBackgroundImage'),
+    deleteBackgroundImage: (imageUrl: string) => ipcRenderer.invoke('dialog:deleteBackgroundImage', imageUrl),
   },
 
   // 主应用窗口监听桌宠窗口转发的聊天请求

@@ -47,7 +47,7 @@ const extractErrorMessage = (e: unknown, fallback: string): string => {
   return err.response?.data?.detail || err.message || fallback
 }
 
-interface AgentFormState {
+export interface AgentFormState {
   name: string
   description: string
   systemPrompt: string

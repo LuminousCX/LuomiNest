@@ -51,10 +51,12 @@ async function handleInstall() {
     store.setInstallProgress(props.item.id, result)
 
     // 本地内置插件:后端已直接启用,无需轮询进度。
-    // 同步启用前端 builtin 插件,使其视图立即出现在导航栏/工具分类。
     if (result.frontendBuiltin) {
+      // fullstack/frontend 本地插件:同步启用前端 builtin,使其视图立即出现在导航栏
       await pluginsStore.enableFrontendPlugin(props.item.id)
-      // 标记为已安装,触发 UI 刷新
+      store.markInstalled(props.item.id)
+    } else if (result.status === 'installed') {
+      // 纯 backend 本地插件(如 weather-query):后端已启用,无需前端操作与轮询
       store.markInstalled(props.item.id)
     } else {
       // 远程/普通插件:开始轮询下载进度
@@ -73,8 +75,9 @@ async function handleUninstall() {
   error.value = null
   try {
     await api.apiPost('/marketplace/uninstall', { itemId: props.item.id })
-    // 内置插件卸载后,同步禁用前端 builtin 插件,从导航栏移除视图
-    if (props.item.source === 'local') {
+    // 仅 fullstack/frontend 本地插件需要禁用前端 builtin,从导航栏移除视图
+    // 纯 backend 本地插件(如 weather-query, platform='backend')无前端视图,跳过
+    if (props.item.source === 'local' && props.item.platform !== 'backend') {
       await pluginsStore.disableFrontendPlugin(props.item.id)
     }
     store.uninstallItem(props.item.id)

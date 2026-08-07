@@ -251,7 +251,7 @@ router.beforeEach(async (to) => {
     return true
   }
 
-  // 受保护路由：无 token → 重定向到登录页，携带 redirect 参数
+  // 受保护路由：未登录则跳转登录页（token 由主进程自动生成并持久化，正常启动时直接放行）
   if (!(await hasAuthToken())) {
     return { name: 'Login', query: { redirect: to.fullPath } }
   }

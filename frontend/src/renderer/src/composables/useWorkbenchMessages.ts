@@ -16,7 +16,7 @@ import { useTaskStreamStore } from '../stores/taskStream'
 import { useToast } from './useToast'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { generateId } from '../utils/id'
-import type { ChatStreamChunk, SubagentEvent } from '../types'
+import type { ChatStreamChunk, SubagentEvent, ChatMessage } from '../types'
 import type { ToolActivity, SubagentActivity, ChatModeLevel, WorkflowModeOption } from '../components/workbench/types'
 import type { WorkbenchModelOption } from './useWorkbenchLive2D'
 import type { NavigationTarget } from './useTaskNavigation'
@@ -325,7 +325,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     scrollToBottom(true)
 
     // 更新 assistantMessage 的辅助函数（不可变更新，触发 Vue 响应式）
-    const updateAssistantMsg = (updater: (m: typeof assistantMessage) => typeof assistantMessage): void => {
+    const updateAssistantMsg = (updater: (m: ChatMessage) => ChatMessage): void => {
       const msgs = chatStore.convMessages[convId] || []
       chatStore.convMessages = {
         ...chatStore.convMessages,

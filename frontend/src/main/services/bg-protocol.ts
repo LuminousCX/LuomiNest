@@ -23,19 +23,28 @@ const isPathSafe = (baseDir: string, targetPath: string): boolean => {
 
 /**
  * 注册 luominest-bg: 自定义协议
- * URL 格式: luominest-bg://filename.ext
+ * URL 格式: luominest-bg://bg/filename.ext（使用 pathname 以保留文件名大小写）
  * 实际文件路径: PATHS.backgrounds/filename.ext
  */
 export function registerBackgroundProtocol(): void {
   protocol.handle('luominest-bg', (request) => {
     try {
       const url = new URL(request.url)
-      // luominest-bg://filename 中 filename 被解析为 hostname，pathname 为 / 或空
-      const fileName = url.hostname
-        ? decodeURIComponent(url.hostname)
-        : decodeURIComponent(url.pathname.replace(/^\/+/, ''))
+      // 使用 pathname 而非 hostname：hostname 会被浏览器小写化，
+      // 而 pathname 保留原始大小写，确保大写字母的文件名也能正确加载。
+      let fileName = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
+
+      // 兼容某些 URL 解析器把文件名放进 host 的情况（例如 luominest-bg://file.png/）
+      if (!fileName && url.hostname && url.hostname !== 'bg') {
+        fileName = decodeURIComponent(url.hostname)
+      }
+
+      logger.debug(
+        `[BgProtocol] request.url=${request.url} host=${url.hostname} pathname=${url.pathname} -> fileName=${fileName}`
+      )
 
       if (!fileName) {
+        logger.warn(`[BgProtocol] Bad Request: missing filename from ${request.url}`)
         return new Response('Bad Request: missing filename', { status: 400 })
       }
 
@@ -76,9 +85,10 @@ export function registerBackgroundProtocol(): void {
 
 /**
  * 将背景文件名转换为 luominest-bg: 协议 URL
+ * 使用固定 host + pathname 形式，避免 hostname 被小写化导致大小写敏感的文件名加载失败
  */
 export function toBackgroundUrl(fileName: string): string {
-  return `luominest-bg://${fileName}`
+  return `luominest-bg://bg/${encodeURIComponent(fileName)}`
 }
 
 /**

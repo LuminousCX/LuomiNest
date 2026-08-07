@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { Bot, AlertTriangle } from 'lucide-vue-next'
 import type { AgentProfile, AgentRoleDefinition } from '../../types'
-import type { PresetAvatar } from '../../composables/useWorkspaceAgentDialogs'
+import type { PresetAvatar, AgentFormState } from '../../composables/useWorkspaceAgentDialogs'
 
 const props = defineProps<{
   showCreateDialog: boolean
@@ -10,8 +10,8 @@ const props = defineProps<{
   showConfirmDialog: boolean
   showCreateGroupDialog: boolean
   showAddAgentDialog: boolean
-  createForm: { name: string; description: string; systemPrompt: string; color: string; avatarMode: string; avatarUrl: string }
-  editForm: { name: string; description: string; systemPrompt: string; color: string; avatarMode: string; avatarUrl: string }
+  createForm: AgentFormState
+  editForm: AgentFormState
   createError: string
   confirmMessage: string
   confirmIsDanger: boolean
@@ -67,7 +67,7 @@ const createColor = computed({
 })
 
 const createAvatarMode = computed({
-  get: () => props.createForm.avatarMode as 'color' | 'preset',
+  get: () => props.createForm.avatarMode,
   set: (v) => emit('update:createForm', { ...props.createForm, avatarMode: v }),
 })
 
@@ -97,7 +97,7 @@ const editColor = computed({
 })
 
 const editAvatarMode = computed({
-  get: () => props.editForm.avatarMode as 'color' | 'preset',
+  get: () => props.editForm.avatarMode,
   set: (v) => emit('update:editForm', { ...props.editForm, avatarMode: v }),
 })
 

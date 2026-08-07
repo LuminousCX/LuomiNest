@@ -147,7 +147,19 @@ export const useApi = () => {
 
       const text = await resp.text()
       if (!text) return undefined as T
-      return JSON.parse(text)
+      const parsed = JSON.parse(text)
+      // 自动解包统一响应信封 ok()/fail()：{code, message, error, data}
+      // 成功时 code===0，返回 data 负载；裸格式（无 code 字段）原样返回，保持向后兼容
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        typeof parsed.code === 'number' &&
+        'data' in parsed &&
+        'error' in parsed
+      ) {
+        return parsed.data as T
+      }
+      return parsed as T
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : String(e)
       throw e

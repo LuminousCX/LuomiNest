@@ -10,7 +10,8 @@ import {
   Settings,
   Volume2,
   Brain,
-  Puzzle
+  Puzzle,
+  LogIn
 } from 'lucide-vue-next'
 import SettingsAppearanceSection from '../../components/settings-detail/SettingsAppearanceSection.vue'
 import SettingsNotificationsSection from '../../components/settings-detail/SettingsNotificationsSection.vue'
@@ -20,6 +21,7 @@ import SettingsPlatformsSection from '../../components/settings-detail/SettingsP
 import SettingsMainAgentSection from '../../components/settings-detail/SettingsMainAgentSection.vue'
 import SettingsMcpSection from '../../components/settings-detail/SettingsMcpSection.vue'
 import SettingsPluginsSection from '../../components/settings-detail/SettingsPluginsSection.vue'
+import SettingsLoginSection from '../../components/settings-detail/SettingsLoginSection.vue'
 import type { SectionItem } from '../../components/settings-detail/types'
 
 const route = useRoute()
@@ -100,6 +102,12 @@ const sectionMap: Record<string, { label: string; icon: typeof Palette; desc: st
     icon: Puzzle,
     desc: '前端插件 / 后端插件 / 技能管理',
     items: []
+  },
+  auth: {
+    label: '登录 / 注册',
+    icon: LogIn,
+    desc: '本地账户登录、注册与 JWT 管理',
+    items: []
   }
 }
 
@@ -115,110 +123,43 @@ const sectionComponent = computed(() => {
     case 'main-agent': return SettingsMainAgentSection
     case 'tts': return SettingsTtsSection
     case 'plugins': return SettingsPluginsSection
+    case 'auth': return SettingsLoginSection
     default: return null
   }
 })
 </script>
 
 <template>
-  <div class="settings-detail-view">
-    <div v-if="currentSection" class="detail-content animate-fade-in">
-      <div class="settings-detail-header">
-        <button class="back-btn" @click="router.push('/settings')">
+  <div class="lumi-settings-page">
+    <template v-if="currentSection">
+      <div class="lumi-settings-page__header animate-fade-in">
+        <button class="lumi-settings-page__back" @click="router.push('/settings')">
           <ArrowLeft :size="18" />
         </button>
-        <div class="header-icon">
-          <component :is="currentSection.icon" :size="24" />
+        <div class="lumi-settings-icon-wrap">
+          <component :is="currentSection.icon" :size="22" />
         </div>
         <div>
-          <h1 class="page-title">{{ currentSection.label }}</h1>
-          <p class="page-subtitle">{{ currentSection.desc }}</p>
+          <h1 class="lumi-settings-page__title">{{ currentSection.label }}</h1>
+          <p class="lumi-settings-page__subtitle">{{ currentSection.desc }}</p>
         </div>
       </div>
 
-      <div class="settings-body">
+      <div class="lumi-settings-page__body custom-scrollbar">
         <component :is="sectionComponent" />
       </div>
-    </div>
+    </template>
 
-    <div v-else class="not-found animate-fade-in">
+    <div v-else class="settings-not-found animate-fade-in">
       <h2>设置项未找到</h2>
       <p>请返回设置主页选择有效的设置项</p>
-      <button class="back-home-btn" @click="router.push('/settings')">返回设置</button>
+      <button class="settings-not-found__btn" @click="router.push('/settings')">返回设置</button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.settings-detail-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--workspace-bg);
-  overflow: hidden;
-}
-
-.detail-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.settings-detail-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-5) var(--space-7);
-  border-bottom: 1px solid var(--workspace-border);
-  flex-shrink: 0;
-}
-
-.back-btn {
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.back-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--lumi-primary);
-}
-
-.header-icon {
-  width: var(--space-9);
-  height: var(--space-9);
-  border-radius: var(--radius-lg);
-  background: var(--lumi-brand-gradient-soft);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--lumi-primary);
-}
-
-.page-title {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.page-subtitle {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  margin-top: 1px;
-}
-
-.settings-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-6) var(--space-7);
-}
-
-.not-found {
+.settings-not-found {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -228,16 +169,16 @@ const sectionComponent = computed(() => {
   color: var(--text-muted);
 }
 
-.not-found h2 {
+.settings-not-found h2 {
   font-size: var(--text-2xl);
   color: var(--text-primary);
 }
 
-.not-found p {
+.settings-not-found p {
   font-size: var(--text-base);
 }
 
-.back-home-btn {
+.settings-not-found__btn {
   margin-top: var(--space-2);
   padding: var(--space-2) var(--space-5);
   border-radius: var(--radius-md);
@@ -248,7 +189,7 @@ const sectionComponent = computed(() => {
   transition: all var(--transition-fast);
 }
 
-.back-home-btn:hover {
+.settings-not-found__btn:hover {
   background: var(--lumi-primary-hover);
 }
 </style>
