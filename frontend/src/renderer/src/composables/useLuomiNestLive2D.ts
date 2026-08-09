@@ -144,6 +144,12 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       document.removeEventListener('visibilitychange', visibilityHandler)
     }
 
+    // 若旧 handler 因页面隐藏停止了 ticker，重新加载模型时需恢复 ticker 运行，
+    // 否则新模型挂载后不会渲染（ticker 未启动则不会驱动 stage 更新）
+    if (!app.ticker.started && !document.hidden) {
+      app.ticker.start()
+    }
+
     visibilityHandler = () => {
       if (document.hidden) {
         app.ticker.stop()
@@ -155,7 +161,10 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
   }
 
   const initPixi = async (): Promise<Application | null> => {
-    return initLuomiNestPixiApp(pixiApp, {
+    // 保存初始化结果到模块级 pixiApp，使后续调用可复用/销毁旧 App。
+    // 此前未赋值导致 pixiApp 始终为 null，每次 loadModel 都新建 Application，
+    // 旧 App 泄漏且 canvas 脱离检测分支无法命中。
+    pixiApp = initLuomiNestPixiApp(pixiApp, {
       canvasRef,
       extraConfig: {
         resizeTo: canvasRef.value?.parentElement ?? undefined,
@@ -163,6 +172,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
       onError: (msg) => { error.value = msg },
       logger,
     })
+    return pixiApp
   }
 
   const loadModel = async (url: string, scale: number = LUOMINEST_DEFAULT_MODEL_SCALE): Promise<void> => {
@@ -209,8 +219,7 @@ export const useLuomiNestLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) => 
         return
       }
 
-      if (loadToken !== currentLoadToken) return
-
+      // 此处 loadToken === currentLoadToken 已由上方守卫保证，移除冗余比较
       setupVisibilityControl(app)
 
       if (currentModel) {

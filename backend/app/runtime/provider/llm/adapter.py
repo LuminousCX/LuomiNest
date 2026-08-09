@@ -337,6 +337,9 @@ class LLMAdapter:
         model = actual_model or provider.default_model
         logger.info(f"[LLM] Chat request: provider={actual_provider_name}, model={model}, messages={len(messages)}, route={route_hint.value}")
 
+        # Prompt 注入防护：净化 user 消息中的伪造系统级标签与守卫标记
+        messages = self._sanitize_messages(messages)
+
         # 构建 LLMRequest（统一参数传递）
         request = LLMRequest(
             messages=messages,
@@ -444,6 +447,9 @@ class LLMAdapter:
         provider = self.get_provider(actual_provider_name)
         model = actual_model or provider.default_model
         logger.info(f"[LLM] Stream request: provider={actual_provider_name}, model={model}, messages={len(messages)}, route={route_hint.value}")
+
+        # Prompt 注入防护：净化 user 消息中的伪造系统级标签与守卫标记
+        messages = self._sanitize_messages(messages)
 
         request = LLMRequest(
             messages=messages,
@@ -558,6 +564,41 @@ class LLMAdapter:
         self._provider_configs.clear()
         self._loaded = False
         logger.info("[Adapter] All providers closed")
+
+    @staticmethod
+    def _sanitize_messages(messages: list[dict]) -> list[dict]:
+        """对 user 角色消息做 Prompt 注入净化。
+
+        只处理 role == "user" 的字符串内容消息：
+        - 中和伪造的守卫块边界标记（防 break-out）
+        - 转义系统级标签（<system>/<memory> 等，渲染为纯文本）
+        - 清理控制字符
+
+        system 角色消息是可信框架区，tool 消息是沙盒工具返回，均不处理，
+        避免破坏系统提示词结构与工具回传的 JSON 内容。
+
+        Args:
+            messages: 原始消息列表。
+
+        Returns:
+            净化后的消息列表（新列表，不修改原消息对象）。
+        """
+        try:
+            from app.security.prompt_security import sanitize_user_input
+        except Exception:
+            return messages
+
+        sanitized: list[dict] = []
+        for msg in messages:
+            if msg.get("role") == "user" and isinstance(msg.get("content"), str):
+                try:
+                    safe_content = sanitize_user_input(msg["content"])
+                    if safe_content != msg["content"]:
+                        msg = {**msg, "content": safe_content}
+                except Exception as e:
+                    logger.debug(f"[Adapter] 用户消息净化跳过: {e}")
+            sanitized.append(msg)
+        return sanitized
 
 
 llm_adapter = LLMAdapter()

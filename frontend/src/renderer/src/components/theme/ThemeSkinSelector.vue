@@ -44,23 +44,25 @@ function getSkinPreviewStyle(skin: Skin): Record<string, string> {
 }
 
 function getSkinPreviewColors(skin: Skin): string[] {
-  return getThemePreviewColors(skin.colorThemeId)
+  // 传入自定义主题列表，使自定义主题皮肤预览使用真实配色而非蓝色兜底
+  return getThemePreviewColors(skin.colorThemeId, themeStore.customThemes)
 }
 
-function handlePresetClick(skin: Skin) {
+// 合并 preset/custom 重复的 apply/edit 处理为统一函数
+function handleApply(skin: Skin) {
   emit('apply', skin.id)
 }
 
-function handlePresetEdit(skin: Skin) {
+function handleEdit(skin: Skin) {
   emit('edit', skin.id)
 }
 
-function handleCustomApply(skin: Skin) {
-  emit('apply', skin.id)
-}
-
-function handleCustomEdit(skin: Skin) {
-  emit('edit', skin.id)
+// 卡片键盘激活：Enter/Space 触发应用（与点击等价，可访问性）
+function onCardKeydown(e: KeyboardEvent, skin: Skin) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    emit('apply', skin.id)
+  }
 }
 
 function handleCreate() {
@@ -74,15 +76,18 @@ function handleCreate() {
     <div class="skin-selector__section">
       <div class="skin-selector__label">预设皮肤</div>
       <div class="preset-grid">
-        <button
+        <div
           v-for="skin in presetSkins"
           :key="skin.id"
           :class="[
             'preset-card',
             { 'preset-card--active': activeId === skin.id }
           ]"
+          role="button"
+          tabindex="0"
           :aria-label="`应用${skin.name}皮肤`"
-          @click="handlePresetClick(skin)"
+          @click="handleApply(skin)"
+          @keydown="onCardKeydown($event, skin)"
         >
           <div class="preset-card__preview" :style="getSkinPreviewStyle(skin)">
             <div v-if="activeId === skin.id" class="preset-card__check">
@@ -95,9 +100,9 @@ function handleCreate() {
                 role="button"
                 tabindex="0"
                 :aria-label="`以${skin.name}为基础编辑`"
-                @click.stop="handlePresetEdit(skin)"
-                @keydown.enter.stop="handlePresetEdit(skin)"
-                @keydown.space.stop.prevent="handlePresetEdit(skin)"
+                @click.stop="handleEdit(skin)"
+                @keydown.enter.stop="handleEdit(skin)"
+                @keydown.space.stop.prevent="handleEdit(skin)"
               >
                 <Pencil :size="12" />
                 <span>编辑</span>
@@ -116,7 +121,7 @@ function handleCreate() {
               />
             </div>
           </div>
-        </button>
+        </div>
       </div>
     </div>
 
@@ -127,15 +132,18 @@ function handleCreate() {
         <span class="skin-selector__count">{{ customSkins.length }}/{{ MAX_CUSTOM_SKINS }}</span>
       </div>
       <div class="custom-list">
-        <button
+        <div
           v-for="skin in customSkins"
           :key="skin.id"
           :class="[
             'custom-card',
             { 'custom-card--active': activeId === skin.id }
           ]"
+          role="button"
+          tabindex="0"
           :aria-label="`应用${skin.name}皮肤`"
-          @click="handleCustomApply(skin)"
+          @click="handleApply(skin)"
+          @keydown="onCardKeydown($event, skin)"
         >
           <div class="custom-card__thumb" :style="getSkinPreviewStyle(skin)" />
           <div class="custom-card__info">
@@ -158,14 +166,14 @@ function handleCreate() {
               role="button"
               tabindex="0"
               :aria-label="`编辑${skin.name}皮肤`"
-              @click.stop="handleCustomEdit(skin)"
-              @keydown.enter.stop="handleCustomEdit(skin)"
-              @keydown.space.stop.prevent="handleCustomEdit(skin)"
+              @click.stop="handleEdit(skin)"
+              @keydown.enter.stop="handleEdit(skin)"
+              @keydown.space.stop.prevent="handleEdit(skin)"
             >
               <Pencil :size="14" />
             </span>
           </div>
-        </button>
+        </div>
 
         <button
           v-if="canAddCustom"
@@ -244,6 +252,12 @@ function handleCreate() {
   border-color: var(--lumi-brand-border);
 }
 
+/* div 替代 button 后需显式提供键盘聚焦轮廓 */
+.preset-card:focus-visible {
+  outline: 2px solid var(--lumi-brand);
+  outline-offset: 2px;
+}
+
 .preset-card--active {
   border-color: var(--lumi-brand);
   box-shadow: 0 0 0 2px var(--lumi-brand-light), var(--shadow-md);
@@ -298,7 +312,8 @@ function handleCreate() {
   z-index: 3;
 }
 
-.preset-card:hover .preset-card__actions {
+.preset-card:hover .preset-card__actions,
+.preset-card:focus-within .preset-card__actions {
   opacity: 1;
 }
 
@@ -382,6 +397,12 @@ function handleCreate() {
   border-color: var(--lumi-brand-border);
   background: var(--surface-hover);
   box-shadow: var(--shadow-sm);
+}
+
+/* div 替代 button 后需显式提供键盘聚焦轮廓 */
+.custom-card:focus-visible {
+  outline: 2px solid var(--lumi-brand);
+  outline-offset: 2px;
 }
 
 .custom-card--active {

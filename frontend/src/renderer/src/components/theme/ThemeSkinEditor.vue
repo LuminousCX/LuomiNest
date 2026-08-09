@@ -122,8 +122,8 @@ async function triggerFileUpload() {
   try {
     uploadingBackground.value = true
     const result = await window.api.dialog.selectBackgroundImage()
-    console.log('[ThemeSkinEditor] selectBackgroundImage result:', result)
     if (!result.success) {
+      // 用户取消选择时不弹错误提示（result.error 为本地化字符串，保持现有行为）
       if (result.error !== '用户取消选择') {
         toast.error(`选择背景图片失败：${result.error}`)
       }
@@ -149,8 +149,21 @@ async function triggerFileUpload() {
   }
 }
 
-function removeCustomBackground() {
+async function removeCustomBackground() {
+  const imageUrl = backgroundImage.value
   backgroundImage.value = null
+  // 仅清理自定义上传的背景文件；预设/渐变背景无实体文件，跳过
+  if (!imageUrl || !imageUrl.startsWith('luominest-bg:')) return
+  // 仅当没有其他皮肤引用同一图片时才删除文件，避免误删共享资源
+  const referencedByOther = themeStore.allSkins.some(
+    (s) => s.background.image === imageUrl && s.id !== props.skin?.id
+  )
+  if (referencedByOther) return
+  try {
+    await window.api.dialog.deleteBackgroundImage(imageUrl)
+  } catch {
+    // 删除失败不阻断编辑流程，残留文件可由后续清理回收
+  }
 }
 
 const previewBackgroundStyle = computed<Record<string, string>>(() => {
@@ -241,7 +254,11 @@ function handleSave() {
     return
   }
 
-  const id = props.skin?.id ?? `custom-skin-${Date.now()}`
+  // 仅当编辑既有自定义皮肤时保留原 id；基于预设皮肤派生或新建时生成新自定义 id，
+  // 避免与预设皮肤 id 冲突导致 preset 被覆盖/别名
+  const id = (isEdit.value && props.skin?.type === 'custom')
+    ? props.skin!.id
+    : `custom-skin-${Date.now()}`
   const skin: Skin = {
     id,
     name: name.value.trim(),
@@ -262,7 +279,9 @@ function handleSave() {
 }
 
 function getCustomThemePreviewColors(theme: ColorTheme): string[] {
-  return [theme.light.primary, theme.light.secondary, theme.light.accent]
+  // 根据 当前明暗模式 选择 light/dark 配色，确保预览与实际渲染一致
+  const palette = themeStore.isDark ? theme.dark : theme.light
+  return [palette.primary, palette.secondary, palette.accent]
 }
 </script>
 
@@ -338,11 +357,16 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
           <div v-if="themeStore.customThemes.length > 0" class="custom-theme-list">
             <div class="custom-theme-list__label">自定义颜色</div>
             <div class="custom-theme-grid">
-              <button
+              <div
                 v-for="theme in themeStore.customThemes"
                 :key="theme.id"
                 :class="['custom-theme-card', { active: colorThemeId === theme.id }]"
+                role="button"
+                tabindex="0"
+                :aria-label="`选择${theme.name}颜色主题`"
                 @click="colorThemeId = theme.id"
+                @keydown.enter.prevent="colorThemeId = theme.id"
+                @keydown.space.prevent="colorThemeId = theme.id"
               >
                 <div class="custom-theme-card__dots">
                   <span
@@ -365,7 +389,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
                   <Pencil :size="12" />
                 </span>
                 <Check v-if="colorThemeId === theme.id" :size="12" class="color-theme-card__check" />
-              </button>
+              </div>
             </div>
           </div>
 
@@ -850,6 +874,12 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
   border-color: var(--lumi-brand-border);
 }
 
+/* div 替代 button 后需显式提供键盘聚焦轮廓 */
+.custom-theme-card:focus-visible {
+  outline: 2px solid var(--lumi-brand);
+  outline-offset: 2px;
+}
+
 .custom-theme-card.active {
   border-color: var(--lumi-brand);
   box-shadow: 0 0 0 2px var(--lumi-brand-light);
@@ -884,7 +914,8 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
   transition: opacity var(--transition-fast), background var(--transition-fast);
 }
 
-.custom-theme-card:hover .custom-theme-card__edit {
+.custom-theme-card:hover .custom-theme-card__edit,
+.custom-theme-card:focus-within .custom-theme-card__edit {
   opacity: 1;
 }
 

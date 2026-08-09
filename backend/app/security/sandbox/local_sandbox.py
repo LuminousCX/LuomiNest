@@ -1,9 +1,18 @@
-"""本地沙盒实现 — 基于 asyncio.create_subprocess_exec 的安全命令执行环境。"""
+"""本地沙盒实现 — 基于 asyncio.create_subprocess_exec 的安全命令执行环境。
+
+安全特性（参考 deer-flow local_sandbox 的进程组隔离与管道排水设计）：
+1. POSIX 下以独立进程组运行（start_new_session），超时后整组 SIGKILL，
+   避免只杀主进程留下残留子进程（如 ``server &`` 后台任务）
+2. 有界管道排水（Bounded Pipe Drain）：后台进程继承 stdout/stderr 时，
+   不会导致 communicate() 永久阻塞，且输出读取有 10 MB 上限
+3. 输出路径遮蔽 + 敏感段黑名单 + 命令审计记录
+"""
 
 import asyncio
 import logging
 import os
 import re
+import signal
 from pathlib import Path
 
 from app.security.sandbox.command_validator import CommandValidator
@@ -20,6 +29,8 @@ logger = logging.getLogger(__name__)
 _OUTPUT_CAPTURE_LIMIT = 10 * 1024 * 1024
 # 写入文件大小上限（80 KB）
 _WRITE_FILE_MAX_BYTES = 80 * 1024
+# 进程退出后等待管道排水任务完成的上限（秒）
+_DRAIN_FINALIZE_TIMEOUT = 5.0
 # 虚拟路径前缀
 _VIRTUAL_PATH_PREFIX = "/mnt/workspace"
 _VIRTUAL_SKILLS_PREFIX = "/mnt/skills"
@@ -93,9 +104,10 @@ class LocalSandbox(Sandbox):
           1. 验证命令安全性（CommandValidator）
           2. 解析为参数列表（如果不已经是 list）
           3. 使用 asyncio.create_subprocess_exec 执行（不经过 shell）
-          4. 超时控制（asyncio.wait_for）
-          5. 输出捕获上限 10 MB
-          6. 路径遮蔽
+          4. POSIX 下以独立进程组运行，超时后整组 SIGKILL
+          5. 有界管道排水：后台进程不会导致 communicate() 永久阻塞
+          6. 输出捕获上限 10 MB + 路径遮蔽
+          7. 命令执行审计记录（异步，不阻塞主流程）
 
         Args:
             cmd: 命令字符串或参数列表。
@@ -115,13 +127,23 @@ class LocalSandbox(Sandbox):
             cmd_parts = cmd
         else:
             cmd_str = cmd
-            self.validator.validate_command(cmd_str)
             cmd_parts = self._parse_cmd(cmd_str)
+
+        # 列表形式同样必须经过安全验证，防止绕过 validate_command
+        self.validator.validate_command(cmd_str)
 
         if not cmd_parts:
             raise SandboxCommandError("命令解析结果为空", command=cmd_str, exit_code=-1)
 
-        # 2. 执行命令
+        # 2. 记录命令审计（异步，失败不阻塞主流程）
+        self._audit_command(cmd_str)
+
+        # 3. 执行命令（进程组隔离）
+        posix_mode = os.name != "nt"
+        # start_new_session 仅 POSIX 支持（Windows 传参会抛 TypeError）
+        subprocess_kwargs: dict = {}
+        if posix_mode:
+            subprocess_kwargs["start_new_session"] = True  # 独立进程组，便于超时后整组清理
         try:
             process = await asyncio.create_subprocess_exec(
                 *cmd_parts,
@@ -129,6 +151,8 @@ class LocalSandbox(Sandbox):
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(self.workspace),
                 env=self._build_env(),
+                stdin=asyncio.subprocess.DEVNULL,  # 禁止交互式输入
+                **subprocess_kwargs,
             )
         except FileNotFoundError as e:
             raise SandboxCommandError(
@@ -148,30 +172,30 @@ class LocalSandbox(Sandbox):
                 exit_code=-1,
             ) from e
 
-        # 3. 等待完成（带超时）
+        # 4. 有界管道排水：分别异步读取 stdout/stderr，避免
+        #    communicate() 在后台进程（如 server &）继承管道时永久阻塞。
+        drain_tasks = [
+            asyncio.create_task(self._drain_stream(process.stdout, _OUTPUT_CAPTURE_LIMIT)),
+            asyncio.create_task(self._drain_stream(process.stderr, _OUTPUT_CAPTURE_LIMIT)),
+        ]
+
+        # 5. 等待进程结束（带超时）
         timed_out = False
         try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                process.communicate(),
-                timeout=timeout,
-            )
+            await asyncio.wait_for(process.wait(), timeout=timeout)
         except asyncio.TimeoutError:
             timed_out = True
-            # 终止进程
-            try:
-                process.kill()
-            except ProcessLookupError:
-                pass
-            await process.wait()
-            stdout_bytes = b""
-            stderr_bytes = b""
+            self._terminate_process_group(process, posix_mode)
 
-        # 4. 解码输出（限制大小）
+        # 6. 等待排水任务完成（限时，防止后台进程拖住事件循环）
+        stdout_bytes, stderr_bytes = await self._finalize_drain(drain_tasks)
+
+        # 7. 解码输出（限制大小）
         stdout = self._decode_and_truncate(stdout_bytes)
         stderr = self._decode_and_truncate(stderr_bytes)
         exit_code = process.returncode if process.returncode is not None else -1
 
-        # 5. 路径遮蔽
+        # 8. 路径遮蔽
         stdout = mask_local_paths_in_output(stdout, self.workspace)
         stderr = mask_local_paths_in_output(stderr, self.workspace)
 
@@ -338,3 +362,111 @@ class LocalSandbox(Sandbox):
         if len(text) > limit:
             text = text[:limit] + f"\n... [output truncated after {limit} bytes] ..."
         return text
+
+    # ------------------------------------------------------------------
+    # 安全辅助：管道排水 / 进程组终止 / 命令审计
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    async def _drain_stream(stream, limit: int) -> bytes:
+        """有界读取管道流，防止后台进程继承管道导致永久阻塞。
+
+        读取直到 EOF、达到 limit 上限或流关闭为止；
+        单次最多读取 limit 字节，超限即停止（剩余数据丢弃）。
+
+        Args:
+            stream: asyncio StreamReader（子进程的 stdout/stderr）。
+            limit: 最大读取字节数。
+
+        Returns:
+            已读取的字节内容。
+        """
+        if stream is None:
+            return b""
+        chunks: list[bytes] = []
+        total = 0
+        while total < limit:
+            try:
+                chunk = await stream.read(min(4096, limit - total))
+            except (ConnectionError, OSError, asyncio.CancelledError):
+                break
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+        return b"".join(chunks)
+
+    @staticmethod
+    async def _finalize_drain(drain_tasks: list[asyncio.Task]) -> tuple[bytes, bytes]:
+        """限时等待排水任务完成，超时后取消任务，返回已读取内容。
+
+        Args:
+            drain_tasks: [stdout 排水任务, stderr 排水任务]。
+
+        Returns:
+            (stdout_bytes, stderr_bytes)。
+        """
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*drain_tasks, return_exceptions=True),
+                timeout=_DRAIN_FINALIZE_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            for task in drain_tasks:
+                if not task.done():
+                    task.cancel()
+
+        results: list[bytes] = []
+        for task in drain_tasks:
+            try:
+                result = task.result()
+            except (asyncio.CancelledError, Exception):
+                result = b""
+            results.append(result if isinstance(result, bytes) else b"")
+        return results[0], results[1]
+
+    def _terminate_process_group(self, process, posix_mode: bool) -> None:
+        """终止进程（组）。
+
+        POSIX 下向进程组发送 SIGKILL，Windows 下回退到 process.kill()。
+        进程已退出时静默忽略（ProcessLookupError）。
+
+        Args:
+            process: 子进程对象。
+            posix_mode: 是否为 POSIX 平台。
+        """
+        try:
+            if posix_mode and hasattr(os, "killpg"):
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                    return
+                except ProcessLookupError:
+                    return  # 进程组已不存在，无需处理
+            process.kill()
+        except ProcessLookupError:
+            pass
+        except Exception as e:
+            logger.warning(f"[LocalSandbox] 终止进程组失败: {e}")
+
+    def _audit_command(self, cmd: str) -> None:
+        """异步记录命令执行审计，失败不阻塞主流程。
+
+        Args:
+            cmd: 命令字符串。
+        """
+        try:
+            from app.security.audit.logger import AuditLogger
+
+            async def _write_audit() -> None:
+                try:
+                    await AuditLogger.get_instance().log_command_execute(
+                        user_id="system",
+                        command=cmd[:200] if len(cmd) > 200 else cmd,
+                        success=True,
+                    )
+                except Exception as e:
+                    logger.debug(f"[LocalSandbox] 命令审计写入失败: {e}")
+
+            asyncio.create_task(_write_audit())
+        except Exception as e:
+            logger.debug(f"[LocalSandbox] 命令审计初始化失败: {e}")

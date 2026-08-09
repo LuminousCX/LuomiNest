@@ -44,6 +44,9 @@ watch(() => route.query.tab, (tab) => {
 
 // 初始化时加载仓库来源数据
 onMounted(async () => {
+  // 先注册点击监听，确保 onUnmounted 能正确移除（即使初始化中途组件卸载）
+  document.addEventListener('click', closeSourceDropdown)
+
   // 优先从后端获取目录数据（失败时保持 Mock 数据）
   await store.fetchCatalogFromBackend()
   await repoSourceStore.fetchSources()
@@ -52,19 +55,20 @@ onMounted(async () => {
   if (activeId) {
     await repoSourceStore.fetchSourceItems(activeId)
   }
-  // 加载发布源列表（含延迟测试）
-  await registryStore.fetchSources()
-  // 从后端同步安装状态
-  await store.syncInstallStatus()
-  // 从后端同步统计数据（下载计数、喜欢计数、排行榜）
-  await store.syncAllStats()
-
-  document.addEventListener('click', closeSourceDropdown)
+  // 三个相互独立的请求并行发起，单个失败不阻断其他
+  await Promise.allSettled([
+    registryStore.fetchSources(),
+    store.syncInstallStatus(),
+    store.syncAllStats(),
+  ])
 })
 
 const handleQuickSwitchSource = async (sourceId: string) => {
   showSourceDropdown.value = false
   if (sourceId === registryStore.activeSourceId) return
+  // 与 RepoSourcePanel.isRegistrySourceSelectable 一致：禁用/不健康源阻止切换
+  const target = registryStore.sources.find((s) => s.id === sourceId)
+  if (!target || !target.enabled || target.healthy === false) return
   try {
     await registryStore.switchSource(sourceId)
     // 切换源后刷新市场目录（远程注册表数据会变化）

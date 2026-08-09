@@ -46,5 +46,5 @@ export function useDebouncedSearch<T extends unknown[]>(
     { immediate: true },
   )
 
-  return { results: results as Ref<T>, isSearching }
+  return { results, isSearching }
 }

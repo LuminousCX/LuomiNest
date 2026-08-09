@@ -149,14 +149,22 @@ export const useApi = () => {
       if (!text) return undefined as T
       const parsed = JSON.parse(text)
       // 自动解包统一响应信封 ok()/fail()：{code, message, error, data}
-      // 成功时 code===0，返回 data 负载；裸格式（无 code 字段）原样返回，保持向后兼容
+      // 仅根据 code（数字）与 data 字段判定为信封，不强制要求 error 字段存在，
+      // 兼容部分端点返回 {code, message, data} 的非标准格式。
+      // code===0 返回 data 负载；code 非 0 抛出错误并保留后端 message（软错误兜底）。
+      // 无 code 字段的裸响应原样返回，保持向后兼容。
       if (
         parsed &&
         typeof parsed === 'object' &&
         typeof parsed.code === 'number' &&
-        'data' in parsed &&
-        'error' in parsed
+        'data' in parsed
       ) {
+        if (parsed.code !== 0) {
+          const msg = typeof parsed.message === 'string' && parsed.message
+            ? parsed.message
+            : statusToMessage(resp.status)
+          throw new Error(msg)
+        }
         return parsed.data as T
       }
       return parsed as T

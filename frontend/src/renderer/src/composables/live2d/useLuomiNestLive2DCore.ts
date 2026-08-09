@@ -264,7 +264,9 @@ export const setupLuomiNestIdleAnimation = (
   fps: number = 30
 ): { cleanup: () => void } => {
   const startTime = Date.now()
-  const targetFps = Ticker.targetFPMS ? 1 / Ticker.targetFPMS : 60
+  // targetFPMS = "frames per millisecond"，乘 1000 得到 FPS。
+  // 此前误用 1/targetFPMS（=毫秒/帧），导致 frameSkip 恒为 1，idle 动画以全速 60fps 运行。
+  const targetFps = Ticker.targetFPMS ? Ticker.targetFPMS * 1000 : 60
   const frameSkip = Math.max(1, Math.round(targetFps / fps))
   let frameCount = 0
 
@@ -585,7 +587,8 @@ export const createLuomiNestFocusTracker = (
 ): LuomiNestFocusTracker => {
   let currentX = 0
   let currentY = 0
-  const targetFps = Ticker.targetFPMS ? 1 / Ticker.targetFPMS : 60
+  // targetFPMS = "frames per millisecond"，乘 1000 得到 FPS（同 setupLuomiNestIdleAnimation）
+  const targetFps = Ticker.targetFPMS ? Ticker.targetFPMS * 1000 : 60
   const frameSkip = Math.max(1, Math.round(targetFps / fps))
   let frameCount = 0
 

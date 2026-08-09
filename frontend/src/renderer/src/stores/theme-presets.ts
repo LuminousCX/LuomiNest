@@ -10,7 +10,7 @@ export const presetThemes: ColorTheme[] = [
   // ────────────────────────────────────────────
   {
     id: 'blue',
-    name: '默认蓝',
+    name: '辰汐蓝',
     type: 'preset',
     light: {
       primary: '#147EBC',
@@ -199,7 +199,17 @@ export const presetThemeColors: Record<string, [string, string, string]> = {
   orange: ['#EA580C', '#FB923C', '#0EA5E9']
 }
 
-/** 获取色彩主题的预览色 */
-export function getThemePreviewColors(themeId: string): [string, string, string] {
-  return presetThemeColors[themeId] ?? ['#147EBC', '#5BA4D4', '#f43f5e']
+/** 获取色彩主题的预览色。
+ *  预设主题查表；自定义主题（传入 customThemes）使用其 light 三色；
+ *  都未命中时回退到蓝色预设，避免预览空白。
+ */
+export function getThemePreviewColors(
+  themeId: string,
+  customThemes?: ColorTheme[]
+): [string, string, string] {
+  const preset = presetThemeColors[themeId]
+  if (preset) return preset
+  const custom = customThemes?.find((t) => t.id === themeId)
+  if (custom) return [custom.light.primary, custom.light.secondary, custom.light.accent]
+  return ['#147EBC', '#5BA4D4', '#f43f5e']
 }

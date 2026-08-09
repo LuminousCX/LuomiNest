@@ -651,6 +651,16 @@ const handleNavigate = (path: string) => {
   }
 }
 
+/* 用户偏好减少动态效果时，跳过进入动画，直接保持可见，
+   避免初始 opacity:0 / transform 残留导致导航子项不可见 */
+@media (prefers-reduced-motion: reduce) {
+  .tree-child {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
+
 .tree-child:hover {
   background: var(--nav-item-hover-bg);
   color: var(--text-primary);

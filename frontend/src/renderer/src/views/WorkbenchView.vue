@@ -343,11 +343,14 @@ onBeforeUnmount(() => {
   overflow: hidden;
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  transition: background-color 0.45s ease-in-out;
+  transition: background-color var(--transition-normal);
 }
 
-/* 有全局背景壁纸时，右侧面板使用更强的毛玻璃表面 */
-.lumi-app.has-background .workbench-avatar {
+/* 有全局背景壁纸时，右侧面板使用更强的毛玻璃表面。
+   支持全部运行时背景激活标记（与 variables.css 保持一致） */
+.lumi-app.lumi-app--bg-active .workbench-avatar,
+.lumi-app.has-background .workbench-avatar,
+[data-lumi-background="active"] .lumi-app .workbench-avatar {
   background: var(--glass-surface);
   border-left-color: var(--glass-border);
 }

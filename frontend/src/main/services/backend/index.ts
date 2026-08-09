@@ -5,6 +5,7 @@ import { existsSync } from 'fs'
 import { platform } from 'os'
 import { PATHS } from '../paths'
 import { createLuomiNestLogger } from '../luomi-logger'
+import { getLumiAuthToken } from './auth-token'
 
 const logger = createLuomiNestLogger('Backend')
 
@@ -178,12 +179,21 @@ export const startBackend = async (): Promise<boolean> => {
     ? [mainPath, '--host', BACKEND_HOST, '--port', String(BACKEND_PORT)]
     : ['--host', BACKEND_HOST, '--port', String(BACKEND_PORT)]
   
+  // 认证策略：
+  // - 开发模式：LUOMINEST_NO_AUTH=1，便于快速迭代，无需令牌即可调用本地后端
+  // - 打包模式：注入 LUOMINEST_AUTH_TOKEN（与渲染进程 window.api.auth.getToken 同源），
+  //   后端启用令牌校验，防止本机其他进程未授权调用 127.0.0.1:18000（为后续 JWT/无头模式做准备）
   const env: Record<string, string | undefined> = {
     ...process.env,
     PYTHONUNBUFFERED: '1',
     PYTHONIOENCODING: 'utf-8',
     LUOMINEST_DATA_DIR: PATHS.backendData,
-    LUOMINEST_NO_AUTH: '1'
+  }
+
+  if (isDev) {
+    env.LUOMINEST_NO_AUTH = '1'
+  } else {
+    env.LUOMINEST_AUTH_TOKEN = getLumiAuthToken()
   }
 
   if (platform() === 'linux' || platform() === 'darwin') {

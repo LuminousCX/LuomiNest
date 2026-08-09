@@ -127,8 +127,6 @@
   --overlay-subtle: rgba(0, 0, 0, 0.15);
 
   --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.40);
-  --glass-blur: blur(16px);
 
   --focus-ring: rgba(20, 126, 188, 0.35);
 
@@ -342,9 +340,6 @@
   --modal-shadow: var(--shadow-xl);
   --modal-overlay: var(--overlay-bg);
 
-  /* Glass / Toast */
-  --glass-shadow: var(--shadow-lg);
-
   /* ========== 辅色（三色主题系统） ========== */
   --lumi-secondary: #5BA4D4;
   --lumi-secondary-hover: #4A93C3;
@@ -465,7 +460,6 @@
   --overlay-subtle: rgba(0, 0, 0, 0.25);
 
   --glass-bg: rgba(17, 17, 17, 0.72);
-  --glass-border: rgba(42, 42, 42, 0.50);
 
   --focus-ring: rgba(58, 159, 212, 0.35);
 
@@ -527,8 +521,6 @@
   --nav-item-active-bg: var(--lumi-brand-subtle);
   --nav-item-active-color: var(--lumi-brand);
   --nav-item-hover-bg: var(--surface-hover);
-
-  --glass-shadow: var(--shadow-lg);
 
   --lumi-secondary: #7BBCE4;
   --lumi-secondary-hover: #8FC8EC;

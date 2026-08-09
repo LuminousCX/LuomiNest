@@ -148,10 +148,27 @@ const isRegistrySourceSelectable = (source: RegistrySource) => {
 const handleRegistrySourceClick = async (source: RegistrySource) => {
   if (!isRegistrySourceSelectable(source)) return
   if (source.id === registryStore.activeSourceId) return
+  // 切换进行中时禁止重复触发，避免并发切换导致状态错乱
+  if (registryStore.switching) return
   try {
     await registryStore.switchSource(source.id)
   } catch {
     // 错误已在 store 中记录，无需额外处理
+  }
+}
+
+// 键盘激活：Enter/Space 触发与点击等价的行为（可访问性）
+const onSourceKeydown = (e: KeyboardEvent, source: RegistrySource) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    handleRegistrySourceClick(source)
+  }
+}
+
+const onToggleRepoKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    showRepoSources.value = !showRepoSources.value
   }
 }
 
@@ -205,7 +222,11 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
               switching: registryStore.switching && registryStore.activeSourceId !== source.id,
             },
           ]"
+          role="button"
+          tabindex="0"
+          :aria-disabled="!isRegistrySourceSelectable(source) || registryStore.switching"
           @click="handleRegistrySourceClick(source)"
+          @keydown="onSourceKeydown($event, source)"
         >
           <div class="registry-source-left">
             <div
@@ -253,7 +274,14 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
 
     <!-- 仓库来源（折叠） -->
     <div class="repo-source-section-toggle">
-      <div class="repo-source-section-toggle-left" @click="showRepoSources = !showRepoSources">
+      <div
+        class="repo-source-section-toggle-left"
+        role="button"
+        tabindex="0"
+        aria-label="展开或收起仓库来源"
+        @click="showRepoSources = !showRepoSources"
+        @keydown="onToggleRepoKeydown"
+      >
         <span class="section-title">仓库来源</span>
         <component :is="showRepoSources ? ChevronDown : ChevronRight" :size="14" />
       </div>
@@ -678,13 +706,6 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
 
 .repo-source-section-toggle:hover {
   background: var(--surface-hover);
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--space-1);
 }
 
 .panel-title {

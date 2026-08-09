@@ -636,11 +636,18 @@
    注意：主要玻璃变量与通用适配已迁移至 variables.css，
    此处仅保留设置页特有的形态与交互样式。
    ------------------------------------------------------- */
-.lumi-app.has-background .settings-panel {
+/* 支持全部运行时背景激活标记（与 variables.css 保持一致）：
+   .lumi-app--bg-active（App.vue 实际使用）、.has-background（兼容）、
+   [data-lumi-background="active"]（属性形式） */
+.lumi-app.lumi-app--bg-active .settings-panel,
+.lumi-app.has-background .settings-panel,
+[data-lumi-background="active"] .lumi-app .settings-panel {
   background: transparent;
 }
 
-.lumi-app.has-background .settings-view {
+.lumi-app.lumi-app--bg-active .settings-view,
+.lumi-app.has-background .settings-view,
+[data-lumi-background="active"] .lumi-app .settings-view {
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
 }

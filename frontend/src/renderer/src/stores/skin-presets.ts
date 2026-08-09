@@ -207,9 +207,14 @@ export const presetSkinMap: Record<string, Skin> = Object.fromEntries(
   presetSkins.map((s) => [s.id, s])
 )
 
-/** 根据色彩主题 ID 生成默认皮肤 ID */
+/** 根据色彩主题 ID 生成默认皮肤 ID。
+ *  校验生成的 classic 皮肤 ID 是否存在于 presetSkinMap，
+ *  若无对应预设皮肤（含自定义主题 ID），回退到 skin-classic-blue，
+ *  避免返回不存在的皮肤 ID 导致 activeSkin 为空。
+ */
 export function getDefaultSkinIdForColorTheme(colorThemeId: string): string {
-  return `skin-classic-${colorThemeId}`
+  const id = `skin-classic-${colorThemeId}`
+  return presetSkinMap[id] ? id : 'skin-classic-blue'
 }
 
 /** 查找预设皮肤 */

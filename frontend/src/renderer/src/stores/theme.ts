@@ -18,7 +18,7 @@ export const useThemeStore = defineStore('theme', () => {
   const activeColorThemeId = ref<string>('blue')
   const activeMode = ref<'light' | 'dark' | 'system'>('light')
   const customThemes = ref<ColorTheme[]>([])
-  const background = ref<BackgroundConfig & { fit?: BackgroundFit }>({
+  const background = ref<BackgroundConfig>({
     image: null,
     blur: 5,
     opacity: 100
@@ -57,7 +57,7 @@ export const useThemeStore = defineStore('theme', () => {
     activeSkin.value?.mode ?? activeMode.value
   )
 
-  const effectiveBackground = computed<BackgroundConfig & { fit?: BackgroundFit }>(() =>
+  const effectiveBackground = computed<BackgroundConfig>(() =>
     activeSkin.value?.background ?? background.value
   )
 
@@ -133,14 +133,15 @@ export const useThemeStore = defineStore('theme', () => {
 
   // ─── Persistence ─────────────────────────────
   function saveConfig() {
-    const config = JSON.parse(JSON.stringify({
+    // structuredClone 替代 JSON.parse(JSON.stringify(...))：更高效且能正确处理 Date 等
+    const config = structuredClone({
       activeColorThemeId: activeColorThemeId.value,
       activeMode: activeMode.value,
       background: toRaw(background.value),
       customThemes: toRaw(customThemes.value),
       activeSkinId: activeSkinId.value,
       customSkins: toRaw(customSkins.value)
-    })) as ThemeConfig
+    }) as ThemeConfig
     setItem(CONFIG_STORAGE_KEY, config)
     getApi()?.setThemeConfig(config).catch(() => {})
   }
@@ -157,9 +158,12 @@ export const useThemeStore = defineStore('theme', () => {
   // ─── Actions: Color Theme ────────────────────
   function setColorTheme(id: string) {
     activeColorThemeId.value = id
-    // 选择色彩主题时，如果当前是经典皮肤或无皮肤，则切换到对应经典皮肤
+    // 选择色彩主题时，切换到对应经典皮肤：
+    // - 无皮肤或任意 preset 皮肤（含 classic 与非 classic）均切换，使 effectiveColorThemeId 能反映新选择
+    // - custom 皮肤保留不动（用户自定义皮肤不应被覆盖），其 colorThemeId 仍会驱动 effectiveColorThemeId
+    //   （显式括号澄清 || 与 && 优先级）
     const currentSkin = activeSkin.value
-    if (!currentSkin || currentSkin.type === 'preset' && currentSkin.id.startsWith('skin-classic-')) {
+    if (!currentSkin || (currentSkin.type === 'preset')) {
       activeSkinId.value = getDefaultSkinIdForColorTheme(id)
     }
     applyThemeToDOM()
@@ -184,7 +188,10 @@ export const useThemeStore = defineStore('theme', () => {
 
   function deleteCustomTheme(id: string) {
     customThemes.value = customThemes.value.filter((t) => t.id !== id)
-    if (effectiveColorThemeId.value === id) {
+    // 同步移除引用了被删主题的自定义皮肤，避免悬空 colorThemeId 指向不存在主题
+    customSkins.value = customSkins.value.filter((s) => s.colorThemeId !== id)
+    // 当前生效主题为被删主题，或激活皮肤已被移除时，回退到默认主题/皮肤
+    if (effectiveColorThemeId.value === id || !activeSkin.value) {
       activeColorThemeId.value = 'blue'
       activeSkinId.value = getDefaultSkinIdForColorTheme('blue')
       applyThemeToDOM()
@@ -223,16 +230,19 @@ export const useThemeStore = defineStore('theme', () => {
 
   // ─── Actions: Skin ───────────────────────────
   function setSkin(id: string) {
+    // 先校验 id 是否对应已存在的皮肤（preset 或 custom），无效则不应用、不持久化
+    const skin = allSkins.value.find((s) => s.id === id)
+    if (!skin) return
+
     activeSkinId.value = id
-    const skin = activeSkin.value
-    if (skin) {
-      activeColorThemeId.value = skin.colorThemeId
-      activeMode.value = skin.mode
-      background.value = {
-        image: skin.background.image,
-        blur: skin.background.blur,
-        opacity: skin.background.opacity
-      }
+    activeColorThemeId.value = skin.colorThemeId
+    activeMode.value = skin.mode
+    // 同步 background 时一并写入 fit，避免上一皮肤 fit 残留与新皮肤不一致
+    background.value = {
+      image: skin.background.image,
+      blur: skin.background.blur,
+      opacity: skin.background.opacity,
+      fit: skin.background.fit
     }
     applyMode(effectiveMode.value)
     applyThemeToDOM()
@@ -240,10 +250,11 @@ export const useThemeStore = defineStore('theme', () => {
     saveConfig()
   }
 
-  function addCustomSkin(skin: Skin) {
-    if (customSkins.value.length >= MAX_CUSTOM_SKINS) return
+  function addCustomSkin(skin: Skin): boolean {
+    if (customSkins.value.length >= MAX_CUSTOM_SKINS) return false
     customSkins.value.push(skin)
     setSkin(skin.id)
+    return true
   }
 
   function updateCustomSkin(id: string, updates: Partial<Skin>) {
@@ -305,7 +316,13 @@ export const useThemeStore = defineStore('theme', () => {
     }
 
     // 创建自定义皮肤来承载旧配置
-    const skinId = `migrated-${Date.now()}`
+    // 使用稳定 ID（而非 Date.now()），避免 initFromConfig 多次调用（本地存储 + IPC）
+    // 时重复追加迁移皮肤
+    const skinId = 'migrated-legacy'
+    const existingMigrated = (config.customSkins ?? []).find((s) => s.id === skinId)
+    if (existingMigrated) {
+      return { ...config, activeSkinId: skinId }
+    }
     const migratedSkin: Skin = {
       id: skinId,
       name: isCustomColor ? '我的自定义主题' : '我的皮肤',
@@ -375,7 +392,7 @@ export const useThemeStore = defineStore('theme', () => {
   // 2. 再从 IPC 加载权威配置（异步，覆盖本地存储）
   const api = getApi()
   if (api) {
-    api.getThemeConfig().then((config: any) => {
+    api.getThemeConfig().then((config) => {
       if (config) {
         initFromConfig(config)
         applyMode(effectiveMode.value)
@@ -384,7 +401,7 @@ export const useThemeStore = defineStore('theme', () => {
       }
       initialized = true
     }).catch(() => {
-      api.getTheme().then((theme: string) => {
+      api.getTheme().then((theme) => {
         if (theme === 'dark') {
           activeMode.value = 'dark'
           applyMode('dark')

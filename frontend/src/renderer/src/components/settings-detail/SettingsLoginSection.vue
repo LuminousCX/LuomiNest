@@ -221,8 +221,8 @@ onMounted(() => {
 
           <div class="auth-actions">
             <LumiButton variant="danger-ghost" size="md" :loading="submitting" @click="handleLogout">
-              <template #icon v-if="!submitting">
-                <LogOut :size="16" />
+              <template #icon>
+                <LogOut v-if="!submitting" :size="16" />
               </template>
               登出
             </LumiButton>
@@ -348,8 +348,8 @@ onMounted(() => {
               :loading="submitting"
               :disabled="!canSubmit || submitting"
             >
-              <template #icon v-if="!submitting">
-                <component :is="isLoginMode ? LogIn : UserPlus" :size="16" />
+              <template #icon>
+                <component :is="isLoginMode ? LogIn : UserPlus" v-if="!submitting" :size="16" />
               </template>
               {{ isLoginMode ? (submitting ? '登录中...' : '登录') : (submitting ? '注册中...' : '注册') }}
             </LumiButton>

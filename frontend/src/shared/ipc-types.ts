@@ -113,7 +113,7 @@ export interface ThemeColorSet {
   gradientBrand: string
 }
 
-/** 背景配置 */
+/** 背景配置（ThemeConfig 与 Skin 共用，fit 为可选以兼容旧配置） */
 export interface BackgroundConfig {
   /** 背景图片路径（相对路径或 null） */
   image: string | null
@@ -121,6 +121,8 @@ export interface BackgroundConfig {
   blur: number
   /** 透明度 0-100 */
   opacity: number
+  /** 背景适配方式（仅图片/渐变有效，可选以兼容无 fit 的旧配置） */
+  fit?: BackgroundFit
 }
 
 /** 背景适配方式 */
@@ -136,10 +138,7 @@ export interface Skin {
   /** 主题模式 */
   mode: 'light' | 'dark' | 'system'
   /** 背景配置 */
-  background: BackgroundConfig & {
-    /** 背景适配方式（仅图片/渐变有效） */
-    fit?: BackgroundFit
-  }
+  background: BackgroundConfig
   /** 毛玻璃强度 0-100 */
   glassIntensity: number
   /** 氛围光强度 0-100 */

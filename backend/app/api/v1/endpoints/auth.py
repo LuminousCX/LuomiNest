@@ -2,9 +2,15 @@
 
 提供用户注册、登录、Token 刷新、登出及当前用户信息查询。
 仅在 AUTH_MODE="jwt" 时有实际意义。
+
+安全特性：
+- 登录失败统一返回"用户名或密码错误"（不泄露用户是否存在）
+- 登录失败延迟响应（防暴力破解，参考 AstrBot 登录防爆破模式）
 """
 
 from __future__ import annotations
+
+import asyncio
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
@@ -23,6 +29,12 @@ from app.security.auth.jwt_handler import (
     TokenError,
 )
 from app.security.auth.password import hash_password, verify_password
+
+
+# 登录失败时的人工延迟（秒），增加暴力破解时间成本
+_LOGIN_FAILURE_DELAY = 1.5
+# 最小用户名校验长度
+_USERNAME_MIN_LENGTH = 3
 
 
 # ── Pydantic 请求/响应模型 ─────────────────────────────────────────────────────
@@ -131,7 +143,13 @@ async def login(request: LoginRequest):
     """用户登录。
 
     验证用户名密码，签发 access_token 和 refresh_token。
+    失败时统一返回"用户名或密码错误"并延迟响应（防暴力破解）。
     """
+    # 用户名长度快速校验（避免对过短用户名做无意义查询）
+    if len(request.username) < _USERNAME_MIN_LENGTH:
+        await asyncio.sleep(_LOGIN_FAILURE_DELAY)
+        raise AuthenticationError("用户名或密码错误")
+
     async with async_session_factory() as session:
         result = await session.execute(
             select(User).where(User.username == request.username)
@@ -139,10 +157,13 @@ async def login(request: LoginRequest):
         user = result.scalar_one_or_none()
 
     if not user:
+        await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户名或密码错误")
     if not user.is_active:
+        await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户已被禁用")
     if not verify_password(request.password, user.password_hash):
+        await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户名或密码错误")
 
     device_id = request.device_id or ""
