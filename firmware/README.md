@@ -379,14 +379,14 @@ firmware/
 
 ```powershell
 # 加载 ESP-IDF 环境（必须！）
-. "C:\Espressif\tools\Microsoft.v5.5.3.PowerShell_profile.ps1"
+C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -ExecutionPolicy Bypass -NoProfile -Command "& {. 'C:\Espressif\tools\Microsoft.v5.4.4.PowerShell_profile.ps1'}"
 ```
 
 ### ESP32-P4
 
 ```powershell
-# 1. 加载 ESP-IDF 环境
-. "C:\Espressif\tools\Microsoft.v5.5.3.PowerShell_profile.ps1"
+# 1. 加载 ESP-IDF 环境（请根据实际情况修改路径）
+C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -ExecutionPolicy Bypass -NoProfile -Command "& {. 'C:\Espressif\tools\Microsoft.v5.4.4.PowerShell_profile.ps1'}"
 
 # 2. 进入项目目录
 cd C:\Users\lumin\Projects\Project\LuomiNest\firmware\embedded\esp32-p4
@@ -396,6 +396,7 @@ rm -Recurse -Force .\build, .\sdkconfig
 
 # 4. 完全深度清理
 idf.py fullclean
+Remove-Item -Recurse -Force .\build
 Remove-Item -Path build, sdkconfig, sdkconfig.old -Recurse -Force
 Remove-Item -Path "managed_components" -Recurse -Force
 

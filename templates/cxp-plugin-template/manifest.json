@@ -1,0 +1,22 @@
+{
+  "id": "cxp-my-plugin",
+  "type": "plugin",
+  "name": "我的插件",
+  "version": "1.0.0",
+  "description": "一个示例插件 — 请根据实际功能修改此描述（20-80 字）",
+  "author": "YourName",
+  "license": "MIT",
+  "entry": "main",
+  "minAppVersion": "0.7.6",
+  "platform": "backend",
+  "category": "tool",
+  "tags": ["example", "template"],
+  "icon": "Puzzle",
+  "permissions": ["event_listen"],
+  "dependencies": {
+    "python": ">=3.12",
+    "pip": []
+  },
+  "settings": {},
+  "hooks": {}
+}

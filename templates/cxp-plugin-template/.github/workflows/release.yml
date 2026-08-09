@@ -1,0 +1,38 @@
+name: Build Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Package plugin
+        run: |
+          # 读取 manifest.json 中的 id 与 version
+          PLUGIN_ID=$(python -c "import json; print(json.load(open('manifest.json'))['id'])")
+          PLUGIN_VERSION=$(python -c "import json; print(json.load(open('manifest.json'))['version'])")
+
+          # 打包为平铺结构 zip（manifest.json + main.py + 其他 *.py 在根目录）
+          # 注意：不要包含 __pycache__/、data/、.git/ 等运行时与版本控制目录
+          zip -r "${PLUGIN_ID}-v${PLUGIN_VERSION}.zip" \
+            manifest.json main.py *.py \
+            -x "__pycache__/*" "*.pyc" "data/*" ".git/*" ".DS_Store"
+
+          echo "Packaged: ${PLUGIN_ID}-v${PLUGIN_VERSION}.zip"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.zip"
+          generate_release_notes: true
+          draft: false
+          prerelease: false
