@@ -7,8 +7,6 @@ import {
   Bell,
   Bot,
   Brain,
-  Volume2,
-  Mic,
   Shield,
   MessageCircle,
   Puzzle,
@@ -50,9 +48,7 @@ const settingGroups = ref<SettingGroup[]>([
     title: '系统配置',
     items: [
       { label: '主智能体', desc: '工作台主 Agent 的人格、模型与行为', route: '/settings/main-agent', icon: Bot, iconColor: 'var(--lumi-primary)' },
-      { label: 'AI 模型', desc: '选择 LLM 推理引擎', route: '/settings/ai-model', icon: Brain, iconColor: 'var(--lumi-accent)' },
-      { label: '语音合成 (TTS)', desc: '本地/在线 TTS 引擎与设备检测', route: '/settings/tts', icon: Volume2, iconColor: 'var(--lumi-success)' },
-      { label: '语音识别 (STT)', desc: '本地/在线 STT 引擎与语音输入', route: '/settings/stt', icon: Mic, iconColor: 'var(--lumi-info)' },
+      { label: '模型设置', desc: 'LLM 推理引擎、语音合成与语音识别', route: '/settings/ai-model', icon: Brain, iconColor: 'var(--lumi-accent)' },
       { label: '登录 / 注册', desc: '本地账户登录、注册与 JWT 管理', route: '/settings/auth', icon: LogIn, iconColor: 'var(--lumi-warning)' },
       { label: '隐私安全', desc: '数据加密与访问控制', route: '/settings/privacy', icon: Shield, iconColor: 'var(--lumi-danger)' }
     ]
@@ -79,66 +75,68 @@ const navigateTo = (route: string) => {
 
 <template>
   <div class="settings-view">
-    <div class="settings-hero animate-fade-in">
-      <div class="settings-hero__avatar">
-        <User :size="28" />
-      </div>
-      <div class="settings-hero__content">
-        <h1 class="settings-hero__title">设置</h1>
-        <p class="settings-hero__subtitle">自定义你的 LuomiNest 体验</p>
-      </div>
-      <div class="settings-hero__line">
-        <span class="settings-hero__dot" />
-        <span class="settings-hero__dash" />
-        <span class="settings-hero__dot" />
-      </div>
-    </div>
-
-    <div class="settings-body">
-      <div
-        v-for="(group, gIdx) in settingGroups"
-        :key="group.title"
-        class="setting-group animate-slide-up"
-        :style="{ animationDelay: `${gIdx * 80}ms` }"
-      >
-        <div class="group-header">
-          <span class="group-header__dot" />
-          <h3 class="group-header__title">{{ group.title }}</h3>
+    <div class="settings-view__content">
+      <div class="settings-hero animate-fade-in">
+        <div class="settings-hero__avatar">
+          <User :size="28" />
         </div>
-        <LumiCard class="setting-items" padding="none">
-          <button
-            v-for="item in group.items"
-            :key="item.label"
-            class="setting-item"
-            @click="navigateTo(item.route)"
-          >
-            <div class="setting-item__icon" :style="{ color: item.iconColor }">
-              <component :is="item.icon" :size="20" />
-            </div>
-            <div class="setting-item__info">
-              <span class="setting-item__label">{{ item.label }}</span>
-              <span class="setting-item__desc">{{ item.desc }}</span>
-            </div>
-            <ChevronRight :size="16" class="setting-item__arrow" />
-          </button>
-        </LumiCard>
+        <div class="settings-hero__content">
+          <h1 class="settings-hero__title">设置</h1>
+          <p class="settings-hero__subtitle">自定义你的 LuomiNest 体验</p>
+        </div>
+        <div class="settings-hero__line">
+          <span class="settings-hero__dot" />
+          <span class="settings-hero__dash" />
+          <span class="settings-hero__dot" />
+        </div>
       </div>
-    </div>
 
-    <div class="settings-footer">
-      <div class="footer-brand">
-        <span v-if="version" class="version-text">LuomiNest v{{ version }} · LuminousChenXi</span>
-      </div>
-      <div class="footer-links">
-        <LumiButton
-          v-for="link in footerLinks"
-          :key="link.label"
-          variant="ghost"
-          size="sm"
-          @click="navigateTo(link.route)"
+      <div class="settings-body">
+        <div
+          v-for="(group, gIdx) in settingGroups"
+          :key="group.title"
+          class="setting-group animate-slide-up"
+          :style="{ animationDelay: `${gIdx * 80}ms` }"
         >
-          {{ link.label }}
-        </LumiButton>
+          <div class="group-header">
+            <span class="group-header__dot" />
+            <h3 class="group-header__title">{{ group.title }}</h3>
+          </div>
+          <LumiCard class="setting-items" padding="none">
+            <button
+              v-for="item in group.items"
+              :key="item.label"
+              class="setting-item"
+              @click="navigateTo(item.route)"
+            >
+              <div class="setting-item__icon" :style="{ color: item.iconColor }">
+                <component :is="item.icon" :size="20" />
+              </div>
+              <div class="setting-item__info">
+                <span class="setting-item__label">{{ item.label }}</span>
+                <span class="setting-item__desc">{{ item.desc }}</span>
+              </div>
+              <ChevronRight :size="16" class="setting-item__arrow" />
+            </button>
+          </LumiCard>
+        </div>
+      </div>
+
+      <div class="settings-footer">
+        <div class="footer-brand">
+          <span v-if="version" class="version-text">LuomiNest v{{ version }} · LuminousChenXi</span>
+        </div>
+        <div class="footer-links">
+          <LumiButton
+            v-for="link in footerLinks"
+            :key="link.label"
+            variant="ghost"
+            size="sm"
+            @click="navigateTo(link.route)"
+          >
+            {{ link.label }}
+          </LumiButton>
+        </div>
       </div>
     </div>
   </div>
@@ -152,6 +150,16 @@ const navigateTo = (route: string) => {
   background: var(--bg);
   overflow-y: auto;
   padding: var(--space-6) var(--space-8) var(--space-5);
+}
+
+.settings-view__content {
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ── Hero ── */
@@ -374,5 +382,49 @@ const navigateTo = (route: string) => {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+}
+
+/* ── 响应式 ── */
+@media (max-width: 768px) {
+  .settings-view {
+    padding: var(--space-4) var(--space-5) var(--space-3);
+  }
+
+  .settings-hero {
+    flex-wrap: wrap;
+    padding: var(--space-4) 0;
+  }
+
+  .settings-hero__line {
+    display: none;
+  }
+
+  .setting-item {
+    padding: var(--space-3);
+  }
+
+  .setting-item__icon {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-view {
+    padding: var(--space-3) var(--space-4) var(--space-2);
+  }
+
+  .settings-hero__avatar {
+    width: 44px;
+    height: 44px;
+  }
+
+  .settings-hero__title {
+    font-size: var(--text-xl);
+  }
+
+  .setting-item__desc {
+    display: none;
+  }
 }
 </style>

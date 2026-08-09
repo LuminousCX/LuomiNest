@@ -6,8 +6,8 @@ import type { Skin } from '../../stores/theme-types'
 import { getThemePreviewColors } from '../../stores/theme-presets'
 import { MAX_CUSTOM_SKINS } from '../../stores/theme-types'
 
-const props = defineProps<{
-  modelValue: string
+defineProps<{
+  activeId: string
 }>()
 
 const emit = defineEmits<{
@@ -18,7 +18,6 @@ const emit = defineEmits<{
 
 const themeStore = useThemeStore()
 
-const activeId = computed(() => props.modelValue)
 const presetSkins = computed(() => themeStore.allSkins.filter((s) => s.type === 'preset'))
 const customSkins = computed(() => themeStore.allSkins.filter((s) => s.type === 'custom'))
 const canAddCustom = computed(() => customSkins.value.length < MAX_CUSTOM_SKINS)

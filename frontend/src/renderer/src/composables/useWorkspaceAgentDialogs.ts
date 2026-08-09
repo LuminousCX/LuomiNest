@@ -18,7 +18,7 @@ const AGENT_COLORS: string[] = [
   'var(--lumi-indigo)',
   'var(--lumi-amber)',
   'var(--lumi-accent)',
-  'var(--task-purple)',
+  'var(--task-sky)',
   'var(--lumi-sky)',
   'var(--lumi-success)',
   'var(--task-pink)',

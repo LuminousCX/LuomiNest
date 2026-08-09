@@ -67,7 +67,7 @@ const DEFAULT_TASKS: LuomiNestTask[] = [
     assignees: ['https://picsum.photos/id/1004/40/40', 'https://picsum.photos/id/1005/40/40', 'https://picsum.photos/id/1006/40/40'],
     tags: ['后端', '协议'],
     progress: 0,
-    colorVar: '--task-purple',
+    colorVar: '--task-sky',
     timeSlot: '10:45 - 14:15'
   },
   {
@@ -203,7 +203,7 @@ const colors = ref([
   { varName: '--task-pink', active: true },
   { varName: '--task-yellow', active: false },
   { varName: '--task-blue', active: false },
-  { varName: '--task-purple', active: false },
+  { varName: '--task-sky', active: false },
   { varName: '--task-green', active: false }
 ])
 
@@ -507,7 +507,7 @@ const colorOptions = [
   { varName: '--task-pink', label: '粉色' },
   { varName: '--task-yellow', label: '黄色' },
   { varName: '--task-blue', label: '蓝色' },
-  { varName: '--task-purple', label: '紫色' },
+  { varName: '--task-sky', label: '天蓝' },
   { varName: '--task-green', label: '绿色' }
 ]
 

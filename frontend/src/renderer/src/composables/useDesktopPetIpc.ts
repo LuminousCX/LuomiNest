@@ -1,7 +1,7 @@
 /**
  * LuomiNest 桌面宠物 IPC 监听器集中管理 composable
  *
- * 从 DesktopPetView.vue 拆分，集中注册/移除 9 个 IPC 监听器。
+ * 从 DesktopPetView.vue 拆分，集中注册/移除桌宠 IPC 监听器。
  * - 用类型化 handler 接口消除 `event: any`
  * - 用命名常量消除魔法字符串（通道字面量见 DesktopPetIpcChannels.ON）
  */
@@ -25,6 +25,7 @@ export interface DesktopPetIpcHandlers {
   onLoadModel: (modelInfo: PetModelInfo) => void | Promise<void>
   onTriggerMotion: (group: string, index: number) => void | Promise<void>
   onTriggerExpression: (name: string) => void | Promise<void>
+  onSetScale: (scale: number) => void
   onLipSync: (value: number) => void
   onPadEmotion: (pad: PadVector) => void
   onSetCoreParam: (paramId: string, value: number) => void
@@ -59,6 +60,10 @@ export const useDesktopPetIpc = (handlers: DesktopPetIpcHandlers) => {
       {
         channel: 'desktop-pet:trigger-expression',
         listener: (_e, ...args) => { void handlers.onTriggerExpression(args[0] as string) }
+      },
+      {
+        channel: 'desktop-pet:set-scale',
+        listener: (_e, ...args) => { handlers.onSetScale(args[0] as number) }
       },
       {
         channel: 'desktop-pet:lip-sync',

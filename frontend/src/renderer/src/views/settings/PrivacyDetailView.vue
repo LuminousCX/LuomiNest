@@ -17,6 +17,8 @@ import {
   FileCheck
 } from 'lucide-vue-next'
 import { ref, onMounted, onUnmounted } from 'vue'
+import LumiSettingsBackground from '../../components/settings-detail/LumiSettingsBackground.vue'
+import '../../styles/views/settings-independent-bg.css'
 
 const router = useRouter()
 
@@ -238,6 +240,7 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 
 <template>
   <div class="lumi-settings-page privacy-view">
+    <LumiSettingsBackground />
     <header class="lumi-settings-page__header lumi-settings-animate-fade">
       <button class="lumi-settings-page__back" @click="router.push('/settings')">
         <ArrowLeft :size="18" />
@@ -330,7 +333,5 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 <style scoped src="../../styles/views/privacy-view.css"></style>
 
 <style scoped>
-.privacy-view {
-  background: var(--surface);
-}
+/* 背景由 settings-independent-bg.css 独立控制 */
 </style>

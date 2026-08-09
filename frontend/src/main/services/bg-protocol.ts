@@ -26,7 +26,7 @@ const isPathSafe = (baseDir: string, targetPath: string): boolean => {
  * URL 格式: luominest-bg://bg/filename.ext（使用 pathname 以保留文件名大小写）
  * 实际文件路径: PATHS.backgrounds/filename.ext
  */
-export function registerBackgroundProtocol(): void {
+export const registerBackgroundProtocol = (): void => {
   protocol.handle('luominest-bg', (request) => {
     try {
       const url = new URL(request.url)
@@ -87,20 +87,20 @@ export function registerBackgroundProtocol(): void {
  * 将背景文件名转换为 luominest-bg: 协议 URL
  * 使用固定 host + pathname 形式，避免 hostname 被小写化导致大小写敏感的文件名加载失败
  */
-export function toBackgroundUrl(fileName: string): string {
+export const toBackgroundUrl = (fileName: string): string => {
   return `luominest-bg://bg/${encodeURIComponent(fileName)}`
 }
 
 /**
  * 判断一个背景图片值是否是 luominest-bg: 协议 URL
  */
-export function isBackgroundProtocolUrl(value: string): boolean {
+export const isBackgroundProtocolUrl = (value: string): boolean => {
   return value.startsWith('luominest-bg:')
 }
 
 /**
  * 判断一个背景图片值是否是预设 CSS 渐变（非文件路径）
  */
-export function isCssGradient(value: string): boolean {
+export const isCssGradient = (value: string): boolean => {
   return value.startsWith('linear-gradient') || value.startsWith('radial-gradient') || value.startsWith('conic-gradient')
 }

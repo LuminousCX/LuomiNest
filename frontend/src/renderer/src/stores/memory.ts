@@ -59,7 +59,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 export const CATEGORY_COLORS: Record<string, string> = {
   preference: 'var(--lumi-success)',
   knowledge: 'var(--lumi-sky)',
-  context: 'var(--task-purple)',
+  context: 'var(--task-sky)',
   behavior: 'var(--lumi-amber)',
   goal: 'var(--lumi-danger)',
   correction: 'var(--lumi-amber)',

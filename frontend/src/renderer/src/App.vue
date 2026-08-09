@@ -15,7 +15,9 @@ const isWelcomePage = computed(() => route.path === '/welcome')
 const isSplashPage = computed(() => route.path === '/splash')
 const isLoginPage = computed(() => route.path === '/login')
 const isDesktopPetPage = computed(() => route.path === '/desktop-pet')
-const isMinimalLayout = computed(() => isWelcomePage.value || isSplashPage.value || isLoginPage.value || isDesktopPetPage.value)
+const isDesktopPetChatPage = computed(() => route.path === '/desktop-pet-chat')
+const isDesktopSurface = computed(() => isDesktopPetPage.value || isDesktopPetChatPage.value)
+const isMinimalLayout = computed(() => isWelcomePage.value || isSplashPage.value || isLoginPage.value || isDesktopSurface.value)
 const isBackgroundExcluded = computed(() =>
   ['/settings/about', '/settings/license', '/settings/privacy-detail'].includes(route.path)
 )
@@ -34,7 +36,7 @@ watch(isDesktopPetPage, (val) => {
 // 桌宠聊天桥接：监听桌宠窗口转发的聊天请求，调用主 Agent (MAIN_AGENT_ID) 的 LLM 流式输出，
 // TTS 全局 Store 驱动桌宠窗口的 Live2D（陪伴优先：任意页面都能与桌宠对话）。
 // 仅在主应用窗口（非桌宠窗口、非登录/欢迎页）初始化。
-if (!isDesktopPetPage.value && !isWelcomePage.value && !isLoginPage.value && !isSplashPage.value) {
+if (!isDesktopSurface.value && !isWelcomePage.value && !isLoginPage.value && !isSplashPage.value) {
   useDesktopPetChatBridge()
 }
 </script>
@@ -44,7 +46,7 @@ if (!isDesktopPetPage.value && !isWelcomePage.value && !isLoginPage.value && !is
     class="lumi-app"
     :class="{
       'welcome-mode': isWelcomePage,
-      'desktop-pet-mode': isDesktopPetPage,
+      'desktop-pet-mode': isDesktopSurface,
       'lumi-app--bg-active': hasBackground
     }"
   >
@@ -66,14 +68,14 @@ if (!isDesktopPetPage.value && !isWelcomePage.value && !isLoginPage.value && !is
       </Transition>
     </router-view>
     <ToastContainer />
-    <div v-if="!isDesktopPetPage" class="resize-handle resize-n"></div>
-    <div v-if="!isDesktopPetPage" class="resize-handle resize-s"></div>
-    <div v-if="!isDesktopPetPage" class="resize-handle resize-e"></div>
-    <div v-if="!isDesktopPetPage" class="resize-handle resize-w"></div>
-    <div v-if="!isDesktopPetPage" class="resize-handle resize-ne"></div>
-    <div v-if="!isDesktopPetPage" class="resize-handle resize-nw"></div>
-    <div v-if="!isDesktopPetPage" class="resize-handle resize-se"></div>
-    <div v-if="!isDesktopPetPage" class="resize-handle resize-sw"></div>
+    <div v-if="!isDesktopSurface" class="resize-handle resize-n"></div>
+    <div v-if="!isDesktopSurface" class="resize-handle resize-s"></div>
+    <div v-if="!isDesktopSurface" class="resize-handle resize-e"></div>
+    <div v-if="!isDesktopSurface" class="resize-handle resize-w"></div>
+    <div v-if="!isDesktopSurface" class="resize-handle resize-ne"></div>
+    <div v-if="!isDesktopSurface" class="resize-handle resize-nw"></div>
+    <div v-if="!isDesktopSurface" class="resize-handle resize-se"></div>
+    <div v-if="!isDesktopSurface" class="resize-handle resize-sw"></div>
   </div>
 </template>
 

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig, STTConfig, STTEngine } from '../types'
+import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig, STTConfig, STTEngine, ComputeDeviceInfo } from '../types'
 import { useApi } from '../composables/useApi'
 import { PROVIDER_LOGOS } from '../config/provider-logos'
 import { getItem, setItem } from '../utils/storage'
@@ -623,6 +623,7 @@ export const useModelStore = defineStore('model', () => {
   const loading = ref(false)
   const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const sttEngines = ref<STTEngine[]>([])
+  const sttDevice = ref<ComputeDeviceInfo | null>(null)
 
   const defaultProvider = computed(() =>
     providers.value.find(p => p.isDefault)
@@ -1035,12 +1036,17 @@ export const useModelStore = defineStore('model', () => {
 
   const fetchSTTEngines = async () => {
     try {
-      const result = await apiGet<{ engines: STTEngine[] } | STTEngine[]>('/chat/stt/engines')
-      const data = unwrapData<{ engines: STTEngine[] } | STTEngine[]>(result)
+      const result = await apiGet<{ engines: STTEngine[]; device?: ComputeDeviceInfo } | STTEngine[]>('/chat/stt/engines')
+      const data = unwrapData<{ engines: STTEngine[]; device?: ComputeDeviceInfo } | STTEngine[]>(result)
       if (Array.isArray(data)) {
         sttEngines.value = data
-      } else if (data?.engines) {
-        sttEngines.value = data.engines
+      } else {
+        if (data?.engines) {
+          sttEngines.value = data.engines
+        }
+        if (data?.device) {
+          sttDevice.value = data.device
+        }
       }
     } catch {
       sttEngines.value = []
@@ -1054,6 +1060,7 @@ export const useModelStore = defineStore('model', () => {
     ttsConfig,
     sttConfig,
     sttEngines,
+    sttDevice,
     loading,
     saveStatus,
     defaultProvider,

@@ -330,13 +330,30 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  padding: var(--space-6) var(--space-7);
+  padding: var(--space-2) var(--space-4);
   overflow-y: auto;
   flex: 1;
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
 }
 
-.settings-panel--narrow {
-  max-width: 760px;
+.settings-panel__content {
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* 嵌套面板：用于被包裹在父容器内的 settings-panel，取消居中和独立滚动 */
+.settings-panel--nested {
+  max-width: none;
+  margin: 0;
+  overflow: visible;
+  flex: none;
+  padding: 0;
 }
 
 .settings-card {
@@ -624,11 +641,11 @@
    动画辅助
    ------------------------------------------------------- */
 .lumi-settings-animate-fade {
-  animation: lumi-fade-in var(--duration-enter) var(--ease-out-expo) both;
+  animation: lumi-fade-in var(--duration-enter) var(--ease-in-out) both;
 }
 
 .lumi-settings-animate-slide {
-  animation: lumi-slide-up var(--duration-enter) var(--ease-out-expo) both;
+  animation: lumi-slide-up var(--duration-enter) var(--ease-in-out) both;
 }
 
 /* -------------------------------------------------------
@@ -636,18 +653,14 @@
    注意：主要玻璃变量与通用适配已迁移至 variables.css，
    此处仅保留设置页特有的形态与交互样式。
    ------------------------------------------------------- */
-/* 支持全部运行时背景激活标记（与 variables.css 保持一致）：
+/* 支持全部运行时背景激活标记（与 variables.css 的 :is() 标记前缀保持一致）：
    .lumi-app--bg-active（App.vue 实际使用）、.has-background（兼容）、
    [data-lumi-background="active"]（属性形式） */
-.lumi-app.lumi-app--bg-active .settings-panel,
-.lumi-app.has-background .settings-panel,
-[data-lumi-background="active"] .lumi-app .settings-panel {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .settings-panel {
   background: transparent;
 }
 
-.lumi-app.lumi-app--bg-active .settings-view,
-.lumi-app.has-background .settings-view,
-[data-lumi-background="active"] .lumi-app .settings-view {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .settings-view {
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
 }
@@ -805,9 +818,82 @@
    全局面板进入动画
    ------------------------------------------------------- */
 .animate-slide-up {
-  animation: lumi-slide-up var(--duration-normal) var(--ease-out-expo) both;
+  animation: lumi-slide-up var(--duration-normal) var(--ease-in-out) both;
 }
 
 .animate-fade-in {
-  animation: lumi-fade-in var(--duration-normal) var(--ease-out-expo) both;
+  animation: lumi-fade-in var(--duration-normal) var(--ease-in-out) both;
+}
+
+/* -------------------------------------------------------
+   响应式适配
+   ------------------------------------------------------- */
+@media (max-width: 768px) {
+  .lumi-settings-page__header {
+    padding: var(--space-4) var(--space-5);
+  }
+
+  .lumi-settings-page__body {
+    padding: var(--space-4) var(--space-3) var(--space-6);
+  }
+
+  .settings-panel {
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .lumi-settings-hero {
+    padding: var(--space-5);
+  }
+
+  .lumi-settings-hero__title {
+    font-size: var(--text-2xl);
+  }
+
+  .lumi-settings-hero__stats {
+    gap: var(--space-3);
+  }
+
+  .settings-card__body {
+    padding: var(--space-3);
+  }
+
+  .settings-form-row--horizontal {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-data-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .settings-data-row__value {
+    text-align: left;
+  }
+}
+
+@media (max-width: 480px) {
+  .lumi-settings-page__header {
+    padding: var(--space-3) var(--space-4);
+    gap: var(--space-2);
+  }
+
+  .lumi-settings-page__title {
+    font-size: var(--text-xl);
+  }
+
+  .settings-panel {
+    padding: var(--space-1);
+    gap: var(--space-3);
+  }
+
+  .settings-card__header {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .settings-btn-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

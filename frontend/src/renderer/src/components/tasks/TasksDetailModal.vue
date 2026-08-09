@@ -292,8 +292,8 @@ const closeModal = () => {
   font-weight: 600;
   padding: 3px var(--space-2);
   border-radius: 5px;
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .detail-progress {

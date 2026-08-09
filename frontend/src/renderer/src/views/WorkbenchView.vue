@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
@@ -31,6 +32,12 @@ const platformStore = usePlatformStore()
 const avatarControl = useAvatarControlStore()
 const workflowStore = useWorkflowStore()
 const { navigateToTask } = useTaskNavigation()
+const router = useRouter()
+
+/** 跳转到设置页指定分类（如命令安全 → /settings/privacy） */
+const navigateToSettings = (section: string): void => {
+  router.push(`/settings/${section}`)
+}
 
 // 桌面宠物模式：通过全局 store 状态统一管理，与 AvatarView 共享同一状态源
 const isDesktopMode = computed(() => avatarControl.isDesktopPetRunning)
@@ -130,7 +137,9 @@ const {
   contextMaxTokens,
   contextPercent,
   isCompressing,
+  hasMoreMessages,
   handleCompressContext,
+  handleLoadMore,
 } = useWorkbenchMessages({
   agentId: MAIN_AGENT_ID,
   handleSubagentEvent,
@@ -238,6 +247,7 @@ onBeforeUnmount(() => {
         :context-max-tokens="contextMaxTokens"
         :context-percent="contextPercent"
         :is-compressing="isCompressing"
+        :has-more-messages="hasMoreMessages"
         @toggle-reasoning="(id: string) => { showReasoning = { ...showReasoning, [id]: !showReasoning[id] } }"
         @regenerate="handleRegenerate"
         @toggle-tool-output="toggleToolOutput"
@@ -251,7 +261,9 @@ onBeforeUnmount(() => {
         @retry-backend="chatStore.checkBackend()"
         @set-input-text="(text: string) => inputText = text"
         @navigate-to-workflow="navigateToTask('workflow')"
+        @navigate-to-settings="(section: string) => navigateToSettings(section)"
         @compress-context="handleCompressContext"
+        @load-more="handleLoadMore"
       />
 
       <WorkbenchInputArea

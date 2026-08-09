@@ -27,7 +27,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="detail-header">
-    <Globe :size="22" :style="{ color: 'var(--task-purple)' }" />
+    <Globe :size="22" :style="{ color: 'var(--task-sky)' }" />
     <h3>用户画像</h3>
     <div class="detail-actions">
       <button v-if="!isEditingSummary" class="h-btn primary" @click="emit('startEditSummary')">
@@ -124,7 +124,7 @@ const emit = defineEmits<{
 .profile-card {
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--task-purple-soft), var(--lumi-sky-soft));
+  background: linear-gradient(135deg, var(--task-sky-soft), var(--lumi-sky-soft));
   border: 1px solid var(--border);
 }
 
@@ -139,7 +139,7 @@ const emit = defineEmits<{
   height: var(--space-8);
   border-radius: var(--radius-md);
   background: var(--lumi-accent-glow);
-  color: var(--task-purple);
+  color: var(--task-sky);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -212,7 +212,7 @@ const emit = defineEmits<{
   outline: none;
 }
 
-.memory-editor:focus { border-color: var(--task-purple); }
+.memory-editor:focus { border-color: var(--task-sky); }
 
 .editor-hint {
   font-size: var(--text-xs);

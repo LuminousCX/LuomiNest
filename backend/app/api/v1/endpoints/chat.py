@@ -57,7 +57,7 @@ async def chat_completions(request: ChatRequest):
     # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
     _conv_chat_mode = None
     if request.conversation_id:
-        _conv = await conversation_store.get_async(request.conversation_id)
+        _conv = await conversation_store.get_meta_async(request.conversation_id)
         if _conv:
             _conv_chat_mode = _conv.get("chat_mode")
     if _conv_chat_mode != "ultra":
@@ -213,15 +213,21 @@ async def create_conversation(request: ConversationCreate):
 
 
 @router.get("/conversations/{conv_id}", response_model=ConversationResponse)
-async def get_conversation(conv_id: str):
-    logger.info(f"[API] GET /chat/conversations/{conv_id} - Fetching conversation")
-    conv = await conversation_store.get_async(conv_id)
+async def get_conversation(
+    conv_id: str,
+    limit: int = Query(100, ge=1, le=500, description="每次返回消息数上限"),
+    before_id: str | None = Query(None, description="返回此消息之前的历史消息"),
+):
+    logger.info(f"[API] GET /chat/conversations/{conv_id} - Fetching conversation (limit={limit}, before_id={before_id})")
+    conv = await conversation_store.get_paginated_async(conv_id, limit=limit, before_id=before_id)
     if not conv:
         logger.error(f"[API] GET /chat/conversations/{conv_id} - Conversation not found")
         raise NotFoundError(f"Conversation {conv_id} not found")
+    msg_count = len(conv.get("messages", []))
+    total = conv.get("total_messages", msg_count)
     logger.success(
         f"[API] GET /chat/conversations/{conv_id} - "
-        f"Success: title={conv['title']}, messages={len(conv.get('messages', []))}"
+        f"Success: title={conv['title']}, messages={msg_count}/{total}, has_more={conv.get('has_more', False)}"
     )
     return ConversationResponse(**conv)
 
@@ -860,28 +866,86 @@ async def tts_synthesize(request: TTSRequest):
         return JSONResponse({"error": f"语音合成失败：{e}"}, status_code=500)
 
 
-def _detect_tts_device() -> dict:
-    """Detect compute device availability for TTS.
+def _detect_compute_device() -> dict:
+    """Detect compute device availability for TTS/STT.
 
-    Checks for CUDA (GPU) via torch if installed, otherwise reports CPU.
-    pyttsx3 is CPU-only; this info helps the frontend show what's available
-    and lets future GPU-based TTS engines be auto-selected.
+    Prefers PyTorch (CUDA/MPS, gives CUDA version); when PyTorch is missing
+    or is a CPU-only build, falls back to OS-native GPU detection
+    (PowerShell / lspci / /sys/class/drm / system_profiler) so real hardware
+    is still reported.
+    Note: current local TTS engines (pyttsx3, sherpa-onnx CPU) run on CPU only;
+    this info informs the frontend and future GPU-based engines.
     """
     import platform
 
-    device = {"type": "cpu", "name": platform.processor() or "Unknown CPU", "cuda_available": False}
+    device = {
+        "type": "cpu",
+        "name": platform.processor() or "Unknown CPU",
+        "vendor": None,
+        "gpu_count": 0,
+        "cuda_available": False,
+        "cuda_version": None,
+        "torch_available": False,
+        "note": "未检测到可用 GPU，本地 TTS 使用 CPU 推理",
+    }
 
+    # 1) PyTorch 检测（可拿到 CUDA 版本）
     try:
         import torch
+
+        device["torch_available"] = True
         if torch.cuda.is_available():
-            device["type"] = "gpu"
-            device["name"] = torch.cuda.get_device_name(0)
-            device["cuda_available"] = True
-            device["cuda_version"] = torch.version.cuda or "unknown"
+            device.update(
+                {
+                    "type": "gpu",
+                    "name": torch.cuda.get_device_name(0),
+                    "vendor": "nvidia",
+                    "gpu_count": torch.cuda.device_count(),
+                    "cuda_available": True,
+                    "cuda_version": torch.version.cuda or "unknown",
+                    "note": "PyTorch CUDA 检测",
+                }
+            )
+            return device
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device.update(
+                {
+                    "type": "gpu",
+                    "name": "Apple Silicon (MPS)",
+                    "vendor": "apple",
+                    "gpu_count": 1,
+                    "note": "PyTorch MPS 检测",
+                }
+            )
+            return device
     except ImportError:
-        pass
+        device["torch_available"] = False
     except Exception as dev_err:
         logger.debug(f"[API] TTS device detection (torch) failed: {dev_err}")
+
+    # 2) 回退：平台原生硬件检测（不依赖 PyTorch）
+    from app.core.hardware import detect_gpus
+
+    try:
+        gpus = detect_gpus()
+        if gpus:
+            primary = gpus[0]
+            device.update(
+                {
+                    "type": "gpu",
+                    "name": primary.name,
+                    "vendor": primary.vendor,
+                    "gpu_count": len(gpus),
+                    "note": (
+                        "系统硬件检测（未安装 PyTorch）。"
+                        "本地 TTS 当前仍为 CPU 推理，GPU 可用于未来 GPU 加速引擎"
+                        if not device["torch_available"]
+                        else "系统硬件检测"
+                    ),
+                }
+            )
+    except Exception as native_err:
+        logger.debug(f"[API] TTS device detection (native) failed: {native_err}")
 
     return device
 
@@ -936,7 +1000,7 @@ async def tts_engines():
 
         engines.append(engine_info)
 
-    device = _detect_tts_device()
+    device = _detect_compute_device()
 
     # Avatar voice bindings (model_id -> voice/lang)
     from app.services.avatar_manager import LUOMINEST_AVATAR_BINDINGS
@@ -1148,5 +1212,6 @@ async def stt_engines():
         "data": {
             "engines": engines,
             "fallback_order": _STT_FALLBACK_ORDER,
+            "device": _detect_compute_device(),
         },
     }

@@ -1660,9 +1660,9 @@ defineExpose({
 
 .reasoning-section {
   margin-bottom: 10px;
-  border: 1px solid var(--task-purple-border);
+  border: 1px solid var(--task-sky-border);
   border-radius: var(--radius-md);
-  background: var(--task-purple-soft);
+  background: var(--task-sky-soft);
   overflow: hidden;
 }
 
@@ -1674,12 +1674,12 @@ defineExpose({
   cursor: pointer;
   user-select: none;
   font-size: var(--text-sm);
-  color: var(--task-purple);
+  color: var(--task-sky);
   transition: background var(--transition-fast);
 }
 
 .reasoning-header:hover {
-  background: var(--task-purple-soft);
+  background: var(--task-sky-soft);
 }
 
 .reasoning-chevron {
@@ -1697,9 +1697,9 @@ defineExpose({
   line-height: 1.6;
   color: var(--text-muted);
   border-top: 1px solid var(--divider-soft);
-  border-left: var(--space-1) solid var(--task-purple-border);
+  border-left: var(--space-1) solid var(--task-sky-border);
   border-radius: 0 4px 4px 0;
-  background: var(--task-purple-soft);
+  background: var(--task-sky-soft);
   word-break: break-word;
   max-height: 400px;
   overflow-y: auto;
@@ -1729,8 +1729,8 @@ defineExpose({
   padding: 1px var(--space-1);
   border-radius: 3px;
   font-size: var(--text-xs);
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 

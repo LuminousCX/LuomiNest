@@ -14,13 +14,11 @@ import { useDesktopPetIpc } from '@/composables/useDesktopPetIpc'
 import { useDesktopPetSubtitle } from '@/composables/useDesktopPetSubtitle'
 import DesktopPetControls from '@/components/desktop-pet/DesktopPetControls.vue'
 import DesktopPetSubtitle from '@/components/desktop-pet/DesktopPetSubtitle.vue'
-import DesktopPetInput from '@/components/desktop-pet/DesktopPetInput.vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const isControlsVisible = ref(false)
 const isAlwaysOnTop = ref(true)
 // 桌宠窗口本地的流式状态（由主应用通过 IPC 反馈，用于输入区的发送/取消切换）
-const isStreaming = ref(false)
 
 const {
   isModelReady,
@@ -35,6 +33,7 @@ const {
   triggerMotion,
   triggerExpression,
   drivePadEmotion,
+  setScale,
   setCoreParam,
   resetPose,
   handleResize,
@@ -55,6 +54,7 @@ const { setupIpc, cleanupIpc } = useDesktopPetIpc({
   },
   onTriggerMotion: (group, index) => { void triggerMotion(group, index) },
   onTriggerExpression: (name) => { void triggerExpression(name) },
+  onSetScale: (scale) => setScale(scale),
   onLipSync: (value) => {
     const clamped = Math.max(0, Math.min(1, value))
     setCoreParam('ParamMouthOpenY', clamped)
@@ -71,18 +71,11 @@ const { setupIpc, cleanupIpc } = useDesktopPetIpc({
   },
   onSubtitle: (text) => showSubtitle(text),
   onSubtitleHide: () => hideSubtitle(),
-  onStreamingState: (streaming) => { isStreaming.value = streaming },
+  onStreamingState: () => {},
   onVisibilityChanged: (visible) => setVisibility(visible)
 })
 
 // 桌宠窗口输入区：发送消息到主应用窗口（由 useDesktopPetChatBridge 接收）
-const handleSend = (text: string): void => {
-  window.api.desktopPetChat.sendMessage(text)
-}
-
-const handleCancel = (): void => {
-  window.api.desktopPetChat.cancel()
-}
 
 // 控制面板计时器（view 私有）
 let controlsHideTimer: ReturnType<typeof setTimeout> | null = null
@@ -117,7 +110,6 @@ const handleClose = (): void => {
 }
 
 // 窗口级事件监听器
-let contextMenuHandler: ((e: MouseEvent) => void) | null = null
 let resizeHandler: (() => void) | null = null
 
 onMounted(async () => {
@@ -144,12 +136,6 @@ onMounted(async () => {
 
   setupIpc()
 
-  contextMenuHandler = (e: MouseEvent) => {
-    e.preventDefault()
-    window.electron?.ipcRenderer.send('desktop-pet:show-context-menu')
-  }
-  window.addEventListener('contextmenu', contextMenuHandler)
-
   resizeHandler = () => {
     handleResize()
   }
@@ -168,11 +154,6 @@ onBeforeUnmount(() => {
   clearSubtitleFade()
 
   if (controlsHideTimer) clearTimeout(controlsHideTimer)
-
-  if (contextMenuHandler) {
-    window.removeEventListener('contextmenu', contextMenuHandler)
-    contextMenuHandler = null
-  }
 
   if (resizeHandler) {
     window.removeEventListener('resize', resizeHandler)
@@ -205,11 +186,6 @@ onBeforeUnmount(() => {
       @mouseleave="scheduleHideControls"
     />
 
-    <DesktopPetInput
-      :is-streaming="isStreaming"
-      @send="handleSend"
-      @cancel="handleCancel"
-    />
   </div>
 </template>
 

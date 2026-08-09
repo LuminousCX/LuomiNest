@@ -164,8 +164,8 @@ const currentTemplates = computed(() =>
 }
 
 .ai-hero-icon {
-  background: linear-gradient(135deg, var(--task-purple-soft), color-mix(in srgb, var(--task-purple) 4%, transparent));
-  color: var(--task-purple);
+  background: linear-gradient(135deg, var(--task-sky-soft), color-mix(in srgb, var(--task-sky) 4%, transparent));
+  color: var(--task-sky);
 }
 
 .step-hero-title {

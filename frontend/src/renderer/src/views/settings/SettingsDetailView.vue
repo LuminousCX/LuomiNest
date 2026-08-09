@@ -8,7 +8,6 @@ import {
   Shield,
   Globe,
   Settings,
-  Volume2,
   Brain,
   Puzzle,
   LogIn
@@ -16,98 +15,57 @@ import {
 import SettingsAppearanceSection from '../../components/settings-detail/SettingsAppearanceSection.vue'
 import SettingsNotificationsSection from '../../components/settings-detail/SettingsNotificationsSection.vue'
 import SettingsSecuritySection from '../../components/settings-detail/SettingsSecuritySection.vue'
-import SettingsTtsSection from '../../components/settings-detail/SettingsTtsSection.vue'
 import SettingsPlatformsSection from '../../components/settings-detail/SettingsPlatformsSection.vue'
 import SettingsMainAgentSection from '../../components/settings-detail/SettingsMainAgentSection.vue'
 import SettingsMcpSection from '../../components/settings-detail/SettingsMcpSection.vue'
 import SettingsPluginsSection from '../../components/settings-detail/SettingsPluginsSection.vue'
 import SettingsLoginSection from '../../components/settings-detail/SettingsLoginSection.vue'
-import type { SectionItem } from '../../components/settings-detail/types'
 
 const route = useRoute()
 const router = useRouter()
 
 const section = computed(() => route.params.section as string)
 
-const sectionMap: Record<string, { label: string; icon: typeof Palette; desc: string; items: SectionItem[] }> = {
+const sectionMap: Record<string, { label: string; icon: typeof Palette; desc: string }> = {
   appearance: {
     label: '外观主题',
     icon: Palette,
-    desc: '自定义界面颜色与风格',
-    items: [
-      { label: '主题模式', desc: '浅色 / 深色 / 跟随系统', type: 'select' },
-      { label: '主色调', desc: '选择界面主色调', type: 'color' },
-      { label: '字体大小', desc: '调整界面文字大小', type: 'slider' },
-      { label: '动画效果', desc: '开启或关闭界面动画', type: 'toggle' }
-    ]
+    desc: '自定义界面颜色与风格'
   },
   notifications: {
     label: '通知设置',
     icon: Bell,
-    desc: '配置消息提醒方式',
-    items: [
-      { label: '桌面通知', desc: '接收桌面推送通知', type: 'toggle' },
-      { label: '声音提醒', desc: '收到消息时播放提示音', type: 'toggle' },
-      { label: '免打扰模式', desc: '设定免打扰时段', type: 'time' },
-      { label: '消息预览', desc: '在通知中显示消息内容', type: 'toggle' }
-    ]
+    desc: '配置消息提醒方式'
   },
   privacy: {
     label: '隐私安全',
     icon: Shield,
-    desc: '数据加密与访问控制',
-    items: [
-      { label: '端到端加密', desc: '所有对话数据加密存储', type: 'toggle' },
-      { label: '本地存储', desc: '数据仅保存在本地设备', type: 'toggle' },
-      { label: '自动清除', desc: '定期清除过期对话记录', type: 'select' },
-      { label: '访问控制', desc: '设置应用启动密码', type: 'password' }
-    ]
+    desc: '数据加密与访问控制'
   },
   platforms: {
     label: '消息平台',
     icon: Globe,
-    desc: 'QQ / 微信 / Discord 等',
-    items: [
-      { label: 'QQ', desc: '连接 QQ 机器人', type: 'connect' },
-      { label: '微信', desc: '连接微信公众号/企微', type: 'connect' },
-      { label: 'Discord', desc: '连接 Discord Bot', type: 'connect' },
-      { label: 'Telegram', desc: '连接 Telegram Bot', type: 'connect' }
-    ]
+    desc: 'QQ / 微信 / Discord 等'
   },
   mcp: {
     label: 'MCP 工具',
     icon: Settings,
-    desc: '外部工具接入协议',
-    items: [
-      { label: '已安装工具', desc: '查看和管理已安装的 MCP 工具', type: 'list' },
-      { label: '添加工具', desc: '从市场或自定义安装工具', type: 'button' },
-      { label: '工具权限', desc: '管理工具的访问权限', type: 'select' },
-      { label: '运行日志', desc: '查看工具运行日志', type: 'button' }
-    ]
+    desc: '外部工具接入协议'
   },
   'main-agent': {
     label: '主智能体',
     icon: Brain,
-    desc: '工作台主 Agent 的人格、模型与行为配置',
-    items: []
-  },
-  tts: {
-    label: '语音合成 (TTS)',
-    icon: Volume2,
-    desc: '本地/在线 TTS 引擎与设备检测',
-    items: []
+    desc: '工作台主 Agent 的人格、模型与行为配置'
   },
   plugins: {
     label: '插件与技能',
     icon: Puzzle,
-    desc: '前端插件 / 后端插件 / 技能管理',
-    items: []
+    desc: '前端插件 / 后端插件 / 技能管理'
   },
   auth: {
     label: '登录 / 注册',
     icon: LogIn,
-    desc: '本地账户登录、注册与 JWT 管理',
-    items: []
+    desc: '本地账户登录、注册与 JWT 管理'
   }
 }
 
@@ -121,7 +79,6 @@ const sectionComponent = computed(() => {
     case 'platforms': return SettingsPlatformsSection
     case 'mcp': return SettingsMcpSection
     case 'main-agent': return SettingsMainAgentSection
-    case 'tts': return SettingsTtsSection
     case 'plugins': return SettingsPluginsSection
     case 'auth': return SettingsLoginSection
     default: return null

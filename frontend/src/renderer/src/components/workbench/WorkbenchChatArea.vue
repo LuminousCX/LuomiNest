@@ -12,6 +12,8 @@ import {
   Terminal,
   CheckCircle2,
   XCircle,
+  ShieldAlert,
+  Settings,
   Brain,
   Cpu,
   ChevronRight,
@@ -54,6 +56,7 @@ const props = defineProps<{
   contextMaxTokens: number
   contextPercent: number
   isCompressing: boolean
+  hasMoreMessages: boolean
 }>()
 
 const emit = defineEmits<{
@@ -63,6 +66,7 @@ const emit = defineEmits<{
   'toggle-tool-output': [id: string]
   'toggle-subagent': [id: string]
   'toggle-subagent-tools': [id: string]
+  'navigate-to-settings': [section: string]
   'confirm-plan': []
   'reject-plan': []
   'update:confirmationFeedback': [value: string]
@@ -72,6 +76,7 @@ const emit = defineEmits<{
   'set-input-text': [text: string]
   'navigate-to-workflow': []
   'compress-context': []
+  'load-more': []
 }>()
 
 const messagesContainer = ref<HTMLElement | null>(null)
@@ -215,6 +220,18 @@ defineExpose({
 
     <div ref="messagesContainer" class="messages-scroll" @scroll="handleMessagesScroll">
       <div class="messages-container">
+        <div v-if="hasMoreMessages && messages.length > 0" class="load-more-wrapper">
+          <LumiButton
+            variant="ghost"
+            size="sm"
+            class="load-more-btn"
+            @click="emit('load-more')"
+          >
+            <Loader2 v-if="isLoadingCurrentConv" :size="12" class="spin-animation" />
+            <ChevronDown v-else :size="12" />
+            {{ isLoadingCurrentConv ? '加载中...' : '加载更早的消息' }}
+          </LumiButton>
+        </div>
         <TransitionGroup name="msg-appear" tag="div">
           <div
             v-for="msg in messages"
@@ -269,17 +286,22 @@ defineExpose({
                   <div
                     v-for="activity in toolActivities"
                     :key="activity.id"
-                    class="tool-activity-item"
+                    :class="['tool-activity-item', { 'tool-activity-item--blocked': activity.status === 'blocked' }]"
                   >
                     <div class="tool-activity-header" @click="emit('toggle-tool-output', activity.id)">
                       <div class="tool-activity-icon">
                         <Loader2 v-if="activity.status === 'running' || activity.status === 'pending'" :size="13" class="spin-animation" />
                         <CheckCircle2 v-else-if="activity.status === 'completed'" :size="13" />
                         <XCircle v-else-if="activity.status === 'failed'" :size="13" />
+                        <ShieldAlert v-else-if="activity.status === 'blocked'" :size="13" />
                       </div>
                       <Terminal :size="12" />
                       <span class="tool-activity-name">{{ activity.name }}</span>
-                      <span v-if="activity.iteration > 0" class="tool-activity-iteration">轮次 {{ activity.iteration + 1 }}</span>
+                      <span v-if="activity.status === 'blocked'" class="tool-activity-blocked-badge">
+                        <ShieldAlert :size="10" />
+                        已拦截
+                      </span>
+                      <span v-else-if="activity.iteration > 0" class="tool-activity-iteration">轮次 {{ activity.iteration + 1 }}</span>
                       <ChevronDown
                         v-if="activity.output"
                         :size="12"
@@ -295,6 +317,25 @@ defineExpose({
                       class="tool-activity-output"
                     >
                       <pre>{{ activity.output }}</pre>
+                    </div>
+                    <div v-if="activity.status === 'blocked'" class="tool-activity-blocked">
+                      <div class="tool-activity-blocked__reason">
+                        <ShieldAlert :size="13" />
+                        <span v-if="activity.blockedCommand">
+                          命令 <code class="tool-activity-blocked__cmd">{{ activity.blockedCommand }}</code>
+                          已被安全策略拦截{{ activity.blockedReason ? `（${activity.blockedReason}）` : '' }}
+                        </span>
+                        <span v-else>该操作已被安全策略拦截{{ activity.blockedReason ? `（${activity.blockedReason}）` : '' }}</span>
+                      </div>
+                      <LumiButton
+                        variant="outline"
+                        size="sm"
+                        class="tool-activity-blocked__btn"
+                        @click.stop="emit('navigate-to-settings', 'privacy')"
+                      >
+                        <Settings :size="12" />
+                        <span>前往设置调整白名单/黑名单</span>
+                      </LumiButton>
                     </div>
                   </div>
                 </div>
@@ -733,6 +774,24 @@ button:focus-visible {
   margin: 0 auto;
 }
 
+.load-more-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3) 0 var(--space-5);
+}
+
+.load-more-btn {
+  color: var(--lumi-text-secondary);
+  font-size: 0.8rem;
+  gap: var(--space-1);
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.load-more-btn:hover {
+  opacity: 1;
+}
+
 .message-row {
   display: flex;
   gap: var(--space-3);
@@ -941,6 +1000,59 @@ button:focus-visible {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ── 命令安全拦截（blocked）样式 ────────────────────────────── */
+.tool-activity-item--blocked {
+  background: color-mix(in srgb, var(--lumi-danger) 5%, var(--surface));
+}
+
+.tool-activity-item--blocked .tool-activity-icon svg[stroke="currentColor"],
+.tool-activity-item--blocked .tool-activity-icon :deep(svg) {
+  color: var(--lumi-danger);
+}
+
+.tool-activity-blocked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--text-2xs);
+  color: var(--lumi-danger);
+  padding: 1px var(--space-2);
+  background: color-mix(in srgb, var(--lumi-danger) 12%, transparent);
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.tool-activity-blocked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-2) var(--space-9);
+}
+
+.tool-activity-blocked__reason {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--lumi-danger);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.tool-activity-blocked__cmd {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--lumi-danger) 12%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
+.tool-activity-blocked__btn {
+  align-self: flex-start;
+}
+
 
 .subagent-activities-section {
   margin-bottom: var(--space-2);

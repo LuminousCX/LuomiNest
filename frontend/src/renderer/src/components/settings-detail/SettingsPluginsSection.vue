@@ -140,7 +140,7 @@ const summary = computed(() => ({
 </script>
 
 <template>
-  <div class="plugins-section">
+  <div class="settings-panel plugins-section">
     <!-- 标签栏 -->
     <div class="tabs-bar">
       <button
@@ -447,10 +447,7 @@ const summary = computed(() => ({
 
 <style scoped>
 .plugins-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  max-width: 760px;
+  /* layout handled by settings-panel shared class */
 }
 
 .tabs-bar {

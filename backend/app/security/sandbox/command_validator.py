@@ -176,6 +176,7 @@ class CommandValidator:
         allow_shell_meta: 是否允许 Shell 元字符（管道、重定向等），默认 False。
         whitelist_mode: 是否启用命令白名单模式（默认 False，使用黑名单模式）。
         allowed_commands: 白名单模式下的允许命令集合。
+        blocked_commands: 用户自定义黑名单命令（即使在白名单内也强制拒绝）。
     """
 
     def __init__(
@@ -186,12 +187,16 @@ class CommandValidator:
         allow_shell_meta: bool = False,
         whitelist_mode: bool = False,
         allowed_commands: set[str] | None = None,
+        blocked_commands: set[str] | None = None,
     ) -> None:
         self.workspace = workspace.resolve()
         self.allowed_dirs: list[Path] = [d.resolve() for d in (allowed_dirs or [])]
         self.allow_shell_meta = allow_shell_meta
         self.whitelist_mode = whitelist_mode
         self.allowed_commands: set[str] = allowed_commands or set()
+        # 基础白名单（不含用户扩展），apply_user_policy 时以它为基础重建
+        self._base_allowed_commands: set[str] = set(self.allowed_commands)
+        self.blocked_commands: set[str] = blocked_commands or set()
 
         # 所有允许的路径（workspace + allowed_dirs）
         self._allowed_roots: list[Path] = [self.workspace] + self.allowed_dirs
@@ -204,6 +209,45 @@ class CommandValidator:
     # ------------------------------------------------------------------
     # 公开接口
     # ------------------------------------------------------------------
+
+    def apply_user_policy(
+        self,
+        extra_whitelist: list[str] | set[str] | None,
+        blacklist: list[str] | set[str] | None,
+    ) -> None:
+        """应用用户自定义命令策略（白名单扩展 + 黑名单）。
+
+        由沙盒 Provider / 控制台入口在每次获取沙盒时调用，从持久化配置
+        加载用户设置。白名单模式以基础白名单（构造函数传入的 allowed_commands）
+        为底重建，再合并用户额外白名单；黑名单在任何模式下都优先于白名单判断。
+
+        Args:
+            extra_whitelist: 用户额外放行的命令列表。
+            blacklist: 用户强制拒绝的命令列表。
+        """
+        # 以基础白名单为底重建，避免用户移除扩展命令后残留
+        self.allowed_commands = set(self._base_allowed_commands)
+        if extra_whitelist:
+            self.allowed_commands |= {
+                str(c).strip().lower() for c in extra_whitelist if str(c).strip()
+            }
+        self.blocked_commands = set()
+        if blacklist:
+            self.blocked_commands |= {
+                str(c).strip().lower() for c in blacklist if str(c).strip()
+            }
+
+    def set_base_whitelist(self, commands: set[str] | list[str]) -> None:
+        """设置基础白名单（不含用户扩展），并同步当前 allowed_commands。
+
+        供控制台/工具入口在首次配置白名单模式时调用，确保 apply_user_policy
+        以完整基础白名单重建。
+
+        Args:
+            commands: 基础允许命令集合。
+        """
+        self._base_allowed_commands = {str(c).strip().lower() for c in commands if str(c).strip()}
+        self.allowed_commands = set(self._base_allowed_commands)
 
     def validate_command(self, cmd: str) -> None:
         """验证命令是否安全，不安全则抛出 SandboxPermissionError。
@@ -376,11 +420,18 @@ class CommandValidator:
         return parts
 
     def _check_command_allowlist(self, parts: list[str]) -> None:
-        """检查命令黑白名单。"""
+        """检查命令黑白名单（用户黑名单优先级最高）。"""
         # 提取主命令 basename（处理路径和 .exe 后缀）
         main_cmd = os.path.basename(parts[0]).lower()
         if main_cmd.endswith(".exe"):
             main_cmd = main_cmd[:-4]
+
+        # 0. 用户自定义黑名单优先（任何模式下都强制拒绝，含白名单模式）
+        if self.blocked_commands and main_cmd in self.blocked_commands:
+            raise SandboxPermissionError(
+                f"命令 '{main_cmd}' 在用户黑名单中，禁止执行",
+                operation="command_blacklist",
+            )
 
         if self.whitelist_mode:
             if main_cmd not in self.allowed_commands:
@@ -390,7 +441,7 @@ class CommandValidator:
                     operation="command_whitelist",
                 )
         else:
-            # 黑名单模式
+            # 黑名单模式（默认危险命令 + 用户黑名单）
             if main_cmd in _DEFAULT_BLACKLIST_CMDS:
                 raise SandboxPermissionError(
                     f"命令 '{main_cmd}' 在黑名单中，禁止执行",

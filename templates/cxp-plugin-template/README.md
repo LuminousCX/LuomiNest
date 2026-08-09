@@ -21,15 +21,17 @@ git init
 
 ```json
 {
-  "id": "cxp-my-plugin",        // 改为你的插件 ID
-  "name": "我的插件",            // 改为你的插件名称
+  "id": "cxp-my-plugin",
+  "name": "我的插件",
   "version": "1.0.0",
-  "description": "...",          // 改为你的插件描述（20-80 字）
-  "platform": "backend",         // backend / frontend / fullstack / hardware
-  "category": "tool",            // tool / integration / ui / adapter / device / theme / automation
+  "description": "请改为你的插件描述（20-80 字）",
+  "platform": "backend",
+  "category": "tool",
   "permissions": ["event_listen"]
 }
 ```
+
+字段说明：`id` 改为你的插件 ID；`name` 改为插件名称；`platform` 可选 `backend` / `frontend` / `fullstack` / `hardware`；`category` 可选 `tool` / `integration` / `ui` / `adapter` / `device` / `theme` / `automation`。
 
 完整字段说明见 [docs/development/plugin-system.md](https://github.com/luminous-ChenXi/LuomiNest/blob/main/docs/development/plugin-system.md)。
 
@@ -48,7 +50,9 @@ class MyPlugin(CxPluginBase):
 
     @cx_handler(CxEventType.ON_CHAT_MESSAGE)
     async def on_message(self, event: dict) -> None:
-        self.logger.info(f"Message: {event}")
+        # 安全提示：不要原样记录事件 payload（可能包含用户隐私内容），
+        # 仅记录事件类型；确需业务字段时请显式提取白名单字段并脱敏。
+        self.logger.info("Received event: ON_CHAT_MESSAGE")
 
     async def terminate(self) -> None:
         self.logger.info("My plugin terminated.")
@@ -60,8 +64,8 @@ class MyPlugin(CxPluginBase):
 
 ```bash
 cd backend
-python -m scripts.package_plugin --path /abs/path/to/your/plugin --dry-run
-python -m scripts.package_plugin --path /abs/path/to/your/plugin
+python -m scripts.package_plugin /abs/path/to/your/plugin --dry-run
+python -m scripts.package_plugin /abs/path/to/your/plugin
 ```
 
 输出文件：`backend/dist/{plugin_id}-v{version}.zip`
@@ -78,8 +82,10 @@ git push origin v1.0.0
 
 ```bash
 gh release create v1.0.0 --title "v1.0.0" --notes "首个版本" \
-  dist/cxp-my-plugin-v1.0.0.zip
+  "dist/cxp-my-plugin-v1.0.0.zip#cxp-my-plugin.zip"
 ```
+
+注意：Release 资产名必须为稳定的 `cxp-my-plugin.zip`（不带版本号），registry 通过 `releases/latest/download/<plugin_id>.zip` 下载；上面的 `本地文件#资产名` 语法会在上传时自动重命名。
 
 ### 6. 注册到 cxp-registry
 

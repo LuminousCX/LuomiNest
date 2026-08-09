@@ -23,7 +23,7 @@ const addForm = ref({ name: '', url: '', description: '' })
 const showRepoSources = ref(false)
 
 const TYPE_CONFIG: Record<RepoSourceType, { icon: LucideIcon; label: string; color: string }> = {
-  github: { icon: Github, label: 'GitHub', color: 'var(--task-purple)' },
+  github: { icon: Github, label: 'GitHub', color: 'var(--task-sky)' },
   cloud: { icon: Cloud, label: '云端', color: 'var(--lumi-info)' },
   cdn: { icon: Globe, label: 'CDN', color: 'var(--lumi-sky)' },
   custom: { icon: Plus, label: '自定义', color: 'var(--lumi-amber)' },
@@ -976,8 +976,8 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
 }
 
 .sub-market-type-badge[data-type="plugin"] {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .sub-market-type-badge[data-type="skill"] {

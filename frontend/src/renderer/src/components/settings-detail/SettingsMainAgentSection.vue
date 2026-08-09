@@ -18,7 +18,7 @@ const agentColors: string[] = [
   'var(--lumi-indigo)',
   'var(--lumi-amber)',
   'var(--lumi-accent)',
-  'var(--task-purple)',
+  'var(--task-sky)',
   'var(--lumi-sky)',
   'var(--lumi-success)',
   'var(--task-pink)',
@@ -92,7 +92,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="settings-panel settings-panel--narrow animate-slide-up">
+  <div class="settings-panel animate-slide-up">
     <div v-if="mainAgentLoading" class="settings-card">
       <div class="settings-card__body settings-card__body--compact main-agent-loading">
         <Loader2 :size="20" class="spin-animation" />

@@ -30,7 +30,7 @@ const PRESET_AGENT_AVATARS: AvatarOption[] = [
   { id: 'pa1', emoji: '', color: 'var(--lumi-brand)', imageUrl: 'luominest-avatar://png/agents/programming-assistant.png' },
   { id: 'pa2', emoji: '', color: 'var(--lumi-info)', imageUrl: 'luominest-avatar://png/agents/info-researcher.png' },
   { id: 'pa3', emoji: '', color: 'var(--lumi-sky)', imageUrl: 'luominest-avatar://png/agents/inspiration-assistant.png' },
-  { id: 'pa4', emoji: '', color: 'var(--task-purple)', imageUrl: 'luominest-avatar://png/agents/task-planner.png' },
+  { id: 'pa4', emoji: '', color: 'var(--task-sky)', imageUrl: 'luominest-avatar://png/agents/task-planner.png' },
   { id: 'pa5', emoji: '', color: 'var(--lumi-accent)', imageUrl: 'luominest-avatar://png/agents/psychology-expert.png' },
   { id: 'pa6', emoji: '', color: 'var(--task-blue)', imageUrl: 'luominest-avatar://png/agents/info-collector.png' },
   { id: 'pa7', emoji: '', color: 'var(--lumi-success)', imageUrl: 'luominest-avatar://png/agents/learning-helper.png' },
@@ -54,7 +54,7 @@ export const AVATAR_OPTIONS: Record<string, AvatarOption[]> = {
   classic: [
     { id: 'c1', emoji: '\u{1F9D4}', color: 'var(--lumi-brand)' },
     { id: 'c2', emoji: '\u{1F9D3}', color: 'var(--lumi-info)' },
-    { id: 'c3', emoji: '\u{1F9D1}\u200D\u{1F52C}', color: 'var(--task-purple)' }
+    { id: 'c3', emoji: '\u{1F9D1}\u200D\u{1F52C}', color: 'var(--task-sky)' }
   ],
   cute: [
     { id: 'cu1', emoji: '\u{1F978}', color: 'var(--lumi-success)' },
@@ -68,7 +68,7 @@ export const AVATAR_OPTIONS: Record<string, AvatarOption[]> = {
   ],
   artistic: [
     { id: 'a1', emoji: '\u{1F3A8}', color: 'var(--task-pink)' },
-    { id: 'a2', emoji: '\u{1F3B8}', color: 'var(--task-purple)' },
+    { id: 'a2', emoji: '\u{1F3B8}', color: 'var(--task-sky)' },
     { id: 'a3', emoji: '\u{2728}', color: 'var(--lumi-brand-soft)' }
   ]
 }

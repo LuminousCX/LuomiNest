@@ -18,6 +18,10 @@ import { API_ENDPOINTS } from '../../config/api'
 import LumiButton from '../common/LumiButton.vue'
 import type { TtsEngineInfo, TtsDeviceInfo, TtsBindingInfo } from './types'
 
+const props = defineProps<{
+  embedded?: boolean
+}>()
+
 const modelStore = useModelStore()
 
 const ttsLoading = ref(false)
@@ -64,6 +68,31 @@ const ttsConfigSaving = ref(false)
 const ttsConfigTesting = ref(false)
 const ttsTestText = '你好，这是语音合成测试。'
 const ttsTestResult = ref<{ ok: boolean; msg: string } | null>(null)
+
+/** 计算设备徽标文案：GPU 时展示厂商，不再硬编码 CUDA */
+const ttsDeviceLabel = computed(() => {
+  const dev = ttsDevice.value
+  if (!dev || dev.type !== 'gpu') return 'CPU'
+  const vendor = dev.vendor || ''
+  if (vendor === 'nvidia') return 'GPU (NVIDIA)'
+  if (vendor === 'amd') return 'GPU (AMD)'
+  if (vendor === 'intel') return 'GPU (Intel)'
+  if (vendor === 'apple') return 'GPU (Apple MPS)'
+  return 'GPU'
+})
+
+/** 设备检测提示语：区分「检测到 GPU」与「TTS 实际是否使用 GPU」两个事实 */
+const ttsDeviceHint = computed(() => {
+  const dev = ttsDevice.value
+  if (!dev || dev.type !== 'gpu') {
+    return '未检测到 GPU，本地 TTS 使用 CPU 推理 (pyttsx3 / sherpa-onnx)。在线 TTS (Edge TTS 等) 在云端合成，不受本地设备限制。'
+  }
+  const gpuCount = dev.gpu_count && dev.gpu_count > 1 ? `（${dev.gpu_count} 块 GPU）` : ''
+  if (dev.cuda_available) {
+    return `检测到 GPU${gpuCount}，硬件支持 CUDA 加速。当前本地 TTS 引擎 (pyttsx3 / sherpa-onnx CPU 版) 仍以 CPU 推理，GPU 加速引擎可在未来版本接入。`
+  }
+  return `检测到 GPU${gpuCount}，硬件支持图形/通用计算。未安装 CUDA 版 PyTorch，本地 TTS 当前仍以 CPU 推理；在线 TTS 在云端合成，不受本地设备限制。`
+})
 
 const ttsNeedsApiKey = computed(() => {
   const opt = modelStore.TTS_ENGINE_OPTIONS.find(o => o.value === ttsConfigForm.value.engine)
@@ -178,7 +207,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="settings-panel settings-panel--narrow animate-slide-up">
+  <div :class="['settings-panel', 'animate-slide-up', { 'is-embedded': embedded }]">
     <!-- 加载 / 错误状态 -->
     <div v-if="ttsLoading" class="settings-card">
       <div class="settings-card__body settings-card__body--compact tts-state">
@@ -332,21 +361,23 @@ onMounted(() => {
           <div class="settings-data-row">
             <span class="settings-data-row__label">计算设备</span>
             <span :class="['tts-badge', ttsDevice?.type === 'gpu' ? 'tts-badge--success' : 'tts-badge--primary']">
-              {{ ttsDevice?.type === 'gpu' ? 'GPU (CUDA)' : 'CPU' }}
+              {{ ttsDeviceLabel }}
             </span>
           </div>
           <div class="settings-data-row">
             <span class="settings-data-row__label">设备名称</span>
             <span class="settings-data-row__value">{{ ttsDevice?.name || '未知' }}</span>
           </div>
+          <div v-if="ttsDevice?.gpu_count && ttsDevice.gpu_count > 1" class="settings-data-row">
+            <span class="settings-data-row__label">GPU 数量</span>
+            <span class="settings-data-row__value">{{ ttsDevice.gpu_count }}</span>
+          </div>
           <div v-if="ttsDevice?.cuda_available" class="settings-data-row">
             <span class="settings-data-row__label">CUDA 版本</span>
             <span class="settings-data-row__value">{{ ttsDevice.cuda_version || '未知' }}</span>
           </div>
           <p class="settings-card__hint" style="margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--divider-soft);">
-            {{ ttsDevice?.type === 'gpu'
-              ? '检测到 GPU，可支持高性能 TTS 推理。当前本地 TTS 使用 pyttsx3 (CPU)，未来可扩展 GPU 加速引擎。'
-              : '未检测到 GPU，本地 TTS 将使用 CPU 推理 (pyttsx3)。在线 TTS (Edge TTS) 不受设备限制。' }}
+            {{ ttsDeviceHint }}
           </p>
         </div>
       </section>
@@ -501,5 +532,41 @@ onMounted(() => {
 
 .spin-animation {
   animation: lumi-spin 1s linear infinite;
+}
+
+/* ── 嵌入模式：去除 settings-card 边框 / 背景 / 蓝条 / 圆角 ── */
+.is-embedded {
+  max-width: none;
+  margin: 0;
+  padding: var(--space-6) var(--space-7);
+  overflow: visible;
+  flex: none;
+  gap: var(--space-7);
+}
+
+.is-embedded .settings-card {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.is-embedded .settings-card::before {
+  display: none !important;
+}
+
+.is-embedded .settings-card:hover {
+  box-shadow: none !important;
+  border-color: transparent !important;
+  transform: none !important;
+}
+
+.is-embedded .settings-card__header {
+  padding-left: 0;
+}
+
+.is-embedded .settings-card__body {
+  padding-left: 0;
+  padding-right: 0;
 }
 </style>

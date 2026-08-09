@@ -52,6 +52,10 @@ export const useChatStore = defineStore('chat', () => {
   // 每个对话的上下文窗口容量（max_tokens），用于前端计算使用百分比
   const convContextMaxTokens = ref<Record<string, number>>({})
 
+  // 分页状态：每个对话是否有更多历史消息 & 后端消息总数
+  const convHasMore = ref<Record<string, boolean>>({})
+  const convTotalMessages = ref<Record<string, number>>({})
+
   // 三端（工作台 / 桌宠 / 皮套工坊）共享 MAIN_AGENT 的当前对话，
   // 通过 agentCurrentConvId[MAIN_AGENT_ID] 获取，无需单独的"桌宠对话 ID"
   // 启动时不创建对话，第一次发消息时自动创建（按需创建，避免空对话堆积）
@@ -85,6 +89,8 @@ export const useChatStore = defineStore('chat', () => {
   const isStreaming = computed(() => !!convStreaming.value[currentConvId.value])
 
   const isLoadingCurrentConversation = computed(() => !!convLoading.value[currentConvId.value])
+
+  const currentHasMore = computed(() => !!convHasMore.value[currentConvId.value])
 
   const currentMessages = computed(() => messages.value)
 
@@ -145,6 +151,38 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  const mapApiMessage = (m: ApiMessage): ChatMessage => {
+    const msg: ChatMessage = {
+      id: m.id || generateId(),
+      role: m.role,
+      content: m.content || '',
+      timestamp: m.timestamp || Date.now(),
+      done: true,
+    }
+    if (m.reasoning_content) {
+      msg.reasoningContent = m.reasoning_content
+    }
+    if (m.interrupted || m.content === '[已中断]') {
+      msg.interrupted = true
+    }
+    if (m.versions && Array.isArray(m.versions) && m.versions.length > 0) {
+      msg.versions = (m.versions as RawMessageVersion[]).map((v) => ({
+        content: v.content || '',
+        reasoningContent: v.reasoning_content || v.reasoningContent || undefined,
+        model: v.model || undefined,
+        provider: v.provider || undefined,
+        suggestedQuestions: v.suggested_questions || v.suggestedQuestions || undefined,
+      }))
+      msg.currentVersion = m.current_version ?? m.versions.length - 1
+    }
+    if (m.files) {
+      msg.files = m.files
+    } else if (m.file_name) {
+      msg.files = [{ name: m.file_name, type: m.file_type }]
+    }
+    return msg
+  }
+
   const loadConversation = async (convId: string, agentId?: string) => {
     const targetAgentId = agentId || activeAgentId.value
     if (!targetAgentId) return
@@ -172,43 +210,37 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const conv = await apiGet<Conversation>(`/chat/conversations/${convId}`)
       convData.value = { ...convData.value, [convId]: conv }
-      const mappedMessages: ChatMessage[] = []
-      for (const m of (conv.messages || []) as ApiMessage[]) {
-        const msg: ChatMessage = {
-          id: m.id || generateId(),
-          role: m.role,
-          content: m.content || '',
-          timestamp: m.timestamp || Date.now(),
-          done: true,
-        }
-        if (m.reasoning_content) {
-          msg.reasoningContent = m.reasoning_content
-        }
-        if (m.interrupted || m.content === '[已中断]') {
-          msg.interrupted = true
-        }
-        if (m.versions && Array.isArray(m.versions) && m.versions.length > 0) {
-          msg.versions = (m.versions as RawMessageVersion[]).map((v) => ({
-            content: v.content || '',
-            reasoningContent: v.reasoning_content || v.reasoningContent || undefined,
-            model: v.model || undefined,
-            provider: v.provider || undefined,
-            suggestedQuestions: v.suggested_questions || v.suggestedQuestions || undefined,
-          }))
-          msg.currentVersion = m.current_version ?? m.versions.length - 1
-        }
-        if (m.files) {
-          msg.files = m.files
-        } else if (m.file_name) {
-          msg.files = [{ name: m.file_name, type: m.file_type }]
-        }
-        mappedMessages.push(msg)
-      }
+      convHasMore.value = { ...convHasMore.value, [convId]: !!conv.has_more }
+      convTotalMessages.value = { ...convTotalMessages.value, [convId]: conv.total_messages ?? (conv.messages?.length ?? 0) }
+      const mappedMessages = (conv.messages || []).map(mapApiMessage)
       convMessages.value = { ...convMessages.value, [convId]: mappedMessages }
     } catch (error) {
       if (!convMessages.value[convId]) {
         convMessages.value = { ...convMessages.value, [convId]: [] }
       }
+    } finally {
+      const newLoading = { ...convLoading.value }
+      delete newLoading[convId]
+      convLoading.value = newLoading
+    }
+  }
+
+  const loadMoreMessages = async (convId: string) => {
+    if (!convHasMore.value[convId]) return
+
+    const existing = convMessages.value[convId] || []
+    if (existing.length === 0) return
+
+    const beforeId = existing[0].id
+    convLoading.value = { ...convLoading.value, [convId]: true }
+
+    try {
+      const conv = await apiGet<Conversation>(`/chat/conversations/${convId}?before_id=${beforeId}`)
+      const olderMessages = (conv.messages || []).map(mapApiMessage)
+      convMessages.value[convId].unshift(...olderMessages)
+      convHasMore.value = { ...convHasMore.value, [convId]: !!conv.has_more }
+    } catch (error) {
+      logger.warn('Failed to load more messages:', error)
     } finally {
       const newLoading = { ...convLoading.value }
       delete newLoading[convId]
@@ -549,19 +581,18 @@ export const useChatStore = defineStore('chat', () => {
       endpoint,
       requestBody,
       (chunk: ChatStreamChunk) => {
-        const currentMsgList = convMessages.value[streamingConvId]
-        if (!currentMsgList) return
-        const lastIndex = currentMsgList.length - 1
-        if (lastIndex >= 0 && currentMsgList[lastIndex]?.role === 'assistant') {
-          const updatedMsg: ChatMessage = {
-            ...currentMsgList[lastIndex],
-            content: currentMsgList[lastIndex].content + (chunk.content || ''),
-            reasoningContent: currentMsgList[lastIndex].reasoningContent + (chunk.reasoning_content || ''),
-          }
+        const msgsList = convMessages.value[streamingConvId]
+        if (!msgsList) return
+        const lastIdx = msgsList.length - 1
+        if (lastIdx >= 0 && msgsList[lastIdx]?.role === 'assistant') {
+          // 直接修改响应式代理属性，避免每个 chunk 都拷贝整个消息数组
+          const lastMsg = msgsList[lastIdx]
+          lastMsg.content += (chunk.content || '')
+          lastMsg.reasoningContent += (chunk.reasoning_content || '')
           if (chunk.done) {
             logger.debug('done chunk suggestions:', chunk.suggested_questions)
             if (chunk.suggested_questions && chunk.suggested_questions.length > 0) {
-              updatedMsg.suggestedQuestions = chunk.suggested_questions
+              lastMsg.suggestedQuestions = chunk.suggested_questions
             }
             if (chunk.context_tokens !== undefined) {
               convContextTokens.value = { ...convContextTokens.value, [streamingConvId]: chunk.context_tokens }
@@ -570,11 +601,7 @@ export const useChatStore = defineStore('chat', () => {
               convContextMaxTokens.value = { ...convContextMaxTokens.value, [streamingConvId]: chunk.context_max_tokens }
             }
           } else {
-            updatedMsg.suggestedQuestions = undefined
-          }
-          convMessages.value = {
-            ...convMessages.value,
-            [streamingConvId]: [...currentMsgList.slice(0, lastIndex), updatedMsg]
+            lastMsg.suggestedQuestions = undefined
           }
         }
         if (chunk.usage) {
@@ -591,10 +618,7 @@ export const useChatStore = defineStore('chat', () => {
         const completeLastIndex = completeMsgList.length - 1
         if (completeLastIndex >= 0 && completeMsgList[completeLastIndex]?.role === 'assistant') {
           const lastMsg = completeMsgList[completeLastIndex]
-          const completedMsg: ChatMessage = {
-            ...lastMsg,
-            done: true
-          }
+          lastMsg.done = true
           if (lastMsg.versions && lastMsg.versions.length > 0) {
             const newVersion: MessageVersion = {
               content: lastMsg.content,
@@ -603,16 +627,12 @@ export const useChatStore = defineStore('chat', () => {
               provider: lastMsg.provider,
               suggestedQuestions: lastMsg.suggestedQuestions || undefined,
             }
-            completedMsg.versions = [...lastMsg.versions, newVersion]
-            completedMsg.currentVersion = completedMsg.versions.length - 1
-          }
-          convMessages.value = {
-            ...convMessages.value,
-            [streamingConvId]: [...completeMsgList.slice(0, completeLastIndex), completedMsg]
+            lastMsg.versions = [...lastMsg.versions, newVersion]
+            lastMsg.currentVersion = lastMsg.versions.length - 1
           }
           // 只有这条消息有推荐问题时，才设置当前推荐消息ID
-          if (completedMsg.suggestedQuestions && completedMsg.suggestedQuestions.length > 0) {
-            currentSuggestionMessageId.value = completedMsg.id
+          if (lastMsg.suggestedQuestions && lastMsg.suggestedQuestions.length > 0) {
+            currentSuggestionMessageId.value = lastMsg.id
           }
         }
         convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
@@ -758,11 +778,11 @@ export const useChatStore = defineStore('chat', () => {
       `/chat/conversations/${convId}/regenerate`,
       requestBody,
       (chunk: ChatStreamChunk) => {
-        const currentMsgList = convMessages.value[streamingConvId]
-        if (!currentMsgList) return
-        const lastIndex = currentMsgList.length - 1
-        if (lastIndex >= 0 && currentMsgList[lastIndex]?.role === 'assistant') {
-          const existing = currentMsgList[lastIndex]
+        const msgsList = convMessages.value[streamingConvId]
+        if (!msgsList) return
+        const lastIdx = msgsList.length - 1
+        if (lastIdx >= 0 && msgsList[lastIdx]?.role === 'assistant') {
+          const lastMsg = msgsList[lastIdx]
           if (chunk.done && chunk.suggested_questions && chunk.suggested_questions.length > 0) {
             streamDoneSuggestions = chunk.suggested_questions
           }
@@ -772,16 +792,10 @@ export const useChatStore = defineStore('chat', () => {
           if (chunk.done && chunk.context_max_tokens !== undefined && chunk.context_max_tokens > 0) {
             convContextMaxTokens.value = { ...convContextMaxTokens.value, [streamingConvId]: chunk.context_max_tokens }
           }
-          const updatedMsg: ChatMessage = {
-            ...existing,
-            content: existing.content + (chunk.content || ''),
-            reasoningContent: existing.reasoningContent + (chunk.reasoning_content || ''),
-            suggestedQuestions: streamDoneSuggestions ?? existing.suggestedQuestions,
-          }
-          convMessages.value = {
-            ...convMessages.value,
-            [streamingConvId]: [...currentMsgList.slice(0, lastIndex), updatedMsg]
-          }
+          // 直接修改响应式代理属性，避免每个 chunk 都拷贝整个消息数组
+          lastMsg.content += (chunk.content || '')
+          lastMsg.reasoningContent += (chunk.reasoning_content || '')
+          lastMsg.suggestedQuestions = streamDoneSuggestions ?? lastMsg.suggestedQuestions
         }
         if (chunk.usage) {
           lastUsage.value = chunk.usage
@@ -797,10 +811,7 @@ export const useChatStore = defineStore('chat', () => {
         const completeLastIndex = completeMsgList.length - 1
         if (completeLastIndex >= 0 && completeMsgList[completeLastIndex]?.role === 'assistant') {
           const lastMsg = completeMsgList[completeLastIndex]
-          const completedMsg: ChatMessage = {
-            ...lastMsg,
-            done: true
-          }
+          lastMsg.done = true
           if (lastMsg.versions && lastMsg.versions.length > 0) {
             const newVersion: MessageVersion = {
               content: lastMsg.content,
@@ -809,17 +820,13 @@ export const useChatStore = defineStore('chat', () => {
               provider: lastMsg.provider,
               suggestedQuestions: lastMsg.suggestedQuestions || undefined,
             }
-            completedMsg.versions = [...lastMsg.versions, newVersion]
-            completedMsg.currentVersion = completedMsg.versions.length - 1
+            lastMsg.versions = [...lastMsg.versions, newVersion]
+            lastMsg.currentVersion = lastMsg.versions.length - 1
           }
           // 明确设置推荐问题：如果流式回调中已更新就用新的，否则清除旧的（新版本尚未生成推荐问题）
-          completedMsg.suggestedQuestions = lastMsg.suggestedQuestions || undefined
-          convMessages.value = {
-            ...convMessages.value,
-            [streamingConvId]: [...completeMsgList.slice(0, completeLastIndex), completedMsg]
-          }
-          if (completedMsg.suggestedQuestions && completedMsg.suggestedQuestions.length > 0) {
-            currentSuggestionMessageId.value = completedMsg.id
+          lastMsg.suggestedQuestions = lastMsg.suggestedQuestions || undefined
+          if (lastMsg.suggestedQuestions && lastMsg.suggestedQuestions.length > 0) {
+            currentSuggestionMessageId.value = lastMsg.id
           }
         }
         convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
@@ -998,5 +1005,8 @@ export const useChatStore = defineStore('chat', () => {
     currentContextPercent,
     compressConversation,
     agentCurrentConvId,
+    convHasMore,
+    currentHasMore,
+    loadMoreMessages,
   }
 })

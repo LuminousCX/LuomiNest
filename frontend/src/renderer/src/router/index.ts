@@ -55,16 +55,16 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'LuomiNest Desktop Pet' }
   },
   {
+    path: '/desktop-pet-chat',
+    name: 'DesktopPetChat',
+    component: () => import('../views/DesktopPetChatView.vue'),
+    meta: { title: 'LuomiNest Companion Chat' }
+  },
+  {
     path: '/settings/ai-model',
     name: 'SettingsAIModel',
     component: () => import('../views/settings/AIModelSettings.vue'),
-    meta: { title: '模型配置 - LuomiNest', icon: 'Cpu' }
-  },
-  {
-    path: '/settings/stt',
-    name: 'SettingsSTT',
-    component: () => import('../views/settings/AIModelSettings.vue'),
-    meta: { title: '语音识别 - LuomiNest', icon: 'Mic', initialTile: 'stt' }
+    meta: { title: '模型设置 - LuomiNest', icon: 'Cpu' }
   },
   {
     path: '/settings/about',
@@ -185,7 +185,7 @@ const router = createRouter({
 // DesktopPet 为独立展示窗口：仅渲染 Live2D + IPC send 通信，不依赖 auth token，
 // 且其 webContents !== mainWindow.webContents，无法通过 assertTrustedSender 校验，
 // 故加入公开路由 allowlist，避免被路由守卫重定向到登录页（导致桌宠窗口显示主页面而非 Live2D）。
-const PUBLIC_ROUTES = new Set(['Welcome', 'Splash', 'Login', 'DesktopPet'])
+const PUBLIC_ROUTES = new Set(['Welcome', 'Splash', 'Login', 'DesktopPet', 'DesktopPetChat'])
 
 // Token 缓存：避免每次导航都走 IPC。登录/登出时通过 invalidateAuthToken() 清除
 let _cachedAuthToken: string | null | undefined

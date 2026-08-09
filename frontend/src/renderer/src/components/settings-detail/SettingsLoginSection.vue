@@ -170,7 +170,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="settings-panel settings-panel--narrow animate-slide-up">
+  <div class="settings-panel animate-slide-up">
     <!-- 加载中 -->
     <section v-if="authState === 'loading'" class="settings-card">
       <div class="settings-card__body settings-card__body--compact auth-loading">

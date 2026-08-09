@@ -2,7 +2,8 @@
 
 检测 CPU 核心数、系统内存总量、GPU 类型，提供统一的 HardwareProfile 数据类.
 所有检测均有 try/except 保护，不因缺少某个库而崩溃.
-内存检测使用 OS 原生命令（PowerShell Get-CimInstance、/proc/meminfo、sysctl），不依赖 psutil.
+内存检测优先使用 psutil（跨平台统一），psutil 缺失时回退 OS 原生命令
+（PowerShell Get-CimInstance、/proc/meminfo、sysctl）.
 """
 
 import os
@@ -10,6 +11,7 @@ import platform
 import subprocess
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 from loguru import logger
 
@@ -21,11 +23,22 @@ class GpuType(str, Enum):
 
 
 @dataclass
+class GpuDevice:
+    """单个 GPU 设备信息（平台原生检测，不依赖 PyTorch）."""
+
+    name: str
+    vendor: str  # nvidia / amd / intel / apple / unknown
+    is_virtual: bool = False
+
+
+@dataclass
 class HardwareProfile:
     cpu_count: int
     total_memory_gb: float
     gpu_type: GpuType
     is_low_end: bool
+    gpu_count: int = 0
+    gpu_names: list[str] = None  # type: ignore[assignment]
 
 
 _hardware_profile: HardwareProfile | None = None
@@ -41,7 +54,24 @@ def _detect_cpu_count() -> int:
 
 
 def _detect_total_memory_gb() -> float:
-    """检测系统内存总量（GB），使用 OS 原生命令，不依赖 psutil."""
+    """检测系统内存总量（GB）.
+
+    优先使用 psutil（跨平台统一，Windows/Linux/macOS 均可靠）；
+    psutil 不可用时回退 OS 原生命令（PowerShell、/proc/meminfo、sysctl）.
+    """
+    # 方法 1：psutil（跨平台）
+    try:
+        import psutil
+
+        total_bytes = psutil.virtual_memory().total
+        if total_bytes > 0:
+            return round(total_bytes / (1024 ** 3), 2)
+    except ImportError:
+        logger.debug("[Hardware] psutil not installed, falling back to native commands")
+    except Exception as e:
+        logger.debug(f"[Hardware] psutil memory detection failed: {e}")
+
+    # 方法 2：平台原生命令回退
     system = platform.system()
 
     if system == "Windows":
@@ -177,8 +207,232 @@ def _detect_memory_fallback() -> float:
     return 8.0
 
 
+def _infer_vendor(name: str) -> str:
+    """根据 GPU 名称推断厂商."""
+    lower = name.lower()
+    if any(k in lower for k in ("nvidia", "geforce", "rtx", "gtx", "quadro", "tesla")):
+        return "nvidia"
+    if any(k in lower for k in ("amd", "radeon", "vega", "firepro", "instinct")):
+        return "amd"
+    if any(k in lower for k in ("intel", "arc", "iris", "uhd graphics", "hd graphics")):
+        return "intel"
+    if "apple" in lower or "mps" in lower:
+        return "apple"
+    return "unknown"
+
+
+def _is_virtual_gpu(name: str, pnp_id: str = "") -> bool:
+    """过滤虚拟显示适配器（远程桌面/串流工具等），避免误报为真实 GPU."""
+    lower = name.lower()
+    virtual_markers = (
+        "virtual", "remote", "basic display", "microsoft basic",
+        "todesk", "sunlogin", "anydesk", "parsec", "displaylink",
+        "virtual display", "rdp",
+    )
+    if any(m in lower for m in virtual_markers):
+        return True
+    return "root\\" in pnp_id.lower()
+
+
+def _detect_gpus_windows() -> list[GpuDevice]:
+    """Windows GPU 检测：PowerShell Get-CimInstance Win32_VideoController."""
+    try:
+        result = subprocess.run(
+            [
+                "powershell", "-NoProfile", "-Command",
+                "Get-CimInstance Win32_VideoController | ForEach-Object { \"$($_.Name)|$($_.PNPDeviceID)\" }",
+            ],
+            capture_output=True, text=True, timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        if result.returncode != 0:
+            return []
+        gpus: list[GpuDevice] = []
+        for line in result.stdout.strip().splitlines():
+            line = line.strip()
+            if not line or "|" not in line:
+                continue
+            name, pnp_id = line.split("|", 1)
+            name = name.strip()
+            pnp_id = pnp_id.strip()
+            if not name or _is_virtual_gpu(name, pnp_id):
+                continue
+            gpus.append(GpuDevice(name=name, vendor=_infer_vendor(name), is_virtual=False))
+        return gpus
+    except Exception as e:
+        logger.debug(f"[Hardware] Windows GPU detection failed: {e}")
+        return []
+
+
+def _detect_gpus_linux() -> list[GpuDevice]:
+    """Linux GPU 检测.
+
+    主路径：lspci 匹配 VGA / 3D / Display controller（需要 pciutils）.
+    回退路径：遍历 /sys/class/drm/card*/device 读取 vendor/device 名称，
+    并在 /sys/bus/pci/drivers/nvidia/ 存在时识别 NVIDIA 设备.
+    """
+    gpus = _detect_gpus_linux_lspci()
+    if gpus:
+        return gpus
+    return _detect_gpus_linux_drm()
+
+
+def _detect_gpus_linux_lspci() -> list[GpuDevice]:
+    """Linux GPU 检测主路径：lspci."""
+    try:
+        result = subprocess.run(
+            ["lspci", "-nn"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return []
+        gpus: list[GpuDevice] = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not any(tag in line.lower() for tag in ("vga compatible", "3d controller", "display controller")):
+                continue
+            # 提取厂商与型号（去掉方括号内的 PCI ID 与驱动编号）
+            if ":" in line:
+                line = line.split(":", 1)[1].strip()
+            if "[" in line:
+                line = line.split("[", 1)[0].strip()
+            # 去掉尾部的 " (rev xx)"
+            if "(" in line:
+                line = line.split("(", 1)[0].strip()
+            if not line:
+                continue
+            gpus.append(GpuDevice(name=line, vendor=_infer_vendor(line), is_virtual=False))
+        return gpus
+    except Exception as e:
+        logger.debug(f"[Hardware] Linux lspci GPU detection failed: {e}")
+        return []
+
+
+def _detect_gpus_linux_drm() -> list[GpuDevice]:
+    """Linux GPU 检测回退路径：/sys/class/drm（无 lspci 的容器/精简系统）."""
+    try:
+        drm_dir = Path("/sys/class/drm")
+        if not drm_dir.is_dir():
+            return []
+        seen: set[str] = set()
+        gpus: list[GpuDevice] = []
+        for entry in sorted(drm_dir.iterdir()):
+            if not entry.name.startswith("card") or entry.name.endswith("-"):
+                continue
+            device_dir = entry / "device"
+            try:
+                vendor_id = (device_dir / "vendor").read_text().strip()
+                # 读取 DRM 设备名（如 i915 / amdgpu / nvidia-drm / vc4）
+                name = (device_dir / "uevent").read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if not vendor_id or vendor_id in seen:
+                continue
+            seen.add(vendor_id)
+            label = _drm_vendor_label(vendor_id, name)
+            if label:
+                gpus.append(GpuDevice(name=label, vendor=_infer_vendor(label), is_virtual=False))
+        return gpus
+    except Exception as e:
+        logger.debug(f"[Hardware] Linux DRM GPU detection failed: {e}")
+        return []
+
+
+def _drm_vendor_label(vendor_id: str, uevent: str = "") -> str:
+    """根据 PCI vendor id 与 uevent 内容生成 GPU 名称."""
+    vendor_map = {
+        "0x10de": "NVIDIA GPU",
+        "0x1002": "AMD GPU (Radeon)",
+        "0x8086": "Intel GPU (iGPU)",
+        "0x1a03": "ASPEED GPU (BMC 虚拟)",
+        "0x1414": "Microsoft Basic Display Adapter (虚拟)",
+    }
+    # 尝试从 uevent 的 DRIVER 字段细化名称
+    driver = ""
+    for line in uevent.splitlines():
+        if line.startswith("DRIVER="):
+            driver = line.split("=", 1)[1].strip()
+            break
+    vendor_lower = vendor_id.strip().lower()
+    label = vendor_map.get(vendor_lower)
+    if label and driver and driver.lower() not in ("nvidia", "amdgpu", "i915"):
+        label = f"{label} ({driver})"
+    return label or ""
+
+
+def _detect_gpus_macos() -> list[GpuDevice]:
+    """macOS GPU 检测：system_profiler SPDisplaysDataType."""
+    try:
+        result = subprocess.run(
+            ["system_profiler", "SPDisplaysDataType"],
+            capture_output=True, text=True, timeout=20,
+        )
+        if result.returncode != 0:
+            return []
+        gpus: list[GpuDevice] = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if "Chipset Model:" in line:
+                name = line.split("Chipset Model:", 1)[1].strip()
+                if name:
+                    gpus.append(GpuDevice(name=name, vendor=_infer_vendor(name), is_virtual=False))
+        return gpus
+    except Exception as e:
+        logger.debug(f"[Hardware] macOS GPU detection failed: {e}")
+        return []
+
+
+def _detect_gpus_native() -> list[GpuDevice]:
+    """平台原生 GPU 检测（不依赖 PyTorch），返回真实（非虚拟）GPU 列表."""
+    system = platform.system()
+    try:
+        if system == "Windows":
+            return _detect_gpus_windows()
+        if system == "Linux":
+            return _detect_gpus_linux()
+        if system == "Darwin":
+            return _detect_gpus_macos()
+    except Exception as e:
+        logger.debug(f"[Hardware] Native GPU detection failed on {system}: {e}")
+    return []
+
+
+def detect_gpus() -> list[GpuDevice]:
+    """检测 GPU 列表：优先 PyTorch（CUDA/MPS），回退平台原生检测."""
+    gpus: list[GpuDevice] = []
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            gpus = [
+                GpuDevice(name=torch.cuda.get_device_name(i), vendor="nvidia", is_virtual=False)
+                for i in range(torch.cuda.device_count())
+            ]
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            gpus = [GpuDevice(name="Apple Silicon (MPS)", vendor="apple", is_virtual=False)]
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.debug(f"[Hardware] torch GPU detection failed: {e}")
+
+    if gpus:
+        return gpus
+
+    # torch 不可用或未检测到加速设备，回退平台原生检测
+    native = _detect_gpus_native()
+    if native:
+        return native
+
+    return []
+
+
 def _detect_gpu_type() -> GpuType:
-    """检测 GPU 类型."""
+    """检测 GPU 类型.
+
+    优先使用 PyTorch（CUDA / MPS）；PyTorch 未安装或为 CPU 版时，
+    回退到平台原生硬件检测（PowerShell / lspci / system_profiler），
+    只要存在真实 GPU 即视为可用硬件。
+    """
     try:
         import torch
 
@@ -196,6 +450,11 @@ def _detect_gpu_type() -> GpuType:
     except Exception as e:
         logger.debug(f"[Hardware] GPU detection error: {e}")
 
+    native_gpus = _detect_gpus_native()
+    if native_gpus:
+        logger.info(f"[Hardware] Native GPU detected: {', '.join(g.name for g in native_gpus)}")
+        return GpuType.CUDA
+
     return GpuType.CPU_ONLY
 
 
@@ -204,6 +463,7 @@ def _detect_hardware() -> HardwareProfile:
     cpu_count = _detect_cpu_count()
     total_memory_gb = _detect_total_memory_gb()
     gpu_type = _detect_gpu_type()
+    gpu_devices = detect_gpus()
 
     # 低端设备判定：内存 < 8GB 或 CPU < 4 核
     is_low_end = total_memory_gb < 8.0 or cpu_count < 4
@@ -213,6 +473,8 @@ def _detect_hardware() -> HardwareProfile:
         total_memory_gb=total_memory_gb,
         gpu_type=gpu_type,
         is_low_end=is_low_end,
+        gpu_count=len(gpu_devices),
+        gpu_names=[g.name for g in gpu_devices],
     )
 
 

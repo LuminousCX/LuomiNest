@@ -276,8 +276,8 @@ const emit = defineEmits<{
   font-weight: 600;
   padding: 2px 7px;
   border-radius: 5px;
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }

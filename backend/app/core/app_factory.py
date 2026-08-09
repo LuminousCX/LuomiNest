@@ -155,6 +155,14 @@ async def lifespan(app: FastAPI):
     logger.info(f"[LuomiNest] Starting application...")
     logger.info(f"[LuomiNest] Environment: {'Development' if settings.DEBUG else 'Production'}")
 
+    # 系统信息日志（操作系统 / 发行版 / 包管理器 / 架构）
+    try:
+        from app.core.platform_info import log_system_info
+
+        log_system_info()
+    except Exception as e:
+        logger.debug(f"[LuomiNest] System info logging failed: {e}")
+
     # 硬件检测日志
     try:
         profile = get_hardware_profile()

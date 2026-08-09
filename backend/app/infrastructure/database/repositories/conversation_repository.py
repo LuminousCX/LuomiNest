@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import func, or_, select, delete as sa_delete, update as sa_update
+from sqlalchemy.orm import defer
 
 from app.infrastructure.database.models.conversation import Conversation
 from app.infrastructure.database.repositories.base import BaseRepository, orm_to_dict, utcnow_iso
@@ -65,6 +66,49 @@ class ConversationRepository(BaseRepository):
             conv["created_at"] = utcnow_iso()
         conv["updated_at"] = utcnow_iso()
         return super().save(key, conv)
+
+    # ── Optimized reads ──
+
+    def get_meta(self, conv_id: str) -> Optional[dict]:
+        """加载对话元数据（不含 messages/search_text），SQL 层跳过重列加载。"""
+        with sync_session_factory() as session:
+            stmt = (
+                select(Conversation)
+                .options(defer(Conversation.messages), defer(Conversation.search_text))
+                .where(Conversation.id == conv_id)
+            )
+            obj = session.execute(stmt).scalar_one_or_none()
+            if obj is None:
+                return None
+            d = orm_to_dict(obj)
+            d["messages"] = []
+            d.pop("search_text", None)
+            return d
+
+    def get_paginated(self, conv_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
+        """加载对话 + 分页消息（最新 N 条），避免一次加载全部。"""
+        with sync_session_factory() as session:
+            obj = session.get(Conversation, conv_id)
+            if obj is None:
+                return None
+            d = orm_to_dict(obj)
+            d.pop("search_text", None)
+            messages = d.get("messages", []) or []
+            total = len(messages)
+
+            if before_id:
+                idx = next((i for i, m in enumerate(messages) if m.get("id") == before_id), total)
+                start = max(0, idx - limit)
+                d["messages"] = messages[start:idx]
+                d["has_more"] = start > 0
+            elif limit and total > limit:
+                d["messages"] = messages[-limit:]
+                d["has_more"] = True
+            else:
+                d["has_more"] = False
+
+            d["total_messages"] = total
+            return d
 
     # ── List / Search ──
 
@@ -232,6 +276,12 @@ class ConversationRepository(BaseRepository):
             return result.rowcount or 0
 
     # ── Async wrappers ──
+
+    async def get_meta_async(self, conv_id: str) -> Optional[dict]:
+        return await asyncio.to_thread(self.get_meta, conv_id)
+
+    async def get_paginated_async(self, conv_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
+        return await asyncio.to_thread(self.get_paginated, conv_id, limit, before_id)
 
     async def list_meta_async(self, agent_id: Optional[str] = None, include_hidden: bool = False) -> list[dict]:
         return await asyncio.to_thread(self.list_meta, agent_id, include_hidden)

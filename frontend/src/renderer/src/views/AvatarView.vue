@@ -836,11 +836,6 @@ onBeforeUnmount(() => {
           @toggle-desktop-mode="toggleDesktopMode"
         />
 
-        <!-- 未实现的模式占位 -->
-        <div v-else class="stage-placeholder">
-          <span>{{ currentMode }} renderer not yet implemented</span>
-        </div>
-
         <AvatarControls
           v-if="!isDesktopMode"
           :current-mode="currentMode"
@@ -909,15 +904,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.stage-placeholder {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  font-size: var(--text-base);
 }
 
 @keyframes stage-appear {

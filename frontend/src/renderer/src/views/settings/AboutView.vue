@@ -19,6 +19,8 @@ import {
   Cpu
 } from 'lucide-vue-next'
 import logoImage from '../../assets/images/Luminous_chenxi.png'
+import LumiSettingsBackground from '../../components/settings-detail/LumiSettingsBackground.vue'
+import '../../styles/views/settings-independent-bg.css'
 
 const router = useRouter()
 
@@ -77,6 +79,7 @@ const techStacks = [
 
 <template>
   <div class="lumi-settings-page about-view">
+    <LumiSettingsBackground />
     <header class="lumi-settings-page__header lumi-settings-animate-fade">
       <button class="lumi-settings-page__back" @click="router.push('/settings')">
         <ArrowLeft :size="18" />
@@ -274,7 +277,5 @@ const techStacks = [
 <style scoped src="../../styles/views/about-view.css"></style>
 
 <style scoped>
-.about-view {
-  background: var(--surface);
-}
+/* 背景由 settings-independent-bg.css 独立控制 */
 </style>

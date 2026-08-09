@@ -231,7 +231,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="platform-panel animate-slide-up">
+  <div class="settings-panel platform-panel animate-slide-up">
     <div class="platform-card">
       <div class="platform-card-header">
         <Brain :size="18" />
@@ -524,10 +524,7 @@ onMounted(() => {
 
 <style scoped>
 .platform-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  max-width: 880px;
+  /* layout handled by settings-panel shared class */
 }
 
 .platform-card {
@@ -808,8 +805,8 @@ onMounted(() => {
 }
 
 .pi-icon.social {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .pi-icon.iot {
@@ -1075,8 +1072,8 @@ onMounted(() => {
 }
 
 .adapter-type-icon.social {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .adapter-type-icon.iot {
@@ -1122,8 +1119,8 @@ onMounted(() => {
 }
 
 .adapter-type-cat.social {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .adapter-type-cat.iot {

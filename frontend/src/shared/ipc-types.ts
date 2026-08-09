@@ -281,7 +281,6 @@ export const DesktopPetIpcChannels = {
   SEND: [
     'desktop-pet:set-ignore-mouse-events',
     'desktop-pet:set-always-on-top',
-    'desktop-pet:resize-window',
     'desktop-pet:start-drag',
     'desktop-pet:drag-window',
     'desktop-pet:end-drag',
@@ -297,6 +296,7 @@ export const DesktopPetIpcChannels = {
     'desktop-pet:load-model',
     'desktop-pet:trigger-motion',
     'desktop-pet:trigger-expression',
+    'desktop-pet:set-scale',
     'desktop-pet:lip-sync',
     'desktop-pet:pad-emotion',
     'desktop-pet:set-core-param',
@@ -458,7 +458,7 @@ export interface ElectronApi {
   dialog: {
     selectBackgroundImage: () => Promise<
       { success: true; url: string; width: number; height: number; warning?: string } |
-      { success: false; error: string }
+      { success: false; error?: string; cancelled?: boolean }
     >
     deleteBackgroundImage: (imageUrl: string) => Promise<{ success: boolean; error?: string }>
   }

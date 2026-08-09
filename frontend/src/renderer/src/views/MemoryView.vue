@@ -43,7 +43,7 @@ const confirmDanger = ref(false)
 const isProcessing = ref(false)
 
 const layerTabs = ref<LayerTab[]>([
-  { id: 'profile', name: '用户画像', sub: 'AI眼中的你', icon: Brain, color: 'var(--task-purple)', desc: '展示AI理解的用户身份、偏好和目标' },
+  { id: 'profile', name: '用户画像', sub: 'AI眼中的你', icon: Brain, color: 'var(--task-sky)', desc: '展示AI理解的用户身份、偏好和目标' },
   { id: 'facts', name: '记忆事实', sub: '结构化知识', icon: BookOpen, color: 'var(--lumi-success)', desc: '按类别存储的事实信息，支持搜索和管理' },
   { id: 'knowledge', name: '知识记忆', sub: '学到的知识', icon: FileText, color: 'var(--lumi-sky)', desc: '从对话中提取的可复用知识点' },
   { id: 'history', name: '对话历史', sub: '每日记录', icon: Calendar, color: 'var(--lumi-amber)', desc: '按日期分组的对话摘要' },
@@ -110,7 +110,7 @@ const knowledgeSectionCards = computed(() => {
 const summarySectionNames = ['用户画像', '偏好设置', '兴趣目标', '近期状态', '事件时间线'] as const
 
 const summarySectionColors: Record<string, string> = {
-  '用户画像': 'var(--task-purple)',
+  '用户画像': 'var(--task-sky)',
   '偏好设置': 'var(--lumi-amber)',
   '兴趣目标': 'var(--lumi-success)',
   '近期状态': 'var(--lumi-sky)',
@@ -758,8 +758,8 @@ window.addEventListener('click', closeMenu)
   font-size: var(--text-xs);
   padding: 3px 10px;
   border-radius: var(--radius-full);
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
   font-weight: 500;
 }
 

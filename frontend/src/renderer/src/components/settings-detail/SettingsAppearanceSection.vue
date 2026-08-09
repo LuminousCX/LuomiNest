@@ -135,7 +135,7 @@ const activeColorThemeName = computed(() => {
       <div class="settings-card__body">
         <p class="settings-card__hint">点击预设皮肤直接应用；悬浮到当前预设可点击编辑。自定义皮肤点击即可编辑。</p>
         <ThemeSkinSelector
-          :model-value="themeStore.activeSkinId"
+          :active-id="themeStore.activeSkinId"
           @apply="handleApplySkin"
           @edit="openSkinEditor"
           @create="openNewSkinEditor"
@@ -190,8 +190,7 @@ const activeColorThemeName = computed(() => {
 
 <style scoped>
 .appearance-panel {
-  max-width: 960px;
-  margin: 0 auto;
+  /* centering handled by settings-panel shared class */
 }
 
 /* ── 顶栏摘要 ── */

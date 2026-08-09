@@ -1,0 +1,288 @@
+/* =========================================================
+   独立页面背景样式 — 关于 / 项目参考 / 隐私与合规
+   这三个页面拥有自己独立的背景系统：
+   - 不跟随全局主题配色
+   - 不跟随全局壁纸背景
+   - 使用 pastel 几何装饰图案（pastel-geo-decor.svg）
+   
+   仅作用于 .about-view / .license-view / .privacy-view
+   ========================================================= */
+
+/* -------------------------------------------------------
+   1. 覆盖 LumiSettingsBackground 组件的 CSS 变量
+   ------------------------------------------------------- */
+.about-view,
+.license-view,
+.privacy-view {
+  --lumi-settings-bg-image: url('/images/pastel-geo-decor.svg');
+  --lumi-settings-bg-opacity: 0.16;
+  --lumi-settings-bg-width: 180px;
+}
+
+/* -------------------------------------------------------
+   2. 页面底层背景 — 干净的近白基底，微带冷蓝调
+   ------------------------------------------------------- */
+.about-view,
+.license-view,
+.privacy-view {
+  background:
+    radial-gradient(ellipse at 20% 15%, rgba(200, 220, 245, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 80%, rgba(190, 215, 240, 0.08) 0%, transparent 50%),
+    linear-gradient(175deg, #fbfcfe 0%, #f8fafc 40%, #f6f8fb 70%, #f9fbfd 100%) !important;
+}
+
+/* -------------------------------------------------------
+   3. Header — 干净毛玻璃，蓝色调边框
+   ------------------------------------------------------- */
+.about-view > .lumi-settings-page__header,
+.license-view > .lumi-settings-page__header,
+.privacy-view > .lumi-settings-page__header {
+  background: rgba(255, 255, 255, 0.82) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(16px) saturate(1.2);
+  border-bottom: 1px solid rgba(100, 150, 220, 0.08) !important;
+}
+
+/* -------------------------------------------------------
+   4. 固定装饰 — 角落柔蓝光晕（极淡）
+   ------------------------------------------------------- */
+.about-view::before,
+.license-view::before,
+.privacy-view::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  right: -80px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(180, 210, 245, 0.12) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.about-view::after,
+.license-view::after,
+.privacy-view::after {
+  content: '';
+  position: absolute;
+  bottom: -80px;
+  left: -60px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(190, 220, 245, 0.1) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* -------------------------------------------------------
+   5. 浮动装饰圆点 — 极淡蓝灰色调
+   ------------------------------------------------------- */
+.about-view > .lumi-settings-page__body::before,
+.license-view > .lumi-settings-page__body::before,
+.privacy-view > .lumi-settings-page__body::before {
+  content: '';
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 0;
+  box-shadow:
+    140px 80px 0 7px rgba(190, 215, 240, 0.12),
+    380px 200px 0 5px rgba(180, 210, 235, 0.1),
+    600px 110px 0 8px rgba(195, 218, 242, 0.08),
+    220px 420px 0 6px rgba(185, 212, 238, 0.1),
+    520px 370px 0 5px rgba(175, 205, 235, 0.08),
+    700px 500px 0 7px rgba(190, 215, 240, 0.06),
+    110px 600px 0 5px rgba(185, 210, 236, 0.08),
+    440px 680px 0 6px rgba(195, 218, 242, 0.06),
+    680px 750px 0 5px rgba(180, 208, 235, 0.05),
+    300px 900px 0 7px rgba(190, 215, 240, 0.04);
+}
+
+/* -------------------------------------------------------
+   5b. Section 间距 — 拉大各部分之间的纵向间距
+   ------------------------------------------------------- */
+.about-view .lumi-settings-page__content,
+.license-view .lumi-settings-page__content,
+.privacy-view .lumi-settings-page__content {
+  gap: var(--space-8);
+}
+
+/* -------------------------------------------------------
+   6a. Section 外层容器 — 透明，不加边框 / 阴影 / 圆角
+   内部子元素（卡片、标签等）保持自身样式
+   ------------------------------------------------------- */
+.about-view .lumi-settings-section,
+.license-view .license-section,
+.privacy-view .privacy-section {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* -------------------------------------------------------
+   6b. lumi-settings-card — 白底 + 圆角 + 蓝色阴影
+   用于底部 Support / Achievements 等独立卡片
+   ------------------------------------------------------- */
+.about-view .lumi-settings-card,
+.license-view .lumi-settings-card,
+.privacy-view .lumi-settings-card {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 14px;
+  box-shadow:
+    0 2px 6px rgba(60, 120, 200, 0.07),
+    0 6px 20px rgba(60, 120, 200, 0.05);
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.about-view .lumi-settings-card:hover,
+.license-view .lumi-settings-card:hover,
+.privacy-view .lumi-settings-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(60, 120, 200, 0.12);
+  box-shadow:
+    0 4px 12px rgba(60, 120, 200, 0.09),
+    0 10px 32px rgba(60, 120, 200, 0.07);
+}
+
+/* -------------------------------------------------------
+   7. Section Header 小标签
+   ------------------------------------------------------- */
+.about-view .lumi-settings-section__header,
+.license-view .lumi-settings-section__header,
+.privacy-view .lumi-settings-section__header {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(80, 130, 200, 0.06);
+}
+
+/* -------------------------------------------------------
+   8. Tag 标签
+   ------------------------------------------------------- */
+.about-view .lumi-settings-tag,
+.license-view .lumi-settings-tag,
+.privacy-view .lumi-settings-tag {
+  background: rgba(245, 248, 252, 0.9);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+.about-view .lumi-settings-tag:hover,
+.license-view .lumi-settings-tag:hover,
+.privacy-view .lumi-settings-tag:hover {
+  border-color: rgba(80, 140, 220, 0.25);
+  color: #4a8ad4;
+  box-shadow: 2px 2px 0 0 rgba(80, 140, 220, 0.1);
+}
+
+/* -------------------------------------------------------
+   9. Hero 卡片 — 保留品牌渐变，增加蓝色阴影
+   ------------------------------------------------------- */
+.about-view .about-hero,
+.license-view .license-hero,
+.privacy-view .lumi-settings-hero {
+  border-radius: 16px;
+  box-shadow:
+    0 4px 24px rgba(60, 120, 200, 0.12),
+    0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+/* -------------------------------------------------------
+   10. 项目卡片（about-project-card）独立美化
+   ------------------------------------------------------- */
+.about-view .about-project-card {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  box-shadow:
+    0 2px 6px rgba(60, 120, 200, 0.07),
+    0 6px 18px rgba(60, 120, 200, 0.05);
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.about-view .about-project-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(60, 120, 200, 0.14);
+  box-shadow:
+    0 4px 12px rgba(60, 120, 200, 0.1),
+    0 12px 36px rgba(60, 120, 200, 0.08);
+}
+
+/* -------------------------------------------------------
+   11. 联系方式行 / Support / Achievements 等子元素
+   ------------------------------------------------------- */
+.about-view .about-contact__item,
+.about-view .about-support,
+.about-view .about-section {
+  border-radius: 10px;
+}
+
+/* -------------------------------------------------------
+   12. License 卡片适配
+   ------------------------------------------------------- */
+.license-view .license-card {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  box-shadow:
+    0 2px 6px rgba(60, 120, 200, 0.07),
+    0 6px 18px rgba(60, 120, 200, 0.05);
+}
+
+.license-view .license-card:hover {
+  border-color: rgba(60, 120, 200, 0.12);
+  box-shadow:
+    0 4px 10px rgba(60, 120, 200, 0.09),
+    0 10px 28px rgba(60, 120, 200, 0.07);
+}
+
+/* -------------------------------------------------------
+   13. Privacy 区域卡片适配
+   ------------------------------------------------------- */
+.privacy-view .privacy-section {
+  border-radius: 14px;
+}
+
+.privacy-view .privacy-contact-card {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 14px;
+  box-shadow:
+    0 2px 6px rgba(60, 120, 200, 0.07),
+    0 6px 20px rgba(60, 120, 200, 0.05);
+}
+
+/* -------------------------------------------------------
+   14. 响应式
+   ------------------------------------------------------- */
+@media (max-width: 1200px) {
+  .about-view > .lumi-settings-page__body::before,
+  .license-view > .lumi-settings-page__body::before,
+  .privacy-view > .lumi-settings-page__body::before {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .about-view::before,
+  .license-view::before,
+  .privacy-view::before,
+  .about-view::after,
+  .license-view::after,
+  .privacy-view::after {
+    display: none;
+  }
+}

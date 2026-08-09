@@ -22,7 +22,9 @@ class MyPlugin(CxPluginBase):
     @cx_handler(CxEventType.ON_CHAT_MESSAGE)
     async def on_message(self, event: dict) -> None:
         """处理聊天消息事件。"""
-        self.logger.info(f"Received message: {event}")
+        # 安全提示：不要原样记录事件 payload（可能包含用户隐私内容），
+        # 仅记录事件类型；确需业务字段时请显式提取白名单字段并脱敏。
+        self.logger.info("Received event: ON_CHAT_MESSAGE")
 
     async def terminate(self) -> None:
         """插件停用时调用 — 释放资源。"""

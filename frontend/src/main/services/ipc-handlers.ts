@@ -255,7 +255,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
       ? await dialog.showOpenDialog(parentWindow, dialogOptions)
       : await dialog.showOpenDialog(dialogOptions)
     if (result.canceled || result.filePaths.length === 0) {
-      return { success: false, error: '用户取消选择' }
+      return { success: false, cancelled: true }
     }
 
     const sourcePath = result.filePaths[0]
@@ -286,6 +286,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
         return { success: false, error: '不支持的图片格式，请选择 jpg/png/gif/webp' }
       }
 
+      // 复制前校验真实图像内容：仅扩展名不足以识别损坏或伪装的文件
+      // 该实例随后复用于读取分辨率，避免对目标文件二次加载
+      const sourceImage = nativeImage.createFromPath(sourcePath)
+      if (sourceImage.isEmpty()) {
+        return { success: false, error: '图片内容无效或文件已损坏，请重新选择' }
+      }
+
       fs.mkdirSync(bgDir, { recursive: true })
 
       // 生成安全文件名：只保留中英文/数字/下划线/连字符，避免特殊字符导致协议或路径问题
@@ -308,21 +315,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
       fs.copyFileSync(sourcePath, finalDestPath)
       logger.info(`[dialog:selectBackgroundImage] 背景图片已保存: ${finalDestPath}`)
 
-      // 读取图片实际分辨率，过小则提示用户
-      let width = 0
-      let height = 0
+      // 复用已校验的源图片实例读取实际分辨率，过小则提示用户
+      const { width, height } = sourceImage.getSize()
       let warning: string | undefined
-      try {
-        const image = nativeImage.createFromPath(finalDestPath)
-        const size = image.getSize()
-        width = size.width
-        height = size.height
-        if (width < 1280 || height < 720) {
-          warning = `图片分辨率较低（${width}×${height}），作为全屏背景可能会模糊，建议使用高清原图`
-          logger.warn(`[dialog:selectBackgroundImage] ${warning}`)
-        }
-      } catch (err) {
-        logger.warn('[dialog:selectBackgroundImage] 无法读取图片尺寸:', err)
+      if (width < 1280 || height < 720) {
+        warning = `图片分辨率较低（${width}×${height}），作为全屏背景可能会模糊，建议使用高清原图`
+        logger.warn(`[dialog:selectBackgroundImage] ${warning}`)
       }
 
       return { success: true, url: toBackgroundUrl(finalDestName), width, height, warning }

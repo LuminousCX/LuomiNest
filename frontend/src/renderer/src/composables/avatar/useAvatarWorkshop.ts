@@ -32,7 +32,6 @@ import {
   type AvatarManifestModel,
   type AvatarBinding,
   type AvatarCapability,
-  type ApiResult,
   type WorkshopDisplayMode,
   type ModelTypeInfo,
   type WorkshopState,
@@ -147,14 +146,9 @@ export function useAvatarWorkshop() {
     isLoadingManifest.value = true
     workshopError.value = null
     try {
-      const result = await api.apiGet<ApiResult<AvatarManifest>>('/avatar/manifest')
-      if (result.code === 0 && result.data) {
-        manifest.value = result.data
-        logger.info(`Manifest loaded: ${result.data.models.length} models`)
-      } else {
-        workshopError.value = result.message || '加载模型清单失败'
-        logger.warn('fetchManifest returned error', result)
-      }
+      const result = await api.apiGet<AvatarManifest>('/avatar/manifest')
+      manifest.value = result
+      logger.info(`Manifest loaded: ${result.models.length} models`)
     } catch (err) {
       workshopError.value = err instanceof Error ? err.message : '加载模型清单失败'
       logger.error('fetchManifest failed', err)
@@ -166,15 +160,10 @@ export function useAvatarWorkshop() {
   /** 拉取指定模型的绑定配置 */
   async function fetchBinding(modelId: string): Promise<void> {
     try {
-      const result = await api.apiGet<ApiResult<AvatarBinding>>(
+      const result = await api.apiGet<AvatarBinding>(
         `/avatar/models/${modelId}/binding`,
       )
-      if (result.code === 0 && result.data) {
-        currentBinding.value = result.data
-      } else {
-        // binding 不存在不视为错误（某些模型可能无绑定）
-        currentBinding.value = null
-      }
+      currentBinding.value = result
     } catch (err) {
       logger.warn('fetchBinding failed, using null', err)
       currentBinding.value = null
@@ -184,14 +173,10 @@ export function useAvatarWorkshop() {
   /** 拉取指定模型的能力声明 */
   async function fetchCapabilities(modelId: string): Promise<void> {
     try {
-      const result = await api.apiGet<ApiResult<AvatarCapability>>(
+      const result = await api.apiGet<AvatarCapability>(
         `/avatar/models/${modelId}/capabilities`,
       )
-      if (result.code === 0 && result.data) {
-        currentCapabilities.value = result.data
-      } else {
-        currentCapabilities.value = null
-      }
+      currentCapabilities.value = result
     } catch (err) {
       logger.warn('fetchCapabilities failed, using null', err)
       currentCapabilities.value = null
@@ -407,18 +392,14 @@ export function useAvatarWorkshop() {
     }
 
     try {
-      const result = await api.apiPut<ApiResult<AvatarBinding>>(
+      const result = await api.apiPut<AvatarBinding>(
         `/avatar/models/${currentModelId.value}/binding`,
         updates,
       )
-      if (result.code === 0 && result.data) {
-        currentBinding.value = result.data
-        toast.success('绑定配置已更新')
-        logger.info('Binding updated', updates)
-        return true
-      }
-      toast.error(`更新失败：${result.message}`)
-      return false
+      currentBinding.value = result
+      toast.success('绑定配置已更新')
+      logger.info('Binding updated', updates)
+      return true
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       toast.error(`更新失败：${msg}`)

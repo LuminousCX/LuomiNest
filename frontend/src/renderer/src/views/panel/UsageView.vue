@@ -256,8 +256,8 @@ const recentActivity = ref([
 }
 
 .memory {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .stat-body {
@@ -466,8 +466,8 @@ const recentActivity = ref([
 }
 
 .activity-badge.memory {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .activity-badge.context {

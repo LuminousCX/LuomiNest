@@ -9,14 +9,15 @@ const logger = createLuomiNestLogger('DesktopPet')
 
 const isDev = !app.isPackaged
 const isMac = platform() === 'darwin'
+const supportsForwardedMouseMove = isMac || platform() === 'win32'
 
 const MIN_WIDTH = 280
 const MIN_HEIGHT = 400
 const MAX_WIDTH = 1200
 const MAX_HEIGHT = 1600
 
-const CSP_DEV = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
-const CSP_PROD = "default-src 'self' luominest-avatar:; script-src 'self' 'unsafe-inline' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+const CSP_DEV = "default-src 'self' luominest-avatar: luominest-bg:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar: luominest-bg:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: luominest-bg: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+const CSP_PROD = "default-src 'self' luominest-avatar: luominest-bg:; script-src 'self' 'unsafe-inline' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar: luominest-bg:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: luominest-bg: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
 
 export interface ImportedModelRecord {
   id: string
@@ -49,8 +50,75 @@ export const saveImportedModels = (models: ImportedModelRecord[]): void => {
 }
 
 let desktopPetWindow: BrowserWindow | null = null
+let desktopPetChatWindow: BrowserWindow | null = null
 
 export const getDesktopPetWindow = (): BrowserWindow | null => desktopPetWindow
+
+const loadAuxiliaryRoute = async (window: BrowserWindow, route: string): Promise<void> => {
+  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
+    const baseUrl = process.env['ELECTRON_RENDERER_URL'].replace(/\/$/, '')
+    await window.loadURL(`${baseUrl}/#/${route}`)
+  } else {
+    await window.loadFile(join(__dirname, '../renderer/index.html'), { hash: `/${route}` })
+  }
+}
+
+const createDesktopPetChat = (mainWindow: BrowserWindow | null): BrowserWindow => {
+  if (desktopPetChatWindow && !desktopPetChatWindow.isDestroyed()) {
+    desktopPetChatWindow.show()
+    desktopPetChatWindow.focus()
+    return desktopPetChatWindow
+  }
+
+  const petBounds = desktopPetWindow?.getBounds()
+  const display = screen.getDisplayNearestPoint({
+    x: petBounds?.x ?? screen.getCursorScreenPoint().x,
+    y: petBounds?.y ?? screen.getCursorScreenPoint().y,
+  })
+  const width = 460
+  const height = 76
+  const x = Math.max(display.workArea.x, Math.min(
+    display.workArea.x + display.workArea.width - width,
+    (petBounds?.x ?? display.workArea.x + display.workArea.width - width - 32) - width - 18,
+  ))
+  const y = Math.max(display.workArea.y, Math.min(
+    display.workArea.y + display.workArea.height - height,
+    petBounds?.y ?? display.workArea.y + display.workArea.height - height - 32,
+  ))
+
+  desktopPetChatWindow = new BrowserWindow({
+    width,
+    height,
+    x,
+    y,
+    minWidth: 320,
+    minHeight: 76,
+    maxHeight: 76,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: true,
+    resizable: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  })
+  desktopPetChatWindow.setAlwaysOnTop(true, 'floating')
+  desktopPetChatWindow.setVisibleOnAllWorkspaces(true)
+  desktopPetChatWindow.once('ready-to-show', () => desktopPetChatWindow?.show())
+  desktopPetChatWindow.on('closed', () => { desktopPetChatWindow = null })
+  void loadAuxiliaryRoute(desktopPetChatWindow, 'desktop-pet-chat').catch(error => {
+    logger.error('Failed to load desktop pet chat window:', error)
+  })
+  return desktopPetChatWindow
+}
 
 export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: ImportedModelRecord): void => {
   if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
@@ -76,6 +144,9 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   const windowConfig: Electron.BrowserWindowConstructorOptions = {
     width: petWidth,
     height: petHeight,
+    // width / height 明确表示网页可用内容区，避免开发环境与安装包环境因
+    // 系统边框度量不同而让 Pixi renderer 比透明窗口少一截。
+    useContentSize: true,
     x: petX,
     y: petY,
     show: false,
@@ -131,6 +202,8 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   const allModels = [...LUOMINEST_BUILTIN_MODELS, ...loadImportedModels()]
 
   const petContextMenu = Menu.buildFromTemplate([
+    { label: '打开对话框', click: () => { createDesktopPetChat(mainWindow) } },
+    { type: 'separator' },
     { label: 'Show Main Window', click: () => { mainWindow?.show(); mainWindow?.focus() } },
     { type: 'separator' },
     { label: 'Switch Model', submenu: [
@@ -163,15 +236,15 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   ])
 
   desktopPetWindow.webContents.on('context-menu', () => {
-    petContextMenu.popup()
+    petContextMenu.popup({ window: desktopPetWindow ?? undefined })
   })
 
   const handleSetIgnoreMouseEvents = (_event: unknown, ignore: boolean) => {
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
-      if (isMac) {
-        desktopPetWindow.setIgnoreMouseEvents(ignore)
-      } else {
+      if (ignore && supportsForwardedMouseMove) {
         desktopPetWindow.setIgnoreMouseEvents(ignore, { forward: true })
+      } else {
+        desktopPetWindow.setIgnoreMouseEvents(ignore)
       }
     }
   }
@@ -186,13 +259,6 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       petContextMenu.popup({ window: desktopPetWindow })
     }
-  }
-
-  const handleResizeWindow = (_event: unknown, width: number, height: number) => {
-    if (!desktopPetWindow || desktopPetWindow.isDestroyed()) return
-    const clampedW = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(width)))
-    const clampedH = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(height)))
-    desktopPetWindow.setSize(clampedW, clampedH)
   }
 
   let dragOffsetX = 0
@@ -225,7 +291,6 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   ipcMain.on('desktop-pet:start-drag', handleStartDrag)
   ipcMain.on('desktop-pet:drag-window', handleDragWindow)
   ipcMain.on('desktop-pet:end-drag', handleEndDrag)
-  ipcMain.on('desktop-pet:resize-window', handleResizeWindow)
 
   // 桌宠窗口 → 主进程 → 主应用窗口：转发聊天消息
   // 桌宠窗口的 webContents !== mainWindow.webContents，无法通过 invoke 的 assertTrustedSender 校验，
@@ -271,7 +336,6 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     ipcMain.removeListener('desktop-pet:start-drag', handleStartDrag)
     ipcMain.removeListener('desktop-pet:drag-window', handleDragWindow)
     ipcMain.removeListener('desktop-pet:end-drag', handleEndDrag)
-    ipcMain.removeListener('desktop-pet:resize-window', handleResizeWindow)
     ipcMain.removeListener('desktop-pet:send-chat-message', handleSendChatMessage)
     ipcMain.removeListener('desktop-pet:cancel-chat', handleCancelChat)
     desktopPetWindow = null
@@ -312,6 +376,10 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
 }
 
 export const closeDesktopPet = (): void => {
+  if (desktopPetChatWindow && !desktopPetChatWindow.isDestroyed()) {
+    desktopPetChatWindow.close()
+    desktopPetChatWindow = null
+  }
   if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
     desktopPetWindow.close()
     desktopPetWindow = null
@@ -435,9 +503,9 @@ export function registerDesktopPetIpc(mainWindow: BrowserWindow | null): void {
 
   ipcMain.handle('desktop-pet:setStreamingState', async (event: IpcMainInvokeEvent, isStreaming: boolean) => {
     if (!assertTrustedSender(event)) return { success: false, error: 'Unauthorized sender' }
-    return sendToDesktopPet('desktop-pet:streaming-state', isStreaming)
-      ? { success: true }
-      : { success: false, error: 'Desktop pet window not running' }
+    sendToDesktopPet('desktop-pet:streaming-state', isStreaming)
+    desktopPetChatWindow?.webContents.send('desktop-pet:streaming-state', isStreaming)
+    return { success: true }
   })
 
   ipcMain.handle('desktop-pet:driveLipSync', async (event: IpcMainInvokeEvent, value: number) => {

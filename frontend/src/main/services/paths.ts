@@ -62,8 +62,8 @@ export const PATHS = {
     // 开发模式：直接使用 backend/data/（与独立后端共用数据，避免数据分散在多个目录）
     // 打包模式：使用 userData/Data/backend/（写入 AppData，不写安装目录）
     if (!app.isPackaged) {
-      // __dirname = frontend/out/main/，需要 ../../.. 到 frontend/，再 ../ 到项目根
-      const projectRoot = join(__dirname, '../../../..')
+      // __dirname = frontend/out/main/，../../.. 到项目根（与 backend/index.ts 保持一致）
+      const projectRoot = join(__dirname, '../../..')
       return ensureDir(join(projectRoot, 'backend', 'data'))
     }
     return ensureDir(join(this.data, 'backend'))

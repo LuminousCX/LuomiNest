@@ -130,7 +130,10 @@ class LocalSandbox(Sandbox):
             cmd_parts = self._parse_cmd(cmd_str)
 
         # 列表形式同样必须经过安全验证，防止绕过 validate_command
-        self.validator.validate_command(cmd_str)
+        try:
+            self.validator.validate_command(cmd_str)
+        except SandboxPermissionError as e:
+            raise self._format_interception_error(e, cmd_str) from e
 
         if not cmd_parts:
             raise SandboxCommandError("命令解析结果为空", command=cmd_str, exit_code=-1)
@@ -227,7 +230,7 @@ class LocalSandbox(Sandbox):
             SandboxPermissionError: 路径越界。
             FileNotFoundError: 文件不存在。
         """
-        resolved = self.validator.validate_path(path)
+        resolved = self._validate_path(path)
 
         if not resolved.exists():
             raise FileNotFoundError(f"文件不存在: {path}")
@@ -251,7 +254,7 @@ class LocalSandbox(Sandbox):
         Raises:
             SandboxPermissionError: 路径越界或文件过大。
         """
-        resolved = self.validator.validate_path(path)
+        resolved = self._validate_path(path)
 
         # 文件大小限制
         content_bytes = len(content.encode("utf-8"))
@@ -283,7 +286,7 @@ class LocalSandbox(Sandbox):
             SandboxPermissionError: 路径越界。
             FileNotFoundError: 目录不存在。
         """
-        resolved = self.validator.validate_path(path)
+        resolved = self._validate_path(path)
 
         if not resolved.exists():
             raise FileNotFoundError(f"目录不存在: {path}")
@@ -366,6 +369,57 @@ class LocalSandbox(Sandbox):
     # ------------------------------------------------------------------
     # 安全辅助：管道排水 / 进程组终止 / 命令审计
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_interception_error(
+        exc: SandboxPermissionError,
+        cmd: str = "",
+    ) -> SandboxPermissionError:
+        """将权限拒绝异常格式化为统一的"命令拦截"提示。
+
+        使用 app.security.command_policy 的统一文案（含前往设置引导），
+        前端据此识别"已拦截"状态并展示引导按钮。
+
+        Args:
+            exc: 原始 SandboxPermissionError。
+            cmd: 被拦截的命令（可选）。
+
+        Returns:
+            消息已格式化的新异常实例（保留 operation/path 等元数据）。
+        """
+        try:
+            from app.security.command_policy import format_interception_message
+
+            message = format_interception_message(
+                operation=exc.operation or "",
+                command=cmd or (exc.path or ""),
+                default_message=exc.message,
+            )
+        except Exception:
+            return exc
+
+        return SandboxPermissionError(
+            message=message,
+            path=exc.path,
+            operation=exc.operation,
+        )
+
+    def _validate_path(self, path: str) -> Path:
+        """验证路径并在越界时抛出统一格式化的拦截错误。
+
+        Args:
+            path: 待验证的路径字符串。
+
+        Returns:
+            解析后的绝对 Path。
+
+        Raises:
+            SandboxPermissionError: 路径越界或命中敏感段（已格式化）。
+        """
+        try:
+            return self.validator.validate_path(path)
+        except SandboxPermissionError as e:
+            raise self._format_interception_error(e, path) from e
 
     @staticmethod
     async def _drain_stream(stream, limit: int) -> bytes:

@@ -123,9 +123,9 @@ async function triggerFileUpload() {
     uploadingBackground.value = true
     const result = await window.api.dialog.selectBackgroundImage()
     if (!result.success) {
-      // 用户取消选择时不弹错误提示（result.error 为本地化字符串，保持现有行为）
-      if (result.error !== '用户取消选择') {
-        toast.error(`选择背景图片失败：${result.error}`)
+      // 用户取消选择时不弹错误提示（结构化 cancelled 标志，不依赖错误文案）
+      if (!result.cancelled) {
+        toast.error(`选择背景图片失败：${result.error ?? '未知错误'}`)
       }
       return
     }

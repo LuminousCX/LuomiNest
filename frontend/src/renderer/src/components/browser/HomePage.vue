@@ -66,7 +66,7 @@ const websites: Website[] = [
 ]
 
 const quickActions: QuickAction[] = [
-  { icon: Code2, label: '执行脚本', color: 'var(--task-purple)', action: 'script' },
+  { icon: Code2, label: '执行脚本', color: 'var(--task-sky)', action: 'script' },
   { icon: Camera, label: '页面截图', color: 'var(--lumi-info)', action: 'screenshot' },
   { icon: MousePointerClick, label: '点击元素', color: 'var(--lumi-success)', action: 'click' },
   { icon: Globe, label: '读取DOM', color: 'var(--lumi-amber)', action: 'dom' },

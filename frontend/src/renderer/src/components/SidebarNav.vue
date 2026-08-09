@@ -360,7 +360,7 @@ const handleNavigate = (path: string) => {
   width: var(--nav-item-height);
   height: var(--nav-item-height);
   border-radius: var(--radius-full);
-  background: var(--surface);
+  background: var(--surface-hover);
   border: 1px solid var(--border-light);
   display: flex;
   align-items: center;

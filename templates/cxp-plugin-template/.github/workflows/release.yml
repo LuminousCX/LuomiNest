@@ -7,30 +7,41 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # 最小权限声明：softprops/action-gh-release 需要 contents write 才能创建/更新 Release，
+    # 权限仅限定在本 job 范围内
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      # 第三方 Action 固定到经审计的完整 commit SHA，防止可变 tag 被篡改；
+      # 升级版本时请同步更新 SHA（计划：跟随上游安全公告定期复核更新）。
+      # actions/checkout v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        # actions/setup-python v5.6.0
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
 
       - name: Package plugin
         run: |
-          # 读取 manifest.json 中的 id 与 version
+          # 读取 manifest.json 中的 id
           PLUGIN_ID=$(python -c "import json; print(json.load(open('manifest.json'))['id'])")
-          PLUGIN_VERSION=$(python -c "import json; print(json.load(open('manifest.json'))['version'])")
 
-          # 打包为平铺结构 zip（manifest.json + main.py + 其他 *.py 在根目录）
-          # 注意：不要包含 __pycache__/、data/、.git/ 等运行时与版本控制目录
-          zip -r "${PLUGIN_ID}-v${PLUGIN_VERSION}.zip" \
-            manifest.json main.py *.py \
+          # 打包为平铺结构 zip（manifest.json + *.py 在根目录）
+          # 注意：*.py 通配符已包含 main.py，无需显式列出；
+          # 不要包含 __pycache__/、data/、.git/ 等运行时与版本控制目录。
+          # 资产使用稳定名称（不带版本号），与 registry 的
+          # releases/latest/download/<plugin_id>.zip 下载契约保持一致。
+          zip -r "${PLUGIN_ID}.zip" \
+            manifest.json *.py \
             -x "__pycache__/*" "*.pyc" "data/*" ".git/*" ".DS_Store"
 
-          echo "Packaged: ${PLUGIN_ID}-v${PLUGIN_VERSION}.zip"
+          echo "Packaged: ${PLUGIN_ID}.zip"
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+        # softprops/action-gh-release v2.6.2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           files: "*.zip"
           generate_release_notes: true

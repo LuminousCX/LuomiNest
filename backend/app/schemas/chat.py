@@ -89,6 +89,8 @@ class ConversationResponse(BaseModel):
     messages: list[dict[str, Any]] = []
     created_at: str
     updated_at: str
+    has_more: bool | None = None
+    total_messages: int | None = None
 
 
 class ConversationListResponse(BaseModel):

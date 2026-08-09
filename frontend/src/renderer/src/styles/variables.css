@@ -210,11 +210,17 @@
   --task-blue: #3b82f6;
   --task-blue-soft: rgba(59, 130, 246, 0.10);
   --task-blue-bg: #eff6ff;
-  --task-purple: #0ea5e9;
-  --task-purple-soft: rgba(14, 165, 233, 0.10);
-  --task-purple-bg: #f0f9ff;
-  --task-purple-light: #38bdf8;
-  --task-purple-border: rgba(14, 165, 233, 0.20);
+  --task-sky: #0ea5e9;
+  --task-sky-soft: rgba(14, 165, 233, 0.10);
+  --task-sky-bg: #f0f9ff;
+  --task-sky-light: #38bdf8;
+  --task-sky-border: rgba(14, 165, 233, 0.20);
+  /* 兼容别名：--task-purple* 已按实际色相更名为 --task-sky*，旧名仅保留给遗留引用，新代码请使用 --task-sky* */
+  --task-purple: var(--task-sky);
+  --task-purple-soft: var(--task-sky-soft);
+  --task-purple-bg: var(--task-sky-bg);
+  --task-purple-light: var(--task-sky-light);
+  --task-purple-border: var(--task-sky-border);
   --task-green: #22c55e;
   --task-green-soft: rgba(34, 197, 94, 0.10);
   --task-green-bg: #f0fdf4;
@@ -488,11 +494,11 @@
   --task-blue: #3b82f6;
   --task-blue-soft: rgba(59, 130, 246, 0.12);
   --task-blue-bg: rgba(59, 130, 246, 0.07);
-  --task-purple: #38bdf8;
-  --task-purple-soft: rgba(56, 189, 248, 0.12);
-  --task-purple-bg: rgba(14, 165, 233, 0.07);
-  --task-purple-light: #7dd3fc;
-  --task-purple-border: rgba(56, 189, 248, 0.20);
+  --task-sky: #38bdf8;
+  --task-sky-soft: rgba(56, 189, 248, 0.12);
+  --task-sky-bg: rgba(14, 165, 233, 0.07);
+  --task-sky-light: #7dd3fc;
+  --task-sky-border: rgba(56, 189, 248, 0.20);
   --task-green: #22c55e;
   --task-green-soft: rgba(34, 197, 94, 0.12);
   --task-green-bg: rgba(34, 197, 94, 0.07);
@@ -570,165 +576,95 @@
   background: transparent !important;
 }
 
-/* ── 应用根容器 ──
-   同时响应新版 lumi-app--bg-active 类、旧版 has-background 类与 data-lumi-background 属性，
-   保证覆盖层与类名任意一方生效时应用根容器都能正确透明，露出底层背景。 */
-.lumi-app.lumi-app--bg-active,
-.lumi-app.has-background,
-[data-lumi-background="active"] .lumi-app {
+/* ── 背景激活标记前缀 ──
+   后续玻璃适配规则统一使用如下 :is() 标记前缀，同时响应新版 lumi-app--bg-active 类、
+   旧版 has-background 类与 data-lumi-background 属性，任意一方生效时样式即可命中。
+   前缀 = :is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+   :is() 权重取参数中最高者，与原三组选择器逐一展开的权重一致。 */
+
+/* ── 应用根容器：露出底层背景 ── */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) {
   background: transparent !important;
 }
 
 /* 主内容区玻璃：使用 !important 确保覆盖 App.vue scoped 样式 */
-.lumi-app.lumi-app--bg-active .lumi-main,
-.lumi-app.lumi-app--bg-active .lumi-main.lumi-main--glass,
-.lumi-app.has-background .lumi-main,
-[data-lumi-background="active"] .lumi-app .lumi-main {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.lumi-main, .lumi-main.lumi-main--glass) {
   background: color-mix(in srgb, var(--bg) calc(80% - var(--lumi-glass-intensity) * 35%), transparent) !important;
   -webkit-backdrop-filter: var(--glass-blur) !important;
   backdrop-filter: var(--glass-blur) !important;
 }
 
-.lumi-app.lumi-app--bg-active .lumi-main > *,
-.lumi-app.has-background .lumi-main > *,
-[data-lumi-background="active"] .lumi-app .lumi-main > * {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .lumi-main > * {
   background: transparent;
 }
 
 /* 侧边栏玻璃：全局背景时也透明化，让背景延伸到导航栏后方 */
-.lumi-app.lumi-app--bg-active .lumi-sidebar,
-.lumi-app.has-background .lumi-sidebar,
-[data-lumi-background="active"] .lumi-app .lumi-sidebar,
-.lumi-app.lumi-app--bg-active .sidebar-nav-panel,
-.lumi-app.has-background .sidebar-nav-panel,
-[data-lumi-background="active"] .lumi-app .sidebar-nav-panel {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.lumi-sidebar, .sidebar-nav-panel) {
   background: color-mix(in srgb, var(--surface) calc(85% - var(--lumi-glass-intensity) * 40%), transparent) !important;
   -webkit-backdrop-filter: var(--glass-blur) !important;
   backdrop-filter: var(--glass-blur) !important;
   border-right-color: var(--glass-border) !important;
 }
 
-.lumi-app.lumi-app--bg-active .sidebar-nav-panel::after,
-.lumi-app.has-background .sidebar-nav-panel::after,
-[data-lumi-background="active"] .lumi-app .sidebar-nav-panel::after {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .sidebar-nav-panel::after {
   opacity: 0.5;
 }
 
 /* ── 主要页面视图根容器 ──
-   使用重复类名提升优先级，覆盖组件 scoped style */
-.lumi-app.lumi-app--bg-active .settings-view.settings-view,
-.lumi-app.lumi-app--bg-active .lumi-settings-page.lumi-settings-page,
-.lumi-app.lumi-app--bg-active .workspace-layout.workspace-layout,
-.lumi-app.lumi-app--bg-active .workbench-layout.workbench-layout,
-.lumi-app.lumi-app--bg-active .browser-view.browser-view,
-.lumi-app.lumi-app--bg-active .tasks-view.tasks-view,
-.lumi-app.lumi-app--bg-active .workflow-view.workflow-view,
-.lumi-app.lumi-app--bg-active .memory-view.memory-view,
-.lumi-app.lumi-app--bg-active .market-view.market-view,
-.lumi-app.lumi-app--bg-active .market-detail-view.market-detail-view,
-.lumi-app.lumi-app--bg-active .agent-create-view.agent-create-view,
-.lumi-app.lumi-app--bg-active .avatar-view.avatar-view,
-.lumi-app.has-background .settings-view.settings-view,
-.lumi-app.has-background .lumi-settings-page.lumi-settings-page,
-.lumi-app.has-background .workspace-layout.workspace-layout,
-.lumi-app.has-background .workbench-layout.workbench-layout,
-.lumi-app.has-background .browser-view.browser-view,
-.lumi-app.has-background .tasks-view.tasks-view,
-.lumi-app.has-background .workflow-view.workflow-view,
-.lumi-app.has-background .memory-view.memory-view,
-.lumi-app.has-background .market-view.market-view,
-.lumi-app.has-background .market-detail-view.market-detail-view,
-.lumi-app.has-background .agent-create-view.agent-create-view,
-.lumi-app.has-background .avatar-view.avatar-view,
-[data-lumi-background="active"] .lumi-app .settings-view.settings-view,
-[data-lumi-background="active"] .lumi-app .lumi-settings-page.lumi-settings-page,
-[data-lumi-background="active"] .lumi-app .workspace-layout.workspace-layout,
-[data-lumi-background="active"] .lumi-app .workbench-layout.workbench-layout,
-[data-lumi-background="active"] .lumi-app .browser-view.browser-view,
-[data-lumi-background="active"] .lumi-app .tasks-view.tasks-view,
-[data-lumi-background="active"] .lumi-app .workflow-view.workflow-view,
-[data-lumi-background="active"] .lumi-app .memory-view.memory-view,
-[data-lumi-background="active"] .lumi-app .market-view.market-view,
-[data-lumi-background="active"] .lumi-app .market-detail-view.market-detail-view,
-[data-lumi-background="active"] .lumi-app .agent-create-view.agent-create-view,
-[data-lumi-background="active"] .lumi-app .avatar-view.avatar-view {
+   :is() 内使用重复类名提升优先级，覆盖组件 scoped style */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(
+    .settings-view.settings-view,
+    .lumi-settings-page.lumi-settings-page,
+    .workspace-layout.workspace-layout,
+    .workbench-layout.workbench-layout,
+    .browser-view.browser-view,
+    .tasks-view.tasks-view,
+    .workflow-view.workflow-view,
+    .memory-view.memory-view,
+    .market-view.market-view,
+    .market-detail-view.market-detail-view,
+    .agent-create-view.agent-create-view,
+    .avatar-view.avatar-view
+  ) {
   background: transparent;
 }
 
 /* ── 设置页玻璃面板 ── */
-.lumi-app.lumi-app--bg-active .settings-view .settings-header,
-.lumi-app.lumi-app--bg-active .lumi-settings-page__header.lumi-settings-page__header,
-.lumi-app.has-background .settings-view .settings-header,
-.lumi-app.has-background .lumi-settings-page__header.lumi-settings-page__header,
-[data-lumi-background="active"] .lumi-app .settings-view .settings-header,
-[data-lumi-background="active"] .lumi-app .lumi-settings-page__header.lumi-settings-page__header {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.settings-view .settings-header, .lumi-settings-page__header.lumi-settings-page__header) {
   background: color-mix(in srgb, var(--workspace-card) 84%, transparent);
   border-bottom-color: var(--glass-border);
   -webkit-backdrop-filter: var(--glass-blur-strong);
   backdrop-filter: var(--glass-blur-strong);
 }
 
-/* 使用重复类名提升优先级，覆盖组件 scoped style */
-.lumi-app.lumi-app--bg-active .settings-card.settings-card,
-.lumi-app.lumi-app--bg-active .lumi-settings-card.lumi-settings-card,
-.lumi-app.lumi-app--bg-active .appearance-hero.appearance-hero,
-.lumi-app.lumi-app--bg-active .lumi-settings-hero.lumi-settings-hero,
-.lumi-app.lumi-app--bg-active .custom-bg-preview.custom-bg-preview,
-.lumi-app.lumi-app--bg-active .theme-placeholder-row.theme-placeholder-row,
-.lumi-app.lumi-app--bg-active .lumi-settings-section__header.lumi-settings-section__header,
-.lumi-app.lumi-app--bg-active .lumi-settings-tag.lumi-settings-tag,
-.lumi-app.lumi-app--bg-active .settings-data-row.settings-data-row,
-.lumi-app.lumi-app--bg-active .settings-mode-selector.settings-mode-selector,
-.lumi-app.lumi-app--bg-active .settings-slider-row.settings-slider-row,
-.lumi-app.lumi-app--bg-active .settings-row-control.settings-row-control,
-.lumi-app.lumi-app--bg-active .lumi-settings-icon-wrap.lumi-settings-icon-wrap,
-.lumi-app.lumi-app--bg-active .theme-preset-card.theme-preset-card,
-.lumi-app.lumi-app--bg-active .theme-custom-card.theme-custom-card,
-.lumi-app.lumi-app--bg-active .background-option.background-option,
-.lumi-app.lumi-app--bg-active .theme-add-btn.theme-add-btn,
-.lumi-app.lumi-app--bg-active .color-picker-swatch.color-picker-swatch,
-.lumi-app.lumi-app--bg-active .theme-editor.theme-editor,
-.lumi-app.lumi-app--bg-active .theme-editor__preview.theme-editor__preview,
-.lumi-app.has-background .settings-card.settings-card,
-.lumi-app.has-background .lumi-settings-card.lumi-settings-card,
-.lumi-app.has-background .appearance-hero.appearance-hero,
-.lumi-app.has-background .lumi-settings-hero.lumi-settings-hero,
-.lumi-app.has-background .custom-bg-preview.custom-bg-preview,
-.lumi-app.has-background .theme-placeholder-row.theme-placeholder-row,
-.lumi-app.has-background .lumi-settings-section__header.lumi-settings-section__header,
-.lumi-app.has-background .lumi-settings-tag.lumi-settings-tag,
-.lumi-app.has-background .settings-data-row.settings-data-row,
-.lumi-app.has-background .settings-mode-selector.settings-mode-selector,
-.lumi-app.has-background .settings-slider-row.settings-slider-row,
-.lumi-app.has-background .settings-row-control.settings-row-control,
-.lumi-app.has-background .lumi-settings-icon-wrap.lumi-settings-icon-wrap,
-.lumi-app.has-background .theme-preset-card.theme-preset-card,
-.lumi-app.has-background .theme-custom-card.theme-custom-card,
-.lumi-app.has-background .background-option.background-option,
-.lumi-app.has-background .theme-add-btn.theme-add-btn,
-.lumi-app.has-background .color-picker-swatch.color-picker-swatch,
-.lumi-app.has-background .theme-editor.theme-editor,
-.lumi-app.has-background .theme-editor__preview.theme-editor__preview,
-[data-lumi-background="active"] .lumi-app .settings-card.settings-card,
-[data-lumi-background="active"] .lumi-app .lumi-settings-card.lumi-settings-card,
-[data-lumi-background="active"] .lumi-app .appearance-hero.appearance-hero,
-[data-lumi-background="active"] .lumi-app .lumi-settings-hero.lumi-settings-hero,
-[data-lumi-background="active"] .lumi-app .custom-bg-preview.custom-bg-preview,
-[data-lumi-background="active"] .lumi-app .theme-placeholder-row.theme-placeholder-row,
-[data-lumi-background="active"] .lumi-app .lumi-settings-section__header.lumi-settings-section__header,
-[data-lumi-background="active"] .lumi-app .lumi-settings-tag.lumi-settings-tag,
-[data-lumi-background="active"] .lumi-app .settings-data-row.settings-data-row,
-[data-lumi-background="active"] .lumi-app .settings-mode-selector.settings-mode-selector,
-[data-lumi-background="active"] .lumi-app .settings-slider-row.settings-slider-row,
-[data-lumi-background="active"] .lumi-app .settings-row-control.settings-row-control,
-[data-lumi-background="active"] .lumi-app .lumi-settings-icon-wrap.lumi-settings-icon-wrap,
-[data-lumi-background="active"] .lumi-app .theme-preset-card.theme-preset-card,
-[data-lumi-background="active"] .lumi-app .theme-custom-card.theme-custom-card,
-[data-lumi-background="active"] .lumi-app .background-option.background-option,
-[data-lumi-background="active"] .lumi-app .theme-add-btn.theme-add-btn,
-[data-lumi-background="active"] .lumi-app .color-picker-swatch.color-picker-swatch,
-[data-lumi-background="active"] .lumi-app .theme-editor.theme-editor,
-[data-lumi-background="active"] .lumi-app .theme-editor__preview.theme-editor__preview {
+/* :is() 内使用重复类名提升优先级，覆盖组件 scoped style */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(
+    .settings-card.settings-card,
+    .lumi-settings-card.lumi-settings-card,
+    .appearance-hero.appearance-hero,
+    .lumi-settings-hero.lumi-settings-hero,
+    .custom-bg-preview.custom-bg-preview,
+    .theme-placeholder-row.theme-placeholder-row,
+    .lumi-settings-section__header.lumi-settings-section__header,
+    .lumi-settings-tag.lumi-settings-tag,
+    .settings-data-row.settings-data-row,
+    .settings-mode-selector.settings-mode-selector,
+    .settings-slider-row.settings-slider-row,
+    .settings-row-control.settings-row-control,
+    .lumi-settings-icon-wrap.lumi-settings-icon-wrap,
+    .theme-preset-card.theme-preset-card,
+    .theme-custom-card.theme-custom-card,
+    .background-option.background-option,
+    .theme-add-btn.theme-add-btn,
+    .color-picker-swatch.color-picker-swatch,
+    .theme-editor.theme-editor,
+    .theme-editor__preview.theme-editor__preview
+  ) {
   background: var(--glass-surface);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
@@ -736,51 +672,29 @@
   box-shadow: var(--glass-shadow);
 }
 
-.lumi-app.lumi-app--bg-active .settings-card.settings-card:hover,
-.lumi-app.lumi-app--bg-active .lumi-settings-card.lumi-settings-card:hover,
-.lumi-app.lumi-app--bg-active .appearance-hero.appearance-hero:hover,
-.lumi-app.lumi-app--bg-active .lumi-settings-hero.lumi-settings-hero:hover,
-.lumi-app.lumi-app--bg-active .theme-preset-card.theme-preset-card:hover,
-.lumi-app.lumi-app--bg-active .theme-custom-card.theme-custom-card:hover,
-.lumi-app.lumi-app--bg-active .background-option.background-option:hover,
-.lumi-app.lumi-app--bg-active .theme-add-btn.theme-add-btn:hover,
-.lumi-app.lumi-app--bg-active .settings-list-row.settings-list-row:hover,
-.lumi-app.has-background .settings-card.settings-card:hover,
-.lumi-app.has-background .lumi-settings-card.lumi-settings-card:hover,
-.lumi-app.has-background .appearance-hero.appearance-hero:hover,
-.lumi-app.has-background .lumi-settings-hero.lumi-settings-hero:hover,
-.lumi-app.has-background .theme-preset-card.theme-preset-card:hover,
-.lumi-app.has-background .theme-custom-card.theme-custom-card:hover,
-.lumi-app.has-background .background-option.background-option:hover,
-.lumi-app.has-background .theme-add-btn.theme-add-btn:hover,
-.lumi-app.has-background .settings-list-row.settings-list-row:hover,
-[data-lumi-background="active"] .lumi-app .settings-card.settings-card:hover,
-[data-lumi-background="active"] .lumi-app .lumi-settings-card.lumi-settings-card:hover,
-[data-lumi-background="active"] .lumi-app .appearance-hero.appearance-hero:hover,
-[data-lumi-background="active"] .lumi-app .lumi-settings-hero.lumi-settings-hero:hover,
-[data-lumi-background="active"] .lumi-app .theme-preset-card.theme-preset-card:hover,
-[data-lumi-background="active"] .lumi-app .theme-custom-card.theme-custom-card:hover,
-[data-lumi-background="active"] .lumi-app .background-option.background-option:hover,
-[data-lumi-background="active"] .lumi-app .theme-add-btn.theme-add-btn:hover,
-[data-lumi-background="active"] .lumi-app .settings-list-row.settings-list-row:hover {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(
+    .settings-card.settings-card,
+    .lumi-settings-card.lumi-settings-card,
+    .appearance-hero.appearance-hero,
+    .lumi-settings-hero.lumi-settings-hero,
+    .theme-preset-card.theme-preset-card,
+    .theme-custom-card.theme-custom-card,
+    .background-option.background-option,
+    .theme-add-btn.theme-add-btn,
+    .settings-list-row.settings-list-row
+  ):hover {
   background: var(--glass-surface-hover);
 }
 
-.lumi-app.lumi-app--bg-active .settings-form-input.settings-form-input,
-.lumi-app.lumi-app--bg-active .settings-form-select.settings-form-select,
-.lumi-app.lumi-app--bg-active .settings-form-textarea.settings-form-textarea,
-.lumi-app.lumi-app--bg-active .color-picker-hex.color-picker-hex,
-.lumi-app.lumi-app--bg-active .theme-editor__name-input.theme-editor__name-input,
-.lumi-app.has-background .settings-form-input.settings-form-input,
-.lumi-app.has-background .settings-form-select.settings-form-select,
-.lumi-app.has-background .settings-form-textarea.settings-form-textarea,
-.lumi-app.has-background .color-picker-hex.color-picker-hex,
-.lumi-app.has-background .theme-editor__name-input.theme-editor__name-input,
-[data-lumi-background="active"] .lumi-app .settings-form-input.settings-form-input,
-[data-lumi-background="active"] .lumi-app .settings-form-select.settings-form-select,
-[data-lumi-background="active"] .lumi-app .settings-form-textarea.settings-form-textarea,
-[data-lumi-background="active"] .lumi-app .color-picker-hex.color-picker-hex,
-[data-lumi-background="active"] .lumi-app .theme-editor__name-input.theme-editor__name-input {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(
+    .settings-form-input.settings-form-input,
+    .settings-form-select.settings-form-select,
+    .settings-form-textarea.settings-form-textarea,
+    .color-picker-hex.color-picker-hex,
+    .theme-editor__name-input.theme-editor__name-input
+  ) {
   background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
   border-color: var(--glass-border);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -788,75 +702,29 @@
 }
 
 /* ── 工作台 / 工作区玻璃面板 ── */
-.lumi-app.lumi-app--bg-active .workbench-history,
-.lumi-app.lumi-app--bg-active .workspace-layout .left-panel,
-.lumi-app.has-background .workbench-history,
-.lumi-app.has-background .workspace-layout .left-panel,
-[data-lumi-background="active"] .lumi-app .workbench-history,
-[data-lumi-background="active"] .lumi-app .workspace-layout .left-panel {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.workbench-history, .workspace-layout .left-panel) {
   background: var(--glass-surface);
   border-right-color: var(--glass-border);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
 }
 
-.lumi-app.lumi-app--bg-active .workbench-avatar,
-.lumi-app.has-background .workbench-avatar,
-[data-lumi-background="active"] .lumi-app .workbench-avatar {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .workbench-avatar {
   background: var(--glass-surface);
   border-left-color: var(--glass-border);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
 }
 
-.lumi-app.lumi-app--bg-active .workbench-chat,
-.lumi-app.lumi-app--bg-active .workspace-layout .chat-panel,
-.lumi-app.lumi-app--bg-active .chat-area,
-.lumi-app.lumi-app--bg-active .input-area,
-.lumi-app.lumi-app--bg-active .avatar-main,
-.lumi-app.lumi-app--bg-active .agent-panels,
-.lumi-app.lumi-app--bg-active .avatar-stage,
-.lumi-app.lumi-app--bg-active .chat-empty-state .empty-orb,
-.lumi-app.has-background .workbench-chat,
-.lumi-app.has-background .workspace-layout .chat-panel,
-.lumi-app.has-background .chat-area,
-.lumi-app.has-background .input-area,
-.lumi-app.has-background .avatar-main,
-.lumi-app.has-background .agent-panels,
-.lumi-app.has-background .avatar-stage,
-.lumi-app.has-background .chat-empty-state .empty-orb,
-[data-lumi-background="active"] .lumi-app .workbench-chat,
-[data-lumi-background="active"] .lumi-app .workspace-layout .chat-panel,
-[data-lumi-background="active"] .lumi-app .chat-area,
-[data-lumi-background="active"] .lumi-app .input-area,
-[data-lumi-background="active"] .lumi-app .avatar-main,
-[data-lumi-background="active"] .lumi-app .agent-panels,
-[data-lumi-background="active"] .lumi-app .avatar-stage,
-[data-lumi-background="active"] .lumi-app .chat-empty-state .empty-orb {
+/* 聊天区容器整体透明（输入区 .input-area 由下方专属规则处理） */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.workbench-chat, .workspace-layout .chat-panel, .chat-area, .avatar-main, .agent-panels, .avatar-stage, .chat-empty-state .empty-orb) {
   background: transparent;
 }
 
-.lumi-app.lumi-app--bg-active .main-agent-bar,
-.lumi-app.lumi-app--bg-active .avatar-header,
-.lumi-app.lumi-app--bg-active .history-header,
-.lumi-app.lumi-app--bg-active .avatar-footer,
-.lumi-app.lumi-app--bg-active .agent-panel,
-.lumi-app.lumi-app--bg-active .avatar-status,
-.lumi-app.lumi-app--bg-active .avatar-subtitle,
-.lumi-app.has-background .main-agent-bar,
-.lumi-app.has-background .avatar-header,
-.lumi-app.has-background .history-header,
-.lumi-app.has-background .avatar-footer,
-.lumi-app.has-background .agent-panel,
-.lumi-app.has-background .avatar-status,
-.lumi-app.has-background .avatar-subtitle,
-[data-lumi-background="active"] .lumi-app .main-agent-bar,
-[data-lumi-background="active"] .lumi-app .avatar-header,
-[data-lumi-background="active"] .lumi-app .history-header,
-[data-lumi-background="active"] .lumi-app .avatar-footer,
-[data-lumi-background="active"] .lumi-app .agent-panel,
-[data-lumi-background="active"] .lumi-app .avatar-status,
-[data-lumi-background="active"] .lumi-app .avatar-subtitle {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.main-agent-bar, .avatar-header, .history-header, .avatar-footer, .agent-panel, .avatar-status, .avatar-subtitle) {
   background: color-mix(in srgb, var(--surface) 84%, transparent);
   border-color: var(--glass-border);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -864,18 +732,14 @@
 }
 
 /* ── 工作台输入区：整体透明，输入框以毛玻璃浮于背景之上 ── */
-.lumi-app.lumi-app--bg-active .input-area,
-.lumi-app.has-background .input-area,
-[data-lumi-background="active"] .lumi-app .input-area {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .input-area {
   background: transparent;
   border-color: transparent;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 
-.lumi-app.lumi-app--bg-active .input-wrapper,
-.lumi-app.has-background .input-wrapper,
-[data-lumi-background="active"] .lumi-app .input-wrapper {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .input-wrapper {
   background: var(--glass-surface);
   border: 1px solid var(--glass-border);
   -webkit-backdrop-filter: var(--glass-blur-strong);
@@ -884,18 +748,14 @@
 }
 
 /* 群聊输入区同样采用毛玻璃浮层 */
-.lumi-app.lumi-app--bg-active .group-chat-input-bar,
-.lumi-app.has-background .group-chat-input-bar,
-[data-lumi-background="active"] .lumi-app .group-chat-input-bar {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .group-chat-input-bar {
   background: color-mix(in srgb, var(--workspace-sidebar) 80%, transparent);
   border-top-color: var(--glass-border);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
 }
 
-.lumi-app.lumi-app--bg-active .group-chat-input-bar .input-main,
-.lumi-app.has-background .group-chat-input-bar .input-main,
-[data-lumi-background="active"] .lumi-app .group-chat-input-bar .input-main {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .group-chat-input-bar .input-main {
   background: var(--glass-surface);
   border-color: var(--glass-border);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -903,9 +763,7 @@
 }
 
 /* ── 通用卡片 ── */
-.lumi-app.lumi-app--bg-active .lumi-card,
-.lumi-app.has-background .lumi-card,
-[data-lumi-background="active"] .lumi-app .lumi-card {
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .lumi-card {
   background: var(--glass-surface);
   border-color: var(--glass-border);
   -webkit-backdrop-filter: var(--glass-blur);
