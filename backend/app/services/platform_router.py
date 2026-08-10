@@ -15,11 +15,17 @@ from app.runtime.platform.main_agent_config import (
     load_luominest_main_agent_config,
     resolve_main_agent_provider_model,
 )
-from app.runtime.platform.registry import get_adapter, get_instance, increment_message_count
+from app.runtime.platform.registry import (
+    get_adapter,
+    get_instance,
+    increment_message_count,
+    attach_message_handler,
+)
 from app.runtime.platform.platform_logger import platform_logger
 from app.infrastructure.database.conversation_store import conversation_store
 from app.services.context_service import context_service
 from app.core.context import get_context_manager
+from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
 
 
@@ -60,8 +66,6 @@ class LuomiNestPlatformRouter:
 
         返回 (provider, model, system_prompt, temperature, max_tokens)。
         """
-        from app.runtime.provider.llm.adapter import llm_adapter
-
         main_config = load_luominest_main_agent_config()
         main_provider, main_model = resolve_main_agent_provider_model()
 
@@ -191,8 +195,6 @@ class LuomiNestPlatformRouter:
         instance_id: str,
         receive_time: float,
     ) -> PlatformResponse | None:
-        from app.runtime.provider.llm.adapter import llm_adapter
-
         session_id = message.session_id or message.user_id
         inst = get_instance(instance_id)
         adapter_type = inst.adapter_type if inst else message.platform
@@ -515,7 +517,6 @@ async def route_platform_message(message: PlatformMessage, instance_id: str) -> 
 
 def attach_router_to_instances() -> None:
     """将路由器绑定到所有已注册的平台适配器实例。"""
-    from app.runtime.platform.registry import attach_message_handler
     attach_message_handler(route_platform_message)
     logger.success("[PlatformRouter] Router attached to all platform instances")
 

@@ -29,6 +29,7 @@ from app.security.auth.jwt_handler import (
     TokenError,
 )
 from app.security.auth.password import hash_password, verify_password
+from app.security.rate_limiter import limiter, RATE_AUTH
 
 
 # 登录失败时的人工延迟（秒），增加暴力破解时间成本
@@ -93,7 +94,8 @@ async def get_current_user(request: Request) -> User:
 # ── 端点 ───────────────────────────────────────────────────────────────────────
 
 @router.post("/register")
-async def register(request: RegisterRequest):
+@limiter.limit(RATE_AUTH)
+async def register(request: Request, body: RegisterRequest):
     """用户注册。
 
     检查 ALLOW_REGISTRATION 配置，若已有用户则拒绝（单用户模式）。
@@ -110,16 +112,16 @@ async def register(request: RegisterRequest):
 
         # 检查用户名是否已被占用
         existing = await session.execute(
-            select(User).where(User.username == request.username)
+            select(User).where(User.username == body.username)
         )
         if existing.scalar_one_or_none():
-            raise ValidationError(f"用户名 '{request.username}' 已被占用")
+            raise ValidationError(f"用户名 '{body.username}' 已被占用")
 
         # 创建用户
         user = User(
-            username=request.username,
-            display_name=request.display_name,
-            password_hash=hash_password(request.password),
+            username=body.username,
+            display_name=body.display_name,
+            password_hash=hash_password(body.password),
             token_version=1,
             is_active=True,
         )
@@ -127,7 +129,7 @@ async def register(request: RegisterRequest):
         await session.commit()
         await session.refresh(user)
 
-        logger.success(f"[Auth] 新用户注册成功: username={request.username}, id={user.id}")
+        logger.success(f"[Auth] 新用户注册成功: username={body.username}, id={user.id}")
 
         return ok(
             {
@@ -139,20 +141,21 @@ async def register(request: RegisterRequest):
 
 
 @router.post("/login")
-async def login(request: LoginRequest):
+@limiter.limit(RATE_AUTH)
+async def login(request: Request, body: LoginRequest):
     """用户登录。
 
     验证用户名密码，签发 access_token 和 refresh_token。
     失败时统一返回"用户名或密码错误"并延迟响应（防暴力破解）。
     """
     # 用户名长度快速校验（避免对过短用户名做无意义查询）
-    if len(request.username) < _USERNAME_MIN_LENGTH:
+    if len(body.username) < _USERNAME_MIN_LENGTH:
         await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户名或密码错误")
 
     async with async_session_factory() as session:
         result = await session.execute(
-            select(User).where(User.username == request.username)
+            select(User).where(User.username == body.username)
         )
         user = result.scalar_one_or_none()
 
@@ -162,11 +165,11 @@ async def login(request: LoginRequest):
     if not user.is_active:
         await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户已被禁用")
-    if not verify_password(request.password, user.password_hash):
+    if not verify_password(body.password, user.password_hash):
         await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户名或密码错误")
 
-    device_id = request.device_id or ""
+    device_id = body.device_id or ""
     roles = ["user"]
 
     access_token = create_access_token(
@@ -180,7 +183,7 @@ async def login(request: LoginRequest):
         device_id=device_id,
     )
 
-    logger.success(f"[Auth] 用户登录成功: username={request.username}")
+    logger.success(f"[Auth] 用户登录成功: username={body.username}")
 
     return ok(
         {

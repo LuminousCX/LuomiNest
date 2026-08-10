@@ -14,6 +14,7 @@ from loguru import logger
 from app.core.utils import utc_now
 
 from app.core.config import settings
+from app.runtime.provider.llm.adapter import llm_adapter
 from .models import (
     MemoryData,
     ProfileData,
@@ -272,7 +273,6 @@ class MemoryEngine:
         if self._vector_manager is None:
             if self._embedding_provider is None:
                 try:
-                    from app.runtime.provider.llm.adapter import llm_adapter
                     self._embedding_provider = llm_adapter.get_provider()
                 except Exception as e:
                     logger.warning(f"[Memory] Failed to access llm_adapter for embedding provider: {e}")

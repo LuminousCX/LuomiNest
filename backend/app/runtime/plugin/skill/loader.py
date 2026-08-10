@@ -45,6 +45,7 @@ from app.runtime.plugin.skill.models import (
     SkillSourceFormat,
     SkillStatus,
 )
+from app.runtime.plugin.skill.registry import cx_skill_registry
 
 
 class SkillLoader:
@@ -132,8 +133,6 @@ class SkillLoader:
             return False
 
         # 注册到全局 registry
-        from app.runtime.plugin.skill.registry import cx_skill_registry
-
         await cx_skill_registry.register(skill)
         self._loaded.add(skill.id)
 
@@ -370,8 +369,6 @@ class SkillLoader:
 
     async def unload_single(self, skill_id: str) -> bool:
         """卸载单个技能。"""
-        from app.runtime.plugin.skill.registry import cx_skill_registry
-
         if skill_id not in self._loaded:
             return False
         await cx_skill_registry.unregister(skill_id)
@@ -381,8 +378,6 @@ class SkillLoader:
 
     async def reload_single(self, skill_id: str) -> bool:
         """重载单个技能。"""
-        from app.runtime.plugin.skill.registry import cx_skill_registry
-
         skill = cx_skill_registry.get(skill_id)
         if skill is None:
             return False
@@ -392,8 +387,6 @@ class SkillLoader:
 
     async def reload_all(self) -> int:
         """重载所有技能。"""
-        from app.runtime.plugin.skill.registry import cx_skill_registry
-
         loaded_ids = set(self._loaded)
         for skill_id in list(loaded_ids):
             await self.unload_single(skill_id)

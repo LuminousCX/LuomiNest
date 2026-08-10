@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from loguru import logger
 from pydantic import BaseModel
 
@@ -12,6 +12,7 @@ from app.security.sandbox import (
     SandboxTimeoutError,
 )
 from app.security.sandbox.local_sandbox import LocalSandbox
+from app.security.rate_limiter import limiter, RATE_CONSOLE
 
 router = APIRouter(prefix="/console", tags=["console"])
 
@@ -266,7 +267,8 @@ async def create_command_record(record: CommandRecord):
 
 
 @router.post("/execute", response_model=ExecuteCommandResponse)
-async def execute_command(req: ExecuteCommandRequest):
+@limiter.limit(RATE_CONSOLE)
+async def execute_command(request: Request, req: ExecuteCommandRequest):
     """执行命令（通过沙盒，带白名单 + 超时 + 路径遮蔽）"""
     command = req.command.strip()
 

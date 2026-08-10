@@ -513,18 +513,27 @@ def create_app() -> FastAPI:
             raise
 
     no_auth = os.environ.get("LUOMINEST_NO_AUTH", "").strip().lower() in ("1", "true", "yes")
-    if no_auth:
-        logger.warning("[AppFactory] LUOMINEST_NO_AUTH enabled, API routes unprotected (desktop launch)")
-    else:
-        auth_token = load_auth_token()
-        if auth_token:
-            logger.success("[AppFactory] Auth token loaded, API routes protected")
-        else:
-            logger.warning("[AppFactory] No auth token, API routes unprotected (dev mode)")
 
-        @app.middleware("http")
-        async def auth_middleware(request: Request, call_next):
-            return await luomi_auth_middleware(request, call_next)
+    # 始终确保有认证 token — 即使在 NOAUTH / dev 模式下也自动生成，
+    # 防止 API 完全无认证暴露到网络上
+    auth_token = load_auth_token()
+    if not auth_token:
+        from app.security.auth.local_token import generate_and_save_token
+        auth_token = generate_and_save_token(settings.DATA_DIR)
+        if no_auth:
+            logger.info("[AppFactory] LUOMINEST_NO_AUTH 模式: 已自动生成认证 token（不再完全无认证）")
+        else:
+            logger.info("[AppFactory] 未找到 auth token，已自动生成（dev mode）")
+
+    if no_auth:
+        logger.warning("[AppFactory] LUOMINEST_NO_AUTH 已设置 — 仍启用认证中间件以保障安全")
+
+    if auth_token:
+        logger.success("[AppFactory] Auth token ready, API routes protected")
+
+    @app.middleware("http")
+    async def auth_middleware(request: Request, call_next):
+        return await luomi_auth_middleware(request, call_next)
 
     app.add_middleware(
         CORSMiddleware,
@@ -562,6 +571,13 @@ def create_app() -> FastAPI:
                 "data": None,
             },
         )
+
+    # --- 速率限制（slowapi） ---
+    from slowapi.errors import RateLimitExceeded
+    from app.security.rate_limiter import limiter, rate_limit_exceeded_handler
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
     app.include_router(api_router, prefix="/api/v1")
     app.include_router(attachment_router, prefix="/api")

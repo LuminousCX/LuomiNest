@@ -2,6 +2,7 @@ from loguru import logger
 from app.infrastructure.database.usage_store import usage_store
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.json_store import agents_store
+from app.engines.memory import get_memory_engine
 
 
 class UsageTracker:
@@ -46,7 +47,6 @@ class UsageTracker:
 
         memory_stats: dict = {}
         try:
-            from app.engines.memory import get_memory_engine
             engine = get_memory_engine()
             data = engine.load_data()
             dailies = engine.list_dailies()

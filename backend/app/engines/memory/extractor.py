@@ -5,11 +5,12 @@ import re
 from loguru import logger
 
 from app.core.utils import utc_now, extract_llm_text
+from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.types import RouteHint
 from .models import MemoryData, FactItem, FACT_CATEGORIES, _SUMMARY_SECTION_MAP, summaries_to_markdown
 from .prompts import _FACT_EXTRACT_PROMPT, _DISTILL_PROMPT, _MERGE_SUMMARY_PROMPT, _SUMMARY_EXTRACT_PROMPT, _KNOWLEDGE_EXTRACT_PROMPT
 from .store import MemoryStore
 from .fact_manager import FactManager
-from app.runtime.provider.llm.types import RouteHint
 
 
 class MemoryExtractor:
@@ -25,7 +26,6 @@ class MemoryExtractor:
 
     @staticmethod
     def _get_llm_adapter():
-        from app.runtime.provider.llm.adapter import llm_adapter
         return llm_adapter
 
     # --- 事实提取 ---

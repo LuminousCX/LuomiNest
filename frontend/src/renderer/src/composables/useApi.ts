@@ -196,124 +196,19 @@ export const useApi = () => {
   const deleteMessage = (convId: string, messageId: string): Promise<void> =>
     apiDelete(`/chat/conversations/${convId}/messages/${messageId}`)
 
-  const apiStream = async (
+  /**
+   * SSE 流式请求的共享核心 —— 统一的 fetch → reader → 按行解析 data: 管线。
+   * apiStream 与 apiSseStream 均委托于此，消除 ~80% 的重复代码。
+   */
+  const _fetchSseStream = async (
     path: string,
     body: unknown,
-    onChunk: (chunk: ChatStreamChunk) => void,
-    onDone: () => void | Promise<void>,
-    onError: (err: string) => void,
-    externalAbortSignal?: AbortSignal
-  ) => {
-    const controller = new AbortController()
-    abortController.value = controller
-
-    const signal = externalAbortSignal 
-      ? AbortSignal.any([controller.signal, externalAbortSignal])
-      : controller.signal
-
-    try {
-      const authHeaders = await getAuthHeaders()
-      const resp = await fetch(getApiUrl(path), {
-        method: 'POST',
-        headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal,
-      })
-
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => null)
-        throw new Error(extractErrorMessage(errData, resp.status))
-      }
-
-      const reader = resp.body?.getReader()
-      if (!reader) throw new Error('无法读取响应流，请检查后端服务')
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      const processLine = (line: string): boolean => {
-        const trimmed = line.trim()
-        if (!trimmed.startsWith('data: ')) return false
-        const dataStr = trimmed.slice(6)
-        if (!dataStr.trim()) return false
-        if (dataStr.trim() === '[DONE]') {
-          return true
-        }
-
-        try {
-          const raw = JSON.parse(dataStr)
-          const chunk: ChatStreamChunk = {
-            id: raw.id,
-            content: raw.content || '',
-            reasoning_content: raw.reasoning_content || raw.reasoningContent || '',
-            model: raw.model || '',
-            provider: raw.provider || '',
-            done: !!raw.done,
-            suggested_questions: raw.suggested_questions || undefined,
-            emotion: raw.emotion || undefined,
-            tool_calls: raw.tool_calls || undefined,
-            tool_event: raw.tool_event || undefined,
-            subagent_event: raw.subagent_event || undefined,
-            task_event: raw.task_event || undefined,
-            iteration: raw.iteration ?? undefined,
-          }
-          onChunk(chunk)
-          return chunk.done
-        } catch (parseErr) {
-          logger.warn('Stream chunk parse failed:', dataStr, parseErr)
-          return false
-        }
-      }
-
-      while (true) {
-        const { done, value } = await reader.read()
-
-        if (done) {
-          if (value) {
-            buffer += decoder.decode(value, { stream: false })
-          } else {
-            buffer += decoder.decode()
-          }
-          const lines = buffer.split('\n')
-          for (const line of lines) {
-            if (processLine(line)) {
-              await onDone()
-              return
-            }
-          }
-          break
-        }
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (processLine(line)) {
-            await onDone()
-            return
-          }
-        }
-      }
-
-      await onDone()
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === 'AbortError') {
-        return
-      }
-      onError(e instanceof Error ? e.message : String(e))
-    } finally {
-      abortController.value = null
-    }
-  }
-
-  const apiSseStream = async <T = unknown>(
-    path: string,
-    body: Record<string, unknown>,
-    onEvent: (event: T) => void,
-    onDone: () => void | Promise<void>,
-    onError: (err: string) => void,
-    externalAbortSignal?: AbortSignal
+    handlers: {
+      onData: (dataStr: string) => boolean | Promise<boolean>
+      onDone: () => void | Promise<void>
+      onError: (err: string) => void
+    },
+    externalAbortSignal?: AbortSignal,
   ) => {
     const controller = new AbortController()
     abortController.value = controller
@@ -344,23 +239,19 @@ export const useApi = () => {
 
       while (true) {
         const { done, value } = await reader.read()
+
         if (done) {
-          if (value) {
-            buffer += decoder.decode(value, { stream: false })
-          } else {
-            buffer += decoder.decode()
-          }
-          const lines = buffer.split('\n')
-          for (const line of lines) {
+          buffer += value
+            ? decoder.decode(value, { stream: false })
+            : decoder.decode()
+          for (const line of buffer.split('\n')) {
             const trimmed = line.trim()
             if (!trimmed.startsWith('data: ')) continue
             const dataStr = trimmed.slice(6)
             if (!dataStr.trim()) continue
-            try {
-              const event: T = JSON.parse(dataStr)
-              onEvent(event)
-            } catch {
-              continue
+            if (await handlers.onData(dataStr)) {
+              await handlers.onDone()
+              return
             }
           }
           break
@@ -375,26 +266,84 @@ export const useApi = () => {
           if (!trimmed.startsWith('data: ')) continue
           const dataStr = trimmed.slice(6)
           if (!dataStr.trim()) continue
-
-          try {
-            const event: T = JSON.parse(dataStr)
-            onEvent(event)
-          } catch {
-            continue
+          if (await handlers.onData(dataStr)) {
+            await handlers.onDone()
+            return
           }
         }
       }
 
-      await onDone()
+      await handlers.onDone()
     } catch (e: unknown) {
-      if (e instanceof DOMException && e.name === 'AbortError') {
-        throw e
+      if (e instanceof Error && e.name === 'AbortError') {
+        return
       }
-      const message = e instanceof Error ? e.message : String(e)
-      onError(message)
+      handlers.onError(e instanceof Error ? e.message : String(e))
     } finally {
       abortController.value = null
     }
+  }
+
+  const apiStream = async (
+    path: string,
+    body: unknown,
+    onChunk: (chunk: ChatStreamChunk) => void,
+    onDone: () => void | Promise<void>,
+    onError: (err: string) => void,
+    externalAbortSignal?: AbortSignal
+  ) => {
+    await _fetchSseStream(path, body, {
+      onData: (dataStr) => {
+        if (dataStr.trim() === '[DONE]') return true
+        try {
+          const raw = JSON.parse(dataStr)
+          const chunk: ChatStreamChunk = {
+            id: raw.id,
+            content: raw.content || '',
+            reasoning_content: raw.reasoning_content || raw.reasoningContent || '',
+            model: raw.model || '',
+            provider: raw.provider || '',
+            done: !!raw.done,
+            suggested_questions: raw.suggested_questions || undefined,
+            emotion: raw.emotion || undefined,
+            tool_calls: raw.tool_calls || undefined,
+            tool_event: raw.tool_event || undefined,
+            subagent_event: raw.subagent_event || undefined,
+            task_event: raw.task_event || undefined,
+            iteration: raw.iteration ?? undefined,
+          }
+          onChunk(chunk)
+          return chunk.done
+        } catch (parseErr) {
+          logger.warn('Stream chunk parse failed:', dataStr, parseErr)
+          return false
+        }
+      },
+      onDone,
+      onError,
+    }, externalAbortSignal)
+  }
+
+  const apiSseStream = async <T = unknown>(
+    path: string,
+    body: Record<string, unknown>,
+    onEvent: (event: T) => void,
+    onDone: () => void | Promise<void>,
+    onError: (err: string) => void,
+    externalAbortSignal?: AbortSignal
+  ) => {
+    await _fetchSseStream(path, body, {
+      onData: (dataStr) => {
+        try {
+          onEvent(JSON.parse(dataStr) as T)
+        } catch {
+          // 忽略无法解析的行
+        }
+        return false
+      },
+      onDone,
+      onError,
+    }, externalAbortSignal)
   }
 
   const checkHealth = async (): Promise<boolean> => {

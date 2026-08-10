@@ -28,7 +28,7 @@ import { useApi } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
 import { useAgentStore } from './agent'
 import { useChatTrashStore } from './chat-trash'
-import { detectSearchIntent, extractSearchQuery } from '../utils/searchIntent'
+import { enrichWithSearchResults, enrichWithUrlContent } from '../utils/chatSearchHelpers'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { MAIN_AGENT_ID } from '../constants'
@@ -505,72 +505,25 @@ export const useChatStore = defineStore('chat', () => {
       if (options.fileType) requestBody.file_type = options.fileType
     }
 
-    // 搜索意图检测：如果用户消息需要联网搜索，先调用内置浏览器搜索
-    try {
-      const searchNeeded = await detectSearchIntent(content)
-      if (searchNeeded) {
-        const searchQuery = extractSearchQuery(content)
-        const searchResults = await window.api.browserSearch.search(searchQuery)
-        if (searchResults && searchResults.length > 0) {
-          requestBody.search_results = searchResults.map((r: { title: string; snippet: string }) =>
-            `${r.title}: ${r.snippet}`
-          ).join('\n')
-        }
-      }
-    } catch (err) {
-      logger.warn('Browser search failed, continuing without search results:', err)
-    }
+    // 搜索意图检测 + URL 内容抓取（已解耦到独立模块）
+    await enrichWithSearchResults(content, requestBody)
 
-    // URL 检测：如果用户消息包含 URL，自动 fetch 页面内容
-    try {
-      const urlMatches = [...content.matchAll(/https?:\/\/[^\s<>"')\]]+/g)].map(m => m[0])
-      const urlsToFetch = urlMatches.slice(0, 3)
-      if (urlsToFetch.length > 0) {
-        // 显示加载提示：在已有的空assistant占位消息上显示加载状态
-        const currentMsgList = convMessages.value[convId]
-        if (currentMsgList && currentMsgList.length > 0) {
-          const lastIdx = currentMsgList.length - 1
-          const lastMsg = currentMsgList[lastIdx]
-          if (lastMsg?.role === 'assistant' && !lastMsg.done) {
-            const fetchingMsg: ChatMessage = {
-              ...lastMsg,
-              content: urlsToFetch.length === 1
-                ? '正在获取网页内容...'
-                : `正在获取 ${urlsToFetch.length} 个网页内容...`,
-            }
-            convMessages.value = {
-              ...convMessages.value,
-              [convId]: [...currentMsgList.slice(0, lastIdx), fetchingMsg]
-            }
+    await enrichWithUrlContent(
+      content,
+      requestBody,
+      (patch) => {
+        const msgList = convMessages.value[convId]
+        if (!msgList || msgList.length === 0) return
+        const lastIdx = msgList.length - 1
+        const lastMsg = msgList[lastIdx]
+        if (lastMsg?.role === 'assistant' && !lastMsg.done) {
+          convMessages.value = {
+            ...convMessages.value,
+            [convId]: [...msgList.slice(0, lastIdx), { ...lastMsg, ...patch }],
           }
         }
-
-        for (const url of urlsToFetch) {
-          const pageContent = await window.api.browserSearch.fetchUrl(url)
-          if (pageContent) {
-            requestBody.search_results = (requestBody.search_results ? requestBody.search_results + '\n\n' : '') + `[网页内容: ${url}]\n${pageContent}`
-          }
-        }
-
-        // 清空加载提示，让 stream 正常填充
-        const msgListAfterFetch = convMessages.value[convId]
-        if (msgListAfterFetch) {
-          const lastIdx = msgListAfterFetch.length - 1
-          if (lastIdx >= 0 && msgListAfterFetch[lastIdx]?.role === 'assistant' && !msgListAfterFetch[lastIdx].done) {
-            const clearedMsg: ChatMessage = {
-              ...msgListAfterFetch[lastIdx],
-              content: '',
-            }
-            convMessages.value = {
-              ...convMessages.value,
-              [convId]: [...msgListAfterFetch.slice(0, lastIdx), clearedMsg]
-            }
-          }
-        }
-      }
-    } catch (err) {
-      logger.warn('Fetch URL failed, continuing without page content:', err)
-    }
+      },
+    )
 
     const controller = new AbortController()
     convAbortControllers.value = { ...convAbortControllers.value, [convId]: controller }

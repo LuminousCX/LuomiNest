@@ -350,11 +350,25 @@ class LocalSandbox(Sandbox):
         return parts
 
     def _build_env(self) -> dict[str, str]:
-        """构建子进程环境变量。"""
-        env = os.environ.copy()
-        # 设置工作目录为环境变量，供子进程参考
-        env["SANDBOX_WORKSPACE"] = str(self.workspace)
-        return env
+        """构建子进程环境变量（白名单模式）。
+
+        只传入显式白名单内的安全变量 + SANDBOX_WORKSPACE，
+        防止 API Key / Secret / Token 等敏感变量泄露到沙箱子进程。
+        """
+        from app.security.sandbox.env_policy import build_safe_env, contains_sensitive_var
+
+        safe_env = build_safe_env(str(self.workspace))
+
+        # 防御性二次校验：即使白名单配置有误，也确保敏感变量不会泄露
+        leaked = [k for k in safe_env if contains_sensitive_var(k) and k != "SANDBOX_WORKSPACE"]
+        if leaked:
+            logger.warning(
+                f"[Sandbox] 环境变量白名单包含疑似敏感变量，已自动过滤: {leaked}"
+            )
+            for k in leaked:
+                del safe_env[k]
+
+        return safe_env
 
     @staticmethod
     def _decode_and_truncate(data: bytes, limit: int = _OUTPUT_CAPTURE_LIMIT) -> str:

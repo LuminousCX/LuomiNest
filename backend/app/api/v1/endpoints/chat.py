@@ -1,12 +1,13 @@
 import uuid
 import time
-from fastapi import APIRouter, UploadFile, File, Form, Query
+from fastapi import APIRouter, Request, UploadFile, File, Form, Query, Depends
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException
 from typing import Any
 from pydantic import BaseModel, Field, field_validator
 from loguru import logger
 
+from app.api.v1.deps import get_chat_service, get_llm_adapter
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -26,6 +27,7 @@ from app.services.chat_service import ChatService
 from app.core.config import get_settings
 from app.core.utils import utc_now, sse_response, require_store, ok
 from app.core.exceptions import NotFoundError, ValidationError
+from app.security.rate_limiter import limiter, RATE_CHAT, RATE_TTS
 
 _chat_service = ChatService(context_service, suggestion_service)
 
@@ -33,74 +35,79 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 @router.post("/completions")
-async def chat_completions(request: ChatRequest):
+@limiter.limit(RATE_CHAT)
+async def chat_completions(
+    request: Request,
+    body: ChatRequest,
+    adapter=Depends(get_llm_adapter),
+):
     start_time = time.time()
-    resolved_provider = request.provider or llm_adapter.default_provider
-    resolved_model = request.model or llm_adapter.get_provider(resolved_provider).default_model
-    request_ts = request.timestamp or time.time()
+    resolved_provider = body.provider or adapter.default_provider
+    resolved_model = body.model or adapter.get_provider(resolved_provider).default_model
+    request_ts = body.timestamp or time.time()
     logger.info(
         f"[API] POST /chat/completions - "
         f"provider={resolved_provider}, model={resolved_model}, "
-        f"stream={request.stream}, ts={request_ts}, "
-        f"is_sub_agent={request.is_sub_agent}, agent_depth={request.agent_depth}"
+        f"stream={body.stream}, ts={request_ts}, "
+        f"is_sub_agent={body.is_sub_agent}, agent_depth={body.agent_depth}"
     )
 
     # Agent 集群调用递归守卫：防止 Agent A→B→A 无限循环
-    if request.agent_depth > 3:
+    if body.agent_depth > 3:
         raise HTTPException(
             status_code=400,
             detail="已达到最大 Agent 调用深度（3），无法继续递归调用",
         )
 
-    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
     # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
     _conv_chat_mode = None
-    if request.conversation_id:
-        _conv = await conversation_store.get_meta_async(request.conversation_id)
+    if body.conversation_id:
+        _conv = await conversation_store.get_meta_async(body.conversation_id)
         if _conv:
             _conv_chat_mode = _conv.get("chat_mode")
     if _conv_chat_mode != "ultra":
         user_query = context_service.get_user_query(messages)
-        system_prompt = context_service.build_system_prompt(request.agent_id, user_context=user_query)
+        system_prompt = context_service.build_system_prompt(body.agent_id, user_context=user_query)
         messages = [{"role": "system", "content": system_prompt}] + messages
 
     messages = context_service.inject_timestamp_prompt(messages)
     # 子 Agent 调用不注入主 Agent 记忆，避免污染独立上下文
     # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
-    if not request.is_sub_agent and _conv_chat_mode != "ultra":
-        messages = await context_service.inject_memory(messages, request.agent_id, resolved_provider, llm_adapter=llm_adapter)
+    if not body.is_sub_agent and _conv_chat_mode != "ultra":
+        messages = await context_service.inject_memory(messages, body.agent_id, resolved_provider, llm_adapter=adapter)
 
-    if request.file_content:
-        supports_vision = llm_adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
+    if body.file_content:
+        supports_vision = adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
         messages = context_service.inject_file_content(
-            messages, request.file_content, request.file_type or "text",
-            supports_vision=supports_vision, file_name=request.file_name,
+            messages, body.file_content, body.file_type or "text",
+            supports_vision=supports_vision, file_name=body.file_name,
         )
 
-    if request.search_results:
+    if body.search_results:
         for i in range(len(messages) - 1, -1, -1):
             if messages[i]["role"] == "user":
-                messages[i]["content"] += f"\n\n[搜索结果]\n{request.search_results}"
+                messages[i]["content"] += f"\n\n[搜索结果]\n{body.search_results}"
                 break
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
     process_result = await ctx_mgr.process(messages)
     messages = process_result["messages"]
 
-    if request.stream:
+    if body.stream:
         logger.info("[API] POST /chat/completions - Starting stream response")
         return sse_response(
-            _chat_service.stream_chat(messages, request, resolved_provider, resolved_model, agent_id=request.agent_id),
+            _chat_service.stream_chat(messages, body, resolved_provider, resolved_model, agent_id=body.agent_id),
         )
 
     gen_state: dict = {"content": "", "reasoning": "", "aborted": False, "started": True}
     await _chat_service.non_stream_generate(
         gen_state, messages,
         resolved_provider, resolved_model,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-        top_p=request.top_p,
+        temperature=body.temperature,
+        max_tokens=body.max_tokens,
+        top_p=body.top_p,
     )
 
     if gen_state["aborted"]:
@@ -108,15 +115,19 @@ async def chat_completions(request: ChatRequest):
 
     result_content = gen_state["content"] or ""
 
+    # 命令安全守卫：扫描 LLM 输出中的不安全命令并标注
+    from app.security.command_guard import scan_and_annotate
+    result_content = scan_and_annotate(result_content)
+
     # 非流式 /chat/completions 写入记忆（子 Agent 调用跳过，避免污染主 Agent 记忆）
-    if not request.is_sub_agent:
+    if not body.is_sub_agent:
         try:
             user_msgs = [m for m in messages if m.get("role") == "user"]
             if user_msgs:
-                thread_id = request.conversation_id or f"completions-{uuid.uuid4().hex[:8]}"
+                thread_id = body.conversation_id or f"completions-{uuid.uuid4().hex[:8]}"
                 await context_service.schedule_memory_update(
-                    messages, thread_id, request.agent_id,
-                    llm_adapter=llm_adapter,
+                    messages, thread_id, body.agent_id,
+                    llm_adapter=adapter,
                 )
         except Exception as mem_err:
             logger.warning(f"[API] /chat/completions memory update failed: {mem_err}")

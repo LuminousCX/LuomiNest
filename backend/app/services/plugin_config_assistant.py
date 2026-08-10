@@ -27,6 +27,9 @@ from app.core.utils import utc_now
 from app.infrastructure.database.json_store import JsonStore
 from app.runtime.plugin.cxplugin.kv_store import PluginKVStore
 from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.types import RouteHint
+from app.core.tools.registry import ToolBase, ToolResult
 
 
 # 插件配置存储命名空间（与 PluginKVStore 同一存储，但用专属前缀避免冲突）
@@ -104,7 +107,6 @@ class CxPluginConfigAssistant:
 
     def _get_llm_adapter(self):
         if self._llm_adapter is None:
-            from app.runtime.provider.llm.adapter import llm_adapter
             self._llm_adapter = llm_adapter
         return self._llm_adapter
 
@@ -181,7 +183,6 @@ class CxPluginConfigAssistant:
 
         try:
             llm = self._get_llm_adapter()
-            from app.runtime.provider.llm.adapter import RouteHint
             response = await llm.chat(
                 messages=[
                     {"role": "system", "content": "你是插件配置助手。严格按 JSON 输出配置修改建议。"},
@@ -455,7 +456,6 @@ class CxPluginConfigAssistant:
 
         try:
             llm = self._get_llm_adapter()
-            from app.runtime.provider.llm.adapter import RouteHint
             response = await llm.chat(
                 messages=[
                     {"role": "system", "content": "你是插件配置解释助手，用清晰的中文解释配置含义。"},
@@ -592,7 +592,6 @@ class CxPluginConfigAssistant:
 
         try:
             llm = self._get_llm_adapter()
-            from app.runtime.provider.llm.adapter import RouteHint
             response = await llm.chat(
                 messages=[
                     {"role": "system", "content": "你是插件配置设计师，严格按 JSON 输出。"},
@@ -637,7 +636,6 @@ class CxPluginConfigAssistant:
 
         try:
             llm = self._get_llm_adapter()
-            from app.runtime.provider.llm.adapter import RouteHint
             response = await llm.chat(
                 messages=[
                     {"role": "system", "content": "严格按 JSON 数组输出。"},
@@ -678,8 +676,6 @@ class CxPluginConfigAssistant:
 
     def _register_tools(self) -> None:
         """注册插件提供的工具（capability=tool_register 时启用）。"""
-        from app.runtime.tool.base import ToolBase, ToolResult
-
         class _ExampleTool(ToolBase):
             """示例工具 — 请根据实际需求修改。"""
             @property
