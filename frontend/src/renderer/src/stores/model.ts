@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig, STTConfig, STTEngine } from '../types'
+import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig, STTConfig, STTEngine, ComputeDeviceInfo } from '../types'
 import { useApi } from '../composables/useApi'
 import { PROVIDER_LOGOS } from '../config/provider-logos'
 import { getItem, setItem } from '../utils/storage'
@@ -88,6 +88,7 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     category: 'cloud',
     color: PROVIDER_LOGOS.groq.color,
     initials: PROVIDER_LOGOS.groq.initials,
+    svgIcon: PROVIDER_LOGOS.groq.svgIcon,
     defaultModels: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
   },
   {
@@ -152,6 +153,7 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     category: 'aggregator',
     color: PROVIDER_LOGOS.siliconflow.color,
     initials: PROVIDER_LOGOS.siliconflow.initials,
+    svgIcon: PROVIDER_LOGOS.siliconflow.svgIcon,
     defaultModels: ['Qwen/Qwen2.5-7B-Instruct', 'deepseek-ai/DeepSeek-V3', 'meta-llama/Llama-3.3-70B-Instruct'],
   },
   {
@@ -164,6 +166,7 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     category: 'aggregator',
     color: PROVIDER_LOGOS.openrouter.color,
     initials: PROVIDER_LOGOS.openrouter.initials,
+    svgIcon: PROVIDER_LOGOS.openrouter.svgIcon,
     defaultModels: ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash-exp'],
   },
   {
@@ -213,6 +216,7 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     category: 'local',
     color: PROVIDER_LOGOS.lmstudio.color,
     initials: PROVIDER_LOGOS.lmstudio.initials,
+    svgIcon: PROVIDER_LOGOS.lmstudio.svgIcon,
     defaultModels: [],
   },
   {
@@ -225,6 +229,7 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     category: 'local',
     color: PROVIDER_LOGOS.vllm.color,
     initials: PROVIDER_LOGOS.vllm.initials,
+    svgIcon: PROVIDER_LOGOS.vllm.svgIcon,
     defaultModels: [],
   },
   {
@@ -249,18 +254,20 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     category: 'cloud',
     color: PROVIDER_LOGOS.nvidia.color,
     initials: PROVIDER_LOGOS.nvidia.initials,
+    svgIcon: PROVIDER_LOGOS.nvidia.svgIcon,
     defaultModels: ['meta/llama-3.1-70b-instruct', 'meta/llama-3.1-405b-instruct', 'nvidia/llama-3.1-nemotron-70b-instruct'],
   },
   {
     id: 'stepfun',
     name: 'StepFun',
     vendor: 'openai_compatible',
-    baseUrl: 'https://api.stepfun.ai/step_plan/v1',
+    baseUrl: 'https://api.stepfun.ai/v1',
     defaultModel: 'step-2-16k',
     description: '阶跃星辰 Step 系列模型',
     category: 'cloud',
     color: PROVIDER_LOGOS.stepfun.color,
     initials: PROVIDER_LOGOS.stepfun.initials,
+    svgIcon: PROVIDER_LOGOS.stepfun.svgIcon,
     defaultModels: ['step-2-16k', 'step-1v-32k', 'step-1-flash'],
   },
   {
@@ -309,6 +316,7 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     category: 'cloud',
     color: PROVIDER_LOGOS.minimax.color,
     initials: PROVIDER_LOGOS.minimax.initials,
+    svgIcon: PROVIDER_LOGOS.minimax.svgIcon,
     defaultModels: ['MiniMax-Text-01', 'abab6.5s-chat'],
   },
   {
@@ -322,6 +330,71 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     color: PROVIDER_LOGOS.vercel.color,
     initials: PROVIDER_LOGOS.vercel.initials,
     defaultModels: ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash'],
+  },
+  {
+    id: 'volcengine',
+    name: 'Volcengine (火山引擎)',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    defaultModel: 'doubao-pro-32k',
+    description: '火山引擎豆包大模型',
+    category: 'cloud',
+    color: PROVIDER_LOGOS.volcengine.color,
+    initials: PROVIDER_LOGOS.volcengine.initials,
+    svgIcon: PROVIDER_LOGOS.volcengine.svgIcon,
+    defaultModels: ['doubao-pro-32k', 'doubao-lite-32k', 'doubao-pro-128k'],
+  },
+  {
+    id: 'aihubmix',
+    name: 'AiHubMix',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://aihubmix.com/v1',
+    defaultModel: 'gpt-4o-mini',
+    description: 'AiHubMix 多模型聚合网关',
+    category: 'aggregator',
+    color: PROVIDER_LOGOS.aihubmix.color,
+    initials: PROVIDER_LOGOS.aihubmix.initials,
+    svgIcon: PROVIDER_LOGOS.aihubmix.svgIcon,
+    defaultModels: ['gpt-4o-mini', 'claude-3.5-sonnet', 'gemini-2.0-flash'],
+  },
+  {
+    id: 'qianfan',
+    name: 'Qianfan (千帆)',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://qianfan.baidubce.com/v2',
+    defaultModel: 'ernie-4.0-turbo-8k',
+    description: '百度千帆文心大模型',
+    category: 'cloud',
+    color: PROVIDER_LOGOS.qianfan.color,
+    initials: PROVIDER_LOGOS.qianfan.initials,
+    svgIcon: PROVIDER_LOGOS.qianfan.svgIcon,
+    defaultModels: ['ernie-4.0-turbo-8k', 'ernie-3.5-8k', 'ernie-speed-128k'],
+  },
+  {
+    id: 'xiaomimimo',
+    name: 'XiaomiMiMo',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://api.xiaomimimo.com/v1',
+    defaultModel: 'mimo-v2-flash',
+    description: '小米 MiMo 系列模型',
+    category: 'cloud',
+    color: PROVIDER_LOGOS.xiaomimimo.color,
+    initials: PROVIDER_LOGOS.xiaomimimo.initials,
+    svgIcon: PROVIDER_LOGOS.xiaomimimo.svgIcon,
+    defaultModels: ['mimo-v2-flash'],
+  },
+  {
+    id: 'azure',
+    name: 'Azure OpenAI',
+    vendor: 'openai_compatible',
+    baseUrl: 'https://YOUR_RESOURCE.openai.azure.com/openai/deployments',
+    defaultModel: 'gpt-4o',
+    description: 'Azure OpenAI 服务',
+    category: 'cloud',
+    color: PROVIDER_LOGOS.azure.color,
+    initials: PROVIDER_LOGOS.azure.initials,
+    svgIcon: PROVIDER_LOGOS.azure.svgIcon,
+    defaultModels: ['gpt-4o', 'gpt-4o-mini', 'gpt-4'],
   },
   {
     id: 'custom',
@@ -550,6 +623,7 @@ export const useModelStore = defineStore('model', () => {
   const loading = ref(false)
   const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const sttEngines = ref<STTEngine[]>([])
+  const sttDevice = ref<ComputeDeviceInfo | null>(null)
 
   const defaultProvider = computed(() =>
     providers.value.find(p => p.isDefault)
@@ -962,12 +1036,17 @@ export const useModelStore = defineStore('model', () => {
 
   const fetchSTTEngines = async () => {
     try {
-      const result = await apiGet<{ engines: STTEngine[] } | STTEngine[]>('/chat/stt/engines')
-      const data = unwrapData<{ engines: STTEngine[] } | STTEngine[]>(result)
+      const result = await apiGet<{ engines: STTEngine[]; device?: ComputeDeviceInfo } | STTEngine[]>('/chat/stt/engines')
+      const data = unwrapData<{ engines: STTEngine[]; device?: ComputeDeviceInfo } | STTEngine[]>(result)
       if (Array.isArray(data)) {
         sttEngines.value = data
-      } else if (data?.engines) {
-        sttEngines.value = data.engines
+      } else {
+        if (data?.engines) {
+          sttEngines.value = data.engines
+        }
+        if (data?.device) {
+          sttDevice.value = data.device
+        }
       }
     } catch {
       sttEngines.value = []
@@ -981,6 +1060,7 @@ export const useModelStore = defineStore('model', () => {
     ttsConfig,
     sttConfig,
     sttEngines,
+    sttDevice,
     loading,
     saveStatus,
     defaultProvider,

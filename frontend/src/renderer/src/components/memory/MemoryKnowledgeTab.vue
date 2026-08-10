@@ -104,7 +104,7 @@ const emit = defineEmits<{
   outline: none;
 }
 
-.memory-editor:focus { border-color: var(--task-purple); }
+.memory-editor:focus { border-color: var(--task-sky); }
 
 .editor-hint {
   font-size: var(--text-xs);

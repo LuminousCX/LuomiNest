@@ -89,7 +89,7 @@ function getWeekday(dateStr: string): string {
         </div>
         <div v-else class="memo-items">
           <div v-for="(line, idx) in dailyLines" :key="idx" class="memo-item">
-            <div class="memo-dot" :style="{ background: line.startsWith('-') ? 'var(--lumi-amber)' : 'var(--task-purple)' }"></div>
+            <div class="memo-dot" :style="{ background: line.startsWith('-') ? 'var(--lumi-amber)' : 'var(--task-sky)' }"></div>
             <div class="memo-content">
               <p class="memo-text">{{ line.replace(/^-\s*/, '').replace(/^#+\s*/, '') }}</p>
             </div>

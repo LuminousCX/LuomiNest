@@ -4,9 +4,13 @@ export interface ToolActivity {
   id: string
   name: string
   arguments: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'blocked'
   output?: string
   iteration: number
+  /** 拦截原因（status === 'blocked' 时展示） */
+  blockedReason?: string
+  /** 被拦截的命令 */
+  blockedCommand?: string
 }
 
 export interface SubagentToolCall {

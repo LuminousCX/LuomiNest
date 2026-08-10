@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { Heart, Download, Check, Loader2, RefreshCw, Trash2, AlertCircle } from 'lucide-vue-next'
 import type { MarketplaceItem, InstallProgress } from '../../types/marketplace'
 import { useMarketplaceStore } from '../../stores/marketplace'
+import { usePluginsStore } from '../../stores/plugins'
 import { useApi } from '../../composables/useApi'
 
 const props = defineProps<{
@@ -11,6 +12,7 @@ const props = defineProps<{
 }>()
 
 const store = useMarketplaceStore()
+const pluginsStore = usePluginsStore()
 const api = useApi()
 
 const loading = ref(false)
@@ -48,8 +50,18 @@ async function handleInstall() {
     // 用后端返回的状态更新 store
     store.setInstallProgress(props.item.id, result)
 
-    // 开始轮询进度
-    store.startProgressPolling(props.item.id)
+    // 本地内置插件:后端已直接启用,无需轮询进度。
+    if (result.frontendBuiltin) {
+      // fullstack/frontend 本地插件:同步启用前端 builtin,使其视图立即出现在导航栏
+      await pluginsStore.enableFrontendPlugin(props.item.id)
+      store.markInstalled(props.item.id)
+    } else if (result.status === 'installed') {
+      // 纯 backend 本地插件(如 weather-query):后端已启用,无需前端操作与轮询
+      store.markInstalled(props.item.id)
+    } else {
+      // 远程/普通插件:开始轮询下载进度
+      store.startProgressPolling(props.item.id)
+    }
   } catch (e: unknown) {
     error.value = (e instanceof Error ? e.message : String(e)) || '安装请求失败'
     store.setInstallProgress(props.item.id, { itemId: props.item.id, status: 'error', progress: 0, error: error.value ?? undefined })
@@ -63,6 +75,11 @@ async function handleUninstall() {
   error.value = null
   try {
     await api.apiPost('/marketplace/uninstall', { itemId: props.item.id })
+    // 仅 fullstack/frontend 本地插件需要禁用前端 builtin,从导航栏移除视图
+    // 纯 backend 本地插件(如 weather-query, platform='backend')无前端视图,跳过
+    if (props.item.source === 'local' && props.item.platform !== 'backend') {
+      await pluginsStore.disableFrontendPlugin(props.item.id)
+    }
     store.uninstallItem(props.item.id)
   } catch (e: unknown) {
     error.value = (e instanceof Error ? e.message : String(e)) || '卸载失败'

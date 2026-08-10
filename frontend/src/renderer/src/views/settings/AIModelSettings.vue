@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   ArrowLeft,
@@ -8,6 +8,8 @@ import {
   Atom,
   Plus,
   Settings2,
+  Volume2,
+  Mic,
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
 import AiModelMainConfig from '../../components/ai-model-settings/AiModelMainConfig.vue'
@@ -15,6 +17,8 @@ import AiModelReasonerConfig from '../../components/ai-model-settings/AiModelRea
 import AiModelAddProviderDialog from '../../components/ai-model-settings/AiModelAddProviderDialog.vue'
 import AiModelEditProviderDialog from '../../components/ai-model-settings/AiModelEditProviderDialog.vue'
 import AiModelContextConfig from '../../components/ai-model-settings/AiModelContextConfig.vue'
+import SettingsTtsSection from '../../components/settings-detail/SettingsTtsSection.vue'
+import SettingsSttSection from '../../components/settings-detail/SettingsSttSection.vue'
 
 const router = useRouter()
 const modelStore = useModelStore()
@@ -30,11 +34,17 @@ const modelTiles = [
   { id: 'main', label: '主模型', icon: Zap, tag: '快速响应' },
   { id: 'reasoner', label: '推理模型', icon: Atom, tag: 'Agent' },
   { id: 'context', label: '高级设置', icon: Settings2, tag: '上下文' },
+  { id: 'tts', label: '语音合成', icon: Volume2, tag: 'TTS' },
+  { id: 'stt', label: '语音识别', icon: Mic, tag: 'STT' },
 ]
 
 const showAddDialog = ref(false)
 const showEditDialog = ref(false)
 const editingProviderId = ref('')
+
+const showProviderActions = computed(() => {
+  return ['main', 'reasoner', 'context'].includes(activeTile.value)
+})
 
 const openAddDialog = () => {
   showAddDialog.value = true
@@ -64,8 +74,8 @@ onMounted(async () => {
         <Cpu :size="24" />
       </div>
       <div>
-        <h1 class="page-title">AI 模型</h1>
-        <p class="page-subtitle">配置 LuomiNest 大语言模型与语音引擎</p>
+        <h1 class="page-title">模型设置</h1>
+        <p class="page-subtitle">配置大语言模型、语音合成与语音识别引擎</p>
       </div>
     </div>
 
@@ -86,7 +96,7 @@ onMounted(async () => {
           </button>
         </nav>
 
-        <div class="sidebar-footer">
+        <div v-if="showProviderActions" class="sidebar-footer">
           <button class="add-provider-btn" @click="openAddDialog">
             <Plus :size="16" />
             <span>添加供应商</span>
@@ -94,7 +104,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="detail-content animate-slide-up" :style="{ animationDelay: '100ms' }">
+      <div :class="['detail-content', 'animate-slide-up', { 'detail-content--panel': activeTile === 'tts' || activeTile === 'stt' }]" :style="{ animationDelay: '100ms' }">
         <AiModelMainConfig
           v-if="activeTile === 'main'"
           @add-provider="openAddDialog"
@@ -105,6 +115,14 @@ onMounted(async () => {
         />
         <AiModelContextConfig
           v-if="activeTile === 'context'"
+        />
+        <SettingsTtsSection
+          v-if="activeTile === 'tts'"
+          :embedded="true"
+        />
+        <SettingsSttSection
+          v-if="activeTile === 'stt'"
+          :embedded="true"
         />
       </div>
     </div>
@@ -268,5 +286,18 @@ export default { name: 'AIModelSettings' }
   overflow-y: auto;
   padding: var(--space-6) var(--space-7);
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-content--panel {
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── 统一加大内容区 section 间距 ── */
+.detail-content :deep(.content-section) {
+  gap: var(--space-7);
 }
 </style>

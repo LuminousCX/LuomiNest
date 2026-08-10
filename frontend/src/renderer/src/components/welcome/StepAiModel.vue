@@ -85,8 +85,9 @@ const currentTemplates = computed(() =>
           :class="['template-card', { selected: selectedTemplate === tmpl.id }]"
           @click="emit('select-template', tmpl.id)"
         >
-          <div class="lumi-icon-wrap lumi-icon-wrap--sm template-card-logo" :style="{ background: tmpl.color }">
-            <span class="template-initials">{{ tmpl.initials }}</span>
+          <div class="lumi-icon-wrap lumi-icon-wrap--sm template-card-logo" :style="{ background: tmpl.svgIcon ? undefined : tmpl.color }">
+            <span v-if="tmpl.svgIcon" class="template-svg-logo" v-html="tmpl.svgIcon"></span>
+            <span v-else class="template-initials">{{ tmpl.initials }}</span>
           </div>
           <div class="template-card-info">
             <span class="template-card-name">{{ tmpl.name }}</span>
@@ -163,8 +164,8 @@ const currentTemplates = computed(() =>
 }
 
 .ai-hero-icon {
-  background: linear-gradient(135deg, var(--task-purple-soft), color-mix(in srgb, var(--task-purple) 4%, transparent));
-  color: var(--task-purple);
+  background: linear-gradient(135deg, var(--task-sky-soft), color-mix(in srgb, var(--task-sky) 4%, transparent));
+  color: var(--task-sky);
 }
 
 .step-hero-title {
@@ -273,6 +274,19 @@ const currentTemplates = computed(() =>
   font-weight: var(--font-bold);
   color: var(--text-inverse);
   letter-spacing: 0.5px;
+}
+
+.template-svg-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.template-svg-logo :deep(svg) {
+  width: 20px;
+  height: 20px;
 }
 
 .template-card-info {

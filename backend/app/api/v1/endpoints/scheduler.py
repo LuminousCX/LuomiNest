@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 from app.core.exceptions import LuomiNestError
+from app.core.utils import ok
 from app.core.scheduler import (
     LuomiTaskStatus,
     LuomiTaskType,
@@ -72,4 +73,4 @@ async def delete_task(task_id: str):
     success = await luomi_scheduler.remove_task(task_id)
     if not success:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
-    return {"success": True, "task_id": task_id}
+    return ok({"task_id": task_id})

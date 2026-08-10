@@ -8,7 +8,7 @@ export function useDebouncedSearch<T extends unknown[]>(
   results: Ref<T>
   isSearching: Ref<boolean>
 } {
-  const results = ref<T>([] as T) as Ref<T>
+  const results = ref([]) as unknown as Ref<T>
   const isSearching = ref(false)
   let timer: ReturnType<typeof setTimeout> | null = null
   let seq = 0
@@ -19,7 +19,7 @@ export function useDebouncedSearch<T extends unknown[]>(
       if (timer) clearTimeout(timer)
       const trimmed = q.trim()
       if (!trimmed) {
-        results.value = [] as T
+        results.value = [] as unknown as T
         isSearching.value = false
         return
       }
@@ -34,7 +34,7 @@ export function useDebouncedSearch<T extends unknown[]>(
           }
         } catch {
           if (currentSeq === seq) {
-            results.value = [] as T
+            results.value = [] as unknown as T
           }
         } finally {
           if (currentSeq === seq) {

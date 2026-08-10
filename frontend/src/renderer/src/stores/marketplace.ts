@@ -539,6 +539,39 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     }
   }
 
+  /**
+   * 标记条目为已安装(用于本地内置插件安装完成后,无需轮询进度)。
+   * 同步更新 pluginItems/skillItems/agentItems 与 repoSourceStore 中的 installStatus。
+   */
+  const markInstalled = (itemId: string) => {
+    setProgress(itemId, {
+      itemId,
+      status: 'installed',
+      progress: 100,
+      message: '安装完成',
+    })
+    const updateInstalledItem = (items: MarketplaceItem[]) => {
+      const item = items.find(i => i.id === itemId)
+      if (item) {
+        item.installStatus = 'installed'
+        item.installedCount += 1
+        item.downloadCount += 1
+      }
+    }
+    updateInstalledItem(pluginItems.value)
+    updateInstalledItem(skillItems.value)
+    updateInstalledItem(agentItems.value)
+    {
+      const repoStore = useRepoSourceStore()
+      for (const items of Object.values(repoStore.syncedItems)) {
+        const ri = (items as MarketplaceItem[]).find(i => i.id === itemId)
+        if (ri) {
+          ri.installStatus = 'installed'
+        }
+      }
+    }
+  }
+
   const updateItem = (itemId: string) => {
     cancelledInstalls.delete(itemId)
     const progress: InstallProgress = {
@@ -927,6 +960,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     toggleFavorite,
     startInstall,
     uninstallItem,
+    markInstalled,
     updateItem,
     getInstallProgress,
     setInstallProgress,

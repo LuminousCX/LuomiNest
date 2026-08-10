@@ -27,6 +27,21 @@ export interface RepoSource {
   errorMessage?: string
 }
 
+export interface RegistrySource {
+  id: string
+  name: string
+  type: 'github' | 'cdn' | 'custom'
+  baseUrl: string
+  urlPattern: 'raw' | 'gh'
+  enabled: boolean
+  /** 延迟测试后填充 */
+  latencyMs?: number
+  healthy?: boolean
+  statusCode?: number | null
+  error?: string | null
+  active?: boolean
+}
+
 export interface MarketplaceCategory {
   id: string
   name: string
@@ -90,6 +105,10 @@ export interface MarketplaceItem {
   createdAt: string
   updatedAt: string
   size: number
+  /** 来源: "local" 表示本地内置插件,卸载时仅禁用不删文件 */
+  source?: string
+  /** 平台: fullstack / frontend / backend */
+  platform?: string
 }
 
 export interface MarketplaceReview {
@@ -141,6 +160,8 @@ export interface InstallProgress {
   eta?: number         // 预计剩余时间 (秒)
   downloadedBytes?: number
   totalBytes?: number
+  /** 本地内置插件标记:安装即启用,无需下载 */
+  frontendBuiltin?: boolean
 }
 
 export interface ItemStats {

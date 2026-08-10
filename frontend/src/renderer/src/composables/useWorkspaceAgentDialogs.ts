@@ -18,7 +18,7 @@ const AGENT_COLORS: string[] = [
   'var(--lumi-indigo)',
   'var(--lumi-amber)',
   'var(--lumi-accent)',
-  'var(--task-purple)',
+  'var(--task-sky)',
   'var(--lumi-sky)',
   'var(--lumi-success)',
   'var(--task-pink)',
@@ -47,7 +47,7 @@ const extractErrorMessage = (e: unknown, fallback: string): string => {
   return err.response?.data?.detail || err.message || fallback
 }
 
-interface AgentFormState {
+export interface AgentFormState {
   name: string
   description: string
   systemPrompt: string

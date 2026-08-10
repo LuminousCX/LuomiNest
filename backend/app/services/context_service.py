@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from loguru import logger
 
 from app.infrastructure.database.json_store import agents_store
+from app.core.context import get_context_manager
 from app.core.utils import extract_text_from_content
 from app.engines.memory import get_memory_engine
 from app.engines.memory.memory_engine import (
@@ -16,7 +17,9 @@ from app.engines.memory.memory_engine import (
     _REINFORCEMENT_PATTERNS_EN,
     _REINFORCEMENT_PATTERNS_ZH,
 )
+from app.runtime.provider.llm.adapter import llm_adapter
 from app.services.distillation_service import distillation_service
+from app.services.skill_service import cx_skill_service
 
 # 主 Agent 唯一标识：记忆系统仅对主 Agent 生效，联系人 Agent 不读写记忆
 MAIN_AGENT_ID = "luominest_main_agent"
@@ -39,7 +42,6 @@ class ContextService:
 
     @staticmethod
     def _get_llm_adapter():
-        from app.runtime.provider.llm.adapter import llm_adapter
         return llm_adapter
 
     async def _get_memory_lock(self, agent_id: str | None) -> asyncio.Lock:
@@ -277,7 +279,6 @@ Examples:
     def _build_skills_index_block() -> str:
         """构建 <skill_index> 块 — 始终注入，让 AI 知道当前可用技能列表。"""
         try:
-            from app.services.skill_service import cx_skill_service
             return cx_skill_service.get_skills_index_prompt()
         except Exception as e:
             logger.debug(f"[ContextService] skill_index injection skipped: {e}")
@@ -289,7 +290,6 @@ Examples:
         if not user_context:
             return ""
         try:
-            from app.services.skill_service import cx_skill_service
             return cx_skill_service.get_skills_prompt_for_injection(context=user_context)
         except Exception as e:
             logger.debug(f"[ContextService] available_skills injection skipped: {e}")
@@ -494,8 +494,6 @@ Examples:
             (compressed_messages, info_dict)
             info_dict 包含 context_tokens, tokens_before 等元信息
         """
-        from app.core.context import get_context_manager
-
         ctx_mgr = get_context_manager(provider_name, model)
         tokens_before = ctx_mgr.token_counter.count_tokens(messages)
 

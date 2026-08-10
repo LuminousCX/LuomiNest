@@ -5,7 +5,10 @@ from loguru import logger
 
 from app.core.utils import extract_llm_text
 from app.engines.memory import get_memory_engine
+from app.engines.memory.memory_engine import get_conversation_store
+from app.engines.memory.models import summaries_to_markdown
 from app.engines.memory.prompts import _DISTILL_PROMPT_ROUND, _MERGE_SUMMARY_PROMPT
+from app.runtime.provider.llm.adapter import llm_adapter as default_adapter
 from app.runtime.provider.llm.types import RouteHint
 
 # 主 Agent 唯一标识（与 context_service.MAIN_AGENT_ID 保持一致）
@@ -184,12 +187,7 @@ class DistillationService:
     async def distill_rounds(messages: list, llm_adapter=None) -> str | None:
         """蒸馏最近5轮 → 新观察"""
         if llm_adapter is None:
-            try:
-                from app.runtime.provider.llm.adapter import llm_adapter as default_adapter
-                llm_adapter = default_adapter
-            except Exception as e:
-                logger.warning(f"[Distill] No LLM adapter available: {e}", exc_info=True)
-                return None
+            llm_adapter = default_adapter
 
         last_5_turns = DistillationService.get_last_n_turns(messages, 5)
         if not last_5_turns:
@@ -224,12 +222,7 @@ class DistillationService:
     async def merge_summaries(old_summary: str, new_obs: str, llm_adapter=None) -> str | None:
         """旧摘要 + 新观察 → 统一摘要"""
         if llm_adapter is None:
-            try:
-                from app.runtime.provider.llm.adapter import llm_adapter as default_adapter
-                llm_adapter = default_adapter
-            except Exception as e:
-                logger.warning(f"[Distill] No LLM adapter available: {e}", exc_info=True)
-                return None
+            llm_adapter = default_adapter
 
         prompt = _MERGE_SUMMARY_PROMPT.format(
             old_summary=old_summary,
@@ -259,10 +252,8 @@ class DistillationService:
         # 对话级摘要：独立合并
         conv_summary = ""
         if conversation_id:
-            from app.engines.memory.memory_engine import get_conversation_store
             conv_store = get_conversation_store(agent_id, conversation_id)
             conv_data = conv_store.load_data()
-            from app.engines.memory.models import summaries_to_markdown
             conv_summary = summaries_to_markdown(conv_data)
 
         if conv_summary and conv_summary.strip():

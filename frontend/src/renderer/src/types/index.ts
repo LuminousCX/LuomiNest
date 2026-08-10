@@ -180,6 +180,8 @@ export interface Conversation {
   messages: ApiMessage[]
   created_at: string
   updated_at: string
+  has_more?: boolean
+  total_messages?: number
 }
 
 export interface ConversationListItem {
@@ -360,6 +362,37 @@ export interface STTEngine {
   description?: string
   model_types?: string[]
   models?: string[]
+}
+
+/** 计算设备信息（TTS/STT 共用，来自后端硬件检测） */
+export interface ComputeDeviceInfo {
+  type: string
+  name: string
+  vendor?: string
+  gpu_count?: number
+  cuda_available: boolean
+  cuda_version?: string
+  torch_available?: boolean
+  note?: string
+}
+
+/** 系统信息（来自 /system/info） */
+export interface LuomiNestSystemInfo {
+  os_name: string
+  os_family: string
+  kernel_version: string
+  machine: string
+  python_version: string
+  package_manager: string
+  is_frozen: boolean
+  distro?: {
+    id: string
+    name: string
+    version: string
+    family: string
+    pretty_name: string
+    version_id: string
+  }
 }
 
 export interface GroupMember {

@@ -285,8 +285,8 @@ const handleConfig = (instance: PlatformInstance) => {
 }
 
 .card-icon.social {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .card-icon.iot {

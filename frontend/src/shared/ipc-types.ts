@@ -78,6 +78,91 @@ export interface AppConfig {
 }
 
 /* ============================================================================
+ * 主题配置（完整持久化）
+ * ========================================================================== */
+
+/** 色彩主题定义 */
+export interface ColorTheme {
+  id: string
+  name: string
+  type: 'preset' | 'custom'
+  /** 三色主调 - 浅色模式 */
+  light: ThemeColorSet
+  /** 三色主调 - 深色模式 */
+  dark: ThemeColorSet
+}
+
+/** 每个主题的三色配色集 */
+export interface ThemeColorSet {
+  /** 主色 - 品牌/导航/按钮 */
+  primary: string
+  /** 辅色 - 辅助元素/卡片边框 */
+  secondary: string
+  /** 强调色 - 高亮/徽章 */
+  accent: string
+  primaryHover: string
+  /** 半透明浅色版本 */
+  primaryLight: string
+  secondaryHover: string
+  secondaryLight: string
+  accentHover: string
+  accentLight: string
+  /** 阴影色（用主色调的半透明） */
+  shadowBrand: string
+  /** 渐变 */
+  gradientBrand: string
+}
+
+/** 背景配置（ThemeConfig 与 Skin 共用，fit 为可选以兼容旧配置） */
+export interface BackgroundConfig {
+  /** 背景图片路径（相对路径或 null） */
+  image: string | null
+  /** 模糊度 0-20 */
+  blur: number
+  /** 透明度 0-100 */
+  opacity: number
+  /** 背景适配方式（仅图片/渐变有效，可选以兼容无 fit 的旧配置） */
+  fit?: BackgroundFit
+}
+
+/** 背景适配方式 */
+export type BackgroundFit = 'cover' | 'contain' | 'center' | 'right'
+
+/** 皮肤包：一套完整的视觉方案 */
+export interface Skin {
+  id: string
+  name: string
+  type: 'preset' | 'custom'
+  /** 关联的色彩主题 ID */
+  colorThemeId: string
+  /** 主题模式 */
+  mode: 'light' | 'dark' | 'system'
+  /** 背景配置 */
+  background: BackgroundConfig
+  /** 毛玻璃强度 0-100 */
+  glassIntensity: number
+  /** 氛围光强度 0-100 */
+  ambientIntensity: number
+  /** 圆角倾向 0-100（影响卡片圆角） */
+  radiusTendency?: number
+}
+
+/** 完整主题配置（持久化用） */
+export interface ThemeConfig {
+  activeColorThemeId: string
+  activeMode: 'light' | 'dark' | 'system'
+  background: BackgroundConfig
+  /** 自定义主题，最多 5 个 */
+  customThemes: ColorTheme[]
+  /** 兼容旧配置：仅有 light/dark 布尔值时使用 */
+  isDark?: boolean
+  /** 新增：当前激活的皮肤包 ID */
+  activeSkinId?: string
+  /** 新增：自定义皮肤包 */
+  customSkins?: Skin[]
+}
+
+/* ============================================================================
  * 浏览器 / 标签页
  * ========================================================================== */
 
@@ -196,7 +281,6 @@ export const DesktopPetIpcChannels = {
   SEND: [
     'desktop-pet:set-ignore-mouse-events',
     'desktop-pet:set-always-on-top',
-    'desktop-pet:resize-window',
     'desktop-pet:start-drag',
     'desktop-pet:drag-window',
     'desktop-pet:end-drag',
@@ -212,6 +296,7 @@ export const DesktopPetIpcChannels = {
     'desktop-pet:load-model',
     'desktop-pet:trigger-motion',
     'desktop-pet:trigger-expression',
+    'desktop-pet:set-scale',
     'desktop-pet:lip-sync',
     'desktop-pet:pad-emotion',
     'desktop-pet:set-core-param',
@@ -295,6 +380,8 @@ export interface ElectronApi {
   config: {
     getTheme: () => Promise<string>
     setTheme: (theme: 'light' | 'dark' | 'system') => Promise<void>
+    getThemeConfig: () => Promise<ThemeConfig | null>
+    setThemeConfig: (config: ThemeConfig) => Promise<void>
     getTTS: () => Promise<TTSConfig>
     setTTS: (updates: Partial<TTSConfig>) => Promise<void>
     getSTT: () => Promise<STTConfig>
@@ -367,5 +454,12 @@ export interface ElectronApi {
   onDesktopPetChatCancel: (callback: () => void) => () => void
   backend: {
     subscribeStage: (callback: (data: BackendStageEvent) => void) => () => void
+  }
+  dialog: {
+    selectBackgroundImage: () => Promise<
+      { success: true; url: string; width: number; height: number; warning?: string } |
+      { success: false; error?: string; cancelled?: boolean }
+    >
+    deleteBackgroundImage: (imageUrl: string) => Promise<{ success: boolean; error?: string }>
   }
 }

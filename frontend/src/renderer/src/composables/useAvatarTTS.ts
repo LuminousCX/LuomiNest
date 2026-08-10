@@ -4,12 +4,15 @@ import { API_ENDPOINTS } from '../config/api'
 import { stripEmotionTags } from '../utils/emotionTagInterceptor'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import {
+  LUOMINEST_DEFAULT_TTS_VOICE,
+  LUOMINEST_SUBTITLE_CHAR_INTERVAL_MS,
+  LUOMINEST_SUBTITLE_MIN_CHAR_INTERVAL_MS,
+} from '../constants'
+import {
   useAvatarAudioEngine,
 } from './useAvatarAudioEngine'
 
 const logger = createLuomiNestRendererLogger('AvatarTTS')
-
-const LUMINEST_SUBTITLE_CHAR_INTERVAL = 60
 
 export interface AvatarTTSOptions {
   syncLipParam?: (value: number) => void
@@ -42,7 +45,10 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
     if (subtitleCharTimer !== null) clearInterval(subtitleCharTimer)
 
     let charIndex = 0
-    const interval = Math.max(30, LUMINEST_SUBTITLE_CHAR_INTERVAL - text.length * 2)
+    const interval = Math.max(
+      LUOMINEST_SUBTITLE_MIN_CHAR_INTERVAL_MS,
+      LUOMINEST_SUBTITLE_CHAR_INTERVAL_MS - text.length * 2
+    )
 
     subtitleCharTimer = setInterval(() => {
       if (charIndex < text.length) {
@@ -70,7 +76,7 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
 
     const modelStore = useModelStore()
     const ttsConfig = modelStore.ttsConfig
-    const voice = ttsConfig.voice || 'zh-CN-XiaoxiaoNeural'
+    const voice = ttsConfig.voice || LUOMINEST_DEFAULT_TTS_VOICE
 
     const controller = new AbortController()
     engine.setCurrentAbortController(controller)
@@ -79,7 +85,7 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
 
     try {
       const token = await window.api.auth.getToken()
-      const response = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
+      const response = await fetch(API_ENDPOINTS.TTS_SYNTHESIZE, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

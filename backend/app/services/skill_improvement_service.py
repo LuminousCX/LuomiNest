@@ -27,6 +27,9 @@ from loguru import logger
 from app.core.utils import utc_now
 from app.infrastructure.database.json_store import JsonStore
 from app.runtime.plugin.skill.registry import cx_skill_registry
+from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.types import RouteHint
+from app.services.skill_service import cx_skill_service
 
 
 # 持久化存储
@@ -108,9 +111,8 @@ class CxSkillImprovementService:
     # ------------------------------------------------------------------
 
     def _get_llm_adapter(self):
-        """懒加载 LLM 适配器，避免 import 时循环依赖。"""
+        """获取 LLM 适配器。"""
         if self._llm_adapter is None:
-            from app.runtime.provider.llm.adapter import llm_adapter
             self._llm_adapter = llm_adapter
         return self._llm_adapter
 
@@ -233,8 +235,6 @@ class CxSkillImprovementService:
         force: bool,
     ) -> dict[str, Any] | None:
         """实际执行建议生成。"""
-        from app.services.skill_service import cx_skill_service
-
         skill_detail = cx_skill_service.get_skill(skill_id)
         if skill_detail is None:
             logger.warning(f"[CxSkillImprove] Skill not found: {skill_id}")
@@ -254,7 +254,6 @@ class CxSkillImprovementService:
         prompt = self._build_improvement_prompt(skill_detail, usage_dict)
         try:
             llm = self._get_llm_adapter()
-            from app.runtime.provider.llm.adapter import RouteHint
             response = await llm.chat(
                 messages=[
                     {"role": "system", "content": "你是一位 SKILL.md 技能优化专家。严格按 JSON 格式输出建议。"},
@@ -442,8 +441,6 @@ class CxSkillImprovementService:
         Raises:
             ValueError: 建议不存在 / 已应用 / 缺少 suggested_content / skill_id 校验失败
         """
-        from app.services.skill_service import cx_skill_service
-
         sugg = _skill_suggestions_store.get(suggestion_id)
         if sugg is None:
             raise ValueError(f"建议不存在: {suggestion_id}")
@@ -535,8 +532,6 @@ class CxSkillImprovementService:
 
     def _restore_skill_md(self, skill_id: str, backup_path: str) -> bool:
         """从备份恢复 SKILL.md。"""
-        from app.services.skill_service import cx_skill_service
-
         if not os.path.isfile(backup_path):
             logger.error(f"[CxSkillImprove] Backup not found: {backup_path}")
             return False

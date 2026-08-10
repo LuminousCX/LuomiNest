@@ -8,7 +8,9 @@
 
 import asyncio
 import io
+import os
 import re
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -18,8 +20,27 @@ from loguru import logger
 from app.runtime.provider.base import STTProvider
 
 
-# 模型根目录（backend/models/stt/）
-_MODEL_ROOT = Path(__file__).resolve().parents[4] / "models" / "stt"
+def _resolve_model_root() -> Path:
+    """解析 STT 模型根目录（按优先级）：
+    1. LUOMINEST_STT_MODEL_DIR 环境变量（绝对路径覆盖，运维/测试用）
+    2. 打包态：sys.executable 同级（内置模型，只读），仅在目录存在且非空时使用
+    3. 打包态回退：settings.DATA_DIR / "models" / "stt"（用户下载目录，可写）
+    4. 开发态：__file__ 在 backend/app/runtime/provider/stt/，parents[4] = backend/
+    """
+    env_dir = os.environ.get("LUOMINEST_STT_MODEL_DIR")
+    if env_dir:
+        return Path(env_dir)
+    if getattr(sys, "frozen", False):
+        builtin_root = Path(sys.executable).parent / "models" / "stt"
+        if builtin_root.exists() and any(builtin_root.iterdir()):
+            return builtin_root
+        from app.core.config import settings
+        return Path(settings.DATA_DIR) / "models" / "stt"
+    return Path(__file__).resolve().parents[4] / "models" / "stt"
+
+
+# 模型根目录（开发态：backend/models/stt/；打包态：userData/Data/backend/models/stt/）
+_MODEL_ROOT = _resolve_model_root()
 
 # 采样率
 _SAMPLE_RATE = 16000

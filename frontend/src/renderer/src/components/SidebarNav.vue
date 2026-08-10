@@ -25,8 +25,8 @@ import {
   PanelLeftOpen,
   Brain,
   Bot,
+  User,
 } from 'lucide-vue-next'
-import LumiBrandStar from './common/LumiBrandStar.vue'
 import { useTaskStreamStore } from '../stores/taskStream'
 import { cxContributionRegistry } from '../plugins'
 import { resolvePluginIcon } from '../plugins/plugin-icons'
@@ -140,8 +140,11 @@ const toggleGroup = (groupId: string) => {
   }
   const next = new Set(expandedGroups.value)
   if (next.has(groupId)) {
+    // 已展开则收缩
     next.delete(groupId)
   } else {
+    // 严格手风琴:展开新分组时,自动收缩其他已展开分组
+    next.clear()
     next.add(groupId)
   }
   expandedGroups.value = next
@@ -155,7 +158,8 @@ watch(isNavCollapsed, (collapsed) => {
 
 watch(activeGroup, (groupId) => {
   if (groupId && !expandedGroups.value.has(groupId)) {
-    expandedGroups.value = new Set([...expandedGroups.value, groupId])
+    // 严格手风琴:路由进入某分组子项时,仅展开该分组,收缩其他
+    expandedGroups.value = new Set([groupId])
   }
 }, { immediate: true })
 
@@ -184,7 +188,7 @@ const handleNavigate = (path: string) => {
     <div class="nav-header">
       <div class="brand">
         <div class="brand-avatar">
-          <LumiBrandStar :size="22" :animated="false" />
+          <User :size="22" />
         </div>
         <div v-if="!isNavCollapsed" class="brand-info">
           <span class="brand-name">LuomiNest</span>
@@ -241,6 +245,7 @@ const handleNavigate = (path: string) => {
                 v-for="(child, idx) in group.children"
                 :key="child.id"
                 :class="['tree-child', { active: isChildActive(child.id), last: idx === group.children.length - 1 }]"
+                :style="{ '--tree-index': idx }"
                 @click="handleNavigate(child.id)"
               >
                 <div class="tree-line">
@@ -354,13 +359,14 @@ const handleNavigate = (path: string) => {
 .brand-avatar {
   width: var(--nav-item-height);
   height: var(--nav-item-height);
-  border-radius: var(--radius-lg);
-  background: var(--lumi-brand-gradient);
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-sm);
-  color: var(--text-inverse);
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .brand-info {
@@ -633,7 +639,9 @@ const handleNavigate = (path: string) => {
   font-size: var(--text-base);
   opacity: 0;
   transform: translateY(calc(var(--space-1) * -1));
+  /* 使用 CSS 变量控制 stagger，避免硬编码 nth-child，减少合成层数量与代码冗余 */
   animation: tree-item-in var(--duration-leave) var(--ease-default) forwards;
+  animation-delay: calc(var(--tree-stagger-step, 35ms) * var(--tree-index, 0));
 }
 
 @keyframes tree-item-in {
@@ -643,12 +651,15 @@ const handleNavigate = (path: string) => {
   }
 }
 
-.tree-child:nth-child(1) { animation-delay: calc(var(--duration-fast) * 0.13); }
-.tree-child:nth-child(2) { animation-delay: calc(var(--duration-fast) * 0.27); }
-.tree-child:nth-child(3) { animation-delay: calc(var(--duration-fast) * 0.4); }
-.tree-child:nth-child(4) { animation-delay: calc(var(--duration-fast) * 0.53); }
-.tree-child:nth-child(5) { animation-delay: calc(var(--duration-fast) * 0.67); }
-.tree-child:nth-child(6) { animation-delay: calc(var(--duration-fast) * 0.8); }
+/* 用户偏好减少动态效果时，跳过进入动画，直接保持可见，
+   避免初始 opacity:0 / transform 残留导致导航子项不可见 */
+@media (prefers-reduced-motion: reduce) {
+  .tree-child {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
 
 .tree-child:hover {
   background: var(--nav-item-hover-bg);

@@ -1,0 +1,60 @@
+{
+  "id": "cxp-pdf-reader",
+  "type": "frontend-plugin",
+  "name": "CxPlugin PDF 智能阅读器",
+  "version": "1.0.0",
+  "description": "PDF/Word/TXT 文档阅读插件，内置 AI 总结/翻译/问答",
+  "author": "LuminousCX",
+  "license": "MIT",
+  "icon": "FileText",
+  "category": "tool",
+  "tags": ["pdf", "document", "reader", "ai"],
+  "minAppVersion": "0.7.6",
+  "entry": "index",
+  "permissions": ["basic", "storage", "ipc"],
+  "builtin": true,
+  "contributes": {
+    "views": [
+      {
+        "path": "reader",
+        "name": "reader",
+        "title": "PDF 阅读",
+        "icon": "FileText",
+        "showInSidebar": true,
+        "sidebarGroup": "bottom"
+      }
+    ],
+    "commands": [
+      {
+        "id": "open-pdf-reader",
+        "title": "打开 PDF 阅读器",
+        "keybinding": "CmdOrCtrl+Shift+R"
+      }
+    ]
+  },
+  "settings": {
+    "defaultZoom": {
+      "type": "select",
+      "label": "默认缩放",
+      "description": "打开 PDF 时的默认缩放方式",
+      "default": "fit-width",
+      "options": [
+        { "label": "适应宽度", "value": "fit-width" },
+        { "label": "适应页面", "value": "fit-page" },
+        { "label": "100%", "value": "1.0" }
+      ]
+    },
+    "aiPanelDefaultOpen": {
+      "type": "boolean",
+      "label": "AI 面板默认展开",
+      "description": "打开文档时是否默认展开右侧 AI 助手面板",
+      "default": true
+    },
+    "sidebarDefaultOpen": {
+      "type": "boolean",
+      "label": "大纲侧边栏默认展开",
+      "description": "打开文档时是否默认展开左侧大纲侧边栏",
+      "default": true
+    }
+  }
+}

@@ -24,6 +24,14 @@ class ConversationFacade:
     def get(self, conv_id: str) -> Optional[dict]:
         return self._repo.get(conv_id)
 
+    def get_meta(self, conv_id: str) -> Optional[dict]:
+        """加载对话元数据（不含 messages/search_text）。"""
+        return self._repo.get_meta(conv_id)
+
+    def get_paginated(self, conv_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
+        """加载对话 + 分页消息（最新 N 条）。"""
+        return self._repo.get_paginated(conv_id, limit, before_id)
+
     def set(self, conv_id: str, conv: dict) -> None:
         self._repo.save(conv_id, conv)
 
@@ -104,6 +112,12 @@ class ConversationFacade:
 
     async def get_async(self, conv_id: str) -> Optional[dict]:
         return await asyncio.to_thread(self.get, conv_id)
+
+    async def get_meta_async(self, conv_id: str) -> Optional[dict]:
+        return await asyncio.to_thread(self.get_meta, conv_id)
+
+    async def get_paginated_async(self, conv_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
+        return await asyncio.to_thread(self.get_paginated, conv_id, limit, before_id)
 
     async def set_async(self, conv_id: str, conv: dict) -> None:
         await asyncio.to_thread(self.set, conv_id, conv)

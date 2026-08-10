@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import importlib
 import importlib.util
 import json
@@ -34,6 +35,10 @@ class CxPluginLoader:
         self._settings = get_settings()
         self._plugin_dir = self._settings.PLUGIN_DIR
         self._loaded: set[str] = set()
+        # 运行中 FastAPI app 引用（apply_routes_to_app 时注入）
+        self._app: Any = None
+        # 已挂载路由的插件 ID 集合，防止重复 include_router
+        self._applied_plugins: set[str] = set()
 
     async def load_all(self) -> int:
         """扫描 PLUGIN_DIR 并加载所有插件，返回成功加载数量。"""
@@ -281,6 +286,11 @@ class CxPluginLoader:
 
         await cx_plugin_registry.unregister_plugin(plugin_id)
         self._loaded.discard(plugin_id)
+        # 从已挂载路由集合中移除，便于后续重新加载时重新挂载路由。
+        # 注意：FastAPI 不支持移除已 include 的 router，因此 reload 场景下
+        # app.router.routes 中可能残留旧路由，但 _applied_plugins 保证不会
+        # 重复 include 同一插件的新 router。
+        self._applied_plugins.discard(plugin_id)
         logger.info(f"[CxPlugin] Unloaded: {plugin_id}")
         return True
 
@@ -308,49 +318,100 @@ class CxPluginLoader:
         在 app_factory lifespan 中、所有插件加载完成后调用。
         路由挂载到 /api/v1/plugins/{plugin_id}/{path}。
 
+        调用时会缓存 app 引用，后续 apply_routes_for_plugin 可复用该引用
+        动态挂载新安装插件的路由。
+
         Returns:
             成功应用的路由数量
         """
-        from fastapi import APIRouter
-
+        self._app = app
         applied = 0
         for metadata in cx_plugin_registry.list_plugins():
-            instance = cx_plugin_registry.get_instance(metadata.plugin_id)
-            if instance is None:
-                continue
-            context: CxPluginContext = getattr(instance, "context", None)
-            if context is None:
-                continue
+            applied += self._apply_plugin_routes(app, metadata.plugin_id)
+        return applied
 
-            routes = context.get_registered_routes()
-            if not routes:
-                continue
+    def apply_routes_for_plugin(self, plugin_id: str) -> int:
+        """动态挂载单个插件的路由到运行中的 FastAPI app。
 
-            # 为每个插件创建独立 APIRouter，挂载到 /api/v1/plugins/{plugin_id}
-            plugin_router = APIRouter(
-                prefix=f"/plugins/{metadata.plugin_id}",
-                tags=[f"plugin-{metadata.plugin_id}"],
+        在 install_local_builtin_plugin 等场景下，新插件加载后调用此方法，
+        使插件的 API 路由立即可用，无需重启服务。
+
+        Args:
+            plugin_id: 插件 ID
+
+        Returns:
+            成功应用的路由数量（0 表示无路由可挂载或 app 引用未就绪）
+        """
+        if self._app is None:
+            logger.warning(
+                f"[CxPlugin] Cannot apply routes for {plugin_id}: "
+                f"app reference not initialized (apply_routes_to_app not called yet?)"
             )
-            for route_spec in routes:
-                try:
-                    plugin_router.add_api_route(
-                        path=f"/{route_spec['path']}",
-                        endpoint=route_spec["handler"],
-                        methods=route_spec["methods"],
-                    )
-                    applied += 1
-                except Exception as e:
-                    logger.error(
-                        f"[CxPlugin] Failed to apply route {route_spec['path']} "
-                        f"for {metadata.plugin_id}: {e}"
-                    )
+            return 0
+        return self._apply_plugin_routes(self._app, plugin_id)
 
-            if len(plugin_router.routes) > 0:
-                app.include_router(plugin_router, prefix="/api/v1")
-                logger.info(
-                    f"[CxPlugin] Applied {len(plugin_router.routes) - 1} routes "
-                    f"for {metadata.plugin_id}"
+    def _apply_plugin_routes(self, app: Any, plugin_id: str) -> int:
+        """为指定插件挂载路由到 app（内部共享实现）。
+
+        - 已挂载过的插件会被跳过，避免重复 include_router 导致路由重复
+        - 插件未注册、未实例化、无 context、无路由时静默返回 0
+
+        Args:
+            app: FastAPI 实例
+            plugin_id: 插件 ID
+
+        Returns:
+            成功应用的路由数量
+        """
+        if plugin_id in self._applied_plugins:
+            logger.debug(f"[CxPlugin] Routes already applied for {plugin_id}, skip")
+            return 0
+
+        metadata = cx_plugin_registry.get_plugin(plugin_id)
+        if metadata is None:
+            return 0
+
+        instance = cx_plugin_registry.get_instance(plugin_id)
+        if instance is None:
+            return 0
+
+        context: CxPluginContext = getattr(instance, "context", None)
+        if context is None:
+            return 0
+
+        routes = context.get_registered_routes()
+        if not routes:
+            return 0
+
+        from fastapi import APIRouter
+
+        # 为每个插件创建独立 APIRouter，挂载到 /api/v1/plugins/{plugin_id}
+        plugin_router = APIRouter(
+            prefix=f"/plugins/{plugin_id}",
+            tags=[f"plugin-{plugin_id}"],
+        )
+        applied = 0
+        for route_spec in routes:
+            try:
+                plugin_router.add_api_route(
+                    path=f"/{route_spec['path']}",
+                    endpoint=route_spec["handler"],
+                    methods=route_spec["methods"],
                 )
+                applied += 1
+            except Exception as e:
+                logger.error(
+                    f"[CxPlugin] Failed to apply route {route_spec['path']} "
+                    f"for {plugin_id}: {e}"
+                )
+
+        if applied > 0:
+            app.include_router(plugin_router, prefix="/api/v1")
+            self._applied_plugins.add(plugin_id)
+            # 清除 OpenAPI schema 缓存，使新路由在 /docs 中可见
+            with contextlib.suppress(Exception):
+                app.openapi_schema = None
+            logger.info(f"[CxPlugin] Applied {applied} routes for {plugin_id}")
 
         return applied
 

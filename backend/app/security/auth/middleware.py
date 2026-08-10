@@ -6,6 +6,8 @@
 
 /health 和 / 路由不受保护。
 """
+from functools import lru_cache
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -14,11 +16,17 @@ from app.core.config import settings
 from app.security.auth.local_token import load_auth_token, verify_token as local_verify_token
 
 # JWT 模式下无需认证的路径白名单
-_JWT_EXEMPT_PATHS = {
+# 注意：refresh 必须放行，否则 access_token 过期后无法刷新（中间件会要求带有效 access_token 形成死循环）
+# /docs、/redoc、/openapi.json 仅在 DEBUG 或 API_DOCS_ENABLED 时放行，生产环境默认关闭
+_JWT_EXEMPT_PATHS_ALWAYS = {
     "/health",
     "/",
     "/api/v1/auth/login",
     "/api/v1/auth/register",
+    "/api/v1/auth/refresh",
+}
+
+_JWT_EXEMPT_PATHS_DOCS = {
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -26,6 +34,18 @@ _JWT_EXEMPT_PATHS = {
 
 # local 模式下豁免的路径（保持向后兼容）
 _LOCAL_EXEMPT_PATHS = {"/health", "/"}
+
+
+@lru_cache(maxsize=1)
+def _get_jwt_exempt_paths() -> set[str]:
+    """根据配置返回当前 JWT 白名单（合并始终放行与文档条件放行）。
+
+    使用 lru_cache 缓存：白名单仅依赖不可变的 DEBUG / API_DOCS_ENABLED 配置，
+    进程内构造一次即可，避免认证热路径上重复计算。
+    """
+    if settings.DEBUG or settings.API_DOCS_ENABLED:
+        return _JWT_EXEMPT_PATHS_ALWAYS | _JWT_EXEMPT_PATHS_DOCS
+    return _JWT_EXEMPT_PATHS_ALWAYS
 
 
 def _extract_token_from_request(request: Request) -> str | None:
@@ -53,7 +73,7 @@ async def _handle_jwt_auth(request: Request, call_next):
     path = request.url.path
 
     # 白名单路径直接放行
-    if path in _JWT_EXEMPT_PATHS or not path.startswith("/api/"):
+    if path in _get_jwt_exempt_paths() or not path.startswith("/api/"):
         return await call_next(request)
 
     token = _extract_token_from_request(request)

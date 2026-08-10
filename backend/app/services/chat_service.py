@@ -14,12 +14,13 @@ from app.runtime.provider.llm.types import RouteHint, StreamEvent
 from app.runtime.provider.llm.providers import LLMResponse
 from app.infrastructure.database.conversation_store import conversation_store
 from app.schemas.chat import ChatStreamChunk
-from app.services.avatar_manager import EmotionStreamParser, strip_emotion_tags
+from app.services.avatar_manager import strip_emotion_tags
 from app.services.context_service import ContextService
 from app.services.suggestion_service import SuggestionService
 from app.services.usage_tracker import usage_tracker
 from app.services.distillation_service import distillation_service
 from app.core.agents.middleware.base import HookRegistry
+from app.services.stream_processor import StreamProcessor
 
 
 # ──────────────────────────────────────────────────────────────
@@ -304,7 +305,6 @@ class ChatService:
         from app.core.agents.middleware.base import AgentContext
 
         chat_id = str(uuid.uuid4())
-        parser = EmotionStreamParser()
 
         # Agent 集群调用：子 Agent 请求设置递归深度 contextvar
         is_sub_agent = getattr(request, "is_sub_agent", False)
@@ -341,66 +341,25 @@ class ChatService:
             },
         )
 
-        # llm_call_fn：信号量内调用 LLM，content 经 EmotionStreamParser + ThinkingTagManager 清洗
-        thinking_mgr = ThinkingTagManager()
-        coalescer = StreamCoalescer()
+        # 流式处理管线：thinking 分流 → chunk 合并 → emotion 清洗（已解耦到 StreamProcessor）
+        processor = StreamProcessor(chat_hook_registry)
 
         async def llm_call_fn(ctx):
             async with self._llm_semaphore:
-                async for chunk in llm_adapter.chat_stream(
-                    messages=ctx.messages,
-                    tools=ctx.tools,
-                    provider_name=provider,
-                    model=model,
-                    temperature=request.temperature,
-                    max_tokens=request.max_tokens,
-                    top_p=request.top_p,
-                    route_hint=RouteHint.CHAT,
+                async for chunk in processor.process_stream(
+                    llm_adapter.chat_stream(
+                        messages=ctx.messages,
+                        tools=ctx.tools,
+                        provider_name=provider,
+                        model=model,
+                        temperature=request.temperature,
+                        max_tokens=request.max_tokens,
+                        top_p=request.top_p,
+                        route_hint=RouteHint.CHAT,
+                    ),
+                    ctx,
                 ):
-                    if chunk.type == "content":
-                        content = chunk.data.get("content", "")
-                        # Thinking 标签分流
-                        content_text, reasoning_text = thinking_mgr.process(content)
-                        if reasoning_text:
-                            # 通过钩子通知 reasoning token
-                            try:
-                                await chat_hook_registry.notify(
-                                    HookRegistry.ON_STREAM_TOKEN, ctx, reasoning_text, "reasoning",
-                                )
-                            except Exception:
-                                pass
-                        # 流式 chunk 合并
-                        if content_text:
-                            merged = await coalescer.feed(content_text)
-                            if merged:
-                                clean_content, emotion = parser.feed(merged)
-                                chunk.data["content"] = clean_content
-                                if emotion:
-                                    chunk.data["emotion"] = emotion
-                                # 通过钩子通知 content token
-                                try:
-                                    await chat_hook_registry.notify(
-                                        HookRegistry.ON_STREAM_TOKEN, ctx, merged, "content",
-                                    )
-                                except Exception:
-                                    pass
-                            else:
-                                continue  # 缓冲区未达阈值，跳过本次发射
-                        else:
-                            continue  # 纯 thinking 内容，不发射 content 事件
                     yield chunk
-                # 流结束后 flush 缓冲区
-                remaining = coalescer.flush()
-                if remaining:
-                    clean_content, emotion = parser.feed(remaining)
-                    if clean_content:
-                        yield StreamEvent("content", {"content": clean_content, **({"emotion": emotion} if emotion else {})})
-                        try:
-                            await chat_hook_registry.notify(
-                                HookRegistry.ON_STREAM_TOKEN, ctx, remaining, "content",
-                            )
-                        except Exception:
-                            pass
 
         runner = tool_orchestrator.create_runner({
             "scene": "chat",
@@ -477,7 +436,6 @@ class ChatService:
         from app.services.context_service import is_main_agent
 
         chat_id = str(uuid.uuid4())
-        parser = EmotionStreamParser()
 
         # 工具支持
         available_tools = tool_orchestrator.get_tools_for_llm(provider, model) if tool_registry.list_names() else None
@@ -511,66 +469,31 @@ class ChatService:
             },
         )
 
-        # llm_call_fn：信号量内调用 LLM，content 经 EmotionStreamParser + ThinkingTagManager 清洗
-        thinking_mgr = ThinkingTagManager()
-        coalescer = StreamCoalescer()
+        # 流式处理管线：thinking 分流 → chunk 合并 → emotion 清洗（已解耦到 StreamProcessor）
+        async def _accumulate_reasoning(text: str, ctx: "AgentContext") -> None:
+            ctx.state["reasoning"] = ctx.state.get("reasoning", "") + text
+
+        processor = StreamProcessor(
+            chat_hook_registry,
+            on_reasoning=_accumulate_reasoning,
+        )
 
         async def llm_call_fn(ctx):
             async with self._llm_semaphore:
-                async for chunk in llm_adapter.chat_stream(
-                    messages=ctx.messages,
-                    tools=ctx.tools,
-                    provider_name=provider,
-                    model=model,
-                    temperature=request.temperature or 0.7,
-                    max_tokens=request.max_tokens or 4096,
-                    top_p=request.top_p or 0.9,
-                    route_hint=RouteHint.CHAT,
+                async for chunk in processor.process_stream(
+                    llm_adapter.chat_stream(
+                        messages=ctx.messages,
+                        tools=ctx.tools,
+                        provider_name=provider,
+                        model=model,
+                        temperature=request.temperature or 0.7,
+                        max_tokens=request.max_tokens or 4096,
+                        top_p=request.top_p or 0.9,
+                        route_hint=RouteHint.CHAT,
+                    ),
+                    ctx,
                 ):
-                    if chunk.type == "content":
-                        content = chunk.data.get("content", "")
-                        # Thinking 标签分流
-                        content_text, reasoning_text = thinking_mgr.process(content)
-                        if reasoning_text:
-                            # 积累 reasoning 到 ctx.state
-                            ctx.state["reasoning"] = ctx.state.get("reasoning", "") + reasoning_text
-                            try:
-                                await chat_hook_registry.notify(
-                                    HookRegistry.ON_STREAM_TOKEN, ctx, reasoning_text, "reasoning",
-                                )
-                            except Exception:
-                                pass
-                        # 流式 chunk 合并
-                        if content_text:
-                            merged = await coalescer.feed(content_text)
-                            if merged:
-                                clean_content, emotion = parser.feed(merged)
-                                chunk.data["content"] = clean_content
-                                if emotion:
-                                    chunk.data["emotion"] = emotion
-                                try:
-                                    await chat_hook_registry.notify(
-                                        HookRegistry.ON_STREAM_TOKEN, ctx, merged, "content",
-                                    )
-                                except Exception:
-                                    pass
-                            else:
-                                continue
-                        else:
-                            continue
                     yield chunk
-                # 流结束后 flush 缓冲区
-                remaining = coalescer.flush()
-                if remaining:
-                    clean_content, emotion = parser.feed(remaining)
-                    if clean_content:
-                        yield StreamEvent("content", {"content": clean_content, **({"emotion": emotion} if emotion else {})})
-                        try:
-                            await chat_hook_registry.notify(
-                                HookRegistry.ON_STREAM_TOKEN, ctx, remaining, "content",
-                            )
-                        except Exception:
-                            pass
 
         runner = tool_orchestrator.create_runner({
             "scene": "chat",

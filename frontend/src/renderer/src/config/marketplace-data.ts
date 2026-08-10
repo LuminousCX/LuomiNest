@@ -103,7 +103,7 @@ export const COMMON_TAGS: MarketplaceTag[] = [
   { id: 'premium', name: '付费', color: '#f59e0b' },
   { id: 'popular', name: '热门', color: '#f43f5e' },
   { id: 'new', name: '新品', color: '#3b82f6' },
-  { id: 'experimental', name: '实验性', color: '#8b5cf6' },
+  { id: 'experimental', name: '实验性', color: '#0ea5e9' },
   { id: 'stable', name: '稳定', color: '#147EBC' },
 ]
 

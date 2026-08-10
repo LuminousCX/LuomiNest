@@ -16,7 +16,7 @@ import { useTaskStreamStore } from '../stores/taskStream'
 import { useToast } from './useToast'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { generateId } from '../utils/id'
-import type { ChatStreamChunk, SubagentEvent } from '../types'
+import type { ChatStreamChunk, SubagentEvent, ChatMessage } from '../types'
 import type { ToolActivity, SubagentActivity, ChatModeLevel, WorkflowModeOption } from '../components/workbench/types'
 import type { WorkbenchModelOption } from './useWorkbenchLive2D'
 import type { NavigationTarget } from './useTaskNavigation'
@@ -24,6 +24,21 @@ import WorkbenchChatArea from '../components/workbench/WorkbenchChatArea.vue'
 import WorkbenchInputArea from '../components/workbench/WorkbenchInputArea.vue'
 
 const logger = createLuomiNestRendererLogger('Workbench')
+
+/** 拦截消息前缀（与后端 app/security/command_policy 保持一致） */
+const INTERCEPTION_MARKER = '命令已被安全策略拦截'
+
+/** 从后端拦截消息中提取原因（“：原因” 段） */
+const parseInterceptionReason = (text: string): string => {
+  const match = /拦截：(.+?)(?:（命令:|。)/.exec(text)
+  return match ? match[1].trim() : text
+}
+
+/** 从后端拦截消息中提取被拦截的命令（“（命令: xxx）” 段） */
+const parseInterceptionCommand = (text: string): string => {
+  const match = /命令:\s*([^）]+)/.exec(text)
+  return match ? match[1].trim() : ''
+}
 
 /** 发送消息选项（chatStore.sendMessage 的 options 子集） */
 interface WorkbenchSendMessageOptions {
@@ -93,6 +108,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   const contextMaxTokens = computed(() => chatStore.currentContextMaxTokens)
   const contextPercent = computed(() => chatStore.currentContextPercent)
   const isCompressing = ref(false)
+  const hasMoreMessages = computed(() => chatStore.currentHasMore)
 
   // 对话模式（普通/标准/超长）
   const chatMode = ref<ChatModeLevel>('normal')
@@ -177,17 +193,34 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
       if (chunk.tool_event) {
         const ev = chunk.tool_event
         const activity = toolActivities.value.find(
-          (a) => a.name === ev.tool_name && a.iteration === (chunk.iteration || 0) && a.status !== 'completed' && a.status !== 'failed'
+          (a) => a.name === ev.tool_name && a.iteration === (chunk.iteration || 0) && a.status !== 'completed' && a.status !== 'failed' && a.status !== 'blocked'
         )
         if (activity) {
           if (ev.status === 'started') {
             activity.status = 'running'
           } else if (ev.status === 'completed') {
-            activity.status = 'completed'
-            activity.output = ev.output || ''
+            // 识别命令安全拦截：输出包含统一拦截文案时标记为 blocked
+            const output = ev.output || ''
+            if (output.includes(INTERCEPTION_MARKER)) {
+              activity.status = 'blocked'
+              activity.output = output
+              activity.blockedReason = parseInterceptionReason(output)
+              activity.blockedCommand = parseInterceptionCommand(output)
+            } else {
+              activity.status = 'completed'
+              activity.output = output || ''
+            }
           } else if (ev.status === 'failed') {
-            activity.status = 'failed'
-            activity.output = ev.output || ''
+            const output = ev.output || ''
+            if (output.includes(INTERCEPTION_MARKER)) {
+              activity.status = 'blocked'
+              activity.output = output
+              activity.blockedReason = parseInterceptionReason(output)
+              activity.blockedCommand = parseInterceptionCommand(output)
+            } else {
+              activity.status = 'failed'
+              activity.output = output || ''
+            }
           }
         }
       }
@@ -325,7 +358,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     scrollToBottom(true)
 
     // 更新 assistantMessage 的辅助函数（不可变更新，触发 Vue 响应式）
-    const updateAssistantMsg = (updater: (m: typeof assistantMessage) => typeof assistantMessage): void => {
+    const updateAssistantMsg = (updater: (m: ChatMessage) => ChatMessage): void => {
       const msgs = chatStore.convMessages[convId] || []
       chatStore.convMessages = {
         ...chatStore.convMessages,
@@ -433,6 +466,25 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     scrollToBottom(true)
   }
 
+  const handleLoadMore = async (): Promise<void> => {
+    const convId = chatStore.currentConvId
+    if (!convId) return
+    const container = chatAreaRef.value?.$el?.querySelector?.('.messages-scroll') as HTMLElement | null
+    const prevScrollHeight = container?.scrollHeight ?? 0
+    try {
+      await chatStore.loadMoreMessages(convId)
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e)
+      toast.error(`加载历史消息失败：${errMsg}`)
+    }
+    await nextTick()
+    // 保持滚动位置：prepending 消息后恢复用户当前视口
+    if (container) {
+      const newScrollHeight = container.scrollHeight
+      container.scrollTop += newScrollHeight - prevScrollHeight
+    }
+  }
+
   const handleCompressContext = async (): Promise<void> => {
     const convId = chatStore.currentConvId
     if (!convId || isCompressing.value) return
@@ -504,6 +556,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     contextMaxTokens,
     contextPercent,
     isCompressing,
+    hasMoreMessages,
     // 子组件引用
     chatAreaRef,
     // 方法
@@ -514,5 +567,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     cancelStreaming,
     handleRegenerate,
     handleCompressContext,
+    handleLoadMore,
   }
 }

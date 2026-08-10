@@ -20,6 +20,7 @@ import {
 } from 'lucide-vue-next'
 import logoImage from '../../assets/images/Luminous_chenxi.png'
 import LumiSettingsBackground from '../../components/settings-detail/LumiSettingsBackground.vue'
+import '../../styles/views/settings-independent-bg.css'
 
 const router = useRouter()
 
@@ -274,3 +275,7 @@ const techStacks = [
 </template>
 
 <style scoped src="../../styles/views/about-view.css"></style>
+
+<style scoped>
+/* 背景由 settings-independent-bg.css 独立控制 */
+</style>

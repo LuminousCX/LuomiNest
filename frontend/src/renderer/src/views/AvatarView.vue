@@ -23,7 +23,14 @@ import type { AvatarMode, AvatarEmotion, AvatarMotion, IdleAnimation, ManifestSk
 import type { AvatarRendererType, AvatarManifestModel } from '@/types/avatar'
 import type { ChatStreamChunk } from '@/types'
 import type { PetModelInfo } from '@shared/ipc-types'
-import { MAIN_AGENT_ID, MAIN_AGENT_PROFILE } from '@/constants'
+import {
+  MAIN_AGENT_ID,
+  MAIN_AGENT_PROFILE,
+  LUOMINEST_DEFAULT_MODEL_SCALE,
+  LUOMINEST_IDLE_ANIMATION_PROGRESS,
+  LUOMINEST_IMPORT_SUCCESS_TTL_MS,
+} from '@/constants'
+import { createCodeBlockFilter } from '@/utils/codeBlockFilter'
 
 // ===========================================================================
 // 基础 stores & composables
@@ -137,8 +144,6 @@ const pngManifestUrl = computed(() => {
 // Manifest 路径 → 模型加载 URL 转换
 // ===========================================================================
 
-const LUOMINEST_DEFAULT_SCALE = 0.25
-
 /** 将 manifest 中的相对路径转换为 luominest-avatar:// URL */
 function manifestPathToAvatarUrl(path: string): string {
   // builtin Live2D: "live2d/{name}/{file}.model3.json" → "luominest-avatar://{name}/{file}.model3.json"
@@ -162,20 +167,20 @@ function resolveModelLoadInfo(model: AvatarManifestModel): { url: string; scale:
   if (model.source === 'builtin') {
     return {
       url: manifestPathToAvatarUrl(model.path),
-      scale: LUOMINEST_DEFAULT_SCALE,
+      scale: LUOMINEST_DEFAULT_MODEL_SCALE,
     }
   }
 
   // 导入模型：通过名称在 IPC 导入列表中查找 URL
   const imported = importedModels.value.find(m => m.name === model.name)
   if (imported) {
-    return { url: imported.url, scale: imported.scale || LUOMINEST_DEFAULT_SCALE }
+    return { url: imported.url, scale: imported.scale || LUOMINEST_DEFAULT_MODEL_SCALE }
   }
 
   // 回退：直接转换路径
   return {
     url: manifestPathToAvatarUrl(model.path),
-    scale: LUOMINEST_DEFAULT_SCALE,
+    scale: LUOMINEST_DEFAULT_MODEL_SCALE,
   }
 }
 
@@ -268,21 +273,7 @@ const finishStream = ttsEngine.finishStream
 const stopAvatarChat = ttsEngine.stop
 
 // 代码块过滤状态机：跳过 ``` 包裹的代码块，不送入 TTS
-let inCodeBlock = false
-const filterCodeForTts = (content: string): string => {
-  if (!content) return ''
-  const parts = content.split('```')
-  let result = ''
-  for (let i = 0; i < parts.length; i++) {
-    if (i === 0) {
-      if (!inCodeBlock) result += parts[i]
-    } else {
-      inCodeBlock = !inCodeBlock
-      if (!inCodeBlock) result += parts[i]
-    }
-  }
-  return result
-}
+const codeBlockFilter = createCodeBlockFilter()
 
 // Unified subtitle display
 const subtitleText = computed(() => {
@@ -363,11 +354,12 @@ watch([currentCapabilities, currentModelId], () => {
 // Idle 动画：仅 Live2D 模式显示（Pixel 有自己的 idle 行为）
 const idleAnimations = computed<IdleAnimation[]>(() => {
   if (currentMode.value !== 'live2d') return []
+  const { breath, blink, idleMotion, headTrack } = LUOMINEST_IDLE_ANIMATION_PROGRESS
   return [
-    { name: 'Breath', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 65 : 0 },
-    { name: 'Blink', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 40 : 0 },
-    { name: 'Idle Motion', status: idleActive.value ? 'running' : 'paused', progress: idleActive.value ? 80 : 0 },
-    { name: 'Head Track', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? 50 : 0 }
+    { name: 'Breath', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? breath : 0 },
+    { name: 'Blink', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? blink : 0 },
+    { name: 'Idle Motion', status: idleActive.value ? 'running' : 'paused', progress: idleActive.value ? idleMotion : 0 },
+    { name: 'Head Track', status: isModelReady.value ? 'running' : 'paused', progress: isModelReady.value ? headTrack : 0 }
   ]
 })
 
@@ -456,10 +448,23 @@ async function loadCurrentModel(): Promise<void> {
   }
 }
 
-// 模型 ID 变化时加载模型
-watch(currentModelId, async () => {
+// 统一的模型加载入口，带并发去重
+async function safeLoadCurrentModel(): Promise<void> {
+  // 同一帧内的多次触发（currentModelId + canvasRef）合并为一次
   await nextTick()
   await loadCurrentModel()
+}
+
+// 模型 ID 变化时加载模型
+watch(currentModelId, () => {
+  safeLoadCurrentModel()
+})
+
+// canvas 挂载完成后再触发加载，避免 v-if 切换或页面过渡期间 canvas 未就绪
+watch(canvasRef, (canvas) => {
+  if (canvas && currentMode.value === 'live2d' && currentModelId.value) {
+    safeLoadCurrentModel()
+  }
 })
 
 // 模式变化时更新 stageRenderer 模式，并释放离开模式的资源
@@ -486,7 +491,7 @@ async function handleImportClick() {
   if (!imported) return
 
   showImportSuccess.value = true
-  setTimeout(() => { showImportSuccess.value = false }, 2000)
+  setTimeout(() => { showImportSuccess.value = false }, LUOMINEST_IMPORT_SUCCESS_TTL_MS)
 
   // 在刷新后的 manifest 中查找导入的模型并切换到它
   const manifestModel = manifest.value?.models.find(
@@ -601,8 +606,7 @@ async function switchToInlineMode() {
     await workshop.switchDisplayMode('inline')
 
     // 3. 重新加载内联模型
-    await nextTick()
-    await loadCurrentModel()
+    await safeLoadCurrentModel()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     toast.error(`切回内联模式失败：${msg}`)
@@ -672,7 +676,7 @@ async function handleChatSend() {
         isChatStreaming.value = false
         return
       }
-      const filteredContent = filterCodeForTts(chunk.content || '')
+      const filteredContent = codeBlockFilter.filter(chunk.content || '')
       if (filteredContent || chunk.emotion) {
         feedChunk({
           ...chunk,
@@ -682,7 +686,7 @@ async function handleChatSend() {
     },
   }
 
-  inCodeBlock = false
+  codeBlockFilter.reset()
 
   try {
     await chatStore.sendMessage(text, options)
@@ -759,8 +763,7 @@ onMounted(async () => {
 
   // 加载初始模型（仅内嵌 + Live2D 模式）
   if (!isDesktopPetRunning.value) {
-    await nextTick()
-    await loadCurrentModel()
+    await safeLoadCurrentModel()
   }
 })
 
@@ -833,11 +836,6 @@ onBeforeUnmount(() => {
           @toggle-desktop-mode="toggleDesktopMode"
         />
 
-        <!-- 未实现的模式占位 -->
-        <div v-else class="stage-placeholder">
-          <span>{{ currentMode }} renderer not yet implemented</span>
-        </div>
-
         <AvatarControls
           v-if="!isDesktopMode"
           :current-mode="currentMode"
@@ -908,21 +906,18 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.stage-placeholder {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  font-size: var(--text-base);
-}
-
 @keyframes stage-appear {
-  0% { opacity: 0; transform: scale(0.96); }
-  100% { opacity: 1; transform: scale(1); }
+  from {
+    opacity: var(--stage-appear-opacity-from);
+    transform: scale(var(--stage-appear-scale-from));
+  }
+  to {
+    opacity: var(--stage-appear-opacity-to);
+    transform: scale(var(--stage-appear-scale-to));
+  }
 }
 
 .animate-stage-appear {
-  animation: stage-appear 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: stage-appear var(--stage-appear-duration) var(--ease-out-expo) both;
 }
 </style>

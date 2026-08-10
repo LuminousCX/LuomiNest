@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 import type { LuomiNestModelInfo } from '@/config/luominest-models'
-import type { AvatarRendererType, WorkshopDisplayMode } from '@/types/avatar'
+import type { AvatarRendererType } from '@/types/avatar'
 
 /**
  * 皮套工坊模式按钮（模型类型切换器）

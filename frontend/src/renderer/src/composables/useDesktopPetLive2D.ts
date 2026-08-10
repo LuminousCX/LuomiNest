@@ -4,16 +4,16 @@
  * 从 DesktopPetView.vue 拆分，负责独立窗口内的 Live2D 模型管理：
  * - PixiJS Application 初始化（WebGL→Canvas 降级）
  * - 模型加载（动态 import cubism4，复用共享 core）
- * - 窗口适配（fitModelToWindow，含 150ms 延迟校验）
- * - 滚轮缩放（同步调整窗口尺寸 via IPC）
- * - 鼠标穿透（IPC set-ignore-mouse-events）
+ * - 窗口适配（窗口变化只同步 renderer 并重新居中，不覆盖模型 scale）
+ * - 滚轮缩放（只缩放 Live2D 模型，不改变 BrowserWindow）
+ * - 透明像素穿透（WebGL alpha readback + IPC set-ignore-mouse-events）
  * - 焦点跟踪（damping 0.12，混合头部/眼球）
  * - Canvas 拖拽（IPC start-drag/drag-window/end-drag）
  *
  * 与 useLuomiNestLive2D（应用内 canvas）的差异：
  * - damping 0.12 vs 0.08（窗口模式手感不同）
- * - 滚轮缩放同步窗口尺寸（而非仅缩放模型）
- * - 鼠标穿透（窗口级 hit test）
+ * - 滚轮仅缩放模型
+ * - 鼠标穿透使用实际渲染 alpha，而非矩形 bounds
  * - 拖拽通过 IPC 移动窗口（而非 canvas 内移动模型）
  */
 import '@pixi/unsafe-eval'
@@ -40,14 +40,18 @@ import {
 const logger = createLuomiNestRendererLogger('LuomiNestDesktopPet')
 
 const MAX_RETRIES = 3
-const MODEL_FIT_PADDING = 16
-const MIN_PET_WIDTH = 280
-const MIN_PET_HEIGHT = 400
-const MAX_PET_WIDTH = 1200
-const MAX_PET_HEIGHT = 1600
+const MIN_MODEL_SCALE = 0.05
+const MAX_MODEL_SCALE = 3
+const TRANSPARENCY_SAMPLE_RADIUS = 4
+const TRANSPARENCY_ALPHA_THRESHOLD = 8
+const TRANSPARENCY_CHECK_INTERVAL_MS = 32
+
+interface ViewportSize {
+  width: number
+  height: number
+}
 
 /** IPC SEND 通道字面量（类型见 DesktopPetIpcChannels.SEND） */
-const IPC_RESIZE_WINDOW = 'desktop-pet:resize-window'
 const IPC_SET_IGNORE_MOUSE = 'desktop-pet:set-ignore-mouse-events'
 const IPC_START_DRAG = 'desktop-pet:start-drag'
 const IPC_DRAG_WINDOW = 'desktop-pet:drag-window'
@@ -68,7 +72,7 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
   let retryTimerId: ReturnType<typeof setTimeout> | null = null
   let currentLoadToken = 0
   let idleCleanup: (() => void) | null = null
-  let modelOriginalBounds: { width: number; height: number } | null = null
+  let resizeFrameId: number | null = null
 
   // 可见性状态：窗口隐藏时降低帧率以节省资源
   let isWindowVisible = true
@@ -81,6 +85,8 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
   let focusTrackerCleanup: (() => void) | null = null
   let isMouseIgnored = false
   let isDraggingWindow = false
+  let lastTransparencyCheckAt = 0
+  let hasLoggedReadbackFailure = false
 
   // 事件监听器引用（便于精确移除）
   let wheelHandler: ((e: WheelEvent) => void) | null = null
@@ -94,10 +100,24 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
     return resolveExpression(currentModelId.value, emotionId)
   }
 
+  const getViewportSize = (): ViewportSize => {
+    // Pixi autoDensity 会给 canvas 写入旧的 inline 像素尺寸；窗口刚发生 resize 时，
+    // canvas.getBoundingClientRect() 仍可能返回旧值。以 document viewport 为准，
+    // 再由 renderer.resize 反向更新 canvas，避免画布比窗口大而被系统裁切。
+    const root = document.documentElement
+    return {
+      width: Math.max(1, Math.round(root.clientWidth || window.innerWidth)),
+      height: Math.max(1, Math.round(root.clientHeight || window.innerHeight))
+    }
+  }
+
   const initPixi = (): Application | null => {
+    const viewport = getViewportSize()
     return initLuomiNestPixiApp(pixiApp, {
       canvasRef,
       extraConfig: {
+        width: viewport.width,
+        height: viewport.height,
         preserveDrawingBuffer: true,
       },
       onError: (msg) => { loadError.value = msg },
@@ -105,46 +125,21 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
     })
   }
 
-  const fitModelToWindow = (model: LuomiNestLive2DModel): void => {
-    // Ensure the renderer matches the current window size; this also seems to
-    // help Live2DModel's anchor/pivot take effect during initial load.
-    if (pixiApp) {
-      pixiApp.renderer.resize(window.innerWidth, window.innerHeight)
-    }
-    // Reset to original size, force transform update, render once, then measure.
-    model.scale.set(1)
-    model.updateTransform()
-    pixiApp?.render()
-    const bounds = model.getLocalBounds()
-    if (bounds.width > 0 && bounds.height > 0) {
-      modelOriginalBounds = { width: bounds.width, height: bounds.height }
-      const targetWidth = Math.max(1, window.innerWidth - MODEL_FIT_PADDING * 2)
-      const targetHeight = Math.max(1, window.innerHeight - MODEL_FIT_PADDING * 2)
-      const scale = Math.min(targetWidth / bounds.width, targetHeight / bounds.height)
-      model.scale.set(scale)
-      // Use the model's anchor to center it. If the anchor is not respected
-      // immediately, the delayed verification below will correct it.
-      model.x = window.innerWidth / 2
-      model.y = window.innerHeight / 2
-      // Verify after a short delay and correct if the rendered bounds are off.
-      window.setTimeout(() => {
-        if (!pixiApp || !currentModel) return
-        pixiApp.render()
-        const gb = currentModel.getBounds()
-        if (
-          gb.x < 0 ||
-          gb.y < 0 ||
-          gb.x + gb.width > window.innerWidth ||
-          gb.y + gb.height > window.innerHeight
-        ) {
-          currentModel.x += (window.innerWidth - gb.width) / 2 - gb.x
-          currentModel.y += (window.innerHeight - gb.height) / 2 - gb.y
-        }
-      }, 150)
-    }
+  /** 窗口变化只同步渲染表面并重新居中，用户设置的模型 scale 始终保留。 */
+  const syncViewportAndModel = (): void => {
+    if (!pixiApp) return
+
+    const viewport = getViewportSize()
+    pixiApp.renderer.resize(viewport.width, viewport.height)
+
+    const model = currentModel
+    if (!model) return
+
+    model.x = viewport.width / 2
+    model.y = viewport.height / 2
   }
 
-  const loadModel = async (url: string, _scale: number): Promise<void> => {
+  const loadModel = async (url: string, scale: number): Promise<void> => {
     if (retryTimerId !== null) {
       clearTimeout(retryTimerId)
       retryTimerId = null
@@ -154,10 +149,10 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
     retryCount = 0
     currentLoadToken++
     const loadToken = currentLoadToken
-    await attemptLoad(url, _scale, loadToken)
+    await attemptLoad(url, scale, loadToken)
   }
 
-  const attemptLoad = async (url: string, _scale: number, loadToken: number): Promise<void> => {
+  const attemptLoad = async (url: string, scale: number, loadToken: number): Promise<void> => {
     isLoading.value = true
     loadError.value = null
     isModelReady.value = false
@@ -194,10 +189,14 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
         return
       }
 
+      // 恢复模型清单中实际配置的默认比例。此前自动 fit 忽略了该参数，
+      // 导致 scale=0.25 的内置模型被按错误 bounds 放大到数倍。
+      const initialScale = Math.max(MIN_MODEL_SCALE, Math.min(MAX_MODEL_SCALE, scale))
+      model.scale.set(initialScale)
       model.anchor.set(0.5, 0.5)
-      // Position the model before fitting; scale will be set by fitModelToWindow.
-      model.x = window.innerWidth / 2
-      model.y = window.innerHeight / 2
+      const viewport = getViewportSize()
+      model.x = viewport.width / 2
+      model.y = viewport.height / 2
 
       model.on('hit', (hitAreas: string[]) => {
         if (hitAreas.includes('body') || hitAreas.includes('head')) {
@@ -207,13 +206,15 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
 
       app.stage.addChild(model)
       currentModel = model
-
-      // Fit the model once after loading so it is fully visible from the start.
-      fitModelToWindow(model)
+      syncViewportAndModel()
+      logger.info(
+        `Model layout ready: viewport=${viewport.width}x${viewport.height}, ` +
+        `configuredScale=${scale}, appliedScale=${model.scale.x.toFixed(4)}`
+      )
 
       hideLuomiNestWatermark(model)
       idleCleanup = setupLuomiNestIdleAnimation(() => currentModel).cleanup
-      setupWindowWheelZoom(model)
+      setupWindowWheelZoom()
       setupMousePassthrough()
       setupWindowFocusTracking()
 
@@ -247,7 +248,7 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
         retryTimerId = setTimeout(() => {
           retryTimerId = null
           if (loadToken !== currentLoadToken) return
-          void attemptLoad(url, _scale, loadToken)
+          void attemptLoad(url, scale, loadToken)
         }, 1000 * retryCount)
       }
     } finally {
@@ -257,59 +258,129 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
     }
   }
 
-  const setupWindowWheelZoom = (model: LuomiNestLive2DModel): void => {
+  const setupWindowWheelZoom = (): void => {
     if (wheelHandler) {
       window.removeEventListener('wheel', wheelHandler)
     }
     wheelHandler = (e: WheelEvent) => {
+      const model = currentModel
       if (!model) return
       e.preventDefault()
-      const oldScale = model.scale.x
       const factor = e.deltaY > 0 ? 0.95 : 1.05
-
-      const bounds = modelOriginalBounds
-      if (bounds) {
-        // Keep window and model in sync: stop scaling once the window hits its
-        // minimum or maximum allowed size.
-        const minScale = Math.max(
-          (MIN_PET_WIDTH - MODEL_FIT_PADDING * 2) / bounds.width,
-          (MIN_PET_HEIGHT - MODEL_FIT_PADDING * 2) / bounds.height
-        )
-        const maxScale = Math.min(
-          (MAX_PET_WIDTH - MODEL_FIT_PADDING * 2) / bounds.width,
-          (MAX_PET_HEIGHT - MODEL_FIT_PADDING * 2) / bounds.height
-        )
-        const newScale = Math.max(minScale, Math.min(maxScale, oldScale * factor))
-        const newWidth = Math.round(bounds.width * newScale + MODEL_FIT_PADDING * 2)
-        const newHeight = Math.round(bounds.height * newScale + MODEL_FIT_PADDING * 2)
-        window.electron?.ipcRenderer.send(IPC_RESIZE_WINDOW, newWidth, newHeight)
-        model.scale.set(newScale)
-      } else {
-        const newScale = Math.max(0.05, Math.min(1.5, oldScale * factor))
-        model.scale.set(newScale)
-      }
+      const nextScale = Math.max(
+        MIN_MODEL_SCALE,
+        Math.min(MAX_MODEL_SCALE, model.scale.x * factor)
+      )
+      model.scale.set(nextScale)
     }
     window.addEventListener('wheel', wheelHandler, { passive: false })
   }
 
-  const updateMousePassthrough = (clientX: number, clientY: number): void => {
-    if (!currentModel || !pixiApp) return
+  /**
+   * 读取鼠标附近的 WebGL alpha。返回 true 表示命中实际可见模型像素，
+   * false 表示透明背景，null 表示当前 GPU/上下文无法读取。
+   */
+  const isCanvasPointOpaque = (
+    gl: WebGLRenderingContext | WebGL2RenderingContext,
+    canvas: HTMLCanvasElement,
+    clientX: number,
+    clientY: number
+  ): boolean | null => {
+    const rect = canvas.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return false
+    if (gl.drawingBufferWidth <= 0 || gl.drawingBufferHeight <= 0) return null
+
+    const xInCanvas = clientX - rect.left
+    const yInCanvas = clientY - rect.top
+    if (
+      xInCanvas < 0 ||
+      yInCanvas < 0 ||
+      xInCanvas >= rect.width ||
+      yInCanvas >= rect.height
+    ) {
+      return false
+    }
+
+    const scaleX = gl.drawingBufferWidth / rect.width
+    const scaleY = gl.drawingBufferHeight / rect.height
+    if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY)) return null
+
+    const centerX = Math.floor(xInCanvas * scaleX)
+    const centerY = Math.floor(gl.drawingBufferHeight - 1 - yInCanvas * scaleY)
+    const radiusX = Math.max(1, Math.ceil(TRANSPARENCY_SAMPLE_RADIUS * scaleX))
+    const radiusY = Math.max(1, Math.ceil(TRANSPARENCY_SAMPLE_RADIUS * scaleY))
+    const startX = Math.max(0, centerX - radiusX)
+    const endX = Math.min(gl.drawingBufferWidth - 1, centerX + radiusX)
+    const startY = Math.max(0, centerY - radiusY)
+    const endY = Math.min(gl.drawingBufferHeight - 1, centerY + radiusY)
+    const readWidth = endX - startX + 1
+    const readHeight = endY - startY + 1
+
+    if (readWidth <= 0 || readHeight <= 0) return false
+
+    const pixels = new Uint8Array(readWidth * readHeight * 4)
     try {
-      // Render once so bounds reflect the latest pose/scale before hit testing.
+      gl.readPixels(
+        startX,
+        startY,
+        readWidth,
+        readHeight,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        pixels
+      )
+    } catch {
+      return null
+    }
+
+    for (let index = 3; index < pixels.length; index += 4) {
+      if (pixels[index] >= TRANSPARENCY_ALPHA_THRESHOLD) return true
+    }
+    return false
+  }
+
+  const updateMousePassthrough = (clientX: number, clientY: number): void => {
+    if (!currentModel || !pixiApp || !canvasRef.value) return
+
+    const now = performance.now()
+    if (now - lastTransparencyCheckAt < TRANSPARENCY_CHECK_INTERVAL_MS) return
+    lastTransparencyCheckAt = now
+
+    try {
+      // preserveDrawingBuffer=true 保证这里可以读取刚完成的 Live2D 帧。
       pixiApp.render()
-      const bounds = currentModel.getBounds()
-      const isOverModel =
-        clientX >= bounds.x &&
-        clientX <= bounds.x + bounds.width &&
-        clientY >= bounds.y &&
-        clientY <= bounds.y + bounds.height
-      const shouldIgnore = !isOverModel
+      const renderer = pixiApp.renderer as typeof pixiApp.renderer & {
+        gl?: WebGLRenderingContext | WebGL2RenderingContext
+      }
+      const gl = renderer.gl ??
+        canvasRef.value.getContext('webgl2') ??
+        canvasRef.value.getContext('webgl')
+
+      let isOverVisiblePixel = gl
+        ? isCanvasPointOpaque(gl, canvasRef.value, clientX, clientY)
+        : null
+
+      // 极少数 GPU/驱动禁用 readPixels 时退回模型 bounds，保证模型仍可交互。
+      if (isOverVisiblePixel === null) {
+        if (!hasLoggedReadbackFailure) {
+          hasLoggedReadbackFailure = true
+          logger.warn('WebGL alpha readback unavailable; using model bounds fallback')
+        }
+        const bounds = currentModel.getBounds()
+        isOverVisiblePixel =
+          clientX >= bounds.x &&
+          clientX <= bounds.x + bounds.width &&
+          clientY >= bounds.y &&
+          clientY <= bounds.y + bounds.height
+      }
+
+      const shouldIgnore = !isOverVisiblePixel
       if (shouldIgnore !== isMouseIgnored) {
         isMouseIgnored = shouldIgnore
         window.electron?.ipcRenderer.send(IPC_SET_IGNORE_MOUSE, shouldIgnore)
       }
     } catch {
-      // If bounds/hit-test fails, keep mouse events enabled to stay interactive.
+      // 读取失败时保持当前状态，避免在模型上突然失去交互。
     }
   }
 
@@ -392,6 +463,11 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
     setLuomiNestCoreParam(currentModel, paramId, value)
   }
 
+  const setScale = (scale: number): void => {
+    if (!currentModel || !Number.isFinite(scale)) return
+    currentModel.scale.set(Math.max(MIN_MODEL_SCALE, Math.min(MAX_MODEL_SCALE, scale)))
+  }
+
   const triggerMotion = async (group: string, index: number): Promise<void> => {
     await triggerLuomiNestMotion(currentModel, group, index)
   }
@@ -417,14 +493,13 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
   }
 
   const handleResize = (): void => {
-    if (pixiApp) {
-      pixiApp.renderer.resize(window.innerWidth, window.innerHeight)
+    if (resizeFrameId !== null) {
+      cancelAnimationFrame(resizeFrameId)
     }
-    if (currentModel) {
-      // Keep the current scale and re-center the model after the window resizes.
-      currentModel.x = window.innerWidth / 2
-      currentModel.y = window.innerHeight / 2
-    }
+    resizeFrameId = requestAnimationFrame(() => {
+      resizeFrameId = null
+      syncViewportAndModel()
+    })
   }
 
   /**
@@ -458,6 +533,10 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
   }
 
   const destroy = (): void => {
+    if (resizeFrameId !== null) {
+      cancelAnimationFrame(resizeFrameId)
+      resizeFrameId = null
+    }
     if (retryTimerId !== null) {
       clearTimeout(retryTimerId)
       retryTimerId = null
@@ -526,6 +605,7 @@ export const useDesktopPetLive2D = (canvasRef: Ref<HTMLCanvasElement | null>) =>
     triggerMotion,
     triggerExpression,
     drivePadEmotion,
+    setScale,
     setCoreParam,
     resetPose,
     handleResize,

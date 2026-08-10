@@ -268,13 +268,37 @@ export function initBrowserSession(): void {
     callback({ requestHeaders: headers })
   })
 
-  // 仅浏览器自动化 partition 绕过证书验证
-  browserSession.setCertificateVerifyProc((_request, callback) => {
-    callback(0)
+  // 仅浏览器自动化 partition：对 localhost 绕过证书验证（本地开发服务），
+  // 其他域名使用 Chromium 默认证书验证（防止 MITM 攻击）
+  browserSession.setCertificateVerifyProc((request, callback) => {
+    const hostname = request.hostname || ''
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname.endsWith('.localhost')
+    ) {
+      callback(0) // 接受本地服务的自签名证书
+    } else {
+      callback(-3) // 使用 Chromium 默认证书验证
+    }
   })
 
-  // 移除响应中的 CSP 头，允许内嵌浏览器渲染所有限制 CSP 的网站（如 B站）
-  // 同时保留其他响应头不变
+  // 替换 CSP 头为宽松策略（而非完全剥离），保留基本 XSS 防护
+  // 原始 CSP 的 frame-ancestors 等限制嵌入式渲染的指令被移除，
+  // 但 script-src / style-src / connect-src 保持宽松允许
+  const RELAXED_CSP = [
+    "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;",
+    "script-src * 'unsafe-inline' 'unsafe-eval';",
+    "style-src * 'unsafe-inline';",
+    "img-src * data: blob:;",
+    "media-src * data: blob:;",
+    "font-src * data:;",
+    "connect-src * ws: wss:;",
+    "object-src 'none';",
+    "base-uri 'self';",
+  ].join(' ')
+
   browserSession.webRequest.onHeadersReceived((details, callback) => {
     const headers: Record<string, string | string[]> = {}
     let modified = false
@@ -287,9 +311,21 @@ export function initBrowserSession(): void {
         modified = true
         continue
       }
+      // 移除 X-Frame-Options 以允许嵌入式渲染
+      if (lowerKey === 'x-frame-options') {
+        modified = true
+        continue
+      }
       headers[key] = value as string | string[]
     }
-    callback(modified ? { responseHeaders: headers } : {})
+
+    if (modified) {
+      // 注入宽松 CSP 替代原始策略（保留 XSS 防护，移除 frame 限制）
+      headers['Content-Security-Policy'] = RELAXED_CSP
+      callback({ responseHeaders: headers })
+    } else {
+      callback({})
+    }
   })
 
   initialized = true

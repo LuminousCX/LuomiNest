@@ -127,8 +127,6 @@
   --overlay-subtle: rgba(0, 0, 0, 0.15);
 
   --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.40);
-  --glass-blur: blur(16px);
 
   --focus-ring: rgba(20, 126, 188, 0.35);
 
@@ -212,11 +210,17 @@
   --task-blue: #3b82f6;
   --task-blue-soft: rgba(59, 130, 246, 0.10);
   --task-blue-bg: #eff6ff;
-  --task-purple: #8b5cf6;
-  --task-purple-soft: rgba(139, 92, 246, 0.10);
-  --task-purple-bg: #f5f3ff;
-  --task-purple-light: #a78bfa;
-  --task-purple-border: rgba(139, 92, 246, 0.20);
+  --task-sky: #0ea5e9;
+  --task-sky-soft: rgba(14, 165, 233, 0.10);
+  --task-sky-bg: #f0f9ff;
+  --task-sky-light: #38bdf8;
+  --task-sky-border: rgba(14, 165, 233, 0.20);
+  /* 兼容别名：--task-purple* 已按实际色相更名为 --task-sky*，旧名仅保留给遗留引用，新代码请使用 --task-sky* */
+  --task-purple: var(--task-sky);
+  --task-purple-soft: var(--task-sky-soft);
+  --task-purple-bg: var(--task-sky-bg);
+  --task-purple-light: var(--task-sky-light);
+  --task-purple-border: var(--task-sky-border);
   --task-green: #22c55e;
   --task-green-soft: rgba(34, 197, 94, 0.10);
   --task-green-bg: #f0fdf4;
@@ -238,6 +242,22 @@
   --duration-slow: 350ms;
   --duration-enter: 400ms;
   --duration-leave: 200ms;
+
+  /* 页面切换动画时长：较短时长可减少重型视图（Live2D/Workbench）切换时的卡顿感 */
+  --page-switch-enter-duration: 180ms;
+  --page-switch-leave-duration: 120ms;
+  --page-fade-enter-duration: 200ms;
+  --page-fade-leave-duration: 140ms;
+
+  /* 组件入场动画 */
+  --stage-appear-duration: 600ms;
+  --stage-appear-scale-from: 0.96;
+  --stage-appear-scale-to: 1;
+  --stage-appear-opacity-from: 0;
+  --stage-appear-opacity-to: 1;
+
+  /* 侧边栏树形菜单 stagger */
+  --tree-stagger-step: 35ms;
 
   --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
@@ -326,8 +346,45 @@
   --modal-shadow: var(--shadow-xl);
   --modal-overlay: var(--overlay-bg);
 
-  /* Glass / Toast */
-  --glass-shadow: var(--shadow-lg);
+  /* ========== 辅色（三色主题系统） ========== */
+  --lumi-secondary: #5BA4D4;
+  --lumi-secondary-hover: #4A93C3;
+  --lumi-secondary-light: rgba(91, 164, 212, 0.1);
+
+  /* ========== 全局背景变量 ========== */
+  --app-bg-image: none;
+  --app-bg-blur: 0px;
+  --app-bg-opacity: 1;
+  --app-bg-fit: cover;
+
+  /* ========== 皮肤强度变量 ========== */
+  --lumi-glass-intensity: 0.35;
+  --lumi-ambient-intensity: 0.30;
+  --lumi-radius-tendency: 0.50;
+
+  /* 新版背景覆盖层使用的媒体层变量（由 AppBackgroundOverlay 组件维护） */
+  --lumi-bg-media: none;
+  --lumi-bg-media-type: none;
+
+  /* 颗粒层：极微弱噪点质感（SVG data URI，集中管理避免组件硬编码） */
+  --lumi-grain-opacity: 0.035;
+  --lumi-grain-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+
+  /* ========== 背景覆盖层（参考 Cyrene-Agent 多层背景） ========== */
+  --app-bg-base: var(--bg);
+  --app-bg-ambient: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--lumi-brand) 10%, transparent) 0%, transparent 55%);
+  --app-bg-overlay-tint: rgba(255, 255, 255, 0.02);
+  --app-bg-vignette: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.14) 100%);
+  --app-bg-transition: opacity 0.55s ease-in-out, filter 0.55s ease-in-out, transform 0.55s ease-in-out;
+
+  /* ========== 毛玻璃面板变量 ========== */
+  --glass-surface: rgba(255, 255, 255, 0.68);
+  --glass-surface-hover: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.48);
+  --glass-blur: blur(calc(var(--lumi-glass-intensity) * 30px)) saturate(150%);
+  --glass-blur-strong: blur(calc(var(--lumi-glass-intensity) * 40px)) saturate(170%);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.50);
+  --glass-radius: var(--radius-lg);
 }
 
 /* =========================================================
@@ -409,7 +466,6 @@
   --overlay-subtle: rgba(0, 0, 0, 0.25);
 
   --glass-bg: rgba(17, 17, 17, 0.72);
-  --glass-border: rgba(42, 42, 42, 0.50);
 
   --focus-ring: rgba(58, 159, 212, 0.35);
 
@@ -438,11 +494,11 @@
   --task-blue: #3b82f6;
   --task-blue-soft: rgba(59, 130, 246, 0.12);
   --task-blue-bg: rgba(59, 130, 246, 0.07);
-  --task-purple: #a78bfa;
-  --task-purple-soft: rgba(167, 139, 250, 0.12);
-  --task-purple-bg: rgba(139, 92, 246, 0.07);
-  --task-purple-light: #c4b5fd;
-  --task-purple-border: rgba(167, 139, 250, 0.20);
+  --task-sky: #38bdf8;
+  --task-sky-soft: rgba(56, 189, 248, 0.12);
+  --task-sky-bg: rgba(14, 165, 233, 0.07);
+  --task-sky-light: #7dd3fc;
+  --task-sky-border: rgba(56, 189, 248, 0.20);
   --task-green: #22c55e;
   --task-green-soft: rgba(34, 197, 94, 0.12);
   --task-green-bg: rgba(34, 197, 94, 0.07);
@@ -472,7 +528,246 @@
   --nav-item-active-color: var(--lumi-brand);
   --nav-item-hover-bg: var(--surface-hover);
 
-  --glass-shadow: var(--shadow-lg);
+  --lumi-secondary: #7BBCE4;
+  --lumi-secondary-hover: #8FC8EC;
+  --lumi-secondary-light: rgba(123, 188, 228, 0.12);
+
+  /* ========== 深色模式背景覆盖层覆盖 ========== */
+  --app-bg-ambient: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--lumi-brand) 14%, transparent) 0%, transparent 50%);
+  --app-bg-overlay-tint: rgba(0, 0, 0, 0.22);
+  --app-bg-vignette: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.50) 100%);
+
+  /* ========== 深色模式毛玻璃面板变量覆盖 ========== */
+  --glass-surface: rgba(17, 17, 17, 0.68);
+  --glass-surface-hover: rgba(26, 26, 26, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-blur: blur(calc(var(--lumi-glass-intensity) * 30px)) saturate(150%);
+  --glass-blur-strong: blur(calc(var(--lumi-glass-intensity) * 40px)) saturate(170%);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  /* 皮肤强度变量在深色模式下保持由 JS 设置 */
+}
+
+/* =========================================================
+   全局背景壁纸下的面板毛玻璃适配
+   参考 Cyrene-Agent：背景层 + 半透明玻璃面板层分离
+   ========================================================= */
+
+/* ── 通用毛玻璃工具类 ── */
+.lumi-glass {
+  background: var(--glass-surface);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+}
+
+.lumi-glass-strong {
+  background: var(--glass-surface-hover);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  backdrop-filter: var(--glass-blur-strong);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ── 背景激活时让 body / #app 透明，避免遮挡覆盖层 ── */
+[data-lumi-background="active"] body,
+[data-lumi-background="active"] #app {
+  background: transparent !important;
+}
+
+/* ── 背景激活标记前缀 ──
+   后续玻璃适配规则统一使用如下 :is() 标记前缀，同时响应新版 lumi-app--bg-active 类、
+   旧版 has-background 类与 data-lumi-background 属性，任意一方生效时样式即可命中。
+   前缀 = :is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+   :is() 权重取参数中最高者，与原三组选择器逐一展开的权重一致。 */
+
+/* ── 应用根容器：露出底层背景 ── */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) {
+  background: transparent !important;
+}
+
+/* 主内容区玻璃：使用 !important 确保覆盖 App.vue scoped 样式 */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.lumi-main, .lumi-main.lumi-main--glass) {
+  background: color-mix(in srgb, var(--bg) calc(80% - var(--lumi-glass-intensity) * 35%), transparent) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  backdrop-filter: var(--glass-blur) !important;
+}
+
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .lumi-main > * {
+  background: transparent;
+}
+
+/* 侧边栏玻璃：全局背景时也透明化，让背景延伸到导航栏后方 */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.lumi-sidebar, .sidebar-nav-panel) {
+  background: color-mix(in srgb, var(--surface) calc(85% - var(--lumi-glass-intensity) * 40%), transparent) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  border-right-color: var(--glass-border) !important;
+}
+
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .sidebar-nav-panel::after {
+  opacity: 0.5;
+}
+
+/* ── 主要页面视图根容器 ──
+   :is() 内使用重复类名提升优先级，覆盖组件 scoped style */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(
+    .settings-view.settings-view,
+    .lumi-settings-page.lumi-settings-page,
+    .workspace-layout.workspace-layout,
+    .workbench-layout.workbench-layout,
+    .browser-view.browser-view,
+    .tasks-view.tasks-view,
+    .workflow-view.workflow-view,
+    .memory-view.memory-view,
+    .market-view.market-view,
+    .market-detail-view.market-detail-view,
+    .agent-create-view.agent-create-view,
+    .avatar-view.avatar-view
+  ) {
+  background: transparent;
+}
+
+/* ── 设置页玻璃面板 ── */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.settings-view .settings-header, .lumi-settings-page__header.lumi-settings-page__header) {
+  background: color-mix(in srgb, var(--workspace-card) 84%, transparent);
+  border-bottom-color: var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  backdrop-filter: var(--glass-blur-strong);
+}
+
+/* :is() 内使用重复类名提升优先级，覆盖组件 scoped style */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(
+    .settings-card.settings-card,
+    .lumi-settings-card.lumi-settings-card,
+    .appearance-hero.appearance-hero,
+    .lumi-settings-hero.lumi-settings-hero,
+    .custom-bg-preview.custom-bg-preview,
+    .theme-placeholder-row.theme-placeholder-row,
+    .lumi-settings-section__header.lumi-settings-section__header,
+    .lumi-settings-tag.lumi-settings-tag,
+    .settings-data-row.settings-data-row,
+    .settings-mode-selector.settings-mode-selector,
+    .settings-slider-row.settings-slider-row,
+    .settings-row-control.settings-row-control,
+    .lumi-settings-icon-wrap.lumi-settings-icon-wrap,
+    .theme-preset-card.theme-preset-card,
+    .theme-custom-card.theme-custom-card,
+    .background-option.background-option,
+    .theme-add-btn.theme-add-btn,
+    .color-picker-swatch.color-picker-swatch,
+    .theme-editor.theme-editor,
+    .theme-editor__preview.theme-editor__preview
+  ) {
+  background: var(--glass-surface);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(
+    .settings-card.settings-card,
+    .lumi-settings-card.lumi-settings-card,
+    .appearance-hero.appearance-hero,
+    .lumi-settings-hero.lumi-settings-hero,
+    .theme-preset-card.theme-preset-card,
+    .theme-custom-card.theme-custom-card,
+    .background-option.background-option,
+    .theme-add-btn.theme-add-btn,
+    .settings-list-row.settings-list-row
+  ):hover {
+  background: var(--glass-surface-hover);
+}
+
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(
+    .settings-form-input.settings-form-input,
+    .settings-form-select.settings-form-select,
+    .settings-form-textarea.settings-form-textarea,
+    .color-picker-hex.color-picker-hex,
+    .theme-editor__name-input.theme-editor__name-input
+  ) {
+  background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* ── 工作台 / 工作区玻璃面板 ── */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.workbench-history, .workspace-layout .left-panel) {
+  background: var(--glass-surface);
+  border-right-color: var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .workbench-avatar {
+  background: var(--glass-surface);
+  border-left-color: var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* 聊天区容器整体透明（输入区 .input-area 由下方专属规则处理） */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.workbench-chat, .workspace-layout .chat-panel, .chat-area, .avatar-main, .agent-panels, .avatar-stage, .chat-empty-state .empty-orb) {
+  background: transparent;
+}
+
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
+  :is(.main-agent-bar, .avatar-header, .history-header, .avatar-footer, .agent-panel, .avatar-status, .avatar-subtitle) {
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* ── 工作台输入区：整体透明，输入框以毛玻璃浮于背景之上 ── */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .input-area {
+  background: transparent;
+  border-color: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .input-wrapper {
+  background: var(--glass-surface);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  backdrop-filter: var(--glass-blur-strong);
+  box-shadow: var(--glass-shadow);
+}
+
+/* 群聊输入区同样采用毛玻璃浮层 */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .group-chat-input-bar {
+  background: color-mix(in srgb, var(--workspace-sidebar) 80%, transparent);
+  border-top-color: var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .group-chat-input-bar .input-main {
+  background: var(--glass-surface);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* ── 通用卡片 ── */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .lumi-card {
+  background: var(--glass-surface);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
 }
 
 /* =========================================================

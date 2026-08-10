@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAgentStore } from '../stores/agent'
 import { useModelStore } from '../stores/model'
@@ -31,6 +32,12 @@ const platformStore = usePlatformStore()
 const avatarControl = useAvatarControlStore()
 const workflowStore = useWorkflowStore()
 const { navigateToTask } = useTaskNavigation()
+const router = useRouter()
+
+/** 跳转到设置页指定分类（如命令安全 → /settings/privacy） */
+const navigateToSettings = (section: string): void => {
+  router.push(`/settings/${section}`)
+}
 
 // 桌面宠物模式：通过全局 store 状态统一管理，与 AvatarView 共享同一状态源
 const isDesktopMode = computed(() => avatarControl.isDesktopPetRunning)
@@ -130,7 +137,9 @@ const {
   contextMaxTokens,
   contextPercent,
   isCompressing,
+  hasMoreMessages,
   handleCompressContext,
+  handleLoadMore,
 } = useWorkbenchMessages({
   agentId: MAIN_AGENT_ID,
   handleSubagentEvent,
@@ -238,6 +247,7 @@ onBeforeUnmount(() => {
         :context-max-tokens="contextMaxTokens"
         :context-percent="contextPercent"
         :is-compressing="isCompressing"
+        :has-more-messages="hasMoreMessages"
         @toggle-reasoning="(id: string) => { showReasoning = { ...showReasoning, [id]: !showReasoning[id] } }"
         @regenerate="handleRegenerate"
         @toggle-tool-output="toggleToolOutput"
@@ -251,7 +261,9 @@ onBeforeUnmount(() => {
         @retry-backend="chatStore.checkBackend()"
         @set-input-text="(text: string) => inputText = text"
         @navigate-to-workflow="navigateToTask('workflow')"
+        @navigate-to-settings="(section: string) => navigateToSettings(section)"
         @compress-context="handleCompressContext"
+        @load-more="handleLoadMore"
       />
 
       <WorkbenchInputArea
@@ -318,7 +330,7 @@ onBeforeUnmount(() => {
   display: flex;
   width: 100%;
   height: 100%;
-  background: var(--bg);
+  background: transparent;
   overflow: hidden;
   position: relative;
 }
@@ -328,7 +340,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: var(--bg);
+  background: transparent;
   position: relative;
 }
 
@@ -337,9 +349,21 @@ onBeforeUnmount(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   border-left: 1px solid var(--border-light);
   flex-shrink: 0;
   overflow: hidden;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  transition: background-color var(--transition-normal);
+}
+
+/* 有全局背景壁纸时，右侧面板使用更强的毛玻璃表面。
+   支持全部运行时背景激活标记（与 variables.css 保持一致） */
+.lumi-app.lumi-app--bg-active .workbench-avatar,
+.lumi-app.has-background .workbench-avatar,
+[data-lumi-background="active"] .lumi-app .workbench-avatar {
+  background: var(--glass-surface);
+  border-left-color: var(--glass-border);
 }
 </style>

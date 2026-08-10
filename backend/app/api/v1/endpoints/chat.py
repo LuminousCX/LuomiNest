@@ -1,12 +1,13 @@
 import uuid
 import time
-from fastapi import APIRouter, UploadFile, File, Form, Query
+from fastapi import APIRouter, Request, UploadFile, File, Form, Query, Depends
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException
 from typing import Any
 from pydantic import BaseModel, Field, field_validator
 from loguru import logger
 
+from app.api.v1.deps import get_chat_service, get_llm_adapter
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -26,6 +27,7 @@ from app.services.chat_service import ChatService
 from app.core.config import get_settings
 from app.core.utils import utc_now, sse_response, require_store, ok
 from app.core.exceptions import NotFoundError, ValidationError
+from app.security.rate_limiter import limiter, RATE_CHAT, RATE_TTS
 
 _chat_service = ChatService(context_service, suggestion_service)
 
@@ -33,74 +35,79 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 @router.post("/completions")
-async def chat_completions(request: ChatRequest):
+@limiter.limit(RATE_CHAT)
+async def chat_completions(
+    request: Request,
+    body: ChatRequest,
+    adapter=Depends(get_llm_adapter),
+):
     start_time = time.time()
-    resolved_provider = request.provider or llm_adapter.default_provider
-    resolved_model = request.model or llm_adapter.get_provider(resolved_provider).default_model
-    request_ts = request.timestamp or time.time()
+    resolved_provider = body.provider or adapter.default_provider
+    resolved_model = body.model or adapter.get_provider(resolved_provider).default_model
+    request_ts = body.timestamp or time.time()
     logger.info(
         f"[API] POST /chat/completions - "
         f"provider={resolved_provider}, model={resolved_model}, "
-        f"stream={request.stream}, ts={request_ts}, "
-        f"is_sub_agent={request.is_sub_agent}, agent_depth={request.agent_depth}"
+        f"stream={body.stream}, ts={request_ts}, "
+        f"is_sub_agent={body.is_sub_agent}, agent_depth={body.agent_depth}"
     )
 
     # Agent 集群调用递归守卫：防止 Agent A→B→A 无限循环
-    if request.agent_depth > 3:
+    if body.agent_depth > 3:
         raise HTTPException(
             status_code=400,
             detail="已达到最大 Agent 调用深度（3），无法继续递归调用",
         )
 
-    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
     # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
     _conv_chat_mode = None
-    if request.conversation_id:
-        _conv = await conversation_store.get_async(request.conversation_id)
+    if body.conversation_id:
+        _conv = await conversation_store.get_meta_async(body.conversation_id)
         if _conv:
             _conv_chat_mode = _conv.get("chat_mode")
     if _conv_chat_mode != "ultra":
         user_query = context_service.get_user_query(messages)
-        system_prompt = context_service.build_system_prompt(request.agent_id, user_context=user_query)
+        system_prompt = context_service.build_system_prompt(body.agent_id, user_context=user_query)
         messages = [{"role": "system", "content": system_prompt}] + messages
 
     messages = context_service.inject_timestamp_prompt(messages)
     # 子 Agent 调用不注入主 Agent 记忆，避免污染独立上下文
     # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
-    if not request.is_sub_agent and _conv_chat_mode != "ultra":
-        messages = await context_service.inject_memory(messages, request.agent_id, resolved_provider, llm_adapter=llm_adapter)
+    if not body.is_sub_agent and _conv_chat_mode != "ultra":
+        messages = await context_service.inject_memory(messages, body.agent_id, resolved_provider, llm_adapter=adapter)
 
-    if request.file_content:
-        supports_vision = llm_adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
+    if body.file_content:
+        supports_vision = adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
         messages = context_service.inject_file_content(
-            messages, request.file_content, request.file_type or "text",
-            supports_vision=supports_vision, file_name=request.file_name,
+            messages, body.file_content, body.file_type or "text",
+            supports_vision=supports_vision, file_name=body.file_name,
         )
 
-    if request.search_results:
+    if body.search_results:
         for i in range(len(messages) - 1, -1, -1):
             if messages[i]["role"] == "user":
-                messages[i]["content"] += f"\n\n[搜索结果]\n{request.search_results}"
+                messages[i]["content"] += f"\n\n[搜索结果]\n{body.search_results}"
                 break
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
     process_result = await ctx_mgr.process(messages)
     messages = process_result["messages"]
 
-    if request.stream:
+    if body.stream:
         logger.info("[API] POST /chat/completions - Starting stream response")
         return sse_response(
-            _chat_service.stream_chat(messages, request, resolved_provider, resolved_model, agent_id=request.agent_id),
+            _chat_service.stream_chat(messages, body, resolved_provider, resolved_model, agent_id=body.agent_id),
         )
 
     gen_state: dict = {"content": "", "reasoning": "", "aborted": False, "started": True}
     await _chat_service.non_stream_generate(
         gen_state, messages,
         resolved_provider, resolved_model,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-        top_p=request.top_p,
+        temperature=body.temperature,
+        max_tokens=body.max_tokens,
+        top_p=body.top_p,
     )
 
     if gen_state["aborted"]:
@@ -108,15 +115,19 @@ async def chat_completions(request: ChatRequest):
 
     result_content = gen_state["content"] or ""
 
+    # 命令安全守卫：扫描 LLM 输出中的不安全命令并标注
+    from app.security.command_guard import scan_and_annotate
+    result_content = scan_and_annotate(result_content)
+
     # 非流式 /chat/completions 写入记忆（子 Agent 调用跳过，避免污染主 Agent 记忆）
-    if not request.is_sub_agent:
+    if not body.is_sub_agent:
         try:
             user_msgs = [m for m in messages if m.get("role") == "user"]
             if user_msgs:
-                thread_id = request.conversation_id or f"completions-{uuid.uuid4().hex[:8]}"
+                thread_id = body.conversation_id or f"completions-{uuid.uuid4().hex[:8]}"
                 await context_service.schedule_memory_update(
-                    messages, thread_id, request.agent_id,
-                    llm_adapter=llm_adapter,
+                    messages, thread_id, body.agent_id,
+                    llm_adapter=adapter,
                 )
         except Exception as mem_err:
             logger.warning(f"[API] /chat/completions memory update failed: {mem_err}")
@@ -213,15 +224,21 @@ async def create_conversation(request: ConversationCreate):
 
 
 @router.get("/conversations/{conv_id}", response_model=ConversationResponse)
-async def get_conversation(conv_id: str):
-    logger.info(f"[API] GET /chat/conversations/{conv_id} - Fetching conversation")
-    conv = await conversation_store.get_async(conv_id)
+async def get_conversation(
+    conv_id: str,
+    limit: int = Query(100, ge=1, le=500, description="每次返回消息数上限"),
+    before_id: str | None = Query(None, description="返回此消息之前的历史消息"),
+):
+    logger.info(f"[API] GET /chat/conversations/{conv_id} - Fetching conversation (limit={limit}, before_id={before_id})")
+    conv = await conversation_store.get_paginated_async(conv_id, limit=limit, before_id=before_id)
     if not conv:
         logger.error(f"[API] GET /chat/conversations/{conv_id} - Conversation not found")
         raise NotFoundError(f"Conversation {conv_id} not found")
+    msg_count = len(conv.get("messages", []))
+    total = conv.get("total_messages", msg_count)
     logger.success(
         f"[API] GET /chat/conversations/{conv_id} - "
-        f"Success: title={conv['title']}, messages={len(conv.get('messages', []))}"
+        f"Success: title={conv['title']}, messages={msg_count}/{total}, has_more={conv.get('has_more', False)}"
     )
     return ConversationResponse(**conv)
 
@@ -860,28 +877,86 @@ async def tts_synthesize(request: TTSRequest):
         return JSONResponse({"error": f"语音合成失败：{e}"}, status_code=500)
 
 
-def _detect_tts_device() -> dict:
-    """Detect compute device availability for TTS.
+def _detect_compute_device() -> dict:
+    """Detect compute device availability for TTS/STT.
 
-    Checks for CUDA (GPU) via torch if installed, otherwise reports CPU.
-    pyttsx3 is CPU-only; this info helps the frontend show what's available
-    and lets future GPU-based TTS engines be auto-selected.
+    Prefers PyTorch (CUDA/MPS, gives CUDA version); when PyTorch is missing
+    or is a CPU-only build, falls back to OS-native GPU detection
+    (PowerShell / lspci / /sys/class/drm / system_profiler) so real hardware
+    is still reported.
+    Note: current local TTS engines (pyttsx3, sherpa-onnx CPU) run on CPU only;
+    this info informs the frontend and future GPU-based engines.
     """
     import platform
 
-    device = {"type": "cpu", "name": platform.processor() or "Unknown CPU", "cuda_available": False}
+    device = {
+        "type": "cpu",
+        "name": platform.processor() or "Unknown CPU",
+        "vendor": None,
+        "gpu_count": 0,
+        "cuda_available": False,
+        "cuda_version": None,
+        "torch_available": False,
+        "note": "未检测到可用 GPU，本地 TTS 使用 CPU 推理",
+    }
 
+    # 1) PyTorch 检测（可拿到 CUDA 版本）
     try:
         import torch
+
+        device["torch_available"] = True
         if torch.cuda.is_available():
-            device["type"] = "gpu"
-            device["name"] = torch.cuda.get_device_name(0)
-            device["cuda_available"] = True
-            device["cuda_version"] = torch.version.cuda or "unknown"
+            device.update(
+                {
+                    "type": "gpu",
+                    "name": torch.cuda.get_device_name(0),
+                    "vendor": "nvidia",
+                    "gpu_count": torch.cuda.device_count(),
+                    "cuda_available": True,
+                    "cuda_version": torch.version.cuda or "unknown",
+                    "note": "PyTorch CUDA 检测",
+                }
+            )
+            return device
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device.update(
+                {
+                    "type": "gpu",
+                    "name": "Apple Silicon (MPS)",
+                    "vendor": "apple",
+                    "gpu_count": 1,
+                    "note": "PyTorch MPS 检测",
+                }
+            )
+            return device
     except ImportError:
-        pass
+        device["torch_available"] = False
     except Exception as dev_err:
         logger.debug(f"[API] TTS device detection (torch) failed: {dev_err}")
+
+    # 2) 回退：平台原生硬件检测（不依赖 PyTorch）
+    from app.core.hardware import detect_gpus
+
+    try:
+        gpus = detect_gpus()
+        if gpus:
+            primary = gpus[0]
+            device.update(
+                {
+                    "type": "gpu",
+                    "name": primary.name,
+                    "vendor": primary.vendor,
+                    "gpu_count": len(gpus),
+                    "note": (
+                        "系统硬件检测（未安装 PyTorch）。"
+                        "本地 TTS 当前仍为 CPU 推理，GPU 可用于未来 GPU 加速引擎"
+                        if not device["torch_available"]
+                        else "系统硬件检测"
+                    ),
+                }
+            )
+    except Exception as native_err:
+        logger.debug(f"[API] TTS device detection (native) failed: {native_err}")
 
     return device
 
@@ -936,7 +1011,7 @@ async def tts_engines():
 
         engines.append(engine_info)
 
-    device = _detect_tts_device()
+    device = _detect_compute_device()
 
     # Avatar voice bindings (model_id -> voice/lang)
     from app.services.avatar_manager import LUOMINEST_AVATAR_BINDINGS
@@ -1148,5 +1223,6 @@ async def stt_engines():
         "data": {
             "engines": engines,
             "fallback_order": _STT_FALLBACK_ORDER,
+            "device": _detect_compute_device(),
         },
     }

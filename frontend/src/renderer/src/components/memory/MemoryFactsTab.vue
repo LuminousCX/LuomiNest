@@ -124,9 +124,9 @@ function formatExpiresAt(iso: string): string {
   <div v-else class="facts-grid">
     <div v-for="(items, cat) in factsByCategory" :key="cat">
       <div v-if="items.length > 0" class="fact-category-group">
-        <div class="fact-category-header" :style="{ '--cat-color': CATEGORY_COLORS[cat] || 'var(--task-purple)' }">
+        <div class="fact-category-header" :style="{ '--cat-color': CATEGORY_COLORS[cat] || 'var(--task-sky)' }">
           <div class="cat-dot"></div>
-          <Tag :size="13" :style="{ color: CATEGORY_COLORS[cat] || 'var(--task-purple)' }" />
+          <Tag :size="13" :style="{ color: CATEGORY_COLORS[cat] || 'var(--task-sky)' }" />
           <span class="cat-label">{{ CATEGORY_LABELS[cat] || cat }}</span>
           <span class="cat-count">{{ items.length }}</span>
         </div>
@@ -135,7 +135,7 @@ function formatExpiresAt(iso: string): string {
             v-for="fact in items"
             :key="fact.id"
             class="fact-item"
-            :style="{ '--fact-color': CATEGORY_COLORS[fact.category] || 'var(--task-purple)' }"
+            :style="{ '--fact-color': CATEGORY_COLORS[fact.category] || 'var(--task-sky)' }"
           >
             <template v-if="editingFactId === fact.id">
               <div class="fact-edit-row">
@@ -209,11 +209,11 @@ function formatExpiresAt(iso: string): string {
 
 .h-btn.primary {
   color: var(--text);
-  background: var(--task-purple-soft);
-  border: 1px solid var(--task-purple-border);
+  background: var(--task-sky-soft);
+  border: 1px solid var(--task-sky-border);
 }
 
-.h-btn.primary:hover { background: var(--task-purple-soft); }
+.h-btn.primary:hover { background: var(--task-sky-soft); }
 .h-btn:disabled { opacity: 0.5; cursor: default; }
 
 
@@ -289,14 +289,14 @@ function formatExpiresAt(iso: string): string {
 }
 
 .filter-option.active {
-  background: var(--task-purple-soft);
+  background: var(--task-sky-soft);
 }
 
 .add-fact-form {
   padding: var(--space-3);
   border-radius: var(--radius-md);
   background: var(--surface);
-  border: 1px solid var(--task-purple-border);
+  border: 1px solid var(--task-sky-border);
 }
 
 .add-fact-row {
@@ -316,7 +316,7 @@ function formatExpiresAt(iso: string): string {
   outline: none;
 }
 
-.add-fact-input:focus { border-color: var(--task-purple); }
+.add-fact-input:focus { border-color: var(--task-sky); }
 
 .add-fact-select {
   padding: var(--space-2) 10px;

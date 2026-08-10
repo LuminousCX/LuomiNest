@@ -1,11 +1,17 @@
-import { ipcMain, BrowserWindow, IpcMainInvokeEvent, app } from 'electron'
+import { ipcMain, BrowserWindow, IpcMainInvokeEvent, app, dialog, type OpenDialogOptions, nativeImage } from 'electron'
 import { PATHS } from './paths'
+import { toBackgroundUrl } from './bg-protocol'
 import { configStore } from './config-store'
 import { cacheManager } from './cache-manager'
 import { tabManager, luomiAutomationExecutor } from './browser'
 import { getLumiAuthToken } from './backend/auth-token'
 import { subscribeBackendStage } from './backend'
-import type { TTSConfig, STTConfig } from '@shared/ipc-types'
+import { createLuomiNestLogger } from './luomi-logger'
+import type { TTSConfig, STTConfig, ThemeConfig } from '@shared/ipc-types'
+import * as fs from 'fs'
+import * as path from 'path'
+
+const logger = createLuomiNestLogger('IpcHandlers')
 
 let _mainWindow: BrowserWindow | null = null
 
@@ -94,6 +100,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('config:setTheme', (event: IpcMainInvokeEvent, theme: 'light' | 'dark' | 'system') => {
     if (!assertTrustedSender(event)) return
     configStore.setTheme(theme)
+  })
+  ipcMain.handle('config:getThemeConfig', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return null
+    return configStore.getThemeConfig()
+  })
+  ipcMain.handle('config:setThemeConfig', (event: IpcMainInvokeEvent, config: ThemeConfig) => {
+    if (!assertTrustedSender(event)) return
+    configStore.setThemeConfig(config)
   })
   ipcMain.handle('config:getTTS', (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
@@ -226,6 +240,126 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
       return { success: false, error: '缺少 action 参数' }
     }
     return await luomiAutomationExecutor.execute(action, args || {})
+  })
+
+  ipcMain.handle('dialog:selectBackgroundImage', async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { success: false, error: '未授权的调用方' }
+
+    const parentWindow = getMainWindow()
+    const dialogOptions: OpenDialogOptions = {
+      title: '选择背景图片',
+      properties: ['openFile'],
+      filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }]
+    }
+    const result = parentWindow
+      ? await dialog.showOpenDialog(parentWindow, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, cancelled: true }
+    }
+
+    const sourcePath = result.filePaths[0]
+    // 背景图片统一保存到用户数据目录（userData/Backgrounds），与安装目录隔离
+    const bgDir = PATHS.backgrounds
+
+    try {
+      if (!fs.existsSync(sourcePath)) {
+        return { success: false, error: '源文件不存在' }
+      }
+
+      const stats = fs.statSync(sourcePath)
+      const MAX_BG_SIZE = 10 * 1024 * 1024 // 10MB
+      if (!stats.isFile()) {
+        return { success: false, error: '选择的不是文件' }
+      }
+      if (stats.size === 0) {
+        return { success: false, error: '选择的文件为空' }
+      }
+      if (stats.size > MAX_BG_SIZE) {
+        return { success: false, error: '图片大小超过 10MB 限制' }
+      }
+
+      // 扩展名 + MIME 双重校验
+      const ext = path.extname(sourcePath).toLowerCase()
+      const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+      if (!allowedExts.includes(ext)) {
+        return { success: false, error: '不支持的图片格式，请选择 jpg/png/gif/webp' }
+      }
+
+      // 复制前校验真实图像内容：仅扩展名不足以识别损坏或伪装的文件
+      // 该实例随后复用于读取分辨率，避免对目标文件二次加载
+      const sourceImage = nativeImage.createFromPath(sourcePath)
+      if (sourceImage.isEmpty()) {
+        return { success: false, error: '图片内容无效或文件已损坏，请重新选择' }
+      }
+
+      fs.mkdirSync(bgDir, { recursive: true })
+
+      // 生成安全文件名：只保留中英文/数字/下划线/连字符，避免特殊字符导致协议或路径问题
+      const rawBase = path.basename(sourcePath, ext)
+        .replace(/[^\u4e00-\u9fa5a-zA-Z0-9_-]/g, '_')
+        .slice(0, 40)
+      const baseName = rawBase || 'upload'
+      const destName = `bg-${baseName}-${Date.now()}${ext}`
+      const destPath = path.join(bgDir, destName)
+
+      // 若极短概率下文件名冲突，追加随机后缀
+      let finalDestPath = destPath
+      let finalDestName = destName
+      if (fs.existsSync(finalDestPath)) {
+        const randomSuffix = Math.random().toString(36).slice(2, 8)
+        finalDestName = `bg-${baseName}-${Date.now()}-${randomSuffix}${ext}`
+        finalDestPath = path.join(bgDir, finalDestName)
+      }
+
+      fs.copyFileSync(sourcePath, finalDestPath)
+      logger.info(`[dialog:selectBackgroundImage] 背景图片已保存: ${finalDestPath}`)
+
+      // 复用已校验的源图片实例读取实际分辨率，过小则提示用户
+      const { width, height } = sourceImage.getSize()
+      let warning: string | undefined
+      if (width < 1280 || height < 720) {
+        warning = `图片分辨率较低（${width}×${height}），作为全屏背景可能会模糊，建议使用高清原图`
+        logger.warn(`[dialog:selectBackgroundImage] ${warning}`)
+      }
+
+      return { success: true, url: toBackgroundUrl(finalDestName), width, height, warning }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '复制背景图片失败'
+      logger.error('[dialog:selectBackgroundImage] 处理失败:', message)
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle('dialog:deleteBackgroundImage', async (event: IpcMainInvokeEvent, imageUrl: string) => {
+    if (!assertTrustedSender(event)) return { success: false, error: '未授权的调用方' }
+    if (typeof imageUrl !== 'string' || !imageUrl.startsWith('luominest-bg://')) {
+      return { success: false, error: '无效的背景图片地址' }
+    }
+
+    try {
+      // 兼容旧的双斜杠格式与新三斜杠格式：统一移除协议前缀及所有前导斜杠
+      const fileName = decodeURIComponent(
+        imageUrl.replace(/^luominest-bg:\/+/, '').replace(/^bg\//, '')
+      )
+      if (!fileName) {
+        return { success: false, error: '无效的文件名' }
+      }
+      const filePath = path.join(PATHS.backgrounds, fileName)
+      const resolvedBgDir = path.resolve(PATHS.backgrounds)
+      if (!filePath.startsWith(resolvedBgDir + path.sep)) {
+        return { success: false, error: '非法的文件路径' }
+      }
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+        logger.info(`[dialog:deleteBackgroundImage] 背景图片已删除: ${filePath}`)
+      }
+      return { success: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '删除背景图片失败'
+      logger.error('[dialog:deleteBackgroundImage] 处理失败:', message)
+      return { success: false, error: message }
+    }
   })
 
   ipcMain.handle('backend:subscribe', (event: IpcMainInvokeEvent) => {

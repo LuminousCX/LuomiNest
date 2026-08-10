@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from loguru import logger
 from pydantic import BaseModel
 
@@ -12,6 +12,7 @@ from app.security.sandbox import (
     SandboxTimeoutError,
 )
 from app.security.sandbox.local_sandbox import LocalSandbox
+from app.security.rate_limiter import limiter, RATE_CONSOLE
 
 router = APIRouter(prefix="/console", tags=["console"])
 
@@ -19,14 +20,11 @@ router = APIRouter(prefix="/console", tags=["console"])
 # 命令白名单（允许执行的主命令）
 # 安全原则：不包含可执行任意代码的解释器/下载器/容器引擎
 # （python/node/curl/wget/docker/pip/redis-cli/sqlite3 已移除，如需使用请直接在系统终端操作）
-# 白名单由沙盒 CommandValidator 执行，替代原有的手动检查
-ALLOWED_COMMANDS = {
-    "git", "npm", "pnpm", "yarn",
-    "ls", "dir", "cat", "type", "echo", "pwd", "cd", "mkdir", "md", "rmdir",
-    "cp", "copy", "mv", "move", "touch", "find", "grep", "rg", "head", "tail",
-    "wc", "ping", "nslookup", "ipconfig", "netstat",
-    "tasklist", "systeminfo", "where", "which",
-}
+# 白名单由沙盒 CommandValidator 执行，替代原有的手动检查。
+# 默认白名单来自 app.security.command_policy（用户可在设置中扩展白名单/黑名单）。
+from app.security.command_policy import DEFAULT_ALLOWED_COMMANDS  # noqa: E402
+
+ALLOWED_COMMANDS = set(DEFAULT_ALLOWED_COMMANDS)
 
 # 默认命令超时（秒）
 DEFAULT_COMMAND_TIMEOUT = 30
@@ -92,6 +90,32 @@ class ExecuteCommandResponse(BaseModel):
     output: str | None
     error: str | None
     duration_ms: int
+
+
+class CommandPolicyRequest(BaseModel):
+    """更新命令安全策略请求体。
+
+    extra_whitelist: 用户额外放行的命令列表（合并进默认白名单）。
+    blacklist: 用户强制拒绝的命令列表（即使在白名单内也拦截）。
+    """
+
+    extra_whitelist: list[str] = []
+    blacklist: list[str] = []
+
+
+class CommandPolicyResponse(BaseModel):
+    """命令安全策略响应。
+
+    default_whitelist: 默认白名单（内置安全命令，不可修改）。
+    extra_whitelist: 用户额外放行命令。
+    blacklist: 用户强制拒绝命令。
+    effective_whitelist: 生效白名单（default + extra）。
+    """
+
+    default_whitelist: list[str]
+    extra_whitelist: list[str]
+    blacklist: list[str]
+    effective_whitelist: list[str]
 
 
 # 存储初始为空，不再使用 demo 数据
@@ -176,17 +200,27 @@ logger.add(_console_handler, level="INFO", format="{message}")
 
 
 def _get_console_sandbox() -> LocalSandbox:
-    """获取控制台专用沙盒实例（带白名单配置）。
+    """获取控制台专用沙盒实例（带白名单配置 + 用户策略）。
 
-    使用固定的 console session，首次获取时配置 CommandValidator 白名单模式。
+    使用固定的 console session，首次获取时配置 CommandValidator 白名单模式，
+    并每次加载用户自定义的白名单扩展/黑名单（支持运行时热更新）。
     """
+    from app.security.command_policy import load_command_policy
+
     provider = SandboxProvider.get_instance()
     sandbox = provider.acquire(_CONSOLE_SESSION_ID)
 
     # 配置白名单模式（仅首次需要）
     if not sandbox.validator.whitelist_mode:
         sandbox.validator.whitelist_mode = True
-        sandbox.validator.allowed_commands = ALLOWED_COMMANDS
+        sandbox.validator.set_base_whitelist(ALLOWED_COMMANDS)
+
+    # 应用用户策略（每次获取都重新同步，保证热更新生效）
+    policy = load_command_policy()
+    sandbox.validator.apply_user_policy(
+        extra_whitelist=policy["extra_whitelist"],
+        blacklist=policy["blacklist"],
+    )
 
     return sandbox
 
@@ -233,7 +267,8 @@ async def create_command_record(record: CommandRecord):
 
 
 @router.post("/execute", response_model=ExecuteCommandResponse)
-async def execute_command(req: ExecuteCommandRequest):
+@limiter.limit(RATE_CONSOLE)
+async def execute_command(request: Request, req: ExecuteCommandRequest):
     """执行命令（通过沙盒，带白名单 + 超时 + 路径遮蔽）"""
     command = req.command.strip()
 
@@ -375,3 +410,54 @@ async def clear_system_logs():
     _log_store.clear()
     logger.info(f"[Console] Cleared {count} log entries")
     return {"status": "ok", "cleared": count}
+
+
+# ── 命令安全策略 ────────────────────────────────────────────────────────
+
+
+def _build_policy_response() -> CommandPolicyResponse:
+    """构建命令策略响应（加载持久化策略 + 默认白名单）。"""
+    from app.security.command_policy import load_command_policy
+
+    policy = load_command_policy()
+    extra = sorted(policy["extra_whitelist"])
+    blacklist = sorted(policy["blacklist"])
+    effective = sorted(set(ALLOWED_COMMANDS) | set(extra))
+    return CommandPolicyResponse(
+        default_whitelist=sorted(ALLOWED_COMMANDS),
+        extra_whitelist=extra,
+        blacklist=blacklist,
+        effective_whitelist=effective,
+    )
+
+
+@router.get("/policy", response_model=CommandPolicyResponse)
+async def get_command_policy():
+    """获取命令安全策略（默认白名单 + 用户白名单/黑名单）。"""
+    return _build_policy_response()
+
+
+@router.put("/policy", response_model=CommandPolicyResponse)
+async def update_command_policy(req: CommandPolicyRequest):
+    """更新命令安全策略。
+
+    覆盖式更新用户白名单扩展与黑名单（传入完整列表）。
+    保存后立即生效（沙盒每次获取时重新加载策略）。
+
+    Args:
+        req: 包含 extra_whitelist / blacklist 的完整策略。
+
+    Returns:
+        更新后的完整策略。
+    """
+    from app.security.command_policy import save_command_policy
+
+    save_command_policy(
+        extra_whitelist=req.extra_whitelist,
+        blacklist=req.blacklist,
+    )
+    logger.info(
+        f"[Console] 命令策略已更新: extra_whitelist={req.extra_whitelist}, "
+        f"blacklist={req.blacklist}"
+    )
+    return _build_policy_response()

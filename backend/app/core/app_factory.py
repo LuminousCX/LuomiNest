@@ -4,6 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
 from contextlib import asynccontextmanager
+import os
+import sys
+import shutil
 
 from app.core.config import settings
 from app.core.exceptions import LuomiNestError
@@ -14,10 +17,151 @@ from app.security.auth.local_token import load_auth_token
 from app.security.auth.middleware import luomi_auth_middleware
 
 
+def _sync_bundled_plugin_resources() -> None:
+    """打包模式下首次启动时把 _internal/{plugins,skills}/ 复制到可写的 DATA_DIR 下。
+
+    背景：PyInstaller spec 将 backend/plugins、backend/skills 作为 datas 打包，
+    运行时被解压到 <exe_dir>/_internal/{plugins,skills}/（只读）。
+    config.py 在 frozen 模式下把 PLUGIN_DIR/SKILL_DIR 指向 DATA_DIR 下的可写副本，
+    但首次启动时该副本目录为空，导致 cx_plugin_loader 扫描不到任何插件。
+
+    本函数完成"首次复制 + 增量同步"：
+    - 对每个内置插件/技能目录，若目标不存在则整目录复制；
+    - 若目标已存在但 manifest.json 版本不同，则更新（保留用户的 data/ 子目录）；
+    - 若目标已存在且版本相同，跳过（避免每次启动都覆盖用户改动）。
+
+    dev 模式下（IS_FROZEN=False）直接 return，由源码目录加载。
+    """
+    if not settings.IS_FROZEN:
+        return
+
+    # PyInstaller 运行时资源根：sys._MEIPASS 指向解压临时目录（即 _internal/）
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if not bundle_root:
+        # 某些 onefile 模式可能无 _MEIPASS，退回到 exe 同级 _internal/
+        bundle_root = os.path.join(os.path.dirname(sys.executable), "_internal")
+
+    bundle_pairs = [
+        (os.path.join(bundle_root, "plugins"), settings.PLUGIN_DIR, "plugin"),
+        (os.path.join(bundle_root, "skills"), settings.SKILL_DIR, "skill"),
+    ]
+
+    for src_root, dst_root, label in bundle_pairs:
+        if not os.path.isdir(src_root):
+            logger.debug(f"[BundledSync] {label} source not found: {src_root}, skip")
+            continue
+        os.makedirs(dst_root, exist_ok=True)
+
+        for entry in os.listdir(src_root):
+            if entry.startswith(".") or entry.startswith("_"):
+                continue
+            src_dir = os.path.join(src_root, entry)
+            dst_dir = os.path.join(dst_root, entry)
+            if not os.path.isdir(src_dir):
+                continue
+
+            # 读取源 manifest 版本
+            src_manifest = os.path.join(src_dir, "manifest.json")
+            src_skill_md = os.path.join(src_dir, "SKILL.md")
+            src_version = ""
+            if os.path.isfile(src_manifest):
+                try:
+                    import json
+                    with open(src_manifest, encoding="utf-8") as f:
+                        src_version = str(json.load(f).get("version", ""))
+                except Exception as e:
+                    logger.debug(f"[BundledSync] Failed to read src manifest {src_manifest}: {e}")
+            elif os.path.isfile(src_skill_md):
+                try:
+                    with open(src_skill_md, encoding="utf-8") as f:
+                        content = f.read()
+                    if content.startswith("---"):
+                        import yaml
+                        parts = content.split("---", 2)
+                        if len(parts) >= 3:
+                            fm = yaml.safe_load(parts[1]) or {}
+                            src_version = str(fm.get("version", ""))
+                except Exception as e:
+                    logger.debug(f"[BundledSync] Failed to read src SKILL.md {src_skill_md}: {e}")
+
+            # 目标已存在：比较版本决定是否更新
+            if os.path.isdir(dst_dir):
+                dst_version = ""
+                dst_manifest = os.path.join(dst_dir, "manifest.json")
+                dst_skill_md = os.path.join(dst_dir, "SKILL.md")
+                if os.path.isfile(dst_manifest):
+                    try:
+                        import json
+                        with open(dst_manifest, encoding="utf-8") as f:
+                            dst_version = str(json.load(f).get("version", ""))
+                    except Exception:
+                        pass
+                elif os.path.isfile(dst_skill_md):
+                    try:
+                        with open(dst_skill_md, encoding="utf-8") as f:
+                            content = f.read()
+                        if content.startswith("---"):
+                            import yaml
+                            parts = content.split("---", 2)
+                            if len(parts) >= 3:
+                                fm = yaml.safe_load(parts[1]) or {}
+                                dst_version = str(fm.get("version", ""))
+                    except Exception:
+                        pass
+
+                if dst_version and src_version:
+                    if dst_version == src_version:
+                        # 版本相同，跳过（保留用户改动与 data/ 子目录）
+                        continue
+                    # 两侧版本均可读且不一致 → 继续走更新流程
+                else:
+                    # 版本不可比较但目标已存在：保守跳过，避免盲目覆盖用户改动
+                    continue
+
+                # 版本不同：先备份旧目录（含用户 data/），再覆盖
+                logger.info(
+                    f"[BundledSync] Updating {label}/{entry}: "
+                    f"v{dst_version} -> v{src_version}"
+                )
+                # 保留用户的 data/ 子目录
+                user_data_dir = os.path.join(dst_dir, "data")
+                temp_data_dir = None
+                if os.path.isdir(user_data_dir):
+                    temp_data_dir = os.path.join(dst_root, f".{entry}.data.tmp")
+                    if os.path.isdir(temp_data_dir):
+                        shutil.rmtree(temp_data_dir)
+                    shutil.move(user_data_dir, temp_data_dir)
+
+                try:
+                    shutil.rmtree(dst_dir, ignore_errors=True)
+                    shutil.copytree(src_dir, dst_dir)
+                finally:
+                    # 无论复制成功与否，只要 data 已被移出就恢复回去，避免用户数据丢失
+                    if temp_data_dir and os.path.isdir(temp_data_dir):
+                        dst_data_dir = os.path.join(dst_dir, "data")
+                        # copytree 失败时 dst_dir 可能不存在，确保父目录存在以放回用户数据
+                        os.makedirs(dst_dir, exist_ok=True)
+                        if os.path.isdir(dst_data_dir):
+                            shutil.rmtree(dst_data_dir, ignore_errors=True)
+                        shutil.move(temp_data_dir, dst_data_dir)
+            else:
+                # 首次复制
+                logger.info(f"[BundledSync] Copying builtin {label}/{entry} v{src_version}")
+                shutil.copytree(src_dir, dst_dir)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"[LuomiNest] Starting application...")
     logger.info(f"[LuomiNest] Environment: {'Development' if settings.DEBUG else 'Production'}")
+
+    # 系统信息日志（操作系统 / 发行版 / 包管理器 / 架构）
+    try:
+        from app.core.platform_info import log_system_info
+
+        log_system_info()
+    except Exception as e:
+        logger.debug(f"[LuomiNest] System info logging failed: {e}")
 
     # 硬件检测日志
     try:
@@ -37,6 +181,16 @@ async def lifespan(app: FastAPI):
             logger.warning("=" * 60)
     except Exception as e:
         logger.warning(f"[LuomiNest] Hardware detection failed: {e}")
+
+    # JWT 模式：启动时预加载密钥，密钥不可用则 fail-fast 阻止启动
+    if settings.AUTH_MODE == "jwt":
+        try:
+            from app.security.auth.jwt_handler import ensure_jwt_secret
+            ensure_jwt_secret()
+            logger.success("[LuomiNest] JWT secret prewarmed successfully")
+        except RuntimeError as e:
+            logger.error(f"[LuomiNest] JWT secret unavailable, cannot start in jwt mode: {e}")
+            raise
 
     # 初始化 SQLite 数据库（核心依赖，必须在任何 store 操作前完成）
     # 失败直接 raise 让进程退出，避免"能访问但功能全坏"的半死状态
@@ -152,10 +306,19 @@ async def lifespan(app: FastAPI):
 
     # 加载 CxPlugin 插件系统
     try:
-        from app.services.plugin_service import cx_plugin_service
         from app.runtime.plugin.cxplugin import init_hot_reload
+        from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
+        from app.services.plugin_service import cx_plugin_service
+        # 打包模式下首次启动：将 _internal/{plugins,skills}/ 复制到可写的 DATA_DIR 下
+        # 让用户安装/启用的内置插件可被运行时找到（dev 模式直接从源码目录加载，无需复制）
+        _sync_bundled_plugin_resources()
         plugin_count = await cx_plugin_service.initialize()
-        logger.info(f"[LuomiNest] Loaded {plugin_count} CxPlugin(s)")
+        # 将已加载插件注册的 API 路由挂载到 app（/api/v1/plugins/{plugin_id}/{path}）
+        # 同时缓存 app 引用，供后续 install_local_builtin_plugin 动态挂载新插件路由
+        applied_routes = cx_plugin_loader.apply_routes_to_app(app)
+        logger.info(
+            f"[LuomiNest] Loaded {plugin_count} CxPlugin(s), applied {applied_routes} API route(s)"
+        )
         init_hot_reload()
     except Exception as e:
         logger.warning(f"[LuomiNest] CxPlugin loading skipped: {e}", exc_info=True)
@@ -349,11 +512,24 @@ def create_app() -> FastAPI:
             logger.error(f"[HTTP] <-- {method} {path} 500 ({elapsed*1000:.1f}ms) ERROR: {e}")
             raise
 
+    no_auth = os.environ.get("LUOMINEST_NO_AUTH", "").strip().lower() in ("1", "true", "yes")
+
+    # 始终确保有认证 token — 即使在 NOAUTH / dev 模式下也自动生成，
+    # 防止 API 完全无认证暴露到网络上
     auth_token = load_auth_token()
+    if not auth_token:
+        from app.security.auth.local_token import generate_and_save_token
+        auth_token = generate_and_save_token(settings.DATA_DIR)
+        if no_auth:
+            logger.info("[AppFactory] LUOMINEST_NO_AUTH 模式: 已自动生成认证 token（不再完全无认证）")
+        else:
+            logger.info("[AppFactory] 未找到 auth token，已自动生成（dev mode）")
+
+    if no_auth:
+        logger.warning("[AppFactory] LUOMINEST_NO_AUTH 已设置 — 仍启用认证中间件以保障安全")
+
     if auth_token:
-        logger.success("[AppFactory] Auth token loaded, API routes protected")
-    else:
-        logger.warning("[AppFactory] No auth token, API routes unprotected (dev mode)")
+        logger.success("[AppFactory] Auth token ready, API routes protected")
 
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
@@ -395,6 +571,13 @@ def create_app() -> FastAPI:
                 "data": None,
             },
         )
+
+    # --- 速率限制（slowapi） ---
+    from slowapi.errors import RateLimitExceeded
+    from app.security.rate_limiter import limiter, rate_limit_exceeded_handler
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
     app.include_router(api_router, prefix="/api/v1")
     app.include_router(attachment_router, prefix="/api")

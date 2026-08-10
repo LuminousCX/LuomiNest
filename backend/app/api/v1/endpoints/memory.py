@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.utils import ok
 from app.engines.memory import get_memory_engine
 from app.engines.memory.memory_engine import FactItem, MemoryData, FACT_CATEGORIES, _engines
 from app.infrastructure.database.json_store import agents_store
@@ -44,25 +45,25 @@ class UpdateFactRequest(BaseModel):
 async def get_memory(agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     data = engine.load_data()
-    return {
+    return ok({
         "memory": engine.load_memory(),
         "profile": engine.parse_profile(),
         "facts": [f.model_dump() for f in data.facts],
-    }
+    })
 
 
 @router.put("/")
 async def update_memory(request: UpdateContentRequest, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     engine.save_memory(request.content)
-    return {"status": "success"}
+    return ok()
 
 
 @router.get("/data")
 async def get_memory_data(agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     data = engine.load_data()
-    return json_compat(data.model_dump())
+    return ok(json_compat(data.model_dump()))
 
 
 @router.get("/knowledge")
@@ -70,14 +71,14 @@ async def get_knowledge(agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     content = engine.load_knowledge()
     sections = engine.parse_knowledge()
-    return {"content": content, "sections": sections}
+    return ok({"content": content, "sections": sections})
 
 
 @router.put("/knowledge")
 async def update_knowledge(request: UpdateContentRequest, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     engine.save_knowledge(request.content)
-    return {"status": "success"}
+    return ok()
 
 
 @router.get("/summary")
@@ -85,14 +86,14 @@ async def get_summary(agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     content = engine.load_summary()
     sections = engine.parse_summary()
-    return {"content": content, "sections": sections}
+    return ok({"content": content, "sections": sections})
 
 
 @router.put("/summary")
 async def update_summary(request: UpdateContentRequest, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     engine.save_summary(request.content)
-    return {"status": "success"}
+    return ok()
 
 
 @router.post("/distill")
@@ -100,8 +101,8 @@ async def distill_conversation(request: DistillRequest, agent_id: str | None = N
     engine = get_memory_engine(agent_id)
     result = await engine.distill_conversation(request.messages)
     if result:
-        return {"status": "success", "summary": result}
-    return {"status": "no_change"}
+        return ok({"summary": result, "changed": True})
+    return ok({"changed": False})
 
 
 @router.get("/facts")
@@ -148,7 +149,7 @@ async def get_facts(
     total = len(unique_facts)
     unique_facts = unique_facts[offset:offset + limit]
 
-    return {"facts": [f.model_dump() for f in unique_facts], "total": total, "limit": limit, "offset": offset}
+    return ok({"facts": [f.model_dump() for f in unique_facts], "total": total, "limit": limit, "offset": offset})
 
 
 @router.post("/facts")
@@ -164,14 +165,14 @@ async def create_fact(request: CreateFactRequest, agent_id: str | None = None):
         source="manual",
     )
     engine.add_fact(fact)
-    return {"status": "success", "fact": fact.model_dump()}
+    return ok({"fact": fact.model_dump()})
 
 
 @router.delete("/facts/{fact_id}")
 async def delete_fact(fact_id: str, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     if engine.remove_fact(fact_id):
-        return {"status": "success"}
+        return ok()
     raise HTTPException(status_code=404, detail="Fact not found")
 
 
@@ -181,27 +182,27 @@ async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | 
         raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {FACT_CATEGORIES}")
     engine = get_memory_engine(agent_id)
     if engine.update_fact(fact_id, request.content, request.category, request.confidence):
-        return {"status": "success"}
+        return ok()
     raise HTTPException(status_code=404, detail="Fact not found")
 
 
 @router.get("/daily")
 async def get_daily(date: str | None = None, agent_id: str | None = None, conversation_id: str | None = None):
     engine = get_memory_engine(agent_id)
-    return {"date": date or "today", "content": engine.load_daily(date, conversation_id)}
+    return ok({"date": date or "today", "content": engine.load_daily(date, conversation_id)})
 
 
 @router.post("/daily")
 async def append_daily(request: AppendRequest, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     engine.append_daily(request.content, request.date, conversation_id=request.conversation_id)
-    return {"status": "success"}
+    return ok()
 
 
 @router.get("/dailies")
 async def list_dailies(agent_id: str | None = None, conversation_id: str | None = None):
     engine = get_memory_engine(agent_id)
-    return {"dailies": engine.list_dailies(conversation_id)}
+    return ok({"dailies": engine.list_dailies(conversation_id)})
 
 
 @router.get("/conversation-dailies")
@@ -217,7 +218,7 @@ async def list_conversation_dailies(agent_id: str | None = None):
         title = conv.get("title", "New Conversation") if conv else "Unknown"
         result.append({"id": conv_id, "title": title})
     
-    return {"conversations": result}
+    return ok({"conversations": result})
 
 
 @router.get("/recent-facts")
@@ -235,20 +236,20 @@ async def get_recent_facts(agent_id: str | None = None, since: float = 30):
                 recent.append(f.model_dump())
         except (ValueError, TypeError):
             pass
-    return {"facts": recent}
+    return ok({"facts": recent})
 
 
 @router.get("/inject")
 async def get_injection_content(agent_id: str | None = None, conversation_id: str | None = None, query: str | None = None):
     engine = get_memory_engine(agent_id)
     content = engine.build_context(query=query or "", conversation_id=conversation_id)
-    return {"content": content, "has_memory": bool(content.strip())}
+    return ok({"content": content, "has_memory": bool(content.strip())})
 
 
 @router.get("/profile")
 async def get_profile(agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
-    return engine.parse_profile()
+    return ok(engine.parse_profile())
 
 
 @router.get("/debug/inject")
@@ -256,7 +257,7 @@ async def debug_inject(agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     ctx = engine.build_context()
     data = engine.load_data()
-    return {
+    return ok({
         "memory_file": str(engine._memory_file()),
         "memory_exists": engine._memory_file().exists(),
         "knowledge_exists": engine._knowledge_file().exists(),
@@ -264,21 +265,21 @@ async def debug_inject(agent_id: str | None = None):
         "fact_count": len(data.facts),
         "context_length": len(ctx),
         "context_preview": ctx[:500] if ctx else "",
-    }
+    })
 
 
 @router.get("/health")
 async def memory_health(agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     data = engine.load_data()
-    return {
+    return ok({
         "status": "ok" if data.profile.name else "warning",
         "profile": engine.parse_profile(),
         "fact_count": len(data.facts),
         "memory_file_exists": engine._memory_file().exists(),
         "knowledge_exists": engine._knowledge_file().exists(),
         "daily_files": engine.list_dailies(),
-    }
+    })
 
 
 @router.get("/agents")
@@ -309,14 +310,14 @@ async def list_memory_agents():
                 pass
             result.append(entry)
 
-    return {"agents": result}
+    return ok({"agents": result})
 
 
 @router.get("/agents/{agent_id}/stats")
 async def get_agent_memory_stats(agent_id: str):
     engine = get_memory_engine(agent_id)
     data = engine.load_data()
-    return {
+    return ok({
         "fact_count": len(data.facts),
         "has_profile": bool(data.profile.name),
         "has_knowledge": bool(engine.load_knowledge().strip()),
@@ -325,7 +326,7 @@ async def get_agent_memory_stats(agent_id: str):
             data.summaries.recent_state, data.summaries.timeline,
         ]),
         "daily_count": len(engine.list_dailies()),
-    }
+    })
 
 
 @router.delete("/agents/{agent_id}")
@@ -335,7 +336,7 @@ async def delete_agent_memory(agent_id: str):
         shutil.rmtree(agent_dir)
     key = agent_id
     _engines.pop(key, None)
-    return {"status": "success"}
+    return ok()
 
 
 @router.delete("/facts")
@@ -343,7 +344,7 @@ async def clear_facts(agent_id: str | None = None):
     """清空所有事实"""
     engine = get_memory_engine(agent_id)
     engine.clear_facts()
-    return {"status": "success"}
+    return ok()
 
 
 @router.delete("/knowledge")
@@ -351,7 +352,7 @@ async def clear_knowledge(agent_id: str | None = None):
     """清空知识记忆"""
     engine = get_memory_engine(agent_id)
     engine.clear_knowledge()
-    return {"status": "success"}
+    return ok()
 
 
 @router.delete("/dailies")
@@ -359,7 +360,7 @@ async def clear_dailies(agent_id: str | None = None):
     """清空所有近期对话记录"""
     engine = get_memory_engine(agent_id)
     engine.clear_dailies()
-    return {"status": "success"}
+    return ok()
 
 
 @router.delete("/summary")
@@ -367,7 +368,7 @@ async def clear_summary(agent_id: str | None = None):
     """重置AI总结"""
     engine = get_memory_engine(agent_id)
     engine.clear_summaries()
-    return {"status": "success"}
+    return ok()
 
 
 @router.delete("/reset-all")
@@ -384,7 +385,7 @@ async def reset_all_memory(agent_id: str | None = None):
     # 清除缓存
     key = agent_id or "_default"
     _engines.pop(key, None)
-    return {"status": "success"}
+    return ok()
 
 
 def json_compat(obj):

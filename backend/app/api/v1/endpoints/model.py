@@ -1,8 +1,9 @@
 import time
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
+from app.api.v1.deps import get_llm_adapter
 from app.runtime.provider.llm.adapter import llm_adapter, _create_provider_from_config
 from app.runtime.provider.llm.providers import PROVIDER_TEMPLATES
 from app.core.config import settings
@@ -197,9 +198,9 @@ async def list_provider_templates():
 
 
 @router.get("/providers", response_model=list[ProviderResponse])
-async def list_providers():
+async def list_providers(adapter=Depends(get_llm_adapter)):
     logger.info("[API] GET /models/providers - Listing all providers")
-    providers_info = llm_adapter.list_providers()
+    providers_info = adapter.list_providers()
     result = []
     for p in providers_info:
         result.append(ProviderResponse(
@@ -350,7 +351,7 @@ async def list_provider_models(provider_id: str):
 
 
 @router.post("/providers/test")
-async def test_provider(request: ProviderTestRequest):
+async def test_provider(request: ProviderTestRequest, adapter=Depends(get_llm_adapter)):
     """检测供应商 API/TOKEN 是否可用：临时构造 provider 调用 list_models，不注册到全局。"""
     logger.info(f"[API] POST /models/providers/test - Testing vendor={request.vendor}, base_url={request.base_url}")
     start_time = time.time()
@@ -361,7 +362,7 @@ async def test_provider(request: ProviderTestRequest):
         "api_key": request.api_key,
         "default_model": request.default_model,
     }
-    result = await llm_adapter.test_provider(config)
+    result = await adapter.test_provider(config)
     elapsed = time.time() - start_time
     if result["success"]:
         logger.success(f"[API] POST /models/providers/test - Success: {len(result['models'])} models, elapsed={elapsed:.2f}s")
@@ -371,10 +372,10 @@ async def test_provider(request: ProviderTestRequest):
 
 
 @router.get("/list")
-async def list_all_models():
+async def list_all_models(adapter=Depends(get_llm_adapter)):
     logger.info("[API] GET /models/list - Listing all models")
     start_time = time.time()
-    models = await llm_adapter.list_models()
+    models = await adapter.list_models()
     elapsed = time.time() - start_time
     logger.success(f"[API] GET /models/list - Success: {len(models)} models, elapsed={elapsed:.2f}s")
     return ok(models)

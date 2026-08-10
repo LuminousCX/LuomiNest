@@ -6,6 +6,7 @@ import type {
   PetModelInfo,
   BrowserAutomationAction,
   BackendStageEvent,
+  ThemeConfig,
 } from '@shared/ipc-types'
 
 export interface Tab {
@@ -41,6 +42,8 @@ const api = {
   config: {
     getTheme: () => ipcRenderer.invoke('config:getTheme'),
     setTheme: (theme: 'light' | 'dark' | 'system') => ipcRenderer.invoke('config:setTheme', theme),
+    getThemeConfig: () => ipcRenderer.invoke('config:getThemeConfig'),
+    setThemeConfig: (config: ThemeConfig) => ipcRenderer.invoke('config:setThemeConfig', config),
     getTTS: () => ipcRenderer.invoke('config:getTTS'),
     setTTS: (updates: Partial<TTSConfig>) => ipcRenderer.invoke('config:setTTS', updates),
     getSTT: () => ipcRenderer.invoke('config:getSTT'),
@@ -119,6 +122,11 @@ const api = {
   desktopPetChat: {
     sendMessage: (text: string) => ipcRenderer.send('desktop-pet:send-chat-message', text),
     cancel: () => ipcRenderer.send('desktop-pet:cancel-chat'),
+  },
+
+  dialog: {
+    selectBackgroundImage: () => ipcRenderer.invoke('dialog:selectBackgroundImage'),
+    deleteBackgroundImage: (imageUrl: string) => ipcRenderer.invoke('dialog:deleteBackgroundImage', imageUrl),
   },
 
   // 主应用窗口监听桌宠窗口转发的聊天请求

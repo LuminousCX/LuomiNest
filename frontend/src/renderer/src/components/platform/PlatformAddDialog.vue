@@ -178,8 +178,8 @@ watch(() => props.visible, (visible) => {
 }
 
 .atc-icon.social {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .atc-icon.iot {
@@ -218,8 +218,8 @@ watch(() => props.visible, (visible) => {
 }
 
 .atc-category.social {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .atc-category.iot {

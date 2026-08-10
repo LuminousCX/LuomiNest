@@ -468,8 +468,8 @@ watch(
 }
 
 .patch-item.invalid {
-  border-color: rgba(239, 68, 68, 0.4);
-  background: rgba(239, 68, 68, 0.05);
+  border-color: var(--lumi-danger-hover, rgba(239, 68, 68, 0.4));
+  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.05));
 }
 
 .patch-head {
@@ -488,18 +488,18 @@ watch(
 }
 
 .patch-op.op-set {
-  color: rgb(22, 163, 74);
-  background: rgba(34, 197, 94, 0.12);
+  color: var(--lumi-success-hover, rgb(22, 163, 74));
+  background: var(--lumi-success-light, rgba(34, 197, 94, 0.12));
 }
 
 .patch-op.op-remove {
-  color: rgb(220, 38, 38);
-  background: rgba(239, 68, 68, 0.12);
+  color: var(--lumi-danger-hover, rgb(220, 38, 38));
+  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.12));
 }
 
 .patch-op.op-reset {
-  color: rgb(37, 99, 235);
-  background: rgba(59, 130, 246, 0.12);
+  color: var(--lumi-info-hover, rgb(37, 99, 235));
+  background: var(--lumi-info-light, rgba(59, 130, 246, 0.12));
 }
 
 .patch-key {
@@ -525,7 +525,7 @@ watch(
   gap: 4px;
   margin: 4px 0 0;
   font-size: var(--text-2xs);
-  color: rgb(220, 38, 38);
+  color: var(--lumi-danger-hover, rgb(220, 38, 38));
 }
 
 .suggestion-actions {
@@ -541,8 +541,8 @@ watch(
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: rgba(239, 68, 68, 0.08);
-  color: rgb(220, 38, 38);
+  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.08));
+  color: var(--lumi-danger-hover, rgb(220, 38, 38));
   font-size: var(--text-xs);
 }
 

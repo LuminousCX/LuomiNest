@@ -2,9 +2,15 @@
 
 提供用户注册、登录、Token 刷新、登出及当前用户信息查询。
 仅在 AUTH_MODE="jwt" 时有实际意义。
+
+安全特性：
+- 登录失败统一返回"用户名或密码错误"（不泄露用户是否存在）
+- 登录失败延迟响应（防暴力破解，参考 AstrBot 登录防爆破模式）
 """
 
 from __future__ import annotations
+
+import asyncio
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
@@ -13,6 +19,7 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.exceptions import AuthenticationError, ValidationError
+from app.core.utils import ok
 from app.infrastructure.database.models.user import User
 from app.infrastructure.database.session import async_session_factory
 from app.security.auth.jwt_handler import (
@@ -20,9 +27,15 @@ from app.security.auth.jwt_handler import (
     create_refresh_token,
     verify_token as jwt_verify_token,
     TokenError,
-    TokenErrorKind,
 )
 from app.security.auth.password import hash_password, verify_password
+from app.security.rate_limiter import limiter, RATE_AUTH
+
+
+# 登录失败时的人工延迟（秒），增加暴力破解时间成本
+_LOGIN_FAILURE_DELAY = 1.5
+# 最小用户名校验长度
+_USERNAME_MIN_LENGTH = 3
 
 
 # ── Pydantic 请求/响应模型 ─────────────────────────────────────────────────────
@@ -81,7 +94,8 @@ async def get_current_user(request: Request) -> User:
 # ── 端点 ───────────────────────────────────────────────────────────────────────
 
 @router.post("/register")
-async def register(request: RegisterRequest):
+@limiter.limit(RATE_AUTH)
+async def register(request: Request, body: RegisterRequest):
     """用户注册。
 
     检查 ALLOW_REGISTRATION 配置，若已有用户则拒绝（单用户模式）。
@@ -98,16 +112,16 @@ async def register(request: RegisterRequest):
 
         # 检查用户名是否已被占用
         existing = await session.execute(
-            select(User).where(User.username == request.username)
+            select(User).where(User.username == body.username)
         )
         if existing.scalar_one_or_none():
-            raise ValidationError(f"用户名 '{request.username}' 已被占用")
+            raise ValidationError(f"用户名 '{body.username}' 已被占用")
 
         # 创建用户
         user = User(
-            username=request.username,
-            display_name=request.display_name,
-            password_hash=hash_password(request.password),
+            username=body.username,
+            display_name=body.display_name,
+            password_hash=hash_password(body.password),
             token_version=1,
             is_active=True,
         )
@@ -115,38 +129,47 @@ async def register(request: RegisterRequest):
         await session.commit()
         await session.refresh(user)
 
-        logger.success(f"[Auth] 新用户注册成功: username={request.username}, id={user.id}")
+        logger.success(f"[Auth] 新用户注册成功: username={body.username}, id={user.id}")
 
-        return {
-            "code": 0,
-            "message": "注册成功",
-            "data": {
+        return ok(
+            {
                 "user_id": user.id,
                 "username": user.username,
             },
-        }
+            message="注册成功",
+        )
 
 
 @router.post("/login")
-async def login(request: LoginRequest):
+@limiter.limit(RATE_AUTH)
+async def login(request: Request, body: LoginRequest):
     """用户登录。
 
     验证用户名密码，签发 access_token 和 refresh_token。
+    失败时统一返回"用户名或密码错误"并延迟响应（防暴力破解）。
     """
+    # 用户名长度快速校验（避免对过短用户名做无意义查询）
+    if len(body.username) < _USERNAME_MIN_LENGTH:
+        await asyncio.sleep(_LOGIN_FAILURE_DELAY)
+        raise AuthenticationError("用户名或密码错误")
+
     async with async_session_factory() as session:
         result = await session.execute(
-            select(User).where(User.username == request.username)
+            select(User).where(User.username == body.username)
         )
         user = result.scalar_one_or_none()
 
     if not user:
+        await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户名或密码错误")
     if not user.is_active:
+        await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户已被禁用")
-    if not verify_password(request.password, user.password_hash):
+    if not verify_password(body.password, user.password_hash):
+        await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户名或密码错误")
 
-    device_id = request.device_id or ""
+    device_id = body.device_id or ""
     roles = ["user"]
 
     access_token = create_access_token(
@@ -160,17 +183,16 @@ async def login(request: LoginRequest):
         device_id=device_id,
     )
 
-    logger.success(f"[Auth] 用户登录成功: username={request.username}")
+    logger.success(f"[Auth] 用户登录成功: username={body.username}")
 
-    return {
-        "code": 0,
-        "message": "登录成功",
-        "data": {
+    return ok(
+        {
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "bearer",
         },
-    }
+        message="登录成功",
+    )
 
 
 @router.post("/refresh")
@@ -215,14 +237,13 @@ async def refresh_token(request: RefreshRequest):
         token_version=user.token_version,
     )
 
-    return {
-        "code": 0,
-        "message": "刷新成功",
-        "data": {
+    return ok(
+        {
             "access_token": access_token,
             "token_type": "bearer",
         },
-    }
+        message="刷新成功",
+    )
 
 
 @router.post("/logout")
@@ -238,20 +259,14 @@ async def logout(user: User = Depends(get_current_user)):
 
     logger.success(f"[Auth] 用户登出成功: username={user.username}, new_version={user.token_version}")
 
-    return {
-        "code": 0,
-        "message": "登出成功",
-        "data": None,
-    }
+    return ok(None, message="登出成功")
 
 
 @router.get("/me")
 async def get_me(user: User = Depends(get_current_user)):
     """获取当前用户信息（不含 password_hash）。"""
-    return {
-        "code": 0,
-        "message": "ok",
-        "data": {
+    return ok(
+        {
             "user_id": user.id,
             "username": user.username,
             "display_name": user.display_name,
@@ -259,5 +274,5 @@ async def get_me(user: User = Depends(get_current_user)):
             "token_version": user.token_version,
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "updated_at": user.updated_at.isoformat() if user.updated_at else None,
-        },
-    }
+        }
+    )

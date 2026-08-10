@@ -25,7 +25,7 @@ from app.schemas.avatar import (
     AvatarDriveData,
     PadEmotion,
 )
-from app.security.auth.local_token import load_auth_token, verify_token
+from app.security.auth.ws_auth import authenticate_ws
 
 
 router = APIRouter()
@@ -111,14 +111,8 @@ async def avatar_drive_endpoint(websocket: WebSocket):
 
     注意：websocket 参数必须有 WebSocket 类型注解，否则 FastAPI 无法识别。
     """
-    expected_token = load_auth_token()
-
-    if expected_token:
-        provided = websocket.query_params.get("token", "")
-        if not verify_token(provided, expected_token):
-            logger.warning(f"[AvatarDriveWS] Rejected unauthorized connection: {websocket.client}")
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="未授权")
-            return
+    if not await authenticate_ws(websocket, endpoint_name="AvatarDriveWS"):
+        return
 
     await avatar_drive_ws_manager.connect(websocket)
     try:

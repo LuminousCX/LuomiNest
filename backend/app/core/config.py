@@ -42,7 +42,12 @@ class Settings(BaseSettings):
     # 是否启用 API 文档（/docs, /redoc），生产环境建议关闭
     API_DOCS_ENABLED: bool = False
 
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ]
 
     LLM_DEFAULT_PROVIDER: str = "openai"
     LLM_FALLBACK_CHAIN: str = "openai,ollama"
@@ -82,7 +87,65 @@ class Settings(BaseSettings):
     PLUGIN_DIR: str = "./plugins"
     SKILL_DIR: str = "./skills"
 
+    # 运行模式标志（由 get_settings() 在运行时设置，不可通过环境变量直接覆盖）
+    # - IS_FROZEN:         PyInstaller 打包模式（exe 在 _internal/ 下，资源只读）
+    # - DEV_MODE:          开发模式（!IS_FROZEN），从源码运行
+    # - DATA_DIR_INJECTED: Electron 注入了 LUOMINEST_DATA_DIR 环境变量
+    # 这三个字段用于其他模块判断应该从何处加载内置资源、把数据写入哪里。
+    IS_FROZEN: bool = False
+    DEV_MODE: bool = True
+    DATA_DIR_INJECTED: bool = False
+
     GITHUB_TOKEN: str = ""
+
+    # 插件市场远程注册表发布源配置
+    # 用户可在前端切换发布源，用于解决不同地区访问 GitHub Raw / CDN 的速度差异。
+    # 每个源包含 id/name/type/baseUrl/urlPattern/enabled 字段。
+    # urlPattern 支持两种模式：
+    #   - raw:   {baseUrl}/{owner}/{repo}/{branch}/{path}
+    #   - gh:    {baseUrl}/{owner}/{repo}@{branch}/{path} (jsdelivr style)
+    REGISTRY_SOURCES: list[dict] = [
+        {
+            "id": "github-raw",
+            "name": "GitHub Raw（官方）",
+            "type": "github",
+            "baseUrl": "https://raw.githubusercontent.com",
+            "urlPattern": "raw",
+            "enabled": True,
+        },
+        {
+            "id": "jsdelivr",
+            "name": "jsDelivr CDN",
+            "type": "cdn",
+            "baseUrl": "https://cdn.jsdelivr.net/gh",
+            "urlPattern": "gh",
+            "enabled": True,
+        },
+        {
+            "id": "gcore-jsdelivr",
+            "name": "jsDelivr Gcore（国内加速）",
+            "type": "cdn",
+            "baseUrl": "https://gcore.jsdelivr.net/gh",
+            "urlPattern": "gh",
+            "enabled": True,
+        },
+        {
+            "id": "custom-cdn",
+            "name": "自定义发布源（开发者）",
+            "type": "custom",
+            "baseUrl": "",
+            "urlPattern": "raw",
+            "enabled": False,
+        },
+    ]
+    # 默认活跃发布源 ID（用户切换后持久化到 JsonStore，启动时覆盖此默认值）
+    REGISTRY_ACTIVE_SOURCE_ID: str = "github-raw"
+    # 远程索引仓库信息（用于构造各发布源 URL）
+    REGISTRY_REPO_OWNER: str = "luminous-ChenXi"
+    REGISTRY_REPO_NAME: str = "LuomiNest-cxp-registry"
+    REGISTRY_INDEX_PATH: str = "index.json"
+    REGISTRY_BRANCH: str = "main"
+
     EXTERNAL_PARSE_API_URL: str = ""
     FILE_MAX_SIZE: int = 100 * 1024 * 1024
 
@@ -117,10 +180,16 @@ def get_settings() -> Settings:
         s.DATA_DIR = os.path.abspath(s.DATA_DIR)
     os.makedirs(s.DATA_DIR, exist_ok=True)
 
-    # 打包模式（frozen）下，插件/技能/上传等目录应位于 DATA_DIR 内，
-    # 而非 CWD（可能不可写）或 exe 目录（_internal/ 为只读打包资源）。
-    is_packaged = getattr(sys, "frozen", False) or bool(env_data_dir)
-    if is_packaged:
+    # 区分"运行时数据目录由 Electron 注入"与"真正的 PyInstaller 打包模式"：
+    # - env_data_dir_set: Electron 启动后端时总会注入 LUOMINEST_DATA_DIR，无论 dev 还是 release
+    # - is_frozen:        PyInstaller exe 真正打包模式（sys.frozen=True），_internal/ 资源只读
+    # 只有 is_frozen 时才需要把 UPLOAD_DIR/AVATAR_DIR/PLUGIN_DIR/SKILL_DIR 重定向到
+    # DATA_DIR 下，因为此时 CWD（exe 目录的 _internal/）不可写。
+    # dev 模式下即使 Electron 注入了 env_data_dir，仍保留相对路径（backend/plugins、
+    # backend/skills），让开发者直接修改源码即时生效。
+    env_data_dir_set = bool(env_data_dir)
+    is_frozen = getattr(sys, "frozen", False)
+    if is_frozen:
         if not os.path.isabs(s.UPLOAD_DIR):
             s.UPLOAD_DIR = os.path.join(s.DATA_DIR, "uploads")
         if not os.path.isabs(s.AVATAR_DIR):
@@ -129,14 +198,31 @@ def get_settings() -> Settings:
             s.PLUGIN_DIR = os.path.join(s.DATA_DIR, "plugins")
         if not os.path.isabs(s.SKILL_DIR):
             s.SKILL_DIR = os.path.join(s.DATA_DIR, "skills")
-        for d in [s.UPLOAD_DIR, s.AVATAR_DIR, s.PLUGIN_DIR, s.SKILL_DIR]:
-            os.makedirs(d, exist_ok=True)
 
         # Electron 桌面端渲染进程从 file:// 加载页面，Origin 为 null，
         # 必须追加到 CORS 白名单否则所有 API 调用被浏览器拦截
         for extra_origin in ["null", "file://"]:
             if extra_origin not in s.CORS_ORIGINS:
                 s.CORS_ORIGINS.append(extra_origin)
+    else:
+        # dev 模式：所有相对路径基于 CWD（通常为 backend/）解析为绝对路径，
+        # 让 settings.PLUGIN_DIR / settings.SKILL_DIR / settings.UPLOAD_DIR 始终为绝对路径
+        # 便于日志展示与跨模块一致引用。
+        for attr in ("UPLOAD_DIR", "AVATAR_DIR", "PLUGIN_DIR", "SKILL_DIR"):
+            val = getattr(s, attr)
+            if not os.path.isabs(val):
+                setattr(s, attr, os.path.abspath(val))
+
+    # 统一确保数据/插件/技能等目录存在（frozen 与 dev 分支均已解析为绝对路径）
+    for d in [s.UPLOAD_DIR, s.AVATAR_DIR, s.PLUGIN_DIR, s.SKILL_DIR]:
+        os.makedirs(d, exist_ok=True)
+
+    # 暴露运行模式标志（Settings 字段，非环境变量），供 install_service、app_factory 等模块使用：
+    # - IS_FROZEN:  是否为 PyInstaller 打包模式（sys.frozen）
+    # - DEV_MODE:   是否为开发模式（!IS_FROZEN）
+    s.IS_FROZEN = is_frozen
+    s.DEV_MODE = not is_frozen
+    s.DATA_DIR_INJECTED = env_data_dir_set
 
     # 若未显式配置 DATABASE_URL，则基于 DATA_DIR 自动生成 SQLite 路径
     if not s.DATABASE_URL:

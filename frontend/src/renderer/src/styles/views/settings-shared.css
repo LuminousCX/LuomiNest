@@ -324,12 +324,576 @@
 }
 
 /* -------------------------------------------------------
+   设置页通用组件
+   ------------------------------------------------------- */
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-2) var(--space-4);
+  overflow-y: auto;
+  flex: 1;
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.settings-panel__content {
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* 嵌套面板：用于被包裹在父容器内的 settings-panel，取消居中和独立滚动 */
+.settings-panel--nested {
+  max-width: none;
+  margin: 0;
+  overflow: visible;
+  flex: none;
+  padding: 0;
+}
+
+.settings-card {
+  position: relative;
+  background: var(--workspace-card);
+  border: 1px solid var(--border-light, var(--workspace-border));
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+  transition:
+    box-shadow var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.settings-card:hover {
+  box-shadow: var(--shadow-sm);
+  border-color: color-mix(in srgb, var(--lumi-primary) 12%, var(--border-light, var(--workspace-border)));
+}
+
+.settings-card--dimmed {
+  opacity: 0.85;
+}
+
+/* 顶部渐变装饰条（参考 KouriChat 配置卡片） */
+.settings-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--lumi-primary) 0%, var(--lumi-secondary) 100%);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.settings-card:hover::before {
+  opacity: 0.6;
+}
+
+.settings-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--divider-soft);
+  color: var(--lumi-primary);
+}
+
+.settings-card__title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-card__body {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-card__body--compact {
+  gap: var(--space-3);
+}
+
+.settings-card__hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* -------------------------------------------------------
+   设置页表单
+   ------------------------------------------------------- */
+.settings-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.settings-form-row--horizontal {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.settings-form-row--horizontal .settings-form-label {
+  margin-bottom: 0;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.settings-form-label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.settings-form-input,
+.settings-form-select,
+.settings-form-textarea {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  color: var(--text-primary);
+  background: var(--bg-secondary, var(--workspace-panel));
+  border: 1px solid var(--border-light, var(--workspace-border));
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.settings-form-input:hover,
+.settings-form-select:hover,
+.settings-form-textarea:hover {
+  border-color: var(--border);
+}
+
+.settings-form-input:focus,
+.settings-form-select:focus,
+.settings-form-textarea:focus {
+  border-color: var(--lumi-brand);
+  box-shadow: var(--input-focus-ring, 0 0 0 3px var(--lumi-brand-light));
+  background: var(--surface);
+}
+
+.settings-form-textarea {
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.6;
+}
+
+.settings-form-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* -------------------------------------------------------
+   设置页按钮
+   ------------------------------------------------------- */
+.settings-btn-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-top: var(--space-1);
+}
+
+.settings-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.settings-message--success {
+  background: var(--lumi-success-light);
+  color: var(--lumi-success);
+}
+
+.settings-message--error {
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
+}
+
+/* -------------------------------------------------------
+   设置页模式选择器
+   ------------------------------------------------------- */
+.settings-mode-selector {
+  display: flex;
+  gap: var(--space-1);
+  background: var(--workspace-panel);
+  border-radius: var(--radius-md);
+  padding: 3px;
+}
+
+.settings-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 8px var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.settings-mode-btn.active {
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+/* -------------------------------------------------------
+   设置页滑块
+   ------------------------------------------------------- */
+.settings-slider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--workspace-panel);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--workspace-border);
+}
+
+.settings-slider-row__label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 56px;
+  flex-shrink: 0;
+}
+
+.settings-slider-row__input {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--workspace-border);
+  outline: none;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.settings-slider-row__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--lumi-primary);
+  border: 3px solid var(--workspace-card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.settings-slider-row__input::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.settings-slider-row__input::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--lumi-primary);
+  border: 3px solid var(--workspace-card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+
+.settings-slider-row__value {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------------
    动画辅助
    ------------------------------------------------------- */
 .lumi-settings-animate-fade {
-  animation: lumi-fade-in var(--duration-enter) var(--ease-out-expo) both;
+  animation: lumi-fade-in var(--duration-enter) var(--ease-in-out) both;
 }
 
 .lumi-settings-animate-slide {
-  animation: lumi-slide-up var(--duration-enter) var(--ease-out-expo) both;
+  animation: lumi-slide-up var(--duration-enter) var(--ease-in-out) both;
+}
+
+/* -------------------------------------------------------
+   全局背景壁纸下的玻璃拟态适配
+   注意：主要玻璃变量与通用适配已迁移至 variables.css，
+   此处仅保留设置页特有的形态与交互样式。
+   ------------------------------------------------------- */
+/* 支持全部运行时背景激活标记（与 variables.css 的 :is() 标记前缀保持一致）：
+   .lumi-app--bg-active（App.vue 实际使用）、.has-background（兼容）、
+   [data-lumi-background="active"]（属性形式） */
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .settings-panel {
+  background: transparent;
+}
+
+:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .settings-view {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* -------------------------------------------------------
+   卡片强调变体
+   ------------------------------------------------------- */
+.settings-card--accent {
+  border-color: color-mix(in srgb, var(--lumi-primary) 24%, var(--border-light, var(--workspace-border)));
+}
+
+.settings-card--accent::before {
+  opacity: 0.8;
+}
+
+/* -------------------------------------------------------
+   数据展示行
+   ------------------------------------------------------- */
+.settings-data-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--workspace-panel);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-md);
+}
+
+.settings-data-row__label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.settings-data-row__value {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: 500;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+/* -------------------------------------------------------
+   列表行
+   ------------------------------------------------------- */
+.settings-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+}
+
+.settings-list-row:not(:last-child) {
+  border-bottom: 1px solid var(--divider-soft);
+}
+
+.settings-list-row:hover {
+  background: var(--surface-hover);
+}
+
+.settings-list-row--disabled {
+  opacity: 0.55;
+}
+
+.settings-list-row--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.settings-list-row__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.settings-list-row__title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--lumi-primary);
+  text-transform: capitalize;
+}
+
+.settings-list-row__desc {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.settings-list-row__control {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.settings-list-row__control .lumi-toggle {
+  margin: 0;
+}
+
+/* 占位型控件（仅用于展示/未接入实际交互的设置项） */
+.settings-row-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--workspace-panel);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  cursor: default;
+  transition: all var(--transition-fast);
+}
+
+.settings-row-control:hover {
+  border-color: var(--lumi-brand-border);
+  background: var(--lumi-brand-subtle);
+  color: var(--lumi-primary);
+}
+
+.settings-row-control__slider {
+  width: 120px;
+  height: var(--space-2);
+  border-radius: var(--space-1);
+  background: var(--workspace-border);
+  position: relative;
+  overflow: hidden;
+}
+
+.settings-row-control__slider::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 60%;
+  height: 100%;
+  border-radius: var(--space-1);
+  background: var(--lumi-primary);
+}
+
+.settings-row-control__connect {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--lumi-primary-light);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--lumi-primary);
+  cursor: default;
+}
+
+/* -------------------------------------------------------
+   全局面板进入动画
+   ------------------------------------------------------- */
+.animate-slide-up {
+  animation: lumi-slide-up var(--duration-normal) var(--ease-in-out) both;
+}
+
+.animate-fade-in {
+  animation: lumi-fade-in var(--duration-normal) var(--ease-in-out) both;
+}
+
+/* -------------------------------------------------------
+   响应式适配
+   ------------------------------------------------------- */
+@media (max-width: 768px) {
+  .lumi-settings-page__header {
+    padding: var(--space-4) var(--space-5);
+  }
+
+  .lumi-settings-page__body {
+    padding: var(--space-4) var(--space-3) var(--space-6);
+  }
+
+  .settings-panel {
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .lumi-settings-hero {
+    padding: var(--space-5);
+  }
+
+  .lumi-settings-hero__title {
+    font-size: var(--text-2xl);
+  }
+
+  .lumi-settings-hero__stats {
+    gap: var(--space-3);
+  }
+
+  .settings-card__body {
+    padding: var(--space-3);
+  }
+
+  .settings-form-row--horizontal {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-data-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .settings-data-row__value {
+    text-align: left;
+  }
+}
+
+@media (max-width: 480px) {
+  .lumi-settings-page__header {
+    padding: var(--space-3) var(--space-4);
+    gap: var(--space-2);
+  }
+
+  .lumi-settings-page__title {
+    font-size: var(--text-xl);
+  }
+
+  .settings-panel {
+    padding: var(--space-1);
+    gap: var(--space-3);
+  }
+
+  .settings-card__header {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .settings-btn-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

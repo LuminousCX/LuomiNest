@@ -966,7 +966,7 @@ const SOURCE_LABELS: Record<string, string> = {
   padding: 8px var(--space-4);
   font-size: var(--text-sm);
   font-weight: 500;
-  color: #fff;
+  color: var(--text-inverse, #fff);
   background: var(--lumi-brand);
   border: none;
   border-radius: var(--radius-sm);

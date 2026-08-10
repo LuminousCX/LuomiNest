@@ -7,20 +7,23 @@ import {
 } from 'lucide-vue-next'
 import type { LucideIcon } from 'lucide-vue-next'
 import { useRepoSourceStore } from '../../stores/repo-source'
-import type { RepoSource, RepoSourceType } from '../../types/marketplace'
+import { useRegistrySourceStore } from '../../stores/registry-source'
+import type { RepoSource, RepoSourceType, RegistrySource } from '../../types/marketplace'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiInput from '../../components/common/LumiInput.vue'
 import LumiModal from '../../components/common/LumiModal.vue'
 import { formatDateRelative } from '../../utils/format'
 
 const store = useRepoSourceStore()
+const registryStore = useRegistrySourceStore()
 
 const expandedSourceIds = ref<Set<string>>(new Set(['github-official']))
 const showAddDialog = ref(false)
 const addForm = ref({ name: '', url: '', description: '' })
+const showRepoSources = ref(false)
 
 const TYPE_CONFIG: Record<RepoSourceType, { icon: LucideIcon; label: string; color: string }> = {
-  github: { icon: Github, label: 'GitHub', color: 'var(--task-purple)' },
+  github: { icon: Github, label: 'GitHub', color: 'var(--task-sky)' },
   cloud: { icon: Cloud, label: '云端', color: 'var(--lumi-info)' },
   cdn: { icon: Globe, label: 'CDN', color: 'var(--lumi-sky)' },
   custom: { icon: Plus, label: '自定义', color: 'var(--lumi-amber)' },
@@ -34,6 +37,7 @@ const SUB_MARKET_TYPE_LABEL: Record<string, string> = {
 
 onMounted(() => {
   store.fetchSources()
+  registryStore.fetchSources()
 })
 
 const toggleExpand = (sourceId: string) => {
@@ -137,19 +141,158 @@ const getSubMarketItemCount = (sourceId: string, subMarketType: string): number 
   return items.filter(i => i.type === subMarketType).length
 }
 
+const isRegistrySourceSelectable = (source: RegistrySource) => {
+  return source.enabled && source.healthy !== false
+}
+
+const handleRegistrySourceClick = async (source: RegistrySource) => {
+  if (!isRegistrySourceSelectable(source)) return
+  if (source.id === registryStore.activeSourceId) return
+  // 切换进行中时禁止重复触发，避免并发切换导致状态错乱
+  if (registryStore.switching) return
+  try {
+    await registryStore.switchSource(source.id)
+  } catch {
+    // 错误已在 store 中记录，无需额外处理
+  }
+}
+
+// 键盘激活：Enter/Space 触发与点击等价的行为（可访问性）
+const onSourceKeydown = (e: KeyboardEvent, source: RegistrySource) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    handleRegistrySourceClick(source)
+  }
+}
+
+const onToggleRepoKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    showRepoSources.value = !showRepoSources.value
+  }
+}
+
+const handlePingRegistrySources = async () => {
+  await registryStore.pingSources()
+}
+
+const getRegistryLatencyClass = (source: RegistrySource) => {
+  const status = registryStore.getLatencyStatus(source)
+  return `latency-${status.className}`
+}
+
 </script>
 
 <template>
   <div class="repo-source-panel">
-    <div class="panel-header">
-      <span class="panel-title">仓库来源</span>
+    <!-- 发布源选择器 -->
+    <div class="registry-source-section">
+      <div class="section-header">
+        <span class="section-title">发布源</span>
+        <button
+          class="ping-btn"
+          :disabled="registryStore.loading || registryStore.switching"
+          title="测试各发布源延迟"
+          @click="handlePingRegistrySources"
+        >
+          <Loader2
+            v-if="registryStore.loading"
+            :size="13"
+            class="spin-animation"
+          />
+          <RefreshCw v-else :size="13" />
+          <span>测延迟</span>
+        </button>
+      </div>
+
+      <div v-if="registryStore.error" class="registry-source-error">
+        <AlertCircle :size="14" />
+        <span>{{ registryStore.error }}</span>
+      </div>
+
+      <div class="registry-source-list">
+        <div
+          v-for="source in registryStore.sources"
+          :key="source.id"
+          :class="[
+            'registry-source-item',
+            {
+              active: registryStore.activeSourceId === source.id,
+              disabled: !isRegistrySourceSelectable(source),
+              switching: registryStore.switching && registryStore.activeSourceId !== source.id,
+            },
+          ]"
+          role="button"
+          tabindex="0"
+          :aria-disabled="!isRegistrySourceSelectable(source) || registryStore.switching"
+          @click="handleRegistrySourceClick(source)"
+          @keydown="onSourceKeydown($event, source)"
+        >
+          <div class="registry-source-left">
+            <div
+              class="registry-source-icon"
+              :style="{ color: TYPE_CONFIG[source.type]?.color || 'var(--text-muted)' }"
+            >
+              <component
+                :is="TYPE_CONFIG[source.type]?.icon || Globe"
+                :size="16"
+              />
+            </div>
+            <div class="registry-source-info">
+              <span class="registry-source-name">{{ source.name }}</span>
+              <span class="registry-source-url">{{ source.baseUrl }}</span>
+            </div>
+          </div>
+
+          <div class="registry-source-right">
+            <span
+              :class="[
+                'registry-latency-badge',
+                getRegistryLatencyClass(source),
+              ]"
+            >
+              {{ registryStore.getLatencyStatus(source).label }}
+            </span>
+            <Check
+              v-if="registryStore.activeSourceId === source.id"
+              :size="14"
+              class="registry-active-icon"
+            />
+            <Loader2
+              v-else-if="registryStore.switching"
+              :size="14"
+              class="spin-animation"
+            />
+          </div>
+        </div>
+      </div>
+
+      <p class="registry-source-hint">
+        切换发布源可改变插件市场的加载速度。不可用源已自动禁用。
+      </p>
+    </div>
+
+    <!-- 仓库来源（折叠） -->
+    <div class="repo-source-section-toggle">
+      <div
+        class="repo-source-section-toggle-left"
+        role="button"
+        tabindex="0"
+        aria-label="展开或收起仓库来源"
+        @click="showRepoSources = !showRepoSources"
+        @keydown="onToggleRepoKeydown"
+      >
+        <span class="section-title">仓库来源</span>
+        <component :is="showRepoSources ? ChevronDown : ChevronRight" :size="14" />
+      </div>
       <LumiButton
+        v-if="showRepoSources"
         variant="ghost"
         size="sm"
         icon-only
         aria-label="添加自定义来源"
         title="添加自定义来源"
-        @click="showAddDialog = true"
+        @click.stop="showAddDialog = true"
       >
         <template #icon>
           <Plus :size="14" />
@@ -157,12 +300,13 @@ const getSubMarketItemCount = (sourceId: string, subMarketType: string): number 
       </LumiButton>
     </div>
 
-    <div v-if="store.loading" class="panel-loading">
-      <Loader2 :size="20" class="spin-animation" />
-      <span>加载中...</span>
-    </div>
+    <template v-if="showRepoSources">
+      <div v-if="store.loading" class="panel-loading">
+        <Loader2 :size="20" class="spin-animation" />
+        <span>加载中...</span>
+      </div>
 
-    <div v-else class="source-list">
+      <div v-else class="source-list">
       <div
         v-for="source in store.sources"
         :key="source.id"
@@ -319,7 +463,8 @@ const getSubMarketItemCount = (sourceId: string, subMarketType: string): number 
           </div>
         </Transition>
       </div>
-    </div>
+      </div>
+    </template>
 
     <!-- Add Custom Source Dialog -->
     <LumiModal v-model:visible="showAddDialog" title="添加自定义仓库来源">
@@ -358,14 +503,209 @@ const getSubMarketItemCount = (sourceId: string, subMarketType: string): number 
 .repo-source-panel {
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
+}
+
+.registry-source-section {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
 }
 
-.panel-header {
+.section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--space-1);
+}
+
+.section-title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ping-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--workspace-panel);
+  border: 1px solid var(--workspace-border);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.ping-btn:hover:not(:disabled) {
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+  border-color: var(--lumi-brand);
+}
+
+.ping-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.registry-source-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
+  font-size: var(--text-xs);
+}
+
+.registry-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.registry-source-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.registry-source-item:hover:not(.disabled) {
+  background: var(--surface-hover);
+  border-color: var(--workspace-border);
+}
+
+.registry-source-item.active {
+  background: var(--lumi-brand-light);
+  border-color: var(--lumi-brand);
+}
+
+.registry-source-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.registry-source-item.disabled .registry-source-url {
+  text-decoration: line-through;
+}
+
+.registry-source-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.registry-source-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.registry-source-info {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-1) / 4);
+  min-width: 0;
+}
+
+.registry-source-name {
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.registry-source-url {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.registry-source-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.registry-latency-badge {
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
+  padding: calc(var(--space-1) / 4) var(--space-1);
+  border-radius: var(--radius-sm);
+  min-width: var(--space-8);
+  text-align: center;
+}
+
+.registry-latency-badge.latency-fast {
+  background: var(--lumi-success-light);
+  color: var(--lumi-success);
+}
+
+.registry-latency-badge.latency-medium {
+  background: var(--lumi-warning-light);
+  color: var(--lumi-warning);
+}
+
+.registry-latency-badge.latency-slow {
+  background: var(--lumi-amber-light);
+  color: var(--lumi-amber);
+}
+
+.registry-latency-badge.latency-unavailable,
+.registry-latency-badge.latency-unknown {
+  background: var(--surface-disabled);
+  color: var(--text-muted);
+}
+
+.registry-active-icon {
+  color: var(--lumi-success);
+}
+
+.registry-source-hint {
+  margin: 0;
+  padding: 0 var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
+}
+
+.repo-source-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-1);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+}
+
+.repo-source-section-toggle-left {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  cursor: pointer;
+}
+
+.repo-source-section-toggle:hover {
+  background: var(--surface-hover);
 }
 
 .panel-title {
@@ -636,8 +976,8 @@ const getSubMarketItemCount = (sourceId: string, subMarketType: string): number 
 }
 
 .sub-market-type-badge[data-type="plugin"] {
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
 }
 
 .sub-market-type-badge[data-type="skill"] {

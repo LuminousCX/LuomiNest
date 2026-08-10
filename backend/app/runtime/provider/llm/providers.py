@@ -1,7 +1,7 @@
 """LuomiNest LLM 供应商实现。
 
 OpenAICompatibleProvider：统一的 OpenAI 兼容 API 供应商实现，
-支持 27 个预置模板（PROVIDER_TEMPLATES）。
+支持 32 个预置模板（PROVIDER_TEMPLATES）。
 
 设计原则：
 1. 单一实现类，所有供应商共用，通过 base_url / api_key / default_model 区分
@@ -78,7 +78,7 @@ def _clean_reasoning_content(raw_reasoning: str) -> str:
 
 
 # ──────────────────────────────────────────────────────────────
-# 供应商模板（27 个预置）
+# 供应商模板（32 个预置）
 # ──────────────────────────────────────────────────────────────
 
 PROVIDER_TEMPLATES: dict[str, dict] = {
@@ -257,7 +257,7 @@ PROVIDER_TEMPLATES: dict[str, dict] = {
         "id": "stepfun",
         "name": "StepFun",
         "vendor": "openai_compatible",
-        "base_url": "https://api.stepfun.ai/step_plan/v1",
+        "base_url": "https://api.stepfun.ai/v1",
         "api_key": "",
         "default_model": "step-2-16k",
         "description": "StepFun step series models",
@@ -306,6 +306,51 @@ PROVIDER_TEMPLATES: dict[str, dict] = {
         "api_key": "",
         "default_model": "openai/gpt-4o-mini",
         "description": "Vercel AI gateway aggregator",
+    },
+    "volcengine": {
+        "id": "volcengine",
+        "name": "Volcengine",
+        "vendor": "openai_compatible",
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "api_key": "",
+        "default_model": "doubao-pro-32k",
+        "description": "Volcengine Doubao large models",
+    },
+    "aihubmix": {
+        "id": "aihubmix",
+        "name": "AiHubMix",
+        "vendor": "openai_compatible",
+        "base_url": "https://aihubmix.com/v1",
+        "api_key": "",
+        "default_model": "gpt-4o-mini",
+        "description": "AiHubMix multi-model gateway",
+    },
+    "qianfan": {
+        "id": "qianfan",
+        "name": "Qianfan (千帆)",
+        "vendor": "openai_compatible",
+        "base_url": "https://qianfan.baidubce.com/v2",
+        "api_key": "",
+        "default_model": "ernie-4.0-turbo-8k",
+        "description": "Baidu Qianfan ERNIE models",
+    },
+    "xiaomimimo": {
+        "id": "xiaomimimo",
+        "name": "XiaomiMiMo",
+        "vendor": "openai_compatible",
+        "base_url": "https://api.xiaomimimo.com/v1",
+        "api_key": "",
+        "default_model": "mimo-v2-flash",
+        "description": "Xiaomi MiMo series models",
+    },
+    "azure": {
+        "id": "azure",
+        "name": "Azure OpenAI",
+        "vendor": "openai_compatible",
+        "base_url": "https://YOUR_RESOURCE.openai.azure.com/openai/deployments",
+        "api_key": "",
+        "default_model": "gpt-4o",
+        "description": "Azure OpenAI Service",
     },
     "custom": {
         "id": "custom",
@@ -356,7 +401,7 @@ def _classify_error(exc: Exception) -> tuple[bool, str]:
 class OpenAICompatibleProvider(LLMProvider):
     """OpenAI 兼容 API 供应商实现。
 
-    所有 27 个预置模板均使用此类的同一实现，
+    所有 32 个预置模板均使用此类的同一实现，
     通过 base_url / api_key / default_model 区分不同供应商。
     """
 

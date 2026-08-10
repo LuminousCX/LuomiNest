@@ -1,0 +1,16 @@
+/* 预设背景 - 通过 CSS 渐变实现，无需图片文件 */
+.theme-bg-blue {
+  background: linear-gradient(135deg, #147EBC 0%, #5BA4D4 50%, #0d5f8a 100%);
+}
+.theme-bg-purple {
+  background: linear-gradient(135deg, #7C3AED 0%, #A78BFA 50%, #5B21B6 100%);
+}
+.theme-bg-red {
+  background: linear-gradient(135deg, #C0392B 0%, #E74C3C 50%, #922B21 100%);
+}
+.theme-bg-green {
+  background: linear-gradient(135deg, #059669 0%, #34D399 50%, #047857 100%);
+}
+.theme-bg-orange {
+  background: linear-gradient(135deg, #EA580C 0%, #FB923C 50%, #C2410C 100%);
+}

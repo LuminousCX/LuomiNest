@@ -567,8 +567,8 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
   gap: var(--space-1);
   padding: 3px var(--space-2);
   border-radius: 5px;
-  background: var(--task-purple-soft);
-  color: var(--task-purple);
+  background: var(--task-sky-soft);
+  color: var(--task-sky);
   font-size: var(--text-xs);
   font-weight: 600;
 }

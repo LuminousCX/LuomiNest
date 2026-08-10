@@ -1,0 +1,296 @@
+/* ============================================
+   色彩主题系统 - CSS 变量覆盖
+   默认蓝色主题 = variables.css 中的现有变量
+   通过 [data-color-theme] + [data-theme] 组合选择器
+   ============================================ */
+
+/* ---------- 默认蓝 (Blue) - 浅色 ---------- */
+/* 值与 theme-presets.ts 一致，作完整性保障 */
+[data-color-theme="blue"]:not([data-theme="dark"]) {
+  /* 主色 */
+  --lumi-brand: #147EBC;
+  --lumi-brand-hover: #116DA3;
+  --lumi-brand-light: rgba(20, 126, 188, 0.1);
+  --lumi-brand-pressed: #095A8E;
+  --lumi-brand-soft: #62A9C8;
+  --lumi-brand-glow: rgba(20, 126, 188, 0.15);
+  --lumi-brand-subtle: rgba(20, 126, 188, 0.04);
+  --lumi-brand-border: rgba(20, 126, 188, 0.20);
+  --lumi-brand-gradient: linear-gradient(135deg, #147EBC 0%, #5BA4D4 100%);
+  --lumi-brand-gradient-soft: linear-gradient(135deg, rgba(20, 126, 188, 0.10) 0%, rgba(91, 164, 212, 0.06) 100%);
+  /* 辅色 */
+  --lumi-secondary: #5BA4D4;
+  --lumi-secondary-hover: #4A93C3;
+  --lumi-secondary-light: rgba(91, 164, 212, 0.1);
+  /* 强调色 */
+  --lumi-accent: #f43f5e;
+  --lumi-accent-hover: #E11D48;
+  --lumi-accent-light: rgba(244, 63, 94, 0.1);
+  /* 阴影 */
+  --shadow-brand: 0 4px 14px rgba(20, 126, 188, 0.15);
+  /* 渐变 */
+  --gradient-brand: linear-gradient(135deg, #147EBC, #5BA4D4);
+  /* 组件 Token 覆盖 */
+  --btn-primary-bg: var(--lumi-brand);
+  --btn-primary-hover: var(--lumi-brand-hover);
+  --input-focus-border: var(--lumi-brand);
+  --card-accent-border: var(--lumi-brand);
+}
+
+/* ---------- 默认蓝 (Blue) - 深色 ---------- */
+[data-color-theme="blue"][data-theme="dark"] {
+  --lumi-brand: #3BA4D8;
+  --lumi-brand-hover: #5BB8E4;
+  --lumi-brand-light: rgba(59, 164, 216, 0.15);
+  --lumi-brand-pressed: #7AC8EA;
+  --lumi-brand-soft: #62A9C8;
+  --lumi-brand-glow: rgba(59, 164, 216, 0.18);
+  --lumi-brand-subtle: rgba(59, 164, 216, 0.04);
+  --lumi-brand-border: rgba(59, 164, 216, 0.20);
+  --lumi-brand-gradient: linear-gradient(135deg, #3BA4D8 0%, #7BBCE4 100%);
+  --lumi-brand-gradient-soft: linear-gradient(135deg, rgba(59, 164, 216, 0.10) 0%, rgba(123, 188, 228, 0.06) 100%);
+  --lumi-secondary: #7BBCE4;
+  --lumi-secondary-hover: #8FC8EC;
+  --lumi-secondary-light: rgba(123, 188, 228, 0.12);
+  --lumi-accent: #FB7185;
+  --lumi-accent-hover: #FDA4AF;
+  --lumi-accent-light: rgba(251, 113, 133, 0.15);
+  --shadow-brand: 0 4px 14px rgba(59, 164, 216, 0.2);
+  --gradient-brand: linear-gradient(135deg, #3BA4D8, #7BBCE4);
+  --btn-primary-bg: var(--lumi-brand);
+  --btn-primary-hover: var(--lumi-brand-hover);
+  --input-focus-border: var(--lumi-brand);
+  --card-accent-border: var(--lumi-brand);
+}
+
+/* ---------- 紫罗兰 (Purple) - 浅色 ---------- */
+[data-color-theme="purple"]:not([data-theme="dark"]) {
+  /* 主色 */
+  --lumi-brand: #7C3AED;
+  --lumi-brand-hover: #6D28D9;
+  --lumi-brand-light: rgba(124, 58, 237, 0.1);
+  --lumi-brand-pressed: #5B21B6;
+  --lumi-brand-soft: #8B6CF6;
+  --lumi-brand-glow: rgba(124, 58, 237, 0.15);
+  --lumi-brand-subtle: rgba(124, 58, 237, 0.04);
+  --lumi-brand-border: rgba(124, 58, 237, 0.20);
+  --lumi-brand-gradient: linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%);
+  --lumi-brand-gradient-soft: linear-gradient(135deg, rgba(124, 58, 237, 0.10) 0%, rgba(167, 139, 250, 0.06) 100%);
+  /* 辅色 */
+  --lumi-secondary: #A78BFA;
+  --lumi-secondary-hover: #8B6CF6;
+  --lumi-secondary-light: rgba(167, 139, 250, 0.1);
+  /* 强调色 */
+  --lumi-accent: #EC4899;
+  --lumi-accent-hover: #DB2777;
+  --lumi-accent-light: rgba(236, 72, 153, 0.1);
+  /* 阴影 */
+  --shadow-brand: 0 4px 14px rgba(124, 58, 237, 0.15);
+  /* 渐变 */
+  --gradient-brand: linear-gradient(135deg, #7C3AED, #A78BFA);
+  /* 组件 Token 覆盖 */
+  --btn-primary-bg: var(--lumi-brand);
+  --btn-primary-hover: var(--lumi-brand-hover);
+  --input-focus-border: var(--lumi-brand);
+  --card-accent-border: var(--lumi-brand);
+}
+
+/* ---------- 紫罗兰 (Purple) - 深色 ---------- */
+[data-color-theme="purple"][data-theme="dark"] {
+  --lumi-brand: #A78BFA;
+  --lumi-brand-hover: #B9A0FC;
+  --lumi-brand-light: rgba(167, 139, 250, 0.15);
+  --lumi-brand-pressed: #8B5CF6;
+  --lumi-brand-soft: #C4B5FD;
+  --lumi-brand-glow: rgba(167, 139, 250, 0.18);
+  --lumi-brand-subtle: rgba(167, 139, 250, 0.04);
+  --lumi-brand-border: rgba(167, 139, 250, 0.20);
+  --lumi-brand-gradient: linear-gradient(135deg, #A78BFA 0%, #C4B5FD 100%);
+  --lumi-brand-gradient-soft: linear-gradient(135deg, rgba(167, 139, 250, 0.10) 0%, rgba(196, 181, 253, 0.06) 100%);
+  --lumi-secondary: #C4B5FD;
+  --lumi-secondary-hover: #D4C8FD;
+  --lumi-secondary-light: rgba(196, 181, 253, 0.12);
+  --lumi-accent: #F472B6;
+  --lumi-accent-hover: #F9A8D4;
+  --lumi-accent-light: rgba(244, 114, 182, 0.15);
+  --shadow-brand: 0 4px 14px rgba(167, 139, 250, 0.2);
+  --gradient-brand: linear-gradient(135deg, #A78BFA, #C4B5FD);
+  --btn-primary-bg: var(--lumi-brand);
+  --btn-primary-hover: var(--lumi-brand-hover);
+  --input-focus-border: var(--lumi-brand);
+  --card-accent-border: var(--lumi-brand);
+}
+
+/* ---------- 中国红 (Red) - 浅色 ---------- */
+[data-color-theme="red"]:not([data-theme="dark"]) {
+  /* 主色 */
+  --lumi-brand: #C0392B;
+  --lumi-brand-hover: #A93226;
+  --lumi-brand-light: rgba(192, 57, 43, 0.1);
+  --lumi-brand-pressed: #962D22;
+  --lumi-brand-soft: #D4574C;
+  --lumi-brand-glow: rgba(192, 57, 43, 0.15);
+  --lumi-brand-subtle: rgba(192, 57, 43, 0.04);
+  --lumi-brand-border: rgba(192, 57, 43, 0.20);
+  --lumi-brand-gradient: linear-gradient(135deg, #C0392B 0%, #E74C3C 100%);
+  --lumi-brand-gradient-soft: linear-gradient(135deg, rgba(192, 57, 43, 0.10) 0%, rgba(231, 76, 60, 0.06) 100%);
+  /* 辅色 */
+  --lumi-secondary: #E74C3C;
+  --lumi-secondary-hover: #D44332;
+  --lumi-secondary-light: rgba(231, 76, 60, 0.1);
+  /* 强调色 */
+  --lumi-accent: #F59E0B;
+  --lumi-accent-hover: #D97706;
+  --lumi-accent-light: rgba(245, 158, 11, 0.1);
+  /* 阴影 */
+  --shadow-brand: 0 4px 14px rgba(192, 57, 43, 0.15);
+  /* 渐变 */
+  --gradient-brand: linear-gradient(135deg, #C0392B, #E74C3C);
+  /* 组件 Token 覆盖 */
+  --btn-primary-bg: var(--lumi-brand);
+  --btn-primary-hover: var(--lumi-brand-hover);
+  --input-focus-border: var(--lumi-brand);
+  --card-accent-border: var(--lumi-brand);
+}
+
+/* ---------- 中国红 (Red) - 深色 ---------- */
+[data-color-theme="red"][data-theme="dark"] {
+  --lumi-brand: #E74C3C;
+  --lumi-brand-hover: #EC6B5E;
+  --lumi-brand-light: rgba(231, 76, 60, 0.15);
+  --lumi-brand-pressed: #D44332;
+  --lumi-brand-soft: #F07169;
+  --lumi-brand-glow: rgba(231, 76, 60, 0.18);
+  --lumi-brand-subtle: rgba(231, 76, 60, 0.04);
+  --lumi-brand-border: rgba(231, 76, 60, 0.20);
+  --lumi-brand-gradient: linear-gradient(135deg, #E74C3C 0%, #F07169 100%);
+  --lumi-brand-gradient-soft: linear-gradient(135deg, rgba(231, 76, 60, 0.10) 0%, rgba(240, 113, 105, 0.06) 100%);
+  --lumi-secondary: #F07169;
+  --lumi-secondary-hover: #F48D86;
+  --lumi-secondary-light: rgba(240, 113, 105, 0.12);
+  --lumi-accent: #FBBF24;
+  --lumi-accent-hover: #FCD34D;
+  --lumi-accent-light: rgba(251, 191, 36, 0.15);
+  --shadow-brand: 0 4px 14px rgba(231, 76, 60, 0.2);
+  --gradient-brand: linear-gradient(135deg, #E74C3C, #F07169);
+  --btn-primary-bg: var(--lumi-brand);
+  --btn-primary-hover: var(--lumi-brand-hover);
+  --input-focus-border: var(--lumi-brand);
+  --card-accent-border: var(--lumi-brand);
+}
+
+/* ---------- 翡翠绿 (Green) - 浅色 ---------- */
+[data-color-theme="green"]:not([data-theme="dark"]) {
+  /* 主色 */
+  --lumi-brand: #059669;
+  --lumi-brand-hover: #047857;
+  --lumi-brand-light: rgba(5, 150, 105, 0.1);
+  --lumi-brand-pressed: #036648;
+  --lumi-brand-soft: #28C08A;
+  --lumi-brand-glow: rgba(5, 150, 105, 0.15);
+  --lumi-brand-subtle: rgba(5, 150, 105, 0.04);
+  --lumi-brand-border: rgba(5, 150, 105, 0.20);
+  --lumi-brand-gradient: linear-gradient(135deg, #059669 0%, #34D399 100%);
+  --lumi-brand-gradient-soft: linear-gradient(135deg, rgba(5, 150, 105, 0.10) 0%, rgba(52, 211, 153, 0.06) 100%);
+  /* 辅色 */
+  --lumi-secondary: #34D399;
+  --lumi-secondary-hover: #28C08A;
+  --lumi-secondary-light: rgba(52, 211, 153, 0.1);
+  /* 强调色 */
+  --lumi-accent: #8B5CF6;
+  --lumi-accent-hover: #7C3AED;
+  --lumi-accent-light: rgba(139, 92, 246, 0.1);
+  /* 阴影 */
+  --shadow-brand: 0 4px 14px rgba(5, 150, 105, 0.15);
+  /* 渐变 */
+  --gradient-brand: linear-gradient(135deg, #059669, #34D399);
+  /* 组件 Token 覆盖 */
+  --btn-primary-bg: var(--lumi-brand);
+  --btn-primary-hover: var(--lumi-brand-hover);
+  --input-focus-border: var(--lumi-brand);
+  --card-accent-border: var(--lumi-brand);
+}
+
+/* ---------- 翡翠绿 (Green) - 深色 ---------- */
+[data-color-theme="green"][data-theme="dark"] {
+  --lumi-brand: #34D399;
+  --lumi-brand-hover: #52E0AD;
+  --lumi-brand-light: rgba(52, 211, 153, 0.15);
+  --lumi-brand-pressed: #28C08A;
+  --lumi-brand-soft: #6EE7B7;
+  --lumi-brand-glow: rgba(52, 211, 153, 0.18);
+  --lumi-brand-subtle: rgba(52, 211, 153, 0.04);
+  --lumi-brand-border: rgba(52, 211, 153, 0.20);
+  --lumi-brand-gradient: linear-gradient(135deg, #34D399 0%, #6EE7B7 100%);
+  --lumi-brand-gradient-soft: linear-gradient(135deg, rgba(52, 211, 153, 0.10) 0%, rgba(110, 231, 183, 0.06) 100%);
+  --lumi-secondary: #6EE7B7;
+  --lumi-secondary-hover: #8AEDCA;
+  --lumi-secondary-light: rgba(110, 231, 183, 0.12);
+  --lumi-accent: #A78BFA;
+  --lumi-accent-hover: #B9A0FC;
+  --lumi-accent-light: rgba(167, 139, 250, 0.15);
+  --shadow-brand: 0 4px 14px rgba(52, 211, 153, 0.2);
+  --gradient-brand: linear-gradient(135deg, #34D399, #6EE7B7);
+  --btn-primary-bg: var(--lumi-brand);
+  --btn-primary-hover: var(--lumi-brand-hover);
+  --input-focus-border: var(--lumi-brand);
+  --card-accent-border: var(--lumi-brand);
+}
+
+/* ---------- 暖橘橙 (Orange) - 浅色 ---------- */
+[data-color-theme="orange"]:not([data-theme="dark"]) {
+  /* 主色 */
+  --lumi-brand: #EA580C;
+  --lumi-brand-hover: #D44E0A;
+  --lumi-brand-light: rgba(234, 88, 12, 0.1);
+  --lumi-brand-pressed: #C24A08;
+  --lumi-brand-soft: #F58025;
+  --lumi-brand-glow: rgba(234, 88, 12, 0.15);
+  --lumi-brand-subtle: rgba(234, 88, 12, 0.04);
+  --lumi-brand-border: rgba(234, 88, 12, 0.20);
+  --lumi-brand-gradient: linear-gradient(135deg, #EA580C 0%, #FB923C 100%);
+  --lumi-brand-gradient-soft: linear-gradient(135deg, rgba(234, 88, 12, 0.10) 0%, rgba(251, 146, 60, 0.06) 100%);
+  /* 辅色 */
+  --lumi-secondary: #FB923C;
+  --lumi-secondary-hover: #F58025;
+  --lumi-secondary-light: rgba(251, 146, 60, 0.1);
+  /* 强调色 */
+  --lumi-accent: #0EA5E9;
+  --lumi-accent-hover: #0284C7;
+  --lumi-accent-light: rgba(14, 165, 233, 0.1);
+  /* 阴影 */
+  --shadow-brand: 0 4px 14px rgba(234, 88, 12, 0.15);
+  /* 渐变 */
+  --gradient-brand: linear-gradient(135deg, #EA580C, #FB923C);
+  /* 组件 Token 覆盖 */
+  --btn-primary-bg: var(--lumi-brand);
+  --btn-primary-hover: var(--lumi-brand-hover);
+  --input-focus-border: var(--lumi-brand);
+  --card-accent-border: var(--lumi-brand);
+}
+
+/* ---------- 暖橘橙 (Orange) - 深色 ---------- */
+[data-color-theme="orange"][data-theme="dark"] {
+  --lumi-brand: #FB923C;
+  --lumi-brand-hover: #FCA656;
+  --lumi-brand-light: rgba(251, 146, 60, 0.15);
+  --lumi-brand-pressed: #F58025;
+  --lumi-brand-soft: #FDBA74;
+  --lumi-brand-glow: rgba(251, 146, 60, 0.18);
+  --lumi-brand-subtle: rgba(251, 146, 60, 0.04);
+  --lumi-brand-border: rgba(251, 146, 60, 0.20);
+  --lumi-brand-gradient: linear-gradient(135deg, #FB923C 0%, #FDBA74 100%);
+  --lumi-brand-gradient-soft: linear-gradient(135deg, rgba(251, 146, 60, 0.10) 0%, rgba(253, 186, 116, 0.06) 100%);
+  --lumi-secondary: #FDBA74;
+  --lumi-secondary-hover: #FDCA92;
+  --lumi-secondary-light: rgba(253, 186, 116, 0.12);
+  --lumi-accent: #38BDF8;
+  --lumi-accent-hover: #7DD3FC;
+  --lumi-accent-light: rgba(56, 189, 248, 0.15);
+  --shadow-brand: 0 4px 14px rgba(251, 146, 60, 0.2);
+  --gradient-brand: linear-gradient(135deg, #FB923C, #FDBA74);
+  --btn-primary-bg: var(--lumi-brand);
+  --btn-primary-hover: var(--lumi-brand-hover);
+  --input-focus-border: var(--lumi-brand);
+  --card-accent-border: var(--lumi-brand);
+}
