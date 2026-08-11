@@ -17,6 +17,7 @@ import {
 import { useMemoryStore, CATEGORY_LABELS, CATEGORY_COLORS, FACT_CATEGORIES } from '../stores/memory'
 import type { FactItem, FactCategory } from '../stores/memory'
 import { useToast } from '../composables/useToast'
+import LumiButton from '../components/common/LumiButton.vue'
 import MemoryConfirmDialog from '../components/memory/MemoryConfirmDialog.vue'
 import MemoryLayerNav from '../components/memory/MemoryLayerNav.vue'
 import MemoryProfileTab from '../components/memory/MemoryProfileTab.vue'
@@ -526,25 +527,24 @@ window.addEventListener('click', closeMenu)
 
 <template>
   <div class="memory-view">
-    <div class="memory-header">
-      <div class="header-left">
-        <Brain :size="20" />
-        <h2>记忆中枢</h2>
-        <span class="header-badge">AI驱动的记忆系统</span>
+    <div class="memory-header animate-fade-in">
+      <div class="memory-header__left">
+        <h1 class="memory-title">记忆中枢</h1>
+        <span class="memory-badge">AI驱动的记忆系统</span>
       </div>
-      <div class="header-actions">
-        <button class="h-btn" @click="exportMemory" title="导出记忆">
-          <Download :size="15" />
-        </button>
-        <button class="h-btn" @click="importMemory" title="导入记忆">
-          <Upload :size="15" />
-        </button>
-        <button class="h-btn" @click="loadData">
-          <RefreshCw :size="15" :class="{ 'spin-animation': memoryStore.loading }" />
-        </button>
-        <button class="h-btn" @click="toggleMenu">
-          <MoreVertical :size="15" />
-        </button>
+      <div class="memory-header__actions">
+        <LumiButton variant="ghost" size="sm" icon-only @click="exportMemory" title="导出记忆">
+          <template #icon><Download :size="15" /></template>
+        </LumiButton>
+        <LumiButton variant="ghost" size="sm" icon-only @click="importMemory" title="导入记忆">
+          <template #icon><Upload :size="15" /></template>
+        </LumiButton>
+        <LumiButton variant="ghost" size="sm" icon-only @click="loadData" title="刷新">
+          <template #icon><RefreshCw :size="15" :class="{ 'spin-animation': memoryStore.loading }" /></template>
+        </LumiButton>
+        <LumiButton variant="ghost" size="sm" icon-only @click="toggleMenu" title="更多">
+          <template #icon><MoreVertical :size="15" /></template>
+        </LumiButton>
       </div>
     </div>
 
@@ -736,50 +736,53 @@ window.addEventListener('click', closeMenu)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--divider-soft, var(--border));
   flex-shrink: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--lumi-brand) 3%, transparent) 0%, transparent 100%);
 }
 
-.header-left {
+.memory-header__left {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--text-muted);
+  gap: var(--space-3);
 }
 
-.header-left h2 {
-  font-size: var(--text-2xl);
-  font-weight: 600;
-  color: var(--text);
+.memory-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
-.header-badge {
+.memory-badge {
   font-size: var(--text-xs);
-  padding: 3px 10px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
-  background: var(--task-sky-soft);
-  color: var(--task-sky);
-  font-weight: 500;
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+  font-weight: var(--font-medium);
 }
 
-.header-actions {
+.memory-header__actions {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 
 .memory-body {
   display: flex;
   flex: 1;
   min-height: 0;
+  gap: var(--space-4);
+  padding: var(--space-4);
   overflow: hidden;
 }
 
 .memory-detail {
   flex: 1;
   min-height: 0;
-  padding: var(--space-6);
+  padding: var(--space-4) var(--space-6);
   overflow-y: auto;
   display: flex;
   flex-direction: column;

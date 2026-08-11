@@ -42,6 +42,16 @@ class PluginError(LuomiNestError):
         super().__init__(message, "PLUGIN_ERROR", 500)
 
 
+class ConversationModeLockedError(LuomiNestError):
+    """对话模式锁定（洋葱架构 §6）：已有消息的对话不可变更 chat_mode。
+
+    后端权威锁定：任何对已有消息对话的 chat_mode 修改请求返回 409。
+    """
+
+    def __init__(self, message: str = "Conversation mode is locked once messages exist"):
+        super().__init__(message, "ERR_CONV_MODE_LOCKED", 409)
+
+
 def register_exception_handlers(app) -> None:
     """注册统一异常处理器（保留入口，主流程已由 app_factory.py 内联注册）。
 

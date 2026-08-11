@@ -39,6 +39,7 @@ const editProvider = ref<EditProviderForm>({
   apiKey: '',
   defaultModel: '',
   isDefault: false,
+  protocol: 'auto',
 })
 
 const providers = computed(() => modelStore.providers)
@@ -96,6 +97,7 @@ const openForProvider = (providerId: string) => {
     apiKeyPrefix: p.apiKeyPrefix || '',
     defaultModel: p.defaultModel,
     isDefault: p.isDefault,
+    protocol: p.protocol || 'auto',
   }
   showApiKey.value = false
   const tmpl = modelStore.allTemplates.find(t => t.id === providerId)
@@ -125,12 +127,14 @@ const handleEditProvider = async () => {
       apiKey?: string
       defaultModel?: string
       isDefault?: boolean
+      protocol?: string
     } = {
       name: editProvider.value.name,
       vendor: editProvider.value.vendor,
       baseUrl: editProvider.value.baseUrl,
       defaultModel: editProvider.value.defaultModel,
       isDefault: editProvider.value.isDefault,
+      protocol: editProvider.value.protocol,
     }
     if (editProvider.value.apiKey) {
       updates.apiKey = editProvider.value.apiKey
@@ -190,6 +194,18 @@ watch(() => props.providerId, (providerId) => {
             </select>
             <ChevronRight :size="14" class="select-icon" />
           </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">接入协议</label>
+          <div class="form-select-wrap">
+            <select v-model="editProvider.protocol" class="form-select">
+              <option value="auto">自动（按供应商推断）</option>
+              <option value="chat_completions">Chat Completions（OpenAI 兼容）</option>
+              <option value="anthropic_messages">Anthropic Messages（原生）</option>
+            </select>
+            <ChevronRight :size="14" class="select-icon" />
+          </div>
+          <span class="form-hint">自动：Anthropic 供应商走原生 Messages 协议，其余走 Chat Completions</span>
         </div>
         <div class="form-group">
           <label class="form-label">API 地址</label>

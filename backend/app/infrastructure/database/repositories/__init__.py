@@ -8,6 +8,7 @@ from app.infrastructure.database.repositories.marketplace_stat_repository import
 from app.infrastructure.database.repositories.platform_repository import PlatformRepository
 from app.infrastructure.database.repositories.provider_repository import ProviderCredentialRepository, ProviderRepository
 from app.infrastructure.database.repositories.repo_source_repository import RepoSourceRepository
+from app.infrastructure.database.repositories.skill_repository import SkillRepository, skill_repository
 from app.infrastructure.database.repositories.usage_repository import UsageRepository
 
 __all__ = [
@@ -23,5 +24,7 @@ __all__ = [
     "ProviderCredentialRepository",
     "ProviderRepository",
     "RepoSourceRepository",
+    "SkillRepository",
+    "skill_repository",
     "UsageRepository",
 ]

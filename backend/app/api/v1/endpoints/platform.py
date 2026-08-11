@@ -364,6 +364,12 @@ async def get_platform_conversations(
         if not conv:
             continue
 
+        # 域隔离守卫（洋葱架构 §5.3/§8.1）：平台对话列表只返回本实例域内的对话；
+        # domain 为空的存量对话（域回填迁移前创建）不排除，保持向后兼容
+        conv_domain = conv.get("domain") or ""
+        if conv_domain and conv_domain != f"platform:{instance_id}":
+            continue
+
         messages = conv.get("messages", [])
         preview = ""
         for m in reversed(messages):

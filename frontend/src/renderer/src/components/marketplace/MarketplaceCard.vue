@@ -311,6 +311,7 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
 .install-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-1);
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
@@ -319,15 +320,22 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
   color: var(--text-inverse);
   background: var(--lumi-brand);
   transition: all var(--transition-fast);
+  min-width: 64px;
+  max-width: 120px;
+  white-space: nowrap;
 }
 
 .install-btn:hover:not(:disabled) {
   background: var(--lumi-brand-hover);
+  box-shadow: var(--shadow-sm);
 }
 
 .install-btn.operating {
-  background: var(--text-secondary);
-  cursor: not-allowed;
+  background: var(--lumi-brand);
+  opacity: 0.85;
+  cursor: default;
+  position: relative;
+  overflow: hidden;
 }
 
 .install-btn.installed {
@@ -337,7 +345,8 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
 
 .progress-text {
   font-size: var(--text-xs);
-  opacity: 0.8;
+  font-weight: var(--font-semibold);
+  opacity: 0.9;
 }
 
 </style>

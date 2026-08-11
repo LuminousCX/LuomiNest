@@ -14,6 +14,7 @@ import { copyToClipboard } from '../../utils/clipboard'
 import { generateId } from '../../utils/id'
 import type { CommandRecord, SystemLogEntry, LogUploadResponse, ExecuteCommandResponse } from '../../types'
 import { formatTime, formatDuration } from '../../utils/format'
+import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
 
 const { apiGet, apiPost, apiDelete } = useApi()
 
@@ -275,12 +276,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="console-view">
-    <div class="console-header">
-      <div class="header-info">
-        <h1 class="header-title">控制台</h1>
-        <p class="header-desc">AI 命令执行记录、系统日志与运行状态</p>
-      </div>
-      <div class="header-actions">
+    <LumiPageHeader title="控制台" desc="AI 命令执行记录、系统日志与运行状态">
+      <template #actions>
         <LumiButton
           variant="ghost"
           size="sm"
@@ -304,8 +301,8 @@ onBeforeUnmount(() => {
             <Minimize2 v-else :size="14" />
           </template>
         </LumiButton>
-      </div>
-    </div>
+      </template>
+    </LumiPageHeader>
 
     <div class="tab-bar">
       <button :class="['tab-btn', { active: activeTab === 'console' }]" @click="activeTab = 'console'">
@@ -607,28 +604,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.console-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.header-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-}
-
-.header-desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-}
-
-.header-actions {
-  display: flex;
-  gap: var(--space-1);
-}
+/* header → LumiPageHeader */
 
 :deep(.header-action-btn.is-active) {
   background: var(--lumi-brand-light);

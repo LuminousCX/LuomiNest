@@ -75,6 +75,8 @@ class SkillLoader:
             except Exception as e:
                 logger.error(f"[CxSkill] Failed to load skill from {entry}: {e}")
         logger.info(f"[CxSkill] Loaded {count} skill(s) from {self._skill_dir}")
+        # skills 表全量 upsert（洋葱架构 §11.1 / §16.1：文件为权威源，每次启动全量同步）
+        self.sync_skills_table()
         return count
 
     async def load_single(self, skill_dir: str) -> bool:
@@ -140,6 +142,8 @@ class SkillLoader:
             f"[CxSkill] Loaded: {skill.id} v{skill.version} ({skill.name}) "
             f"format={skill.source_format.value} body_len={len(skill.body)}"
         )
+        # 同步 upsert 到 skills 表（市场安装 / 写入即加载等热路径）
+        self._sync_single_to_db(skill)
         return True
 
     def _parse_skill_md(self, path: Path, skill_dir: str) -> SkillDefinition:
@@ -373,6 +377,8 @@ class SkillLoader:
             return False
         await cx_skill_registry.unregister(skill_id)
         self._loaded.discard(skill_id)
+        # 同步删除 skills 表索引行（文件/注册表为权威源）
+        self._remove_single_from_db(skill_id)
         logger.info(f"[CxSkill] Unloaded: {skill_id}")
         return True
 
@@ -395,6 +401,69 @@ class SkillLoader:
 
     def get_loaded_ids(self) -> set[str]:
         return set(self._loaded)
+
+    # ------------------------------------------------------------------
+    # skills 表持久化索引同步（洋葱架构 §11.1 / B9）
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _skill_to_row(skill: SkillDefinition) -> dict[str, Any]:
+        """SkillDefinition → skills 表行数据（tags 序列化为 JSON TEXT）。"""
+        return {
+            "name": skill.name,
+            "version": skill.version,
+            "description": skill.description,
+            "category": skill.category,
+            "tags": json.dumps(skill.tags, ensure_ascii=False),
+            "status": skill.status.value,
+            "enabled": 1 if cx_skill_registry.is_enabled(skill.id) else 0,
+            "source_path": skill.source_path,
+            "body_length": len(skill.body),
+        }
+
+    def _sync_single_to_db(self, skill: SkillDefinition) -> None:
+        """upsert 单个技能到 skills 表（DB 失败不影响加载主流程）。"""
+        try:
+            from app.infrastructure.database.repositories.skill_repository import (
+                skill_repository,
+            )
+            skill_repository.upsert_skill(skill.id, self._skill_to_row(skill))
+        except Exception as e:
+            logger.warning(f"[CxSkill] skills table upsert skipped: {skill.id}: {e}")
+
+    def _remove_single_from_db(self, skill_id: str) -> None:
+        """删除单个技能的 skills 表索引行（卸载时调用）。"""
+        try:
+            from app.infrastructure.database.repositories.skill_repository import (
+                skill_repository,
+            )
+            skill_repository.delete(skill_id)
+        except Exception as e:
+            logger.warning(f"[CxSkill] skills table delete skipped: {skill_id}: {e}")
+
+    def sync_skills_table(self) -> None:
+        """全量同步 skills 表（幂等，文件为权威源，§16.1 风险缓解）。
+
+        以内存 registry 为准逐行 upsert，并删除文件中已不存在的多余行。
+        每次启动 load_all() 结束时调用；DB 不可用时仅告警不阻断加载。
+        """
+        try:
+            from app.infrastructure.database.repositories.skill_repository import (
+                skill_repository,
+            )
+        except Exception as e:
+            logger.warning(f"[CxSkill] skills table sync skipped (import failed): {e}")
+            return
+        try:
+            skills = cx_skill_registry.list_skills()
+            for skill in skills:
+                skill_repository.upsert_skill(skill.id, self._skill_to_row(skill))
+            removed = skill_repository.prune_stale({s.id for s in skills})
+            logger.info(
+                f"[CxSkill] skills table synced: upserted={len(skills)}, pruned={removed}"
+            )
+        except Exception as e:
+            logger.warning(f"[CxSkill] skills table sync skipped: {e}")
 
     # ------------------------------------------------------------------
     # 写入与删除（供 skill-creator 元技能与 API 调用）

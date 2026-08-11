@@ -73,6 +73,7 @@ class ProviderCreate(BaseModel):
     default_model: str = Field(alias="defaultModel", default="")
     is_default: bool = Field(alias="isDefault", default=False)
     selected_models: list[str] = Field(alias="selectedModels", default_factory=list)
+    protocol: str = "auto"
 
 
 class ProviderUpdate(BaseModel):
@@ -85,6 +86,7 @@ class ProviderUpdate(BaseModel):
     default_model: str | None = Field(alias="defaultModel", default=None)
     is_default: bool | None = Field(alias="isDefault", default=None)
     selected_models: list[str] | None = Field(alias="selectedModels", default=None)
+    protocol: str | None = None
 
 
 class ProviderResponse(BaseModel):
@@ -99,6 +101,7 @@ class ProviderResponse(BaseModel):
     default_model: str = Field(alias="defaultModel")
     is_default: bool = Field(alias="isDefault")
     selected_models: list[str] = Field(alias="selectedModels", default_factory=list)
+    protocol: str = "auto"
     models: list[dict] = []
 
 
@@ -183,6 +186,7 @@ def _build_provider_response(provider_id: str, adapter) -> ProviderResponse:
         default_model=getattr(provider, "default_model", ""),
         is_default=provider_id == adapter.default_provider,
         selected_models=cfg.get("selected_models", []),
+        protocol=cfg.get("protocol") or "auto",
         models=[],
     )
 
@@ -220,6 +224,7 @@ async def list_providers(adapter=Depends(get_llm_adapter)):
             default_model=p["default_model"],
             is_default=p["is_default"],
             selected_models=p.get("selected_models", []),
+            protocol=p.get("protocol") or "auto",
             models=[],
         ))
     logger.success(f"[API] GET /models/providers - Success: returned {len(result)} providers")
@@ -242,6 +247,7 @@ async def add_provider(request: ProviderCreate, adapter=Depends(get_llm_adapter)
         "default_model": request.default_model,
         "is_default": request.is_default,
         "selected_models": request.selected_models,
+        "protocol": request.protocol or "auto",
     }
 
     provider = _create_provider_from_config(config)
@@ -280,6 +286,7 @@ async def add_provider(request: ProviderCreate, adapter=Depends(get_llm_adapter)
         default_model=provider.default_model,
         is_default=request.is_default,
         selected_models=config["selected_models"],
+        protocol=config["protocol"],
         models=models,
     )
 
@@ -316,6 +323,9 @@ async def update_provider(provider_id: str, request: ProviderUpdate, adapter=Dep
     if request.selected_models is not None:
         updated_cfg["selected_models"] = request.selected_models
         updated_fields.append("selected_models")
+    if request.protocol is not None:
+        updated_cfg["protocol"] = request.protocol or "auto"
+        updated_fields.append("protocol")
 
     provider = _create_provider_from_config(updated_cfg)
     set_default = request.is_default if request.is_default is not None else False

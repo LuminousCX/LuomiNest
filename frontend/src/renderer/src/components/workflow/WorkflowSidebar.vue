@@ -88,17 +88,24 @@ defineEmits<{
 <style scoped>
 .workflow-sidebar {
   width: 240px;
-  background: var(--workspace-sidebar);
-  border-right: 1px solid var(--workspace-border);
+  flex-shrink: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-  overflow-y: auto;
+  gap: var(--space-2);
+  background: var(--workspace-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--workspace-border);
+  box-shadow: var(--shadow-sm);
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  max-height: 100%;
 }
 
 .sidebar-section {
-  padding: var(--space-4) var(--space-3);
-  border-bottom: 1px solid var(--workspace-border);
+  padding: var(--space-2) var(--space-1);
 }
 
 .sidebar-sessions {

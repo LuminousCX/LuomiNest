@@ -11,7 +11,7 @@ import { onMounted } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
-import { Sparkles, Square, Clock, Cpu, Workflow as WorkflowIcon } from 'lucide-vue-next'
+import { Square, Clock, Cpu, Workflow as WorkflowIcon } from 'lucide-vue-next'
 import LumiButton from '../components/common/LumiButton.vue'
 import LumiEmptyState from '../components/common/LumiEmptyState.vue'
 import WorkflowSidebar from '../components/workflow/WorkflowSidebar.vue'
@@ -51,15 +51,12 @@ onMounted(() => {
 
 <template>
   <div class="workflow-view">
-    <div class="workflow-header">
-      <div class="header-left">
-        <h1 class="page-title">
-          <Sparkles :size="20" />
-          工作流画布
-        </h1>
-        <span class="page-subtitle">AI 任务编排与可视化</span>
+    <div class="workflow-header animate-fade-in">
+      <div class="workflow-header__text">
+        <h1 class="workflow-title">工作流画布</h1>
+        <p class="workflow-desc">AI 任务编排与可视化</p>
       </div>
-      <div class="header-actions">
+      <div class="workflow-header__actions">
         <div v-if="currentDisplaySession" class="session-progress">
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: progressStats.progress + '%' }"></div>
@@ -174,36 +171,29 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--workspace-border);
+  padding: var(--space-6) var(--space-7) var(--space-4);
   flex-shrink: 0;
 }
 
-.header-left {
+.workflow-header__text {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
 }
 
-.page-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-lg);
-  font-weight: 700;
+.workflow-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
+  line-height: 1.2;
 }
 
-.page-subtitle {
-  font-size: var(--text-sm);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
-  font-weight: 500;
+.workflow-desc {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
 }
 
-.header-actions {
+.workflow-header__actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -244,6 +234,8 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  gap: var(--space-4);
+  padding: 0 var(--space-7) var(--space-7);
 }
 
 .canvas-area {

@@ -427,6 +427,7 @@ interface RawProvider {
   is_default?: boolean
   selectedModels?: string[]
   selected_models?: string[]
+  protocol?: string
   models?: unknown[]
 }
 
@@ -711,6 +712,7 @@ export const useModelStore = defineStore('model', () => {
           defaultModel: p.defaultModel || p.default_model || '',
           isDefault: p.isDefault || p.is_default || false,
           selectedModels: p.selectedModels || p.selected_models || [],
+          protocol: p.protocol || 'auto',
           models: (p.models || []) as { id: string; name: string }[],
         }
       })
@@ -784,6 +786,7 @@ export const useModelStore = defineStore('model', () => {
     defaultModel?: string
     isDefault?: boolean
     selectedModels?: string[]
+    protocol?: string
   }) => {
     const result = await apiPatch<ModelProvider>(`/models/providers/${providerId}`, {
       name: updates.name,
@@ -793,6 +796,7 @@ export const useModelStore = defineStore('model', () => {
       defaultModel: updates.defaultModel,
       isDefault: updates.isDefault,
       selectedModels: updates.selectedModels,
+      protocol: updates.protocol,
     })
     await fetchProviders()
     return result

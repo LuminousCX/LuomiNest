@@ -12,6 +12,7 @@ from typing import Optional
 from sqlalchemy import func, or_, select, delete as sa_delete, update as sa_update
 from sqlalchemy.orm import defer
 
+from app.core.exceptions import ConversationModeLockedError
 from app.infrastructure.database.models.conversation import Conversation
 from app.infrastructure.database.repositories.base import BaseRepository, orm_to_dict, utcnow_iso
 from app.infrastructure.database.session import sync_session_factory
@@ -65,7 +66,36 @@ class ConversationRepository(BaseRepository):
         if not conv.get("created_at"):
             conv["created_at"] = utcnow_iso()
         conv["updated_at"] = utcnow_iso()
+        # 模式锁（洋葱架构 §6）：已有消息的对话 chat_mode 不可变更，后端权威校验
+        self._enforce_mode_lock(key, conv)
         return super().save(key, conv)
+
+    def _enforce_mode_lock(self, key: str, data: dict) -> None:
+        """模式锁定校验（§6）：会话已有消息后 chat_mode 不可变更。
+
+        - 新建会话设初始模式：不受限（无存量行）
+        - 存量会话无消息：仍允许变更
+        - 存量会话有消息且模式不同：抛 ConversationModeLockedError（409 / ERR_CONV_MODE_LOCKED）
+        - 请求未携带 chat_mode 或模式相同：不受限
+        """
+        if "chat_mode" not in data:
+            return
+        new_mode = data.get("chat_mode")
+        if not new_mode:
+            return
+        with sync_session_factory() as session:
+            obj = session.get(Conversation, key)
+            if obj is None:
+                return  # 新建会话，初始模式不受限
+            has_messages = bool(obj.messages or [])
+            old_mode = obj.chat_mode or "normal"
+        if not has_messages:
+            return
+        if str(new_mode) != str(old_mode):
+            raise ConversationModeLockedError(
+                f"Conversation {key} already has messages, "
+                f"chat_mode cannot change from '{old_mode}' to '{new_mode}'"
+            )
 
     # ── Optimized reads ──
 
@@ -112,8 +142,19 @@ class ConversationRepository(BaseRepository):
 
     # ── List / Search ──
 
-    def list_meta(self, agent_id: Optional[str] = None, include_hidden: bool = False) -> list[dict]:
-        """列表查询（不含 messages/search_text），按 updated_at 降序。"""
+    def list_meta(
+        self,
+        agent_id: Optional[str] = None,
+        include_hidden: bool = False,
+        domain: Optional[str] = None,
+        exclude_domain_prefix: Optional[str] = None,
+    ) -> list[dict]:
+        """列表查询（不含 messages/search_text），按 updated_at 降序。
+
+        对话域过滤（洋葱架构 §5.3 列表隔离）：
+        - domain：精确匹配对话域（如 workbench / agent:{id} / platform:{instId}）
+        - exclude_domain_prefix：排除指定前缀的域（domain 为空/NULL 的对话不排除，兼容存量）
+        """
         with sync_session_factory() as session:
             stmt = select(Conversation).where(Conversation.deleted_at.is_(None))
             if not include_hidden:
@@ -122,6 +163,16 @@ class ConversationRepository(BaseRepository):
                 )
             if agent_id:
                 stmt = stmt.where(Conversation.agent_id == agent_id)
+            if domain:
+                stmt = stmt.where(Conversation.domain == domain)
+            if exclude_domain_prefix:
+                stmt = stmt.where(
+                    or_(
+                        Conversation.domain.is_(None),
+                        Conversation.domain == "",
+                        ~Conversation.domain.like(f"{exclude_domain_prefix}%"),
+                    )
+                )
             stmt = stmt.order_by(Conversation.updated_at.desc())
             objs = session.execute(stmt).scalars().all()
             result = []
@@ -283,8 +334,16 @@ class ConversationRepository(BaseRepository):
     async def get_paginated_async(self, conv_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
         return await asyncio.to_thread(self.get_paginated, conv_id, limit, before_id)
 
-    async def list_meta_async(self, agent_id: Optional[str] = None, include_hidden: bool = False) -> list[dict]:
-        return await asyncio.to_thread(self.list_meta, agent_id, include_hidden)
+    async def list_meta_async(
+        self,
+        agent_id: Optional[str] = None,
+        include_hidden: bool = False,
+        domain: Optional[str] = None,
+        exclude_domain_prefix: Optional[str] = None,
+    ) -> list[dict]:
+        return await asyncio.to_thread(
+            self.list_meta, agent_id, include_hidden, domain, exclude_domain_prefix,
+        )
 
     async def search_async(self, keyword: str, agent_id: Optional[str] = None) -> list[dict]:
         return await asyncio.to_thread(self.search, keyword, agent_id)

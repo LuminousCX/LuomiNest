@@ -14,6 +14,7 @@ from app.infrastructure.database.models.provider import Provider
 from app.infrastructure.database.models.provider_credential import ProviderCredential
 from app.infrastructure.database.models.repo_source import RepoSource
 from app.infrastructure.database.models.scheduled_task import ScheduledTaskORM
+from app.infrastructure.database.models.skill import SkillORM
 from app.infrastructure.database.models.tool_call_record import ToolCallRecordORM
 from app.infrastructure.database.models.usage_record import UsageRecord
 from app.infrastructure.database.models.user import User
@@ -33,6 +34,7 @@ __all__ = [
     "ProviderCredential",
     "RepoSource",
     "ScheduledTaskORM",
+    "SkillORM",
     "ToolCallRecordORM",
     "UsageRecord",
     "User",

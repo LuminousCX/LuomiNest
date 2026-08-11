@@ -89,6 +89,67 @@ async def _migrate_columns(conn) -> None:
                     text("ALTER TABLE conversations ADD COLUMN is_hidden BOOLEAN DEFAULT 0")
                 )
                 logger.info("[DB] Migrated conversations table: added is_hidden column")
+            # 对话域字段（洋葱架构 §5.2/§12.1）：domain/scene/user_key
+            if "domain" not in existing_cols:
+                sync_conn.execute(
+                    text("ALTER TABLE conversations ADD COLUMN domain TEXT DEFAULT ''")
+                )
+                logger.info("[DB] Migrated conversations table: added domain column")
+            if "scene" not in existing_cols:
+                sync_conn.execute(
+                    text("ALTER TABLE conversations ADD COLUMN scene TEXT DEFAULT 'workbench'")
+                )
+                logger.info("[DB] Migrated conversations table: added scene column")
+            if "user_key" not in existing_cols:
+                sync_conn.execute(
+                    text("ALTER TABLE conversations ADD COLUMN user_key TEXT DEFAULT ''")
+                )
+                logger.info("[DB] Migrated conversations table: added user_key column")
+            # §12.1 索引：domain / user_key 查询索引（新建库由 create_all 建立，此处兜底存量库）
+            existing_indexes = {ix["name"] for ix in inspector.get_indexes("conversations")}
+            if "ix_conversations_domain" not in existing_indexes:
+                sync_conn.execute(
+                    text("CREATE INDEX ix_conversations_domain ON conversations(domain)")
+                )
+                logger.info("[DB] Migrated conversations table: added ix_conversations_domain index")
+            if "ix_conversations_user_key" not in existing_indexes:
+                sync_conn.execute(
+                    text("CREATE INDEX ix_conversations_user_key ON conversations(user_key)")
+                )
+                logger.info("[DB] Migrated conversations table: added ix_conversations_user_key index")
+
+        # providers 表添加 protocol 列（接入协议：auto | chat_completions | anthropic_messages）
+        if "providers" in inspector.get_table_names():
+            provider_cols = {c["name"] for c in inspector.get_columns("providers")}
+            if "protocol" not in provider_cols:
+                sync_conn.execute(
+                    text("ALTER TABLE providers ADD COLUMN protocol VARCHAR(32) DEFAULT 'auto'")
+                )
+                logger.info("[DB] Migrated providers table: added protocol column")
+
+        # skills 表（洋葱架构 §11.1）：新建库由 create_all 建表；
+        # 此处兜底存量库——若历史上已存在手工建的 skills 表，补齐缺失列
+        if "skills" in inspector.get_table_names():
+            skill_cols = {c["name"] for c in inspector.get_columns("skills")}
+            _skill_col_defs = {
+                "name": "TEXT NOT NULL DEFAULT ''",
+                "version": "TEXT DEFAULT '1.0.0'",
+                "description": "TEXT DEFAULT ''",
+                "category": "TEXT DEFAULT ''",
+                "tags": "TEXT DEFAULT '[]'",
+                "status": "TEXT DEFAULT 'loaded'",
+                "enabled": "INTEGER DEFAULT 1",
+                "source_path": "TEXT DEFAULT ''",
+                "body_length": "INTEGER DEFAULT 0",
+                "updated_at": "TEXT DEFAULT ''",
+                "created_at": "TEXT DEFAULT ''",
+            }
+            for col_name, col_def in _skill_col_defs.items():
+                if col_name not in skill_cols:
+                    sync_conn.execute(
+                        text(f"ALTER TABLE skills ADD COLUMN {col_name} {col_def}")
+                    )
+                    logger.info(f"[DB] Migrated skills table: added {col_name} column")
 
     await conn.run_sync(_do_migrate)
 

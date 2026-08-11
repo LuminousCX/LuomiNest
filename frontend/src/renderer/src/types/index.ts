@@ -222,6 +222,8 @@ export interface ModelProvider {
   isDefault: boolean
   defaultModel: string
   selectedModels: string[]
+  /** 接入协议：auto | chat_completions | anthropic_messages */
+  protocol: string
   models: { id: string; name: string }[]
 }
 

@@ -31,6 +31,9 @@ from app.infrastructure.database.config_store import lumi_config_store
 from app.infrastructure.database.usage_store import usage_store
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.facades.main_agent_config import save_luominest_main_agent_config
+from app.infrastructure.database.migration.conversation_domain_migrator import (
+    migrate_conversation_domains,
+)
 from app.infrastructure.database.models.migration_meta import MigrationMeta
 from app.infrastructure.database.repositories.usage_repository import UsageRepository
 from app.infrastructure.database.session import sync_session_factory
@@ -802,6 +805,8 @@ _MIGRATION_SOURCES: list[tuple[str, Callable[[], int]]] = [
     ("main_agent", _migrate_main_agent),
     ("model_config", _migrate_model_config),
     ("conversations", _migrate_conversations),
+    # 对话域回填（§5.4）：须在 conversations/standalone_db 迁移之后执行，依赖平台会话映射
+    ("conversation_domains", migrate_conversation_domains),
     ("providers_from_config_items", _migrate_providers_from_config_items),
     ("scheduled_tasks", _migrate_scheduled_tasks),
     ("plugin_states", _migrate_plugin_states),

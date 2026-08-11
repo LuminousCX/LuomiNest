@@ -13,23 +13,65 @@ from app.runtime.provider.llm.adapters.chat_completions import (
     OpenAICompatibleProvider,
     PROVIDER_TEMPLATES,
 )
+from app.runtime.provider.llm.adapters.anthropic_messages import AnthropicMessagesProvider
+from app.runtime.provider.llm.ports import LLMProvider
 from app.runtime.provider.llm.types import LLMRequest, ProviderCapabilities, RouteHint
 from app.runtime.provider.llm.capabilities import get_capabilities as _get_capabilities
 from app.runtime.provider.registry import provider_registry
 
 
-# ── 注册默认 Provider 实现 ──
-# 所有已知 vendor 均使用 OpenAICompatibleProvider；
-# 未来新增非兼容 Provider（如原生 Anthropic SDK）时，只需 register 新类即可。
+# ── 注册 Provider 实现（按接入协议分派，onion §4.1.1 / §4.1.2）──
+# chat_completions：OpenAI 兼容协议（默认），覆盖全部预置模板
+# anthropic_messages：Anthropic 原生 /v1/messages 协议（修复 Claude 直连 404）
 provider_registry.register(
     "openai_compatible",
     OpenAICompatibleProvider,
-    aliases=list(PROVIDER_TEMPLATES.keys()),
+    aliases=[name for name in PROVIDER_TEMPLATES.keys() if name != "anthropic"] + ["chat_completions"],
+)
+provider_registry.register(
+    "anthropic_messages",
+    AnthropicMessagesProvider,
+    aliases=["anthropic"],
 )
 
+# ── 协议取值与实现类映射（responses 协议暂不实现，选到时回退 auto 行为）──
+SUPPORTED_PROTOCOLS = ("auto", "chat_completions", "anthropic_messages")
 
-def _create_provider_from_config(config: dict) -> OpenAICompatibleProvider:
+_PROTOCOL_IMPL_CLASSES: dict[str, type[LLMProvider]] = {
+    "chat_completions": OpenAICompatibleProvider,
+    "anthropic_messages": AnthropicMessagesProvider,
+}
+
+
+def _resolve_protocol(config: dict) -> str:
+    """解析接入协议：显式值强制；auto 按 vendor 推断（anthropic → anthropic_messages）。
+
+    - 显式 chat_completions / anthropic_messages：强制使用该协议
+    - auto（含空值，兼容存量配置）：vendor=anthropic → anthropic_messages，
+      其余 → chat_completions；存量 anthropic 配置 vendor 可能仍为
+      openai_compatible，补充按官方域名推断，保证不改配置即可修复直连 404
+    - responses / 未知值：明确提示未支持并回退 auto 推断
+    """
+    raw = str(config.get("protocol") or "").strip() or "auto"
+    if raw not in SUPPORTED_PROTOCOLS:
+        if raw == "responses":
+            logger.warning("[Adapter] responses 协议暂未支持，回退 auto 推断")
+        else:
+            logger.warning(f"[Adapter] 未知接入协议 '{raw}'，回退 auto 推断")
+        raw = "auto"
+    if raw != "auto":
+        return raw
+    vendor = str(config.get("vendor", "openai_compatible"))
+    base_url = str(config.get("base_url", "") or "")
+    if vendor == "anthropic" or "anthropic.com" in base_url:
+        return "anthropic_messages"
+    return "chat_completions"
+
+
+def _create_provider_from_config(config: dict) -> LLMProvider:
+    """按配置构造 Provider 实例：先解析接入协议（显式 > auto 推断），再分派实现类。"""
     vendor = config.get("vendor", "openai_compatible")
+    protocol = _resolve_protocol(config)
     base_url = config.get("base_url", "").rstrip("/")
     api_key = config.get("api_key", "")
     default_model = config.get("default_model", "")
@@ -47,14 +89,22 @@ def _create_provider_from_config(config: dict) -> OpenAICompatibleProvider:
         provider_name = "ollama"
     else:
         if not base_url:
-            base_url = "https://api.openai.com/v1"
+            if protocol == "anthropic_messages":
+                base_url = "https://api.anthropic.com/v1"
+            else:
+                base_url = "https://api.openai.com/v1"
         if not default_model:
-            default_model = "gpt-4o-mini"
+            if protocol == "anthropic_messages":
+                default_model = "claude-sonnet-4-20250514"
+            else:
+                default_model = "gpt-4o-mini"
 
-    # 通过 ProviderRegistry 查找实现类（支持未来扩展非 OpenAI 兼容的 Provider）
-    provider_cls = provider_registry.get(vendor) or OpenAICompatibleProvider
+    # 按协议分派实现类（上层不感知协议差异）；兜底走注册表/默认实现
+    provider_cls = _PROTOCOL_IMPL_CLASSES.get(protocol)
+    if provider_cls is None:
+        provider_cls = provider_registry.get(vendor) or OpenAICompatibleProvider
 
-    logger.debug(f"[Adapter] Creating provider: name={provider_name}, base_url={base_url}, model={default_model}, class={provider_cls.__name__}")
+    logger.debug(f"[Adapter] Creating provider: name={provider_name}, protocol={protocol}, base_url={base_url}, model={default_model}, class={provider_cls.__name__}")
     return provider_cls(
         api_key=api_key,
         base_url=base_url,
@@ -66,7 +116,7 @@ def _create_provider_from_config(config: dict) -> OpenAICompatibleProvider:
 class LLMAdapter:
     def __init__(self):
         logger.info("[Adapter] Initializing LLMAdapter (lazy load mode)...")
-        self.providers: dict[str, OpenAICompatibleProvider] = {}
+        self.providers: dict[str, LLMProvider] = {}
         self._provider_configs: dict[str, dict] = {}
         self.default_provider = settings.LLM_DEFAULT_PROVIDER
         self._loaded = False
@@ -182,7 +232,7 @@ class LLMAdapter:
             lumi_config_store.set("providers.dismissed_defaults", dismissed)
             logger.info(f"[Adapter] Removed dismissed provider: {name}")
 
-    def register_provider(self, name: str, provider: OpenAICompatibleProvider, config: dict, set_default: bool = False):
+    def register_provider(self, name: str, provider: LLMProvider, config: dict, set_default: bool = False):
         self.ensure_providers_loaded()
         logger.info(f"[Adapter] Registering provider: {name}")
         self._ensure_repos()
@@ -207,7 +257,7 @@ class LLMAdapter:
         # 注册变更后失效该 provider 的上下文缓存
         invalidate_context_cache(provider=name)
 
-    def update_provider(self, name: str, provider: OpenAICompatibleProvider, config: dict, set_default: bool = False):
+    def update_provider(self, name: str, provider: LLMProvider, config: dict, set_default: bool = False):
         self.ensure_providers_loaded()
         logger.info(f"[Adapter] Updating provider: {name}")
         self._ensure_repos()
@@ -260,7 +310,7 @@ class LLMAdapter:
         # provider 删除后失效相关上下文缓存
         invalidate_context_cache(provider=name)
 
-    def get_provider(self, name: str | None = None) -> OpenAICompatibleProvider:
+    def get_provider(self, name: str | None = None) -> LLMProvider:
         self.ensure_providers_loaded()
         provider_name = name or self.default_provider
         provider = self.providers.get(provider_name)
@@ -544,6 +594,7 @@ class LLMAdapter:
                 "api_key_set": bool(api_key_prefix),
                 "default_model": getattr(provider, "default_model", ""),
                 "selected_models": cfg.get("selected_models", []),
+                "protocol": cfg.get("protocol") or "auto",
             })
         return result
 

@@ -37,6 +37,16 @@ const getProviderIcon = (providerId: string): string => {
   return tmpl?.svgIcon || ''
 }
 
+const PROTOCOL_LABELS: Record<string, string> = {
+  auto: '自动协议',
+  chat_completions: 'Chat Completions',
+  anthropic_messages: 'Anthropic Messages',
+}
+
+const protocolLabel = (protocol: string): string => {
+  return PROTOCOL_LABELS[protocol] || protocol || PROTOCOL_LABELS.auto
+}
+
 const toggleModelPicker = (providerId: string) => {
   if (expandedModelPicker.value === providerId) {
     expandedModelPicker.value = ''
@@ -113,6 +123,7 @@ const handleRemoveProvider = async (providerId: string) => {
               <Server v-else :size="14" class="provider-item-icon" />
               <span class="provider-item-name">{{ provider.name }}</span>
               <span v-if="provider.isDefault" class="default-badge">默认</span>
+              <span class="protocol-badge">{{ protocolLabel(provider.protocol) }}</span>
               <span v-if="provider.selectedModels.length > 0" class="selected-count-badge">{{ provider.selectedModels.length }} 模型</span>
             </div>
             <div class="provider-item-detail">
@@ -299,6 +310,16 @@ const handleRemoveProvider = async (providerId: string) => {
   background: var(--lumi-primary-light);
   color: var(--lumi-primary);
   font-weight: 500;
+}
+
+.protocol-badge {
+  font-size: var(--text-2xs);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .model-picker-panel {

@@ -1,11 +1,12 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, system, chat, agent, model, social, memory, console, stats, platform, repo_source, marketplace, tools, mcp, scheduler, scheduled_tasks, workflow, smart_home, avatar, plugin, plugin_assistant
+from app.api.v1.endpoints import auth, system, chat, voice, agent, model, social, memory, console, stats, platform, repo_source, marketplace, tools, mcp, scheduler, scheduled_tasks, workflow, smart_home, avatar, plugin, plugin_assistant
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(system.router)
 api_router.include_router(chat.router)
+api_router.include_router(voice.router)
 api_router.include_router(agent.router)
 api_router.include_router(model.router)
 api_router.include_router(social.router)

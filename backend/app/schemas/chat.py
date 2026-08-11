@@ -86,6 +86,10 @@ class ConversationResponse(BaseModel):
     provider: str | None = None
     chat_mode: str | None = None
     is_hidden: bool = False
+    # 对话域字段（洋葱架构 §5.2，新增只增不改，老客户端忽略即可）
+    domain: str = ""
+    scene: str = "workbench"
+    user_key: str = ""
     messages: list[dict[str, Any]] = []
     created_at: str
     updated_at: str
@@ -101,6 +105,10 @@ class ConversationListResponse(BaseModel):
     provider: str | None = None
     chat_mode: str | None = None
     is_hidden: bool = False
+    # 对话域字段（洋葱架构 §5.2，新增只增不改，老客户端忽略即可）
+    domain: str = ""
+    scene: str = "workbench"
+    user_key: str = ""
     last_message: str | None = None
     created_at: str
     updated_at: str

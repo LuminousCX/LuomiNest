@@ -69,6 +69,30 @@ def _wf_catch(tool_name: str):
     return decorator
 
 
+def _make_skill_tool_handler(tool_name: str):
+    """构造技能工具的 internal handler（桥接 tool_registry 中的 ToolBase 工具）。
+
+    洋葱架构 §11.3：皮套工坊/桌宠为 standard 模式，工具来自 internal_tool_registry，
+    在此桥接 skills 工具使 standard/ultra 模式自动获得技能能力。
+    """
+
+    @_wf_catch(tool_name)
+    async def handler(args: dict[str, Any]) -> WorkflowTaskResult:
+        from app.core.tools.registry import tool_registry
+        tool = tool_registry.get(tool_name)
+        if tool is None:
+            return WorkflowTaskResult(success=False, error=f"技能工具未注册: {tool_name}")
+        result = await tool.execute(args or {})
+        return WorkflowTaskResult(
+            success=result.success,
+            output=result.output,
+            error=result.error,
+            metadata=result.metadata,
+        )
+
+    return handler
+
+
 def _make_browser_bridge_handler(tool_name: str, action: str, timeout: float):
     """创建浏览器自动化桥接 handler
 
@@ -1787,6 +1811,18 @@ async def register_internal_tools() -> None:
         parameters_schema={"type": "object", "properties": {}},
         is_concurrent_safe=True,
     )
+
+    # ─── 技能模块（洋葱架构 §11.2/§11.3：各场景通用，standard/ultra 工具集自动包含）───
+    from app.core.tools.builtin.skills_tools import get_luominest_skills_tools
+    for _skill_tool in get_luominest_skills_tools():
+        await internal_tool_registry.register(
+            name=_skill_tool.name,
+            module="skills",
+            description=_skill_tool.description,
+            handler=_make_skill_tool_handler(_skill_tool.name),
+            parameters_schema=_skill_tool.parameters,
+            is_concurrent_safe=True,
+        )
 
     logger.info(
         f"[Workflow] Registered {len(internal_tool_registry.list_names())} internal tools: "

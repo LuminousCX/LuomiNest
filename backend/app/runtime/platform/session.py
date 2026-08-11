@@ -40,6 +40,20 @@ def _config_key(instance_id: str, session_id: str) -> str:
     return f"{_SESSIONS_KEY_PREFIX}{_session_key(instance_id, session_id)}"
 
 
+def _build_user_key(platform_name: str, session_id: str, is_group: bool) -> str:
+    """构造 user_key（洋葱架构 §8.5）：私聊 {Platform}_{User_ID}，群聊为空。
+
+    私聊时 session_id 即 User_ID（§8.1）；群聊成员记忆走消息级 sender_id，
+    与 conversation 解耦，故群聊 user_key 留空。元数据不完整时留空，
+    待远期账号绑定（Internal_User_ID）归一化。
+    """
+    if is_group:
+        return ""
+    if not platform_name or not session_id:
+        return ""
+    return f"{platform_name}_{session_id}"
+
+
 def _merge_legacy_json() -> None:
     """幂等合并遗留 JSON 文件（platform_sessions.json）到 config_items。
 
@@ -122,6 +136,11 @@ async def get_or_create_conversation(
         "id": conv_id,
         "title": title,
         "agent_id": MAIN_AGENT_ID,
+        # 对话域（洋葱架构 §5/§8.1）：每个平台实例一域，决定列表隔离边界
+        "domain": f"platform:{instance_id}",
+        "scene": "platform",
+        # user_key（§8.5）：私聊 {Platform}_{User_ID}，群聊为空
+        "user_key": _build_user_key(platform_name, session_id, is_group),
         "messages": [],
         "created_at": now,
         "updated_at": now,
@@ -197,6 +216,11 @@ async def create_new_conversation(instance_id: str, session_id: str) -> dict:
         "id": conv_id,
         "title": title,
         "agent_id": MAIN_AGENT_ID,
+        # 对话域（洋葱架构 §5/§8.1）：每个平台实例一域，决定列表隔离边界
+        "domain": f"platform:{instance_id}",
+        "scene": "platform",
+        # user_key（§8.5）：私聊 {Platform}_{User_ID}，群聊为空
+        "user_key": _build_user_key(platform_name, session_id, is_group),
         "messages": [],
         "created_at": now,
         "updated_at": now,

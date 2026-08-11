@@ -292,6 +292,11 @@ async def lifespan(app: FastAPI):
         from app.core.tools.builtin.memory_search_tool import LuomiNestMemorySearchTool
         tool_registry.register(LuomiNestMemorySearchTool())
 
+        # 技能工具：list/read/use（洋葱架构 §11.2 / B10，各场景通用）
+        from app.core.tools.builtin.skills_tools import get_luominest_skills_tools
+        for _skill_tool in get_luominest_skills_tools():
+            tool_registry.register(_skill_tool)
+
         logger.info(f"[LuomiNest] Registered {len(tool_registry.list_names())} tools: {', '.join(tool_registry.list_names())}")
     except Exception as e:
         logger.error(f"[LuomiNest] Tool registration failed (critical): {e}", exc_info=True)

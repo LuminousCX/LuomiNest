@@ -16,7 +16,6 @@ import {
   Server,
   Cpu,
   Users,
-  Sparkles,
 } from 'lucide-vue-next'
 import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
@@ -232,19 +231,12 @@ watch(period, () => { loadData() })
 
 <template>
   <div class="data-stats-view">
-    <div class="stats-header">
-      <div class="header-left">
-        <div class="greeting-block">
-          <div class="lumi-icon-wrap lumi-icon-wrap--md greeting-icon">
-            <Sparkles :size="18" />
-          </div>
-          <div class="greeting-text">
-            <span class="greeting-label">{{ greeting }}，LuminousChenXi</span>
-            <span class="greeting-date">{{ formattedDate }}</span>
-          </div>
-        </div>
+    <div class="stats-header animate-fade-in">
+      <div class="stats-header__text">
+        <h1 class="stats-title">数据统计</h1>
+        <p class="stats-desc">{{ greeting }}，LuminousChenXi · {{ formattedDate }}</p>
       </div>
-      <div class="header-actions">
+      <div class="stats-header__actions">
         <div class="period-tabs">
           <button :class="['period-btn', { active: period === 7 }]" @click="period = 7">7天</button>
           <button :class="['period-btn', { active: period === 30 }]" @click="period = 30">30天</button>
@@ -547,47 +539,36 @@ watch(period, () => { loadData() })
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--divider-soft, var(--border-light));
   animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-}
-
-.greeting-block {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.greeting-icon {
-  background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-soft));
-  color: var(--text-inverse);
-  box-shadow: var(--shadow-md);
-}
-
-.greeting-text {
+.stats-header__text {
   display: flex;
   flex-direction: column;
 }
 
-.greeting-label {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text);
+.stats-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1.2;
 }
 
-.greeting-date {
-  font-size: var(--text-xs);
+.stats-desc {
+  font-size: var(--text-base);
   color: var(--text-muted);
+  margin-top: var(--space-1);
 }
 
-.header-actions {
+.stats-header__actions {
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
+
+
 
 .period-tabs {
   display: flex;
