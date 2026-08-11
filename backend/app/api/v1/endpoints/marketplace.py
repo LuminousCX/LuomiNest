@@ -4,7 +4,7 @@
 import json
 import os
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 from loguru import logger
@@ -19,7 +19,7 @@ from app.infrastructure.install.install_service import (
     get_all_install_status,
     get_installed_records_resolved,
 )
-from app.infrastructure.database.json_store import marketplace_stats_store
+from app.api.v1.deps import get_marketplace_stats_store
 from app.data.marketplace_catalog import (
     get_catalog_by_type,
     get_all_catalog_items,
@@ -518,15 +518,21 @@ async def list_installed_items(
 
 async def _get_item_stats(item_id: str) -> dict:
     """获取单个条目的统计数据，不存在则初始化"""
-    stats = await marketplace_stats_store.get_async(item_id)
+    # 路由外辅助函数，经容器取同一门面单例
+    from app.core.container import container
+    stats_store = container.marketplace_stats_store
+    stats = await stats_store.get_async(item_id)
     if stats is None:
         stats = {"downloadCount": 0, "likeCount": 0, "type": ""}
-        await marketplace_stats_store.set_async(item_id, stats)
+        await stats_store.set_async(item_id, stats)
     return stats
 
 
 async def _increment_download_count(item_id: str, item_type: str):
     """增加下载计数（原子操作，由 JsonStore.mutate_async 锁保护）"""
+    # BackgroundTasks 后台任务无法注入，经容器取同一门面单例
+    from app.core.container import container
+
     def _updater(stats):
         if stats is None:
             stats = {"downloadCount": 0, "likeCount": 0, "type": ""}
@@ -535,7 +541,7 @@ async def _increment_download_count(item_id: str, item_type: str):
             stats["type"] = item_type
         return stats
 
-    stats = await marketplace_stats_store.mutate_async(item_id, _updater)
+    stats = await container.marketplace_stats_store.mutate_async(item_id, _updater)
     logger.info(f"[MarketplaceStats] Download count incremented: {item_id} -> {stats['downloadCount']}")
 
 
@@ -551,7 +557,10 @@ def _get_likes_key(user_id: str = "") -> str:
 
 
 @router.post("/stats/like")
-async def toggle_like(req: LikeRequest) -> dict:
+async def toggle_like(
+    req: LikeRequest,
+    marketplace_stats_store=Depends(get_marketplace_stats_store),
+) -> dict:
     """切换喜欢状态，返回当前是否喜欢及喜欢计数（原子操作）"""
     likes_key = _get_likes_key(req.userId)
 
@@ -596,7 +605,11 @@ async def toggle_like(req: LikeRequest) -> dict:
 
 
 @router.get("/stats/{item_id}")
-async def get_item_stats(item_id: str, userId: str = ""):
+async def get_item_stats(
+    item_id: str,
+    userId: str = "",
+    marketplace_stats_store=Depends(get_marketplace_stats_store),
+):
     """获取单个条目的统计数据"""
     stats = await _get_item_stats(item_id)
     likes_key = _get_likes_key(userId)
@@ -614,6 +627,7 @@ async def get_item_stats(item_id: str, userId: str = ""):
 async def get_all_stats(
     type: Optional[str] = Query(None, description="按类型过滤"),
     userId: str = "",
+    marketplace_stats_store=Depends(get_marketplace_stats_store),
 ):
     """获取所有条目的统计数据"""
     all_stats = await marketplace_stats_store.list_all_async()
@@ -641,6 +655,7 @@ async def get_leaderboard(
     type: Optional[str] = Query(None, description="按类型过滤 (plugin/skill/agent)"),
     sort_by: str = Query("composite", description="排序方式: downloads / likes / composite"),
     limit: int = Query(20, ge=1, le=100, description="返回数量"),
+    marketplace_stats_store=Depends(get_marketplace_stats_store),
 ):
     """
     获取排行榜，基于下载次数和喜欢次数综合排序。

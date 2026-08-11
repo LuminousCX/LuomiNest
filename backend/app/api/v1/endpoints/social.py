@@ -1,11 +1,11 @@
 import uuid
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from loguru import logger
 
 from app.core.utils import utc_now, sse_response, sse_data, require_store, to_camel_case, ok
 from app.core.exceptions import ValidationError
-from app.infrastructure.database.json_store import groups_store, agents_store
+from app.api.v1.deps import get_groups_store, get_agents_store
 from app.domains.social.group_chat import GroupChatManager
 from app.domains.social.ai_to_ai_chat import AIToAIChat
 from app.domains.social.agent_orchestrator import agent_orchestrator
@@ -58,7 +58,7 @@ class AIChatRequest(BaseModel):
 
 
 @router.get("/groups")
-async def list_groups():
+async def list_groups(groups_store=Depends(get_groups_store)):
     logger.info("[API] GET /social/groups - Listing groups")
     groups = await groups_store.values_async()
     result = []
@@ -83,7 +83,10 @@ async def list_groups():
 
 
 @router.post("/groups")
-async def create_group(request: GroupCreate):
+async def create_group(
+    request: GroupCreate,
+    groups_store=Depends(get_groups_store),
+):
     logger.info(f"[API] POST /social/groups - Creating group: {request.name}")
     group_id = str(uuid.uuid4())
     now = utc_now()
@@ -102,7 +105,10 @@ async def create_group(request: GroupCreate):
     
 
 @router.get("/groups/{group_id}")
-async def get_group(group_id: str):
+async def get_group(
+    group_id: str,
+    groups_store=Depends(get_groups_store),
+):
     logger.info(f"[API] GET /social/groups/{group_id} - Fetching group")
     group = await require_store(groups_store, group_id, "Group")
 
@@ -111,7 +117,11 @@ async def get_group(group_id: str):
 
 
 @router.patch("/groups/{group_id}")
-async def update_group(group_id: str, request: GroupUpdate):
+async def update_group(
+    group_id: str,
+    request: GroupUpdate,
+    groups_store=Depends(get_groups_store),
+):
     logger.info(f"[API] PATCH /social/groups/{group_id} - Updating group")
     group = await require_store(groups_store, group_id, "Group")
     update_data = request.model_dump(exclude_unset=True)
@@ -122,14 +132,22 @@ async def update_group(group_id: str, request: GroupUpdate):
     
 
 @router.delete("/groups/{group_id}")
-async def delete_group(group_id: str):
+async def delete_group(
+    group_id: str,
+    groups_store=Depends(get_groups_store),
+):
     logger.info(f"[API] DELETE /social/groups/{group_id} - Deleting group")
     await groups_store.delete_async(group_id)
     return ok({"deleted": True})
 
 
 @router.post("/groups/{group_id}/members")
-async def add_group_member(group_id: str, request: GroupMemberAdd):
+async def add_group_member(
+    group_id: str,
+    request: GroupMemberAdd,
+    groups_store=Depends(get_groups_store),
+    agents_store=Depends(get_agents_store),
+):
     logger.info(f"[API] POST /social/groups/{group_id}/members - Adding member")
     group = await require_store(groups_store, group_id, "Group")
 
@@ -153,7 +171,11 @@ async def add_group_member(group_id: str, request: GroupMemberAdd):
     
 
 @router.delete("/groups/{group_id}/members/{agent_id}")
-async def remove_group_member(group_id: str, agent_id: str):
+async def remove_group_member(
+    group_id: str,
+    agent_id: str,
+    groups_store=Depends(get_groups_store),
+):
     logger.info(f"[API] DELETE /social/groups/{group_id}/members/{agent_id} - Removing member")
     group = await require_store(groups_store, group_id, "Group")
 
@@ -165,7 +187,11 @@ async def remove_group_member(group_id: str, agent_id: str):
     
 
 @router.post("/groups/{group_id}/messages")
-async def send_group_message(group_id: str, request: GroupMessageSend):
+async def send_group_message(
+    group_id: str,
+    request: GroupMessageSend,
+    groups_store=Depends(get_groups_store),
+):
     logger.info(f"[API] POST /social/groups/{group_id}/messages - Sending message (stream)")
     group = await require_store(groups_store, group_id, "Group")
 
@@ -196,7 +222,11 @@ async def send_group_message(group_id: str, request: GroupMessageSend):
 
 
 @router.post("/groups/{group_id}/collaborate")
-async def collaborate(group_id: str, request: CollaborationRequest):
+async def collaborate(
+    group_id: str,
+    request: CollaborationRequest,
+    groups_store=Depends(get_groups_store),
+):
     logger.info(f"[API] POST /social/groups/{group_id}/collaborate - Multi-agent collaboration")
     group = await require_store(groups_store, group_id, "Group")
 
@@ -281,7 +311,7 @@ async def ai_to_ai_chat(request: AIChatRequest):
 
 
 @router.get("/agents")
-async def list_available_agents():
+async def list_available_agents(agents_store=Depends(get_agents_store)):
     logger.info("[API] GET /social/agents - Listing available agents for social")
     agents = await agents_store.values_async()
     safe_agents = []

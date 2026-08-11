@@ -5,26 +5,29 @@ from loguru import logger
 
 from app.api.v1.deps import get_llm_adapter
 from app.runtime.provider.llm.adapter import llm_adapter, _create_provider_from_config
-from app.runtime.provider.llm.providers import PROVIDER_TEMPLATES
+from app.runtime.provider.llm.adapters.chat_completions import PROVIDER_TEMPLATES
 from app.core.config import settings
 from app.core.context import invalidate_context_cache
 from app.core.utils import ok
 from app.core.exceptions import NotFoundError, ValidationError
-from app.infrastructure.database.config_store import lumi_config_store
 
 router = APIRouter(prefix="/models", tags=["models"])
 
 
 def _load_model_config() -> dict:
     """从 config_items['model_config'] 加载模型配置。"""
-    saved = lumi_config_store.get("model_config", {})
+    # 路由与 lifespan 共用，无法 Depends 注入，经容器取同一门面单例
+    from app.core.container import container
+    saved = container.lumi_config_store.get("model_config", {})
     return saved if isinstance(saved, dict) else {}
 
 
 def _save_model_config(config: dict):
     """保存模型配置到 config_items['model_config']。"""
+    # 路由与 lifespan 共用，无法 Depends 注入，经容器取同一门面单例
+    from app.core.container import container
     try:
-        lumi_config_store.set("model_config", config)
+        container.lumi_config_store.set("model_config", config)
         logger.success("[ModelConfig] Saved to config_items['model_config']")
     except Exception as e:
         logger.error(f"[ModelConfig] Failed to save: {e}")

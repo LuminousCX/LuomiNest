@@ -24,7 +24,7 @@ from loguru import logger
 
 from app.core.config import get_settings
 from app.core.utils import utc_now
-from app.infrastructure.database.json_store import JsonStore
+from app.infrastructure.database.config_namespace_store import ConfigNamespaceStore
 from app.runtime.plugin.cxplugin.kv_store import PluginKVStore
 from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
 from app.runtime.provider.llm.adapter import llm_adapter
@@ -34,8 +34,13 @@ from app.core.tools.registry import ToolBase, ToolResult
 
 # 插件配置存储命名空间（与 PluginKVStore 同一存储，但用专属前缀避免冲突）
 _PLUGIN_CONFIG_PREFIX = "settings:"
-# 脚手架历史记录（便于用户回看与重用）
-_scaffold_store = JsonStore("cx_plugin_scaffolds.json")
+# 脚手架历史记录（便于用户回看与重用）：存入 config_items（唯一权威源），
+# 遗留 JSON 首次访问时幂等并集合并，旧文件保留不删除
+_scaffold_store = ConfigNamespaceStore(
+    "plugins.scaffolds",
+    legacy_source="plugin_scaffolds",
+    legacy_filename="cx_plugin_scaffolds.json",
+)
 
 
 @dataclass

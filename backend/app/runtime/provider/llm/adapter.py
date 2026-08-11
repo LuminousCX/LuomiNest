@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.context import invalidate_context_cache
 from app.core.exceptions import ProviderError
 from app.security.prompt_security import sanitize_user_input
-from app.runtime.provider.llm.providers import (
+from app.runtime.provider.llm.adapters.chat_completions import (
     OpenAICompatibleProvider,
     PROVIDER_TEMPLATES,
 )

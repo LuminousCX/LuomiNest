@@ -1,11 +1,11 @@
 import uuid
 import os
 import shutil
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
-from app.infrastructure.database.json_store import agents_store
+from app.api.v1.deps import get_agents_store, get_conversation_store
 from app.infrastructure.database.facades.main_agent_config import (
     load_luominest_main_agent_config,
     save_luominest_main_agent_config,
@@ -136,7 +136,7 @@ async def update_main_agent_config(request: MainAgentConfigUpdate):
 
 
 @router.get("", response_model=list[AgentResponse])
-async def list_agents():
+async def list_agents(agents_store=Depends(get_agents_store)):
     logger.info("[API] GET /agents - Listing all agents")
     agents = [a for a in await agents_store.values_async() if not a.get("is_main", False)]
     logger.success(f"[API] GET /agents - Success: returned {len(agents)} agents")
@@ -144,7 +144,10 @@ async def list_agents():
 
 
 @router.post("", response_model=AgentResponse)
-async def create_agent(request: AgentCreate):
+async def create_agent(
+    request: AgentCreate,
+    agents_store=Depends(get_agents_store),
+):
     logger.info(f"[API] POST /agents - Creating agent: name={request.name}")
     
     agents = await agents_store.all_async()
@@ -179,7 +182,10 @@ async def create_agent(request: AgentCreate):
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
-async def get_agent(agent_id: str):
+async def get_agent(
+    agent_id: str,
+    agents_store=Depends(get_agents_store),
+):
     logger.info(f"[API] GET /agents/{agent_id} - Fetching agent")
     agent = await agents_store.get_async(agent_id)
     if not agent:
@@ -190,7 +196,11 @@ async def get_agent(agent_id: str):
 
 
 @router.patch("/{agent_id}", response_model=AgentResponse)
-async def update_agent(agent_id: str, request: AgentUpdate):
+async def update_agent(
+    agent_id: str,
+    request: AgentUpdate,
+    agents_store=Depends(get_agents_store),
+):
     logger.info(f"[API] PATCH /agents/{agent_id} - Updating agent")
     agent = await agents_store.get_async(agent_id)
     if not agent:
@@ -215,7 +225,11 @@ async def update_agent(agent_id: str, request: AgentUpdate):
 
 
 @router.delete("/{agent_id}")
-async def delete_agent(agent_id: str):
+async def delete_agent(
+    agent_id: str,
+    agents_store=Depends(get_agents_store),
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] DELETE /agents/{agent_id} - Deleting agent")
     agent = await agents_store.get_async(agent_id)
     if agent:
@@ -225,7 +239,6 @@ async def delete_agent(agent_id: str):
     else:
         logger.warning(f"[API] DELETE /agents/{agent_id} - Agent not found (already deleted)")
     
-    from app.infrastructure.database.conversation_store import conversation_store
     conversation_store.delete_by_agent_id(agent_id)
     
     agent_memory_dir = os.path.join(settings.DATA_DIR, "memory", "agents", agent_id)

@@ -2,14 +2,14 @@ import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.utils import ok
 from app.engines.memory import get_memory_engine
 from app.engines.memory.memory_engine import FactItem, MemoryData, FACT_CATEGORIES, _engines
-from app.infrastructure.database.json_store import agents_store
+from app.api.v1.deps import get_agents_store, get_conversation_store
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
 
@@ -206,12 +206,14 @@ async def list_dailies(agent_id: str | None = None, conversation_id: str | None 
 
 
 @router.get("/conversation-dailies")
-async def list_conversation_dailies(agent_id: str | None = None):
+async def list_conversation_dailies(
+    agent_id: str | None = None,
+    conversation_store=Depends(get_conversation_store),
+):
     """列出所有有 daily 记录的 conversation_id 及其标题。"""
     engine = get_memory_engine(agent_id)
     conv_ids = engine.list_conversation_dailies()
-    
-    from app.infrastructure.database.conversation_store import conversation_store
+
     result = []
     for conv_id in conv_ids:
         conv = conversation_store.get(conv_id)
@@ -283,7 +285,7 @@ async def memory_health(agent_id: str | None = None):
 
 
 @router.get("/agents")
-async def list_memory_agents():
+async def list_memory_agents(agents_store=Depends(get_agents_store)):
     memory_root = Path(settings.DATA_DIR) / "memory"
     result = []
 
@@ -372,14 +374,16 @@ async def clear_summary(agent_id: str | None = None):
 
 
 @router.delete("/reset-all")
-async def reset_all_memory(agent_id: str | None = None):
+async def reset_all_memory(
+    agent_id: str | None = None,
+    conversation_store=Depends(get_conversation_store),
+):
     """重置全部记忆到出厂状态（同时删除该 Agent 的所有对话记录）"""
     # 删除记忆数据
     engine = get_memory_engine(agent_id)
     engine.reset_all()
     
     # 删除该 Agent 的所有对话记录
-    from app.infrastructure.database.conversation_store import conversation_store
     conversation_store.delete_by_agent_id(agent_id or "_default")
     
     # 清除缓存

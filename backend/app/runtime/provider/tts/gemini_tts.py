@@ -11,7 +11,7 @@ import wave
 import httpx
 from loguru import logger
 
-from app.runtime.provider.base import TTSProvider
+from app.runtime.provider.tts.ports import TTSProvider
 
 
 # Gemini TTS 预置音色（30 种）

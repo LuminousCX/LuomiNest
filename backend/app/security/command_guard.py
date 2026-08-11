@@ -69,7 +69,10 @@ def _extract_shell_commands(text: str) -> list[str]:
 
 
 def _check_command_safety(cmd: str) -> tuple[bool, str]:
-    """使用 command_policy 白名单/黑名单校验单条命令。
+    """使用 command_policy 白名单/黑名单校验命令（含复合命令拆分）。
+
+    对 ``a && b``、``a || b``、``a; b`` 等复合命令逐段校验，
+    任一段不安全即整体拒绝。同时检测 Shell 元字符（管道/重定向等）。
 
     Returns:
         (is_safe, reason) — is_safe=True 表示命令在白名单内。
@@ -79,27 +82,55 @@ def _check_command_safety(cmd: str) -> tuple[bool, str]:
         get_effective_blacklist,
         format_interception_message,
     )
+    from app.security.sandbox.command_validator import (
+        _split_compound_command,
+        _SHELL_METACHARACTERS,
+        _WINDOWS_SEPARATORS,
+    )
 
     import os
 
-    # 提取主命令
-    parts = cmd.split()
-    if not parts:
+    if not cmd or not cmd.strip():
         return True, ""
 
-    main_cmd = os.path.basename(parts[0]).lower()
-    if main_cmd.endswith(".exe"):
-        main_cmd = main_cmd[:-4]
+    # 1. Shell 元字符检测（管道/重定向/命令注入等）
+    found_meta: list[str] = []
+    for ch in _SHELL_METACHARACTERS:
+        if ch in cmd:
+            found_meta.append(ch)
+    if os.name == "nt":
+        for sep in _WINDOWS_SEPARATORS:
+            if sep in cmd:
+                found_meta.append(sep)
+    if found_meta:
+        chars = " ".join(sorted(set(found_meta)))
+        return False, (
+            f"命令包含 Shell 元字符（{chars}），安全策略不允许管道和重定向。"
+            f"可在 设置 → 隐私安全 → 命令安全 中调整。"
+        )
 
-    # 黑名单优先
-    blacklist = get_effective_blacklist()
-    if main_cmd in blacklist:
-        return False, format_interception_message("command_blacklist", cmd)
+    # 2. 复合命令拆分逐段校验（处理 &&、||、;）
+    sub_commands = _split_compound_command(cmd)
 
-    # 白名单检查
     whitelist = get_effective_whitelist()
-    if main_cmd not in whitelist:
-        return False, format_interception_message("command_whitelist", cmd)
+    blacklist = get_effective_blacklist()
+
+    for sub_cmd in sub_commands:
+        parts = sub_cmd.split()
+        if not parts:
+            continue
+
+        main_cmd = os.path.basename(parts[0]).lower()
+        if main_cmd.endswith(".exe"):
+            main_cmd = main_cmd[:-4]
+
+        # 黑名单优先
+        if main_cmd in blacklist:
+            return False, format_interception_message("command_blacklist", sub_cmd)
+
+        # 白名单检查
+        if main_cmd not in whitelist:
+            return False, format_interception_message("command_whitelist", sub_cmd)
 
     return True, ""
 

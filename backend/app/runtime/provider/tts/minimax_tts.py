@@ -7,7 +7,7 @@
 import httpx
 from loguru import logger
 
-from app.runtime.provider.base import TTSProvider
+from app.runtime.provider.tts.ports import TTSProvider
 
 
 # MiniMax 预置音色

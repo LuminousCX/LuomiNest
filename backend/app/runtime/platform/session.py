@@ -1,19 +1,92 @@
+"""平台会话映射 — 平台会话 (instance_id + session_id) → 主 Agent conversation。
+
+持久化：会话映射存储在 config_items 表（通过 lumi_config_store，SQLite），
+键命名空间 ``platform.sessions.*``，单键格式
+``platform.sessions.<instance_id>:<session_id>``（每条会话映射一行）。
+
+该映射属于用户绑定的会话状态：平台实例运行时并不持有它，无法从运行时状态
+重建；丢失会导致该平台会话下一条消息被创建全新 conversation，对话上下文断裂
+（用户可感知），因此迁入 config_items，参与 AES 加密与统一备份链路。
+遗留 JSON 文件 platform_sessions.json 仅在首次迁移时幂等合并一次，不删除。
+"""
+import os
 import uuid
 from loguru import logger
 
 from app.core.utils import utc_now
 from app.infrastructure.database.conversation_store import conversation_store
-from app.infrastructure.database.json_store import JsonStore
+from app.infrastructure.database.config_store import lumi_config_store
 
 # 主 Agent 唯一标识，与 context_service.py 中的 MAIN_AGENT_ID 保持一致
 # 注意：旧数据中 agent_id 为 "main"，context_service.is_main_agent() 已做兼容
 MAIN_AGENT_ID = "luominest_main_agent"
 
-_platform_sessions_store = JsonStore("platform_sessions.json")
+# config_items 键前缀（会话映射命名空间）
+_SESSIONS_KEY_PREFIX = "platform.sessions."
+
+# 遗留 JSON 文件（DATA_DIR/store/）—— 收敛后仅在迁移时读取一次，不再写入，也不删除文件本身
+_LEGACY_JSON_FILENAME = "platform_sessions.json"
+# _migration_meta 标记源名：与 json_to_sqlite_migrator 共用同一标记表，谁先执行谁标记，避免重复合并
+_MIGRATION_SOURCE = "platform_sessions"
+_legacy_merged = False
 
 
 def _session_key(instance_id: str, session_id: str) -> str:
     return f"{instance_id}:{session_id}"
+
+
+def _config_key(instance_id: str, session_id: str) -> str:
+    """config_items 存储键：platform.sessions.<instance_id>:<session_id>。"""
+    return f"{_SESSIONS_KEY_PREFIX}{_session_key(instance_id, session_id)}"
+
+
+def _merge_legacy_json() -> None:
+    """幂等合并遗留 JSON 文件（platform_sessions.json）到 config_items。
+
+    参照 json_to_sqlite_migrator 的 _migration_meta 标记模式：
+    - 已标记迁移 → 直接跳过（重跑不重复合并）
+    - JSON 文件不存在 → 仅记录标记
+    - JSON 文件存在 → config_items 为权威源，遗留条目仅补缺（已存在的键不覆盖）
+    遗留 JSON 文件是用户数据：仅迁移时读取，不删除文件本身。
+    """
+    global _legacy_merged
+    if _legacy_merged:
+        return
+
+    try:
+        from app.core.config import settings
+        from app.infrastructure.database.migration.json_to_sqlite_migrator import (
+            _is_migrated,
+            _mark_migrated,
+            _read_json_file,
+        )
+
+        if _is_migrated(_MIGRATION_SOURCE):
+            _legacy_merged = True
+            return
+
+        path = os.path.join(settings.DATA_DIR, "store", _LEGACY_JSON_FILENAME)
+        data = _read_json_file(path)
+        count = 0
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if not isinstance(value, dict):
+                    continue
+                # 遗留 JsonStore 的键已是 instance_id:session_id 格式，直接加命名空间前缀
+                config_key = f"{_SESSIONS_KEY_PREFIX}{key}"
+                if lumi_config_store.get(config_key) is None:
+                    lumi_config_store.set(config_key, value)
+                    count += 1
+
+        _mark_migrated(_MIGRATION_SOURCE, count)
+        _legacy_merged = True
+        if count:
+            logger.info(
+                f"[PlatformSession] Merged legacy JSON into config_items: "
+                f"{count} session mapping(s)"
+            )
+    except Exception as e:
+        logger.warning(f"[PlatformSession] Legacy JSON merge skipped: {e}")
 
 
 async def get_or_create_conversation(
@@ -28,8 +101,11 @@ async def get_or_create_conversation(
     每个平台实例 + 平台会话标识（user_id 或 group_id）映射到主 Agent 的一个独立 conversation。
     所有平台会话共享主 Agent 的记忆（agent_id=MAIN_AGENT_ID）。
     """
-    key = _session_key(instance_id, session_id)
-    mapping = _platform_sessions_store.get(key, {})
+    _merge_legacy_json()
+    key = _config_key(instance_id, session_id)
+    mapping = lumi_config_store.get(key, {})
+    if not isinstance(mapping, dict):
+        mapping = {}
 
     conv_id = mapping.get("conversation_id")
     if conv_id:
@@ -59,7 +135,7 @@ async def get_or_create_conversation(
     }
     await conversation_store.set_async(conv_id, conv)
 
-    _platform_sessions_store.set(key, {
+    lumi_config_store.set(key, {
         "conversation_id": conv_id,
         "instance_id": instance_id,
         "session_id": session_id,
@@ -69,20 +145,28 @@ async def get_or_create_conversation(
         "created_at": now,
         "updated_at": now,
     })
-    logger.info(f"[PlatformSession] Created conversation {conv_id} for {key}")
+    logger.info(f"[PlatformSession] Created conversation {conv_id} for {_session_key(instance_id, session_id)}")
     return conv_id
 
 
 async def get_conversation_id(instance_id: str, session_id: str) -> str | None:
     """获取平台会话对应的 conversation_id（不创建）。"""
-    key = _session_key(instance_id, session_id)
-    mapping = _platform_sessions_store.get(key, {})
+    _merge_legacy_json()
+    mapping = lumi_config_store.get(_config_key(instance_id, session_id), {})
+    if not isinstance(mapping, dict):
+        return None
     return mapping.get("conversation_id")
 
 
 def list_platform_sessions(instance_id: str | None = None) -> list[dict]:
     """列出平台会话映射。"""
-    all_sessions = _platform_sessions_store.values()
+    _merge_legacy_json()
+    all_sessions = [
+        v for v in lumi_config_store.get_namespace(_SESSIONS_KEY_PREFIX).values()
+        if isinstance(v, dict)
+    ]
+    # 按创建时间排序，保证返回顺序稳定（SQLite 行序不确定）
+    all_sessions.sort(key=lambda s: str(s.get("created_at", "")))
     if instance_id:
         return [s for s in all_sessions if s.get("instance_id") == instance_id]
     return all_sessions
@@ -93,8 +177,11 @@ async def create_new_conversation(instance_id: str, session_id: str) -> dict:
 
     清除旧的会话映射，创建新的 conversation，返回新对话信息。
     """
-    key = _session_key(instance_id, session_id)
-    old_mapping = _platform_sessions_store.get(key, {})
+    _merge_legacy_json()
+    key = _config_key(instance_id, session_id)
+    old_mapping = lumi_config_store.get(key, {})
+    if not isinstance(old_mapping, dict):
+        old_mapping = {}
 
     # 从旧映射中保留平台元信息
     platform_name = old_mapping.get("platform_name", "unknown")
@@ -123,7 +210,7 @@ async def create_new_conversation(instance_id: str, session_id: str) -> dict:
     }
     await conversation_store.set_async(conv_id, conv)
 
-    _platform_sessions_store.set(key, {
+    lumi_config_store.set(key, {
         "conversation_id": conv_id,
         "instance_id": instance_id,
         "session_id": session_id,
@@ -133,7 +220,7 @@ async def create_new_conversation(instance_id: str, session_id: str) -> dict:
         "created_at": now,
         "updated_at": now,
     })
-    logger.info(f"[PlatformSession] Created new conversation {conv_id} for {key} (replacing old mapping)")
+    logger.info(f"[PlatformSession] Created new conversation {conv_id} for {_session_key(instance_id, session_id)} (replacing old mapping)")
     return {
         "id": conv_id,
         "title": title,
@@ -143,8 +230,5 @@ async def create_new_conversation(instance_id: str, session_id: str) -> dict:
 
 def remove_platform_session(instance_id: str, session_id: str) -> bool:
     """移除平台会话映射（不删除 conversation）。"""
-    key = _session_key(instance_id, session_id)
-    if _platform_sessions_store.get(key):
-        _platform_sessions_store.delete(key)
-        return True
-    return False
+    _merge_legacy_json()
+    return lumi_config_store.delete(_config_key(instance_id, session_id))

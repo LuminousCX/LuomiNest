@@ -16,7 +16,7 @@ from app.core.tools.builtin.browser_automation import BROWSER_ACTION_SPECS, _for
 from app.core.workflow.event_emitter import WorkflowEventEmitter
 from app.core.workflow.internal_registry import internal_tool_registry
 from app.core.workflow.models import WorkflowTaskResult
-from app.services.browser_automation_client import execute_browser_action
+from app.core.ports.browser_automation import execute_browser_action
 
 # 当前活跃的事件推送器（由 WorkflowEngine 在执行前设置）
 # key: session_id, value: WorkflowEventEmitter

@@ -17,11 +17,17 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.utils import utc_now
-from app.infrastructure.database.json_store import JsonStore, repo_sources_store
+from app.infrastructure.database.config_namespace_store import ConfigNamespaceStore
+from app.infrastructure.database.json_store import repo_sources_store
 from app.security.net.safe_url import assert_url_safe, create_safe_async_client, UnsafeUrlError
 
-# 安装记录存储
-install_store = JsonStore("installed_items.json")
+# 安装记录存储（config_items 为唯一权威源；遗留 installed_items.json
+# 首次访问时幂等并集合并，旧文件保留不删除）
+install_store = ConfigNamespaceStore(
+    "install.items",
+    legacy_source="installed_items",
+    legacy_filename="installed_items.json",
+)
 
 # 下载临时目录
 DOWNLOAD_DIR = Path(settings.DATA_DIR) / "downloads"

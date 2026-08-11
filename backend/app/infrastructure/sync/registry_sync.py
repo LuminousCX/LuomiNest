@@ -40,6 +40,8 @@ REGISTRY_INDEX_PATH = settings.REGISTRY_INDEX_PATH
 REGISTRY_BRANCH = settings.REGISTRY_BRANCH
 
 # 本地缓存存储
+# 有意保留文件存储：可重建缓存，不入库 —— 内容为远程 cxp-registry index.json 的拉取快照，
+# TTL 过期或强制刷新时可从远程索引仓库完全重建，不含用户状态
 _registry_cache_store = JsonStore("registry_cache.json")
 
 

@@ -23,6 +23,11 @@ if TYPE_CHECKING:
     from app.services.chat_service import ChatService
     from app.services.context_service import ContextService
     from app.services.suggestion_service import SuggestionService
+    from app.infrastructure.database.conversation_store import ConversationFacade
+    from app.infrastructure.database.config_store import LumiConfigFacade
+    from app.infrastructure.database.usage_store import UsageFacade
+    from app.infrastructure.database.facades.json_store_facade import JsonStoreFacade
+    from app.infrastructure.database.facades.marketplace_stats_store import MarketplaceStatsFacade
 
 
 class ServiceContainer:
@@ -72,20 +77,25 @@ class ServiceContainer:
 
     @property
     def context_service(self) -> "ContextService":
+        # 复用模块单例：全系统唯一 ContextService（持有 _memory_locks 等状态），
+        # 避免容器与模块单例并存导致的状态分裂
         if "context_service" not in self._cache:
-            from app.services.context_service import ContextService
-            self._cache["context_service"] = ContextService()
+            from app.services.context_service import context_service
+            self._cache["context_service"] = context_service
         return self._cache["context_service"]  # type: ignore
 
     @property
     def suggestion_service(self) -> "SuggestionService":
+        # 复用模块单例：全系统唯一 SuggestionService（持有 _pending_tasks 状态）
         if "suggestion_service" not in self._cache:
-            from app.services.suggestion_service import SuggestionService
-            self._cache["suggestion_service"] = SuggestionService()
+            from app.services.suggestion_service import suggestion_service
+            self._cache["suggestion_service"] = suggestion_service
         return self._cache["suggestion_service"]  # type: ignore
 
     @property
     def chat_service(self) -> "ChatService":
+        # 全系统唯一 ChatService：懒创建一次并缓存，
+        # 组装的 context/suggestions 即上方模块单例（同一对象）
         if "chat_service" not in self._cache:
             from app.services.chat_service import ChatService
             self._cache["chat_service"] = ChatService(
@@ -93,6 +103,67 @@ class ServiceContainer:
                 suggestions=self.suggestion_service,
             )
         return self._cache["chat_service"]  # type: ignore
+
+    # ── 数据访问门面层（Facade 即端口）──
+    # 以下属性直接返回既有门面单例对象本身，绝不新建实例
+
+    @property
+    def conversation_store(self) -> "ConversationFacade":
+        if "conversation_store" not in self._cache:
+            from app.infrastructure.database.conversation_store import conversation_store
+            self._cache["conversation_store"] = conversation_store
+        return self._cache["conversation_store"]  # type: ignore
+
+    @property
+    def lumi_config_store(self) -> "LumiConfigFacade":
+        if "lumi_config_store" not in self._cache:
+            from app.infrastructure.database.config_store import lumi_config_store
+            self._cache["lumi_config_store"] = lumi_config_store
+        return self._cache["lumi_config_store"]  # type: ignore
+
+    @property
+    def usage_store(self) -> "UsageFacade":
+        if "usage_store" not in self._cache:
+            from app.infrastructure.database.usage_store import usage_store
+            self._cache["usage_store"] = usage_store
+        return self._cache["usage_store"]  # type: ignore
+
+    @property
+    def agents_store(self) -> "JsonStoreFacade":
+        if "agents_store" not in self._cache:
+            from app.infrastructure.database.facades.json_store_facade import agents_store
+            self._cache["agents_store"] = agents_store
+        return self._cache["agents_store"]  # type: ignore
+
+    @property
+    def groups_store(self) -> "JsonStoreFacade":
+        if "groups_store" not in self._cache:
+            from app.infrastructure.database.facades.json_store_facade import groups_store
+            self._cache["groups_store"] = groups_store
+        return self._cache["groups_store"]  # type: ignore
+
+    @property
+    def platforms_store(self) -> "JsonStoreFacade":
+        if "platforms_store" not in self._cache:
+            from app.infrastructure.database.facades.json_store_facade import platforms_store
+            self._cache["platforms_store"] = platforms_store
+        return self._cache["platforms_store"]  # type: ignore
+
+    @property
+    def repo_sources_store(self) -> "JsonStoreFacade":
+        if "repo_sources_store" not in self._cache:
+            from app.infrastructure.database.facades.json_store_facade import repo_sources_store
+            self._cache["repo_sources_store"] = repo_sources_store
+        return self._cache["repo_sources_store"]  # type: ignore
+
+    @property
+    def marketplace_stats_store(self) -> "MarketplaceStatsFacade":
+        if "marketplace_stats_store" not in self._cache:
+            from app.infrastructure.database.facades.marketplace_stats_store import (
+                marketplace_stats_store,
+            )
+            self._cache["marketplace_stats_store"] = marketplace_stats_store
+        return self._cache["marketplace_stats_store"]  # type: ignore
 
     # ── 测试支持 ──
 
@@ -147,3 +218,43 @@ def get_context_service():
 def get_suggestion_service():
     """FastAPI 依赖：获取 SuggestionService 实例。"""
     return container.suggestion_service
+
+
+def get_conversation_store():
+    """FastAPI 依赖：获取对话存储门面（全局单例本身）。"""
+    return container.conversation_store
+
+
+def get_lumi_config_store():
+    """FastAPI 依赖：获取配置存储门面（全局单例本身）。"""
+    return container.lumi_config_store
+
+
+def get_usage_store():
+    """FastAPI 依赖：获取用量存储门面（全局单例本身）。"""
+    return container.usage_store
+
+
+def get_agents_store():
+    """FastAPI 依赖：获取 Agent 存储门面（全局单例本身）。"""
+    return container.agents_store
+
+
+def get_groups_store():
+    """FastAPI 依赖：获取群组存储门面（全局单例本身）。"""
+    return container.groups_store
+
+
+def get_platforms_store():
+    """FastAPI 依赖：获取平台实例存储门面（全局单例本身）。"""
+    return container.platforms_store
+
+
+def get_repo_sources_store():
+    """FastAPI 依赖：获取仓库来源存储门面（全局单例本身）。"""
+    return container.repo_sources_store
+
+
+def get_marketplace_stats_store():
+    """FastAPI 依赖：获取市场统计存储门面（全局单例本身）。"""
+    return container.marketplace_stats_store

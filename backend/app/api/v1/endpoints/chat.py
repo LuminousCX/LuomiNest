@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 from loguru import logger
 
-from app.api.v1.deps import get_chat_service, get_llm_adapter
+from app.api.v1.deps import get_chat_service, get_conversation_store, get_llm_adapter
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -19,17 +19,12 @@ from app.schemas.chat import (
     BatchIdsRequest,
 )
 from app.runtime.provider.llm.adapter import llm_adapter
-from app.infrastructure.database.conversation_store import conversation_store
 from app.core.context import get_context_manager
 from app.services.context_service import context_service
-from app.services.suggestion_service import suggestion_service
-from app.services.chat_service import ChatService
 from app.core.config import get_settings
 from app.core.utils import utc_now, sse_response, require_store, ok
 from app.core.exceptions import NotFoundError, ValidationError
 from app.security.rate_limiter import limiter, RATE_CHAT, RATE_TTS
-
-_chat_service = ChatService(context_service, suggestion_service)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -40,6 +35,8 @@ async def chat_completions(
     request: Request,
     body: ChatRequest,
     adapter=Depends(get_llm_adapter),
+    chat_service=Depends(get_chat_service),
+    conversation_store=Depends(get_conversation_store),
 ):
     start_time = time.time()
     resolved_provider = body.provider or adapter.default_provider
@@ -98,11 +95,11 @@ async def chat_completions(
     if body.stream:
         logger.info("[API] POST /chat/completions - Starting stream response")
         return sse_response(
-            _chat_service.stream_chat(messages, body, resolved_provider, resolved_model, agent_id=body.agent_id),
+            chat_service.stream_chat(messages, body, resolved_provider, resolved_model, agent_id=body.agent_id),
         )
 
     gen_state: dict = {"content": "", "reasoning": "", "aborted": False, "started": True}
-    await _chat_service.non_stream_generate(
+    await chat_service.non_stream_generate(
         gen_state, messages,
         resolved_provider, resolved_model,
         temperature=body.temperature,
@@ -149,6 +146,7 @@ async def chat_completions(
 async def list_conversations(
     agent_id: str | None = None,
     include_hidden: bool = Query(default=False, description="是否包含隐藏对话"),
+    conversation_store=Depends(get_conversation_store),
 ):
     logger.info(f"[API] GET /chat/conversations - Listing conversations, agent_id={agent_id}, include_hidden={include_hidden}")
     conv_list = await conversation_store.list_conversations_async(agent_id, include_hidden=include_hidden)
@@ -175,7 +173,11 @@ async def list_conversations(
 
 
 @router.get("/conversations/search", response_model=list[ConversationSearchResult])
-async def search_conversations(keyword: str, agent_id: str | None = None):
+async def search_conversations(
+    keyword: str,
+    agent_id: str | None = None,
+    conversation_store=Depends(get_conversation_store),
+):
     req_id = str(uuid.uuid4())[:8]
     logger.info(
         f"[API] GET /chat/conversations/search - "
@@ -199,7 +201,10 @@ async def search_conversations(keyword: str, agent_id: str | None = None):
 
 
 @router.post("/conversations", response_model=ConversationResponse)
-async def create_conversation(request: ConversationCreate):
+async def create_conversation(
+    request: ConversationCreate,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(
         f"[API] POST /chat/conversations - "
         f"Creating conversation: title={request.title}, agent_id={request.agent_id}, chat_mode={request.chat_mode}"
@@ -228,6 +233,7 @@ async def get_conversation(
     conv_id: str,
     limit: int = Query(100, ge=1, le=500, description="每次返回消息数上限"),
     before_id: str | None = Query(None, description="返回此消息之前的历史消息"),
+    conversation_store=Depends(get_conversation_store),
 ):
     logger.info(f"[API] GET /chat/conversations/{conv_id} - Fetching conversation (limit={limit}, before_id={before_id})")
     conv = await conversation_store.get_paginated_async(conv_id, limit=limit, before_id=before_id)
@@ -247,8 +253,9 @@ async def _resolve_agent_id(conv: dict, request_agent_id: str | None = None) -> 
     """解析并回填 agent_id：优先 conv 存储，其次 request，最后 agents_store 兜底。"""
     agent_id = conv.get("agent_id") or request_agent_id
     if not agent_id:
-        from app.infrastructure.database.json_store import agents_store
-        all_agents = await agents_store.all_async()
+        # 路由外辅助函数无法注入，经容器取同一门面单例
+        from app.core.container import container
+        all_agents = await container.agents_store.all_async()
         if all_agents:
             agent_id = all_agents[0].get("id")
     if agent_id and not conv.get("agent_id"):
@@ -283,7 +290,10 @@ async def _rebuild_conversation_memory(conv_id: str, conv: dict, agent_id: str) 
 
 
 @router.post("/conversations/{conv_id}/leave")
-async def leave_conversation(conv_id: str):
+async def leave_conversation(
+    conv_id: str,
+    conversation_store=Depends(get_conversation_store),
+):
     """用户离开/切换对话时触发最终蒸馏"""
     logger.info(f"[API] POST /chat/conversations/{conv_id}/leave")
     try:
@@ -295,7 +305,10 @@ async def leave_conversation(conv_id: str):
 
 
 @router.delete("/conversations/{conv_id}")
-async def delete_conversation(conv_id: str):
+async def delete_conversation(
+    conv_id: str,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] DELETE /chat/conversations/{conv_id} - Moving to trash")
     # 对话移到回收站前触发最终蒸馏
     try:
@@ -314,7 +327,11 @@ class RenameConversationRequest(BaseModel):
 
 
 @router.patch("/conversations/{conv_id}/rename")
-async def rename_conversation(conv_id: str, request: RenameConversationRequest):
+async def rename_conversation(
+    conv_id: str,
+    request: RenameConversationRequest,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] PATCH /chat/conversations/{conv_id}/rename - title_len={len(request.title)}")
     success = await conversation_store.rename_async(conv_id, request.title)
     if not success:
@@ -332,14 +349,19 @@ class DeleteMessageRequest(BaseModel):
 
 
 @router.patch("/conversations/{conv_id}/messages")
-async def truncate_messages(conv_id: str, request: TruncateMessagesRequest):
+async def truncate_messages(
+    conv_id: str,
+    request: TruncateMessagesRequest,
+    chat_service=Depends(get_chat_service),
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(
         f"[API] PATCH /chat/conversations/{conv_id}/messages - "
         f"Truncating to {request.keep_count}"
     )
     conv = await require_store(conversation_store, conv_id, "Conversation")
     conv["messages"] = conv["messages"][:request.keep_count]
-    await _chat_service.persist_conv(conv_id, conv)
+    await chat_service.persist_conv(conv_id, conv)
 
     # 截断的是尾部，重建对话级记忆
     agent_id = await _resolve_agent_id(conv)
@@ -373,7 +395,12 @@ class UpdateMessageVersionRequest(BaseModel):
 
 
 @router.post("/conversations/{conv_id}/regenerate")
-async def regenerate_message(conv_id: str, request: RegenerateRequest):
+async def regenerate_message(
+    conv_id: str,
+    request: RegenerateRequest,
+    chat_service=Depends(get_chat_service),
+    conversation_store=Depends(get_conversation_store),
+):
     start_time = time.time()
     logger.info(f"[API] POST /chat/conversations/{conv_id}/regenerate")
 
@@ -381,7 +408,7 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
 
     while conv["messages"] and conv["messages"][-1].get("role") == "assistant":
         conv["messages"].pop()
-    await _chat_service.persist_conv(conv_id, conv)
+    await chat_service.persist_conv(conv_id, conv)
 
     resolved_provider = (
         request.provider or conv.get("provider") or llm_adapter.default_provider
@@ -435,14 +462,14 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
     }
 
     if request.stream:
-        return await _chat_service.stream_response(
+        return await chat_service.stream_response(
             conv_id, conv, request, all_messages,
             resolved_provider, resolved_model,
             agent_id, gen_state, start_time,
             versions=request.versions,
         )
 
-    await _chat_service.non_stream_generate(
+    await chat_service.non_stream_generate(
         gen_state, all_messages,
         resolved_provider, resolved_model,
         temperature=request.temperature,
@@ -454,8 +481,8 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
     if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
         persist_state["content"] = ""
 
-    _chat_service.save_assistant_message(conv, persist_state, versions=request.versions)
-    await _chat_service.persist_conv(conv_id, conv)
+    chat_service.save_assistant_message(conv, persist_state, versions=request.versions)
+    await chat_service.persist_conv(conv_id, conv)
 
     try:
         await context_service.schedule_memory_update(
@@ -483,7 +510,12 @@ async def regenerate_message(conv_id: str, request: RegenerateRequest):
 
 
 @router.patch("/conversations/{conv_id}/messages/version")
-async def update_message_version(conv_id: str, request: UpdateMessageVersionRequest):
+async def update_message_version(
+    conv_id: str,
+    request: UpdateMessageVersionRequest,
+    chat_service=Depends(get_chat_service),
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(
         f"[API] PATCH /chat/conversations/{conv_id}/messages/version - "
         f"Updating message version for {request.message_id}"
@@ -505,7 +537,7 @@ async def update_message_version(conv_id: str, request: UpdateMessageVersionRequ
                 msg["suggested_questions"] = v["suggested_questions"]
             elif "suggested_questions" in msg:
                 del msg["suggested_questions"]
-            await _chat_service.persist_conv(conv_id, conv)
+            await chat_service.persist_conv(conv_id, conv)
             logger.success(
                 f"[API] PATCH /chat/conversations/{conv_id}/messages/version - Version updated"
             )
@@ -515,7 +547,12 @@ async def update_message_version(conv_id: str, request: UpdateMessageVersionRequ
 
 
 @router.delete("/conversations/{conv_id}/messages/{message_id}")
-async def delete_message(conv_id: str, message_id: str):
+async def delete_message(
+    conv_id: str,
+    message_id: str,
+    chat_service=Depends(get_chat_service),
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(
         f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Deleting message"
     )
@@ -540,7 +577,7 @@ async def delete_message(conv_id: str, message_id: str):
             last_user_idx = i
 
     conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
-    await _chat_service.persist_conv(conv_id, conv)
+    await chat_service.persist_conv(conv_id, conv)
 
     # 删除用户消息时始终重建记忆，删除中间AI消息则跳过
     agent_id = await _resolve_agent_id(conv)
@@ -560,28 +597,35 @@ async def delete_message(conv_id: str, message_id: str):
     
 
 @router.post("/conversations/{conv_id}/messages")
-async def add_message(conv_id: str, request: ChatRequest):
+@limiter.limit(RATE_CHAT)
+async def add_message(
+    request: Request,
+    conv_id: str,
+    body: ChatRequest,
+    chat_service=Depends(get_chat_service),
+    conversation_store=Depends(get_conversation_store),
+):
     start_time = time.time()
     logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Adding message")
 
     conv = await require_store(conversation_store, conv_id, "Conversation")
 
     last_user_content = ""
-    for m in reversed(request.messages):
+    for m in reversed(body.messages):
         if m.role == "user":
             last_user_content = m.content
             break
 
-    _chat_service.save_user_message(
-        conv, last_user_content, request.file_content, request.file_name, request.file_type,
+    chat_service.save_user_message(
+        conv, last_user_content, body.file_content, body.file_name, body.file_type,
     )
-    await _chat_service.persist_conv(conv_id, conv)
+    await chat_service.persist_conv(conv_id, conv)
 
     resolved_provider = (
-        request.provider or conv.get("provider") or llm_adapter.default_provider
+        body.provider or conv.get("provider") or llm_adapter.default_provider
     )
     resolved_model = (
-        request.model or conv.get("model")
+        body.model or conv.get("model")
         or llm_adapter.get_provider(resolved_provider).default_model
     )
 
@@ -607,7 +651,7 @@ async def add_message(conv_id: str, request: ChatRequest):
 
     all_messages = context_service.inject_timestamp_prompt(all_messages)
     # 始终以对话存储的 agent_id 为准，确保记忆读写一致
-    agent_id = await _resolve_agent_id(conv, request.agent_id)
+    agent_id = await _resolve_agent_id(conv, body.agent_id)
     # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
     if conv.get("chat_mode") != "ultra":
         all_messages = await context_service.inject_memory(
@@ -615,10 +659,10 @@ async def add_message(conv_id: str, request: ChatRequest):
             llm_adapter=llm_adapter,
         )
 
-    if request.search_results:
+    if body.search_results:
         for i in range(len(all_messages) - 1, -1, -1):
             if all_messages[i]["role"] == "user":
-                all_messages[i]["content"] += f"\n\n[搜索结果]\n{request.search_results}"
+                all_messages[i]["content"] += f"\n\n[搜索结果]\n{body.search_results}"
                 break
 
     ctx_mgr = get_context_manager(resolved_provider, resolved_model)
@@ -634,28 +678,28 @@ async def add_message(conv_id: str, request: ChatRequest):
         "provider": resolved_provider,
     }
 
-    if request.stream:
-        return await _chat_service.stream_response(
-            conv_id, conv, request, all_messages,
+    if body.stream:
+        return await chat_service.stream_response(
+            conv_id, conv, body, all_messages,
             resolved_provider, resolved_model,
             agent_id, gen_state, start_time,
-            versions=request.versions,
+            versions=body.versions,
         )
 
-    await _chat_service.non_stream_generate(
+    await chat_service.non_stream_generate(
         gen_state, all_messages,
         resolved_provider, resolved_model,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-        top_p=request.top_p,
+        temperature=body.temperature,
+        max_tokens=body.max_tokens,
+        top_p=body.top_p,
     )
 
     persist_state = dict(gen_state)
     if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
         persist_state["content"] = ""
 
-    _chat_service.save_assistant_message(conv, persist_state, versions=request.versions)
-    await _chat_service.persist_conv(conv_id, conv)
+    chat_service.save_assistant_message(conv, persist_state, versions=body.versions)
+    await chat_service.persist_conv(conv_id, conv)
     await context_service.schedule_memory_update(
         [dict(m) for m in conv["messages"]], conv_id, agent_id,
         llm_adapter=llm_adapter,
@@ -682,7 +726,10 @@ async def add_message(conv_id: str, request: ChatRequest):
 
 
 @router.get("/trash", response_model=list[TrashListItemResponse])
-async def list_trash(agent_id: str | None = None):
+async def list_trash(
+    agent_id: str | None = None,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] GET /chat/trash - Listing trash, agent_id={agent_id}")
     items = await conversation_store.list_trash_async(agent_id)
     result = []
@@ -704,7 +751,10 @@ async def list_trash(agent_id: str | None = None):
 
 
 @router.post("/trash/{conv_id}/restore")
-async def restore_conversation(conv_id: str):
+async def restore_conversation(
+    conv_id: str,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] POST /chat/trash/{conv_id}/restore - Restoring conversation")
     restored = await conversation_store.restore_async(conv_id)
     if not restored:
@@ -715,7 +765,10 @@ async def restore_conversation(conv_id: str):
 
 
 @router.delete("/trash/{conv_id}")
-async def permanent_delete_conversation(conv_id: str):
+async def permanent_delete_conversation(
+    conv_id: str,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] DELETE /chat/trash/{conv_id} - Permanent deleting conversation")
     deleted = await conversation_store.permanent_delete_async(conv_id)
     if not deleted:
@@ -726,7 +779,10 @@ async def permanent_delete_conversation(conv_id: str):
     
 
 @router.delete("/trash")
-async def empty_trash(agent_id: str | None = None):
+async def empty_trash(
+    agent_id: str | None = None,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] DELETE /chat/trash - Emptying trash, agent_id={agent_id}")
     count = await conversation_store.empty_trash_async(agent_id)
     logger.success(f"[API] DELETE /chat/trash - Emptied {count} items")
@@ -734,7 +790,10 @@ async def empty_trash(agent_id: str | None = None):
     
 
 @router.post("/trash/batch-restore")
-async def batch_restore(request: BatchIdsRequest):
+async def batch_restore(
+    request: BatchIdsRequest,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] POST /chat/trash/batch-restore - Restoring {len(request.ids)} items")
     count = await conversation_store.batch_restore_async(request.ids)
     logger.success(f"[API] POST /chat/trash/batch-restore - Restored {count} items")
@@ -742,7 +801,10 @@ async def batch_restore(request: BatchIdsRequest):
 
 
 @router.post("/trash/batch-delete")
-async def batch_permanent_delete(request: BatchIdsRequest):
+async def batch_permanent_delete(
+    request: BatchIdsRequest,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] POST /chat/trash/batch-delete - Deleting {len(request.ids)} items")
     count = await conversation_store.batch_permanent_delete_async(request.ids)
     logger.success(f"[API] POST /chat/trash/batch-delete - Deleted {count} items")
@@ -750,7 +812,10 @@ async def batch_permanent_delete(request: BatchIdsRequest):
     
 
 @router.post("/conversations/batch-delete")
-async def batch_soft_delete(request: BatchIdsRequest):
+async def batch_soft_delete(
+    request: BatchIdsRequest,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] POST /chat/conversations/batch-delete - Moving {len(request.ids)} to trash")
 
     # 为每个对话触发最终蒸馏（与单个删除行为对齐）
@@ -767,7 +832,11 @@ async def batch_soft_delete(request: BatchIdsRequest):
     
 
 @router.post("/conversations/{conv_id}/compress")
-async def compress_conversation(conv_id: str):
+async def compress_conversation(
+    conv_id: str,
+    chat_service=Depends(get_chat_service),
+    conversation_store=Depends(get_conversation_store),
+):
     """手动压缩对话上下文。"""
     logger.info(f"[API] POST /chat/conversations/{conv_id}/compress - Compressing conversation")
     conv = await require_store(conversation_store, conv_id, "Conversation")
@@ -799,7 +868,7 @@ async def compress_conversation(conv_id: str):
     non_system_messages = [m for m in compressed_messages if m.get("role") != "system"]
     # 将摘要消息写回
     conv["messages"] = non_system_messages
-    await _chat_service.persist_conv(conv_id, conv)
+    await chat_service.persist_conv(conv_id, conv)
 
     logger.success(
         f"[API] POST /chat/conversations/{conv_id}/compress - "
@@ -1039,10 +1108,6 @@ async def tts_engines():
 # STT (Speech-to-Text) endpoints
 # ---------------------------------------------------------------------------
 
-# STT 引擎优先级（自动降级顺序）
-_STT_FALLBACK_ORDER = ["sherpa-onnx", "funasr", "faster-whisper"]
-
-
 def _get_stt_provider(engine_id: str | None = None):
     """根据引擎 ID 获取 STT Provider，支持自动降级.
 
@@ -1055,48 +1120,12 @@ def _get_stt_provider(engine_id: str | None = None):
     Raises:
         RuntimeError: 所有引擎都不可用
     """
-    # 构建尝试顺序：用户指定的优先，其余按 fallback order
-    if engine_id and engine_id != "auto":
-        try_order = [engine_id] + [e for e in _STT_FALLBACK_ORDER if e != engine_id]
-    else:
-        try_order = list(_STT_FALLBACK_ORDER)
+    # 触发 STT 引擎注册（import 包即注册）
+    import app.runtime.provider.stt  # noqa: F401
+    from app.runtime.provider.stt.stt_registry import LuomiNestSTTRegistry
 
-    errors: list[str] = []
-
-    for eid in try_order:
-        try:
-            if eid == "sherpa-onnx":
-                from app.runtime.provider.stt.sherpa_onnx_stt import SherpaOnnxSTTProvider
-                if not SherpaOnnxSTTProvider.is_available():
-                    errors.append(f"{eid}: sherpa-onnx 未安装")
-                    continue
-                provider = SherpaOnnxSTTProvider()
-                return provider, eid
-
-            elif eid == "faster-whisper":
-                from app.runtime.provider.stt.faster_whisper_stt import FasterWhisperSTTProvider
-                if not FasterWhisperSTTProvider.is_available():
-                    errors.append(f"{eid}: faster-whisper 未安装")
-                    continue
-                provider = FasterWhisperSTTProvider()
-                return provider, eid
-
-            elif eid == "funasr":
-                from app.runtime.provider.stt.funasr_stt import FunASRSTTProvider
-                if not FunASRSTTProvider.is_available():
-                    errors.append(f"{eid}: funasr 未安装")
-                    continue
-                provider = FunASRSTTProvider()
-                return provider, eid
-
-        except Exception as e:
-            errors.append(f"{eid}: {e}")
-            logger.warning(f"[API] STT engine [{eid}] failed: {e}, trying next...")
-
-    raise RuntimeError(
-        f"所有 STT 引擎均不可用: {'; '.join(errors)}. "
-        f"请安装 sherpa-onnx / faster-whisper / funasr 中的至少一个"
-    )
+    # 通过注册表解析引擎，支持自动降级（降级顺序见 STT_FALLBACK_ORDER）
+    return LuomiNestSTTRegistry.resolve(engine_id)
 
 
 @router.post("/stt/transcribe")
@@ -1149,6 +1178,8 @@ async def stt_transcribe(
 @router.get("/stt/engines")
 async def stt_engines():
     """报告可用的 STT 引擎列表."""
+    from app.runtime.provider.stt.stt_registry import STT_FALLBACK_ORDER
+
     engines: list[dict] = []
 
     # Sherpa-ONNX STT
@@ -1222,7 +1253,7 @@ async def stt_engines():
         "error": None,
         "data": {
             "engines": engines,
-            "fallback_order": _STT_FALLBACK_ORDER,
+            "fallback_order": STT_FALLBACK_ORDER,
             "device": _detect_compute_device(),
         },
     }

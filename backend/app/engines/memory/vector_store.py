@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 import json
 import httpx
 import asyncio

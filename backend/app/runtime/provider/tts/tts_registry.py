@@ -6,7 +6,7 @@
 
 from loguru import logger
 
-from app.runtime.provider.base import TTSProvider
+from app.runtime.provider.tts.ports import TTSProvider
 
 
 # TTS 引擎降级顺序（auto 模式下按此顺序尝试）

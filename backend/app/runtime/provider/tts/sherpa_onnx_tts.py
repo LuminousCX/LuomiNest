@@ -18,7 +18,7 @@ import httpx
 import soundfile as sf
 from loguru import logger
 
-from app.runtime.provider.base import TTSProvider
+from app.runtime.provider.tts.ports import TTSProvider
 
 
 def _resolve_model_dir() -> Path:

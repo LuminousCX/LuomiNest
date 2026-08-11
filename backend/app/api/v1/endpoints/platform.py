@@ -1,11 +1,11 @@
 import uuid
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.core.utils import utc_now, require_value, ok
 from app.core.exceptions import NotFoundError, LuomiNestError, ValidationError
-from app.infrastructure.database.json_store import platforms_store
+from app.api.v1.deps import get_platforms_store, get_conversation_store
 from app.runtime.platform.registry import (
     PlatformStatus,
     list_adapter_types,
@@ -135,6 +135,9 @@ def _instance_to_response(inst) -> PlatformInstanceResponse:
 
 
 def _load_persisted_instances():
+    # lifespan 调用（非路由），无法 Depends 注入，经容器取同一门面单例
+    from app.core.container import container
+    platforms_store = container.platforms_store
     for inst_data in platforms_store.values():
         inst_id = inst_data.get("id", "")
         adapter_type = inst_data.get("adapter_type", "")
@@ -189,7 +192,10 @@ async def list_platform_instances():
 
 
 @router.post("/instances", response_model=PlatformInstanceResponse)
-async def create_platform_instance(request: PlatformInstanceCreate):
+async def create_platform_instance(
+    request: PlatformInstanceCreate,
+    platforms_store=Depends(get_platforms_store),
+):
     logger.info(f"[API] POST /platforms/instances - Creating: adapter_type={request.adapter_type}, name={request.name}")
     at = get_adapter_type(request.adapter_type)
     if not at:
@@ -240,7 +246,11 @@ async def get_platform_instance(instance_id: str):
 
 
 @router.patch("/instances/{instance_id}", response_model=PlatformInstanceResponse)
-async def update_platform_instance(instance_id: str, request: PlatformInstanceUpdate):
+async def update_platform_instance(
+    instance_id: str,
+    request: PlatformInstanceUpdate,
+    platforms_store=Depends(get_platforms_store),
+):
     logger.info(f"[API] PATCH /platforms/instances/{instance_id}")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
@@ -276,7 +286,10 @@ async def update_platform_instance(instance_id: str, request: PlatformInstanceUp
 
 
 @router.delete("/instances/{instance_id}")
-async def delete_platform_instance(instance_id: str):
+async def delete_platform_instance(
+    instance_id: str,
+    platforms_store=Depends(get_platforms_store),
+):
     logger.info(f"[API] DELETE /platforms/instances/{instance_id}")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
@@ -290,7 +303,10 @@ async def delete_platform_instance(instance_id: str):
 
 
 @router.post("/instances/{instance_id}/start", response_model=PlatformInstanceResponse)
-async def start_platform_instance(instance_id: str):
+async def start_platform_instance(
+    instance_id: str,
+    platforms_store=Depends(get_platforms_store),
+):
     logger.info(f"[API] POST /platforms/instances/{instance_id}/start")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
@@ -313,7 +329,10 @@ async def start_platform_instance(instance_id: str):
 
 
 @router.post("/instances/{instance_id}/stop", response_model=PlatformInstanceResponse)
-async def stop_platform_instance(instance_id: str):
+async def stop_platform_instance(
+    instance_id: str,
+    platforms_store=Depends(get_platforms_store),
+):
     logger.info(f"[API] POST /platforms/instances/{instance_id}/stop")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
@@ -326,12 +345,14 @@ async def stop_platform_instance(instance_id: str):
 
 
 @router.get("/instances/{instance_id}/conversations", response_model=list[PlatformConversationResponse])
-async def get_platform_conversations(instance_id: str):
+async def get_platform_conversations(
+    instance_id: str,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] GET /platforms/instances/{instance_id}/conversations")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     from app.runtime.platform.session import list_platform_sessions
-    from app.infrastructure.database.conversation_store import conversation_store
 
     sessions = list_platform_sessions(instance_id)
     result = []
@@ -407,12 +428,14 @@ async def create_new_platform_conversation(instance_id: str, request: NewConvers
 
 
 @router.get("/instances/{instance_id}/conversations/{conversation_id}/messages")
-async def get_platform_conversation_messages(instance_id: str, conversation_id: str):
+async def get_platform_conversation_messages(
+    instance_id: str,
+    conversation_id: str,
+    conversation_store=Depends(get_conversation_store),
+):
     """获取平台实例下指定对话的详细消息列表（含图片消息）。"""
     logger.info(f"[API] GET /platforms/instances/{instance_id}/conversations/{conversation_id}/messages")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
-
-    from app.infrastructure.database.conversation_store import conversation_store
 
     conv = await conversation_store.get_async(conversation_id)
     if not conv:
@@ -535,7 +558,11 @@ async def get_platform_model_config(instance_id: str):
 
 
 @router.patch("/instances/{instance_id}/model_config")
-async def update_platform_model_config(instance_id: str, request: PlatformModelConfigUpdate):
+async def update_platform_model_config(
+    instance_id: str,
+    request: PlatformModelConfigUpdate,
+    platforms_store=Depends(get_platforms_store),
+):
     """更新平台实例的模型配置（空值表示继承主 Agent）。"""
     logger.info(f"[API] PATCH /platforms/instances/{instance_id}/model_config")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)

@@ -9,7 +9,7 @@
 - **数据安全优先**：auto_improve 默认关闭，所有自动修改都先备份原文件
 - **可解释性**：每次改进都记录 diff 与原因，供用户审阅
 - **LLM 异步**：LLM 调用不阻塞 API 响应，改进建议生成通过后台任务
-- **持久化**：使用 JsonStore 原子写入，避免数据丢失
+- **持久化**：统一存入 config_items 表（SQLite，AES 加密与统一备份链路），避免数据丢失
 - **品牌一致性**：所有类名使用 Cx 前缀
 """
 from __future__ import annotations
@@ -25,16 +25,24 @@ from typing import Any, Callable
 from loguru import logger
 
 from app.core.utils import utc_now
-from app.infrastructure.database.json_store import JsonStore
+from app.infrastructure.database.config_namespace_store import ConfigNamespaceStore
 from app.runtime.plugin.skill.registry import cx_skill_registry
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
 from app.services.skill_service import cx_skill_service
 
 
-# 持久化存储
-_skill_usage_store = JsonStore("cx_skill_usage.json")
-_skill_suggestions_store = JsonStore("cx_skill_suggestions.json")
+# 持久化存储（config_items 为唯一权威源；遗留 JSON 首次访问时幂等并集合并，旧文件保留不删除）
+_skill_usage_store = ConfigNamespaceStore(
+    "skills.usage",
+    legacy_source="skill_usage",
+    legacy_filename="cx_skill_usage.json",
+)
+_skill_suggestions_store = ConfigNamespaceStore(
+    "skills.suggestions",
+    legacy_source="skill_suggestions",
+    legacy_filename="cx_skill_suggestions.json",
+)
 _skill_backup_dir_name = ".backups"
 
 

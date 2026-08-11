@@ -731,7 +731,11 @@ def _migrate_from_standalone_db() -> int:
 
 
 def _migrate_plugin_states() -> int:
-    """迁移 cx_plugin_states.json → config_items['plugins.states']。"""
+    """迁移 cx_plugin_states.json → config_items['plugins.states']。
+
+    JSON 文件为 JsonStore 格式（{"disabled_plugins": [...]}），提取禁用 id 列表写入，
+    与 CxPluginLifecycle 运行时写入的形状（list）保持一致；已有值时取并集，不覆盖。
+    """
     if _is_migrated("plugin_states"):
         return 0
 
@@ -742,14 +746,25 @@ def _migrate_plugin_states() -> int:
         logger.info("[Migration] plugin_states: no JSON file found, marked as migrated (0 records)")
         return 0
 
-    lumi_config_store.set("plugins.states", data)
-    _mark_migrated("plugin_states", 1)
+    raw = data.get("disabled_plugins", []) if isinstance(data, dict) else []
+    legacy_ids = [str(i) for i in raw] if isinstance(raw, list) else []
+
+    existing = lumi_config_store.get("plugins.states")
+    existing_ids = [str(i) for i in existing] if isinstance(existing, list) else []
+    merged = existing_ids + [i for i in legacy_ids if i not in existing_ids]
+
+    lumi_config_store.set("plugins.states", merged)
+    _mark_migrated("plugin_states", len(merged))
     logger.success("[Migration] plugin_states: migrated to config_items['plugins.states']")
-    return 1
+    return len(merged)
 
 
 def _migrate_skill_disabled() -> int:
-    """迁移 cx_skill_disabled.json → config_items['skills.disabled_ids']。"""
+    """迁移 cx_skill_disabled.json → config_items['skills.disabled_ids']。
+
+    JSON 文件为 JsonStore 格式（{"disabled_ids": [...]}），提取禁用 id 列表写入，
+    与 CxSkillService 运行时写入的形状（list）保持一致；已有值时取并集，不覆盖。
+    """
     if _is_migrated("skill_disabled"):
         return 0
 
@@ -760,10 +775,17 @@ def _migrate_skill_disabled() -> int:
         logger.info("[Migration] skill_disabled: no JSON file found, marked as migrated (0 records)")
         return 0
 
-    lumi_config_store.set("skills.disabled_ids", data)
-    _mark_migrated("skill_disabled", 1)
+    raw = data.get("disabled_ids", []) if isinstance(data, dict) else []
+    legacy_ids = [str(i) for i in raw] if isinstance(raw, list) else []
+
+    existing = lumi_config_store.get("skills.disabled_ids")
+    existing_ids = [str(i) for i in existing] if isinstance(existing, list) else []
+    merged = existing_ids + [i for i in legacy_ids if i not in existing_ids]
+
+    lumi_config_store.set("skills.disabled_ids", merged)
+    _mark_migrated("skill_disabled", len(merged))
     logger.success("[Migration] skill_disabled: migrated to config_items['skills.disabled_ids']")
-    return 1
+    return len(merged)
 
 
 # 数据源注册表：(名称, 迁移函数)

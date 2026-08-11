@@ -1,7 +1,9 @@
-"""LuomiNest LLM 供应商实现。
+"""LuomiNest Chat Completions 协议适配器（L1 适配器层）。
 
-OpenAICompatibleProvider：统一的 OpenAI 兼容 API 供应商实现，
+OpenAICompatibleProvider：统一的 OpenAI 兼容 API 供应商实现（/chat/completions 协议），
 支持 32 个预置模板（PROVIDER_TEMPLATES）。
+本模块是六边形架构中的适配器：向内实现 ports.py 的 LLMProvider 端口，
+向外对接 OpenAI 兼容生态；新增协议族请另建适配器模块，勿在此堆叠。
 
 设计原则：
 1. 单一实现类，所有供应商共用，通过 base_url / api_key / default_model 区分
@@ -21,7 +23,7 @@ from typing import AsyncIterator
 import httpx
 from loguru import logger
 
-from app.runtime.provider.base import LLMProvider
+from app.runtime.provider.llm.ports import LLMProvider
 from app.runtime.provider.llm.types import LLMRequest, LLMResponse, ProviderCapabilities, StreamEvent
 from app.runtime.provider.llm.capabilities import get_capabilities as _get_capabilities
 

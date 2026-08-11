@@ -118,15 +118,30 @@ async def _handle_jwt_auth(request: Request, call_next):
 
 
 async def _handle_local_auth(request: Request, call_next):
-    """local 模式认证处理（向后兼容，行为完全不变）。"""
+    """local 模式认证处理（Fail-Closed）。
+
+    与 ws_auth.py 保持一致：无 token 时拒绝请求，
+    防止 token 文件丢失/不可读时 API 静默开放。
+    """
     path = request.url.path
     if path in _LOCAL_EXEMPT_PATHS or not path.startswith("/api/"):
         return await call_next(request)
 
     expected_token = load_auth_token()
     if not expected_token:
-        logger.debug("[Auth] No auth token configured, allowing request (dev mode)")
-        return await call_next(request)
+        logger.warning(
+            f"[Auth/Local] No auth token available, rejecting request (fail-closed): "
+            f"{request.method} {path}"
+        )
+        return JSONResponse(
+            status_code=401,
+            content={
+                "code": 1,
+                "message": "服务器未配置认证令牌，请检查后端启动日志",
+                "error": {"code": "AUTH_FAILED", "message": "服务器认证未配置"},
+                "data": None,
+            },
+        )
 
     auth_header = request.headers.get("Authorization", "")
     provided = ""

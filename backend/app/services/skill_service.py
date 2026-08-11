@@ -11,21 +11,40 @@
 """
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from loguru import logger
 
 from app.infrastructure.database.config_store import lumi_config_store
-from app.infrastructure.database.json_store import JsonStore
 from app.runtime.plugin.skill.loader import cx_skill_loader
 from app.runtime.plugin.skill.registry import cx_skill_registry
 
 
-# DB 存储 key
+# DB 存储 key（config_items 为唯一权威源）
 _DB_KEY = "skills.disabled_ids"
 
-# 禁用偏好持久化（id 列表）—— 保留作为 fallback / 备份
-_disabled_store = JsonStore("cx_skill_disabled.json")
+# 遗留 JSON 文件（DATA_DIR/store/）—— 收敛后仅在迁移时读取一次，不再写入，也不删除文件本身
+_LEGACY_JSON_FILENAME = "cx_skill_disabled.json"
+# 遗留 JSON 文件（JsonStore 格式）中禁用 id 列表所在字段名
+_LEGACY_JSON_FIELD = "disabled_ids"
+# _migration_meta 标记源名：与 json_to_sqlite_migrator 共用同一标记，谁先执行谁标记，避免重复合并
+_MIGRATION_SOURCE = "skill_disabled"
+
+
+def _normalize_disabled_ids(value: Any) -> list[str]:
+    """将 config_items 中的值规范化为 list[str]。
+
+    兼容两种历史形状：
+    - list：运行时直接写入（CxSkillService._persist_disabled）
+    - dict：旧版迁移器写入的整个 JSON 文件内容（{"disabled_ids": [...]}）
+    """
+    if isinstance(value, list):
+        return [str(i) for i in value]
+    if isinstance(value, dict):
+        raw = value.get(_LEGACY_JSON_FIELD, [])
+        return [str(i) for i in raw] if isinstance(raw, list) else []
+    return []
 
 
 class CxSkillService:
@@ -46,12 +65,13 @@ class CxSkillService:
         Returns:
             成功加载的技能数量
         """
-        # 恢复用户的禁用偏好（优先 DB，fallback JSON）
-        disabled_ids = lumi_config_store.get(_DB_KEY)
-        if disabled_ids is None:
-            disabled_ids = _disabled_store.get("disabled_ids", [])
-        if isinstance(disabled_ids, list) and disabled_ids:
-            cx_skill_registry.set_disabled_ids([str(i) for i in disabled_ids])
+        # 幂等合并遗留 JSON 数据到 config_items（_migration_meta 标记保护，重跑不重复合并）
+        self._merge_legacy_json()
+
+        # 恢复用户的禁用偏好（config_items 唯一权威源）
+        disabled_ids = _normalize_disabled_ids(lumi_config_store.get(_DB_KEY))
+        if disabled_ids:
+            cx_skill_registry.set_disabled_ids(disabled_ids)
             logger.info(f"[CxSkillService] Restored {len(disabled_ids)} disabled skill id(s)")
 
         # 扫描并加载所有技能
@@ -98,13 +118,50 @@ class CxSkillService:
         return ok
 
     def _persist_disabled(self) -> None:
-        """将当前禁用列表持久化到 DB，同时保留 JSON 文件备份。"""
+        """将当前禁用列表持久化到 config_items（唯一权威源）。"""
         disabled_ids = cx_skill_registry.get_disabled_ids()
         lumi_config_store.set(_DB_KEY, disabled_ids)
+
+    def _merge_legacy_json(self) -> None:
+        """幂等合并遗留 JSON 文件（cx_skill_disabled.json）到 config_items。
+
+        参照 json_to_sqlite_migrator 的 _migration_meta 标记模式：
+        - 已标记迁移 → 直接跳过（重跑不重复合并）
+        - JSON 文件不存在 → 仅记录标记
+        - JSON 文件存在 → 与 config_items 现有值取并集合并，不覆盖
+        遗留 JSON 文件是用户数据：仅迁移时读取，不删除文件本身。
+        """
+        from app.core.config import settings
+        from app.infrastructure.database.migration.json_to_sqlite_migrator import (
+            _is_migrated,
+            _mark_migrated,
+            _read_json_file,
+        )
+
         try:
-            _disabled_store.set("disabled_ids", disabled_ids)
+            if _is_migrated(_MIGRATION_SOURCE):
+                return
+
+            path = os.path.join(settings.DATA_DIR, "store", _LEGACY_JSON_FILENAME)
+            data = _read_json_file(path)
+            legacy_ids: list[str] = []
+            if isinstance(data, dict):
+                raw = data.get(_LEGACY_JSON_FIELD, [])
+                if isinstance(raw, list):
+                    legacy_ids = [str(i) for i in raw]
+
+            if legacy_ids:
+                existing = _normalize_disabled_ids(lumi_config_store.get(_DB_KEY))
+                merged = existing + [i for i in legacy_ids if i not in existing]
+                lumi_config_store.set(_DB_KEY, merged)
+                logger.info(
+                    f"[CxSkillService] Merged legacy JSON into config_items: "
+                    f"{len(merged)} disabled skill id(s)"
+                )
+
+            _mark_migrated(_MIGRATION_SOURCE, len(legacy_ids))
         except Exception as e:
-            logger.warning(f"[CxSkillService] Failed to write JSON backup: {e}")
+            logger.warning(f"[CxSkillService] Legacy JSON merge skipped: {e}")
 
     # ------------------------------------------------------------------
     # 重载
@@ -183,8 +240,6 @@ class CxSkillService:
         Raises:
             ValueError: skill_id 或内容校验失败，或已存在且 overwrite=False
         """
-        import os
-
         self.validate_skill_id(skill_id)
         self.validate_skill_md_content(content, skill_id)
 
@@ -231,8 +286,6 @@ class CxSkillService:
 
         若 skill 不存在返回 None。
         """
-        import os
-
         skill = cx_skill_registry.get(skill_id)
         if skill is None:
             return None

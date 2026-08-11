@@ -9,17 +9,23 @@ from app.core.context import get_context_manager
 from app.core.utils import utc_now, sse_response, sse_data
 from app.core.tools import tool_registry
 from app.core.tools.orchestrator import tool_orchestrator
+from app.core.agents.middleware.base import HookRegistry, AgentContext
+from app.core.agents.cluster.agent_tool import (
+    set_luominest_agent_call_depth,
+    reset_luominest_agent_call_depth,
+)
+from app.core.agents.memory_access import MEMORY_ACCESS_NONE, MEMORY_ACCESS_READ_WRITE
+from app.core.chat_mode import ChatMode, get_tool_config
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint, StreamEvent
-from app.runtime.provider.llm.providers import LLMResponse
+from app.runtime.provider.llm.types import LLMResponse
 from app.infrastructure.database.conversation_store import conversation_store
 from app.schemas.chat import ChatStreamChunk
 from app.services.avatar_manager import strip_emotion_tags
-from app.services.context_service import ContextService
+from app.services.context_service import ContextService, is_main_agent
 from app.services.suggestion_service import SuggestionService
 from app.services.usage_tracker import usage_tracker
 from app.services.distillation_service import distillation_service
-from app.core.agents.middleware.base import HookRegistry
 from app.services.stream_processor import StreamProcessor
 
 
@@ -302,15 +308,12 @@ class ChatService:
         llm_call_fn 内通过 EmotionStreamParser 清洗 content，确保 runner 积累
         干净内容（无 emotion 标签），emotion 通过 chunk.data["emotion"] 传入 SSE。
         """
-        from app.core.agents.middleware.base import AgentContext
-
         chat_id = str(uuid.uuid4())
 
         # Agent 集群调用：子 Agent 请求设置递归深度 contextvar
         is_sub_agent = getattr(request, "is_sub_agent", False)
         depth_token = None
         if is_sub_agent:
-            from app.core.agents.cluster.agent_tool import set_luominest_agent_call_depth
             depth_token = set_luominest_agent_call_depth(getattr(request, "agent_depth", 0))
 
         # 工具支持：获取工具列表（disable_tools/tool_whitelist 过滤由 ToolFilterMiddleware 处理）
@@ -323,7 +326,6 @@ class ChatService:
         chat_mode_str = getattr(request, "chat_mode", "normal")
         tool_whitelist = None
         if chat_mode_str == "normal":
-            from app.core.chat_mode import ChatMode, get_tool_config
             tool_whitelist = get_tool_config(ChatMode.NORMAL).get("whitelist")
 
         # 构建 AgentContext
@@ -393,7 +395,6 @@ class ChatService:
             yield sse_data(done_data)
         finally:
             if depth_token is not None:
-                from app.core.agents.cluster.agent_tool import reset_luominest_agent_call_depth
                 reset_luominest_agent_call_depth(depth_token)
             # /chat/completions 流式模式写入记忆（子 Agent 跳过，避免污染主 Agent 记忆）
             if not is_sub_agent:
@@ -431,10 +432,6 @@ class ChatService:
 
         流式结束后执行：state 同步、推荐问题生成、消息持久化、done 事件、记忆更新、蒸馏。
         """
-        from app.core.agents.middleware.base import AgentContext
-        from app.core.agents.memory_access import MEMORY_ACCESS_NONE, MEMORY_ACCESS_READ_WRITE
-        from app.services.context_service import is_main_agent
-
         chat_id = str(uuid.uuid4())
 
         # 工具支持
@@ -450,7 +447,6 @@ class ChatService:
         chat_mode_str = getattr(request, "chat_mode", "normal")
         tool_whitelist = None
         if chat_mode_str == "normal":
-            from app.core.chat_mode import ChatMode, get_tool_config
             tool_whitelist = get_tool_config(ChatMode.NORMAL).get("whitelist")
 
         # 构建 AgentContext（all_messages 共享引用，runner 追加 assistant/tool 消息）

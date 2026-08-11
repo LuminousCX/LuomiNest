@@ -13,28 +13,71 @@ Please see the following acknowledgments:
 ### Backend (Python)
 
 - FastAPI - MIT License
+- Uvicorn - BSD-3-Clause License
 - Pydantic - MIT License
+- Pydantic Settings - MIT License
 - SQLAlchemy - MIT License
-- LiteLLM - MIT License
-- OpenAI SDK - MIT License
-- Anthropic SDK - MIT License
-- Redis - MIT License
-- Paho-MQTT - MIT License
+- Alembic - MIT License
+- aiofiles / aiosqlite - Apache-2.0 License
+- httpx / aiohttp - BSD-3-Clause License
+- websockets - BSD-3-Clause License
+- Paho-MQTT - EPL-2.0 / BSD-3-Clause License
+- NumPy - BSD-3-Clause License
+- psutil - BSD-3-Clause License
+- cryptography - Apache-2.0 OR BSD-3-Clause License
+- python-jose - MIT License
+- passlib - BSD-3-Clause License
+- python-magic - MIT License
+- Pillow - HPND License
 - Loguru - MIT License
+- orjson - Apache-2.0 OR MIT License
+- Tenacity - Apache-2.0 License
+- PyMuPDF - AGPL-3.0 OR Commercial License
+- python-docx - MIT License
+- edge-tts - GPL-3.0 License
+- MCP (Model Context Protocol SDK) - MIT License
+- APScheduler - MIT License
+- python-a2a - MIT License
+- slowapi - MIT License
+- OpenAI SDK - Apache-2.0 License
+- Anthropic SDK - MIT License
+- asyncpg - Apache-2.0 License
+- Redis (redis-py) - MIT License
+- pgvector - MIT License
+- Sherpa-ONNX - Apache-2.0 License
+- faster-whisper - MIT License
+- FunASR - MIT License
+- ModelScope - Apache-2.0 License
+- PyTorch - BSD-3-Clause License
+- sentence-transformers - Apache-2.0 License
+- Cubism Live2D Core - Live2D Proprietary License
 
 ### Frontend (TypeScript/Vue)
 
 - Vue.js - MIT License
 - Electron - MIT License
-- PixiJS - MIT License
-- pixi-live2d-display - MIT License
+- Electron Builder - MIT License
+- Electron Vite - MIT License
+- Vite - MIT License
 - Pinia - MIT License
+- Vue Router - MIT License
+- PixiJS - MIT License
+- pixi-live2d-display-mulmotion - MIT License
 - Lucide Icons - ISC License
+- marked - MIT License
+- dompurify - Apache-2.0 / Mozilla Public License 2.0
+- pdfjs-dist - Apache-2.0 License
+- @vue-flow/core - MIT License
+- dagre - MIT License
+- cronstrue - MIT License
+- electron-log - MIT License
+- sharp - Apache-2.0 License
 
 ### Firmware (ESP32)
 
 - ESP-IDF - Apache 2.0 License
 - LVGL - MIT License
+- esp_jpeg / esp_lcd / esp-dl (ESP Component Registry) - Apache-2.0 License
 
 ### Live2D Models
 

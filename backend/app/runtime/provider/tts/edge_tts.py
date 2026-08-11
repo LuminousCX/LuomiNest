@@ -1,7 +1,7 @@
 import io
 import os
 import edge_tts
-from app.runtime.provider.base import TTSProvider
+from app.runtime.provider.tts.ports import TTSProvider
 
 
 class EdgeTTSProvider(TTSProvider):

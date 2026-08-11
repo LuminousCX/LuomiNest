@@ -21,7 +21,7 @@ import numpy as np
 import soundfile as sf
 from loguru import logger
 
-from app.runtime.provider.base import STTProvider
+from app.runtime.provider.stt.ports import STTProvider
 
 
 def _resolve_model_root() -> Path:

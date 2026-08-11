@@ -1,4 +1,9 @@
-"""LuomiNest Provider 抽象基类。
+"""LuomiNest LLM 端口定义（L1 能力内核）。
+
+LLMProvider 是能力内核对外暴露的唯一协议抽象（Port）：
+- 内核只定义契约，不感知任何具体供应商协议细节
+- 所有供应商实现（Adapter）位于 adapters/ 子包，向内实现本端口
+- 依赖方向：adapters → ports（外层依赖内层，禁止反向）
 
 LLMProvider 统一使用 LLMRequest / LLMResponse / StreamEvent，
 明确接口契约，消除旧版返回类型不一致问题。
@@ -14,7 +19,7 @@ from app.runtime.provider.llm.types import LLMRequest, LLMResponse, StreamEvent
 
 
 class LLMProvider(ABC):
-    """LLM 供应商抽象基类。
+    """LLM 供应商抽象基类（端口）。
 
     所有 LLM 供应商实现必须继承此类并提供 chat / chat_stream / embed / list_models 方法。
     chat 返回 LLMResponse，chat_stream 返回 StreamEvent 流，
@@ -124,28 +129,4 @@ class LLMProvider(ABC):
 
     async def aclose(self) -> None:
         """关闭 httpx 客户端等资源。子类可覆写。"""
-        ...
-
-
-class STTProvider(ABC):
-    provider_name: str = "base"
-
-    @abstractmethod
-    async def transcribe(self, audio_data: bytes, format: str = "wav") -> str:
-        ...
-
-
-class TTSProvider(ABC):
-    provider_name: str = "base"
-
-    @abstractmethod
-    async def synthesize(self, text: str, voice: str = "default") -> bytes:
-        raise NotImplementedError
-
-
-class EmbeddingProvider(ABC):
-    provider_name: str = "base"
-
-    @abstractmethod
-    async def embed(self, text: str) -> list[float]:
         ...

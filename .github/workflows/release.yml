@@ -13,7 +13,7 @@ name: Build & Release
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'frontend/package.json'
       - 'backend/pyproject.toml'
