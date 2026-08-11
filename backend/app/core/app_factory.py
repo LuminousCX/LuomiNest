@@ -304,6 +304,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Workflow internal tools registration skipped: {e}", exc_info=True)
 
+    # 装配工作流引擎依赖（组合根注入，替代引擎内部延迟 import；未注入时引擎保留兜底）
+    try:
+        from app.core.workflow.engine import configure_engine
+        from app.core.container import container
+        configure_engine(
+            chat_service_cls=container.chat_service.__class__,
+            conversation_store=container.conversation_store,
+            llm_adapter=container.llm_adapter,
+        )
+        logger.info("[LuomiNest] Workflow engine dependencies configured")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Workflow engine configure skipped: {e}", exc_info=True)
+
     # 加载 CxPlugin 插件系统
     try:
         from app.runtime.plugin.cxplugin import init_hot_reload
@@ -334,6 +347,9 @@ async def lifespan(app: FastAPI):
     # 启动定时任务调度器（APScheduler）
     try:
         from app.core.scheduler import luomi_scheduler
+        # 注入任务载荷执行器（组合根装配；未注入时调度器经 subagent_delegation 端口兜底）
+        from app.core.container import container
+        luomi_scheduler.register_task_executor(container.subagent_executor)
         await luomi_scheduler.init()
         logger.info(f"[LuomiNest] Scheduler started, tasks: {len(luomi_scheduler.list_tasks())}")
     except Exception as e:

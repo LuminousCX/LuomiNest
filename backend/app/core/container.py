@@ -28,6 +28,8 @@ if TYPE_CHECKING:
     from app.infrastructure.database.usage_store import UsageFacade
     from app.infrastructure.database.facades.json_store_facade import JsonStoreFacade
     from app.infrastructure.database.facades.marketplace_stats_store import MarketplaceStatsFacade
+    from app.core.agents.subagent_executor import SubagentExecutor
+    from app.core.scheduler.manager import LuomiSchedulerManager
 
 
 class ServiceContainer:
@@ -103,6 +105,23 @@ class ServiceContainer:
                 suggestions=self.suggestion_service,
             )
         return self._cache["chat_service"]  # type: ignore
+
+    # ── Agent 执行 / 调度层 ──
+    # 以下属性代理既有模块单例本身，绝不新建实例
+
+    @property
+    def subagent_executor(self) -> "SubagentExecutor":
+        if "subagent_executor" not in self._cache:
+            from app.core.agents.subagent_executor import subagent_executor
+            self._cache["subagent_executor"] = subagent_executor
+        return self._cache["subagent_executor"]  # type: ignore
+
+    @property
+    def luomi_scheduler(self) -> "LuomiSchedulerManager":
+        if "luomi_scheduler" not in self._cache:
+            from app.core.scheduler.manager import luomi_scheduler
+            self._cache["luomi_scheduler"] = luomi_scheduler
+        return self._cache["luomi_scheduler"]  # type: ignore
 
     # ── 数据访问门面层（Facade 即端口）──
     # 以下属性直接返回既有门面单例对象本身，绝不新建实例
@@ -258,3 +277,13 @@ def get_repo_sources_store():
 def get_marketplace_stats_store():
     """FastAPI 依赖：获取市场统计存储门面（全局单例本身）。"""
     return container.marketplace_stats_store
+
+
+def get_subagent_executor():
+    """FastAPI 依赖：获取子 Agent 执行器（全局单例本身）。"""
+    return container.subagent_executor
+
+
+def get_luomi_scheduler():
+    """FastAPI 依赖：获取定时任务调度器管理器（全局单例本身）。"""
+    return container.luomi_scheduler

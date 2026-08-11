@@ -489,3 +489,83 @@ def get_hardware_profile() -> HardwareProfile:
 def is_low_end_device() -> bool:
     """判断当前设备是否为低端设备（内存 < 8GB 或 CPU < 4 核）."""
     return get_hardware_profile().is_low_end
+
+
+def detect_compute_device() -> dict:
+    """Detect compute device availability for TTS/STT.
+
+    Prefers PyTorch (CUDA/MPS, gives CUDA version); when PyTorch is missing
+    or is a CPU-only build, falls back to OS-native GPU detection
+    (PowerShell / lspci / /sys/class/drm / system_profiler) so real hardware
+    is still reported.
+    Note: current local TTS engines (pyttsx3, sherpa-onnx CPU) run on CPU only;
+    this info informs the frontend and future GPU-based engines.
+    """
+    device = {
+        "type": "cpu",
+        "name": platform.processor() or "Unknown CPU",
+        "vendor": None,
+        "gpu_count": 0,
+        "cuda_available": False,
+        "cuda_version": None,
+        "torch_available": False,
+        "note": "未检测到可用 GPU，本地 TTS 使用 CPU 推理",
+    }
+
+    # 1) PyTorch 检测（可拿到 CUDA 版本）
+    try:
+        import torch
+
+        device["torch_available"] = True
+        if torch.cuda.is_available():
+            device.update(
+                {
+                    "type": "gpu",
+                    "name": torch.cuda.get_device_name(0),
+                    "vendor": "nvidia",
+                    "gpu_count": torch.cuda.device_count(),
+                    "cuda_available": True,
+                    "cuda_version": torch.version.cuda or "unknown",
+                    "note": "PyTorch CUDA 检测",
+                }
+            )
+            return device
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device.update(
+                {
+                    "type": "gpu",
+                    "name": "Apple Silicon (MPS)",
+                    "vendor": "apple",
+                    "gpu_count": 1,
+                    "note": "PyTorch MPS 检测",
+                }
+            )
+            return device
+    except ImportError:
+        device["torch_available"] = False
+    except Exception as dev_err:
+        logger.debug(f"[Hardware] Compute device detection (torch) failed: {dev_err}")
+
+    # 2) 回退：平台原生硬件检测（不依赖 PyTorch）
+    try:
+        gpus = detect_gpus()
+        if gpus:
+            primary = gpus[0]
+            device.update(
+                {
+                    "type": "gpu",
+                    "name": primary.name,
+                    "vendor": primary.vendor,
+                    "gpu_count": len(gpus),
+                    "note": (
+                        "系统硬件检测（未安装 PyTorch）。"
+                        "本地 TTS 当前仍为 CPU 推理，GPU 可用于未来 GPU 加速引擎"
+                        if not device["torch_available"]
+                        else "系统硬件检测"
+                    ),
+                }
+            )
+    except Exception as native_err:
+        logger.debug(f"[Hardware] Compute device detection (native) failed: {native_err}")
+
+    return device

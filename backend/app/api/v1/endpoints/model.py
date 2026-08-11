@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.api.v1.deps import get_llm_adapter
-from app.runtime.provider.llm.adapter import llm_adapter, _create_provider_from_config
+from app.runtime.provider.llm.adapter import _create_provider_from_config
 from app.runtime.provider.llm.adapters.chat_completions import PROVIDER_TEMPLATES
 from app.core.config import settings
 from app.core.context import invalidate_context_cache
@@ -40,11 +40,15 @@ def apply_model_config_from_db():
     调用顺序需在 llm_adapter.ensure_providers_loaded() 之后，以保证 model_config 的
     default_provider 覆盖 provider 配置中的 is_default 标志（与原行为一致）。
     """
+    # lifespan 上下文（非路由）无法 Depends 注入，经容器取同一门面单例
+    from app.core.container import container
+    adapter = container.llm_adapter
+
     saved = _load_model_config()
     if not saved:
         return
     if saved.get("default_provider"):
-        llm_adapter.default_provider = saved["default_provider"]
+        adapter.default_provider = saved["default_provider"]
     if saved.get("default_model"):
         settings.LLM_DEFAULT_MODEL = saved["default_model"]
     if saved.get("default_temperature") is not None:
@@ -54,7 +58,7 @@ def apply_model_config_from_db():
     if saved.get("default_top_p") is not None:
         settings.LLM_DEFAULT_TOP_P = saved["default_top_p"]
     # 应用推理模型路由配置到 adapter 内存
-    llm_adapter.apply_reasoner_config(saved)
+    adapter.apply_reasoner_config(saved)
     logger.info(f"[ModelConfig] Applied saved config: provider={saved.get('default_provider')}, model={saved.get('default_model')}")
 
 
@@ -149,17 +153,17 @@ class ModelConfigUpdate(BaseModel):
     summary_provider: str | None = Field(alias="summaryProvider", default=None)
 
 
-def _build_provider_response(provider_id: str) -> ProviderResponse:
-    provider = llm_adapter.providers.get(provider_id)
-    cfg = llm_adapter.get_provider_config(provider_id) or {}
+def _build_provider_response(provider_id: str, adapter) -> ProviderResponse:
+    provider = adapter.providers.get(provider_id)
+    cfg = adapter.get_provider_config(provider_id) or {}
     if not provider:
         raise NotFoundError(f"Provider [{provider_id}] not found")
 
     # 从凭证仓储取前缀（不暴露密文/明文）
     api_key_prefix = ""
     try:
-        llm_adapter._ensure_repos()
-        creds = llm_adapter._credential_repo.list_credentials(provider_id)
+        adapter._ensure_repos()
+        creds = adapter._credential_repo.list_credentials(provider_id)
         if creds:
             api_key_prefix = creds[0].get("api_key_prefix", "")
     except Exception as exc:
@@ -177,7 +181,7 @@ def _build_provider_response(provider_id: str) -> ProviderResponse:
         api_key_prefix=api_key_prefix,
         api_key_set=bool(api_key_prefix),
         default_model=getattr(provider, "default_model", ""),
-        is_default=provider_id == llm_adapter.default_provider,
+        is_default=provider_id == adapter.default_provider,
         selected_models=cfg.get("selected_models", []),
         models=[],
     )
@@ -223,9 +227,9 @@ async def list_providers(adapter=Depends(get_llm_adapter)):
 
 
 @router.post("/providers", response_model=ProviderResponse)
-async def add_provider(request: ProviderCreate):
+async def add_provider(request: ProviderCreate, adapter=Depends(get_llm_adapter)):
     logger.info(f"[API] POST /models/providers - Adding provider: id={request.id}, vendor={request.vendor}")
-    if request.id in llm_adapter.providers:
+    if request.id in adapter.providers:
         logger.error(f"[API] POST /models/providers - Provider already exists: {request.id}")
         raise ValidationError(f"Provider [{request.id}] already exists")
 
@@ -241,7 +245,7 @@ async def add_provider(request: ProviderCreate):
     }
 
     provider = _create_provider_from_config(config)
-    llm_adapter.register_provider(
+    adapter.register_provider(
         name=request.id,
         provider=provider,
         config=config,
@@ -259,8 +263,8 @@ async def add_provider(request: ProviderCreate):
     # 从凭证仓储取前缀（register_provider 已保存凭证）
     api_key_prefix = ""
     try:
-        llm_adapter._ensure_repos()
-        creds = llm_adapter._credential_repo.list_credentials(request.id)
+        adapter._ensure_repos()
+        creds = adapter._credential_repo.list_credentials(request.id)
         if creds:
             api_key_prefix = creds[0].get("api_key_prefix", "")
     except Exception:
@@ -281,13 +285,13 @@ async def add_provider(request: ProviderCreate):
 
 
 @router.patch("/providers/{provider_id}", response_model=ProviderResponse)
-async def update_provider(provider_id: str, request: ProviderUpdate):
+async def update_provider(provider_id: str, request: ProviderUpdate, adapter=Depends(get_llm_adapter)):
     logger.info(f"[API] PATCH /models/providers/{provider_id} - Updating provider")
-    if provider_id not in llm_adapter.providers:
+    if provider_id not in adapter.providers:
         logger.error(f"[API] PATCH /models/providers/{provider_id} - Provider not found")
         raise NotFoundError(f"Provider [{provider_id}] not found")
 
-    existing_cfg = llm_adapter.get_provider_config(provider_id) or {}
+    existing_cfg = adapter.get_provider_config(provider_id) or {}
     updated_cfg = dict(existing_cfg)
     updated_fields = []
 
@@ -315,7 +319,7 @@ async def update_provider(provider_id: str, request: ProviderUpdate):
 
     provider = _create_provider_from_config(updated_cfg)
     set_default = request.is_default if request.is_default is not None else False
-    llm_adapter.update_provider(
+    adapter.update_provider(
         name=provider_id,
         provider=provider,
         config=updated_cfg,
@@ -323,27 +327,27 @@ async def update_provider(provider_id: str, request: ProviderUpdate):
     )
     logger.success(f"[API] PATCH /models/providers/{provider_id} - Updated fields: {updated_fields}")
 
-    return _build_provider_response(provider_id)
+    return _build_provider_response(provider_id, adapter)
 
 
 @router.delete("/providers/{provider_id}")
-async def remove_provider(provider_id: str):
+async def remove_provider(provider_id: str, adapter=Depends(get_llm_adapter)):
     logger.info(f"[API] DELETE /models/providers/{provider_id} - Removing provider")
-    if provider_id not in llm_adapter.providers:
+    if provider_id not in adapter.providers:
         logger.error(f"[API] DELETE /models/providers/{provider_id} - Provider not found")
         raise NotFoundError(f"Provider [{provider_id}] not found")
 
-    llm_adapter.remove_provider(provider_id)
+    adapter.remove_provider(provider_id)
     logger.success(f"[API] DELETE /models/providers/{provider_id} - Provider removed")
     return ok({"deleted": True, "id": provider_id})
 
 
 @router.get("/providers/{provider_id}/models")
-async def list_provider_models(provider_id: str):
+async def list_provider_models(provider_id: str, adapter=Depends(get_llm_adapter)):
     logger.info(f"[API] GET /models/providers/{provider_id}/models - Listing models")
     start_time = time.time()
     try:
-        models = await llm_adapter.list_models(provider_id)
+        models = await adapter.list_models(provider_id)
         elapsed = time.time() - start_time
         logger.success(f"[API] GET /models/providers/{provider_id}/models - Success: {len(models)} models, elapsed={elapsed:.2f}s")
         return ok(models)
@@ -385,10 +389,10 @@ async def list_all_models(adapter=Depends(get_llm_adapter)):
     
 
 @router.get("/config")
-async def get_model_config():
+async def get_model_config(adapter=Depends(get_llm_adapter)):
     logger.info("[API] GET /models/config - Getting model config")
     config = {
-        "default_provider": llm_adapter.default_provider,
+        "default_provider": adapter.default_provider,
         "default_model": settings.LLM_DEFAULT_MODEL,
         "default_temperature": settings.LLM_DEFAULT_TEMPERATURE,
         "default_max_tokens": settings.LLM_DEFAULT_MAX_TOKENS,
@@ -421,12 +425,12 @@ async def get_model_config():
 
 
 @router.patch("/config")
-async def update_model_config(request: ModelConfigUpdate):
+async def update_model_config(request: ModelConfigUpdate, adapter=Depends(get_llm_adapter)):
     logger.info(f"[API] PATCH /models/config - Updating model config")
     updated_fields = []
 
     if request.provider is not None:
-        llm_adapter.default_provider = request.provider
+        adapter.default_provider = request.provider
         updated_fields.append("provider")
     if request.model is not None:
         settings.LLM_DEFAULT_MODEL = request.model
@@ -489,7 +493,7 @@ async def update_model_config(request: ModelConfigUpdate):
 
     existing_config = _load_model_config()
     config_to_save = {
-        "default_provider": llm_adapter.default_provider,
+        "default_provider": adapter.default_provider,
         "default_model": settings.LLM_DEFAULT_MODEL,
         "default_temperature": settings.LLM_DEFAULT_TEMPERATURE,
         "default_max_tokens": settings.LLM_DEFAULT_MAX_TOKENS,
@@ -510,14 +514,14 @@ async def update_model_config(request: ModelConfigUpdate):
     _save_model_config(config_to_save)
 
     # 应用 reasoner_* 到 adapter 内存（路由决策依赖）
-    llm_adapter.apply_reasoner_config(config_to_save)
+    adapter.apply_reasoner_config(config_to_save)
 
     logger.success(f"[API] PATCH /models/config - Updated fields: {updated_fields}")
     invalidate_context_cache()  # 清空所有缓存（可能改了默认 provider/model）
     return {
         "error": None,
         "data": {
-            "default_provider": llm_adapter.default_provider,
+            "default_provider": adapter.default_provider,
             "default_model": settings.LLM_DEFAULT_MODEL,
             "default_temperature": settings.LLM_DEFAULT_TEMPERATURE,
             "default_max_tokens": settings.LLM_DEFAULT_MAX_TOKENS,

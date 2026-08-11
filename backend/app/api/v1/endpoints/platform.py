@@ -5,7 +5,7 @@ from loguru import logger
 
 from app.core.utils import utc_now, require_value, ok
 from app.core.exceptions import NotFoundError, LuomiNestError, ValidationError
-from app.api.v1.deps import get_platforms_store, get_conversation_store
+from app.api.v1.deps import get_platforms_store, get_conversation_store, get_llm_adapter
 from app.runtime.platform.registry import (
     PlatformStatus,
     list_adapter_types,
@@ -487,7 +487,10 @@ async def get_platform_conversation_messages(
 
 
 @router.get("/instances/{instance_id}/model_config")
-async def get_platform_model_config(instance_id: str):
+async def get_platform_model_config(
+    instance_id: str,
+    adapter=Depends(get_llm_adapter),
+):
     """获取平台实例的模型配置（含主 Agent 默认值回退信息）。"""
     logger.info(f"[API] GET /platforms/instances/{instance_id}/model_config")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
@@ -496,7 +499,6 @@ async def get_platform_model_config(instance_id: str):
         load_luominest_main_agent_config,
         resolve_main_agent_provider_model,
     )
-    from app.runtime.provider.llm.adapter import llm_adapter
 
     main_config = load_luominest_main_agent_config()
     main_provider, main_model = resolve_main_agent_provider_model()
@@ -504,7 +506,7 @@ async def get_platform_model_config(instance_id: str):
     main_provider_name = main_provider
     main_supports_vision = False
     try:
-        provider_inst = llm_adapter.get_provider(main_provider)
+        provider_inst = adapter.get_provider(main_provider)
         main_provider_name = getattr(provider_inst, "display_name", None) or main_provider
         main_supports_vision = provider_inst.supports_multimodal(main_model)
     except Exception as e:
@@ -519,7 +521,7 @@ async def get_platform_model_config(instance_id: str):
     is_overridden = bool(instance_provider or instance_model)
     if is_overridden:
         try:
-            provider_inst = llm_adapter.get_provider(instance_provider or main_provider)
+            provider_inst = adapter.get_provider(instance_provider or main_provider)
             instance_provider_name = getattr(provider_inst, "display_name", None) or (instance_provider or main_provider)
             instance_supports_vision = provider_inst.supports_multimodal(instance_model or main_model)
         except Exception as e:
@@ -779,7 +781,9 @@ async def list_platform_sessions(instance_id: str):
 
 
 @router.get("/main_agent")
-async def get_main_agent_info():
+async def get_main_agent_info(
+    adapter=Depends(get_llm_adapter),
+):
     """获取主 Agent 的 LLM 配置信息（供前端平台管理页面展示）。
 
     返回字段：
@@ -794,7 +798,6 @@ async def get_main_agent_info():
         load_luominest_main_agent_config,
         resolve_main_agent_provider_model,
     )
-    from app.runtime.provider.llm.adapter import llm_adapter
 
     config = load_luominest_main_agent_config()
     provider, model = resolve_main_agent_provider_model()
@@ -802,7 +805,7 @@ async def get_main_agent_info():
     provider_name = provider
     supports_multimodal = False
     try:
-        provider_inst = llm_adapter.get_provider(provider)
+        provider_inst = adapter.get_provider(provider)
         provider_name = getattr(provider_inst, "display_name", None) or provider
         supports_multimodal = provider_inst.supports_multimodal(model)
     except Exception as e:

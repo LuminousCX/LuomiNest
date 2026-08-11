@@ -1,5 +1,4 @@
 import uuid
-import time
 from fastapi import APIRouter, Request, UploadFile, File, Form, Query, Depends
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException
@@ -18,13 +17,10 @@ from app.schemas.chat import (
     TrashListItemResponse,
     BatchIdsRequest,
 )
-from app.runtime.provider.llm.adapter import llm_adapter
-from app.core.context import get_context_manager
-from app.services.context_service import context_service
-from app.core.config import get_settings
-from app.core.utils import utc_now, sse_response, require_store, ok
+from app.core.hardware import detect_compute_device
+from app.core.utils import utc_now, require_store, ok
 from app.core.exceptions import NotFoundError, ValidationError
-from app.security.rate_limiter import limiter, RATE_CHAT, RATE_TTS
+from app.security.rate_limiter import limiter, RATE_CHAT
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -38,17 +34,6 @@ async def chat_completions(
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
-    start_time = time.time()
-    resolved_provider = body.provider or adapter.default_provider
-    resolved_model = body.model or adapter.get_provider(resolved_provider).default_model
-    request_ts = body.timestamp or time.time()
-    logger.info(
-        f"[API] POST /chat/completions - "
-        f"provider={resolved_provider}, model={resolved_model}, "
-        f"stream={body.stream}, ts={request_ts}, "
-        f"is_sub_agent={body.is_sub_agent}, agent_depth={body.agent_depth}"
-    )
-
     # Agent 集群调用递归守卫：防止 Agent A→B→A 无限循环
     if body.agent_depth > 3:
         raise HTTPException(
@@ -56,89 +41,16 @@ async def chat_completions(
             detail="已达到最大 Agent 调用深度（3），无法继续递归调用",
         )
 
-    messages = [{"role": m.role, "content": m.content} for m in body.messages]
-
-    # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
-    _conv_chat_mode = None
-    if body.conversation_id:
-        _conv = await conversation_store.get_meta_async(body.conversation_id)
-        if _conv:
-            _conv_chat_mode = _conv.get("chat_mode")
-    if _conv_chat_mode != "ultra":
-        user_query = context_service.get_user_query(messages)
-        system_prompt = context_service.build_system_prompt(body.agent_id, user_context=user_query)
-        messages = [{"role": "system", "content": system_prompt}] + messages
-
-    messages = context_service.inject_timestamp_prompt(messages)
-    # 子 Agent 调用不注入主 Agent 记忆，避免污染独立上下文
-    # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
-    if not body.is_sub_agent and _conv_chat_mode != "ultra":
-        messages = await context_service.inject_memory(messages, body.agent_id, resolved_provider, llm_adapter=adapter)
-
-    if body.file_content:
-        supports_vision = adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
-        messages = context_service.inject_file_content(
-            messages, body.file_content, body.file_type or "text",
-            supports_vision=supports_vision, file_name=body.file_name,
-        )
-
-    if body.search_results:
-        for i in range(len(messages) - 1, -1, -1):
-            if messages[i]["role"] == "user":
-                messages[i]["content"] += f"\n\n[搜索结果]\n{body.search_results}"
-                break
-
-    ctx_mgr = get_context_manager(resolved_provider, resolved_model)
-    process_result = await ctx_mgr.process(messages)
-    messages = process_result["messages"]
-
+    result = await chat_service.handle_completions(body, adapter, conversation_store)
     if body.stream:
-        logger.info("[API] POST /chat/completions - Starting stream response")
-        return sse_response(
-            chat_service.stream_chat(messages, body, resolved_provider, resolved_model, agent_id=body.agent_id),
-        )
-
-    gen_state: dict = {"content": "", "reasoning": "", "aborted": False, "started": True}
-    await chat_service.non_stream_generate(
-        gen_state, messages,
-        resolved_provider, resolved_model,
-        temperature=body.temperature,
-        max_tokens=body.max_tokens,
-        top_p=body.top_p,
-    )
-
-    if gen_state["aborted"]:
-        raise HTTPException(status_code=400, detail=gen_state["content"].removeprefix("[Error] "))
-
-    result_content = gen_state["content"] or ""
-
-    # 命令安全守卫：扫描 LLM 输出中的不安全命令并标注
-    from app.security.command_guard import scan_and_annotate
-    result_content = scan_and_annotate(result_content)
-
-    # 非流式 /chat/completions 写入记忆（子 Agent 调用跳过，避免污染主 Agent 记忆）
-    if not body.is_sub_agent:
-        try:
-            user_msgs = [m for m in messages if m.get("role") == "user"]
-            if user_msgs:
-                thread_id = body.conversation_id or f"completions-{uuid.uuid4().hex[:8]}"
-                await context_service.schedule_memory_update(
-                    messages, thread_id, body.agent_id,
-                    llm_adapter=adapter,
-                )
-        except Exception as mem_err:
-            logger.warning(f"[API] /chat/completions memory update failed: {mem_err}")
-
-    elapsed = time.time() - start_time
-    logger.success(
-        f"[API] POST /chat/completions - "
-        f"Success: elapsed={elapsed:.2f}s, response_len={len(result_content)}"
-    )
+        return result
+    if result["aborted"]:
+        raise HTTPException(status_code=400, detail=result["content"].removeprefix("[Error] "))
     return ChatResponse(
         id=str(uuid.uuid4()),
-        content=result_content,
-        model=resolved_model,
-        provider=resolved_provider,
+        content=result["content"],
+        model=result["model"],
+        provider=result["provider"],
     )
 
 
@@ -249,56 +161,18 @@ async def get_conversation(
     return ConversationResponse(**conv)
 
 
-async def _resolve_agent_id(conv: dict, request_agent_id: str | None = None) -> str | None:
-    """解析并回填 agent_id：优先 conv 存储，其次 request，最后 agents_store 兜底。"""
-    agent_id = conv.get("agent_id") or request_agent_id
-    if not agent_id:
-        # 路由外辅助函数无法注入，经容器取同一门面单例
-        from app.core.container import container
-        all_agents = await container.agents_store.all_async()
-        if all_agents:
-            agent_id = all_agents[0].get("id")
-    if agent_id and not conv.get("agent_id"):
-        conv["agent_id"] = agent_id
-    return agent_id
-
-
-async def _trigger_final_distill(conv_id: str, conv: dict) -> None:
-    """对话结束前触发最终蒸馏（离开/删除/批量删除共用）。"""
-    if not (conv and conv.get("messages")):
-        return
-    from app.services.distillation_service import distillation_service
-    agent_id = await _resolve_agent_id(conv)
-    await distillation_service.final_distill(
-        agent_id, conv_id, conv["messages"], llm_adapter,
-    )
-
-
-async def _rebuild_conversation_memory(conv_id: str, conv: dict, agent_id: str) -> None:
-    """消息变更后重建对话级记忆（截断/删除消息共用）。"""
-    from app.engines.memory import get_memory_engine
-    from app.services.distillation_service import distillation_service as ds
-    engine = get_memory_engine(agent_id)
-    engine.clear_conversation_data(conv_id)
-    ds.reset_distill_state(conv_id)
-    await context_service.schedule_memory_update(
-        conv["messages"], conv_id, agent_id, llm_adapter=llm_adapter,
-    )
-    await ds.maybe_distill(
-        agent_id, conv_id, conv["messages"], llm_adapter,
-    )
-
-
 @router.post("/conversations/{conv_id}/leave")
 async def leave_conversation(
     conv_id: str,
+    adapter=Depends(get_llm_adapter),
+    chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
     """用户离开/切换对话时触发最终蒸馏"""
     logger.info(f"[API] POST /chat/conversations/{conv_id}/leave")
     try:
         conv = await conversation_store.get_async(conv_id)
-        await _trigger_final_distill(conv_id, conv)
+        await chat_service.trigger_final_distill(conv_id, conv, adapter)
     except Exception as distill_err:
         logger.warning(f"[API] Final distill on leave failed: {distill_err}")
     return ok({"left": True})
@@ -307,20 +181,22 @@ async def leave_conversation(
 @router.delete("/conversations/{conv_id}")
 async def delete_conversation(
     conv_id: str,
+    adapter=Depends(get_llm_adapter),
+    chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
     logger.info(f"[API] DELETE /chat/conversations/{conv_id} - Moving to trash")
     # 对话移到回收站前触发最终蒸馏
     try:
         conv = await conversation_store.get_async(conv_id)
-        await _trigger_final_distill(conv_id, conv)
+        await chat_service.trigger_final_distill(conv_id, conv, adapter)
     except Exception as distill_err:
         logger.warning(f"[API] Final distill on delete failed: {distill_err}")
 
     await conversation_store.soft_delete_async(conv_id)
     logger.success(f"[API] DELETE /chat/conversations/{conv_id} - Moved to trash")
     return ok({"deleted": True})
-    
+
 
 class RenameConversationRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
@@ -344,14 +220,11 @@ class TruncateMessagesRequest(BaseModel):
     keep_count: int = Field(..., ge=0)
 
 
-class DeleteMessageRequest(BaseModel):
-    message_id: str
-
-
 @router.patch("/conversations/{conv_id}/messages")
 async def truncate_messages(
     conv_id: str,
     request: TruncateMessagesRequest,
+    adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
@@ -364,10 +237,10 @@ async def truncate_messages(
     await chat_service.persist_conv(conv_id, conv)
 
     # 截断的是尾部，重建对话级记忆
-    agent_id = await _resolve_agent_id(conv)
+    agent_id = await chat_service.resolve_agent_id(conv)
     if agent_id:
         try:
-            await _rebuild_conversation_memory(conv_id, conv, agent_id)
+            await chat_service.rebuild_conversation_memory(conv_id, conv, agent_id, adapter)
         except Exception as mem_err:
             logger.warning(f"[Memory] Rebuild after truncate failed: {mem_err}")
 
@@ -398,114 +271,22 @@ class UpdateMessageVersionRequest(BaseModel):
 async def regenerate_message(
     conv_id: str,
     request: RegenerateRequest,
+    adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
-    start_time = time.time()
     logger.info(f"[API] POST /chat/conversations/{conv_id}/regenerate")
-
-    conv = await require_store(conversation_store, conv_id, "Conversation")
-
-    while conv["messages"] and conv["messages"][-1].get("role") == "assistant":
-        conv["messages"].pop()
-    await chat_service.persist_conv(conv_id, conv)
-
-    resolved_provider = (
-        request.provider or conv.get("provider") or llm_adapter.default_provider
+    result = await chat_service.process_conversation_turn(
+        conv_id, request, adapter, conversation_store, regenerate=True,
     )
-    resolved_model = (
-        request.model or conv.get("model")
-        or llm_adapter.get_provider(resolved_provider).default_model
-    )
-
-    # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
-    if conv.get("chat_mode") != "ultra":
-        user_query = context_service.get_user_query(conv["messages"])
-        system_prompt = context_service.build_system_prompt(conv.get("agent_id"), user_context=user_query)
-        all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
-    else:
-        all_messages: list[dict] = []
-
-    supports_vision = llm_adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
-
-    for m in conv["messages"]:
-        content = m["content"]
-        if m.get("role") == "user" and m.get("file_content"):
-            content = context_service.build_content_with_file(
-                content, m["file_content"], m.get("file_type", "text"),
-                supports_vision=supports_vision, file_name=m.get("file_name"),
-            )
-        msg = {"role": m["role"], "content": content}
-        all_messages.append(msg)
-
-    all_messages = context_service.inject_timestamp_prompt(all_messages)
-    # 始终以对话存储的 agent_id 为准，确保记忆读写一致
-    agent_id = await _resolve_agent_id(conv, request.agent_id)
-    # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
-    if conv.get("chat_mode") != "ultra":
-        all_messages = await context_service.inject_memory(
-            all_messages, agent_id, resolved_provider, conv_id,
-            llm_adapter=llm_adapter,
-        )
-
-    ctx_mgr = get_context_manager(resolved_provider, resolved_model)
-    process_result = await ctx_mgr.process(all_messages)
-    all_messages = process_result["messages"]
-
-    gen_state: dict = {
-        "content": "",
-        "reasoning": "",
-        "aborted": False,
-        "started": True,
-        "model": resolved_model,
-        "provider": resolved_provider,
-    }
-
     if request.stream:
-        return await chat_service.stream_response(
-            conv_id, conv, request, all_messages,
-            resolved_provider, resolved_model,
-            agent_id, gen_state, start_time,
-            versions=request.versions,
-        )
-
-    await chat_service.non_stream_generate(
-        gen_state, all_messages,
-        resolved_provider, resolved_model,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-        top_p=request.top_p,
-    )
-
-    persist_state = dict(gen_state)
-    if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
-        persist_state["content"] = ""
-
-    chat_service.save_assistant_message(conv, persist_state, versions=request.versions)
-    await chat_service.persist_conv(conv_id, conv)
-
-    try:
-        await context_service.schedule_memory_update(
-            [dict(m) for m in conv["messages"]], conv_id, agent_id,
-            llm_adapter=llm_adapter,
-        )
-    except Exception as mem_err:
-        logger.warning(f"[API] Regenerate memory update failed: {mem_err}")
-
-    try:
-        from app.services.distillation_service import distillation_service
-        await distillation_service.maybe_distill(agent_id, conv_id, conv["messages"], llm_adapter)
-    except Exception as distill_err:
-        logger.warning(f"[API] Regenerate distillation failed: {distill_err}")
-
-    elapsed = time.time() - start_time
-    logger.success(f"[API] Regenerate done: conv={conv_id}, elapsed={elapsed:.2f}s")
-
+        return result
+    logger.success(f"[API] Regenerate done: conv={conv_id}")
     return ChatResponse(
         id=str(uuid.uuid4()),
-        content=gen_state["content"],
-        model=resolved_model,
-        provider=resolved_provider,
+        content=result["content"],
+        model=result["model"],
+        provider=result["provider"],
     )
 
 
@@ -550,6 +331,7 @@ async def update_message_version(
 async def delete_message(
     conv_id: str,
     message_id: str,
+    adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
@@ -580,11 +362,11 @@ async def delete_message(
     await chat_service.persist_conv(conv_id, conv)
 
     # 删除用户消息时始终重建记忆，删除中间AI消息则跳过
-    agent_id = await _resolve_agent_id(conv)
+    agent_id = await chat_service.resolve_agent_id(conv)
     if agent_id and conv["messages"]:
         if deleted_role == "user" or deleted_idx >= last_user_idx:
             try:
-                await _rebuild_conversation_memory(conv_id, conv, agent_id)
+                await chat_service.rebuild_conversation_memory(conv_id, conv, agent_id, adapter)
             except Exception as mem_err:
                 logger.warning(f"[Memory] Rebuild after delete failed: {mem_err}")
         else:
@@ -594,7 +376,7 @@ async def delete_message(
         f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Message deleted"
     )
     return ok({"deleted": True})
-    
+
 
 @router.post("/conversations/{conv_id}/messages")
 @limiter.limit(RATE_CHAT)
@@ -602,126 +384,21 @@ async def add_message(
     request: Request,
     conv_id: str,
     body: ChatRequest,
+    adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
-    start_time = time.time()
     logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Adding message")
-
-    conv = await require_store(conversation_store, conv_id, "Conversation")
-
-    last_user_content = ""
-    for m in reversed(body.messages):
-        if m.role == "user":
-            last_user_content = m.content
-            break
-
-    chat_service.save_user_message(
-        conv, last_user_content, body.file_content, body.file_name, body.file_type,
+    result = await chat_service.process_conversation_turn(
+        conv_id, body, adapter, conversation_store,
     )
-    await chat_service.persist_conv(conv_id, conv)
-
-    resolved_provider = (
-        body.provider or conv.get("provider") or llm_adapter.default_provider
-    )
-    resolved_model = (
-        body.model or conv.get("model")
-        or llm_adapter.get_provider(resolved_provider).default_model
-    )
-
-    # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
-    if conv.get("chat_mode") != "ultra":
-        user_query = context_service.get_user_query(conv["messages"])
-        system_prompt = context_service.build_system_prompt(conv.get("agent_id"), user_context=user_query)
-        all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
-    else:
-        all_messages: list[dict] = []
-
-    supports_vision = llm_adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
-
-    for m in conv["messages"]:
-        content = m["content"]
-        if m.get("role") == "user" and m.get("file_content"):
-            content = context_service.build_content_with_file(
-                content, m["file_content"], m.get("file_type", "text"),
-                supports_vision=supports_vision, file_name=m.get("file_name"),
-            )
-        msg = {"role": m["role"], "content": content}
-        all_messages.append(msg)
-
-    all_messages = context_service.inject_timestamp_prompt(all_messages)
-    # 始终以对话存储的 agent_id 为准，确保记忆读写一致
-    agent_id = await _resolve_agent_id(conv, body.agent_id)
-    # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
-    if conv.get("chat_mode") != "ultra":
-        all_messages = await context_service.inject_memory(
-            all_messages, agent_id, resolved_provider, conv_id,
-            llm_adapter=llm_adapter,
-        )
-
-    if body.search_results:
-        for i in range(len(all_messages) - 1, -1, -1):
-            if all_messages[i]["role"] == "user":
-                all_messages[i]["content"] += f"\n\n[搜索结果]\n{body.search_results}"
-                break
-
-    ctx_mgr = get_context_manager(resolved_provider, resolved_model)
-    process_result = await ctx_mgr.process(all_messages)
-    all_messages = process_result["messages"]
-
-    gen_state: dict = {
-        "content": "",
-        "reasoning": "",
-        "aborted": False,
-        "started": True,
-        "model": resolved_model,
-        "provider": resolved_provider,
-    }
-
     if body.stream:
-        return await chat_service.stream_response(
-            conv_id, conv, body, all_messages,
-            resolved_provider, resolved_model,
-            agent_id, gen_state, start_time,
-            versions=body.versions,
-        )
-
-    await chat_service.non_stream_generate(
-        gen_state, all_messages,
-        resolved_provider, resolved_model,
-        temperature=body.temperature,
-        max_tokens=body.max_tokens,
-        top_p=body.top_p,
-    )
-
-    persist_state = dict(gen_state)
-    if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
-        persist_state["content"] = ""
-
-    chat_service.save_assistant_message(conv, persist_state, versions=body.versions)
-    await chat_service.persist_conv(conv_id, conv)
-    await context_service.schedule_memory_update(
-        [dict(m) for m in conv["messages"]], conv_id, agent_id,
-        llm_adapter=llm_adapter,
-    )
-
-    try:
-        from app.services.distillation_service import distillation_service
-        await distillation_service.maybe_distill(agent_id, conv_id, conv["messages"], llm_adapter)
-    except Exception as distill_err:
-        logger.warning(f"[API] Distillation failed: {distill_err}")
-
-    elapsed = time.time() - start_time
-    logger.success(
-        f"[API] Done: conv={conv_id}, elapsed={elapsed:.2f}s, "
-        f"len={len(gen_state['content'])}, aborted={gen_state['aborted']}"
-    )
-
+        return result
     return ChatResponse(
         id=str(uuid.uuid4()),
-        content=gen_state["content"],
-        model=resolved_model,
-        provider=resolved_provider,
+        content=result["content"],
+        model=result["model"],
+        provider=result["provider"],
     )
 
 
@@ -776,7 +453,7 @@ async def permanent_delete_conversation(
         return {"error": "not found", "data": {"deleted": False}}
     logger.success(f"[API] DELETE /chat/trash/{conv_id} - Permanently deleted")
     return ok({"deleted": True})
-    
+
 
 @router.delete("/trash")
 async def empty_trash(
@@ -787,7 +464,7 @@ async def empty_trash(
     count = await conversation_store.empty_trash_async(agent_id)
     logger.success(f"[API] DELETE /chat/trash - Emptied {count} items")
     return ok({"deleted_count": count})
-    
+
 
 @router.post("/trash/batch-restore")
 async def batch_restore(
@@ -809,11 +486,13 @@ async def batch_permanent_delete(
     count = await conversation_store.batch_permanent_delete_async(request.ids)
     logger.success(f"[API] POST /chat/trash/batch-delete - Deleted {count} items")
     return ok({"deleted_count": count})
-    
+
 
 @router.post("/conversations/batch-delete")
 async def batch_soft_delete(
     request: BatchIdsRequest,
+    adapter=Depends(get_llm_adapter),
+    chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
     logger.info(f"[API] POST /chat/conversations/batch-delete - Moving {len(request.ids)} to trash")
@@ -822,63 +501,36 @@ async def batch_soft_delete(
     for conv_id in request.ids:
         try:
             conv = await conversation_store.get_async(conv_id)
-            await _trigger_final_distill(conv_id, conv)
+            await chat_service.trigger_final_distill(conv_id, conv, adapter)
         except Exception as distill_err:
             logger.warning(f"[Memory] Final distill on batch delete failed for {conv_id}: {distill_err}")
 
     count = await conversation_store.batch_soft_delete_async(request.ids)
     logger.success(f"[API] POST /chat/conversations/batch-delete - Moved {count} to trash")
     return ok({"deleted_count": count})
-    
+
 
 @router.post("/conversations/{conv_id}/compress")
 async def compress_conversation(
     conv_id: str,
+    adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
     """手动压缩对话上下文。"""
     logger.info(f"[API] POST /chat/conversations/{conv_id}/compress - Compressing conversation")
     conv = await require_store(conversation_store, conv_id, "Conversation")
-
-    agent_id = await _resolve_agent_id(conv)
-    resolved_provider = conv.get("provider") or llm_adapter.default_provider
-    resolved_model = conv.get("model") or llm_adapter.get_provider(resolved_provider).default_model
-
-    # 构建完整消息列表
-    user_query = context_service.get_user_query(conv.get("messages", []))
-    system_prompt = context_service.build_system_prompt(agent_id, user_context=user_query)
-    all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
-    for m in conv["messages"]:
-        all_messages.append({"role": m["role"], "content": m["content"]})
-
-    ctx_mgr = get_context_manager(resolved_provider, resolved_model)
-
-    # 计算压缩前 token 数
-    tokens_before = ctx_mgr.token_counter.count_tokens(all_messages)
-
-    # 强制压缩：通过 force_compression 参数触发，避免修改共享的 compressor.compression_threshold
-    # （共享对象在并发请求中会被复用，直接修改 threshold 会导致其他请求的阈值判断失效）
-    process_result = await ctx_mgr.process(all_messages, chat_mode="compress", force_compression=True)
-    compressed_messages = process_result["messages"]
-
-    tokens_after = ctx_mgr.token_counter.count_tokens(compressed_messages)
-
-    # 回写 conversation（去除 system 消息后存储）
-    non_system_messages = [m for m in compressed_messages if m.get("role") != "system"]
-    # 将摘要消息写回
-    conv["messages"] = non_system_messages
-    await chat_service.persist_conv(conv_id, conv)
-
+    result = await chat_service.compress_conversation(conv_id, conv, adapter)
     logger.success(
         f"[API] POST /chat/conversations/{conv_id}/compress - "
-        f"Done: {tokens_before} -> {tokens_after} tokens"
+        f"Done: {result['tokens_before']} -> {result['tokens_after']} tokens"
     )
     return ok({
         "compressed": True,
-        "tokens_before": tokens_before,
-        "tokens_after": tokens_after,
+        "tokens_before": result["tokens_before"],
+        "tokens_after": result["tokens_after"],
     })
+
 
 class TTSRequest(BaseModel):
     text: str = Field(..., max_length=2000)
@@ -946,90 +598,6 @@ async def tts_synthesize(request: TTSRequest):
         return JSONResponse({"error": f"语音合成失败：{e}"}, status_code=500)
 
 
-def _detect_compute_device() -> dict:
-    """Detect compute device availability for TTS/STT.
-
-    Prefers PyTorch (CUDA/MPS, gives CUDA version); when PyTorch is missing
-    or is a CPU-only build, falls back to OS-native GPU detection
-    (PowerShell / lspci / /sys/class/drm / system_profiler) so real hardware
-    is still reported.
-    Note: current local TTS engines (pyttsx3, sherpa-onnx CPU) run on CPU only;
-    this info informs the frontend and future GPU-based engines.
-    """
-    import platform
-
-    device = {
-        "type": "cpu",
-        "name": platform.processor() or "Unknown CPU",
-        "vendor": None,
-        "gpu_count": 0,
-        "cuda_available": False,
-        "cuda_version": None,
-        "torch_available": False,
-        "note": "未检测到可用 GPU，本地 TTS 使用 CPU 推理",
-    }
-
-    # 1) PyTorch 检测（可拿到 CUDA 版本）
-    try:
-        import torch
-
-        device["torch_available"] = True
-        if torch.cuda.is_available():
-            device.update(
-                {
-                    "type": "gpu",
-                    "name": torch.cuda.get_device_name(0),
-                    "vendor": "nvidia",
-                    "gpu_count": torch.cuda.device_count(),
-                    "cuda_available": True,
-                    "cuda_version": torch.version.cuda or "unknown",
-                    "note": "PyTorch CUDA 检测",
-                }
-            )
-            return device
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            device.update(
-                {
-                    "type": "gpu",
-                    "name": "Apple Silicon (MPS)",
-                    "vendor": "apple",
-                    "gpu_count": 1,
-                    "note": "PyTorch MPS 检测",
-                }
-            )
-            return device
-    except ImportError:
-        device["torch_available"] = False
-    except Exception as dev_err:
-        logger.debug(f"[API] TTS device detection (torch) failed: {dev_err}")
-
-    # 2) 回退：平台原生硬件检测（不依赖 PyTorch）
-    from app.core.hardware import detect_gpus
-
-    try:
-        gpus = detect_gpus()
-        if gpus:
-            primary = gpus[0]
-            device.update(
-                {
-                    "type": "gpu",
-                    "name": primary.name,
-                    "vendor": primary.vendor,
-                    "gpu_count": len(gpus),
-                    "note": (
-                        "系统硬件检测（未安装 PyTorch）。"
-                        "本地 TTS 当前仍为 CPU 推理，GPU 可用于未来 GPU 加速引擎"
-                        if not device["torch_available"]
-                        else "系统硬件检测"
-                    ),
-                }
-            )
-    except Exception as native_err:
-        logger.debug(f"[API] TTS device detection (native) failed: {native_err}")
-
-    return device
-
-
 @router.get("/tts/engines")
 async def tts_engines():
     """Report available TTS engines, device info, and avatar voice bindings."""
@@ -1080,7 +648,7 @@ async def tts_engines():
 
         engines.append(engine_info)
 
-    device = _detect_compute_device()
+    device = detect_compute_device()
 
     # Avatar voice bindings (model_id -> voice/lang)
     from app.services.avatar_manager import LUOMINEST_AVATAR_BINDINGS
@@ -1254,6 +822,6 @@ async def stt_engines():
         "data": {
             "engines": engines,
             "fallback_order": STT_FALLBACK_ORDER,
-            "device": _detect_compute_device(),
+            "device": detect_compute_device(),
         },
     }

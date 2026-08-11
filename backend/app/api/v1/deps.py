@@ -30,6 +30,8 @@ from app.core.container import (
     get_platforms_store,
     get_repo_sources_store,
     get_marketplace_stats_store,
+    get_subagent_executor,
+    get_luomi_scheduler,
 )
 
 __all__ = [
@@ -49,4 +51,6 @@ __all__ = [
     "get_platforms_store",
     "get_repo_sources_store",
     "get_marketplace_stats_store",
+    "get_subagent_executor",
+    "get_luomi_scheduler",
 ]

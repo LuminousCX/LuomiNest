@@ -43,6 +43,61 @@ from app.core.workflow.models import (
 WorkflowEventCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 
+# ── 模块级依赖注入（由组合根 app_factory 装配）──
+# setter 未调用时保留函数内延迟导入兜底，行为向后兼容。
+# 纪律：本模块顶层不得新增对 app.services / app.infrastructure 的导入。
+_chat_service_cls: Any | None = None
+_conversation_store: Any | None = None
+_llm_adapter: Any | None = None
+
+
+def configure_engine(
+    chat_service_cls: Any | None = None,
+    conversation_store: Any | None = None,
+    llm_adapter: Any | None = None,
+) -> None:
+    """装配工作流引擎的外部依赖（由组合根在启动阶段调用一次）。
+
+    Args:
+        chat_service_cls: ChatService 类（引擎使用其静态持久化辅助方法）
+        conversation_store: 对话存储门面实例（ConversationFacade）
+        llm_adapter: LLM 适配器实例
+
+    任一参数传 None 时该依赖保持原有延迟导入兜底。
+    """
+    global _chat_service_cls, _conversation_store, _llm_adapter
+    if chat_service_cls is not None:
+        _chat_service_cls = chat_service_cls
+    if conversation_store is not None:
+        _conversation_store = conversation_store
+    if llm_adapter is not None:
+        _llm_adapter = llm_adapter
+
+
+def _get_chat_service_cls() -> Any:
+    """获取 ChatService 类（优先注入实例，兜底延迟导入）。"""
+    if _chat_service_cls is None:
+        from app.services.chat_service import ChatService
+        return ChatService
+    return _chat_service_cls
+
+
+def _get_conversation_store() -> Any:
+    """获取对话存储门面（优先注入实例，兜底延迟导入）。"""
+    if _conversation_store is None:
+        from app.infrastructure.database.conversation_store import conversation_store
+        return conversation_store
+    return _conversation_store
+
+
+def _get_llm_adapter() -> Any:
+    """获取 LLM 适配器（优先注入实例，兜底延迟导入）。"""
+    if _llm_adapter is None:
+        from app.runtime.provider.llm.adapter import llm_adapter
+        return llm_adapter
+    return _llm_adapter
+
+
 # 工作流系统提示模板（英文）
 _WORKFLOW_SYSTEM_PROMPT = """You are the LuomiNest main Agent workflow engine. Your role is to decompose complex user tasks into executable subtask plans.
 
@@ -424,12 +479,10 @@ class WorkflowEngine:
                 # 保存用户消息到 conversation_store（工作流模式复用普通对话的持久化机制）
                 if session.conversation_id:
                     try:
-                        from app.infrastructure.database.conversation_store import conversation_store
-                        from app.services.chat_service import ChatService
-                        conv = await conversation_store.get_async(session.conversation_id)
+                        conv = await _get_conversation_store().get_async(session.conversation_id)
                         if conv:
-                            ChatService.save_user_message(conv, session.user_message)
-                            await ChatService.persist_conv(session.conversation_id, conv)
+                            _get_chat_service_cls().save_user_message(conv, session.user_message)
+                            await _get_chat_service_cls().persist_conv(session.conversation_id, conv)
                             logger.debug(f"[WorkflowEngine][DEBUG] Session {session.session_id} user message saved to conversation {session.conversation_id}")
                     except Exception as save_err:
                         logger.warning(f"[WorkflowEngine] Save user message failed: {save_err}")
@@ -450,11 +503,9 @@ class WorkflowEngine:
                 # 工作流完成后，保存 assistant 消息到 conversation_store
                 if session.conversation_id and session.final_result:
                     try:
-                        from app.infrastructure.database.conversation_store import conversation_store
-                        from app.services.chat_service import ChatService
-                        conv = await conversation_store.get_async(session.conversation_id)
+                        conv = await _get_conversation_store().get_async(session.conversation_id)
                         if conv:
-                            ChatService.save_assistant_message(conv, {
+                            _get_chat_service_cls().save_assistant_message(conv, {
                                 "content": session.final_result,
                                 "reasoning": "",
                                 "aborted": session.phase == WorkflowPhase.FAILED,
@@ -481,11 +532,9 @@ class WorkflowEngine:
                 # 异常时也保存 assistant 消息（记录错误信息），避免聊天记录丢失
                 if session.conversation_id:
                     try:
-                        from app.infrastructure.database.conversation_store import conversation_store
-                        from app.services.chat_service import ChatService
-                        conv = await conversation_store.get_async(session.conversation_id)
+                        conv = await _get_conversation_store().get_async(session.conversation_id)
                         if conv:
-                            ChatService.save_assistant_message(conv, {
+                            _get_chat_service_cls().save_assistant_message(conv, {
                                 "content": f"工作流执行失败：{e}",
                                 "reasoning": "",
                                 "aborted": True,
@@ -751,7 +800,7 @@ class WorkflowEngine:
         使用 return_raw=True 获取完整响应（含 reasoning 思考过程），
         并提取 <think></think> 标签内的思考内容，推送到前端 SSE 流。
         """
-        from app.runtime.provider.llm.adapter import llm_adapter
+        llm_adapter = _get_llm_adapter()
 
         sid = session.session_id
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _analyze_and_plan START")
@@ -1192,7 +1241,7 @@ class WorkflowEngine:
         event_callback: WorkflowEventCallback | None,
     ) -> str:
         """综合所有子任务结果，生成最终回复"""
-        from app.runtime.provider.llm.adapter import llm_adapter
+        llm_adapter = _get_llm_adapter()
 
         completed = [t for t in session.tasks if t.status == WorkflowStatus.COMPLETED]
         failed = [t for t in session.tasks if t.status == WorkflowStatus.FAILED]
