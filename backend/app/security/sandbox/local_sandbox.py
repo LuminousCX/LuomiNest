@@ -36,6 +36,27 @@ _VIRTUAL_PATH_PREFIX = "/mnt/workspace"
 _VIRTUAL_SKILLS_PREFIX = "/mnt/skills"
 
 
+def _build_platform_shell_command(cmd_str: str) -> tuple[str, list[str]]:
+    """根据平台构建 shell 执行命令。
+
+    Args:
+        cmd_str: 要执行的 shell 命令字符串。
+
+    Returns:
+        (shell_executable, shell_args) 元组：
+        - Windows: ('powershell', ['-NoProfile', '-NonInteractive', '-Command', cmd_str])
+        - macOS/Linux: ('bash', ['-lc', cmd_str])
+        - 兜底（Windows 且 powershell 不可用）: ('cmd', ['/c', cmd_str])
+    """
+    if os.name == "nt":
+        # Windows: 优先 PowerShell，失败兜底 cmd
+        # -NoProfile: 不加载用户配置，避免环境变量泄露或脚本干扰
+        # -NonInteractive: 禁止交互式提示
+        return "powershell", ["-NoProfile", "-NonInteractive", "-Command", cmd_str]
+    # macOS / Linux: bash -lc（-l 加载登录 shell 配置，-c 执行命令串）
+    return "bash", ["-lc", cmd_str]
+
+
 def mask_local_paths_in_output(output: str, workspace: Path) -> str:
     """将输出中的实际路径替换为虚拟路径，避免泄露主机目录结构。
 
@@ -97,13 +118,21 @@ class LocalSandbox(Sandbox):
         # 确保工作目录存在
         self.workspace.mkdir(parents=True, exist_ok=True)
 
-    async def execute_command(self, cmd: str | list[str], timeout: int = 120) -> CommandResult:
+    async def execute_command(
+        self,
+        cmd: str | list[str],
+        timeout: int = 120,
+        *,
+        shell_mode: bool = False,
+    ) -> CommandResult:
         """在沙盒内执行命令。
 
         流程：
           1. 验证命令安全性（CommandValidator）
           2. 解析为参数列表（如果不已经是 list）
-          3. 使用 asyncio.create_subprocess_exec 执行（不经过 shell）
+          3. 执行命令：
+             - shell_mode=False（默认）：使用 asyncio.create_subprocess_exec（不经过 shell）
+             - shell_mode=True：通过平台 shell 执行（PowerShell / bash），支持管道/重定向
           4. POSIX 下以独立进程组运行，超时后整组 SIGKILL
           5. 有界管道排水：后台进程不会导致 communicate() 永久阻塞
           6. 输出捕获上限 10 MB + 路径遮蔽
@@ -112,6 +141,10 @@ class LocalSandbox(Sandbox):
         Args:
             cmd: 命令字符串或参数列表。
             timeout: 超时秒数，默认 120。
+            shell_mode: 是否通过平台 shell 执行（默认 False）。
+                True 时支持管道/重定向/通配符，但安全风险增加；
+                校验器会自动切换到 allow_shell_meta=True 模式，
+                并对管道子命令逐段做危险模式审计。
 
         Returns:
             CommandResult。
@@ -129,11 +162,20 @@ class LocalSandbox(Sandbox):
             cmd_str = cmd
             cmd_parts = self._parse_cmd(cmd_str)
 
-        # 列表形式同样必须经过安全验证，防止绕过 validate_command
+        # shell 模式下临时切换 allow_shell_meta，校验完毕后还原
+        original_allow_shell_meta = self.validator.allow_shell_meta
+        if shell_mode:
+            self.validator.allow_shell_meta = True
+
         try:
-            self.validator.validate_command(cmd_str)
-        except SandboxPermissionError as e:
-            raise self._format_interception_error(e, cmd_str) from e
+            # 列表形式同样必须经过安全验证，防止绕过 validate_command
+            try:
+                self.validator.validate_command(cmd_str)
+            except SandboxPermissionError as e:
+                raise self._format_interception_error(e, cmd_str) from e
+        finally:
+            # 还原校验器状态，避免影响后续非 shell 命令
+            self.validator.allow_shell_meta = original_allow_shell_meta
 
         if not cmd_parts:
             raise SandboxCommandError("命令解析结果为空", command=cmd_str, exit_code=-1)
@@ -148,15 +190,29 @@ class LocalSandbox(Sandbox):
         if posix_mode:
             subprocess_kwargs["start_new_session"] = True  # 独立进程组，便于超时后整组清理
         try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd_parts,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(self.workspace),
-                env=self._build_env(),
-                stdin=asyncio.subprocess.DEVNULL,  # 禁止交互式输入
-                **subprocess_kwargs,
-            )
+            if shell_mode:
+                # 通过平台 shell 执行：自动选择 PowerShell / bash
+                shell_cmd, shell_args = _build_platform_shell_command(cmd_str)
+                process = await asyncio.create_subprocess_exec(
+                    shell_cmd,
+                    *shell_args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(self.workspace),
+                    env=self._build_env(),
+                    stdin=asyncio.subprocess.DEVNULL,
+                    **subprocess_kwargs,
+                )
+            else:
+                process = await asyncio.create_subprocess_exec(
+                    *cmd_parts,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(self.workspace),
+                    env=self._build_env(),
+                    stdin=asyncio.subprocess.DEVNULL,  # 禁止交互式输入
+                    **subprocess_kwargs,
+                )
         except FileNotFoundError as e:
             raise SandboxCommandError(
                 f"命令不存在: {cmd_parts[0]}",

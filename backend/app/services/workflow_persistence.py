@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import Integer, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.core.utils import utc_now
@@ -148,7 +148,7 @@ async def get_workflow_session(session_id: str) -> dict[str, Any] | None:
 
 
 async def list_workflow_sessions(limit: int = 20) -> list[dict[str, Any]]:
-    """列出最近的工作流会话"""
+    """列出最近的工作流会话（含任务统计聚合）"""
     async with get_async_session() as db:
         result = await db.execute(
             select(WorkflowSessionORM)
@@ -156,6 +156,30 @@ async def list_workflow_sessions(limit: int = 20) -> list[dict[str, Any]]:
             .limit(limit)
         )
         sessions = result.scalars().all()
+
+        if not sessions:
+            return []
+
+        # 批量聚合节点统计（一次查询代替 N+1）
+        session_ids = [s.session_id for s in sessions]
+        stats_result = await db.execute(
+            select(
+                WorkflowNodeORM.session_id,
+                func.count().label("total"),
+                func.sum(func.cast(WorkflowNodeORM.status == "completed", Integer)).label("completed"),
+                func.sum(func.cast(WorkflowNodeORM.status == "failed", Integer)).label("failed"),
+            )
+            .where(WorkflowNodeORM.session_id.in_(session_ids))
+            .group_by(WorkflowNodeORM.session_id)
+        )
+        stats_map: dict[str, dict[str, int]] = {}
+        for row in stats_result:
+            stats_map[row.session_id] = {
+                "total": row.total,
+                "completed": row.completed or 0,
+                "failed": row.failed or 0,
+            }
+
         return [
             {
                 "session_id": s.session_id,
@@ -164,6 +188,38 @@ async def list_workflow_sessions(limit: int = 20) -> list[dict[str, Any]]:
                 "phase": s.phase,
                 "created_at": s.created_at,
                 "completed_at": s.completed_at,
+                "stats": stats_map.get(s.session_id, {"total": 0, "completed": 0, "failed": 0}),
             }
             for s in sessions
         ]
+
+
+# 终态 phase 集合（不再运行的会话）
+_TERMINAL_PHASES = frozenset({"completed", "failed"})
+
+
+async def cleanup_stale_sessions() -> int:
+    """将陈旧的非终态会话标记为 failed（服务重启时调用）。
+
+    Returns:
+        被清理的会话数量。
+    """
+    async with get_async_session() as db:
+        result = await db.execute(
+            select(WorkflowSessionORM).where(
+                WorkflowSessionORM.phase.notin_(list(_TERMINAL_PHASES))
+            )
+        )
+        stale_sessions = result.scalars().all()
+        if not stale_sessions:
+            return 0
+
+        now = utc_now()
+        for s in stale_sessions:
+            s.phase = "failed"
+            s.error = "服务重启，会话中断"
+            s.completed_at = now
+
+        await db.flush()
+        logger.info(f"[WorkflowPersistence] Cleaned up {len(stale_sessions)} stale sessions")
+        return len(stale_sessions)

@@ -823,13 +823,18 @@ class WorkflowEngine:
         system_prompt = _WORKFLOW_SYSTEM_PROMPT.format(available_tools=tools_text)
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} system_prompt (len={len(system_prompt)}): {system_prompt[:500]}")
 
-        # P3：自动注入记忆上下文到 system prompt
-        # 借鉴常规对话的 inject_memory 机制，LLM 无需主动调用 memory.build_context 工具
-        system_prompt = workflow_context_manager.inject_memory_context(
-            system_prompt=system_prompt,
-            query=session.user_message,
-            conversation_id=session.conversation_id if hasattr(session, 'conversation_id') else None,
-        )
+        # Ultra 模式追加引导：优先规划工作流 + 记忆按需查询
+        if session.mode == WorkflowMode.ULTRA:
+            system_prompt += "\n\nULTRA MODE GUIDELINES:\n- You are in ultra mode with ALL tools available. Prioritize decomposing user requests into structured workflow plans.\n- After understanding the user's intent, proactively create a task plan (even for moderately complex requests).\n- Use memory.search and memory.build_context tools ON DEMAND when you need user profile or historical context — memory is NOT pre-injected.\n- You have higher token budget and iteration limits; leverage them for thorough multi-step execution.\n- When in doubt about whether to plan, lean towards creating a plan — a well-structured plan rarely hurts."
+
+        # P3：自动注入记忆上下文到 system prompt（仅 standard 模式）
+        # Ultra 模式改为按需查询：AI 主动调 memory.search / memory.build_context 工具
+        if session.mode != WorkflowMode.ULTRA:
+            system_prompt = workflow_context_manager.inject_memory_context(
+                system_prompt=system_prompt,
+                query=session.user_message,
+                conversation_id=session.conversation_id if hasattr(session, 'conversation_id') else None,
+            )
         logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} system_prompt after memory injection (len={len(system_prompt)})")
 
         messages = [

@@ -11,7 +11,61 @@ from loguru import logger
 from app.core.utils import utc_now
 
 from app.core.config import settings
+from app.core.domain_policy import MAIN_AGENT_ID, TRACK_OWNER, TRACK_USERS
 from .models import MemoryData, _SUMMARY_SECTION_MAP
+
+
+# ──────────────────────────────────────────────────────────────
+# 双轨目录解析（洋葱架构 §8.5.2 / §13 B18）
+# ──────────────────────────────────────────────────────────────
+
+# user_key 路径白名单：字母数字与 -_.（形如 qq_onebot_10001）
+_USER_KEY_ALLOWED = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+# 历史版本 owner 数据所在目录（按优先级兜底；M2=B 零迁移过渡）
+_LEGACY_OWNER_KEYS = ("main", "_default")
+
+
+def sanitize_track_key(user_key: str) -> str:
+    """校验并返回路径安全的 user_key；非法时抛 ValueError（防路径穿越）。"""
+    key = (user_key or "").strip()
+    if not _USER_KEY_ALLOWED.match(key):
+        raise ValueError(f"Invalid user_key for memory track: {user_key!r}")
+    return key
+
+
+def resolve_owner_agent_key(base_dir: Path | None = None) -> str:
+    """解析主人轨道对应的 agents/ 子目录名（M2=B：owner 为 agents/ 的别名）。
+
+    规范目录为 ``agents/{MAIN_AGENT_ID}``；不存在时按优先级回退到历史
+    目录（main / _default），保证存量数据零迁移可读；均不存在时返回规范名。
+    """
+    agents_dir = Path(base_dir) if base_dir else Path(settings.DATA_DIR) / "memory" / "agents"
+    if (agents_dir / MAIN_AGENT_ID).exists():
+        return MAIN_AGENT_ID
+    for legacy_key in _LEGACY_OWNER_KEYS:
+        if (agents_dir / legacy_key).exists():
+            return legacy_key
+    return MAIN_AGENT_ID
+
+
+def resolve_track_dir(track: str, user_key: str = "", base_dir: Path | None = None) -> Path:
+    """轨道 → 目录定位（§8.5.2）。读写逻辑由 MemoryStore 复用，此处只做路径解析。
+
+    - owner            → memory/agents/{owner_key}/（owner ≙ 主 Agent 目录，别名过渡）
+    - users + user_key → memory/users/{user_key}/
+
+    Args:
+        track: TRACK_OWNER / TRACK_USERS
+        user_key: users 轨道必填（私聊用户标识，群聊为空时不应调用）
+        base_dir: memory 根目录（缺省 settings.DATA_DIR/memory）
+    """
+    base = Path(base_dir) if base_dir else Path(settings.DATA_DIR) / "memory"
+    if track == TRACK_OWNER:
+        return base / "agents" / resolve_owner_agent_key(base / "agents")
+    if track == TRACK_USERS:
+        return base / "users" / sanitize_track_key(user_key)
+    raise ValueError(f"Unknown memory track: {track!r}")
 
 
 class MemoryStore:
@@ -28,6 +82,15 @@ class MemoryStore:
         self._lock = threading.RLock()
         self._cache: MemoryData | None = None
         self._auto_migrate()
+
+    @classmethod
+    def for_track(cls, track: str, user_key: str = "", base_dir: Path | None = None) -> "MemoryStore":
+        """按记忆轨道构造 MemoryStore（§8.5.2 双轨）。
+
+        路径解析即目录定位（resolve_track_dir），文件读写/缓存/迁移逻辑
+        与单轨实例完全复用：owner → 主 Agent 目录别名；users → users/{user_key}/。
+        """
+        return cls(resolve_track_dir(track, user_key, base_dir))
 
     def _memory_file(self) -> Path:
         return self._path / "memory.json"

@@ -255,12 +255,16 @@ class LuomiNestPlatformRouter:
         messages = [{"role": "system", "content": full_system}] + history_messages + [user_message]
 
         messages = context_service.inject_timestamp_prompt(messages)
+        # 记忆注入（DomainPolicy，§9）：平台域读 owner（优先）+ 该用户 users/{user_key} 记忆
         messages = await context_service.inject_memory(
             messages,
             agent_id=MAIN_AGENT_ID,
             provider_name=provider,
             thread_id=conv_id,
             llm_adapter=llm_adapter,
+            domain=conv.get("domain") or f"platform:{instance_id}",
+            scene=conv.get("scene") or "platform",
+            user_key=conv.get("user_key") or "",
         )
 
         # 平台对话使用更激进的 70% 压缩阈值
@@ -365,7 +369,15 @@ class LuomiNestPlatformRouter:
             },
         )
 
-        self._spawn_background_task(self._schedule_memory_update(messages, conv_id, assistant_text))
+        # 记忆写入（M5=C）：每平台实例独立开关 inst.config["memory_write"]，默认关（§9）；
+        # 开启后提炼写入 users/{user_key}/ 用户轨道，不污染主人记忆（§8.5.5）
+        memory_write_enabled = bool(inst.config.get("memory_write", False)) if inst else False
+        self._spawn_background_task(self._schedule_memory_update(
+            messages, conv_id, assistant_text,
+            domain=conv.get("domain") or f"platform:{instance_id}",
+            user_key=conv.get("user_key") or "",
+            memory_write=memory_write_enabled,
+        ))
 
         return PlatformResponse(
             content=assistant_text,
@@ -497,11 +509,16 @@ class LuomiNestPlatformRouter:
         await conversation_store.set_async(conv_id, conv)
 
     @staticmethod
-    async def _schedule_memory_update(messages: list[dict], thread_id: str, assistant_text: str) -> None:
+    async def _schedule_memory_update(
+        messages: list[dict], thread_id: str, assistant_text: str,
+        *, domain: str = "", user_key: str = "", memory_write: bool = False,
+    ) -> None:
         try:
             await context_service.schedule_memory_update(
                 messages, thread_id, MAIN_AGENT_ID,
                 llm_adapter=None,
+                domain=domain, user_key=user_key,
+                platform_memory_write=memory_write,
             )
         except Exception as e:
             logger.warning(f"[PlatformRouter] Memory update skipped: {e}")

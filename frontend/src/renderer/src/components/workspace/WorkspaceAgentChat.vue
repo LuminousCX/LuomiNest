@@ -25,6 +25,7 @@ import {
 import FileUpload from '../../components/FileUpload.vue'
 import SuggestedQuestions from '../../components/SuggestedQuestions.vue'
 import SkillsPicker from '../common/SkillsPicker.vue'
+import LumiButton from '../common/LumiButton.vue'
 import LumiEmptyState from '../common/LumiEmptyState.vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { getFileIcon } from '../../utils/file'
@@ -41,12 +42,15 @@ const props = defineProps<{
   currentProviderLogo: ProviderLogo
   availableModelOptions: { providerId: string; providerName: string; providerLogo: ProviderLogo; modelId: string; modelName: string }[]
   showModelDropdown: boolean
+  chatMode: 'normal' | 'standard' | 'ultra'
+  chatModeOptions: { value: 'normal' | 'standard' | 'ultra'; label: string; title: string }[]
   inputText: string
   canSend: boolean
   isUploading: boolean
   quotedMessage: ChatMessage | null
   contextUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | null
   contextPercent: number
+  contextTokens: number
   copiedId: string | null
   showReasoning: Record<string, boolean>
   currentSuggestionMessageId: string | null
@@ -75,6 +79,7 @@ const emit = defineEmits<{
   cancel: []
   'toggle-model-dropdown': []
   'select-model': [providerId: string, modelId: string]
+  'select-chat-mode': [value: 'normal' | 'standard' | 'ultra']
   'clear-quote': []
   'file-preview': [file: { name: string; type?: string; content?: string }]
   'update:selectedSkillIds': [ids: string[]]
@@ -93,6 +98,20 @@ const inputTextModel = computed<string>({
   get: () => props.inputText,
   set: (value) => emit('update:inputText', value),
 })
+
+const isWorkflowMode = computed(() => props.chatMode !== 'normal')
+
+const toggleWorkflowMode = () => {
+  if (isWorkflowMode.value) {
+    emit('select-chat-mode', 'normal')
+  } else {
+    emit('select-chat-mode', 'standard')
+  }
+}
+
+const selectMode = (value: 'normal' | 'standard' | 'ultra') => {
+  emit('select-chat-mode', value)
+}
 
 const scrollToBottom = (force = false) => {
   if (!messagesContainer.value) return
@@ -506,7 +525,7 @@ defineExpose({
 
     <div class="input-area">
       <FileUpload ref="fileUploadRef" />
-      <div class="input-wrapper">
+      <div class="input-wrapper lumi-card">
         <SkillsPicker
           :selected-ids="selectedSkillIds"
           class="input-skills-picker"
@@ -535,39 +554,76 @@ defineExpose({
         <div class="input-toolbar">
           <div class="toolbar-left">
             <div class="model-dropdown-container">
-              <button class="tool-btn" title="选择模型" @click.stop="emit('toggle-model-dropdown')">
-                <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
-                <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
-                  {{ currentProviderLogo.initials }}
-                </span>
+              <LumiButton
+                variant="secondary"
+                size="sm"
+                class="tool-btn"
+                @click.stop="emit('toggle-model-dropdown')"
+              >
+                <template #icon>
+                  <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
+                  <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+                    {{ currentProviderLogo.initials }}
+                  </span>
+                </template>
                 <span class="model-btn-text">{{ currentModel }}</span>
                 <ChevronDown :size="14" />
-              </button>
+              </LumiButton>
               <Transition name="dropdown-fade">
                 <div v-if="showModelDropdown" class="model-dropdown">
                   <div class="dropdown-header">选择模型</div>
                   <div class="dropdown-list">
-                    <button
+                    <LumiButton
                       v-for="opt in availableModelOptions"
                       :key="`${opt.providerId}-${opt.modelId}`"
+                      variant="ghost"
+                      size="sm"
+                      block
                       :class="['dropdown-item', { active: currentProvider === opt.providerId && currentModel === opt.modelId }]"
                       @click="emit('select-model', opt.providerId, opt.modelId)"
                     >
-                      <span v-if="opt.providerLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="opt.providerLogo.svgIcon"></span>
-                      <span v-else class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
-                        {{ opt.providerLogo.initials }}
-                      </span>
+                      <template #icon>
+                        <span v-if="opt.providerLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="opt.providerLogo.svgIcon"></span>
+                        <span v-else class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
+                          {{ opt.providerLogo.initials }}
+                        </span>
+                      </template>
                       <div class="dropdown-item-info">
                         <span class="dropdown-item-model">{{ opt.modelName }}</span>
                         <span class="dropdown-item-provider">{{ opt.providerName }}</span>
                       </div>
-                    </button>
+                    </LumiButton>
                     <div v-if="availableModelOptions.length === 0" class="dropdown-empty">
-                      暂无可用模型，请先配置供应商
+                      暂无可用模型，请先到设置多选模型
                     </div>
                   </div>
                 </div>
               </Transition>
+            </div>
+            <LumiButton
+              :class="['workflow-toggle', { active: isWorkflowMode }]"
+              variant="secondary"
+              size="sm"
+              :title="isWorkflowMode ? '专业模式已开启：长任务将自动分解并调度内部模块' : '当前为普通模式：点击切换专业模式'"
+              @click="toggleWorkflowMode"
+            >
+              <template #icon>
+                <Wand2 :size="15" />
+              </template>
+              <span class="workflow-toggle-text">{{ isWorkflowMode ? '专业' : '普通' }}</span>
+            </LumiButton>
+            <div v-if="isWorkflowMode" class="workflow-mode-selector">
+              <LumiButton
+                v-for="opt in chatModeOptions"
+                :key="opt.value"
+                :class="['mode-chip', { active: chatMode === opt.value }]"
+                variant="secondary"
+                size="sm"
+                :title="opt.title"
+                @click="selectMode(opt.value)"
+              >
+                {{ opt.label }}
+              </LumiButton>
             </div>
           </div>
           <div class="toolbar-right">
@@ -577,31 +633,40 @@ defineExpose({
             <button class="tool-btn icon-only" title="语音">
               <Mic :size="16" />
             </button>
-            <button
+            <LumiButton
               v-if="isStreaming"
-              class="send-btn stop"
+              variant="danger"
+              size="sm"
+              class="send-btn"
               title="停止生成"
               @click="emit('cancel')"
             >
-              <Square :size="16" />
-            </button>
-            <button
+              <template #icon>
+                <Square :size="16" />
+              </template>
+            </LumiButton>
+            <LumiButton
               v-else
-              :class="['send-btn', { disabled: !canSend }]"
+              variant="primary"
+              size="sm"
+              class="send-btn"
+              :disabled="!canSend"
               title="发送"
               @click="emit('send')"
             >
-              <Send :size="17" />
-            </button>
+              <template #icon>
+                <Send :size="17" />
+              </template>
+            </LumiButton>
           </div>
         </div>
       </div>
       <div class="input-footer">
-        <div v-if="contextUsage" class="context-usage">
+        <div v-if="contextTokens > 0" class="context-usage">
           <div class="context-bar">
             <div class="context-bar-fill" :style="{ width: contextPercent + '%' }" :class="{ warn: contextPercent > 70, danger: contextPercent > 90 }"></div>
           </div>
-          <span class="context-text">{{ contextUsage.totalTokens?.toLocaleString() || 0 }} tokens · {{ contextPercent }}%</span>
+          <span class="context-text">{{ contextTokens.toLocaleString() }} tokens · {{ contextPercent }}%</span>
         </div>
         <span v-else></span>
       </div>
@@ -1430,40 +1495,53 @@ defineExpose({
 }
 
 .send-btn {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  background: var(--lumi-brand);
-  color: var(--text-inverse);
-  cursor: pointer;
-  transition: background-color var(--duration-normal) var(--ease-in-out), color var(--duration-normal) var(--ease-in-out), box-shadow var(--duration-normal) var(--ease-in-out);
   margin-left: var(--space-1);
 }
 
-.send-btn:hover {
-  background: var(--lumi-brand-hover);
-  transform: scale(1.05);
+.workflow-toggle {
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
 }
 
-.send-btn:active {
-  transform: scale(0.95);
+.workflow-toggle:hover {
+  color: var(--text-primary);
+  background: var(--surface-active);
 }
 
-.send-btn.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
+.workflow-toggle.active {
+  color: var(--lumi-success);
+  background: var(--lumi-success-light);
+  border-color: color-mix(in srgb, var(--lumi-success) 30%, transparent);
 }
 
-.send-btn.stop {
-  background: var(--lumi-danger);
+.workflow-toggle-text {
+  white-space: nowrap;
 }
 
-.send-btn.stop:hover {
-  background: var(--lumi-danger-hover);
+.workflow-mode-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.mode-chip {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border-radius: var(--radius-full);
+}
+
+.mode-chip:hover {
+  color: var(--text-primary);
+  background: var(--surface-active);
+}
+
+.mode-chip.active {
+  color: var(--lumi-success);
+  background: var(--lumi-success-light);
 }
 
 .input-footer {

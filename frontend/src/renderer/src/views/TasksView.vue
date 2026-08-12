@@ -546,12 +546,6 @@ const timeSlotOptions = [
       <div class="tasks-page-header__left">
         <h1 class="tasks-page-title">计划视图</h1>
         <p class="tasks-page-desc">项目管理、任务跟踪与团队协作</p>
-        <div class="tasks-page-avatars">
-          <img v-for="(member, i) in teamMembers" :key="i" :src="member" class="tasks-avatar" alt="member" />
-          <button class="tasks-avatar tasks-avatar-add">
-            <Plus :size="12" />
-          </button>
-        </div>
       </div>
       <div class="tasks-page-header__right">
         <div class="tasks-search-box">
@@ -562,6 +556,12 @@ const timeSlotOptions = [
           <Plus :size="16" />
           <span>新建任务</span>
         </button>
+        <div class="tasks-page-avatars">
+          <img v-for="(member, i) in teamMembers" :key="i" :src="member" class="tasks-avatar" alt="member" />
+          <button class="tasks-avatar tasks-avatar-add">
+            <Plus :size="12" />
+          </button>
+        </div>
       </div>
     </div>
 
@@ -644,7 +644,7 @@ const timeSlotOptions = [
   height: 100%;
   background: var(--workspace-bg);
   overflow-y: auto;
-  padding: var(--space-5) 28px;
+  padding: var(--space-5) var(--space-7);
   color: var(--text-primary);
 }
 

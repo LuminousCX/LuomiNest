@@ -12,9 +12,10 @@ from .vector_store import VectorStore, VectorEntry, LLMEmbeddingProvider, LocalE
 class VectorSearchManager:
     """向量搜索管理器：负责事实的向量去重、语义检索和索引重建。"""
 
-    def __init__(self, agent_id: str, provider: Any) -> None:
+    def __init__(self, agent_id: str, provider: Any, storage_path: Path | None = None) -> None:
         self._agent_id: str = agent_id
-        storage_path = Path(settings.DATA_DIR) / "memory" / "agents" / agent_id / "vectors"
+        if storage_path is None:
+            storage_path = Path(settings.DATA_DIR) / "memory" / "agents" / agent_id / "vectors"
         self._store: VectorStore = VectorStore(storage_path, provider)
 
     async def dedup_and_add(self, facts: list[FactItem], conversation_id: str | None = None) -> list[FactItem]:

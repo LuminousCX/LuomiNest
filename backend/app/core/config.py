@@ -74,7 +74,8 @@ class Settings(BaseSettings):
 
     # 上下文压缩预算配置
     LLM_CONTEXT_BUDGET_RATIO: float = 0.35  # 历史消息预算占上下文窗口的比例
-    LLM_SUMMARY_TARGET_RATIO: float = 0.40  # 摘要占历史预算的比例
+    LLM_SUMMARY_TARGET_RATIO: float = 0.40  # 摘要占历史预算的比例（与 compression_ratio 同步）
+    LLM_COMPRESSION_RATIO: int = 40  # UI 侧摘要保留百分比（1-90，推荐 40-50）
     LLM_SUMMARY_MAX_LENGTH: int = 2000  # 摘要最大字符数
     LLM_ANTI_DRIFT_ENABLED: bool = True  # 防漂移开关
 

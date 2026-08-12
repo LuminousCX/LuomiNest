@@ -252,6 +252,8 @@ export interface ModelConfig {
   contextWindowSize?: number
   /** 压缩阈值（0.5 - 0.95） */
   compressionThreshold?: number
+  /** LM 摘要压缩保留比例（1 - 90，推荐 40-50） */
+  compressionRatio?: number
   /** 是否启用 LLM 摘要压缩 */
   llmCompressEnabled?: boolean
   /** 摘要模型 */
@@ -314,6 +316,9 @@ export interface ModelInfo {
   name: string
   owned_by?: string
   provider?: string
+  enabled?: boolean
+  max_context_tokens?: number
+  maxContextTokens?: number
 }
 
 export interface ProviderTemplate {

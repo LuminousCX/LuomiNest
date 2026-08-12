@@ -76,6 +76,9 @@ class ConversationCreate(BaseModel):
     provider: str | None = None
     chat_mode: str | None = None
     is_hidden: bool = False
+    # 对话域字段（洋葱架构 §5.2，B3 创建时写入；缺省按 agent_id 推导）
+    domain: str | None = None
+    scene: str | None = None
 
 
 class ConversationResponse(BaseModel):

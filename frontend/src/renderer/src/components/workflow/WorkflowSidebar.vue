@@ -2,7 +2,7 @@
 /**
  * 工作流侧栏 - 实时会话指示 + 历史会话列表
  */
-import { Play, Loader2, CheckCircle2, XCircle, Zap, Clock } from 'lucide-vue-next'
+import { Play, Loader2, CheckCircle2, XCircle, Zap, Clock, AlertCircle } from 'lucide-vue-next'
 import type { WorkflowSession } from '../../types/workflow'
 import { PHASE_LABELS, formatWorkflowTime } from '../../composables/useWorkflowSessions'
 
@@ -13,6 +13,7 @@ defineProps<{
   hasLiveSession: boolean
   isRunning: boolean
   livePhase: string
+  liveSessionId: string
 }>()
 
 defineEmits<{
@@ -68,10 +69,11 @@ defineEmits<{
           :class="{ active: selectedSessionId === session.session_id }"
           @click="$emit('select-session', session.session_id)"
         >
-          <div class="session-item-icon" :class="session.phase">
+          <div class="session-item-icon" :class="session.phase === 'completed' ? 'completed' : session.phase === 'failed' ? 'failed' : (session.session_id === liveSessionId && isRunning) ? 'running' : 'stale'">
             <CheckCircle2 v-if="session.phase === 'completed'" :size="14" />
             <XCircle v-else-if="session.phase === 'failed'" :size="14" />
-            <Loader2 v-else :size="14" class="spin-animation" />
+            <Loader2 v-else-if="session.session_id === liveSessionId && isRunning" :size="14" class="spin-animation" />
+            <AlertCircle v-else :size="14" />
           </div>
           <div class="session-item-info">
             <span class="session-item-title">{{ session.user_message?.slice(0, 30) || '未命名工作流' }}</span>
@@ -168,6 +170,10 @@ defineEmits<{
 
 .session-item-icon.failed {
   color: var(--lumi-danger);
+}
+
+.session-item-icon.stale {
+  color: var(--lumi-warning, #f59e0b);
 }
 
 .session-item-info {

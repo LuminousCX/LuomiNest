@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { VNodeRef } from 'vue'
+import { computed } from 'vue'
 import {
   Sparkles,
   Loader2,
@@ -9,6 +10,7 @@ import {
   Eye
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
+import { useStageBackgroundStore } from '@/stores/stage-background'
 import type { AvatarEmotion, AvatarMode } from './types'
 
 const props = defineProps<{
@@ -28,10 +30,16 @@ const props = defineProps<{
 const emit = defineEmits<{
   'toggle-desktop-mode': []
 }>()
+
+// 舞台自定义背景（默认渐变底时 backgroundStyle 为空，不覆盖组件原样式）
+const stageBg = useStageBackgroundStore()
+const stageBgStyle = computed(() =>
+  stageBg.backgroundStyle ? { background: stageBg.backgroundStyle } : undefined
+)
 </script>
 
 <template>
-  <div class="stage-canvas" :class="{ 'desktop-mode-active': props.isDesktopMode }">
+  <div class="stage-canvas" :class="{ 'desktop-mode-active': props.isDesktopMode }" :style="stageBgStyle">
     <template v-if="!props.isDesktopMode">
       <canvas :ref="props.setCanvasRef" class="live2d-canvas"></canvas>
 

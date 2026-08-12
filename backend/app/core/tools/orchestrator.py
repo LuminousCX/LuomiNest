@@ -28,6 +28,21 @@ from app.core.tools.registry import tool_registry
 _tools_compatibility_cache: dict[str, bool] = {}
 
 
+def _detect_current_platform() -> str:
+    """探测当前运行平台（win/mac/linux）。
+
+    Returns:
+        'win'（Windows）/ 'mac'（macOS）/ 'linux'（Linux 及其他）
+    """
+    import os
+    import sys
+    if os.name == "nt":
+        return "win"
+    if sys.platform == "darwin":
+        return "mac"
+    return "linux"
+
+
 async def discover_tool_compatibility(provider_name: str, model: str, llm_adapter=None) -> bool:
     """运行时探测模型是否支持工具调用。
 
@@ -105,8 +120,11 @@ class ToolOrchestrator:
         self,
         provider_name: str | None = None,
         model: str | None = None,
+        *,
+        scope: str | None = None,
+        platform: str | None = None,
     ) -> list[dict[str, Any]]:
-        """获取所有已注册工具的 OpenAI function calling 格式列表
+        """获取已注册工具的 OpenAI function calling 格式列表（支持 tier/scope/platform 过滤）
 
         合并两个来源：
         1. tool_registry 中的内置工具（cli、文件操作、delegate_to_subagent 等）
@@ -115,6 +133,10 @@ class ToolOrchestrator:
         Args:
             provider_name: 目标 LLM provider 名称，用于兼容性检查
             model: 目标模型名称，用于兼容性检查
+            scope: 场景归属过滤。
+                - None：注入 scope='shared' 工具，排除 scope='platform'（工作台/皮套/桌宠场景）
+                - 'platform:{instId}'：注入 scope='shared' 子集 + scope='platform' 且匹配该实例的工具
+            platform: 运行平台过滤（'win'/'mac'/'linux'）。None 时自动探测当前平台。
 
         Returns:
             形如 [{"type": "function", "function": {"name", "description", "parameters"}}] 的列表。
@@ -141,7 +163,32 @@ class ToolOrchestrator:
             except Exception:
                 pass
 
-        tools = [tool.to_openai_function() for tool in tool_registry.list_tools()]
+        # 自动探测当前运行平台
+        current_platform = platform or _detect_current_platform()
+
+        # 按 scope + platform 过滤 tool_registry 中的工具
+        tools: list[dict[str, Any]] = []
+        for tool in tool_registry.list_tools():
+            # 平台过滤：工具声明的 platform 集合必须包含当前平台
+            if current_platform not in tool.platform:
+                continue
+
+            # scope 过滤
+            tool_scope = tool.scope or "shared"
+            if scope is None:
+                # 工作台/皮套/桌宠：仅注入 shared 工具，排除 platform 专用
+                if tool_scope != "shared":
+                    continue
+            elif scope.startswith("platform"):
+                # 平台域：注入 shared + 该实例的 platform 工具
+                if tool_scope != "shared" and tool_scope != scope and tool_scope != "platform":
+                    continue
+            # 其他自定义 scope：精确匹配
+            elif tool_scope != "shared" and tool_scope != scope:
+                continue
+
+            tools.append(tool.to_openai_function())
+
         # 合并 MCP 工具（延迟导入避免循环依赖）
         try:
             from app.core.tools.mcp.manager import mcp_manager

@@ -14,15 +14,21 @@ from app.core.agents.cluster.agent_tool import (
     set_luominest_agent_call_depth,
     reset_luominest_agent_call_depth,
 )
-from app.core.agents.memory_access import MEMORY_ACCESS_NONE, MEMORY_ACCESS_READ_WRITE
+from app.core.agents.memory_access import (
+    MEMORY_ACCESS_NONE,
+    MEMORY_ACCESS_READ_MAIN,
+    MEMORY_ACCESS_READ_WRITE,
+)
 from app.core.chat_mode import ChatMode, get_tool_config
+from app.core.domain_policy import resolve_domain_policy
+from app.security.prompt_security import wrap_untrusted_content
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint, StreamEvent
 from app.runtime.provider.llm.types import LLMResponse
 from app.infrastructure.database.conversation_store import conversation_store
 from app.schemas.chat import ChatStreamChunk
 from app.services.avatar_manager import strip_emotion_tags
-from app.services.context_service import ContextService, is_main_agent
+from app.services.context_service import ContextService
 from app.services.suggestion_service import SuggestionService
 from app.services.usage_tracker import usage_tracker
 from app.services.distillation_service import distillation_service
@@ -295,6 +301,9 @@ class ChatService:
         provider: str,
         model: str,
         agent_id: str | None = None,
+        domain: str = "",
+        scene: str = "",
+        user_key: str = "",
     ):
         """流式对话（/chat/completions stream=true）。
 
@@ -404,6 +413,7 @@ class ChatService:
                         await self._context.schedule_memory_update(
                             messages, f"completions-{chat_id[:8]}", agent_id,
                             llm_adapter=llm_adapter,
+                            domain=domain, scene=scene, user_key=user_key,
                         )
                 except Exception as mem_err:
                     logger.warning(f"[STREAM] /chat/completions memory update failed: {mem_err}")
@@ -440,8 +450,20 @@ class ChatService:
         if available_tools and not use_tools:
             logger.info(f"[STREAM] Provider {provider}/{model} 不支持工具调用，本次以纯对话模式运行")
 
-        # 记忆访问权限：主 Agent 可读写，联系人 Agent 无权限
-        memory_access = MEMORY_ACCESS_READ_WRITE if is_main_agent(agent_id) else MEMORY_ACCESS_NONE
+        # 对话域策略（B6）：记忆访问级别由 DomainPolicy 驱动（洋葱 §9），
+        # 替换原 is_main_agent 单一判定；domain 取自会话（P0 已落库）
+        conv_domain = conv.get("domain") or ""
+        conv_scene = conv.get("scene") or ""
+        conv_user_key = conv.get("user_key") or ""
+        policy = resolve_domain_policy(
+            conv_domain, scene=conv_scene, agent_id=agent_id, user_key=conv_user_key,
+        )
+        if policy.memory_write:
+            memory_access = MEMORY_ACCESS_READ_WRITE
+        elif policy.memory_read:
+            memory_access = MEMORY_ACCESS_READ_MAIN
+        else:
+            memory_access = MEMORY_ACCESS_NONE
 
         # 按对话模式设置工具白名单（NORMAL 模式仅允许任务视图操作工具）
         chat_mode_str = getattr(request, "chat_mode", "normal")
@@ -460,8 +482,10 @@ class ChatService:
                 "is_stream": True,
                 "memory_access": memory_access,
                 "tool_whitelist": tool_whitelist,
+                "tool_profile": policy.tool_profile,
                 "agent_id": agent_id,
                 "conv_id": conv_id,
+                "domain": conv_domain,
             },
         )
 
@@ -563,18 +587,22 @@ class ChatService:
                 except Exception as done_err:
                     logger.debug(f"[STREAM] Done event send failed (client may have disconnected): {done_err}")
 
-                # 记忆更新
+                # 记忆更新（DomainPolicy 门控，B6/B7）
                 try:
                     await self._context.schedule_memory_update(
                         [dict(m) for m in conv["messages"]], conv_id, agent_id,
                         llm_adapter=llm_adapter,
+                        domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
                     )
                 except Exception as schedule_err:
                     logger.warning(f"[STREAM] Memory update scheduling failed: {schedule_err}")
 
-                # 蒸馏
+                # 蒸馏（平台域不写 owner 轨，防记忆污染，§8.5.5）
                 try:
-                    await distillation_service.maybe_distill(agent_id, conv_id, conv["messages"], llm_adapter)
+                    await distillation_service.maybe_distill(
+                        agent_id, conv_id, conv["messages"], llm_adapter,
+                        domain=conv_domain, user_key=conv_user_key,
+                    )
                 except Exception as distill_err:
                     logger.warning(f"[STREAM] Distillation failed: {distill_err}")
 
@@ -608,6 +636,7 @@ class ChatService:
         agent_id = await self.resolve_agent_id(conv)
         await distillation_service.final_distill(
             agent_id, conv_id, conv["messages"], adapter,
+            domain=conv.get("domain") or "", user_key=conv.get("user_key") or "",
         )
 
     async def rebuild_conversation_memory(
@@ -618,11 +647,16 @@ class ChatService:
         engine = get_memory_engine(agent_id)
         engine.clear_conversation_data(conv_id)
         distillation_service.reset_distill_state(conv_id)
+        conv_domain = conv.get("domain") or ""
+        conv_scene = conv.get("scene") or ""
+        conv_user_key = conv.get("user_key") or ""
         await self._context.schedule_memory_update(
             conv["messages"], conv_id, agent_id, llm_adapter=adapter,
+            domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
         )
         await distillation_service.maybe_distill(
             agent_id, conv_id, conv["messages"], adapter,
+            domain=conv_domain, user_key=conv_user_key,
         )
 
     # ──────────────────────────────────────────────────────────────
@@ -651,10 +685,16 @@ class ChatService:
 
         # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
         conv_chat_mode = None
+        conv_domain = ""
+        conv_scene = ""
+        conv_user_key = ""
         if body.conversation_id:
             conv_meta = await conversation_store.get_meta_async(body.conversation_id)
             if conv_meta:
                 conv_chat_mode = conv_meta.get("chat_mode")
+                conv_domain = conv_meta.get("domain") or ""
+                conv_scene = conv_meta.get("scene") or ""
+                conv_user_key = conv_meta.get("user_key") or ""
         if conv_chat_mode != "ultra":
             user_query = self._context.get_user_query(messages)
             system_prompt = self._context.build_system_prompt(body.agent_id, user_context=user_query)
@@ -666,6 +706,7 @@ class ChatService:
         if not body.is_sub_agent and conv_chat_mode != "ultra":
             messages = await self._context.inject_memory(
                 messages, body.agent_id, resolved_provider, llm_adapter=adapter,
+                domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
             )
 
         if body.file_content:
@@ -676,9 +717,10 @@ class ChatService:
             )
 
         if body.search_results:
+            wrapped = wrap_untrusted_content(body.search_results, source="search")
             for i in range(len(messages) - 1, -1, -1):
                 if messages[i]["role"] == "user":
-                    messages[i]["content"] += f"\n\n[搜索结果]\n{body.search_results}"
+                    messages[i]["content"] += f"\n\n[搜索结果]\n{wrapped}"
                     break
 
         ctx_mgr = get_context_manager(resolved_provider, resolved_model)
@@ -688,7 +730,11 @@ class ChatService:
         if body.stream:
             logger.info("[ChatService] POST /chat/completions - Starting stream response")
             return sse_response(
-                self.stream_chat(messages, body, resolved_provider, resolved_model, agent_id=body.agent_id),
+                self.stream_chat(
+                    messages, body, resolved_provider, resolved_model,
+                    agent_id=body.agent_id,
+                    domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
+                ),
             )
 
         gen_state: dict = {"content": "", "reasoning": "", "aborted": False, "started": True}
@@ -723,6 +769,7 @@ class ChatService:
                     await self._context.schedule_memory_update(
                         messages, thread_id, body.agent_id,
                         llm_adapter=adapter,
+                        domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
                     )
             except Exception as mem_err:
                 logger.warning(f"[ChatService] /chat/completions memory update failed: {mem_err}")
@@ -806,18 +853,24 @@ class ChatService:
         all_messages = self._context.inject_timestamp_prompt(all_messages)
         # 始终以对话存储的 agent_id 为准，确保记忆读写一致
         agent_id = await self.resolve_agent_id(conv, request.agent_id)
+        # 对话域字段（B6）：驱动 DomainPolicy 记忆读/写与轨道选择
+        conv_domain = conv.get("domain") or ""
+        conv_scene = conv.get("scene") or ""
+        conv_user_key = conv.get("user_key") or ""
         # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
         if conv.get("chat_mode") != "ultra":
             all_messages = await self._context.inject_memory(
                 all_messages, agent_id, resolved_provider, conv_id,
                 llm_adapter=adapter,
+                domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
             )
 
         # 仅"发送新消息"路径拼接搜索结果（regenerate 请求体不携带 search_results）
         if not regenerate and request.search_results:
+            wrapped = wrap_untrusted_content(request.search_results, source="search")
             for i in range(len(all_messages) - 1, -1, -1):
                 if all_messages[i]["role"] == "user":
-                    all_messages[i]["content"] += f"\n\n[搜索结果]\n{request.search_results}"
+                    all_messages[i]["content"] += f"\n\n[搜索结果]\n{wrapped}"
                     break
 
         ctx_mgr = get_context_manager(resolved_provider, resolved_model)
@@ -857,18 +910,22 @@ class ChatService:
         self.save_assistant_message(conv, persist_state, versions=request.versions)
         await self.persist_conv(conv_id, conv)
 
-        # 非流式路径单触发：记忆更新 + 增量蒸馏
+        # 非流式路径单触发：记忆更新 + 增量蒸馏（DomainPolicy 门控，B6/B7）
         # （schedule_memory_update 内部已吞掉全部异常，try/except 仅作防御）
         try:
             await self._context.schedule_memory_update(
                 [dict(m) for m in conv["messages"]], conv_id, agent_id,
                 llm_adapter=adapter,
+                domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
             )
         except Exception as mem_err:
             logger.warning(f"[ChatService] Memory update failed: conv={conv_id}, error={mem_err}")
 
         try:
-            await distillation_service.maybe_distill(agent_id, conv_id, conv["messages"], adapter)
+            await distillation_service.maybe_distill(
+                agent_id, conv_id, conv["messages"], adapter,
+                domain=conv_domain, user_key=conv_user_key,
+            )
         except Exception as distill_err:
             logger.warning(f"[ChatService] Distillation failed: conv={conv_id}, error={distill_err}")
 

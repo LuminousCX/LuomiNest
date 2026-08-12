@@ -131,7 +131,7 @@ async function handleImageClick() {
     </button>
 
     <!-- 展开的圆球列表（纯图形，无文字，逐个下落动画） -->
-    <div class="bg-ball-list" aria-hidden="!expanded">
+    <div class="bg-ball-list" :aria-hidden="!expanded">
       <!-- 恢复默认 -->
       <button
         class="bg-ball bg-ball--default"

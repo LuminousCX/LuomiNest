@@ -17,7 +17,7 @@
  * - 通过 luominest-avatar://png/{model}/manifest.json 加载 manifest
  * - 然后 usePngTuber 内部加载 spritesheet.png 并切割帧
  */
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import {
   Sparkles,
   Loader2,
@@ -28,6 +28,7 @@ import {
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 import { usePngTuber } from '@/composables/avatar/usePngTuber'
+import { useStageBackgroundStore } from '@/stores/stage-background'
 import type { AvatarEmotion, AvatarMode } from './types'
 
 const props = defineProps<{
@@ -45,6 +46,12 @@ const props = defineProps<{
 const emit = defineEmits<{
   'toggle-desktop-mode': []
 }>()
+
+// 舞台自定义背景（默认渐变底时 backgroundStyle 为空，不覆盖组件原样式）
+const stageBg = useStageBackgroundStore()
+const stageBgStyle = computed(() =>
+  stageBg.backgroundStyle ? { background: stageBg.backgroundStyle } : undefined
+)
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const setCanvasRef = (el: unknown) => {
@@ -91,7 +98,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="stage-canvas png-stage" :class="{ 'desktop-mode-active': props.isDesktopMode }">
+  <div class="stage-canvas png-stage" :class="{ 'desktop-mode-active': props.isDesktopMode }" :style="stageBgStyle">
     <template v-if="!props.isDesktopMode">
       <canvas :ref="setCanvasRef" class="png-canvas"></canvas>
 

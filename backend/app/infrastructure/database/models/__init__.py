@@ -12,6 +12,7 @@ from app.infrastructure.database.models.migration_meta import MigrationMeta
 from app.infrastructure.database.models.platform_instance import PlatformInstance
 from app.infrastructure.database.models.provider import Provider
 from app.infrastructure.database.models.provider_credential import ProviderCredential
+from app.infrastructure.database.models.provider_model import ProviderModel
 from app.infrastructure.database.models.repo_source import RepoSource
 from app.infrastructure.database.models.scheduled_task import ScheduledTaskORM
 from app.infrastructure.database.models.skill import SkillORM
@@ -32,6 +33,7 @@ __all__ = [
     "PlatformInstance",
     "Provider",
     "ProviderCredential",
+    "ProviderModel",
     "RepoSource",
     "ScheduledTaskORM",
     "SkillORM",

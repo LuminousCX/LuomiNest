@@ -1824,6 +1824,24 @@ async def register_internal_tools() -> None:
             is_concurrent_safe=True,
         )
 
+    # ─── 文件搜索模块（search.everything，桥接 SearchEverythingTool 适配器）───
+    await internal_tool_registry.register(
+        name="search.everything",
+        module="search",
+        description="秒级搜索本地文件（按文件名，支持子串和 glob 模式）",
+        handler=_make_skill_tool_handler("search_everything"),
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "文件名搜索关键词或 glob 模式"},
+                "path": {"type": "string", "description": "搜索根路径（可选，默认全盘）"},
+                "max_results": {"type": "integer", "description": "最大返回条数（默认 50）"},
+            },
+            "required": ["query"],
+        },
+        is_concurrent_safe=True,
+    )
+
     logger.info(
         f"[Workflow] Registered {len(internal_tool_registry.list_names())} internal tools: "
         f"{', '.join(internal_tool_registry.list_names())}"

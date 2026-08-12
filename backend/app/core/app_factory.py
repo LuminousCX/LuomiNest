@@ -297,6 +297,18 @@ async def lifespan(app: FastAPI):
         for _skill_tool in get_luominest_skills_tools():
             tool_registry.register(_skill_tool)
 
+        # 工具发现 meta-tool（L1 主动发现，tier=meta，对齐 tool-opt §4.2.1）
+        from app.core.tools.builtin.tools_meta import (
+            ListLuomiNestToolsTool,
+            ReadLuomiNestToolTool,
+        )
+        tool_registry.register(ListLuomiNestToolsTool())
+        tool_registry.register(ReadLuomiNestToolTool())
+
+        # 文件搜索工具（tier=domain, platform=win，Everything/OsWalk 适配器，对齐 tool-opt §4.5 T6）
+        from app.core.tools.builtin.search_everything_tool import SearchEverythingTool
+        tool_registry.register(SearchEverythingTool())
+
         logger.info(f"[LuomiNest] Registered {len(tool_registry.list_names())} tools: {', '.join(tool_registry.list_names())}")
     except Exception as e:
         logger.error(f"[LuomiNest] Tool registration failed (critical): {e}", exc_info=True)
@@ -319,6 +331,12 @@ async def lifespan(app: FastAPI):
             llm_adapter=container.llm_adapter,
         )
         logger.info("[LuomiNest] Workflow engine dependencies configured")
+
+        # 清理陈旧的非终态工作流会话（服务重启后，内存中的工作流已丢失）
+        from app.services.workflow_persistence import cleanup_stale_sessions
+        stale_count = await cleanup_stale_sessions()
+        if stale_count:
+            logger.info(f"[LuomiNest] Cleaned up {stale_count} stale workflow sessions")
     except Exception as e:
         logger.warning(f"[LuomiNest] Workflow engine configure skipped: {e}", exc_info=True)
 

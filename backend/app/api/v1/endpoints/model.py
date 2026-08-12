@@ -6,6 +6,9 @@ from loguru import logger
 from app.api.v1.deps import get_llm_adapter
 from app.runtime.provider.llm.adapter import _create_provider_from_config
 from app.runtime.provider.llm.adapters.chat_completions import PROVIDER_TEMPLATES
+from app.runtime.provider.llm.capabilities import get_capabilities
+from app.runtime.provider.llm.model_context_data import infer_max_context_tokens
+from app.infrastructure.database.repositories.provider_model_repository import ProviderModelRepository
 from app.core.config import settings
 from app.core.context import invalidate_context_cache
 from app.core.utils import ok
@@ -151,9 +154,106 @@ class ModelConfigUpdate(BaseModel):
     # LLM 上下文窗口与压缩配置
     context_window_size: int | None = Field(alias="contextWindowSize", default=None, ge=0, le=1_000_000)
     compression_threshold: float | None = Field(alias="compressionThreshold", default=None, ge=0.5, le=0.95)
+    compression_ratio: int | None = Field(alias="compressionRatio", default=None, ge=1, le=100)
     llm_compress_enabled: bool | None = Field(alias="llmCompressEnabled", default=None)
     summary_model: str | None = Field(alias="summaryModel", default=None)
     summary_provider: str | None = Field(alias="summaryProvider", default=None)
+
+
+class ProviderModelResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, by_alias=True)
+
+    id: str
+    provider_id: str = Field(alias="providerId")
+    model_id: str = Field(alias="modelId")
+    name: str
+    enabled: bool
+    max_context_tokens: int = Field(alias="maxContextTokens")
+
+
+class ProviderModelUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    enabled: bool | None = None
+    max_context_tokens: int | None = Field(alias="maxContextTokens", default=None, ge=0, le=2_000_000)
+
+
+# ── ProviderModel 辅助函数 ──
+
+_provider_model_repo_instance: ProviderModelRepository | None = None
+
+
+def _get_provider_model_repo() -> ProviderModelRepository:
+    global _provider_model_repo_instance
+    if _provider_model_repo_instance is None:
+        _provider_model_repo_instance = ProviderModelRepository()
+    return _provider_model_repo_instance
+
+
+def _persist_provider_models(provider_id: str, models: list[dict], provider_name: str = "") -> list[dict]:
+    """将 /models 返回的模型列表持久化到 provider_models 表，并推断最大上下文长度。"""
+    if not models:
+        return []
+
+    repo = _get_provider_model_repo()
+    default_window = 0
+    try:
+        caps = get_capabilities(provider_name or provider_id)
+        default_window = caps.default_context_window
+    except Exception:
+        pass
+
+    enriched = []
+    for m in models:
+        model_id = m.get("id", "")
+        if not model_id:
+            continue
+        inferred = infer_max_context_tokens(model_id, provider_name or provider_id, default_window)
+        enriched.append({
+            "id": model_id,
+            "name": m.get("name") or model_id,
+            "max_context_tokens": inferred,
+        })
+
+    try:
+        saved = repo.save_models(provider_id, enriched)
+        logger.success(f"[ModelConfig] Persisted {len(saved)} models for provider={provider_id}")
+        return saved
+    except Exception as e:
+        logger.warning(f"[ModelConfig] Failed to persist models for provider={provider_id}: {e}")
+        return []
+
+
+def _merge_models_with_db(provider_id: str, fetched_models: list[dict]) -> list[dict]:
+    """合并 provider /models 返回与 DB 中保存的模型配置，以 DB 配置覆盖 fetched 默认值。"""
+    repo = _get_provider_model_repo()
+    try:
+        db_models = repo.get_by_provider(provider_id)
+    except Exception as e:
+        logger.warning(f"[ModelConfig] Failed to load DB models for {provider_id}: {e}")
+        db_models = []
+
+    if not db_models:
+        return fetched_models
+
+    db_map = {m["model_id"]: m for m in db_models}
+    merged = []
+    for m in fetched_models:
+        model_id = m.get("id", "")
+        db_entry = db_map.get(model_id)
+        if db_entry:
+            merged.append({
+                "id": model_id,
+                "name": db_entry.get("name") or m.get("name") or model_id,
+                "owned_by": m.get("owned_by", ""),
+                "provider": provider_id,
+                "enabled": db_entry.get("enabled", True),
+                "max_context_tokens": db_entry.get("max_context_tokens", 0),
+            })
+        else:
+            merged.append({**m, "provider": provider_id, "enabled": True, "max_context_tokens": 0})
+
+    return merged
 
 
 def _build_provider_response(provider_id: str, adapter) -> ProviderResponse:
@@ -263,8 +363,25 @@ async def add_provider(request: ProviderCreate, adapter=Depends(get_llm_adapter)
     try:
         models = await provider.list_models()
         logger.debug(f"[API] POST /models/providers - Fetched {len(models)} models for {request.id}")
+        if models:
+            _persist_provider_models(request.id, models, provider_name=request.id)
+            models = _merge_models_with_db(request.id, models)
     except Exception as e:
         logger.warning(f"[API] POST /models/providers - Failed to fetch models: {e}")
+        # 获取失败时仍尝试从 DB 返回已保存的模型列表
+        try:
+            db_models = _get_provider_model_repo().get_by_provider(request.id)
+            models = [
+                {
+                    "id": m["model_id"],
+                    "name": m.get("name") or m["model_id"],
+                    "enabled": m.get("enabled", True),
+                    "max_context_tokens": m.get("max_context_tokens", 0),
+                }
+                for m in db_models
+            ]
+        except Exception:
+            models = []
 
     # 从凭证仓储取前缀（register_provider 已保存凭证）
     api_key_prefix = ""
@@ -357,14 +474,43 @@ async def list_provider_models(provider_id: str, adapter=Depends(get_llm_adapter
     logger.info(f"[API] GET /models/providers/{provider_id}/models - Listing models")
     start_time = time.time()
     try:
-        models = await adapter.list_models(provider_id)
+        fetched = await adapter.list_models(provider_id)
+        if fetched:
+            _persist_provider_models(provider_id, fetched, provider_name=provider_id)
+            models = _merge_models_with_db(provider_id, fetched)
+        else:
+            # 远端未返回模型时，回退到数据库中已保存的列表
+            db_models = _get_provider_model_repo().get_by_provider(provider_id)
+            models = [
+                {
+                    "id": m["model_id"],
+                    "name": m.get("name") or m["model_id"],
+                    "enabled": m.get("enabled", True),
+                    "max_context_tokens": m.get("max_context_tokens", 0),
+                }
+                for m in db_models
+            ]
         elapsed = time.time() - start_time
         logger.success(f"[API] GET /models/providers/{provider_id}/models - Success: {len(models)} models, elapsed={elapsed:.2f}s")
         return ok(models)
     except Exception as e:
         elapsed = time.time() - start_time
         logger.error(f"[API] GET /models/providers/{provider_id}/models - Failed: elapsed={elapsed:.2f}s, error={e}")
-        raise
+        # 拉取失败时返回 DB 中已保存的模型，避免前端崩溃
+        try:
+            db_models = _get_provider_model_repo().get_by_provider(provider_id)
+            models = [
+                {
+                    "id": m["model_id"],
+                    "name": m.get("name") or m["model_id"],
+                    "enabled": m.get("enabled", True),
+                    "max_context_tokens": m.get("max_context_tokens", 0),
+                }
+                for m in db_models
+            ]
+            return ok(models)
+        except Exception:
+            raise
 
 
 @router.post("/providers/test")
@@ -392,11 +538,109 @@ async def test_provider(request: ProviderTestRequest, adapter=Depends(get_llm_ad
 async def list_all_models(adapter=Depends(get_llm_adapter)):
     logger.info("[API] GET /models/list - Listing all models")
     start_time = time.time()
-    models = await adapter.list_models()
+    fetched = await adapter.list_models()
+    if fetched:
+        # 按 provider 分组持久化
+        by_provider: dict[str, list[dict]] = {}
+        for m in fetched:
+            provider_id = m.get("provider", "")
+            if not provider_id:
+                continue
+            by_provider.setdefault(provider_id, []).append(m)
+        for provider_id, group in by_provider.items():
+            try:
+                _persist_provider_models(provider_id, group, provider_name=provider_id)
+            except Exception as e:
+                logger.warning(f"[API] GET /models/list - Failed to persist models for {provider_id}: {e}")
+        # 合并 DB 配置
+        merged = []
+        for m in fetched:
+            provider_id = m.get("provider", "")
+            merged.extend(_merge_models_with_db(provider_id, [m]))
+        models = merged
+    else:
+        # 回退到数据库中已保存的全部模型
+        db_models = _get_provider_model_repo().get_all()
+        models = [
+            {
+                "id": m["model_id"],
+                "name": m.get("name") or m["model_id"],
+                "provider": m["provider_id"],
+                "enabled": m.get("enabled", True),
+                "max_context_tokens": m.get("max_context_tokens", 0),
+            }
+            for m in db_models
+        ]
     elapsed = time.time() - start_time
     logger.success(f"[API] GET /models/list - Success: {len(models)} models, elapsed={elapsed:.2f}s")
     return ok(models)
-    
+
+
+@router.get("/context-overrides", response_model=list[ProviderModelResponse])
+async def list_context_overrides(adapter=Depends(get_llm_adapter)):
+    """返回所有已保存的模型上下文覆盖配置（按模型维度）。"""
+    logger.info("[API] GET /models/context-overrides - Listing context overrides")
+    try:
+        repo = _get_provider_model_repo()
+        rows = repo.get_all()
+        result = []
+        for row in rows:
+            # 若 DB 中 max_context_tokens 为 0，则重新推断一次作为展示默认值
+            max_tokens = row.get("max_context_tokens", 0) or 0
+            if max_tokens <= 0:
+                max_tokens = infer_max_context_tokens(
+                    row.get("model_id", ""),
+                    row.get("provider_id", ""),
+                )
+            result.append(ProviderModelResponse(
+                id=row["id"],
+                provider_id=row["provider_id"],
+                model_id=row["model_id"],
+                name=row.get("name") or row["model_id"],
+                enabled=row.get("enabled", True),
+                max_context_tokens=max_tokens,
+            ))
+        logger.success(f"[API] GET /models/context-overrides - Success: {len(result)} overrides")
+        return result
+    except Exception as e:
+        logger.error(f"[API] GET /models/context-overrides - Failed: {e}")
+        return []
+
+
+@router.patch("/context-overrides/{provider_id}/{model_id}", response_model=ProviderModelResponse)
+async def update_context_override(
+    provider_id: str,
+    model_id: str,
+    request: ProviderModelUpdate,
+    adapter=Depends(get_llm_adapter),
+):
+    """更新指定模型的启用状态与最大上下文长度。"""
+    logger.info(f"[API] PATCH /models/context-overrides/{provider_id}/{model_id} - Updating context override")
+    try:
+        repo = _get_provider_model_repo()
+        updates: dict = {}
+        if request.enabled is not None:
+            updates["enabled"] = request.enabled
+        if request.max_context_tokens is not None:
+            updates["max_context_tokens"] = request.max_context_tokens
+        updated = repo.update_by_provider_model(provider_id, model_id, updates)
+        if updated is None:
+            raise NotFoundError(f"Model [{provider_id}/{model_id}] not found")
+        logger.success(f"[API] PATCH /models/context-overrides/{provider_id}/{model_id} - Updated: {updates}")
+        return ProviderModelResponse(
+            id=updated["id"],
+            provider_id=updated["provider_id"],
+            model_id=updated["model_id"],
+            name=updated.get("name") or updated["model_id"],
+            enabled=updated.get("enabled", True),
+            max_context_tokens=updated.get("max_context_tokens", 0),
+        )
+    except NotFoundError:
+        raise
+    except Exception as e:
+        logger.error(f"[API] PATCH /models/context-overrides/{provider_id}/{model_id} - Failed: {e}")
+        raise
+
 
 @router.get("/config")
 async def get_model_config(adapter=Depends(get_llm_adapter)):
@@ -415,15 +659,16 @@ async def get_model_config(adapter=Depends(get_llm_adapter)):
                    "tts_model", "tts_voice", "tts_speed", "stt_provider",
                    "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay",
                    "stt_engine", "context_window_size", "compression_threshold",
-                   "llm_compress_enabled", "summary_model", "summary_provider"]:
+                   "compression_ratio", "llm_compress_enabled", "summary_model", "summary_provider"]:
         if field in saved:
             config[field] = saved[field]
     # 上下文配置也可从 settings 读取默认值
-    for field in ["context_window_size", "compression_threshold", "llm_compress_enabled", "summary_model", "summary_provider"]:
+    for field in ["context_window_size", "compression_threshold", "compression_ratio", "llm_compress_enabled", "summary_model", "summary_provider"]:
         if field not in config:
             settings_key = {
                 "context_window_size": "LLM_CONTEXT_WINDOW_SIZE",
                 "compression_threshold": "LLM_COMPRESSION_THRESHOLD",
+                "compression_ratio": "LLM_COMPRESSION_RATIO",
                 "llm_compress_enabled": "LLM_COMPRESS_ENABLED",
                 "summary_model": "LLM_SUMMARY_MODEL",
                 "summary_provider": "LLM_SUMMARY_PROVIDER",
@@ -491,6 +736,10 @@ async def update_model_config(request: ModelConfigUpdate, adapter=Depends(get_ll
     if request.compression_threshold is not None:
         settings.LLM_COMPRESSION_THRESHOLD = request.compression_threshold
         updated_fields.append("compression_threshold")
+    if request.compression_ratio is not None:
+        settings.LLM_COMPRESSION_RATIO = request.compression_ratio
+        settings.LLM_SUMMARY_TARGET_RATIO = request.compression_ratio / 100.0
+        updated_fields.append("compression_ratio")
     if request.llm_compress_enabled is not None:
         settings.LLM_COMPRESS_ENABLED = request.llm_compress_enabled
         updated_fields.append("llm_compress_enabled")
@@ -515,7 +764,7 @@ async def update_model_config(request: ModelConfigUpdate, adapter=Depends(get_ll
                    "tts_model", "tts_voice", "tts_speed", "stt_provider",
                    "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay",
                    "stt_engine", "context_window_size", "compression_threshold",
-                   "llm_compress_enabled", "summary_model", "summary_provider"]:
+                   "compression_ratio", "llm_compress_enabled", "summary_model", "summary_provider"]:
         val = getattr(request, field, None)
         if val is not None:
             config_to_save[field] = val

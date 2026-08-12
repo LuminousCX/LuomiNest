@@ -31,8 +31,10 @@ const {
   isRunning,
   hasLiveSession,
   livePhase,
+  liveSessionId,
   toggleRun,
   progressStats,
+  loadSessionDetail,
 } = useWorkflowSessions()
 
 // VueFlow 流程图（依赖 currentDisplaySession）
@@ -47,6 +49,12 @@ const {
 onMounted(() => {
   loadSessions()
 })
+
+/** 选中历史会话时同时加载详情（含节点数据，渲染流程图） */
+const handleSelectSession = (sessionId: string): void => {
+  selectSession(sessionId)
+  loadSessionDetail(sessionId)
+}
 </script>
 
 <template>
@@ -92,7 +100,8 @@ onMounted(() => {
         :has-live-session="hasLiveSession"
         :is-running="isRunning"
         :live-phase="livePhase"
-        @select-session="selectSession"
+        :live-session-id="liveSessionId"
+        @select-session="handleSelectSession"
         @show-live="showLiveSession"
       />
 

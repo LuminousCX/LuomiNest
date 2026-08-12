@@ -60,6 +60,7 @@ onMounted(async () => {
     modelStore.fetchProviders(),
     modelStore.fetchTemplates(),
     modelStore.fetchModelConfig(),
+    modelStore.fetchContextOverrides(),
   ])
 })
 </script>

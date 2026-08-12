@@ -250,7 +250,7 @@ button:focus-visible {
 
 .workbench-history-wrapper {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   height: 100%;
   flex-shrink: 0;
 }

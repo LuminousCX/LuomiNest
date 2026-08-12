@@ -118,6 +118,7 @@ export const useWorkflowSessions = () => {
   // 实时会话指示（供侧栏组件使用）
   const hasLiveSession = computed(() => !!workflowStore.currentSession)
   const livePhase = computed(() => workflowStore.currentSession?.phase || '')
+  const liveSessionId = computed(() => workflowStore.currentSession?.session_id || '')
 
   const toggleRun = (): void => {
     if (isRunning.value) {
@@ -139,6 +140,49 @@ export const useWorkflowSessions = () => {
     return { total, completed, failed, progress }
   })
 
+  /** 加载历史会话详情（含节点数据，用于渲染流程图） */
+  const loadSessionDetail = async (sessionId: string): Promise<void> => {
+    try {
+      const detail = await apiGet<WorkflowSession & { nodes?: Array<Record<string, unknown>> }>(
+        `/workflow/db/sessions/${sessionId}`,
+      )
+      // 将后端 nodes 映射为前端 WorkflowTask 格式
+      const tasks: import('../types/workflow').WorkflowTask[] = (detail.nodes || []).map((n) => ({
+        task_id: (n.node_id as string) || '',
+        title: (n.title as string) || '',
+        description: (n.description as string) || '',
+        task_type: (n.node_type as string) || 'tool',
+        tool_name: (n.tool_name as string) || '',
+        arguments: (n.arguments as Record<string, unknown>) || {},
+        depends_on: (n.depends_on as string[]) || [],
+        priority: (n.priority as 'normal' | 'high' | 'urgent' | 'low') || 'normal',
+        node_type: ((n.node_type as string) || 'tool') as import('../types/workflow').WorkflowNodeType,
+        status: ((n.status as string) || 'pending') as import('../types/workflow').WorkflowTaskStatus,
+        result: (n.result as string) || null,
+        error: (n.error as string) || null,
+        metadata: {},
+        started_at: (n.started_at as string) || null,
+        completed_at: (n.completed_at as string) || null,
+      }))
+      // 更新 sessions 列表中对应项的 tasks 和 stats
+      const idx = sessions.value.findIndex((s) => s.session_id === sessionId)
+      if (idx !== -1) {
+        const completed = tasks.filter((t) => t.status === 'completed').length
+        const failed = tasks.filter((t) => t.status === 'failed').length
+        sessions.value[idx] = {
+          ...sessions.value[idx],
+          tasks,
+          plan: detail.plan || sessions.value[idx].plan,
+          final_result: detail.final_result || sessions.value[idx].final_result,
+          error: detail.error || sessions.value[idx].error,
+          stats: { total: tasks.length, completed, failed },
+        }
+      }
+    } catch (err: unknown) {
+      logger.error('Failed to load workflow session detail:', err)
+    }
+  }
+
   return {
     sessions,
     isLoadingSessions,
@@ -150,7 +194,9 @@ export const useWorkflowSessions = () => {
     isRunning,
     hasLiveSession,
     livePhase,
+    liveSessionId,
     toggleRun,
     progressStats,
+    loadSessionDetail,
   }
 }

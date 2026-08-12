@@ -4,6 +4,11 @@ from datetime import datetime, timezone
 from loguru import logger
 
 from app.core.utils import extract_llm_text
+from app.core.domain_policy import (
+    MAIN_AGENT_ID,
+    TRACK_OWNER,
+    resolve_domain_policy,
+)
 from app.engines.memory import get_memory_engine
 from app.engines.memory.memory_engine import get_conversation_store
 from app.engines.memory.models import summaries_to_markdown
@@ -11,8 +16,21 @@ from app.engines.memory.prompts import _DISTILL_PROMPT_ROUND, _MERGE_SUMMARY_PRO
 from app.runtime.provider.llm.adapter import llm_adapter as default_adapter
 from app.runtime.provider.llm.types import RouteHint
 
-# 主 Agent 唯一标识（与 context_service.MAIN_AGENT_ID 保持一致）
-_MAIN_AGENT_ID = "luominest_main_agent"
+# 主 Agent 唯一标识（canonical 在 app.core.domain_policy，此处兼容再导出）
+_MAIN_AGENT_ID = MAIN_AGENT_ID
+
+
+def _distill_allowed(agent_id: str | None, domain: str | None, user_key: str) -> bool:
+    """蒸馏写入门控（§8.5.5 写入隔离，防 owner 轨污染）。
+
+    - domain 已提供：按 DomainPolicy 判定；蒸馏产物只落 owner 轨，
+      平台域（用户轨道）不在此写入 —— 用户轨提炼由后台任务承担（§8.5.7）
+    - domain 缺省（legacy 调用）：仅主 Agent 生效
+    """
+    if domain:
+        policy = resolve_domain_policy(domain, agent_id=agent_id, user_key=user_key)
+        return policy.memory_write and policy.memory_track == TRACK_OWNER
+    return agent_id == _MAIN_AGENT_ID
 
 
 class DistillationService:
@@ -155,14 +173,17 @@ class DistillationService:
         return hashlib.md5(f"{agent_id}:{conversation_id}".encode()).hexdigest()
 
     @staticmethod
-    async def maybe_distill(agent_id: str, conversation_id: str, messages: list, llm_adapter=None) -> bool:
+    async def maybe_distill(
+        agent_id: str, conversation_id: str, messages: list, llm_adapter=None,
+        *, domain: str | None = None, user_key: str = "",
+    ) -> bool:
         """检查是否有未蒸馏的新轮次，有则触发蒸馏合并。
 
         触发条件：full_turns >= DROPLET_THRESHOLD 且有未蒸馏的增量轮次。
         通过 _last_distilled_turns 记录上次蒸馏时的轮次数，避免重复蒸馏。
         """
-        # 蒸馏属于记忆系统，仅对主 Agent 生效
-        if agent_id != _MAIN_AGENT_ID:
+        # 蒸馏属于记忆系统：domain 驱动策略门控（B7），缺省按主 Agent 判定
+        if not _distill_allowed(agent_id, domain, user_key):
             return False
         full_turns = DistillationService.count_full_turns(messages)
 
@@ -295,10 +316,13 @@ class DistillationService:
             return False
 
     @staticmethod
-    async def final_distill(agent_id: str, conversation_id: str, messages: list, llm_adapter=None):
+    async def final_distill(
+        agent_id: str, conversation_id: str, messages: list, llm_adapter=None,
+        *, domain: str | None = None, user_key: str = "",
+    ):
         """对话结束触发最终蒸馏，兜底处理未蒸馏的剩余轮次"""
-        # 蒸馏属于记忆系统，仅对主 Agent 生效
-        if agent_id != _MAIN_AGENT_ID:
+        # 蒸馏属于记忆系统：domain 驱动策略门控（B7），缺省按主 Agent 判定
+        if not _distill_allowed(agent_id, domain, user_key):
             return
         full_turns = DistillationService.count_full_turns(messages)
 

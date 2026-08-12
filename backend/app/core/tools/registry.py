@@ -50,7 +50,19 @@ class ToolBase(ABC):
         - description: 工具描述（LLM 据此判断是否调用该工具）
         - parameters: OpenAI JSON Schema 格式的参数定义
         - execute: 异步执行方法，接收 arguments 字典，返回 ToolResult
+
+    声明式属性（子类可覆盖，用于工具分层与过滤，对齐 DBS tool_calls.tool_type）：
+        - tier: 工具层级，core（常驻）/ domain（领域）/ meta（发现式）
+        - scope: 场景归属，shared（共享，默认）/ platform（平台专用，仅平台域注入）
+        - platform: 运行平台集合，win/mac/linux 的组合（默认全平台）
     """
+
+    # 工具层级（落 DBS tool_calls.tool_type）
+    tier: str = "domain"
+    # 场景归属（shared / platform / platform:{instId}）
+    scope: str = "shared"
+    # 运行平台集合
+    platform: frozenset[str] = frozenset({"win", "mac", "linux"})
 
     @property
     @abstractmethod
@@ -87,6 +99,17 @@ class ToolBase(ABC):
                 "description": self.description,
                 "parameters": self.parameters,
             },
+        }
+
+    def to_tool_info_dict(self) -> dict[str, Any]:
+        """转换为工具信息字典（含 tier/scope/platform 声明字段，供 /api/tools 端点与前端面板使用）。"""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.parameters,
+            "tier": self.tier,
+            "scope": self.scope,
+            "platform": sorted(self.platform),
         }
 
 

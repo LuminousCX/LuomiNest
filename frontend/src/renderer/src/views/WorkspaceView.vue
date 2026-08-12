@@ -165,7 +165,8 @@ const {
   messages, isStreaming, isLoadingCurrentConv, isBackendReady, currentConvId,
   currentModel, currentProvider, currentProviderLogo, hasProvider, availableModelOptions,
   selectModel, canSend, sendMessage, cancelStreaming,
-  contextUsage, contextPercent, currentSuggestionMessageId,
+  chatMode, chatModeOptions, selectChatMode,
+  contextUsage, contextTokens, contextPercent, currentSuggestionMessageId,
   handleSwitchVersion, handleSuggestionClick, handleRegenerate,
   handleDeleteMessage, handleGoBackToStart, handleQuoteMessage, toggleReasoning,
 } = messages_
@@ -294,12 +295,15 @@ onBeforeUnmount(() => {
         :current-provider-logo="currentProviderLogo"
         :available-model-options="availableModelOptions"
         :show-model-dropdown="showModelDropdown"
+        :chat-mode="chatMode"
+        :chat-mode-options="chatModeOptions"
         :input-text="inputText"
         :can-send="canSend"
         :is-uploading="isUploading"
         :quoted-message="chatStore.quotedMessage"
         :context-usage="contextUsage"
         :context-percent="contextPercent"
+        :context-tokens="contextTokens"
         :copied-id="copiedId"
         :show-reasoning="showReasoning"
         :current-suggestion-message-id="currentSuggestionMessageId"
@@ -325,6 +329,7 @@ onBeforeUnmount(() => {
         @cancel="cancelStreaming"
         @toggle-model-dropdown="showModelDropdown = !showModelDropdown"
         @select-model="selectModel"
+        @select-chat-mode="selectChatMode"
         @clear-quote="chatStore.quotedMessage = null"
         @file-preview="openFilePreview"
       />

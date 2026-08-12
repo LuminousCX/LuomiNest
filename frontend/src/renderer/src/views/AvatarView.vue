@@ -19,6 +19,7 @@ import PixelPetStage from '@/components/avatar/PixelPetStage.vue'
 import PngTuberStage from '@/components/avatar/PngTuberStage.vue'
 import AvatarControls from '@/components/avatar/AvatarControls.vue'
 import AvatarSkinSidebar from '@/components/avatar/AvatarSkinSidebar.vue'
+import StageBackgroundMenu from '@/components/avatar/StageBackgroundMenu.vue'
 import type { AvatarMode, AvatarEmotion, AvatarMotion, IdleAnimation, ManifestSkinItem } from '@/components/avatar/types'
 import type { AvatarRendererType, AvatarManifestModel } from '@/types/avatar'
 import type { ChatStreamChunk } from '@/types'
@@ -863,6 +864,13 @@ onBeforeUnmount(() => {
           @select-emotion="selectEmotion"
           @select-motion="selectMotion"
         />
+
+        <!--
+          舞台背景设置菜单：绝对定位在画布区右上角，悬于 stage-canvas 之上。
+          放在 .avatar-stage 内（而非 stage-canvas 内），避免被 stage-canvas 的 overflow:hidden 裁掉下拉菜单。
+          .avatar-stage 自身也是 overflow:hidden，但舞台高度通常远超菜单下拉长度，不会被截断。
+        -->
+        <StageBackgroundMenu class="stage-bg-menu-float" />
       </div>
 
       <AvatarSkinSidebar
@@ -887,7 +895,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg);
   color: var(--text);
   overflow: hidden;
 }
@@ -919,5 +926,13 @@ onBeforeUnmount(() => {
 
 .animate-stage-appear {
   animation: stage-appear var(--stage-appear-duration) var(--ease-out-expo) both;
+}
+
+/* 舞台背景菜单：绝对定位在画布区右上角，z-index 高于 stage-overlay 标签 */
+.stage-bg-menu-float {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 25;
 }
 </style>

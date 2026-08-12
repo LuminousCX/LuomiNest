@@ -8,10 +8,12 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import type { Ref } from 'vue'
 import type { AgentProfile, ChatMessage } from '../types'
+import type { ChatModeLevel, WorkflowModeOption } from '../components/workbench/types'
 import { useChatStore } from '../stores/chat'
 import { useModelStore } from '../stores/model'
 import { useAgentStore } from '../stores/agent'
 import { useApi } from './useApi'
+import { useToast } from './useToast'
 import { getProviderLogo } from '../config/provider-logos'
 
 /** WorkspaceAgentChat 子组件实例的最小接口（避免依赖具体组件类型） */
@@ -44,6 +46,7 @@ export interface SendMessageOptions {
   fileContent?: string
   fileType?: string
   fileName?: string
+  chatMode?: ChatModeLevel
 }
 
 /** 文件上传状态（由 useFileUpload 提供，透传给本 composable） */
@@ -127,14 +130,72 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     return list
   })
 
-  const selectModel = (providerId: string, modelId: string): void => {
+  const selectModel = async (providerId: string, modelId: string): Promise<void> => {
     if (localSelectedAgent.value) {
-      agentStore.updateAgent(localSelectedAgent.value.id, {
+      // Optimistic update: 立即修改本地对象让 UI 即时反映
+      localSelectedAgent.value.model = modelId
+      localSelectedAgent.value.provider = providerId
+
+      await agentStore.updateAgent(localSelectedAgent.value.id, {
         provider: providerId,
         model: modelId,
       })
+
+      // Re-sync: fetchAgents 替换了整个数组后，抓回新鲜引用
+      const updated = agentStore.agents.find(a => a.id === localSelectedAgent.value?.id)
+      if (updated) localSelectedAgent.value = updated
     }
     showModelDropdown.value = false
+  }
+
+  // —— 对话模式（普通/标准/超长） ——
+  const toast = useToast()
+  const chatMode = ref<ChatModeLevel>('normal')
+  const chatModeOptions: WorkflowModeOption[] = [
+    { value: 'normal', label: '普通', title: '普通模式：工具最少（任务视图操作 + 表情操控）' },
+    { value: 'standard', label: '标准', title: '专业模式·标准：平衡速度与深度，排除细粒度浏览器工具' },
+    { value: 'ultra', label: '超长', title: '专业模式·超长：最大能力，全部工具可用，适合复杂长任务' },
+  ]
+  const isWorkflowMode = computed(() => chatMode.value !== 'normal')
+
+  // 切换对话时从存储的 chat_mode 字段同步
+  watch(localSelectedConvId, (convId) => {
+    if (convId) {
+      const conv = chatStore.convData[convId]
+      chatMode.value = (conv?.chat_mode as ChatModeLevel) || 'normal'
+    } else {
+      chatMode.value = 'normal'
+    }
+  })
+
+  const REASONING_MODEL_KEYWORDS = ['reasoner', 'reason', 'o1', 'o3', 'o4', 'thinking', 'r1']
+  const isReasoningModel = (modelId: string): boolean => {
+    const lower = modelId.toLowerCase()
+    return REASONING_MODEL_KEYWORDS.some((kw) => lower.includes(kw))
+  }
+
+  const selectChatMode = (mode: ChatModeLevel): void => {
+    // 上下文隔离：如果当前对话已有消息，禁止切换模式
+    const convId = localSelectedConvId.value
+    if (convId) {
+      const currentMsgs = chatStore.convMessages[convId] || []
+      if (currentMsgs.length > 0 && chatMode.value !== mode) {
+        toast.warning('当前对话已有内容，无法切换模式。请新建对话后再选择所需模式。')
+        return
+      }
+    }
+
+    chatMode.value = mode
+    const opts = availableModelOptions.value
+    if (opts.length === 0) return
+    // 专业模式优先推理模型，普通模式优先快速模型
+    if (mode !== 'normal') {
+      const reasoning = opts.find((opt) => isReasoningModel(opt.modelId))
+      if (reasoning) selectModel(reasoning.providerId, reasoning.modelId)
+    } else {
+      const fast = opts.find((opt) => !isReasoningModel(opt.modelId))
+      if (fast) selectModel(fast.providerId, fast.modelId)
+    }
   }
 
   // —— 发送消息 ——
@@ -172,6 +233,7 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
       temperature: modelStore.modelConfig.defaultTemperature,
       maxTokens: modelStore.modelConfig.defaultMaxTokens,
       topP: modelStore.modelConfig.defaultTopP,
+      chatMode: chatMode.value,
     }
     if (agent?.systemPrompt) sendOptions.systemPrompt = agent.systemPrompt
     if (agent?.id) sendOptions.agentId = agent.id
@@ -197,9 +259,22 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     return lastAssistantMsg?.usage || chatStore.lastUsage || null
   })
   const currentSuggestionMessageId = computed(() => chatStore.currentSuggestionMessageId)
+  const contextTokens = computed(() => {
+    const convId = localSelectedConvId.value
+    if (!convId) return 0
+    return chatStore.convContextTokens[convId] || 0
+  })
+  const contextMaxTokens = computed(() => {
+    const convId = localSelectedConvId.value
+    if (!convId) return 0
+    return chatStore.convContextMaxTokens[convId] || 0
+  })
   const contextPercent = computed(() => {
-    if (!contextUsage.value?.totalTokens || !modelStore.modelConfig.defaultMaxTokens) return 0
-    return Math.min(100, Math.round((contextUsage.value.totalTokens / modelStore.modelConfig.defaultMaxTokens) * 100))
+    const max = contextMaxTokens.value
+    if (!max || max <= 0) return 0
+    const used = contextTokens.value
+    if (!used || used <= 0) return 0
+    return Math.min(100, Math.round((used / max) * 100))
   })
 
   // —— 版本切换与重生成 ——
@@ -397,12 +472,19 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     hasProvider,
     availableModelOptions,
     selectModel,
+    // 对话模式
+    chatMode,
+    chatModeOptions,
+    isWorkflowMode,
+    selectChatMode,
     // 发送消息
     canSend,
     sendMessage,
     cancelStreaming,
     // 上下文用量与推荐
     contextUsage,
+    contextTokens,
+    contextMaxTokens,
     contextPercent,
     currentSuggestionMessageId,
     // 版本切换与重生成

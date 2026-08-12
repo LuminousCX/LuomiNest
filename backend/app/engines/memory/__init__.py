@@ -7,7 +7,14 @@ from .models import (
     SummarySection,
     FACT_CATEGORIES,
 )
-from .memory_engine import MemoryEngine, get_memory_engine, get_conversation_store, _engines
+from .memory_engine import (
+    MemoryEngine,
+    get_memory_engine,
+    get_track_engine,
+    get_conversation_store,
+    _engines,
+    _track_engines,
+)
 
 
 async def init_memory() -> None:
@@ -33,8 +40,9 @@ async def init_memory() -> None:
 
 async def shutdown_memory() -> None:
     """关闭记忆引擎，保存未持久化的数据"""
-    # 快照 engines，避免并发创建导致迭代期间字典变更
-    for engine in list(_engines.values()):
+    # 快照 engines（含双轨引擎），避免并发创建导致迭代期间字典变更
+    all_engines = list(_engines.values()) + list(_track_engines.values())
+    for engine in all_engines:
         try:
             if engine._vector_manager is not None:
                 engine._vector_manager.save()
@@ -51,6 +59,7 @@ __all__ = [
     "SummarySection",
     "FACT_CATEGORIES",
     "get_memory_engine",
+    "get_track_engine",
     "get_conversation_store",
     "init_memory",
     "shutdown_memory",

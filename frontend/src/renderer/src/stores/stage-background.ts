@@ -26,7 +26,7 @@ export type StageBgUploadResult =
   | { success: true; url: string; width: number; height: number; warning?: string }
   | { success: false; error?: string; cancelled?: boolean }
 
-interface StageBackgroundState {
+type StageBackgroundState = {
   mode: StageBackgroundMode
   color: string | null
   imageUrl: string | null

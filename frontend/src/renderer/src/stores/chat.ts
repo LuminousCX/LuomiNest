@@ -931,6 +931,7 @@ export const useChatStore = defineStore('chat', () => {
     agentConversations,
     convStreaming,
     convMessages,
+    convData,
     currentSuggestionMessageId,
     checkBackend,
     fetchConversations,

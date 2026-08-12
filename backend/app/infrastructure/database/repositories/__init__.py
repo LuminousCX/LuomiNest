@@ -6,6 +6,7 @@ from app.infrastructure.database.repositories.conversation_repository import Con
 from app.infrastructure.database.repositories.group_repository import GroupRepository
 from app.infrastructure.database.repositories.marketplace_stat_repository import MarketplaceStatRepository
 from app.infrastructure.database.repositories.platform_repository import PlatformRepository
+from app.infrastructure.database.repositories.provider_model_repository import ProviderModelRepository
 from app.infrastructure.database.repositories.provider_repository import ProviderCredentialRepository, ProviderRepository
 from app.infrastructure.database.repositories.repo_source_repository import RepoSourceRepository
 from app.infrastructure.database.repositories.skill_repository import SkillRepository, skill_repository
@@ -22,6 +23,7 @@ __all__ = [
     "MarketplaceStatRepository",
     "PlatformRepository",
     "ProviderCredentialRepository",
+    "ProviderModelRepository",
     "ProviderRepository",
     "RepoSourceRepository",
     "SkillRepository",

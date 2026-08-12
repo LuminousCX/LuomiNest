@@ -112,6 +112,10 @@ class CliTool(ToolBase):
             "危险命令（如 rm -rf /、format、shutdown）会被拦截。"
             "输出超过 20000 字符会被截断。"
             "执行记录会同步到控制台页面。"
+            "\n\n"
+            "**shell 模式**：当需要管道（|）、重定向（>）、通配符（*）等 shell 语法时，"
+            "设置 use_shell=true。shell 模式下命令会经过平台 shell（Windows: PowerShell，"
+            "macOS/Linux: bash），安全风险更高，请仅在必要时开启。"
         )
 
     @property
@@ -128,6 +132,15 @@ class CliTool(ToolBase):
                     "description": f"超时秒数（可选，默认 {_DEFAULT_TIMEOUT}，上限 {_MAX_TIMEOUT}）",
                     "default": _DEFAULT_TIMEOUT,
                 },
+                "use_shell": {
+                    "type": "boolean",
+                    "description": (
+                        "是否通过平台 shell 执行（默认 false）。"
+                        "当命令需要管道/重定向/通配符时设置为 true。"
+                        "开启后命令经过 PowerShell（Windows）或 bash（macOS/Linux）。"
+                    ),
+                    "default": False,
+                },
             },
             "required": ["command"],
         }
@@ -139,8 +152,11 @@ class CliTool(ToolBase):
 
         timeout = arguments.get("timeout") or _DEFAULT_TIMEOUT
         timeout = min(max(int(timeout), 1), _MAX_TIMEOUT)
+        use_shell = bool(arguments.get("use_shell", False))
 
-        logger.info(f"[CliTool] 执行命令: {command[:100]} (timeout={timeout}s)")
+        logger.info(
+            f"[CliTool] 执行命令: {command[:100]} (timeout={timeout}s, shell={use_shell})"
+        )
 
         # 获取沙盒实例
         try:
@@ -152,7 +168,9 @@ class CliTool(ToolBase):
         # 通过沙盒执行命令
         started_at = datetime.now(timezone.utc)
         try:
-            result = await sandbox.execute_command(command, timeout=timeout)
+            result = await sandbox.execute_command(
+                command, timeout=timeout, shell_mode=use_shell
+            )
             exit_code = result.exit_code
             stdout = result.stdout or ""
             stderr = result.stderr or ""

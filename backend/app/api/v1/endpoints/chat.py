@@ -138,6 +138,16 @@ async def create_conversation(
         f"[API] POST /chat/conversations - "
         f"Creating conversation: title={request.title}, agent_id={request.agent_id}, chat_mode={request.chat_mode}"
     )
+    from app.core.chat_mode import ChatMode
+    from app.core.domain_policy import SCENE_AVATAR, SCENE_WORKBENCH, domain_for_agent
+
+    chat_mode = request.chat_mode or "normal"
+    scene = request.scene or SCENE_WORKBENCH
+    domain = request.domain or domain_for_agent(request.agent_id)
+    # D4：皮套工坊/桌宠（scene=avatar）固定 standard 工具集（§10），创建时锁定
+    if scene == SCENE_AVATAR and chat_mode != ChatMode.STANDARD.value:
+        chat_mode = ChatMode.STANDARD.value
+
     conv_id = str(uuid.uuid4())
     now = utc_now()
     conv = {
@@ -146,8 +156,11 @@ async def create_conversation(
         "agent_id": request.agent_id,
         "model": request.model,
         "provider": request.provider,
-        "chat_mode": request.chat_mode or "normal",
+        "chat_mode": chat_mode,
         "is_hidden": request.is_hidden,
+        # 对话域（B3）：创建时写入，决定列表隔离与 DomainPolicy 记忆/工具策略
+        "domain": domain,
+        "scene": scene,
         "messages": [],
         "created_at": now,
         "updated_at": now,

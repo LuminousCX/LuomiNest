@@ -11,7 +11,6 @@ import {
   Loader
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
-import StageBackgroundMenu from './StageBackgroundMenu.vue'
 
 const props = defineProps<{
   isDesktopMode: boolean
@@ -74,7 +73,6 @@ const emit = defineEmits<{
         <template #icon><Download :size="16" /></template>
         <span>Import</span>
       </LumiButton>
-      <StageBackgroundMenu />
       <LumiButton variant="ghost" size="sm" icon-only aria-label="Settings">
         <template #icon><Settings2 :size="16" /></template>
       </LumiButton>
@@ -87,19 +85,9 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-6);
+  padding: var(--space-4) var(--space-7);
   flex-shrink: 0;
-  position: relative;
-}
-
-.avatar-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: var(--space-6);
-  right: var(--space-6);
-  height: 1px;
-  background: var(--divider-soft);
+  background: transparent !important;
 }
 
 .avatar-header__left {

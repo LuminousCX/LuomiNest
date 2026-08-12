@@ -530,7 +530,7 @@ window.addEventListener('click', closeMenu)
     <div class="memory-header animate-fade-in">
       <div class="memory-header__left">
         <h1 class="memory-title">记忆中枢</h1>
-        <span class="memory-badge">AI驱动的记忆系统</span>
+        <p class="memory-desc">AI 驱动的用户画像、事实库与知识记忆管理</p>
       </div>
       <div class="memory-header__actions">
         <LumiButton variant="ghost" size="sm" icon-only @click="exportMemory" title="导出记忆">
@@ -736,16 +736,14 @@ window.addEventListener('click', closeMenu)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-5) var(--space-6);
-  border-bottom: 1px solid var(--divider-soft, var(--border));
+  padding: var(--space-6) var(--space-7) var(--space-4);
   flex-shrink: 0;
   background: linear-gradient(180deg, color-mix(in srgb, var(--lumi-brand) 3%, transparent) 0%, transparent 100%);
 }
 
 .memory-header__left {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
 }
 
 .memory-title {
@@ -753,15 +751,13 @@ window.addEventListener('click', closeMenu)
   font-weight: var(--font-bold);
   color: var(--text-primary);
   letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
-.memory-badge {
-  font-size: var(--text-xs);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
-  font-weight: var(--font-medium);
+.memory-desc {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
 }
 
 .memory-header__actions {

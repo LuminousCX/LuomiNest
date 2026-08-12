@@ -14,12 +14,13 @@ import uuid
 from loguru import logger
 
 from app.core.utils import utc_now
+from app.core.domain_policy import MAIN_AGENT_ID, LEGACY_MAIN_AGENT_ID
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.config_store import lumi_config_store
 
-# 主 Agent 唯一标识，与 context_service.py 中的 MAIN_AGENT_ID 保持一致
-# 注意：旧数据中 agent_id 为 "main"，context_service.is_main_agent() 已做兼容
-MAIN_AGENT_ID = "luominest_main_agent"
+# 主 Agent 唯一标识（canonical 在 app.core.domain_policy，此处兼容再导出）
+# 注意：旧数据中 agent_id 为 "main"（LEGACY_MAIN_AGENT_ID），
+# context_service.is_main_agent() 已做兼容
 
 # config_items 键前缀（会话映射命名空间）
 _SESSIONS_KEY_PREFIX = "platform.sessions."
