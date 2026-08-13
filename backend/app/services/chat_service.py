@@ -430,6 +430,7 @@ class ChatService:
         state: dict,
         start_time: float,
         versions: list[dict] | None = None,
+        notice: str = "",
     ):
         """主对话流式响应（/api/chat stream 模式）。
 
@@ -523,6 +524,11 @@ class ChatService:
 
         async def generator():
             suggested_questions: list[str] = []
+            # 模型路由通知（如专业模式推理模型退化为主模型）：头部空 chunk 带出，前端 toast
+            if notice:
+                yield sse_data(ChatStreamChunk(
+                    id=chat_id, content="", model=model, provider=provider, notice=notice,
+                ))
             try:
                 async for sse_str in runner.run_stream(ctx, llm_call_fn):
                     yield sse_str
@@ -700,6 +706,11 @@ class ChatService:
             system_prompt = self._context.build_system_prompt(body.agent_id, user_context=user_query)
             messages = [{"role": "system", "content": system_prompt}] + messages
 
+        # 用户显式选择的技能注入（无条件注入完整 body，优先于关键词自动匹配）
+        selected_block = self._context.build_user_selected_skills_prompt(body.skill_ids or [])
+        if selected_block:
+            messages.insert(0, {"role": "system", "content": selected_block})
+
         messages = self._context.inject_timestamp_prompt(messages)
         # 子 Agent 调用不注入主 Agent 记忆，避免污染独立上下文
         # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
@@ -823,13 +834,46 @@ class ChatService:
             )
             await self.persist_conv(conv_id, conv)
 
-        resolved_provider = (
-            request.provider or conv.get("provider") or adapter.default_provider
+        # ── 模型解析（2026-08 全局模型统一）──
+        # 专业模式（standard/ultra）路由到推理模型（设置→模型设置→推理模型）；
+        # 推理模型不可用时退化为主模型，并通过 notice 通知前端（右上角 toast）。
+        # 其余情况使用主模型解析链：请求级显式指定 → 对话级快照 → 全局默认。
+        chat_mode_for_route = (
+            conv.get("chat_mode") or getattr(request, "chat_mode", None) or "normal"
         )
-        resolved_model = (
-            request.model or conv.get("model")
-            or adapter.get_provider(resolved_provider).default_model
+        model_notice = ""
+        reasoner_cfg = (
+            adapter.get_reasoner_provider()
+            if chat_mode_for_route in ("standard", "ultra")
+            else None
         )
+        if reasoner_cfg:
+            r_provider, r_model, r_temp, r_maxtok, _r_effort = reasoner_cfg
+            try:
+                r_provider_inst = adapter.get_provider(r_provider)
+                resolved_provider = r_provider
+                resolved_model = r_model or r_provider_inst.default_model
+                # 推理模型自有的生成参数优先（未配置则沿用请求/全局默认）
+                if r_temp is not None:
+                    request.temperature = r_temp
+                if r_maxtok is not None:
+                    request.max_tokens = r_maxtok
+            except Exception as e:
+                logger.warning(
+                    f"[ChatService] Reasoner provider '{r_provider}' unavailable, "
+                    f"falling back to main model: {e}"
+                )
+                model_notice = "推理模型不可用，已退化为主模型"
+                reasoner_cfg = None
+
+        if not reasoner_cfg:
+            resolved_provider = (
+                request.provider or conv.get("provider") or adapter.default_provider
+            )
+            resolved_model = (
+                request.model or conv.get("model")
+                or adapter.get_provider(resolved_provider).default_model
+            )
 
         # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
         if conv.get("chat_mode") != "ultra":
@@ -838,6 +882,14 @@ class ChatService:
             all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
         else:
             all_messages: list[dict] = []
+
+        # 用户显式选择的技能注入（无条件注入完整 body，优先于关键词自动匹配）
+        selected_block = self._context.build_user_selected_skills_prompt(request.skill_ids or [])
+        if selected_block:
+            if all_messages and all_messages[0]["role"] == "system":
+                all_messages.insert(1, {"role": "system", "content": selected_block})
+            else:
+                all_messages.insert(0, {"role": "system", "content": selected_block})
 
         supports_vision = adapter.get_provider(resolved_provider).supports_multimodal(resolved_model)
 
@@ -884,6 +936,7 @@ class ChatService:
             "started": True,
             "model": resolved_model,
             "provider": resolved_provider,
+            "notice": model_notice,
         }
 
         if request.stream:
@@ -893,6 +946,7 @@ class ChatService:
                 resolved_provider, resolved_model,
                 agent_id, gen_state, start_time,
                 versions=request.versions,
+                notice=model_notice,
             )
 
         await self.non_stream_generate(
@@ -939,6 +993,7 @@ class ChatService:
             "content": gen_state["content"],
             "model": resolved_model,
             "provider": resolved_provider,
+            "notice": model_notice or None,
         }
 
     async def compress_conversation(self, conv_id: str, conv: dict, adapter) -> dict:

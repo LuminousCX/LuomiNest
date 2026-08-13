@@ -792,21 +792,29 @@ async def get_main_agent_info(
 ):
     """获取主 Agent 的 LLM 配置信息（供前端平台管理页面展示）。
 
+    2026-08 全局模型统一后：
+    - provider/model 来自全局主模型（config_items['model_config']），
+      主 Agent 不再拥有独立模型；
+    - temperature/max_tokens 来自全局生成参数；
+    - system_prompt/color/avatar 仍为主 Agent 人设配置。
+
     返回字段：
-    - provider: 主 Agent 使用的供应商 ID
+    - provider: 主 Agent 使用的供应商 ID（= 全局主模型）
     - provider_name: 供应商显示名称
-    - model: 主 Agent 使用的模型 ID
+    - model: 主 Agent 使用的模型 ID（= 全局主模型）
     - supports_multimodal: 当前模型是否支持图片识别
     - system_prompt: 主 Agent 系统提示词
-    - temperature / max_tokens: 生成参数
+    - temperature / max_tokens: 生成参数（全局默认）
     """
     from app.runtime.platform.main_agent_config import (
         load_luominest_main_agent_config,
         resolve_main_agent_provider_model,
     )
+    from app.infrastructure.database.facades.model_selection import get_global_generation_defaults
 
     config = load_luominest_main_agent_config()
     provider, model = resolve_main_agent_provider_model()
+    temperature, max_tokens = get_global_generation_defaults()
 
     provider_name = provider
     supports_multimodal = False
@@ -825,8 +833,8 @@ async def get_main_agent_info(
             "model": model,
             "supports_multimodal": supports_multimodal,
             "system_prompt": config.get("system_prompt", ""),
-            "temperature": config.get("temperature", 0.7),
-            "max_tokens": config.get("max_tokens", 4096),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
             "color": config.get("color", ""),
             "avatar": config.get("avatar"),
         },
@@ -834,8 +842,17 @@ async def get_main_agent_info(
 
 
 @router.patch("/main_agent")
-async def update_main_agent_info(request: PlatformModelConfigUpdate):
-    """更新主 Agent 的 LLM 配置（系统提示词、温度、最大 tokens、provider、model）。
+async def update_main_agent_info(
+    request: PlatformModelConfigUpdate,
+    adapter=Depends(get_llm_adapter),
+):
+    """更新主 Agent 配置。
+
+    2026-08 全局模型统一后：
+    - provider/model 写入全局主模型配置（config_items['model_config']），
+      与设置页"模型设置"、工作台模型下拉共用同一权威源；
+    - temperature/max_tokens 写入全局生成参数；
+    - system_prompt/color/avatar 保存到主 Agent 人设配置。
 
     前端可在此切换主 Agent 使用的供应商/模型，平台消息路由会自动复用新配置。
     """
@@ -843,30 +860,54 @@ async def update_main_agent_info(request: PlatformModelConfigUpdate):
         load_luominest_main_agent_config,
         save_luominest_main_agent_config,
     )
+    from app.api.v1.endpoints.model import (
+        apply_global_model_selection,
+        apply_global_generation_defaults,
+    )
 
-    current = load_luominest_main_agent_config()
+    update_data = request.model_dump(exclude_unset=True)
     updated_fields: list[str] = []
 
-    # Pydantic 已做类型转换和范围校验，直接遍历已设置字段
-    update_data = request.model_dump(exclude_unset=True)
-    for key in ("provider", "model", "system_prompt", "temperature", "max_tokens", "color", "avatar"):
+    # 1) provider/model → 全局主模型（唯一权威源）
+    global_fields = apply_global_model_selection(
+        adapter,
+        provider=update_data.get("provider"),
+        model=update_data.get("model"),
+    )
+    updated_fields.extend(global_fields)
+
+    # 2) temperature/max_tokens → 全局生成参数
+    gen_fields = apply_global_generation_defaults(
+        temperature=update_data.get("temperature"),
+        max_tokens=update_data.get("max_tokens"),
+    )
+    updated_fields.extend(gen_fields)
+
+    # 3) system_prompt/color/avatar → 主 Agent 人设配置
+    current = load_luominest_main_agent_config()
+    persona_changed = False
+    for key in ("system_prompt", "color", "avatar"):
         if key in update_data and update_data[key] is not None:
             new_val = update_data[key]
+            if key == "avatar":
+                new_val = new_val or ""
             if current.get(key) != new_val:
                 current[key] = new_val
                 updated_fields.append(key)
+                persona_changed = True
+
+    if persona_changed:
+        try:
+            save_luominest_main_agent_config(current)
+        except Exception as e:
+            raise LuomiNestError(
+                f"Failed to persist main agent config: {e}",
+                code="MAIN_AGENT_CONFIG_PERSIST_FAILED",
+                status_code=500,
+            )
 
     if not updated_fields:
         return ok({"updated": False, "note": "no changes"})
 
-    try:
-        save_luominest_main_agent_config(current)
-        logger.info(f"[PlatformAPI] Main agent config updated: {updated_fields}")
-    except Exception as e:
-        raise LuomiNestError(
-            f"Failed to persist main agent config: {e}",
-            code="MAIN_AGENT_CONFIG_PERSIST_FAILED",
-            status_code=500,
-        )
-
+    logger.info(f"[PlatformAPI] Main agent config updated: {updated_fields}")
     return ok({"updated": True, "fields": updated_fields})

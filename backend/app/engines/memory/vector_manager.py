@@ -27,6 +27,10 @@ class VectorSearchManager:
         seen_content = {}  # (category, content_hash) -> fact_id
 
         for f in facts:
+            # 已在向量索引中的 fact 跳过（避免重复 embedding）
+            if f.id in self._store._cache:
+                continue
+
             content_hash = hashlib.sha256(f.content.encode()).hexdigest()
             key = (f.category, content_hash)
 
@@ -45,7 +49,7 @@ class VectorSearchManager:
                 fact_id=f.id, content=f.content, category=f.category,
                 scope=scope, conversation_id=conversation_id or ""
             ))
-        
+
         await self._store.batch_add(entries)
         return [f for f in facts if f.id in {e.fact_id for e in entries}]
 

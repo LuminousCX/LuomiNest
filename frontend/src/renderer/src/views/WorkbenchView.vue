@@ -150,8 +150,6 @@ const {
   filterCodeForTts,
   resetCodeBlockFilter,
   navigateToTask,
-  selectModel,
-  availableModelOptions,
   stopTts,
   inputAreaRef,
 })

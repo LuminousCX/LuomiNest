@@ -75,7 +75,6 @@ const dismissError = (): void => {
             @select-avatar="selectAvatar"
             @select-style="toggleStyle"
             @select-category="activeAvatarCategory = $event"
-            @select-model="formData.selectedModel = $event"
           />
 
           <StepSkills

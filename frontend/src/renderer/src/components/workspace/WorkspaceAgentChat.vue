@@ -38,10 +38,7 @@ const props = defineProps<{
   isBackendReady: boolean
   hasProvider: boolean
   currentModel: string
-  currentProvider: string
   currentProviderLogo: ProviderLogo
-  availableModelOptions: { providerId: string; providerName: string; providerLogo: ProviderLogo; modelId: string; modelName: string }[]
-  showModelDropdown: boolean
   chatMode: 'normal' | 'standard' | 'ultra'
   chatModeOptions: { value: 'normal' | 'standard' | 'ultra'; label: string; title: string }[]
   inputText: string
@@ -77,8 +74,6 @@ const emit = defineEmits<{
   'update:inputText': [value: string]
   send: []
   cancel: []
-  'toggle-model-dropdown': []
-  'select-model': [providerId: string, modelId: string]
   'select-chat-mode': [value: 'normal' | 'standard' | 'ultra']
   'clear-quote': []
   'file-preview': [file: { name: string; type?: string; content?: string }]
@@ -553,52 +548,17 @@ defineExpose({
         ></textarea>
         <div class="input-toolbar">
           <div class="toolbar-left">
-            <div class="model-dropdown-container">
-              <LumiButton
-                variant="secondary"
-                size="sm"
-                class="tool-btn"
-                @click.stop="emit('toggle-model-dropdown')"
-              >
-                <template #icon>
-                  <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
-                  <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
-                    {{ currentProviderLogo.initials }}
-                  </span>
-                </template>
-                <span class="model-btn-text">{{ currentModel }}</span>
-                <ChevronDown :size="14" />
-              </LumiButton>
-              <Transition name="dropdown-fade">
-                <div v-if="showModelDropdown" class="model-dropdown">
-                  <div class="dropdown-header">选择模型</div>
-                  <div class="dropdown-list">
-                    <LumiButton
-                      v-for="opt in availableModelOptions"
-                      :key="`${opt.providerId}-${opt.modelId}`"
-                      variant="ghost"
-                      size="sm"
-                      block
-                      :class="['dropdown-item', { active: currentProvider === opt.providerId && currentModel === opt.modelId }]"
-                      @click="emit('select-model', opt.providerId, opt.modelId)"
-                    >
-                      <template #icon>
-                        <span v-if="opt.providerLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="opt.providerLogo.svgIcon"></span>
-                        <span v-else class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
-                          {{ opt.providerLogo.initials }}
-                        </span>
-                      </template>
-                      <div class="dropdown-item-info">
-                        <span class="dropdown-item-model">{{ opt.modelName }}</span>
-                        <span class="dropdown-item-provider">{{ opt.providerName }}</span>
-                      </div>
-                    </LumiButton>
-                    <div v-if="availableModelOptions.length === 0" class="dropdown-empty">
-                      暂无可用模型，请先到设置多选模型
-                    </div>
-                  </div>
-                </div>
-              </Transition>
+            <!-- 2026-08 全局模型统一：对话页不提供模型切换，展示全局主模型；
+                 切换请前往 设置 → 模型设置 -->
+            <div
+              class="model-badge"
+              title="当前使用全局主模型，可在 设置 → 模型设置 中切换"
+            >
+              <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
+              <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+                {{ currentProviderLogo.initials }}
+              </span>
+              <span class="model-btn-text">{{ currentModel }}</span>
             </div>
             <LumiButton
               :class="['workflow-toggle', { active: isWorkflowMode }]"
@@ -1375,123 +1335,19 @@ defineExpose({
   text-overflow: ellipsis;
 }
 
-.model-dropdown-container {
-  position: relative;
-}
-
-.model-dropdown {
-  position: absolute;
-  bottom: calc(100% + var(--space-2));
-  left: 0;
-  width: 280px;
-  background: var(--workspace-card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  z-index: var(--z-modal);
-  overflow: hidden;
-}
-
-.dropdown-header {
-  padding: 10px 14px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  position: relative;
-  display: flex;
+/* 2026-08 全局模型统一：对话页不提供模型切换，只读徽章展示全局主模型 */
+.model-badge {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.dropdown-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 14px;
-  right: 14px;
-  height: 1px;
-  background: var(--divider-soft);
-}
-
-.dropdown-list {
-  max-height: 280px;
-  overflow-y: auto;
-  padding: var(--space-1);
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: var(--space-2) 10px;
-  border-radius: var(--radius-md);
-  text-align: left;
-  transition: background-color var(--duration-normal) var(--ease-in-out), color var(--duration-normal) var(--ease-in-out);
-}
-
-.dropdown-item:hover {
-  background: var(--workspace-hover);
-}
-
-.dropdown-item.active {
-  background: var(--lumi-brand-light);
-}
-
-.dropdown-item-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.dropdown-item-model {
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dropdown-item-provider {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  color: var(--text-muted);
   font-size: var(--text-xs);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dropdown-item.active .dropdown-item-model {
-  color: var(--lumi-brand);
-}
-
-.dropdown-empty {
-  padding: var(--space-5) 14px;
-  text-align: center;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-.dropdown-fade-enter-active {
-  animation: dropdown-in var(--duration-leave) var(--ease-out-expo);
-}
-
-.dropdown-fade-leave-active {
-  animation: dropdown-in var(--duration-fast) var(--ease-out-expo) reverse;
-}
-
-@keyframes dropdown-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  cursor: default;
+  user-select: none;
+  max-width: 220px;
 }
 
 .send-btn {

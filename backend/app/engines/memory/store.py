@@ -98,6 +98,14 @@ class MemoryStore:
     def _knowledge_file(self) -> Path:
         return self._path / "knowledge.md"
 
+    @staticmethod
+    def _safe_conversation_id(conversation_id: str) -> str:
+        """校验并返回路径安全的 conversation_id（防路径遍历）。"""
+        safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in conversation_id)
+        if safe_id != conversation_id:
+            raise ValueError(f"Invalid conversation_id: {conversation_id!r}")
+        return safe_id
+
     def _daily_file(self, date: str | None = None, conversation_id: str | None = None) -> Path:
         if date is not None:
             # 验证日期格式 YYYY-MM-DD
@@ -106,12 +114,15 @@ class MemoryStore:
         else:
             date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
         if conversation_id:
-            # 验证 conversation_id 不含路径遍历字符
-            safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in conversation_id)
-            if safe_id != conversation_id:
-                raise ValueError(f"Invalid conversation_id: {conversation_id!r}")
-            return self._path / "daily" / safe_id / f"{date}.md"
+            safe_id = self._safe_conversation_id(conversation_id)
+            # 规范布局：{path}/conversations/{conversation_id}/daily/{date}.md
+            # （与对话级 store 自身的 daily 目录一致，保证读写同路径）
+            return self._path / "conversations" / safe_id / "daily" / f"{date}.md"
         return self._path / "daily" / f"{date}.md"
+
+    def _legacy_daily_file(self, date: str, conversation_id: str) -> Path:
+        """旧布局（历史数据兜底）：{path}/daily/{conversation_id}/{date}.md。"""
+        return self._path / "daily" / conversation_id / f"{date}.md"
 
     def _read(self, path: Path) -> str:
         if not path.exists():
@@ -260,11 +271,39 @@ class MemoryStore:
 
     # --- 每日记录 ---
 
+    def _conversation_daily_dirs(self) -> list[Path]:
+        """扫描所有对话级 daily 目录（规范布局 conversations/{id}/daily 与旧布局 daily/{id}/）。"""
+        dirs: list[Path] = []
+        conv_root = self._path / "conversations"
+        if conv_root.exists():
+            for sub in sorted(conv_root.iterdir()):
+                if sub.is_dir():
+                    d = sub / "daily"
+                    if d.exists():
+                        dirs.append(d)
+        legacy_root = self._path / "daily"
+        if legacy_root.exists():
+            for sub in sorted(legacy_root.iterdir()):
+                if sub.is_dir():
+                    dirs.append(sub)
+        return dirs
+
     def load_daily(self, date: str | None = None, conversation_id: str | None = None) -> str:
         with self._lock:
             if conversation_id:
-                return self._read(self._daily_file(date, conversation_id))
-            # 不指定对话时，合并根目录和所有子目录中对应日期的内容
+                safe_id = self._safe_conversation_id(conversation_id)
+                if date is None:
+                    date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+                # 规范布局优先，旧布局兜底
+                parts: list[str] = []
+                content = self._read(self._daily_file(date, safe_id))
+                if content:
+                    parts.append(content)
+                legacy = self._read(self._legacy_daily_file(date, safe_id))
+                if legacy:
+                    parts.append(legacy)
+                return "\n".join(parts)
+            # 不指定对话时，合并根目录和所有对话级目录中对应日期的内容
             if date is None:
                 date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
             parts: list[str] = []
@@ -272,14 +311,10 @@ class MemoryStore:
             root_content = self._read(root_file)
             if root_content:
                 parts.append(root_content)
-            daily_dir = self._path / "daily"
-            if daily_dir.exists():
-                for sub in sorted(daily_dir.iterdir()):
-                    if sub.is_dir():
-                        sub_file = sub / f"{date}.md"
-                        sub_content = self._read(sub_file)
-                        if sub_content:
-                            parts.append(sub_content)
+            for d in self._conversation_daily_dirs():
+                sub_content = self._read(d / f"{date}.md")
+                if sub_content:
+                    parts.append(sub_content)
             return "\n".join(parts)
 
     def append_daily(self, content: str, date: str | None = None, conversation_id: str | None = None) -> None:
@@ -294,24 +329,41 @@ class MemoryStore:
             self._write(path, existing + entry)
 
     def list_dailies(self, conversation_id: str | None = None) -> list[str]:
-        daily_dir = self._path / "daily"
         if conversation_id:
-            daily_dir = daily_dir / conversation_id
-        if not daily_dir.exists():
-            return []
-        if conversation_id:
-            files = sorted(daily_dir.glob("*.md"))
-        else:
-            # 不指定对话时，搜索根目录和所有子目录中的 .md 文件
-            files = sorted(daily_dir.glob("**/*.md"))
-        return sorted(set(f.stem for f in files))
+            safe_id = self._safe_conversation_id(conversation_id)
+            dates: set[str] = set()
+            conv_daily = self._path / "conversations" / safe_id / "daily"
+            if conv_daily.exists():
+                dates.update(f.stem for f in conv_daily.glob("*.md"))
+            legacy_daily = self._path / "daily" / safe_id
+            if legacy_daily.exists():
+                dates.update(f.stem for f in legacy_daily.glob("*.md"))
+            return sorted(dates)
+        # 不指定对话：聚合根 daily/ + 所有对话级 daily/ 的日期
+        dates: set[str] = set()
+        root_daily = self._path / "daily"
+        if root_daily.exists():
+            dates.update(f.stem for f in root_daily.glob("*.md"))
+        for d in self._conversation_daily_dirs():
+            dates.update(f.stem for f in d.glob("*.md"))
+        return sorted(dates)
 
     def list_conversation_dailies(self) -> list[str]:
-        """列出所有有 daily 记录的 conversation_id。"""
-        daily_dir = self._path / "daily"
-        if not daily_dir.exists():
-            return []
-        return [d.name for d in daily_dir.iterdir() if d.is_dir()]
+        """列出所有有 daily 记录的 conversation_id（规范布局 conversations/{id}/ 与旧布局 daily/{id}/）。"""
+        conv_ids: set[str] = set()
+        conv_root = self._path / "conversations"
+        if conv_root.exists():
+            for d in conv_root.iterdir():
+                if d.is_dir():
+                    daily_dir = d / "daily"
+                    if daily_dir.exists() and any(daily_dir.glob("*.md")):
+                        conv_ids.add(d.name)
+        legacy_root = self._path / "daily"
+        if legacy_root.exists():
+            for d in legacy_root.iterdir():
+                if d.is_dir() and any(d.glob("*.md")):
+                    conv_ids.add(d.name)
+        return sorted(conv_ids)
 
     # --- 清空操作 ---
 
@@ -322,21 +374,27 @@ class MemoryStore:
 
     def clear_daily(self, conversation_id: str, date: str | None = None) -> None:
         """清除指定对话的daily记录。指定date只清当天，否则清全部。"""
-        # 验证 conversation_id 不含路径遍历字符
-        safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in conversation_id)
-        if safe_id != conversation_id:
-            raise ValueError(f"Invalid conversation_id: {conversation_id!r}")
+        safe_id = self._safe_conversation_id(conversation_id)
         with self._lock:
             if date:
-                daily_file = self._daily_file(date, conversation_id)
-                if daily_file.exists():
-                    daily_file.unlink()
+                # 规范布局与旧布局都清
+                for path in (
+                    self._daily_file(date, safe_id),
+                    self._legacy_daily_file(date, safe_id),
+                ):
+                    if path.exists():
+                        path.unlink()
             else:
-                daily_dir = self._path / "daily" / conversation_id
-                if daily_dir.exists() and daily_dir.is_dir():
-                    # 确保解析后的路径仍在 daily 目录下
-                    daily_dir.resolve().relative_to((self._path / "daily").resolve())
-                    shutil.rmtree(daily_dir)
+                # 规范布局：conversations/{id}/daily
+                conv_daily_dir = self._path / "conversations" / safe_id / "daily"
+                if conv_daily_dir.exists():
+                    conv_daily_dir.resolve().relative_to((self._path / "conversations").resolve())
+                    shutil.rmtree(conv_daily_dir)
+                # 旧布局：daily/{id}
+                legacy_dir = self._path / "daily" / safe_id
+                if legacy_dir.exists():
+                    legacy_dir.resolve().relative_to((self._path / "daily").resolve())
+                    shutil.rmtree(legacy_dir)
 
     def clear_dailies(self) -> None:
         with self._lock:

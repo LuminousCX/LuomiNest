@@ -309,11 +309,42 @@ class DistillationService:
                 return False
 
             await DistillationService._merge_observation(agent_id, conversation_id, new_observation, llm_adapter)
+            # 知识自动提取：随蒸馏触发，合并到 knowledge.md（失败不影响蒸馏主流程）
+            await DistillationService._extract_knowledge(agent_id, messages, llm_adapter)
             return True
 
         except Exception as e:
             logger.error(f"[Distill] distill_and_merge failed: {e}", exc_info=True)
             return False
+
+    @staticmethod
+    async def _extract_knowledge(agent_id: str, messages: list, llm_adapter) -> None:
+        """从近期对话中提取知识点并合并到知识库。
+
+        每次蒸馏成功后触发一次 LLM 调用，将新知识点与现有 knowledge.md 合并。
+        失败仅记日志，不影响蒸馏主流程。
+        """
+        try:
+            recent = []
+            for m in messages[-16:]:
+                role = m.get("role", "")
+                content = m.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    recent.append(f"[{role}] {content[:200]}")
+            if not recent:
+                return
+
+            engine = get_memory_engine(agent_id)
+            merged = await engine.extract_knowledge(
+                "\n".join(recent),
+                existing_knowledge=engine.load_knowledge(),
+                llm_adapter=llm_adapter,
+            )
+            if merged and merged.strip():
+                engine.save_knowledge(merged.strip())
+                logger.info(f"[Distill] Knowledge merged: {len(merged)} chars")
+        except Exception as e:
+            logger.warning(f"[Distill] Knowledge extraction failed: {e}", exc_info=True)
 
     @staticmethod
     async def final_distill(
@@ -342,6 +373,8 @@ class DistillationService:
         new_observation = await DistillationService.distill_rounds(unprocessed_turns if unprocessed_turns else messages, llm_adapter)
         if new_observation:
             await DistillationService._merge_observation(agent_id, conversation_id, new_observation, llm_adapter)
+        # 对话结束兜底：随最终蒸馏提取知识
+        await DistillationService._extract_knowledge(agent_id, messages, llm_adapter)
 
         DistillationService._last_distilled_turns.pop(conversation_id, None)
 

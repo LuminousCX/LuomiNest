@@ -355,6 +355,12 @@ export interface AvatarDeleteResult {
   error?: string
 }
 
+/** 协作者头像缓存查询结果：缓存文件存在时 url 为 luominest-avatar://cached/ 协议地址，否则为 null */
+export interface CollaboratorAvatarResult {
+  key: string
+  url: string | null
+}
+
 export interface DesktopPetResult {
   success: boolean
   error?: string
@@ -424,6 +430,8 @@ export interface ElectronApi {
     listImportedModels: () => Promise<PetModelInfo[]>
     deleteModel: (modelName: string) => Promise<AvatarDeleteResult>
     getImportedModelsPath: () => Promise<string>
+    getCollaboratorAvatar: (key: string) => Promise<CollaboratorAvatarResult>
+    updateCollaboratorAvatars: () => Promise<Record<string, boolean>>
   }
   desktopPet: {
     open: (modelInfo?: PetModelInfo) => Promise<DesktopPetResult>

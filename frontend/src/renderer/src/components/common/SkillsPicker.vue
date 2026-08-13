@@ -10,7 +10,7 @@ import {
   ChevronDown,
 } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../../stores/marketplace'
-import type { MarketplaceItem } from '../../types/marketplace'
+import { usePluginsStore } from '../../stores/plugins'
 
 const props = defineProps<{
   selectedIds: string[]
@@ -22,26 +22,49 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const marketplaceStore = useMarketplaceStore()
+const pluginsStore = usePluginsStore()
 
 const showDropdown = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
 const triggerBtnRef = ref<HTMLElement | null>(null)
 
-const installedSkills = computed(() => marketplaceStore.installedSkills)
+/** 技能选项（合并后的统一结构） */
+interface SkillOption {
+  id: string
+  name: string
+  description: string
+}
+
+/**
+ * 可用技能列表 — 合并两个来源：
+ * 1. 后端已加载技能（backend/skills，经 /api/v1/skills 读取，系统级）
+ * 2. 市场已安装技能（marketplace store）
+ * 按 id 去重合并（后端优先），使用户能选择系统内任意已启用技能。
+ */
+const availableSkills = computed<SkillOption[]>(() => {
+  const merged = new Map<string, SkillOption>()
+  for (const s of marketplaceStore.installedSkills) {
+    merged.set(s.id, { id: s.id, name: s.name, description: s.description })
+  }
+  for (const s of pluginsStore.skills) {
+    merged.set(s.id, { id: s.id, name: s.name || s.id, description: s.description })
+  }
+  return [...merged.values()]
+})
 
 const filteredSkills = computed(() => {
-  if (!searchQuery.value) return installedSkills.value
+  if (!searchQuery.value) return availableSkills.value
   const q = searchQuery.value.toLowerCase()
-  return installedSkills.value.filter(
+  return availableSkills.value.filter(
     (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)
   )
 })
 
 const selectedSkills = computed(() => {
   return props.selectedIds
-    .map((id) => installedSkills.value.find((s) => s.id === id))
-    .filter((s): s is MarketplaceItem => Boolean(s))
+    .map((id) => availableSkills.value.find((s) => s.id === id))
+    .filter((s): s is SkillOption => Boolean(s))
 })
 
 const toggleDropdown = () => {
@@ -95,6 +118,8 @@ const handleEscape = (e: KeyboardEvent) => {
 }
 
 onMounted(() => {
+  // 加载后端已加载技能（backend/skills），与市场技能合并供选择
+  void pluginsStore.refreshSkills()
   document.addEventListener('click', handleClickOutside, true)
   document.addEventListener('keydown', handleEscape)
 })
@@ -182,19 +207,19 @@ onBeforeUnmount(() => {
           <div v-if="filteredSkills.length === 0" class="luomi-skills-empty">
             <Blocks :size="28" />
             <p class="luomi-skills-empty-title">
-              {{ installedSkills.length === 0 ? '暂无已安装技能' : '未找到匹配的技能' }}
+              {{ availableSkills.length === 0 ? '暂无可用技能' : '未找到匹配的技能' }}
             </p>
             <p class="luomi-skills-empty-desc">
-              {{ installedSkills.length === 0 ? '前往市场安装技能后即可在此选择' : '试试其他关键词' }}
+              {{ availableSkills.length === 0 ? '前往市场安装技能，或在设置-插件与技能中创建' : '试试其他关键词' }}
             </p>
-            <button v-if="installedSkills.length === 0" class="luomi-skills-empty-action" @click.stop="goToMarket">
+            <button v-if="availableSkills.length === 0" class="luomi-skills-empty-action" @click.stop="goToMarket">
               去市场看看
             </button>
           </div>
         </div>
 
         <div class="luomi-skills-dropdown-footer">
-          <span class="luomi-skills-count">已选 {{ selectedIds.length }} / {{ installedSkills.length }} 个</span>
+          <span class="luomi-skills-count">已选 {{ selectedIds.length }} / {{ availableSkills.length }} 个</span>
           <button class="luomi-skills-manage" @click.stop="goToMarket">
             管理技能
           </button>

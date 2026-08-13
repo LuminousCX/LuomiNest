@@ -7,7 +7,7 @@
 import { computed } from 'vue'
 import LumiCard from '../common/LumiCard.vue'
 import {
-  SKILL_ITEMS, STYLE_TAGS, MODEL_OPTIONS,
+  SKILL_ITEMS, STYLE_TAGS,
   type AvatarOption, type AgentFormData
 } from '../../composables/useAgentCreateForm'
 
@@ -68,20 +68,8 @@ const enabledSkills = computed(() =>
             <span class="detail-value">{{ formData.description || '未设置' }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">模型</span>
-            <span class="detail-value">{{ MODEL_OPTIONS.find(m => m.id === formData.selectedModel)?.label }}</span>
-          </div>
-          <div class="detail-row">
             <span class="detail-label">已选技能</span>
             <span class="detail-value">{{ enabledSkills.length }} 项</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Temperature</span>
-            <span class="detail-value">{{ formData.temperature }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Max Tokens</span>
-            <span class="detail-value">{{ formData.maxTokens }}</span>
           </div>
         </div>
       </LumiCard>

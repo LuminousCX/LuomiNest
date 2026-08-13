@@ -109,10 +109,24 @@ class LuomiNestMemorySearchTool(ToolBase):
                 metadata={"query": query, "result_count": 0},
             )
 
-        # 反查 fact 内容
+        # 反查 fact 内容（仅有效事实：is_latest 且未过期，向量索引过期条目兜底过滤）
         try:
+            from datetime import datetime, timezone
+
             memory_data = engine.load_data()
-            fact_map = {f.id: f for f in memory_data.facts}
+            valid_facts = []
+            for f in memory_data.facts:
+                if not f.is_latest:
+                    continue
+                if f.expires_at:
+                    try:
+                        exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
+                        if exp_time <= datetime.now(timezone.utc):
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+                valid_facts.append(f)
+            fact_map = {f.id: f for f in valid_facts}
         except Exception as e:
             logger.error(f"[MemorySearch] 加载记忆数据失败: {e}", exc_info=True)
             return ToolResult.fail(f"记忆数据加载失败: {e}")

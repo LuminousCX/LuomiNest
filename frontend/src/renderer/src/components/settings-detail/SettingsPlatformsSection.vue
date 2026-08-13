@@ -51,12 +51,10 @@ const newPlatformConfig = ref<Record<string, any>>({})
 const editingInstance = ref<PlatformInstance | null>(null)
 const editConfig = ref<Record<string, any>>({})
 
+// 2026-08 全局模型统一：主 Agent 对话框仅编辑人设（系统提示词），
+// 模型与生成参数统一在"模型设置"页配置。
 const mainAgentEdit = ref({
-  provider: '',
-  model: '',
   systemPrompt: '',
-  temperature: 0.7,
-  maxTokens: 4096,
 })
 const mainAgentSaving = ref(false)
 
@@ -190,11 +188,7 @@ const handleRefreshPlatforms = async () => {
 const openMainAgentDialog = () => {
   if (platformStore.mainAgent) {
     mainAgentEdit.value = {
-      provider: platformStore.mainAgent.provider,
-      model: platformStore.mainAgent.model,
       systemPrompt: platformStore.mainAgent.systemPrompt,
-      temperature: platformStore.mainAgent.temperature,
-      maxTokens: platformStore.mainAgent.maxTokens,
     }
   }
   showMainAgentDialog.value = true
@@ -208,11 +202,7 @@ const handleSaveMainAgent = async () => {
   mainAgentSaving.value = true
   try {
     await platformStore.updateMainAgent({
-      provider: mainAgentEdit.value.provider,
-      model: mainAgentEdit.value.model,
       systemPrompt: mainAgentEdit.value.systemPrompt,
-      temperature: mainAgentEdit.value.temperature,
-      maxTokens: mainAgentEdit.value.maxTokens,
     })
     closeMainAgentDialog()
   } catch (e) {

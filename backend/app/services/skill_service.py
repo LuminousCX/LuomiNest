@@ -206,6 +206,19 @@ class CxSkillService:
         """
         return cx_skill_registry.build_skills_prompt(context=context, max_skills=max_skills)
 
+    def build_selected_skills_prompt(self, skill_ids: list[str]) -> str:
+        """构建用户显式选择技能的 prompt 块（含 body）。
+
+        供 ContextService 在用户主动勾选技能时注入完整指令体，优先于关键词自动匹配。
+
+        Args:
+            skill_ids: 用户选择的技能 ID 列表
+
+        Returns:
+            <available_skills> 块字符串，无有效技能时返回空字符串
+        """
+        return cx_skill_registry.build_selected_skills_prompt(skill_ids)
+
     # ------------------------------------------------------------------
     # 卸载（用于热重载/卸载场景）
     # ------------------------------------------------------------------

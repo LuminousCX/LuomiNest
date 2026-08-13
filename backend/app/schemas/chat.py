@@ -27,6 +27,8 @@ class ChatRequest(BaseModel):
     ] | None = None
     search_results: str | None = Field(default=None, max_length=100_000)
     versions: list[dict[str, Any]] | None = None
+    # 用户本次请求显式选择的技能 ID（优先于关键词自动匹配注入）
+    skill_ids: list[str] | None = None
     # Agent 集群调用内部字段（不暴露前端，仅供 agent_tool_call 递归守卫使用）
     is_sub_agent: bool = False
     disable_tools: list[str] | None = None
@@ -62,6 +64,8 @@ class ChatStreamChunk(BaseModel):
     context_tokens: int | None = None
     # 上下文窗口容量（done 时回填，前端用于计算使用百分比）
     context_max_tokens: int | None = None
+    # 模型路由通知（如专业模式推理模型退化为主模型，前端右上角 toast 展示）
+    notice: str | None = None
 
     @field_validator("content", "reasoning_content", mode="before")
     @classmethod

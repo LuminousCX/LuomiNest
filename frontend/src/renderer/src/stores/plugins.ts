@@ -16,7 +16,6 @@ import type {
   CxFrontendPluginInstance,
   CxBackendPlugin,
   CxBackendSkill,
-  CxApiResponse,
   CxPluginStats,
   CxSkillStats,
   CxSkillWriteResult,
@@ -104,12 +103,14 @@ export const usePluginsStore = defineStore('plugins', () => {
   const refreshBackend = async () => {
     loadingBackend.value = true
     try {
+      // useApi 已自动解包 {code,message,data} 信封（code===0 时直接返回 data），
+      // 此处直接使用返回值，不要再访问 .data（否则列表永远为空）
       const [pluginsResp, statsResp] = await Promise.all([
-        apiGet<CxApiResponse<CxBackendPlugin[]>>('/plugins'),
-        apiGet<CxApiResponse<CxPluginStats>>('/plugins/stats'),
+        apiGet<CxBackendPlugin[]>('/plugins'),
+        apiGet<CxPluginStats>('/plugins/stats'),
       ])
-      backendPlugins.value = pluginsResp.data ?? []
-      backendStats.value = statsResp.data ?? { total: 0, active: 0, disabled: 0, disabled_ids: [] }
+      backendPlugins.value = Array.isArray(pluginsResp) ? pluginsResp : []
+      backendStats.value = statsResp ?? { total: 0, active: 0, disabled: 0, disabled_ids: [] }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('Failed to load backend plugins:', msg)
@@ -122,14 +123,11 @@ export const usePluginsStore = defineStore('plugins', () => {
   const enableBackendPlugin = async (pluginId: string): Promise<boolean> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxBackendPlugin>>(`/plugins/${pluginId}/enable`)
-        if (resp.code === 0) {
-          await refreshBackend()
-          toast.success(`后端插件已启用：${pluginId}`)
-          return true
-        }
-        toast.error(`后端插件启用失败：${resp.message}`)
-        return false
+        // useApi 已自动解包信封并抛出业务错误，成功时直接返回 data
+        await apiPost<CxBackendPlugin>(`/plugins/${pluginId}/enable`)
+        await refreshBackend()
+        toast.success(`后端插件已启用：${pluginId}`)
+        return true
       } catch (e) {
         toast.error(`后端插件启用失败：${e instanceof Error ? e.message : String(e)}`)
         return false
@@ -139,14 +137,10 @@ export const usePluginsStore = defineStore('plugins', () => {
   const disableBackendPlugin = async (pluginId: string): Promise<boolean> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxBackendPlugin>>(`/plugins/${pluginId}/disable`)
-        if (resp.code === 0) {
-          await refreshBackend()
-          toast.success(`后端插件已禁用：${pluginId}`)
-          return true
-        }
-        toast.error(`后端插件禁用失败：${resp.message}`)
-        return false
+        await apiPost<CxBackendPlugin>(`/plugins/${pluginId}/disable`)
+        await refreshBackend()
+        toast.success(`后端插件已禁用：${pluginId}`)
+        return true
       } catch (e) {
         toast.error(`后端插件禁用失败：${e instanceof Error ? e.message : String(e)}`)
         return false
@@ -156,14 +150,10 @@ export const usePluginsStore = defineStore('plugins', () => {
   const reloadBackendPlugin = async (pluginId: string): Promise<boolean> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxBackendPlugin>>(`/plugins/${pluginId}/reload`)
-        if (resp.code === 0) {
-          await refreshBackend()
-          toast.success(`后端插件已重载：${pluginId}`)
-          return true
-        }
-        toast.error(`后端插件重载失败：${resp.message}`)
-        return false
+        await apiPost<CxBackendPlugin>(`/plugins/${pluginId}/reload`)
+        await refreshBackend()
+        toast.success(`后端插件已重载：${pluginId}`)
+        return true
       } catch (e) {
         toast.error(`后端插件重载失败：${e instanceof Error ? e.message : String(e)}`)
         return false
@@ -173,16 +163,12 @@ export const usePluginsStore = defineStore('plugins', () => {
   const reloadAllBackendPlugins = async (): Promise<boolean> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<{ loaded_count: number }>>('/plugins/reload-all')
-        if (resp.code === 0) {
-          await refreshBackend()
-          toast.success(`已重载全部后端插件（共 ${resp.data?.loaded_count ?? 0} 个）`)
-          return true
-        }
-        toast.error(`重载全部后端插件失败：${resp.message}`)
-        return false
-      } catch {
-        toast.error('重载全部后端插件失败')
+        const result = await apiPost<{ loaded_count: number }>('/plugins/reload-all')
+        await refreshBackend()
+        toast.success(`已重载全部后端插件（共 ${result?.loaded_count ?? 0} 个）`)
+        return true
+      } catch (e) {
+        toast.error(`重载全部后端插件失败：${e instanceof Error ? e.message : String(e)}`)
         return false
       }
     })
@@ -192,12 +178,13 @@ export const usePluginsStore = defineStore('plugins', () => {
   const refreshSkills = async () => {
     loadingBackend.value = true
     try {
+      // useApi 已自动解包 {code,message,data} 信封，直接使用返回值
       const [skillsResp, statsResp] = await Promise.all([
-        apiGet<CxApiResponse<CxBackendSkill[]>>('/skills'),
-        apiGet<CxApiResponse<CxSkillStats>>('/skills/stats'),
+        apiGet<CxBackendSkill[]>('/skills'),
+        apiGet<CxSkillStats>('/skills/stats'),
       ])
-      skills.value = skillsResp.data ?? []
-      skillStats.value = statsResp.data ?? { total: 0, active: 0, disabled: 0, disabled_ids: [] }
+      skills.value = Array.isArray(skillsResp) ? skillsResp : []
+      skillStats.value = statsResp ?? { total: 0, active: 0, disabled: 0, disabled_ids: [] }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('Failed to load skills:', msg)
@@ -210,14 +197,10 @@ export const usePluginsStore = defineStore('plugins', () => {
   const enableSkill = async (skillId: string): Promise<boolean> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxBackendSkill>>(`/skills/${skillId}/enable`)
-        if (resp.code === 0) {
-          await refreshSkills()
-          toast.success(`技能已启用：${skillId}`)
-          return true
-        }
-        toast.error(`技能启用失败：${resp.message}`)
-        return false
+        await apiPost<CxBackendSkill>(`/skills/${skillId}/enable`)
+        await refreshSkills()
+        toast.success(`技能已启用：${skillId}`)
+        return true
       } catch (e) {
         toast.error(`技能启用失败：${e instanceof Error ? e.message : String(e)}`)
         return false
@@ -227,14 +210,10 @@ export const usePluginsStore = defineStore('plugins', () => {
   const disableSkill = async (skillId: string): Promise<boolean> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxBackendSkill>>(`/skills/${skillId}/disable`)
-        if (resp.code === 0) {
-          await refreshSkills()
-          toast.success(`技能已禁用：${skillId}`)
-          return true
-        }
-        toast.error(`技能禁用失败：${resp.message}`)
-        return false
+        await apiPost<CxBackendSkill>(`/skills/${skillId}/disable`)
+        await refreshSkills()
+        toast.success(`技能已禁用：${skillId}`)
+        return true
       } catch (e) {
         toast.error(`技能禁用失败：${e instanceof Error ? e.message : String(e)}`)
         return false
@@ -244,14 +223,10 @@ export const usePluginsStore = defineStore('plugins', () => {
   const reloadSkill = async (skillId: string): Promise<boolean> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxBackendSkill>>(`/skills/${skillId}/reload`)
-        if (resp.code === 0) {
-          await refreshSkills()
-          toast.success(`技能已重载：${skillId}`)
-          return true
-        }
-        toast.error(`技能重载失败：${resp.message}`)
-        return false
+        await apiPost<CxBackendSkill>(`/skills/${skillId}/reload`)
+        await refreshSkills()
+        toast.success(`技能已重载：${skillId}`)
+        return true
       } catch (e) {
         toast.error(`技能重载失败：${e instanceof Error ? e.message : String(e)}`)
         return false
@@ -261,16 +236,12 @@ export const usePluginsStore = defineStore('plugins', () => {
   const reloadAllSkills = async (): Promise<boolean> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<{ loaded_count: number }>>('/skills/reload-all')
-        if (resp.code === 0) {
-          await refreshSkills()
-          toast.success(`已重载全部技能（共 ${resp.data?.loaded_count ?? 0} 个）`)
-          return true
-        }
-        toast.error(`重载全部技能失败：${resp.message}`)
-        return false
-      } catch {
-        toast.error('重载全部技能失败')
+        const result = await apiPost<{ loaded_count: number }>('/skills/reload-all')
+        await refreshSkills()
+        toast.success(`已重载全部技能（共 ${result?.loaded_count ?? 0} 个）`)
+        return true
+      } catch (e) {
+        toast.error(`重载全部技能失败：${e instanceof Error ? e.message : String(e)}`)
         return false
       }
     })
@@ -280,14 +251,10 @@ export const usePluginsStore = defineStore('plugins', () => {
   /** 读取 SKILL.md 原文（用于编辑回填） */
   const getSkillRaw = async (skillId: string): Promise<string | null> => {
     try {
-      const resp = await apiGet<CxApiResponse<{ skill_id: string; content: string }>>(
+      const result = await apiGet<{ skill_id: string; content: string }>(
         `/skills/${skillId}/raw`,
       )
-      if (resp.code === 0) {
-        return resp.data?.content ?? ''
-      }
-      toast.error(`读取技能原文失败：${resp.message}`)
-      return null
+      return result?.content ?? ''
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       toast.error(`读取技能原文失败：${msg}`)
@@ -301,15 +268,10 @@ export const usePluginsStore = defineStore('plugins', () => {
     content: string,
   ): Promise<CxSkillValidateResult | null> => {
     try {
-      const resp = await apiPost<CxApiResponse<CxSkillValidateResult>>(
+      return await apiPost<CxSkillValidateResult>(
         '/skills/validate',
         { skill_id: skillId, content, overwrite: true },
       )
-      if (resp.code === 0) {
-        return resp.data
-      }
-      toast.error(`技能校验失败：${resp.message}`)
-      return null
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       toast.error(`技能校验失败：${msg}`)
@@ -325,18 +287,14 @@ export const usePluginsStore = defineStore('plugins', () => {
   ): Promise<CxSkillWriteResult | null> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxSkillWriteResult>>('/skills/write', {
+        const result = await apiPost<CxSkillWriteResult>('/skills/write', {
           skill_id: skillId,
           content,
           overwrite,
         })
-        if (resp.code === 0) {
-          await refreshSkills()
-          toast.success(`技能已保存：${skillId}`)
-          return resp.data
-        }
-        toast.error(`技能保存失败：${resp.message}`)
-        return null
+        await refreshSkills()
+        toast.success(`技能已保存：${skillId}`)
+        return result
       } catch (e) {
         toast.error(`技能保存失败：${e instanceof Error ? e.message : String(e)}`)
         return null
@@ -347,16 +305,12 @@ export const usePluginsStore = defineStore('plugins', () => {
   const deleteSkill = async (skillId: string): Promise<boolean> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxSkillDeleteResult>>('/skills/delete', {
+        await apiPost<CxSkillDeleteResult>('/skills/delete', {
           skill_id: skillId,
         })
-        if (resp.code === 0) {
-          await refreshSkills()
-          toast.success(`技能已删除：${skillId}`)
-          return true
-        }
-        toast.error(`技能删除失败：${resp.message}`)
-        return false
+        await refreshSkills()
+        toast.success(`技能已删除：${skillId}`)
+        return true
       } catch (e) {
         toast.error(`技能删除失败：${e instanceof Error ? e.message : String(e)}`)
         return false
@@ -370,14 +324,9 @@ export const usePluginsStore = defineStore('plugins', () => {
     pluginId: string,
   ): Promise<CxPluginConfigResult | null> => {
     try {
-      const resp = await apiGet<CxApiResponse<CxPluginConfigResult>>(
+      return await apiGet<CxPluginConfigResult>(
         `/plugins/assistant/config/${pluginId}`,
       )
-      if (resp.code === 0) {
-        return resp.data
-      }
-      toast.error(`读取插件配置失败：${resp.message}`)
-      return null
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       toast.error(`读取插件配置失败：${msg}`)
@@ -391,16 +340,12 @@ export const usePluginsStore = defineStore('plugins', () => {
   ): Promise<CxPluginConfigResetResult | null> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxPluginConfigResetResult>>(
+        const result = await apiPost<CxPluginConfigResetResult>(
           '/plugins/assistant/config/reset',
           { plugin_id: pluginId },
         )
-        if (resp.code === 0) {
-          toast.success(`插件配置已重置：${pluginId}`)
-          return resp.data
-        }
-        toast.error(`重置插件配置失败：${resp.message}`)
-        return null
+        toast.success(`插件配置已重置：${pluginId}`)
+        return result
       } catch (e) {
         toast.error(`重置插件配置失败：${e instanceof Error ? e.message : String(e)}`)
         return null
@@ -414,13 +359,10 @@ export const usePluginsStore = defineStore('plugins', () => {
   ): Promise<CxConfigSuggestion | null> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxConfigSuggestion>>(
+        return await apiPost<CxConfigSuggestion>(
           '/plugins/assistant/suggest',
           { plugin_id: pluginId, user_request: userRequest },
         )
-        if (resp.code === 0) return resp.data
-        toast.error(`生成配置建议失败：${resp.message}`)
-        return null
       } catch (e) {
         toast.error(`生成配置建议失败：${e instanceof Error ? e.message : String(e)}`)
         return null
@@ -435,7 +377,7 @@ export const usePluginsStore = defineStore('plugins', () => {
   ): Promise<CxConfigApplyResult | null> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxConfigApplyResult>>(
+        const result = await apiPost<CxConfigApplyResult>(
           '/plugins/assistant/apply',
           {
             plugin_id: pluginId,
@@ -449,12 +391,8 @@ export const usePluginsStore = defineStore('plugins', () => {
             skip_invalid: skipInvalid,
           },
         )
-        if (resp.code === 0) {
-          toast.success(`配置已应用：${resp.data?.applied ?? 0} 项`)
-          return resp.data
-        }
-        toast.error(`应用配置失败：${resp.message}`)
-        return null
+        toast.success(`配置已应用：${result?.applied ?? 0} 项`)
+        return result
       } catch (e) {
         toast.error(`应用配置失败：${e instanceof Error ? e.message : String(e)}`)
         return null
@@ -467,13 +405,10 @@ export const usePluginsStore = defineStore('plugins', () => {
   ): Promise<CxPluginConfigExplain | null> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxPluginConfigExplain>>(
+        return await apiPost<CxPluginConfigExplain>(
           '/plugins/assistant/explain',
           { plugin_id: pluginId },
         )
-        if (resp.code === 0) return resp.data
-        toast.error(`配置解释失败：${resp.message}`)
-        return null
       } catch (e) {
         toast.error(`配置解释失败：${e instanceof Error ? e.message : String(e)}`)
         return null
@@ -493,7 +428,7 @@ export const usePluginsStore = defineStore('plugins', () => {
   }): Promise<CxPluginScaffold | null> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxPluginScaffold>>(
+        const result = await apiPost<CxPluginScaffold>(
           '/plugins/assistant/scaffold/generate',
           {
             plugin_id: payload.pluginId,
@@ -506,12 +441,8 @@ export const usePluginsStore = defineStore('plugins', () => {
             settings_decl: payload.settingsDecl,
           },
         )
-        if (resp.code === 0) {
-          toast.success(`脚手架已生成：${payload.pluginId}`)
-          return resp.data
-        }
-        toast.error(`生成脚手架失败：${resp.message}`)
-        return null
+        toast.success(`脚手架已生成：${payload.pluginId}`)
+        return result
       } catch (e) {
         toast.error(`生成脚手架失败：${e instanceof Error ? e.message : String(e)}`)
         return null
@@ -525,17 +456,13 @@ export const usePluginsStore = defineStore('plugins', () => {
   ): Promise<CxPluginScaffoldWriteResult | null> =>
     withOperating(async () => {
       try {
-        const resp = await apiPost<CxApiResponse<CxPluginScaffoldWriteResult>>(
+        const result = await apiPost<CxPluginScaffoldWriteResult>(
           '/plugins/assistant/scaffold/write',
           { plugin_id: pluginId, overwrite },
         )
-        if (resp.code === 0) {
-          await refreshBackend()
-          toast.success(`脚手架已写入磁盘：${pluginId}`)
-          return resp.data
-        }
-        toast.error(`写入脚手架失败：${resp.message}`)
-        return null
+        await refreshBackend()
+        toast.success(`脚手架已写入磁盘：${pluginId}`)
+        return result
       } catch (e) {
         toast.error(`写入脚手架失败：${e instanceof Error ? e.message : String(e)}`)
         return null
@@ -545,10 +472,8 @@ export const usePluginsStore = defineStore('plugins', () => {
   /** 列出所有历史脚手架记录 */
   const listPluginScaffolds = async (): Promise<CxPluginScaffold[]> => {
     try {
-      const resp = await apiGet<CxApiResponse<CxPluginScaffold[]>>(
-        '/plugins/assistant/scaffolds',
-      )
-      return resp.code === 0 ? (resp.data ?? []) : []
+      const result = await apiGet<CxPluginScaffold[]>('/plugins/assistant/scaffolds')
+      return Array.isArray(result) ? result : []
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('Failed to list plugin scaffolds:', msg)

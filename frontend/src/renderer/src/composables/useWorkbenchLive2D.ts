@@ -10,7 +10,6 @@
  */
 import { ref, computed, watch, nextTick, type ComputedRef, type VNodeRef } from 'vue'
 import { useModelStore } from '../stores/model'
-import { usePlatformStore } from '../stores/platform'
 import { useAvatarControlStore } from '../stores/avatar-control'
 import { useTtsEngineStore } from '../stores/tts-engine'
 import { useLuomiNestLive2D } from './useLuomiNestLive2D'
@@ -34,7 +33,6 @@ export interface WorkbenchModelOption {
 export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
   const { isDesktopMode } = options
   const modelStore = useModelStore()
-  const platformStore = usePlatformStore()
   const avatarControl = useAvatarControlStore()
   const ttsEngine = useTtsEngineStore()
   const toast = useToast()
@@ -186,7 +184,16 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
 
   const selectModel = async (providerId: string, modelId: string): Promise<void> => {
     try {
-      await platformStore.updateMainAgent({ provider: providerId, model: modelId })
+      // 2026-08 全局模型统一：工作台模型下拉写入全局主模型配置
+      // （config_items['model_config']），与设置页"模型设置"同一权威源。
+      // 乐观更新：先改本地 modelConfig 让按钮文案即时反映，写库失败时
+      // updateModelConfig 内部会保留本地值并提示。
+      modelStore.modelConfig.defaultProvider = providerId
+      modelStore.modelConfig.defaultModel = modelId
+      await modelStore.updateModelConfig({
+        defaultProvider: providerId,
+        defaultModel: modelId,
+      })
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : '未知错误'
       toast.error(`切换模型失败：${errMsg}`)

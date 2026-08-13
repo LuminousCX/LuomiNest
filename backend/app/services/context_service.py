@@ -313,6 +313,27 @@ Examples:
             return ""
 
     @staticmethod
+    def build_user_selected_skills_prompt(skill_ids: list[str]) -> str:
+        """构建用户显式选择技能的 <available_skills> 块（注入完整 body）。
+
+        与自动匹配注入的区别：用户主动勾选的技能无条件注入，
+        不受关键词匹配限制，确保 AI 按所选技能执行。
+
+        Args:
+            skill_ids: 用户本次请求显式选择的技能 ID 列表
+
+        Returns:
+            <available_skills> 块文本；无有效技能时返回空字符串
+        """
+        if not skill_ids:
+            return ""
+        try:
+            return cx_skill_service.build_selected_skills_prompt(skill_ids)
+        except Exception as e:
+            logger.debug(f"[ContextService] selected skills injection skipped: {e}")
+            return ""
+
+    @staticmethod
     def build_content_with_file(
         content: str | list, file_content: str, file_type: str = "text",
         supports_vision: bool = True, file_name: str | None = None,

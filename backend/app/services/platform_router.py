@@ -62,12 +62,20 @@ class LuomiNestPlatformRouter:
             return self._processing_locks[session_key]
 
     def _resolve_instance_model(self, instance_id: str) -> tuple[str, str, str, float, int]:
-        """解析平台实例的模型配置，空值回退到主 Agent 配置。
+        """解析平台实例的模型配置，空值回退到全局主模型配置。
 
         返回 (provider, model, system_prompt, temperature, max_tokens)。
+
+        2026-08 全局模型统一后：
+        - provider/model 回退到全局主模型（resolve_main_agent_provider_model 已委托全局）；
+        - temperature/max_tokens 回退到全局生成参数（不再读 main_agent 人设配置）；
+        - system_prompt 仍取主 Agent 人设。
         """
+        from app.infrastructure.database.facades.model_selection import get_global_generation_defaults
+
         main_config = load_luominest_main_agent_config()
         main_provider, main_model = resolve_main_agent_provider_model()
+        global_temperature, global_max_tokens = get_global_generation_defaults()
 
         inst = get_instance(instance_id)
         if not inst:
@@ -75,8 +83,8 @@ class LuomiNestPlatformRouter:
                 main_provider,
                 main_model,
                 main_config.get("system_prompt", ""),
-                float(main_config.get("temperature", 0.7)),
-                int(main_config.get("max_tokens", 4096)),
+                float(global_temperature),
+                int(global_max_tokens),
             )
 
         inst_cfg = inst.config.get("model_config", {}) or {}
@@ -85,12 +93,12 @@ class LuomiNestPlatformRouter:
         system_prompt = inst_cfg.get("system_prompt") or main_config.get("system_prompt", "")
         temperature = inst_cfg.get("temperature")
         if temperature is None:
-            temperature = float(main_config.get("temperature", 0.7))
+            temperature = float(global_temperature)
         else:
             temperature = float(temperature)
         max_tokens = inst_cfg.get("max_tokens")
         if max_tokens is None:
-            max_tokens = int(main_config.get("max_tokens", 4096))
+            max_tokens = int(global_max_tokens)
         else:
             max_tokens = int(max_tokens)
 

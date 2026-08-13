@@ -161,24 +161,17 @@ const {
 } = convList
 
 const {
-  inputText, selectedSkillIds, showModelDropdown, showReasoning,
+  inputText, selectedSkillIds, showReasoning,
   messages, isStreaming, isLoadingCurrentConv, isBackendReady, currentConvId,
-  currentModel, currentProvider, currentProviderLogo, hasProvider, availableModelOptions,
-  selectModel, canSend, sendMessage, cancelStreaming,
+  currentModel, currentProviderLogo, hasProvider,
+  canSend, sendMessage, cancelStreaming,
   chatMode, chatModeOptions, selectChatMode,
   contextUsage, contextTokens, contextPercent, currentSuggestionMessageId,
   handleSwitchVersion, handleSuggestionClick, handleRegenerate,
   handleDeleteMessage, handleGoBackToStart, handleQuoteMessage, toggleReasoning,
 } = messages_
 
-// —— 外部点击与触发器 ——
-const handleClickOutsideModel = (e: MouseEvent) => {
-  const target = e.target as HTMLElement
-  if (!target.closest('.model-dropdown-container')) {
-    showModelDropdown.value = false
-  }
-}
-
+// —— 外部事件触发器 ——
 function handleChatTrigger(event: CustomEvent) {
   if (event.detail?.message) {
     inputText.value = event.detail.message
@@ -210,13 +203,11 @@ onMounted(async () => {
       socialStore.fetchAgentRoles(),
     ])
   }
-  document.addEventListener('click', handleClickOutsideModel)
   window.addEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
   window.addEventListener('luominest:memory-chat-trigger', handleMemoryChatTrigger as EventListener)
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', handleClickOutsideModel)
   window.removeEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
   window.removeEventListener('luominest:memory-chat-trigger', handleMemoryChatTrigger as EventListener)
   ;(window as unknown as Record<string, unknown>).__memoryChatTrigger = undefined
@@ -291,10 +282,7 @@ onBeforeUnmount(() => {
         :is-backend-ready="isBackendReady"
         :has-provider="hasProvider"
         :current-model="currentModel"
-        :current-provider="currentProvider"
         :current-provider-logo="currentProviderLogo"
-        :available-model-options="availableModelOptions"
-        :show-model-dropdown="showModelDropdown"
         :chat-mode="chatMode"
         :chat-mode-options="chatModeOptions"
         :input-text="inputText"
@@ -327,8 +315,6 @@ onBeforeUnmount(() => {
         @update:selected-skill-ids="selectedSkillIds = $event"
         @send="sendMessage"
         @cancel="cancelStreaming"
-        @toggle-model-dropdown="showModelDropdown = !showModelDropdown"
-        @select-model="selectModel"
         @select-chat-mode="selectChatMode"
         @clear-quote="chatStore.quotedMessage = null"
         @file-preview="openFilePreview"

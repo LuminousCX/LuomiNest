@@ -1,6 +1,7 @@
 import asyncio
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from loguru import logger
 
@@ -96,6 +97,35 @@ class LumiCleanupService:
             logger.info(f"[Cleanup] Deleted {deleted} temp files")
         return deleted
 
+    def cleanup_memory(self) -> int:
+        """清理所有记忆轨道（agents/ 与 users/，含对话级）中的过期事实。
+
+        过期事实仅从 memory.json 移除；向量索引中的过期条目由检索侧
+        有效性过滤兜底（memory_search_tool / context_builder 已过滤）。
+        """
+        memory_root = Path(settings.DATA_DIR) / "memory"
+        if not memory_root.exists():
+            return 0
+        from app.engines.memory.store import MemoryStore
+        from app.engines.memory.fact_manager import FactManager
+
+        removed = 0
+        cleaned_files = 0
+        for memory_file in sorted(memory_root.glob("**/memory.json")):
+            try:
+                store = MemoryStore(memory_file.parent)
+                manager = FactManager(store)
+                n = manager.cleanup_expired_facts()
+                if n > 0:
+                    removed += n
+                    cleaned_files += 1
+            except Exception as e:
+                logger.warning(f"[Cleanup] Memory cleanup failed for {memory_file}: {e}")
+
+        if removed > 0:
+            logger.info(f"[Cleanup] Removed {removed} expired memory facts from {cleaned_files} files")
+        return removed
+
     def run_all(self) -> dict:
         """执行所有清理任务，返回清理统计。"""
         logger.info("[Cleanup] Starting full cleanup...")
@@ -104,6 +134,7 @@ class LumiCleanupService:
             "usage_trimmed": self.cleanup_usage_records(),
             "downloads_deleted": self.cleanup_downloads(),
             "temp_files_deleted": self.cleanup_temp_files(),
+            "memory_expired_facts": self.cleanup_memory(),
         }
         total = sum(stats.values())
         logger.info(f"[Cleanup] Completed: {total} items cleaned ({stats})")

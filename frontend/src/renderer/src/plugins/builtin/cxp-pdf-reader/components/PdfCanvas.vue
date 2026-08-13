@@ -4,13 +4,19 @@
  *
  * 使用 pdfjs-dist 渲染当前页到 canvas。
  * - 动态 import pdfjs-dist，避免构建时硬依赖
- * - workerSrc 使用 CDN（cdnjs）
+ * - workerSrc 使用 Vite 打包的本地 worker（?url 导入），
+ *   规避 CDN 网络不可达与 Electron CSP（worker-src 'self' blob:）拦截导致的
+ *   "Setting up fake worker failed" 报错
  * - 仅渲染当前页（简化版，不做虚拟滚动）
  * - 支持搜索高亮（在文本层标记）
  * - 支持键盘翻页（由父组件已绑定全局监听，这里仅处理组件内 wheel 滚动）
  */
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-vue-next'
+
+// 本地 PDF worker：通过 Vite 的 ?url 后缀将 pdf.worker.min.mjs 作为资源打包，
+// 与主包同源加载，满足 CSP 且无需外部 CDN。
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 // pdfjs-dist 的类型（动态导入，类型宽松处理）
 type PdfDocumentProxy = {
@@ -68,9 +74,9 @@ const loadPdf = async () => {
     // 动态导入 pdfjs-dist
     const pdfjsLib: typeof import('pdfjs-dist') = await import('pdfjs-dist')
 
-    // 配置 workerSrc（使用 CDN，与 pdfjs-dist 版本对齐）
+    // 配置 workerSrc（使用 Vite 打包的本地 worker，同源加载，满足 CSP 约束）
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
     }
 
     // 加载文档

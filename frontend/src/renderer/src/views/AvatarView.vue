@@ -10,7 +10,6 @@ import { useAvatarControlStore } from '@/stores/avatar-control'
 import { useModelStore } from '@/stores/model'
 import { useChatStore } from '@/stores/chat'
 import { useAgentStore } from '@/stores/agent'
-import { usePlatformStore } from '@/stores/platform'
 import { useAvatarWorkshop } from '@/composables/avatar/useAvatarWorkshop'
 import { useAvatarStageRenderer, type StageDriver, type Live2DDriver } from '@/composables/avatar/useAvatarStageRenderer'
 import AvatarHeader from '@/components/avatar/AvatarHeader.vue'
@@ -41,7 +40,6 @@ const avatarControl = useAvatarControlStore()
 const modelStore = useModelStore()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
-const platformStore = usePlatformStore()
 const ttsEngine = useTtsEngineStore()
 const toast = useToast()
 
@@ -649,7 +647,6 @@ async function handleChatSend() {
   isChatStreaming.value = true
   stopAvatarChat()
 
-  const mainAgent = platformStore.mainAgent
   const resolved = modelStore.resolveModel
 
   const targetConvId = chatStore.agentCurrentConvId[MAIN_AGENT_ID] || undefined
@@ -665,10 +662,11 @@ async function handleChatSend() {
     onChunk: (chunk: ChatStreamChunk) => void
   } = {
     agentId: MAIN_AGENT_ID,
-    model: mainAgent?.model || resolved?.model || undefined,
-    provider: mainAgent?.provider || resolved?.provider || undefined,
-    temperature: mainAgent?.temperature ?? modelStore.modelConfig.defaultTemperature,
-    maxTokens: mainAgent?.maxTokens ?? modelStore.modelConfig.defaultMaxTokens,
+    // 2026-08 全局模型统一：皮套工坊使用全局主模型与全局生成参数
+    model: resolved?.model || undefined,
+    provider: resolved?.provider || undefined,
+    temperature: modelStore.modelConfig.defaultTemperature,
+    maxTokens: modelStore.modelConfig.defaultMaxTokens,
     topP: modelStore.modelConfig.defaultTopP,
     targetConvId,
     onChunk: (chunk: ChatStreamChunk) => {
@@ -751,10 +749,9 @@ onMounted(async () => {
     await workshop.switchDisplayMode('desktop')
   }
 
-  // 并发加载后端状态
+  // 并发加载后端状态（2026-08 全局模型统一：模型来源为 modelStore 全局配置）
   await Promise.all([
     chatStore.checkBackend(),
-    platformStore.fetchMainAgent(),
     modelStore.fetchProviders(),
     modelStore.fetchModelConfig(),
   ])

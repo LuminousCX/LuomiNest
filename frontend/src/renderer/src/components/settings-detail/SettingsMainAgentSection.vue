@@ -2,7 +2,6 @@
 import { ref, onMounted } from 'vue'
 import { Brain, Check, AlertCircle, Save, Loader2 } from 'lucide-vue-next'
 import { usePlatformStore } from '../../stores/platform'
-import { useModelStore } from '../../stores/model'
 import { PRESET_AGENT_AVATARS, type PresetAvatar } from '../../composables/useWorkspaceAgentDialogs'
 import LumiButton from '../common/LumiButton.vue'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
@@ -10,7 +9,6 @@ import { createLuomiNestRendererLogger } from '../../utils/logger'
 const logger = createLuomiNestRendererLogger('Settings')
 
 const platformStore = usePlatformStore()
-const modelStore = useModelStore()
 
 const presetAvatars: PresetAvatar[] = PRESET_AGENT_AVATARS
 const agentColors: string[] = [
@@ -24,12 +22,11 @@ const agentColors: string[] = [
   'var(--task-pink)',
 ]
 
+// 2026-08 全局模型统一：主智能体面板仅管理"人设"（系统提示词 / 头像 / 颜色）。
+// 模型与生成参数（provider/model/temperature/maxTokens）统一在"模型设置"页配置，
+// 此处不再读写，避免把陈旧值写回全局配置。
 const mainAgentEdit = ref({
-  provider: '',
-  model: '',
   systemPrompt: '',
-  temperature: 0.7,
-  maxTokens: 4096,
   color: '',
   avatar: null as string | null,
   avatarMode: 'color' as 'color' | 'preset',
@@ -41,17 +38,10 @@ const mainAgentSaveMsg = ref<{ type: 'success' | 'error'; text: string } | null>
 const loadMainAgentConfig = async () => {
   mainAgentLoading.value = true
   try {
-    await Promise.all([
-      platformStore.fetchMainAgent(),
-      modelStore.providers.length === 0 ? modelStore.fetchProviders() : Promise.resolve(),
-    ])
+    await platformStore.fetchMainAgent()
     if (platformStore.mainAgent) {
       mainAgentEdit.value = {
-        provider: platformStore.mainAgent.provider,
-        model: platformStore.mainAgent.model,
         systemPrompt: platformStore.mainAgent.systemPrompt,
-        temperature: platformStore.mainAgent.temperature,
-        maxTokens: platformStore.mainAgent.maxTokens,
         color: platformStore.mainAgent.color || 'var(--lumi-brand)',
         avatar: platformStore.mainAgent.avatar || null,
         avatarMode: platformStore.mainAgent.avatar ? 'preset' : 'color',
@@ -69,11 +59,7 @@ const handleSaveMainAgentConfig = async () => {
   mainAgentSaveMsg.value = null
   try {
     await platformStore.updateMainAgent({
-      provider: mainAgentEdit.value.provider,
-      model: mainAgentEdit.value.model,
       systemPrompt: mainAgentEdit.value.systemPrompt,
-      temperature: mainAgentEdit.value.temperature,
-      maxTokens: mainAgentEdit.value.maxTokens,
       color: mainAgentEdit.value.avatarMode === 'color' ? mainAgentEdit.value.color : '',
       avatar: mainAgentEdit.value.avatarMode === 'preset' ? (mainAgentEdit.value.avatar || '') : '',
     })

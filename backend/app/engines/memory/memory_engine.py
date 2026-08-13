@@ -243,9 +243,9 @@ class MemoryEngine:
         """使用LLM从摘要内容中提取五个部分。"""
         return await self._extractor.extract_summary_sections(content, llm_adapter)
 
-    async def extract_knowledge(self, conversation: str, llm_adapter=None) -> str | None:
-        """使用LLM从对话中提取知识点。"""
-        return await self._extractor.extract_knowledge(conversation, llm_adapter)
+    async def extract_knowledge(self, conversation: str, existing_knowledge: str = "", llm_adapter=None) -> str | None:
+        """使用LLM从对话中提取知识点，并与现有知识库合并。"""
+        return await self._extractor.extract_knowledge(conversation, existing_knowledge, llm_adapter)
 
     def clear_summaries(self) -> None:
         data = self._store.load_data()
@@ -410,6 +410,14 @@ class MemoryEngine:
                 self._fact_manager.merge_facts(conv_data, conv_facts)
                 conv_store.save_data(conv_data)
 
+        # 增量向量化新提取的事实（embedding 失败不影响主流程，B2.3）
+        new_facts = result.get("facts") or []
+        if new_facts:
+            try:
+                await self.vector_dedup(new_facts, conversation_id)
+            except Exception as e:
+                logger.warning(f"[Memory] Vector dedup after profile update failed: {e}")
+
         return result
 
     async def distill_conversation(
@@ -419,7 +427,23 @@ class MemoryEngine:
         correction_hint: str = "",
         conversation_id: str | None = None,
     ) -> str | None:
-        return await self._extractor.distill_conversation(messages, llm_adapter, correction_hint, conversation_id)
+        result = await self._extractor.distill_conversation(messages, llm_adapter, correction_hint, conversation_id)
+
+        # 蒸馏后增量向量化（agent 级 + 对话级 latest facts，B2.3）
+        try:
+            data = self._store.load_data()
+            agent_facts = [f for f in data.facts if f.is_latest]
+            if agent_facts:
+                await self.vector_dedup(agent_facts)
+            if conversation_id:
+                conv_store = self._get_conv_store(conversation_id)
+                conv_facts = [f for f in conv_store.load_data().facts if f.is_latest]
+                if conv_facts:
+                    await self.vector_dedup(conv_facts, conversation_id)
+        except Exception as e:
+            logger.warning(f"[Memory] Vector sync after distill failed: {e}")
+
+        return result
 
     # --- 重置 ---
 
@@ -438,8 +462,8 @@ class MemoryEngine:
     def _knowledge_file(self):
         return self._store._knowledge_file()
 
-    def _find_similar_fact(self, data: MemoryData, content: str):
-        return self._fact_manager._find_similar_fact(data, content)
+    def _find_similar_fact(self, data: MemoryData, fact: FactItem):
+        return self._fact_manager._find_similar_fact(data, fact)
 
     def _deprecate_old_name_facts(self, data: MemoryData, old_name: str, new_name: str) -> None:
         self._fact_manager.deprecate_old_name_facts(data, old_name, new_name)

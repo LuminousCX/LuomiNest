@@ -37,8 +37,8 @@ const PRESET_AGENT_AVATARS: AvatarOption[] = [
   { id: 'pa8', emoji: '', color: 'var(--lumi-amber)', imageUrl: 'luominest-avatar://png/agents/daily-assistant.png' }
 ]
 
-export const STEP_TITLES = ['身份与模型', '技能配置', '高级设置', '确认创建']
-export const STEP_SUBTITLES = ['定义智能体基础信息', '选择并配置能力模块', '调整行为参数', '预览并完成创建']
+export const STEP_TITLES = ['身份设置', '技能配置', '高级设置', '确认创建']
+export const STEP_SUBTITLES = ['定义智能体基础信息', '选择并配置能力模块', '定义系统提示词', '预览并完成创建']
 export const TOTAL_STEPS = 4
 
 export const AVATAR_CATEGORIES = [
@@ -82,12 +82,8 @@ export const STYLE_TAGS = [
   { id: 'expert', label: '专家' }
 ]
 
-export const MODEL_OPTIONS = [
-  { id: 'auto', label: '自动' },
-  { id: 'gpt4o', label: 'GPT-4o' },
-  { id: 'claude', label: 'Claude' },
-  { id: 'gemini', label: 'Gemini' }
-]
+// 2026-08 全局模型统一：Agent 不再单独选择模型，统一使用全局主模型，
+// 因此创建向导不再提供 MODEL_OPTIONS。
 
 export interface SkillItem {
   id: string
@@ -163,10 +159,7 @@ export interface AgentFormData {
   description: string
   selectedAvatarId: string
   selectedStyle: string
-  selectedModel: string
   skills: Record<string, boolean>
-  temperature: number
-  maxTokens: number
   systemPrompt: string
 }
 
@@ -186,10 +179,7 @@ export const useAgentCreateForm = () => {
     description: '',
     selectedAvatarId: randomPresetId,
     selectedStyle: 'professional',
-    selectedModel: 'auto',
     skills: {} as Record<string, boolean>,
-    temperature: 0.7,
-    maxTokens: 4096,
     systemPrompt: ''
   })
 
@@ -260,7 +250,6 @@ export const useAgentCreateForm = () => {
         name: formData.name,
         description: formData.description,
         systemPrompt: formData.systemPrompt,
-        model: formData.selectedModel === 'auto' ? undefined : formData.selectedModel,
         color: selectedAvatar.value.color,
         capabilities: capabilities.length > 0 ? capabilities : ['chat']
       })

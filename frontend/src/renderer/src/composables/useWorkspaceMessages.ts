@@ -11,7 +11,6 @@ import type { AgentProfile, ChatMessage } from '../types'
 import type { ChatModeLevel, WorkflowModeOption } from '../components/workbench/types'
 import { useChatStore } from '../stores/chat'
 import { useModelStore } from '../stores/model'
-import { useAgentStore } from '../stores/agent'
 import { useApi } from './useApi'
 import { useToast } from './useToast'
 import { getProviderLogo } from '../config/provider-logos'
@@ -23,15 +22,6 @@ interface WorkspaceAgentChatComponent {
   scrollToSearchResult: (keyword: string) => void
   focusTextarea: () => void
   autoResize: () => void
-}
-
-/** 模型下拉选项 */
-interface ModelOption {
-  providerId: string
-  providerName: string
-  providerLogo: ReturnType<typeof getProviderLogo>
-  modelId: string
-  modelName: string
 }
 
 /** 发送消息的 options（与 chatStore.sendMessage 兼容的子集） */
@@ -47,6 +37,7 @@ export interface SendMessageOptions {
   fileType?: string
   fileName?: string
   chatMode?: ChatModeLevel
+  skillIds?: string[]
 }
 
 /** 文件上传状态（由 useFileUpload 提供，透传给本 composable） */
@@ -70,7 +61,6 @@ export interface UseWorkspaceMessagesOptions {
 export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   const chatStore = useChatStore()
   const modelStore = useModelStore()
-  const agentStore = useAgentStore()
   const { truncateMessages, deleteMessage } = useApi()
   const { localSelectedAgent, localSelectedConvId, agentChatRef, fileUpload, openConfirmDialog } = options
   const { isUploading, parsedContent, fileName, fileType, uploadingFile, clearUploadState } = fileUpload
@@ -78,7 +68,6 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   // —— 输入与 UI 状态 ——
   const inputText = ref('')
   const selectedSkillIds = ref<string[]>([])
-  const showModelDropdown = ref(false)
   const showReasoning = ref<Record<string, boolean>>({})
 
   // —— 消息与流式状态 ——
@@ -94,59 +83,18 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   const isBackendReady = computed(() => chatStore.isBackendReady)
   const currentConvId = computed(() => localSelectedConvId.value || '')
 
-  // —— 模型选择 ——
+  // —— 模型展示（2026-08 全局模型统一：对话页统一使用全局主模型，
+  //    不再有 per-agent 模型覆盖；模型选择收口到设置页"模型设置"）——
   const currentModel = computed(() => {
-    const agent = localSelectedAgent.value
-    if (agent?.model) return agent.model
     const resolved = modelStore.resolveModel
     return resolved?.model || '未配置模型'
   })
   const currentProvider = computed(() => {
-    const agent = localSelectedAgent.value
-    if (agent?.provider) return agent.provider
     const resolved = modelStore.resolveModel
     return resolved?.provider || ''
   })
   const currentProviderLogo = computed(() => getProviderLogo(currentProvider.value))
   const hasProvider = computed(() => modelStore.providers.length > 0)
-
-  const availableModelOptions = computed<ModelOption[]>(() => {
-    const list: ModelOption[] = []
-    for (const provider of modelStore.providers) {
-      const logo = getProviderLogo(provider.id)
-      const modelIds = provider.selectedModels.length > 0
-        ? provider.selectedModels
-        : (provider.defaultModel ? [provider.defaultModel] : [])
-      for (const modelId of modelIds) {
-        list.push({
-          providerId: provider.id,
-          providerName: provider.name,
-          providerLogo: logo,
-          modelId,
-          modelName: modelId,
-        })
-      }
-    }
-    return list
-  })
-
-  const selectModel = async (providerId: string, modelId: string): Promise<void> => {
-    if (localSelectedAgent.value) {
-      // Optimistic update: 立即修改本地对象让 UI 即时反映
-      localSelectedAgent.value.model = modelId
-      localSelectedAgent.value.provider = providerId
-
-      await agentStore.updateAgent(localSelectedAgent.value.id, {
-        provider: providerId,
-        model: modelId,
-      })
-
-      // Re-sync: fetchAgents 替换了整个数组后，抓回新鲜引用
-      const updated = agentStore.agents.find(a => a.id === localSelectedAgent.value?.id)
-      if (updated) localSelectedAgent.value = updated
-    }
-    showModelDropdown.value = false
-  }
 
   // —— 对话模式（普通/标准/超长） ——
   const toast = useToast()
@@ -168,12 +116,6 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     }
   })
 
-  const REASONING_MODEL_KEYWORDS = ['reasoner', 'reason', 'o1', 'o3', 'o4', 'thinking', 'r1']
-  const isReasoningModel = (modelId: string): boolean => {
-    const lower = modelId.toLowerCase()
-    return REASONING_MODEL_KEYWORDS.some((kw) => lower.includes(kw))
-  }
-
   const selectChatMode = (mode: ChatModeLevel): void => {
     // 上下文隔离：如果当前对话已有消息，禁止切换模式
     const convId = localSelectedConvId.value
@@ -185,17 +127,10 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
       }
     }
 
+    // 2026-08 全局模型统一：切换模式不再改动全局主模型。
+    // 专业模式（standard/ultra）由后端按轮路由到推理模型，
+    // 推理模型不可用时后端退化为主模型并通过 SSE notice 通知前端 toast。
     chatMode.value = mode
-    const opts = availableModelOptions.value
-    if (opts.length === 0) return
-    // 专业模式优先推理模型，普通模式优先快速模型
-    if (mode !== 'normal') {
-      const reasoning = opts.find((opt) => isReasoningModel(opt.modelId))
-      if (reasoning) selectModel(reasoning.providerId, reasoning.modelId)
-    } else {
-      const fast = opts.find((opt) => !isReasoningModel(opt.modelId))
-      if (fast) selectModel(fast.providerId, fast.modelId)
-    }
   }
 
   // —— 发送消息 ——
@@ -225,15 +160,17 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     clearUploadState()
 
     const agent = localSelectedAgent.value
+    // 2026-08 全局模型统一：对话页一律使用全局主模型发送
     const resolved = modelStore.resolveModel
 
     const sendOptions: SendMessageOptions = {
-      model: agent?.model || resolved?.model || undefined,
-      provider: agent?.provider || resolved?.provider || undefined,
+      model: resolved?.model || undefined,
+      provider: resolved?.provider || undefined,
       temperature: modelStore.modelConfig.defaultTemperature,
       maxTokens: modelStore.modelConfig.defaultMaxTokens,
       topP: modelStore.modelConfig.defaultTopP,
       chatMode: chatMode.value,
+      skillIds: selectedSkillIds.value,
     }
     if (agent?.systemPrompt) sendOptions.systemPrompt = agent.systemPrompt
     if (agent?.id) sendOptions.agentId = agent.id
@@ -457,7 +394,6 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     // 输入与 UI 状态
     inputText,
     selectedSkillIds,
-    showModelDropdown,
     showReasoning,
     // 消息与流式状态
     messages,
@@ -465,13 +401,11 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     isLoadingCurrentConv,
     isBackendReady,
     currentConvId,
-    // 模型选择
+    // 模型展示（全局主模型）
     currentModel,
     currentProvider,
     currentProviderLogo,
     hasProvider,
-    availableModelOptions,
-    selectModel,
     // 对话模式
     chatMode,
     chatModeOptions,

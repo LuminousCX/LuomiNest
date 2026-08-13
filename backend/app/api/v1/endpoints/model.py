@@ -65,6 +65,72 @@ def apply_model_config_from_db():
     logger.info(f"[ModelConfig] Applied saved config: provider={saved.get('default_provider')}, model={saved.get('default_model')}")
 
 
+# ── 全局模型选择统一写入助手（2026-08 全局模型统一重构）──
+# 所有"切换主模型"的入口（设置页模型设置 / 工作台模型下拉 / 主智能体面板）
+# 都必须经此助手写入，保证：运行时镜像同步 + 持久化 + 缓存失效，三者原子完成。
+
+def apply_global_model_selection(adapter, provider: str | None = None, model: str | None = None) -> list[str]:
+    """将全局主模型选择应用到运行时镜像并持久化。
+
+    Args:
+        adapter: LLMAdapter 实例（通常为 container.llm_adapter）
+        provider: 新的默认供应商（None 表示不修改）
+        model: 新的默认模型（None 表示不修改）
+
+    Returns:
+        实际更新的字段列表（用于日志/响应）
+    """
+    updated: list[str] = []
+    if provider is not None:
+        adapter.default_provider = provider
+        updated.append("default_provider")
+    if model is not None:
+        settings.LLM_DEFAULT_MODEL = model
+        updated.append("default_model")
+    if not updated:
+        return updated
+
+    existing = _load_model_config()
+    config_to_save = dict(existing) if isinstance(existing, dict) else {}
+    config_to_save["default_provider"] = adapter.default_provider
+    config_to_save["default_model"] = settings.LLM_DEFAULT_MODEL
+    _save_model_config(config_to_save)
+    adapter.apply_reasoner_config(config_to_save)
+    # 切换主模型后失效上下文缓存（与 PATCH /models/config 行为一致）
+    invalidate_context_cache()
+    logger.success(f"[ModelConfig] Global model selection updated: {updated}")
+    return updated
+
+
+def apply_global_generation_defaults(
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    top_p: float | None = None,
+) -> list[str]:
+    """将全局生成参数（temperature/max_tokens/top_p）应用到运行时并持久化。"""
+    updated: list[str] = []
+    if temperature is not None:
+        settings.LLM_DEFAULT_TEMPERATURE = temperature
+        updated.append("default_temperature")
+    if max_tokens is not None:
+        settings.LLM_DEFAULT_MAX_TOKENS = max_tokens
+        updated.append("default_max_tokens")
+    if top_p is not None:
+        settings.LLM_DEFAULT_TOP_P = top_p
+        updated.append("default_top_p")
+    if not updated:
+        return updated
+
+    existing = _load_model_config()
+    config_to_save = dict(existing) if isinstance(existing, dict) else {}
+    config_to_save["default_temperature"] = settings.LLM_DEFAULT_TEMPERATURE
+    config_to_save["default_max_tokens"] = settings.LLM_DEFAULT_MAX_TOKENS
+    config_to_save["default_top_p"] = settings.LLM_DEFAULT_TOP_P
+    _save_model_config(config_to_save)
+    logger.success(f"[ModelConfig] Global generation defaults updated: {updated}")
+    return updated
+
+
 class ProviderCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

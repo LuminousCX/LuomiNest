@@ -168,6 +168,8 @@ export interface ChatStreamChunk {
   context_tokens?: number
   /** 上下文窗口容量（仅 done=True 的 chunk 携带，前端用于计算使用百分比） */
   context_max_tokens?: number
+  /** 模型路由通知（如专业模式推理模型退化为主模型，右上角 toast 展示） */
+  notice?: string
 }
 
 export interface Conversation {
@@ -299,16 +301,6 @@ export interface AgentProfile extends Agent {
   isMain?: boolean
   capabilities?: string[]
   isActive?: boolean
-}
-
-export interface MainAgentConfig {
-  provider: string
-  model: string
-  systemPrompt: string
-  temperature: number
-  maxTokens: number
-  color: string
-  avatar?: string | null
 }
 
 export interface ModelInfo {
