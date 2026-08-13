@@ -54,7 +54,9 @@ const isPattern = (value: string | null): boolean =>
   !value.startsWith('luominest-bg://') &&
   !value.startsWith('http') &&
   !value.startsWith('data:') &&
-  !value.startsWith('/')
+  !value.startsWith('/') &&
+  // 相对路径（内置静态背景图，如 ./themes/...）视为图片而非图案
+  !value.startsWith('./')
 
 const isImageUrl = (value: string | null): boolean =>
   !!value && !isGradient(value) && !isPattern(value)
