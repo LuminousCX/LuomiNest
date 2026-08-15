@@ -12,6 +12,7 @@ from loguru import logger
 
 from app.runtime.provider.llm.types import StreamEvent
 from app.services.avatar_manager import EmotionStreamParser
+from app.services.stream_components import ThinkingTagManager, StreamCoalescer
 from app.core.agents.middleware.base import HookRegistry
 
 
@@ -36,8 +37,6 @@ class StreamProcessor:
                           stream_response 用它积累 ctx.state["reasoning"]；
                           stream_chat 不需要（默认忽略）。
         """
-        from app.services.chat_service import ThinkingTagManager, StreamCoalescer
-
         self._thinking_mgr = ThinkingTagManager()
         self._coalescer = StreamCoalescer()
         self._emotion_parser = EmotionStreamParser()
