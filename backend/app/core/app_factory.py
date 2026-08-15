@@ -451,6 +451,33 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Periodic cleanup registration skipped: {e}", exc_info=True)
 
+    # 注册定时数据备份任务（可经 BACKUP_ENABLED / BACKUP_INTERVAL_HOURS 配置）
+    if settings.BACKUP_ENABLED:
+        try:
+            from apscheduler.triggers.interval import IntervalTrigger
+            from app.infrastructure.backup.backup_manager import lumi_backup_manager
+
+            async def _periodic_backup():
+                try:
+                    path = await lumi_backup_manager.create_backup_async(label="scheduled")
+                    if path:
+                        logger.info(f"[LuomiNest] Scheduled backup created: {path}")
+                except Exception as backup_err:
+                    logger.warning(f"[LuomiNest] Scheduled backup failed: {backup_err}", exc_info=True)
+
+            if luomi_scheduler.add_job(
+                _periodic_backup,
+                trigger=IntervalTrigger(hours=settings.BACKUP_INTERVAL_HOURS),
+                id="lumi_periodic_backup",
+                replace_existing=True,
+            ):
+                logger.info(
+                    f"[LuomiNest] Periodic backup job registered "
+                    f"(every {settings.BACKUP_INTERVAL_HOURS}h, keep last {lumi_backup_manager.MAX_BACKUPS})"
+                )
+        except Exception as e:
+            logger.warning(f"[LuomiNest] Periodic backup registration skipped: {e}", exc_info=True)
+
     yield
 
     # 停止 CxPlugin 热重载监听

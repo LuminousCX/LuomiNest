@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     MQTT_USERNAME: str = ""
     MQTT_PASSWORD: str = ""
 
+    # 数据备份（lumi_backup_manager 定时任务）
+    BACKUP_ENABLED: bool = True
+    BACKUP_INTERVAL_HOURS: int = 24
+
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120  # 2小时
 
