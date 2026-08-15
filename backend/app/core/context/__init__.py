@@ -4,6 +4,26 @@ from loguru import logger
 
 from app.runtime.provider.llm.types import RouteHint
 
+# ── Token 估算与上下文预算常量（LuomiNest 语义，勿散落字面量）──────────────
+# 注意：下列两组 0.6/0.3 同值不同义，禁止互相混用：
+#   - TOKEN_WEIGHT_* 用于字符数→token 数的估算换算；
+#   - REBUILD_BUDGET_RATIO / SUMMARY_TEMPERATURE 用于摘要压缩策略。
+
+# 单张图片消息的固定 token 估算值
+IMAGE_TOKEN_ESTIMATE: int = 765
+# 中文字符的 token 换算权重（1 汉字 ≈ 0.6 token）
+TOKEN_WEIGHT_CHINESE: float = 0.6
+# 非中文字符的 token 换算权重（1 其他字符 ≈ 0.3 token）
+TOKEN_WEIGHT_OTHER: float = 0.3
+# Provider 能力表与配置均未提供时的默认上下文窗口
+DEFAULT_CONTEXT_WINDOW: int = 16384
+# context_window 解析失败（<=0）时的宽口径回退窗口
+FALLBACK_CONTEXT_WINDOW: int = 128000
+# 防漂移重建预算占历史预算的比例
+REBUILD_BUDGET_RATIO: float = 0.6
+# 摘要生成的 LLM 采样温度（低温保证摘要稳定）
+SUMMARY_TEMPERATURE: float = 0.3
+
 
 class TokenCounter:
     def count_tokens(self, messages: list[dict], trusted_token_usage: int = 0) -> int:
@@ -21,7 +41,7 @@ class TokenCounter:
                         if part.get("type") == "text":
                             total += self._estimate_tokens(part.get("text", ""))
                         elif part.get("type") == "image_url":
-                            total += 765
+                            total += IMAGE_TOKEN_ESTIMATE
 
             tool_calls = msg.get("tool_calls")
             if tool_calls:
@@ -37,7 +57,7 @@ class TokenCounter:
     def _estimate_tokens(self, text: str) -> int:
         chinese_count = len([c for c in text if "\u4e00" <= c <= "\u9fff"])
         other_count = len(text) - chinese_count
-        return int(chinese_count * 0.6 + other_count * 0.3)
+        return int(chinese_count * TOKEN_WEIGHT_CHINESE + other_count * TOKEN_WEIGHT_OTHER)
 
     def get_context_window_for_model(self, provider: str, model: str) -> int:
         """获取模型的上下文窗口大小。
@@ -66,7 +86,7 @@ class TokenCounter:
         if settings.LLM_CONTEXT_WINDOW_SIZE > 0:
             return settings.LLM_CONTEXT_WINDOW_SIZE
 
-        return 16384
+        return DEFAULT_CONTEXT_WINDOW
 
 
 class ContextTruncator:
@@ -303,7 +323,7 @@ class LLMSummaryCompressor:
             "history_total": history_budget,
             "summary": summary_budget,
             "recent": recent_budget,
-            "rebuild_source": int(history_budget * 0.6),  # 防漂移重建预算
+            "rebuild_source": int(history_budget * REBUILD_BUDGET_RATIO),  # 防漂移重建预算
         }
 
     # ── 增量水位线 ────────────────────────────────────────────
@@ -384,7 +404,7 @@ class LLMSummaryCompressor:
 
         chat_kwargs: dict = {
             "messages": llm_payload,
-            "temperature": 0.3,
+            "temperature": SUMMARY_TEMPERATURE,
             "max_tokens": max_tokens,
             "route_hint": RouteHint.CHAT,
         }
@@ -506,7 +526,7 @@ class LLMSummaryCompressor:
             return messages
 
         # 计算预算
-        ctx_window = self.context_window or 128000
+        ctx_window = self.context_window or FALLBACK_CONTEXT_WINDOW
         budgets = self._calculate_budgets(ctx_window)
 
         # 增量水位线分离
@@ -737,7 +757,7 @@ def get_context_manager(
         context_window = token_counter.get_context_window_for_model(resolved_provider, model)
 
     if context_window <= 0:
-        context_window = 128000
+        context_window = FALLBACK_CONTEXT_WINDOW
 
     # 注意：max_context_tokens 传入完整的上下文窗口容量，不预乘 compression_threshold。
     # should_compress 内部会用 current_tokens / max_tokens > threshold 判断，
