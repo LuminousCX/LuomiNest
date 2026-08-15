@@ -12,11 +12,11 @@ from fastapi import APIRouter
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from app.runtime.plugin.cxplugin.lifecycle import cx_plugin_lifecycle
-from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+from app.runtime.plugin.cxplugin.lifecycle import luominest_plugin_lifecycle
+from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
 from app.schemas.avatar import ApiResponse
-from app.services.skill_service import cx_skill_service
-from app.services.skill_improvement_service import cx_skill_improvement_service
+from app.services.skill_service import luominest_skill_service
+from app.services.skill_improvement_service import luominest_skill_improvement_service
 
 
 router = APIRouter(tags=["plugins"])
@@ -66,15 +66,15 @@ def _plugin_to_dict(metadata) -> dict:
 @router.get("/plugins", response_model=ApiResponse)
 async def list_plugins(active_only: bool = False) -> ApiResponse:
     """列出所有已加载的插件。"""
-    plugins = cx_plugin_registry.list_plugins(active_only=active_only)
+    plugins = luominest_plugin_registry.list_plugins(active_only=active_only)
     return _ok(data=[_plugin_to_dict(m) for m in plugins])
 
 
 @router.get("/plugins/stats", response_model=ApiResponse)
 async def plugins_stats() -> ApiResponse:
     """返回插件系统统计信息。"""
-    plugins = cx_plugin_registry.list_plugins()
-    disabled = cx_plugin_lifecycle.get_disabled_plugins()
+    plugins = luominest_plugin_registry.list_plugins()
+    disabled = luominest_plugin_lifecycle.get_disabled_plugins()
     return _ok(data={
         "total": len(plugins),
         "active": sum(1 for p in plugins if p.is_active),
@@ -86,7 +86,7 @@ async def plugins_stats() -> ApiResponse:
 @router.get("/plugins/{plugin_id}", response_model=ApiResponse)
 async def get_plugin(plugin_id: str) -> ApiResponse:
     """获取单个插件详情。"""
-    meta = cx_plugin_registry.get_plugin(plugin_id)
+    meta = luominest_plugin_registry.get_plugin(plugin_id)
     if meta is None:
         return _err(ERR_PLUGIN_NOT_FOUND, f"Plugin not found: {plugin_id}")
     return _ok(data=_plugin_to_dict(meta))
@@ -95,49 +95,49 @@ async def get_plugin(plugin_id: str) -> ApiResponse:
 @router.post("/plugins/{plugin_id}/enable", response_model=ApiResponse)
 async def enable_plugin(plugin_id: str) -> ApiResponse:
     """启用插件。"""
-    meta = cx_plugin_registry.get_plugin(plugin_id)
+    meta = luominest_plugin_registry.get_plugin(plugin_id)
     if meta is None:
         return _err(ERR_PLUGIN_NOT_FOUND, f"Plugin not found: {plugin_id}")
-    ok = await cx_plugin_lifecycle.enable_plugin(plugin_id)
+    ok = await luominest_plugin_lifecycle.enable_plugin(plugin_id)
     if not ok:
         return _err(ERR_PLUGIN_OP_FAILED, f"Failed to enable plugin: {plugin_id}")
-    meta = cx_plugin_registry.get_plugin(plugin_id)
+    meta = luominest_plugin_registry.get_plugin(plugin_id)
     return _ok(data=_plugin_to_dict(meta), message="Plugin enabled")
 
 
 @router.post("/plugins/{plugin_id}/disable", response_model=ApiResponse)
 async def disable_plugin(plugin_id: str) -> ApiResponse:
     """禁用插件（不卸载，仅标记为禁用状态）。"""
-    meta = cx_plugin_registry.get_plugin(plugin_id)
+    meta = luominest_plugin_registry.get_plugin(plugin_id)
     if meta is None:
         return _err(ERR_PLUGIN_NOT_FOUND, f"Plugin not found: {plugin_id}")
-    ok = await cx_plugin_lifecycle.disable_plugin(plugin_id)
+    ok = await luominest_plugin_lifecycle.disable_plugin(plugin_id)
     if not ok:
         return _err(ERR_PLUGIN_OP_FAILED, f"Failed to disable plugin: {plugin_id}")
-    meta = cx_plugin_registry.get_plugin(plugin_id)
+    meta = luominest_plugin_registry.get_plugin(plugin_id)
     return _ok(data=_plugin_to_dict(meta), message="Plugin disabled")
 
 
 @router.post("/plugins/{plugin_id}/reload", response_model=ApiResponse)
 async def reload_plugin(plugin_id: str) -> ApiResponse:
     """重载单个插件（卸载后重新加载）。"""
-    meta = cx_plugin_registry.get_plugin(plugin_id)
+    meta = luominest_plugin_registry.get_plugin(plugin_id)
     if meta is None:
         return _err(ERR_PLUGIN_NOT_FOUND, f"Plugin not found: {plugin_id}")
-    ok = await cx_plugin_lifecycle.reload_plugin(plugin_id)
+    ok = await luominest_plugin_lifecycle.reload_plugin(plugin_id)
     if not ok:
         return _err(ERR_PLUGIN_OP_FAILED, f"Failed to reload plugin: {plugin_id}")
-    meta = cx_plugin_registry.get_plugin(plugin_id)
+    meta = luominest_plugin_registry.get_plugin(plugin_id)
     return _ok(data=_plugin_to_dict(meta) if meta else None, message="Plugin reloaded")
 
 
 @router.post("/plugins/{plugin_id}/unload", response_model=ApiResponse)
 async def unload_plugin(plugin_id: str) -> ApiResponse:
     """卸载插件（从注册表移除，不删除文件）。"""
-    meta = cx_plugin_registry.get_plugin(plugin_id)
+    meta = luominest_plugin_registry.get_plugin(plugin_id)
     if meta is None:
         return _err(ERR_PLUGIN_NOT_FOUND, f"Plugin not found: {plugin_id}")
-    ok = await cx_plugin_lifecycle.unload_plugin(plugin_id)
+    ok = await luominest_plugin_lifecycle.unload_plugin(plugin_id)
     if not ok:
         return _err(ERR_PLUGIN_OP_FAILED, f"Failed to unload plugin: {plugin_id}")
     return _ok(message="Plugin unloaded")
@@ -146,7 +146,7 @@ async def unload_plugin(plugin_id: str) -> ApiResponse:
 @router.post("/plugins/reload-all", response_model=ApiResponse)
 async def reload_all_plugins() -> ApiResponse:
     """重载所有插件。"""
-    count = await cx_plugin_lifecycle.reload_all()
+    count = await luominest_plugin_lifecycle.reload_all()
     logger.info(f"[PluginAPI] Reloaded all plugins: {count} loaded")
     return _ok(data={"loaded_count": count}, message="All plugins reloaded")
 
@@ -158,19 +158,19 @@ async def reload_all_plugins() -> ApiResponse:
 @router.get("/skills", response_model=ApiResponse)
 async def list_skills(active_only: bool = False) -> ApiResponse:
     """列出所有已加载的技能。"""
-    return _ok(data=cx_skill_service.list_skills(active_only=active_only))
+    return _ok(data=luominest_skill_service.list_skills(active_only=active_only))
 
 
 @router.get("/skills/stats", response_model=ApiResponse)
 async def skills_stats() -> ApiResponse:
     """返回技能系统统计信息。"""
-    return _ok(data=cx_skill_service.get_stats())
+    return _ok(data=luominest_skill_service.get_stats())
 
 
 @router.get("/skills/{skill_id}", response_model=ApiResponse)
 async def get_skill(skill_id: str) -> ApiResponse:
     """获取单个技能详情（含 body 全文）。"""
-    data = cx_skill_service.get_skill(skill_id)
+    data = luominest_skill_service.get_skill(skill_id)
     if data is None:
         return _err(ERR_SKILL_NOT_FOUND, f"Skill not found: {skill_id}")
     return _ok(data=data)
@@ -179,34 +179,34 @@ async def get_skill(skill_id: str) -> ApiResponse:
 @router.post("/skills/{skill_id}/enable", response_model=ApiResponse)
 async def enable_skill(skill_id: str) -> ApiResponse:
     """启用技能。"""
-    ok = cx_skill_service.enable_skill(skill_id)
+    ok = luominest_skill_service.enable_skill(skill_id)
     if not ok:
         return _err(ERR_SKILL_NOT_FOUND, f"Skill not found: {skill_id}")
-    return _ok(data=cx_skill_service.get_skill(skill_id), message="Skill enabled")
+    return _ok(data=luominest_skill_service.get_skill(skill_id), message="Skill enabled")
 
 
 @router.post("/skills/{skill_id}/disable", response_model=ApiResponse)
 async def disable_skill(skill_id: str) -> ApiResponse:
     """禁用技能（不卸载，仅标记为禁用状态，不参与 Prompt 注入）。"""
-    ok = cx_skill_service.disable_skill(skill_id)
+    ok = luominest_skill_service.disable_skill(skill_id)
     if not ok:
         return _err(ERR_SKILL_NOT_FOUND, f"Skill not found: {skill_id}")
-    return _ok(data=cx_skill_service.get_skill(skill_id), message="Skill disabled")
+    return _ok(data=luominest_skill_service.get_skill(skill_id), message="Skill disabled")
 
 
 @router.post("/skills/{skill_id}/reload", response_model=ApiResponse)
 async def reload_skill(skill_id: str) -> ApiResponse:
     """重载单个技能（用于 SKILL.md 修改后热更新）。"""
-    ok = await cx_skill_service.reload_skill(skill_id)
+    ok = await luominest_skill_service.reload_skill(skill_id)
     if not ok:
         return _err(ERR_SKILL_OP_FAILED, f"Failed to reload skill: {skill_id}")
-    return _ok(data=cx_skill_service.get_skill(skill_id), message="Skill reloaded")
+    return _ok(data=luominest_skill_service.get_skill(skill_id), message="Skill reloaded")
 
 
 @router.post("/skills/reload-all", response_model=ApiResponse)
 async def reload_all_skills() -> ApiResponse:
     """重载所有技能。"""
-    count = await cx_skill_service.reload_all()
+    count = await luominest_skill_service.reload_all()
     return _ok(data={"loaded_count": count}, message="All skills reloaded")
 
 
@@ -230,7 +230,7 @@ class SkillIdRequest(BaseModel):
 @router.get("/skills/{skill_id}/raw", response_model=ApiResponse)
 async def get_skill_raw(skill_id: str) -> ApiResponse:
     """获取 SKILL.md 原始文本内容（供前端编辑器加载）。"""
-    content = await cx_skill_service.get_skill_raw_content(skill_id)
+    content = await luominest_skill_service.get_skill_raw_content(skill_id)
     if content is None:
         return _err(ERR_SKILL_NOT_FOUND, f"Skill not found or no source file: {skill_id}")
     return _ok(data={"skill_id": skill_id, "content": content})
@@ -243,7 +243,7 @@ async def write_skill(req: SkillWriteRequest) -> ApiResponse:
     供 skill-creator 元技能、前端编辑器、AI 自主扩展调用。
     """
     try:
-        result = await cx_skill_service.write_skill(
+        result = await luominest_skill_service.write_skill(
             req.skill_id, req.content, overwrite=req.overwrite
         )
     except ValueError as e:
@@ -256,7 +256,7 @@ async def write_skill(req: SkillWriteRequest) -> ApiResponse:
         return _err(ERR_SKILL_OP_FAILED, f"写入技能失败: {e}")
 
     # 返回最新技能详情（若加载成功）
-    detail = cx_skill_service.get_skill(req.skill_id)
+    detail = luominest_skill_service.get_skill(req.skill_id)
     return _ok(
         data={**result, "skill": detail},
         message="Skill created" if result.get("created") else "Skill updated",
@@ -267,7 +267,7 @@ async def write_skill(req: SkillWriteRequest) -> ApiResponse:
 async def validate_skill_content(req: SkillWriteRequest) -> ApiResponse:
     """仅校验 SKILL.md 内容合法性，不写入磁盘。"""
     try:
-        frontmatter = cx_skill_service.validate_skill_md_content(
+        frontmatter = luominest_skill_service.validate_skill_md_content(
             req.content, req.skill_id
         )
     except ValueError as e:
@@ -279,7 +279,7 @@ async def validate_skill_content(req: SkillWriteRequest) -> ApiResponse:
 async def delete_skill(req: SkillIdRequest) -> ApiResponse:
     """删除技能（含目录与注册表条目）。"""
     try:
-        result = await cx_skill_service.delete_skill(req.skill_id)
+        result = await luominest_skill_service.delete_skill(req.skill_id)
     except ValueError as e:
         return _err(ERR_SKILL_INVALID, str(e))
     except Exception as e:
@@ -322,20 +322,20 @@ class AutoImproveConfigRequest(BaseModel):
 @router.get("/skills/improvement/dashboard", response_model=ApiResponse)
 async def get_improvement_dashboard() -> ApiResponse:
     """获取技能自改进仪表盘数据。"""
-    return _ok(data=cx_skill_improvement_service.get_dashboard())
+    return _ok(data=luominest_skill_improvement_service.get_dashboard())
 
 
 @router.get("/skills/improvement/usage", response_model=ApiResponse)
 async def list_skill_usage_stats() -> ApiResponse:
     """列出所有技能的使用统计。"""
-    stats = cx_skill_improvement_service.list_usage_stats()
+    stats = luominest_skill_improvement_service.list_usage_stats()
     return _ok(data=[s.to_dict() for s in stats])
 
 
 @router.get("/skills/improvement/usage/{skill_id}", response_model=ApiResponse)
 async def get_skill_usage_stats(skill_id: str) -> ApiResponse:
     """获取单个技能的使用统计。"""
-    stats = cx_skill_improvement_service.get_usage_stats(skill_id)
+    stats = luominest_skill_improvement_service.get_usage_stats(skill_id)
     if stats is None:
         return _err(ERR_SKILL_NOT_FOUND, f"No usage stats for: {skill_id}")
     return _ok(data=stats.to_dict())
@@ -345,7 +345,7 @@ async def get_skill_usage_stats(skill_id: str) -> ApiResponse:
 async def submit_skill_feedback(req: SkillFeedbackRequest) -> ApiResponse:
     """提交技能反馈（赞/踩）。"""
     try:
-        stats = cx_skill_improvement_service.track_feedback(
+        stats = luominest_skill_improvement_service.track_feedback(
             req.skill_id, req.kind, req.comment
         )
     except ValueError as e:
@@ -369,7 +369,7 @@ async def list_suggestions(
     """
     applied_only = applied is True
     unapplied_only = applied is False
-    suggs = cx_skill_improvement_service.list_suggestions(
+    suggs = luominest_skill_improvement_service.list_suggestions(
         skill_id=skill_id,
         applied_only=applied_only,
         unapplied_only=unapplied_only,
@@ -384,7 +384,7 @@ async def generate_suggestion(req: SkillSuggestionRequest) -> ApiResponse:
     若已有未应用的建议且 force=False，直接返回该建议。
     """
     try:
-        suggestion = await cx_skill_improvement_service.generate_suggestion(
+        suggestion = await luominest_skill_improvement_service.generate_suggestion(
             req.skill_id, force=req.force
         )
     except Exception as e:
@@ -400,7 +400,7 @@ async def generate_suggestion(req: SkillSuggestionRequest) -> ApiResponse:
 async def apply_suggestion(req: SuggestionActionRequest) -> ApiResponse:
     """应用一条改进建议到 SKILL.md（含备份）。"""
     try:
-        result = await cx_skill_improvement_service.apply_suggestion(
+        result = await luominest_skill_improvement_service.apply_suggestion(
             req.suggestion_id, auto=False
         )
     except ValueError as e:
@@ -414,7 +414,7 @@ async def apply_suggestion(req: SuggestionActionRequest) -> ApiResponse:
 @router.post("/skills/improvement/dismiss", response_model=ApiResponse)
 async def dismiss_suggestion(req: SuggestionActionRequest) -> ApiResponse:
     """忽略（删除）一条改进建议。"""
-    ok = cx_skill_improvement_service.dismiss_suggestion(req.suggestion_id)
+    ok = luominest_skill_improvement_service.dismiss_suggestion(req.suggestion_id)
     if not ok:
         return _err(ERR_SKILL_NOT_FOUND, f"Suggestion not found: {req.suggestion_id}")
     return _ok(message="Suggestion dismissed")
@@ -424,8 +424,8 @@ async def dismiss_suggestion(req: SuggestionActionRequest) -> ApiResponse:
 async def get_auto_improve_config() -> ApiResponse:
     """获取 auto_improve 配置。"""
     return _ok(data={
-        "enabled": cx_skill_improvement_service.is_auto_improve_enabled(),
-        "threshold": cx_skill_improvement_service.get_auto_improve_threshold(),
+        "enabled": luominest_skill_improvement_service.is_auto_improve_enabled(),
+        "threshold": luominest_skill_improvement_service.get_auto_improve_threshold(),
     })
 
 
@@ -433,11 +433,11 @@ async def get_auto_improve_config() -> ApiResponse:
 async def set_auto_improve_config(req: AutoImproveConfigRequest) -> ApiResponse:
     """配置 auto_improve 开关与阈值。"""
     try:
-        cx_skill_improvement_service.set_auto_improve(req.enabled)
-        cx_skill_improvement_service.set_auto_improve_threshold(req.threshold)
+        luominest_skill_improvement_service.set_auto_improve(req.enabled)
+        luominest_skill_improvement_service.set_auto_improve_threshold(req.threshold)
     except ValueError as e:
         return _err(ERR_SKILL_INVALID, str(e))
     return _ok(data={
-        "enabled": cx_skill_improvement_service.is_auto_improve_enabled(),
-        "threshold": cx_skill_improvement_service.get_auto_improve_threshold(),
+        "enabled": luominest_skill_improvement_service.is_auto_improve_enabled(),
+        "threshold": luominest_skill_improvement_service.get_auto_improve_threshold(),
     }, message="auto_improve config updated")

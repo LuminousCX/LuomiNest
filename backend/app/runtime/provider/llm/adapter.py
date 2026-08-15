@@ -210,26 +210,26 @@ class LLMAdapter:
     def _get_dismissed_providers(self) -> list[str]:
         """从 config_items 读取用户已主动删除的默认供应商列表。"""
         # NOTE: 延迟 import —— config_store 会触发 DB 引擎初始化，不能在模块顶层加载
-        from app.infrastructure.database.config_store import lumi_config_store
-        dismissed = lumi_config_store.get("providers.dismissed_defaults")
+        from app.infrastructure.database.config_store import luominest_config_store
+        dismissed = luominest_config_store.get("providers.dismissed_defaults")
         return dismissed if isinstance(dismissed, list) else []
 
     def _add_dismissed_provider(self, name: str):
         """记录用户已主动删除的默认供应商。"""
-        from app.infrastructure.database.config_store import lumi_config_store
+        from app.infrastructure.database.config_store import luominest_config_store
         dismissed = self._get_dismissed_providers()
         if name not in dismissed:
             dismissed.append(name)
-            lumi_config_store.set("providers.dismissed_defaults", dismissed)
+            luominest_config_store.set("providers.dismissed_defaults", dismissed)
             logger.info(f"[Adapter] Added dismissed provider: {name}")
 
     def _remove_dismissed_provider(self, name: str):
         """用户重新手动添加同名供应商时，从 dismissed 列表移除。"""
-        from app.infrastructure.database.config_store import lumi_config_store
+        from app.infrastructure.database.config_store import luominest_config_store
         dismissed = self._get_dismissed_providers()
         if name in dismissed:
             dismissed.remove(name)
-            lumi_config_store.set("providers.dismissed_defaults", dismissed)
+            luominest_config_store.set("providers.dismissed_defaults", dismissed)
             logger.info(f"[Adapter] Removed dismissed provider: {name}")
 
     def register_provider(self, name: str, provider: LLMProvider, config: dict, set_default: bool = False):

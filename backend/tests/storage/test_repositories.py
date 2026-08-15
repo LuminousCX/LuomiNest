@@ -284,7 +284,7 @@ usage_repo = UsageRepository()
 # record
 rec = usage_repo.record(provider="openai", model="gpt-4o", prompt_tokens=100,
                           completion_tokens=50, total_tokens=150, agent_id="agent-1",
-                          conv_id="conv-1", is_stream=True)
+                          conversation_id="conv-1", is_stream=True)
 check("record returns entry", rec is not None and rec["provider"] == "openai")
 check("record stores tokens", rec["total_tokens"] == 150)
 

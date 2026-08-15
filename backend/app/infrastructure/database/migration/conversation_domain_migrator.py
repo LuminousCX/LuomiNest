@@ -39,11 +39,11 @@ def _load_platform_session_index() -> dict[str, dict]:
 
     映射来自 config_items 的 platform.sessions.*（含遗留 JSON 合并后的条目）。
     """
-    from app.infrastructure.database.config_store import lumi_config_store
+    from app.infrastructure.database.config_store import luominest_config_store
 
     index: dict[str, dict] = {}
     try:
-        namespace = lumi_config_store.get_namespace(_PLATFORM_SESSIONS_PREFIX)
+        namespace = luominest_config_store.get_namespace(_PLATFORM_SESSIONS_PREFIX)
     except Exception as e:
         logger.warning(f"[Migration] conversation_domains: failed to load platform sessions: {e}")
         return index

@@ -211,4 +211,4 @@ class SkillRegistry:
 
 
 # 全局单例
-cx_skill_registry = SkillRegistry()
+luominest_skill_registry = SkillRegistry()

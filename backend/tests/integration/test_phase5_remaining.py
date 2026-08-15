@@ -282,7 +282,11 @@ async def test_group_chat_basic():
     member = {"agent_id": "agent-1", "name": "测试Agent", "role": "member"}
     group = {"id": "group-1", "name": "测试群"}
 
-    with patch("app.domains.social.group_chat.llm_adapter") as mock_adapter:
+    # resolve_provider/resolve_model 使用 agent_orchestrator 模块自己的 llm_adapter
+    # （懒加载、providers 为空），必须在 group_chat 命名空间直接 mock 才能命中
+    with patch("app.domains.social.group_chat.resolve_provider", return_value="test-provider"), \
+         patch("app.domains.social.group_chat.resolve_model", return_value="test-model"), \
+         patch("app.domains.social.group_chat.llm_adapter") as mock_adapter:
         mock_adapter.chat_stream = mock_chat_stream_basic
         mock_adapter.supports_tool_calls.return_value = False
         mock_provider = MagicMock()
@@ -334,7 +338,9 @@ async def test_group_chat_emotion():
     member = {"agent_id": "agent-1", "name": "测试Agent", "role": "member"}
     group = {"id": "group-1", "name": "测试群"}
 
-    with patch("app.domains.social.group_chat.llm_adapter") as mock_adapter:
+    with patch("app.domains.social.group_chat.resolve_provider", return_value="test-provider"), \
+         patch("app.domains.social.group_chat.resolve_model", return_value="test-model"), \
+         patch("app.domains.social.group_chat.llm_adapter") as mock_adapter:
         mock_adapter.chat_stream = mock_chat_stream_emotion
         mock_adapter.supports_tool_calls.return_value = False
         mock_provider = MagicMock()
@@ -407,7 +413,9 @@ async def test_group_chat_tools():
 
     tools = [{"type": "function", "function": {"name": "memory_search", "description": "search", "parameters": {}}}]
 
-    with patch("app.domains.social.group_chat.llm_adapter") as mock_adapter:
+    with patch("app.domains.social.group_chat.resolve_provider", return_value="test-provider"), \
+         patch("app.domains.social.group_chat.resolve_model", return_value="test-model"), \
+         patch("app.domains.social.group_chat.llm_adapter") as mock_adapter:
         mock_adapter.chat_stream = mock_chat_stream_with_tools
         mock_adapter.supports_tool_calls.return_value = True
         mock_provider = MagicMock()
@@ -465,7 +473,9 @@ async def test_group_chat_error():
     member = {"agent_id": "agent-1", "name": "测试Agent", "role": "member"}
     group = {"id": "group-1", "name": "测试群"}
 
-    with patch("app.domains.social.group_chat.llm_adapter") as mock_adapter:
+    with patch("app.domains.social.group_chat.resolve_provider", return_value="test-provider"), \
+         patch("app.domains.social.group_chat.resolve_model", return_value="test-model"), \
+         patch("app.domains.social.group_chat.llm_adapter") as mock_adapter:
         mock_adapter.chat_stream = mock_chat_stream_error
         mock_adapter.supports_tool_calls.return_value = False
         mock_provider = MagicMock()

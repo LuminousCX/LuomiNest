@@ -26,10 +26,10 @@ from loguru import logger
 
 from app.core.utils import utc_now
 from app.infrastructure.database.config_namespace_store import ConfigNamespaceStore
-from app.runtime.plugin.skill.registry import cx_skill_registry
+from app.runtime.plugin.skill.registry import luominest_skill_registry
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
-from app.services.skill_service import cx_skill_service
+from app.services.skill_service import luominest_skill_service
 
 
 # 持久化存储（config_items 为唯一权威源；遗留 JSON 首次访问时幂等并集合并，旧文件保留不删除）
@@ -98,7 +98,7 @@ class SkillImprovementSuggestion:
 
 
 class CxSkillImprovementService:
-    """技能自改进服务 — 全局单例 cx_skill_improvement_service。
+    """技能自改进服务 — 全局单例 luominest_skill_improvement_service。
 
     提供：
     - track_invocation / track_feedback：记录使用数据
@@ -243,7 +243,7 @@ class CxSkillImprovementService:
         force: bool,
     ) -> dict[str, Any] | None:
         """实际执行建议生成。"""
-        skill_detail = cx_skill_service.get_skill(skill_id)
+        skill_detail = luominest_skill_service.get_skill(skill_id)
         if skill_detail is None:
             logger.warning(f"[CxSkillImprove] Skill not found: {skill_id}")
             return None
@@ -465,7 +465,7 @@ class CxSkillImprovementService:
 
         # 写入新内容（覆盖）
         try:
-            write_result = await cx_skill_service.write_skill(
+            write_result = await luominest_skill_service.write_skill(
                 skill_id, suggested_content, overwrite=True
             )
         except Exception as e:
@@ -515,7 +515,7 @@ class CxSkillImprovementService:
 
     def _backup_skill_md(self, skill_id: str) -> str:
         """备份当前 SKILL.md 到 .backups 目录，返回备份路径。"""
-        skill = cx_skill_registry.get(skill_id)
+        skill = luominest_skill_registry.get(skill_id)
         if skill is None or not skill.source_path:
             raise ValueError(f"技能未加载或无 source_path: {skill_id}")
 
@@ -548,7 +548,7 @@ class CxSkillImprovementService:
             with open(backup_path, encoding="utf-8") as f:
                 content = f.read()
             asyncio.get_event_loop().create_task(
-                cx_skill_service.write_skill(skill_id, content, overwrite=True)
+                luominest_skill_service.write_skill(skill_id, content, overwrite=True)
             )
             logger.info(f"[CxSkillImprove] Restored from backup: {backup_path}")
             return True
@@ -647,4 +647,4 @@ class CxSkillImprovementService:
 
 
 # 全局单例
-cx_skill_improvement_service = CxSkillImprovementService()
+luominest_skill_improvement_service = CxSkillImprovementService()

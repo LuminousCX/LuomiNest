@@ -2,11 +2,12 @@ import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.utils import ok
 from app.engines.memory import get_memory_engine
 from app.engines.memory.memory_engine import FactItem, MemoryData, FACT_CATEGORIES, _engines
@@ -156,7 +157,7 @@ async def get_facts(
 @router.post("/facts")
 async def create_fact(request: CreateFactRequest, agent_id: str | None = None):
     if request.category not in FACT_CATEGORIES:
-        raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {FACT_CATEGORIES}")
+        raise BadRequestError(f"Invalid category. Must be one of: {FACT_CATEGORIES}", code="MEMORY_CATEGORY_INVALID")
     engine = get_memory_engine(agent_id)
     fact = FactItem(
         content=request.content,
@@ -174,17 +175,17 @@ async def delete_fact(fact_id: str, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     if engine.remove_fact(fact_id):
         return ok()
-    raise HTTPException(status_code=404, detail="Fact not found")
+    raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
 
 
 @router.patch("/facts/{fact_id}")
 async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | None = None):
     if request.category is not None and request.category not in FACT_CATEGORIES:
-        raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {FACT_CATEGORIES}")
+        raise BadRequestError(f"Invalid category. Must be one of: {FACT_CATEGORIES}", code="MEMORY_CATEGORY_INVALID")
     engine = get_memory_engine(agent_id)
     if engine.update_fact(fact_id, request.content, request.category, request.confidence):
         return ok()
-    raise HTTPException(status_code=404, detail="Fact not found")
+    raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
 
 
 @router.get("/daily")

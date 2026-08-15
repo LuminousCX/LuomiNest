@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import {
   Send,
   Square,
-  ChevronDown,
   Wand2,
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
@@ -17,16 +16,7 @@ const props = defineProps<{
   isStreaming: boolean
   canSend: boolean
   currentModel: string
-  currentProvider: string
   currentProviderLogo: ProviderLogo
-  availableModelOptions: {
-    providerId: string
-    providerName: string
-    providerLogo: ProviderLogo
-    modelId: string
-    modelName: string
-  }[]
-  showModelDropdown: boolean
   chatMode: ChatModeLevel
   chatModeOptions: WorkflowModeOption[]
   selectedSkillIds: string[]
@@ -36,8 +26,7 @@ const emit = defineEmits<{
   'update:inputText': [value: string]
   send: []
   cancel: []
-  'toggle-model-dropdown': []
-  'select-model': [providerId: string, modelId: string]
+  'go-settings': []
   'select-chat-mode': [value: ChatModeLevel]
   'update:selectedSkillIds': [ids: string[]]
 }>()
@@ -102,52 +91,18 @@ defineExpose({
       ></textarea>
       <div class="input-toolbar">
         <div class="toolbar-left">
-          <div class="model-dropdown-container">
-            <LumiButton
-              variant="secondary"
-              size="sm"
-              class="tool-btn"
-              @click.stop="emit('toggle-model-dropdown')"
-            >
-              <template #icon>
-                <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
-                <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
-                  {{ currentProviderLogo.initials }}
-                </span>
-              </template>
-              <span class="model-btn-text">{{ currentModel }}</span>
-              <ChevronDown :size="14" />
-            </LumiButton>
-            <Transition name="dropdown-fade">
-              <div v-if="showModelDropdown" class="model-dropdown">
-                <div class="dropdown-header">选择模型</div>
-                <div class="dropdown-list">
-                  <LumiButton
-                    v-for="opt in availableModelOptions"
-                    :key="`${opt.providerId}-${opt.modelId}`"
-                    variant="ghost"
-                    size="sm"
-                    block
-                    :class="['dropdown-item', { active: currentProvider === opt.providerId && currentModel === opt.modelId }]"
-                    @click="emit('select-model', opt.providerId, opt.modelId)"
-                  >
-                    <template #icon>
-                      <span v-if="opt.providerLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="opt.providerLogo.svgIcon"></span>
-                      <span v-else class="provider-icon-mini" :style="{ background: opt.providerLogo.color }">
-                        {{ opt.providerLogo.initials }}
-                      </span>
-                    </template>
-                    <div class="dropdown-item-info">
-                      <span class="dropdown-item-model">{{ opt.modelName }}</span>
-                      <span class="dropdown-item-provider">{{ opt.providerName }}</span>
-                    </div>
-                  </LumiButton>
-                  <div v-if="availableModelOptions.length === 0" class="dropdown-empty">
-                    暂无可用模型，请先到设置多选模型
-                  </div>
-                </div>
-              </div>
-            </Transition>
+          <!-- 2026-08 全局模型统一：工作台不提供模型切换，展示全局主模型；
+               点击徽章跳转到 设置 → 模型设置 -->
+          <div
+            class="model-badge"
+            title="当前使用全局主模型，点击前往 设置 → 模型设置 切换"
+            @click="emit('go-settings')"
+          >
+            <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
+            <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
+              {{ currentProviderLogo.initials }}
+            </span>
+            <span class="model-btn-text">{{ currentModel }}</span>
           </div>
           <LumiButton
             :class="['workflow-toggle', { active: isWorkflowMode }]"
@@ -338,102 +293,25 @@ button:focus-visible {
   text-overflow: ellipsis;
 }
 
-.model-dropdown-container {
-  position: relative;
-}
-
-.model-dropdown {
-  position: absolute;
-  bottom: calc(100% + var(--space-2));
-  left: 0;
-  width: 280px;
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border-light);
-  z-index: 9999;
-  overflow: hidden;
-}
-
-.dropdown-header {
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  position: relative;
-  display: flex;
+/* 2026-08 全局模型统一：工作台只读徽章展示全局主模型，点击跳转设置页 */
+.model-badge {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-}
-
-.dropdown-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: var(--space-4);
-  right: var(--space-4);
-  height: 1px;
-  background: var(--divider-soft);
-}
-
-.dropdown-list {
-  max-height: 280px;
-  overflow-y: auto;
-  padding: var(--space-1);
-}
-
-.dropdown-item.lumi-btn {
-  justify-content: flex-start;
-  text-align: left;
-  gap: var(--space-3);
-  padding: var(--space-2) 10px;
-  width: 100%;
-}
-
-.dropdown-item:hover {
-  background: var(--workspace-hover);
-}
-
-.dropdown-item.active {
-  background: var(--lumi-primary-light);
-}
-
-.dropdown-item.active .dropdown-item-model {
-  color: var(--lumi-primary);
-}
-
-.dropdown-item-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.dropdown-item-model {
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dropdown-item-provider {
+  gap: 6px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  color: var(--text-muted);
   font-size: var(--text-xs);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  cursor: pointer;
+  user-select: none;
+  max-width: 220px;
+  transition: background var(--transition-fast) ease-in-out, color var(--transition-fast) ease-in-out;
 }
 
-.dropdown-empty {
-  padding: var(--space-5) var(--space-4);
-  text-align: center;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
+.model-badge:hover {
+  background: var(--surface-active);
+  color: var(--text-primary);
 }
 
 .provider-icon-mini {
@@ -467,16 +345,5 @@ button:focus-visible {
 .send-btn.lumi-btn {
   width: 34px;
   height: 34px;
-}
-
-.dropdown-fade-enter-active,
-.dropdown-fade-leave-active {
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
-}
-
-.dropdown-fade-enter-from,
-.dropdown-fade-leave-to {
-  opacity: 0;
-  transform: translateY(4px);
 }
 </style>

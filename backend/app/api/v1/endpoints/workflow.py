@@ -10,11 +10,11 @@
 - POST   /workflow/sessions/{id}/reject  拒绝执行计划
 - GET    /workflow/tools           列出已注册的内部工具
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from app.core.exceptions import LuomiNestError
+from app.core.exceptions import LuomiNestError, NotFoundError
 from app.core.utils import ok, sse_response, sse_data
 from app.core.workflow import (
     WorkflowMode,
@@ -107,7 +107,7 @@ async def get_session(session_id: str):
     """获取指定工作流会话详情"""
     session = workflow_engine.get_session(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail=f"会话 {session_id} 不存在")
+        raise NotFoundError(f"会话 {session_id} 不存在", code="WORKFLOW_SESSION_NOT_FOUND")
     return session.to_dict()
 
 
@@ -116,10 +116,7 @@ async def cancel_session(session_id: str):
     """取消工作流会话"""
     success = await workflow_engine.cancel_session(session_id)
     if not success:
-        raise HTTPException(
-            status_code=404,
-            detail=f"会话 {session_id} 不存在或已完成",
-        )
+        raise NotFoundError(f"会话 {session_id} 不存在或已完成", code="WORKFLOW_SESSION_NOT_FOUND")
     return ok({"session_id": session_id})
 
 
@@ -132,10 +129,7 @@ async def confirm_session(session_id: str, req: PlanConfirmationRequest):
     """
     success = workflow_engine.confirm_session(session_id, req.feedback)
     if not success:
-        raise HTTPException(
-            status_code=404,
-            detail=f"会话 {session_id} 不存在或不在等待确认状态",
-        )
+        raise NotFoundError(f"会话 {session_id} 不存在或不在等待确认状态", code="WORKFLOW_SESSION_NOT_FOUND")
     return ok({"session_id": session_id})
 
 
@@ -148,10 +142,7 @@ async def reject_session(session_id: str, req: PlanConfirmationRequest):
     """
     success = workflow_engine.reject_session(session_id, req.feedback)
     if not success:
-        raise HTTPException(
-            status_code=404,
-            detail=f"会话 {session_id} 不存在或不在等待确认状态",
-        )
+        raise NotFoundError(f"会话 {session_id} 不存在或不在等待确认状态", code="WORKFLOW_SESSION_NOT_FOUND")
     return ok({"session_id": session_id})
 
 
@@ -181,7 +172,7 @@ async def get_db_session(session_id: str):
     from app.services.workflow_persistence import get_workflow_session
     session = await get_workflow_session(session_id)
     if not session:
-        raise HTTPException(status_code=404, detail=f"会话 {session_id} 不存在")
+        raise NotFoundError(f"会话 {session_id} 不存在", code="WORKFLOW_SESSION_NOT_FOUND")
     return session
 
 
@@ -205,5 +196,5 @@ async def get_tool_record(record_id: str):
     from app.services.tool_call_recorder import get_tool_call_record
     record = await get_tool_call_record(record_id)
     if not record:
-        raise HTTPException(status_code=404, detail=f"记录 {record_id} 不存在")
+        raise NotFoundError(f"记录 {record_id} 不存在", code="WORKFLOW_RECORD_NOT_FOUND")
     return record

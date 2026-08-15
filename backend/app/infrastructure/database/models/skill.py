@@ -3,7 +3,7 @@
 三层结构中的「持久化索引」层：
 - 权威内容源：skills/{skill_id}/SKILL.md（文件系统）
 - 持久化索引：本表（列表查询、启停状态、版本、路径、body_length、updated_at）
-- 运行时缓存：cx_skill_registry（内存热加载，供 prompt 注入与工具读取）
+- 运行时缓存：luominest_skill_registry（内存热加载，供 prompt 注入与工具读取）
 
 表结构以 onion-architecture.md §11.1 的 CREATE TABLE 为准。
 文件为权威源：SkillLoader.load_all() 每次启动全量 upsert（§16.1 风险缓解），

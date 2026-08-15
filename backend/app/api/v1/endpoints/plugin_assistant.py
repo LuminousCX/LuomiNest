@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from app.schemas.avatar import ApiResponse
 from app.services.plugin_config_assistant import (
     CxSettingPatch,
-    cx_plugin_config_assistant,
+    luominest_plugin_config_assistant,
 )
 
 
@@ -95,7 +95,7 @@ class ScaffoldWriteRequest(BaseModel):
 async def get_plugin_config(plugin_id: str) -> ApiResponse:
     """获取插件当前配置（合并 manifest 默认值与 KV 存储值）。"""
     try:
-        result = cx_plugin_config_assistant.get_plugin_config(plugin_id)
+        result = luominest_plugin_config_assistant.get_plugin_config(plugin_id)
     except ValueError as e:
         return _err(ERR_PLUGIN_NOT_FOUND, str(e))
     return _ok(data=result)
@@ -105,7 +105,7 @@ async def get_plugin_config(plugin_id: str) -> ApiResponse:
 async def reset_plugin_config(req: PluginIdRequest) -> ApiResponse:
     """重置插件配置到 manifest 默认值。"""
     try:
-        result = cx_plugin_config_assistant.reset_plugin_config(req.plugin_id)
+        result = luominest_plugin_config_assistant.reset_plugin_config(req.plugin_id)
     except ValueError as e:
         return _err(ERR_PLUGIN_NOT_FOUND, str(e))
     return _ok(data=result, message="Config reset")
@@ -120,7 +120,7 @@ async def reset_plugin_config(req: PluginIdRequest) -> ApiResponse:
 async def suggest_config_change(req: ConfigSuggestRequest) -> ApiResponse:
     """让 LLM 根据自然语言请求生成配置 patch 建议。"""
     try:
-        suggestion = await cx_plugin_config_assistant.suggest_config_change(
+        suggestion = await luominest_plugin_config_assistant.suggest_config_change(
             req.plugin_id, req.user_request
         )
     except ValueError as e:
@@ -146,7 +146,7 @@ async def apply_config_patches(req: ConfigApplyRequest) -> ApiResponse:
             )
             for p in req.patches
         ]
-        result = cx_plugin_config_assistant.apply_config_patches(
+        result = luominest_plugin_config_assistant.apply_config_patches(
             req.plugin_id, patches, skip_invalid=req.skip_invalid
         )
     except ValueError as e:
@@ -161,7 +161,7 @@ async def apply_config_patches(req: ConfigApplyRequest) -> ApiResponse:
 async def explain_config(req: PluginIdRequest) -> ApiResponse:
     """用 LLM 解释插件当前配置含义。"""
     try:
-        result = await cx_plugin_config_assistant.explain_config(req.plugin_id)
+        result = await luominest_plugin_config_assistant.explain_config(req.plugin_id)
     except ValueError as e:
         return _err(ERR_PLUGIN_NOT_FOUND, str(e))
     except RuntimeError as e:
@@ -179,7 +179,7 @@ async def explain_config(req: PluginIdRequest) -> ApiResponse:
 async def generate_scaffold(req: ScaffoldGenerateRequest) -> ApiResponse:
     """根据描述生成新插件脚手架（不写入磁盘）。"""
     try:
-        scaffold = await cx_plugin_config_assistant.generate_scaffold(
+        scaffold = await luominest_plugin_config_assistant.generate_scaffold(
             plugin_id=req.plugin_id,
             name=req.name,
             description=req.description,
@@ -203,7 +203,7 @@ async def write_scaffold(req: ScaffoldWriteRequest) -> ApiResponse:
 
     需先调用 /scaffold/generate 生成脚手架，本接口根据 plugin_id 从历史记录中读取。
     """
-    scaffold_data = cx_plugin_config_assistant.get_scaffold(req.plugin_id)
+    scaffold_data = luominest_plugin_config_assistant.get_scaffold(req.plugin_id)
     if scaffold_data is None:
         return _err(ERR_ASSISTANT_INVALID, f"未找到脚手架记录: {req.plugin_id}")
 
@@ -219,7 +219,7 @@ async def write_scaffold(req: ScaffoldWriteRequest) -> ApiResponse:
     )
 
     try:
-        result = cx_plugin_config_assistant.write_scaffold_to_disk(
+        result = luominest_plugin_config_assistant.write_scaffold_to_disk(
             scaffold, overwrite=req.overwrite
         )
     except ValueError as e:
@@ -236,13 +236,13 @@ async def write_scaffold(req: ScaffoldWriteRequest) -> ApiResponse:
 @router.get("/plugins/assistant/scaffolds", response_model=ApiResponse)
 async def list_scaffolds() -> ApiResponse:
     """列出所有历史脚手架记录。"""
-    return _ok(data=cx_plugin_config_assistant.list_scaffolds())
+    return _ok(data=luominest_plugin_config_assistant.list_scaffolds())
 
 
 @router.get("/plugins/assistant/scaffolds/{plugin_id}", response_model=ApiResponse)
 async def get_scaffold(plugin_id: str) -> ApiResponse:
     """获取单个历史脚手架详情。"""
-    data = cx_plugin_config_assistant.get_scaffold(plugin_id)
+    data = luominest_plugin_config_assistant.get_scaffold(plugin_id)
     if data is None:
         return _err(ERR_PLUGIN_NOT_FOUND, f"Scaffold not found: {plugin_id}")
     return _ok(data=data)

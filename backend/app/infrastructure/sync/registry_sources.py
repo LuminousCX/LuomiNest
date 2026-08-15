@@ -7,7 +7,7 @@
 - 提供延迟测试接口（供后端 API 调用）
 
 持久化：活跃源选择与自定义源覆盖属于用户配置（不可重建），存储在 config_items
-表（通过 lumi_config_store，SQLite），参与统一备份链路。注意与 repo_sources_store
+表（通过 luominest_config_store，SQLite），参与统一备份链路。注意与 repo_sources_store
 （用户添加的 GitHub 仓库来源，独立 SQLite 表）无关，二者数据不重叠。
 遗留 JSON 文件 registry_source.json 仅在首次迁移时幂等合并一次，不删除。
 """
@@ -22,7 +22,7 @@ import httpx
 from loguru import logger
 
 from app.core.config import settings
-from app.infrastructure.database.config_store import lumi_config_store
+from app.infrastructure.database.config_store import luominest_config_store
 
 # config_items 存储键（config_items 为唯一权威源）
 _KEY_ACTIVE_SOURCE_ID = "registry_source.active_source_id"
@@ -70,17 +70,17 @@ def _merge_legacy_json() -> None:
             if (
                 isinstance(legacy_active, str)
                 and legacy_active
-                and not lumi_config_store.get(_KEY_ACTIVE_SOURCE_ID)
+                and not luominest_config_store.get(_KEY_ACTIVE_SOURCE_ID)
             ):
-                lumi_config_store.set(_KEY_ACTIVE_SOURCE_ID, legacy_active)
+                luominest_config_store.set(_KEY_ACTIVE_SOURCE_ID, legacy_active)
                 count += 1
             legacy_custom = data.get("custom_sources")
             if (
                 isinstance(legacy_custom, list)
                 and legacy_custom
-                and lumi_config_store.get(_KEY_CUSTOM_SOURCES) is None
+                and luominest_config_store.get(_KEY_CUSTOM_SOURCES) is None
             ):
-                lumi_config_store.set(_KEY_CUSTOM_SOURCES, legacy_custom)
+                luominest_config_store.set(_KEY_CUSTOM_SOURCES, legacy_custom)
                 count += 1
 
         _mark_migrated(_MIGRATION_SOURCE, count)
@@ -101,7 +101,7 @@ def get_registry_sources() -> list[dict[str, Any]]:
     """
     _merge_legacy_json()
     sources = list(settings.REGISTRY_SOURCES or [])
-    custom_overrides = lumi_config_store.get(_KEY_CUSTOM_SOURCES) or []
+    custom_overrides = luominest_config_store.get(_KEY_CUSTOM_SOURCES) or []
     override_map = {s.get("id"): s for s in custom_overrides if isinstance(s, dict) and s.get("id")}
 
     result = []
@@ -131,7 +131,7 @@ def get_registry_sources() -> list[dict[str, Any]]:
 def get_active_source_id() -> str:
     """获取当前活跃发布源 ID（先从持久化读取， fallback 到默认）。"""
     _merge_legacy_json()
-    stored = lumi_config_store.get(_KEY_ACTIVE_SOURCE_ID)
+    stored = luominest_config_store.get(_KEY_ACTIVE_SOURCE_ID)
     if isinstance(stored, str) and stored:
         # 确认该源存在于配置中
         if any(s["id"] == stored for s in get_registry_sources()):
@@ -153,7 +153,7 @@ def set_active_source_id(source_id: str) -> bool:
     if not source.get("enabled"):
         logger.warning(f"[RegistrySource] Source disabled, cannot activate: {source_id}")
         return False
-    lumi_config_store.set(_KEY_ACTIVE_SOURCE_ID, source_id)
+    luominest_config_store.set(_KEY_ACTIVE_SOURCE_ID, source_id)
     logger.info(f"[RegistrySource] Active source switched to: {source_id}")
     return True
 
@@ -206,13 +206,13 @@ def set_custom_source_base_url(base_url: str) -> bool:
     _merge_legacy_json()
     clean_url = base_url.strip().rstrip("/")
     # 读取已有的持久化覆盖列表（仅 custom-cdn 及未来其他自定义源）
-    custom_overrides = lumi_config_store.get(_KEY_CUSTOM_SOURCES) or []
+    custom_overrides = luominest_config_store.get(_KEY_CUSTOM_SOURCES) or []
     if not isinstance(custom_overrides, list):
         custom_overrides = []
     # 移除旧的 custom-cdn 条目，保留其他自定义源覆盖
     others = [s for s in custom_overrides if isinstance(s, dict) and s.get("id") != "custom-cdn"]
     others.append({"id": "custom-cdn", "baseUrl": clean_url})
-    lumi_config_store.set(_KEY_CUSTOM_SOURCES, others)
+    luominest_config_store.set(_KEY_CUSTOM_SOURCES, others)
     logger.info(f"[RegistrySource] Custom CDN baseUrl updated: {clean_url}")
     return True
 

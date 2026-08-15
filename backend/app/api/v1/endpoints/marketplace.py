@@ -4,10 +4,17 @@
 import json
 import os
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 from loguru import logger
+
+from app.core.exceptions import (
+    BadRequestError,
+    ConflictError,
+    InternalServerError,
+    NotFoundError,
+)
 
 from app.infrastructure.install.install_service import (
     download_item,
@@ -151,8 +158,8 @@ async def list_local_items(
     （loaded/disabled 等），便于前端展示当前是否生效。
     """
     from app.core.config import settings
-    from app.runtime.plugin.skill.registry import cx_skill_registry
-    from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+    from app.runtime.plugin.skill.registry import luominest_skill_registry
+    from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
 
     items: list[dict] = []
 
@@ -196,10 +203,10 @@ async def list_local_items(
 
 def _scan_local_skill(skill_id: str, skill_dir: str) -> Optional[dict]:
     """扫描单个本地 skill 目录，返回条目字典。"""
-    from app.runtime.plugin.skill.registry import cx_skill_registry
+    from app.runtime.plugin.skill.registry import luominest_skill_registry
     from app.runtime.plugin.skill.models import SkillStatus
 
-    skill = cx_skill_registry.get(skill_id)
+    skill = luominest_skill_registry.get(skill_id)
     runtime_status = skill.status.value if skill else "not_loaded"
 
     # 尝试读取 SKILL.md / manifest.json 提取元数据
@@ -284,9 +291,9 @@ def _scan_local_skill(skill_id: str, skill_dir: str) -> Optional[dict]:
 
 def _scan_local_plugin(plugin_id: str, plugin_dir: str) -> Optional[dict]:
     """扫描单个本地 plugin 目录，返回条目字典。"""
-    from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+    from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
 
-    meta = cx_plugin_registry.get_plugin(plugin_id)
+    meta = luominest_plugin_registry.get_plugin(plugin_id)
     runtime_status = meta.status.value if meta else "not_loaded"
 
     name = plugin_id
@@ -344,7 +351,7 @@ async def get_catalog_item_by_id(item_id: str):
     """按 ID 获取单个目录条目，合并本地安装状态。"""
     item = get_catalog_item(item_id)
     if not item:
-        raise HTTPException(status_code=404, detail=f"条目 {item_id} 不存在")
+        raise NotFoundError(f"条目 {item_id} 不存在", code="MARKETPLACE_ITEM_NOT_FOUND")
 
     # 合并安装状态
     if is_installed(item_id):
@@ -424,7 +431,7 @@ async def install_marketplace_item(req: InstallRequest, background_tasks: Backgr
     """
     # 检查是否已安装
     if is_installed(req.itemId):
-        raise HTTPException(status_code=409, detail=f"条目 {req.itemId} 已安装")
+        raise ConflictError(f"条目 {req.itemId} 已安装", code="MARKETPLACE_ALREADY_INSTALLED")
 
     # 检查是否正在下载/安装中
     current = get_download_status(req.itemId)
@@ -459,7 +466,7 @@ async def uninstall_marketplace_item(req: UninstallRequest):
     """卸载已安装的市场内容"""
     result = await uninstall_item(req.itemId)
     if not result.get("success"):
-        raise HTTPException(status_code=404, detail=result.get("error", "卸载失败"))
+        raise NotFoundError(result.get("error", "卸载失败"), code="MARKETPLACE_UNINSTALL_FAILED")
     return {"code": 0, "message": "ok", "error": None, "data": result}
 
 
@@ -783,7 +790,7 @@ async def build_local_snapshot():
         }
     except Exception as e:
         logger.error(f"[MarketplaceAPI] Build snapshot failed: {e}")
-        raise HTTPException(status_code=500, detail="生成快照失败，请查看后端日志") from e
+        raise InternalServerError("生成快照失败，请查看后端日志", code="MARKETPLACE_SNAPSHOT_FAILED") from e
 
 
 @router.get("/registry/sources")
@@ -836,20 +843,20 @@ async def switch_registry_source(source_id: str):
 
     source = get_source_by_id(source_id)
     if not source:
-        raise HTTPException(status_code=404, detail=f"发布源 {source_id} 不存在")
+        raise NotFoundError(f"发布源 {source_id} 不存在", code="MARKETPLACE_SOURCE_NOT_FOUND")
     if not source.get("enabled"):
-        raise HTTPException(status_code=400, detail=f"发布源 {source_id} 已禁用，无法切换")
+        raise BadRequestError(f"发布源 {source_id} 已禁用，无法切换", code="MARKETPLACE_SOURCE_DISABLED")
 
     # 切换前快速 ping 一次，避免切到不可用的源
     ping = await ping_source(source, timeout=3.0)
     if not ping["healthy"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"发布源 {source_id} 当前不可用: {ping.get('error') or ping.get('statusCode')}",
+        raise BadRequestError(
+            f"发布源 {source_id} 当前不可用: {ping.get('error') or ping.get('statusCode')}",
+            code="MARKETPLACE_SOURCE_UNAVAILABLE",
         )
 
     if not set_active_source_id(source_id):
-        raise HTTPException(status_code=500, detail=f"切换发布源 {source_id} 失败")
+        raise InternalServerError(f"切换发布源 {source_id} 失败", code="MARKETPLACE_SOURCE_SWITCH_FAILED")
 
     return {
         "code": 0,

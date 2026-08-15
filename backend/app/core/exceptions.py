@@ -7,23 +7,51 @@ class LuomiNestError(Exception):
 
 
 class NotFoundError(LuomiNestError):
-    def __init__(self, message: str = "Resource not found"):
-        super().__init__(message, "NOT_FOUND", 404)
+    def __init__(self, message: str = "Resource not found", code: str = "NOT_FOUND"):
+        super().__init__(message, code, 404)
+
+
+class BadRequestError(LuomiNestError):
+    """请求参数或操作无效（400）。code 可覆盖为业务错误码。"""
+
+    def __init__(self, message: str = "请求无效", code: str = "BAD_REQUEST"):
+        super().__init__(message, code, 400)
+
+
+class ConflictError(LuomiNestError):
+    """资源状态冲突（409），如重复安装、模式锁定等。"""
+
+    def __init__(self, message: str = "资源状态冲突", code: str = "CONFLICT"):
+        super().__init__(message, code, 409)
+
+
+class InternalServerError(LuomiNestError):
+    """服务器内部错误（500）。"""
+
+    def __init__(self, message: str = "服务器内部错误", code: str = "INTERNAL_ERROR"):
+        super().__init__(message, code, 500)
+
+
+class ServiceUnavailableError(LuomiNestError):
+    """服务暂不可用（503），如调度器未启动、引擎缺失。"""
+
+    def __init__(self, message: str = "服务暂不可用", code: str = "SERVICE_UNAVAILABLE"):
+        super().__init__(message, code, 503)
 
 
 class AuthenticationError(LuomiNestError):
-    def __init__(self, message: str = "Authentication failed"):
-        super().__init__(message, "AUTH_FAILED", 401)
+    def __init__(self, message: str = "Authentication failed", code: str = "AUTH_FAILED"):
+        super().__init__(message, code, 401)
 
 
 class AuthorizationError(LuomiNestError):
-    def __init__(self, message: str = "Permission denied"):
-        super().__init__(message, "FORBIDDEN", 403)
+    def __init__(self, message: str = "Permission denied", code: str = "FORBIDDEN"):
+        super().__init__(message, code, 403)
 
 
 class ValidationError(LuomiNestError):
-    def __init__(self, message: str = "Validation failed"):
-        super().__init__(message, "VALIDATION_ERROR", 422)
+    def __init__(self, message: str = "Validation failed", code: str = "VALIDATION_ERROR"):
+        super().__init__(message, code, 422)
 
 
 class RateLimitError(LuomiNestError):

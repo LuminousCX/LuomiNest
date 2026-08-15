@@ -25,7 +25,7 @@ class UsageFacade:
         completion_tokens: int = 0,
         total_tokens: int = 0,
         agent_id: Optional[str] = None,
-        conv_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
         is_stream: bool = False,
     ) -> dict:
         return self._repo.record(
@@ -35,7 +35,7 @@ class UsageFacade:
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             agent_id=agent_id,
-            conv_id=conv_id,
+            conversation_id=conversation_id,
             is_stream=is_stream,
         )
 

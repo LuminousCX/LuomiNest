@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from enum import Enum
 
-from fastapi import HTTPException, Request
+from fastapi import Request
+
+from app.core.exceptions import AuthorizationError
 
 
 class Permission(str, Enum):
@@ -44,7 +46,7 @@ def require_permission(permission: Permission):
     """FastAPI 依赖注入工厂：检查当前用户是否拥有指定权限。
 
     从 request.state.user 中读取角色列表，结合角色权限映射进行校验。
-    无权限时抛出 403 HTTPException。
+    无权限时抛出 AuthorizationError（403, FORBIDDEN）。
 
     Args:
         permission: 要求的目标权限。
@@ -73,13 +75,7 @@ def require_permission(permission: Permission):
         roles: list[str] = user_info.get("roles", [])
 
         if not roles:
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "code": "FORBIDDEN",
-                    "message": f"无权限执行此操作（需要: {permission.value}）",
-                },
-            )
+            raise AuthorizationError(f"无权限执行此操作（需要: {permission.value}）")
 
         # 延迟导入避免循环依赖
         from app.security.rbac.role import Role, has_permission
@@ -93,12 +89,6 @@ def require_permission(permission: Permission):
             if has_permission(role, permission):
                 return user_info
 
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "FORBIDDEN",
-                "message": f"无权限执行此操作（需要: {permission.value}）",
-            },
-        )
+        raise AuthorizationError(f"无权限执行此操作（需要: {permission.value}）")
 
     return dependency

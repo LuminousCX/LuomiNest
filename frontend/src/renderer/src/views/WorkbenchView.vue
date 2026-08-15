@@ -72,12 +72,8 @@ const {
   stopTts,
   dismissSubtitle,
   switchModel,
-  showModelDropdown,
   currentModel,
-  currentProvider,
   currentProviderLogo,
-  availableModelOptions,
-  selectModel,
   feedChunk,
   finishStream,
   filterCodeForTts,
@@ -154,14 +150,6 @@ const {
   inputAreaRef,
 })
 
-// 模型下拉外部点击关闭
-const handleClickOutsideModel = (e: MouseEvent): void => {
-  const target = e.target as HTMLElement
-  if (!target.closest('.model-dropdown-container')) {
-    showModelDropdown.value = false
-  }
-}
-
 onMounted(async () => {
   agentStore.setActiveAgent(MAIN_AGENT_PROFILE)
 
@@ -184,13 +172,11 @@ onMounted(async () => {
     const defaultModel = LUOMINEST_BUILTIN_MODELS[0]
     await loadModel(defaultModel.url, defaultModel.scale)
   }
-  document.addEventListener('click', handleClickOutsideModel)
   nextTick(() => chatAreaRef.value?.setupResizeObserver())
 })
 
 onBeforeUnmount(() => {
   chatAreaRef.value?.teardownResizeObserver()
-  document.removeEventListener('click', handleClickOutsideModel)
   // 桌宠模式下 TTS 引擎是全局 store，不随 WorkbenchView 卸载而停止（陪伴优先）；
   // 普通模式下 TTS 随页面切换中断（原有行为）。
   // teardownLive2D 在桌宠模式下已是 no-op（watch isDesktopMode 已卸载 canvas）。
@@ -273,15 +259,11 @@ onBeforeUnmount(() => {
         :is-streaming="isStreaming"
         :can-send="canSend"
         :current-model="currentModel"
-        :current-provider="currentProvider"
         :current-provider-logo="currentProviderLogo"
-        :available-model-options="availableModelOptions"
-        :show-model-dropdown="showModelDropdown"
         :chat-mode-options="CHAT_MODE_OPTIONS"
         @send="sendMessage"
         @cancel="cancelStreaming"
-        @toggle-model-dropdown="showModelDropdown = !showModelDropdown"
-        @select-model="selectModel"
+        @go-settings="navigateToSettings('ai-model')"
         @select-chat-mode="selectChatMode"
       />
     </div>

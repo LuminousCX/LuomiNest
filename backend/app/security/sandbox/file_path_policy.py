@@ -34,8 +34,8 @@ def _get_default_allowed_roots() -> list[Path]:
 def _load_extra_allowed_dirs() -> list[Path]:
     """加载用户配置的额外允许目录。"""
     try:
-        from app.infrastructure.database.config_store import lumi_config_store
-        dirs = lumi_config_store.get(KEY_FILE_ALLOWED_DIRS, []) or []
+        from app.infrastructure.database.config_store import luominest_config_store
+        dirs = luominest_config_store.get(KEY_FILE_ALLOWED_DIRS, []) or []
     except Exception:
         return []
 
@@ -88,8 +88,8 @@ def save_extra_allowed_dirs(dirs: list | None) -> list[str]:
             cleaned.append(d)
 
     try:
-        from app.infrastructure.database.config_store import lumi_config_store
-        lumi_config_store.set(KEY_FILE_ALLOWED_DIRS, cleaned)
+        from app.infrastructure.database.config_store import luominest_config_store
+        luominest_config_store.set(KEY_FILE_ALLOWED_DIRS, cleaned)
         logger.info(f"[FilePathPolicy] 额外允许目录已保存: {cleaned}")
     except Exception as e:
         logger.warning(f"[FilePathPolicy] 保存额外允许目录失败: {e}")

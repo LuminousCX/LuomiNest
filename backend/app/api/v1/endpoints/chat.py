@@ -1,6 +1,5 @@
 import uuid
 from fastapi import APIRouter, Request, Query, Depends
-from fastapi import HTTPException
 from typing import Any
 from pydantic import BaseModel, Field
 from loguru import logger
@@ -18,7 +17,7 @@ from app.schemas.chat import (
     BatchIdsRequest,
 )
 from app.core.utils import utc_now, require_store, ok
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import BadRequestError, NotFoundError, ValidationError
 from app.security.rate_limiter import limiter, RATE_CHAT
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -35,16 +34,16 @@ async def chat_completions(
 ):
     # Agent 集群调用递归守卫：防止 Agent A→B→A 无限循环
     if body.agent_depth > settings.A2A_MAX_DEPTH:
-        raise HTTPException(
-            status_code=400,
-            detail=f"已达到最大 Agent 调用深度（{settings.A2A_MAX_DEPTH}），无法继续递归调用",
+        raise BadRequestError(
+            f"已达到最大 Agent 调用深度（{settings.A2A_MAX_DEPTH}），无法继续递归调用",
+            code="A2A_MAX_DEPTH_EXCEEDED",
         )
 
     result = await chat_service.handle_completions(body, adapter, conversation_store)
     if body.stream:
         return result
     if result["aborted"]:
-        raise HTTPException(status_code=400, detail=result["content"].removeprefix("[Error] "))
+        raise BadRequestError(result["content"].removeprefix("[Error] "))
     return ChatResponse(
         id=str(uuid.uuid4()),
         content=result["content"],
@@ -79,12 +78,12 @@ async def list_conversations(
         )
     result = []
     for meta in conv_list:
-        conv_id = meta.get("id")
-        if not conv_id:
+        conversation_id = meta.get("id")
+        if not conversation_id:
             logger.warning("[API] Skipping conversation with missing id in index")
             continue
         result.append(ConversationListResponse(
-            id=conv_id,
+            id=conversation_id,
             title=meta.get("title", "New Conversation"),
             agent_id=meta.get("agent_id"),
             model=meta.get("model"),
@@ -149,10 +148,10 @@ async def create_conversation(
     if scene == SCENE_AVATAR and chat_mode != ChatMode.STANDARD.value:
         chat_mode = ChatMode.STANDARD.value
 
-    conv_id = str(uuid.uuid4())
+    conversation_id = str(uuid.uuid4())
     now = utc_now()
     conv = {
-        "id": conv_id,
+        "id": conversation_id,
         "title": request.title or "New Conversation",
         "agent_id": request.agent_id,
         "model": request.model,
@@ -166,66 +165,66 @@ async def create_conversation(
         "created_at": now,
         "updated_at": now,
     }
-    await conversation_store.set_async(conv_id, conv)
-    logger.success(f"[API] POST /chat/conversations - Conversation created: id={conv_id}")
+    await conversation_store.set_async(conversation_id, conv)
+    logger.success(f"[API] POST /chat/conversations - Conversation created: id={conversation_id}")
     return ConversationResponse(**conv)
 
 
-@router.get("/conversations/{conv_id}", response_model=ConversationResponse)
+@router.get("/conversations/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(
-    conv_id: str,
+    conversation_id: str,
     limit: int = Query(100, ge=1, le=500, description="每次返回消息数上限"),
     before_id: str | None = Query(None, description="返回此消息之前的历史消息"),
     conversation_store=Depends(get_conversation_store),
 ):
-    logger.info(f"[API] GET /chat/conversations/{conv_id} - Fetching conversation (limit={limit}, before_id={before_id})")
-    conv = await conversation_store.get_paginated_async(conv_id, limit=limit, before_id=before_id)
+    logger.info(f"[API] GET /chat/conversations/{conversation_id} - Fetching conversation (limit={limit}, before_id={before_id})")
+    conv = await conversation_store.get_paginated_async(conversation_id, limit=limit, before_id=before_id)
     if not conv:
-        logger.error(f"[API] GET /chat/conversations/{conv_id} - Conversation not found")
-        raise NotFoundError(f"Conversation {conv_id} not found")
+        logger.error(f"[API] GET /chat/conversations/{conversation_id} - Conversation not found")
+        raise NotFoundError(f"Conversation {conversation_id} not found")
     msg_count = len(conv.get("messages", []))
     total = conv.get("total_messages", msg_count)
     logger.success(
-        f"[API] GET /chat/conversations/{conv_id} - "
+        f"[API] GET /chat/conversations/{conversation_id} - "
         f"Success: title={conv['title']}, messages={msg_count}/{total}, has_more={conv.get('has_more', False)}"
     )
     return ConversationResponse(**conv)
 
 
-@router.post("/conversations/{conv_id}/leave")
+@router.post("/conversations/{conversation_id}/leave")
 async def leave_conversation(
-    conv_id: str,
+    conversation_id: str,
     adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
     """用户离开/切换对话时触发最终蒸馏"""
-    logger.info(f"[API] POST /chat/conversations/{conv_id}/leave")
+    logger.info(f"[API] POST /chat/conversations/{conversation_id}/leave")
     try:
-        conv = await conversation_store.get_async(conv_id)
-        await chat_service.trigger_final_distill(conv_id, conv, adapter)
+        conv = await conversation_store.get_async(conversation_id)
+        await chat_service.trigger_final_distill(conversation_id, conv, adapter)
     except Exception as distill_err:
         logger.warning(f"[API] Final distill on leave failed: {distill_err}")
     return ok({"left": True})
 
 
-@router.delete("/conversations/{conv_id}")
+@router.delete("/conversations/{conversation_id}")
 async def delete_conversation(
-    conv_id: str,
+    conversation_id: str,
     adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
-    logger.info(f"[API] DELETE /chat/conversations/{conv_id} - Moving to trash")
+    logger.info(f"[API] DELETE /chat/conversations/{conversation_id} - Moving to trash")
     # 对话移到回收站前触发最终蒸馏
     try:
-        conv = await conversation_store.get_async(conv_id)
-        await chat_service.trigger_final_distill(conv_id, conv, adapter)
+        conv = await conversation_store.get_async(conversation_id)
+        await chat_service.trigger_final_distill(conversation_id, conv, adapter)
     except Exception as distill_err:
         logger.warning(f"[API] Final distill on delete failed: {distill_err}")
 
-    await conversation_store.soft_delete_async(conv_id)
-    logger.success(f"[API] DELETE /chat/conversations/{conv_id} - Moved to trash")
+    await conversation_store.soft_delete_async(conversation_id)
+    logger.success(f"[API] DELETE /chat/conversations/{conversation_id} - Moved to trash")
     return ok({"deleted": True})
 
 
@@ -233,17 +232,17 @@ class RenameConversationRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
 
 
-@router.patch("/conversations/{conv_id}/rename")
+@router.patch("/conversations/{conversation_id}/rename")
 async def rename_conversation(
-    conv_id: str,
+    conversation_id: str,
     request: RenameConversationRequest,
     conversation_store=Depends(get_conversation_store),
 ):
-    logger.info(f"[API] PATCH /chat/conversations/{conv_id}/rename - title_len={len(request.title)}")
-    success = await conversation_store.rename_async(conv_id, request.title)
+    logger.info(f"[API] PATCH /chat/conversations/{conversation_id}/rename - title_len={len(request.title)}")
+    success = await conversation_store.rename_async(conversation_id, request.title)
     if not success:
-        raise NotFoundError(f"Conversation {conv_id} not found")
-    logger.success(f"[API] PATCH /chat/conversations/{conv_id}/rename - Renamed")
+        raise NotFoundError(f"Conversation {conversation_id} not found")
+    logger.success(f"[API] PATCH /chat/conversations/{conversation_id}/rename - Renamed")
     return ok({"renamed": True, "title": request.title})
 
 
@@ -251,32 +250,32 @@ class TruncateMessagesRequest(BaseModel):
     keep_count: int = Field(..., ge=0)
 
 
-@router.patch("/conversations/{conv_id}/messages")
+@router.patch("/conversations/{conversation_id}/messages")
 async def truncate_messages(
-    conv_id: str,
+    conversation_id: str,
     request: TruncateMessagesRequest,
     adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
     logger.info(
-        f"[API] PATCH /chat/conversations/{conv_id}/messages - "
+        f"[API] PATCH /chat/conversations/{conversation_id}/messages - "
         f"Truncating to {request.keep_count}"
     )
-    conv = await require_store(conversation_store, conv_id, "Conversation")
+    conv = await require_store(conversation_store, conversation_id, "Conversation")
     conv["messages"] = conv["messages"][:request.keep_count]
-    await chat_service.persist_conv(conv_id, conv)
+    await chat_service.persist_conv(conversation_id, conv)
 
     # 截断的是尾部，重建对话级记忆
     agent_id = await chat_service.resolve_agent_id(conv)
     if agent_id:
         try:
-            await chat_service.rebuild_conversation_memory(conv_id, conv, agent_id, adapter)
+            await chat_service.rebuild_conversation_memory(conversation_id, conv, agent_id, adapter)
         except Exception as mem_err:
             logger.warning(f"[Memory] Rebuild after truncate failed: {mem_err}")
 
     logger.success(
-        f"[API] PATCH /chat/conversations/{conv_id}/messages - "
+        f"[API] PATCH /chat/conversations/{conversation_id}/messages - "
         f"Truncated to {request.keep_count} messages"
     )
     return ok({"truncated": True, "keep_count": request.keep_count})
@@ -298,21 +297,21 @@ class UpdateMessageVersionRequest(BaseModel):
     current_version: int
 
 
-@router.post("/conversations/{conv_id}/regenerate")
+@router.post("/conversations/{conversation_id}/regenerate")
 async def regenerate_message(
-    conv_id: str,
+    conversation_id: str,
     request: RegenerateRequest,
     adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
-    logger.info(f"[API] POST /chat/conversations/{conv_id}/regenerate")
+    logger.info(f"[API] POST /chat/conversations/{conversation_id}/regenerate")
     result = await chat_service.process_conversation_turn(
-        conv_id, request, adapter, conversation_store, regenerate=True,
+        conversation_id, request, adapter, conversation_store, regenerate=True,
     )
     if request.stream:
         return result
-    logger.success(f"[API] Regenerate done: conv={conv_id}")
+    logger.success(f"[API] Regenerate done: conv={conversation_id}")
     return ChatResponse(
         id=str(uuid.uuid4()),
         content=result["content"],
@@ -321,18 +320,18 @@ async def regenerate_message(
     )
 
 
-@router.patch("/conversations/{conv_id}/messages/version")
+@router.patch("/conversations/{conversation_id}/messages/version")
 async def update_message_version(
-    conv_id: str,
+    conversation_id: str,
     request: UpdateMessageVersionRequest,
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
     logger.info(
-        f"[API] PATCH /chat/conversations/{conv_id}/messages/version - "
+        f"[API] PATCH /chat/conversations/{conversation_id}/messages/version - "
         f"Updating message version for {request.message_id}"
     )
-    conv = await require_store(conversation_store, conv_id, "Conversation")
+    conv = await require_store(conversation_store, conversation_id, "Conversation")
 
     for msg in conv["messages"]:
         if msg.get("id") == request.message_id:
@@ -349,27 +348,27 @@ async def update_message_version(
                 msg["suggested_questions"] = v["suggested_questions"]
             elif "suggested_questions" in msg:
                 del msg["suggested_questions"]
-            await chat_service.persist_conv(conv_id, conv)
+            await chat_service.persist_conv(conversation_id, conv)
             logger.success(
-                f"[API] PATCH /chat/conversations/{conv_id}/messages/version - Version updated"
+                f"[API] PATCH /chat/conversations/{conversation_id}/messages/version - Version updated"
             )
             return ok({"updated": True})
 
-    raise NotFoundError(f"Message {request.message_id} not found in conversation {conv_id}")
+    raise NotFoundError(f"Message {request.message_id} not found in conversation {conversation_id}")
 
 
-@router.delete("/conversations/{conv_id}/messages/{message_id}")
+@router.delete("/conversations/{conversation_id}/messages/{message_id}")
 async def delete_message(
-    conv_id: str,
+    conversation_id: str,
     message_id: str,
     adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
     logger.info(
-        f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Deleting message"
+        f"[API] DELETE /chat/conversations/{conversation_id}/messages/{message_id} - Deleting message"
     )
-    conv = await require_store(conversation_store, conv_id, "Conversation")
+    conv = await require_store(conversation_store, conversation_id, "Conversation")
 
     # 找到被删消息在原始列表中的位置
     deleted_idx = None
@@ -381,7 +380,7 @@ async def delete_message(
             break
 
     if deleted_idx is None:
-        raise NotFoundError(f"Message {message_id} not found in conversation {conv_id}")
+        raise NotFoundError(f"Message {message_id} not found in conversation {conversation_id}")
 
     # 找到最后一条用户消息的位置（用于尾部判断）
     last_user_idx = -1
@@ -390,38 +389,38 @@ async def delete_message(
             last_user_idx = i
 
     conv["messages"] = [m for m in conv["messages"] if m.get("id") != message_id]
-    await chat_service.persist_conv(conv_id, conv)
+    await chat_service.persist_conv(conversation_id, conv)
 
     # 删除用户消息时始终重建记忆，删除中间AI消息则跳过
     agent_id = await chat_service.resolve_agent_id(conv)
     if agent_id and conv["messages"]:
         if deleted_role == "user" or deleted_idx >= last_user_idx:
             try:
-                await chat_service.rebuild_conversation_memory(conv_id, conv, agent_id, adapter)
+                await chat_service.rebuild_conversation_memory(conversation_id, conv, agent_id, adapter)
             except Exception as mem_err:
                 logger.warning(f"[Memory] Rebuild after delete failed: {mem_err}")
         else:
             logger.info("[Memory] Middle message deleted, tail unchanged — skip rebuild")
 
     logger.success(
-        f"[API] DELETE /chat/conversations/{conv_id}/messages/{message_id} - Message deleted"
+        f"[API] DELETE /chat/conversations/{conversation_id}/messages/{message_id} - Message deleted"
     )
     return ok({"deleted": True})
 
 
-@router.post("/conversations/{conv_id}/messages")
+@router.post("/conversations/{conversation_id}/messages")
 @limiter.limit(RATE_CHAT)
 async def add_message(
     request: Request,
-    conv_id: str,
+    conversation_id: str,
     body: ChatRequest,
     adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
-    logger.info(f"[API] POST /chat/conversations/{conv_id}/messages - Adding message")
+    logger.info(f"[API] POST /chat/conversations/{conversation_id}/messages - Adding message")
     result = await chat_service.process_conversation_turn(
-        conv_id, body, adapter, conversation_store,
+        conversation_id, body, adapter, conversation_store,
     )
     if body.stream:
         return result
@@ -458,31 +457,31 @@ async def list_trash(
     return result
 
 
-@router.post("/trash/{conv_id}/restore")
+@router.post("/trash/{conversation_id}/restore")
 async def restore_conversation(
-    conv_id: str,
+    conversation_id: str,
     conversation_store=Depends(get_conversation_store),
 ):
-    logger.info(f"[API] POST /chat/trash/{conv_id}/restore - Restoring conversation")
-    restored = await conversation_store.restore_async(conv_id)
+    logger.info(f"[API] POST /chat/trash/{conversation_id}/restore - Restoring conversation")
+    restored = await conversation_store.restore_async(conversation_id)
     if not restored:
-        logger.warning(f"[API] POST /chat/trash/{conv_id}/restore - Restore failed, not found")
+        logger.warning(f"[API] POST /chat/trash/{conversation_id}/restore - Restore failed, not found")
         return {"error": "not found", "data": {"restored": False}}
-    logger.success(f"[API] POST /chat/trash/{conv_id}/restore - Restored")
+    logger.success(f"[API] POST /chat/trash/{conversation_id}/restore - Restored")
     return ok({"restored": True})
 
 
-@router.delete("/trash/{conv_id}")
+@router.delete("/trash/{conversation_id}")
 async def permanent_delete_conversation(
-    conv_id: str,
+    conversation_id: str,
     conversation_store=Depends(get_conversation_store),
 ):
-    logger.info(f"[API] DELETE /chat/trash/{conv_id} - Permanent deleting conversation")
-    deleted = await conversation_store.permanent_delete_async(conv_id)
+    logger.info(f"[API] DELETE /chat/trash/{conversation_id} - Permanent deleting conversation")
+    deleted = await conversation_store.permanent_delete_async(conversation_id)
     if not deleted:
-        logger.warning(f"[API] DELETE /chat/trash/{conv_id} - Delete failed, not found")
+        logger.warning(f"[API] DELETE /chat/trash/{conversation_id} - Delete failed, not found")
         return {"error": "not found", "data": {"deleted": False}}
-    logger.success(f"[API] DELETE /chat/trash/{conv_id} - Permanently deleted")
+    logger.success(f"[API] DELETE /chat/trash/{conversation_id} - Permanently deleted")
     return ok({"deleted": True})
 
 
@@ -529,31 +528,31 @@ async def batch_soft_delete(
     logger.info(f"[API] POST /chat/conversations/batch-delete - Moving {len(request.ids)} to trash")
 
     # 为每个对话触发最终蒸馏（与单个删除行为对齐）
-    for conv_id in request.ids:
+    for conversation_id in request.ids:
         try:
-            conv = await conversation_store.get_async(conv_id)
-            await chat_service.trigger_final_distill(conv_id, conv, adapter)
+            conv = await conversation_store.get_async(conversation_id)
+            await chat_service.trigger_final_distill(conversation_id, conv, adapter)
         except Exception as distill_err:
-            logger.warning(f"[Memory] Final distill on batch delete failed for {conv_id}: {distill_err}")
+            logger.warning(f"[Memory] Final distill on batch delete failed for {conversation_id}: {distill_err}")
 
     count = await conversation_store.batch_soft_delete_async(request.ids)
     logger.success(f"[API] POST /chat/conversations/batch-delete - Moved {count} to trash")
     return ok({"deleted_count": count})
 
 
-@router.post("/conversations/{conv_id}/compress")
+@router.post("/conversations/{conversation_id}/compress")
 async def compress_conversation(
-    conv_id: str,
+    conversation_id: str,
     adapter=Depends(get_llm_adapter),
     chat_service=Depends(get_chat_service),
     conversation_store=Depends(get_conversation_store),
 ):
     """手动压缩对话上下文。"""
-    logger.info(f"[API] POST /chat/conversations/{conv_id}/compress - Compressing conversation")
-    conv = await require_store(conversation_store, conv_id, "Conversation")
-    result = await chat_service.compress_conversation(conv_id, conv, adapter)
+    logger.info(f"[API] POST /chat/conversations/{conversation_id}/compress - Compressing conversation")
+    conv = await require_store(conversation_store, conversation_id, "Conversation")
+    result = await chat_service.compress_conversation(conversation_id, conv, adapter)
     logger.success(
-        f"[API] POST /chat/conversations/{conv_id}/compress - "
+        f"[API] POST /chat/conversations/{conversation_id}/compress - "
         f"Done: {result['tokens_before']} -> {result['tokens_after']} tokens"
     )
     return ok({

@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import time
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, UploadFile, File, Form, Query
 from loguru import logger
 
 from app.schemas.avatar import (

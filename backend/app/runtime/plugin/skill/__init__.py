@@ -14,13 +14,13 @@
 - 用户可请求 AI 创建/修改技能，即时生效无需重启
 """
 
-from app.runtime.plugin.skill.loader import SkillLoader, cx_skill_loader
+from app.runtime.plugin.skill.loader import SkillLoader, luominest_skill_loader
 from app.runtime.plugin.skill.models import (
     SkillDefinition,
     SkillSourceFormat,
     SkillStatus,
 )
-from app.runtime.plugin.skill.registry import SkillRegistry, cx_skill_registry
+from app.runtime.plugin.skill.registry import SkillRegistry, luominest_skill_registry
 
 __all__ = [
     # 数据模型
@@ -30,6 +30,6 @@ __all__ = [
     # 运行时组件
     "SkillLoader",
     "SkillRegistry",
-    "cx_skill_loader",
-    "cx_skill_registry",
+    "luominest_skill_loader",
+    "luominest_skill_registry",
 ]

@@ -183,7 +183,7 @@ class ChatService:
                     try:
                         usage_tracker.record_usage(
                             provider=provider, model=model,
-                            usage=raw["usage"], agent_id=agent_id, conv_id=conv_id,
+                            usage=raw["usage"], agent_id=agent_id, conversation_id=conv_id,
                         )
                     except Exception as ut_err:
                         logger.warning(f"[ChatService] Usage tracking failed: {ut_err}")
@@ -192,7 +192,7 @@ class ChatService:
                 try:
                     usage_tracker.record_usage(
                         provider=provider, model=model,
-                        usage=raw.usage, agent_id=agent_id, conv_id=conv_id,
+                        usage=raw.usage, agent_id=agent_id, conversation_id=conv_id,
                     )
                 except Exception as ut_err:
                     logger.warning(f"[ChatService] Usage tracking failed: {ut_err}")
@@ -201,7 +201,7 @@ class ChatService:
                 try:
                     usage_tracker.record_usage(
                         provider=provider, model=model,
-                        agent_id=agent_id, conv_id=conv_id,
+                        agent_id=agent_id, conversation_id=conv_id,
                     )
                 except Exception as ut_err:
                     logger.warning(f"[ChatService] Usage tracking failed: {ut_err}")

@@ -150,4 +150,4 @@ class LumiBackupManager:
         return await asyncio.to_thread(self.delete_backup, backup_path)
 
 
-lumi_backup_manager = LumiBackupManager()
+luominest_backup_manager = LumiBackupManager()

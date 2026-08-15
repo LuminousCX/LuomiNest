@@ -1,11 +1,11 @@
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.core.utils import utc_now, require_store, ok
-from app.core.exceptions import LuomiNestError
+from app.core.exceptions import LuomiNestError, NotFoundError
 from app.api.v1.deps import get_repo_sources_store
 
 router = APIRouter(prefix="/repo-sources", tags=["repo-sources"])
@@ -286,7 +286,7 @@ async def unlink_sub_market(
             found = True
             break
     if not found:
-        raise HTTPException(status_code=404, detail=f"Sub-market {sub_market_id} not found")
+        raise NotFoundError(f"Sub-market {sub_market_id} not found", code="SUBMARKET_NOT_FOUND")
 
     source["sub_markets"] = sub_markets
     source["updated_at"] = utc_now()
@@ -312,7 +312,7 @@ async def link_sub_market(
             found = True
             break
     if not found:
-        raise HTTPException(status_code=404, detail=f"Sub-market {sub_market_id} not found")
+        raise NotFoundError(f"Sub-market {sub_market_id} not found", code="SUBMARKET_NOT_FOUND")
 
     source["sub_markets"] = sub_markets
     source["updated_at"] = utc_now()
@@ -382,7 +382,7 @@ async def sync_sub_market(
             sub_market = sm
             break
     if not sub_market:
-        raise HTTPException(status_code=404, detail=f"Sub-market {sub_market_id} not found")
+        raise NotFoundError(f"Sub-market {sub_market_id} not found", code="SUBMARKET_NOT_FOUND")
 
     try:
         from app.infrastructure.sync.github_sync import sync_sub_market as do_sync

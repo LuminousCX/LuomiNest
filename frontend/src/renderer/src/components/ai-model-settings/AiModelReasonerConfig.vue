@@ -58,8 +58,12 @@ const onReasonerProviderChange = () => {
 
 const handleFetchModels = async (providerId: string) => {
   try {
-    await modelStore.fetchProviderModels(providerId)
-    toast.info('模型列表已刷新')
+    const models = await modelStore.fetchProviderModels(providerId)
+    if (models.length > 0) {
+      toast.success(`已获取 ${models.length} 个模型`)
+    } else {
+      toast.warning('未获取到模型，请检查供应商配置或网络连接')
+    }
   } catch (e: unknown) {
     logger.error('Failed to fetch models:', e)
     toast.error(`获取模型列表失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)

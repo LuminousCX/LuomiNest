@@ -8,7 +8,7 @@
 端口清单：
 - browser_automation: 浏览器自动化执行端口（WS 传输由接入层注入）
 - subagent_delegation: 子 Agent 委派端口（兜底延迟导入 subagent_executor 单例）
-- task_scheduling: 任务调度执行端口（兜底延迟导入 luomi_scheduler 单例）
+- task_scheduling: 任务调度执行端口（兜底延迟导入 luominest_scheduler 单例）
 
 依赖方向：外层 → 本包；本包 ↛ 外层（顶层导入禁止）。
 """

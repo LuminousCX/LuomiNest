@@ -572,4 +572,4 @@ class LuomiSchedulerManager:
 
 
 # 全局单例
-luomi_scheduler = LuomiSchedulerManager()
+luominest_scheduler = LuomiSchedulerManager()

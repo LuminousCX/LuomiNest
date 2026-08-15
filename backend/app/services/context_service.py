@@ -28,7 +28,7 @@ from app.engines.memory.memory_engine import (
 )
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.services.distillation_service import distillation_service
-from app.services.skill_service import cx_skill_service
+from app.services.skill_service import luominest_skill_service
 
 # 主 Agent 唯一标识：canonical 定义在 app.core.domain_policy，此处为兼容再导出
 # （联系人 Agent 不读写记忆；旧版 "main" 标识由 is_main_agent 兼容）
@@ -296,7 +296,7 @@ Examples:
     def _build_skills_index_block() -> str:
         """构建 <skill_index> 块 — 始终注入，让 AI 知道当前可用技能列表。"""
         try:
-            return cx_skill_service.get_skills_index_prompt()
+            return luominest_skill_service.get_skills_index_prompt()
         except Exception as e:
             logger.debug(f"[ContextService] skill_index injection skipped: {e}")
             return ""
@@ -307,7 +307,7 @@ Examples:
         if not user_context:
             return ""
         try:
-            return cx_skill_service.get_skills_prompt_for_injection(context=user_context)
+            return luominest_skill_service.get_skills_prompt_for_injection(context=user_context)
         except Exception as e:
             logger.debug(f"[ContextService] available_skills injection skipped: {e}")
             return ""
@@ -328,7 +328,7 @@ Examples:
         if not skill_ids:
             return ""
         try:
-            return cx_skill_service.build_selected_skills_prompt(skill_ids)
+            return luominest_skill_service.build_selected_skills_prompt(skill_ids)
         except Exception as e:
             logger.debug(f"[ContextService] selected skills injection skipped: {e}")
             return ""

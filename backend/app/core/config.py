@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     MQTT_USERNAME: str = ""
     MQTT_PASSWORD: str = ""
 
-    # 数据备份（lumi_backup_manager 定时任务）
+    # 数据备份（luominest_backup_manager 定时任务）
     BACKUP_ENABLED: bool = True
     BACKUP_INTERVAL_HOURS: int = 24
 

@@ -21,7 +21,7 @@ def _load_model_config() -> dict:
     """从 config_items['model_config'] 加载模型配置。"""
     # 路由与 lifespan 共用，无法 Depends 注入，经容器取同一门面单例
     from app.core.container import container
-    saved = container.lumi_config_store.get("model_config", {})
+    saved = container.luominest_config_store.get("model_config", {})
     return saved if isinstance(saved, dict) else {}
 
 
@@ -30,7 +30,7 @@ def _save_model_config(config: dict):
     # 路由与 lifespan 共用，无法 Depends 注入，经容器取同一门面单例
     from app.core.container import container
     try:
-        container.lumi_config_store.set("model_config", config)
+        container.luominest_config_store.set("model_config", config)
         logger.success("[ModelConfig] Saved to config_items['model_config']")
     except Exception as e:
         logger.error(f"[ModelConfig] Failed to save: {e}")

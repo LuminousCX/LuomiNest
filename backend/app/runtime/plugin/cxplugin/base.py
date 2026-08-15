@@ -84,17 +84,17 @@ class CxPluginContext:
     def emit_event(self, event_type: CxEventType, data: dict[str, Any]) -> None:
         """主动发射事件到全局事件总线（同步触发，非阻塞）。
 
-        通过 cx_plugin_registry.dispatch_event 异步分发，此处用 asyncio.create_task
+        通过 luominest_plugin_registry.dispatch_event 异步分发，此处用 asyncio.create_task
         触发，不等待完成。需要 EVENT_LISTEN 权限（默认授予）。
         """
         import asyncio
 
         # 懒导入避免循环依赖
-        from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+        from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
 
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(cx_plugin_registry.dispatch_event(event_type, data))
+            loop.create_task(luominest_plugin_registry.dispatch_event(event_type, data))
         except RuntimeError:
             # 无运行中的事件循环（如同步上下文），降级为同步调用
             self._logger.warning(

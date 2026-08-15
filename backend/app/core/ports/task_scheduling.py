@@ -3,7 +3,7 @@
 内层工具（core.tools.builtin.scheduler_tool 等）只依赖本端口的
 get_scheduler / 便捷函数契约，不再直接 import app.core.scheduler.manager；
 具体调度器实例可在组合根通过 register_task_scheduler() 显式注入；
-未注入时回退到内置兜底实现（对 luomi_scheduler 单例采用延迟导入，
+未注入时回退到内置兜底实现（对 luominest_scheduler 单例采用延迟导入，
 避免核心模块之间形成顶层导入环）。
 
 依赖方向纪律：
@@ -31,13 +31,13 @@ def register_task_scheduler(scheduler: Any | None) -> None:
 
 
 def _default_scheduler() -> Any:
-    """默认兜底实现：返回全局 luomi_scheduler 单例。
+    """默认兜底实现：返回全局 luominest_scheduler 单例。
 
     延迟导入 —— 避免本端口顶层依赖 app.core.scheduler（依赖方向纪律）。
     """
-    from app.core.scheduler.manager import luomi_scheduler
+    from app.core.scheduler.manager import luominest_scheduler
 
-    return luomi_scheduler
+    return luominest_scheduler
 
 
 def get_scheduler() -> Any:

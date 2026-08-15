@@ -2,7 +2,7 @@
 
 验证：
 - 7 个 Facade 单例存在且方法签名与原 store 一致
-- lumi_config_store 方法签名兼容
+- luominest_config_store 方法签名兼容
 - main_agent_config 统一接口
 - 薄 shim 文件正确 re-export（import 路径不变）
 - CRUD round-trip 通过 Facade 单例
@@ -46,7 +46,7 @@ from app.infrastructure.database.facades.json_store_facade import (
 from app.infrastructure.database.facades.marketplace_stats_store import marketplace_stats_store
 from app.infrastructure.database.usage_store import usage_store
 from app.infrastructure.database.conversation_store import conversation_store
-from app.infrastructure.database.config_store import lumi_config_store
+from app.infrastructure.database.config_store import luominest_config_store
 
 check("agents_store exists", agents_store is not None)
 check("groups_store exists", groups_store is not None)
@@ -55,7 +55,7 @@ check("repo_sources_store exists", repo_sources_store is not None)
 check("marketplace_stats_store exists", marketplace_stats_store is not None)
 check("usage_store exists", usage_store is not None)
 check("conversation_store exists", conversation_store is not None)
-check("lumi_config_store exists", lumi_config_store is not None)
+check("luominest_config_store exists", luominest_config_store is not None)
 
 
 # ════════════════════════════════════════════════════
@@ -94,10 +94,10 @@ for method in ["set", "get", "delete", "list_conversations", "search_conversatio
           hasattr(conversation_store, method) and callable(getattr(conversation_store, method)),
           f"missing={method}")
 
-# lumi_config_store
+# luominest_config_store
 for method in ["get", "set", "delete", "delete_namespace", "get_namespace", "list_all", "clear", "invalidate"]:
-    check(f"lumi_config_store.{method}() exists",
-          hasattr(lumi_config_store, method) and callable(getattr(lumi_config_store, method)),
+    check(f"luominest_config_store.{method}() exists",
+          hasattr(luominest_config_store, method) and callable(getattr(luominest_config_store, method)),
           f"missing={method}")
 
 
@@ -110,7 +110,7 @@ for store_name, store, methods in [
     ("marketplace_stats_store", marketplace_stats_store, ["set_async", "get_async", "delete_async", "clear_async", "list_all_async"]),
     ("usage_store", usage_store, ["record_async", "get_records_async", "clear_async", "trim_async"]),
     ("conversation_store", conversation_store, ["set_async", "get_async", "search_conversations_async", "soft_delete_async", "list_conversations_async"]),
-    ("lumi_config_store", lumi_config_store, ["get_async", "set_async", "delete_async", "get_namespace_async"]),
+    ("luominest_config_store", luominest_config_store, ["get_async", "set_async", "delete_async", "get_namespace_async"]),
 ]:
     for method in methods:
         check(f"{store_name}.{method}() exists",
@@ -165,11 +165,11 @@ conversation_store.set("facade-conv", {
 check("conversation_store round-trip", conversation_store.get("facade-conv")["title"] == "Facade对话")
 conversation_store.delete("facade-conv")
 
-# lumi_config_store
-lumi_config_store.set("facade.key", "value")
-check("lumi_config_store round-trip", lumi_config_store.get("facade.key") == "value")
-lumi_config_store.delete("facade.key")
-check("lumi_config_store delete", lumi_config_store.get("facade.key") is None)
+# luominest_config_store
+luominest_config_store.set("facade.key", "value")
+check("luominest_config_store round-trip", luominest_config_store.get("facade.key") == "value")
+luominest_config_store.delete("facade.key")
+check("luominest_config_store delete", luominest_config_store.get("facade.key") is None)
 
 
 # ════════════════════════════════════════════════════
@@ -211,9 +211,9 @@ print("\n=== 6. 薄 shim re-export ===")
 from app.infrastructure.database.json_store import JsonStore
 check("JsonStore class re-exported from json_store", JsonStore is not None)
 
-from app.infrastructure.database.config_store import lumi_config_store as shim_config_store
-check("lumi_config_store re-exported from config_store shim",
-      shim_config_store is lumi_config_store)
+from app.infrastructure.database.config_store import luominest_config_store as shim_config_store
+check("luominest_config_store re-exported from config_store shim",
+      shim_config_store is luominest_config_store)
 
 from app.infrastructure.database.usage_store import usage_store as shim_usage_store
 check("usage_store re-exported from usage_store shim",
@@ -240,8 +240,8 @@ async def test_async_crud():
     result = await agents_store.get_async("async-agent")
     assert result is not None and result["name"] == "异步Agent"
 
-    await lumi_config_store.set_async("async.key", {"nested": [1, 2]})
-    val = await lumi_config_store.get_async("async.key")
+    await luominest_config_store.set_async("async.key", {"nested": [1, 2]})
+    val = await luominest_config_store.get_async("async.key")
     assert val == {"nested": [1, 2]}
 
     await usage_store.record_async(provider="async", model="test", total_tokens=99)

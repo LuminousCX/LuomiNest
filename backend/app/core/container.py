@@ -117,11 +117,11 @@ class ServiceContainer:
         return self._cache["subagent_executor"]  # type: ignore
 
     @property
-    def luomi_scheduler(self) -> "LuomiSchedulerManager":
-        if "luomi_scheduler" not in self._cache:
-            from app.core.scheduler.manager import luomi_scheduler
-            self._cache["luomi_scheduler"] = luomi_scheduler
-        return self._cache["luomi_scheduler"]  # type: ignore
+    def luominest_scheduler(self) -> "LuomiSchedulerManager":
+        if "luominest_scheduler" not in self._cache:
+            from app.core.scheduler.manager import luominest_scheduler
+            self._cache["luominest_scheduler"] = luominest_scheduler
+        return self._cache["luominest_scheduler"]  # type: ignore
 
     # ── 数据访问门面层（Facade 即端口）──
     # 以下属性直接返回既有门面单例对象本身，绝不新建实例
@@ -134,11 +134,11 @@ class ServiceContainer:
         return self._cache["conversation_store"]  # type: ignore
 
     @property
-    def lumi_config_store(self) -> "LumiConfigFacade":
-        if "lumi_config_store" not in self._cache:
-            from app.infrastructure.database.config_store import lumi_config_store
-            self._cache["lumi_config_store"] = lumi_config_store
-        return self._cache["lumi_config_store"]  # type: ignore
+    def luominest_config_store(self) -> "LumiConfigFacade":
+        if "luominest_config_store" not in self._cache:
+            from app.infrastructure.database.config_store import luominest_config_store
+            self._cache["luominest_config_store"] = luominest_config_store
+        return self._cache["luominest_config_store"]  # type: ignore
 
     @property
     def usage_store(self) -> "UsageFacade":
@@ -246,7 +246,7 @@ def get_conversation_store():
 
 def get_lumi_config_store():
     """FastAPI 依赖：获取配置存储门面（全局单例本身）。"""
-    return container.lumi_config_store
+    return container.luominest_config_store
 
 
 def get_usage_store():
@@ -286,4 +286,4 @@ def get_subagent_executor():
 
 def get_luomi_scheduler():
     """FastAPI 依赖：获取定时任务调度器管理器（全局单例本身）。"""
-    return container.luomi_scheduler
+    return container.luominest_scheduler

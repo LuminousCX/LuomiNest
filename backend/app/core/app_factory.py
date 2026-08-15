@@ -23,7 +23,7 @@ def _sync_bundled_plugin_resources() -> None:
     背景：PyInstaller spec 将 backend/plugins、backend/skills 作为 datas 打包，
     运行时被解压到 <exe_dir>/_internal/{plugins,skills}/（只读）。
     config.py 在 frozen 模式下把 PLUGIN_DIR/SKILL_DIR 指向 DATA_DIR 下的可写副本，
-    但首次启动时该副本目录为空，导致 cx_plugin_loader 扫描不到任何插件。
+    但首次启动时该副本目录为空，导致 luominest_plugin_loader 扫描不到任何插件。
 
     本函数完成"首次复制 + 增量同步"：
     - 对每个内置插件/技能目录，若目标不存在则整目录复制；
@@ -357,15 +357,15 @@ async def lifespan(app: FastAPI):
     # 加载 CxPlugin 插件系统
     try:
         from app.runtime.plugin.cxplugin import init_hot_reload
-        from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
-        from app.services.plugin_service import cx_plugin_service
+        from app.runtime.plugin.cxplugin.loader import luominest_plugin_loader
+        from app.services.plugin_service import luominest_plugin_service
         # 打包模式下首次启动：将 _internal/{plugins,skills}/ 复制到可写的 DATA_DIR 下
         # 让用户安装/启用的内置插件可被运行时找到（dev 模式直接从源码目录加载，无需复制）
         _sync_bundled_plugin_resources()
-        plugin_count = await cx_plugin_service.initialize()
+        plugin_count = await luominest_plugin_service.initialize()
         # 将已加载插件注册的 API 路由挂载到 app（/api/v1/plugins/{plugin_id}/{path}）
         # 同时缓存 app 引用，供后续 install_local_builtin_plugin 动态挂载新插件路由
-        applied_routes = cx_plugin_loader.apply_routes_to_app(app)
+        applied_routes = luominest_plugin_loader.apply_routes_to_app(app)
         logger.info(
             f"[LuomiNest] Loaded {plugin_count} CxPlugin(s), applied {applied_routes} API route(s)"
         )
@@ -375,20 +375,20 @@ async def lifespan(app: FastAPI):
 
     # 初始化 CxSkill 技能系统（在 CxPlugin 之后，确保 plugin 类型条目已被 loader 跳过）
     try:
-        from app.services.skill_service import cx_skill_service
-        skill_count = await cx_skill_service.init()
+        from app.services.skill_service import luominest_skill_service
+        skill_count = await luominest_skill_service.init()
         logger.info(f"[LuomiNest] Loaded {skill_count} CxSkill(s)")
     except Exception as e:
         logger.warning(f"[LuomiNest] CxSkill loading skipped: {e}", exc_info=True)
 
     # 启动定时任务调度器（APScheduler）
     try:
-        from app.core.scheduler import luomi_scheduler
+        from app.core.scheduler import luominest_scheduler
         # 注入任务载荷执行器（组合根装配；未注入时调度器经 subagent_delegation 端口兜底）
         from app.core.container import container
-        luomi_scheduler.register_task_executor(container.subagent_executor)
-        await luomi_scheduler.init()
-        logger.info(f"[LuomiNest] Scheduler started, tasks: {len(luomi_scheduler.list_tasks())}")
+        luominest_scheduler.register_task_executor(container.subagent_executor)
+        await luominest_scheduler.init()
+        logger.info(f"[LuomiNest] Scheduler started, tasks: {len(luominest_scheduler.list_tasks())}")
     except Exception as e:
         logger.warning(f"[LuomiNest] Scheduler init skipped: {e}", exc_info=True)
 
@@ -423,8 +423,8 @@ async def lifespan(app: FastAPI):
 
     # 启动时清理临时文件
     try:
-        from app.services.cleanup_service import lumi_cleanup_service
-        temp_cleaned = lumi_cleanup_service.cleanup_temp_files()
+        from app.services.cleanup_service import luominest_cleanup_service
+        temp_cleaned = luominest_cleanup_service.cleanup_temp_files()
         if temp_cleaned > 0:
             logger.info(f"[LuomiNest] Cleaned {temp_cleaned} temp files on startup")
     except Exception as e:
@@ -433,15 +433,15 @@ async def lifespan(app: FastAPI):
     # 注册定时清理任务（每24小时执行一次）
     try:
         from apscheduler.triggers.interval import IntervalTrigger
-        from app.services.cleanup_service import lumi_cleanup_service
+        from app.services.cleanup_service import luominest_cleanup_service
 
         async def _periodic_cleanup():
             try:
-                await lumi_cleanup_service.run_all_async()
+                await luominest_cleanup_service.run_all_async()
             except Exception as cleanup_err:
                 logger.warning(f"[LuomiNest] Periodic cleanup failed: {cleanup_err}")
 
-        if luomi_scheduler.add_job(
+        if luominest_scheduler.add_job(
             _periodic_cleanup,
             trigger=IntervalTrigger(hours=24),
             id="lumi_periodic_cleanup",
@@ -455,17 +455,17 @@ async def lifespan(app: FastAPI):
     if settings.BACKUP_ENABLED:
         try:
             from apscheduler.triggers.interval import IntervalTrigger
-            from app.infrastructure.backup.backup_manager import lumi_backup_manager
+            from app.infrastructure.backup.backup_manager import luominest_backup_manager
 
             async def _periodic_backup():
                 try:
-                    path = await lumi_backup_manager.create_backup_async(label="scheduled")
+                    path = await luominest_backup_manager.create_backup_async(label="scheduled")
                     if path:
                         logger.info(f"[LuomiNest] Scheduled backup created: {path}")
                 except Exception as backup_err:
                     logger.warning(f"[LuomiNest] Scheduled backup failed: {backup_err}", exc_info=True)
 
-            if luomi_scheduler.add_job(
+            if luominest_scheduler.add_job(
                 _periodic_backup,
                 trigger=IntervalTrigger(hours=settings.BACKUP_INTERVAL_HOURS),
                 id="lumi_periodic_backup",
@@ -473,7 +473,7 @@ async def lifespan(app: FastAPI):
             ):
                 logger.info(
                     f"[LuomiNest] Periodic backup job registered "
-                    f"(every {settings.BACKUP_INTERVAL_HOURS}h, keep last {lumi_backup_manager.MAX_BACKUPS})"
+                    f"(every {settings.BACKUP_INTERVAL_HOURS}h, keep last {luominest_backup_manager.MAX_BACKUPS})"
                 )
         except Exception as e:
             logger.warning(f"[LuomiNest] Periodic backup registration skipped: {e}", exc_info=True)
@@ -506,8 +506,8 @@ async def lifespan(app: FastAPI):
 
     # 关闭定时任务调度器
     try:
-        from app.core.scheduler import luomi_scheduler
-        await luomi_scheduler.shutdown()
+        from app.core.scheduler import luominest_scheduler
+        await luominest_scheduler.shutdown()
         logger.info(f"[LuomiNest] Scheduler stopped")
     except Exception as e:
         logger.warning(f"[LuomiNest] Scheduler shutdown skipped: {e}", exc_info=True)

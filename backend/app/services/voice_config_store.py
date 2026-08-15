@@ -62,9 +62,9 @@ class LuomiNestVoiceConfigStore:
 
     @staticmethod
     def _store():
-        from app.infrastructure.database.config_store import lumi_config_store
+        from app.infrastructure.database.config_store import luominest_config_store
 
-        return lumi_config_store
+        return luominest_config_store
 
     def _invalidate(self) -> None:
         with self._lock:

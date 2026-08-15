@@ -25,7 +25,7 @@ from app.core.config import get_settings
 from app.models.plugin import CxPermission, CxPluginManifest, CxPluginMetadata, CxPluginStatus
 from app.runtime.plugin.cxplugin.base import CxPluginBase, CxPluginContext
 from app.runtime.plugin.cxplugin.permission import PermissionGuard
-from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
 
 
 class CxPluginLoader:
@@ -144,7 +144,7 @@ class CxPluginLoader:
 
         # 收集 context 中注册的处理器
         for entry in context.get_handlers():
-            cx_plugin_registry.register_handler(entry)
+            luominest_plugin_registry.register_handler(entry)
 
         # 注册到 registry
         metadata = CxPluginMetadata(
@@ -153,7 +153,7 @@ class CxPluginLoader:
             plugin_dir=plugin_dir,
             status=CxPluginStatus.LOADED,
         )
-        await cx_plugin_registry.register_plugin(metadata, instance)
+        await luominest_plugin_registry.register_plugin(metadata, instance)
         self._loaded.add(manifest.id)
 
         logger.success(
@@ -260,11 +260,11 @@ class CxPluginLoader:
 
         清理顺序：调用 terminate() → 注销工具 → 清理 context 资源 → 清理 sys.modules → 从 registry 移除
         """
-        metadata = cx_plugin_registry.get_plugin(plugin_id)
+        metadata = luominest_plugin_registry.get_plugin(plugin_id)
         if metadata is None:
             return False
 
-        instance = cx_plugin_registry.get_instance(plugin_id)
+        instance = luominest_plugin_registry.get_instance(plugin_id)
         context: CxPluginContext | None = None
         if instance is not None:
             context = getattr(instance, "context", None)
@@ -284,7 +284,7 @@ class CxPluginLoader:
         for k in to_remove:
             sys.modules.pop(k, None)
 
-        await cx_plugin_registry.unregister_plugin(plugin_id)
+        await luominest_plugin_registry.unregister_plugin(plugin_id)
         self._loaded.discard(plugin_id)
         # 从已挂载路由集合中移除，便于后续重新加载时重新挂载路由。
         # 注意：FastAPI 不支持移除已 include 的 router，因此 reload 场景下
@@ -326,7 +326,7 @@ class CxPluginLoader:
         """
         self._app = app
         applied = 0
-        for metadata in cx_plugin_registry.list_plugins():
+        for metadata in luominest_plugin_registry.list_plugins():
             applied += self._apply_plugin_routes(app, metadata.plugin_id)
         return applied
 
@@ -367,11 +367,11 @@ class CxPluginLoader:
             logger.debug(f"[CxPlugin] Routes already applied for {plugin_id}, skip")
             return 0
 
-        metadata = cx_plugin_registry.get_plugin(plugin_id)
+        metadata = luominest_plugin_registry.get_plugin(plugin_id)
         if metadata is None:
             return 0
 
-        instance = cx_plugin_registry.get_instance(plugin_id)
+        instance = luominest_plugin_registry.get_instance(plugin_id)
         if instance is None:
             return 0
 
@@ -438,4 +438,4 @@ def _version_gte(current: str, required: str) -> bool:
 
 
 # 全局单例
-cx_plugin_loader = CxPluginLoader()
+luominest_plugin_loader = CxPluginLoader()

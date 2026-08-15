@@ -45,7 +45,7 @@ from app.runtime.plugin.skill.models import (
     SkillSourceFormat,
     SkillStatus,
 )
-from app.runtime.plugin.skill.registry import cx_skill_registry
+from app.runtime.plugin.skill.registry import luominest_skill_registry
 
 
 class SkillLoader:
@@ -135,7 +135,7 @@ class SkillLoader:
             return False
 
         # 注册到全局 registry
-        await cx_skill_registry.register(skill)
+        await luominest_skill_registry.register(skill)
         self._loaded.add(skill.id)
 
         logger.success(
@@ -375,7 +375,7 @@ class SkillLoader:
         """卸载单个技能。"""
         if skill_id not in self._loaded:
             return False
-        await cx_skill_registry.unregister(skill_id)
+        await luominest_skill_registry.unregister(skill_id)
         self._loaded.discard(skill_id)
         # 同步删除 skills 表索引行（文件/注册表为权威源）
         self._remove_single_from_db(skill_id)
@@ -384,7 +384,7 @@ class SkillLoader:
 
     async def reload_single(self, skill_id: str) -> bool:
         """重载单个技能。"""
-        skill = cx_skill_registry.get(skill_id)
+        skill = luominest_skill_registry.get(skill_id)
         if skill is None:
             return False
         skill_dir = skill.skill_dir
@@ -396,7 +396,7 @@ class SkillLoader:
         loaded_ids = set(self._loaded)
         for skill_id in list(loaded_ids):
             await self.unload_single(skill_id)
-        cx_skill_registry.clear()
+        luominest_skill_registry.clear()
         return await self.load_all()
 
     def get_loaded_ids(self) -> set[str]:
@@ -416,7 +416,7 @@ class SkillLoader:
             "category": skill.category,
             "tags": json.dumps(skill.tags, ensure_ascii=False),
             "status": skill.status.value,
-            "enabled": 1 if cx_skill_registry.is_enabled(skill.id) else 0,
+            "enabled": 1 if luominest_skill_registry.is_enabled(skill.id) else 0,
             "source_path": skill.source_path,
             "body_length": len(skill.body),
         }
@@ -455,7 +455,7 @@ class SkillLoader:
             logger.warning(f"[CxSkill] skills table sync skipped (import failed): {e}")
             return
         try:
-            skills = cx_skill_registry.list_skills()
+            skills = luominest_skill_registry.list_skills()
             for skill in skills:
                 skill_repository.upsert_skill(skill.id, self._skill_to_row(skill))
             removed = skill_repository.prune_stale({s.id for s in skills})
@@ -624,4 +624,4 @@ class SkillLoader:
 
 
 # 全局单例
-cx_skill_loader = SkillLoader()
+luominest_skill_loader = SkillLoader()

@@ -8,7 +8,7 @@
 | read_luominest_skill  | skill_id              | 返回 SKILL.md 完整内容（body 全文）                      |
 | use_luominest_skill   | skill_id, input       | 返回「技能指令 + 任务」拼接文本，供 LLM 按技能流程执行                |
 
-数据来源为 cx_skill_registry（运行时缓存层，§11.1 三位一体中的第三层，
+数据来源为 luominest_skill_registry（运行时缓存层，§11.1 三位一体中的第三层，
 "供 prompt 注入与工具读取"）；skills 表是附加持久化索引，不参与运行时读取。
 技能 body 只读注入（§11.5：技能禁止注册工具/路由，仅允许注入 Prompt）。
 """
@@ -22,9 +22,9 @@ from app.core.tools.registry import ToolBase, ToolResult
 
 
 def _get_registry():
-    """延迟导入 cx_skill_registry，避免模块级循环依赖。"""
-    from app.runtime.plugin.skill.registry import cx_skill_registry
-    return cx_skill_registry
+    """延迟导入 luominest_skill_registry，避免模块级循环依赖。"""
+    from app.runtime.plugin.skill.registry import luominest_skill_registry
+    return luominest_skill_registry
 
 
 class LuomiNestListSkillsTool(ToolBase):

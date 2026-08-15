@@ -6,7 +6,7 @@
   但默认 system_prompt 不同（"平台路由器" vs "Live2D 皮套"）。
 
 解决方案：
-- 统一存储到 config_items 表的 main_agent.* 命名空间（通过 lumi_config_store）
+- 统一存储到 config_items 表的 main_agent.* 命名空间（通过 luominest_config_store）
 - 单一默认值（合并两个 prompt 的要点）
 - 统一入口：load_luominest_main_agent_config / save_luominest_main_agent_config
 
@@ -20,7 +20,7 @@
 """
 from loguru import logger
 
-from app.infrastructure.database.config_store import lumi_config_store
+from app.infrastructure.database.config_store import luominest_config_store
 
 
 _CONFIG_KEY = "main_agent.config"
@@ -44,7 +44,7 @@ def load_luominest_main_agent_config() -> dict:
     注意：返回 dict 中的 provider/model/temperature/max_tokens 为历史遗留字段，
     仅为兼容旧调用方保留默认值，不再作为模型选择的权威来源。
     """
-    stored = lumi_config_store.get(_CONFIG_KEY)
+    stored = luominest_config_store.get(_CONFIG_KEY)
     if stored is None or not isinstance(stored, dict):
         return dict(_DEFAULT_MAIN_AGENT_CONFIG)
     # 合并默认值（确保新字段有默认值）
@@ -55,7 +55,7 @@ def load_luominest_main_agent_config() -> dict:
 
 def save_luominest_main_agent_config(config: dict) -> None:
     """保存主 Agent 人设配置（统一入口）。"""
-    lumi_config_store.set(_CONFIG_KEY, config)
+    luominest_config_store.set(_CONFIG_KEY, config)
     logger.success("[MainAgentConfig] Saved to config_items")
 
 

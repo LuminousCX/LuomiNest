@@ -20,6 +20,7 @@ from loguru import logger
 from app.core.utils import utc_now
 from app.core.constants.colors import TAG_COLOR_NEUTRAL
 from app.infrastructure.database.json_store import JsonStore
+from app.infrastructure.sync.schemas import GitHubMarketplaceEntry, ManifestItem
 
 # ---------------------------------------------------------------------------
 # 缓存 Store
@@ -45,43 +46,14 @@ REQUEST_TIMEOUT = 30.0
 
 
 # ---------------------------------------------------------------------------
-# 数据模型
+# 数据模型（ManifestItem / 输出条目见 sync/schemas.py，alias 序列化统一映射）
 # ---------------------------------------------------------------------------
 
-class ManifestItem:
-    """manifest.json 中单个条目的结构"""
-    def __init__(self, data: dict):
-        self.id = data.get("id", "")
-        self.name = data.get("name", "")
-        self.type = data.get("type", "plugin")  # plugin / skill / agent
-        self.summary = data.get("summary", "")
-        self.description = data.get("description", "")
-        self.icon = data.get("icon", "")
-        self.category = data.get("category", "")
-        self.tags = data.get("tags", [])
-        self.version = data.get("version", "0.1.0")
-        self.author = data.get("author", {})
-        self.homepage = data.get("homepage", "")
-        self.repository = data.get("repository", "")
-        self.license = data.get("license", "")
-        self.rating = data.get("rating", 0.0)
-        self.download_count = data.get("downloadCount", 0)
-        self.installed_count = data.get("installedCount", 0)
-        self.featured = data.get("featured", False)
-        self.screenshots = data.get("screenshots", [])
-        self.versions = data.get("versions", [])
-        self.size = data.get("size", 0)
-        self.min_app_version = data.get("minAppVersion", "")
-        self.created_at = data.get("createdAt", "")
-        self.updated_at = data.get("updatedAt", "")
-        self.download_url = data.get("downloadUrl", "")
-        self.extra = {k: v for k, v in data.items() if k not in {
-            "id", "name", "type", "summary", "description", "icon", "category",
-            "tags", "version", "author", "homepage", "repository", "license",
-            "rating", "downloadCount", "installedCount", "featured", "screenshots",
-            "versions", "size", "minAppVersion", "createdAt", "updatedAt",
-            "downloadUrl",
-        }}
+def _parse_manifest_item(data: dict) -> ManifestItem:
+    """解析 manifest.json 条目：已知 key 入模型字段，未知 key 归入 extra。"""
+    known_keys = {f.alias or name for name, f in ManifestItem.model_fields.items()}
+    extra = {k: v for k, v in data.items() if k not in known_keys}
+    return ManifestItem(**data, extra=extra)
 
 
 class SyncResult:
@@ -267,7 +239,7 @@ def parse_manifest_to_items(manifest: dict, repo_url: str) -> list[dict]:
     for raw in items:
         if not isinstance(raw, dict):
             continue
-        item = ManifestItem(raw)
+        item = _parse_manifest_item(raw)
         # 补全必要字段（使用确定性哈希，包含仓库信息避免跨源碰撞）
         if not item.id:
             item.id = f"{item.type}-{hashlib.md5((repo_url + item.name).encode()).hexdigest()[:6]}"
@@ -278,35 +250,33 @@ def parse_manifest_to_items(manifest: dict, repo_url: str) -> list[dict]:
         if not item.repository:
             item.repository = repo_url
 
-        result.append({
-            "id": item.id,
-            "name": item.name,
-            "type": item.type,
-            "summary": item.summary,
-            "description": item.description,
-            "icon": item.icon,
-            "category": item.category,
-            "tags": _normalize_tags(item.tags),
-            "version": item.version,
-            "author": _normalize_author(item.author),
-            "homepage": item.homepage,
-            "repository": item.repository,
-            "license": item.license,
-            "rating": item.rating or 0.0,
-            "downloadCount": item.download_count or 0,
-            "installedCount": item.installed_count or 0,
-            "featured": item.featured or False,
-            "screenshots": item.screenshots,
-            "versions": item.versions,
-            "size": item.size,
-            "minAppVersion": item.min_app_version,
-            "createdAt": item.created_at,
-            "updatedAt": item.updated_at,
-            "downloadUrl": item.download_url,
-            "installStatus": "none",
-            "isFavorite": False,
-            "extra": item.extra,
-        })
+        result.append(GitHubMarketplaceEntry(
+            id=item.id,
+            name=item.name,
+            type=item.type,
+            summary=item.summary,
+            description=item.description,
+            icon=item.icon,
+            category=item.category,
+            tags=_normalize_tags(item.tags),
+            version=item.version,
+            author=_normalize_author(item.author),
+            homepage=item.homepage,
+            repository=item.repository,
+            license=item.license,
+            rating=item.rating or 0.0,
+            download_count=item.download_count or 0,
+            installed_count=item.installed_count or 0,
+            featured=item.featured or False,
+            screenshots=item.screenshots,
+            versions=item.versions,
+            size=item.size,
+            min_app_version=item.min_app_version,
+            created_at=item.created_at,
+            updated_at=item.updated_at,
+            download_url=item.download_url,
+            extra=item.extra,
+        ).model_dump(by_alias=True))
     return result
 
 
@@ -472,7 +442,7 @@ def parse_single_manifest(manifest: dict, repo_url: str) -> Optional[dict]:
     if not isinstance(manifest, dict):
         return None
 
-    item = ManifestItem(manifest)
+    item = _parse_manifest_item(manifest)
     now = utc_now()
 
     if not item.id:
@@ -484,35 +454,33 @@ def parse_single_manifest(manifest: dict, repo_url: str) -> Optional[dict]:
     if not item.repository:
         item.repository = repo_url
 
-    return {
-        "id": item.id,
-        "name": item.name,
-        "type": item.type,
-        "summary": item.summary,
-        "description": item.description,
-        "icon": item.icon,
-        "category": item.category,
-        "tags": _normalize_tags(item.tags),
-        "version": item.version,
-        "author": _normalize_author(item.author),
-        "homepage": item.homepage,
-        "repository": item.repository,
-        "license": item.license,
-        "rating": item.rating or 0.0,
-        "downloadCount": item.download_count or 0,
-        "installedCount": item.installed_count or 0,
-        "featured": item.featured or False,
-        "screenshots": item.screenshots,
-        "versions": item.versions,
-        "size": item.size,
-        "minAppVersion": item.min_app_version,
-        "createdAt": item.created_at,
-        "updatedAt": item.updated_at,
-        "downloadUrl": item.download_url,
-        "installStatus": "none",
-        "isFavorite": False,
-        "extra": item.extra,
-    }
+    return GitHubMarketplaceEntry(
+        id=item.id,
+        name=item.name,
+        type=item.type,
+        summary=item.summary,
+        description=item.description,
+        icon=item.icon,
+        category=item.category,
+        tags=_normalize_tags(item.tags),
+        version=item.version,
+        author=_normalize_author(item.author),
+        homepage=item.homepage,
+        repository=item.repository,
+        license=item.license,
+        rating=item.rating or 0.0,
+        download_count=item.download_count or 0,
+        installed_count=item.installed_count or 0,
+        featured=item.featured or False,
+        screenshots=item.screenshots,
+        versions=item.versions,
+        size=item.size,
+        min_app_version=item.min_app_version,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+        download_url=item.download_url,
+        extra=item.extra,
+    ).model_dump(by_alias=True)
 
 
 async def sync_sub_market(

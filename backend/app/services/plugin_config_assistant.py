@@ -26,7 +26,7 @@ from app.core.config import get_settings
 from app.core.utils import utc_now
 from app.infrastructure.database.config_namespace_store import ConfigNamespaceStore
 from app.runtime.plugin.cxplugin.kv_store import PluginKVStore
-from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
 from app.core.tools.registry import ToolBase, ToolResult
@@ -92,7 +92,7 @@ class CxPluginScaffold:
 
 
 class CxPluginConfigAssistant:
-    """插件配置 AI 助手 — 全局单例 cx_plugin_config_assistant。
+    """插件配置 AI 助手 — 全局单例 luominest_plugin_config_assistant。
 
     对外提供：
     - suggest_config_change：根据用户自然语言生成配置 patch 建议
@@ -121,7 +121,7 @@ class CxPluginConfigAssistant:
 
     def get_plugin_config(self, plugin_id: str) -> dict[str, Any]:
         """获取插件当前配置（合并 manifest 默认值与 KV 存储值）。"""
-        meta = cx_plugin_registry.get_plugin(plugin_id)
+        meta = luominest_plugin_registry.get_plugin(plugin_id)
         if meta is None:
             raise ValueError(f"插件未加载: {plugin_id}")
 
@@ -144,7 +144,7 @@ class CxPluginConfigAssistant:
 
     def reset_plugin_config(self, plugin_id: str) -> dict[str, Any]:
         """重置插件配置到 manifest 默认值。"""
-        meta = cx_plugin_registry.get_plugin(plugin_id)
+        meta = luominest_plugin_registry.get_plugin(plugin_id)
         if meta is None:
             raise ValueError(f"插件未加载: {plugin_id}")
 
@@ -174,7 +174,7 @@ class CxPluginConfigAssistant:
         Returns:
             CxConfigSuggestion 对象，patches 已经过类型校验
         """
-        meta = cx_plugin_registry.get_plugin(plugin_id)
+        meta = luominest_plugin_registry.get_plugin(plugin_id)
         if meta is None:
             raise ValueError(f"插件未加载: {plugin_id}")
 
@@ -383,7 +383,7 @@ class CxPluginConfigAssistant:
         Returns:
             应用结果字典，含 applied/skipped/failed 三个列表
         """
-        meta = cx_plugin_registry.get_plugin(plugin_id)
+        meta = luominest_plugin_registry.get_plugin(plugin_id)
         if meta is None:
             raise ValueError(f"插件未加载: {plugin_id}")
 
@@ -432,7 +432,7 @@ class CxPluginConfigAssistant:
 
     async def explain_config(self, plugin_id: str) -> dict[str, Any]:
         """用 LLM 生成对插件当前配置的自然语言解释。"""
-        meta = cx_plugin_registry.get_plugin(plugin_id)
+        meta = luominest_plugin_registry.get_plugin(plugin_id)
         if meta is None:
             raise ValueError(f"插件未加载: {plugin_id}")
 
@@ -871,10 +871,10 @@ def create_plugin() -> {self._pascal_case(plugin_id)}Plugin:
         """列出所有历史脚手架记录。"""
         all_data = _scaffold_store.list_all()
         result = []
-        for sid, data in all_data.items():
+        for session_id, data in all_data.items():
             if isinstance(data, dict):
                 result.append({
-                    "plugin_id": data.get("plugin_id", sid),
+                    "plugin_id": data.get("plugin_id", session_id),
                     "name": data.get("name", ""),
                     "description": data.get("description", ""),
                     "created_at": data.get("created_at", ""),
@@ -889,4 +889,4 @@ def create_plugin() -> {self._pascal_case(plugin_id)}Plugin:
 
 
 # 全局单例
-cx_plugin_config_assistant = CxPluginConfigAssistant()
+luominest_plugin_config_assistant = CxPluginConfigAssistant()

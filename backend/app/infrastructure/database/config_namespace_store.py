@@ -25,7 +25,7 @@ from typing import Any, Callable, Optional
 from loguru import logger
 
 from app.core.config import settings
-from app.infrastructure.database.config_store import lumi_config_store
+from app.infrastructure.database.config_store import luominest_config_store
 
 # config_items.key 列长度上限（String(256)）
 _MAX_KEY_LEN = 256
@@ -101,12 +101,12 @@ class ConfigNamespaceStore:
             data = _read_json_file(path)
             count = 0
             if isinstance(data, dict) and data:
-                existing = lumi_config_store.get_namespace(self._prefix)
+                existing = luominest_config_store.get_namespace(self._prefix)
                 for key, value in data.items():
                     full_key = self._compose(str(key))
                     if full_key in existing:
                         continue  # 并集合并：不覆盖运行时已写入的值
-                    lumi_config_store.set(full_key, value)
+                    luominest_config_store.set(full_key, value)
                     count += 1
 
             _mark_migrated(self._legacy_source, count)
@@ -131,36 +131,36 @@ class ConfigNamespaceStore:
     def get(self, key: str, default: Any = None) -> Any:
         with self._lock:
             self._ensure_merged()
-            return lumi_config_store.get(self._compose(key), default)
+            return luominest_config_store.get(self._compose(key), default)
 
     def set(self, key: str, value: Any) -> None:
         with self._lock:
             self._ensure_merged()
-            lumi_config_store.set(self._compose(key), value)
+            luominest_config_store.set(self._compose(key), value)
 
     def delete(self, key: str) -> None:
         with self._lock:
             self._ensure_merged()
-            lumi_config_store.delete(self._compose(key))
+            luominest_config_store.delete(self._compose(key))
 
     def list_all(self) -> dict:
         """返回 {原始key: value} 映射（已剥离命名空间前缀，与 JsonStore.list_all 一致）。"""
         with self._lock:
             self._ensure_merged()
-            data = lumi_config_store.get_namespace(self._prefix)
+            data = luominest_config_store.get_namespace(self._prefix)
         return {self._strip(k): v for k, v in data.items()}
 
     def all(self) -> list:
         with self._lock:
             self._ensure_merged()
-            data = lumi_config_store.get_namespace(self._prefix)
+            data = luominest_config_store.get_namespace(self._prefix)
         return list(data.values())
 
     def clear(self) -> None:
         """清空命名空间下所有键值。"""
         with self._lock:
             self._ensure_merged()
-            lumi_config_store.delete_namespace(self._prefix)
+            luominest_config_store.delete_namespace(self._prefix)
 
     def mutate(self, key: str, updater_fn: Callable[[Any], Any]) -> Optional[Any]:
         """原子读-改-写：updater_fn 接收旧值（键不存在时为 None）返回新值。
@@ -170,9 +170,9 @@ class ConfigNamespaceStore:
         with self._lock:
             self._ensure_merged()
             full_key = self._compose(key)
-            value = lumi_config_store.get(full_key)
+            value = luominest_config_store.get(full_key)
             new_value = updater_fn(value)
-            lumi_config_store.set(full_key, new_value)
+            luominest_config_store.set(full_key, new_value)
             return new_value
 
     # ------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import uuid
 import os
 import shutil
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
@@ -9,7 +9,7 @@ from app.api.v1.deps import get_agents_store, get_conversation_store
 from app.core.config import settings
 from app.core.constants.colors import DEFAULT_AGENT_COLOR
 from app.core.utils import utc_now, ok
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -73,11 +73,11 @@ async def create_agent(
     
     agents = await agents_store.all_async()
     if len(agents) >= 10:
-        raise HTTPException(status_code=400, detail="最多只能创建 10 个 Agent")
+        raise BadRequestError("最多只能创建 10 个 Agent", code="AGENT_LIMIT_REACHED")
     
     for agent in agents:
         if agent.get("name") == request.name:
-            raise HTTPException(status_code=400, detail=f"Agent 名称 '{request.name}' 已存在")
+            raise BadRequestError(f"Agent 名称 '{request.name}' 已存在", code="AGENT_NAME_DUPLICATED")
     
     agent_id = str(uuid.uuid4())
     now = utc_now()
@@ -133,7 +133,7 @@ async def update_agent(
         all_agents = await agents_store.all_async()
         for ag in all_agents:
             if ag.get("id") != agent_id and ag.get("name") == new_name:
-                raise HTTPException(status_code=400, detail=f"Agent 名称 '{new_name}' 已存在")
+                raise BadRequestError(f"Agent 名称 '{new_name}' 已存在", code="AGENT_NAME_DUPLICATED")
     updated_fields = list(update_data.keys())
     agent.update(update_data)
     agent["updated_at"] = utc_now()

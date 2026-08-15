@@ -184,3 +184,88 @@ class BasePlatformAdapter(ABC):
         if status == AdapterStatus.RUNNING:
             import time
             self._started_at = time.time()
+
+    # ─── 平台工具能力声明（tool-opt §4.7 T9 / M11）───
+
+    @property
+    def available_tools(self) -> list[dict[str, Any]]:
+        """本适配器可用的平台专用工具清单（OpenAI function schema 格式）。
+
+        子类覆盖此方法，声明自己支持的平台内操作（如 QQ 的撤回/拍一拍/群管理）。
+        默认返回空列表（无平台专用工具）。
+
+        返回的每个工具字典格式:
+        {
+            "type": "function",
+            "function": {
+                "name": "qq.poke",          # {platform}.{action} 格式
+                "description": "拍一拍群成员",
+                "parameters": { ... }       # JSON Schema
+            }
+        }
+        """
+        return []
+
+    @property
+    def platform_scope(self) -> str:
+        """平台域 scope 标识，用于工具过滤。
+
+        格式: "platform:{instance_id}"
+        """
+        return f"platform:{self._instance_id}" if self._instance_id else "platform"
+
+    async def execute_platform_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """执行平台专用工具调用。
+
+        Args:
+            tool_name: 工具名（如 "qq.poke"）
+            arguments: 工具参数
+
+        Returns:
+            {"success": bool, "output": str, "error": str}
+
+        子类覆盖此方法，实现具体的平台工具执行逻辑。
+        默认返回"工具不支持"错误。
+        """
+        return {
+            "success": False,
+            "output": "",
+            "error": f"平台工具 {tool_name} 不支持（{self.platform_name} 适配器未实现）",
+        }
+
+
+def get_standard_tools_for_platform(provider_name: str | None = None, model: str | None = None) -> list[dict[str, Any]]:
+    """获取平台域对话的标准工具子集（双层注入第一层）。
+
+    平台域不使用 normal/ultra 全量工具集（上下文长度原因），
+    只注入 standard 层级的工具子集：
+    - console.execute（命令行）
+    - memory.search（记忆查询）
+    - memory.build_context（记忆上下文构建）
+    - schedule.list / schedule.get（定时任务查询）
+    - search.everything（文件搜索）
+
+    这些工具通过 tool_orchestrator.get_tools_for_llm() 获取，
+    scope=None（只注入 shared 工具，排除 platform 专用工具）。
+    然后通过白名单过滤，只保留标准子集中的工具。
+    """
+    from app.core.tools.orchestrator import tool_orchestrator
+
+    # 标准子集白名单（高层语义工具，排除细粒度浏览器工具和高风险工具）
+    STANDARD_WHITELIST = {
+        "console.execute",
+        "memory.search",
+        "memory.build_context",
+        "schedule.list",
+        "schedule.get",
+        "search.everything",
+    }
+
+    all_tools = tool_orchestrator.get_tools_for_llm(
+        provider_name=provider_name,
+        model=model,
+        scope=None,  # 只获取 shared 工具
+    )
+
+    # 白名单过滤
+    return [t for t in all_tools if t.get("function", {}).get("name") in STANDARD_WHITELIST]

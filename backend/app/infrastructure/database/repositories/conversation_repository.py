@@ -99,13 +99,13 @@ class ConversationRepository(BaseRepository):
 
     # ── Optimized reads ──
 
-    def get_meta(self, conv_id: str) -> Optional[dict]:
+    def get_meta(self, conversation_id: str) -> Optional[dict]:
         """加载对话元数据（不含 messages/search_text），SQL 层跳过重列加载。"""
         with sync_session_factory() as session:
             stmt = (
                 select(Conversation)
                 .options(defer(Conversation.messages), defer(Conversation.search_text))
-                .where(Conversation.id == conv_id)
+                .where(Conversation.id == conversation_id)
             )
             obj = session.execute(stmt).scalar_one_or_none()
             if obj is None:
@@ -115,10 +115,10 @@ class ConversationRepository(BaseRepository):
             d.pop("search_text", None)
             return d
 
-    def get_paginated(self, conv_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
+    def get_paginated(self, conversation_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
         """加载对话 + 分页消息（最新 N 条），避免一次加载全部。"""
         with sync_session_factory() as session:
-            obj = session.get(Conversation, conv_id)
+            obj = session.get(Conversation, conversation_id)
             if obj is None:
                 return None
             d = orm_to_dict(obj)
@@ -224,9 +224,9 @@ class ConversationRepository(BaseRepository):
 
     # ── Soft delete / Trash ──
 
-    def soft_delete(self, conv_id: str) -> bool:
+    def soft_delete(self, conversation_id: str) -> bool:
         with sync_session_factory() as session:
-            obj = session.get(Conversation, conv_id)
+            obj = session.get(Conversation, conversation_id)
             if obj is None:
                 return False
             obj.deleted_at = utcnow_iso()
@@ -248,17 +248,17 @@ class ConversationRepository(BaseRepository):
                 result.append(d)
             return result
 
-    def restore(self, conv_id: str) -> bool:
+    def restore(self, conversation_id: str) -> bool:
         with sync_session_factory() as session:
-            obj = session.get(Conversation, conv_id)
+            obj = session.get(Conversation, conversation_id)
             if obj is None:
                 return False
             obj.deleted_at = None
             session.commit()
             return True
 
-    def permanent_delete(self, conv_id: str) -> bool:
-        return self.delete(conv_id)
+    def permanent_delete(self, conversation_id: str) -> bool:
+        return self.delete(conversation_id)
 
     def empty_trash(self, agent_id: Optional[str] = None) -> int:
         """批量清空回收站（单次 DELETE）。"""
@@ -270,47 +270,47 @@ class ConversationRepository(BaseRepository):
             session.commit()
             return result.rowcount or 0
 
-    def batch_soft_delete(self, conv_ids: list[str]) -> int:
+    def batch_soft_delete(self, conversation_ids: list[str]) -> int:
         """批量软删除（单次 UPDATE）。"""
-        if not conv_ids:
+        if not conversation_ids:
             return 0
         with sync_session_factory() as session:
             stmt = (
                 sa_update(Conversation)
-                .where(Conversation.id.in_(conv_ids), Conversation.deleted_at.is_(None))
+                .where(Conversation.id.in_(conversation_ids), Conversation.deleted_at.is_(None))
                 .values(deleted_at=utcnow_iso(), updated_at=utcnow_iso())
             )
             result = session.execute(stmt)
             session.commit()
             return result.rowcount or 0
 
-    def batch_restore(self, conv_ids: list[str]) -> int:
+    def batch_restore(self, conversation_ids: list[str]) -> int:
         """批量恢复（单次 UPDATE）。"""
-        if not conv_ids:
+        if not conversation_ids:
             return 0
         with sync_session_factory() as session:
             stmt = (
                 sa_update(Conversation)
-                .where(Conversation.id.in_(conv_ids), Conversation.deleted_at.is_not(None))
+                .where(Conversation.id.in_(conversation_ids), Conversation.deleted_at.is_not(None))
                 .values(deleted_at=None, updated_at=utcnow_iso())
             )
             result = session.execute(stmt)
             session.commit()
             return result.rowcount or 0
 
-    def batch_permanent_delete(self, conv_ids: list[str]) -> int:
+    def batch_permanent_delete(self, conversation_ids: list[str]) -> int:
         """批量永久删除（单次 DELETE）。"""
-        if not conv_ids:
+        if not conversation_ids:
             return 0
         with sync_session_factory() as session:
-            stmt = sa_delete(Conversation).where(Conversation.id.in_(conv_ids))
+            stmt = sa_delete(Conversation).where(Conversation.id.in_(conversation_ids))
             result = session.execute(stmt)
             session.commit()
             return result.rowcount or 0
 
-    def rename(self, conv_id: str, new_title: str) -> bool:
+    def rename(self, conversation_id: str, new_title: str) -> bool:
         with sync_session_factory() as session:
-            obj = session.get(Conversation, conv_id)
+            obj = session.get(Conversation, conversation_id)
             if obj is None:
                 return False
             obj.title = new_title
@@ -328,11 +328,11 @@ class ConversationRepository(BaseRepository):
 
     # ── Async wrappers ──
 
-    async def get_meta_async(self, conv_id: str) -> Optional[dict]:
-        return await asyncio.to_thread(self.get_meta, conv_id)
+    async def get_meta_async(self, conversation_id: str) -> Optional[dict]:
+        return await asyncio.to_thread(self.get_meta, conversation_id)
 
-    async def get_paginated_async(self, conv_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
-        return await asyncio.to_thread(self.get_paginated, conv_id, limit, before_id)
+    async def get_paginated_async(self, conversation_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
+        return await asyncio.to_thread(self.get_paginated, conversation_id, limit, before_id)
 
     async def list_meta_async(
         self,
@@ -348,32 +348,32 @@ class ConversationRepository(BaseRepository):
     async def search_async(self, keyword: str, agent_id: Optional[str] = None) -> list[dict]:
         return await asyncio.to_thread(self.search, keyword, agent_id)
 
-    async def soft_delete_async(self, conv_id: str) -> bool:
-        return await asyncio.to_thread(self.soft_delete, conv_id)
+    async def soft_delete_async(self, conversation_id: str) -> bool:
+        return await asyncio.to_thread(self.soft_delete, conversation_id)
 
     async def list_trash_async(self, agent_id: Optional[str] = None) -> list[dict]:
         return await asyncio.to_thread(self.list_trash, agent_id)
 
-    async def restore_async(self, conv_id: str) -> bool:
-        return await asyncio.to_thread(self.restore, conv_id)
+    async def restore_async(self, conversation_id: str) -> bool:
+        return await asyncio.to_thread(self.restore, conversation_id)
 
-    async def permanent_delete_async(self, conv_id: str) -> bool:
-        return await asyncio.to_thread(self.permanent_delete, conv_id)
+    async def permanent_delete_async(self, conversation_id: str) -> bool:
+        return await asyncio.to_thread(self.permanent_delete, conversation_id)
 
     async def empty_trash_async(self, agent_id: Optional[str] = None) -> int:
         return await asyncio.to_thread(self.empty_trash, agent_id)
 
-    async def batch_soft_delete_async(self, conv_ids: list[str]) -> int:
-        return await asyncio.to_thread(self.batch_soft_delete, conv_ids)
+    async def batch_soft_delete_async(self, conversation_ids: list[str]) -> int:
+        return await asyncio.to_thread(self.batch_soft_delete, conversation_ids)
 
-    async def batch_restore_async(self, conv_ids: list[str]) -> int:
-        return await asyncio.to_thread(self.batch_restore, conv_ids)
+    async def batch_restore_async(self, conversation_ids: list[str]) -> int:
+        return await asyncio.to_thread(self.batch_restore, conversation_ids)
 
-    async def batch_permanent_delete_async(self, conv_ids: list[str]) -> int:
-        return await asyncio.to_thread(self.batch_permanent_delete, conv_ids)
+    async def batch_permanent_delete_async(self, conversation_ids: list[str]) -> int:
+        return await asyncio.to_thread(self.batch_permanent_delete, conversation_ids)
 
-    async def rename_async(self, conv_id: str, new_title: str) -> bool:
-        return await asyncio.to_thread(self.rename, conv_id, new_title)
+    async def rename_async(self, conversation_id: str, new_title: str) -> bool:
+        return await asyncio.to_thread(self.rename, conversation_id, new_title)
 
     async def delete_by_agent_id_async(self, agent_id: str) -> int:
         return await asyncio.to_thread(self.delete_by_agent_id, agent_id)

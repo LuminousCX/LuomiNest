@@ -25,15 +25,15 @@ from app.models.plugin import (
 )
 from app.runtime.plugin.cxplugin.base import CxPluginBase, CxPluginContext, cx_handler
 from app.runtime.plugin.cxplugin.hot_reload import (
-    cx_plugin_hot_reload,
+    luominest_plugin_hot_reload,
     init_hot_reload,
     shutdown_hot_reload,
 )
 from app.runtime.plugin.cxplugin.kv_store import PluginKVStore
-from app.runtime.plugin.cxplugin.lifecycle import cx_plugin_lifecycle
-from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
+from app.runtime.plugin.cxplugin.lifecycle import luominest_plugin_lifecycle
+from app.runtime.plugin.cxplugin.loader import luominest_plugin_loader
 from app.runtime.plugin.cxplugin.permission import PermissionGuard
-from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
 
 __all__ = [
     # 枚举与数据模型
@@ -54,10 +54,10 @@ __all__ = [
     "PermissionGuard",
     "PluginKVStore",
     # 运行时组件
-    "cx_plugin_hot_reload",
-    "cx_plugin_lifecycle",
-    "cx_plugin_loader",
-    "cx_plugin_registry",
+    "luominest_plugin_hot_reload",
+    "luominest_plugin_lifecycle",
+    "luominest_plugin_loader",
+    "luominest_plugin_registry",
     # 生命周期辅助
     "init_hot_reload",
     "shutdown_hot_reload",

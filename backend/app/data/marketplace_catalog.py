@@ -230,7 +230,7 @@ CATALOG_PLUGINS: list[dict[str, Any]] = [
 # 用户从市场"安装"本地插件时,install_service 会从此清单读取插件包路径。
 # 当前所有插件均以源码形式存在于 backend/plugins/{plugin_id}/ 目录,
 # 安装动作等价于"启用":前端 builtin 插件调用 enableFrontendPlugin,
-# 后端插件由 cx_plugin_loader 扫描目录加载。
+# 后端插件由 luominest_plugin_loader 扫描目录加载。
 # 后期上传到 GitHub/云端时,只需将 downloadUrl 改为远程 URL,
 # install_service 会自动下载 zip 并解压到 PLUGIN_DIR。
 
@@ -239,7 +239,7 @@ LOCAL_PLUGIN_REPO: list[dict[str, Any]] = [
     # - 前端代码: frontend/src/renderer/src/plugins/builtin/cxp-pdf-reader/
     #   (Vite 构建时打包进 renderer,无需远程下载)
     # - 后端代码: backend/plugins/cxp-pdf-reader/ (Python)
-    # 安装动作: 启用前端 builtin + 后端 cx_plugin_lifecycle.enable_plugin
+    # 安装动作: 启用前端 builtin + 后端 luominest_plugin_lifecycle.enable_plugin
     {
         "id": "cxp-pdf-reader",
         "name": "CxPlugin PDF 智能阅读器",
@@ -254,7 +254,7 @@ LOCAL_PLUGIN_REPO: list[dict[str, Any]] = [
     # weather-query: 纯后端(backend)插件,仅注册天气查询工具
     # - 后端代码: backend/plugins/weather-query/ (Python)
     # 无前端 builtin 代码,MarketplaceInstallBtn 走"远程下载"路径
-    # 安装动作: cx_plugin_lifecycle.enable_plugin(若未自动加载则先 load_single)
+    # 安装动作: luominest_plugin_lifecycle.enable_plugin(若未自动加载则先 load_single)
     {
         "id": "weather-query",
         "name": "天气查询",
@@ -266,6 +266,18 @@ LOCAL_PLUGIN_REPO: list[dict[str, Any]] = [
         "platform": "backend",
         "frontendBuiltin": False,
     },
+    # cxp-chart-renderer: 纯后端(backend)插件,数据可视化图表渲染
+    # - 后端代码: backend/plugins/cxp-chart-renderer/ (Python)
+    # 提供折线/散点/柱状/直方/饼图/热力图 + 自由代码执行工具
+    # 安装动作: luominest_plugin_lifecycle.enable_plugin
+    {
+        "id": "cxp-chart-renderer",
+        "source": "local",
+        "localPath": "plugins/cxp-chart-renderer",
+        "downloadUrl": None,
+        "platform": "backend",
+        "frontendBuiltin": False,
+    },
 ]
 
 
@@ -273,7 +285,7 @@ def get_local_builtin_plugin(item_id: str) -> dict[str, Any] | None:
     """根据 item_id 查找本地内置插件清单条目。
 
     用于 install 流程识别 builtin 插件,跳过远程下载,
-    直接走"启用"路径(前端 enableFrontendPlugin + 后端 cx_plugin_lifecycle.enable_plugin)。
+    直接走"启用"路径(前端 enableFrontendPlugin + 后端 luominest_plugin_lifecycle.enable_plugin)。
     """
     for entry in LOCAL_PLUGIN_REPO:
         if entry.get("id") == item_id:

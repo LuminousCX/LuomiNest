@@ -7,7 +7,7 @@
  * - useWorkflowFlow：VueFlow 节点/边构建、dagre 布局、节点选择
  * 侧栏与节点详情面板拆分至 components/workflow/ 子组件。
  */
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -16,8 +16,11 @@ import LumiButton from '../components/common/LumiButton.vue'
 import LumiEmptyState from '../components/common/LumiEmptyState.vue'
 import WorkflowSidebar from '../components/workflow/WorkflowSidebar.vue'
 import WorkflowNodeDetail from '../components/workflow/WorkflowNodeDetail.vue'
+import WorkflowTemplateList from '../components/workflow/WorkflowTemplateList.vue'
 import { useWorkflowSessions } from '../composables/useWorkflowSessions'
 import { useWorkflowFlow, NODE_TYPE_ICON, STATUS_ICON, STATUS_COLOR } from '../composables/useWorkflowFlow'
+import { useWorkflowStore } from '../stores/workflow'
+import type { WorkflowTemplate } from '../types/workflow'
 
 // 会话列表 + 当前会话 + 进度统计
 const {
@@ -46,6 +49,12 @@ const {
   handlePaneClick,
 } = useWorkflowFlow(currentDisplaySession)
 
+// Tab 切换
+const activeTab = ref<'sessions' | 'templates'>('sessions')
+
+// 模板 Store
+const workflowStore = useWorkflowStore()
+
 onMounted(() => {
   loadSessions()
 })
@@ -54,6 +63,38 @@ onMounted(() => {
 const handleSelectSession = (sessionId: string): void => {
   selectSession(sessionId)
   loadSessionDetail(sessionId)
+}
+
+/** 切换到模板 Tab 时自动加载模板列表 */
+const switchToTemplates = (): void => {
+  activeTab.value = 'templates'
+  workflowStore.loadTemplates()
+}
+
+/** 运行模板 */
+const handleRunTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
+  const sessionId = await workflowStore.runTemplate(tpl.template_id, {}, tpl.auto_approve ? true : null)
+  if (sessionId) {
+    // 切回会话 Tab 并刷新列表
+    activeTab.value = 'sessions'
+    loadSessions()
+  }
+}
+
+/** 定时运行模板（简单弹窗输入 cron 表达式） */
+const handleScheduleTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
+  const schedule = window.prompt('请输入定时表达式（cron 格式，如 "0 9 * * *" 表示每天9点）', '0 9 * * *')
+  if (!schedule) return
+  const taskId = await workflowStore.scheduleTemplate(tpl.template_id, schedule)
+  if (taskId) {
+    window.alert('定时任务已创建')
+  }
+}
+
+/** 删除模板 */
+const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
+  if (!window.confirm(`确定要删除模板「${tpl.name}」吗？`)) return
+  await workflowStore.deleteTemplate(tpl.template_id)
 }
 </script>
 
@@ -92,7 +133,26 @@ const handleSelectSession = (sessionId: string): void => {
       </div>
     </div>
 
-    <div class="workflow-body">
+    <!-- Tab 切换栏 -->
+    <div class="workflow-tabs">
+      <button
+        class="workflow-tab"
+        :class="{ active: activeTab === 'sessions' }"
+        @click="activeTab = 'sessions'"
+      >
+        历史会话
+      </button>
+      <button
+        class="workflow-tab"
+        :class="{ active: activeTab === 'templates' }"
+        @click="switchToTemplates"
+      >
+        模板
+      </button>
+    </div>
+
+    <!-- 历史会话 Tab：三栏布局 -->
+    <div v-show="activeTab === 'sessions'" class="workflow-body">
       <WorkflowSidebar
         :sessions="sessions"
         :is-loading-sessions="isLoadingSessions"
@@ -157,6 +217,17 @@ const handleSelectSession = (sessionId: string): void => {
         />
       </Transition>
     </div>
+
+    <!-- 模板 Tab：模板列表 -->
+    <div v-if="activeTab === 'templates'" class="workflow-body">
+      <WorkflowTemplateList
+        :templates="workflowStore.templates"
+        :templates-loading="workflowStore.templatesLoading"
+        @run="handleRunTemplate"
+        @schedule="handleScheduleTemplate"
+        @delete="handleDeleteTemplate"
+      />
+    </div>
   </div>
 </template>
 
@@ -206,6 +277,36 @@ const handleSelectSession = (sessionId: string): void => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.workflow-tabs {
+  display: flex;
+  gap: var(--space-2);
+  padding: 0 var(--space-7);
+  margin-bottom: var(--space-3);
+  flex-shrink: 0;
+}
+
+.workflow-tab {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease-in-out);
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+
+.workflow-tab:hover {
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
+}
+
+.workflow-tab.active {
+  background: var(--lumi-brand);
+  color: #fff;
 }
 
 .session-progress {

@@ -158,4 +158,4 @@ class LumiCleanupService:
         return await asyncio.to_thread(self.run_all)
 
 
-lumi_cleanup_service = LumiCleanupService()
+luominest_cleanup_service = LumiCleanupService()

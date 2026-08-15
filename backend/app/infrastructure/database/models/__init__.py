@@ -21,6 +21,7 @@ from app.infrastructure.database.models.usage_record import UsageRecord
 from app.infrastructure.database.models.user import User
 from app.infrastructure.database.models.workflow_node import WorkflowNodeORM
 from app.infrastructure.database.models.workflow_session import WorkflowSessionORM
+from app.infrastructure.database.models.workflow_template import WorkflowTemplateORM
 
 __all__ = [
     "Agent",
@@ -42,4 +43,5 @@ __all__ = [
     "User",
     "WorkflowNodeORM",
     "WorkflowSessionORM",
+    "WorkflowTemplateORM",
 ]

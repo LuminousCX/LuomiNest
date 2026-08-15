@@ -526,7 +526,7 @@ class UsageTrackMiddleware(AgentMiddleware):
                 model=model,
                 usage=usage,
                 agent_id=agent_id,
-                conv_id=conv_id,
+                conversation_id=conv_id,
                 is_stream=is_stream,
             )
         except Exception as e:

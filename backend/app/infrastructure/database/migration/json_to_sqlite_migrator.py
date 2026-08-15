@@ -28,7 +28,7 @@ from app.infrastructure.database.facades.json_store_facade import (
     repo_sources_store,
 )
 from app.infrastructure.database.facades.marketplace_stats_store import marketplace_stats_store
-from app.infrastructure.database.config_store import lumi_config_store
+from app.infrastructure.database.config_store import luominest_config_store
 from app.infrastructure.database.usage_store import usage_store
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.facades.main_agent_config import save_luominest_main_agent_config
@@ -211,7 +211,7 @@ def _migrate_user_config() -> int:
         # 跳过 __updated_at 元数据键（时间戳，非配置数据）
         if key.endswith("__updated_at"):
             continue
-        lumi_config_store.set(key, value)
+        luominest_config_store.set(key, value)
         count += 1
 
     _mark_migrated("user_config", count)
@@ -258,7 +258,7 @@ def _migrate_model_config() -> int:
         _mark_migrated("model_config", 0)
         return 0
 
-    lumi_config_store.set("model_config", data)
+    luominest_config_store.set("model_config", data)
     _mark_migrated("model_config", 1)
     logger.success(f"[Migration] model_config: migrated config")
     return 1
@@ -753,11 +753,11 @@ def _migrate_plugin_states() -> int:
     raw = data.get("disabled_plugins", []) if isinstance(data, dict) else []
     legacy_ids = [str(i) for i in raw] if isinstance(raw, list) else []
 
-    existing = lumi_config_store.get("plugins.states")
+    existing = luominest_config_store.get("plugins.states")
     existing_ids = [str(i) for i in existing] if isinstance(existing, list) else []
     merged = existing_ids + [i for i in legacy_ids if i not in existing_ids]
 
-    lumi_config_store.set("plugins.states", merged)
+    luominest_config_store.set("plugins.states", merged)
     _mark_migrated("plugin_states", len(merged))
     logger.success("[Migration] plugin_states: migrated to config_items['plugins.states']")
     return len(merged)
@@ -782,11 +782,11 @@ def _migrate_skill_disabled() -> int:
     raw = data.get("disabled_ids", []) if isinstance(data, dict) else []
     legacy_ids = [str(i) for i in raw] if isinstance(raw, list) else []
 
-    existing = lumi_config_store.get("skills.disabled_ids")
+    existing = luominest_config_store.get("skills.disabled_ids")
     existing_ids = [str(i) for i in existing] if isinstance(existing, list) else []
     merged = existing_ids + [i for i in legacy_ids if i not in existing_ids]
 
-    lumi_config_store.set("skills.disabled_ids", merged)
+    luominest_config_store.set("skills.disabled_ids", merged)
     _mark_migrated("skill_disabled", len(merged))
     logger.success("[Migration] skill_disabled: migrated to config_items['skills.disabled_ids']")
     return len(merged)

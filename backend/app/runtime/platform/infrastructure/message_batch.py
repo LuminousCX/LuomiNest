@@ -182,11 +182,11 @@ class TextBatchAggregator:
         cleaned = 0
         with self._lock:
             expired = [
-                sid for sid, entry in self._buffers.items()
+                session_id for session_id, entry in self._buffers.items()
                 if now - entry.last_arrival > self.aggregation_window
             ]
-            for sid in expired:
-                del self._buffers[sid]
+            for session_id in expired:
+                del self._buffers[session_id]
                 cleaned += 1
         if cleaned:
             logger.debug(f"[BatchAgg] 清理 {cleaned} 个过期缓冲")
