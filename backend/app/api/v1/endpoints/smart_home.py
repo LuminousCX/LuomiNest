@@ -41,39 +41,79 @@ def _list_iot_instances() -> list:
     ]
 
 
+async def _aggregate_capability(method_name: str, item_key: str) -> tuple[list, list[str]]:
+    """聚合一类 IoT 设备查询能力（list_devices / list_scenes / ...）。
+
+    只有能力已实现的适配器（如 mqtt_terminal 的设备注册表、
+    xiaomi_iot 的米家设备列表）会贡献数据；未实现的适配器
+    （如 home_assistant）自动跳过并计入 unsupported 列表。
+
+    Returns:
+        (聚合条目列表, 未支持该能力的 adapter_type 列表)
+    """
+    items: list = []
+    unsupported: list[str] = []
+    for inst in _list_iot_instances():
+        if not inst.adapter:
+            continue
+        method = getattr(inst.adapter, method_name, None)
+        if method is None or not callable(method):
+            unsupported.append(inst.adapter_type)
+            continue
+        try:
+            result = await method()
+            if isinstance(result, list):
+                # 标注来源实例，便于前端区分多适配器设备
+                for item in result:
+                    if isinstance(item, dict) and "instance_id" not in item:
+                        item.setdefault("instance_id", inst.instance_id)
+                        item.setdefault("adapter_type", inst.adapter_type)
+                items.extend(result)
+        except Exception as e:
+            logger.warning(
+                f"[SmartHome] {inst.adapter_type}.{method_name} 查询失败 "
+                f"(instance={inst.instance_id}): {e}",
+                exc_info=True,
+            )
+    return items, unsupported
+
+
 @router.get("/devices")
 async def list_devices():
-    """返回智能家居设备列表（适配器尚未实现，暂返回空列表）"""
+    """返回智能家居设备列表（聚合各 IoT 适配器：mqtt_terminal 注册表 / 米家设备等）"""
     logger.info("[API] GET /smart-home/devices - Listing IoT devices")
 
-    iot_instances = _list_iot_instances()
+    devices, unsupported = await _aggregate_capability("list_devices", "devices")
     logger.debug(
-        f"[SmartHome] Found {len(iot_instances)} IoT platform instance(s): "
-        f"{[inst.instance_id for inst in iot_instances]}"
+        f"[SmartHome] Aggregated {len(devices)} device(s), "
+        f"unsupported adapters: {unsupported}"
     )
 
-    return ok({"devices": [], "total": 0})
+    return ok({"devices": devices, "total": len(devices), "unsupported_adapters": unsupported})
 
 
 @router.get("/scenes")
 async def list_scenes():
-    """返回智能家居场景列表（适配器尚未实现，暂返回空列表）"""
+    """返回智能家居场景列表（当前注册的适配器均未提供场景能力时返回空）"""
     logger.info("[API] GET /smart-home/scenes - Listing scenes")
-    return ok({"scenes": [], "total": 0})
+    scenes, unsupported = await _aggregate_capability("list_scenes", "scenes")
+    return ok({"scenes": scenes, "total": len(scenes), "unsupported_adapters": unsupported})
 
 
 @router.get("/rooms")
 async def list_rooms():
-    """返回智能家居房间列表（适配器尚未实现，暂返回空列表）"""
+    """返回智能家居房间列表（当前注册的适配器均未提供房间能力时返回空）"""
     logger.info("[API] GET /smart-home/rooms - Listing rooms")
-    return ok({"rooms": [], "total": 0})
+    rooms, unsupported = await _aggregate_capability("list_rooms", "rooms")
+    return ok({"rooms": rooms, "total": len(rooms), "unsupported_adapters": unsupported})
 
 
 @router.get("/automations")
 async def list_automations():
-    """返回智能家居自动化规则列表（适配器尚未实现，暂返回空列表）"""
+    """返回智能家居自动化规则列表（当前注册的适配器均未提供该能力时返回空）"""
     logger.info("[API] GET /smart-home/automations - Listing automations")
-    return ok({"automations": [], "total": 0})
+    automations, unsupported = await _aggregate_capability("list_automations", "automations")
+    return ok({"automations": automations, "total": len(automations), "unsupported_adapters": unsupported})
 
 
 @router.post("/devices/{device_id}/control")
