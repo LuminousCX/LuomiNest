@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from loguru import logger
 
 from app.api.v1.deps import get_chat_service, get_conversation_store, get_llm_adapter
+from app.core.config import settings
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -33,10 +34,10 @@ async def chat_completions(
     conversation_store=Depends(get_conversation_store),
 ):
     # Agent 集群调用递归守卫：防止 Agent A→B→A 无限循环
-    if body.agent_depth > 3:
+    if body.agent_depth > settings.A2A_MAX_DEPTH:
         raise HTTPException(
             status_code=400,
-            detail="已达到最大 Agent 调用深度（3），无法继续递归调用",
+            detail=f"已达到最大 Agent 调用深度（{settings.A2A_MAX_DEPTH}），无法继续递归调用",
         )
 
     result = await chat_service.handle_completions(body, adapter, conversation_store)

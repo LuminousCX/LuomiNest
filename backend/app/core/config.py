@@ -248,6 +248,11 @@ def get_settings() -> Settings:
         )
         s.LLM_CONTEXT_STRATEGY = "truncate"
     if is_placeholder(s.SECRET_KEY):
+        if s.ENVIRONMENT == "production":
+            logger.warning(
+                "[Config] SECRET_KEY 未显式配置（生产环境）— 已自动生成机器绑定密钥并持久化。"
+                "集群部署或跨机迁移前必须显式设置 SECRET_KEY，否则已加密数据将无法解密"
+            )
         s.SECRET_KEY = load_or_create_secret_key(s.DATA_DIR)
         logger.success("[Config] SECRET_KEY loaded from persistent store")
     return s

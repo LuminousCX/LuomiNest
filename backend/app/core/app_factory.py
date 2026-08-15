@@ -309,6 +309,14 @@ async def lifespan(app: FastAPI):
         from app.core.tools.builtin.search_everything_tool import SearchEverythingTool
         tool_registry.register(SearchEverythingTool())
 
+        # 应用启动工具（tier=domain，全平台，对齐 tool-opt §4.6 T7）
+        from app.core.tools.builtin.launch_tool import LaunchApplicationTool
+        tool_registry.register(LaunchApplicationTool())
+
+        # 上下文压缩工具（tier=core，对齐 tool-opt §4.3 T4）
+        from app.core.tools.builtin.context_tools import CompressContextTool
+        tool_registry.register(CompressContextTool())
+
         logger.info(f"[LuomiNest] Registered {len(tool_registry.list_names())} tools: {', '.join(tool_registry.list_names())}")
     except Exception as e:
         logger.error(f"[LuomiNest] Tool registration failed (critical): {e}", exc_info=True)
@@ -592,6 +600,25 @@ def create_app() -> FastAPI:
                 "code": 1,
                 "message": exc.message,
                 "error": {"code": exc.code, "message": exc.message},
+                "data": None,
+            },
+        )
+
+    # FastAPI 原生 HTTPException（含 StarletteHTTPException 子类）统一转规范信封，
+    # 消除 {"detail"} 裸响应 —— 全库 49 处 raise HTTPException 因此纳入错误码体系
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail or "请求处理失败")
+        err_code = f"HTTP_{exc.status_code}"
+        logger.warning(f"[Exception] HTTPException: {detail} (status={exc.status_code}, path={request.url.path})")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "code": 1,
+                "message": detail,
+                "error": {"code": err_code, "message": detail},
                 "data": None,
             },
         )

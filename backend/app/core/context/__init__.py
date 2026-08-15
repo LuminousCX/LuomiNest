@@ -49,8 +49,17 @@ class TokenCounter:
             caps = get_capabilities(provider, model)
             if caps.default_context_window > 0:
                 return caps.default_context_window
-        except (ImportError, Exception):
+        except ImportError:
+            # capabilities 模块不可用属可选依赖降级，静默回退到配置值
             pass
+        except Exception:
+            # 能力表查询自身的异常（KeyError/ValueError 等）不可吞掉，否则
+            # 配置错误会被静默回退的默认窗口 16384 掩盖
+            logger.warning(
+                f"[Context] get_capabilities 查询异常，回退配置默认窗口: "
+                f"provider={provider}, model={model}",
+                exc_info=True,
+            )
 
         from app.core.config import get_settings
         settings = get_settings()
