@@ -201,7 +201,8 @@ def _detect_memory_fallback() -> float:
                     kb = int(line.split()[1])
                     return round(kb / (1024 ** 2), 2)
     except Exception:
-        pass
+        # Windows 等平台无 /proc/meminfo，走下方统一回退告警
+        logger.debug("[Hardware] /proc/meminfo 不可用，走默认内存回退", exc_info=True)
 
     logger.warning("[Hardware] Memory detection failed on unknown OS, defaulting to 8.0 GB")
     return 8.0

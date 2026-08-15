@@ -46,7 +46,8 @@ class _LuomiNestRconClient:
                 self._writer.close()
                 await self._writer.wait_closed()
             except Exception:
-                pass
+                # 断开清理：连接可能已失效，属预期情况
+                logger.debug("[MinecraftRCON] 关闭连接时异常（忽略）", exc_info=True)
         self._reader = None
         self._writer = None
 
@@ -209,7 +210,8 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
             try:
                 await conn.close()
             except Exception:
-                pass
+                # 停机清理：连接可能已断开，属预期情况
+                logger.debug("[Minecraft] 关闭 WS 连接时异常（忽略）", exc_info=True)
         self._ws_connections.clear()
         logger.info("[Minecraft] Adapter stopped")
         self._log("info", "instance_stopped", "Minecraft 适配器已停止")
@@ -260,7 +262,8 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
                     if result or result == "":
                         continue
                 except Exception:
-                    pass
+                    # 探测失败即触发下方重连流程，属预期信号
+                    logger.debug("[Minecraft] RCON 存活探测失败，准备重连", exc_info=True)
                 await self._rcon.disconnect()
 
             self._log("info", "connection_reconnecting", f"正在重连 RCON (第 {retry_count} 次)", details={

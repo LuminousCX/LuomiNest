@@ -656,7 +656,7 @@ def _migrate_from_standalone_db() -> int:
                 _mark_migrated("standalone_db", 0)
                 return 0
     except Exception:
-        pass
+        logger.warning("[Migration] standalone_db: 现库数据量预检失败，继续执行复制流程", exc_info=True)
 
     # 从 standalone DB 复制数据
     import sqlite3

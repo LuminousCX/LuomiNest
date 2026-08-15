@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
@@ -309,7 +310,7 @@ async def list_memory_agents(agents_store=Depends(get_agents_store)):
                 entry["has_profile"] = bool(profile.get("name"))
                 entry["profile_name"] = profile.get("name", "")
             except Exception:
-                pass
+                logger.warning(f"[Memory] agent memory.json 解析失败（条目缺少统计字段）: {d.name}", exc_info=True)
             result.append(entry)
 
     return ok({"agents": result})

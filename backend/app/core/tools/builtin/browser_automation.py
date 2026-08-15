@@ -467,7 +467,8 @@ def _format_output(tool_name: str, data: dict[str, Any]) -> str:
                 tree_text = tree_text[:4000] + "\n...（DOM 树已截断，共更多节点）"
             return f"DOM 树：\n{tree_text}"
         except Exception:
-            pass
+            # 格式化失败会继续走下方通用回退返回原始数据
+            logger.debug("[BrowserAutomationTool] DOM 树格式化失败，走通用回退", exc_info=True)
 
     # URL / 标题
     if "url" in data and len(data) == 1:

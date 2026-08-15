@@ -215,7 +215,8 @@ class McpManager:
             try:
                 await stack.aclose()
             except Exception:
-                pass
+                # 主错误已在下方 warning 记录，此处为二次清理噪音
+                logger.debug(f"[McpManager] 连接失败后清理 stack 异常（忽略）: {name}", exc_info=True)
             logger.warning(f"[McpManager] 服务器连接失败: {name}, error={e}")
             return False
 

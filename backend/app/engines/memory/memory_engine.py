@@ -543,7 +543,8 @@ class _LRUDict(OrderedDict):
                 try:
                     oldest_val.close()
                 except Exception:
-                    pass
+                    # LRU 淘汰清理：store 可能已关闭，属预期情况
+                    logger.debug(f"[Memory] LRU 淘汰关闭 store 异常（忽略）: {oldest_key}", exc_info=True)
             logger.debug(f"[Memory] LRU evicted conversation store: {oldest_key}")
 
     def __getitem__(self, key):

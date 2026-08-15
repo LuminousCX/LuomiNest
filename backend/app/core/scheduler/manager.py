@@ -505,7 +505,8 @@ class LuomiSchedulerManager:
             try:
                 self._scheduler.remove_job(task_id)
             except Exception:
-                pass
+                # job 可能已执行完毕（一次性任务），属预期情况
+                logger.debug(f"[LuomiScheduler] remove_job 未找到已结束的 job: id={task_id}", exc_info=True)
 
         logger.info(f"[LuomiScheduler] 移除任务: id={task_id}, name={info.get('name')}")
 

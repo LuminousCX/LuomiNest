@@ -267,7 +267,8 @@ def _persist_provider_models(provider_id: str, models: list[dict], provider_name
         caps = get_capabilities(provider_name or provider_id)
         default_window = caps.default_context_window
     except Exception:
-        pass
+        # 能力表未收录该 provider 属常规回退（default_window=0 由推理兜底），降级为 debug 防刷屏
+        logger.debug(f"[ModelConfig] 能力表查询失败，default_window=0: provider={provider_name or provider_id}", exc_info=True)
 
     enriched = []
     for m in models:
@@ -457,7 +458,7 @@ async def add_provider(request: ProviderCreate, adapter=Depends(get_llm_adapter)
         if creds:
             api_key_prefix = creds[0].get("api_key_prefix", "")
     except Exception:
-        pass
+        logger.warning(f"[ModelConfig] 凭证前缀读取失败: provider={request.id}", exc_info=True)
 
     return ProviderResponse(
         id=request.id,

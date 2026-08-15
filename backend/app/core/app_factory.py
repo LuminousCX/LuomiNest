@@ -95,7 +95,10 @@ def _sync_bundled_plugin_resources() -> None:
                         with open(dst_manifest, encoding="utf-8") as f:
                             dst_version = str(json.load(f).get("version", ""))
                     except Exception:
-                        pass
+                        logger.warning(
+                            f"[BundledSync] 目标 manifest 版本读取失败（将保守跳过更新）: {dst_manifest}",
+                            exc_info=True,
+                        )
                 elif os.path.isfile(dst_skill_md):
                     try:
                         with open(dst_skill_md, encoding="utf-8") as f:
@@ -107,7 +110,10 @@ def _sync_bundled_plugin_resources() -> None:
                                 fm = yaml.safe_load(parts[1]) or {}
                                 dst_version = str(fm.get("version", ""))
                     except Exception:
-                        pass
+                        logger.warning(
+                            f"[BundledSync] 目标 SKILL.md 版本解析失败（将保守跳过更新）: {dst_skill_md}",
+                            exc_info=True,
+                        )
 
                 if dst_version and src_version:
                     if dst_version == src_version:

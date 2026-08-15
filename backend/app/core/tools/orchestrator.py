@@ -161,7 +161,8 @@ class ToolOrchestrator:
                     )
                     return []
             except Exception:
-                pass
+                # 能力表未收录该 provider/model 属常规情况，跳过检查走默认流程
+                logger.debug(f"[ToolOrchestrator] 能力表查询失败，跳过工具兼容性检查: {cache_key}", exc_info=True)
 
         # 自动探测当前运行平台
         current_platform = platform or _detect_current_platform()
