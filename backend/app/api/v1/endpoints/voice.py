@@ -2,15 +2,36 @@
 
 自 app/api/v1/endpoints/chat.py 结构拆分而来：路由 path/method/tags/响应
 逐字不变，router 沿用 prefix="/chat"、tags=["chat"]，最终 URL 与原先完全一致。
+
+v0.5 P0 重构（voice-model-market.md）：
+- G1/G2：engine_meta 硬编码 → EngineCapabilities（registry.list_capabilities）
+- G3/G6：avatar 绑定 → voice_config_store（config_items 权威源）
+- G5：TTSRequest.lang + VoiceProfileResolver 语言感知解析链
+- G7：统一超时（Settings.TTS_*_TIMEOUT，各 provider 内落地）
+- G8：错误响应统一走 LuomiNestError 家族 + ok()/fail() 信封
 """
 from fastapi import APIRouter, UploadFile, File, Form
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from fastapi.responses import Response
 from loguru import logger
+from pydantic import BaseModel, Field, field_validator
 
+from app.core.exceptions import (
+    LangNotSupportedError,
+    VoiceEngineUnavailableError,
+    VoiceSynthesisError,
+    VoiceTranscribeError,
+)
 from app.core.hardware import detect_compute_device
+from app.core.utils import fail, ok
+from app.runtime.provider.engine_capabilities import (
+    LANGUAGE_LABELS,
+    SUPPORTED_TTS_LANGUAGES,
+)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# 语音配置/画像端点（voice-model-market.md §7.4）
+voice_router = APIRouter(prefix="/voice", tags=["voice"])
 
 
 class TTSRequest(BaseModel):
@@ -21,6 +42,10 @@ class TTSRequest(BaseModel):
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
     apiKey: str = Field(default="", max_length=500)
     baseUrl: str = Field(default="", pattern=r"^$|^https?://.*")
+    # v0.5 G5：语言字段（auto/zh/en/ja/ko/yue），驱动语言感知解析链
+    lang: str = Field(default="auto")
+    # 皮套场景（可选）：携带 model_id 触发皮套语音绑定查询
+    avatarModelId: str = Field(default="", max_length=100)
 
     @field_validator("baseUrl")
     @classmethod
@@ -29,46 +54,70 @@ class TTSRequest(BaseModel):
             raise ValueError("baseUrl 必须是有效的 HTTP/HTTPS URL")
         return v
 
+    @field_validator("lang")
+    @classmethod
+    def _validate_lang(cls, v: str) -> str:
+        if v not in SUPPORTED_TTS_LANGUAGES:
+            raise ValueError(f"lang 必须是 {'/'.join(SUPPORTED_TTS_LANGUAGES)} 之一")
+        return v
+
 
 @router.post("/tts/synthesize")
 async def tts_synthesize(request: TTSRequest):
     if not request.text.strip():
-        return JSONResponse({"error": "文本内容不能为空"}, status_code=400)
+        return fail("文本内容不能为空", err_code="TTS_EMPTY_TEXT", status_code=400)
 
-    from fastapi.responses import Response
     from app.utils.tts_text_filter import filter_tts_text
+
     # 触发 TTS 引擎注册（import 包即注册）
     import app.runtime.provider.tts  # noqa: F401
     from app.runtime.provider.tts.tts_registry import LuminousChenXiTTSRegistry
+    from app.services.voice_profile_resolver import luominest_voice_profile_resolver
 
     # 后端兜底过滤：清理 markdown/emoji/特殊符号
     clean_text = filter_tts_text(request.text)
     if not clean_text:
-        return JSONResponse({"error": "过滤后文本为空，无需合成"}, status_code=400)
+        return fail("过滤后文本为空，无需合成", err_code="TTS_EMPTY_TEXT", status_code=400)
 
-    # 构建引擎配置 kwargs（仅传递非空值，避免覆盖引擎默认值）
-    config: dict = {}
-    if request.model:
-        config["model"] = request.model
-    if request.speed and request.speed != 1.0:
-        config["speed"] = request.speed
-    if request.apiKey:
-        config["apiKey"] = request.apiKey
-    if request.baseUrl:
-        config["baseUrl"] = request.baseUrl
-    if request.voice and request.voice != "default":
-        config["voice"] = request.voice
+    # 语音画像解析（请求参数 > 皮套绑定 > 全局默认 + 语言感知，G5/G6）
+    profile = luominest_voice_profile_resolver.resolve_tts(
+        engine=request.engine,
+        model=request.model or None,
+        voice=request.voice,
+        lang=request.lang,
+        speed=request.speed,
+        api_key=request.apiKey or None,
+        base_url=request.baseUrl or None,
+        avatar_model_id=request.avatarModelId or None,
+        text=clean_text,
+    )
 
-    # 通过 Registry 解析引擎，支持自动降级
+    # 语言能力校验（解析链 L1/L2）：显式指定引擎且声明不支持目标语言 → LANG_NOT_SUPPORTED
+    # （auto 模式由 Registry 语言过滤自动降级，不在此报错）
+    if profile.engine and profile.engine != "auto" and profile.lang != "auto":
+        caps = LuminousChenXiTTSRegistry.capabilities(profile.engine)
+        if caps and caps.get("languages") and profile.lang not in caps["languages"]:
+            raise LangNotSupportedError(
+                f"当前语音引擎 {caps.get('name', profile.engine)} 不支持"
+                f"{LANGUAGE_LABELS.get(profile.lang, profile.lang)}",
+                lang=profile.lang,
+                engine=profile.engine,
+            )
+
+    # 通过 Registry 解析引擎（含语言过滤 + 自动降级）
     try:
-        provider, used_engine = LuminousChenXiTTSRegistry.resolve(request.engine, **config)
+        provider, used_engine = LuminousChenXiTTSRegistry.resolve(
+            profile.engine, lang=profile.lang, **profile.to_config_kwargs()
+        )
     except RuntimeError as e:
         logger.error(f"[API] TTS: no engine available: {e}")
-        return JSONResponse({"error": str(e)}, status_code=503)
+        raise VoiceEngineUnavailableError(str(e)) from e
 
     try:
-        audio_bytes = await provider.synthesize(clean_text, request.voice)
-        logger.info(f"[API] TTS synthesized by [{used_engine}]: {clean_text[:60]}...")
+        audio_bytes = await provider.synthesize(clean_text, profile.voice or "default")
+        logger.info(
+            f"[API] TTS synthesized by [{used_engine}] (lang={profile.lang}): {clean_text[:60]}..."
+        )
         return Response(
             content=audio_bytes,
             media_type="audio/wav",
@@ -76,43 +125,34 @@ async def tts_synthesize(request: TTSRequest):
         )
     except Exception as e:
         logger.error(f"[API] TTS: engine [{used_engine}] failed: {e}")
-        return JSONResponse({"error": f"语音合成失败：{e}"}, status_code=500)
+        raise VoiceSynthesisError(f"语音合成失败：{e}", engine=used_engine) from e
 
 
 @router.get("/tts/engines")
 async def tts_engines():
-    """Report available TTS engines, device info, and avatar voice bindings."""
+    """Report available TTS engines, device info, and avatar voice bindings.
+
+    v0.5 G1：引擎元数据来自各 Provider 的 CAPABILITIES 类属性（替代 engine_meta 硬编码），
+    含 languages/voices/voice_mode/models 等能力声明，前端按此渲染级联下拉。
+    """
     # 触发 TTS 引擎注册
     import app.runtime.provider.tts  # noqa: F401
     from app.runtime.provider.tts.tts_registry import LuminousChenXiTTSRegistry
-
-    # 引擎元数据：显示名称、分类、是否需要 API Key、是否在线
-    engine_meta = {
-        "edge-tts": {"name": "Edge TTS (在线，免费)", "category": "cloud-free", "needs_api_key": False, "online": True},
-        "sherpa-onnx": {"name": "Sherpa-ONNX TTS (离线神经网络)", "category": "local", "needs_api_key": False, "online": False},
-        "local": {"name": "本地 TTS (pyttsx3, CPU)", "category": "local", "needs_api_key": False, "online": False},
-        "gemini": {"name": "Gemini TTS (Google，免费层)", "category": "cloud-paid", "needs_api_key": True, "online": True},
-        "minimax": {"name": "MiniMax TTS (高质量)", "category": "cloud-paid", "needs_api_key": True, "online": True},
-        "siliconflow": {"name": "SiliconFlow TTS (CosyVoice2 云端)", "category": "cloud-paid", "needs_api_key": True, "online": True},
-        "fish-audio": {"name": "Fish Audio TTS (多语言)", "category": "cloud-paid", "needs_api_key": True, "online": True},
-    }
+    from app.services.voice_config_store import luominest_voice_config_store
 
     engines: list[dict] = []
     for engine_id in LuminousChenXiTTSRegistry.list_engines():
         provider_class = LuminousChenXiTTSRegistry.get(engine_id)
         available = LuminousChenXiTTSRegistry.is_available(engine_id)
-        meta = engine_meta.get(engine_id, {"name": engine_id, "category": "unknown", "needs_api_key": False, "online": False})
+        caps = LuminousChenXiTTSRegistry.capabilities(engine_id)
 
-        engine_info: dict = {
-            "id": engine_id,
-            "name": meta["name"],
-            "category": meta["category"],
-            "needs_api_key": meta["needs_api_key"],
-            "online": meta["online"],
-            "available": available,
-        }
+        if caps is not None:
+            engine_info = dict(caps)
+        else:
+            engine_info = {"id": engine_id, "name": engine_id, "category": "unknown"}
+        engine_info["available"] = available
 
-        # 附加引擎特定信息（default_voices / voices / lang_map）
+        # 附加引擎特定信息（default_voices 语言映射 / 本地引擎动态音色枚举）
         if available and provider_class is not None:
             default_voices = getattr(provider_class, "DEFAULT_VOICES", None)
             if default_voices:
@@ -122,7 +162,7 @@ async def tts_engines():
             if engine_id == "local":
                 try:
                     provider = provider_class()
-                    engine_info["voices"] = provider.list_voices()
+                    engine_info["voices_dynamic"] = provider.list_voices()
                     engine_info["lang_map"] = provider.get_lang_map()
                 except Exception as lv_err:
                     logger.debug(f"[API] TTS local voice enumeration failed: {lv_err}")
@@ -131,26 +171,17 @@ async def tts_engines():
 
     device = detect_compute_device()
 
-    # Avatar voice bindings (model_id -> voice/lang)
-    from app.services.avatar_manager import LUOMINEST_AVATAR_BINDINGS
-    bindings = {
-        mid: {
-            "model_id": b.model_id,
-            "voice": b.voice,
-            "voice_lang": b.voice_lang,
-            "default_expression": b.default_expression,
-        }
-        for mid, b in LUOMINEST_AVATAR_BINDINGS.items()
-    }
+    # Avatar voice bindings (model_id -> voice/lang)，v0.5 G3：从 config_items 读取（迁移后权威源）
+    bindings = luominest_voice_config_store.get_avatar_bindings()
 
-    return {
-        "error": None,
-        "data": {
-            "engines": engines,
-            "device": device,
-            "avatar_bindings": bindings,
-        },
-    }
+    return ok({
+        "engines": engines,
+        "device": device,
+        "avatar_bindings": bindings,
+        "languages": [
+            {"value": v, "label": LANGUAGE_LABELS[v]} for v in SUPPORTED_TTS_LANGUAGES
+        ],
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -191,11 +222,12 @@ async def stt_transcribe(
         language: 识别语言（auto/zh/en/ja/ko 等）
 
     Returns:
-        {"error": None, "data": {"text": "...", "engine": "sherpa-onnx"}}
+        ok() 信封：{"code": 0, "data": {"text": "...", "engine": "sherpa-onnx"}}
+        （保留旧 data 结构字段，error 字段由信封统一承载）
     """
     audio_data = await audio.read()
     if not audio_data:
-        return JSONResponse({"error": "音频文件为空"}, status_code=400)
+        return fail("音频文件为空", err_code="STT_EMPTY_AUDIO", status_code=400)
 
     # 获取音频格式（从文件扩展名推断）
     format_hint = "wav"
@@ -207,102 +239,126 @@ async def stt_transcribe(
     try:
         provider, used_engine = _get_stt_provider(engine)
     except RuntimeError as e:
-        return JSONResponse({"error": str(e)}, status_code=503)
+        raise VoiceEngineUnavailableError(str(e)) from e
 
     try:
         text = await provider.transcribe(audio_data, format=format_hint)
         logger.info(f"[API] STT transcribed by [{used_engine}]: {text[:80]}...")
-        return {
-            "error": None,
-            "data": {
-                "text": text,
-                "engine": used_engine,
-            },
-        }
+        return ok({"text": text, "engine": used_engine})
     except Exception as e:
         logger.error(f"[API] STT transcribe failed: {e}")
-        return JSONResponse({"error": f"语音识别失败：{e}"}, status_code=500)
+        raise VoiceTranscribeError(f"语音识别失败：{e}", engine=used_engine) from e
 
 
 @router.get("/stt/engines")
 async def stt_engines():
-    """报告可用的 STT 引擎列表."""
-    from app.runtime.provider.stt.stt_registry import STT_FALLBACK_ORDER
+    """报告可用的 STT 引擎列表（v0.5 G1：capabilities 聚合，替代逐个 try-import 硬编码）."""
+    import app.runtime.provider.stt  # noqa: F401
+    from app.runtime.provider.stt.stt_registry import STT_FALLBACK_ORDER, LuomiNestSTTRegistry
 
-    engines: list[dict] = []
+    engines = LuomiNestSTTRegistry.list_capabilities()
 
-    # Sherpa-ONNX STT
-    try:
-        from app.runtime.provider.stt.sherpa_onnx_stt import SherpaOnnxSTTProvider
-        sherpa_available = SherpaOnnxSTTProvider.is_available()
-        sherpa_model_ready = SherpaOnnxSTTProvider.is_model_ready() if sherpa_available else False
-        engines.append({
-            "id": "sherpa-onnx",
-            "name": "Sherpa-ONNX (离线, SenseVoice)",
-            "online": False,
-            "available": sherpa_available,
-            "model_ready": sherpa_model_ready,
-            "languages": ["zh", "en", "ja", "ko", "yue", "auto"],
-            "description": "基于 ONNX 的离线语音识别，默认使用 SenseVoice 模型，支持中英日韩粤",
-            "model_types": ["sense_voice", "paraformer", "whisper"],
-        })
-    except ImportError:
-        engines.append({
-            "id": "sherpa-onnx",
-            "name": "Sherpa-ONNX (离线, SenseVoice)",
-            "online": False,
-            "available": False,
-        })
+    # 附加引擎特有信息（模型就绪态/模型清单，供设置页渲染）
+    for info in engines:
+        eid = info.get("id")
+        try:
+            if eid == "sherpa-onnx":
+                from app.runtime.provider.stt.sherpa_onnx_stt import SherpaOnnxSTTProvider
 
-    # FunASR STT
-    try:
-        from app.runtime.provider.stt.funasr_stt import FunASRSTTProvider
-        funasr_available = FunASRSTTProvider.is_available()
-        engines.append({
-            "id": "funasr",
-            "name": "FunASR (离线, 阿里达摩院)",
-            "online": False,
-            "available": funasr_available,
-            "model_ready": funasr_available,
-            "languages": ["zh", "en", "auto"],
-            "description": "阿里达摩院 FunASR，默认使用 SenseVoiceSmall，中文识别效果优秀",
-            "models": FunASRSTTProvider.SUPPORTED_MODELS,
-        })
-    except ImportError:
-        engines.append({
-            "id": "funasr",
-            "name": "FunASR (离线, 阿里达摩院)",
-            "online": False,
-            "available": False,
-        })
+                if info.get("available"):
+                    info["model_ready"] = SherpaOnnxSTTProvider.is_model_ready()
+                info["model_types"] = list(SherpaOnnxSTTProvider.SUPPORTED_MODEL_TYPES)
+            elif eid == "funasr":
+                from app.runtime.provider.stt.funasr_stt import FunASRSTTProvider
 
-    # Faster Whisper STT
-    try:
-        from app.runtime.provider.stt.faster_whisper_stt import FasterWhisperSTTProvider, MODEL_SIZES as FW_MODEL_SIZES
-        fw_available = FasterWhisperSTTProvider.is_available()
-        engines.append({
-            "id": "faster-whisper",
-            "name": "Faster Whisper (离线, CTranslate2 加速)",
-            "online": False,
-            "available": fw_available,
-            "model_ready": fw_available,
-            "languages": ["zh", "en", "ja", "ko", "fr", "de", "es", "auto"],
-            "description": "基于 CTranslate2 的 Whisper 加速版，比原版快 4 倍以上",
-            "model_sizes": list(FW_MODEL_SIZES.keys()),
-        })
-    except ImportError:
-        engines.append({
-            "id": "faster-whisper",
-            "name": "Faster Whisper (离线, CTranslate2 加速)",
-            "online": False,
-            "available": False,
-        })
+                info["model_ready"] = info.get("available", False)
+                info["models"] = FunASRSTTProvider.SUPPORTED_MODELS
+            elif eid == "faster-whisper":
+                from app.runtime.provider.stt.faster_whisper_stt import (
+                    MODEL_SIZES as FW_MODEL_SIZES,
+                )
 
-    return {
-        "error": None,
-        "data": {
-            "engines": engines,
-            "fallback_order": STT_FALLBACK_ORDER,
-            "device": detect_compute_device(),
-        },
-    }
+                info["model_ready"] = info.get("available", False)
+                info["model_sizes"] = list(FW_MODEL_SIZES.keys())
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"[API] STT engines extra info failed for [{eid}]: {e}")
+
+    return ok({
+        "engines": engines,
+        "fallback_order": STT_FALLBACK_ORDER,
+        "device": detect_compute_device(),
+    })
+
+
+# ---------------------------------------------------------------------------
+# v0.5 语音配置/画像端点（voice-model-market.md §7.4）
+# ---------------------------------------------------------------------------
+
+class VoiceConfigUpdate(BaseModel):
+    """PUT /voice/config 请求体（合并式更新，字段可选）."""
+
+    tts: dict | None = None
+    stt: dict | None = None
+    translation: dict | None = None
+
+
+class AvatarBindingUpdate(BaseModel):
+    """PUT /voice/avatar-bindings/{model_id} 请求体."""
+
+    voice: str | None = None
+    voice_lang: str | None = None
+    engine: str | None = None
+    model: str | None = None
+    default_expression: str | None = None
+    expression_map: dict | None = None
+
+
+@voice_router.get("/config")
+async def get_voice_config():
+    """读取全局语音配置（voice_config，config_items 权威源）."""
+    from app.services.voice_config_store import luominest_voice_config_store
+
+    return ok(luominest_voice_config_store.get_voice_config())
+
+
+@voice_router.put("/config")
+async def put_voice_config(update: VoiceConfigUpdate):
+    """写入全局语音配置（合并式；语言/引擎字段校验）."""
+    from app.services.voice_config_store import luominest_voice_config_store
+
+    patch: dict = {}
+    if update.tts is not None:
+        tts = dict(update.tts)
+        lang = tts.get("lang")
+        if lang is not None and lang not in SUPPORTED_TTS_LANGUAGES:
+            return fail(
+                f"tts.lang 必须是 {'/'.join(SUPPORTED_TTS_LANGUAGES)} 之一",
+                err_code="VOICE_CONFIG_INVALID",
+                status_code=422,
+            )
+        patch["tts"] = tts
+    if update.stt is not None:
+        patch["stt"] = dict(update.stt)
+    if update.translation is not None:
+        patch["translation"] = dict(update.translation)
+
+    saved = luominest_voice_config_store.save_voice_config(patch)
+    return ok(saved)
+
+
+@voice_router.get("/avatar-bindings")
+async def get_avatar_bindings():
+    """读取全部皮套音色绑定（voice.avatar_bindings.*）."""
+    from app.services.voice_config_store import luominest_voice_config_store
+
+    return ok(luominest_voice_config_store.get_avatar_bindings())
+
+
+@voice_router.put("/avatar-bindings/{model_id}")
+async def put_avatar_binding(model_id: str, update: AvatarBindingUpdate):
+    """写入皮套音色绑定（落库，替代旧 avatar.py 直改文件）."""
+    from app.services.voice_config_store import luominest_voice_config_store
+
+    patch = update.model_dump(exclude_none=True)
+    saved = luominest_voice_config_store.save_avatar_binding(model_id, patch)
+    return ok(saved)

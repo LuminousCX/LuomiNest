@@ -17,6 +17,7 @@ import numpy as np
 import soundfile as sf
 from loguru import logger
 
+from app.runtime.provider.engine_capabilities import EngineCapabilities
 from app.runtime.provider.stt.ports import STTProvider
 
 
@@ -84,6 +85,18 @@ class FunASRSTTProvider(STTProvider):
     _instance = None
     _model = None
     _current_model_name = None
+
+    # 引擎能力声明（G1/G2 治理）
+    CAPABILITIES = EngineCapabilities(
+        engine_id="funasr",
+        name="FunASR（离线·阿里达摩院）",
+        kind="local",
+        category="local",
+        needs_api_key=False,
+        online=False,
+        languages=("zh", "en", "ja", "ko", "yue"),
+        description="阿里达摩院 FunASR，默认 SenseVoiceSmall，中文识别效果优秀，模型首次使用自动从 ModelScope 下载",
+    )
 
     # 支持的模型
     SUPPORTED_MODELS = list(MODEL_ALIAS_TO_FULL_ID.keys())

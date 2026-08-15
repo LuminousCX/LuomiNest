@@ -68,8 +68,19 @@ export interface TtsEngineInfo {
   category?: string
   needs_api_key?: boolean
   default_voices?: Record<string, string>
-  voices?: Array<{ id: string; name: string; lang: string }>
+  voices?: Array<{ value: string; label: string; langs?: string[] }>
   lang_map?: Record<string, string>
+  /** v0.5 EngineCapabilities 能力声明 */
+  kind?: 'cloud' | 'local'
+  languages?: string[]
+  voice_mode?: 'list' | 'dynamic' | 'input'
+  default_voice?: string
+  models?: string[]
+  default_model?: string
+  supports_speed?: boolean
+  description?: string
+  /** local 引擎运行时枚举的系统音色 */
+  voices_dynamic?: Array<{ id: string; name: string }>
 }
 
 export interface TtsDeviceInfo {

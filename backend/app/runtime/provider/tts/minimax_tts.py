@@ -7,6 +7,7 @@
 import httpx
 from loguru import logger
 
+from app.runtime.provider.engine_capabilities import EngineCapabilities
 from app.runtime.provider.tts.ports import TTSProvider
 
 
@@ -37,6 +38,30 @@ class MiniMaxTTSProvider(TTSProvider):
 
     DEFAULT_MODEL = "speech-2.8-hd"
     DEFAULT_BASE_URL = "https://api.minimax.io/v1/t2a_v2"
+
+    # 引擎能力声明（G1/G2 治理）
+    CAPABILITIES = EngineCapabilities(
+        engine_id="minimax",
+        name="MiniMax TTS（高质量）",
+        kind="cloud",
+        category="cloud-paid",
+        needs_api_key=True,
+        online=True,
+        languages=("zh", "en", "ja"),
+        voices=[
+            {"value": "English_Graceful_Lady", "label": "English Graceful Lady（英文优雅女声）", "langs": ["en"]},
+            {"value": "English_Trustworth_Man", "label": "English Trustworth Man（英文可靠男声）", "langs": ["en"]},
+            {"value": "Chinese_Gentle_Lady", "label": "Chinese Gentle Lady（中文温柔女声）", "langs": ["zh"]},
+            {"value": "Chinese_Serene_Man", "label": "Chinese Serene Man（中文沉稳男声）", "langs": ["zh"]},
+            {"value": "Chinese_Expressive_Girl", "label": "Chinese Expressive Girl（中文活泼女孩）", "langs": ["zh"]},
+            {"value": "Chinese_Fresh_Girl", "label": "Chinese Fresh Girl（中文清新女声）", "langs": ["zh"]},
+            {"value": "Japanese_Calm_Woman", "label": "Japanese Calm Woman（日文冷静女声）", "langs": ["ja"]},
+        ],
+        default_voice="Chinese_Gentle_Lady",
+        models=["speech-2.8-hd"],
+        default_model="speech-2.8-hd",
+        description="MiniMax T2A v2，高质量云语音，支持语速/音量/音调调节",
+    )
 
     @classmethod
     def is_available(cls) -> bool:
@@ -84,7 +109,10 @@ class MiniMaxTTSProvider(TTSProvider):
             "Authorization": f"Bearer {self.api_key}",
         }
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        # 统一超时治理（应急修复 B3）：硬编码 → Settings.TTS_HTTP_TIMEOUT
+        from app.core.config import settings as _settings
+
+        async with httpx.AsyncClient(timeout=_settings.TTS_HTTP_TIMEOUT) as client:
             response = await client.post(self.base_url, json=payload, headers=headers)
             response.raise_for_status()
             result = response.json()

@@ -63,6 +63,27 @@ class LuomiNestSTTRegistry:
         return True
 
     @classmethod
+    def capabilities(cls, engine_id: str) -> dict | None:
+        """输出引擎能力声明（CAPABILITIES 类属性 → dict），未注册返回 None."""
+        provider_class = cls._providers.get(engine_id)
+        if provider_class is None:
+            return None
+        caps = getattr(provider_class, "CAPABILITIES", None)
+        return caps.to_dict() if caps is not None else None
+
+    @classmethod
+    def list_capabilities(cls) -> list[dict]:
+        """聚合全部引擎能力声明 + 可用状态（G1：/chat/stt/engines 数据源）."""
+        result: list[dict] = []
+        for engine_id in cls._providers:
+            info = cls.capabilities(engine_id)
+            if info is None:
+                info = {"id": engine_id, "name": engine_id, "online": False}
+            info["available"] = cls.is_available(engine_id)
+            result.append(info)
+        return result
+
+    @classmethod
     def resolve(cls, engine_id: str | None = None, **config) -> tuple[STTProvider, str]:
         """解析并实例化 STT 引擎，支持自动降级.
 

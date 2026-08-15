@@ -152,6 +152,12 @@ class Settings(BaseSettings):
 
     TTS_PROXY: str = ""
 
+    # TTS 统一超时治理（应急修复 B3 / voice-model-market.md G7）：
+    # 各引擎散落的 30/60/600 超时常量统一收敛到 Settings，env 可覆盖
+    TTS_HTTP_TIMEOUT: float = 60.0          # 云端 TTS HTTP 合成超时（edge/gemini/minimax/siliconflow/fish-audio）
+    TTS_DOWNLOAD_TIMEOUT: float = 600.0     # 模型下载超时（sherpa-onnx 大模型慢网络）
+    TTS_LOCAL_PROC_TIMEOUT: float = 120.0   # 本地推理/子进程超时（pyttsx3 worker/sherpa 合成）
+
     # Agent 集群调用配置
     APP_SELF_BASE_URL: str = "http://localhost:8000"
     A2A_SERVERS: list[dict] = []  # 每项: {name, url, enabled, api_key}
