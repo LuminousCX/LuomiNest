@@ -28,15 +28,32 @@ _SKIP_DIRS = frozenset({
     ".egg-info",
 })
 
-# 默认搜索根路径（Windows 从 C:\\，其他从 HOME）
+# 默认搜索根路径（Windows 枚举所有本地盘符，其他平台从 HOME）
 _DEFAULT_SEARCH_ROOTS: list[str] = []
 
 
-def _get_default_root() -> str:
-    """获取默认搜索根路径。"""
-    if os.name == "nt":
-        return "C:\\"
-    return os.path.expanduser("~")
+def _get_default_roots() -> list[str]:
+    """获取默认搜索根路径列表。
+
+    Windows：枚举所有本地固定盘符（多盘符机器不再漏搜 D:/E:，
+    也不再把范围错锁在系统盘一个盘上）；
+    其他平台：HOME 目录（遍历 / 在 Linux/macOS 上不现实且危险）。
+    psutil 不可用时回退 HOME，避免单盘硬编码。
+    """
+    if os.name != "nt":
+        return [os.path.expanduser("~")]
+    try:
+        import psutil
+        roots = [
+            p.mountpoint
+            for p in psutil.disk_partitions(all=False)
+            if "cdrom" not in p.opts and p.fstype
+        ]
+        if roots:
+            return roots
+    except Exception:
+        logger.debug("[OsWalkAdapter] psutil 盘符枚举失败，回退用户主目录", exc_info=True)
+    return [os.path.expanduser("~")]
 
 
 class OsWalkAdapter:
@@ -72,53 +89,55 @@ class OsWalkAdapter:
         Returns:
             FileSearchResult 列表（按路径字典序排序）。
         """
-        search_root = path or _get_default_root()
-
-        if not os.path.isdir(search_root):
-            logger.warning(f"[OsWalkAdapter] 搜索路径不存在: {search_root}")
-            return []
+        # 指定 path 时单根搜索；否则枚举平台默认根（Windows 多盘符逐盘兜底）
+        search_roots = [path] if path else _get_default_roots()
 
         # 判断匹配模式：含 * 或 ? 为 glob，否则为子串
         is_glob = "*" in query or "?" in query
         query_lower = query.lower()
 
         results: list[FileSearchResult] = []
-        logger.info(f"[OsWalkAdapter] 搜索: query={query!r}, root={search_root}, glob={is_glob}")
+        logger.info(f"[OsWalkAdapter] 搜索: query={query!r}, roots={search_roots}, glob={is_glob}")
 
-        for root, dirs, files in os.walk(search_root):
-            # 原地修改 dirs 跳过噪声目录
-            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+        for search_root in search_roots:
+            if not os.path.isdir(search_root):
+                logger.warning(f"[OsWalkAdapter] 搜索路径不存在: {search_root}")
+                continue
 
-            for name in files + dirs:
+            for root, dirs, files in os.walk(search_root):
+                # 原地修改 dirs 跳过噪声目录
+                dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+
+                for name in files + dirs:
+                    if len(results) >= max_results:
+                        break
+
+                    name_lower = name.lower()
+                    if is_glob:
+                        matched = fnmatch.fnmatch(name_lower, query_lower)
+                    else:
+                        matched = query_lower in name_lower
+
+                    if not matched:
+                        continue
+
+                    full_path = os.path.join(root, name)
+                    try:
+                        stat = os.stat(full_path)
+                        size = stat.st_size
+                        is_dir = os.path.isdir(full_path)
+                    except OSError:
+                        size = 0
+                        is_dir = False
+
+                    results.append(FileSearchResult(
+                        path=full_path,
+                        size=size,
+                        is_dir=is_dir,
+                    ))
+
                 if len(results) >= max_results:
                     break
-
-                name_lower = name.lower()
-                if is_glob:
-                    matched = fnmatch.fnmatch(name_lower, query_lower)
-                else:
-                    matched = query_lower in name_lower
-
-                if not matched:
-                    continue
-
-                full_path = os.path.join(root, name)
-                try:
-                    stat = os.stat(full_path)
-                    size = stat.st_size
-                    is_dir = os.path.isdir(full_path)
-                except OSError:
-                    size = 0
-                    is_dir = False
-
-                results.append(FileSearchResult(
-                    path=full_path,
-                    size=size,
-                    is_dir=is_dir,
-                ))
-
-            if len(results) >= max_results:
-                break
 
         logger.info(f"[OsWalkAdapter] 返回 {len(results)} 条结果")
         return results

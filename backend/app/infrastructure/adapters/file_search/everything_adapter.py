@@ -73,7 +73,13 @@ class EverythingAdapter:
         return None
 
     def available(self) -> bool:
-        """检查 es.exe 是否可用（结果缓存）。"""
+        """检查 es.exe 是否可用（结果缓存）。
+
+        非 Windows 平台直接返回 False：Everything/es.exe 仅存在于 Windows，
+        提前短路避免在 Linux/macOS 上做无意义的 PATH 与候选路径探测。
+        """
+        if os.name != "nt":
+            return False
         if self._cached_available is not None:
             return self._cached_available
 
