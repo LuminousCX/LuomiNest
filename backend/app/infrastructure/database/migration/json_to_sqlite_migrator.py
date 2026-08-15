@@ -18,6 +18,7 @@ from typing import Callable
 from loguru import logger
 
 from app.core.utils import utc_now
+from app.core.constants.colors import DEFAULT_AGENT_COLOR
 
 from app.core.config import settings
 from app.infrastructure.database.facades.json_store_facade import (
@@ -489,7 +490,7 @@ def _migrate_agents_json_file() -> int:
                 system_prompt=agent_data.get("system_prompt", ""),
                 model=agent_data.get("model"),
                 provider=agent_data.get("provider"),
-                color=agent_data.get("color", "#0d9488"),
+                color=agent_data.get("color", DEFAULT_AGENT_COLOR),
                 avatar=agent_data.get("avatar"),
                 capabilities=agent_data.get("capabilities", ["chat"]),
                 memory_access=agent_data.get("memory_access", "none"),

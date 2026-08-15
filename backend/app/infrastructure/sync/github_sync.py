@@ -18,6 +18,7 @@ import httpx
 from loguru import logger
 
 from app.core.utils import utc_now
+from app.core.constants.colors import TAG_COLOR_NEUTRAL
 from app.infrastructure.database.json_store import JsonStore
 
 # ---------------------------------------------------------------------------
@@ -446,13 +447,13 @@ def _normalize_tags(tags_data) -> list[dict]:
                 result.append({
                     "id": tag.get("id", f"tag-{i}"),
                     "name": tag.get("name", str(tag)),
-                    "color": tag.get("color", "#6b7280"),
+                    "color": tag.get("color", TAG_COLOR_NEUTRAL),
                 })
             elif isinstance(tag, str) and tag:
                 result.append({
                     "id": f"tag-{tag}",
                     "name": tag,
-                    "color": "#6b7280",
+                    "color": TAG_COLOR_NEUTRAL,
                 })
     return result
 

@@ -1,0 +1,38 @@
+{
+  "id": "cxp-chart-renderer",
+  "type": "plugin",
+  "name": "CxPlugin 绘图渲染器",
+  "version": "1.0.0",
+  "description": "数据可视化图表渲染插件，为 AI 提供折线图、散点图、柱状图等绘图能力，支持自由代码执行",
+  "author": "LuminousCX",
+  "license": "MIT",
+  "entry": "main",
+  "minAppVersion": "0.7.6",
+  "platform": "backend",
+  "category": "tool",
+  "tags": ["chart", "visualization", "plot", "data", "matplotlib"],
+  "icon": "BarChart3",
+  "permissions": ["tool_register", "file_write"],
+  "dependencies": {
+    "python": ">=3.12",
+    "pip": ["matplotlib", "numpy", "pandas"]
+  },
+  "settings": {
+    "default_figsize": {
+      "type": "array",
+      "default": [8, 5],
+      "description": "默认画布尺寸 [宽, 高]（英寸）"
+    },
+    "inline_threshold_kb": {
+      "type": "integer",
+      "default": 50,
+      "description": "图片内联阈值（KB），小于此值用 base64 内联"
+    },
+    "execution_timeout": {
+      "type": "integer",
+      "default": 30,
+      "description": "代码执行超时时间（秒）"
+    }
+  },
+  "hooks": {}
+}

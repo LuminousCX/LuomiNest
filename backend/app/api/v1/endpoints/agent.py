@@ -7,6 +7,7 @@ from loguru import logger
 
 from app.api.v1.deps import get_agents_store, get_conversation_store
 from app.core.config import settings
+from app.core.constants.colors import DEFAULT_AGENT_COLOR
 from app.core.utils import utc_now, ok
 from app.core.exceptions import NotFoundError
 
@@ -17,7 +18,7 @@ class AgentCreate(BaseModel):
     name: str
     description: str = ""
     system_prompt: str = ""
-    color: str = "#0d9488"
+    color: str = DEFAULT_AGENT_COLOR
     avatar: str | None = None
     capabilities: list[str] = Field(default_factory=lambda: ["chat"])
     memory_access: str = "none"

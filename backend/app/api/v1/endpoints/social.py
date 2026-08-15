@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from loguru import logger
 
 from app.core.utils import utc_now, sse_response, sse_data, require_store, to_camel_case, ok
+from app.core.constants.colors import DEFAULT_AGENT_COLOR
 from app.core.exceptions import ValidationError
 from app.api.v1.deps import get_groups_store, get_agents_store
 from app.domains.social.group_chat import GroupChatManager
@@ -162,7 +163,7 @@ async def add_group_member(
         "name": agent["name"],
         "type": "agent",
         "role": request.role,
-        "color": agent.get("color", "#0d9488"),
+        "color": agent.get("color", DEFAULT_AGENT_COLOR),
     })
     group["members"] = members
     group["updated_at"] = utc_now()
@@ -320,7 +321,7 @@ async def list_available_agents(agents_store=Depends(get_agents_store)):
             "id": a.get("id", ""),
             "name": a.get("name", ""),
             "description": a.get("description", ""),
-            "color": a.get("color", "#0d9488"),
+            "color": a.get("color", DEFAULT_AGENT_COLOR),
             "avatar": a.get("avatar"),
             "is_main": a.get("is_main", False),
         })

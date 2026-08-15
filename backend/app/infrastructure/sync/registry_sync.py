@@ -25,6 +25,7 @@ import yaml
 from loguru import logger
 
 from app.core.config import settings
+from app.core.constants.colors import TAG_COLOR_MUTED
 from app.infrastructure.database.json_store import JsonStore
 from app.infrastructure.sync.registry_sources import build_registry_url, get_active_source_id
 
@@ -192,7 +193,7 @@ def _normalize_remote_item(item: dict[str, Any]) -> dict[str, Any]:
     # 处理 tags（远程可能是 string[] 或 object[]）
     raw_tags = item.get("tags", [])
     if raw_tags and isinstance(raw_tags[0], str):
-        tags = [{"id": t, "name": t, "color": "#888"} for t in raw_tags]
+        tags = [{"id": t, "name": t, "color": TAG_COLOR_MUTED} for t in raw_tags]
     else:
         tags = raw_tags
 

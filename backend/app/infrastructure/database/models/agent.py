@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy import Boolean, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants.colors import DEFAULT_AGENT_COLOR
 from app.infrastructure.database.base import Base
 
 
@@ -19,7 +20,7 @@ class Agent(Base):
     system_prompt: Mapped[str] = mapped_column(Text, default="")
     model: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     provider: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    color: Mapped[str] = mapped_column(String(32), default="#0d9488")
+    color: Mapped[str] = mapped_column(String(32), default=DEFAULT_AGENT_COLOR)
     avatar: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     capabilities: Mapped[list] = mapped_column(JSON, default=list)
     memory_access: Mapped[str] = mapped_column(String(32), default="none")

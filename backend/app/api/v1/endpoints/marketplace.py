@@ -20,6 +20,7 @@ from app.infrastructure.install.install_service import (
     get_installed_records_resolved,
 )
 from app.api.v1.deps import get_marketplace_stats_store
+from app.core.constants.colors import TAG_COLOR_MUTED
 from app.data.marketplace_catalog import (
     get_catalog_by_type,
     get_all_catalog_items,
@@ -270,7 +271,7 @@ def _scan_local_skill(skill_id: str, skill_dir: str) -> Optional[dict]:
         "version": version,
         "author": {"id": "local", "name": author or "本地", "avatar": "", "verified": False},
         "category": category,
-        "tags": [{"id": t, "name": t, "color": "#888"} for t in tags],
+        "tags": [{"id": t, "name": t, "color": TAG_COLOR_MUTED} for t in tags],
         "icon": icon,
         "license": license_str,
         "localPath": skill_dir,
@@ -326,7 +327,7 @@ def _scan_local_plugin(plugin_id: str, plugin_dir: str) -> Optional[dict]:
         "version": version,
         "author": {"id": "local", "name": author or "本地", "avatar": "", "verified": False},
         "category": category,
-        "tags": [{"id": t, "name": t, "color": "#888"} for t in tags],
+        "tags": [{"id": t, "name": t, "color": TAG_COLOR_MUTED} for t in tags],
         "icon": icon,
         "license": license_str,
         "localPath": plugin_dir,
