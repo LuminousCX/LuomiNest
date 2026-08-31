@@ -482,8 +482,17 @@ class ChatService:
                     persist_state = dict(state)
                     if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
                         persist_state["content"] = ""
+                    prev_len = len(conv["messages"])
                     self.save_assistant_message(conv, persist_state, versions=versions)
-                    await self.persist_conv(conv_id, conv)
+                    if len(conv["messages"]) > prev_len:
+                        # 热路径：增量追加 assistant 消息 + 同步元数据
+                        if not await conversation_store.append_message_async(conv_id, conv["messages"][-1]):
+                            await self.persist_conv(conv_id, conv)
+                        await conversation_store.update_meta_async(
+                            conv_id, {"title": conv.get("title", "New Conversation")}
+                        )
+                    else:
+                        await self.persist_conv(conv_id, conv)
                 except Exception as persist_err:
                     logger.error(f"[STREAM] Persist failed: conv={conv_id}, error={persist_err}")
 
@@ -745,10 +754,20 @@ class ChatService:
                 if m.role == "user":
                     last_user_content = m.content
                     break
+            prev_len = len(conv["messages"])
             self.save_user_message(
                 conv, last_user_content, request.file_content, request.file_name, request.file_type,
             )
-            await self.persist_conv(conv_id, conv)
+            if len(conv["messages"]) > prev_len:
+                # 热路径：仅追加最后一条消息（O(1) INSERT + 增量 search_text）
+                if not await conversation_store.append_message_async(conv_id, conv["messages"][-1]):
+                    await self.persist_conv(conv_id, conv)
+            else:
+                # 合并进最后一条 user 消息（如补充文件内容）→ 按 id 更新，失败回退全量
+                last = conv["messages"][-1]
+                mid = str(last.get("id", "") or "")
+                if not mid or not await conversation_store.update_message_async(conv_id, mid, last):
+                    await self.persist_conv(conv_id, conv)
 
         # ── 模型解析（2026-08 全局模型统一）──
         # 专业模式（standard/ultra）路由到推理模型（设置→模型设置→推理模型）；
@@ -877,8 +896,17 @@ class ChatService:
         if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
             persist_state["content"] = ""
 
+        prev_len = len(conv["messages"])
         self.save_assistant_message(conv, persist_state, versions=request.versions)
-        await self.persist_conv(conv_id, conv)
+        if len(conv["messages"]) > prev_len:
+            # 热路径：增量追加 assistant 消息 + 同步元数据（标题可能被自动更新）
+            if not await conversation_store.append_message_async(conv_id, conv["messages"][-1]):
+                await self.persist_conv(conv_id, conv)
+            await conversation_store.update_meta_async(
+                conv_id, {"title": conv.get("title", "New Conversation")}
+            )
+        else:
+            await self.persist_conv(conv_id, conv)
 
         # 非流式路径单触发：记忆更新 + 增量蒸馏（DomainPolicy 门控，B6/B7）
         # （schedule_memory_update 内部已吞掉全部异常，try/except 仅作防御）

@@ -6,8 +6,17 @@ from app.infrastructure.database.models.agent import Agent
 from app.infrastructure.database.models.audit_log import AuditLog
 from app.infrastructure.database.models.config_item import ConfigItem
 from app.infrastructure.database.models.conversation import Conversation
+from app.infrastructure.database.models.conversation_message import ConversationMessage
 from app.infrastructure.database.models.group import Group
 from app.infrastructure.database.models.marketplace_stat import MarketplaceStat
+from app.infrastructure.database.models.memory import (
+    MemoryDaily,
+    MemoryFact,
+    MemoryKnowledge,
+    MemoryProfile,
+    MemorySummary,
+    MemoryVector,
+)
 from app.infrastructure.database.models.migration_meta import MigrationMeta
 from app.infrastructure.database.models.platform_instance import PlatformInstance
 from app.infrastructure.database.models.provider import Provider
@@ -28,8 +37,15 @@ __all__ = [
     "AuditLog",
     "ConfigItem",
     "Conversation",
+    "ConversationMessage",
     "Group",
     "MarketplaceStat",
+    "MemoryDaily",
+    "MemoryFact",
+    "MemoryKnowledge",
+    "MemoryProfile",
+    "MemorySummary",
+    "MemoryVector",
     "MigrationMeta",
     "PlatformInstance",
     "Provider",

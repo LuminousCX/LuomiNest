@@ -1,10 +1,11 @@
-"""对话存储 — 委托 ConversationRepository + conversations 表（SQLite）。
+"""对话存储 — 委托 ConversationRepository + conversations/conversation_messages 表（SQLite）。
 
 替代原 data/conversations/*.json + _index.json 的 per-conv 文件方案：
-- messages 用 JSON 列存储（不拆表）
-- search_text 用 LIKE 搜索
+- 消息存 conversation_messages 独立表（每消息一行），追加 O(1)、SQL 层分页
+- search_text 随写入增量维护，用 LIKE 搜索（FTS5 预留扩展点）
 - deleted_at 软删除（回收站）
-- save() 自动构建 search_text 与 last_message
+- save()/set() 为全量替换（元数据 + 消息行单事务）
+- append_message/append_messages/update_message 为热路径增量写入
 - migrate_from_json_store() 供 Phase 5 迁移器调用
 """
 import asyncio
@@ -29,11 +30,29 @@ class ConversationFacade:
         return self._repo.get_meta(conversation_id)
 
     def get_paginated(self, conversation_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
-        """加载对话 + 分页消息（最新 N 条）。"""
+        """加载对话 + 分页消息（SQL 层 keyset 分页）。"""
         return self._repo.get_paginated(conversation_id, limit, before_id)
 
     def set(self, conversation_id: str, conv: dict) -> None:
         self._repo.save(conversation_id, conv)
+
+    # ── 热路径增量写入（O(1) 追加，避免全量重写） ──
+
+    def append_message(self, conversation_id: str, message: dict) -> bool:
+        """追加单条消息（INSERT + 增量维护 search_text/last_message）。"""
+        return self._repo.append_message(conversation_id, message)
+
+    def append_messages(self, conversation_id: str, messages: list[dict]) -> bool:
+        """批量追加多条消息（单事务）。"""
+        return self._repo.append_messages(conversation_id, messages)
+
+    def update_message(self, conversation_id: str, mid: str, message: dict) -> bool:
+        """按消息 id 更新单行（如合并文件内容的最后一条 user 消息）。"""
+        return self._repo.update_message(conversation_id, mid, message)
+
+    def update_meta(self, conversation_id: str, updates: dict) -> Optional[dict]:
+        """仅更新对话元数据（标题/模型等），不影响消息与 search_text。"""
+        return self._repo.update_meta(conversation_id, updates)
 
     def delete(self, conversation_id: str) -> None:
         self._repo.delete(conversation_id)
@@ -132,6 +151,18 @@ class ConversationFacade:
 
     async def set_async(self, conversation_id: str, conv: dict) -> None:
         await asyncio.to_thread(self.set, conversation_id, conv)
+
+    async def append_message_async(self, conversation_id: str, message: dict) -> bool:
+        return await asyncio.to_thread(self.append_message, conversation_id, message)
+
+    async def append_messages_async(self, conversation_id: str, messages: list[dict]) -> bool:
+        return await asyncio.to_thread(self.append_messages, conversation_id, messages)
+
+    async def update_message_async(self, conversation_id: str, mid: str, message: dict) -> bool:
+        return await asyncio.to_thread(self.update_message, conversation_id, mid, message)
+
+    async def update_meta_async(self, conversation_id: str, updates: dict) -> Optional[dict]:
+        return await asyncio.to_thread(self.update_meta, conversation_id, updates)
 
     async def delete_async(self, conversation_id: str) -> None:
         await asyncio.to_thread(self.delete, conversation_id)

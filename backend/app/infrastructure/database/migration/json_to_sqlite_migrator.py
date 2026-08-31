@@ -38,6 +38,9 @@ from app.infrastructure.database.migration.conversation_domain_migrator import (
 from app.infrastructure.database.models.migration_meta import MigrationMeta
 from app.infrastructure.database.repositories.usage_repository import UsageRepository
 from app.infrastructure.database.session import sync_session_factory
+from app.infrastructure.database.migration.memory_to_sqlite_migrator import (
+    migrate_memory_files_to_sqlite as memory_migrator,
+)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -812,6 +815,8 @@ _MIGRATION_SOURCES: list[tuple[str, Callable[[], int]]] = [
     ("scheduled_tasks", _migrate_scheduled_tasks),
     ("plugin_states", _migrate_plugin_states),
     ("skill_disabled", _migrate_skill_disabled),
+    # 记忆系统文件 → SQLite（memory.json / knowledge.md / daily / vectors.npz）
+    ("memory_files", memory_migrator),
 ]
 
 

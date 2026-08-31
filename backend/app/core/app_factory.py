@@ -204,6 +204,16 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.success("[LuomiNest] Database initialized")
 
+    # 存储位置日志（开发/生产区分：dev=backend/data，打包=userData/Data/backend）
+    logger.info(
+        f"[LuomiNest] 存储位置: 模式={'打包生产(PyInstaller)' if settings.IS_FROZEN else '开发(源码)'}, "
+        f"DATA_DIR={settings.DATA_DIR}, DB={settings.DATABASE_URL}"
+    )
+    logger.info(
+        f"[LuomiNest] 存储位置: UPLOAD_DIR={settings.UPLOAD_DIR}, AVATAR_DIR={settings.AVATAR_DIR}, "
+        f"PLUGIN_DIR={settings.PLUGIN_DIR}, SKILL_DIR={settings.SKILL_DIR}"
+    )
+
     # JSON → SQLite 幂等迁移（已迁移则跳过，旧文件不删除）
     try:
         from app.infrastructure.database.migration import migrate_all_json_to_sqlite

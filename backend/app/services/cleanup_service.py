@@ -1,7 +1,6 @@
 import asyncio
 import os
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from loguru import logger
 
@@ -98,32 +97,51 @@ class LumiCleanupService:
         return deleted
 
     def cleanup_memory(self) -> int:
-        """清理所有记忆轨道（agents/ 与 users/，含对话级）中的过期事实。
+        """清理所有记忆轨道（owner 主人轨 / users 平台用户轨，含对话级）中的过期事实。
 
-        过期事实仅从 memory.json 移除；向量索引中的过期条目由检索侧
-        有效性过滤兜底（memory_search_tool / context_builder 已过滤）。
+        记忆已迁入 SQLite（memory_facts 表），此处按 (owner_key, conversation_id)
+        枚举所有 store 清理过期事实；向量索引中的过期条目由检索侧有效性过滤兜底
+        （memory_search_tool / context_builder 已过滤）。
         """
-        memory_root = Path(settings.DATA_DIR) / "memory"
-        if not memory_root.exists():
-            return 0
-        from app.engines.memory.store import MemoryStore
+        from sqlalchemy import select
+
         from app.engines.memory.fact_manager import FactManager
+        from app.engines.memory.store import MemoryStore, store_path_for_owner_key
+        from app.infrastructure.database.models.memory import MemoryFact
+        from app.infrastructure.database.session import sync_session_factory
 
         removed = 0
-        cleaned_files = 0
-        for memory_file in sorted(memory_root.glob("**/memory.json")):
+        cleaned = 0
+
+        # 枚举 DB 中存在的 (owner_key, conversation_id)，避免依赖旧文件布局
+        pairs: set[tuple[str, str]] = set()
+        try:
+            with sync_session_factory() as session:
+                rows = session.execute(
+                    select(MemoryFact.owner_key, MemoryFact.conversation_id).distinct()
+                ).all()
+            pairs = {(str(r[0]), str(r[1])) for r in rows}
+        except Exception as e:
+            logger.warning(f"[Cleanup] Memory owner keys enumeration failed: {e}")
+            return 0
+
+        for owner_key, conversation_id in pairs:
             try:
-                store = MemoryStore(memory_file.parent)
+                store_path = store_path_for_owner_key(owner_key, conversation_id)
+            except ValueError:
+                continue  # tmp: 测试轨不参与清理
+            try:
+                store = MemoryStore(store_path)
                 manager = FactManager(store)
                 n = manager.cleanup_expired_facts()
                 if n > 0:
                     removed += n
-                    cleaned_files += 1
+                    cleaned += 1
             except Exception as e:
-                logger.warning(f"[Cleanup] Memory cleanup failed for {memory_file}: {e}")
+                logger.warning(f"[Cleanup] Memory cleanup failed for {owner_key}/{conversation_id}: {e}")
 
         if removed > 0:
-            logger.info(f"[Cleanup] Removed {removed} expired memory facts from {cleaned_files} files")
+            logger.info(f"[Cleanup] Removed {removed} expired memory facts from {cleaned} stores")
         return removed
 
     def run_all(self) -> dict:

@@ -71,12 +71,81 @@ async def init_db() -> None:
 
 
 async def _migrate_columns(conn) -> None:
-    """为已有表添加缺失列（SQLite ALTER TABLE ADD COLUMN，幂等）。"""
+    """为已有表添加缺失列（SQLite ALTER TABLE ADD COLUMN，幂等）。
+
+    另负责 messages JSON 列 → conversation_messages 独立表的存量回填
+    （前端后端项目锐评 · 高优先级 #1）：
+    1. conversation_messages 表由 create_all 新建（含 FK + 索引）；
+    2. 若旧库 conversations 仍带 messages JSON 列且消息表为空 → 逐行回填；
+    3. 回填成功后 DROP 旧列（SQLite 3.35+ 支持），避免双写不一致。
+    """
     from sqlalchemy import text, inspect
 
     def _do_migrate(sync_conn):
         inspector = inspect(sync_conn)
-        # conversations 表添加 chat_mode 列
+
+        # ── 消息独立表回填（旧库） ──
+        if "conversations" in inspector.get_table_names():
+            existing_cols = {c["name"] for c in inspector.get_columns("conversations")}
+            if "conversation_messages" in inspector.get_table_names() and "messages" in existing_cols:
+                msg_count = sync_conn.execute(
+                    text("SELECT COUNT(*) FROM conversation_messages")
+                ).scalar() or 0
+                backfill_ok = msg_count > 0  # 已有行视为已回填（幂等）
+                if msg_count == 0:
+                    try:
+                        sync_conn.execute(
+                            text(
+                                """
+                                INSERT INTO conversation_messages
+                                    (conversation_id, mid, role, content, data, created_at)
+                                SELECT c.id,
+                                       COALESCE(json_extract(value, '$.id'), ''),
+                                       COALESCE(json_extract(value, '$.role'), ''),
+                                       COALESCE(json_extract(value, '$.content'), ''),
+                                       value,
+                                       COALESCE(c.updated_at, '')
+                                FROM conversations c, json_each(c.messages)
+                                WHERE c.messages IS NOT NULL AND c.messages != '[]'
+                                """
+                            )
+                        )
+                        # 回填后按消息行重建 search_text / last_message（旧列值可能缺失/过期）
+                        sync_conn.execute(
+                            text(
+                                """
+                                UPDATE conversations SET
+                                  search_text = COALESCE((
+                                    SELECT group_concat(content, ' ')
+                                    FROM conversation_messages
+                                    WHERE conversation_id = conversations.id AND content != ''
+                                  ), ''),
+                                  last_message = (
+                                    SELECT substr(content, 1, 50)
+                                    FROM conversation_messages
+                                    WHERE conversation_id = conversations.id
+                                    ORDER BY seq DESC LIMIT 1
+                                  )
+                                WHERE id IN (SELECT DISTINCT conversation_id FROM conversation_messages)
+                                """
+                            )
+                        )
+                        backfilled = sync_conn.execute(
+                            text("SELECT COUNT(*) FROM conversation_messages")
+                        ).scalar() or 0
+                        backfill_ok = True
+                        logger.info(f"[DB] Migrated conversations.messages JSON → conversation_messages: {backfilled} rows")
+                    except Exception as e:
+                        logger.warning(f"[DB] conversation_messages backfill skipped: {e}")
+                # 仅当回填成功才移除旧列（防数据丢失：回填失败时保留 messages 列可人工恢复）
+                if backfill_ok:
+                    try:
+                        sync_conn.execute(text("ALTER TABLE conversations DROP COLUMN messages"))
+                        logger.info("[DB] Migrated conversations table: dropped legacy messages column")
+                    except Exception as e:
+                        logger.debug(f"[DB] Drop legacy messages column skipped: {e}")
+
+        # conversations 表历史列兜底（存量库补齐）
         if "conversations" in inspector.get_table_names():
             existing_cols = {c["name"] for c in inspector.get_columns("conversations")}
             if "chat_mode" not in existing_cols:

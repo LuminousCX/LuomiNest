@@ -4,7 +4,7 @@
 
 # LuomiNest
 
-**分布式全屋 AI 伴侣平台**
+**分布式多用户关系型 AI 智能体平台**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.7.7-green.svg)](CHANGELOG.md)
@@ -29,7 +29,7 @@
 
 ## 简介
 
-LuomiNest 是一个开源的分布式全屋 AI 伴侣平台，致力于让每个人都能拥有专属的 AI 伴侣。它支持在桌面电脑、嵌入式终端（ESP32）、智能家居设备上运行，通过自然语言对话、语音交互、Live2D 虚拟形象、工作流自动化与浏览器操作等方式，提供沉浸式的 AI 陪伴体验。
+LuomiNest 是一个开源的**分布式多用户关系型 AI 智能体平台**，以"关系驱动"为核心设计理念。它通过主/从双层记忆架构，在群聊中自动提取每位用户的独立画像（从记忆），私聊时自动加载该用户的记忆（主记忆联动），实现真正个性化的多用户对话；同时支持人、AI、AI 与 AI 跨平台群聊协作。它可运行于桌面电脑、嵌入式终端（ESP32）、智能家居设备之上，覆盖自然语言对话、语音交互、Live2D 虚拟形象、工作流自动化与浏览器操作等能力，提供懂每一个人的长期智能体服务。
 
 核心设计理念：**一台普通电脑即可运行，数据 100% 本地闭环。**
 
@@ -233,7 +233,7 @@ LuomiNest/
 
 ## Introduction
 
-LuomiNest is an open-source distributed AI companion platform designed to make personalized AI companionship accessible to everyone. It runs on desktop computers, embedded terminals (ESP32), and smart home devices, delivering an immersive AI companion experience through natural language dialogue, voice interaction, and Live2D virtual avatars.
+LuomiNest is an open-source distributed multi-user relational AI agent platform built on a relationship-driven design. Its dual-layer memory architecture (primary memory pool + per-user persona memory) automatically extracts each user's profile during group chats and loads it back in private conversations, enabling truly personalized multi-user dialogue. It supports human, AI, and AI-to-AI collaboration across platforms (QQ / WeChat / Telegram / Discord, etc.). It runs on desktop computers, embedded terminals (ESP32), and smart home devices, delivering natural language dialogue, voice interaction, Live2D virtual avatars, workflow automation, and browser operations for a long-term agent experience that knows every single user.
 
 Core design principle: **Runs on a single ordinary computer with 100% local data retention.**
 

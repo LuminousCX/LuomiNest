@@ -1,7 +1,7 @@
 {
   "name": "luominest-desktop",
   "version": "0.7.7",
-  "description": "LuomiNest 辰汐分布式AI伴侣平台 - Electron桌面客户端",
+  "description": "LuomiNest 辰汐分布式多用户关系型AI智能体平台 - Electron桌面客户端",
   "author": "LuminousCX R&D Team",
   "main": "./out/main/index.js",
   "packageManager": "pnpm@10.33.0",
@@ -157,8 +157,8 @@
       "icon": "resources/icon.svg",
       "maintainer": "LuminousCX R&D Team",
       "vendor": "LuminousCX",
-      "synopsis": "LuomiNest - Distributed AI Companion Platform",
-      "description": "LuomiNest is a distributed whole-house AI companion system that provides intelligent conversation, IoT control, and Live2D avatar interaction.",
+      "synopsis": "LuomiNest - Distributed Multi-user Relational AI Agent Platform",
+      "description": "LuomiNest is a distributed multi-user relational AI agent platform that provides personalized conversation, group chat collaboration, IoT control, and Live2D avatar interaction.",
       "artifactName": "LuomiNest-${version}-linux-${arch}.${ext}"
     },
     "appImage": {

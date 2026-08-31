@@ -1,18 +1,52 @@
-import json
+import hashlib
 import re
-import shutil
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Iterator
 from zoneinfo import ZoneInfo
 
 from loguru import logger
+from sqlalchemy import create_engine, delete, select
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import NullPool
 
 from app.core.utils import utc_now
 
 from app.core.config import settings
 from app.core.domain_policy import MAIN_AGENT_ID, TRACK_OWNER, TRACK_USERS
-from .models import MemoryData, _SUMMARY_SECTION_MAP
+from app.infrastructure.database.base import Base
+from app.infrastructure.database.models.memory import (
+    MemoryDaily,
+    MemoryFact,
+    MemoryKnowledge,
+    MemoryProfile,
+    MemorySummary,
+    MemoryVector,
+)
+from app.infrastructure.database.session import sync_session_factory
+from .models import (
+    ArchivedFact,
+    FactItem,
+    MemoryData,
+    ProfileData,
+    SummaryData,
+)
+
+# 记忆/向量模型表（本地独立库建表用，全局库由 create_all 统一创建）
+_MEMORY_TABLES = [
+    MemoryProfile.__table__,
+    MemoryFact.__table__,
+    MemorySummary.__table__,
+    MemoryKnowledge.__table__,
+    MemoryDaily.__table__,
+    MemoryVector.__table__,
+]
+
+# 每日记录展示时区
+_TZ = ZoneInfo("Asia/Shanghai")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -68,12 +102,122 @@ def resolve_track_dir(track: str, user_key: str = "", base_dir: Path | None = No
     raise ValueError(f"Unknown memory track: {track!r}")
 
 
+def store_path_for_owner_key(
+    owner_key: str,
+    conversation_id: str = "",
+    memory_root: Path | None = None,
+) -> Path:
+    """owner_key（+对话级）→ 规范存储目录（SQLite 行级隔离键的路径映射）。
+
+    用于从 DB 反向枚举（如清理任务）：owner:{key} → memory/agents/{key}，
+    users:{key} → memory/users/{key}；tmp: 测试轨不映射（抛 ValueError）。
+    """
+    root = Path(memory_root) if memory_root else Path(settings.DATA_DIR) / "memory"
+    if owner_key.startswith("owner:"):
+        base = root / "agents" / owner_key[len("owner:"):]
+    elif owner_key.startswith("users:"):
+        base = root / "users" / owner_key[len("users:"):]
+    else:
+        raise ValueError(f"owner_key not mappable to a store path: {owner_key!r}")
+    if conversation_id:
+        base = base / "conversations" / conversation_id
+    return base
+
+
+# ──────────────────────────────────────────────────────────────
+# SQLite 后端：全局库（与对话同库，统一备份）或独立文件（临时目录）
+# ──────────────────────────────────────────────────────────────
+
+def _derive_owner_key(storage_path: Path) -> str:
+    """从存储路径推导 owner_key（SQLite 行级隔离键）。
+
+    - {DATA_DIR}/memory/agents/{key}/...   → owner:{key}
+    - {DATA_DIR}/memory/users/{key}/...    → users:{key}
+    - 其他路径（测试/临时目录）            → tmp:{sha1[:12]}
+    """
+    p = Path(storage_path).resolve()
+    root = (Path(settings.DATA_DIR) / "memory").resolve()
+    try:
+        rel = p.relative_to(root)
+    except ValueError:
+        digest = hashlib.sha1(str(p).encode("utf-8")).hexdigest()[:12]
+        return f"tmp:{digest}"
+    parts = rel.parts
+    if parts and parts[0] == "users" and len(parts) > 1:
+        return f"users:{parts[1]}"
+    if parts and parts[0] == "agents" and len(parts) > 1:
+        return f"owner:{parts[1]}"
+    if parts and parts[0] == "agents":
+        return f"owner:{MAIN_AGENT_ID}"
+    # 旧布局根目录（memory/memory.json 时代）兜底
+    return f"owner:{MAIN_AGENT_ID}"
+
+
+def _derive_conversation_id(storage_path: Path) -> str:
+    """从存储路径推导对话级隔离键（路径含 conversations/{id} 时返回该 id，否则空串）。"""
+    p = Path(storage_path).resolve()
+    root = (Path(settings.DATA_DIR) / "memory").resolve()
+    try:
+        parts = p.relative_to(root).parts
+    except ValueError:
+        parts = ()
+    if "conversations" in parts:
+        idx = parts.index("conversations")
+        if idx + 1 < len(parts):
+            return parts[idx + 1]
+    return ""
+
+
+class _MemoryDB:
+    """记忆/向量 SQLite 后端统一封装。
+
+    - 全局模式：复用 sync_session_factory（与对话同一 luominest.db → 单备份单元）
+    - 本地模式：storage_path 不在 DATA_DIR/memory 下时（测试/临时目录），
+      在 storage_path/memory.db 建独立库，互不串扰
+    """
+
+    def __init__(self, storage_path: Path):
+        self._is_global = False
+        self._local_engine: Engine | None = None
+        root = (Path(settings.DATA_DIR) / "memory").resolve()
+        try:
+            Path(storage_path).resolve().relative_to(root)
+            self._is_global = True
+        except ValueError:
+            local_db = Path(storage_path) / "memory.db"
+            self._local_engine = create_engine(
+                f"sqlite:///{local_db}",
+                connect_args={"timeout": 30, "check_same_thread": False},
+                poolclass=NullPool,
+            )
+            Base.metadata.create_all(self._local_engine, tables=_MEMORY_TABLES)
+
+    @contextmanager
+    def session(self) -> Iterator[Session]:
+        if self._is_global:
+            with sync_session_factory() as session:
+                yield session
+        else:
+            with Session(self._local_engine) as session:  # type: ignore[union-attr]
+                yield session
+
+    def close(self) -> None:
+        if self._local_engine is not None:
+            self._local_engine.dispose()
+            self._local_engine = None
+
+
 class MemoryStore:
-    """纯存储层：文件读写、缓存、线程锁、格式迁移。"""
+    """纯存储层：SQLite 读写（单库单事务）、缓存、线程锁、格式迁移。
+
+    公开 API 与旧文件实现保持一致（load_data/save_data/load_knowledge/
+    append_daily/...），便于 MemoryEngine 与调用方零改动切换。
+    """
 
     def __init__(self, storage_path: Path):
         self._path = Path(storage_path)
         self._path.mkdir(parents=True, exist_ok=True)
+        # 兼容旧代码/测试对 daily 目录的依赖（SQLite 下不再写入，仅保留占位）
         (self._path / "daily").mkdir(exist_ok=True)
         # NOTE: 使用 threading.RLock 而非 asyncio.Lock，原因：
         # MemoryStore 的所有数据读写方法（load_data, save_data 等）均为同步方法，
@@ -81,16 +225,27 @@ class MemoryStore:
         # threading.RLock 在此场景下是正确的选择（asyncio.Lock 不能在非 async 函数中使用）。
         self._lock = threading.RLock()
         self._cache: MemoryData | None = None
+        self._owner_key = _derive_owner_key(self._path)
+        self._conversation_id = _derive_conversation_id(self._path)
+        self._db = _MemoryDB(self._path)
         self._auto_migrate()
 
     @classmethod
     def for_track(cls, track: str, user_key: str = "", base_dir: Path | None = None) -> "MemoryStore":
         """按记忆轨道构造 MemoryStore（§8.5.2 双轨）。
 
-        路径解析即目录定位（resolve_track_dir），文件读写/缓存/迁移逻辑
-        与单轨实例完全复用：owner → 主 Agent 目录别名；users → users/{user_key}/。
+        路径解析即目录定位（resolve_track_dir）；owner_key 由路径推导
+        （owner:agent_key / users:user_key），保证主人记忆与平台用户记忆
+        在 SQLite 中行级隔离、互不串扰。
         """
         return cls(resolve_track_dir(track, user_key, base_dir))
+
+    @property
+    def owner_key(self) -> str:
+        """行级隔离键（owner:… / users:… / tmp:…），向量索引与记忆共用。"""
+        return self._owner_key
+
+    # ── 兼容旧文件布局的虚拟路径（历史 API/端点仍引用） ──
 
     def _memory_file(self) -> Path:
         return self._path / "memory.json"
@@ -107,16 +262,14 @@ class MemoryStore:
         return safe_id
 
     def _daily_file(self, date: str | None = None, conversation_id: str | None = None) -> Path:
+        """兼容旧布局的虚拟路径（SQLite 下仅作展示/迁移参考，不再读写）。"""
         if date is not None:
-            # 验证日期格式 YYYY-MM-DD
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
                 raise ValueError(f"Invalid date format: {date!r}, expected YYYY-MM-DD")
         else:
-            date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+            date = datetime.now(_TZ).strftime("%Y-%m-%d")
         if conversation_id:
             safe_id = self._safe_conversation_id(conversation_id)
-            # 规范布局：{path}/conversations/{conversation_id}/daily/{date}.md
-            # （与对话级 store 自身的 daily 目录一致，保证读写同路径）
             return self._path / "conversations" / safe_id / "daily" / f"{date}.md"
         return self._path / "daily" / f"{date}.md"
 
@@ -124,80 +277,17 @@ class MemoryStore:
         """旧布局（历史数据兜底）：{path}/daily/{conversation_id}/{date}.md。"""
         return self._path / "daily" / conversation_id / f"{date}.md"
 
-    def _read(self, path: Path) -> str:
-        if not path.exists():
-            return ""
-        try:
-            return path.read_text(encoding="utf-8")
-        except Exception as e:
-            logger.warning(f"[Memory] Failed to read {path}: {e}")
-            return ""
-
-    def _write(self, path: Path, content: str) -> None:
-        """原子写入：先写临时文件，再 rename 替换，防止写入中断导致数据损坏。"""
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        try:
-            tmp.write_text(content, encoding="utf-8")
-            tmp.replace(path)
-        except Exception:
-            if tmp.exists():
-                tmp.unlink()
-            raise
-
-    # --- 格式迁移 ---
+    # --- 格式迁移（文件 → SQLite 由 migration.memory_to_sqlite_migrator 统一执行） ---
 
     def _auto_migrate(self) -> None:
-        if self._memory_file().exists():
-            return
-
-        old_memory = self._path / "MEMORY.md"
-        old_summary = self._path / "summary.md"
-
-        if not old_memory.exists() and not old_summary.exists():
-            return
-
-        logger.info("[Memory] Auto-migrating from old format...")
-        try:
-            data = MemoryData()
-
-            if old_memory.exists():
-                content = old_memory.read_text(encoding="utf-8")
-                name_match = re.search(
-                    r"(?:姓名|name|Name)[：:]\s*(.+)", content, re.IGNORECASE
-                )
-                if name_match:
-                    data.profile.name = name_match.group(1).strip()
-                    data.profile.updated_at = utc_now()
-
-            if old_summary.exists():
-                content = old_summary.read_text(encoding="utf-8")
-                now = utc_now()
-                for cn_name, attr_name in _SUMMARY_SECTION_MAP.items():
-                    pattern = rf"##\s*{re.escape(cn_name)}\s*\n(.*?)(?=\n##\s|\Z)"
-                    match = re.search(pattern, content, re.DOTALL)
-                    if match:
-                        text = match.group(1).strip()
-                        if text:
-                            section = getattr(data.summaries, attr_name)
-                            section.summary = text
-                            section.updated_at = now
-
-            self._write(self._memory_file(), data.model_dump_json(indent=2))
-            self._cache = data
-
-            if old_memory.exists():
-                old_memory.unlink()
-                logger.info("[Memory] Deleted old MEMORY.md")
-            if old_summary.exists():
-                old_summary.unlink()
-                logger.info("[Memory] Deleted old summary.md")
-
-            logger.info("[Memory] Auto-migration completed")
-        except Exception as e:
-            logger.error(f"[Memory] Auto-migration failed: {e}")
+        # 旧实现在此处把 MEMORY.md/summary.md 迁移到 memory.json；
+        # SQLite 化后文件级迁移统一收敛到 DB 迁移器（幂等，见
+        # app/infrastructure/database/migration/memory_to_sqlite_migrator.py），
+        # 此处不再需要 per-store 文件迁移。
+        return
 
     def _migrate_summary_sections(self, raw: dict) -> None:
+        # 兼容旧逻辑：preferences → interests 分区改名（历史 memory.json 兜底）
         summaries = raw.get("summaries", {})
         if not summaries:
             return
@@ -211,41 +301,198 @@ class MemoryStore:
                 summaries["preferences"] = {"summary": "", "updated_at": ""}
                 logger.info("[Memory] Migrated '兴趣偏好' to '兴趣目标'")
 
-    # --- 数据读写 ---
+    # --- 数据读写（SQLite） ---
 
     def load_data(self) -> MemoryData:
         with self._lock:
             if self._cache is not None:
                 return self._cache
-            path = self._memory_file()
-            if not path.exists():
-                self._cache = MemoryData()
-                return self._cache
+            data = MemoryData()
             try:
-                raw = json.loads(path.read_text(encoding="utf-8"))
-                self._migrate_summary_sections(raw)
-                self._cache = MemoryData.model_validate(raw)
-                return self._cache
+                with self._db.session() as session:
+                    profile_row = session.get(
+                        MemoryProfile, (self._owner_key, self._conversation_id)
+                    )
+                    if profile_row is not None:
+                        data.profile = ProfileData(
+                            name=profile_row.name or "",
+                            updated_at=profile_row.updated_at or "",
+                            static_facts=list(profile_row.static_facts or []),
+                            dynamic_context=list(profile_row.dynamic_context or []),
+                        )
+                    fact_rows = (
+                        session.execute(
+                            select(MemoryFact)
+                            .where(
+                                MemoryFact.owner_key == self._owner_key,
+                                MemoryFact.conversation_id == self._conversation_id,
+                            )
+                            .order_by(MemoryFact.created_at.asc(), MemoryFact.id.asc())
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    data.facts = [self._fact_from_row(r) for r in fact_rows]
+                    summary_rows = (
+                        session.execute(
+                            select(MemorySummary).where(
+                                MemorySummary.owner_key == self._owner_key,
+                                MemorySummary.conversation_id == self._conversation_id,
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    data.summaries = self._summaries_from_rows(summary_rows)
             except Exception as e:
-                logger.warning(f"[Memory] Failed to load memory.json: {e}")
-                self._cache = MemoryData()
-                return self._cache
+                logger.warning(f"[Memory] Failed to load memory data from SQLite: {e}")
+            self._cache = data
+            return data
 
     def save_data(self, data: MemoryData) -> None:
         with self._lock:
             data.last_updated = utc_now()
-            self._write(self._memory_file(), data.model_dump_json(indent=2))
+            try:
+                with self._db.session() as session:
+                    profile = session.get(
+                        MemoryProfile, (self._owner_key, self._conversation_id)
+                    )
+                    if profile is None:
+                        profile = MemoryProfile(
+                            owner_key=self._owner_key,
+                            conversation_id=self._conversation_id,
+                        )
+                        session.add(profile)
+                    profile.name = data.profile.name or ""
+                    profile.static_facts = data.profile.static_facts or []
+                    profile.dynamic_context = data.profile.dynamic_context or []
+                    profile.updated_at = data.profile.updated_at or utc_now()
+
+                    # 事实全量替换（单事务；事实集合量级小，替换语义最稳）
+                    session.execute(
+                        delete(MemoryFact).where(
+                            MemoryFact.owner_key == self._owner_key,
+                            MemoryFact.conversation_id == self._conversation_id,
+                        )
+                    )
+                    for fact in data.facts:
+                        session.add(self._fact_to_row(fact))
+
+                    # 摘要分区 upsert
+                    for section_name, section in data.summaries.model_dump().items():
+                        summary_row = session.get(
+                            MemorySummary,
+                            (self._owner_key, self._conversation_id, section_name),
+                        )
+                        if summary_row is None:
+                            summary_row = MemorySummary(
+                                owner_key=self._owner_key,
+                                conversation_id=self._conversation_id,
+                                section=section_name,
+                            )
+                            session.add(summary_row)
+                        summary_row.summary = section.get("summary", "") or ""
+                        summary_row.updated_at = section.get("updated_at", "") or ""
+
+                    session.commit()
+            except Exception as e:
+                logger.error(f"[Memory] Failed to save memory data to SQLite: {e}")
+                raise
             self._cache = data
+
+    def _fact_to_row(self, fact: FactItem) -> MemoryFact:
+        return MemoryFact(
+            id=fact.id,
+            owner_key=self._owner_key,
+            conversation_id=self._conversation_id,
+            content=fact.content,
+            category=fact.category,
+            confidence=fact.confidence,
+            created_at=fact.created_at,
+            source=fact.source,
+            source_error=fact.source_error,
+            expires_at=fact.expires_at,
+            is_latest=1 if fact.is_latest else 0,
+            supersedes_id=fact.supersedes_id,
+            source_conversation_id=fact.source_conversation_id,
+            source_message=fact.source_message,
+            history=[a.model_dump() for a in fact.history],
+        )
+
+    @staticmethod
+    def _fact_from_row(row: MemoryFact) -> FactItem:
+        return FactItem.model_validate({
+            "id": row.id,
+            "content": row.content,
+            "category": row.category,
+            "confidence": row.confidence,
+            "created_at": row.created_at,
+            "source": row.source,
+            "source_error": row.source_error,
+            "expires_at": row.expires_at,
+            "is_latest": bool(row.is_latest),
+            "supersedes_id": row.supersedes_id,
+            "source_conversation_id": row.source_conversation_id,
+            "source_message": row.source_message,
+            "history": [ArchivedFact.model_validate(h) for h in (row.history or [])],
+        })
+
+    @staticmethod
+    def _summaries_from_rows(rows) -> SummaryData:
+        data = SummaryData()
+        for row in rows:
+            section = getattr(data, row.section, None)
+            if section is not None:
+                section.summary = row.summary or ""
+                section.updated_at = row.updated_at or ""
+        return data
 
     # --- 知识 ---
 
     def load_knowledge(self) -> str:
         with self._lock:
-            return self._read(self._knowledge_file())
+            try:
+                with self._db.session() as session:
+                    row = session.get(
+                        MemoryKnowledge, (self._owner_key, self._conversation_id)
+                    )
+                    return row.content if row is not None else ""
+            except Exception as e:
+                logger.warning(f"[Memory] Failed to load knowledge: {e}")
+                return ""
 
     def save_knowledge(self, content: str) -> None:
         with self._lock:
-            self._write(self._knowledge_file(), content)
+            try:
+                with self._db.session() as session:
+                    row = session.get(
+                        MemoryKnowledge, (self._owner_key, self._conversation_id)
+                    )
+                    if row is None:
+                        row = MemoryKnowledge(
+                            owner_key=self._owner_key,
+                            conversation_id=self._conversation_id,
+                        )
+                        session.add(row)
+                    row.content = content or ""
+                    row.updated_at = utc_now()
+                    session.commit()
+            except Exception as e:
+                logger.error(f"[Memory] Failed to save knowledge: {e}")
+                raise
+
+    def export_knowledge(self, path: Path | None = None) -> Path:
+        """把 SQLite 中的知识库导出为 Markdown 文件（knowledge.md 的导出视图）。
+
+        供迁移器/管理端使用；不指定 path 时导出到存储目录下 knowledge.md。
+        """
+        target = Path(path) if path else self._knowledge_file()
+        content = self.load_knowledge()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(".tmp")
+        tmp.write_text(content or "", encoding="utf-8")
+        tmp.replace(target)
+        return target
 
     def parse_knowledge(self) -> list[dict[str, str]]:
         content = self.load_knowledge()
@@ -269,148 +516,165 @@ class MemoryStore:
             sections.append({"title": current_title, "content": "\n".join(current_lines)})
         return sections
 
-    # --- 每日记录 ---
+    # --- 每日记录（行式追加，替代读-改-写整文件） ---
 
-    def _conversation_daily_dirs(self) -> list[Path]:
-        """扫描所有对话级 daily 目录（规范布局 conversations/{id}/daily 与旧布局 daily/{id}/）。"""
-        dirs: list[Path] = []
-        conv_root = self._path / "conversations"
-        if conv_root.exists():
-            for sub in sorted(conv_root.iterdir()):
-                if sub.is_dir():
-                    d = sub / "daily"
-                    if d.exists():
-                        dirs.append(d)
-        legacy_root = self._path / "daily"
-        if legacy_root.exists():
-            for sub in sorted(legacy_root.iterdir()):
-                if sub.is_dir():
-                    dirs.append(sub)
-        return dirs
+    @staticmethod
+    def _today() -> str:
+        return datetime.now(_TZ).strftime("%Y-%m-%d")
 
-    def load_daily(self, date: str | None = None, conversation_id: str | None = None) -> str:
-        with self._lock:
-            if conversation_id:
-                safe_id = self._safe_conversation_id(conversation_id)
-                if date is None:
-                    date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
-                # 规范布局优先，旧布局兜底
-                parts: list[str] = []
-                content = self._read(self._daily_file(date, safe_id))
-                if content:
-                    parts.append(content)
-                legacy = self._read(self._legacy_daily_file(date, safe_id))
-                if legacy:
-                    parts.append(legacy)
-                return "\n".join(parts)
-            # 不指定对话时，合并根目录和所有对话级目录中对应日期的内容
-            if date is None:
-                date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
-            parts: list[str] = []
-            root_file = self._path / "daily" / f"{date}.md"
-            root_content = self._read(root_file)
-            if root_content:
-                parts.append(root_content)
-            for d in self._conversation_daily_dirs():
-                sub_content = self._read(d / f"{date}.md")
-                if sub_content:
-                    parts.append(sub_content)
-            return "\n".join(parts)
+    @staticmethod
+    def _now_hhmm() -> str:
+        return datetime.now(_TZ).strftime("%H:%M")
 
     def append_daily(self, content: str, date: str | None = None, conversation_id: str | None = None) -> None:
         with self._lock:
-            actual_date = date or datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
-            path = self._daily_file(actual_date, conversation_id)
-            existing = self._read(path)
-            now = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%H:%M")
-            if not existing:
-                existing = f"# {actual_date}\n\n"
-            entry = f"- [{now}] {content}\n"
-            self._write(path, existing + entry)
+            actual_date = date or self._today()
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", actual_date):
+                raise ValueError(f"Invalid date format: {actual_date!r}, expected YYYY-MM-DD")
+            conv_id = conversation_id or self._conversation_id
+            try:
+                with self._db.session() as session:
+                    session.add(MemoryDaily(
+                        owner_key=self._owner_key,
+                        conversation_id=conv_id,
+                        date=actual_date,
+                        created_at=self._now_hhmm(),
+                        content=content,
+                    ))
+                    session.commit()
+            except Exception as e:
+                logger.error(f"[Memory] Failed to append daily: {e}")
+                raise
+
+    def load_daily(self, date: str | None = None, conversation_id: str | None = None) -> str:
+        """加载每日记录（格式化回 Markdown 文本，与旧文件布局展示一致）。"""
+        with self._lock:
+            actual_date = date or self._today()
+            conv_id = conversation_id if conversation_id is not None else self._conversation_id
+            try:
+                with self._db.session() as session:
+                    stmt = select(MemoryDaily).where(
+                        MemoryDaily.owner_key == self._owner_key,
+                        MemoryDaily.date == actual_date,
+                    )
+                    if conv_id:
+                        stmt = stmt.where(MemoryDaily.conversation_id == conv_id)
+                    rows = (
+                        session.execute(
+                            stmt.order_by(
+                                MemoryDaily.conversation_id.asc(),
+                                MemoryDaily.id.asc(),
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+            except Exception as e:
+                logger.warning(f"[Memory] Failed to load daily: {e}")
+                return ""
+            if not rows:
+                return ""
+            parts = [f"# {actual_date}", ""]
+            for row in rows:
+                parts.append(f"- [{row.created_at}] {row.content}")
+            return "\n".join(parts)
 
     def list_dailies(self, conversation_id: str | None = None) -> list[str]:
-        if conversation_id:
-            safe_id = self._safe_conversation_id(conversation_id)
-            dates: set[str] = set()
-            conv_daily = self._path / "conversations" / safe_id / "daily"
-            if conv_daily.exists():
-                dates.update(f.stem for f in conv_daily.glob("*.md"))
-            legacy_daily = self._path / "daily" / safe_id
-            if legacy_daily.exists():
-                dates.update(f.stem for f in legacy_daily.glob("*.md"))
-            return sorted(dates)
-        # 不指定对话：聚合根 daily/ + 所有对话级 daily/ 的日期
-        dates: set[str] = set()
-        root_daily = self._path / "daily"
-        if root_daily.exists():
-            dates.update(f.stem for f in root_daily.glob("*.md"))
-        for d in self._conversation_daily_dirs():
-            dates.update(f.stem for f in d.glob("*.md"))
-        return sorted(dates)
+        """列出有记录的日期（YYYY-MM-DD，升序）。"""
+        conv_id = conversation_id if conversation_id is not None else self._conversation_id
+        try:
+            with self._db.session() as session:
+                stmt = select(MemoryDaily.date).where(MemoryDaily.owner_key == self._owner_key)
+                if conv_id:
+                    stmt = stmt.where(MemoryDaily.conversation_id == conv_id)
+                dates = set(session.execute(stmt.distinct()).scalars().all())
+                return sorted(d for d in dates if d)
+        except Exception as e:
+            logger.warning(f"[Memory] Failed to list dailies: {e}")
+            return []
 
     def list_conversation_dailies(self) -> list[str]:
-        """列出所有有 daily 记录的 conversation_id（规范布局 conversations/{id}/ 与旧布局 daily/{id}/）。"""
-        conv_ids: set[str] = set()
-        conv_root = self._path / "conversations"
-        if conv_root.exists():
-            for d in conv_root.iterdir():
-                if d.is_dir():
-                    daily_dir = d / "daily"
-                    if daily_dir.exists() and any(daily_dir.glob("*.md")):
-                        conv_ids.add(d.name)
-        legacy_root = self._path / "daily"
-        if legacy_root.exists():
-            for d in legacy_root.iterdir():
-                if d.is_dir() and any(d.glob("*.md")):
-                    conv_ids.add(d.name)
-        return sorted(conv_ids)
+        """列出所有有 daily 记录的 conversation_id。"""
+        try:
+            with self._db.session() as session:
+                rows = session.execute(
+                    select(MemoryDaily.conversation_id)
+                    .where(
+                        MemoryDaily.owner_key == self._owner_key,
+                        MemoryDaily.conversation_id != "",
+                    )
+                    .distinct()
+                ).scalars().all()
+                return sorted(rows)
+        except Exception as e:
+            logger.warning(f"[Memory] Failed to list conversation dailies: {e}")
+            return []
 
     # --- 清空操作 ---
 
     def clear_knowledge(self) -> None:
         with self._lock:
-            if self._knowledge_file().exists():
-                self._knowledge_file().unlink()
+            try:
+                with self._db.session() as session:
+                    session.execute(
+                        delete(MemoryKnowledge).where(
+                            MemoryKnowledge.owner_key == self._owner_key,
+                            MemoryKnowledge.conversation_id == self._conversation_id,
+                        )
+                    )
+                    session.commit()
+            except Exception as e:
+                logger.error(f"[Memory] Failed to clear knowledge: {e}")
+                raise
 
     def clear_daily(self, conversation_id: str, date: str | None = None) -> None:
-        """清除指定对话的daily记录。指定date只清当天，否则清全部。"""
-        safe_id = self._safe_conversation_id(conversation_id)
+        """清除指定对话的 daily 记录。指定 date 只清当天，否则清全部。"""
+        conv_id = conversation_id or self._conversation_id
         with self._lock:
-            if date:
-                # 规范布局与旧布局都清
-                for path in (
-                    self._daily_file(date, safe_id),
-                    self._legacy_daily_file(date, safe_id),
-                ):
-                    if path.exists():
-                        path.unlink()
-            else:
-                # 规范布局：conversations/{id}/daily
-                conv_daily_dir = self._path / "conversations" / safe_id / "daily"
-                if conv_daily_dir.exists():
-                    conv_daily_dir.resolve().relative_to((self._path / "conversations").resolve())
-                    shutil.rmtree(conv_daily_dir)
-                # 旧布局：daily/{id}
-                legacy_dir = self._path / "daily" / safe_id
-                if legacy_dir.exists():
-                    legacy_dir.resolve().relative_to((self._path / "daily").resolve())
-                    shutil.rmtree(legacy_dir)
+            try:
+                with self._db.session() as session:
+                    stmt = delete(MemoryDaily).where(
+                        MemoryDaily.owner_key == self._owner_key,
+                        MemoryDaily.conversation_id == conv_id,
+                    )
+                    if date:
+                        stmt = stmt.where(MemoryDaily.date == date)
+                    session.execute(stmt)
+                    session.commit()
+            except Exception as e:
+                logger.error(f"[Memory] Failed to clear daily: {e}")
+                raise
 
     def clear_dailies(self) -> None:
         with self._lock:
-            daily_dir = self._path / "daily"
-            if daily_dir.exists() and daily_dir.is_dir():
-                shutil.rmtree(daily_dir)
-                daily_dir.mkdir(exist_ok=True)
+            try:
+                with self._db.session() as session:
+                    session.execute(
+                        delete(MemoryDaily).where(MemoryDaily.owner_key == self._owner_key)
+                    )
+                    session.commit()
+            except Exception as e:
+                logger.error(f"[Memory] Failed to clear dailies: {e}")
+                raise
 
     def reset_all(self) -> None:
+        """清空本 store 的全部数据（profile/facts/summaries/knowledge/daily）。"""
         with self._lock:
-            if self._memory_file().exists():
-                self._memory_file().unlink()
-            if self._knowledge_file().exists():
-                self._knowledge_file().unlink()
-            daily_dir = self._path / "daily"
-            if daily_dir.exists() and daily_dir.is_dir():
-                shutil.rmtree(daily_dir)
-            (self._path / "daily").mkdir(exist_ok=True)
+            try:
+                with self._db.session() as session:
+                    for table, where in (
+                        (MemoryFact, (MemoryFact.owner_key == self._owner_key, MemoryFact.conversation_id == self._conversation_id)),
+                        (MemorySummary, (MemorySummary.owner_key == self._owner_key, MemorySummary.conversation_id == self._conversation_id)),
+                        (MemoryProfile, (MemoryProfile.owner_key == self._owner_key, MemoryProfile.conversation_id == self._conversation_id)),
+                        (MemoryKnowledge, (MemoryKnowledge.owner_key == self._owner_key, MemoryKnowledge.conversation_id == self._conversation_id)),
+                        (MemoryDaily, (MemoryDaily.owner_key == self._owner_key,)),
+                    ):
+                        session.execute(delete(table).where(*where))
+                    session.commit()
+            except Exception as e:
+                logger.error(f"[Memory] Failed to reset memory store: {e}")
+                raise
             self._cache = None
+
+    def close(self) -> None:
+        self._db.close()

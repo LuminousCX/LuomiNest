@@ -307,10 +307,12 @@ class MemoryEngine:
                 )
 
             from .vector_manager import VectorSearchManager
-            # 向量索引跟随轨道目录（owner → agents/{key}/vectors，users → users/{key}/vectors）
+            # 向量索引跟随轨道目录（owner → agents/{key}/vectors，users → users/{key}/vectors）；
+            # owner_key 与记忆同源（行级隔离，主人轨/平台用户轨互不串扰）
             self._vector_manager = VectorSearchManager(
                 self._agent_id, self._embedding_provider,
                 storage_path=self._store._path / "vectors",
+                owner_key=self._store.owner_key,
             )
         return self._vector_manager
 
