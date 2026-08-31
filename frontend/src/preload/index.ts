@@ -92,7 +92,9 @@ const api = {
     importModel: () => ipcRenderer.invoke('avatar:importModel'),
     listImportedModels: () => ipcRenderer.invoke('avatar:listImportedModels'),
     deleteModel: (modelName: string) => ipcRenderer.invoke('avatar:deleteModel', modelName),
-    getImportedModelsPath: () => ipcRenderer.invoke('avatar:getImportedModelsPath')
+    getImportedModelsPath: () => ipcRenderer.invoke('avatar:getImportedModelsPath'),
+    getCollaboratorAvatar: (key: string) => ipcRenderer.invoke('avatar:getCollaboratorAvatar', key),
+    updateCollaboratorAvatars: () => ipcRenderer.invoke('avatar:updateCollaboratorAvatars'),
   },
 
   desktopPet: {

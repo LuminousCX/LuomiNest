@@ -8,7 +8,7 @@
 """
 from functools import lru_cache
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 
@@ -118,15 +118,30 @@ async def _handle_jwt_auth(request: Request, call_next):
 
 
 async def _handle_local_auth(request: Request, call_next):
-    """local 模式认证处理（向后兼容，行为完全不变）。"""
+    """local 模式认证处理（Fail-Closed）。
+
+    与 ws_auth.py 保持一致：无 token 时拒绝请求，
+    防止 token 文件丢失/不可读时 API 静默开放。
+    """
     path = request.url.path
     if path in _LOCAL_EXEMPT_PATHS or not path.startswith("/api/"):
         return await call_next(request)
 
     expected_token = load_auth_token()
     if not expected_token:
-        logger.debug("[Auth] No auth token configured, allowing request (dev mode)")
-        return await call_next(request)
+        logger.warning(
+            f"[Auth/Local] No auth token available, rejecting request (fail-closed): "
+            f"{request.method} {path}"
+        )
+        return JSONResponse(
+            status_code=401,
+            content={
+                "code": 1,
+                "message": "服务器未配置认证令牌，请检查后端启动日志",
+                "error": {"code": "AUTH_FAILED", "message": "服务器认证未配置"},
+                "data": None,
+            },
+        )
 
     auth_header = request.headers.get("Authorization", "")
     provided = ""
@@ -149,12 +164,38 @@ async def _handle_local_auth(request: Request, call_next):
 
 
 async def luomi_auth_middleware(request: Request, call_next):
-    """双模式认证中间件。
+    """三通道认证中间件。
 
-    根据 settings.AUTH_MODE 选择认证方式：
-    - "local"（默认）：Bearer Token + 常量时间比较，无 Token 时放行（向后兼容）
-    - "jwt"：JWT 验证，Fail-Closed，无 Token 或验证失败返回 401
+    认证顺序：
+    1. 内部服务认证：X-LuomiNest-Internal-Token（INTERNAL_AUTH_TOKEN 配置时启用，
+       供 Java 后端等可信内部服务调用，可选 X-LuomiNest-Owner-User-Id 代理用户）
+    2. 根据 settings.AUTH_MODE 选择：
+       - "local"（默认）：Bearer Token + 常量时间比较，Fail-Closed
+       - "jwt"：JWT 验证，Fail-Closed，无 Token 或验证失败返回 401
     """
+    # ── 内部服务认证 ──
+    from app.security.auth.internal_auth import InternalAuth
+
+    try:
+        internal_user = await InternalAuth.from_settings().verify(request)
+    except HTTPException as exc:
+        # verify 抛出 401（token 无效/未配置），转统一信封
+        detail = exc.detail if isinstance(exc.detail, str) else "内部认证失败"
+        logger.warning(f"[Auth/Internal] Rejected: {request.method} {request.url.path}")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "code": 1,
+                "message": detail,
+                "error": {"code": "AUTH_FAILED", "message": detail},
+                "data": None,
+            },
+        )
+    if internal_user is not None:
+        request.state.user = internal_user
+        return await call_next(request)
+
+    # ── 常规认证（local / jwt）──
     if settings.AUTH_MODE == "jwt":
         return await _handle_jwt_auth(request, call_next)
     else:

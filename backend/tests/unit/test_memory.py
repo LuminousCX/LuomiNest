@@ -159,13 +159,13 @@ class TestMemoryEngine:
     def test_find_similar_fact(self, memory_engine):
         fact = FactItem(content="Hello World", category="context", confidence=0.8)
         memory_engine.add_fact(fact)
-        
+
         data = memory_engine.load_data()
-        found = memory_engine._find_similar_fact(data, "hello world")
+        found = memory_engine._find_similar_fact(data, FactItem(content="hello world"))
         assert found is not None
         assert found.content == "Hello World"
-        
-        not_found = memory_engine._find_similar_fact(data, "different")
+
+        not_found = memory_engine._find_similar_fact(data, FactItem(content="different"))
         assert not_found is None
 
 @pytest.mark.asyncio
@@ -204,7 +204,7 @@ async def test_distill_conversation(memory_engine):
     mock_adapter = AsyncMock()
     mock_adapter.chat.return_value = '''{
         "profile_name": "",
-        "facts": [{"content": "Distilled fact", "category": "context", "confidence": 0.9}],
+        "facts": [{"content": "Distilled fact", "category": "preference", "confidence": 0.9}],
         "summary": {"用户画像": "- Test user", "偏好设置": "", "兴趣目标": "", "近期状态": "", "事件时间线": ""}
     }'''
     

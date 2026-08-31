@@ -8,10 +8,11 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import type { Ref } from 'vue'
 import type { AgentProfile, ChatMessage } from '../types'
+import type { ChatModeLevel, WorkflowModeOption } from '../components/workbench/types'
 import { useChatStore } from '../stores/chat'
 import { useModelStore } from '../stores/model'
-import { useAgentStore } from '../stores/agent'
 import { useApi } from './useApi'
+import { useToast } from './useToast'
 import { getProviderLogo } from '../config/provider-logos'
 
 /** WorkspaceAgentChat 子组件实例的最小接口（避免依赖具体组件类型） */
@@ -21,15 +22,6 @@ interface WorkspaceAgentChatComponent {
   scrollToSearchResult: (keyword: string) => void
   focusTextarea: () => void
   autoResize: () => void
-}
-
-/** 模型下拉选项 */
-interface ModelOption {
-  providerId: string
-  providerName: string
-  providerLogo: ReturnType<typeof getProviderLogo>
-  modelId: string
-  modelName: string
 }
 
 /** 发送消息的 options（与 chatStore.sendMessage 兼容的子集） */
@@ -44,6 +36,8 @@ export interface SendMessageOptions {
   fileContent?: string
   fileType?: string
   fileName?: string
+  chatMode?: ChatModeLevel
+  skillIds?: string[]
 }
 
 /** 文件上传状态（由 useFileUpload 提供，透传给本 composable） */
@@ -67,7 +61,6 @@ export interface UseWorkspaceMessagesOptions {
 export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   const chatStore = useChatStore()
   const modelStore = useModelStore()
-  const agentStore = useAgentStore()
   const { truncateMessages, deleteMessage } = useApi()
   const { localSelectedAgent, localSelectedConvId, agentChatRef, fileUpload, openConfirmDialog } = options
   const { isUploading, parsedContent, fileName, fileType, uploadingFile, clearUploadState } = fileUpload
@@ -75,7 +68,6 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   // —— 输入与 UI 状态 ——
   const inputText = ref('')
   const selectedSkillIds = ref<string[]>([])
-  const showModelDropdown = ref(false)
   const showReasoning = ref<Record<string, boolean>>({})
 
   // —— 消息与流式状态 ——
@@ -91,50 +83,54 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   const isBackendReady = computed(() => chatStore.isBackendReady)
   const currentConvId = computed(() => localSelectedConvId.value || '')
 
-  // —— 模型选择 ——
+  // —— 模型展示（2026-08 全局模型统一：对话页统一使用全局主模型，
+  //    不再有 per-agent 模型覆盖；模型选择收口到设置页"模型设置"）——
   const currentModel = computed(() => {
-    const agent = localSelectedAgent.value
-    if (agent?.model) return agent.model
     const resolved = modelStore.resolveModel
     return resolved?.model || '未配置模型'
   })
   const currentProvider = computed(() => {
-    const agent = localSelectedAgent.value
-    if (agent?.provider) return agent.provider
     const resolved = modelStore.resolveModel
     return resolved?.provider || ''
   })
   const currentProviderLogo = computed(() => getProviderLogo(currentProvider.value))
   const hasProvider = computed(() => modelStore.providers.length > 0)
 
-  const availableModelOptions = computed<ModelOption[]>(() => {
-    const list: ModelOption[] = []
-    for (const provider of modelStore.providers) {
-      const logo = getProviderLogo(provider.id)
-      const modelIds = provider.selectedModels.length > 0
-        ? provider.selectedModels
-        : (provider.defaultModel ? [provider.defaultModel] : [])
-      for (const modelId of modelIds) {
-        list.push({
-          providerId: provider.id,
-          providerName: provider.name,
-          providerLogo: logo,
-          modelId,
-          modelName: modelId,
-        })
-      }
+  // —— 对话模式（普通/标准/超长） ——
+  const toast = useToast()
+  const chatMode = ref<ChatModeLevel>('normal')
+  const chatModeOptions: WorkflowModeOption[] = [
+    { value: 'normal', label: '普通', title: '普通模式：工具最少（任务视图操作 + 表情操控）' },
+    { value: 'standard', label: '标准', title: '专业模式·标准：平衡速度与深度，排除细粒度浏览器工具' },
+    { value: 'ultra', label: '超长', title: '专业模式·超长：最大能力，全部工具可用，适合复杂长任务' },
+  ]
+  const isWorkflowMode = computed(() => chatMode.value !== 'normal')
+
+  // 切换对话时从存储的 chat_mode 字段同步
+  watch(localSelectedConvId, (convId) => {
+    if (convId) {
+      const conv = chatStore.convData[convId]
+      chatMode.value = (conv?.chat_mode as ChatModeLevel) || 'normal'
+    } else {
+      chatMode.value = 'normal'
     }
-    return list
   })
 
-  const selectModel = (providerId: string, modelId: string): void => {
-    if (localSelectedAgent.value) {
-      agentStore.updateAgent(localSelectedAgent.value.id, {
-        provider: providerId,
-        model: modelId,
-      })
+  const selectChatMode = (mode: ChatModeLevel): void => {
+    // 上下文隔离：如果当前对话已有消息，禁止切换模式
+    const convId = localSelectedConvId.value
+    if (convId) {
+      const currentMsgs = chatStore.convMessages[convId] || []
+      if (currentMsgs.length > 0 && chatMode.value !== mode) {
+        toast.warning('当前对话已有内容，无法切换模式。请新建对话后再选择所需模式。')
+        return
+      }
     }
-    showModelDropdown.value = false
+
+    // 2026-08 全局模型统一：切换模式不再改动全局主模型。
+    // 专业模式（standard/ultra）由后端按轮路由到推理模型，
+    // 推理模型不可用时后端退化为主模型并通过 SSE notice 通知前端 toast。
+    chatMode.value = mode
   }
 
   // —— 发送消息 ——
@@ -164,14 +160,17 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     clearUploadState()
 
     const agent = localSelectedAgent.value
+    // 2026-08 全局模型统一：对话页一律使用全局主模型发送
     const resolved = modelStore.resolveModel
 
     const sendOptions: SendMessageOptions = {
-      model: agent?.model || resolved?.model || undefined,
-      provider: agent?.provider || resolved?.provider || undefined,
+      model: resolved?.model || undefined,
+      provider: resolved?.provider || undefined,
       temperature: modelStore.modelConfig.defaultTemperature,
       maxTokens: modelStore.modelConfig.defaultMaxTokens,
       topP: modelStore.modelConfig.defaultTopP,
+      chatMode: chatMode.value,
+      skillIds: selectedSkillIds.value,
     }
     if (agent?.systemPrompt) sendOptions.systemPrompt = agent.systemPrompt
     if (agent?.id) sendOptions.agentId = agent.id
@@ -197,9 +196,22 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     return lastAssistantMsg?.usage || chatStore.lastUsage || null
   })
   const currentSuggestionMessageId = computed(() => chatStore.currentSuggestionMessageId)
+  const contextTokens = computed(() => {
+    const convId = localSelectedConvId.value
+    if (!convId) return 0
+    return chatStore.convContextTokens[convId] || 0
+  })
+  const contextMaxTokens = computed(() => {
+    const convId = localSelectedConvId.value
+    if (!convId) return 0
+    return chatStore.convContextMaxTokens[convId] || 0
+  })
   const contextPercent = computed(() => {
-    if (!contextUsage.value?.totalTokens || !modelStore.modelConfig.defaultMaxTokens) return 0
-    return Math.min(100, Math.round((contextUsage.value.totalTokens / modelStore.modelConfig.defaultMaxTokens) * 100))
+    const max = contextMaxTokens.value
+    if (!max || max <= 0) return 0
+    const used = contextTokens.value
+    if (!used || used <= 0) return 0
+    return Math.min(100, Math.round((used / max) * 100))
   })
 
   // —— 版本切换与重生成 ——
@@ -382,7 +394,6 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     // 输入与 UI 状态
     inputText,
     selectedSkillIds,
-    showModelDropdown,
     showReasoning,
     // 消息与流式状态
     messages,
@@ -390,19 +401,24 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     isLoadingCurrentConv,
     isBackendReady,
     currentConvId,
-    // 模型选择
+    // 模型展示（全局主模型）
     currentModel,
     currentProvider,
     currentProviderLogo,
     hasProvider,
-    availableModelOptions,
-    selectModel,
+    // 对话模式
+    chatMode,
+    chatModeOptions,
+    isWorkflowMode,
+    selectChatMode,
     // 发送消息
     canSend,
     sendMessage,
     cancelStreaming,
     // 上下文用量与推荐
     contextUsage,
+    contextTokens,
+    contextMaxTokens,
     contextPercent,
     currentSuggestionMessageId,
     // 版本切换与重生成

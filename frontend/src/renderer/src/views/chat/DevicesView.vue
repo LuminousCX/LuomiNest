@@ -7,6 +7,7 @@ import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiInput from '../../components/common/LumiInput.vue'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
+import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
 
 interface Device {
   id: string
@@ -109,12 +110,8 @@ onMounted(() => {
 
 <template>
   <div class="devices-view">
-    <div class="devices-header">
-      <div class="header-info">
-        <h1 class="header-title">设备与群组</h1>
-        <p class="header-desc">物联网设备管理、人机混合群组、历史聊天记录</p>
-      </div>
-      <div class="header-actions">
+    <LumiPageHeader title="设备与群组" desc="物联网设备管理、人机混合群组、历史聊天记录">
+      <template #actions>
         <LumiButton variant="secondary" size="sm">
           <template #icon><Settings2 :size="15" /></template>
           配置
@@ -123,8 +120,8 @@ onMounted(() => {
           <template #icon><Plus :size="15" /></template>
           添加设备
         </LumiButton>
-      </div>
-    </div>
+      </template>
+    </LumiPageHeader>
 
     <div class="tab-bar">
       <button :class="['tab-btn', { active: activeTab === 'devices' }]" @click="activeTab = 'devices'">
@@ -279,28 +276,7 @@ onMounted(() => {
   overflow-y: auto;
 }
 
-.devices-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.header-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-}
-
-.header-desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-}
-
-.header-actions {
-  display: flex;
-  gap: var(--space-2);
-}
+/* header → LumiPageHeader */
 
 .tab-bar {
   display: flex;

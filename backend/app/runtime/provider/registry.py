@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 if TYPE_CHECKING:
-    from app.runtime.provider.base import LLMProvider
+    from app.runtime.provider.llm.ports import LLMProvider
 
 
 class ProviderRegistry:

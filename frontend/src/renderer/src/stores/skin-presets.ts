@@ -199,6 +199,26 @@ export const presetSkins: Skin[] = [
     glassIntensity: 45,
     ambientIntensity: 45,
     radiusTendency: 55
+  },
+
+  // ────────────────────────────────────────────
+  // 4. 官方默认范例（随仓库内置的背景图片）
+  // ────────────────────────────────────────────
+  {
+    id: 'skin-default-sample',
+    name: '默认范例',
+    type: 'preset',
+    colorThemeId: 'blue',
+    mode: 'light',
+    background: {
+      image: './themes/backgrounds/wallhaven-qz9ykr.webp',
+      blur: 0,
+      opacity: 100,
+      fit: 'cover'
+    },
+    glassIntensity: 0,
+    ambientIntensity: 0,
+    radiusTendency: 0
   }
 ]
 

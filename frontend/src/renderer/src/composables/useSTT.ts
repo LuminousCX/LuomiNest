@@ -150,7 +150,12 @@ export const useSTT = () => {
 
     if (!resp.ok) {
       const errData = await resp.json().catch(() => null)
-      const errMsg = errData?.error || `识别失败 (${resp.status})`
+      // 统一信封兼容：error 可为对象 {code,message} 或旧字符串
+      const errMsg =
+        (typeof errData?.error === 'string' && errData.error) ||
+        errData?.error?.message ||
+        errData?.message ||
+        `识别失败 (${resp.status})`
       throw new Error(errMsg)
     }
 

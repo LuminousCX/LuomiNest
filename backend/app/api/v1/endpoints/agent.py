@@ -1,18 +1,15 @@
 import uuid
 import os
 import shutil
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
-from app.infrastructure.database.json_store import agents_store
-from app.infrastructure.database.facades.main_agent_config import (
-    load_luominest_main_agent_config,
-    save_luominest_main_agent_config,
-)
+from app.api.v1.deps import get_agents_store, get_conversation_store
 from app.core.config import settings
+from app.core.constants.colors import DEFAULT_AGENT_COLOR
 from app.core.utils import utc_now, ok
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -21,9 +18,7 @@ class AgentCreate(BaseModel):
     name: str
     description: str = ""
     system_prompt: str = ""
-    model: str | None = None
-    provider: str | None = None
-    color: str = "#0d9488"
+    color: str = DEFAULT_AGENT_COLOR
     avatar: str | None = None
     capabilities: list[str] = Field(default_factory=lambda: ["chat"])
     memory_access: str = "none"
@@ -33,8 +28,6 @@ class AgentUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     system_prompt: str | None = None
-    model: str | None = None
-    provider: str | None = None
     color: str | None = None
     avatar: str | None = None
     capabilities: list[str] | None = None
@@ -49,6 +42,8 @@ class AgentResponse(BaseModel):
     name: str
     description: str
     system_prompt: str = Field(alias="systemPrompt", default="")
+    # 2026-08 全局模型统一：Agent 不再拥有独立模型，统一使用全局主模型。
+    # 保留字段以兼容存量数据读取（迁移后恒为空）。
     model: str | None = None
     provider: str | None = None
     color: str
@@ -61,82 +56,8 @@ class AgentResponse(BaseModel):
     updated_at: str = Field(alias="updatedAt", default="")
 
 
-class MainAgentConfigUpdate(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    provider: str | None = None
-    model: str | None = None
-    system_prompt: str | None = Field(alias="systemPrompt", default=None)
-    temperature: float | None = None
-    max_tokens: int | None = Field(alias="maxTokens", default=None)
-    color: str | None = None
-    avatar: str | None = None
-
-
-class MainAgentConfigResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, by_alias=True)
-
-    provider: str = ""
-    model: str = ""
-    system_prompt: str = Field(alias="systemPrompt", default="")
-    temperature: float = 0.7
-    max_tokens: int = Field(alias="maxTokens", default=4096)
-    color: str = ""
-    avatar: str | None = None
-
-
-@router.get("/main-agent/config", response_model=MainAgentConfigResponse)
-async def get_main_agent_config():
-    logger.info("[API] GET /agents/main-agent/config - Fetching main agent config")
-    config = load_luominest_main_agent_config()
-    response = MainAgentConfigResponse(
-        provider=config.get("provider", ""),
-        model=config.get("model", ""),
-        system_prompt=config.get("system_prompt", ""),
-        temperature=config.get("temperature", 0.7),
-        max_tokens=config.get("max_tokens", 4096),
-        color=config.get("color", ""),
-        avatar=config.get("avatar"),
-    )
-    logger.success(f"[API] GET /agents/main-agent/config - Success: provider={response.provider}, model={response.model}")
-    return response
-
-
-@router.patch("/main-agent/config", response_model=MainAgentConfigResponse)
-async def update_main_agent_config(request: MainAgentConfigUpdate):
-    logger.info("[API] PATCH /agents/main-agent/config - Updating main agent config")
-    config = load_luominest_main_agent_config()
-    update_data = request.model_dump(exclude_unset=True, by_alias=False)
-
-    updated_fields = []
-    if update_data.get("system_prompt") is not None:
-        config["system_prompt"] = update_data["system_prompt"]
-        updated_fields.append("system_prompt")
-    if update_data.get("max_tokens") is not None:
-        config["max_tokens"] = update_data["max_tokens"]
-        updated_fields.append("max_tokens")
-
-    for key in ("provider", "model", "temperature", "color", "avatar"):
-        if key in update_data and update_data[key] is not None:
-            config[key] = update_data[key]
-            updated_fields.append(key)
-
-    save_luominest_main_agent_config(config)
-    logger.success(f"[API] PATCH /agents/main-agent/config - Updated fields: {updated_fields}")
-
-    return MainAgentConfigResponse(
-        provider=config.get("provider", ""),
-        model=config.get("model", ""),
-        system_prompt=config.get("system_prompt", ""),
-        temperature=config.get("temperature", 0.7),
-        max_tokens=config.get("max_tokens", 4096),
-        color=config.get("color", ""),
-        avatar=config.get("avatar"),
-    )
-
-
 @router.get("", response_model=list[AgentResponse])
-async def list_agents():
+async def list_agents(agents_store=Depends(get_agents_store)):
     logger.info("[API] GET /agents - Listing all agents")
     agents = [a for a in await agents_store.values_async() if not a.get("is_main", False)]
     logger.success(f"[API] GET /agents - Success: returned {len(agents)} agents")
@@ -144,16 +65,19 @@ async def list_agents():
 
 
 @router.post("", response_model=AgentResponse)
-async def create_agent(request: AgentCreate):
+async def create_agent(
+    request: AgentCreate,
+    agents_store=Depends(get_agents_store),
+):
     logger.info(f"[API] POST /agents - Creating agent: name={request.name}")
     
     agents = await agents_store.all_async()
     if len(agents) >= 10:
-        raise HTTPException(status_code=400, detail="最多只能创建 10 个 Agent")
+        raise BadRequestError("最多只能创建 10 个 Agent", code="AGENT_LIMIT_REACHED")
     
     for agent in agents:
         if agent.get("name") == request.name:
-            raise HTTPException(status_code=400, detail=f"Agent 名称 '{request.name}' 已存在")
+            raise BadRequestError(f"Agent 名称 '{request.name}' 已存在", code="AGENT_NAME_DUPLICATED")
     
     agent_id = str(uuid.uuid4())
     now = utc_now()
@@ -162,8 +86,6 @@ async def create_agent(request: AgentCreate):
         "name": request.name,
         "description": request.description,
         "system_prompt": request.system_prompt,
-        "model": request.model,
-        "provider": request.provider,
         "color": request.color,
         "avatar": request.avatar,
         "capabilities": request.capabilities,
@@ -179,7 +101,10 @@ async def create_agent(request: AgentCreate):
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
-async def get_agent(agent_id: str):
+async def get_agent(
+    agent_id: str,
+    agents_store=Depends(get_agents_store),
+):
     logger.info(f"[API] GET /agents/{agent_id} - Fetching agent")
     agent = await agents_store.get_async(agent_id)
     if not agent:
@@ -190,7 +115,11 @@ async def get_agent(agent_id: str):
 
 
 @router.patch("/{agent_id}", response_model=AgentResponse)
-async def update_agent(agent_id: str, request: AgentUpdate):
+async def update_agent(
+    agent_id: str,
+    request: AgentUpdate,
+    agents_store=Depends(get_agents_store),
+):
     logger.info(f"[API] PATCH /agents/{agent_id} - Updating agent")
     agent = await agents_store.get_async(agent_id)
     if not agent:
@@ -204,7 +133,7 @@ async def update_agent(agent_id: str, request: AgentUpdate):
         all_agents = await agents_store.all_async()
         for ag in all_agents:
             if ag.get("id") != agent_id and ag.get("name") == new_name:
-                raise HTTPException(status_code=400, detail=f"Agent 名称 '{new_name}' 已存在")
+                raise BadRequestError(f"Agent 名称 '{new_name}' 已存在", code="AGENT_NAME_DUPLICATED")
     updated_fields = list(update_data.keys())
     agent.update(update_data)
     agent["updated_at"] = utc_now()
@@ -215,7 +144,11 @@ async def update_agent(agent_id: str, request: AgentUpdate):
 
 
 @router.delete("/{agent_id}")
-async def delete_agent(agent_id: str):
+async def delete_agent(
+    agent_id: str,
+    agents_store=Depends(get_agents_store),
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] DELETE /agents/{agent_id} - Deleting agent")
     agent = await agents_store.get_async(agent_id)
     if agent:
@@ -225,7 +158,6 @@ async def delete_agent(agent_id: str):
     else:
         logger.warning(f"[API] DELETE /agents/{agent_id} - Agent not found (already deleted)")
     
-    from app.infrastructure.database.conversation_store import conversation_store
     conversation_store.delete_by_agent_id(agent_id)
     
     agent_memory_dir = os.path.join(settings.DATA_DIR, "memory", "agents", agent_id)

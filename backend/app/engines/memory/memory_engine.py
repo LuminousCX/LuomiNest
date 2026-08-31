@@ -36,7 +36,13 @@ from .prompts import (
     _REINFORCEMENT_PATTERNS_ZH,
     _SUMMARY_EXTRACT_PROMPT,
 )
-from .store import MemoryStore
+from .store import (
+    MemoryStore,
+    resolve_owner_agent_key,
+    resolve_track_dir,
+    sanitize_track_key,
+)
+from app.core.domain_policy import TRACK_OWNER, TRACK_USERS
 from .fact_manager import FactManager
 from .extractor import MemoryExtractor
 from .context_builder import ContextBuilder
@@ -48,7 +54,13 @@ if TYPE_CHECKING:
 class MemoryEngine:
     """记忆引擎门面：组合存储、事实管理、LLM 提取、上下文组装等组件。"""
 
-    def __init__(self, storage_path: Path | str | None = None, agent_id: str | None = None, embedding_provider=None):
+    def __init__(
+        self,
+        storage_path: Path | str | None = None,
+        agent_id: str | None = None,
+        embedding_provider=None,
+        conversation_base_dir: Path | None = None,
+    ):
         self._agent_id = agent_id or "_default"
         self._embedding_provider = embedding_provider
 
@@ -58,12 +70,23 @@ class MemoryEngine:
             path = Path(settings.DATA_DIR) / "memory" / "agents" / self._agent_id
 
         self._store = MemoryStore(path)
+        # 会话级 store 的根目录：轨道引擎指向自身轨道目录（users/{key}/conversations/…），
+        # agents/ 引擎保持 None → 沿用 get_conversation_store 的 agents/{agent}/conversations 语义
+        self._conversation_base_dir = Path(conversation_base_dir) if conversation_base_dir else None
         self._fact_manager = FactManager(self._store)
         self._async_lock = asyncio.Lock()
         self._extractor = MemoryExtractor(self._store, self._fact_manager, self._async_lock, agent_id=self._agent_id)
         self._context_builder = ContextBuilder(self._store)
         
         self._vector_manager: VectorSearchManager | None = None
+
+    # --- 会话级 store 访问（轨道感知） ---
+
+    def _get_conv_store(self, conversation_id: str) -> MemoryStore:
+        """返回本引擎对应的会话级 MemoryStore（轨道目录感知）。"""
+        if self._conversation_base_dir is not None:
+            return get_conversation_store_at(self._conversation_base_dir, conversation_id)
+        return get_conversation_store(self._agent_id, conversation_id)
 
     # --- 数据访问 ---
 
@@ -133,7 +156,7 @@ class MemoryEngine:
         Returns:
             提升的fact数量
         """
-        conv_store = get_conversation_store(self._agent_id, conversation_id)
+        conv_store = self._get_conv_store(conversation_id)
         conv_data = conv_store.load_data()
         agent_data = self._store.load_data()
 
@@ -194,7 +217,7 @@ class MemoryEngine:
     def save_summary(self, content: str, conversation_id: str | None = None) -> None:
         """保存摘要内容。如果提供 conversation_id，只写入对话级store；否则写入Agent级store。"""
         if conversation_id:
-            conv_store = get_conversation_store(self._agent_id, conversation_id)
+            conv_store = self._get_conv_store(conversation_id)
             conv_data = conv_store.load_data()
             self._markdown_to_summaries(conv_data, content)
             conv_store.save_data(conv_data)
@@ -220,9 +243,9 @@ class MemoryEngine:
         """使用LLM从摘要内容中提取五个部分。"""
         return await self._extractor.extract_summary_sections(content, llm_adapter)
 
-    async def extract_knowledge(self, conversation: str, llm_adapter=None) -> str | None:
-        """使用LLM从对话中提取知识点。"""
-        return await self._extractor.extract_knowledge(conversation, llm_adapter)
+    async def extract_knowledge(self, conversation: str, existing_knowledge: str = "", llm_adapter=None) -> str | None:
+        """使用LLM从对话中提取知识点，并与现有知识库合并。"""
+        return await self._extractor.extract_knowledge(conversation, existing_knowledge, llm_adapter)
 
     def clear_summaries(self) -> None:
         data = self._store.load_data()
@@ -233,13 +256,13 @@ class MemoryEngine:
 
     def load_daily(self, date: str | None = None, conversation_id: str | None = None) -> str:
         if conversation_id:
-            conv_store = get_conversation_store(self._agent_id, conversation_id)
+            conv_store = self._get_conv_store(conversation_id)
             return conv_store.load_daily(date)
         return self._store.load_daily(date)
 
     def append_daily(self, content: str, date: str | None = None, conversation_id: str | None = None) -> None:
         if conversation_id:
-            conv_store = get_conversation_store(self._agent_id, conversation_id)
+            conv_store = self._get_conv_store(conversation_id)
             conv_store.append_daily(content, date)
         else:
             self._store.append_daily(content, date)
@@ -259,7 +282,7 @@ class MemoryEngine:
 
     def clear_conversation_data(self, conversation_id: str) -> None:
         """清除对话级store的所有数据（facts + summary + dynamic_context + daily）"""
-        conv_store = get_conversation_store(self._agent_id, conversation_id)
+        conv_store = self._get_conv_store(conversation_id)
         conv_store.save_data(MemoryData())
         self._store.clear_daily(conversation_id)
 
@@ -284,7 +307,13 @@ class MemoryEngine:
                 )
 
             from .vector_manager import VectorSearchManager
-            self._vector_manager = VectorSearchManager(self._agent_id, self._embedding_provider)
+            # 向量索引跟随轨道目录（owner → agents/{key}/vectors，users → users/{key}/vectors）；
+            # owner_key 与记忆同源（行级隔离，主人轨/平台用户轨互不串扰）
+            self._vector_manager = VectorSearchManager(
+                self._agent_id, self._embedding_provider,
+                storage_path=self._store._path / "vectors",
+                owner_key=self._store.owner_key,
+            )
         return self._vector_manager
 
     async def vector_dedup(self, facts: list[FactItem], conversation_id: str | None = None) -> list[FactItem]:
@@ -308,7 +337,7 @@ class MemoryEngine:
                 facts.append(f)
         
         if conversation_id:
-            conv_store = get_conversation_store(self._agent_id, conversation_id)
+            conv_store = self._get_conv_store(conversation_id)
             conv_data = conv_store.load_data()
             for f in conv_data.facts:
                 if f.is_latest:
@@ -332,8 +361,7 @@ class MemoryEngine:
     async def build_context_async(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
         conv_store = None
         if conversation_id:
-            agent_id = getattr(self, '_agent_id', None)
-            conv_store = get_conversation_store(agent_id, conversation_id)
+            conv_store = self._get_conv_store(conversation_id)
 
         # 如果有查询，尝试向量召回增强
         if query:
@@ -358,7 +386,7 @@ class MemoryEngine:
             # 已在事件循环中，无法用 asyncio.run，使用同步回退
             conv_store = None
             if conversation_id:
-                conv_store = get_conversation_store(self._agent_id, conversation_id)
+                conv_store = self._get_conv_store(conversation_id)
             return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id)
 
         return asyncio.run(self.build_context_async(max_chars, query, conversation_id))
@@ -379,10 +407,18 @@ class MemoryEngine:
         if conversation_id and result.get("facts"):
             conv_facts = [f for f in result["facts"] if f.category in FACT_SCOPE_CONVERSATION]
             if conv_facts:
-                conv_store = get_conversation_store(self._agent_id, conversation_id)
+                conv_store = self._get_conv_store(conversation_id)
                 conv_data = conv_store.load_data()
                 self._fact_manager.merge_facts(conv_data, conv_facts)
                 conv_store.save_data(conv_data)
+
+        # 增量向量化新提取的事实（embedding 失败不影响主流程，B2.3）
+        new_facts = result.get("facts") or []
+        if new_facts:
+            try:
+                await self.vector_dedup(new_facts, conversation_id)
+            except Exception as e:
+                logger.warning(f"[Memory] Vector dedup after profile update failed: {e}")
 
         return result
 
@@ -393,7 +429,23 @@ class MemoryEngine:
         correction_hint: str = "",
         conversation_id: str | None = None,
     ) -> str | None:
-        return await self._extractor.distill_conversation(messages, llm_adapter, correction_hint, conversation_id)
+        result = await self._extractor.distill_conversation(messages, llm_adapter, correction_hint, conversation_id)
+
+        # 蒸馏后增量向量化（agent 级 + 对话级 latest facts，B2.3）
+        try:
+            data = self._store.load_data()
+            agent_facts = [f for f in data.facts if f.is_latest]
+            if agent_facts:
+                await self.vector_dedup(agent_facts)
+            if conversation_id:
+                conv_store = self._get_conv_store(conversation_id)
+                conv_facts = [f for f in conv_store.load_data().facts if f.is_latest]
+                if conv_facts:
+                    await self.vector_dedup(conv_facts, conversation_id)
+        except Exception as e:
+            logger.warning(f"[Memory] Vector sync after distill failed: {e}")
+
+        return result
 
     # --- 重置 ---
 
@@ -412,8 +464,8 @@ class MemoryEngine:
     def _knowledge_file(self):
         return self._store._knowledge_file()
 
-    def _find_similar_fact(self, data: MemoryData, content: str):
-        return self._fact_manager._find_similar_fact(data, content)
+    def _find_similar_fact(self, data: MemoryData, fact: FactItem):
+        return self._fact_manager._find_similar_fact(data, fact)
 
     def _deprecate_old_name_facts(self, data: MemoryData, old_name: str, new_name: str) -> None:
         self._fact_manager.deprecate_old_name_facts(data, old_name, new_name)
@@ -493,7 +545,8 @@ class _LRUDict(OrderedDict):
                 try:
                     oldest_val.close()
                 except Exception:
-                    pass
+                    # LRU 淘汰清理：store 可能已关闭，属预期情况
+                    logger.debug(f"[Memory] LRU 淘汰关闭 store 异常（忽略）: {oldest_key}", exc_info=True)
             logger.debug(f"[Memory] LRU evicted conversation store: {oldest_key}")
 
     def __getitem__(self, key):
@@ -502,6 +555,24 @@ class _LRUDict(OrderedDict):
 
 
 _conversation_stores: _LRUDict = _LRUDict(maxsize=100)
+
+
+def get_conversation_store_at(base_dir: Path, conversation_id: str) -> MemoryStore:
+    """返回以 base_dir/conversations/{conversation_id} 为根的对话级 MemoryStore。
+
+    供轨道引擎使用（如 users/{user_key}/conversations/…），与
+    get_conversation_store 共享同一 LRU 缓存（键含根目录，互不冲突）。
+    """
+    base = Path(base_dir)
+    key = f"@{base}:{conversation_id}"
+    if key in _conversation_stores:
+        return _conversation_stores[key]
+    with _engine_lock:
+        if key in _conversation_stores:
+            return _conversation_stores[key]
+        store = MemoryStore(base / "conversations" / conversation_id)
+        _conversation_stores[key] = store
+        return store
 
 
 def get_conversation_store(agent_id: str | None, conversation_id: str) -> MemoryStore:
@@ -539,3 +610,36 @@ def get_memory_engine(agent_id: str | None = None) -> MemoryEngine:
         engine = MemoryEngine(storage_path=path, agent_id=key)
         _engines[key] = engine
         return engine
+
+
+# --- 双轨引擎注册表（洋葱架构 §8.5.2 / §13 B18） ---
+
+_track_engines: dict[str, MemoryEngine] = {}
+
+
+def get_track_engine(track: str, user_key: str = "") -> MemoryEngine:
+    """按记忆轨道返回引擎（owner / users 双轨）。
+
+    - owner：委托 get_memory_engine（目录别名解析见 store.resolve_track_dir），
+      与工作台主 Agent 引擎是同一实例，保证读写一致（M2=B）。
+    - users：users/{user_key}/ 目录独立引擎，读写逻辑复用 MemoryEngine。
+    """
+    if track == TRACK_OWNER:
+        return get_memory_engine(resolve_owner_agent_key())
+    if track == TRACK_USERS:
+        safe_key = sanitize_track_key(user_key)
+        key = f"{TRACK_USERS}/{safe_key}"
+        if key in _track_engines:
+            return _track_engines[key]
+        with _engine_lock:
+            if key in _track_engines:
+                return _track_engines[key]
+            track_dir = resolve_track_dir(TRACK_USERS, safe_key)
+            engine = MemoryEngine(
+                storage_path=track_dir,
+                agent_id=key,
+                conversation_base_dir=track_dir,
+            )
+            _track_engines[key] = engine
+            return engine
+    raise ValueError(f"Unknown memory track: {track!r}")

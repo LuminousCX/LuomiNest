@@ -42,10 +42,21 @@ class LuomiSchedulerManager:
         self._tasks: dict[str, dict[str, Any]] = {}  # task_id -> task info dict
         self._event_callbacks: list[TaskEventCallback] = []
         self._started = False
+        # 任务载荷执行器（SubagentExecutor 兼容对象）：由组合根注入，None 时走端口兜底
+        self._task_executor: Any | None = None
 
     @property
     def is_running(self) -> bool:
         return self._started and self._scheduler is not None and self._scheduler.running
+
+    def register_task_executor(self, executor: Any | None) -> None:
+        """注入任务载荷执行器（由组合根在 lifespan 中调用）。
+
+        Args:
+            executor: SubagentExecutor 兼容对象（需有 async execute(task=..., context=..., depth=...)）；
+                传 None 恢复兜底行为（经 subagent_delegation 端口延迟导入模块单例）。
+        """
+        self._task_executor = executor
 
     def add_event_callback(self, callback: TaskEventCallback) -> None:
         """注册任务事件回调（用于 SSE 推送）"""
@@ -464,14 +475,19 @@ class LuomiSchedulerManager:
             return "任务载荷无 instruction 字段，跳过执行"
 
         # 通过子 Agent 执行指令（独立上下文，不污染主 Agent）
+        # 执行器优先使用组合根注入的实例；未注入时经 subagent_delegation 端口兜底
+        # （端口内部延迟导入 subagent_executor 模块单例），行为保持一致
         try:
-            from app.core.agents.subagent_executor import subagent_executor
             context = payload.get("context", "")
-            result = await subagent_executor.execute(
-                task=instruction,
-                context=context,
-                depth=0,
-            )
+            if self._task_executor is not None:
+                result = await self._task_executor.execute(
+                    task=instruction,
+                    context=context,
+                    depth=0,
+                )
+            else:
+                from app.core.ports.subagent_delegation import delegate_task
+                result = await delegate_task(instruction, context=context, depth=0)
             return result
         except Exception as e:
             logger.error(f"[LuomiScheduler] 子 Agent 执行失败: {e}", exc_info=True)
@@ -489,7 +505,8 @@ class LuomiSchedulerManager:
             try:
                 self._scheduler.remove_job(task_id)
             except Exception:
-                pass
+                # job 可能已执行完毕（一次性任务），属预期情况
+                logger.debug(f"[LuomiScheduler] remove_job 未找到已结束的 job: id={task_id}", exc_info=True)
 
         logger.info(f"[LuomiScheduler] 移除任务: id={task_id}, name={info.get('name')}")
 
@@ -555,4 +572,4 @@ class LuomiSchedulerManager:
 
 
 # 全局单例
-luomi_scheduler = LuomiSchedulerManager()
+luominest_scheduler = LuomiSchedulerManager()

@@ -1,5 +1,7 @@
-.PHONY: help check install dev dev-frontend dev-backend build build-frontend build-backend \
-       build-win build-linux build-mac \
+.PHONY: help check install install-backend install-frontend \
+       dev dev-frontend dev-backend \
+       build build-frontend build-backend \
+       build-win build-linux build-mac package \
        prepare-backend verify-backend \
        clean clean-frontend clean-backend clean-all config doctor \
        lint lint-frontend lint-backend test test-frontend test-backend
@@ -59,10 +61,11 @@ help:
 	@echo "  make build                - Build frontend + backend"
 	@echo "  make build-frontend       - Build frontend only"
 	@echo "  make build-backend        - Build backend only (PyInstaller)"
+	@echo "  make package              - Build & package installer for current platform (build-all.ps1)"
 	@echo ""
 	@echo "Platform-Specific Build:"
-	@echo "  make build-win            - Build Windows installer (NSIS + portable)"
-	@echo "  make build-linux          - Build Linux packages (AppImage + deb + rpm)"
+	@echo "  make build-win            - Build Windows unpacked app (electron-builder)"
+	@echo "  make build-linux          - Build Linux packages (AppImage + deb + tar.gz)"
 	@echo "  make build-mac            - Build macOS DMG + zip"
 	@echo ""
 	@echo "Quality Commands:"
@@ -205,12 +208,12 @@ verify-backend:
 	@echo "[Verify] Backend executable verified: $(BACKEND_DIR)/dist/$(BACKEND_EXE)"
 
 build-win: prepare-backend
-	@echo "[Frontend] Building Windows installer (NSIS + portable)..."
-	cd $(FRONTEND_DIR) && $(PNPM) run build:win
+	@echo "[Frontend] Building Windows unpacked app (dir)..."
+	cd $(FRONTEND_DIR) && $(PNPM) run build:win-dir
 	@echo "Output: $(FRONTEND_DIR)/release/dist/"
 
 build-linux: prepare-backend
-	@echo "[Frontend] Building Linux packages (AppImage + deb + rpm)..."
+	@echo "[Frontend] Building Linux packages (AppImage + deb + tar.gz)..."
 	cd $(FRONTEND_DIR) && $(PNPM) run build:linux
 	@echo "Output: $(FRONTEND_DIR)/release/dist/"
 
@@ -218,6 +221,14 @@ build-mac: prepare-backend
 	@echo "[Frontend] Building macOS DMG + zip..."
 	cd $(FRONTEND_DIR) && $(PNPM) run build:mac
 	@echo "Output: $(FRONTEND_DIR)/release/dist/"
+
+package:
+	@echo "[Package] Building & packaging installer for current platform (Inno Setup)..."
+ifeq ($(OS),Windows_NT)
+	pwsh -NoProfile -ExecutionPolicy Bypass -File $(PROJECT_ROOT)/build-all.ps1
+else
+	@echo "[Package] build-all.ps1 is Windows-only. Use 'make build' for platform builds."
+endif
 
 lint: lint-frontend lint-backend
 

@@ -19,7 +19,6 @@ import { useChatStore } from '../stores/chat'
 import { useTtsEngineStore } from '../stores/tts-engine'
 import { useAvatarControlStore } from '../stores/avatar-control'
 import { useModelStore } from '../stores/model'
-import { usePlatformStore } from '../stores/platform'
 import { useToast } from './useToast'
 import { resolveExpressionByModelUrl } from '../config/luominest-models'
 import { LUOMINEST_BUILTIN_MODELS } from '../config/luominest-models'
@@ -56,7 +55,6 @@ export const useDesktopPetChatBridge = (): void => {
   const ttsEngine = useTtsEngineStore()
   const avatarControl = useAvatarControlStore()
   const modelStore = useModelStore()
-  const platformStore = usePlatformStore()
   const agentStore = useAgentStore()
   const toast = useToast()
 
@@ -151,17 +149,17 @@ export const useDesktopPetChatBridge = (): void => {
     // 确保 TTS drivers 路由到桌宠 IPC
     updateTtsDriversForDesktopPet()
 
-    const mainAgent = platformStore.mainAgent
     const resolved = modelStore.resolveModel
 
     // 方案 B：如果当前没有共享对话，chatStore.sendMessage 会自动创建
     // targetConvId 传 undefined，sendMessage 内部会调用 createConversation
     const options = {
       agentId: MAIN_AGENT_ID,
-      model: mainAgent?.model || resolved?.model || undefined,
-      provider: mainAgent?.provider || resolved?.provider || undefined,
-      temperature: mainAgent?.temperature ?? modelStore.modelConfig.defaultTemperature,
-      maxTokens: mainAgent?.maxTokens ?? modelStore.modelConfig.defaultMaxTokens,
+      // 2026-08 全局模型统一：桌宠使用全局主模型与全局生成参数
+      model: resolved?.model || undefined,
+      provider: resolved?.provider || undefined,
+      temperature: modelStore.modelConfig.defaultTemperature,
+      maxTokens: modelStore.modelConfig.defaultMaxTokens,
       topP: modelStore.modelConfig.defaultTopP,
       chatMode: 'normal' as const,
       targetConvId: getMainAgentConvId() || undefined, // 三端共享的 MAIN_AGENT 对话

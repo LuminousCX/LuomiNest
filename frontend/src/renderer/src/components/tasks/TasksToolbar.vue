@@ -2,10 +2,6 @@
 import { computed } from 'vue'
 import {
   Plus,
-  Search,
-  Bell,
-  Share2,
-  Link,
   Filter,
   Clock,
   ChevronLeft,
@@ -14,13 +10,7 @@ import {
   CalendarDays,
   CalendarRange,
   Timer,
-  Edit3,
-  Lock,
-  Type,
-  Palette,
-  Image,
   Trash2,
-  Mic,
   CheckCircle2,
   Circle
 } from 'lucide-vue-next'
@@ -28,7 +18,6 @@ import type { ViewMode, LuomiNestTask } from './types'
 
 const props = defineProps<{
   currentView: ViewMode
-  searchQuery: string
   currentNavLabel: string
   tasks: LuomiNestTask[]
   teamMembers: string[]
@@ -38,7 +27,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:currentView': [view: ViewMode]
-  'update:searchQuery': [query: string]
   navigatePrev: []
   navigateNext: []
   goToday: []
@@ -50,10 +38,7 @@ const currentViewModel = computed<ViewMode>({
   set: (value) => emit('update:currentView', value)
 })
 
-const searchQueryModel = computed<string>({
-  get: () => props.searchQuery,
-  set: (value) => emit('update:searchQuery', value)
-})
+
 
 const viewList: { value: ViewMode; label: string; icon: typeof LayoutGrid }[] = [
   { value: 'card', label: '卡片', icon: LayoutGrid },
@@ -70,46 +55,7 @@ const showIndicator = (view: ViewMode) => {
 </script>
 
 <template>
-  <header class="tasks-header animate-fade-in">
-    <div class="header-left">
-      <div class="project-indicator">
-        <div class="indicator-dot"></div>
-        <h1 class="page-title">LuomiNest 任务中心</h1>
-      </div>
-      <div class="team-avatars">
-        <img v-for="(member, i) in teamMembers" :key="i" :src="member" class="avatar" alt="member" />
-        <button class="avatar avatar-add">
-          <Plus :size="12" />
-        </button>
-      </div>
-      <span class="project-path">AI Agent / 前端 / 核心模块</span>
-    </div>
-
-    <div class="header-right">
-      <div class="search-box">
-        <Search :size="14" class="search-icon" />
-        <input v-model="searchQueryModel" type="text" placeholder="搜索任务..." />
-        <Mic :size="14" class="mic-icon" />
-      </div>
-      <button class="icon-btn">
-        <Bell :size="16" />
-        <span class="notification-dot"></span>
-      </button>
-      <button class="icon-btn luomi-create-btn" @click="emit('openCreate')">
-        <Plus :size="16" />
-      </button>
-      <button class="action-btn">
-        <Share2 :size="14" />
-        分享
-      </button>
-      <button class="action-btn">
-        <Link :size="14" />
-        链接
-      </button>
-    </div>
-  </header>
-
-  <div class="toolbar animate-slide-up">
+  <div class="tasks-toolbar animate-slide-up">
     <div class="view-switcher">
       <button
         v-for="view in viewList"
@@ -135,12 +81,6 @@ const showIndicator = (view: ViewMode) => {
         <Clock :size="12" />
         今天
       </button>
-      <div class="last-update">
-        <Clock :size="12" />
-        30 分钟前
-        <img src="https://picsum.photos/id/1010/30/30" class="update-avatar" alt="user" />
-        <span>Sarah</span>
-      </div>
     </div>
   </div>
 
@@ -189,14 +129,13 @@ const showIndicator = (view: ViewMode) => {
     </div>
   </div>
 
-  <div class="bottom-toolbar animate-slide-up" style="animation-delay: 210ms">
-    <div class="toolbar-left">
+  <div class="tasks-bottom-bar animate-slide-up" style="animation-delay: 210ms">
+    <div class="bottom-bar-left">
       <button class="filter-btn">
         <Filter :size="14" />
         筛选
       </button>
       <div class="color-filters">
-        <span class="filter-label">颜色:</span>
         <button
           v-for="(color, idx) in colors"
           :key="idx"
@@ -209,217 +148,29 @@ const showIndicator = (view: ViewMode) => {
         </button>
       </div>
     </div>
-
-    <div class="toolbar-right">
-      <button class="tool-btn"><Edit3 :size="14" /></button>
-      <button class="tool-btn"><Lock :size="14" /></button>
-      <button class="tool-btn"><Type :size="14" /></button>
-      <button class="tool-btn"><Palette :size="14" /></button>
-      <button class="tool-btn text-tool-btn" @click="emit('openCreate')">
-        <Image :size="14" />
-        新建任务
-      </button>
-      <button class="tool-btn delete-tool-btn">
+    <div class="bottom-bar-right">
+      <button class="trash-btn" @click="emit('openCreate')">
         <Trash2 :size="14" />
-        回收站
-        <span class="delete-count">{{ tasks.filter(t => t.status === 'done').length }}</span>
+        <span>回收站</span>
+        <span v-if="tasks.filter(t => t.status === 'done').length > 0" class="trash-count">
+          {{ tasks.filter(t => t.status === 'done').length }}
+        </span>
       </button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.tasks-header {
+.tasks-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-5);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--workspace-border);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.project-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.indicator-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: var(--radius-full);
-  background: linear-gradient(135deg, var(--lumi-brand), var(--lumi-brand-soft));
-  box-shadow: 0 0 var(--space-2) var(--lumi-brand-glow);
-}
-
-.page-title {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.2px;
-}
-
-.team-avatars {
-  display: flex;
-  align-items: center;
-}
-
-.avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-full);
-  border: 2px solid var(--workspace-bg);
-  margin-left: -7px;
-  object-fit: cover;
-}
-
-.avatar:first-child {
-  margin-left: 0;
-}
-
-.avatar-add {
-  background: var(--workspace-card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: 1px solid var(--workspace-border);
-}
-
-.avatar-add:hover {
-  background: var(--workspace-hover);
-  color: var(--text-primary);
-}
-
-.project-path {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-left: 2px;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.search-box {
-  position: relative;
-}
-
-.search-box input {
-  width: 200px;
-  padding: 7px 30px 7px var(--space-7);
-  border-radius: var(--radius-md);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  outline: none;
-  transition: all var(--transition-fast);
-}
-
-.search-box input:focus {
-  border-color: var(--lumi-brand-light);
-  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
-}
-
-.search-box input::placeholder {
-  color: var(--text-muted);
-}
-
-.search-icon {
-  position: absolute;
-  left: 10px;
-  color: var(--text-muted);
-}
-
-.mic-icon {
-  position: absolute;
-  right: var(--space-2);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.icon-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-md);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  position: relative;
-}
-
-.icon-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--text-primary);
-}
-
-.luomi-create-btn {
-  background: var(--lumi-brand);
-  border-color: var(--lumi-brand);
-  color: var(--text-inverse);
-}
-
-.luomi-create-btn:hover {
-  background: var(--lumi-brand-hover);
-  color: var(--text-inverse);
-}
-
-.notification-dot {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 5px;
-  height: 5px;
-  border-radius: var(--radius-full);
-  background: var(--lumi-accent);
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 14px;
-  border-radius: var(--radius-md);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.action-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--text-primary);
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: var(--space-4);
 }
 
 .view-switcher {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   padding: 3px;
   background: var(--workspace-card);
   border-radius: var(--radius-lg);
@@ -431,7 +182,7 @@ const showIndicator = (view: ViewMode) => {
   align-items: center;
   gap: 5px;
   padding: 6px var(--space-3);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-muted);
@@ -447,8 +198,9 @@ const showIndicator = (view: ViewMode) => {
 }
 
 .view-btn.active {
-  background: var(--workspace-hover);
-  color: var(--text-primary);
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+  font-weight: 600;
 }
 
 .view-indicator {
@@ -461,18 +213,18 @@ const showIndicator = (view: ViewMode) => {
 .toolbar-center {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .date-nav {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .date-nav button {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -500,7 +252,7 @@ const showIndicator = (view: ViewMode) => {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 5px 10px;
+  padding: 5px 12px;
   border-radius: var(--radius-md);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
@@ -515,21 +267,6 @@ const showIndicator = (view: ViewMode) => {
   background: var(--lumi-brand);
   border-color: var(--lumi-brand);
   color: var(--text-inverse);
-}
-
-.last-update {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.update-avatar {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-full);
-  object-fit: cover;
 }
 
 .stats-overview {
@@ -655,7 +392,7 @@ const showIndicator = (view: ViewMode) => {
   margin-left: var(--space-1);
 }
 
-.bottom-toolbar {
+.tasks-bottom-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -664,17 +401,17 @@ const showIndicator = (view: ViewMode) => {
   border-top: 1px solid var(--workspace-border);
 }
 
-.toolbar-left {
+.bottom-bar-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-3);
 }
 
 .filter-btn {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 7px var(--space-3);
+  padding: 6px var(--space-3);
   border-radius: var(--radius-md);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
@@ -691,17 +428,12 @@ const showIndicator = (view: ViewMode) => {
 .color-filters {
   display: flex;
   align-items: center;
-  gap: 7px;
-}
-
-.filter-label {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
+  gap: 6px;
 }
 
 .color-dot {
-  width: var(--space-5);
-  height: var(--space-5);
+  width: var(--space-4);
+  height: var(--space-4);
   border-radius: var(--radius-full);
   border: 2px solid transparent;
   cursor: pointer;
@@ -709,12 +441,12 @@ const showIndicator = (view: ViewMode) => {
 }
 
 .color-dot.active {
-  border-color: var(--text-inverse);
+  border-color: var(--text-primary);
   box-shadow: 0 0 0 2px var(--workspace-bg);
 }
 
 .color-dot:hover {
-  transform: scale(1.12);
+  transform: scale(1.15);
 }
 
 .add-color {
@@ -726,45 +458,36 @@ const showIndicator = (view: ViewMode) => {
   justify-content: center;
 }
 
-.toolbar-right {
+.bottom-bar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.trash-btn {
   display: flex;
   align-items: center;
   gap: 5px;
-}
-
-.tool-btn {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-md);
   background: var(--workspace-card);
   border: 1px solid var(--workspace-border);
   color: var(--text-muted);
+  font-size: var(--text-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.tool-btn:hover {
+.trash-btn:hover {
   background: var(--workspace-hover);
   color: var(--text-primary);
 }
 
-.text-tool-btn,
-.delete-tool-btn {
-  width: auto;
-  padding: 0 10px;
-  gap: 5px;
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-
-.delete-count {
+.trash-count {
   background: var(--task-red-soft);
   color: var(--task-red);
-  padding: 1px 5px;
-  border-radius: 4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
   font-size: var(--text-2xs);
   font-weight: 600;
 }

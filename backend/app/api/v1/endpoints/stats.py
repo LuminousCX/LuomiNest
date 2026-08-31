@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from loguru import logger
 
+from app.api.v1.deps import get_usage_store
 from app.services.usage_tracker import usage_tracker
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -14,25 +15,30 @@ async def get_stats_overview(days: int | None = Query(None, ge=1, le=365)):
 
 
 @router.get("/usage")
-async def get_usage_stats(days: int | None = Query(None, ge=1, le=365)):
+async def get_usage_stats(
+    days: int | None = Query(None, ge=1, le=365),
+    usage_store=Depends(get_usage_store),
+):
     logger.info(f"[API] GET /stats/usage - days={days}")
-    from app.infrastructure.database.usage_store import usage_store
     return usage_store.get_summary(days)
 
 
 @router.get("/usage/daily")
-async def get_daily_usage(days: int = Query(7, ge=1, le=90)):
+async def get_daily_usage(
+    days: int = Query(7, ge=1, le=90),
+    usage_store=Depends(get_usage_store),
+):
     logger.info(f"[API] GET /stats/usage/daily - days={days}")
-    from app.infrastructure.database.usage_store import usage_store
     summary = usage_store.get_summary(days)
     return {"by_day": summary.get("by_day", {})}
 
 
 @router.get("/usage/compare")
-async def get_usage_compare(days: int = Query(7, ge=1, le=90)):
+async def get_usage_compare(
+    days: int = Query(7, ge=1, le=90),
+    usage_store=Depends(get_usage_store),
+):
     logger.info(f"[API] GET /stats/usage/compare - days={days}")
-    from app.infrastructure.database.usage_store import usage_store
-
     current_summary = usage_store.get_summary(days)
     previous_summary = usage_store.get_summary(days * 2)
 

@@ -5,11 +5,13 @@
 - POST   /scheduled-tasks           创建定时任务
 - DELETE /scheduled-tasks/{task_id} 删除定时任务
 
-数据源为数据库（ScheduledTaskORM），与 luomi_scheduler 双写。
+数据源为数据库（ScheduledTaskORM），与 luominest_scheduler 双写。
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from loguru import logger
 from pydantic import BaseModel, Field
+
+from app.core.exceptions import NotFoundError
 
 from app.services.scheduled_task_persistence import (
     delete_scheduled_task,
@@ -60,9 +62,9 @@ async def create_scheduled_task(req: CreateScheduledTaskRequest):
     # 同步注册到调度器（可选，调度器未启动时跳过）
     try:
         from app.core.scheduler.models import LuomiTaskType, ScheduledTaskConfig
-        from app.core.scheduler.manager import luomi_scheduler
+        from app.core.scheduler.manager import luominest_scheduler
 
-        if luomi_scheduler.is_running and req.schedule_cron:
+        if luominest_scheduler.is_running and req.schedule_cron:
             config = ScheduledTaskConfig(
                 name=req.name,
                 description=req.description or "",
@@ -76,7 +78,7 @@ async def create_scheduled_task(req: CreateScheduledTaskRequest):
                 },
                 source=req.created_from,
             )
-            scheduler_task_id = await luomi_scheduler.add_task(config)
+            scheduler_task_id = await luominest_scheduler.add_task(config)
             logger.info(
                 f"[ScheduledTaskAPI] Task registered to scheduler: "
                 f"db_id={task_id}, scheduler_id={scheduler_task_id}"
@@ -95,14 +97,14 @@ async def remove_scheduled_task(task_id: str):
 
     # 从调度器删除（可选）
     try:
-        from app.core.scheduler.manager import luomi_scheduler
-        if luomi_scheduler.is_running:
-            await luomi_scheduler.remove_task(task_id)
+        from app.core.scheduler.manager import luominest_scheduler
+        if luominest_scheduler.is_running:
+            await luominest_scheduler.remove_task(task_id)
     except Exception as e:
         logger.warning(f"[ScheduledTaskAPI] Scheduler removal skipped: {e}")
 
     if not db_deleted:
-        raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+        raise NotFoundError(f"任务 {task_id} 不存在", code="SCHEDULER_TASK_NOT_FOUND")
 
     return {"success": True, "task_id": task_id}
 

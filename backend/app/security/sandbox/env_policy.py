@@ -81,8 +81,8 @@ def load_env_whitelist() -> set[str]:
     default = _get_default_whitelist()
 
     try:
-        from app.infrastructure.database.config_store import lumi_config_store
-        extra = lumi_config_store.get(KEY_ENV_EXTRA_WHITELIST, []) or []
+        from app.infrastructure.database.config_store import luominest_config_store
+        extra = luominest_config_store.get(KEY_ENV_EXTRA_WHITELIST, []) or []
     except Exception as e:
         logger.warning(f"[EnvPolicy] 加载额外白名单失败，使用默认白名单: {e}")
         extra = []
@@ -103,8 +103,8 @@ def save_env_extra_whitelist(extra_whitelist: list | None) -> list[str]:
     cleaned = _normalize_var_names(extra_whitelist)
 
     try:
-        from app.infrastructure.database.config_store import lumi_config_store
-        lumi_config_store.set(KEY_ENV_EXTRA_WHITELIST, cleaned)
+        from app.infrastructure.database.config_store import luominest_config_store
+        luominest_config_store.set(KEY_ENV_EXTRA_WHITELIST, cleaned)
         logger.info(f"[EnvPolicy] 额外环境变量白名单已保存: {cleaned}")
     except Exception as e:
         logger.warning(f"[EnvPolicy] 保存额外白名单失败: {e}")

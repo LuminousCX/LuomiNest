@@ -8,7 +8,7 @@ import { Upload, CircleDot } from 'lucide-vue-next'
 import LumiInput from '../common/LumiInput.vue'
 import LumiCard from '../common/LumiCard.vue'
 import {
-  AVATAR_CATEGORIES, STYLE_TAGS, MODEL_OPTIONS, TOTAL_STEPS,
+  AVATAR_CATEGORIES, STYLE_TAGS, TOTAL_STEPS,
   type AvatarOption, type AgentFormData
 } from '../../composables/useAgentCreateForm'
 
@@ -24,7 +24,6 @@ const emit = defineEmits<{
   'select-avatar': [avatarId: string]
   'select-style': [styleId: string]
   'select-category': [categoryId: string]
-  'select-model': [modelId: string]
 }>()
 </script>
 
@@ -95,20 +94,6 @@ const emit = defineEmits<{
           </button>
         </div>
       </div>
-
-      <div class="form-group">
-        <label class="form-label">模型偏好</label>
-        <div class="model-list">
-          <button
-            v-for="model in MODEL_OPTIONS"
-            :key="model.id"
-            :class="['model-chip', { active: formData.selectedModel === model.id }]"
-            @click="emit('select-model', model.id)"
-          >
-            {{ model.label }}
-          </button>
-        </div>
-      </div>
     </div>
 
     <div class="preview-area">
@@ -129,9 +114,6 @@ const emit = defineEmits<{
         <h3 class="preview-name">{{ formData.name || '未命名智能体' }}</h3>
         <p class="preview-badge">{{ STYLE_TAGS.find(t => t.id === formData.selectedStyle)?.label || '风格' }} · 已验证</p>
         <p class="preview-desc">{{ formData.description || '暂无描述信息。添加描述可帮助理解智能体的定位与用途。' }}</p>
-        <div class="preview-meta">
-          <span>模型：{{ MODEL_OPTIONS.find(m => m.id === formData.selectedModel)?.label }}</span>
-        </div>
       </LumiCard>
 
       <div class="step-indicator">
@@ -280,33 +262,6 @@ const emit = defineEmits<{
   border-color: transparent;
 }
 
-.model-list {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.model-chip {
-  padding: 7px var(--space-4);
-  border-radius: var(--radius-full);
-  font-size: var(--text-base);
-  font-weight: var(--font-medium);
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  transition: all var(--transition-fast);
-}
-
-.model-chip:hover:not(.active) {
-  border-color: var(--text-muted);
-}
-
-.model-chip.active {
-  background: var(--text-primary);
-  color: var(--text-inverse);
-  border-color: transparent;
-}
-
 .preview-area {
   display: flex;
   flex-direction: column;
@@ -395,15 +350,6 @@ const emit = defineEmits<{
   line-height: var(--leading-relaxed);
   text-align: left;
   width: 100%;
-}
-
-.preview-meta {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  width: 100%;
-  text-align: left;
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--border-light);
 }
 
 .step-indicator {

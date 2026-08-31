@@ -16,7 +16,7 @@ from app.core.tools.builtin.browser_automation import BROWSER_ACTION_SPECS, _for
 from app.core.workflow.event_emitter import WorkflowEventEmitter
 from app.core.workflow.internal_registry import internal_tool_registry
 from app.core.workflow.models import WorkflowTaskResult
-from app.services.browser_automation_client import execute_browser_action
+from app.core.ports.browser_automation import execute_browser_action
 
 # 当前活跃的事件推送器（由 WorkflowEngine 在执行前设置）
 # key: session_id, value: WorkflowEventEmitter
@@ -67,6 +67,137 @@ def _wf_catch(tool_name: str):
                 return WorkflowTaskResult(success=False, error=str(e))
         return wrapper
     return decorator
+
+
+def _make_skill_tool_handler(tool_name: str):
+    """构造技能工具的 internal handler（桥接 tool_registry 中的 ToolBase 工具）。
+
+    洋葱架构 §11.3：皮套工坊/桌宠为 standard 模式，工具来自 internal_tool_registry，
+    在此桥接 skills 工具使 standard/ultra 模式自动获得技能能力。
+    """
+
+    @_wf_catch(tool_name)
+    async def handler(args: dict[str, Any]) -> WorkflowTaskResult:
+        from app.core.tools.registry import tool_registry
+        tool = tool_registry.get(tool_name)
+        if tool is None:
+            return WorkflowTaskResult(success=False, error=f"技能工具未注册: {tool_name}")
+        result = await tool.execute(args or {})
+        return WorkflowTaskResult(
+            success=result.success,
+            output=result.output,
+            error=result.error,
+            metadata=result.metadata,
+        )
+
+    return handler
+
+
+def _make_workflow_template_handler(action: str):
+    """构造工作流模板工具的 internal handler（桥接 WorkflowTemplateService）。
+
+    tool-opt §4.8.6：模板管理工具，tier=domain。
+    action 取值: list / save / run，对应 template_service 的三个核心操作。
+    """
+
+    @_wf_catch(f"workflow.{action}_template" if action != "list" else "workflow.list_templates")
+    async def handler(args: dict[str, Any]) -> WorkflowTaskResult:
+        from app.core.workflow.template_service import WorkflowTemplateService
+
+        service = WorkflowTemplateService()
+
+        if action == "list":
+            templates = await service.list_templates()
+            return WorkflowTaskResult(
+                success=True,
+                output=json.dumps(templates, ensure_ascii=False),
+                metadata={"count": len(templates) if isinstance(templates, list) else 0},
+            )
+
+        elif action == "save":
+            name = args.get("name", "")
+            plan_json = args.get("plan_json", "")
+            if not name or not plan_json:
+                return WorkflowTaskResult(
+                    success=False,
+                    error="Missing required parameters: name, plan_json",
+                )
+            template = await service.save_template(
+                name=name,
+                description=args.get("description", ""),
+                plan_json=plan_json,
+                parameters_schema=args.get("parameters_schema", "{}"),
+                auto_approve=args.get("auto_approve", False),
+                created_from=args.get("created_from", "ai"),
+                source_session_id=args.get("source_session_id", ""),
+            )
+            emitter = _get_emitter()
+            if emitter:
+                await emitter.emit_module_action(
+                    module="workflow",
+                    action="template_saved",
+                    success=True,
+                    output=f"已保存模板: {name}",
+                    metadata={"template": template},
+                )
+            return WorkflowTaskResult(
+                success=True,
+                output=f"已保存工作流模板: {name}",
+                metadata=template if isinstance(template, dict) else {},
+            )
+
+        elif action == "run":
+            template_id = args.get("template_id", "")
+            if not template_id:
+                return WorkflowTaskResult(
+                    success=False,
+                    error="Missing required parameter: template_id",
+                )
+            result = await service.run_template(
+                template_id=template_id,
+                params=args.get("params", {}),
+                auto_approve=args.get("auto_approve"),
+            )
+            emitter = _get_emitter()
+            if emitter:
+                await emitter.emit_module_action(
+                    module="workflow",
+                    action="template_run",
+                    success=True,
+                    output=f"已执行模板: {template_id}",
+                    metadata={"template_id": template_id, "result": result},
+                )
+            return WorkflowTaskResult(
+                success=True,
+                output=f"已实例化执行工作流模板: {template_id}",
+                metadata=result if isinstance(result, dict) else {},
+            )
+
+        else:
+            return WorkflowTaskResult(success=False, error=f"Unknown action: {action}")
+
+    return handler
+
+
+@_wf_catch("context.compress")
+async def _context_compress(args: dict[str, Any]) -> WorkflowTaskResult:
+    """上下文压缩 handler（桥接 CompressContextTool）。
+
+    对齐 tool-opt §4.3 T4：复用 ChatService.compress_conversation()，
+    让工作流引擎也能触发上下文压缩。
+    """
+    from app.core.tools.registry import tool_registry
+
+    tool = tool_registry.get("compress_context")
+    if tool is None:
+        return WorkflowTaskResult(success=False, error="compress_context 工具未注册")
+    result = await tool.execute(args or {})
+    return WorkflowTaskResult(
+        success=result.success,
+        output=result.output,
+        error=result.error,
+        metadata=result.metadata,
+    )
 
 
 def _make_browser_bridge_handler(tool_name: str, action: str, timeout: float):
@@ -430,9 +561,9 @@ async def _console_execute(args: dict[str, Any]) -> WorkflowTaskResult:
 async def _schedule_list(args: dict[str, Any]) -> WorkflowTaskResult:
     """列出所有定时任务"""
     try:
-        from app.core.scheduler import luomi_scheduler
+        from app.core.scheduler import luominest_scheduler
 
-        tasks = luomi_scheduler.list_tasks()
+        tasks = luominest_scheduler.list_tasks()
         task_list = [t.model_dump() for t in tasks]
 
         emitter = _get_emitter()
@@ -462,9 +593,9 @@ async def _schedule_get(args: dict[str, Any]) -> WorkflowTaskResult:
         return WorkflowTaskResult(success=False, error="Missing required parameter: task_id")
 
     try:
-        from app.core.scheduler import luomi_scheduler
+        from app.core.scheduler import luominest_scheduler
 
-        task = luomi_scheduler.get_task(task_id)
+        task = luominest_scheduler.get_task(task_id)
         if not task:
             return WorkflowTaskResult(success=False, error=f"任务 {task_id} 不存在")
 
@@ -485,9 +616,9 @@ async def _schedule_delete(args: dict[str, Any]) -> WorkflowTaskResult:
         return WorkflowTaskResult(success=False, error="Missing required parameter: task_id")
 
     try:
-        from app.core.scheduler import luomi_scheduler
+        from app.core.scheduler import luominest_scheduler
 
-        success = await luomi_scheduler.remove_task(task_id)
+        success = await luominest_scheduler.remove_task(task_id)
         if not success:
             return WorkflowTaskResult(success=False, error=f"任务 {task_id} 不存在")
 
@@ -1786,6 +1917,124 @@ async def register_internal_tools() -> None:
         handler=_smart_home_list_scenes,
         parameters_schema={"type": "object", "properties": {}},
         is_concurrent_safe=True,
+    )
+
+    # ─── 技能模块（洋葱架构 §11.2/§11.3：各场景通用，standard/ultra 工具集自动包含）───
+    from app.core.tools.builtin.skills_tools import get_luominest_skills_tools
+    for _skill_tool in get_luominest_skills_tools():
+        await internal_tool_registry.register(
+            name=_skill_tool.name,
+            module="skills",
+            description=_skill_tool.description,
+            handler=_make_skill_tool_handler(_skill_tool.name),
+            parameters_schema=_skill_tool.parameters,
+            is_concurrent_safe=True,
+        )
+
+    # ─── 文件搜索模块（search.everything，桥接 SearchEverythingTool 适配器）───
+    await internal_tool_registry.register(
+        name="search.everything",
+        module="search",
+        description="秒级搜索本地文件（按文件名，支持子串和 glob 模式）",
+        handler=_make_skill_tool_handler("search_everything"),
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "文件名搜索关键词或 glob 模式"},
+                "path": {"type": "string", "description": "搜索根路径（可选，默认全盘）"},
+                "max_results": {"type": "integer", "description": "最大返回条数（默认 50）"},
+            },
+            "required": ["query"],
+        },
+        is_concurrent_safe=True,
+    )
+
+    # ─── 上下文压缩模块（tool-opt §4.3 T4：复用 CompressContextTool）───
+    await internal_tool_registry.register(
+        name="context.compress",
+        module="context",
+        description="压缩对话上下文（释放 token 空间，保留关键摘要）",
+        handler=_context_compress,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "conversation_id": {"type": "string", "description": "要压缩的对话 ID"},
+                "max_tokens": {"type": "integer", "description": "压缩后目标 token 上限（可选）"},
+            },
+            "required": ["conversation_id"],
+        },
+        is_concurrent_safe=False,
+        timeout_seconds=120,
+    )
+
+    # ─── 应用启动模块（app.launch，桥接 LaunchApplicationTool）───
+    await internal_tool_registry.register(
+        name="app.launch",
+        module="app",
+        description="按名称搜索并启动已安装的应用程序",
+        handler=_make_skill_tool_handler("launch_application"),
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "应用名称或关键词"},
+                "action": {"type": "string", "enum": ["search", "launch"], "description": "search=仅搜索，launch=搜索并启动"},
+                "app_id": {"type": "string", "description": "直接启动指定 app_id"},
+            },
+            "required": ["name"],
+        },
+        is_concurrent_safe=False,
+    )
+
+    # ─── 工作流模板模块（tool-opt §4.8.6：模板管理工具，tier=domain）───
+    await internal_tool_registry.register(
+        name="workflow.list_templates",
+        module="workflow",
+        description="列出所有已保存的工作流模板",
+        handler=_make_workflow_template_handler("list"),
+        parameters_schema={
+            "type": "object",
+            "properties": {},
+        },
+        is_concurrent_safe=True,
+    )
+
+    await internal_tool_registry.register(
+        name="workflow.save_template",
+        module="workflow",
+        description="将工作流计划保存为可复用模板",
+        handler=_make_workflow_template_handler("save"),
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "模板名称"},
+                "description": {"type": "string", "description": "模板描述（可选）"},
+                "plan_json": {"type": "string", "description": "工作流计划 JSON 字符串"},
+                "parameters_schema": {"type": "string", "description": "参数 JSON Schema 字符串（默认 {}）"},
+                "auto_approve": {"type": "boolean", "description": "是否自动审批（默认 false）"},
+                "created_from": {"type": "string", "enum": ["user", "ai"], "description": "创建来源（默认 ai）"},
+                "source_session_id": {"type": "string", "description": "来源会话 ID（可选）"},
+            },
+            "required": ["name", "plan_json"],
+        },
+        is_concurrent_safe=False,
+    )
+
+    await internal_tool_registry.register(
+        name="workflow.run_template",
+        module="workflow",
+        description="实例化执行指定的工作流模板",
+        handler=_make_workflow_template_handler("run"),
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "template_id": {"type": "string", "description": "模板 ID"},
+                "params": {"type": "object", "description": "模板参数（可选）"},
+                "auto_approve": {"type": "boolean", "description": "是否自动审批（可选，默认使用模板设置）"},
+            },
+            "required": ["template_id"],
+        },
+        is_concurrent_safe=False,
+        timeout_seconds=300,
     )
 
     logger.info(

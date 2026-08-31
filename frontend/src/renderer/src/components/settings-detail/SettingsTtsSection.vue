@@ -11,9 +11,11 @@ import {
   Wifi,
   WifiOff,
   Save,
-  Play
+  Play,
+  Languages
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
+import { useToast } from '../../composables/useToast'
 import { API_ENDPOINTS } from '../../config/api'
 import LumiButton from '../common/LumiButton.vue'
 import type { TtsEngineInfo, TtsDeviceInfo, TtsBindingInfo } from './types'
@@ -23,12 +25,29 @@ const props = defineProps<{
 }>()
 
 const modelStore = useModelStore()
+const toast = useToast()
+
+/** TTS 语言选项（v0.5 决策：auto/zh/en/ja/ko/yue 全量） */
+const TTS_LANGUAGE_OPTIONS = [
+  { value: 'auto', label: '自动检测' },
+  { value: 'zh', label: '中文' },
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+  { value: 'yue', label: '粵語' },
+] as const
+
+const LANG_LABELS: Record<string, string> = Object.fromEntries(
+  TTS_LANGUAGE_OPTIONS.map(o => [o.value, o.label]),
+)
 
 const ttsLoading = ref(false)
 const ttsError = ref<string | null>(null)
 const ttsEngines = ref<TtsEngineInfo[]>([])
 const ttsDevice = ref<TtsDeviceInfo | null>(null)
 const ttsBindings = ref<Record<string, TtsBindingInfo>>({})
+/** 翻译管线开关（voice_config.translation.enabled，默认关闭） */
+const translationEnabled = ref(false)
 
 const fetchTtsInfo = async () => {
   ttsLoading.value = true
@@ -49,6 +68,16 @@ const fetchTtsInfo = async () => {
     ttsEngines.value = data.engines || []
     ttsDevice.value = data.device || null
     ttsBindings.value = data.avatar_bindings || {}
+    // 同步读取全局语音配置（lang / translation，config_items 权威源）
+    const cfgResp = await fetch(`${API_ENDPOINTS.V1}/voice/config`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (cfgResp.ok) {
+      const cfgJson = await cfgResp.json()
+      const cfg = cfgJson?.data || {}
+      if (cfg.tts?.lang) ttsConfigForm.value.lang = cfg.tts.lang
+      translationEnabled.value = !!cfg.translation?.enabled
+    }
   } catch (e) {
     ttsError.value = e instanceof Error ? e.message : '获取 TTS 信息失败'
   } finally {
@@ -63,44 +92,51 @@ const ttsConfigForm = ref({
   apiKey: '',
   baseUrl: '',
   speed: 1.0,
+  lang: 'auto' as string,
 })
 const ttsConfigSaving = ref(false)
 const ttsConfigTesting = ref(false)
 const ttsTestText = '你好，这是语音合成测试。'
 const ttsTestResult = ref<{ ok: boolean; msg: string } | null>(null)
 
-/** 计算设备徽标文案：GPU 时展示厂商，不再硬编码 CUDA */
-const ttsDeviceLabel = computed(() => {
-  const dev = ttsDevice.value
-  if (!dev || dev.type !== 'gpu') return 'CPU'
-  const vendor = dev.vendor || ''
-  if (vendor === 'nvidia') return 'GPU (NVIDIA)'
-  if (vendor === 'amd') return 'GPU (AMD)'
-  if (vendor === 'intel') return 'GPU (Intel)'
-  if (vendor === 'apple') return 'GPU (Apple MPS)'
-  return 'GPU'
+/** 当前引擎的能力声明（后端 CAPABILITIES，G1：替代前端硬编码） */
+const ttsEngineCaps = computed<TtsEngineInfo | null>(() => {
+  return ttsEngines.value.find(e => e.id === ttsConfigForm.value.engine) || null
 })
 
-/** 设备检测提示语：区分「检测到 GPU」与「TTS 实际是否使用 GPU」两个事实 */
-const ttsDeviceHint = computed(() => {
-  const dev = ttsDevice.value
-  if (!dev || dev.type !== 'gpu') {
-    return '未检测到 GPU，本地 TTS 使用 CPU 推理 (pyttsx3 / sherpa-onnx)。在线 TTS (Edge TTS 等) 在云端合成，不受本地设备限制。'
+/** 引擎选项：优先后端 capabilities 动态生成，未加载时回退 store 硬编码 */
+const ttsEngineOptions = computed(() => {
+  if (ttsEngines.value.length > 0) {
+    return [
+      { value: 'auto', label: '自动（按降级链选择）', needsApiKey: false },
+      ...ttsEngines.value.map(e => ({
+        value: e.id,
+        label: e.name || e.id,
+        needsApiKey: e.needs_api_key ?? false,
+      })),
+    ]
   }
-  const gpuCount = dev.gpu_count && dev.gpu_count > 1 ? `（${dev.gpu_count} 块 GPU）` : ''
-  if (dev.cuda_available) {
-    return `检测到 GPU${gpuCount}，硬件支持 CUDA 加速。当前本地 TTS 引擎 (pyttsx3 / sherpa-onnx CPU 版) 仍以 CPU 推理，GPU 加速引擎可在未来版本接入。`
-  }
-  return `检测到 GPU${gpuCount}，硬件支持图形/通用计算。未安装 CUDA 版 PyTorch，本地 TTS 当前仍以 CPU 推理；在线 TTS 在云端合成，不受本地设备限制。`
+  return modelStore.TTS_ENGINE_OPTIONS
 })
 
 const ttsNeedsApiKey = computed(() => {
-  const opt = modelStore.TTS_ENGINE_OPTIONS.find(o => o.value === ttsConfigForm.value.engine)
+  const opt = ttsEngineOptions.value.find(o => o.value === ttsConfigForm.value.engine)
   return opt?.needsApiKey ?? false
 })
 
+/** 音色下拉（级联刷新核心）：capabilities.voices 按当前语言过滤 */
 const ttsVoiceOptions = computed(() => {
-  return modelStore.TTS_ENGINE_VOICES[ttsConfigForm.value.engine] || []
+  const caps = ttsEngineCaps.value
+  if (!caps) return []
+  const voices = (caps as { voices?: Array<{ value: string; label: string; langs?: string[] }> }).voices || []
+  const lang = ttsConfigForm.value.lang
+  if (lang === 'auto') return voices
+  return voices.filter(v => !v.langs || v.langs.includes(lang))
+})
+
+/** 音色交互模式：list（下拉）/ dynamic（系统枚举）/ input（自由输入） */
+const ttsVoiceMode = computed(() => {
+  return ttsEngineCaps.value?.voice_mode || 'list'
 })
 
 const ttsShowModel = computed(() => {
@@ -115,17 +151,72 @@ const ttsShowBaseUrl = computed(() => {
   return ['gemini', 'minimax', 'siliconflow', 'fish-audio'].includes(ttsConfigForm.value.engine)
 })
 
+/** 语言能力校验：显式引擎不支持目标语言 → 消息通知（§11.3） */
+const checkLangSupport = (): boolean => {
+  const lang = ttsConfigForm.value.lang
+  const engine = ttsConfigForm.value.engine
+  if (lang === 'auto' || engine === 'auto') return true
+  const caps = ttsEngineCaps.value as { languages?: string[] } | null
+  if (!caps?.languages?.length) return true
+  if (!caps.languages.includes(lang)) {
+    const engineName = ttsEngineCaps.value?.name || engine
+    toast.warning(
+      `当前语音引擎 ${engineName} 不支持${LANG_LABELS[lang] || lang}。可更换支持该语言的引擎，或开启翻译管线（翻译后合成）`,
+    )
+    return false
+  }
+  return true
+}
+
+/** 引擎切换 → 级联刷新（模型/音色/语言校验，§11.2） */
 const onTtsEngineChange = () => {
   const engine = ttsConfigForm.value.engine
-  const voices = modelStore.TTS_ENGINE_VOICES[engine] || []
-  if (voices.length > 0 && voices[0].value) {
-    ttsConfigForm.value.voice = voices[0].value
-  } else {
+  const caps = ttsEngines.value.find(e => e.id === engine) as
+    | { voices?: Array<{ value: string }>; default_voice?: string; default_model?: string }
+    | undefined
+  // 音色重置：该引擎默认音色或第一个音色
+  const voices = caps?.voices || []
+  ttsConfigForm.value.voice = caps?.default_voice || (voices[0]?.value ?? '')
+  // 模型重置：引擎默认模型
+  ttsConfigForm.value.model = caps?.default_model || modelStore.TTS_ENGINE_DEFAULT_MODEL[engine] || ''
+  // 语言能力校验（不支持时通知，保留用户选择）
+  checkLangSupport()
+  ttsTestResult.value = null
+}
+
+/** 语言切换 → 音色联动过滤 + 能力校验 */
+const onTtsLangChange = () => {
+  const supported = checkLangSupport()
+  // 音色重置为该语言下第一个可用音色（保持联动）
+  const voices = ttsVoiceOptions.value
+  if (voices.length > 0) {
+    if (!voices.some(v => v.value === ttsConfigForm.value.voice)) {
+      ttsConfigForm.value.voice = voices[0].value
+    }
+  } else if (supported && ttsVoiceMode.value === 'list') {
     ttsConfigForm.value.voice = ''
   }
-  const defaultModel = modelStore.TTS_ENGINE_DEFAULT_MODEL[engine]
-  ttsConfigForm.value.model = defaultModel || ''
-  ttsTestResult.value = null
+}
+
+/** 翻译管线开关切换（默认关，写 voice_config.translation） */
+const onTranslationToggle = async () => {
+  const next = !translationEnabled.value
+  try {
+    const token = await window.api.auth.getToken()
+    const resp = await fetch(`${API_ENDPOINTS.V1}/voice/config`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ translation: { enabled: next } }),
+    })
+    if (!resp.ok) throw new Error(`请求失败 (${resp.status})`)
+    translationEnabled.value = next
+    toast.success(next ? '翻译管线已开启：语言不匹配时自动翻译后合成' : '翻译管线已关闭')
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : '翻译管线设置失败')
+  }
 }
 
 const syncTtsConfigForm = () => {
@@ -151,12 +242,40 @@ const saveTtsConfig = async () => {
       speed: ttsConfigForm.value.speed,
       apiKeySet: !!ttsConfigForm.value.apiKey,
     })
+    // 同步写后端语音画像权威源（voice_config.tts.lang）
+    const token = await window.api.auth.getToken()
+    await fetch(`${API_ENDPOINTS.V1}/voice/config`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        tts: {
+          engine: ttsConfigForm.value.engine,
+          voice: ttsConfigForm.value.voice,
+          model: ttsConfigForm.value.model,
+          lang: ttsConfigForm.value.lang,
+          speed: ttsConfigForm.value.speed,
+        },
+      }),
+    })
     ttsTestResult.value = { ok: true, msg: '配置已保存' }
+    toast.success('TTS 配置已保存')
   } catch (e) {
     ttsTestResult.value = { ok: false, msg: e instanceof Error ? e.message : '保存失败' }
+    toast.error(e instanceof Error ? e.message : '保存失败')
   } finally {
     ttsConfigSaving.value = false
   }
+}
+
+/** 信封错误解析（统一 error 对象/旧字符串兼容） */
+const parseEnvelopeError = (errJson: unknown, status: number): string => {
+  const ej = errJson as { error?: string | { code?: string; message?: string }; message?: string } | null
+  if (!ej) return `请求失败 (${status})`
+  if (typeof ej.error === 'string') return ej.error
+  return ej.error?.message || ej.message || `请求失败 (${status})`
 }
 
 const testTtsSynthesize = async () => {
@@ -178,11 +297,20 @@ const testTtsSynthesize = async () => {
         speed: ttsConfigForm.value.speed,
         apiKey: ttsConfigForm.value.apiKey,
         baseUrl: ttsConfigForm.value.baseUrl,
+        lang: ttsConfigForm.value.lang,
       }),
     })
     if (!resp.ok) {
       const errJson = await resp.json().catch(() => null)
-      throw new Error(errJson?.error || `请求失败 (${resp.status})`)
+      const errMsg = parseEnvelopeError(errJson, resp.status)
+      // LANG_NOT_SUPPORTED → 行动建议通知（§11.3）
+      const errCode = (errJson as { error?: { code?: string } } | null)?.error?.code
+      if (errCode === 'LANG_NOT_SUPPORTED') {
+        toast.warning(`${errMsg}。可更换引擎/音色，或开启翻译管线（翻译后合成）`)
+      } else {
+        toast.error(errMsg)
+      }
+      throw new Error(errMsg)
     }
     const blob = await resp.blob()
     if (blob.size === 0) {
@@ -240,7 +368,24 @@ onMounted(() => {
               @change="onTtsEngineChange"
             >
               <option
-                v-for="opt in modelStore.TTS_ENGINE_OPTIONS"
+                v-for="opt in ttsEngineOptions"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+
+          <div class="settings-form-row">
+            <label class="settings-form-label">语言</label>
+            <select
+              v-model="ttsConfigForm.lang"
+              class="settings-form-select"
+              @change="onTtsLangChange"
+            >
+              <option
+                v-for="opt in TTS_LANGUAGE_OPTIONS"
                 :key="opt.value"
                 :value="opt.value"
               >
@@ -273,7 +418,7 @@ onMounted(() => {
           </div>
 
           <div
-            v-else-if="ttsConfigForm.engine === 'fish-audio' || ttsConfigForm.engine === 'local'"
+            v-else-if="ttsVoiceMode === 'input' || ttsVoiceMode === 'dynamic'"
             class="settings-form-row"
           >
             <label class="settings-form-label">
@@ -317,6 +462,28 @@ onMounted(() => {
               class="settings-form-input"
               placeholder="留空使用默认地址"
             />
+          </div>
+
+          <!-- 翻译管线开关（v0.5：默认关闭，语言不匹配时通知引导开启） -->
+          <div class="settings-form-row tts-translation-row">
+            <div class="tts-translation-row__info">
+              <label class="settings-form-label">
+                <Languages :size="14" />
+                <span>翻译管线</span>
+              </label>
+              <span class="tts-translation-row__hint">
+                开启后，目标语言与引擎/音色语言不匹配时自动翻译再合成（LLM 翻译，消耗 token）
+              </span>
+            </div>
+            <button
+              type="button"
+              class="tts-toggle"
+              role="switch"
+              :aria-checked="translationEnabled"
+              @click="onTranslationToggle"
+            >
+              <span class="tts-toggle__thumb" />
+            </button>
           </div>
 
           <div class="settings-btn-row">
@@ -568,5 +735,73 @@ onMounted(() => {
 .is-embedded .settings-card__body {
   padding-left: 0;
   padding-right: 0;
+}
+
+/* ── 翻译管线开关（minimalist，颜色全走 CSS 变量） ── */
+
+.tts-translation-row {
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.tts-translation-row__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.tts-translation-row__info .settings-form-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: 0;
+}
+
+.tts-translation-row__hint {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+.tts-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  transition: background var(--duration-fast, 0.15s) ease-in-out,
+    border-color var(--duration-fast, 0.15s) ease-in-out;
+  padding: 0;
+}
+
+.tts-toggle__thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  transition: transform var(--duration-fast, 0.15s) ease-in-out,
+    background var(--duration-fast, 0.15s) ease-in-out;
+}
+
+.tts-toggle[aria-checked='true'] {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.tts-toggle[aria-checked='true'] .tts-toggle__thumb {
+  transform: translateX(16px);
+  background: var(--bg-primary);
+}
+
+.tts-toggle:hover {
+  border-color: var(--accent-color);
 }
 </style>

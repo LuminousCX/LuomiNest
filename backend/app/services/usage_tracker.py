@@ -12,13 +12,13 @@ class UsageTracker:
         model: str,
         usage: dict | None = None,
         agent_id: str | None = None,
-        conv_id: str | None = None,
+        conversation_id: str | None = None,
         is_stream: bool = False,
     ):
         if not usage:
             usage_store.record(
                 provider=provider, model=model,
-                agent_id=agent_id, conv_id=conv_id, is_stream=is_stream,
+                agent_id=agent_id, conversation_id=conversation_id, is_stream=is_stream,
             )
             return
         prompt_tokens = usage.get("prompt_tokens") or usage.get("promptTokens") or 0
@@ -31,7 +31,7 @@ class UsageTracker:
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
-            agent_id=agent_id, conv_id=conv_id, is_stream=is_stream,
+            agent_id=agent_id, conversation_id=conversation_id, is_stream=is_stream,
         )
 
     @staticmethod

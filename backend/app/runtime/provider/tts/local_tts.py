@@ -11,7 +11,8 @@ import tempfile
 
 from loguru import logger
 
-from app.runtime.provider.base import TTSProvider
+from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.tts.ports import TTSProvider
 
 
 # Voice selection keywords grouped by language.
@@ -69,6 +70,21 @@ class LocalTTSProvider(TTSProvider):
     """本地 pyttsx3 TTS Provider（通过 subprocess 隔离运行）."""
 
     provider_name = "local"
+
+    # 引擎能力声明（G1/G2 治理）：系统语音动态枚举（voice_mode=dynamic）
+    CAPABILITIES = EngineCapabilities(
+        engine_id="local",
+        name="本地 TTS（pyttsx3·CPU）",
+        kind="local",
+        category="local",
+        needs_api_key=False,
+        online=False,
+        languages=("zh", "en"),
+        voices=[],
+        voice_mode="dynamic",
+        default_voice="",
+        description="系统 SAPI5 语音（Windows 自带），离线兜底，音质一般；音色随系统语音包动态枚举",
+    )
 
     @classmethod
     def is_available(cls) -> bool:
@@ -128,11 +144,18 @@ class LocalTTSProvider(TTSProvider):
                 stderr=asyncio.subprocess.PIPE,
             )
             try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15.0)
+                # 统一超时治理（应急修复 B3）：15s 硬编码 → Settings.TTS_LOCAL_PROC_TIMEOUT
+                from app.core.config import settings as _settings
+
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=_settings.TTS_LOCAL_PROC_TIMEOUT
+                )
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.wait()
-                raise RuntimeError("Local TTS subprocess timed out (15s)")
+                raise RuntimeError(
+                    f"Local TTS subprocess timed out ({_settings.TTS_LOCAL_PROC_TIMEOUT}s)"
+                )
 
             if proc.returncode != 0:
                 err_msg = stderr.decode("utf-8", errors="replace") if stderr else "unknown"

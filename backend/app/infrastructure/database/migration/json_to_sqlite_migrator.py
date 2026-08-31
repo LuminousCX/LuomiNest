@@ -18,6 +18,7 @@ from typing import Callable
 from loguru import logger
 
 from app.core.utils import utc_now
+from app.core.constants.colors import DEFAULT_AGENT_COLOR
 
 from app.core.config import settings
 from app.infrastructure.database.facades.json_store_facade import (
@@ -27,13 +28,19 @@ from app.infrastructure.database.facades.json_store_facade import (
     repo_sources_store,
 )
 from app.infrastructure.database.facades.marketplace_stats_store import marketplace_stats_store
-from app.infrastructure.database.config_store import lumi_config_store
+from app.infrastructure.database.config_store import luominest_config_store
 from app.infrastructure.database.usage_store import usage_store
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.facades.main_agent_config import save_luominest_main_agent_config
+from app.infrastructure.database.migration.conversation_domain_migrator import (
+    migrate_conversation_domains,
+)
 from app.infrastructure.database.models.migration_meta import MigrationMeta
 from app.infrastructure.database.repositories.usage_repository import UsageRepository
 from app.infrastructure.database.session import sync_session_factory
+from app.infrastructure.database.migration.memory_to_sqlite_migrator import (
+    migrate_memory_files_to_sqlite as memory_migrator,
+)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -207,7 +214,7 @@ def _migrate_user_config() -> int:
         # 跳过 __updated_at 元数据键（时间戳，非配置数据）
         if key.endswith("__updated_at"):
             continue
-        lumi_config_store.set(key, value)
+        luominest_config_store.set(key, value)
         count += 1
 
     _mark_migrated("user_config", count)
@@ -254,7 +261,7 @@ def _migrate_model_config() -> int:
         _mark_migrated("model_config", 0)
         return 0
 
-    lumi_config_store.set("model_config", data)
+    luominest_config_store.set("model_config", data)
     _mark_migrated("model_config", 1)
     logger.success(f"[Migration] model_config: migrated config")
     return 1
@@ -486,7 +493,7 @@ def _migrate_agents_json_file() -> int:
                 system_prompt=agent_data.get("system_prompt", ""),
                 model=agent_data.get("model"),
                 provider=agent_data.get("provider"),
-                color=agent_data.get("color", "#0d9488"),
+                color=agent_data.get("color", DEFAULT_AGENT_COLOR),
                 avatar=agent_data.get("avatar"),
                 capabilities=agent_data.get("capabilities", ["chat"]),
                 memory_access=agent_data.get("memory_access", "none"),
@@ -653,7 +660,7 @@ def _migrate_from_standalone_db() -> int:
                 _mark_migrated("standalone_db", 0)
                 return 0
     except Exception:
-        pass
+        logger.warning("[Migration] standalone_db: 现库数据量预检失败，继续执行复制流程", exc_info=True)
 
     # 从 standalone DB 复制数据
     import sqlite3
@@ -731,7 +738,11 @@ def _migrate_from_standalone_db() -> int:
 
 
 def _migrate_plugin_states() -> int:
-    """迁移 cx_plugin_states.json → config_items['plugins.states']。"""
+    """迁移 cx_plugin_states.json → config_items['plugins.states']。
+
+    JSON 文件为 JsonStore 格式（{"disabled_plugins": [...]}），提取禁用 id 列表写入，
+    与 CxPluginLifecycle 运行时写入的形状（list）保持一致；已有值时取并集，不覆盖。
+    """
     if _is_migrated("plugin_states"):
         return 0
 
@@ -742,14 +753,25 @@ def _migrate_plugin_states() -> int:
         logger.info("[Migration] plugin_states: no JSON file found, marked as migrated (0 records)")
         return 0
 
-    lumi_config_store.set("plugins.states", data)
-    _mark_migrated("plugin_states", 1)
+    raw = data.get("disabled_plugins", []) if isinstance(data, dict) else []
+    legacy_ids = [str(i) for i in raw] if isinstance(raw, list) else []
+
+    existing = luominest_config_store.get("plugins.states")
+    existing_ids = [str(i) for i in existing] if isinstance(existing, list) else []
+    merged = existing_ids + [i for i in legacy_ids if i not in existing_ids]
+
+    luominest_config_store.set("plugins.states", merged)
+    _mark_migrated("plugin_states", len(merged))
     logger.success("[Migration] plugin_states: migrated to config_items['plugins.states']")
-    return 1
+    return len(merged)
 
 
 def _migrate_skill_disabled() -> int:
-    """迁移 cx_skill_disabled.json → config_items['skills.disabled_ids']。"""
+    """迁移 cx_skill_disabled.json → config_items['skills.disabled_ids']。
+
+    JSON 文件为 JsonStore 格式（{"disabled_ids": [...]}），提取禁用 id 列表写入，
+    与 CxSkillService 运行时写入的形状（list）保持一致；已有值时取并集，不覆盖。
+    """
     if _is_migrated("skill_disabled"):
         return 0
 
@@ -760,10 +782,17 @@ def _migrate_skill_disabled() -> int:
         logger.info("[Migration] skill_disabled: no JSON file found, marked as migrated (0 records)")
         return 0
 
-    lumi_config_store.set("skills.disabled_ids", data)
-    _mark_migrated("skill_disabled", 1)
+    raw = data.get("disabled_ids", []) if isinstance(data, dict) else []
+    legacy_ids = [str(i) for i in raw] if isinstance(raw, list) else []
+
+    existing = luominest_config_store.get("skills.disabled_ids")
+    existing_ids = [str(i) for i in existing] if isinstance(existing, list) else []
+    merged = existing_ids + [i for i in legacy_ids if i not in existing_ids]
+
+    luominest_config_store.set("skills.disabled_ids", merged)
+    _mark_migrated("skill_disabled", len(merged))
     logger.success("[Migration] skill_disabled: migrated to config_items['skills.disabled_ids']")
-    return 1
+    return len(merged)
 
 
 # 数据源注册表：(名称, 迁移函数)
@@ -780,10 +809,14 @@ _MIGRATION_SOURCES: list[tuple[str, Callable[[], int]]] = [
     ("main_agent", _migrate_main_agent),
     ("model_config", _migrate_model_config),
     ("conversations", _migrate_conversations),
+    # 对话域回填（§5.4）：须在 conversations/standalone_db 迁移之后执行，依赖平台会话映射
+    ("conversation_domains", migrate_conversation_domains),
     ("providers_from_config_items", _migrate_providers_from_config_items),
     ("scheduled_tasks", _migrate_scheduled_tasks),
     ("plugin_states", _migrate_plugin_states),
     ("skill_disabled", _migrate_skill_disabled),
+    # 记忆系统文件 → SQLite（memory.json / knowledge.md / daily / vectors.npz）
+    ("memory_files", memory_migrator),
 ]
 
 

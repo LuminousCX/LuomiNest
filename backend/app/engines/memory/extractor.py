@@ -55,7 +55,7 @@ class MemoryExtractor:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
                 max_tokens=500,
-                route_hint=RouteHint.REASONER,
+                route_hint=RouteHint.CHAT,
             )
             response_text = extract_llm_text(result)
             logger.info(f"[Memory] LLM fact extract response: {response_text}")
@@ -176,7 +176,7 @@ class MemoryExtractor:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=2000,
-                route_hint=RouteHint.REASONER,
+                route_hint=RouteHint.CHAT,
             )
             response_text = extract_llm_text(result)
             logger.info(f"[Memory] Distill response: {response_text[:300]}")
@@ -195,6 +195,14 @@ class MemoryExtractor:
 
             async with self._async_lock:
                 data = self._store.load_data()
+
+                # 蒸馏提取的用户名写入档案（与 update_profile_from_message 一致的逻辑）
+                if profile_name:
+                    old_name = data.profile.name
+                    data.profile.name = profile_name
+                    data.profile.updated_at = now
+                    if old_name and old_name != profile_name:
+                        self._fact_manager.deprecate_old_name_facts(data, old_name, profile_name)
 
                 # 只合并Agent级共享的facts
                 from .models import FACT_SCOPE_AGENT, FACT_SCOPE_CONVERSATION
@@ -266,7 +274,7 @@ class MemoryExtractor:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=2000,
-                route_hint=RouteHint.REASONER,
+                route_hint=RouteHint.CHAT,
             )
             response_text = extract_llm_text(result)
             logger.info(f"[Memory] Merge response: {response_text[:300]}")
@@ -295,7 +303,7 @@ class MemoryExtractor:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=1000,
-                route_hint=RouteHint.REASONER,
+                route_hint=RouteHint.CHAT,
             )
             response_text = extract_llm_text(result)
             logger.info(f"[Memory] Summary sections extract response: {response_text[:300]}")
@@ -311,9 +319,9 @@ class MemoryExtractor:
             return None
 
     async def extract_knowledge(
-        self, conversation: str, llm_adapter=None
+        self, conversation: str, existing_knowledge: str = "", llm_adapter=None
     ) -> str | None:
-        """使用LLM从对话中提取知识点。"""
+        """使用LLM从对话中提取知识点，并与现有知识库合并。"""
         if llm_adapter is None:
             try:
                 llm_adapter = self._get_llm_adapter()
@@ -322,13 +330,16 @@ class MemoryExtractor:
                 return None
 
         try:
-            prompt = _KNOWLEDGE_EXTRACT_PROMPT.format(conversation=conversation)
+            prompt = _KNOWLEDGE_EXTRACT_PROMPT.format(
+                conversation=conversation,
+                existing_knowledge=existing_knowledge or "(空)",
+            )
 
             result = await llm_adapter.chat(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=1500,
-                route_hint=RouteHint.REASONER,
+                route_hint=RouteHint.CHAT,
             )
             response_text = extract_llm_text(result)
             logger.info(f"[Memory] Knowledge extract response: {response_text[:300]}")

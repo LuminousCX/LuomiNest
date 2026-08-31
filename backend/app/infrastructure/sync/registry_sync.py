@@ -25,11 +25,23 @@ import yaml
 from loguru import logger
 
 from app.core.config import settings
+from app.core.constants.colors import TAG_COLOR_MUTED
 from app.infrastructure.database.json_store import JsonStore
 from app.infrastructure.sync.registry_sources import build_registry_url, get_active_source_id
+from app.infrastructure.sync.schemas import RegistryIndexEntry, RegistryMarketplaceEntry
 
 # 缓存刷新间隔（秒），默认 6 小时
 CACHE_TTL_SECONDS = 6 * 60 * 60
+
+# cxp-registry index.json / 本地缓存快照的外部 JSON 契约 key（camelCase，勿改名）。
+# 结构化条目的构造统一走 sync/schemas.py 的 alias 序列化；
+# 此处常量仅覆盖顶层结构的动态读写（远程 JSON 合并、TTL 检查等）。
+KEY_VERSION = "version"
+KEY_UPDATED_AT = "updatedAt"
+KEY_CREATED_AT = "createdAt"
+KEY_FETCHED_AT = "fetchedAt"
+KEY_PLUGINS = "plugins"
+KEY_SKILLS = "skills"
 
 # cxp-registry 仓库的 GitHub API 写入端点（用于 publish_local_plugins 推送 index.json）
 # 命名规则：每个插件一个独立 GitHub 仓库 LuomiNest-cxp-<plugin-name>，
@@ -40,6 +52,8 @@ REGISTRY_INDEX_PATH = settings.REGISTRY_INDEX_PATH
 REGISTRY_BRANCH = settings.REGISTRY_BRANCH
 
 # 本地缓存存储
+# 有意保留文件存储：可重建缓存，不入库 —— 内容为远程 cxp-registry index.json 的拉取快照，
+# TTL 过期或强制刷新时可从远程索引仓库完全重建，不含用户状态
 _registry_cache_store = JsonStore("registry_cache.json")
 
 
@@ -57,7 +71,7 @@ def _set_cache(data: dict[str, Any]) -> None:
 def is_cache_fresh() -> bool:
     """检查本地缓存是否仍在有效期内。"""
     cache = _get_cache()
-    fetched_at = cache.get("fetchedAt", 0)
+    fetched_at = cache.get(KEY_FETCHED_AT, 0)
     return (time.time() - fetched_at) < CACHE_TTL_SECONDS
 
 
@@ -66,12 +80,12 @@ def get_cached_plugins() -> list[dict[str, Any]]:
 
     供 marketplace API 在不需要等待远程同步的场景下快速返回缓存数据。
     """
-    return list(_get_cache().get("plugins", []))
+    return list(_get_cache().get(KEY_PLUGINS, []))
 
 
 def get_cached_skills() -> list[dict[str, Any]]:
     """读取本地缓存中的技能列表（不触发远程拉取）。"""
-    return list(_get_cache().get("skills", []))
+    return list(_get_cache().get(KEY_SKILLS, []))
 
 
 async def sync_registry(force: bool = False) -> dict[str, list[dict[str, Any]]]:
@@ -87,8 +101,8 @@ async def sync_registry(force: bool = False) -> dict[str, list[dict[str, Any]]]:
     if not force and is_cache_fresh():
         cache = _get_cache()
         return {
-            "plugins": cache.get("plugins", []),
-            "skills": cache.get("skills", []),
+            "plugins": cache.get(KEY_PLUGINS, []),
+            "skills": cache.get(KEY_SKILLS, []),
         }
 
     registry_url = build_registry_url()
@@ -100,8 +114,8 @@ async def sync_registry(force: bool = False) -> dict[str, list[dict[str, Any]]]:
             resp.raise_for_status()
             data = resp.json()
 
-        plugins = data.get("plugins", [])
-        skills = data.get("skills", [])
+        plugins = data.get(KEY_PLUGINS, [])
+        skills = data.get(KEY_SKILLS, [])
         logger.info(
             f"[RegistrySync] Fetched {len(plugins)} plugins, "
             f"{len(skills)} skills from source={source_id}"
@@ -109,11 +123,11 @@ async def sync_registry(force: bool = False) -> dict[str, list[dict[str, Any]]]:
 
         # 写入缓存
         _set_cache({
-            "fetchedAt": time.time(),
-            "version": data.get("version", ""),
-            "updatedAt": data.get("updatedAt", ""),
-            "plugins": plugins,
-            "skills": skills,
+            KEY_FETCHED_AT: time.time(),
+            KEY_VERSION: data.get(KEY_VERSION, ""),
+            KEY_UPDATED_AT: data.get(KEY_UPDATED_AT, ""),
+            KEY_PLUGINS: plugins,
+            KEY_SKILLS: skills,
         })
 
         return {"plugins": plugins, "skills": skills}
@@ -128,8 +142,8 @@ async def sync_registry(force: bool = False) -> dict[str, list[dict[str, Any]]]:
     # 拉取失败时返回缓存数据（可能过期）
     cache = _get_cache()
     return {
-        "plugins": cache.get("plugins", []),
-        "skills": cache.get("skills", []),
+        "plugins": cache.get(KEY_PLUGINS, []),
+        "skills": cache.get(KEY_SKILLS, []),
     }
 
 
@@ -190,42 +204,38 @@ def _normalize_remote_item(item: dict[str, Any]) -> dict[str, Any]:
     # 处理 tags（远程可能是 string[] 或 object[]）
     raw_tags = item.get("tags", [])
     if raw_tags and isinstance(raw_tags[0], str):
-        tags = [{"id": t, "name": t, "color": "#888"} for t in raw_tags]
+        tags = [{"id": t, "name": t, "color": TAG_COLOR_MUTED} for t in raw_tags]
     else:
         tags = raw_tags
 
     description = item.get("description", "")
-    return {
-        "id": item.get("id", ""),
-        "type": "plugin",
-        "name": item.get("name", item.get("id", "")),
-        "description": description,
-        "summary": item.get("summary", description[:60] + "..." if len(description) > 60 else description),
-        "version": item.get("version", "0.0.0"),
-        "author": author_obj,
-        "category": item.get("category", ""),
-        "tags": tags,
-        "icon": item.get("icon", ""),
-        "license": item.get("license", ""),
-        "platform": item.get("platform", "backend"),
-        "minAppVersion": item.get("minAppVersion", ""),
-        "repo": item.get("repo", ""),
-        "downloadUrl": item.get("downloadUrl", ""),
-        "homepage": item.get("homepage", item.get("repo", "")),
-        "createdAt": item.get("createdAt", ""),
-        "updatedAt": item.get("updatedAt", ""),
-        "installStatus": "none",
-        "isFavorite": False,
-        "featured": item.get("featured", False),
-        "rating": item.get("rating", 0.0),
-        "ratingCount": item.get("ratingCount", 0),
-        "downloadCount": item.get("downloadCount", 0),
-        "installedCount": item.get("installedCount", 0),
-        "likeCount": item.get("likeCount", 0),
-        "versions": item.get("versions", []),
-        "screenshots": item.get("screenshots", []),
-        "source": "remote",
-    }
+    return RegistryMarketplaceEntry(
+        id=item.get("id", ""),
+        name=item.get("name", item.get("id", "")),
+        description=description,
+        summary=item.get("summary", description[:60] + "..." if len(description) > 60 else description),
+        version=item.get("version", "0.0.0"),
+        author=author_obj,
+        category=item.get("category", ""),
+        tags=tags,
+        icon=item.get("icon", ""),
+        license=item.get("license", ""),
+        platform=item.get("platform", "backend"),
+        min_app_version=item.get("minAppVersion", ""),
+        repo=item.get("repo", ""),
+        download_url=item.get("downloadUrl", ""),
+        homepage=item.get("homepage", item.get("repo", "")),
+        created_at=item.get("createdAt", ""),
+        updated_at=item.get("updatedAt", ""),
+        featured=item.get("featured", False),
+        rating=item.get("rating", 0.0),
+        rating_count=item.get("ratingCount", 0),
+        download_count=item.get("downloadCount", 0),
+        installed_count=item.get("installedCount", 0),
+        like_count=item.get("likeCount", 0),
+        versions=item.get("versions", []),
+        screenshots=item.get("screenshots", []),
+    ).model_dump(by_alias=True)
 
 
 # ---------------------------------------------------------------------------
@@ -310,23 +320,23 @@ def _collect_local_plugin_metadata(plugin_dir: str) -> list[dict[str, Any]]:
             author_obj = {"name": "", "url": ""}
 
         today = time.strftime("%Y-%m-%d", time.gmtime())
-        items.append({
-            "id": plugin_id,
-            "name": str(manifest.get("name", plugin_id)),
-            "version": str(manifest.get("version", "0.0.0")),
-            "description": str(manifest.get("description", "")),
-            "author": author_obj,
-            "category": str(manifest.get("category", "tool")),
-            "tags": list(manifest.get("tags", [])),
-            "icon": str(manifest.get("icon", "")),
-            "platform": str(manifest.get("platform", "backend")),
-            "license": str(manifest.get("license", "")),
-            "minAppVersion": str(manifest.get("minAppVersion", "")),
-            "repo": repo_url,
-            "downloadUrl": download_url,
-            "createdAt": "",
-            "updatedAt": today,
-        })
+        items.append(RegistryIndexEntry(
+            id=plugin_id,
+            name=str(manifest.get("name", plugin_id)),
+            version=str(manifest.get("version", "0.0.0")),
+            description=str(manifest.get("description", "")),
+            author=author_obj,
+            category=str(manifest.get("category", "tool")),
+            tags=list(manifest.get("tags", [])),
+            icon=str(manifest.get("icon", "")),
+            platform=str(manifest.get("platform", "backend")),
+            license=str(manifest.get("license", "")),
+            min_app_version=str(manifest.get("minAppVersion", "")),
+            repo=repo_url,
+            download_url=download_url,
+            created_at="",
+            updated_at=today,
+        ).model_dump(by_alias=True, exclude_unset=True))
 
     return items
 
@@ -413,21 +423,21 @@ def _collect_local_skill_metadata(skill_dir: str) -> list[dict[str, Any]]:
             author_obj = {"name": "", "url": ""}
 
         today = time.strftime("%Y-%m-%d", time.gmtime())
-        items.append({
-            "id": skill_id,
-            "name": str(meta.get("name", skill_id)),
-            "version": str(meta.get("version", "0.0.0")),
-            "description": str(meta.get("description", "")),
-            "author": author_obj,
-            "category": str(meta.get("category", "")),
-            "tags": list(meta.get("tags", [])),
-            "icon": str(meta.get("icon", "")),
-            "license": str(meta.get("license", "")),
-            "repo": repo_url,
-            "downloadUrl": download_url,
-            "createdAt": "",
-            "updatedAt": today,
-        })
+        items.append(RegistryIndexEntry(
+            id=skill_id,
+            name=str(meta.get("name", skill_id)),
+            version=str(meta.get("version", "0.0.0")),
+            description=str(meta.get("description", "")),
+            author=author_obj,
+            category=str(meta.get("category", "")),
+            tags=list(meta.get("tags", [])),
+            icon=str(meta.get("icon", "")),
+            license=str(meta.get("license", "")),
+            repo=repo_url,
+            download_url=download_url,
+            created_at="",
+            updated_at=today,
+        ).model_dump(by_alias=True, exclude_unset=True))
 
     return items
 
@@ -452,10 +462,10 @@ def build_registry_index(
         skills = _collect_local_skill_metadata(settings.SKILL_DIR)
 
     return {
-        "version": "1.0.0",
-        "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "plugins": plugins,
-        "skills": skills,
+        KEY_VERSION: "1.0.0",
+        KEY_UPDATED_AT: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        KEY_PLUGINS: plugins,
+        KEY_SKILLS: skills,
     }
 
 
@@ -484,7 +494,7 @@ def write_local_index_snapshot(output_path: Optional[str] = None) -> str:
         json.dump(index_data, f, ensure_ascii=False, indent=2)
     logger.info(
         f"[RegistrySync] Local index snapshot written: {output_path} "
-        f"({len(index_data['plugins'])} plugins, {len(index_data['skills'])} skills)"
+        f"({len(index_data[KEY_PLUGINS])} plugins, {len(index_data[KEY_SKILLS])} skills)"
     )
     return output_path
 
@@ -498,11 +508,11 @@ def _preserve_created_at(
     - 远程已有 createdAt → 覆盖本地值（本地采集时留空）
     - 远程无/不存在且本地也缺失 → 以本次发布时间回填（全新插件）
     """
-    remote_created = (remote_item or {}).get("createdAt", "")
+    remote_created = (remote_item or {}).get(KEY_CREATED_AT, "")
     if remote_created:
-        local_item["createdAt"] = remote_created
-    elif not local_item.get("createdAt"):
-        local_item["createdAt"] = time.strftime("%Y-%m-%d", time.gmtime())
+        local_item[KEY_CREATED_AT] = remote_created
+    elif not local_item.get(KEY_CREATED_AT):
+        local_item[KEY_CREATED_AT] = time.strftime("%Y-%m-%d", time.gmtime())
 
 
 async def publish_local_plugins_to_registry(
@@ -551,7 +561,7 @@ async def publish_local_plugins_to_registry(
         "Authorization": f"token {token}",
     }
 
-    existing_index: dict[str, Any] = {"plugins": [], "skills": []}
+    existing_index: dict[str, Any] = {KEY_PLUGINS: [], KEY_SKILLS: []}
     existing_sha: Optional[str] = None
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -579,27 +589,27 @@ async def publish_local_plugins_to_registry(
 
     # 3. 合并：本地条目覆盖远程（按 id 索引），保留远程独有的条目
     merged_plugins: dict[str, dict[str, Any]] = {
-        p.get("id", ""): p for p in existing_index.get("plugins", []) if p.get("id")
+        p.get("id", ""): p for p in existing_index.get(KEY_PLUGINS, []) if p.get("id")
     }
     for p in local_plugins:
         _preserve_created_at(p, merged_plugins.get(p["id"]))
         merged_plugins[p["id"]] = p
 
     merged_skills: dict[str, dict[str, Any]] = {
-        s.get("id", ""): s for s in existing_index.get("skills", []) if s.get("id")
+        s.get("id", ""): s for s in existing_index.get(KEY_SKILLS, []) if s.get("id")
     }
     for s in local_skills:
         _preserve_created_at(s, merged_skills.get(s["id"]))
         merged_skills[s["id"]] = s
 
     new_index = {
-        "version": existing_index.get("version", "1.0.0"),
-        "updatedAt": (
+        KEY_VERSION: existing_index.get(KEY_VERSION, "1.0.0"),
+        KEY_UPDATED_AT: (
             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            if bump_updated_at else existing_index.get("updatedAt", "")
+            if bump_updated_at else existing_index.get(KEY_UPDATED_AT, "")
         ),
-        "plugins": list(merged_plugins.values()),
-        "skills": list(merged_skills.values()),
+        KEY_PLUGINS: list(merged_plugins.values()),
+        KEY_SKILLS: list(merged_skills.values()),
     }
 
     # 4. 本地写一份快照备份（便于排查）
@@ -638,15 +648,15 @@ async def publish_local_plugins_to_registry(
             logger.success(
                 f"[RegistrySync] Published index.json: "
                 f"sha={commit.get('sha', '')[:8]}, "
-                f"plugins={len(new_index['plugins'])}, skills={len(new_index['skills'])}"
+                f"plugins={len(new_index[KEY_PLUGINS])}, skills={len(new_index[KEY_SKILLS])}"
             )
             return {
                 "success": True,
                 "message": "发布成功",
                 "commit_sha": commit.get("sha", ""),
                 "url": commit.get("html_url", ""),
-                "plugins_count": len(new_index["plugins"]),
-                "skills_count": len(new_index["skills"]),
+                "plugins_count": len(new_index[KEY_PLUGINS]),
+                "skills_count": len(new_index[KEY_SKILLS]),
             }
         return {
             "success": False,

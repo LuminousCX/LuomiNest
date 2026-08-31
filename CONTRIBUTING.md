@@ -211,13 +211,13 @@ vue-tsc --noEmit -p tsconfig.web.json && vue-tsc --noEmit -p tsconfig.node.json
 ### Docker Development Environment (Recommended)
 
 ```bash
-# Start complete development environment
+# Start infrastructure services (PostgreSQL + Redis + MQTT)
 cd LuomiNest/docker
 docker compose -f docker-compose.dev.yml up -d
 
-# Access the application
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:8000
+# Backend API: http://localhost:18000  (docs at /docs)
+# PostgreSQL: localhost:5432 / Redis: localhost:6379 / MQTT: localhost:1883
+# Then run the backend & frontend locally as described above.
 ```
 
 ## Project Structure
@@ -226,34 +226,33 @@ docker compose -f docker-compose.dev.yml up -d
 LuomiNest/
 ├── backend/                 # Python FastAPI backend
 │   ├── app/                 # Application core code
-│   │   ├── api/             # API routes and endpoints
-│   │   ├── core/            # Core configuration and constants
-│   │   ├── domains/         # Business domain logic
-│   │   ├── engines/         # Engine modules (voice, render, memory, etc.)
-│   │   ├── infrastructure/  # Infrastructure (database, MQTT, Redis)
-│   │   ├── models/          # Data models
-│   │   ├── runtime/         # Runtime platform adapters
-│   │   ├── schemas/         # API Schema
-│   │   ├── security/        # Security modules
+│   │   ├── api/             # REST API routes and WebSocket endpoints
+│   │   ├── core/            # Config, DI container, workflow engine, agent orchestration
+│   │   ├── domains/         # Business domain logic (social, group chat)
+│   │   ├── engines/         # Engine modules (voice, render, memory, location)
+│   │   ├── infrastructure/  # Infrastructure (database, MQTT, Redis, sync)
+│   │   ├── runtime/         # Runtime platform adapters, plugins, providers
+│   │   ├── security/        # Security (JWT, OAuth, RBAC, sandbox, audit)
 │   │   └── services/        # Business services
 │   ├── config/              # Configuration files
+│   ├── plugins/             # Plugin directory
+│   ├── skills/              # Skills directory
 │   ├── scripts/             # Script tools
 │   └── tests/               # Test code
 │
 ├── frontend/                # Electron + Vue frontend
 │   ├── src/                 # Source code
-│   │   ├── main/            # Electron main process
+│   │   ├── main/            # Electron main process (IPC, browser automation)
 │   │   ├── preload/         # Preload scripts
 │   │   └── renderer/        # Vue render process
 │   └── resources/           # Resource files
 │
 ├── firmware/                # ESP32 firmware
-│   ├── esp32-p4/            # ESP32-P4 main controller firmware
-│   ├── esp32-s3/            # ESP32-S3 firmware
-│   └── server/              # Live2D render server
+│   └── embedded/esp32-p4/   # ESP32-P4 main controller (components: app / bsp / drivers)
 │
 ├── docker/                  # Docker configuration
-├── scripts/                 # Deployment and development scripts
+├── docs/                    # VitePress documentation site
+├── 文档/                    # Project design documents
 └── .github/                 # GitHub configuration
 ```
 

@@ -12,6 +12,7 @@ from loguru import logger
 
 from app.runtime.provider.llm.types import StreamEvent
 from app.services.avatar_manager import EmotionStreamParser
+from app.services.stream_components import ThinkingTagManager, StreamCoalescer
 from app.core.agents.middleware.base import HookRegistry
 
 
@@ -36,8 +37,6 @@ class StreamProcessor:
                           stream_response 用它积累 ctx.state["reasoning"]；
                           stream_chat 不需要（默认忽略）。
         """
-        from app.services.chat_service import ThinkingTagManager, StreamCoalescer
-
         self._thinking_mgr = ThinkingTagManager()
         self._coalescer = StreamCoalescer()
         self._emotion_parser = EmotionStreamParser()
@@ -66,7 +65,11 @@ class StreamProcessor:
                             ctx, reasoning_text, "reasoning",
                         )
                     except Exception:
-                        pass
+                        logger.warning(
+                            f"[StreamProcessor] reasoning hook 事件通知失败已丢弃: "
+                            f"agent={ctx.extra.get('agent_id') or ctx.state.get('chat_id') or '?'}",
+                            exc_info=True,
+                        )
 
                 # 2. 流式 chunk 合并
                 if content_text:
@@ -83,7 +86,11 @@ class StreamProcessor:
                                 ctx, merged, "content",
                             )
                         except Exception:
-                            pass
+                            logger.warning(
+                                f"[StreamProcessor] content hook 事件通知失败已丢弃: "
+                                f"agent={ctx.extra.get('agent_id') or ctx.state.get('chat_id') or '?'}",
+                                exc_info=True,
+                            )
                     else:
                         continue  # 缓冲区未达阈值
                 else:
@@ -105,4 +112,8 @@ class StreamProcessor:
                         HookRegistry.ON_STREAM_TOKEN, ctx, remaining, "content",
                     )
                 except Exception:
-                    pass
+                    logger.warning(
+                        f"[StreamProcessor] flush 残留 hook 事件通知失败已丢弃: "
+                        f"agent={ctx.extra.get('agent_id') or ctx.state.get('chat_id') or '?'}",
+                        exc_info=True,
+                    )

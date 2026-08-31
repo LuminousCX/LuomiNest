@@ -24,6 +24,7 @@ import { useTaskStreamStore } from './taskStream'
 import { useMemoryStore } from './memory'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import type { WorkflowTemplate, SaveAsTemplateRequest } from '../types/workflow'
 
 const logger = createLuomiNestRendererLogger('Workflow')
 
@@ -124,7 +125,7 @@ export interface WorkflowSessionState {
 }
 
 export const useWorkflowStore = defineStore('workflow', () => {
-  const { apiSseStream, apiPost } = useApi()
+  const { apiSseStream, apiPost, apiGet, apiDelete } = useApi()
 
   // 当前活跃的工作流会话
   const currentSession = ref<WorkflowSessionState | null>(null)
@@ -147,6 +148,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
   } | null>(null)
   // 用户反馈输入
   const confirmationFeedback = ref('')
+
+  // ─── 模板相关状态 ───
+  const templates = ref<WorkflowTemplate[]>([])
+  const templatesLoading = ref(false)
 
   // 统计
   const totalTasks = computed(() => currentSession.value?.tasks.length ?? 0)
@@ -682,6 +687,78 @@ export const useWorkflowStore = defineStore('workflow', () => {
     confirmationFeedback.value = ''
   }
 
+  // ─── 模板操作 ───
+
+  const loadTemplates = async () => {
+    templatesLoading.value = true
+    try {
+      const data = await apiGet<WorkflowTemplate[]>('/workflow/templates')
+      templates.value = Array.isArray(data) ? data : []
+    } catch (e) {
+      logger.error('loadTemplates failed:', e)
+    } finally {
+      templatesLoading.value = false
+    }
+  }
+
+  const saveAsTemplate = async (req: SaveAsTemplateRequest): Promise<string | null> => {
+    try {
+      const data = await apiPost<WorkflowTemplate>('/workflow/templates', req)
+      if (data) {
+        templates.value.unshift(data)
+      }
+      return data?.template_id || null
+    } catch (e) {
+      logger.error('saveAsTemplate failed:', e)
+      return null
+    }
+  }
+
+  const runTemplate = async (
+    templateId: string,
+    params: Record<string, unknown> = {},
+    autoApprove?: boolean | null
+  ): Promise<string | null> => {
+    try {
+      const data = await apiPost<{ session_id: string }>(
+        `/workflow/templates/${templateId}/run`,
+        { params, auto_approve: autoApprove }
+      )
+      return data?.session_id || null
+    } catch (e) {
+      logger.error('runTemplate failed:', e)
+      return null
+    }
+  }
+
+  const deleteTemplate = async (templateId: string): Promise<boolean> => {
+    try {
+      await apiDelete(`/workflow/templates/${templateId}`)
+      templates.value = templates.value.filter(t => t.template_id !== templateId)
+      return true
+    } catch (e) {
+      logger.error('deleteTemplate failed:', e)
+      return false
+    }
+  }
+
+  const scheduleTemplate = async (
+    templateId: string,
+    schedule: string,
+    params: Record<string, unknown> = {}
+  ): Promise<string | null> => {
+    try {
+      const data = await apiPost<{ task_id: string }>(
+        `/workflow/templates/${templateId}/schedule`,
+        { schedule, params, auto_approve: true }
+      )
+      return data?.task_id || null
+    } catch (e) {
+      logger.error('scheduleTemplate failed:', e)
+      return null
+    }
+  }
+
   return {
     currentSession,
     isRunning,
@@ -693,11 +770,18 @@ export const useWorkflowStore = defineStore('workflow', () => {
     completedTasks,
     failedTasks,
     progress,
+    templates,
+    templatesLoading,
     submitWorkflow,
     cancelWorkflow,
     confirmPlan,
     rejectPlan,
     clearWorkflow,
     handleWorkflowEvent,
+    loadTemplates,
+    saveAsTemplate,
+    runTemplate,
+    deleteTemplate,
+    scheduleTemplate,
   }
 })

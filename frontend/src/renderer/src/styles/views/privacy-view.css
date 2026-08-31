@@ -1,6 +1,7 @@
 /* =========================================================
    PrivacyDetailView 专属样式
    采用通栏卡片布局，移除中间窄容器，让内容随页面宽度自适应。
+   Hero 头部独立实现，不复用 settings-shared 的共享组件。
    ========================================================= */
 
 .privacy-view .lumi-settings-page__body {
@@ -9,9 +10,91 @@
   gap: var(--space-4);
 }
 
-.privacy-view .lumi-settings-page__body > .lumi-settings-hero,
+.privacy-view .lumi-settings-page__body > .privacy-hero,
 .privacy-view .lumi-settings-page__body > .privacy-intro {
   flex-shrink: 0;
+}
+
+/* -------------------------------------------------------
+   Hero 隐私合规卡片
+   ------------------------------------------------------- */
+.privacy-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-2xl);
+  background: var(--lumi-brand-gradient);
+  color: var(--text-inverse);
+  padding: var(--space-8) var(--space-7);
+  box-shadow: 0 var(--space-3) var(--space-8) color-mix(in srgb, var(--lumi-primary) 25%, transparent);
+}
+
+.privacy-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--text-inverse) 12%, transparent) 0%, transparent 45%),
+    radial-gradient(circle at 80% 70%, color-mix(in srgb, var(--text-inverse) 8%, transparent) 0%, transparent 45%);
+  pointer-events: none;
+}
+
+.privacy-hero__content {
+  position: relative;
+}
+
+.privacy-hero__icon {
+  margin-bottom: var(--space-4);
+  opacity: 0.9;
+}
+
+.privacy-hero__title {
+  font-size: var(--text-4xl);
+  font-weight: 800;
+  margin-bottom: var(--space-2);
+  letter-spacing: -0.5px;
+}
+
+.privacy-hero__desc {
+  font-size: var(--text-md);
+  line-height: 1.7;
+  opacity: 0.92;
+  max-width: 560px;
+  margin-bottom: var(--space-7);
+}
+
+.privacy-hero__desc strong {
+  font-weight: 700;
+}
+
+.privacy-hero__stats {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.privacy-hero__stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.privacy-hero__stat-value {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.privacy-hero__stat-label {
+  font-size: var(--text-sm);
+  opacity: 0.8;
+}
+
+.privacy-hero__divider {
+  width: 1px;
+  height: var(--space-8);
+  background: color-mix(in srgb, var(--text-inverse) 25%, transparent);
 }
 
 /* -------------------------------------------------------
@@ -161,6 +244,20 @@
 /* -------------------------------------------------------
    响应式
    ------------------------------------------------------- */
+@media (max-width: 768px) {
+  .privacy-hero {
+    padding: var(--space-5);
+  }
+
+  .privacy-hero__title {
+    font-size: var(--text-2xl);
+  }
+
+  .privacy-hero__stats {
+    gap: var(--space-3);
+  }
+}
+
 @media (min-width: 768px) {
   .privacy-region-grid {
     grid-template-columns: repeat(2, 1fr);

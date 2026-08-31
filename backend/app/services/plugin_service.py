@@ -8,9 +8,9 @@ from __future__ import annotations
 from typing import Any
 
 from app.models.plugin import CxPluginMetadata, CxPluginStatus
-from app.runtime.plugin.cxplugin.lifecycle import cx_plugin_lifecycle
-from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
-from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+from app.runtime.plugin.cxplugin.lifecycle import luominest_plugin_lifecycle
+from app.runtime.plugin.cxplugin.loader import luominest_plugin_loader
+from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
 
 
 class CxPluginService:
@@ -18,47 +18,47 @@ class CxPluginService:
 
     async def initialize(self) -> int:
         """加载所有插件（应用启动时调用）。"""
-        count = await cx_plugin_loader.load_all()
+        count = await luominest_plugin_loader.load_all()
         # 应用禁用状态
-        for plugin_id in cx_plugin_lifecycle.get_disabled_plugins():
-            metadata = cx_plugin_registry.get_plugin(plugin_id)
+        for plugin_id in luominest_plugin_lifecycle.get_disabled_plugins():
+            metadata = luominest_plugin_registry.get_plugin(plugin_id)
             if metadata and metadata.status == CxPluginStatus.LOADED:
-                cx_plugin_registry.update_status(plugin_id, CxPluginStatus.DISABLED)
+                luominest_plugin_registry.update_status(plugin_id, CxPluginStatus.DISABLED)
         return count
 
     def list_plugins(self) -> list[dict[str, Any]]:
         """列出所有已加载的插件信息。"""
         result: list[dict[str, Any]] = []
-        for metadata in cx_plugin_registry.list_plugins():
+        for metadata in luominest_plugin_registry.list_plugins():
             result.append(self._to_dict(metadata))
         return result
 
     def get_plugin(self, plugin_id: str) -> dict[str, Any] | None:
         """获取单个插件信息。"""
-        metadata = cx_plugin_registry.get_plugin(plugin_id)
+        metadata = luominest_plugin_registry.get_plugin(plugin_id)
         if metadata is None:
             return None
         return self._to_dict(metadata)
 
     async def enable_plugin(self, plugin_id: str) -> bool:
         """启用插件。"""
-        return await cx_plugin_lifecycle.enable_plugin(plugin_id)
+        return await luominest_plugin_lifecycle.enable_plugin(plugin_id)
 
     async def disable_plugin(self, plugin_id: str) -> bool:
         """禁用插件。"""
-        return await cx_plugin_lifecycle.disable_plugin(plugin_id)
+        return await luominest_plugin_lifecycle.disable_plugin(plugin_id)
 
     async def reload_plugin(self, plugin_id: str) -> bool:
         """重载插件。"""
-        return await cx_plugin_lifecycle.reload_plugin(plugin_id)
+        return await luominest_plugin_lifecycle.reload_plugin(plugin_id)
 
     async def unload_plugin(self, plugin_id: str) -> bool:
         """卸载插件。"""
-        return await cx_plugin_lifecycle.unload_plugin(plugin_id)
+        return await luominest_plugin_lifecycle.unload_plugin(plugin_id)
 
     async def reload_all(self) -> int:
         """重载所有插件。"""
-        return await cx_plugin_lifecycle.reload_all()
+        return await luominest_plugin_lifecycle.reload_all()
 
     def _to_dict(self, metadata: CxPluginMetadata) -> dict[str, Any]:
         """将插件元数据转为 API 响应字典。"""
@@ -70,7 +70,7 @@ class CxPluginService:
             "author": metadata.manifest.author,
             "status": metadata.status.value,
             "is_active": metadata.is_active,
-            "is_enabled": cx_plugin_lifecycle.is_enabled(metadata.plugin_id),
+            "is_enabled": luominest_plugin_lifecycle.is_enabled(metadata.plugin_id),
             "loaded_at": metadata.loaded_at,
             "error": metadata.error_message,
             "capabilities": metadata.manifest.capabilities,
@@ -81,4 +81,4 @@ class CxPluginService:
 
 
 # 全局单例
-cx_plugin_service = CxPluginService()
+luominest_plugin_service = CxPluginService()

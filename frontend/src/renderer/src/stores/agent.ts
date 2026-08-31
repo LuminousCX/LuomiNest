@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { AgentProfile, MainAgentConfig } from '../types'
+import type { AgentProfile } from '../types'
 import { useApi } from '../composables/useApi'
 
 /** Raw agent object returned by GET /agents */
@@ -12,8 +12,6 @@ interface RawAgent {
   color?: string
   system_prompt?: string
   systemPrompt?: string
-  model?: string
-  provider?: string
   capabilities?: string[]
   is_active?: boolean
   is_main?: boolean
@@ -26,22 +24,7 @@ interface RawAgentCreateResponse {
   id: string
   name?: string
   description?: string
-  provider?: string
-  model?: string
   color?: string
-}
-
-/** Raw main-agent config returned by GET /agents/main-agent/config */
-interface RawMainAgentConfig {
-  provider?: string
-  model?: string
-  systemPrompt?: string
-  system_prompt?: string
-  temperature?: number
-  maxTokens?: number
-  max_tokens?: number
-  color?: string
-  avatar?: string | null
 }
 
 export const useAgentStore = defineStore('agent', () => {
@@ -50,15 +33,6 @@ export const useAgentStore = defineStore('agent', () => {
   const agents = ref<AgentProfile[]>([])
   const activeAgent = ref<AgentProfile | null>(null)
   const loading = ref(false)
-  const mainAgentConfig = ref<MainAgentConfig>({
-    provider: '',
-    model: '',
-    systemPrompt: '',
-    temperature: 0.7,
-    maxTokens: 4096,
-    color: '',
-    avatar: null,
-  })
 
   const activeAgents = computed(() => agents.value.filter(a => a.isActive))
 
@@ -75,8 +49,6 @@ export const useAgentStore = defineStore('agent', () => {
           avatar: a.avatar || '',
           color: a.color || '',
           systemPrompt: a.system_prompt || a.systemPrompt || '',
-          model: a.model || '',
-          provider: a.provider,
           capabilities: a.capabilities || [],
           isActive: a.is_active ?? true,
           isMain: a.is_main ?? false,
@@ -97,8 +69,6 @@ export const useAgentStore = defineStore('agent', () => {
     name: string
     description?: string
     systemPrompt?: string
-    model?: string
-    provider?: string
     color?: string
     avatar?: string
     capabilities?: string[]
@@ -107,8 +77,6 @@ export const useAgentStore = defineStore('agent', () => {
       name: agent.name,
       description: agent.description || '',
       system_prompt: agent.systemPrompt || '',
-      model: agent.model,
-      provider: agent.provider,
       color: agent.color || '#147EBC',
       avatar: agent.avatar || '',
       capabilities: agent.capabilities || ['chat'],
@@ -126,8 +94,6 @@ export const useAgentStore = defineStore('agent', () => {
     if (updates.name !== undefined) body.name = updates.name
     if (updates.description !== undefined) body.description = updates.description
     if (updates.systemPrompt !== undefined) body.system_prompt = updates.systemPrompt
-    if (updates.model !== undefined) body.model = updates.model
-    if (updates.provider !== undefined) body.provider = updates.provider
     if (updates.color !== undefined) body.color = updates.color
     if (updates.avatar !== undefined) body.avatar = updates.avatar || ''
     if (updates.capabilities !== undefined) body.capabilities = updates.capabilities
@@ -156,58 +122,15 @@ export const useAgentStore = defineStore('agent', () => {
     activeAgent.value = agent
   }
 
-  const fetchMainAgentConfig = async () => {
-    try {
-      const result = await apiGet<RawMainAgentConfig>('/agents/main-agent/config')
-      mainAgentConfig.value = {
-        provider: result.provider || '',
-        model: result.model || '',
-        systemPrompt: result.systemPrompt || result.system_prompt || '',
-        temperature: result.temperature ?? 0.7,
-        maxTokens: result.maxTokens || result.max_tokens || 4096,
-        color: result.color || '',
-        avatar: result.avatar || null,
-      }
-    } catch {
-      // use defaults
-    }
-  }
-
-  const updateMainAgentConfig = async (updates: Partial<MainAgentConfig>) => {
-    const body: Record<string, unknown> = {}
-    if (updates.provider !== undefined) body.provider = updates.provider
-    if (updates.model !== undefined) body.model = updates.model
-    if (updates.systemPrompt !== undefined) body.systemPrompt = updates.systemPrompt
-    if (updates.temperature !== undefined) body.temperature = updates.temperature
-    if (updates.maxTokens !== undefined) body.maxTokens = updates.maxTokens
-    if (updates.color !== undefined) body.color = updates.color
-    if (updates.avatar !== undefined) body.avatar = updates.avatar || ''
-
-    const result = await apiPatch<RawMainAgentConfig>('/agents/main-agent/config', body)
-    mainAgentConfig.value = {
-      provider: result.provider || '',
-      model: result.model || '',
-      systemPrompt: result.systemPrompt || result.system_prompt || '',
-      temperature: result.temperature ?? 0.7,
-      maxTokens: result.maxTokens || result.max_tokens || 4096,
-      color: result.color || '',
-      avatar: result.avatar || null,
-    }
-    return result
-  }
-
   return {
     agents,
     activeAgent,
     loading,
-    mainAgentConfig,
     activeAgents,
     fetchAgents,
     createAgent,
     updateAgent,
     deleteAgent,
     setActiveAgent,
-    fetchMainAgentConfig,
-    updateMainAgentConfig,
   }
 })

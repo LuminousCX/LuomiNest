@@ -7,7 +7,7 @@ CommandValidator 白名单模式。本模块提供：
 3. 用户自定义黑名单（即使在白名单内也强制拒绝，优先级最高）
 4. 统一拦截错误格式化（含拦截原因 + 前往设置引导）
 
-策略持久化：写入 config_items 表（通过 lumi_config_store），键名前缀
+策略持久化：写入 config_items 表（通过 luominest_config_store），键名前缀
 ``command_policy.*``，支持运行时热更新，无需重启。
 """
 
@@ -68,10 +68,10 @@ def load_command_policy() -> dict:
         {"extra_whitelist": [...], "blacklist": [...]}，均为小写清洗后的列表。
     """
     try:
-        from app.infrastructure.database.config_store import lumi_config_store
+        from app.infrastructure.database.config_store import luominest_config_store
 
-        extra = lumi_config_store.get(KEY_EXTRA_WHITELIST, []) or []
-        blacklist = lumi_config_store.get(KEY_BLACKLIST, []) or []
+        extra = luominest_config_store.get(KEY_EXTRA_WHITELIST, []) or []
+        blacklist = luominest_config_store.get(KEY_BLACKLIST, []) or []
     except Exception as e:
         logger.warning(f"[CommandPolicy] 加载策略失败，使用空策略: {e}")
         return {"extra_whitelist": [], "blacklist": []}
@@ -98,10 +98,10 @@ def save_command_policy(extra_whitelist: list | None, blacklist: list | None) ->
     # 黑名单与默认白名单重叠时，以黑名单为准（黑名单优先级最高），
     # 防止用户误把安全命令加入黑名单后又困惑为何无法执行。
     try:
-        from app.infrastructure.database.config_store import lumi_config_store
+        from app.infrastructure.database.config_store import luominest_config_store
 
-        lumi_config_store.set(KEY_EXTRA_WHITELIST, cleaned_extra)
-        lumi_config_store.set(KEY_BLACKLIST, cleaned_blacklist)
+        luominest_config_store.set(KEY_EXTRA_WHITELIST, cleaned_extra)
+        luominest_config_store.set(KEY_BLACKLIST, cleaned_blacklist)
         logger.info(
             f"[CommandPolicy] 策略已保存: extra_whitelist={cleaned_extra}, "
             f"blacklist={cleaned_blacklist}"

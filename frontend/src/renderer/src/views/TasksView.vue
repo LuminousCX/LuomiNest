@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { Search, Plus } from 'lucide-vue-next'
 import { useTaskStreamStore } from '../stores/taskStream'
 import { getItem, setItem } from '../utils/storage'
 import type { ViewMode, TaskStatus, LuomiNestTask, CalendarDay, MonthGrid } from '../components/tasks/types'
@@ -541,9 +542,31 @@ const timeSlotOptions = [
 
 <template>
   <div class="tasks-view custom-scrollbar">
+    <div class="tasks-page-header animate-fade-in">
+      <div class="tasks-page-header__left">
+        <h1 class="tasks-page-title">计划视图</h1>
+        <p class="tasks-page-desc">项目管理、任务跟踪与团队协作</p>
+      </div>
+      <div class="tasks-page-header__right">
+        <div class="tasks-search-box">
+          <Search :size="14" class="tasks-search-icon" />
+          <input v-model="searchQuery" type="text" placeholder="搜索任务..." />
+        </div>
+        <button class="tasks-create-btn" @click="() => openCreateModal()">
+          <Plus :size="16" />
+          <span>新建任务</span>
+        </button>
+        <div class="tasks-page-avatars">
+          <img v-for="(member, i) in teamMembers" :key="i" :src="member" class="tasks-avatar" alt="member" />
+          <button class="tasks-avatar tasks-avatar-add">
+            <Plus :size="12" />
+          </button>
+        </div>
+      </div>
+    </div>
+
     <TasksToolbar
       v-model:currentView="currentView"
-      v-model:searchQuery="searchQuery"
       :currentNavLabel="currentNavLabel"
       :tasks="tasks"
       :teamMembers="teamMembers"
@@ -621,8 +644,131 @@ const timeSlotOptions = [
   height: 100%;
   background: var(--workspace-bg);
   overflow-y: auto;
-  padding: var(--space-5) 28px;
+  padding: var(--space-5) var(--space-7);
   color: var(--text-primary);
+}
+
+.tasks-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--divider-soft, var(--workspace-border));
+}
+
+.tasks-page-header__left {
+  display: flex;
+  flex-direction: column;
+}
+
+.tasks-page-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.tasks-page-desc {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+.tasks-page-avatars {
+  display: flex;
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.tasks-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--workspace-bg);
+  margin-left: -6px;
+  object-fit: cover;
+}
+
+.tasks-avatar:first-child {
+  margin-left: 0;
+}
+
+.tasks-avatar-add {
+  background: var(--workspace-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: 1px solid var(--workspace-border);
+  transition: all var(--transition-fast);
+}
+
+.tasks-avatar-add:hover {
+  background: var(--workspace-hover);
+  color: var(--text-primary);
+}
+
+.tasks-page-header__right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.tasks-search-box {
+  position: relative;
+}
+
+.tasks-search-box input {
+  width: 200px;
+  padding: 7px 12px 7px var(--space-7);
+  border-radius: var(--radius-md);
+  background: var(--workspace-card);
+  border: 1px solid var(--workspace-border);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.tasks-search-box input:focus {
+  border-color: var(--lumi-brand-light);
+  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
+}
+
+.tasks-search-box input::placeholder {
+  color: var(--text-muted);
+}
+
+.tasks-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+}
+
+.tasks-create-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 7px 16px;
+  border-radius: var(--radius-md);
+  background: var(--lumi-brand);
+  color: var(--text-inverse);
+  border: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tasks-create-btn:hover {
+  background: var(--lumi-brand-hover);
+  box-shadow: var(--shadow-sm);
 }
 
 </style>

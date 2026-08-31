@@ -43,6 +43,61 @@ from app.core.workflow.models import (
 WorkflowEventCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 
+# ── 模块级依赖注入（由组合根 app_factory 装配）──
+# setter 未调用时保留函数内延迟导入兜底，行为向后兼容。
+# 纪律：本模块顶层不得新增对 app.services / app.infrastructure 的导入。
+_chat_service_cls: Any | None = None
+_conversation_store: Any | None = None
+_llm_adapter: Any | None = None
+
+
+def configure_engine(
+    chat_service_cls: Any | None = None,
+    conversation_store: Any | None = None,
+    llm_adapter: Any | None = None,
+) -> None:
+    """装配工作流引擎的外部依赖（由组合根在启动阶段调用一次）。
+
+    Args:
+        chat_service_cls: ChatService 类（引擎使用其静态持久化辅助方法）
+        conversation_store: 对话存储门面实例（ConversationFacade）
+        llm_adapter: LLM 适配器实例
+
+    任一参数传 None 时该依赖保持原有延迟导入兜底。
+    """
+    global _chat_service_cls, _conversation_store, _llm_adapter
+    if chat_service_cls is not None:
+        _chat_service_cls = chat_service_cls
+    if conversation_store is not None:
+        _conversation_store = conversation_store
+    if llm_adapter is not None:
+        _llm_adapter = llm_adapter
+
+
+def _get_chat_service_cls() -> Any:
+    """获取 ChatService 类（优先注入实例，兜底延迟导入）。"""
+    if _chat_service_cls is None:
+        from app.services.chat_service import ChatService
+        return ChatService
+    return _chat_service_cls
+
+
+def _get_conversation_store() -> Any:
+    """获取对话存储门面（优先注入实例，兜底延迟导入）。"""
+    if _conversation_store is None:
+        from app.infrastructure.database.conversation_store import conversation_store
+        return conversation_store
+    return _conversation_store
+
+
+def _get_llm_adapter() -> Any:
+    """获取 LLM 适配器（优先注入实例，兜底延迟导入）。"""
+    if _llm_adapter is None:
+        from app.runtime.provider.llm.adapter import llm_adapter
+        return llm_adapter
+    return _llm_adapter
+
+
 # 工作流系统提示模板（英文）
 _WORKFLOW_SYSTEM_PROMPT = """You are the LuomiNest main Agent workflow engine. Your role is to decompose complex user tasks into executable subtask plans.
 
@@ -424,12 +479,10 @@ class WorkflowEngine:
                 # 保存用户消息到 conversation_store（工作流模式复用普通对话的持久化机制）
                 if session.conversation_id:
                     try:
-                        from app.infrastructure.database.conversation_store import conversation_store
-                        from app.services.chat_service import ChatService
-                        conv = await conversation_store.get_async(session.conversation_id)
+                        conv = await _get_conversation_store().get_async(session.conversation_id)
                         if conv:
-                            ChatService.save_user_message(conv, session.user_message)
-                            await ChatService.persist_conv(session.conversation_id, conv)
+                            _get_chat_service_cls().save_user_message(conv, session.user_message)
+                            await _get_chat_service_cls().persist_conv(session.conversation_id, conv)
                             logger.debug(f"[WorkflowEngine][DEBUG] Session {session.session_id} user message saved to conversation {session.conversation_id}")
                     except Exception as save_err:
                         logger.warning(f"[WorkflowEngine] Save user message failed: {save_err}")
@@ -450,11 +503,9 @@ class WorkflowEngine:
                 # 工作流完成后，保存 assistant 消息到 conversation_store
                 if session.conversation_id and session.final_result:
                     try:
-                        from app.infrastructure.database.conversation_store import conversation_store
-                        from app.services.chat_service import ChatService
-                        conv = await conversation_store.get_async(session.conversation_id)
+                        conv = await _get_conversation_store().get_async(session.conversation_id)
                         if conv:
-                            ChatService.save_assistant_message(conv, {
+                            _get_chat_service_cls().save_assistant_message(conv, {
                                 "content": session.final_result,
                                 "reasoning": "",
                                 "aborted": session.phase == WorkflowPhase.FAILED,
@@ -481,11 +532,9 @@ class WorkflowEngine:
                 # 异常时也保存 assistant 消息（记录错误信息），避免聊天记录丢失
                 if session.conversation_id:
                     try:
-                        from app.infrastructure.database.conversation_store import conversation_store
-                        from app.services.chat_service import ChatService
-                        conv = await conversation_store.get_async(session.conversation_id)
+                        conv = await _get_conversation_store().get_async(session.conversation_id)
                         if conv:
-                            ChatService.save_assistant_message(conv, {
+                            _get_chat_service_cls().save_assistant_message(conv, {
                                 "content": f"工作流执行失败：{e}",
                                 "reasoning": "",
                                 "aborted": True,
@@ -538,11 +587,11 @@ class WorkflowEngine:
         event_callback: WorkflowEventCallback | None,
     ) -> None:
         """执行工作流完整流程"""
-        sid = session.session_id
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _run_workflow START")
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _run_workflow: provider={provider}, model={model}")
+        session_id = session.session_id
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _run_workflow START")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _run_workflow: provider={provider}, model={model}")
 
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting phase_change: ANALYZING")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} emitting phase_change: ANALYZING")
         await self._emit(event_callback, {
             "type": "phase_change",
             "data": {"phase": WorkflowPhase.ANALYZING.value},
@@ -550,45 +599,45 @@ class WorkflowEngine:
 
         # 阶段 1: 分析和规划
         session.phase = WorkflowPhase.PLANNING
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting phase_change: PLANNING")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} emitting phase_change: PLANNING")
         await self._emit(event_callback, {
             "type": "phase_change",
             "data": {"phase": WorkflowPhase.PLANNING.value},
         })
 
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} calling _analyze_and_plan...")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} calling _analyze_and_plan...")
         plan = await self._analyze_and_plan(
             session, provider, model, event_callback,
         )
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _analyze_and_plan returned: plan={type(plan).__name__}, has_tasks={bool(plan and plan.get('tasks'))}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _analyze_and_plan returned: plan={type(plan).__name__}, has_tasks={bool(plan and plan.get('tasks'))}")
 
         if not plan or not plan.get("tasks"):
             # 无需工具调用，直接返回分析结果
             # 如果用户询问工具/能力，主动附加可用工具列表，避免只返回一句空泛分析
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} no tasks in plan, building direct response")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} no tasks in plan, building direct response")
             analysis = plan.get("analysis", "无法处理该请求") if plan else "无法处理该请求"
             tools_text = self._format_available_tools_for_user()
             final_result = analysis
             if tools_text and ("工具" in session.user_message or "能" in session.user_message or "哪些" in session.user_message):
                 final_result = f"{analysis}\n\n{tools_text}"
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} appended available tools to direct response")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} appended available tools to direct response")
             session.phase = WorkflowPhase.COMPLETED
             session.final_result = final_result
             session.completed_at = utc_now()
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting final_result (direct): content_len={len(session.final_result)}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} emitting final_result (direct): content_len={len(session.final_result)}")
             await self._emit(event_callback, {
                 "type": "final_result",
                 "data": {"content": session.final_result},
             })
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _run_workflow END (no tasks)")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _run_workflow END (no tasks)")
             return
 
         session.plan = plan.get("plan", "")
         tasks = self._create_tasks_from_plan(plan)
         session.tasks = tasks
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} created {len(tasks)} WorkflowTask objects from plan")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} created {len(tasks)} WorkflowTask objects from plan")
         for i, t in enumerate(tasks):
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task[{i}]: id={t.task_id}, title={t.title}, tool={t.tool_name}, type={t.task_type.value}, priority={t.priority.value}, depends_on={t.depends_on}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task[{i}]: id={t.task_id}, title={t.title}, tool={t.tool_name}, type={t.task_type.value}, priority={t.priority.value}, depends_on={t.depends_on}")
 
         # 持久化会话和节点到数据库
         try:
@@ -604,11 +653,11 @@ class WorkflowEngine:
                 conversation_id=session.conversation_id,
             )
             await save_workflow_nodes(session.session_id, [t.to_dict() for t in tasks])
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} persisted to database")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} persisted to database")
         except Exception as persist_err:
             logger.warning(f"[WorkflowEngine] Persistence failed: {persist_err}")
 
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting plan_created: task_count={len(tasks)}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} emitting plan_created: task_count={len(tasks)}")
         await self._emit(event_callback, {
             "type": "plan_created",
             "data": {
@@ -621,11 +670,11 @@ class WorkflowEngine:
         # 计划确认机制（借鉴 deer-flow ClarificationMiddleware）
         # P2：闪电模式（skip_confirmation=True）跳过用户确认，直接执行
         if session.skip_confirmation:
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} skip_confirmation=True (mode={session.mode.value}), auto-confirming plan")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} skip_confirmation=True (mode={session.mode.value}), auto-confirming plan")
             await self._emit(event_callback, {
                 "type": "plan_auto_confirmed",
                 "data": {
-                    "session_id": sid,
+                    "session_id": session_id,
                     "mode": session.mode.value,
                     "plan": session.plan,
                     "task_count": len(tasks),
@@ -634,16 +683,16 @@ class WorkflowEngine:
         else:
             # 推送 plan_pending_confirmation 事件，暂停等待用户确认
             session.phase = WorkflowPhase.WAITING_CONFIRMATION
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting phase_change: WAITING_CONFIRMATION")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} emitting phase_change: WAITING_CONFIRMATION")
             await self._emit(event_callback, {
                 "type": "phase_change",
                 "data": {"phase": WorkflowPhase.WAITING_CONFIRMATION.value},
             })
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting plan_pending_confirmation")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} emitting plan_pending_confirmation")
             await self._emit(event_callback, {
                 "type": "plan_pending_confirmation",
                 "data": {
-                    "session_id": sid,
+                    "session_id": session_id,
                     "plan": session.plan,
                     "task_count": len(tasks),
                     "tasks": [t.to_dict() for t in tasks],
@@ -651,9 +700,9 @@ class WorkflowEngine:
             })
 
             # 阻塞等待用户确认
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} waiting for user confirmation...")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} waiting for user confirmation...")
             await session.confirmation_event.wait()
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} confirmation received: result={session.confirmation_result}, feedback={session.confirmation_feedback[:200] if session.confirmation_feedback else ''}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} confirmation received: result={session.confirmation_result}, feedback={session.confirmation_feedback[:200] if session.confirmation_feedback else ''}")
 
             if not session.confirmation_result:
                 # 用户拒绝执行
@@ -661,7 +710,7 @@ class WorkflowEngine:
                 session.completed_at = utc_now()
                 reject_msg = f"用户拒绝了执行计划。{f' 反馈: {session.confirmation_feedback}' if session.confirmation_feedback else ''}"
                 session.final_result = reject_msg
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} plan rejected, emitting final_result")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} plan rejected, emitting final_result")
                 await self._emit(event_callback, {
                     "type": "plan_rejected",
                     "data": {
@@ -672,11 +721,11 @@ class WorkflowEngine:
                     "type": "final_result",
                     "data": {"content": reject_msg},
                 })
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _run_workflow END (plan rejected)")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _run_workflow END (plan rejected)")
                 return
 
             # 用户确认执行，继续
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} plan confirmed, proceeding to execution")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} plan confirmed, proceeding to execution")
             await self._emit(event_callback, {
                 "type": "plan_confirmed",
                 "data": {
@@ -686,15 +735,15 @@ class WorkflowEngine:
 
         # 阶段 2: 执行子任务
         session.phase = WorkflowPhase.EXECUTING
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting phase_change: EXECUTING")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} emitting phase_change: EXECUTING")
         await self._emit(event_callback, {
             "type": "phase_change",
             "data": {"phase": WorkflowPhase.EXECUTING.value},
         })
 
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} calling _execute_tasks...")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} calling _execute_tasks...")
         await self._execute_tasks(session, event_callback)
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _execute_tasks completed")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _execute_tasks completed")
 
         # 阶段 3: 直接汇总结果（不调用 LLM，避免上下文膨胀）
         # LLM 只负责输出计划，工具执行结果由前端拼接展示
@@ -708,7 +757,7 @@ class WorkflowEngine:
         # 生成结果摘要（从工具输出中提取，不调用 LLM）
         completed = [t for t in session.tasks if t.status == WorkflowStatus.COMPLETED]
         failed = [t for t in session.tasks if t.status == WorkflowStatus.FAILED]
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task results: completed={len(completed)}, failed={len(failed)}, total={len(session.tasks)}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task results: completed={len(completed)}, failed={len(failed)}, total={len(session.tasks)}")
         summary_lines = []
         if completed:
             summary_lines.append(f"已完成 {len(completed)} 个子任务：")
@@ -723,9 +772,9 @@ class WorkflowEngine:
 
         final_result = "\n".join(summary_lines)
         session.final_result = final_result
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} final_result (len={len(final_result)}): {final_result[:500]}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} final_result (len={len(final_result)}): {final_result[:500]}")
 
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting final_result with stats")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} emitting final_result with stats")
         await self._emit(event_callback, {
             "type": "final_result",
             "data": {
@@ -737,7 +786,7 @@ class WorkflowEngine:
                 },
             },
         })
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _run_workflow END (with tasks)")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _run_workflow END (with tasks)")
 
     async def _analyze_and_plan(
         self,
@@ -751,12 +800,12 @@ class WorkflowEngine:
         使用 return_raw=True 获取完整响应（含 reasoning 思考过程），
         并提取 <think></think> 标签内的思考内容，推送到前端 SSE 流。
         """
-        from app.runtime.provider.llm.adapter import llm_adapter
+        llm_adapter = _get_llm_adapter()
 
-        sid = session.session_id
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _analyze_and_plan START")
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} provider={provider}, model={model}")
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} user_message (len={len(session.user_message)}): {session.user_message[:300]}")
+        session_id = session.session_id
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _analyze_and_plan START")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} provider={provider}, model={model}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} user_message (len={len(session.user_message)}): {session.user_message[:300]}")
 
         # 按模式过滤工具列表（STANDARD 排除 27 个细粒度 browser_action 工具）
         from app.core.chat_mode import BROWSER_AUTOMATION_TOOL_NAMES
@@ -768,33 +817,38 @@ class WorkflowEngine:
             exclude_tools=exclude_tools,
         )
         tools_text = json.dumps(available_tools, ensure_ascii=False, indent=2)
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} available_tools count={len(available_tools) if isinstance(available_tools, list) else 'N/A'}")
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} tools_text (len={len(tools_text)}): {tools_text[:500]}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} available_tools count={len(available_tools) if isinstance(available_tools, list) else 'N/A'}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} tools_text (len={len(tools_text)}): {tools_text[:500]}")
 
         system_prompt = _WORKFLOW_SYSTEM_PROMPT.format(available_tools=tools_text)
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} system_prompt (len={len(system_prompt)}): {system_prompt[:500]}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} system_prompt (len={len(system_prompt)}): {system_prompt[:500]}")
 
-        # P3：自动注入记忆上下文到 system prompt
-        # 借鉴常规对话的 inject_memory 机制，LLM 无需主动调用 memory.build_context 工具
-        system_prompt = workflow_context_manager.inject_memory_context(
-            system_prompt=system_prompt,
-            query=session.user_message,
-            conversation_id=session.conversation_id if hasattr(session, 'conversation_id') else None,
-        )
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} system_prompt after memory injection (len={len(system_prompt)})")
+        # Ultra 模式追加引导：优先规划工作流 + 记忆按需查询
+        if session.mode == WorkflowMode.ULTRA:
+            system_prompt += "\n\nULTRA MODE GUIDELINES:\n- You are in ultra mode with ALL tools available. Prioritize decomposing user requests into structured workflow plans.\n- After understanding the user's intent, proactively create a task plan (even for moderately complex requests).\n- Use memory.search and memory.build_context tools ON DEMAND when you need user profile or historical context — memory is NOT pre-injected.\n- You have higher token budget and iteration limits; leverage them for thorough multi-step execution.\n- When in doubt about whether to plan, lean towards creating a plan — a well-structured plan rarely hurts."
+
+        # P3：自动注入记忆上下文到 system prompt（仅 standard 模式）
+        # Ultra 模式改为按需查询：AI 主动调 memory.search / memory.build_context 工具
+        if session.mode != WorkflowMode.ULTRA:
+            system_prompt = workflow_context_manager.inject_memory_context(
+                system_prompt=system_prompt,
+                query=session.user_message,
+                conversation_id=session.conversation_id if hasattr(session, 'conversation_id') else None,
+            )
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} system_prompt after memory injection (len={len(system_prompt)})")
 
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": session.user_message},
         ]
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} messages count={len(messages)}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} messages count={len(messages)}")
 
         actual_provider = provider or llm_adapter.default_provider
         if model is None:
             provider_obj = llm_adapter.get_provider(actual_provider)
             model = provider_obj.default_model if provider_obj else ""
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} resolved provider={actual_provider}, model={model}")
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} mode={session.mode.value}, planning_temperature={session.planning_temperature}, planning_max_tokens={session.planning_max_tokens}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} resolved provider={actual_provider}, model={model}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} mode={session.mode.value}, planning_temperature={session.planning_temperature}, planning_max_tokens={session.planning_max_tokens}")
 
         await self._emit(event_callback, {
             "type": "planning",
@@ -806,7 +860,7 @@ class WorkflowEngine:
         content = ""
         reasoning = ""
         finish_reason = "stop"
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} calling llm_adapter.chat_stream...")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} calling llm_adapter.chat_stream...")
         async for chunk in llm_adapter.chat_stream(
             messages=messages,
             provider_name=actual_provider,
@@ -838,33 +892,33 @@ class WorkflowEngine:
                     })
             elif chunk.type == "finish_reason":
                 finish_reason = chunk.data.get("finish_reason", "stop")
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} chat_stream completed: content_len={len(content)}, reasoning_len={len(reasoning)}, finish_reason={finish_reason}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} chat_stream completed: content_len={len(content)}, reasoning_len={len(reasoning)}, finish_reason={finish_reason}")
 
         # 检测 LLM 输出截断
         if finish_reason == "length":
             logger.warning(
                 "[WorkflowEngine] Session {} LLM output truncated (finish_reason=length, "
                 "max_tokens={}). Attempting JSON repair...",
-                sid, session.planning_max_tokens,
+                session_id, session.planning_max_tokens,
             )
 
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} raw content (first 800): {content[:800]}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} raw content (first 800): {content[:800]}")
 
         # 检测并提取 <think></think> 标签中的思考过程
         # 部分模型（DeepSeek-R1、Qwen3）将思考过程嵌入 content 的 <think> 标签中
         has_think_tag = "<think>" in content.lower() or "</think>" in content.lower()
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} has_think_tag_in_content={has_think_tag}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} has_think_tag_in_content={has_think_tag}")
 
         think_content = ""
         if has_think_tag:
             content_before_len = len(content)
             content, think_content = _extract_think_content(content)
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} extracted think_content (len={len(think_content)}): {think_content[:500]}")
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} content after think removal (len={len(content)}, before={content_before_len}): {content[:500]}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} extracted think_content (len={len(think_content)}): {think_content[:500]}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} content after think removal (len={len(content)}, before={content_before_len}): {content[:500]}")
 
         # 如果有 think 标签内容，推送为 reasoning 事件（流式过程中未作为 reasoning 推送）
         if think_content:
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting think_content as reasoning (len={len(think_content)})")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} emitting think_content as reasoning (len={len(think_content)})")
             await self._emit(event_callback, {
                 "type": "reasoning",
                 "data": {
@@ -877,27 +931,27 @@ class WorkflowEngine:
 
         logger.info(
             "[WorkflowEngine] Session {} LLM response: content_len={}, reasoning_len={}, think_tag={}",
-            sid, len(content), len(combined_reasoning), has_think_tag,
+            session_id, len(content), len(combined_reasoning), has_think_tag,
         )
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} content for JSON extraction (first 800): {content[:800]}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} content for JSON extraction (first 800): {content[:800]}")
 
         plan = _extract_json_plan(content)
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _extract_json_plan result: {type(plan).__name__}, keys={list(plan.keys()) if plan else 'None'}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _extract_json_plan result: {type(plan).__name__}, keys={list(plan.keys()) if plan else 'None'}")
 
         if plan:
             task_count = len(plan.get("tasks", []))
             logger.info(
-                f"[WorkflowEngine] Session {sid} plan created with {task_count} tasks"
+                f"[WorkflowEngine] Session {session_id} plan created with {task_count} tasks"
             )
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} plan details: analysis={plan.get('analysis', '')[:200]}, plan={plan.get('plan', '')[:200]}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} plan details: analysis={plan.get('analysis', '')[:200]}, plan={plan.get('plan', '')[:200]}")
             if task_count > 0:
                 for i, t in enumerate(plan.get("tasks", [])):
-                    logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task[{i}]: title={t.get('title')}, tool={t.get('tool_name')}, priority={t.get('priority')}")
+                    logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task[{i}]: title={t.get('title')}, tool={t.get('tool_name')}, priority={t.get('priority')}")
         else:
             logger.info(
-                f"[WorkflowEngine] Session {sid} no structured plan, using direct response"
+                f"[WorkflowEngine] Session {session_id} no structured plan, using direct response"
             )
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} falling back to direct response as analysis")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} falling back to direct response as analysis")
             # 如果 LLM 输出被截断且 JSON 修复失败，在 analysis 中附加提示
             if finish_reason == "length":
                 return {
@@ -1011,29 +1065,29 @@ class WorkflowEngine:
         - 依赖已满足的任务可以并行执行
         - 有依赖关系的任务串行执行
         """
-        sid = session.session_id
+        session_id = session.session_id
         completed_ids: set[str] = set()
         failed_ids: set[str] = set()
         max_rounds = len(session.tasks) + 1
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _execute_tasks START: total_tasks={len(session.tasks)}, max_rounds={max_rounds}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _execute_tasks START: total_tasks={len(session.tasks)}, max_rounds={max_rounds}")
 
         for round_num in range(1, max_rounds + 1):
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _execute_tasks round {round_num}/{max_rounds}: completed={len(completed_ids)}, failed={len(failed_ids)}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _execute_tasks round {round_num}/{max_rounds}: completed={len(completed_ids)}, failed={len(failed_ids)}")
             if session.abort_requested:
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} abort requested, cancelling pending tasks")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} abort requested, cancelling pending tasks")
                 for task in session.tasks:
                     if task.status == WorkflowStatus.PENDING:
                         task.mark_cancelled()
                 break
 
             ready = self._get_ready_tasks(session, completed_ids, failed_ids)
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} round {round_num}: ready_tasks={len(ready)}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} round {round_num}: ready_tasks={len(ready)}")
             if not ready:
                 stuck = [
                     t for t in session.tasks
                     if t.status == WorkflowStatus.PENDING
                 ]
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} no ready tasks, stuck_tasks={len(stuck)}")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} no ready tasks, stuck_tasks={len(stuck)}")
                 for t in stuck:
                     t.mark_failed("Unresolvable dependency")
                     failed_ids.add(t.task_id)
@@ -1048,10 +1102,10 @@ class WorkflowEngine:
                 break
 
             if len(ready) == 1:
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} round {round_num}: executing single task {ready[0].task_id} ({ready[0].title})")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} round {round_num}: executing single task {ready[0].task_id} ({ready[0].title})")
                 await self._execute_single_task(ready[0], session, event_callback)
             else:
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} round {round_num}: executing {len(ready)} tasks in parallel: {[t.task_id for t in ready]}")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} round {round_num}: executing {len(ready)} tasks in parallel: {[t.task_id for t in ready]}")
                 results = await asyncio.gather(*[
                     self._execute_single_task(t, session, event_callback)
                     for t in ready
@@ -1062,7 +1116,7 @@ class WorkflowEngine:
                             f"[WorkflowEngine] Task {ready[i].task_id} "
                             f"gather error: {result}"
                         )
-                        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} gather exception for task {ready[i].task_id}: {type(result).__name__}: {result}")
+                        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} gather exception for task {ready[i].task_id}: {type(result).__name__}: {result}")
 
             for t in ready:
                 if t.status == WorkflowStatus.COMPLETED:
@@ -1071,10 +1125,10 @@ class WorkflowEngine:
                     failed_ids.add(t.task_id)
 
             if len(completed_ids) + len(failed_ids) >= len(session.tasks):
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} all tasks resolved (completed={len(completed_ids)}, failed={len(failed_ids)}), breaking")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} all tasks resolved (completed={len(completed_ids)}, failed={len(failed_ids)}), breaking")
                 break
 
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _execute_tasks END: completed={len(completed_ids)}, failed={len(failed_ids)}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _execute_tasks END: completed={len(completed_ids)}, failed={len(failed_ids)}")
 
     def _get_ready_tasks(
         self,
@@ -1108,13 +1162,13 @@ class WorkflowEngine:
         event_callback: WorkflowEventCallback | None,
     ) -> None:
         """执行单个子任务"""
-        sid = session.session_id
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _execute_single_task START: task_id={task.task_id}, title={task.title}, tool={task.tool_name}")
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task arguments: {json.dumps(task.arguments, ensure_ascii=False)[:500]}")
+        session_id = session.session_id
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _execute_single_task START: task_id={task.task_id}, title={task.title}, tool={task.tool_name}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task arguments: {json.dumps(task.arguments, ensure_ascii=False)[:500]}")
         task.mark_running()
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task {task.task_id} marked as RUNNING")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task {task.task_id} marked as RUNNING")
 
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} emitting task_started: task_id={task.task_id}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} emitting task_started: task_id={task.task_id}")
         await self._emit(event_callback, {
             "type": "task_started",
             "data": {
@@ -1128,7 +1182,7 @@ class WorkflowEngine:
 
         try:
             if not task.tool_name:
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task {task.task_id} has no tool_name, marking as completed (skipped)")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task {task.task_id} has no tool_name, marking as completed (skipped)")
                 task.mark_completed("任务无需工具调用，已跳过")
                 await self._emit(event_callback, {
                     "type": "task_completed",
@@ -1140,16 +1194,16 @@ class WorkflowEngine:
                 })
                 return
 
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task {task.task_id} calling internal_tool_registry.execute: tool={task.tool_name}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task {task.task_id} calling internal_tool_registry.execute: tool={task.tool_name}")
             result = await internal_tool_registry.execute(
                 task.tool_name, task.arguments,
             )
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task {task.task_id} tool execution returned: success={result.success}, output_len={len(result.output) if result.output else 0}, error={result.error}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task {task.task_id} tool execution returned: success={result.success}, output_len={len(result.output) if result.output else 0}, error={result.error}")
 
             if result.success:
                 task.mark_completed(result.output)
                 task.metadata = result.metadata
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task {task.task_id} marked as COMPLETED, result_len={len(result.output) if result.output else 0}")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task {task.task_id} marked as COMPLETED, result_len={len(result.output) if result.output else 0}")
                 await self._emit(event_callback, {
                     "type": "task_completed",
                     "data": {
@@ -1161,7 +1215,7 @@ class WorkflowEngine:
                 })
             else:
                 task.mark_failed(result.error)
-                logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task {task.task_id} marked as FAILED: error={result.error}")
+                logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task {task.task_id} marked as FAILED: error={result.error}")
                 await self._emit(event_callback, {
                     "type": "task_failed",
                     "data": {
@@ -1172,7 +1226,7 @@ class WorkflowEngine:
                 })
 
         except Exception as e:
-            logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} task {task.task_id} exception: {type(e).__name__}: {e}")
+            logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task {task.task_id} exception: {type(e).__name__}: {e}")
             task.mark_failed(str(e))
             await self._emit(event_callback, {
                 "type": "task_failed",
@@ -1182,7 +1236,7 @@ class WorkflowEngine:
                     "error": str(e),
                 },
             })
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {sid} _execute_single_task END: task_id={task.task_id}, final_status={task.status.value}")
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} _execute_single_task END: task_id={task.task_id}, final_status={task.status.value}")
 
     async def _synthesize_results(
         self,
@@ -1192,7 +1246,7 @@ class WorkflowEngine:
         event_callback: WorkflowEventCallback | None,
     ) -> str:
         """综合所有子任务结果，生成最终回复"""
-        from app.runtime.provider.llm.adapter import llm_adapter
+        llm_adapter = _get_llm_adapter()
 
         completed = [t for t in session.tasks if t.status == WorkflowStatus.COMPLETED]
         failed = [t for t in session.tasks if t.status == WorkflowStatus.FAILED]

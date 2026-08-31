@@ -7,17 +7,20 @@
  * - useWorkflowFlow：VueFlow 节点/边构建、dagre 布局、节点选择
  * 侧栏与节点详情面板拆分至 components/workflow/ 子组件。
  */
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
-import { Sparkles, Square, Clock, Cpu, Workflow as WorkflowIcon } from 'lucide-vue-next'
+import { Square, Clock, Cpu, Workflow as WorkflowIcon } from 'lucide-vue-next'
 import LumiButton from '../components/common/LumiButton.vue'
 import LumiEmptyState from '../components/common/LumiEmptyState.vue'
 import WorkflowSidebar from '../components/workflow/WorkflowSidebar.vue'
 import WorkflowNodeDetail from '../components/workflow/WorkflowNodeDetail.vue'
+import WorkflowTemplateList from '../components/workflow/WorkflowTemplateList.vue'
 import { useWorkflowSessions } from '../composables/useWorkflowSessions'
 import { useWorkflowFlow, NODE_TYPE_ICON, STATUS_ICON, STATUS_COLOR } from '../composables/useWorkflowFlow'
+import { useWorkflowStore } from '../stores/workflow'
+import type { WorkflowTemplate } from '../types/workflow'
 
 // 会话列表 + 当前会话 + 进度统计
 const {
@@ -31,8 +34,10 @@ const {
   isRunning,
   hasLiveSession,
   livePhase,
+  liveSessionId,
   toggleRun,
   progressStats,
+  loadSessionDetail,
 } = useWorkflowSessions()
 
 // VueFlow 流程图（依赖 currentDisplaySession）
@@ -44,22 +49,63 @@ const {
   handlePaneClick,
 } = useWorkflowFlow(currentDisplaySession)
 
+// Tab 切换
+const activeTab = ref<'sessions' | 'templates'>('sessions')
+
+// 模板 Store
+const workflowStore = useWorkflowStore()
+
 onMounted(() => {
   loadSessions()
 })
+
+/** 选中历史会话时同时加载详情（含节点数据，渲染流程图） */
+const handleSelectSession = (sessionId: string): void => {
+  selectSession(sessionId)
+  loadSessionDetail(sessionId)
+}
+
+/** 切换到模板 Tab 时自动加载模板列表 */
+const switchToTemplates = (): void => {
+  activeTab.value = 'templates'
+  workflowStore.loadTemplates()
+}
+
+/** 运行模板 */
+const handleRunTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
+  const sessionId = await workflowStore.runTemplate(tpl.template_id, {}, tpl.auto_approve ? true : null)
+  if (sessionId) {
+    // 切回会话 Tab 并刷新列表
+    activeTab.value = 'sessions'
+    loadSessions()
+  }
+}
+
+/** 定时运行模板（简单弹窗输入 cron 表达式） */
+const handleScheduleTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
+  const schedule = window.prompt('请输入定时表达式（cron 格式，如 "0 9 * * *" 表示每天9点）', '0 9 * * *')
+  if (!schedule) return
+  const taskId = await workflowStore.scheduleTemplate(tpl.template_id, schedule)
+  if (taskId) {
+    window.alert('定时任务已创建')
+  }
+}
+
+/** 删除模板 */
+const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
+  if (!window.confirm(`确定要删除模板「${tpl.name}」吗？`)) return
+  await workflowStore.deleteTemplate(tpl.template_id)
+}
 </script>
 
 <template>
   <div class="workflow-view">
-    <div class="workflow-header">
-      <div class="header-left">
-        <h1 class="page-title">
-          <Sparkles :size="20" />
-          工作流画布
-        </h1>
-        <span class="page-subtitle">AI 任务编排与可视化</span>
+    <div class="workflow-header animate-fade-in">
+      <div class="workflow-header__text">
+        <h1 class="workflow-title">工作流画布</h1>
+        <p class="workflow-desc">AI 任务编排与可视化</p>
       </div>
-      <div class="header-actions">
+      <div class="workflow-header__actions">
         <div v-if="currentDisplaySession" class="session-progress">
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: progressStats.progress + '%' }"></div>
@@ -87,7 +133,26 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="workflow-body">
+    <!-- Tab 切换栏 -->
+    <div class="workflow-tabs">
+      <button
+        class="workflow-tab"
+        :class="{ active: activeTab === 'sessions' }"
+        @click="activeTab = 'sessions'"
+      >
+        历史会话
+      </button>
+      <button
+        class="workflow-tab"
+        :class="{ active: activeTab === 'templates' }"
+        @click="switchToTemplates"
+      >
+        模板
+      </button>
+    </div>
+
+    <!-- 历史会话 Tab：三栏布局 -->
+    <div v-show="activeTab === 'sessions'" class="workflow-body">
       <WorkflowSidebar
         :sessions="sessions"
         :is-loading-sessions="isLoadingSessions"
@@ -95,7 +160,8 @@ onMounted(() => {
         :has-live-session="hasLiveSession"
         :is-running="isRunning"
         :live-phase="livePhase"
-        @select-session="selectSession"
+        :live-session-id="liveSessionId"
+        @select-session="handleSelectSession"
         @show-live="showLiveSession"
       />
 
@@ -151,6 +217,17 @@ onMounted(() => {
         />
       </Transition>
     </div>
+
+    <!-- 模板 Tab：模板列表 -->
+    <div v-if="activeTab === 'templates'" class="workflow-body">
+      <WorkflowTemplateList
+        :templates="workflowStore.templates"
+        :templates-loading="workflowStore.templatesLoading"
+        @run="handleRunTemplate"
+        @schedule="handleScheduleTemplate"
+        @delete="handleDeleteTemplate"
+      />
+    </div>
   </div>
 </template>
 
@@ -174,39 +251,62 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--workspace-border);
+  padding: var(--space-6) var(--space-7) var(--space-4);
   flex-shrink: 0;
 }
 
-.header-left {
+.workflow-header__text {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
 }
 
-.page-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-lg);
-  font-weight: 700;
+.workflow-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
+  line-height: 1.2;
 }
 
-.page-subtitle {
-  font-size: var(--text-sm);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
-  font-weight: 500;
+.workflow-desc {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
 }
 
-.header-actions {
+.workflow-header__actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.workflow-tabs {
+  display: flex;
+  gap: var(--space-2);
+  padding: 0 var(--space-7);
+  margin-bottom: var(--space-3);
+  flex-shrink: 0;
+}
+
+.workflow-tab {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease-in-out);
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+
+.workflow-tab:hover {
+  background: var(--workspace-hover);
+  color: var(--text-secondary);
+}
+
+.workflow-tab.active {
+  background: var(--lumi-brand);
+  color: #fff;
 }
 
 .session-progress {
@@ -244,6 +344,8 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  gap: var(--space-4);
+  padding: 0 var(--space-7) var(--space-7);
 }
 
 .canvas-area {

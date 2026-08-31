@@ -1,12 +1,15 @@
 import numpy as np
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, Protocol
-import json
+from typing import Any, Protocol
 import httpx
 import asyncio
 
 from loguru import logger
+from sqlalchemy import delete, select
+
+from app.infrastructure.database.models.memory import MemoryVector
+from .store import _MemoryDB, _derive_owner_key
 
 
 @dataclass
@@ -93,19 +96,72 @@ class LocalEmbeddingProvider:
 
 
 class VectorStore:
-    def __init__(self, storage_path: Path, provider: EmbeddingProvider):
+    """向量存储 — SQLite BLOB 按行存储 + 增量写（替代 vectors.npz 全量重写）。
+
+    设计（前端后端项目锐评 · 高优先级 #3）：
+    - 每条向量一行（memory_vectors.fact_id 主键），add/batch_add/remove
+      立即单事务落库，进程崩溃不丢增量；
+    - save() 兼容保留（历史调用点），但已无需全量重写（数据实时持久化）；
+    - 检索仍走进程内 cache + 分类/作用域/对话索引（与旧实现一致），
+      冷启动时 _load() 一次性从 SQLite 读回。
+    - owner_key 行级隔离：主人轨 / 平台用户轨的向量互不串扰。
+    """
+
+    def __init__(self, storage_path: Path, provider: EmbeddingProvider, owner_key: str | None = None):
         self._path = Path(storage_path)
         self._provider = provider
+        self._owner_key = owner_key or _derive_owner_key(self._path)
+        self._db = _MemoryDB(self._path)
         self._cache: dict[str, VectorEntry] = {}
         self._category_index: dict[str, set[str]] = {}
         self._scope_index: dict[str, set[str]] = {}
         self._conv_index: dict[str, set[str]] = {}
         self._loaded = False
 
+    def close(self) -> None:
+        self._db.close()
+
     def _ensure_loaded(self):
         if not self._loaded:
             self._load()
             self._loaded = True
+
+    # ── 持久化（增量写，单事务） ──
+
+    @staticmethod
+    def _vector_to_blob(vector: np.ndarray) -> bytes:
+        return np.asarray(vector, dtype=np.float32).tobytes()
+
+    @staticmethod
+    def _blob_to_vector(blob: bytes) -> np.ndarray:
+        return np.frombuffer(blob, dtype=np.float32)
+
+    def _row_from_entry(self, entry: VectorEntry) -> MemoryVector:
+        return MemoryVector(
+            fact_id=entry.fact_id,
+            owner_key=self._owner_key,
+            content=entry.content,
+            category=entry.category,
+            scope=entry.scope,
+            conversation_id=entry.conversation_id,
+            vector=self._vector_to_blob(entry.vector),
+        )
+
+    def _persist_upsert(self, entry: VectorEntry) -> None:
+        """单行 upsert（SQLite INSERT OR REPLACE 语义）。"""
+        with self._db.session() as session:
+            row = session.get(MemoryVector, entry.fact_id)
+            if row is None:
+                session.add(self._row_from_entry(entry))
+            else:
+                row.content = entry.content
+                row.category = entry.category
+                row.scope = entry.scope
+                row.conversation_id = entry.conversation_id
+                row.vector = self._vector_to_blob(entry.vector)
+            session.commit()
+
+    # ── 写入 ──
 
     async def add(self, entry: VectorEntry) -> None:
         self._ensure_loaded()
@@ -114,19 +170,40 @@ class VectorStore:
             entry.vector = np.array(vectors[0], dtype=np.float32)
         self._cache[entry.fact_id] = entry
         self._update_indexes(entry, add=True)
+        try:
+            self._persist_upsert(entry)
+        except Exception as e:
+            logger.warning(f"[VectorStore] Persist add failed for {entry.fact_id}: {e}")
 
     async def batch_add(self, entries: list[VectorEntry]) -> None:
         self._ensure_loaded()
         if not entries:
             return
-        
+
         texts = [e.content for e in entries]
         vectors = await self._provider.embed(texts)
-        
+
         for i, entry in enumerate(entries):
             entry.vector = np.array(vectors[i], dtype=np.float32)
             self._cache[entry.fact_id] = entry
             self._update_indexes(entry, add=True)
+
+        # 批量落盘（单事务）
+        try:
+            with self._db.session() as session:
+                for entry in entries:
+                    row = session.get(MemoryVector, entry.fact_id)
+                    if row is None:
+                        session.add(self._row_from_entry(entry))
+                    else:
+                        row.content = entry.content
+                        row.category = entry.category
+                        row.scope = entry.scope
+                        row.conversation_id = entry.conversation_id
+                        row.vector = self._vector_to_blob(entry.vector)
+                session.commit()
+        except Exception as e:
+            logger.warning(f"[VectorStore] Batch persist failed ({len(entries)} entries): {e}")
 
     async def remove(self, fact_id: str) -> None:
         self._ensure_loaded()
@@ -135,15 +212,42 @@ class VectorStore:
         entry = self._cache[fact_id]
         self._update_indexes(entry, add=False)
         del self._cache[fact_id]
+        try:
+            with self._db.session() as session:
+                session.execute(
+                    delete(MemoryVector).where(
+                        MemoryVector.fact_id == fact_id,
+                        MemoryVector.owner_key == self._owner_key,
+                    )
+                )
+                session.commit()
+        except Exception as e:
+            logger.warning(f"[VectorStore] Persist remove failed for {fact_id}: {e}")
 
     async def delete_by_conversation(self, conversation_id: str) -> int:
         self._ensure_loaded()
-        deleted = 0
         to_delete = list(self._conv_index.get(conversation_id, set()))
         for fact_id in to_delete:
-            await self.remove(fact_id)
-            deleted += 1
-        return deleted
+            entry = self._cache.get(fact_id)
+            if entry is None:
+                continue
+            self._update_indexes(entry, add=False)
+            del self._cache[fact_id]
+        if to_delete:
+            try:
+                with self._db.session() as session:
+                    session.execute(
+                        delete(MemoryVector).where(
+                            MemoryVector.owner_key == self._owner_key,
+                            MemoryVector.conversation_id == conversation_id,
+                        )
+                    )
+                    session.commit()
+            except Exception as e:
+                logger.warning(f"[VectorStore] Persist delete_by_conversation failed: {e}")
+        return len(to_delete)
+
+    # ── 检索（进程内 cache + 索引，与旧实现一致） ──
 
     async def search(
         self, query: str, k: int = 10,
@@ -153,7 +257,7 @@ class VectorStore:
         self._ensure_loaded()
         query_vec = np.array((await self._provider.embed([query]))[0], dtype=np.float32)
         candidates = self._get_candidates(category, scope, conversation_id)
-        
+
         results = []
         for fid in candidates:
             entry = self._cache.get(fid)
@@ -162,7 +266,7 @@ class VectorStore:
             score = self._cosine(query_vec, entry.vector)
             if score >= min_score:
                 results.append((fid, score))
-        
+
         results.sort(key=lambda x: x[1], reverse=True)
         return [
             ScoredFact(fact_id=fid, score=score, category=self._cache[fid].category)
@@ -175,7 +279,7 @@ class VectorStore:
         self._ensure_loaded()
         query_vec = np.array((await self._provider.embed([content]))[0], dtype=np.float32)
         candidates = self._category_index.get(category, set())
-        
+
         best_score, best_id = 0.0, None
         for fid in candidates:
             entry = self._cache.get(fid)
@@ -187,54 +291,27 @@ class VectorStore:
         return best_id
 
     def save(self) -> None:
-        if not self._cache:
-            return
-        self._path.mkdir(parents=True, exist_ok=True)
-        
-        ids = list(self._cache.keys())
-        vectors = np.stack([self._cache[fid].vector for fid in ids])
-        
-        np.savez_compressed(self._path / "vectors.npz", ids=np.array(ids), vectors=vectors)
-        
-        meta = {
-            fid: {
-                "content": self._cache[fid].content,
-                "category": self._cache[fid].category,
-                "scope": self._cache[fid].scope,
-                "conversation_id": self._cache[fid].conversation_id,
-            }
-            for fid in ids
-        }
-        (self._path / "vectors_meta.json").write_text(
-            json.dumps(meta, ensure_ascii=False), encoding="utf-8"
-        )
+        """兼容保留：数据已实时持久化（增量写），无需全量重写。"""
+        # 旧实现在此全量重写 vectors.npz + vectors_meta.json；
+        # SQLite 行存储后 add/batch_add/remove 已即时落盘，此处为空操作。
+        return
 
     def _load(self) -> None:
-        path = self._path / "vectors.npz"
-        if not path.exists():
-            return
-        
         try:
-            data = np.load(path, allow_pickle=False)
-            ids = [str(x) for x in data["ids"]]
-            vectors = data["vectors"]
-            
-            meta_path = self._path / "vectors_meta.json"
-            meta = {}
-            if meta_path.exists():
-                meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            
-            for i, fid in enumerate(ids):
-                m = meta.get(fid, {})
+            with self._db.session() as session:
+                rows = session.execute(
+                    select(MemoryVector).where(MemoryVector.owner_key == self._owner_key)
+                ).scalars().all()
+            for row in rows:
                 entry = VectorEntry(
-                    fact_id=fid,
-                    content=m.get("content", ""),
-                    category=m.get("category", ""),
-                    scope=m.get("scope", ""),
-                    conversation_id=m.get("conversation_id", ""),
-                    vector=vectors[i].astype(np.float32),
+                    fact_id=row.fact_id,
+                    content=row.content or "",
+                    category=row.category or "",
+                    scope=row.scope or "",
+                    conversation_id=row.conversation_id or "",
+                    vector=self._blob_to_vector(row.vector),
                 )
-                self._cache[fid] = entry
+                self._cache[entry.fact_id] = entry
                 self._update_indexes(entry, add=True)
         except Exception as e:
             logger.warning(f"[VectorStore] Load failed: {e}")

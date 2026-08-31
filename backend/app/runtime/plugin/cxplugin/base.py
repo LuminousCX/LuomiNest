@@ -59,7 +59,7 @@ class CxPluginContext:
         self._kv_store = PluginKVStore(plugin_id)
         # 共享 HTTP 客户端（懒创建，需 NETWORK 权限）
         self._http_client: httpx.AsyncClient | None = None
-        # 用户可变的 settings 配置（独立于 manifest.raw，持久化到 JsonStore）
+        # 用户可变的 settings 配置（独立于 manifest.raw，持久化到 config_items）
         self._settings_store = None  # 懒创建，避免 import 时副作用
 
     # ===================================================================
@@ -84,17 +84,17 @@ class CxPluginContext:
     def emit_event(self, event_type: CxEventType, data: dict[str, Any]) -> None:
         """主动发射事件到全局事件总线（同步触发，非阻塞）。
 
-        通过 cx_plugin_registry.dispatch_event 异步分发，此处用 asyncio.create_task
+        通过 luominest_plugin_registry.dispatch_event 异步分发，此处用 asyncio.create_task
         触发，不等待完成。需要 EVENT_LISTEN 权限（默认授予）。
         """
         import asyncio
 
         # 懒导入避免循环依赖
-        from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+        from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
 
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(cx_plugin_registry.dispatch_event(event_type, data))
+            loop.create_task(luominest_plugin_registry.dispatch_event(event_type, data))
         except RuntimeError:
             # 无运行中的事件循环（如同步上下文），降级为同步调用
             self._logger.warning(
@@ -236,11 +236,13 @@ class CxPluginContext:
         self._logger.debug(f"[CxPlugin] Config updated: {key}")
 
     def _ensure_settings_store(self) -> None:
-        """懒创建插件 settings 持久化存储。"""
-        if self._settings_store is None:
-            from app.infrastructure.database.json_store import JsonStore
+        """懒创建插件 settings 持久化存储。
 
-            self._settings_store = JsonStore(f"cx_plugin_settings_{self.plugin_id}.json")
+        存储于 config_items 命名空间 plugins.settings.<plugin_id>
+        （唯一权威源）；遗留 JSON 文件首次访问时幂等合并，旧文件保留不删除。
+        """
+        if self._settings_store is None:
+            self._settings_store = PluginKVStore(self.plugin_id, namespace="settings")
 
     # ===================================================================
     # 系统能力

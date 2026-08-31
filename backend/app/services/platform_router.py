@@ -1,11 +1,12 @@
 import asyncio
+import json
 import time
 import traceback
 import uuid
 from loguru import logger
 
 from app.core.utils import utc_now
-from app.runtime.platform.base import PlatformMessage, PlatformResponse
+from app.runtime.platform.base import PlatformMessage, PlatformResponse, get_standard_tools_for_platform
 from app.runtime.platform.session import (
     MAIN_AGENT_ID,
     create_new_conversation,
@@ -62,12 +63,20 @@ class LuomiNestPlatformRouter:
             return self._processing_locks[session_key]
 
     def _resolve_instance_model(self, instance_id: str) -> tuple[str, str, str, float, int]:
-        """解析平台实例的模型配置，空值回退到主 Agent 配置。
+        """解析平台实例的模型配置，空值回退到全局主模型配置。
 
         返回 (provider, model, system_prompt, temperature, max_tokens)。
+
+        2026-08 全局模型统一后：
+        - provider/model 回退到全局主模型（resolve_main_agent_provider_model 已委托全局）；
+        - temperature/max_tokens 回退到全局生成参数（不再读 main_agent 人设配置）；
+        - system_prompt 仍取主 Agent 人设。
         """
+        from app.infrastructure.database.facades.model_selection import get_global_generation_defaults
+
         main_config = load_luominest_main_agent_config()
         main_provider, main_model = resolve_main_agent_provider_model()
+        global_temperature, global_max_tokens = get_global_generation_defaults()
 
         inst = get_instance(instance_id)
         if not inst:
@@ -75,8 +84,8 @@ class LuomiNestPlatformRouter:
                 main_provider,
                 main_model,
                 main_config.get("system_prompt", ""),
-                float(main_config.get("temperature", 0.7)),
-                int(main_config.get("max_tokens", 4096)),
+                float(global_temperature),
+                int(global_max_tokens),
             )
 
         inst_cfg = inst.config.get("model_config", {}) or {}
@@ -85,12 +94,12 @@ class LuomiNestPlatformRouter:
         system_prompt = inst_cfg.get("system_prompt") or main_config.get("system_prompt", "")
         temperature = inst_cfg.get("temperature")
         if temperature is None:
-            temperature = float(main_config.get("temperature", 0.7))
+            temperature = float(global_temperature)
         else:
             temperature = float(temperature)
         max_tokens = inst_cfg.get("max_tokens")
         if max_tokens is None:
-            max_tokens = int(main_config.get("max_tokens", 4096))
+            max_tokens = int(global_max_tokens)
         else:
             max_tokens = int(max_tokens)
 
@@ -255,12 +264,16 @@ class LuomiNestPlatformRouter:
         messages = [{"role": "system", "content": full_system}] + history_messages + [user_message]
 
         messages = context_service.inject_timestamp_prompt(messages)
+        # 记忆注入（DomainPolicy，§9）：平台域读 owner（优先）+ 该用户 users/{user_key} 记忆
         messages = await context_service.inject_memory(
             messages,
             agent_id=MAIN_AGENT_ID,
             provider_name=provider,
             thread_id=conv_id,
             llm_adapter=llm_adapter,
+            domain=conv.get("domain") or f"platform:{instance_id}",
+            scene=conv.get("scene") or "platform",
+            user_key=conv.get("user_key") or "",
         )
 
         # 平台对话使用更激进的 70% 压缩阈值
@@ -293,6 +306,20 @@ class LuomiNestPlatformRouter:
             f"history={len(history_messages)}"
         )
 
+        # ─── 平台工具注入（tool-opt §4.7 T9）───
+        # 双层注入：standard 子集 + 平台专用工具
+        platform_adapter = get_adapter(instance_id)
+        platform_tools: list[dict] = []
+        # 第一层：标准工具子集
+        standard_tools = get_standard_tools_for_platform(provider, model)
+        platform_tools.extend(standard_tools)
+        # 第二层：适配器声明的平台专用工具
+        if platform_adapter and hasattr(platform_adapter, 'available_tools'):
+            adapter_tools = platform_adapter.available_tools
+            platform_tools.extend(adapter_tools)
+
+        use_tools = bool(platform_tools) and llm_adapter.supports_tool_calls(provider, model)
+
         llm_start = time.time()
         try:
             result = await llm_adapter.chat(
@@ -303,6 +330,8 @@ class LuomiNestPlatformRouter:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 route_hint=RouteHint.CHAT,
+                return_raw=True,
+                tools=platform_tools if use_tools else None,
             )
         except Exception as e:
             error_tb = traceback.format_exc()
@@ -326,6 +355,78 @@ class LuomiNestPlatformRouter:
                 content=f"[LuomiNest] 模型调用失败：{e}",
                 message_type="text",
             )
+
+        # ─── function calling 循环 ───
+        max_tool_iterations = 10  # 平台域限制迭代次数（避免无限循环）
+        tool_iteration = 0
+
+        while use_tools and tool_iteration < max_tool_iterations:
+            tool_calls = self._extract_tool_calls(result)
+            if not tool_calls:
+                break
+
+            tool_iteration += 1
+            logger.info(
+                f"[PlatformRouter] Function calling iteration {tool_iteration}: "
+                f"{len(tool_calls)} tool call(s)"
+            )
+
+            for tc in tool_calls:
+                tool_name = tc.get("function", {}).get("name", "")
+                tool_args = tc.get("function", {}).get("arguments", {})
+                tc_id = tc.get("id", f"call_{tool_iteration}")
+
+                # 解析 arguments（可能是 JSON 字符串）
+                if isinstance(tool_args, str):
+                    try:
+                        tool_args = json.loads(tool_args)
+                    except json.JSONDecodeError:
+                        tool_args = {}
+
+                # 执行工具
+                tool_result = await self._execute_platform_tool(
+                    tool_name, tool_args, platform_adapter,
+                )
+
+                # 将工具结果追加到消息列表（OpenAI API 格式）
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [tc],
+                })
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": tool_result.get("output", tool_result.get("error", "")),
+                })
+
+            # 再次调用 LLM（带工具结果）
+            try:
+                result = await llm_adapter.chat(
+                    messages=messages,
+                    stream=False,
+                    provider_name=provider,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    route_hint=RouteHint.CHAT,
+                    return_raw=True,
+                    tools=platform_tools,
+                )
+            except Exception as e:
+                logger.error(f"[PlatformRouter] Follow-up LLM call failed: {e}")
+                # 回退：使用已积累的内容作为最终响应
+                assistant_text = self._extract_assistant_text(result) if result else ""
+                usage = self._extract_usage(result) if result else {}
+                llm_elapsed = round(time.time() - llm_start, 3)
+                self._save_assistant_message(conv, assistant_text, provider, model)
+                await self._persist_conv(conv_id, conv)
+                increment_message_count(instance_id)
+                return PlatformResponse(
+                    content=assistant_text or "[LuomiNest] 工具调用后模型响应失败",
+                    message_type="text",
+                    reply_to=message.message_id,
+                )
 
         llm_elapsed = round(time.time() - llm_start, 3)
         assistant_text = self._extract_assistant_text(result)
@@ -365,7 +466,15 @@ class LuomiNestPlatformRouter:
             },
         )
 
-        self._spawn_background_task(self._schedule_memory_update(messages, conv_id, assistant_text))
+        # 记忆写入（M5=C）：每平台实例独立开关 inst.config["memory_write"]，默认关（§9）；
+        # 开启后提炼写入 users/{user_key}/ 用户轨道，不污染主人记忆（§8.5.5）
+        memory_write_enabled = bool(inst.config.get("memory_write", False)) if inst else False
+        self._spawn_background_task(self._schedule_memory_update(
+            messages, conv_id, assistant_text,
+            domain=conv.get("domain") or f"platform:{instance_id}",
+            user_key=conv.get("user_key") or "",
+            memory_write=memory_write_enabled,
+        ))
 
         return PlatformResponse(
             content=assistant_text,
@@ -492,16 +601,88 @@ class LuomiNestPlatformRouter:
         return {}
 
     @staticmethod
+    def _extract_tool_calls(result) -> list[dict]:
+        """从 LLM chat 结果中提取 tool_calls。
+
+        支持 return_raw=True 返回的 dict 格式（含顶层 tool_calls 键）
+        以及 OpenAI choices[].message.tool_calls 格式。
+        """
+        if not isinstance(result, dict):
+            return []
+        # return_raw=True 格式：顶层 tool_calls 键
+        tool_calls = result.get("tool_calls")
+        if tool_calls:
+            return tool_calls
+        # OpenAI choices 格式
+        choices = result.get("choices", [])
+        if choices:
+            first = choices[0]
+            if isinstance(first, dict):
+                msg = first.get("message", {})
+                if isinstance(msg, dict):
+                    return msg.get("tool_calls") or []
+        return []
+
+    @staticmethod
+    async def _execute_platform_tool(
+        tool_name: str,
+        arguments: dict,
+        adapter,
+    ) -> dict:
+        """执行平台工具调用（standard 子集或平台专用）。
+
+        查找顺序：
+        1. 平台专用工具（adapter.execute_platform_tool，名称含 "." 前缀）
+        2. tool_registry 中的内置工具（function calling 工具）
+        3. internal_tool_registry 中的工作流内部工具
+        """
+        from app.core.tools.registry import tool_registry
+        from app.core.workflow.internal_registry import internal_tool_registry
+
+        # 先尝试平台专用工具（adapter 实现）
+        if "." in tool_name and adapter and hasattr(adapter, "execute_platform_tool"):
+            try:
+                result = await adapter.execute_platform_tool(tool_name, arguments)
+                return result
+            except Exception as e:
+                return {"success": False, "output": "", "error": str(e)}
+
+        # 再尝试 tool_registry（内置 function calling 工具）
+        tool = tool_registry.get(tool_name)
+        if tool:
+            try:
+                result = await tool.execute(arguments)
+                return {"success": result.success, "output": result.output, "error": result.error}
+            except Exception as e:
+                return {"success": False, "output": "", "error": str(e)}
+
+        # 再查 internal_tool_registry（工作流内部工具，如 console.execute）
+        internal_entry = internal_tool_registry.get(tool_name)
+        if internal_entry:
+            try:
+                wf_result = await internal_tool_registry.execute(tool_name, arguments)
+                return {"success": wf_result.success, "output": wf_result.output, "error": wf_result.error}
+            except Exception as e:
+                return {"success": False, "output": "", "error": str(e)}
+
+        return {"success": False, "output": "", "error": f"工具未找到: {tool_name}"}
+
+    @staticmethod
     async def _persist_conv(conv_id: str, conv: dict) -> None:
         conv["updated_at"] = utc_now()
         await conversation_store.set_async(conv_id, conv)
 
     @staticmethod
-    async def _schedule_memory_update(messages: list[dict], thread_id: str, assistant_text: str) -> None:
+    async def _schedule_memory_update(
+        messages: list[dict], thread_id: str, assistant_text: str,
+        *, domain: str = "", user_key: str = "", memory_write: bool = False,
+    ) -> None:
         try:
             await context_service.schedule_memory_update(
                 messages, thread_id, MAIN_AGENT_ID,
                 llm_adapter=None,
+                domain=domain, user_key=user_key,
+                platform_memory_write=memory_write,
             )
         except Exception as e:
             logger.warning(f"[PlatformRouter] Memory update skipped: {e}")

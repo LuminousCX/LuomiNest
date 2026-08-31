@@ -10,7 +10,6 @@ import { useAvatarControlStore } from '@/stores/avatar-control'
 import { useModelStore } from '@/stores/model'
 import { useChatStore } from '@/stores/chat'
 import { useAgentStore } from '@/stores/agent'
-import { usePlatformStore } from '@/stores/platform'
 import { useAvatarWorkshop } from '@/composables/avatar/useAvatarWorkshop'
 import { useAvatarStageRenderer, type StageDriver, type Live2DDriver } from '@/composables/avatar/useAvatarStageRenderer'
 import AvatarHeader from '@/components/avatar/AvatarHeader.vue'
@@ -19,6 +18,7 @@ import PixelPetStage from '@/components/avatar/PixelPetStage.vue'
 import PngTuberStage from '@/components/avatar/PngTuberStage.vue'
 import AvatarControls from '@/components/avatar/AvatarControls.vue'
 import AvatarSkinSidebar from '@/components/avatar/AvatarSkinSidebar.vue'
+import StageBackgroundMenu from '@/components/avatar/StageBackgroundMenu.vue'
 import type { AvatarMode, AvatarEmotion, AvatarMotion, IdleAnimation, ManifestSkinItem } from '@/components/avatar/types'
 import type { AvatarRendererType, AvatarManifestModel } from '@/types/avatar'
 import type { ChatStreamChunk } from '@/types'
@@ -40,7 +40,6 @@ const avatarControl = useAvatarControlStore()
 const modelStore = useModelStore()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
-const platformStore = usePlatformStore()
 const ttsEngine = useTtsEngineStore()
 const toast = useToast()
 
@@ -648,7 +647,6 @@ async function handleChatSend() {
   isChatStreaming.value = true
   stopAvatarChat()
 
-  const mainAgent = platformStore.mainAgent
   const resolved = modelStore.resolveModel
 
   const targetConvId = chatStore.agentCurrentConvId[MAIN_AGENT_ID] || undefined
@@ -664,10 +662,11 @@ async function handleChatSend() {
     onChunk: (chunk: ChatStreamChunk) => void
   } = {
     agentId: MAIN_AGENT_ID,
-    model: mainAgent?.model || resolved?.model || undefined,
-    provider: mainAgent?.provider || resolved?.provider || undefined,
-    temperature: mainAgent?.temperature ?? modelStore.modelConfig.defaultTemperature,
-    maxTokens: mainAgent?.maxTokens ?? modelStore.modelConfig.defaultMaxTokens,
+    // 2026-08 全局模型统一：皮套工坊使用全局主模型与全局生成参数
+    model: resolved?.model || undefined,
+    provider: resolved?.provider || undefined,
+    temperature: modelStore.modelConfig.defaultTemperature,
+    maxTokens: modelStore.modelConfig.defaultMaxTokens,
     topP: modelStore.modelConfig.defaultTopP,
     targetConvId,
     onChunk: (chunk: ChatStreamChunk) => {
@@ -750,10 +749,9 @@ onMounted(async () => {
     await workshop.switchDisplayMode('desktop')
   }
 
-  // 并发加载后端状态
+  // 并发加载后端状态（2026-08 全局模型统一：模型来源为 modelStore 全局配置）
   await Promise.all([
     chatStore.checkBackend(),
-    platformStore.fetchMainAgent(),
     modelStore.fetchProviders(),
     modelStore.fetchModelConfig(),
   ])
@@ -863,6 +861,13 @@ onBeforeUnmount(() => {
           @select-emotion="selectEmotion"
           @select-motion="selectMotion"
         />
+
+        <!--
+          舞台背景设置菜单：绝对定位在画布区右上角，悬于 stage-canvas 之上。
+          放在 .avatar-stage 内（而非 stage-canvas 内），避免被 stage-canvas 的 overflow:hidden 裁掉下拉菜单。
+          .avatar-stage 自身也是 overflow:hidden，但舞台高度通常远超菜单下拉长度，不会被截断。
+        -->
+        <StageBackgroundMenu class="stage-bg-menu-float" />
       </div>
 
       <AvatarSkinSidebar
@@ -887,7 +892,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg);
   color: var(--text);
   overflow: hidden;
 }
@@ -919,5 +923,13 @@ onBeforeUnmount(() => {
 
 .animate-stage-appear {
   animation: stage-appear var(--stage-appear-duration) var(--ease-out-expo) both;
+}
+
+/* 舞台背景菜单：绝对定位在画布区右上角，z-index 高于 stage-overlay 标签 */
+.stage-bg-menu-float {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 25;
 }
 </style>

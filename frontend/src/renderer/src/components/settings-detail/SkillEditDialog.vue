@@ -65,6 +65,63 @@ trigger_keywords:
 
 const resolveSkillId = () => (isCreate.value ? skillIdInput.value.trim() : props.skillId ?? '')
 
+/**
+ * 规范化 SKILL.md 内容：补齐 frontmatter 缺失的标准字段（id/name/version/description/trigger_keywords）。
+ *
+ * 目的：兼容从外部复制的旧格式技能（如 SKILL.md 只有 name/description/license），
+ * 使其能通过后端校验（validate_skill_md_content 要求 id 与目录名一致、name 非空、
+ * description 非空、trigger_keywords >= 3 个）。只追加缺失字段，不修改已有内容与 body。
+ */
+const normalizeSkillContent = (raw: string, skillId: string): string => {
+  const trimmed = raw.replace(/^\uFEFF/, '').trimStart()
+  // 无 YAML frontmatter 时无法安全注入，原样返回（后端会给出校验提示）
+  if (!trimmed.startsWith('---')) return raw
+
+  const fmEnd = trimmed.indexOf('\n---', 3)
+  if (fmEnd === -1) return raw
+
+  const fmRaw = trimmed.slice(3, fmEnd).replace(/\r\n/g, '\n')
+  const body = trimmed.slice(fmEnd + 4).trimStart()
+
+  // 解析已有 key（保留原样，仅用于判断缺失字段）
+  const existingKeys = new Set<string>()
+  for (const line of fmRaw.split('\n')) {
+    const m = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:/)
+    if (m) existingKeys.add(m[1])
+  }
+
+  const extra: string[] = []
+  if (!existingKeys.has('id')) extra.push(`id: ${skillId}`)
+  if (!existingKeys.has('name')) extra.push(`name: ${skillId}`)
+  if (!existingKeys.has('version')) extra.push(`version: 1.0.0`)
+  if (!existingKeys.has('author')) extra.push(`author: LuminousCX`)
+  if (!existingKeys.has('license')) extra.push(`license: MIT`)
+
+  // description 缺失时补一句占位描述（后端要求非空）
+  if (!existingKeys.has('description')) {
+    extra.push(`description: ${skillId} 技能：按照 SKILL.md 指令完成相关任务`)
+  }
+
+  // trigger_keywords 缺失或不足时，从 name/description 提取关键词补齐
+  if (!existingKeys.has('trigger_keywords')) {
+    const nameMatch = fmRaw.match(/^name\s*:\s*(.+)$/m)
+    const descMatch = fmRaw.match(/^description\s*:\s*(.+)$/m)
+    const candidates: string[] = [
+      ...(nameMatch ? [nameMatch[1].trim().replace(/["']/g, '')] : [skillId]),
+      ...(descMatch
+        ? descMatch[1].replace(/["']/g, '').split(/[,，。.\s]+/).filter((w) => w.length >= 2).slice(0, 4)
+        : []),
+    ]
+    const kws = [...new Set(candidates)].filter(Boolean).slice(0, 5)
+    while (kws.length < 3) kws.push(skillId)
+    extra.push('trigger_keywords:')
+    for (const kw of kws) extra.push(`  - ${kw}`)
+  }
+
+  if (extra.length === 0) return raw
+  return `---\n${fmRaw.trim()}\n${extra.join('\n')}\n---\n\n${body}`
+}
+
 const loadRaw = async () => {
   if (isCreate.value || !props.skillId) return
   loadingRaw.value = true
@@ -95,7 +152,8 @@ const handleValidate = async () => {
   errorMessage.value = ''
   validateResult.value = null
   try {
-    const result = await store.validateSkill(id, content.value)
+    // 校验前先规范化补齐缺失的 frontmatter 字段，兼容旧格式技能
+    const result = await store.validateSkill(id, normalizeSkillContent(content.value, id))
     validateResult.value = result
     if (result && !result.valid) {
       errorMessage.value = result.errors.join('；') || '校验未通过'
@@ -123,7 +181,8 @@ const handleSave = async () => {
   saving.value = true
   errorMessage.value = ''
   try {
-    const result = await store.writeSkill(id, content.value, true)
+    // 保存前规范化补齐缺失的 frontmatter 字段，兼容旧格式技能
+    const result = await store.writeSkill(id, normalizeSkillContent(content.value, id), true)
     if (result) {
       emit('saved')
       emit('update:visible', false)

@@ -232,7 +232,7 @@ def _register_all_adapter_types():
     register_adapter_type(
         name="telegram",
         display_name="Telegram",
-        description="通过 Telegram Bot API 接入 Telegram 平台，支持私聊和群组消息（占位符，待实现）",
+        description="通过 Telegram Bot API 接入 Telegram 平台，支持私聊和群组消息",
         adapter_cls=TelegramAdapter,
         config_template={
             "bot_token": "",
@@ -250,7 +250,7 @@ def _register_all_adapter_types():
     register_adapter_type(
         name="discord",
         display_name="Discord",
-        description="通过 Discord Bot 接入 Discord 服务器，支持频道消息和私聊（占位符，待实现）",
+        description="通过 Discord Bot 接入 Discord 服务器，支持频道消息和私聊",
         adapter_cls=DiscordAdapter,
         config_template={
             "bot_token": "",
@@ -268,7 +268,7 @@ def _register_all_adapter_types():
     register_adapter_type(
         name="home_assistant",
         display_name="HomeAssistant",
-        description="接入 HomeAssistant 智能家居平台，控制和管理智能设备（占位符，待实现）",
+        description="接入 HomeAssistant 智能家居平台，控制和管理智能设备",
         adapter_cls=HomeAssistantAdapter,
         config_template={
             "ha_url": "http://homeassistant.local:8123",
@@ -285,7 +285,7 @@ def _register_all_adapter_types():
     register_adapter_type(
         name="xiaomi_iot",
         display_name="小米 IoT",
-        description="接入小米 IoT 平台，控制米家智能设备（占位符，待实现）",
+        description="接入小米 IoT 平台，控制米家智能设备",
         adapter_cls=XiaomiIoTAdapter,
         config_template={
             "mi_user": "",

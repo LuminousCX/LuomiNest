@@ -21,7 +21,8 @@ import numpy as np
 import soundfile as sf
 from loguru import logger
 
-from app.runtime.provider.base import STTProvider
+from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.stt.ports import STTProvider
 
 
 def _resolve_model_root() -> Path:
@@ -170,6 +171,18 @@ class SherpaOnnxSTTProvider(STTProvider):
     provider_name = "sherpa-onnx"
     _instance = None
     _recognizer = None
+
+    # 引擎能力声明（G1/G2 治理）
+    CAPABILITIES = EngineCapabilities(
+        engine_id="sherpa-onnx",
+        name="Sherpa-ONNX（离线·SenseVoice）",
+        kind="local",
+        category="local",
+        needs_api_key=False,
+        online=False,
+        languages=("zh", "en", "ja", "ko", "yue"),
+        description="基于 ONNX 的离线语音识别，默认 SenseVoice 模型（约 220MB 首次自动下载），支持中英日韩粤",
+    )
 
     # 支持的模型类型
     SUPPORTED_MODEL_TYPES = ("sense_voice", "paraformer", "whisper")

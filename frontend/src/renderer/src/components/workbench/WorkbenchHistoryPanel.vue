@@ -7,9 +7,8 @@ import {
   Clock,
   Trash2,
   Pencil,
-  PanelLeftClose,
+  ChevronLeft,
   PanelLeftOpen,
-  Bot,
   Loader2,
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
@@ -111,24 +110,9 @@ const onStartRename = (convId: string, currentTitle: string) => {
   <div class="workbench-history-wrapper">
     <Transition name="history-slide">
       <div v-if="!isHistoryCollapsed" class="workbench-history">
-        <div class="history-header">
-          <div class="history-title">
-            <Bot :size="16" />
-            <span>陪伴对话</span>
-          </div>
-          <LumiButton
-            variant="ghost"
-            size="sm"
-            icon-only
-            aria-label="收起历史记录"
-            class="history-collapse-btn"
-            @click="emit('collapse')"
-          >
-            <template #icon>
-              <PanelLeftClose :size="15" />
-            </template>
-          </LumiButton>
-        </div>
+        <button class="history-collapse-triangle" aria-label="收起历史记录" @click="emit('collapse')">
+          <ChevronLeft :size="14" />
+        </button>
 
         <div class="history-search">
           <LumiInput v-model="searchQueryModel" size="sm" placeholder="搜索对话...">
@@ -266,7 +250,7 @@ button:focus-visible {
 
 .workbench-history-wrapper {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   height: 100%;
   flex-shrink: 0;
 }
@@ -280,32 +264,33 @@ button:focus-visible {
   border-right: 1px solid var(--border-light);
   flex-shrink: 0;
   overflow: hidden;
+  position: relative;
 }
 
-.history-header {
+.history-collapse-triangle {
+  position: absolute;
+  top: 50%;
+  right: -1px;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 40px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-4) var(--space-3);
-  flex-shrink: 0;
-}
-
-.history-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.history-collapse-btn {
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-right: none;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  z-index: 10;
 }
 
-.history-collapse-btn:hover {
+.history-collapse-triangle:hover {
   color: var(--text-primary);
   background: var(--surface-hover);
+  width: 20px;
 }
 
 .history-search {

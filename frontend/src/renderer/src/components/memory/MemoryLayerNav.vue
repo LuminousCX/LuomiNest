@@ -90,22 +90,28 @@ const emit = defineEmits<{
 
 <style scoped>
 .layer-nav {
-  width: 280px;
-  padding: var(--space-5);
-  border-right: 1px solid var(--border);
-  overflow-y: auto;
+  width: 260px;
   flex-shrink: 0;
-  background: var(--surface);
+  padding: var(--space-4);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
+  background: var(--workspace-card, var(--surface));
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--workspace-border, var(--border));
+  box-shadow: var(--shadow-sm);
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  max-height: 100%;
 }
 
 .stats-overview {
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--bg);
-  border: 1px solid var(--border);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary, var(--bg));
+  border: 1px solid var(--border-light, var(--border));
 }
 
 .stats-header {
@@ -185,22 +191,24 @@ const emit = defineEmits<{
 }
 
 .nav-card {
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--bg);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light, var(--border));
+  background: var(--bg-secondary, var(--bg));
   cursor: pointer;
-  transition: all var(--transition-slow);
+  transition: all var(--transition-normal);
 }
 
 .nav-card:hover {
   border-color: var(--tab-color);
-  box-shadow: 0 4px 20px color-mix(in srgb, var(--tab-color) 10%, transparent);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--tab-color) 8%, transparent);
+  transform: translateX(2px);
 }
 
 .nav-card.active {
   border-color: var(--tab-color);
-  background: color-mix(in srgb, var(--tab-color) 4%, transparent);
+  background: color-mix(in srgb, var(--tab-color) 6%, transparent);
+  box-shadow: 0 2px 16px color-mix(in srgb, var(--tab-color) 12%, transparent);
 }
 
 .nav-top {

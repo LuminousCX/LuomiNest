@@ -65,7 +65,7 @@ body:
     attributes:
       label: Version Information
       description: Please provide the version you are using
-      placeholder: "e.g., v0.1.0 or commit hash"
+      placeholder: "e.g., v0.7.7 or commit hash"
     validations:
       required: true
   - type: textarea

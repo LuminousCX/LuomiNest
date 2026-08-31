@@ -427,6 +427,7 @@ interface RawProvider {
   is_default?: boolean
   selectedModels?: string[]
   selected_models?: string[]
+  protocol?: string
   models?: unknown[]
 }
 
@@ -486,6 +487,8 @@ interface RawModelConfig {
   context_window_size?: number
   compressionThreshold?: number
   compression_threshold?: number
+  compressionRatio?: number
+  compression_ratio?: number
   llmCompressEnabled?: boolean
   llm_compress_enabled?: boolean
   summaryModel?: string
@@ -584,6 +587,15 @@ const STT_LANGUAGES = [
   { value: 'es-ES', label: 'Español' },
 ] as const
 
+export interface ContextOverrideItem {
+  id: string
+  providerId: string
+  modelId: string
+  name: string
+  enabled: boolean
+  maxContextTokens: number
+}
+
 export const useModelStore = defineStore('model', () => {
   const { apiGet, apiPost, apiDelete, apiPatch } = useApi()
 
@@ -624,6 +636,8 @@ export const useModelStore = defineStore('model', () => {
   const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const sttEngines = ref<STTEngine[]>([])
   const sttDevice = ref<ComputeDeviceInfo | null>(null)
+
+  const contextOverrides = ref<ContextOverrideItem[]>([])
 
   const defaultProvider = computed(() =>
     providers.value.find(p => p.isDefault)
@@ -711,6 +725,7 @@ export const useModelStore = defineStore('model', () => {
           defaultModel: p.defaultModel || p.default_model || '',
           isDefault: p.isDefault || p.is_default || false,
           selectedModels: p.selectedModels || p.selected_models || [],
+          protocol: p.protocol || 'auto',
           models: (p.models || []) as { id: string; name: string }[],
         }
       })
@@ -784,6 +799,7 @@ export const useModelStore = defineStore('model', () => {
     defaultModel?: string
     isDefault?: boolean
     selectedModels?: string[]
+    protocol?: string
   }) => {
     const result = await apiPatch<ModelProvider>(`/models/providers/${providerId}`, {
       name: updates.name,
@@ -793,6 +809,7 @@ export const useModelStore = defineStore('model', () => {
       defaultModel: updates.defaultModel,
       isDefault: updates.isDefault,
       selectedModels: updates.selectedModels,
+      protocol: updates.protocol,
     })
     await fetchProviders()
     return result
@@ -829,6 +846,43 @@ export const useModelStore = defineStore('model', () => {
     return models
   }
 
+  const fetchContextOverrides = async () => {
+    try {
+      const result = await apiGet<ContextOverrideItem[] | { data: ContextOverrideItem[] }>('/models/context-overrides')
+      const rows = unwrapData<ContextOverrideItem[]>(result)
+      contextOverrides.value = rows.map(r => ({
+        id: r.id,
+        providerId: r.providerId || (r as unknown as Record<string, string>).provider_id || '',
+        modelId: r.modelId || (r as unknown as Record<string, string>).model_id || '',
+        name: r.name,
+        enabled: r.enabled,
+        maxContextTokens: r.maxContextTokens || (r as unknown as Record<string, number>).max_context_tokens || 0,
+      }))
+    } catch {
+      contextOverrides.value = []
+    }
+  }
+
+  const updateContextOverride = async (providerId: string, modelId: string, updates: { enabled?: boolean; maxContextTokens?: number }) => {
+    const result = await apiPatch<ContextOverrideItem | { data: ContextOverrideItem }>(`/models/context-overrides/${providerId}/${modelId}`, updates)
+    const row = unwrapData<ContextOverrideItem>(result)
+    const idx = contextOverrides.value.findIndex(o => o.providerId === providerId && o.modelId === modelId)
+    const normalized: ContextOverrideItem = {
+      id: row.id,
+      providerId: row.providerId || (row as unknown as Record<string, string>).provider_id || providerId,
+      modelId: row.modelId || (row as unknown as Record<string, string>).model_id || modelId,
+      name: row.name,
+      enabled: row.enabled,
+      maxContextTokens: row.maxContextTokens || (row as unknown as Record<string, number>).max_context_tokens || 0,
+    }
+    if (idx >= 0) {
+      contextOverrides.value[idx] = normalized
+    } else {
+      contextOverrides.value.push(normalized)
+    }
+    return normalized
+  }
+
   const fetchModelConfig = async () => {
     try {
       const result = await apiGet<RawModelConfig>('/models/config')
@@ -857,6 +911,7 @@ export const useModelStore = defineStore('model', () => {
           sttEngine: config.sttEngine || config.stt_engine || 'auto',
           contextWindowSize: config.contextWindowSize ?? config.context_window_size ?? 0,
           compressionThreshold: config.compressionThreshold ?? config.compression_threshold ?? 0.70,
+          compressionRatio: config.compressionRatio ?? config.compression_ratio ?? 40,
           llmCompressEnabled: config.llmCompressEnabled ?? config.llm_compress_enabled ?? false,
           summaryModel: config.summaryModel || config.summary_model || '',
           summaryProvider: config.summaryProvider || config.summary_provider || '',
@@ -896,6 +951,7 @@ export const useModelStore = defineStore('model', () => {
       if (config.sttEngine !== undefined) body.sttEngine = config.sttEngine
       if (config.contextWindowSize !== undefined) body.contextWindowSize = config.contextWindowSize
       if (config.compressionThreshold !== undefined) body.compressionThreshold = config.compressionThreshold
+      if (config.compressionRatio !== undefined) body.compressionRatio = config.compressionRatio
       if (config.llmCompressEnabled !== undefined) body.llmCompressEnabled = config.llmCompressEnabled
       if (config.summaryModel !== undefined) body.summaryModel = config.summaryModel
       if (config.summaryProvider !== undefined) body.summaryProvider = config.summaryProvider
@@ -1063,6 +1119,9 @@ export const useModelStore = defineStore('model', () => {
     sttDevice,
     loading,
     saveStatus,
+    contextOverrides,
+    fetchContextOverrides,
+    updateContextOverride,
     defaultProvider,
     allModels,
     allTemplates,

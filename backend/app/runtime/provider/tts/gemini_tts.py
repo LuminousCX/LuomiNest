@@ -11,7 +11,8 @@ import wave
 import httpx
 from loguru import logger
 
-from app.runtime.provider.base import TTSProvider
+from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.tts.ports import TTSProvider
 
 
 # Gemini TTS 预置音色（30 种）
@@ -37,6 +38,22 @@ class GeminiTTSProvider(TTSProvider):
 
     DEFAULT_MODEL = "gemini-2.5-flash-preview-tts"
     DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+    # 引擎能力声明（G1/G2 治理）：Gemini TTS 音色多语言，均可合成 zh/en/ja
+    CAPABILITIES = EngineCapabilities(
+        engine_id="gemini",
+        name="Gemini TTS（Google·免费层）",
+        kind="cloud",
+        category="cloud-paid",
+        needs_api_key=True,
+        online=True,
+        languages=("zh", "en", "ja"),
+        voices=[{"value": v, "label": v, "langs": ["zh", "en", "ja"]} for v in GEMINI_TTS_VOICES[:15]],
+        default_voice="Leda",
+        models=["gemini-2.5-flash-preview-tts"],
+        default_model="gemini-2.5-flash-preview-tts",
+        description="Google Gemini TTS，30 种预置音色，多语言合成，需 API Key",
+    )
 
     @classmethod
     def is_available(cls) -> bool:
@@ -76,7 +93,10 @@ class GeminiTTSProvider(TTSProvider):
 
         params = {"key": self.api_key}
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        # 统一超时治理（应急修复 B3）：硬编码 → Settings.TTS_HTTP_TIMEOUT
+        from app.core.config import settings as _settings
+
+        async with httpx.AsyncClient(timeout=_settings.TTS_HTTP_TIMEOUT) as client:
             response = await client.post(url, json=payload, params=params)
             response.raise_for_status()
             result = response.json()

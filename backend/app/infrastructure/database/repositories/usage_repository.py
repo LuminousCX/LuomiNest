@@ -26,7 +26,7 @@ class UsageRepository:
         completion_tokens: int = 0,
         total_tokens: int = 0,
         agent_id: Optional[str] = None,
-        conv_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
         is_stream: bool = False,
     ) -> dict:
         """记录一次用量。"""
@@ -38,7 +38,7 @@ class UsageRepository:
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             agent_id=agent_id,
-            conv_id=conv_id,
+            conv_id=conversation_id,  # ORM/DB 列名为 conv_id（迁移需 review，保持不动）
             is_stream=is_stream,
         )
         with sync_session_factory() as session:

@@ -91,4 +91,4 @@ class CxPluginRegistry:
 
 
 # 全局单例
-cx_plugin_registry = CxPluginRegistry()
+luominest_plugin_registry = CxPluginRegistry()

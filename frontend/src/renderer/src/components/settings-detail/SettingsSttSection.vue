@@ -78,12 +78,24 @@ const saveSttConfig = async () => {
   }
 }
 
-const sttEngineOptions = [
-  { value: 'auto', label: '自动选择' },
-  { value: 'whisper', label: 'OpenAI Whisper' },
-  { value: 'sherpa-onnx', label: 'Sherpa-ONNX (本地)' },
-  { value: 'browser', label: '浏览器内置' },
-]
+const sttEngineOptions = computed(() => {
+  // 优先后端 capabilities（/chat/stt/engines），未加载时回退静态清单
+  const remote = modelStore.sttEngines as Array<{ id: string; name?: string }>
+  if (remote && remote.length > 0) {
+    return [
+      { value: 'auto', label: '自动选择' },
+      ...remote.map(e => ({ value: e.id, label: e.name || e.id })),
+      { value: 'browser', label: '浏览器内置（Web Speech，在线免费）' },
+    ]
+  }
+  return [
+    { value: 'auto', label: '自动选择' },
+    { value: 'sherpa-onnx', label: 'Sherpa-ONNX（离线，SenseVoice）' },
+    { value: 'funasr', label: 'FunASR（离线，阿里达摩院）' },
+    { value: 'faster-whisper', label: 'Faster Whisper（离线，CTranslate2）' },
+    { value: 'browser', label: '浏览器内置（Web Speech，在线免费）' },
+  ]
+})
 
 const sttModelOptions = computed(() => {
   const engine = sttForm.value.engine

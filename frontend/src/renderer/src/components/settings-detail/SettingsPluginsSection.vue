@@ -366,7 +366,7 @@ const summary = computed(() => ({
           </div>
           <div class="plugin-info">
             <div class="plugin-title-row">
-              <span class="plugin-name">{{ skill.name }}</span>
+              <span class="plugin-name">{{ skill.name || skill.id }}</span>
               <span class="plugin-version">v{{ skill.version }}</span>
             </div>
             <span class="plugin-id">{{ skill.id }}</span>
@@ -383,7 +383,7 @@ const summary = computed(() => ({
 
         <div class="plugin-meta">
           <span v-if="skill.author" class="meta-item">作者：{{ skill.author }}</span>
-          <span v-if="skill.category" class="meta-item">分类：{{ skill.category }}</span>
+          <span class="meta-item">分类：{{ skill.category || '未分类' }}</span>
           <span v-if="skill.source_format" class="meta-item">格式：{{ skill.source_format }}</span>
         </div>
 

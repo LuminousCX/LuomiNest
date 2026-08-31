@@ -31,8 +31,31 @@ const ERR_CODE_MESSAGES: Record<string, string> = {
   TTS_SYNTHESIS_FAILED: '语音合成失败',
   TTS_MODEL_NOT_FOUND: '语音模型未下载，请参考后端日志安装',
   MEMORY_NOT_FOUND: '记忆数据不存在',
+  MEMORY_FACT_NOT_FOUND: '记忆条目不存在',
+  MEMORY_CATEGORY_INVALID: '记忆分类无效',
   CONVERSATION_NOT_FOUND: '对话不存在，可能已被删除',
   AGENT_NOT_FOUND: 'Agent 不存在',
+  AGENT_LIMIT_REACHED: 'Agent 数量已达上限（10 个）',
+  AGENT_NAME_DUPLICATED: 'Agent 名称已存在，请换一个名称',
+  A2A_MAX_DEPTH_EXCEEDED: '已达到最大 Agent 调用深度，无法继续递归调用',
+  MCP_SERVER_NOT_FOUND: 'MCP 服务器不存在',
+  MCP_CONFIG_INVALID: 'MCP 配置无效，请检查参数',
+  MCP_OPERATION_FAILED: 'MCP 操作失败，请查看后端日志',
+  MARKETPLACE_ITEM_NOT_FOUND: '市场条目不存在',
+  MARKETPLACE_ALREADY_INSTALLED: '该内容已安装，无需重复安装',
+  MARKETPLACE_UNINSTALL_FAILED: '卸载失败，请查看后端日志',
+  MARKETPLACE_SNAPSHOT_FAILED: '生成快照失败，请查看后端日志',
+  MARKETPLACE_SOURCE_NOT_FOUND: '发布源不存在',
+  MARKETPLACE_SOURCE_DISABLED: '该发布源已被禁用，无法切换',
+  MARKETPLACE_SOURCE_UNAVAILABLE: '发布源当前不可用，请检查网络',
+  MARKETPLACE_SOURCE_SWITCH_FAILED: '切换发布源失败，请稍后重试',
+  WORKFLOW_SESSION_NOT_FOUND: '工作流会话不存在或已结束',
+  WORKFLOW_RECORD_NOT_FOUND: '工具调用记录不存在',
+  WORKFLOW_TEMPLATE_NOT_FOUND: '工作流模板不存在',
+  SCHEDULER_TASK_NOT_FOUND: '定时任务不存在',
+  SCHEDULER_NOT_RUNNING: '调度器未启动，请稍后重试',
+  SCHEDULER_TASK_INVALID: '定时任务配置无效，请检查表达式',
+  SUBMARKET_NOT_FOUND: '子市场不存在',
 }
 
 const statusToMessage = (status: number): string =>
@@ -53,7 +76,6 @@ const getAuthHeaders = async (): Promise<Record<string, string>> => {
 
 /** 后端错误响应体（兼容多种错误格式） */
 interface ApiErrorBody {
-  err_code?: string
   error?: string | { code?: string; message?: string }
   detail?: unknown
   message?: string
@@ -61,8 +83,8 @@ interface ApiErrorBody {
 
 const extractErrorMessage = (errData: unknown, status: number): string => {
   const data = (errData ?? {}) as ApiErrorBody
-  // 1. 优先处理 err_code（符合工作区规则 "API 响应必须包含错误码"）
-  const errCode = data.err_code ?? (typeof data.error === 'object' ? data.error?.code : undefined)
+  // 1. 统一信封 error.code（LuomiNestError 家族 + HTTPException 兜底信封均产出）
+  const errCode = typeof data.error === 'object' ? data.error?.code : undefined
   if (errCode && ERR_CODE_MESSAGES[errCode]) {
     return ERR_CODE_MESSAGES[errCode]
   }

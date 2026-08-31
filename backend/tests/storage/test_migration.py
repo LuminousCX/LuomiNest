@@ -50,7 +50,7 @@ from app.infrastructure.database.facades.json_store_facade import (
     agents_store, groups_store, platforms_store, repo_sources_store,
 )
 from app.infrastructure.database.facades.marketplace_stats_store import marketplace_stats_store
-from app.infrastructure.database.config_store import lumi_config_store
+from app.infrastructure.database.config_store import luominest_config_store
 from app.infrastructure.database.usage_store import usage_store
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.facades.main_agent_config import (
@@ -257,12 +257,12 @@ usage_recs = usage_store.get_records()
 check("usage_records migrated 2 entries", len(usage_recs) == 2, f"count={len(usage_recs)}")
 check("usage_records first provider", usage_recs[0]["provider"] in ("openai", "anthropic"))
 
-# user_config (写入 lumi_config_store)
+# user_config (写入 luominest_config_store)
 check("user_config llm.default_provider migrated",
-      lumi_config_store.get("llm.default_provider") == "openai")
-check("user_config ui.theme migrated", lumi_config_store.get("ui.theme") == "dark")
+      luominest_config_store.get("llm.default_provider") == "openai")
+check("user_config ui.theme migrated", luominest_config_store.get("ui.theme") == "dark")
 check("user_config __updated_at NOT migrated",
-      lumi_config_store.get("llm.default_provider__updated_at") is None)
+      luominest_config_store.get("llm.default_provider__updated_at") is None)
 
 # main_agent
 main_agent = load_luominest_main_agent_config()
@@ -271,7 +271,7 @@ check("main_agent model migrated", main_agent.get("model") == "gpt-4o")
 check("main_agent system_prompt migrated", main_agent.get("system_prompt") == "你是主Agent")
 
 # model_config
-model_cfg = lumi_config_store.get("model_config")
+model_cfg = luominest_config_store.get("model_config")
 check("model_config migrated as dict", isinstance(model_cfg, dict))
 check("model_config default_provider", model_cfg.get("default_provider") == "openai")
 check("model_config default_model", model_cfg.get("default_model") == "gpt-4o-mini")

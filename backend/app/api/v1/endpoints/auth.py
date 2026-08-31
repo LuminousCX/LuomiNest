@@ -196,14 +196,15 @@ async def login(request: Request, body: LoginRequest):
 
 
 @router.post("/refresh")
-async def refresh_token(request: RefreshRequest):
+@limiter.limit(RATE_AUTH)
+async def refresh_token(request: Request, body: RefreshRequest):
     """刷新 Access Token。
 
     验证 refresh_token，检查 token type 和 token_version，签发新的 access_token。
     """
     # 验证 refresh_token
     try:
-        payload = jwt_verify_token(request.refresh_token)
+        payload = jwt_verify_token(body.refresh_token)
     except TokenError as exc:
         raise AuthenticationError(f"Refresh token 无效: {exc.message}")
 

@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     MQTT_USERNAME: str = ""
     MQTT_PASSWORD: str = ""
 
+    # 数据备份（luominest_backup_manager 定时任务）
+    BACKUP_ENABLED: bool = True
+    BACKUP_INTERVAL_HOURS: int = 24
+
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120  # 2小时
 
@@ -74,7 +78,8 @@ class Settings(BaseSettings):
 
     # 上下文压缩预算配置
     LLM_CONTEXT_BUDGET_RATIO: float = 0.35  # 历史消息预算占上下文窗口的比例
-    LLM_SUMMARY_TARGET_RATIO: float = 0.40  # 摘要占历史预算的比例
+    LLM_SUMMARY_TARGET_RATIO: float = 0.40  # 摘要占历史预算的比例（与 compression_ratio 同步）
+    LLM_COMPRESSION_RATIO: int = 40  # UI 侧摘要保留百分比（1-90，推荐 40-50）
     LLM_SUMMARY_MAX_LENGTH: int = 2000  # 摘要最大字符数
     LLM_ANTI_DRIFT_ENABLED: bool = True  # 防漂移开关
 
@@ -150,6 +155,12 @@ class Settings(BaseSettings):
     FILE_MAX_SIZE: int = 100 * 1024 * 1024
 
     TTS_PROXY: str = ""
+
+    # TTS 统一超时治理（应急修复 B3 / voice-model-market.md G7）：
+    # 各引擎散落的 30/60/600 超时常量统一收敛到 Settings，env 可覆盖
+    TTS_HTTP_TIMEOUT: float = 60.0          # 云端 TTS HTTP 合成超时（edge/gemini/minimax/siliconflow/fish-audio）
+    TTS_DOWNLOAD_TIMEOUT: float = 600.0     # 模型下载超时（sherpa-onnx 大模型慢网络）
+    TTS_LOCAL_PROC_TIMEOUT: float = 120.0   # 本地推理/子进程超时（pyttsx3 worker/sherpa 合成）
 
     # Agent 集群调用配置
     APP_SELF_BASE_URL: str = "http://localhost:8000"
@@ -247,6 +258,11 @@ def get_settings() -> Settings:
         )
         s.LLM_CONTEXT_STRATEGY = "truncate"
     if is_placeholder(s.SECRET_KEY):
+        if s.ENVIRONMENT == "production":
+            logger.warning(
+                "[Config] SECRET_KEY 未显式配置（生产环境）— 已自动生成机器绑定密钥并持久化。"
+                "集群部署或跨机迁移前必须显式设置 SECRET_KEY，否则已加密数据将无法解密"
+            )
         s.SECRET_KEY = load_or_create_secret_key(s.DATA_DIR)
         logger.success("[Config] SECRET_KEY loaded from persistent store")
     return s

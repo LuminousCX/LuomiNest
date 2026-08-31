@@ -52,6 +52,9 @@ export const PATHS = {
   get imageCache() {
     return ensureDir(join(this.cache, 'images'))
   },
+  get avatarCache() {
+    return ensureDir(join(this.cache, 'avatars'))
+  },
   get sessions() {
     return ensureDir(join(this.data, 'sessions'))
   },

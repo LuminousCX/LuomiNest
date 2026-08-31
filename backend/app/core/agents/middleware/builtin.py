@@ -71,11 +71,12 @@ class ToolFilterMiddleware(AgentMiddleware):
 
 
 class ToolExecutionMiddleware(AgentMiddleware):
-    """执行工具调用 + 异常兜底 + 发射 tool_event SSE。
+    """执行工具调用 + 统一输出截断 + 异常兜底 + 发射 tool_event SSE。
 
     洋葱式位置：在 SpecialToolMiddleware 外层（先进入、后退出）。
     - 进入时：通过 ctx.sse_emitter 发射 tool_event "started"（如有）
     - 调用 next_fn（内层 SpecialTool 或 execute_fn）
+    - 输出治理：content 超阈值时走 tool_call_records 落盘 + 占位符替换（T5，对齐 §4.4）
     - 退出时：通过 ctx.sse_emitter 发射 tool_event "completed"（如有）
     - 异常时：返回兜底 tool message，不中断循环
     """
@@ -111,6 +112,52 @@ class ToolExecutionMiddleware(AgentMiddleware):
                 "name": tool_name,
                 "content": f"[工具执行失败] {e}",
             }
+
+        # ── T5 统一输出治理：超阈值落盘 + 占位符替换 ──────────
+        # 复用 services/tool_call_recorder 的 LUMINOUS_PERSIST_THRESHOLD 机制，
+        # 各工具不再各自为政；落盘结果前端 ConsoleView 仍可查看完整内容。
+        if isinstance(result, dict) and result.get("role") == "tool":
+            content = result.get("content", "")
+            if isinstance(content, str) and len(content) > 2000:
+                try:
+                    from app.services.tool_call_recorder import record_tool_call
+
+                    # 从 ctx.extra 获取会话标识（对齐 tool_call_records 表结构）
+                    conv_id = ctx.extra.get("conv_id") or ctx.extra.get("conversation_id")
+                    session_id = ctx.extra.get("session_id") or ctx.extra.get("chat_id")
+
+                    # 解析 arguments（JSON 字符串或 dict）
+                    import json
+                    raw_args = tool_call.get("function", {}).get("arguments", "{}")
+                    try:
+                        arguments = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
+                    except (json.JSONDecodeError, TypeError):
+                        arguments = {}
+
+                    # 记录并替换为占位符（异步写入 DB，失败不中断）
+                    persisted = await record_tool_call(
+                        session_id=session_id,
+                        tool_name=tool_name,
+                        arguments=arguments,
+                        result=content,
+                        success=not content.startswith("[工具执行失败]"),
+                        conversation_id=conv_id,
+                    )
+                    # 占位符替换 content（仅当 record_tool_call 返回占位符时）
+                    if persisted.startswith("<luminous-persisted-output"):
+                        result["content"] = (
+                            f"[工具输出已落盘，共 {len(content)} 字符，可在控制台查看完整内容]\n"
+                            f"{persisted}"
+                        )
+                        logger.debug(
+                            f"[ToolExec] 工具 {tool_name} 输出超阈值已落盘 "
+                            f"(原始 {len(content)} 字符)"
+                        )
+                except Exception as persist_err:
+                    # 落盘失败不中断工具循环，仅记录警告
+                    logger.warning(
+                        f"[ToolExec] 工具 {tool_name} 输出落盘失败: {persist_err}"
+                    )
 
         if ctx.sse_emitter:
             output = ""
@@ -479,7 +526,7 @@ class UsageTrackMiddleware(AgentMiddleware):
                 model=model,
                 usage=usage,
                 agent_id=agent_id,
-                conv_id=conv_id,
+                conversation_id=conv_id,
                 is_stream=is_stream,
             )
         except Exception as e:

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  Palette,
   RotateCcw,
   Maximize2,
   Download,
@@ -31,12 +30,11 @@ const emit = defineEmits<{
 
 <template>
   <div class="avatar-header">
-    <div class="header-left">
-      <Palette :size="20" />
-      <h2>Avatar Studio</h2>
-      <span class="header-badge">LuomiNest</span>
+    <div class="avatar-header__left">
+      <h1 class="avatar-title">皮套工坊</h1>
+      <p class="avatar-desc">Live2D 形象管理、动作编辑与场景配置</p>
     </div>
-    <div class="header-actions">
+    <div class="avatar-header__actions">
       <div
         class="desktop-mode-toggle"
         :class="{ active: props.isDesktopMode, switching: props.isSwitchingMode }"
@@ -87,54 +85,33 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-6);
+  padding: var(--space-4) var(--space-7);
   flex-shrink: 0;
-  position: relative;
+  background: transparent !important;
 }
 
-.avatar-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: var(--space-6);
-  right: var(--space-6);
-  height: 1px;
-  background: var(--divider-soft);
-}
-
-.header-left {
+.avatar-header__left {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  flex-direction: column;
+}
+
+.avatar-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.avatar-desc {
+  font-size: var(--text-base);
   color: var(--text-muted);
+  margin-top: var(--space-1);
 }
 
-.header-left h2 {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-semibold);
-  color: var(--text);
-}
-
-.header-badge {
-  font-size: var(--text-xs);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
-  font-weight: var(--font-medium);
-}
-
-.header-actions {
+.avatar-header__actions {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-}
-
-.header-divider {
-  width: 1px;
-  height: var(--space-5);
-  background: var(--divider-soft);
-  margin: 0 var(--space-1);
 }
 
 .desktop-mode-toggle {
@@ -181,5 +158,12 @@ const emit = defineEmits<{
 
 .toggle-label {
   font-weight: var(--font-semibold);
+}
+
+.header-divider {
+  width: 1px;
+  height: var(--space-5);
+  background: var(--divider-soft);
+  margin: 0 var(--space-1);
 }
 </style>

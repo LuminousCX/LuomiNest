@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 
+from app.core.constants.colors import DEFAULT_AGENT_COLOR, ROLE_COLORS
+
 
 @dataclass
 class AgentRoleDefinition:
@@ -13,7 +15,7 @@ class AgentRoleDefinition:
     execution_mode: str = "parallel"
     max_concurrent_tasks: int = 3
     timeout_seconds: int = 120
-    color: str = "#0d9488"
+    color: str = DEFAULT_AGENT_COLOR
 
 
 COORDINATOR_PROMPT = """你是 {name}，LuomiNest 多 Agent 协作系统的中心调度员。
@@ -147,7 +149,7 @@ BUILTIN_ROLES: dict[str, AgentRoleDefinition] = {
         execution_mode="serial",
         max_concurrent_tasks=1,
         timeout_seconds=60,
-        color="#147ebc",
+        color=ROLE_COLORS["coordinator"],
     ),
     "data-agent": AgentRoleDefinition(
         role_id="data-agent",
@@ -158,7 +160,7 @@ BUILTIN_ROLES: dict[str, AgentRoleDefinition] = {
         execution_mode="parallel",
         max_concurrent_tasks=3,
         timeout_seconds=120,
-        color="#22c55e",
+        color=ROLE_COLORS["data-agent"],
     ),
     "compute-agent": AgentRoleDefinition(
         role_id="compute-agent",
@@ -169,7 +171,7 @@ BUILTIN_ROLES: dict[str, AgentRoleDefinition] = {
         execution_mode="parallel",
         max_concurrent_tasks=3,
         timeout_seconds=120,
-        color="#f59e0b",
+        color=ROLE_COLORS["compute-agent"],
     ),
     "review-agent": AgentRoleDefinition(
         role_id="review-agent",
@@ -180,7 +182,7 @@ BUILTIN_ROLES: dict[str, AgentRoleDefinition] = {
         execution_mode="serial",
         max_concurrent_tasks=1,
         timeout_seconds=90,
-        color="#ef4444",
+        color=ROLE_COLORS["review-agent"],
     ),
     "creative-agent": AgentRoleDefinition(
         role_id="creative-agent",
@@ -191,7 +193,7 @@ BUILTIN_ROLES: dict[str, AgentRoleDefinition] = {
         execution_mode="parallel",
         max_concurrent_tasks=2,
         timeout_seconds=120,
-        color="#10b981",
+        color=ROLE_COLORS["creative-agent"],
     ),
 }
 

@@ -12,10 +12,12 @@ from .vector_store import VectorStore, VectorEntry, LLMEmbeddingProvider, LocalE
 class VectorSearchManager:
     """向量搜索管理器：负责事实的向量去重、语义检索和索引重建。"""
 
-    def __init__(self, agent_id: str, provider: Any) -> None:
+    def __init__(self, agent_id: str, provider: Any, storage_path: Path | None = None, owner_key: str | None = None) -> None:
         self._agent_id: str = agent_id
-        storage_path = Path(settings.DATA_DIR) / "memory" / "agents" / agent_id / "vectors"
-        self._store: VectorStore = VectorStore(storage_path, provider)
+        if storage_path is None:
+            storage_path = Path(settings.DATA_DIR) / "memory" / "agents" / agent_id / "vectors"
+        # owner_key：行级隔离键（owner:… / users:…），缺省按路径推导（与 MemoryStore 一致）
+        self._store: VectorStore = VectorStore(storage_path, provider, owner_key=owner_key)
 
     async def dedup_and_add(self, facts: list[FactItem], conversation_id: str | None = None) -> list[FactItem]:
         if not facts:
@@ -26,6 +28,10 @@ class VectorSearchManager:
         seen_content = {}  # (category, content_hash) -> fact_id
 
         for f in facts:
+            # 已在向量索引中的 fact 跳过（避免重复 embedding）
+            if f.id in self._store._cache:
+                continue
+
             content_hash = hashlib.sha256(f.content.encode()).hexdigest()
             key = (f.category, content_hash)
 
@@ -44,7 +50,7 @@ class VectorSearchManager:
                 fact_id=f.id, content=f.content, category=f.category,
                 scope=scope, conversation_id=conversation_id or ""
             ))
-        
+
         await self._store.batch_add(entries)
         return [f for f in facts if f.id in {e.fact_id for e in entries}]
 

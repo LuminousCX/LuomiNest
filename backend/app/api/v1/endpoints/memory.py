@@ -1,15 +1,15 @@
-import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.utils import ok
 from app.engines.memory import get_memory_engine
-from app.engines.memory.memory_engine import FactItem, MemoryData, FACT_CATEGORIES, _engines
-from app.infrastructure.database.json_store import agents_store
+from app.engines.memory.memory_engine import FactItem, FACT_CATEGORIES, _engines
+from app.api.v1.deps import get_agents_store, get_conversation_store
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
 
@@ -155,7 +155,7 @@ async def get_facts(
 @router.post("/facts")
 async def create_fact(request: CreateFactRequest, agent_id: str | None = None):
     if request.category not in FACT_CATEGORIES:
-        raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {FACT_CATEGORIES}")
+        raise BadRequestError(f"Invalid category. Must be one of: {FACT_CATEGORIES}", code="MEMORY_CATEGORY_INVALID")
     engine = get_memory_engine(agent_id)
     fact = FactItem(
         content=request.content,
@@ -173,17 +173,17 @@ async def delete_fact(fact_id: str, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     if engine.remove_fact(fact_id):
         return ok()
-    raise HTTPException(status_code=404, detail="Fact not found")
+    raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
 
 
 @router.patch("/facts/{fact_id}")
 async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | None = None):
     if request.category is not None and request.category not in FACT_CATEGORIES:
-        raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {FACT_CATEGORIES}")
+        raise BadRequestError(f"Invalid category. Must be one of: {FACT_CATEGORIES}", code="MEMORY_CATEGORY_INVALID")
     engine = get_memory_engine(agent_id)
     if engine.update_fact(fact_id, request.content, request.category, request.confidence):
         return ok()
-    raise HTTPException(status_code=404, detail="Fact not found")
+    raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
 
 
 @router.get("/daily")
@@ -206,12 +206,14 @@ async def list_dailies(agent_id: str | None = None, conversation_id: str | None 
 
 
 @router.get("/conversation-dailies")
-async def list_conversation_dailies(agent_id: str | None = None):
+async def list_conversation_dailies(
+    agent_id: str | None = None,
+    conversation_store=Depends(get_conversation_store),
+):
     """列出所有有 daily 记录的 conversation_id 及其标题。"""
     engine = get_memory_engine(agent_id)
     conv_ids = engine.list_conversation_dailies()
-    
-    from app.infrastructure.database.conversation_store import conversation_store
+
     result = []
     for conv_id in conv_ids:
         conv = conversation_store.get(conv_id)
@@ -259,8 +261,9 @@ async def debug_inject(agent_id: str | None = None):
     data = engine.load_data()
     return ok({
         "memory_file": str(engine._memory_file()),
-        "memory_exists": engine._memory_file().exists(),
-        "knowledge_exists": engine._knowledge_file().exists(),
+        # 记忆已迁入 SQLite（memory_profiles/memory_facts 表）；文件路径仅作兼容展示
+        "memory_exists": bool(data.profile.name or data.facts),
+        "knowledge_exists": bool(engine.load_knowledge().strip()),
         "daily_count": len(engine.list_dailies()),
         "fact_count": len(data.facts),
         "context_length": len(ctx),
@@ -276,39 +279,51 @@ async def memory_health(agent_id: str | None = None):
         "status": "ok" if data.profile.name else "warning",
         "profile": engine.parse_profile(),
         "fact_count": len(data.facts),
-        "memory_file_exists": engine._memory_file().exists(),
-        "knowledge_exists": engine._knowledge_file().exists(),
+        # 记忆已迁入 SQLite 单库；字段语义改为"是否存在记忆数据"
+        "memory_file_exists": bool(data.profile.name or data.facts),
+        "knowledge_exists": bool(engine.load_knowledge().strip()),
         "daily_files": engine.list_dailies(),
     })
 
 
 @router.get("/agents")
-async def list_memory_agents():
-    memory_root = Path(settings.DATA_DIR) / "memory"
-    result = []
+async def list_memory_agents(agents_store=Depends(get_agents_store)):
+    """列出 owner 轨道（主人/各 Agent）中有记忆数据的条目（SQLite 行级统计）。"""
+    from sqlalchemy import func, select
 
-    agents_dir = memory_root / "agents"
-    if agents_dir.exists():
-        for d in sorted(agents_dir.iterdir()):
-            if not d.is_dir():
-                continue
-            if d.name == "_default":
-                continue
-            if not (d / "memory.json").exists():
-                continue
-            agent = await agents_store.get_async(d.name)
-            name = agent.get("name", d.name) if agent else d.name
-            entry = {"id": d.name, "name": name}
-            try:
-                raw = json.loads((d / "memory.json").read_text(encoding="utf-8"))
-                profile = raw.get("profile", {})
-                facts = raw.get("facts", [])
-                entry["fact_count"] = len(facts)
-                entry["has_profile"] = bool(profile.get("name"))
-                entry["profile_name"] = profile.get("name", "")
-            except Exception:
-                pass
-            result.append(entry)
+    from app.infrastructure.database.models.memory import MemoryFact, MemoryProfile
+    from app.infrastructure.database.session import sync_session_factory
+
+    result = []
+    with sync_session_factory() as session:
+        profile_rows = session.execute(
+            select(MemoryProfile.owner_key, MemoryProfile.name).where(
+                MemoryProfile.owner_key.like("owner:%")
+            )
+        ).all()
+        fact_counts = dict(
+            session.execute(
+                select(MemoryFact.owner_key, func.count())
+                .where(MemoryFact.owner_key.like("owner:%"))
+                .group_by(MemoryFact.owner_key)
+            ).all()
+        )
+    names = {owner_key: name for owner_key, name in profile_rows}
+    owner_keys = sorted(set(names.keys()) | set(fact_counts.keys()))
+
+    for owner_key in owner_keys:
+        agent_id = owner_key[len("owner:"):]
+        if agent_id == "_default":
+            continue
+        agent = await agents_store.get_async(agent_id)
+        name = agent.get("name", agent_id) if agent else agent_id
+        result.append({
+            "id": agent_id,
+            "name": name,
+            "fact_count": fact_counts.get(owner_key, 0),
+            "has_profile": bool(names.get(owner_key)),
+            "profile_name": names.get(owner_key, ""),
+        })
 
     return ok({"agents": result})
 
@@ -331,6 +346,25 @@ async def get_agent_memory_stats(agent_id: str):
 
 @router.delete("/agents/{agent_id}")
 async def delete_agent_memory(agent_id: str):
+    """删除指定 Agent 的全部记忆（SQLite 行 + 旧文件布局），含对话级数据与向量索引。"""
+    from sqlalchemy import delete as sa_delete
+
+    from app.infrastructure.database.models.memory import (
+        MemoryDaily,
+        MemoryFact,
+        MemoryKnowledge,
+        MemoryProfile,
+        MemorySummary,
+        MemoryVector,
+    )
+    from app.infrastructure.database.session import sync_session_factory
+
+    owner_key = f"owner:{agent_id}"
+    with sync_session_factory() as session:
+        for table in (MemoryFact, MemorySummary, MemoryProfile, MemoryKnowledge, MemoryDaily, MemoryVector):
+            session.execute(sa_delete(table).where(table.owner_key == owner_key))
+        session.commit()
+    # 清理旧文件布局（迁移前遗留，兼容保留）
     agent_dir = Path(settings.DATA_DIR) / "memory" / "agents" / agent_id
     if agent_dir.exists():
         shutil.rmtree(agent_dir)
@@ -372,14 +406,16 @@ async def clear_summary(agent_id: str | None = None):
 
 
 @router.delete("/reset-all")
-async def reset_all_memory(agent_id: str | None = None):
+async def reset_all_memory(
+    agent_id: str | None = None,
+    conversation_store=Depends(get_conversation_store),
+):
     """重置全部记忆到出厂状态（同时删除该 Agent 的所有对话记录）"""
     # 删除记忆数据
     engine = get_memory_engine(agent_id)
     engine.reset_all()
     
     # 删除该 Agent 的所有对话记录
-    from app.infrastructure.database.conversation_store import conversation_store
     conversation_store.delete_by_agent_id(agent_id or "_default")
     
     # 清除缓存

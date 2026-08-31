@@ -12,6 +12,7 @@ import { registerIpcHandlers, setMainWindow } from './services/ipc-handlers'
 import { createDesktopPet, getDesktopPetWindow, registerDesktopPetIpc } from './services/desktop-pet'
 import { registerAvatarProtocol, verifyAvatarResources, registerAvatarIpc } from './services/avatar-protocol'
 import { registerBackgroundProtocol } from './services/bg-protocol'
+import { registerCollaboratorAvatarIpc, updateCollaboratorAvatars } from './services/collaborator-avatars'
 import { createLuomiNestLogger } from './services/luomi-logger'
 
 const logger = createLuomiNestLogger('Main')
@@ -318,6 +319,10 @@ app.whenReady().then(() => {
   registerIpcHandlers(mainWindow)
   registerDesktopPetIpc(mainWindow)
   registerAvatarIpc()
+  registerCollaboratorAvatarIpc()
+
+  // 启动后后台更新协作者头像缓存：失败时自动复用上一次缓存（不阻塞窗口创建）
+  updateCollaboratorAvatars().catch(() => {})
 
   logger.info('Starting backend service in background...')
   startBackendInBackground()

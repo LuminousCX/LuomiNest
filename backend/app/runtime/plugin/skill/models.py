@@ -96,6 +96,7 @@ class SkillDefinition:
             "skill_dir": self.skill_dir,
             "trigger_keywords": self.trigger_keywords,
             "status": self.status.value,
+            "is_active": self.is_active,
             "loaded_at": self.loaded_at,
             "error_message": self.error_message,
             "body_length": len(self.body),

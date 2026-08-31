@@ -4,10 +4,10 @@
 
 # LuomiNest
 
-**分布式全屋 AI 伴侣平台**
+**分布式多用户关系型 AI 智能体平台**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.7.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.7-green.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D.svg?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
@@ -16,7 +16,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/LuminousCX/LuomiNest?style=social)](https://github.com/LuminousCX/LuomiNest/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/LuminousCX/LuomiNest?style=social)](https://github.com/LuminousCX/LuomiNest/network/members)
 [![GitHub Issues](https://img.shields.io/github/issues/LuminousCX/LuomiNest)](https://github.com/LuminousCX/LuomiNest/issues)
-[![GitHub Last Commit](https://img.shields.io/github/last-commit/LuminousCX/LuomiNest)](https://github.com/LuminousCX/LuomiNest/commits/main)
+[![GitHub Last Commit](https://img.shields.io/github/last-commit/LuminousCX/LuomiNest)](https://github.com/LuminousCX/LuomiNest/commits/master)
 [![Code Size](https://img.shields.io/github/languages/code-size/LuminousCX/LuomiNest)](https://github.com/LuminousCX/LuomiNest)
 
 [English](#english) | [中文](#luominest)
@@ -29,22 +29,26 @@
 
 ## 简介
 
-LuomiNest 是一个开源的分布式全屋 AI 伴侣平台，致力于让每个人都能拥有专属的 AI 伴侣。它支持在桌面电脑、嵌入式终端（ESP32）、智能家居设备上运行，通过自然语言对话、语音交互、Live2D 虚拟形象等方式，提供沉浸式的 AI 陪伴体验。
+LuomiNest 是一个开源的**分布式多用户关系型 AI 智能体平台**，以"关系驱动"为核心设计理念。它通过主/从双层记忆架构，在群聊中自动提取每位用户的独立画像（从记忆），私聊时自动加载该用户的记忆（主记忆联动），实现真正个性化的多用户对话；同时支持人、AI、AI 与 AI 跨平台群聊协作。它可运行于桌面电脑、嵌入式终端（ESP32）、智能家居设备之上，覆盖自然语言对话、语音交互、Live2D 虚拟形象、工作流自动化与浏览器操作等能力，提供懂每一个人的长期智能体服务。
 
 核心设计理念：**一台普通电脑即可运行，数据 100% 本地闭环。**
 
 ## 核心特性
 
 - **沉浸式对话** — 多轮自然语言对话，支持多 LLM Provider（OpenAI / Anthropic / DeepSeek / Ollama 等），流式响应
-- **Live2D 虚拟形象** — Cubism 5 引擎驱动，口型同步、表情驱动、情感映射，支持 VRM 模型
+- **Live2D 虚拟形象** — Cubism 5 引擎驱动，口型同步、表情驱动、情感映射，支持 VRM 模型与 PngTuber 像素化头像
 - **三层记忆系统** — 工作记忆 + 情景记忆 + 语义记忆，自动提取事实、构建用户画像、知识图谱
-- **语音交互** — Whisper 语音识别（ASR）+ Edge TTS / 本地 TTS 合成，支持多语言
-- **多平台接入** — QQ（OneBot / 官方）、微信（公众号 / 企业微信）、Minecraft、WebSocket、REST API 等 13 种适配器
+- **语音交互** — Whisper / FunASR 语音识别（ASR）+ Edge TTS / 本地 TTS 等多引擎合成，支持多语言
+- **多平台接入** — QQ（OneBot / 官方）、微信（公众号 / 企业微信）、Telegram、Discord、Minecraft 等 13 种适配器
 - **MCP 工具协议** — 标准 MCP 协议支持，工具注册与调用，内置 CLI、文件操作、子 Agent 委派等工具
-- **多 Agent 协作** — 任务分析 → 子任务调度 → 并行执行 → 结果综合，支持 AI-AI 自主对话
-- **IoT 智能控制** — MQTT 设备通信，ESP32 硬件终端，支持状态上报、音频流和位置信息
+- **多 Agent 协作** — 任务分析 → 子任务调度 → 并行执行 → 结果综合，支持 A2A 协议 AI-AI 自主对话
+- **工作流引擎** — 可视化节点编排、定时任务调度（APScheduler）、工具调用记录与持久化
+- **浏览器自动化** — Luminous Human 模拟交互（鼠标 / 键盘 / 滚动），标签页管理、隐身预加载与搜索
+- **主题皮肤系统** — 预设主题 + 自定义皮肤编辑器，注册表源管理与扩展市场
+- **IoT 智能控制** — MQTT 设备通信，ESP32-P4 硬件终端，支持状态上报、音频流和位置信息
 - **插件与技能系统** — Star 插件热加载 + Skills 轻技能双轨扩展，内置扩展市场
 - **桌面客户端** — Electron 桌面应用，内置浏览器、桌面宠物、Live2D 皮套工坊、控制台终端
+- **安全体系** — JWT 认证、RBAC 权限控制、本地沙箱、命令守卫、速率限制、安全审计日志
 - **隐私优先** — 全部数据本地存储，零外网传输，AES-256 加密
 
 ## 技术栈
@@ -52,13 +56,13 @@ LuomiNest 是一个开源的分布式全屋 AI 伴侣平台，致力于让每个
 | 层级 | 技术选型 |
 |------|---------|
 | **前端** | Electron 41 + Vue 3 + TypeScript + Pinia + PixiJS (Live2D) |
-| **后端** | Python 3.12+ + FastAPI + Uvicorn + SQLAlchemy 2 (async) |
-| **存储** | JSON 文件存储（主）+ SQLite / PostgreSQL (PGVector) + Redis |
+| **后端** | Python 3.12+ + FastAPI + Uvicorn + SQLAlchemy 2 (async) + APScheduler |
+| **存储** | SQLite (SQLAlchemy ORM) + JSON 文件 + PostgreSQL (PGVector) + Redis |
 | **通信** | WebSocket + MQTT + HTTP/REST + SSE 流式响应 |
-| **AI/LLM** | LiteLLM + OpenAI + Anthropic + DeepSeek + Ollama |
-| **语音** | Whisper (ASR) + Edge TTS + SherpaOnnx (本地 TTS) |
-| **硬件** | ESP-IDF (ESP32-P4 / ESP32-S3 / ESP32-C6) |
-| **部署** | Docker Compose + PyInstaller + Electron Builder |
+| **AI/LLM** | OpenAI / Anthropic / DeepSeek / Ollama，多厂商适配器 + 中间件管道 |
+| **语音** | Whisper / FunASR (ASR) + Edge TTS / SherpaOnnx / 多引擎 TTS |
+| **硬件** | ESP-IDF (ESP32-P4) |
+| **部署** | Docker Compose + PyInstaller + Electron Builder + Inno Setup |
 
 ## 快速开始
 
@@ -155,14 +159,14 @@ docker compose -f docker-compose.prod.yml up -d
 LuomiNest/
 ├── backend/                     # Python 后端服务
 │   ├── app/
-│   │   ├── api/v1/endpoints/    # REST API 端点（13 个模块）
-│   │   ├── core/                # 配置、工厂、异常
-│   │   ├── domains/             # 领域逻辑（社交、知识）
-│   │   ├── engines/             # 引擎（记忆、语音、渲染、定位）
-│   │   ├── infrastructure/      # 基础设施（数据库、Redis、MQTT）
-│   │   ├── models/              # 数据模型
-│   │   ├── runtime/             # 运行时（平台适配、插件、Provider）
-│   │   ├── security/            # 安全（JWT、OAuth、RBAC、审计）
+│   │   ├── api/v1/endpoints/    # REST API 端点（21 个模块）
+│   │   ├── api/ws/              # WebSocket（认证、Avatar 驱动、连接管理）
+│   │   ├── core/                # 配置、容器、工作流引擎、Agent 编排、调度器
+│   │   ├── domains/             # 领域逻辑（社交、群聊、AI-AI 对话）
+│   │   ├── engines/             # 引擎（记忆、渲染、定位）
+│   │   ├── infrastructure/      # 基础设施（数据库、Redis、MQTT、安装、同步）
+│   │   ├── runtime/             # 运行时（平台适配器、插件、Provider）
+│   │   ├── security/            # 安全（JWT、OAuth、RBAC、沙箱、审计、速率限制）
 │   │   └── services/            # 业务服务
 │   ├── config/                  # 环境配置
 │   ├── plugins/                 # 插件目录
@@ -171,16 +175,13 @@ LuomiNest/
 │
 ├── frontend/                    # Electron + Vue 3 桌面客户端
 │   ├── src/
-│   │   ├── main/                # Electron 主进程
+│   │   ├── main/                # Electron 主进程（IPC、浏览器自动化、后端托管）
 │   │   ├── preload/             # 预加载脚本
-│   │   └── renderer/            # Vue 渲染进程（28 个页面）
+│   │   └── renderer/            # Vue 渲染进程（26 个页面）
 │   └── resources/               # 静态资源（图标、Live2D 模型）
 │
 ├── firmware/                    # ESP32 嵌入式固件
-│   ├── esp32-p4/                # ESP32-P4 主控（MIPI LCD）
-│   ├── esp32-s3/                # ESP32-S3 副屏（ST7735S）
-│   ├── esp32-c6-coordinator/    # ESP32-C6 协调器
-│   └── server/                  # Live2D 预渲染服务器
+│   └── embedded/esp32-p4/       # ESP32-P4 主控（组件化：app / bsp / drivers）
 │
 ├── docker/                      # Docker 部署配置
 ├── docs/                        # VitePress 文档站
@@ -232,22 +233,26 @@ LuomiNest/
 
 ## Introduction
 
-LuomiNest is an open-source distributed AI companion platform designed to make personalized AI companionship accessible to everyone. It runs on desktop computers, embedded terminals (ESP32), and smart home devices, delivering an immersive AI companion experience through natural language dialogue, voice interaction, and Live2D virtual avatars.
+LuomiNest is an open-source distributed multi-user relational AI agent platform built on a relationship-driven design. Its dual-layer memory architecture (primary memory pool + per-user persona memory) automatically extracts each user's profile during group chats and loads it back in private conversations, enabling truly personalized multi-user dialogue. It supports human, AI, and AI-to-AI collaboration across platforms (QQ / WeChat / Telegram / Discord, etc.). It runs on desktop computers, embedded terminals (ESP32), and smart home devices, delivering natural language dialogue, voice interaction, Live2D virtual avatars, workflow automation, and browser operations for a long-term agent experience that knows every single user.
 
 Core design principle: **Runs on a single ordinary computer with 100% local data retention.**
 
 ## Key Features
 
 - **Immersive Dialogue** — Multi-turn natural language conversations with multiple LLM providers (OpenAI / Anthropic / DeepSeek / Ollama), streaming responses
-- **Live2D Avatar** — Cubism 5 engine with lip sync, expression drive, emotion mapping; VRM model support
+- **Live2D Avatar** — Cubism 5 engine with lip sync, expression drive, emotion mapping; VRM model and PngTuber support
 - **Three-Layer Memory** — Working + episodic + semantic memory with automatic fact extraction, user profiling, and knowledge graphs
-- **Voice Interaction** — Whisper ASR + Edge TTS / local TTS synthesis, multi-language support
-- **Multi-Platform Access** — 13 adapter types: QQ (OneBot / Official), WeChat (MP / Work), Minecraft, WebSocket, REST API, and more
+- **Voice Interaction** — Whisper / FunASR ASR + Edge TTS / local TTS synthesis, multi-language support
+- **Multi-Platform Access** — 13 adapter types: QQ (OneBot / Official), WeChat (MP / Work), Telegram, Discord, Minecraft, and more
 - **MCP Tool Protocol** — Standard MCP protocol support with tool registration and invocation; built-in CLI, file ops, sub-agent delegation
-- **Multi-Agent Collaboration** — Task analysis → sub-task scheduling → parallel execution → result synthesis; AI-to-AI autonomous dialogue
-- **IoT Smart Control** — MQTT device communication, ESP32 hardware terminals, status reporting, audio streaming, and location tracking
+- **Multi-Agent Collaboration** — Task analysis → sub-task scheduling → parallel execution → result synthesis; A2A AI-to-AI autonomous dialogue
+- **Workflow Engine** — Visual node orchestration, scheduled tasks (APScheduler), tool-call recording and persistence
+- **Browser Automation** — Luminous Human simulated interaction (mouse / keyboard / scroll), tab management, incognito preload and search
+- **Theme System** — Preset skins + custom skin editor, registry source management and marketplace
+- **IoT Smart Control** — MQTT device communication, ESP32-P4 hardware terminals, status reporting, audio streaming, and location tracking
 - **Plugin & Skill System** — Star plugin hot-reload + Skills lightweight extension dual-track architecture with built-in marketplace
 - **Desktop Client** — Electron app with built-in browser, desktop pet, Live2D avatar workshop, and console terminal
+- **Security** — JWT authentication, RBAC, local sandbox, command guard, rate limiting, and security audit logs
 - **Privacy First** — All data stored locally, zero external transmission, AES-256 encryption
 
 ## Quick Start

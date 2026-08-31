@@ -5,10 +5,19 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from loguru import logger
 
+from app.core.domain_policy import (
+    MAIN_AGENT_ID,
+    LEGACY_MAIN_AGENT_ID as _LEGACY_MAIN_AGENT_ID,
+    TRACK_OWNER,
+    TRACK_USERS,
+    DomainPolicy,
+    is_main_agent_id,
+    resolve_domain_policy,
+)
 from app.infrastructure.database.json_store import agents_store
 from app.core.context import get_context_manager
 from app.core.utils import extract_text_from_content
-from app.engines.memory import get_memory_engine
+from app.engines.memory import get_memory_engine, get_track_engine
 from app.engines.memory.memory_engine import (
     _CORRECTION_HINT,
     _CORRECTION_PATTERNS_EN,
@@ -19,20 +28,28 @@ from app.engines.memory.memory_engine import (
 )
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.services.distillation_service import distillation_service
-from app.services.skill_service import cx_skill_service
+from app.services.skill_service import luominest_skill_service
 
-# 主 Agent 唯一标识：记忆系统仅对主 Agent 生效，联系人 Agent 不读写记忆
-MAIN_AGENT_ID = "luominest_main_agent"
-# 旧版平台数据中使用的 agent_id，保留以兼容历史会话
-_LEGACY_MAIN_AGENT_ID = "main"
+# 主 Agent 唯一标识：canonical 定义在 app.core.domain_policy，此处为兼容再导出
+# （联系人 Agent 不读写记忆；旧版 "main" 标识由 is_main_agent 兼容）
 
 
 def is_main_agent(agent_id: str | None) -> bool:
     """判断给定 agent_id 是否为主 Agent（工作台或平台）。
 
+    兼容保留的旧函数（B7）：记忆读写判定已升级为 DomainPolicy 三开关
+    （resolve_domain_policy），本函数仅供 legacy 调用点与外部模块使用。
     同时匹配新版 "luominest_main_agent" 和旧版 "main"，确保历史会话数据兼容。
     """
-    return agent_id == MAIN_AGENT_ID or agent_id == _LEGACY_MAIN_AGENT_ID
+    return is_main_agent_id(agent_id)
+
+
+def _owner_engine_for(agent_id: str | None):
+    """主人轨道引擎：优先按调用方 agent_id 取引擎（兼容 main / luominest_main_agent
+    两套历史目录），否则走轨道别名解析（resolve_owner_agent_key）。"""
+    if is_main_agent_id(agent_id):
+        return get_memory_engine(agent_id)
+    return get_track_engine(TRACK_OWNER)
 
 
 class ContextService:
@@ -188,7 +205,7 @@ class ContextService:
 
         if agent_id:
             # 主 Agent 走 main_agent_config，不查 agents_store
-            if agent_id == "luominest_main_agent":
+            if agent_id == MAIN_AGENT_ID:
                 try:
                     from app.runtime.platform.main_agent_config import (
                         load_luominest_main_agent_config,
@@ -279,7 +296,7 @@ Examples:
     def _build_skills_index_block() -> str:
         """构建 <skill_index> 块 — 始终注入，让 AI 知道当前可用技能列表。"""
         try:
-            return cx_skill_service.get_skills_index_prompt()
+            return luominest_skill_service.get_skills_index_prompt()
         except Exception as e:
             logger.debug(f"[ContextService] skill_index injection skipped: {e}")
             return ""
@@ -290,9 +307,30 @@ Examples:
         if not user_context:
             return ""
         try:
-            return cx_skill_service.get_skills_prompt_for_injection(context=user_context)
+            return luominest_skill_service.get_skills_prompt_for_injection(context=user_context)
         except Exception as e:
             logger.debug(f"[ContextService] available_skills injection skipped: {e}")
+            return ""
+
+    @staticmethod
+    def build_user_selected_skills_prompt(skill_ids: list[str]) -> str:
+        """构建用户显式选择技能的 <available_skills> 块（注入完整 body）。
+
+        与自动匹配注入的区别：用户主动勾选的技能无条件注入，
+        不受关键词匹配限制，确保 AI 按所选技能执行。
+
+        Args:
+            skill_ids: 用户本次请求显式选择的技能 ID 列表
+
+        Returns:
+            <available_skills> 块文本；无有效技能时返回空字符串
+        """
+        if not skill_ids:
+            return ""
+        try:
+            return luominest_skill_service.build_selected_skills_prompt(skill_ids)
+        except Exception as e:
+            logger.debug(f"[ContextService] selected skills injection skipped: {e}")
             return ""
 
     @staticmethod
@@ -383,21 +421,49 @@ Examples:
         provider_name: str | None = None,
         thread_id: str = "",
         llm_adapter=None,
+        *,
+        domain: str | None = None,
+        scene: str = "",
+        user_key: str = "",
     ) -> list[dict]:
-        # 记忆系统仅对主 Agent 生效，联系人 Agent 不注入记忆
-        if not is_main_agent(agent_id):
+        """记忆注入（读），由 DomainPolicy.memory_read 判定（B7，§9 记忆策略矩阵）。
+
+        - workbench（含 avatar 场景）：注入 owner 轨
+        - platform:{instId}：owner 优先 + 该用户 users/{user_key} 记忆（§8.5.5 注入顺序）
+        - agent:{id} / 未知域：不注入
+        domain 缺省时按 agent_id 兜底推导（legacy 行为兼容）。
+        """
+        policy = resolve_domain_policy(
+            domain, scene=scene, agent_id=agent_id, user_key=user_key,
+        )
+        if not policy.memory_read:
             return messages
         try:
-            engine = get_memory_engine(agent_id)
             # query-aware：用用户最新消息作为 query 优化事实检索
             query = self.get_user_query(messages)
-            memory_ctx = engine.build_context(query=query, conversation_id=thread_id)
+            blocks: list[str] = []
 
-            if not memory_ctx:
+            # ① owner 轨（主人记忆优先，§8.5.5）
+            owner_engine = _owner_engine_for(agent_id)
+            owner_ctx = owner_engine.build_context(query=query, conversation_id=thread_id)
+            if owner_ctx:
+                blocks.append(owner_ctx)
+
+            # ② users 轨（平台私聊用户记忆，owner 之后注入）
+            if policy.memory_track == TRACK_USERS and user_key:
+                try:
+                    user_engine = get_track_engine(TRACK_USERS, user_key)
+                    user_ctx = user_engine.build_context(query=query, conversation_id=thread_id)
+                    if user_ctx:
+                        blocks.append(f"[当前用户记忆]\n{user_ctx}")
+                except Exception as user_err:
+                    logger.warning(f"[Memory] User track read failed: user_key={user_key}, error={user_err}")
+
+            if not blocks:
                 logger.info(f"[Memory] No memory context to inject, thread={thread_id}")
                 return messages
 
-            memory_block = f"<user_memory>\n{memory_ctx}\n</user_memory>"
+            memory_block = f"<user_memory>\n" + "\n\n".join(blocks) + "\n</user_memory>"
 
             new_messages = list(messages)
             if new_messages and new_messages[0].get("role") == "system":
@@ -422,7 +488,15 @@ Examples:
         thread_id: str,
         agent_id: str | None = None,
         llm_adapter=None,
+        *,
+        policy: DomainPolicy | None = None,
+        user_key: str = "",
     ) -> None:
+        """对话后记忆提炼写入。轨道由 policy.memory_track 决定（B7/§8.5.5 写入隔离）：
+
+        - owner 轨（工作台/皮套/桌宠）：写 agents/{主 Agent}/（现状行为）
+        - users 轨（平台私聊）：写 users/{user_key}/，不污染主人记忆
+        """
         try:
             user_msgs = [m for m in messages if m.get("role") == "user"]
             if not user_msgs:
@@ -431,7 +505,10 @@ Examples:
             last_msg = user_msgs[-1]
             content = ContextService._extract_user_text(last_msg)
 
-            engine = get_memory_engine(agent_id)
+            if policy is not None and policy.memory_track == TRACK_USERS and user_key:
+                engine = get_track_engine(TRACK_USERS, user_key)
+            else:
+                engine = get_memory_engine(agent_id)
             hint = ContextService.build_correction_hint(messages)
 
             # 自然语言记忆操作检测
@@ -528,15 +605,29 @@ Examples:
         thread_id: str,
         agent_id: str | None = None,
         llm_adapter=None,
+        *,
+        domain: str | None = None,
+        scene: str = "",
+        user_key: str = "",
+        platform_memory_write: bool = False,
     ) -> None:
-        # 记忆系统仅对主 Agent 生效，联系人 Agent 不更新记忆
-        if not is_main_agent(agent_id):
+        """记忆写入门控：由 DomainPolicy.memory_write 判定（B7，§9）。
+
+        domain 缺省时按 agent_id 兜底推导（legacy：仅主 Agent 写记忆）。
+        平台域写入受实例级开关 platform_memory_write 控制（M5=C，默认关）。
+        """
+        policy = resolve_domain_policy(
+            domain, scene=scene, agent_id=agent_id, user_key=user_key,
+            platform_memory_write=platform_memory_write,
+        )
+        if not policy.memory_write:
             return
         user_count = sum(1 for m in messages if m.get("role") == "user")
-        logger.info(f"[Memory] schedule_memory_update: thread={thread_id}, user_msgs={user_count}, has_adapter={llm_adapter is not None}")
+        logger.info(f"[Memory] schedule_memory_update: thread={thread_id}, user_msgs={user_count}, has_adapter={llm_adapter is not None}, track={policy.memory_track}")
         try:
             await ContextService.update_memory_from_conversation(
                 messages, thread_id, agent_id, llm_adapter,
+                policy=policy, user_key=user_key,
             )
             logger.info(f"[Memory] Background task completed")
         except Exception as e:

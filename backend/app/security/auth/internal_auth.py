@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from loguru import logger
+
+from app.core.exceptions import AuthenticationError
 
 # ── Header 常量 ──────────────────────────────────────────────────────────────
 
@@ -70,19 +72,13 @@ class InternalAuth:
             logger.warning(
                 "[InternalAuth] Request with internal token header but token not configured"
             )
-            raise HTTPException(
-                status_code=401,
-                detail="Internal authentication not configured",
-            )
+            raise AuthenticationError("Internal authentication not configured")
 
         if not secrets.compare_digest(token, self._token):
             logger.warning(
                 "[InternalAuth] Invalid internal token presented"
             )
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid internal token",
-            )
+            raise AuthenticationError("Invalid internal token", code="AUTH_INVALID_TOKEN")
 
         # 内部认证通过，检查是否有代理用户（系统级调用时省略此 Header）
         owner_user_id = request.headers.get(OWNER_USER_ID_HEADER)

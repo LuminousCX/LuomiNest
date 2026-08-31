@@ -9,7 +9,8 @@ import re
 import httpx
 from loguru import logger
 
-from app.runtime.provider.base import TTSProvider
+from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.tts.ports import TTSProvider
 
 
 class FishAudioTTSProvider(TTSProvider):
@@ -23,6 +24,21 @@ class FishAudioTTSProvider(TTSProvider):
     }
 
     DEFAULT_BASE_URL = "https://api.fish-audio.cn/v1"
+
+    # 引擎能力声明（G1/G2 治理）：音色为自由输入（reference_id 或角色名，voice_mode=input）
+    CAPABILITIES = EngineCapabilities(
+        engine_id="fish-audio",
+        name="Fish Audio TTS（多语言）",
+        kind="cloud",
+        category="cloud-paid",
+        needs_api_key=True,
+        online=True,
+        languages=("zh", "en", "ja"),
+        voices=[],
+        voice_mode="input",
+        default_voice="",
+        description="Fish Audio 云语音，通过 reference_id（32 位 hex）或角色名称指定音色，支持音色克隆生态",
+    )
 
     # reference_id 格式：32 位十六进制字符串
     _REFERENCE_ID_PATTERN = re.compile(r"^[a-fA-F0-9]{32}$")
@@ -70,7 +86,10 @@ class FishAudioTTSProvider(TTSProvider):
             "Content-Type": "application/json",
         }
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        # 统一超时治理（应急修复 B3）：硬编码 → Settings.TTS_HTTP_TIMEOUT
+        from app.core.config import settings as _settings
+
+        async with httpx.AsyncClient(timeout=_settings.TTS_HTTP_TIMEOUT) as client:
             response = await client.post(
                 f"{self.base_url}/tts",
                 json=payload,
@@ -100,7 +119,9 @@ class FishAudioTTSProvider(TTSProvider):
         base = self.base_url.replace("/v1", "")
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
-        async with httpx.AsyncClient(timeout=20) as client:
+        from app.core.config import settings as _settings
+
+        async with httpx.AsyncClient(timeout=_settings.TTS_HTTP_TIMEOUT) as client:
             for sort_by in ["score", "task_count", "created_at"]:
                 params = {"title": character, "sort_by": sort_by}
                 response = await client.get(

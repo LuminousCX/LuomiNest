@@ -7,7 +7,8 @@
 import httpx
 from loguru import logger
 
-from app.runtime.provider.base import TTSProvider
+from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.tts.ports import TTSProvider
 
 
 # SiliconFlow TTS 预置音色（CosyVoice2 系列）
@@ -37,6 +38,31 @@ class SiliconFlowTTSProvider(TTSProvider):
 
     DEFAULT_MODEL = "FunAudioLLM/CosyVoice2-0.5B"
     DEFAULT_BASE_URL = "https://api.siliconflow.cn/v1/audio/speech"
+
+    # 引擎能力声明（G1/G2 治理）：CosyVoice2 音色多语言（zh/en 为主）
+    CAPABILITIES = EngineCapabilities(
+        engine_id="siliconflow",
+        name="SiliconFlow TTS（CosyVoice2 云端）",
+        kind="cloud",
+        category="cloud-paid",
+        needs_api_key=True,
+        online=True,
+        languages=("zh", "en", "ja"),
+        voices=[
+            {"value": "FunAudioLLM/CosyVoice2-0.5B:alex", "label": "Alex（英文男声）", "langs": ["en", "zh"]},
+            {"value": "FunAudioLLM/CosyVoice2-0.5B:benjamin", "label": "Benjamin（英文男声）", "langs": ["en", "zh"]},
+            {"value": "FunAudioLLM/CosyVoice2-0.5B:bella", "label": "Bella（英文女声）", "langs": ["en", "zh"]},
+            {"value": "FunAudioLLM/CosyVoice2-0.5B:claire", "label": "Claire（英文女声）", "langs": ["en", "zh"]},
+            {"value": "FunAudioLLM/CosyVoice2-0.5B:david", "label": "David（英文男声）", "langs": ["en", "zh"]},
+            {"value": "FunAudioLLM/CosyVoice2-0.5B:diana", "label": "Diana（英文女声）", "langs": ["en", "zh"]},
+            {"value": "FunAudioLLM/CosyVoice2-0.5B:emily", "label": "Emily（英文女声）", "langs": ["en", "zh"]},
+            {"value": "FunAudioLLM/CosyVoice2-0.5B:grace", "label": "Grace（英文女声）", "langs": ["en", "zh"]},
+        ],
+        default_voice="FunAudioLLM/CosyVoice2-0.5B:alex",
+        models=["FunAudioLLM/CosyVoice2-0.5B"],
+        default_model="FunAudioLLM/CosyVoice2-0.5B",
+        description="SiliconFlow OpenAI 兼容 TTS，CosyVoice2-0.5B 云端托管，10 种音色",
+    )
 
     @classmethod
     def is_available(cls) -> bool:
@@ -75,7 +101,10 @@ class SiliconFlowTTSProvider(TTSProvider):
             "Content-Type": "application/json",
         }
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        # 统一超时治理（应急修复 B3）：硬编码 → Settings.TTS_HTTP_TIMEOUT
+        from app.core.config import settings as _settings
+
+        async with httpx.AsyncClient(timeout=_settings.TTS_HTTP_TIMEOUT) as client:
             response = await client.post(self.base_url, json=payload, headers=headers)
             response.raise_for_status()
 

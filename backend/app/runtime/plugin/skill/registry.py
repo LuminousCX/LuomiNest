@@ -138,6 +138,38 @@ class SkillRegistry:
             + "\n</available_skills>"
         )
 
+    def build_selected_skills_prompt(self, skill_ids: list[str]) -> str:
+        """构建用户显式选择技能的 prompt 块（与自动匹配注入共用同一 <available_skills> 格式）。
+
+        仅注入存在且已启用的技能；未知 / 已禁用的 skill_id 静默忽略。
+        用户选择优先于关键词匹配：命中列表中的技能一定注入完整 body。
+
+        Args:
+            skill_ids: 用户本次请求显式选择的技能 ID 列表
+
+        Returns:
+            <available_skills> 块文本；无有效技能时返回空字符串
+        """
+        blocks: list[str] = []
+        for skill_id in skill_ids or []:
+            skill = self._skills.get(skill_id)
+            if skill is None or not skill.is_active or not skill.body:
+                continue
+            blocks.append(
+                f'<skill id="{skill.id}" name="{skill.name}">\n'
+                f"{skill.body}\n"
+                f"</skill>"
+            )
+        if not blocks:
+            return ""
+
+        return (
+            "<available_skills>\n"
+            "以下是用户本次会话显式选择的技能，请严格按照技能描述的指引完成用户需求：\n\n"
+            + "\n\n".join(blocks)
+            + "\n</available_skills>"
+        )
+
     def build_skills_index_prompt(self) -> str:
         """构建技能索引 prompt（仅列出技能 id/name/description，不含 body）。
 
@@ -179,4 +211,4 @@ class SkillRegistry:
 
 
 # 全局单例
-cx_skill_registry = SkillRegistry()
+luominest_skill_registry = SkillRegistry()

@@ -2,7 +2,7 @@
 from app.core.scheduler.manager import (
     LuomiSchedulerManager,
     TaskEventCallback,
-    luomi_scheduler,
+    luominest_scheduler,
 )
 from app.core.scheduler.models import (
     LuomiTaskStatus,
@@ -15,7 +15,7 @@ from app.core.scheduler.models import (
 __all__ = [
     "LuomiSchedulerManager",
     "TaskEventCallback",
-    "luomi_scheduler",
+    "luominest_scheduler",
     "LuomiTaskStatus",
     "LuomiTaskType",
     "ScheduledTaskConfig",

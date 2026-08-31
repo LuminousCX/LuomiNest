@@ -69,6 +69,19 @@ const isPathSafe = (baseDir: string, targetPath: string): boolean => {
 const resolveModelFile = (hostname: string, relativePath: string): string | null => {
   const decodedPath = decodeURIComponent(relativePath)
 
+  // 协作者头像缓存：hostname 为 cached，映射到 userData/Cache/avatars/
+  // 例如：luominest-avatar://cached/luminous-ChenXi.png
+  if (hostname === 'cached') {
+    if (!isPathSafe(PATHS.avatarCache, decodedPath)) {
+      logger.warn(`Path traversal blocked: cached:${decodedPath}`)
+      return null
+    }
+    const filePath = resolve(PATHS.avatarCache, decodedPath)
+    if (existsSync(filePath) && statSync(filePath).isFile()) return filePath
+    logger.warn(`Resource not found: cached/${relativePath}`)
+    return null
+  }
+
   // 新格式：hostname 是模型类型前缀（live2d/vrm/pixel/spine/png）
   // 例如：luominest-avatar://pixel/default-pet/manifest.json
   if (isModelTypePrefix(hostname)) {

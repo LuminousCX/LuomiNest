@@ -27,6 +27,8 @@ class ChatRequest(BaseModel):
     ] | None = None
     search_results: str | None = Field(default=None, max_length=100_000)
     versions: list[dict[str, Any]] | None = None
+    # 用户本次请求显式选择的技能 ID（优先于关键词自动匹配注入）
+    skill_ids: list[str] | None = None
     # Agent 集群调用内部字段（不暴露前端，仅供 agent_tool_call 递归守卫使用）
     is_sub_agent: bool = False
     disable_tools: list[str] | None = None
@@ -62,6 +64,8 @@ class ChatStreamChunk(BaseModel):
     context_tokens: int | None = None
     # 上下文窗口容量（done 时回填，前端用于计算使用百分比）
     context_max_tokens: int | None = None
+    # 模型路由通知（如专业模式推理模型退化为主模型，前端右上角 toast 展示）
+    notice: str | None = None
 
     @field_validator("content", "reasoning_content", mode="before")
     @classmethod
@@ -76,6 +80,9 @@ class ConversationCreate(BaseModel):
     provider: str | None = None
     chat_mode: str | None = None
     is_hidden: bool = False
+    # 对话域字段（洋葱架构 §5.2，B3 创建时写入；缺省按 agent_id 推导）
+    domain: str | None = None
+    scene: str | None = None
 
 
 class ConversationResponse(BaseModel):
@@ -86,6 +93,10 @@ class ConversationResponse(BaseModel):
     provider: str | None = None
     chat_mode: str | None = None
     is_hidden: bool = False
+    # 对话域字段（洋葱架构 §5.2，新增只增不改，老客户端忽略即可）
+    domain: str = ""
+    scene: str = "workbench"
+    user_key: str = ""
     messages: list[dict[str, Any]] = []
     created_at: str
     updated_at: str
@@ -101,6 +112,10 @@ class ConversationListResponse(BaseModel):
     provider: str | None = None
     chat_mode: str | None = None
     is_hidden: bool = False
+    # 对话域字段（洋葱架构 §5.2，新增只增不改，老客户端忽略即可）
+    domain: str = ""
+    scene: str = "workbench"
+    user_key: str = ""
     last_message: str | None = None
     created_at: str
     updated_at: str

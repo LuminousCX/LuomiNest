@@ -385,6 +385,7 @@ export const useChatStore = defineStore('chat', () => {
       fileType?: string
       fileName?: string
       chatMode?: 'normal' | 'standard' | 'ultra'
+      skillIds?: string[]
       _preserveVersions?: MessageVersion[]
       onChunk?: (chunk: ChatStreamChunk) => void
       targetConvId?: string
@@ -497,6 +498,10 @@ export const useChatStore = defineStore('chat', () => {
 
     if (options?.chatMode) {
       requestBody.chat_mode = options.chatMode
+    }
+
+    if (options?.skillIds && options.skillIds.length > 0) {
+      requestBody.skill_ids = options.skillIds
     }
 
     if (options?.fileContent) {
@@ -931,6 +936,7 @@ export const useChatStore = defineStore('chat', () => {
     agentConversations,
     convStreaming,
     convMessages,
+    convData,
     currentSuggestionMessageId,
     checkBackend,
     fetchConversations,

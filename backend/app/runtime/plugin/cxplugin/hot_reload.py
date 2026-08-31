@@ -12,9 +12,9 @@ from typing import Any
 
 from loguru import logger
 
-from app.runtime.plugin.cxplugin.lifecycle import cx_plugin_lifecycle
-from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
-from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+from app.runtime.plugin.cxplugin.lifecycle import luominest_plugin_lifecycle
+from app.runtime.plugin.cxplugin.loader import luominest_plugin_loader
+from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
 
 
 class CxPluginHotReload:
@@ -66,13 +66,13 @@ class CxPluginHotReload:
 
     async def _check_changes(self) -> None:
         """检查所有已加载插件的 .py 文件变化。"""
-        for metadata in cx_plugin_registry.list_plugins():
+        for metadata in luominest_plugin_registry.list_plugins():
             if not metadata.is_active:
                 continue
             changed = self._detect_file_changes(metadata.plugin_dir, metadata.plugin_id)
             if changed:
                 logger.info(f"[CxPlugin] Detected changes in {metadata.plugin_id}, reloading...")
-                await cx_plugin_lifecycle.reload_plugin(metadata.plugin_id)
+                await luominest_plugin_lifecycle.reload_plugin(metadata.plugin_id)
                 # 重载后更新 mtime 缓存
                 self._scan_mtimes(metadata.plugin_dir, metadata.plugin_id)
 
@@ -118,20 +118,20 @@ class CxPluginHotReload:
 
     def snapshot_loaded_plugins(self) -> None:
         """为所有已加载插件建立 mtime 快照（加载完成后调用）。"""
-        for metadata in cx_plugin_registry.list_plugins():
+        for metadata in luominest_plugin_registry.list_plugins():
             self._scan_mtimes(metadata.plugin_dir, metadata.plugin_id)
 
 
 # 全局单例
-cx_plugin_hot_reload = CxPluginHotReload.get_instance()
+luominest_plugin_hot_reload = CxPluginHotReload.get_instance()
 
 
 def init_hot_reload() -> None:
     """初始化热重载（在所有插件加载完成后调用）。"""
-    cx_plugin_hot_reload.snapshot_loaded_plugins()
-    cx_plugin_hot_reload.start()
+    luominest_plugin_hot_reload.snapshot_loaded_plugins()
+    luominest_plugin_hot_reload.start()
 
 
 async def shutdown_hot_reload() -> None:
     """关闭热重载（在应用关闭时调用）。"""
-    await cx_plugin_hot_reload.stop()
+    await luominest_plugin_hot_reload.stop()

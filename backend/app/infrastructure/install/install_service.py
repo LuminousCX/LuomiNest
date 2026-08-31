@@ -17,11 +17,17 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.utils import utc_now
-from app.infrastructure.database.json_store import JsonStore, repo_sources_store
+from app.infrastructure.database.config_namespace_store import ConfigNamespaceStore
+from app.infrastructure.database.json_store import repo_sources_store
 from app.security.net.safe_url import assert_url_safe, create_safe_async_client, UnsafeUrlError
 
-# 安装记录存储
-install_store = JsonStore("installed_items.json")
+# 安装记录存储（config_items 为唯一权威源；遗留 installed_items.json
+# 首次访问时幂等并集合并，旧文件保留不删除）
+install_store = ConfigNamespaceStore(
+    "install.items",
+    legacy_source="installed_items",
+    legacy_filename="installed_items.json",
+)
 
 # 下载临时目录
 DOWNLOAD_DIR = Path(settings.DATA_DIR) / "downloads"
@@ -101,7 +107,7 @@ async def download_item(
 
     # 本地内置插件短路:不走下载流程,直接走"启用"路径。
     # 前端 builtin 插件由 MarketView 调用 enableFrontendPlugin 启用,
-    # 后端插件由 cx_plugin_loader.load_single + lifecycle.enable_plugin 启用。
+    # 后端插件由 luominest_plugin_loader.load_single + lifecycle.enable_plugin 启用。
     from app.data.marketplace_catalog import get_local_builtin_plugin
     local_entry = get_local_builtin_plugin(item_id)
     if local_entry is not None:
@@ -190,8 +196,8 @@ async def install_local_builtin_plugin(
 
     用于 LOCAL_PLUGIN_REPO 中 source="local" 且 frontendBuiltin=True 的插件。
     后端插件目录已存在于 settings.PLUGIN_DIR/{item_id},此处只需:
-    1. 调用 cx_plugin_loader.load_single 加载后端插件
-    2. 调用 cx_plugin_lifecycle.enable_plugin 启用
+    1. 调用 luominest_plugin_loader.load_single 加载后端插件
+    2. 调用 luominest_plugin_lifecycle.enable_plugin 启用
     3. 写入 install_store 记录,标记 source="builtin" 与 frontendBuiltin=True
     4. 同步 _active_downloads 状态,前端轮询 download-progress 时能拿到 installed
 
@@ -205,9 +211,9 @@ async def install_local_builtin_plugin(
         与 download_item 相同结构的进度 dict,但 status 直接为 installed
     """
     from app.core.config import settings
-    from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
-    from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
-    from app.runtime.plugin.cxplugin.lifecycle import cx_plugin_lifecycle
+    from app.runtime.plugin.cxplugin.loader import luominest_plugin_loader
+    from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
+    from app.runtime.plugin.cxplugin.lifecycle import luominest_plugin_lifecycle
 
     # 初始化进度状态(供前端轮询)
     # frontendBuiltin 从 local_entry 读取，决定前端是否同步启用 builtin 视图
@@ -228,8 +234,8 @@ async def install_local_builtin_plugin(
     plugin_dir = Path(settings.PLUGIN_DIR) / item_id
     try:
         # 后端插件若未加载,先 load_single
-        if cx_plugin_registry.get_plugin(item_id) is None:
-            ok = await cx_plugin_loader.load_single(str(plugin_dir))
+        if luominest_plugin_registry.get_plugin(item_id) is None:
+            ok = await luominest_plugin_loader.load_single(str(plugin_dir))
             if not ok:
                 logger.warning(
                     f"[InstallService] Builtin plugin load_single failed: {item_id} "
@@ -237,12 +243,12 @@ async def install_local_builtin_plugin(
                 )
 
         # 启用插件(若已加载)
-        if cx_plugin_registry.get_plugin(item_id) is not None:
-            await cx_plugin_lifecycle.enable_plugin(item_id)
+        if luominest_plugin_registry.get_plugin(item_id) is not None:
+            await luominest_plugin_lifecycle.enable_plugin(item_id)
             # 动态挂载插件 API 路由到运行中的 app（必须先 load_single 成功）
             # 未挂载时前端调用 /api/v1/plugins/{id}/extract 会 404
             try:
-                applied = cx_plugin_loader.apply_routes_for_plugin(item_id)
+                applied = luominest_plugin_loader.apply_routes_for_plugin(item_id)
                 if applied > 0:
                     logger.info(
                         f"[InstallService] Builtin plugin routes applied: "
@@ -656,11 +662,11 @@ async def _post_install_reload(item_id: str, item_type: str, install_path: str) 
     try:
         if item_type == "skill":
             result["attempted"] = True
-            from app.runtime.plugin.skill.loader import cx_skill_loader
+            from app.runtime.plugin.skill.loader import luominest_skill_loader
             # 若已加载，先卸载
-            if item_id in cx_skill_loader.get_loaded_ids():
-                await cx_skill_loader.unload_single(item_id)
-            ok = await cx_skill_loader.load_single(install_path)
+            if item_id in luominest_skill_loader.get_loaded_ids():
+                await luominest_skill_loader.unload_single(item_id)
+            ok = await luominest_skill_loader.load_single(install_path)
             result["success"] = ok
             if ok:
                 logger.info(f"[InstallService] Auto-reloaded skill: {item_id}")
@@ -668,18 +674,18 @@ async def _post_install_reload(item_id: str, item_type: str, install_path: str) 
                 result["error"] = "load_single returned False"
         elif item_type == "plugin":
             result["attempted"] = True
-            from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
-            from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
+            from app.runtime.plugin.cxplugin.loader import luominest_plugin_loader
+            from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
             # 若已加载，先卸载
-            if cx_plugin_registry.get_plugin(item_id) is not None:
-                await cx_plugin_loader.unload_single(item_id)
-            ok = await cx_plugin_loader.load_single(install_path)
+            if luominest_plugin_registry.get_plugin(item_id) is not None:
+                await luominest_plugin_loader.unload_single(item_id)
+            ok = await luominest_plugin_loader.load_single(install_path)
             result["success"] = ok
             if ok:
                 logger.info(f"[InstallService] Auto-reloaded plugin: {item_id}")
                 # 动态挂载插件 API 路由到运行中的 app
                 try:
-                    applied = cx_plugin_loader.apply_routes_for_plugin(item_id)
+                    applied = luominest_plugin_loader.apply_routes_for_plugin(item_id)
                     if applied > 0:
                         logger.info(
                             f"[InstallService] Plugin routes applied: "
@@ -724,8 +730,8 @@ async def uninstall_item(item_id: str) -> dict:
         if is_builtin:
             # 内置插件:仅禁用后端插件,不删除文件,不卸载注册表
             try:
-                from app.runtime.plugin.cxplugin.lifecycle import cx_plugin_lifecycle
-                await cx_plugin_lifecycle.disable_plugin(item_id)
+                from app.runtime.plugin.cxplugin.lifecycle import luominest_plugin_lifecycle
+                await luominest_plugin_lifecycle.disable_plugin(item_id)
             except Exception as e:
                 logger.warning(f"[InstallService] Builtin disable failed for {item_id}: {e}")
             logger.info(f"[InstallService] Builtin plugin disabled (files kept): {item_id}")
@@ -779,17 +785,17 @@ async def _post_uninstall_unload(item_id: str, item_type: str) -> dict:
     try:
         if item_type == "skill":
             result["attempted"] = True
-            from app.runtime.plugin.skill.loader import cx_skill_loader
-            if item_id in cx_skill_loader.get_loaded_ids():
-                ok = await cx_skill_loader.unload_single(item_id)
+            from app.runtime.plugin.skill.loader import luominest_skill_loader
+            if item_id in luominest_skill_loader.get_loaded_ids():
+                ok = await luominest_skill_loader.unload_single(item_id)
                 result["success"] = ok
                 logger.info(f"[InstallService] Unloaded skill before uninstall: {item_id}")
         elif item_type == "plugin":
             result["attempted"] = True
-            from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
-            from app.runtime.plugin.cxplugin.registry import cx_plugin_registry
-            if cx_plugin_registry.get_plugin(item_id) is not None:
-                ok = await cx_plugin_loader.unload_single(item_id)
+            from app.runtime.plugin.cxplugin.loader import luominest_plugin_loader
+            from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
+            if luominest_plugin_registry.get_plugin(item_id) is not None:
+                ok = await luominest_plugin_loader.unload_single(item_id)
                 result["success"] = ok
                 logger.info(f"[InstallService] Unloaded plugin before uninstall: {item_id}")
     except Exception as e:

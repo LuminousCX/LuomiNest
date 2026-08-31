@@ -135,3 +135,39 @@ export const CHAT_MODE_OPTIONS: ChatModeOption[] = [
     title: '超长模式：工作流规划，全部工具可用，适合复杂长任务',
   },
 ]
+
+// ─── 工作流模板（S-WF §4.8）───
+
+export interface WorkflowTemplate {
+  template_id: string
+  name: string
+  description: string
+  plan_json: string        // JSON string
+  parameters_schema: string // JSON Schema string
+  auto_approve: number     // 0=需审批, 1=免审批
+  created_from: 'user' | 'ai'
+  source_session_id: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SaveAsTemplateRequest {
+  name: string
+  description?: string
+  plan_json: string
+  parameters_schema?: string
+  auto_approve?: boolean
+  created_from?: string
+  source_session_id?: string
+}
+
+export interface RunTemplateRequest {
+  params?: Record<string, unknown>
+  auto_approve?: boolean | null
+}
+
+export interface ScheduleTemplateRequest {
+  schedule: string
+  params?: Record<string, unknown>
+  auto_approve?: boolean
+}

@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
 import { ArrowLeft, ExternalLink, AlertTriangle, Scale, Heart } from 'lucide-vue-next'
 import LicenseSectionHeader from '../../components/settings-detail/LicenseSectionHeader.vue'
 import LumiSettingsBackground from '../../components/settings-detail/LumiSettingsBackground.vue'
 import '../../styles/views/settings-independent-bg.css'
+// 打包进前端的默认头像：缓存未就绪或网络失败时兜底显示
+import avatarLuminousChenXi from '../../assets/images/avatars/luminous-ChenXi.png'
+import avatarKipbbsjsjs from '../../assets/images/avatars/kipbbsjsjs.png'
+import avatarNoobL696 from '../../assets/images/avatars/NoobL696.jpg'
 
 const router = useRouter()
 
@@ -488,23 +493,63 @@ const specialLicenses = [
 const collaborators = [
   {
     name: 'Luminous辰汐',
+    key: 'luminous-ChenXi',
     role: '项目创始人 · 项目总负责人 · 全栈开发 · 架构设计 / 软件安全',
-    url: 'https://github.com/luminous-ChenXi',
-    avatar: 'https://github.com/luminous-ChenXi.png'
+    url: 'https://github.com/luminous-ChenXi'
   },
   {
     name: 'kipbbsjsjs',
+    key: 'kipbbsjsjs',
     role: '核心记忆模块开发 · 本地用户数据管理 · 功能贡献',
-    url: 'https://github.com/kipbbsjsjs',
-    avatar: 'https://github.com/kipbbsjsjs.png'
+    url: 'https://github.com/kipbbsjsjs'
   },
   {
     name: 'NoobL696',
+    key: 'NoobL696',
     role: '测试与反馈 · 建议贡献',
-    url: 'https://github.com/NoobL696',
-    avatar: 'https://github.com/NoobL696.png'
+    url: 'https://github.com/NoobL696'
   }
 ]
+
+const bundledAvatarByKey: Record<string, string> = {
+  'luminous-ChenXi': avatarLuminousChenXi,
+  'kipbbsjsjs': avatarKipbbsjsjs,
+  'NoobL696': avatarNoobL696
+}
+
+/**
+ * 当前生效的头像 URL：优先使用主进程缓存的协议 URL（luominest-avatar://cached/），
+ * 未命中时回退到打包进前端的静态资源，保证离线也能正常显示。
+ */
+const avatarUrls = ref<Record<string, string>>({})
+
+const resolveAvatars = async (): Promise<void> => {
+  try {
+    const entries = await Promise.all(
+      collaborators.map(async (person) => {
+        const result = await window.api.avatar.getCollaboratorAvatar(person.key)
+        return [person.name, result.url ?? bundledAvatarByKey[person.key]] as const
+      })
+    )
+    avatarUrls.value = Object.fromEntries(entries)
+  } catch {
+    // IPC 异常时保持默认打包资源
+  }
+}
+
+onMounted(() => {
+  void resolveAvatars()
+  // 触发一次更新：成功后刷新显示，失败则保持现有缓存/打包资源
+  window.api.avatar
+    .updateCollaboratorAvatars()
+    .then(() => resolveAvatars())
+    .catch(() => {})
+})
+
+const onAvatarError = (key: string, event: Event): void => {
+  const img = event.target as HTMLImageElement
+  img.src = bundledAvatarByKey[key] ?? ''
+}
 </script>
 
 <template>
@@ -746,7 +791,13 @@ const collaborators = [
               class="license-collab-card"
               :style="{ animationDelay: `${index * 80}ms` }"
             >
-              <img :src="person.avatar" :alt="person.name" class="license-collab-card__avatar" />
+              <img
+                :src="avatarUrls[person.name] ?? bundledAvatarByKey[person.key]"
+                :alt="person.name"
+                class="license-collab-card__avatar"
+                loading="lazy"
+                @error="onAvatarError(person.key, $event)"
+              />
               <div class="license-collab-card__info">
                 <span class="license-collab-card__name">{{ person.name }}</span>
                 <span class="license-collab-card__role">{{ person.role }}</span>

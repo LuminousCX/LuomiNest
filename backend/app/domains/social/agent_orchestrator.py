@@ -84,56 +84,6 @@ class CollaborationSession:
     completed_at: str | None = None
 
 
-class MCPInterface:
-    async def call_tool(self, server_name: str, tool_name: str, arguments: dict) -> Any:
-        logger.info(f"[MCPInterface] Reserved: call_tool({server_name}, {tool_name})")
-        raise NotImplementedError("MCP tool calling is reserved for future implementation")
-
-    async def list_tools(self, server_name: str) -> list[dict]:
-        logger.info(f"[MCPInterface] Reserved: list_tools({server_name})")
-        return []
-
-
-class MemoryInterface:
-    async def store(self, agent_id: str, content: str, metadata: dict | None = None) -> str:
-        logger.info(f"[MemoryInterface] Reserved: store({agent_id})")
-        raise NotImplementedError("Memory storage is reserved for future implementation")
-
-    async def recall(self, agent_id: str, query: str, top_k: int = 5) -> list[dict]:
-        logger.info(f"[MemoryInterface] Reserved: recall({agent_id})")
-        return []
-
-    async def update_profile(self, agent_id: str, updates: dict) -> None:
-        logger.info(f"[MemoryInterface] Reserved: update_profile({agent_id})")
-        raise NotImplementedError("Memory profile update is reserved for future implementation")
-
-
-class SkillInterface:
-    async def execute(self, skill_name: str, arguments: dict, agent_id: str | None = None) -> Any:
-        logger.info(f"[SkillInterface] Reserved: execute({skill_name})")
-        raise NotImplementedError("Skill execution is reserved for future implementation")
-
-    async def list_skills(self) -> list[dict]:
-        logger.info("[SkillInterface] Reserved: list_skills()")
-        return []
-
-
-class ToolCallingInterface:
-    async def call(self, tool_name: str, arguments: dict, agent_id: str | None = None) -> Any:
-        logger.info(f"[ToolCallingInterface] Reserved: call({tool_name})")
-        raise NotImplementedError("Tool calling is reserved for future implementation")
-
-    async def list_available_tools(self, agent_id: str | None = None) -> list[dict]:
-        logger.info(f"[ToolCallingInterface] Reserved: list_available_tools({agent_id})")
-        return []
-
-
-mcp_interface = MCPInterface()
-memory_interface = MemoryInterface()
-skill_interface = SkillInterface()
-tool_calling_interface = ToolCallingInterface()
-
-
 def _extract_json_plan(text: str) -> dict | None:
     patterns = [
         r'```json\s*([\s\S]*?)\s*```',

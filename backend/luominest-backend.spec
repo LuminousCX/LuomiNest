@@ -123,7 +123,6 @@ hiddenimports = [
     'app.runtime.provider.tts.tts_registry',
     'app.runtime.provider.stt',
     'app.runtime.provider.llm',
-    'app.runtime.provider.embedding',
 ]
 
 # ---------------------------------------------------------------------------

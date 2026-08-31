@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Puzzle, Sparkles, SlidersHorizontal, X, Package, Bot, Database, Globe, Check, Loader2, Github, RefreshCw } from 'lucide-vue-next'
+import { Puzzle, Sparkles, SlidersHorizontal, X, Bot, Database, Globe, Check, Loader2, Github, RefreshCw } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
 import { useRepoSourceStore } from '../stores/repo-source'
 import { useRegistrySourceStore } from '../stores/registry-source'
@@ -11,7 +11,6 @@ import MarketplaceFilters from '../components/marketplace/MarketplaceFilters.vue
 import MarketplaceCard from '../components/marketplace/MarketplaceCard.vue'
 import MarketplaceBanner from '../components/marketplace/MarketplaceBanner.vue'
 import RepoSourcePanel from '../components/marketplace/RepoSourcePanel.vue'
-import LumiCardIcon from '../components/common/LumiCardIcon.vue'
 import LumiEmptyState from '../components/common/LumiEmptyState.vue'
 import LumiButton from '../components/common/LumiButton.vue'
 import type { MarketplaceFilter, MarketplaceItem, MarketplaceType } from '../types/marketplace'
@@ -177,12 +176,9 @@ function toggleFilters() {
 <template>
   <div class="market-view">
     <div class="market-header animate-fade-in">
-      <div class="header-left">
-        <LumiCardIcon :icon="Package" :size="24" theme="Package" />
-        <div class="header-text">
-          <h1 class="page-title">扩展</h1>
-          <p class="page-subtitle">插件、技能与智能体，一站式管理</p>
-        </div>
+      <div class="market-header__text">
+        <h1 class="market-title">扩展</h1>
+        <p class="market-desc">插件、技能与智能体，一站式管理</p>
       </div>
       <div class="market-switch">
         <button
@@ -394,13 +390,25 @@ function toggleFilters() {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-6) var(--space-7) 0;
+  padding: var(--space-6) var(--space-7) var(--space-4);
 }
 
-.header-left {
+.market-header__text {
   display: flex;
-  align-items: center;
-  gap: var(--space-4);
+  flex-direction: column;
+}
+
+.market-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.market-desc {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
 }
 
 
@@ -441,7 +449,7 @@ function toggleFilters() {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 0 var(--space-7);
+  padding: 0 var(--space-7) var(--space-2);
 }
 
 .market-toolbar > :deep(.market-search) {
@@ -613,20 +621,26 @@ function toggleFilters() {
 }
 
 .market-sidebar {
-  width: 210px;
+  width: 220px;
   flex-shrink: 0;
-  padding: var(--space-4) var(--space-3) var(--space-4) var(--space-5);
+  padding: var(--space-4);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  background: var(--workspace-sidebar);
-  border-right: 1px solid var(--workspace-border);
-  backdrop-filter: blur(12px);
+  background: var(--workspace-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--workspace-border);
+  box-shadow: var(--shadow-sm);
+  margin-right: var(--space-4);
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  max-height: 100%;
 }
 
 .sidebar-filter-toggle {
-  padding-top: var(--space-1);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--workspace-border);
   display: flex;
   gap: var(--space-2);
@@ -705,6 +719,23 @@ function toggleFilters() {
   margin-left: auto;
   font-size: var(--text-xs);
   opacity: 0.7;
+}
+
+.market-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4) var(--space-7);
+  overflow: hidden;
+}
+
+.market-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .section-count {

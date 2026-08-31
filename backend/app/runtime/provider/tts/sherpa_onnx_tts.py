@@ -18,7 +18,8 @@ import httpx
 import soundfile as sf
 from loguru import logger
 
-from app.runtime.provider.base import TTSProvider
+from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.tts.ports import TTSProvider
 
 
 def _resolve_model_dir() -> Path:
@@ -94,7 +95,10 @@ async def _download_and_extract_once(target_dir: Path) -> None:
         archive_path = tmp_path / "vits-melo-tts-zh_en.tar.bz2"
 
         # 流式下载，显示进度
-        async with httpx.AsyncClient(timeout=_DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
+        # 统一超时治理（应急修复 B3）：模块级 600s 硬编码 → Settings.TTS_DOWNLOAD_TIMEOUT
+        from app.core.config import settings as _settings
+
+        async with httpx.AsyncClient(timeout=_settings.TTS_DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
             async with client.stream("GET", _MODEL_DOWNLOAD_URL) as resp:
                 resp.raise_for_status()
                 total = int(resp.headers.get("content-length", 0))
@@ -159,6 +163,24 @@ class SherpaOnnxTTSProvider(TTSProvider):
         "en": "en-female",
     }
 
+    # 引擎能力声明（G1/G2 治理）
+    CAPABILITIES = EngineCapabilities(
+        engine_id="sherpa-onnx",
+        name="Sherpa-ONNX TTS（离线神经网络）",
+        kind="local",
+        category="local",
+        needs_api_key=False,
+        online=False,
+        languages=("zh", "en"),
+        voices=[
+            {"value": "zh-female", "label": "中文女声", "langs": ["zh"]},
+            {"value": "en-female", "label": "英文女声", "langs": ["en"]},
+        ],
+        default_voice="zh-female",
+        supports_speed=True,
+        description="vits-melo-tts-zh_en 离线模型（约 162MB，首次使用自动下载），中英双语，纯 CPU 推理",
+    )
+
     @classmethod
     def is_available(cls) -> bool:
         """检查 sherpa-onnx 是否已安装."""
@@ -189,9 +211,10 @@ class SherpaOnnxTTSProvider(TTSProvider):
         self._engine_ready = False
 
         # 模型已就绪时直接加载引擎；否则延迟到首次 async 调用
+        # 注意传 self._num_threads（自适应后 >0），原始 num_threads=0 会导致 validate 失败
         model_path = model_dir / "model.onnx"
         if model_path.exists():
-            self._load_engine(sherpa_onnx, model_dir, model_path, num_threads)
+            self._load_engine(sherpa_onnx, model_dir, model_path, self._num_threads)
         else:
             logger.info(
                 f"[SherpaOnnxTTS] 模型未找到，将在首次调用时自动下载"

@@ -15,7 +15,8 @@ import numpy as np
 import soundfile as sf
 from loguru import logger
 
-from app.runtime.provider.base import STTProvider
+from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.stt.ports import STTProvider
 
 
 def _resolve_model_root() -> Path:
@@ -69,6 +70,18 @@ class FasterWhisperSTTProvider(STTProvider):
     _instance = None
     _model = None
     _current_model_size = None
+
+    # 引擎能力声明（G1/G2 治理）
+    CAPABILITIES = EngineCapabilities(
+        engine_id="faster-whisper",
+        name="Faster Whisper（离线·CTranslate2 加速）",
+        kind="local",
+        category="local",
+        needs_api_key=False,
+        online=False,
+        languages=("zh", "en", "ja", "ko", "yue", "fr", "de", "es"),
+        description="基于 CTranslate2 的 Whisper 加速版，多语言识别，模型首次使用自动从 HuggingFace 下载",
+    )
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:

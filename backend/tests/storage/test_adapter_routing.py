@@ -42,7 +42,7 @@ def check(name: str, cond: bool, detail: str = ""):
 # ════════════════════════════════════════════════════
 # FakeProvider — 记录调用参数，不实际调用 LLM API
 # ════════════════════════════════════════════════════
-from app.runtime.provider.base import LLMProvider
+from app.runtime.provider.llm.ports import LLMProvider
 from app.runtime.provider.llm.types import LLMRequest, LLMResponse, StreamEvent
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint

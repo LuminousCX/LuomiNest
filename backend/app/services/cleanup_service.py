@@ -96,6 +96,54 @@ class LumiCleanupService:
             logger.info(f"[Cleanup] Deleted {deleted} temp files")
         return deleted
 
+    def cleanup_memory(self) -> int:
+        """清理所有记忆轨道（owner 主人轨 / users 平台用户轨，含对话级）中的过期事实。
+
+        记忆已迁入 SQLite（memory_facts 表），此处按 (owner_key, conversation_id)
+        枚举所有 store 清理过期事实；向量索引中的过期条目由检索侧有效性过滤兜底
+        （memory_search_tool / context_builder 已过滤）。
+        """
+        from sqlalchemy import select
+
+        from app.engines.memory.fact_manager import FactManager
+        from app.engines.memory.store import MemoryStore, store_path_for_owner_key
+        from app.infrastructure.database.models.memory import MemoryFact
+        from app.infrastructure.database.session import sync_session_factory
+
+        removed = 0
+        cleaned = 0
+
+        # 枚举 DB 中存在的 (owner_key, conversation_id)，避免依赖旧文件布局
+        pairs: set[tuple[str, str]] = set()
+        try:
+            with sync_session_factory() as session:
+                rows = session.execute(
+                    select(MemoryFact.owner_key, MemoryFact.conversation_id).distinct()
+                ).all()
+            pairs = {(str(r[0]), str(r[1])) for r in rows}
+        except Exception as e:
+            logger.warning(f"[Cleanup] Memory owner keys enumeration failed: {e}")
+            return 0
+
+        for owner_key, conversation_id in pairs:
+            try:
+                store_path = store_path_for_owner_key(owner_key, conversation_id)
+            except ValueError:
+                continue  # tmp: 测试轨不参与清理
+            try:
+                store = MemoryStore(store_path)
+                manager = FactManager(store)
+                n = manager.cleanup_expired_facts()
+                if n > 0:
+                    removed += n
+                    cleaned += 1
+            except Exception as e:
+                logger.warning(f"[Cleanup] Memory cleanup failed for {owner_key}/{conversation_id}: {e}")
+
+        if removed > 0:
+            logger.info(f"[Cleanup] Removed {removed} expired memory facts from {cleaned} stores")
+        return removed
+
     def run_all(self) -> dict:
         """执行所有清理任务，返回清理统计。"""
         logger.info("[Cleanup] Starting full cleanup...")
@@ -104,6 +152,7 @@ class LumiCleanupService:
             "usage_trimmed": self.cleanup_usage_records(),
             "downloads_deleted": self.cleanup_downloads(),
             "temp_files_deleted": self.cleanup_temp_files(),
+            "memory_expired_facts": self.cleanup_memory(),
         }
         total = sum(stats.values())
         logger.info(f"[Cleanup] Completed: {total} items cleaned ({stats})")
@@ -127,4 +176,4 @@ class LumiCleanupService:
         return await asyncio.to_thread(self.run_all)
 
 
-lumi_cleanup_service = LumiCleanupService()
+luominest_cleanup_service = LumiCleanupService()

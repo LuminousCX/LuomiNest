@@ -23,7 +23,7 @@ def _sync_bundled_plugin_resources() -> None:
     背景：PyInstaller spec 将 backend/plugins、backend/skills 作为 datas 打包，
     运行时被解压到 <exe_dir>/_internal/{plugins,skills}/（只读）。
     config.py 在 frozen 模式下把 PLUGIN_DIR/SKILL_DIR 指向 DATA_DIR 下的可写副本，
-    但首次启动时该副本目录为空，导致 cx_plugin_loader 扫描不到任何插件。
+    但首次启动时该副本目录为空，导致 luominest_plugin_loader 扫描不到任何插件。
 
     本函数完成"首次复制 + 增量同步"：
     - 对每个内置插件/技能目录，若目标不存在则整目录复制；
@@ -95,7 +95,10 @@ def _sync_bundled_plugin_resources() -> None:
                         with open(dst_manifest, encoding="utf-8") as f:
                             dst_version = str(json.load(f).get("version", ""))
                     except Exception:
-                        pass
+                        logger.warning(
+                            f"[BundledSync] 目标 manifest 版本读取失败（将保守跳过更新）: {dst_manifest}",
+                            exc_info=True,
+                        )
                 elif os.path.isfile(dst_skill_md):
                     try:
                         with open(dst_skill_md, encoding="utf-8") as f:
@@ -107,7 +110,10 @@ def _sync_bundled_plugin_resources() -> None:
                                 fm = yaml.safe_load(parts[1]) or {}
                                 dst_version = str(fm.get("version", ""))
                     except Exception:
-                        pass
+                        logger.warning(
+                            f"[BundledSync] 目标 SKILL.md 版本解析失败（将保守跳过更新）: {dst_skill_md}",
+                            exc_info=True,
+                        )
 
                 if dst_version and src_version:
                     if dst_version == src_version:
@@ -197,6 +203,16 @@ async def lifespan(app: FastAPI):
     from app.infrastructure.database import init_db
     await init_db()
     logger.success("[LuomiNest] Database initialized")
+
+    # 存储位置日志（开发/生产区分：dev=backend/data，打包=userData/Data/backend）
+    logger.info(
+        f"[LuomiNest] 存储位置: 模式={'打包生产(PyInstaller)' if settings.IS_FROZEN else '开发(源码)'}, "
+        f"DATA_DIR={settings.DATA_DIR}, DB={settings.DATABASE_URL}"
+    )
+    logger.info(
+        f"[LuomiNest] 存储位置: UPLOAD_DIR={settings.UPLOAD_DIR}, AVATAR_DIR={settings.AVATAR_DIR}, "
+        f"PLUGIN_DIR={settings.PLUGIN_DIR}, SKILL_DIR={settings.SKILL_DIR}"
+    )
 
     # JSON → SQLite 幂等迁移（已迁移则跳过，旧文件不删除）
     try:
@@ -292,6 +308,31 @@ async def lifespan(app: FastAPI):
         from app.core.tools.builtin.memory_search_tool import LuomiNestMemorySearchTool
         tool_registry.register(LuomiNestMemorySearchTool())
 
+        # 技能工具：list/read/use（洋葱架构 §11.2 / B10，各场景通用）
+        from app.core.tools.builtin.skills_tools import get_luominest_skills_tools
+        for _skill_tool in get_luominest_skills_tools():
+            tool_registry.register(_skill_tool)
+
+        # 工具发现 meta-tool（L1 主动发现，tier=meta，对齐 tool-opt §4.2.1）
+        from app.core.tools.builtin.tools_meta import (
+            ListLuomiNestToolsTool,
+            ReadLuomiNestToolTool,
+        )
+        tool_registry.register(ListLuomiNestToolsTool())
+        tool_registry.register(ReadLuomiNestToolTool())
+
+        # 文件搜索工具（tier=domain, platform=win，Everything/OsWalk 适配器，对齐 tool-opt §4.5 T6）
+        from app.core.tools.builtin.search_everything_tool import SearchEverythingTool
+        tool_registry.register(SearchEverythingTool())
+
+        # 应用启动工具（tier=domain，全平台，对齐 tool-opt §4.6 T7）
+        from app.core.tools.builtin.launch_tool import LaunchApplicationTool
+        tool_registry.register(LaunchApplicationTool())
+
+        # 上下文压缩工具（tier=core，对齐 tool-opt §4.3 T4）
+        from app.core.tools.builtin.context_tools import CompressContextTool
+        tool_registry.register(CompressContextTool())
+
         logger.info(f"[LuomiNest] Registered {len(tool_registry.list_names())} tools: {', '.join(tool_registry.list_names())}")
     except Exception as e:
         logger.error(f"[LuomiNest] Tool registration failed (critical): {e}", exc_info=True)
@@ -304,18 +345,37 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Workflow internal tools registration skipped: {e}", exc_info=True)
 
+    # 装配工作流引擎依赖（组合根注入，替代引擎内部延迟 import；未注入时引擎保留兜底）
+    try:
+        from app.core.workflow.engine import configure_engine
+        from app.core.container import container
+        configure_engine(
+            chat_service_cls=container.chat_service.__class__,
+            conversation_store=container.conversation_store,
+            llm_adapter=container.llm_adapter,
+        )
+        logger.info("[LuomiNest] Workflow engine dependencies configured")
+
+        # 清理陈旧的非终态工作流会话（服务重启后，内存中的工作流已丢失）
+        from app.services.workflow_persistence import cleanup_stale_sessions
+        stale_count = await cleanup_stale_sessions()
+        if stale_count:
+            logger.info(f"[LuomiNest] Cleaned up {stale_count} stale workflow sessions")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Workflow engine configure skipped: {e}", exc_info=True)
+
     # 加载 CxPlugin 插件系统
     try:
         from app.runtime.plugin.cxplugin import init_hot_reload
-        from app.runtime.plugin.cxplugin.loader import cx_plugin_loader
-        from app.services.plugin_service import cx_plugin_service
+        from app.runtime.plugin.cxplugin.loader import luominest_plugin_loader
+        from app.services.plugin_service import luominest_plugin_service
         # 打包模式下首次启动：将 _internal/{plugins,skills}/ 复制到可写的 DATA_DIR 下
         # 让用户安装/启用的内置插件可被运行时找到（dev 模式直接从源码目录加载，无需复制）
         _sync_bundled_plugin_resources()
-        plugin_count = await cx_plugin_service.initialize()
+        plugin_count = await luominest_plugin_service.initialize()
         # 将已加载插件注册的 API 路由挂载到 app（/api/v1/plugins/{plugin_id}/{path}）
         # 同时缓存 app 引用，供后续 install_local_builtin_plugin 动态挂载新插件路由
-        applied_routes = cx_plugin_loader.apply_routes_to_app(app)
+        applied_routes = luominest_plugin_loader.apply_routes_to_app(app)
         logger.info(
             f"[LuomiNest] Loaded {plugin_count} CxPlugin(s), applied {applied_routes} API route(s)"
         )
@@ -325,17 +385,20 @@ async def lifespan(app: FastAPI):
 
     # 初始化 CxSkill 技能系统（在 CxPlugin 之后，确保 plugin 类型条目已被 loader 跳过）
     try:
-        from app.services.skill_service import cx_skill_service
-        skill_count = await cx_skill_service.init()
+        from app.services.skill_service import luominest_skill_service
+        skill_count = await luominest_skill_service.init()
         logger.info(f"[LuomiNest] Loaded {skill_count} CxSkill(s)")
     except Exception as e:
         logger.warning(f"[LuomiNest] CxSkill loading skipped: {e}", exc_info=True)
 
     # 启动定时任务调度器（APScheduler）
     try:
-        from app.core.scheduler import luomi_scheduler
-        await luomi_scheduler.init()
-        logger.info(f"[LuomiNest] Scheduler started, tasks: {len(luomi_scheduler.list_tasks())}")
+        from app.core.scheduler import luominest_scheduler
+        # 注入任务载荷执行器（组合根装配；未注入时调度器经 subagent_delegation 端口兜底）
+        from app.core.container import container
+        luominest_scheduler.register_task_executor(container.subagent_executor)
+        await luominest_scheduler.init()
+        logger.info(f"[LuomiNest] Scheduler started, tasks: {len(luominest_scheduler.list_tasks())}")
     except Exception as e:
         logger.warning(f"[LuomiNest] Scheduler init skipped: {e}", exc_info=True)
 
@@ -370,8 +433,8 @@ async def lifespan(app: FastAPI):
 
     # 启动时清理临时文件
     try:
-        from app.services.cleanup_service import lumi_cleanup_service
-        temp_cleaned = lumi_cleanup_service.cleanup_temp_files()
+        from app.services.cleanup_service import luominest_cleanup_service
+        temp_cleaned = luominest_cleanup_service.cleanup_temp_files()
         if temp_cleaned > 0:
             logger.info(f"[LuomiNest] Cleaned {temp_cleaned} temp files on startup")
     except Exception as e:
@@ -380,15 +443,15 @@ async def lifespan(app: FastAPI):
     # 注册定时清理任务（每24小时执行一次）
     try:
         from apscheduler.triggers.interval import IntervalTrigger
-        from app.services.cleanup_service import lumi_cleanup_service
+        from app.services.cleanup_service import luominest_cleanup_service
 
         async def _periodic_cleanup():
             try:
-                await lumi_cleanup_service.run_all_async()
+                await luominest_cleanup_service.run_all_async()
             except Exception as cleanup_err:
                 logger.warning(f"[LuomiNest] Periodic cleanup failed: {cleanup_err}")
 
-        if luomi_scheduler.add_job(
+        if luominest_scheduler.add_job(
             _periodic_cleanup,
             trigger=IntervalTrigger(hours=24),
             id="lumi_periodic_cleanup",
@@ -397,6 +460,33 @@ async def lifespan(app: FastAPI):
             logger.info(f"[LuomiNest] Periodic cleanup job registered (every 24h)")
     except Exception as e:
         logger.warning(f"[LuomiNest] Periodic cleanup registration skipped: {e}", exc_info=True)
+
+    # 注册定时数据备份任务（可经 BACKUP_ENABLED / BACKUP_INTERVAL_HOURS 配置）
+    if settings.BACKUP_ENABLED:
+        try:
+            from apscheduler.triggers.interval import IntervalTrigger
+            from app.infrastructure.backup.backup_manager import luominest_backup_manager
+
+            async def _periodic_backup():
+                try:
+                    path = await luominest_backup_manager.create_backup_async(label="scheduled")
+                    if path:
+                        logger.info(f"[LuomiNest] Scheduled backup created: {path}")
+                except Exception as backup_err:
+                    logger.warning(f"[LuomiNest] Scheduled backup failed: {backup_err}", exc_info=True)
+
+            if luominest_scheduler.add_job(
+                _periodic_backup,
+                trigger=IntervalTrigger(hours=settings.BACKUP_INTERVAL_HOURS),
+                id="lumi_periodic_backup",
+                replace_existing=True,
+            ):
+                logger.info(
+                    f"[LuomiNest] Periodic backup job registered "
+                    f"(every {settings.BACKUP_INTERVAL_HOURS}h, keep last {luominest_backup_manager.MAX_BACKUPS})"
+                )
+        except Exception as e:
+            logger.warning(f"[LuomiNest] Periodic backup registration skipped: {e}", exc_info=True)
 
     yield
 
@@ -426,8 +516,8 @@ async def lifespan(app: FastAPI):
 
     # 关闭定时任务调度器
     try:
-        from app.core.scheduler import luomi_scheduler
-        await luomi_scheduler.shutdown()
+        from app.core.scheduler import luominest_scheduler
+        await luominest_scheduler.shutdown()
         logger.info(f"[LuomiNest] Scheduler stopped")
     except Exception as e:
         logger.warning(f"[LuomiNest] Scheduler shutdown skipped: {e}", exc_info=True)
@@ -553,6 +643,25 @@ def create_app() -> FastAPI:
                 "code": 1,
                 "message": exc.message,
                 "error": {"code": exc.code, "message": exc.message},
+                "data": None,
+            },
+        )
+
+    # FastAPI 原生 HTTPException（含 StarletteHTTPException 子类）统一转规范信封，
+    # 消除 {"detail"} 裸响应 —— 全库 49 处 raise HTTPException 因此纳入错误码体系
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail or "请求处理失败")
+        err_code = f"HTTP_{exc.status_code}"
+        logger.warning(f"[Exception] HTTPException: {detail} (status={exc.status_code}, path={request.url.path})")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "code": 1,
+                "message": detail,
+                "error": {"code": err_code, "message": detail},
                 "data": None,
             },
         )

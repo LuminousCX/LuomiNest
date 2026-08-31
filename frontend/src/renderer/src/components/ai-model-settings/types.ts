@@ -32,6 +32,8 @@ export interface EditProviderForm {
   apiKeyPrefix?: string
   defaultModel: string
   isDefault: boolean
+  /** 接入协议：auto | chat_completions | anthropic_messages */
+  protocol: string
 }
 
 export interface TestResult {

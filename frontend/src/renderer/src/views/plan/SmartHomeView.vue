@@ -81,12 +81,12 @@ const toggleScene = (sceneId: string) => {
 
 <template>
   <div class="smart-home-view">
-    <div class="sh-header">
-      <div class="header-info">
-        <h1 class="header-title">智能家居</h1>
-        <p class="header-desc">物联网智能居家计划与设备控制</p>
+    <div class="sh-header animate-fade-in">
+      <div class="sh-header__info">
+        <h1 class="sh-title">智能家居</h1>
+        <p class="sh-desc">物联网智能居家计划与设备控制</p>
       </div>
-      <div class="header-actions">
+      <div class="sh-header__actions">
         <LumiButton variant="secondary" size="sm">
           <template #icon><Settings2 :size="14" /></template>
           <span>设置</span>
@@ -205,21 +205,29 @@ const toggleScene = (sceneId: string) => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--divider-soft, var(--border-light));
 }
 
-.header-title {
+.sh-header__info {
+  display: flex;
+  flex-direction: column;
+}
+
+.sh-title {
   font-size: var(--text-3xl);
   font-weight: var(--font-bold);
   color: var(--text-primary);
+  line-height: 1.2;
 }
 
-.header-desc {
+.sh-desc {
   font-size: var(--text-base);
   color: var(--text-muted);
   margin-top: var(--space-1);
 }
 
-.header-actions {
+.sh-header__actions {
   display: flex;
   gap: var(--space-2);
 }

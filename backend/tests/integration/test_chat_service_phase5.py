@@ -252,7 +252,10 @@ async def test_stream_response_basic():
         with patch("app.services.chat_service.tool_registry") as mock_registry:
             mock_registry.list_names.return_value = []
             with patch("app.services.chat_service.conversation_store") as mock_store:
+                # 热路径增量持久化（messages 拆独立表后：append_message + update_meta）
                 mock_store.set_async = AsyncMock()
+                mock_store.append_message_async = AsyncMock(return_value=True)
+                mock_store.update_meta_async = AsyncMock()
                 with patch("app.services.chat_service.distillation_service") as mock_distill:
                     mock_distill.maybe_distill = AsyncMock()
 
@@ -280,8 +283,10 @@ async def test_stream_response_basic():
     check("state['provider'] 已同步", state["provider"] == "test-provider")
     check("state['aborted'] 为 False", state["aborted"] is False)
 
-    # 持久化调用
-    check("persist_conv 被调用", mock_store.set_async.called)
+    # 持久化调用（增量追加路径，替代旧的全量 set_async）
+    check("append_message_async 被调用", mock_store.append_message_async.called)
+    check("update_meta_async 被调用", mock_store.update_meta_async.called)
+    check("未走全量 set_async", not mock_store.set_async.called)
     check("schedule_memory_update 被调用", service._context.schedule_memory_update.called)
     check("maybe_distill 被调用", mock_distill.maybe_distill.called)
     check("generate_suggestions 被调用", service._suggestions.generate_suggestions_for_conv.called)
@@ -315,6 +320,8 @@ async def test_stream_response_error():
             mock_registry.list_names.return_value = []
             with patch("app.services.chat_service.conversation_store") as mock_store:
                 mock_store.set_async = AsyncMock()
+                mock_store.append_message_async = AsyncMock(return_value=True)
+                mock_store.update_meta_async = AsyncMock()
                 with patch("app.services.chat_service.distillation_service") as mock_distill:
                     mock_distill.maybe_distill = AsyncMock()
 

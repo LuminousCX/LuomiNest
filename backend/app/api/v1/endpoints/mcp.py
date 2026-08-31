@@ -5,9 +5,11 @@
 import os
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from loguru import logger
 from pydantic import BaseModel, Field
+
+from app.core.exceptions import BadRequestError, NotFoundError
 
 from app.core.tools.mcp.manager import mcp_manager
 from app.core.tools.mcp.models import McpServerConfig, McpTransportType
@@ -146,7 +148,7 @@ async def get_server(name: str):
     """获取单个 MCP 服务器详情（含工具列表）。"""
     server = mcp_manager.get_server(name)
     if server is None:
-        raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+        raise NotFoundError(f"Server '{name}' not found", code="MCP_SERVER_NOT_FOUND")
     return ServerDetailResponse(server=server)
 
 
@@ -168,7 +170,7 @@ async def create_server(req: CreateServerRequest):
     )
     success, message = await mcp_manager.add_server(config)
     if not success:
-        raise HTTPException(status_code=400, detail=message)
+        raise BadRequestError(message, code="MCP_OPERATION_FAILED")
     logger.info(f"[McpAPI] Created server: {req.name}")
     return ServerActionResponse(success=success, message=message)
 
@@ -178,7 +180,7 @@ async def update_server(name: str, req: UpdateServerRequest):
     """更新 MCP 服务器配置（会触发重连）。"""
     existing = mcp_manager.get_server(name)
     if existing is None:
-        raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+        raise NotFoundError(f"Server '{name}' not found", code="MCP_SERVER_NOT_FOUND")
 
     # 合并更新
     update_data = req.model_dump(exclude_unset=True)
@@ -192,11 +194,11 @@ async def update_server(name: str, req: UpdateServerRequest):
     try:
         config = McpServerConfig(**merged)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid config: {e}")
+        raise BadRequestError(f"Invalid config: {e}", code="MCP_CONFIG_INVALID")
 
     success, message = await mcp_manager.update_server(name, config)
     if not success:
-        raise HTTPException(status_code=400, detail=message)
+        raise BadRequestError(message, code="MCP_OPERATION_FAILED")
     logger.info(f"[McpAPI] Updated server: {name}")
     return ServerActionResponse(success=success, message=message)
 
@@ -206,7 +208,7 @@ async def delete_server(name: str):
     """删除 MCP 服务器配置并断开连接。"""
     success, message = await mcp_manager.remove_server(name)
     if not success:
-        raise HTTPException(status_code=404, detail=message)
+        raise NotFoundError(message, code="MCP_SERVER_NOT_FOUND")
     logger.info(f"[McpAPI] Deleted server: {name}")
     return ServerActionResponse(success=success, message=message)
 
@@ -215,7 +217,7 @@ async def delete_server(name: str):
 async def server_action(name: str, req: ServerActionRequest):
     """执行服务器操作：connect / disconnect / reconnect。"""
     if name not in {s["name"] for s in mcp_manager.list_servers()}:
-        raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+        raise NotFoundError(f"Server '{name}' not found", code="MCP_SERVER_NOT_FOUND")
 
     try:
         if req.action == "connect":
@@ -234,9 +236,9 @@ async def server_action(name: str, req: ServerActionRequest):
                 message=f"Server '{name}' reconnected" if ok else f"Server '{name}' reconnect failed",
             )
         else:
-            raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
+            raise BadRequestError(f"Unknown action: {req.action}")
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise BadRequestError(str(e), code="MCP_OPERATION_FAILED")
 
 
 @router.get("/tools", response_model=ToolListResponse)
@@ -250,7 +252,7 @@ async def list_all_tools():
 async def list_resources(name: str):
     """列出指定服务器的资源。"""
     if name not in {s["name"] for s in mcp_manager.list_servers()}:
-        raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+        raise NotFoundError(f"Server '{name}' not found", code="MCP_SERVER_NOT_FOUND")
     resources = await mcp_manager.list_resources(name)
     return ok({"resources": resources, "count": len(resources)})
 
@@ -259,6 +261,6 @@ async def list_resources(name: str):
 async def list_prompts(name: str):
     """列出指定服务器的提示。"""
     if name not in {s["name"] for s in mcp_manager.list_servers()}:
-        raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+        raise NotFoundError(f"Server '{name}' not found", code="MCP_SERVER_NOT_FOUND")
     prompts = await mcp_manager.list_prompts(name)
     return ok({"prompts": prompts, "count": len(prompts)})

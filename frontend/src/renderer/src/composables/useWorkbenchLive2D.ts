@@ -1,16 +1,19 @@
 /**
- * LuomiNest 工作台 Live2D 集成 + TTS/字幕 + 模型选择
+ * LuomiNest 工作台 Live2D 集成 + TTS/字幕 + 全局主模型展示
  *
  * 从 WorkbenchView.vue 拆分：收纳 Live2D 加载/销毁、TTS 语音合成、字幕显示、
- * 模型切换、模型下拉选择等逻辑。桌面宠物模式与内嵌模式通过 isDesktopMode 切换。
+ * 全局主模型徽章展示等逻辑。桌面宠物模式与内嵌模式通过 isDesktopMode 切换。
  * 消息/工作流 composable 通过 feedChunk/finishStream/filterCodeForTts 驱动 TTS。
+ *
+ * 2026-08 全局模型统一：工作台不再提供模型切换下拉，模型切换统一收口到
+ * 设置页 → 模型设置。本 composable 仅暴露 currentModel/currentProviderLogo
+ * 供徽章只读展示。
  *
  * TTS 引擎已迁移至全局 Pinia store（useTtsEngineStore），桌宠模式下切换页面时
  * TTS 不中断（陪伴优先）。驱动回调与配置由本 composable 按模式动态设置。
  */
 import { ref, computed, watch, nextTick, type ComputedRef, type VNodeRef } from 'vue'
 import { useModelStore } from '../stores/model'
-import { usePlatformStore } from '../stores/platform'
 import { useAvatarControlStore } from '../stores/avatar-control'
 import { useTtsEngineStore } from '../stores/tts-engine'
 import { useLuomiNestLive2D } from './useLuomiNestLive2D'
@@ -22,19 +25,9 @@ export interface UseWorkbenchLive2DOptions {
   isDesktopMode: ComputedRef<boolean>
 }
 
-/** LLM 模型下拉选项（非 Live2D 模型） */
-export interface WorkbenchModelOption {
-  providerId: string
-  providerName: string
-  providerLogo: ReturnType<typeof getProviderLogo>
-  modelId: string
-  modelName: string
-}
-
 export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
   const { isDesktopMode } = options
   const modelStore = useModelStore()
-  const platformStore = usePlatformStore()
   const avatarControl = useAvatarControlStore()
   const ttsEngine = useTtsEngineStore()
   const toast = useToast()
@@ -147,9 +140,8 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
     }
   }
 
-  // 模型下拉选择（切换 LLM provider/model，非 Live2D 模型）
-  const showModelDropdown = ref(false)
-
+  // 全局主模型徽章展示（2026-08 全局模型统一：工作台不再提供模型切换下拉，
+  // 切换请前往 设置 → 模型设置）
   const currentModel = computed(() => {
     const resolved = modelStore.resolveModel
     return resolved?.model || '未配置模型'
@@ -161,38 +153,6 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
   })
 
   const currentProviderLogo = computed(() => getProviderLogo(currentProvider.value))
-
-  const hasProvider = computed(() => modelStore.providers.length > 0)
-
-  const availableModelOptions = computed<WorkbenchModelOption[]>(() => {
-    const options: WorkbenchModelOption[] = []
-    for (const provider of modelStore.providers) {
-      const logo = getProviderLogo(provider.id)
-      const modelIds = provider.selectedModels.length > 0
-        ? provider.selectedModels
-        : (provider.defaultModel ? [provider.defaultModel] : [])
-      for (const modelId of modelIds) {
-        options.push({
-          providerId: provider.id,
-          providerName: provider.name,
-          providerLogo: logo,
-          modelId,
-          modelName: modelId,
-        })
-      }
-    }
-    return options
-  })
-
-  const selectModel = async (providerId: string, modelId: string): Promise<void> => {
-    try {
-      await platformStore.updateMainAgent({ provider: providerId, model: modelId })
-    } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : '未知错误'
-      toast.error(`切换模型失败：${errMsg}`)
-    }
-    showModelDropdown.value = false
-  }
 
   // 桌面宠物模式切换时加载/卸载 Live2D
   watch(isDesktopMode, async (desktopMode) => {
@@ -229,15 +189,10 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
     dismissSubtitle: ttsEngine.dismissSubtitle,
     filterCodeForTts,
     resetCodeBlockFilter,
-    // 模型切换
+    // Live2D 模型切换
     switchModel,
-    // LLM 模型下拉
-    showModelDropdown,
+    // 全局主模型徽章展示
     currentModel,
-    currentProvider,
     currentProviderLogo,
-    hasProvider,
-    availableModelOptions,
-    selectModel,
   }
 }

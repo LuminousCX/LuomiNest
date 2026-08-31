@@ -252,28 +252,28 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
     </header>
 
     <div class="lumi-settings-page__body">
-      <section class="lumi-settings-hero lumi-settings-animate-slide">
-        <div class="lumi-settings-hero__content">
-          <Shield :size="28" class="lumi-settings-hero__icon" />
-          <h2 class="lumi-settings-hero__title">隐私优先 · 合规为本</h2>
-          <p class="lumi-settings-hero__desc">
+      <section class="privacy-hero lumi-settings-animate-slide">
+        <div class="privacy-hero__content">
+          <Shield :size="28" class="privacy-hero__icon" />
+          <h2 class="privacy-hero__title">隐私优先 · 合规为本</h2>
+          <p class="privacy-hero__desc">
             LuomiNest 由 LuminousChenXi 团队开发。我们深知隐私的重要性，致力于保护用户的数据安全与法律合规。
             本页面详细说明了本应用如何收集、使用、存储和保护您的信息，以及我们在各主要司法管辖区的法律法规合规情况。
           </p>
-          <div class="lumi-settings-hero__stats">
-            <div class="lumi-settings-hero__stat">
-              <span class="lumi-settings-hero__stat-value">{{ sections.length }}</span>
-              <span class="lumi-settings-hero__stat-label">核心原则</span>
+          <div class="privacy-hero__stats">
+            <div class="privacy-hero__stat">
+              <span class="privacy-hero__stat-value">{{ sections.length }}</span>
+              <span class="privacy-hero__stat-label">核心原则</span>
             </div>
-            <div class="lumi-settings-hero__divider"></div>
-            <div class="lumi-settings-hero__stat">
-              <span class="lumi-settings-hero__stat-value">{{ regionCount }}</span>
-              <span class="lumi-settings-hero__stat-label">合规地区</span>
+            <div class="privacy-hero__divider"></div>
+            <div class="privacy-hero__stat">
+              <span class="privacy-hero__stat-value">{{ regionCount }}</span>
+              <span class="privacy-hero__stat-label">合规地区</span>
             </div>
-            <div class="lumi-settings-hero__divider"></div>
-            <div class="lumi-settings-hero__stat">
-              <span class="lumi-settings-hero__stat-value">AES-256</span>
-              <span class="lumi-settings-hero__stat-label">加密标准</span>
+            <div class="privacy-hero__divider"></div>
+            <div class="privacy-hero__stat">
+              <span class="privacy-hero__stat-value">AES-256</span>
+              <span class="privacy-hero__stat-label">加密标准</span>
             </div>
           </div>
         </div>
@@ -314,7 +314,7 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 
       <section
         :data-section-idx="sections.length"
-        :class="['privacy-section privacy-contact-card', { visible: isVisible(sections.length) }]"
+        :class="['privacy-section', { visible: isVisible(sections.length) }]"
       >
         <h2 class="privacy-section__title">
           <Mail :size="14" />

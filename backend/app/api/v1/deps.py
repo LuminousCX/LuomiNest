@@ -22,6 +22,16 @@ from app.core.container import (
     get_chat_service,
     get_context_service,
     get_suggestion_service,
+    get_conversation_store,
+    get_lumi_config_store,
+    get_usage_store,
+    get_agents_store,
+    get_groups_store,
+    get_platforms_store,
+    get_repo_sources_store,
+    get_marketplace_stats_store,
+    get_subagent_executor,
+    get_luomi_scheduler,
 )
 
 __all__ = [
@@ -33,4 +43,14 @@ __all__ = [
     "get_chat_service",
     "get_context_service",
     "get_suggestion_service",
+    "get_conversation_store",
+    "get_lumi_config_store",
+    "get_usage_store",
+    "get_agents_store",
+    "get_groups_store",
+    "get_platforms_store",
+    "get_repo_sources_store",
+    "get_marketplace_stats_store",
+    "get_subagent_executor",
+    "get_luomi_scheduler",
 ]

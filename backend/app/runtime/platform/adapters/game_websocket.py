@@ -96,7 +96,8 @@ class LuomiNestGameWebSocketAdapter(BasePlatformAdapter):
             try:
                 await ws.close()
             except Exception:
-                pass
+                # 停机清理：连接可能已断开，属预期情况
+                logger.debug("[GameWS] 关闭客户端连接时异常（忽略）", exc_info=True)
         self._clients.clear()
         self._client_meta.clear()
         logger.info(f"[GameWS] Adapter stopped")
@@ -210,4 +211,4 @@ class LuomiNestGameWebSocketAdapter(BasePlatformAdapter):
         try:
             await websocket.send(json.dumps({"type": "error", "message": message}))
         except Exception:
-            pass
+            logger.warning(f"[GameWS] 错误消息下发失败: {message}", exc_info=True)

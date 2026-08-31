@@ -9,6 +9,7 @@ const CACHE_DIRS = [
   PATHS.live2dCache,
   PATHS.ttsCache,
   PATHS.imageCache,
+  PATHS.avatarCache,
 ]
 
 const getDirSize = (dir: string): number => {

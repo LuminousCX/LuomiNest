@@ -278,8 +278,8 @@
   --z-sidebar: 200;
   --z-overlay: 300;
   --z-modal: 400;
-  --z-toast: 500;
   --z-tooltip: 600;
+  --z-toast: 9999;
 
   /* -------------------------------------------------------
      12. 组件 Token (Component Tokens)
@@ -385,6 +385,13 @@
   --glass-blur-strong: blur(calc(var(--lumi-glass-intensity) * 40px)) saturate(170%);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.50);
   --glass-radius: var(--radius-lg);
+
+  /* ========== 系统级通知（Toast）反相高对比样式 ==========
+     明色主题：黑底白字，确保在浅色背景上醒目突出 */
+  --toast-bg: #1a1a1a;
+  --toast-fg: #ffffff;
+  --toast-border: rgba(255, 255, 255, 0.14);
+  --toast-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.18);
 }
 
 /* =========================================================
@@ -546,6 +553,13 @@
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 
   /* 皮肤强度变量在深色模式下保持由 JS 设置 */
+
+  /* ========== 系统级通知（Toast）反相高对比样式 ==========
+     暗色主题：白底黑字，确保在深色背景上醒目突出 */
+  --toast-bg: #ffffff;
+  --toast-fg: #1a1a1a;
+  --toast-border: rgba(0, 0, 0, 0.08);
+  --toast-shadow: 0 8px 24px rgba(0, 0, 0, 0.40), 0 2px 6px rgba(0, 0, 0, 0.24);
 }
 
 /* =========================================================

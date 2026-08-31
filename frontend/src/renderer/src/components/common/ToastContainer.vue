@@ -51,8 +51,11 @@ const { toasts, remove } = useToast()
   font-weight: var(--font-medium);
   cursor: pointer;
   pointer-events: auto;
-  backdrop-filter: var(--glass-blur);
-  box-shadow: var(--shadow-lg);
+  /* 反相高对比：明色主题黑底白字 / 暗色主题白底黑字 */
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  border: 1px solid var(--toast-border);
+  box-shadow: var(--toast-shadow);
   transition:
     transform var(--transition-fast),
     box-shadow var(--transition-fast),
@@ -64,29 +67,11 @@ const { toasts, remove } = useToast()
   box-shadow: var(--shadow-xl);
 }
 
-.toast-success {
-  background: var(--lumi-success-light);
-  border: 1px solid var(--task-green-border);
-  color: var(--lumi-success);
-}
-
-.toast-error {
-  background: var(--lumi-danger-light);
-  border: 1px solid var(--task-red-border);
-  color: var(--lumi-danger);
-}
-
-.toast-warning {
-  background: var(--lumi-warning-light);
-  border: 1px solid var(--lumi-amber-border);
-  color: var(--lumi-warning);
-}
-
-.toast-info {
-  background: var(--lumi-info-light);
-  border: 1px solid var(--task-blue-border);
-  color: var(--lumi-info);
-}
+/* 类型色仅作为图标点缀，保留类型识别；文字与背景统一反相 */
+.toast-success .toast-icon { color: var(--lumi-success); }
+.toast-error .toast-icon { color: var(--lumi-danger); }
+.toast-warning .toast-icon { color: var(--lumi-warning); }
+.toast-info .toast-icon { color: var(--lumi-info); }
 
 .toast-icon {
   flex-shrink: 0;

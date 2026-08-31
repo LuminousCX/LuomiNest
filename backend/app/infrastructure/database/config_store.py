@@ -62,4 +62,4 @@ class LumiConfigFacade:
 
 # ── 单例 ──
 
-lumi_config_store = LumiConfigFacade(ConfigRepository())
+luominest_config_store = LumiConfigFacade(ConfigRepository())

@@ -1,11 +1,11 @@
 import uuid
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.core.utils import utc_now, require_value, ok
 from app.core.exceptions import NotFoundError, LuomiNestError, ValidationError
-from app.infrastructure.database.json_store import platforms_store
+from app.api.v1.deps import get_platforms_store, get_conversation_store, get_llm_adapter
 from app.runtime.platform.registry import (
     PlatformStatus,
     list_adapter_types,
@@ -135,6 +135,9 @@ def _instance_to_response(inst) -> PlatformInstanceResponse:
 
 
 def _load_persisted_instances():
+    # lifespan 调用（非路由），无法 Depends 注入，经容器取同一门面单例
+    from app.core.container import container
+    platforms_store = container.platforms_store
     for inst_data in platforms_store.values():
         inst_id = inst_data.get("id", "")
         adapter_type = inst_data.get("adapter_type", "")
@@ -189,7 +192,10 @@ async def list_platform_instances():
 
 
 @router.post("/instances", response_model=PlatformInstanceResponse)
-async def create_platform_instance(request: PlatformInstanceCreate):
+async def create_platform_instance(
+    request: PlatformInstanceCreate,
+    platforms_store=Depends(get_platforms_store),
+):
     logger.info(f"[API] POST /platforms/instances - Creating: adapter_type={request.adapter_type}, name={request.name}")
     at = get_adapter_type(request.adapter_type)
     if not at:
@@ -240,7 +246,11 @@ async def get_platform_instance(instance_id: str):
 
 
 @router.patch("/instances/{instance_id}", response_model=PlatformInstanceResponse)
-async def update_platform_instance(instance_id: str, request: PlatformInstanceUpdate):
+async def update_platform_instance(
+    instance_id: str,
+    request: PlatformInstanceUpdate,
+    platforms_store=Depends(get_platforms_store),
+):
     logger.info(f"[API] PATCH /platforms/instances/{instance_id}")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
@@ -276,7 +286,10 @@ async def update_platform_instance(instance_id: str, request: PlatformInstanceUp
 
 
 @router.delete("/instances/{instance_id}")
-async def delete_platform_instance(instance_id: str):
+async def delete_platform_instance(
+    instance_id: str,
+    platforms_store=Depends(get_platforms_store),
+):
     logger.info(f"[API] DELETE /platforms/instances/{instance_id}")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
@@ -290,7 +303,10 @@ async def delete_platform_instance(instance_id: str):
 
 
 @router.post("/instances/{instance_id}/start", response_model=PlatformInstanceResponse)
-async def start_platform_instance(instance_id: str):
+async def start_platform_instance(
+    instance_id: str,
+    platforms_store=Depends(get_platforms_store),
+):
     logger.info(f"[API] POST /platforms/instances/{instance_id}/start")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
@@ -313,7 +329,10 @@ async def start_platform_instance(instance_id: str):
 
 
 @router.post("/instances/{instance_id}/stop", response_model=PlatformInstanceResponse)
-async def stop_platform_instance(instance_id: str):
+async def stop_platform_instance(
+    instance_id: str,
+    platforms_store=Depends(get_platforms_store),
+):
     logger.info(f"[API] POST /platforms/instances/{instance_id}/stop")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
@@ -326,12 +345,14 @@ async def stop_platform_instance(instance_id: str):
 
 
 @router.get("/instances/{instance_id}/conversations", response_model=list[PlatformConversationResponse])
-async def get_platform_conversations(instance_id: str):
+async def get_platform_conversations(
+    instance_id: str,
+    conversation_store=Depends(get_conversation_store),
+):
     logger.info(f"[API] GET /platforms/instances/{instance_id}/conversations")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     from app.runtime.platform.session import list_platform_sessions
-    from app.infrastructure.database.conversation_store import conversation_store
 
     sessions = list_platform_sessions(instance_id)
     result = []
@@ -341,6 +362,12 @@ async def get_platform_conversations(instance_id: str):
             continue
         conv = await conversation_store.get_async(conv_id)
         if not conv:
+            continue
+
+        # 域隔离守卫（洋葱架构 §5.3/§8.1）：平台对话列表只返回本实例域内的对话；
+        # domain 为空的存量对话（域回填迁移前创建）不排除，保持向后兼容
+        conv_domain = conv.get("domain") or ""
+        if conv_domain and conv_domain != f"platform:{instance_id}":
             continue
 
         messages = conv.get("messages", [])
@@ -407,12 +434,14 @@ async def create_new_platform_conversation(instance_id: str, request: NewConvers
 
 
 @router.get("/instances/{instance_id}/conversations/{conversation_id}/messages")
-async def get_platform_conversation_messages(instance_id: str, conversation_id: str):
+async def get_platform_conversation_messages(
+    instance_id: str,
+    conversation_id: str,
+    conversation_store=Depends(get_conversation_store),
+):
     """获取平台实例下指定对话的详细消息列表（含图片消息）。"""
     logger.info(f"[API] GET /platforms/instances/{instance_id}/conversations/{conversation_id}/messages")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
-
-    from app.infrastructure.database.conversation_store import conversation_store
 
     conv = await conversation_store.get_async(conversation_id)
     if not conv:
@@ -464,7 +493,10 @@ async def get_platform_conversation_messages(instance_id: str, conversation_id: 
 
 
 @router.get("/instances/{instance_id}/model_config")
-async def get_platform_model_config(instance_id: str):
+async def get_platform_model_config(
+    instance_id: str,
+    adapter=Depends(get_llm_adapter),
+):
     """获取平台实例的模型配置（含主 Agent 默认值回退信息）。"""
     logger.info(f"[API] GET /platforms/instances/{instance_id}/model_config")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
@@ -473,7 +505,6 @@ async def get_platform_model_config(instance_id: str):
         load_luominest_main_agent_config,
         resolve_main_agent_provider_model,
     )
-    from app.runtime.provider.llm.adapter import llm_adapter
 
     main_config = load_luominest_main_agent_config()
     main_provider, main_model = resolve_main_agent_provider_model()
@@ -481,7 +512,7 @@ async def get_platform_model_config(instance_id: str):
     main_provider_name = main_provider
     main_supports_vision = False
     try:
-        provider_inst = llm_adapter.get_provider(main_provider)
+        provider_inst = adapter.get_provider(main_provider)
         main_provider_name = getattr(provider_inst, "display_name", None) or main_provider
         main_supports_vision = provider_inst.supports_multimodal(main_model)
     except Exception as e:
@@ -496,7 +527,7 @@ async def get_platform_model_config(instance_id: str):
     is_overridden = bool(instance_provider or instance_model)
     if is_overridden:
         try:
-            provider_inst = llm_adapter.get_provider(instance_provider or main_provider)
+            provider_inst = adapter.get_provider(instance_provider or main_provider)
             instance_provider_name = getattr(provider_inst, "display_name", None) or (instance_provider or main_provider)
             instance_supports_vision = provider_inst.supports_multimodal(instance_model or main_model)
         except Exception as e:
@@ -535,7 +566,11 @@ async def get_platform_model_config(instance_id: str):
 
 
 @router.patch("/instances/{instance_id}/model_config")
-async def update_platform_model_config(instance_id: str, request: PlatformModelConfigUpdate):
+async def update_platform_model_config(
+    instance_id: str,
+    request: PlatformModelConfigUpdate,
+    platforms_store=Depends(get_platforms_store),
+):
     """更新平台实例的模型配置（空值表示继承主 Agent）。"""
     logger.info(f"[API] PATCH /platforms/instances/{instance_id}/model_config")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
@@ -752,30 +787,39 @@ async def list_platform_sessions(instance_id: str):
 
 
 @router.get("/main_agent")
-async def get_main_agent_info():
+async def get_main_agent_info(
+    adapter=Depends(get_llm_adapter),
+):
     """获取主 Agent 的 LLM 配置信息（供前端平台管理页面展示）。
 
+    2026-08 全局模型统一后：
+    - provider/model 来自全局主模型（config_items['model_config']），
+      主 Agent 不再拥有独立模型；
+    - temperature/max_tokens 来自全局生成参数；
+    - system_prompt/color/avatar 仍为主 Agent 人设配置。
+
     返回字段：
-    - provider: 主 Agent 使用的供应商 ID
+    - provider: 主 Agent 使用的供应商 ID（= 全局主模型）
     - provider_name: 供应商显示名称
-    - model: 主 Agent 使用的模型 ID
+    - model: 主 Agent 使用的模型 ID（= 全局主模型）
     - supports_multimodal: 当前模型是否支持图片识别
     - system_prompt: 主 Agent 系统提示词
-    - temperature / max_tokens: 生成参数
+    - temperature / max_tokens: 生成参数（全局默认）
     """
     from app.runtime.platform.main_agent_config import (
         load_luominest_main_agent_config,
         resolve_main_agent_provider_model,
     )
-    from app.runtime.provider.llm.adapter import llm_adapter
+    from app.infrastructure.database.facades.model_selection import get_global_generation_defaults
 
     config = load_luominest_main_agent_config()
     provider, model = resolve_main_agent_provider_model()
+    temperature, max_tokens = get_global_generation_defaults()
 
     provider_name = provider
     supports_multimodal = False
     try:
-        provider_inst = llm_adapter.get_provider(provider)
+        provider_inst = adapter.get_provider(provider)
         provider_name = getattr(provider_inst, "display_name", None) or provider
         supports_multimodal = provider_inst.supports_multimodal(model)
     except Exception as e:
@@ -789,8 +833,8 @@ async def get_main_agent_info():
             "model": model,
             "supports_multimodal": supports_multimodal,
             "system_prompt": config.get("system_prompt", ""),
-            "temperature": config.get("temperature", 0.7),
-            "max_tokens": config.get("max_tokens", 4096),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
             "color": config.get("color", ""),
             "avatar": config.get("avatar"),
         },
@@ -798,8 +842,17 @@ async def get_main_agent_info():
 
 
 @router.patch("/main_agent")
-async def update_main_agent_info(request: PlatformModelConfigUpdate):
-    """更新主 Agent 的 LLM 配置（系统提示词、温度、最大 tokens、provider、model）。
+async def update_main_agent_info(
+    request: PlatformModelConfigUpdate,
+    adapter=Depends(get_llm_adapter),
+):
+    """更新主 Agent 配置。
+
+    2026-08 全局模型统一后：
+    - provider/model 写入全局主模型配置（config_items['model_config']），
+      与设置页"模型设置"、工作台模型下拉共用同一权威源；
+    - temperature/max_tokens 写入全局生成参数；
+    - system_prompt/color/avatar 保存到主 Agent 人设配置。
 
     前端可在此切换主 Agent 使用的供应商/模型，平台消息路由会自动复用新配置。
     """
@@ -807,30 +860,54 @@ async def update_main_agent_info(request: PlatformModelConfigUpdate):
         load_luominest_main_agent_config,
         save_luominest_main_agent_config,
     )
+    from app.api.v1.endpoints.model import (
+        apply_global_model_selection,
+        apply_global_generation_defaults,
+    )
 
-    current = load_luominest_main_agent_config()
+    update_data = request.model_dump(exclude_unset=True)
     updated_fields: list[str] = []
 
-    # Pydantic 已做类型转换和范围校验，直接遍历已设置字段
-    update_data = request.model_dump(exclude_unset=True)
-    for key in ("provider", "model", "system_prompt", "temperature", "max_tokens", "color", "avatar"):
+    # 1) provider/model → 全局主模型（唯一权威源）
+    global_fields = apply_global_model_selection(
+        adapter,
+        provider=update_data.get("provider"),
+        model=update_data.get("model"),
+    )
+    updated_fields.extend(global_fields)
+
+    # 2) temperature/max_tokens → 全局生成参数
+    gen_fields = apply_global_generation_defaults(
+        temperature=update_data.get("temperature"),
+        max_tokens=update_data.get("max_tokens"),
+    )
+    updated_fields.extend(gen_fields)
+
+    # 3) system_prompt/color/avatar → 主 Agent 人设配置
+    current = load_luominest_main_agent_config()
+    persona_changed = False
+    for key in ("system_prompt", "color", "avatar"):
         if key in update_data and update_data[key] is not None:
             new_val = update_data[key]
+            if key == "avatar":
+                new_val = new_val or ""
             if current.get(key) != new_val:
                 current[key] = new_val
                 updated_fields.append(key)
+                persona_changed = True
+
+    if persona_changed:
+        try:
+            save_luominest_main_agent_config(current)
+        except Exception as e:
+            raise LuomiNestError(
+                f"Failed to persist main agent config: {e}",
+                code="MAIN_AGENT_CONFIG_PERSIST_FAILED",
+                status_code=500,
+            )
 
     if not updated_fields:
         return ok({"updated": False, "note": "no changes"})
 
-    try:
-        save_luominest_main_agent_config(current)
-        logger.info(f"[PlatformAPI] Main agent config updated: {updated_fields}")
-    except Exception as e:
-        raise LuomiNestError(
-            f"Failed to persist main agent config: {e}",
-            code="MAIN_AGENT_CONFIG_PERSIST_FAILED",
-            status_code=500,
-        )
-
+    logger.info(f"[PlatformAPI] Main agent config updated: {updated_fields}")
     return ok({"updated": True, "fields": updated_fields})

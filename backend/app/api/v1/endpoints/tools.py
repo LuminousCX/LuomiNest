@@ -15,10 +15,13 @@ router = APIRouter(prefix="/tools", tags=["tools"])
 
 
 class ToolInfo(BaseModel):
-    """工具信息"""
+    """工具信息（含声明字段 tier/scope/platform，对齐 tool-system-optimization §4.2）"""
     name: str
     description: str
     parameters: dict[str, Any]
+    tier: str = "domain"
+    scope: str = "shared"
+    platform: list[str] = ["win", "mac", "linux"]
 
 
 class ToolCallRequest(BaseModel):
@@ -37,16 +40,9 @@ class ToolCallResponse(BaseModel):
 
 @router.get("", response_model=list[ToolInfo])
 async def list_tools():
-    """列出所有已注册的工具"""
+    """列出所有已注册的工具（含 tier/scope/platform 声明字段）"""
     tools = tool_registry.list_tools()
-    return [
-        ToolInfo(
-            name=t.name,
-            description=t.description,
-            parameters=t.parameters,
-        )
-        for t in tools
-    ]
+    return [ToolInfo(**t.to_tool_info_dict()) for t in tools]
 
 
 @router.get("/openai-format")

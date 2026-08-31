@@ -5,10 +5,16 @@
 - 持久化用户选择的活跃源
 - 根据 source 的 urlPattern 构造 index.json 下载 URL
 - 提供延迟测试接口（供后端 API 调用）
+
+持久化：活跃源选择与自定义源覆盖属于用户配置（不可重建），存储在 config_items
+表（通过 luominest_config_store，SQLite），参与统一备份链路。注意与 repo_sources_store
+（用户添加的 GitHub 仓库来源，独立 SQLite 表）无关，二者数据不重叠。
+遗留 JSON 文件 registry_source.json 仅在首次迁移时幂等合并一次，不删除。
 """
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from typing import Any, Optional
 
@@ -16,13 +22,75 @@ import httpx
 from loguru import logger
 
 from app.core.config import settings
-from app.infrastructure.database.json_store import JsonStore
+from app.infrastructure.database.config_store import luominest_config_store
 
-# 持久化存储当前活跃源
-_source_store = JsonStore("registry_source.json")
+# config_items 存储键（config_items 为唯一权威源）
+_KEY_ACTIVE_SOURCE_ID = "registry_source.active_source_id"
+_KEY_CUSTOM_SOURCES = "registry_source.custom_sources"
+
+# 遗留 JSON 文件（DATA_DIR/store/）—— 收敛后仅在迁移时读取一次，不再写入，也不删除文件本身
+_LEGACY_JSON_FILENAME = "registry_source.json"
+# _migration_meta 标记源名：与 json_to_sqlite_migrator 共用同一标记表，谁先执行谁标记，避免重复合并
+_MIGRATION_SOURCE = "registry_source"
+_legacy_merged = False
 
 # 发布源默认字段（用于补全缺失字段）
 _DEFAULT_SOURCE_KEYS = {"type", "baseUrl", "urlPattern", "enabled"}
+
+
+def _merge_legacy_json() -> None:
+    """幂等合并遗留 JSON 文件（registry_source.json）到 config_items。
+
+    参照 json_to_sqlite_migrator 的 _migration_meta 标记模式：
+    - 已标记迁移 → 直接跳过（重跑不重复合并）
+    - JSON 文件不存在 → 仅记录标记
+    - JSON 文件存在 → config_items 为权威源，遗留值仅补缺（已有键不覆盖）
+    遗留 JSON 文件是用户数据：仅迁移时读取，不删除文件本身。
+    """
+    global _legacy_merged
+    if _legacy_merged:
+        return
+
+    try:
+        from app.infrastructure.database.migration.json_to_sqlite_migrator import (
+            _is_migrated,
+            _mark_migrated,
+            _read_json_file,
+        )
+
+        if _is_migrated(_MIGRATION_SOURCE):
+            _legacy_merged = True
+            return
+
+        path = os.path.join(settings.DATA_DIR, "store", _LEGACY_JSON_FILENAME)
+        data = _read_json_file(path)
+        count = 0
+        if isinstance(data, dict):
+            legacy_active = data.get("active_source_id")
+            if (
+                isinstance(legacy_active, str)
+                and legacy_active
+                and not luominest_config_store.get(_KEY_ACTIVE_SOURCE_ID)
+            ):
+                luominest_config_store.set(_KEY_ACTIVE_SOURCE_ID, legacy_active)
+                count += 1
+            legacy_custom = data.get("custom_sources")
+            if (
+                isinstance(legacy_custom, list)
+                and legacy_custom
+                and luominest_config_store.get(_KEY_CUSTOM_SOURCES) is None
+            ):
+                luominest_config_store.set(_KEY_CUSTOM_SOURCES, legacy_custom)
+                count += 1
+
+        _mark_migrated(_MIGRATION_SOURCE, count)
+        _legacy_merged = True
+        if count:
+            logger.info(
+                f"[RegistrySource] Merged legacy JSON into config_items: {count} key(s)"
+            )
+    except Exception as e:
+        logger.warning(f"[RegistrySource] Legacy JSON merge skipped: {e}")
 
 
 def get_registry_sources() -> list[dict[str, Any]]:
@@ -31,8 +99,9 @@ def get_registry_sources() -> list[dict[str, Any]]:
     自定义发布源（custom-cdn）的 baseUrl 会从持久化存储中合并，
     方便开发者在不修改配置文件的情况下测试自建 CDN。
     """
+    _merge_legacy_json()
     sources = list(settings.REGISTRY_SOURCES or [])
-    custom_overrides = _source_store.get("custom_sources") or []
+    custom_overrides = luominest_config_store.get(_KEY_CUSTOM_SOURCES) or []
     override_map = {s.get("id"): s for s in custom_overrides if isinstance(s, dict) and s.get("id")}
 
     result = []
@@ -61,7 +130,8 @@ def get_registry_sources() -> list[dict[str, Any]]:
 
 def get_active_source_id() -> str:
     """获取当前活跃发布源 ID（先从持久化读取， fallback 到默认）。"""
-    stored = _source_store.get("active_source_id")
+    _merge_legacy_json()
+    stored = luominest_config_store.get(_KEY_ACTIVE_SOURCE_ID)
     if isinstance(stored, str) and stored:
         # 确认该源存在于配置中
         if any(s["id"] == stored for s in get_registry_sources()):
@@ -75,6 +145,7 @@ def set_active_source_id(source_id: str) -> bool:
     Returns:
         True if source_id is valid and persisted, False otherwise.
     """
+    _merge_legacy_json()
     source = get_source_by_id(source_id)
     if not source:
         logger.warning(f"[RegistrySource] Invalid source id: {source_id}")
@@ -82,7 +153,7 @@ def set_active_source_id(source_id: str) -> bool:
     if not source.get("enabled"):
         logger.warning(f"[RegistrySource] Source disabled, cannot activate: {source_id}")
         return False
-    _source_store.set("active_source_id", source_id)
+    luominest_config_store.set(_KEY_ACTIVE_SOURCE_ID, source_id)
     logger.info(f"[RegistrySource] Active source switched to: {source_id}")
     return True
 
@@ -132,15 +203,16 @@ def set_custom_source_base_url(base_url: str) -> bool:
     仅持久化 custom-cdn 条目的覆盖值，不写入其他默认源，确保后续配置升级
     或修改 settings.REGISTRY_SOURCES 时默认源地址能正常生效。
     """
+    _merge_legacy_json()
     clean_url = base_url.strip().rstrip("/")
     # 读取已有的持久化覆盖列表（仅 custom-cdn 及未来其他自定义源）
-    custom_overrides = _source_store.get("custom_sources") or []
+    custom_overrides = luominest_config_store.get(_KEY_CUSTOM_SOURCES) or []
     if not isinstance(custom_overrides, list):
         custom_overrides = []
     # 移除旧的 custom-cdn 条目，保留其他自定义源覆盖
     others = [s for s in custom_overrides if isinstance(s, dict) and s.get("id") != "custom-cdn"]
     others.append({"id": "custom-cdn", "baseUrl": clean_url})
-    _source_store.set("custom_sources", others)
+    luominest_config_store.set(_KEY_CUSTOM_SOURCES, others)
     logger.info(f"[RegistrySource] Custom CDN baseUrl updated: {clean_url}")
     return True
 

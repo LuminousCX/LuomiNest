@@ -168,6 +168,8 @@ export interface ChatStreamChunk {
   context_tokens?: number
   /** 上下文窗口容量（仅 done=True 的 chunk 携带，前端用于计算使用百分比） */
   context_max_tokens?: number
+  /** 模型路由通知（如专业模式推理模型退化为主模型，右上角 toast 展示） */
+  notice?: string
 }
 
 export interface Conversation {
@@ -222,6 +224,8 @@ export interface ModelProvider {
   isDefault: boolean
   defaultModel: string
   selectedModels: string[]
+  /** 接入协议：auto | chat_completions | anthropic_messages */
+  protocol: string
   models: { id: string; name: string }[]
 }
 
@@ -250,6 +254,8 @@ export interface ModelConfig {
   contextWindowSize?: number
   /** 压缩阈值（0.5 - 0.95） */
   compressionThreshold?: number
+  /** LM 摘要压缩保留比例（1 - 90，推荐 40-50） */
+  compressionRatio?: number
   /** 是否启用 LLM 摘要压缩 */
   llmCompressEnabled?: boolean
   /** 摘要模型 */
@@ -297,21 +303,14 @@ export interface AgentProfile extends Agent {
   isActive?: boolean
 }
 
-export interface MainAgentConfig {
-  provider: string
-  model: string
-  systemPrompt: string
-  temperature: number
-  maxTokens: number
-  color: string
-  avatar?: string | null
-}
-
 export interface ModelInfo {
   id: string
   name: string
   owned_by?: string
   provider?: string
+  enabled?: boolean
+  max_context_tokens?: number
+  maxContextTokens?: number
 }
 
 export interface ProviderTemplate {

@@ -7,7 +7,7 @@
  * TTS/子Agent/工具活动等跨关注点副作用通过 options 回调交由对应 composable 处理。
  */
 import { ref, computed, watch, nextTick } from 'vue'
-import type { Ref, ComputedRef } from 'vue'
+import type { Ref } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useModelStore } from '../stores/model'
 import { useWorkflowStore } from '../stores/workflow'
@@ -18,7 +18,6 @@ import { createLuomiNestRendererLogger } from '../utils/logger'
 import { generateId } from '../utils/id'
 import type { ChatStreamChunk, SubagentEvent, ChatMessage } from '../types'
 import type { ToolActivity, SubagentActivity, ChatModeLevel, WorkflowModeOption } from '../components/workbench/types'
-import type { WorkbenchModelOption } from './useWorkbenchLive2D'
 import type { NavigationTarget } from './useTaskNavigation'
 import WorkbenchChatArea from '../components/workbench/WorkbenchChatArea.vue'
 import WorkbenchInputArea from '../components/workbench/WorkbenchInputArea.vue'
@@ -49,6 +48,7 @@ interface WorkbenchSendMessageOptions {
   maxTokens: number
   topP: number
   chatMode: ChatModeLevel
+  skillIds?: string[]
   onChunk: (chunk: ChatStreamChunk) => void
 }
 
@@ -62,8 +62,6 @@ export interface UseWorkbenchMessagesOptions {
   filterCodeForTts: (content: string) => string
   resetCodeBlockFilter: () => void
   navigateToTask: (target: NavigationTarget) => void
-  selectModel: (providerId: string, modelId: string) => Promise<void>
-  availableModelOptions: ComputedRef<WorkbenchModelOption[]>
   stopTts: () => void
   inputAreaRef: Ref<InstanceType<typeof WorkbenchInputArea> | null>
 }
@@ -79,8 +77,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     filterCodeForTts,
     resetCodeBlockFilter,
     navigateToTask,
-    selectModel,
-    availableModelOptions,
     stopTts,
     inputAreaRef,
   } = options
@@ -129,12 +125,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     { immediate: true },
   )
 
-  const REASONING_MODEL_KEYWORDS = ['reasoner', 'reason', 'o1', 'o3', 'o4', 'thinking', 'r1']
-  const isReasoningModel = (modelId: string): boolean => {
-    const lower = modelId.toLowerCase()
-    return REASONING_MODEL_KEYWORDS.some((kw) => lower.includes(kw))
-  }
-
   const canSend = computed(() => {
     if (!isBackendReady.value) return false
     return inputText.value.trim().length > 0
@@ -163,6 +153,11 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     return (chunk: ChatStreamChunk): void => {
       if (!isRegenerate) {
         statsStore.interceptChunk(chunk, chatStore.currentConvId)
+      }
+
+      // 模型路由通知（如专业模式推理模型退化为主模型）：右上角 toast
+      if (chunk.notice) {
+        toast.warning(chunk.notice)
       }
 
       if (chunk.done) {
@@ -242,17 +237,10 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
       }
     }
 
+    // 2026-08 全局模型统一：切换模式不再改动全局主模型。
+    // 专业模式（standard/ultra）由后端按轮路由到推理模型（设置页配置），
+    // 推理模型不可用时后端退化为主模型并通过 SSE notice 通知前端 toast。
     chatMode.value = mode
-    const opts = availableModelOptions.value
-    if (opts.length === 0) return
-    // 专业模式优先推理模型，普通模式优先快速模型
-    if (mode !== 'normal') {
-      const reasoning = opts.find((opt) => isReasoningModel(opt.modelId))
-      if (reasoning) selectModel(reasoning.providerId, reasoning.modelId)
-    } else {
-      const fast = opts.find((opt) => !isReasoningModel(opt.modelId))
-      if (fast) selectModel(fast.providerId, fast.modelId)
-    }
   }
 
   const sendMessage = async (): Promise<void> => {
@@ -281,6 +269,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
       maxTokens: modelStore.modelConfig.defaultMaxTokens,
       topP: modelStore.modelConfig.defaultTopP,
       chatMode: chatMode.value,
+      skillIds: selectedSkillIds.value,
       onChunk: createChunkHandler(false),
     }
 
