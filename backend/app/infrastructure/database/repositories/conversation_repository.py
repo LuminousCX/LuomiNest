@@ -67,6 +67,32 @@ def _build_snippet(search_text: str, title: str, keyword: str) -> str:
     return snippet
 
 
+def _snippet_at(
+    search_text: str, title: str,
+    body_pos: int, title_pos: int, kw_len: int,
+) -> str:
+    """按 SQL instr() 返回的命中位置直接切 snippet 窗口（前后 30 字）。
+
+    body_pos/title_pos 为 1-based 命中位置（0=未命中）；优先正文命中。
+    """
+    if body_pos > 0:
+        src = search_text or ""
+        pos = body_pos - 1
+    elif title_pos > 0:
+        src = title or ""
+        pos = title_pos - 1
+    else:
+        return title
+    start = max(0, pos - 30)
+    end = min(len(src), pos + kw_len + 30)
+    snippet = src[start:end]
+    if start > 0:
+        snippet = "..." + snippet
+    if end < len(src):
+        snippet = snippet + "..."
+    return snippet
+
+
 class ConversationRepository(BaseRepository):
     model = Conversation
     pk = "id"
@@ -424,31 +450,52 @@ class ConversationRepository(BaseRepository):
                 stmt = stmt.where(Conversation.agent_id == agent_id)
             return session.execute(stmt).scalar() or 0
 
+    # 会话搜索返回上限（前端搜索框场景足够；FTS5 全文索引为后续扩展点）
+    SEARCH_LIMIT = 50
+
     def search(self, keyword: str, agent_id: Optional[str] = None) -> list[dict]:
         if not keyword or not keyword.strip():
             return []
         q_lower = keyword.strip().lower()
         with sync_session_factory() as session:
-            stmt = select(Conversation).where(
-                Conversation.deleted_at.is_(None),
-                or_(
-                    func.lower(Conversation.search_text).like(f"%{q_lower}%"),
-                    func.lower(Conversation.title).like(f"%{q_lower}%"),
-                ),
+            # instr() 在 SQL 层定位命中位置，Python 只切 snippet 窗口，
+            # 避免对每行全量 search_text 大字段做 lower().find() 扫描
+            body_pos = func.instr(
+                func.lower(func.coalesce(Conversation.search_text, "")), q_lower,
+            )
+            title_pos = func.instr(func.lower(Conversation.title), q_lower)
+            stmt = (
+                select(
+                    Conversation,
+                    body_pos.label("_body_pos"),
+                    title_pos.label("_title_pos"),
+                )
+                .where(
+                    Conversation.deleted_at.is_(None),
+                    or_(
+                        body_pos > 0,
+                        title_pos > 0,
+                    ),
+                )
+                .order_by(Conversation.updated_at.desc())
+                .limit(self.SEARCH_LIMIT)
             )
             if agent_id:
                 stmt = stmt.where(Conversation.agent_id == agent_id)
-            objs = session.execute(stmt).scalars().all()
+            rows = session.execute(stmt).all()
             results = []
-            for o in objs:
-                snippet = _build_snippet(o.search_text or "", o.title or "", keyword.strip())
+            kw_len = len(keyword.strip())
+            for o, body_pos_val, title_pos_val in rows:
+                snippet = _snippet_at(
+                    o.search_text or "", o.title or "",
+                    int(body_pos_val or 0), int(title_pos_val or 0), kw_len,
+                )
                 results.append({
                     "id": o.id,
                     "title": o.title,
                     "snippet": snippet,
                     "updated_at": o.updated_at,
                 })
-            results.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
             return results
 
     # ── Soft delete / Trash（消息行由 FK CASCADE 级联清理） ──
