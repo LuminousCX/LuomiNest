@@ -251,8 +251,7 @@ LuomiNest/
 │   └── embedded/esp32-p4/   # ESP32-P4 main controller (components: app / bsp / drivers)
 │
 ├── docker/                  # Docker configuration
-├── docs/                    # VitePress documentation site
-├── 文档/                    # Project design documents
+├── 文档/                    # Project documentation (single source, entry README.md)
 └── .github/                 # GitHub configuration
 ```
 
@@ -372,7 +371,7 @@ By contributing, you agree your contributions will be licensed under the [GNU AG
 
 - Check [Issues](https://github.com/LuminousCX/LuomiNest/issues)
 - Join [Discussions](https://github.com/LuminousCX/LuomiNest/discussions)
-- Read [Documentation](docs/)
+- Read [Documentation](文档/README.md)
 
 ---
 

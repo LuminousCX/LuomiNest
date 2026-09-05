@@ -33,23 +33,25 @@ LuomiNest 是一个开源的**分布式多用户关系型 AI 智能体平台**�
 
 核心设计理念：**一台普通电脑即可运行，数据 100% 本地闭环。**
 
+产品主打三件事：**记得住你（记忆性）、像一个生命（陪伴性）、装得上任何能力（扩展性）**。工具与 MCP 是基石级基础设施，不是卖点本身。
+
 ## 核心特性
 
-- **沉浸式对话** — 多轮自然语言对话，支持多 LLM Provider（OpenAI / Anthropic / DeepSeek / Ollama 等），流式响应
-- **Live2D 虚拟形象** — Cubism 5 引擎驱动，口型同步、表情驱动、情感映射，支持 VRM 模型与 PngTuber 像素化头像
-- **三层记忆系统** — 工作记忆 + 情景记忆 + 语义记忆，自动提取事实、构建用户画像、知识图谱
-- **语音交互** — Whisper / FunASR 语音识别（ASR）+ Edge TTS / 本地 TTS 等多引擎合成，支持多语言
-- **多平台接入** — QQ（OneBot / 官方）、微信（公众号 / 企业微信）、Telegram、Discord、Minecraft 等 13 种适配器
-- **MCP 工具协议** — 标准 MCP 协议支持，工具注册与调用，内置 CLI、文件操作、子 Agent 委派等工具
+- **双轨记忆系统** — 主人记忆 / 平台用户记忆行级隔离，自动事实抽取、蒸馏沉淀、画像与知识库，向量检索全量落 SQLite
+- **Live2D 虚拟形象** — Cubism 5 引擎驱动，口型同步、表情驱动、情感映射，支持 PngTuber 像素化头像与桌面宠物（VRM 规划中）
+- **插件与技能系统** — CxPlugin 插件热加载 + CxSkill 轻技能双轨扩展，内置扩展市场与多 CDN 发布源
+- **沉浸式对话** — 多轮自然语言对话，支持多 LLM Provider（OpenAI 兼容 32 模板 / Anthropic 原生 / DeepSeek / Ollama 等），SSE 流式响应
+- **多平台接入** — QQ（OneBot / 官方）、微信（公众号 / 企业微信）、Telegram、Discord、Minecraft、米家、Home Assistant 等 13 种适配器
+- **语音交互** — SherpaOnnx / FunASR / Faster-Whisper 语音识别（ASR）+ Edge TTS / SherpaOnnx / 本地 TTS 等 7 引擎合成，能力声明与语言感知回退
+- **MCP 工具协议** — 标准 MCP 协议支持，工具注册与调用，内置 CLI、文件操作、子 Agent 委派等 40+ 工具
 - **多 Agent 协作** — 任务分析 → 子任务调度 → 并行执行 → 结果综合，支持 A2A 协议 AI-AI 自主对话
-- **工作流引擎** — 可视化节点编排、定时任务调度（APScheduler）、工具调用记录与持久化
+- **工作流引擎** — 可视化节点编排、模板库、定时任务调度（APScheduler）、工具调用记录与持久化
 - **浏览器自动化** — Luminous Human 模拟交互（鼠标 / 键盘 / 滚动），标签页管理、隐身预加载与搜索
-- **主题皮肤系统** — 预设主题 + 自定义皮肤编辑器，注册表源管理与扩展市场
-- **IoT 智能控制** — MQTT 设备通信，ESP32-P4 硬件终端，支持状态上报、音频流和位置信息
-- **插件与技能系统** — Star 插件热加载 + Skills 轻技能双轨扩展，内置扩展市场
+- **主题系统** — 预设主题与外观设置，注册表源管理与扩展市场（插件 / 技能安装）
+- **IoT 智能控制** — MQTT 设备通信，ESP32-P4 硬件终端，设备 / 场景 / 房间 / 自动化统一视图
 - **桌面客户端** — Electron 桌面应用，内置浏览器、桌面宠物、Live2D 皮套工坊、控制台终端
-- **安全体系** — JWT 认证、RBAC 权限控制、本地沙箱、命令守卫、速率限制、安全审计日志
-- **隐私优先** — 全部数据本地存储，零外网传输，AES-256 加密
+- **安全体系** — JWT / Token 双模式认证、RBAC（定义中）、本地沙箱、命令守卫、速率限制、安全审计日志、24h 自动备份
+- **隐私优先** — 对话与记忆数据全部本地存储（单 SQLite 库），敏感配置 AES 加密
 
 ## 技术栈
 
@@ -57,10 +59,10 @@ LuomiNest 是一个开源的**分布式多用户关系型 AI 智能体平台**�
 |------|---------|
 | **前端** | Electron 41 + Vue 3 + TypeScript + Pinia + PixiJS (Live2D) |
 | **后端** | Python 3.12+ + FastAPI + Uvicorn + SQLAlchemy 2 (async) + APScheduler |
-| **存储** | SQLite (SQLAlchemy ORM) + JSON 文件 + PostgreSQL (PGVector) + Redis |
+| **存储** | SQLite (SQLAlchemy ORM, WAL 单库) + JSON 缓存；PostgreSQL / Redis 为云端化预留 |
 | **通信** | WebSocket + MQTT + HTTP/REST + SSE 流式响应 |
 | **AI/LLM** | OpenAI / Anthropic / DeepSeek / Ollama，多厂商适配器 + 中间件管道 |
-| **语音** | Whisper / FunASR (ASR) + Edge TTS / SherpaOnnx / 多引擎 TTS |
+| **语音** | SherpaOnnx / FunASR / Faster-Whisper (ASR) + Edge TTS / SherpaOnnx / 本地 TTS / Gemini / MiniMax / SiliconFlow / Fish Audio |
 | **硬件** | ESP-IDF (ESP32-P4) |
 | **部署** | Docker Compose + PyInstaller + Electron Builder + Inno Setup |
 
@@ -144,7 +146,7 @@ pnpm build
 ```bash
 cd docker
 
-# 开发环境（含 PostgreSQL + Redis + MQTT）
+# 开发环境（backend + PostgreSQL + Redis + MQTT；后端当前使用 SQLite，pg/redis 为预留）
 docker compose -f docker-compose.dev.yml up -d
 
 # 生产环境
@@ -159,47 +161,51 @@ docker compose -f docker-compose.prod.yml up -d
 LuomiNest/
 ├── backend/                     # Python 后端服务
 │   ├── app/
-│   │   ├── api/v1/endpoints/    # REST API 端点（21 个模块）
-│   │   ├── api/ws/              # WebSocket（认证、Avatar 驱动、连接管理）
-│   │   ├── core/                # 配置、容器、工作流引擎、Agent 编排、调度器
+│   │   ├── api/v1/endpoints/    # REST API 端点（23 个模块）
+│   │   ├── api/ws/              # WebSocket（浏览器自动化、Avatar 驱动）
+│   │   ├── core/                # 配置、容器、端口、工具、工作流引擎、Agent 编排、调度器
 │   │   ├── domains/             # 领域逻辑（社交、群聊、AI-AI 对话）
-│   │   ├── engines/             # 引擎（记忆、渲染、定位）
-│   │   ├── infrastructure/      # 基础设施（数据库、Redis、MQTT、安装、同步）
-│   │   ├── runtime/             # 运行时（平台适配器、插件、Provider）
-│   │   ├── security/            # 安全（JWT、OAuth、RBAC、沙箱、审计、速率限制）
+│   │   ├── engines/             # 引擎（记忆）
+│   │   ├── infrastructure/      # 基础设施（数据库 27 表、备份、MQTT、同步、适配器）
+│   │   ├── runtime/             # 运行时（平台适配器 ×13、插件、技能、Provider）
+│   │   ├── security/            # 安全（JWT、内部鉴权、RBAC、沙箱、审计、速率限制）
 │   │   └── services/            # 业务服务
 │   ├── config/                  # 环境配置
-│   ├── plugins/                 # 插件目录
-│   ├── skills/                  # 技能目录
+│   ├── plugins/                 # 内置插件（4 个）
+│   ├── skills/                  # 内置技能（21 个）
 │   └── tests/                   # 测试
 │
 ├── frontend/                    # Electron + Vue 3 桌面客户端
 │   ├── src/
 │   │   ├── main/                # Electron 主进程（IPC、浏览器自动化、后端托管）
 │   │   ├── preload/             # 预加载脚本
-│   │   └── renderer/            # Vue 渲染进程（26 个页面）
+│   │   └── renderer/            # Vue 渲染进程（24 个页面）
 │   └── resources/               # 静态资源（图标、Live2D 模型）
 │
 ├── firmware/                    # ESP32 嵌入式固件
 │   └── embedded/esp32-p4/       # ESP32-P4 主控（组件化：app / bsp / drivers）
 │
+├── luominest-cloud/             # Java 云端服务（认证 + LLM 目录/配额，其余规划中）
+├── templates/                   # 插件开发模板
 ├── docker/                      # Docker 部署配置
-├── docs/                        # VitePress 文档站
-└── 文档/                        # 项目设计文档
+└── 文档/                        # 项目文档（唯一文档体系，入口 README.md）
 ```
 
 ## 文档
 
 | 文档 | 说明 |
 |------|------|
-| [需求规格说明书](文档/SRS-需求规格说明书.md) | 系统功能边界、验收标准、技术约束（IEEE 830） |
-| [核心架构文档](文档/ARC-核心架构文档.md) | 架构设计、技术选型、ADR 决策记录 |
-| [接口规格说明书](文档/API-接口规格说明书.md) | REST / WebSocket / MQTT 接口契约 |
-| [数据模型设计说明书](文档/DBS-数据模型设计说明书.md) | 数据实体、表结构、缓存策略 |
-| [技术实现手册](文档/IMP-技术实现手册.md) | 代码实现、部署配置、开发指南 |
-| [安全与隐私专项设计](文档/SEC-安全与隐私专项设计.md) | 安全合规、加密方案、审计机制 |
-| [需求追溯矩阵](文档/RTM-需求追溯矩阵.md) | 需求全生命周期追踪 |
-| [开放通信协议](文档/NEST-开放通信协议与自动化执行架构.md) | NestProtocol 协议栈设计 |
+| [文档总入口](文档/README.md) | 文档导航与阅读路径、维护规则 |
+| [01-项目概览](文档/01-项目概览.md) | 定位、核心能力与实现状态一览（✅ / 🚧 / 📋） |
+| [02-系统架构](文档/02-系统架构.md) | 分层与端口-适配器架构、前端/固件/云端 |
+| [03-接口规格](文档/03-接口规格.md) | REST / SSE / WebSocket / MQTT 实际接口 |
+| [04-数据模型](文档/04-数据模型.md) | SQLite 27 表、双轨记忆、迁移与备份 |
+| [05-功能实现/](文档/05-功能实现/) | 记忆、陪伴、插件、技能、工作流、语音、平台、市场、IoT、安全十篇 |
+| [06-部署与运维](文档/06-部署与运维.md) | 桌面打包、Docker、配置、备份 |
+| [07-开发指南](文档/07-开发指南.md) | 环境搭建、插件/技能开发 |
+| [08-路线图](文档/08-路线图.md) | 未实现功能与演进规划（唯一规划清单） |
+
+> 历史版本文档（SRS/ARC/DBS 等课程式基线文档）已移入 [文档/归档](文档/归档/README.md)。
 
 ## 贡献
 
@@ -237,23 +243,25 @@ LuomiNest is an open-source distributed multi-user relational AI agent platform 
 
 Core design principle: **Runs on a single ordinary computer with 100% local data retention.**
 
+The product bets on three things: **memory (it remembers you), companionship (it feels alive), and extensibility (it accepts any capability)**. Tools and MCP are cornerstone infrastructure, not the selling point.
+
 ## Key Features
 
-- **Immersive Dialogue** — Multi-turn natural language conversations with multiple LLM providers (OpenAI / Anthropic / DeepSeek / Ollama), streaming responses
-- **Live2D Avatar** — Cubism 5 engine with lip sync, expression drive, emotion mapping; VRM model and PngTuber support
-- **Three-Layer Memory** — Working + episodic + semantic memory with automatic fact extraction, user profiling, and knowledge graphs
-- **Voice Interaction** — Whisper / FunASR ASR + Edge TTS / local TTS synthesis, multi-language support
-- **Multi-Platform Access** — 13 adapter types: QQ (OneBot / Official), WeChat (MP / Work), Telegram, Discord, Minecraft, and more
-- **MCP Tool Protocol** — Standard MCP protocol support with tool registration and invocation; built-in CLI, file ops, sub-agent delegation
+- **Dual-Track Memory** — Owner memory / platform-user memory with row-level isolation; automatic fact extraction, distillation, profiling and knowledge base; vector search fully on SQLite
+- **Live2D Avatar** — Cubism 5 engine with lip sync, expression drive, emotion mapping; PngTuber pixel avatar and desktop pet support (VRM planned)
+- **Plugin & Skill System** — CxPlugin hot-reload + CxSkill lightweight extension dual-track architecture, built-in marketplace with multi-CDN registries
+- **Immersive Dialogue** — Multi-turn natural language conversations with multiple LLM providers (OpenAI-compatible ×32 templates / Anthropic native / DeepSeek / Ollama), SSE streaming
+- **Multi-Platform Access** — 13 adapter types: QQ (OneBot / Official), WeChat (MP / Work), Telegram, Discord, Minecraft, Xiaomi IoT, Home Assistant, and more
+- **Voice Interaction** — SherpaOnnx / FunASR / Faster-Whisper ASR + 7 TTS engines (Edge TTS / SherpaOnnx / local / Gemini / MiniMax / SiliconFlow / Fish Audio) with capability declarations and language-aware fallback
+- **MCP Tool Protocol** — Standard MCP protocol support with tool registration and invocation; 40+ built-in tools (CLI, file ops, sub-agent delegation, …)
 - **Multi-Agent Collaboration** — Task analysis → sub-task scheduling → parallel execution → result synthesis; A2A AI-to-AI autonomous dialogue
-- **Workflow Engine** — Visual node orchestration, scheduled tasks (APScheduler), tool-call recording and persistence
+- **Workflow Engine** — Visual node orchestration, template library, scheduled tasks (APScheduler), tool-call recording and persistence
 - **Browser Automation** — Luminous Human simulated interaction (mouse / keyboard / scroll), tab management, incognito preload and search
-- **Theme System** — Preset skins + custom skin editor, registry source management and marketplace
-- **IoT Smart Control** — MQTT device communication, ESP32-P4 hardware terminals, status reporting, audio streaming, and location tracking
-- **Plugin & Skill System** — Star plugin hot-reload + Skills lightweight extension dual-track architecture with built-in marketplace
+- **Theme System** — Preset themes and appearance settings, registry source management and extension marketplace
+- **IoT Smart Control** — MQTT device communication, ESP32-P4 hardware terminals, unified devices / scenes / rooms / automations view
 - **Desktop Client** — Electron app with built-in browser, desktop pet, Live2D avatar workshop, and console terminal
-- **Security** — JWT authentication, RBAC, local sandbox, command guard, rate limiting, and security audit logs
-- **Privacy First** — All data stored locally, zero external transmission, AES-256 encryption
+- **Security** — JWT / token dual-mode authentication, RBAC (defined), local sandbox, command guard, rate limiting, audit logs, 24h scheduled backup
+- **Privacy First** — All dialogue and memory data stored locally in a single SQLite database; sensitive config AES-encrypted
 
 ## Quick Start
 
