@@ -86,7 +86,7 @@ async def run_workflow_test():
             user_message=MOCK_LONG_TASK,
             provider="deepseek",
             model="deepseek-chat",
-            mode=WorkflowMode.ULTRA,
+            mode=WorkflowMode.STANDARD,
             skip_confirmation=True,
         ):
             events.append(event)

@@ -7,7 +7,6 @@
 """
 import json
 import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
@@ -43,6 +42,8 @@ async def record_tool_call(
     success: bool,
     duration_ms: int = 0,
     conversation_id: str | None = None,
+    scope: str | None = None,
+    tool_type: str | None = None,
 ) -> str:
     """记录工具调用，返回 record_id
 
@@ -72,6 +73,8 @@ async def record_tool_call(
             success=success,
             duration_ms=duration_ms,
             created_at=utc_now(),
+            scope=scope,
+            tool_type=tool_type,
         )
         await db.execute(stmt)
 

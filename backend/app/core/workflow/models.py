@@ -54,12 +54,10 @@ class WorkflowPriority(str, Enum):
 class WorkflowMode(str, Enum):
     """工作流执行模式（仅工作流模式，普通模式见 ChatMode）
 
-    不同模式调整迭代次数、并发度、温度等参数，适配不同复杂度的任务：
-    - standard: 标准模式，平衡速度与深度（默认），排除细粒度浏览器自动化工具
-    - ultra: 超长模式，最大能力，适合复杂长任务，全部工具可用
+    历史说明：曾存在 ultra 超长模式（高迭代预算 + 全量工具），已移除；
+    传入 ultra 的请求由入口归一为 standard。
     """
     STANDARD = "standard"
-    ULTRA = "ultra"
 
 
 # 各模式的参数配置
@@ -70,14 +68,6 @@ MODE_CONFIGS: dict[WorkflowMode, dict[str, Any]] = {
         "planning_temperature": 0.3,
         "synthesis_temperature": 0.4,
         "planning_max_tokens": 8192,
-        "skip_confirmation": False,
-    },
-    WorkflowMode.ULTRA: {
-        "max_iterations": 100,
-        "max_concurrent": 8,
-        "planning_temperature": 0.5,
-        "synthesis_temperature": 0.6,
-        "planning_max_tokens": 16384,
         "skip_confirmation": False,
     },
 }

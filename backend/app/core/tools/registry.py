@@ -10,11 +10,45 @@
 2. 工具执行返回 ToolResult，含 success/output/error/metadata 四字段
 3. 注册表仅负责登记与查找，不负责工具的实例化时机（由 app_factory 在 lifespan 中注册）
 """
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, Field
+
+# 拉丁词（≥2 字符）与 CJK 串的检索正则（S1b 轻量匹配共用）
+_LATIN_RE = re.compile(r"[a-z0-9_]{2,}")
+_CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]{2,}")
+_CJK_CHAR_RE = re.compile(r"[\u4e00-\u9fff]")
+
+
+def score_tool_match(query: str, name: str, description: str) -> int:
+    """轻量相关性评分（S1b 服务端检索共用）。
+
+    拉丁词命中 name +3 / description +1；CJK 连续串命中 name +4 / description +2；
+    单个汉字命中 description +1。无新引擎依赖，嵌入检索为远期增强（替换本函数即可）。
+    """
+    q = (query or "").strip().lower()
+    if not q:
+        return 0
+    name_l = name.lower()
+    desc_l = description.lower()
+    score = 0
+    for term in _LATIN_RE.findall(q):
+        if term in name_l:
+            score += 3
+        elif term in desc_l:
+            score += 1
+    for run in _CJK_RUN_RE.findall(q):
+        if run in name_l:
+            score += 4
+        if run in desc_l:
+            score += 2
+    for ch in _CJK_CHAR_RE.findall(q):
+        if ch in desc_l:
+            score += 1
+    return score
 
 
 class ToolResult(BaseModel):
@@ -148,6 +182,32 @@ class ToolRegistry:
     def list_names(self) -> list[str]:
         """列出所有已注册工具名称"""
         return list(self._tools.keys())
+
+    def search(self, query: str, top_k: int = 8) -> list[ToolBase]:
+        """按语义关键词检索工具（S1b L2 服务端检索，对齐 tool-opt §4.2.1）。
+
+        轻量实现：对 name/description 做加权匹配（见 score_tool_match），
+        不引入向量引擎（嵌入检索为远期增强，接口保持不变可直接替换内部实现）。
+        meta tier 工具常驻注入，不参与召回。
+
+        Args:
+            query: 检索query（通常为用户当前消息）
+            top_k: 最多返回的工具数
+
+        Returns:
+            按相关性降序的工具实例列表（score<=0 的不返回）
+        """
+        if not (query or "").strip():
+            return []
+        scored: list[tuple[int, str, ToolBase]] = []
+        for tool in self._tools.values():
+            if tool.tier == "meta":
+                continue
+            score = score_tool_match(query, tool.name, tool.description)
+            if score > 0:
+                scored.append((score, tool.name, tool))
+        scored.sort(key=lambda x: (-x[0], x[1]))
+        return [t for _, _, t in scored[:top_k]]
 
     async def execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         """按名称执行工具

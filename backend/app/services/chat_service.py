@@ -2,38 +2,37 @@ import asyncio
 import time
 import uuid
 from typing import Any
+
 from loguru import logger
 
-from app.core.config import settings
-from app.core.context import get_context_manager
-from app.core.utils import utc_now, sse_response, sse_data, require_store
-from app.core.tools import tool_registry
-from app.core.tools.orchestrator import tool_orchestrator
-from app.core.agents.middleware.base import HookRegistry, AgentContext
 from app.core.agents.cluster.agent_tool import (
-    set_luominest_agent_call_depth,
     reset_luominest_agent_call_depth,
+    set_luominest_agent_call_depth,
 )
 from app.core.agents.memory_access import (
     MEMORY_ACCESS_NONE,
     MEMORY_ACCESS_READ_MAIN,
     MEMORY_ACCESS_READ_WRITE,
 )
+from app.core.agents.middleware.base import AgentContext, HookRegistry
 from app.core.chat_mode import ChatMode, get_tool_config
+from app.core.config import settings
+from app.core.context import get_context_manager
 from app.core.domain_policy import resolve_domain_policy
-from app.security.prompt_security import wrap_untrusted_content
-from app.runtime.provider.llm.adapter import llm_adapter
-from app.runtime.provider.llm.types import RouteHint, StreamEvent
-from app.runtime.provider.llm.types import LLMResponse
+from app.core.tools import tool_registry
+from app.core.tools.orchestrator import tool_orchestrator
+from app.core.utils import require_store, sse_data, sse_response, utc_now
 from app.infrastructure.database.conversation_store import conversation_store
+from app.runtime.provider.llm.adapter import llm_adapter
+from app.runtime.provider.llm.types import LLMResponse, RouteHint
 from app.schemas.chat import ChatStreamChunk
+from app.security.prompt_security import wrap_untrusted_content
 from app.services.avatar_manager import strip_emotion_tags
 from app.services.context_service import ContextService
-from app.services.suggestion_service import SuggestionService
-from app.services.usage_tracker import usage_tracker
 from app.services.distillation_service import distillation_service
 from app.services.stream_processor import StreamProcessor
-
+from app.services.suggestion_service import SuggestionService
+from app.services.usage_tracker import usage_tracker
 
 # ──────────────────────────────────────────────────────────────
 # 全局钩子注册表
@@ -41,6 +40,21 @@ from app.services.stream_processor import StreamProcessor
 
 # 全局钩子注册表：用于运行时动态注册的观察者回调
 chat_hook_registry = HookRegistry()
+
+
+def _build_normal_tool_whitelist(user_query: str) -> list[str]:
+    """NORMAL 模式工具白名单：固定白名单 + S1b 按用户消息召回的 top-K 工具（去重）。
+
+    召回失败不阻断对话（退化为纯固定白名单）。
+    """
+    whitelist = list(get_tool_config(ChatMode.NORMAL).get("whitelist") or [])
+    try:
+        for tool in tool_registry.search(user_query, top_k=6):
+            if tool.name not in whitelist:
+                whitelist.append(tool.name)
+    except Exception:
+        logger.debug("[ChatService] 工具召回失败，退化为固定白名单", exc_info=True)
+    return whitelist
 
 
 async def _on_chat_turn_complete_usage(
@@ -247,11 +261,13 @@ class ChatService:
         if available_tools and not use_tools:
             logger.info(f"[STREAM] stream_chat: Provider {provider}/{model} 不支持工具调用，纯对话模式")
 
-        # 按对话模式设置工具白名单（NORMAL 模式仅允许任务视图操作工具）
+        # 按对话模式设置工具白名单（NORMAL 模式：固定白名单 + S1b 按消息召回）
         chat_mode_str = getattr(request, "chat_mode", "normal")
         tool_whitelist = None
         if chat_mode_str == "normal":
-            tool_whitelist = get_tool_config(ChatMode.NORMAL).get("whitelist")
+            tool_whitelist = _build_normal_tool_whitelist(
+                self._context.get_user_query(messages),
+            )
 
         # 构建 AgentContext
         ctx = AgentContext(
@@ -382,11 +398,13 @@ class ChatService:
         else:
             memory_access = MEMORY_ACCESS_NONE
 
-        # 按对话模式设置工具白名单（NORMAL 模式仅允许任务视图操作工具）
+        # 按对话模式设置工具白名单（NORMAL 模式：固定白名单 + S1b 按消息召回）
         chat_mode_str = getattr(request, "chat_mode", "normal")
         tool_whitelist = None
         if chat_mode_str == "normal":
-            tool_whitelist = get_tool_config(ChatMode.NORMAL).get("whitelist")
+            tool_whitelist = _build_normal_tool_whitelist(
+                self._context.get_user_query(conv["messages"]),
+            )
 
         # 构建 AgentContext（all_messages 共享引用，runner 追加 assistant/tool 消息）
         ctx = AgentContext(
@@ -614,22 +632,18 @@ class ChatService:
 
         messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
-        # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
-        conv_chat_mode = None
         conv_domain = ""
         conv_scene = ""
         conv_user_key = ""
         if body.conversation_id:
             conv_meta = await conversation_store.get_meta_async(body.conversation_id)
             if conv_meta:
-                conv_chat_mode = conv_meta.get("chat_mode")
                 conv_domain = conv_meta.get("domain") or ""
                 conv_scene = conv_meta.get("scene") or ""
                 conv_user_key = conv_meta.get("user_key") or ""
-        if conv_chat_mode != "ultra":
-            user_query = self._context.get_user_query(messages)
-            system_prompt = self._context.build_system_prompt(body.agent_id, user_context=user_query)
-            messages = [{"role": "system", "content": system_prompt}] + messages
+        user_query = self._context.get_user_query(messages)
+        system_prompt = self._context.build_system_prompt(body.agent_id, user_context=user_query)
+        messages = [{"role": "system", "content": system_prompt}] + messages
 
         # 用户显式选择的技能注入（无条件注入完整 body，优先于关键词自动匹配）
         selected_block = self._context.build_user_selected_skills_prompt(body.skill_ids or [])
@@ -638,8 +652,7 @@ class ChatService:
 
         messages = self._context.inject_timestamp_prompt(messages)
         # 子 Agent 调用不注入主 Agent 记忆，避免污染独立上下文
-        # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
-        if not body.is_sub_agent and conv_chat_mode != "ultra":
+        if not body.is_sub_agent:
             messages = await self._context.inject_memory(
                 messages, body.agent_id, resolved_provider, llm_adapter=adapter,
                 domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
@@ -770,7 +783,7 @@ class ChatService:
                     await self.persist_conv(conv_id, conv)
 
         # ── 模型解析（2026-08 全局模型统一）──
-        # 专业模式（standard/ultra）路由到推理模型（设置→模型设置→推理模型）；
+        # 专业模式（standard）路由到推理模型（设置→模型设置→推理模型）；
         # 推理模型不可用时退化为主模型，并通过 notice 通知前端（右上角 toast）。
         # 其余情况使用主模型解析链：请求级显式指定 → 对话级快照 → 全局默认。
         chat_mode_for_route = (
@@ -779,7 +792,7 @@ class ChatService:
         model_notice = ""
         reasoner_cfg = (
             adapter.get_reasoner_provider()
-            if chat_mode_for_route in ("standard", "ultra")
+            if chat_mode_for_route == "standard"
             else None
         )
         if reasoner_cfg:
@@ -810,13 +823,9 @@ class ChatService:
                 or adapter.get_provider(resolved_provider).default_model
             )
 
-        # Ultra 模式跳过 system prompt（含用户画像引用），减少 token 消耗
-        if conv.get("chat_mode") != "ultra":
-            user_query = self._context.get_user_query(conv["messages"])
-            system_prompt = self._context.build_system_prompt(conv.get("agent_id"), user_context=user_query)
-            all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
-        else:
-            all_messages: list[dict] = []
+        user_query = self._context.get_user_query(conv["messages"])
+        system_prompt = self._context.build_system_prompt(conv.get("agent_id"), user_context=user_query)
+        all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
 
         # 用户显式选择的技能注入（无条件注入完整 body，优先于关键词自动匹配）
         selected_block = self._context.build_user_selected_skills_prompt(request.skill_ids or [])
@@ -844,13 +853,11 @@ class ChatService:
         conv_domain = conv.get("domain") or ""
         conv_scene = conv.get("scene") or ""
         conv_user_key = conv.get("user_key") or ""
-        # Ultra 模式跳过 inject_memory（含用户画像 <user_memory>），减少 token 消耗
-        if conv.get("chat_mode") != "ultra":
-            all_messages = await self._context.inject_memory(
-                all_messages, agent_id, resolved_provider, conv_id,
-                llm_adapter=adapter,
-                domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
-            )
+        all_messages = await self._context.inject_memory(
+            all_messages, agent_id, resolved_provider, conv_id,
+            llm_adapter=adapter,
+            domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
+        )
 
         # 仅"发送新消息"路径拼接搜索结果（regenerate 请求体不携带 search_results）
         if not regenerate and request.search_results:

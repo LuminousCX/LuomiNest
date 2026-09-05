@@ -1,18 +1,19 @@
+import os
+import shutil
+import sys
 import time
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
-from contextlib import asynccontextmanager
-import os
-import sys
-import shutil
 
+from app.api.attachment_api import router as attachment_router
+from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exceptions import LuomiNestError
 from app.core.hardware import get_hardware_profile
-from app.api.v1.router import api_router
-from app.api.attachment_api import router as attachment_router
 from app.security.auth.local_token import load_auth_token
 from app.security.auth.middleware import luomi_auth_middleware
 
@@ -158,7 +159,7 @@ def _sync_bundled_plugin_resources() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"[LuomiNest] Starting application...")
+    logger.info("[LuomiNest] Starting application...")
     logger.info(f"[LuomiNest] Environment: {'Development' if settings.DEBUG else 'Production'}")
 
     # 系统信息日志（操作系统 / 发行版 / 包管理器 / 架构）
@@ -179,11 +180,11 @@ async def lifespan(app: FastAPI):
         )
         if profile.is_low_end:
             logger.warning("=" * 60)
-            logger.warning(f"  ⚠ 系统资源不足")
+            logger.warning("  ⚠ 系统资源不足")
             logger.warning(f"  CPU: {profile.cpu_count} 核 | 内存: {profile.total_memory_gb:.1f} GB")
-            logger.warning(f"  LuomiNest 需要至少 4 核 CPU + 8 GB 内存以保证稳定运行。")
-            logger.warning(f"  当前配置下可能出现响应缓慢、功能受限等问题。")
-            logger.warning(f"  建议升级硬件后重试。")
+            logger.warning("  LuomiNest 需要至少 4 核 CPU + 8 GB 内存以保证稳定运行。")
+            logger.warning("  当前配置下可能出现响应缓慢、功能受限等问题。")
+            logger.warning("  建议升级硬件后重试。")
             logger.warning("=" * 60)
     except Exception as e:
         logger.warning(f"[LuomiNest] Hardware detection failed: {e}")
@@ -266,11 +267,18 @@ async def lifespan(app: FastAPI):
     try:
         from app.core.tools import tool_registry
         from app.core.tools.builtin import (
-            CliTool, ReadFileTool, WriteFileTool, ListFilesTool, SearchFilesTool,
-            McpTool, ListMcpServersTool, DelegateToSubagentTool,
-            CreateScheduledTaskTool, ListScheduledTasksTool,
-            GetScheduledTaskTool, DeleteScheduledTaskTool,
-            CreateBrowserTabTool,
+            CliTool,
+            CreateScheduledTaskTool,
+            DelegateToSubagentTool,
+            DeleteScheduledTaskTool,
+            GetScheduledTaskTool,
+            ListFilesTool,
+            ListMcpServersTool,
+            ListScheduledTasksTool,
+            McpTool,
+            ReadFileTool,
+            SearchFilesTool,
+            WriteFileTool,
         )
         tool_registry.register(CliTool())
         tool_registry.register(ReadFileTool())
@@ -284,9 +292,9 @@ async def lifespan(app: FastAPI):
         tool_registry.register(ListScheduledTasksTool())
         tool_registry.register(GetScheduledTaskTool())
         tool_registry.register(DeleteScheduledTaskTool())
-        tool_registry.register(CreateBrowserTabTool())
 
-        # 浏览器自动化工具集（25 个，通过 WS 调用前端 Electron 执行）
+        # 浏览器观察工具集（2 个：screenshot/get_html，通过 WS 调用前端 Electron 执行；
+        # 交互类能力保留在前端 DevPanel，Agent 不做页面操作）
         from app.core.tools.builtin.browser_automation import get_luominest_browser_automation_tools
         for _browser_tool in get_luominest_browser_automation_tools():
             tool_registry.register(_browser_tool)
@@ -347,8 +355,8 @@ async def lifespan(app: FastAPI):
 
     # 装配工作流引擎依赖（组合根注入，替代引擎内部延迟 import；未注入时引擎保留兜底）
     try:
-        from app.core.workflow.engine import configure_engine
         from app.core.container import container
+        from app.core.workflow.engine import configure_engine
         configure_engine(
             chat_service_cls=container.chat_service.__class__,
             conversation_store=container.conversation_store,
@@ -393,9 +401,9 @@ async def lifespan(app: FastAPI):
 
     # 启动定时任务调度器（APScheduler）
     try:
-        from app.core.scheduler import luominest_scheduler
         # 注入任务载荷执行器（组合根装配；未注入时调度器经 subagent_delegation 端口兜底）
         from app.core.container import container
+        from app.core.scheduler import luominest_scheduler
         luominest_scheduler.register_task_executor(container.subagent_executor)
         await luominest_scheduler.init()
         logger.info(f"[LuomiNest] Scheduler started, tasks: {len(luominest_scheduler.list_tasks())}")
@@ -410,7 +418,7 @@ async def lifespan(app: FastAPI):
         if servers:
             logger.info(f"[LuomiNest] MCP servers: {len(servers)} configured")
         else:
-            logger.info(f"[LuomiNest] No MCP servers configured")
+            logger.info("[LuomiNest] No MCP servers configured")
     except Exception as e:
         logger.warning(f"[LuomiNest] MCP manager init skipped: {e}", exc_info=True)
 
@@ -418,7 +426,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.platform_router import attach_router_to_instances
         attach_router_to_instances()
-        logger.info(f"[LuomiNest] Platform router attached to instances")
+        logger.info("[LuomiNest] Platform router attached to instances")
     except Exception as e:
         logger.warning(f"[LuomiNest] Platform router init skipped: {e}", exc_info=True)
 
@@ -427,7 +435,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.avatar_manifest import avatar_manifest_manager
         await avatar_manifest_manager.init()
-        logger.info(f"[LuomiNest] Avatar manifest manager initialized")
+        logger.info("[LuomiNest] Avatar manifest manager initialized")
     except Exception as e:
         logger.warning(f"[LuomiNest] Avatar manifest init skipped: {e}", exc_info=True)
 
@@ -443,6 +451,7 @@ async def lifespan(app: FastAPI):
     # 注册定时清理任务（每24小时执行一次）
     try:
         from apscheduler.triggers.interval import IntervalTrigger
+
         from app.services.cleanup_service import luominest_cleanup_service
 
         async def _periodic_cleanup():
@@ -457,7 +466,7 @@ async def lifespan(app: FastAPI):
             id="lumi_periodic_cleanup",
             replace_existing=True,
         ):
-            logger.info(f"[LuomiNest] Periodic cleanup job registered (every 24h)")
+            logger.info("[LuomiNest] Periodic cleanup job registered (every 24h)")
     except Exception as e:
         logger.warning(f"[LuomiNest] Periodic cleanup registration skipped: {e}", exc_info=True)
 
@@ -465,6 +474,7 @@ async def lifespan(app: FastAPI):
     if settings.BACKUP_ENABLED:
         try:
             from apscheduler.triggers.interval import IntervalTrigger
+
             from app.infrastructure.backup.backup_manager import luominest_backup_manager
 
             async def _periodic_backup():
@@ -494,7 +504,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.runtime.plugin.cxplugin import shutdown_hot_reload
         await shutdown_hot_reload()
-        logger.info(f"[LuomiNest] CxPlugin hot reload stopped")
+        logger.info("[LuomiNest] CxPlugin hot reload stopped")
     except Exception as e:
         logger.warning(f"[LuomiNest] CxPlugin shutdown skipped: {e}", exc_info=True)
 
@@ -502,7 +512,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.runtime.platform.registry import stop_all_instances
         await stop_all_instances()
-        logger.info(f"[LuomiNest] Platform instances stopped")
+        logger.info("[LuomiNest] Platform instances stopped")
     except Exception as e:
         logger.warning(f"[LuomiNest] Platform shutdown skipped: {e}", exc_info=True)
 
@@ -510,7 +520,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.core.tools.mcp.manager import mcp_manager
         await mcp_manager.disconnect_all()
-        logger.info(f"[LuomiNest] MCP connections closed")
+        logger.info("[LuomiNest] MCP connections closed")
     except Exception as e:
         logger.warning(f"[LuomiNest] MCP shutdown skipped: {e}", exc_info=True)
 
@@ -518,7 +528,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.core.scheduler import luominest_scheduler
         await luominest_scheduler.shutdown()
-        logger.info(f"[LuomiNest] Scheduler stopped")
+        logger.info("[LuomiNest] Scheduler stopped")
     except Exception as e:
         logger.warning(f"[LuomiNest] Scheduler shutdown skipped: {e}", exc_info=True)
 
@@ -539,7 +549,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.api.ws import browser_ws_manager
         await browser_ws_manager.shutdown()
-        logger.info(f"[LuomiNest] Browser WS manager closed")
+        logger.info("[LuomiNest] Browser WS manager closed")
     except Exception as e:
         logger.warning(f"[LuomiNest] Browser WS shutdown skipped: {e}", exc_info=True)
 
@@ -550,7 +560,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Database dispose skipped: {e}", exc_info=True)
 
-    logger.info(f"[LuomiNest] Shutting down application...")
+    logger.info("[LuomiNest] Shutting down application...")
 
 
 def create_app() -> FastAPI:
@@ -683,6 +693,7 @@ def create_app() -> FastAPI:
 
     # --- 速率限制（slowapi） ---
     from slowapi.errors import RateLimitExceeded
+
     from app.security.rate_limiter import limiter, rate_limit_exceeded_handler
 
     app.state.limiter = limiter

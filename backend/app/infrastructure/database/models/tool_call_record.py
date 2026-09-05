@@ -25,6 +25,9 @@ class ToolCallRecordORM(Base):
     success: Mapped[bool] = mapped_column(Boolean, default=True)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[str] = mapped_column(String(64), default="", index=True)
+    # 工具分层（tool-opt §9 决策 10）：scope=shared/platform:{instId}；tool_type=core/domain/meta
+    scope: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    tool_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
     __table_args__ = (
         Index("ix_tool_call_records_session_created", "session_id", "created_at"),

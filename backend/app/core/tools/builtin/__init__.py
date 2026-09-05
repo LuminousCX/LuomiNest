@@ -9,14 +9,12 @@
 - collaboration_tool：LuomiNestStartCollaborationTool（工作台多 Agent 协作）
 - memory_search_tool：LuomiNestMemorySearchTool（记忆主动搜索，群聊 Agent 查主 Agent 记忆）
 - scheduler_tool：CreateScheduledTaskTool（定时任务创建）
-- browser_tool：CreateBrowserTabTool（浏览器标签页创建）
 - skills_tools：list/read/use_luominest_skills（技能列表/读取/应用，洋葱架构 §11.2）
 - tools_meta：ListLuomiNestToolsTool / ReadLuomiNestToolTool（工具发现，tier=meta）
 
 所有工具继承 ToolBase，统一使用 `arguments: dict[str, Any]` 签名。
 在 app_factory lifespan 中注册到 tool_registry。
 """
-from app.core.tools.builtin.browser_tool import CreateBrowserTabTool
 from app.core.tools.builtin.cli_tool import CliTool
 from app.core.tools.builtin.collaboration_tool import LuomiNestStartCollaborationTool
 from app.core.tools.builtin.file_tools import (
@@ -58,7 +56,6 @@ __all__ = [
     "ListScheduledTasksTool",
     "GetScheduledTaskTool",
     "DeleteScheduledTaskTool",
-    "CreateBrowserTabTool",
     "LuomiNestListSkillsTool",
     "LuomiNestReadSkillTool",
     "LuomiNestUseSkillTool",

@@ -6,17 +6,17 @@ internal_tool_registry，供工作流引擎调度。
 每个模块的接口封装现有工具或服务，提供高层操作语义。
 执行后通过 WorkflowEventEmitter 推送结构化事件到前端。
 """
-import json
 import functools
+import json
 from typing import Any
 
 from loguru import logger
 
+from app.core.ports.browser_automation import execute_browser_action
 from app.core.tools.builtin.browser_automation import BROWSER_ACTION_SPECS, _format_output
 from app.core.workflow.event_emitter import WorkflowEventEmitter
 from app.core.workflow.internal_registry import internal_tool_registry
 from app.core.workflow.models import WorkflowTaskResult
-from app.core.ports.browser_automation import execute_browser_action
 
 # 当前活跃的事件推送器（由 WorkflowEngine 在执行前设置）
 # key: session_id, value: WorkflowEventEmitter
@@ -73,7 +73,7 @@ def _make_skill_tool_handler(tool_name: str):
     """构造技能工具的 internal handler（桥接 tool_registry 中的 ToolBase 工具）。
 
     洋葱架构 §11.3：皮套工坊/桌宠为 standard 模式，工具来自 internal_tool_registry，
-    在此桥接 skills 工具使 standard/ultra 模式自动获得技能能力。
+    在此桥接 skills 工具使 standard 模式自动获得技能能力。
     """
 
     @_wf_catch(tool_name)
@@ -228,41 +228,6 @@ def _make_browser_bridge_handler(tool_name: str, action: str, timeout: float):
             logger.error(f"[Workflow:{tool_name}] Failed: {e}", exc_info=True)
             return WorkflowTaskResult(success=False, error=str(e))
     return handler
-
-
-async def _browser_search(args: dict[str, Any]) -> WorkflowTaskResult:
-    """浏览器搜索：在浏览器中打开搜索结果页
-
-    高层语义工具，构建搜索 URL 后调用 execute_browser_action("navigate") 导航。
-    不属于 29 个细粒度浏览器自动化工具，STANDARD 模式下可用。
-    """
-    query = args.get("query", "")
-    engine = args.get("engine", "google")
-    if not query:
-        return WorkflowTaskResult(success=False, error="Missing required parameter: query")
-
-    engine_urls = {
-        "google": "https://www.google.com/search?q=",
-        "bing": "https://www.bing.com/search?q=",
-        "baidu": "https://www.baidu.com/s?wd=",
-    }
-    base_url = engine_urls.get(engine, engine_urls["google"])
-    url = f"{base_url}{query}"
-
-    try:
-        await execute_browser_action("navigate", {"url": url})
-        logger.info(f"[Workflow:browser.search] query={query}, engine={engine}")
-        return WorkflowTaskResult(
-            success=True,
-            output=f"已在浏览器中搜索「{query}」（{engine}）: {url}",
-            metadata={"url": url, "engine": engine, "action": "navigate"},
-        )
-    except ConnectionError as e:
-        logger.warning(f"[Workflow:browser.search] 浏览器未连接: {e}")
-        return WorkflowTaskResult(success=False, error=str(e))
-    except Exception as e:
-        logger.error("[Workflow:browser.search] Failed: {}", str(e), exc_info=True)
-        return WorkflowTaskResult(success=False, error=str(e))
 
 
 async def _schedule_create(args: dict[str, Any]) -> WorkflowTaskResult:
@@ -690,8 +655,8 @@ async def _smart_home_control(args: dict[str, Any]) -> WorkflowTaskResult:
         )
 
     try:
-        from app.runtime.platform.registry import list_instances
         from app.runtime.platform.base import PlatformResponse
+        from app.runtime.platform.registry import list_instances
 
         # 查找包含该设备 ID 的 IoT 平台实例
         instances = list_instances()
@@ -781,7 +746,7 @@ async def _memory_create_fact(args: dict[str, Any]) -> WorkflowTaskResult:
     if not content:
         return WorkflowTaskResult(success=False, error="Missing required parameter: content")
 
-    from app.engines.memory.memory_engine import FactItem, FACT_CATEGORIES
+    from app.engines.memory.memory_engine import FACT_CATEGORIES, FactItem
 
     if category not in FACT_CATEGORIES:
         return WorkflowTaskResult(
@@ -920,7 +885,7 @@ async def _memory_update_summary(args: dict[str, Any]) -> WorkflowTaskResult:
 
     return WorkflowTaskResult(
         success=True,
-        output=f"已更新记忆摘要",
+        output="已更新记忆摘要",
         metadata={"length": len(content)},
     )
 
@@ -1321,9 +1286,46 @@ async def register_internal_tools() -> None:
 
     在应用启动时调用（app_factory.py lifespan）。
     """
-    # ─── 浏览器自动化模块（29 个真实工具，桥接到 execute_browser_action）───
-    # 通过 WebSocket 调用前端 Electron Main 的 LuomiAutomationExecutor 执行真实操作
-    # 命名规范：browser.{action}（如 browser.navigate），与 BROWSER_AUTOMATION_TOOL_NAMES 一致
+    # ─── 工具元信息模块（S1b：长尾工具按需取完整参数定义）───
+    async def _tool_read(args: dict[str, Any]) -> WorkflowTaskResult:
+        name = args.get("name", "")
+        entry = internal_tool_registry.get(name)
+        if entry is None:
+            return WorkflowTaskResult(
+                success=False,
+                error=f"Internal tool '{name}' not found. Available modules: {internal_tool_registry.list_modules()}",
+            )
+        return WorkflowTaskResult(
+            success=True,
+            output=json.dumps(
+                {
+                    "name": entry.name,
+                    "module": entry.module,
+                    "description": entry.description,
+                    "parameters": entry.parameters_schema,
+                },
+                ensure_ascii=False,
+            ),
+        )
+
+    await internal_tool_registry.register(
+        name="tool.read",
+        module="meta",
+        description="读取某个内部工具的完整参数定义（规划使用 other_tools_name_only 中的工具前先调用）",
+        handler=_tool_read,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "内部工具名（如 memory.search）"},
+            },
+            "required": ["name"],
+        },
+        is_concurrent_safe=True,
+    )
+
+    # ─── 浏览器观察模块（2 个工具，桥接到 execute_browser_action）───
+    # 仅保留 screenshot/get_html 两个观察类工具（工具链瘦身）；
+    # 交互类能力保留在前端 DevPanel，由用户直接使用
     for _tool_name, _spec in BROWSER_ACTION_SPECS.items():
         _action = _spec["action"]
         _internal_name = f"browser.{_action}"
@@ -1336,27 +1338,6 @@ async def register_internal_tools() -> None:
             is_concurrent_safe=True,
             timeout_seconds=int(_spec.get("timeout", 30.0)) + 5,
         )
-
-    # ─── 浏览器语义工具（高层封装，STANDARD 模式可用）───
-    await internal_tool_registry.register(
-        name="browser.search",
-        module="browser",
-        description="在浏览器中执行搜索（构建搜索 URL 并导航）",
-        handler=_browser_search,
-        parameters_schema={
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "搜索关键词"},
-                "engine": {
-                    "type": "string",
-                    "enum": ["google", "bing", "baidu"],
-                    "description": "搜索引擎（默认 google）",
-                },
-            },
-            "required": ["query"],
-        },
-        is_concurrent_safe=True,
-    )
 
     # 计划任务模块
     await internal_tool_registry.register(
@@ -1919,7 +1900,7 @@ async def register_internal_tools() -> None:
         is_concurrent_safe=True,
     )
 
-    # ─── 技能模块（洋葱架构 §11.2/§11.3：各场景通用，standard/ultra 工具集自动包含）───
+    # ─── 技能模块（洋葱架构 §11.2/§11.3：各场景通用，standard 工具集自动包含）───
     from app.core.tools.builtin.skills_tools import get_luominest_skills_tools
     for _skill_tool in get_luominest_skills_tools():
         await internal_tool_registry.register(

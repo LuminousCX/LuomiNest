@@ -98,6 +98,33 @@ def _get_llm_adapter() -> Any:
     return _llm_adapter
 
 
+# 常驻核心内部工具（S1b：始终注入完整 schema；其余工具仅名称+一句话，按需 tool.read）
+_CORE_INTERNAL_TOOLS: frozenset[str] = frozenset({
+    "memory.search",
+    "memory.build_context",
+    "memory.get_profile",
+    "schedule.create",
+    "schedule.list",
+    "schedule.get",
+    "schedule.delete",
+    "browser.screenshot",
+    "browser.get_html",
+    "console.execute",
+    "subagent.delegate",
+    "context.compress",
+    "app.launch",
+    "search.everything",
+    "smart_home.control",
+    "smart_home.list_devices",
+    "market.list_installed",
+    "platform.list_instances",
+    "platform.send_message",
+    "workflow.list_templates",
+    "workflow.run_template",
+    "tool.read",
+})
+
+
 # 工作流系统提示模板（英文）
 _WORKFLOW_SYSTEM_PROMPT = """You are the LuomiNest main Agent workflow engine. Your role is to decompose complex user tasks into executable subtask plans.
 
@@ -403,7 +430,7 @@ class WorkflowEngine:
             provider: LLM provider（默认使用系统配置）
             model: LLM model（默认使用系统配置）
             event_callback: 事件回调（可选），用于推送执行进度
-            mode: 工作流执行模式（standard/ultra）
+            mode: 工作流执行模式（standard）
             conversation_id: 关联对话 ID（可选，用于持久化和前端跳转）
             skip_confirmation: 覆盖模式默认的 skip_confirmation（None 表示使用模式默认值）
 
@@ -444,7 +471,7 @@ class WorkflowEngine:
             user_message: 用户的长任务请求
             provider: LLM provider
             model: LLM model
-            mode: 工作流执行模式（standard/ultra）
+            mode: 工作流执行模式（standard）
             conversation_id: 关联对话 ID（可选，用于持久化和前端跳转）
             skip_confirmation: 覆盖模式默认的 skip_confirmation（None 表示使用模式默认值）
 
@@ -807,34 +834,34 @@ class WorkflowEngine:
         logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} provider={provider}, model={model}")
         logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} user_message (len={len(session.user_message)}): {session.user_message[:300]}")
 
-        # 按模式过滤工具列表（STANDARD 排除 27 个细粒度 browser_action 工具）
-        from app.core.chat_mode import BROWSER_AUTOMATION_TOOL_NAMES
-        if session.mode == WorkflowMode.STANDARD:
-            exclude_tools = set(BROWSER_AUTOMATION_TOOL_NAMES)
-        else:
-            exclude_tools = set()
-        available_tools = internal_tool_registry.get_filtered_module_summary(
-            exclude_tools=exclude_tools,
+        # 工具清单注入（S1b 瘦身）：常驻核心工具给完整 schema，其余仅名称+一句话；
+        # 按用户消息召回 top-K 补全 schema；长尾工具用 tool.read 按需取完整定义
+        recalled = internal_tool_registry.search(session.user_message, top_k=8)
+        recalled_names = {t.name for t in recalled}
+        core_schemas = internal_tool_registry.get_schemas_for(
+            set(_CORE_INTERNAL_TOOLS) | recalled_names,
         )
-        tools_text = json.dumps(available_tools, ensure_ascii=False, indent=2)
-        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} available_tools count={len(available_tools) if isinstance(available_tools, list) else 'N/A'}")
+        available_tools = {
+            "core_tools": core_schemas,
+            "other_tools_name_only": internal_tool_registry.get_module_summary(),
+            "hint": (
+                "core_tools 含完整参数 schema；other_tools_name_only 仅列出名称与用途，"
+                "规划使用其中某个工具前，先调用 tool.read 获取其完整参数定义。"
+            ),
+        }
+        tools_text = json.dumps(available_tools, ensure_ascii=False)
+        logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} core_tools count={len(core_schemas)}")
         logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} tools_text (len={len(tools_text)}): {tools_text[:500]}")
 
         system_prompt = _WORKFLOW_SYSTEM_PROMPT.format(available_tools=tools_text)
         logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} system_prompt (len={len(system_prompt)}): {system_prompt[:500]}")
 
-        # Ultra 模式追加引导：优先规划工作流 + 记忆按需查询
-        if session.mode == WorkflowMode.ULTRA:
-            system_prompt += "\n\nULTRA MODE GUIDELINES:\n- You are in ultra mode with ALL tools available. Prioritize decomposing user requests into structured workflow plans.\n- After understanding the user's intent, proactively create a task plan (even for moderately complex requests).\n- Use memory.search and memory.build_context tools ON DEMAND when you need user profile or historical context — memory is NOT pre-injected.\n- You have higher token budget and iteration limits; leverage them for thorough multi-step execution.\n- When in doubt about whether to plan, lean towards creating a plan — a well-structured plan rarely hurts."
-
-        # P3：自动注入记忆上下文到 system prompt（仅 standard 模式）
-        # Ultra 模式改为按需查询：AI 主动调 memory.search / memory.build_context 工具
-        if session.mode != WorkflowMode.ULTRA:
-            system_prompt = workflow_context_manager.inject_memory_context(
-                system_prompt=system_prompt,
-                query=session.user_message,
-                conversation_id=session.conversation_id if hasattr(session, 'conversation_id') else None,
-            )
+        # 注入记忆上下文到 system prompt（专业模式标准行为）
+        system_prompt = workflow_context_manager.inject_memory_context(
+            system_prompt=system_prompt,
+            query=session.user_message,
+            conversation_id=session.conversation_id if hasattr(session, 'conversation_id') else None,
+        )
         logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} system_prompt after memory injection (len={len(system_prompt)})")
 
         messages = [
@@ -955,7 +982,7 @@ class WorkflowEngine:
             # 如果 LLM 输出被截断且 JSON 修复失败，在 analysis 中附加提示
             if finish_reason == "length":
                 return {
-                    "analysis": content + "\n\n[注意：LLM 输出因 token 限制被截断，JSON 计划不完整。请考虑使用 ULTRA 模式或简化任务。]",
+                    "analysis": content + "\n\n[注意：LLM 输出因 token 限制被截断，JSON 计划不完整。请考虑简化任务。]",
                     "plan": "",
                     "tasks": [],
                 }
@@ -1197,6 +1224,8 @@ class WorkflowEngine:
             logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task {task.task_id} calling internal_tool_registry.execute: tool={task.tool_name}")
             result = await internal_tool_registry.execute(
                 task.tool_name, task.arguments,
+                session_id=session_id,
+                conversation_id=getattr(session, "conversation_id", None),
             )
             logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} task {task.task_id} tool execution returned: success={result.success}, output_len={len(result.output) if result.output else 0}, error={result.error}")
 

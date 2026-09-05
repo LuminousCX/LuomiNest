@@ -153,6 +153,10 @@ async def _migrate_columns(conn) -> None:
                     text("ALTER TABLE conversations ADD COLUMN chat_mode VARCHAR(32) DEFAULT 'normal'")
                 )
                 logger.info("[DB] Migrated conversations table: added chat_mode column")
+            # ULTRA 模式已移除：存量 ultra 会话归一为 standard（幂等，无命中即空操作）
+            sync_conn.execute(
+                text("UPDATE conversations SET chat_mode='standard' WHERE chat_mode='ultra'")
+            )
             if "is_hidden" not in existing_cols:
                 sync_conn.execute(
                     text("ALTER TABLE conversations ADD COLUMN is_hidden BOOLEAN DEFAULT 0")
@@ -195,6 +199,20 @@ async def _migrate_columns(conn) -> None:
                     text("ALTER TABLE providers ADD COLUMN protocol VARCHAR(32) DEFAULT 'auto'")
                 )
                 logger.info("[DB] Migrated providers table: added protocol column")
+
+        # tool_call_records 表补 scope/tool_type 列（tool-opt §9 决策 10：工具分层审计）
+        if "tool_call_records" in inspector.get_table_names():
+            tcr_cols = {c["name"] for c in inspector.get_columns("tool_call_records")}
+            if "scope" not in tcr_cols:
+                sync_conn.execute(
+                    text("ALTER TABLE tool_call_records ADD COLUMN scope VARCHAR(64)")
+                )
+                logger.info("[DB] Migrated tool_call_records table: added scope column")
+            if "tool_type" not in tcr_cols:
+                sync_conn.execute(
+                    text("ALTER TABLE tool_call_records ADD COLUMN tool_type VARCHAR(32)")
+                )
+                logger.info("[DB] Migrated tool_call_records table: added tool_type column")
 
         # skills 表（洋葱架构 §11.1）：新建库由 create_all 建表；
         # 此处兜底存量库——若历史上已存在手工建的 skills 表，补齐缺失列

@@ -8,14 +8,16 @@
 - deer-flow: MCP 工具加载 + 缓存机制
 """
 import asyncio
+import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from loguru import logger
 
+from app.core.tools.registry import score_tool_match
 from app.core.utils import utc_now
 from app.core.workflow.models import WorkflowTaskResult
-
 
 # 内部工具执行器类型：接收参数字典，返回 WorkflowTaskResult
 InternalToolHandler = Callable[[dict[str, Any]], Awaitable[WorkflowTaskResult]]
@@ -133,12 +135,54 @@ class InternalToolRegistry:
         """列出所有接口名称"""
         return list(self._tools.keys())
 
-    async def execute(self, name: str, arguments: dict[str, Any]) -> WorkflowTaskResult:
+    def search(self, query: str, top_k: int = 8) -> list[InternalToolEntry]:
+        """按语义关键词检索内部接口（S1b L2 服务端检索）。
+
+        复用 score_tool_match 轻量评分；meta 模块工具不参与召回。
+        """
+        if not (query or "").strip():
+            return []
+        scored: list[tuple[int, str, InternalToolEntry]] = []
+        for entry in self._tools.values():
+            if entry.module == "meta":
+                continue
+            score = score_tool_match(query, entry.name, entry.description)
+            if score > 0:
+                scored.append((score, entry.name, entry))
+        scored.sort(key=lambda x: (-x[0], x[1]))
+        return [e for _, _, e in scored[:top_k]]
+
+    def get_schemas_for(self, names: set[str]) -> list[dict[str, Any]]:
+        """按名称集合返回完整定义（name/description/parameters），供规划注入全 schema"""
+        out: list[dict[str, Any]] = []
+        for name in names:
+            entry = self._tools.get(name)
+            if entry is not None:
+                out.append({
+                    "name": entry.name,
+                    "description": entry.description,
+                    "parameters": entry.parameters_schema,
+                })
+        return out
+
+    async def execute(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        session_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> WorkflowTaskResult:
         """执行指定接口
+
+        结果超过落盘阈值（LUMINOUS_PERSIST_THRESHOLD）时写入 tool_call_records
+        并以占位符替换输出（S3/T5：workflow 入口与 function calling 同一落盘行为；
+        记录失败不中断工具结果返回）。
 
         Args:
             name: 接口名称
             arguments: 调用参数
+            session_id: 工作流会话 ID（用于落盘审计）
+            conversation_id: 关联对话 ID（用于落盘审计）
 
         Returns:
             WorkflowTaskResult: 执行结果
@@ -151,13 +195,13 @@ class InternalToolRegistry:
                 error=f"Internal tool '{name}' not found. Available: {available}",
             )
 
+        mono_start = time.monotonic()
         try:
             result = await asyncio.wait_for(
                 entry.handler(arguments),
                 timeout=entry.timeout_seconds,
             )
-            return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(
                 f"[InternalToolRegistry] Tool '{name}' timed out "
                 f"after {entry.timeout_seconds}s"
@@ -175,6 +219,32 @@ class InternalToolRegistry:
                 success=False,
                 error=f"Tool execution failed: {e}",
             )
+
+        # 超长输出落盘 + 占位符（与 function calling 中间件同阈值；失败不中断）
+        try:
+            from app.services.tool_call_recorder import (
+                record_tool_call,
+                should_persist,
+            )
+
+            if result.success and result.output and should_persist(result.output):
+                placeholder = await record_tool_call(
+                    session_id=session_id,
+                    tool_name=name,
+                    arguments=arguments,
+                    result=result.output,
+                    success=True,
+                    duration_ms=int((time.monotonic() - mono_start) * 1000),
+                    conversation_id=conversation_id,
+                )
+                result.output = (
+                    f"[工具输出已落盘，共 {len(result.output)} 字符，"
+                    f"可通过记录 id 查看全文]\n{placeholder}"
+                )
+        except Exception as e:
+            logger.debug(f"[InternalToolRegistry] 输出落盘跳过: {e}", exc_info=True)
+
+        return result
 
     def to_openai_schemas(self) -> list[dict[str, Any]]:
         """转换为 OpenAI function calling 格式列表

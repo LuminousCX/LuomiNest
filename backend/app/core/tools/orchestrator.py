@@ -20,7 +20,6 @@ from loguru import logger
 
 from app.core.tools.registry import tool_registry
 
-
 # ──────────────────────────────────────────────────────────────
 # 工具兼容性运行时探测缓存
 # ──────────────────────────────────────────────────────────────
@@ -41,6 +40,31 @@ def _detect_current_platform() -> str:
     if sys.platform == "darwin":
         return "mac"
     return "linux"
+
+
+def _to_llm_function_with_tier(tool) -> dict[str, Any]:
+    """按 tier 转换为 OpenAI function 格式（S1b L1 轻量注入）。
+
+    meta tier 工具若无必填参数，仅注入占位参数 schema（~50 token/个），
+    完整定义由 read_luominest_tool 按需拉取；有必填参数的 meta 工具
+    （如 read_luominest_tool 自身）保留完整 schema 以保证可调用性。
+    """
+    if tool.tier != "meta":
+        return tool.to_openai_function()
+    try:
+        required = tool.parameters.get("required") or []
+    except Exception:
+        required = []
+    if required:
+        return tool.to_openai_function()
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
 
 
 async def discover_tool_compatibility(provider_name: str, model: str, llm_adapter=None) -> bool:
@@ -188,7 +212,7 @@ class ToolOrchestrator:
             elif tool_scope != "shared" and tool_scope != scope:
                 continue
 
-            tools.append(tool.to_openai_function())
+            tools.append(_to_llm_function_with_tier(tool))
 
         # 合并 MCP 工具（延迟导入避免循环依赖）
         try:
