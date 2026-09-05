@@ -9,15 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- 工具检索（S1b）：`ToolRegistry` / `InternalToolRegistry` 新增 `search()` 轻量召回；workflow 工具注入改为「核心+召回全 schema、长尾仅名称、`tool.read` 按需取定义」；普通模式白名单并入召回结果与 meta 工具
+- workflow 路径超长工具输出（>2000 字符）统一落盘 `tool_call_records` 并替换占位符，与 function calling 中间件同阈值
+- `tool_call_records` 表新增 `scope` / `tool_type` 列（工具分层审计）
+- 浏览器开发者面板新增「源码」tab（读取当前页 HTML）；统一搜索框组件 `SearchInput`
+
 ### Changed
 
-### Deprecated
+- 对话模式收敛为 普通/专业 双模式；存量 ultra 会话启动时自动归一为 standard，workflow 入参 ultra 自动归一
+- 会话搜索提速：SQL 层 `instr()` 定位命中位置 + `LIMIT 50`，替换全字段 LIKE 扫描与 Python 逐行切片；前端防抖后才进入 loading 态并支持 AbortController 取消过期请求
+- 搜索结果高亮逻辑收敛到 `utils/highlight.ts`；工作台搜索结果点击后滚动并高亮命中消息
 
 ### Removed
 
-### Fixed
-
-### Security
+- 移除超长（ULTRA）工作流模式及其高迭代预算配置
+- 移除 29 个浏览器自动化工具中的 27 个交互类工具（导航/点击/输入/标签页管理等）及 `browser.search`、`create_browser_tab`；仅保留页面截图与读取当前页 HTML 两个观察类工具，交互能力保留在前端开发者面板
 
 ---
 

@@ -43,10 +43,10 @@ LuomiNest 是一个开源的**分布式多用户关系型 AI 智能体平台**�
 - **沉浸式对话** — 多轮自然语言对话，支持多 LLM Provider（OpenAI 兼容 32 模板 / Anthropic 原生 / DeepSeek / Ollama 等），SSE 流式响应
 - **多平台接入** — QQ（OneBot / 官方）、微信（公众号 / 企业微信）、Telegram、Discord、Minecraft、米家、Home Assistant 等 13 种适配器
 - **语音交互** — SherpaOnnx / FunASR / Faster-Whisper 语音识别（ASR）+ Edge TTS / SherpaOnnx / 本地 TTS 等 7 引擎合成，能力声明与语言感知回退
-- **MCP 工具协议** — 标准 MCP 协议支持，工具注册与调用，内置 CLI、文件操作、子 Agent 委派等 40+ 工具
+- **MCP 工具协议** — 标准 MCP 协议支持，工具注册与调用，内置 CLI、文件操作、子 Agent 委派等 20+ 工具
 - **多 Agent 协作** — 任务分析 → 子任务调度 → 并行执行 → 结果综合，支持 A2A 协议 AI-AI 自主对话
 - **工作流引擎** — 可视化节点编排、模板库、定时任务调度（APScheduler）、工具调用记录与持久化
-- **浏览器自动化** — Luminous Human 模拟交互（鼠标 / 键盘 / 滚动），标签页管理、隐身预加载与搜索
+- **内嵌浏览器** — 内置浏览器与开发者面板（脚本 / DOM / 源码 / 截图），Agent 可读取当前页 HTML 与页面截图
 - **主题系统** — 预设主题与外观设置，注册表源管理与扩展市场（插件 / 技能安装）
 - **IoT 智能控制** — MQTT 设备通信，ESP32-P4 硬件终端，设备 / 场景 / 房间 / 自动化统一视图
 - **桌面客户端** — Electron 桌面应用，内置浏览器、桌面宠物、Live2D 皮套工坊、控制台终端
@@ -242,10 +242,10 @@ The product bets on three things: **memory (it remembers you), companionship (it
 - **Immersive Dialogue** — Multi-turn natural language conversations with multiple LLM providers (OpenAI-compatible ×32 templates / Anthropic native / DeepSeek / Ollama), SSE streaming
 - **Multi-Platform Access** — 13 adapter types: QQ (OneBot / Official), WeChat (MP / Work), Telegram, Discord, Minecraft, Xiaomi IoT, Home Assistant, and more
 - **Voice Interaction** — SherpaOnnx / FunASR / Faster-Whisper ASR + 7 TTS engines (Edge TTS / SherpaOnnx / local / Gemini / MiniMax / SiliconFlow / Fish Audio) with capability declarations and language-aware fallback
-- **MCP Tool Protocol** — Standard MCP protocol support with tool registration and invocation; 40+ built-in tools (CLI, file ops, sub-agent delegation, …)
+- **MCP Tool Protocol** — Standard MCP protocol support with tool registration and invocation; 20+ built-in tools (CLI, file ops, sub-agent delegation, …)
 - **Multi-Agent Collaboration** — Task analysis → sub-task scheduling → parallel execution → result synthesis; A2A AI-to-AI autonomous dialogue
 - **Workflow Engine** — Visual node orchestration, template library, scheduled tasks (APScheduler), tool-call recording and persistence
-- **Browser Automation** — Luminous Human simulated interaction (mouse / keyboard / scroll), tab management, incognito preload and search
+- **Embedded Browser** — Built-in browser with developer panel (script / DOM / page source / screenshot); the agent can read the current page's HTML and take screenshots
 - **Theme System** — Preset themes and appearance settings, registry source management and extension marketplace
 - **IoT Smart Control** — MQTT device communication, ESP32-P4 hardware terminals, unified devices / scenes / rooms / automations view
 - **Desktop Client** — Electron app with built-in browser, desktop pet, Live2D avatar workshop, and console terminal
