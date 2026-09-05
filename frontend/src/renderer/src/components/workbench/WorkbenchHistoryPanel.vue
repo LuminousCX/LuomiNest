@@ -2,7 +2,6 @@
 import { computed, nextTick } from 'vue'
 import {
   Plus,
-  Search,
   MessageSquare,
   Clock,
   Trash2,
@@ -12,7 +11,8 @@ import {
   Loader2,
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
-import LumiInput from '../common/LumiInput.vue'
+import SearchInput from '../common/SearchInput.vue'
+import { highlightSnippet } from '../../utils/highlight'
 import type { ConversationSearchResult } from '../../types'
 import type { TimeGroup } from './types'
 
@@ -55,8 +55,7 @@ const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '�
 
 const MODE_LABELS: Record<string, string> = {
   normal: '普通',
-  standard: '标准',
-  ultra: '超长',
+  standard: '专业',
 }
 
 const modeLabel = (chatMode?: string): string => {
@@ -79,20 +78,8 @@ const formatTime = (dateStr: string) => {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-const highlightSnippet = (snippet: string): string => {
-  if (!snippet) return ''
-  const escaped = snippet
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-  const q = props.searchQuery.trim()
-  if (!q) return escaped
-  const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`(${escapedQ})`, 'gi')
-  return escaped.replace(regex, '<mark>$1</mark>')
-}
+const snippetHtml = (snippet: string): string =>
+  highlightSnippet(snippet, props.searchQuery)
 
 const onStartRename = (convId: string, currentTitle: string) => {
   emit('start-rename', convId, currentTitle)
@@ -115,11 +102,7 @@ const onStartRename = (convId: string, currentTitle: string) => {
         </button>
 
         <div class="history-search">
-          <LumiInput v-model="searchQueryModel" size="sm" placeholder="搜索对话...">
-            <template #icon>
-              <Search :size="14" />
-            </template>
-          </LumiInput>
+          <SearchInput v-model="searchQueryModel" size="sm" placeholder="搜索对话..." :loading="isSearching" />
         </div>
 
         <LumiButton variant="primary" size="sm" block class="new-conv-btn" @click="emit('new-conversation')">
@@ -143,7 +126,7 @@ const onStartRename = (convId: string, currentTitle: string) => {
                 <MessageSquare :size="14" class="history-item-icon" />
                 <div class="history-item-content">
                   <span class="history-item-title">{{ result.title }}</span>
-                  <span class="history-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
+                  <span class="history-item-snippet" v-html="snippetHtml(result.snippet)"></span>
                 </div>
               </div>
               <div v-if="searchResults.length === 0" class="history-empty">
@@ -381,11 +364,6 @@ button:focus-visible {
 .mode-tag-standard {
   color: var(--primary-color, var(--text-link));
   background: var(--primary-bg, rgba(0, 122, 255, 0.1));
-}
-
-.mode-tag-ultra {
-  color: var(--warning-color, #e8a317);
-  background: var(--warning-bg, rgba(232, 163, 23, 0.1));
 }
 
 .history-item-time {

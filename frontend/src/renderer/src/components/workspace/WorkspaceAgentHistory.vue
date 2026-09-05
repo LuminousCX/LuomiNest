@@ -3,7 +3,6 @@ import { computed } from 'vue'
 import {
   Bot,
   ChevronLeft,
-  Search,
   Plus,
   SquareCheck,
   MessageSquare,
@@ -13,6 +12,8 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-vue-next'
+import SearchInput from '../common/SearchInput.vue'
+import { highlightSnippet } from '../../utils/highlight'
 import type { AgentProfile } from '../../types'
 import type { TimeGroup, ConversationSearchResult } from './types'
 
@@ -73,20 +74,8 @@ const formatConvTime = (dateStr: string) => {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-const highlightSnippet = (snippet: string): string => {
-  if (!snippet) return ''
-  const escaped = snippet
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-  const q = props.searchQuery.trim()
-  if (!q) return escaped
-  const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`(${escapedQ})`, 'gi')
-  return escaped.replace(regex, '<mark>$1</mark>')
-}
+const snippetHtml = (snippet: string): string =>
+  highlightSnippet(snippet, props.searchQuery)
 </script>
 
 <template>
@@ -106,8 +95,7 @@ const highlightSnippet = (snippet: string): string => {
 
     <div class="sidebar-header">
       <div class="conv-search">
-        <Search :size="14" class="search-icon" />
-        <input v-model="searchQueryModel" type="text" placeholder="搜索对话..." />
+        <SearchInput v-model="searchQueryModel" placeholder="搜索对话..." :loading="isSearching" />
       </div>
       <div class="sidebar-actions">
         <button class="new-conv-btn" title="创建新对话" @click="emit('new-conversation')">
@@ -154,7 +142,7 @@ const highlightSnippet = (snippet: string): string => {
             <MessageSquare :size="14" class="conv-item-icon" />
             <div class="conv-item-content">
               <span class="conv-item-title">{{ result.title }}</span>
-              <span class="conv-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
+              <span class="conv-item-snippet" v-html="snippetHtml(result.snippet)"></span>
             </div>
           </div>
           <div v-if="searchResults.length === 0" class="conv-empty">
@@ -299,38 +287,7 @@ const highlightSnippet = (snippet: string): string => {
 }
 
 .conv-search {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px 10px;
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--workspace-border);
-  transition: all var(--transition-fast);
   margin-bottom: var(--space-2);
-}
-
-.conv-search:focus-within {
-  border-color: var(--lumi-brand-border);
-}
-
-.conv-search .search-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.conv-search input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  min-width: 0;
-}
-
-.conv-search input::placeholder {
-  color: var(--text-muted);
 }
 
 .sidebar-actions {

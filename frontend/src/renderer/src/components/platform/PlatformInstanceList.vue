@@ -2,14 +2,14 @@
 import { ref, computed } from 'vue'
 import {
   Globe, Radio, Cable, Link, MessageCircle, Send, Gamepad2, Home, Smartphone,
-  Search, Play, Square, Plus, Trash2, Settings,
+  Play, Square, Plus, Trash2, Settings,
   AlertCircle,
 } from 'lucide-vue-next'
 import { usePlatformStore } from '../../stores/platform'
 import type { PlatformInstance } from '../../types'
 import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
-import LumiInput from '../../components/common/LumiInput.vue'
+import SearchInput from '../common/SearchInput.vue'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
 
@@ -107,9 +107,7 @@ const handleConfig = (instance: PlatformInstance) => {
 <template>
   <div class="platform-list-panel">
     <div class="panel-toolbar">
-      <LumiInput v-model="searchQuery" type="search" placeholder="搜索平台..." class="search-input">
-        <template #icon><Search :size="14" /></template>
-      </LumiInput>
+      <SearchInput v-model="searchQuery" placeholder="搜索平台..." class="search-input" />
       <div class="filter-group">
         <button :class="['filter-btn', { active: activeFilter === 'all' }]" @click="activeFilter = 'all'">全部</button>
         <button :class="['filter-btn', { active: activeFilter === 'active' }]" @click="activeFilter = 'active'">活跃</button>

@@ -106,12 +106,11 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   const isCompressing = ref(false)
   const hasMoreMessages = computed(() => chatStore.currentHasMore)
 
-  // 对话模式（普通/标准/超长）
+  // 对话模式（普通/专业）—— 选项统一定义在 types/workflow.ts
   const chatMode = ref<ChatModeLevel>('normal')
   const CHAT_MODE_OPTIONS: WorkflowModeOption[] = [
     { value: 'normal', label: '普通', title: '普通模式：工具最少（任务视图操作 + 表情操控）' },
-    { value: 'standard', label: '标准', title: '专业模式·标准：平衡速度与深度，排除细粒度浏览器工具' },
-    { value: 'ultra', label: '超长', title: '专业模式·超长：最大能力，全部工具可用，适合复杂长任务' },
+    { value: 'standard', label: '专业', title: '专业模式：工作流规划 + 全量工具，适合复杂长任务' },
   ]
   const isWorkflowMode = computed(() => chatMode.value !== 'normal')
 
@@ -238,7 +237,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     }
 
     // 2026-08 全局模型统一：切换模式不再改动全局主模型。
-    // 专业模式（standard/ultra）由后端按轮路由到推理模型（设置页配置），
+    // 专业模式（standard）由后端按轮路由到推理模型（设置页配置），
     // 推理模型不可用时后端退化为主模型并通过 SSE notice 通知前端 toast。
     chatMode.value = mode
   }
@@ -379,7 +378,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
       await workflowStore.submitWorkflow(content, {
         provider: resolved?.provider || undefined,
         model: resolved?.model || undefined,
-        mode: chatMode.value === 'ultra' ? 'ultra' : 'standard',
+        mode: 'standard',
         conversationId: convId,
         onPhaseChange: (phase: string) => {
           logger.info(`工作流阶段: ${phase}`)

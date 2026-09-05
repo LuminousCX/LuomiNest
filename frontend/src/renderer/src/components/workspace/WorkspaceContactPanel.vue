@@ -10,6 +10,7 @@ import {
   MoreVertical,
   Trash2,
 } from 'lucide-vue-next'
+import SearchInput from '../common/SearchInput.vue'
 import type { AgentProfile, GroupInfo } from '../../types'
 import type { ContactType } from './types'
 
@@ -56,7 +57,7 @@ const filteredGroups = computed(() => {
     <div class="contact-header">
       <div class="contact-search">
         <Search :size="14" class="search-icon" />
-        <input v-model="searchQueryModel" type="text" placeholder="搜索联系人..." />
+        <SearchInput v-model="searchQueryModel" placeholder="搜索联系人..." />
       </div>
       <button class="contact-add-btn" title="新建 Agent" @click="emit('create-agent')">
         <Plus :size="14" />

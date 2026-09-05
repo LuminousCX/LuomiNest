@@ -26,6 +26,7 @@ import {
   Save,
   Image as ImageIcon
 } from 'lucide-vue-next'
+import SearchInput from '../common/SearchInput.vue'
 import { usePlatformStore } from '../../stores/platform'
 import { useModelStore } from '../../stores/model'
 import type { PlatformAdapterType, PlatformInstance } from '../../types'
@@ -312,7 +313,7 @@ onMounted(() => {
       </div>
       <div class="platform-card-body">
         <div class="platform-toolbar">
-          <input v-model="platformSearchQuery" type="text" class="platform-search" placeholder="搜索平台..." />
+          <SearchInput v-model="platformSearchQuery" placeholder="搜索平台..." />
           <div class="platform-filter-group">
             <button :class="['platform-filter-btn', { active: platformFilter === 'all' }]" @click="platformFilter = 'all'">全部</button>
             <button :class="['platform-filter-btn', { active: platformFilter === 'active' }]" @click="platformFilter = 'active'">运行中</button>

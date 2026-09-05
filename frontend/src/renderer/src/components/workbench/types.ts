@@ -45,13 +45,12 @@ export interface McpStatus {
   totalTools: number
 }
 
-/** 对话模式（普通/专业·标准/专业·超长）
+/** 对话模式（普通/专业）
  * - normal: 普通模式，工具最少（任务视图操作 + 表情操控）
- * - standard: 专业模式·标准，排除细粒度浏览器自动化工具
- * - ultra: 专业模式·超长，全部工具可用，适合复杂长任务
+ * - standard: 专业模式，工作流规划，全量工具（历史 ultra 超长模式已移除）
  * 上下文隔离：切换模式需新建对话，不同模式的对话各自独立
  */
-export type ChatModeLevel = 'normal' | 'standard' | 'ultra'
+export type ChatModeLevel = 'normal' | 'standard'
 
 export interface WorkflowModeOption {
   value: ChatModeLevel

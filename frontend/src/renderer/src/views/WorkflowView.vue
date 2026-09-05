@@ -171,7 +171,7 @@ const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
           class="canvas-empty-state"
           icon="inbox"
           title="工作流画布"
-          description="在主 Agent 工作台开启标准或超长模式后，AI 创建的执行计划将自动在此显示为流程图。"
+          description="在主 Agent 工作台开启专业模式后，AI 创建的执行计划将自动在此显示为流程图。"
           size="md"
         />
         <VueFlow

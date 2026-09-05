@@ -35,7 +35,7 @@ export const useWorkspaceConvList = (options: UseWorkspaceConvListOptions) => {
   const convSearchQuery = ref('')
   const { results: searchResults, isSearching } = useDebouncedSearch<ConversationSearchResult[]>(
     convSearchQuery,
-    (q) => chatStore.searchConversations(q),
+    (q, signal) => chatStore.searchConversations(q, undefined, signal),
     300,
   )
 

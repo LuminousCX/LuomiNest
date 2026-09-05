@@ -22,6 +22,7 @@ import {
   X,
   Volume2,
 } from 'lucide-vue-next'
+import type { ChatMode } from '../../types/workflow'
 import FileUpload from '../../components/FileUpload.vue'
 import SuggestedQuestions from '../../components/SuggestedQuestions.vue'
 import SkillsPicker from '../common/SkillsPicker.vue'
@@ -39,8 +40,8 @@ const props = defineProps<{
   hasProvider: boolean
   currentModel: string
   currentProviderLogo: ProviderLogo
-  chatMode: 'normal' | 'standard' | 'ultra'
-  chatModeOptions: { value: 'normal' | 'standard' | 'ultra'; label: string; title: string }[]
+  chatMode: ChatMode
+  chatModeOptions: { value: ChatMode; label: string; title: string }[]
   inputText: string
   canSend: boolean
   isUploading: boolean
@@ -74,7 +75,7 @@ const emit = defineEmits<{
   'update:inputText': [value: string]
   send: []
   cancel: []
-  'select-chat-mode': [value: 'normal' | 'standard' | 'ultra']
+  'select-chat-mode': [value: ChatMode]
   'clear-quote': []
   'file-preview': [file: { name: string; type?: string; content?: string }]
   'update:selectedSkillIds': [ids: string[]]
@@ -104,7 +105,7 @@ const toggleWorkflowMode = () => {
   }
 }
 
-const selectMode = (value: 'normal' | 'standard' | 'ultra') => {
+const selectMode = (value: ChatMode) => {
   emit('select-chat-mode', value)
 }
 

@@ -10,6 +10,7 @@ import {
   formatDateStr,
   cloneDate
 } from '../components/tasks/types'
+import SearchInput from '../components/common/SearchInput.vue'
 import TasksToolbar from '../components/tasks/TasksToolbar.vue'
 import TasksCardView from '../components/tasks/TasksCardView.vue'
 import TasksWeekView from '../components/tasks/TasksWeekView.vue'
@@ -550,7 +551,7 @@ const timeSlotOptions = [
       <div class="tasks-page-header__right">
         <div class="tasks-search-box">
           <Search :size="14" class="tasks-search-icon" />
-          <input v-model="searchQuery" type="text" placeholder="搜索任务..." />
+          <SearchInput v-model="searchQuery" placeholder="搜索任务..." />
         </div>
         <button class="tasks-create-btn" @click="() => openCreateModal()">
           <Plus :size="16" />

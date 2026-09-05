@@ -7,6 +7,7 @@ import LumiButton from '../common/LumiButton.vue'
  * 浏览器开发者面板。
  * - 脚本 tab：输入并执行 JavaScript，结果输出到下方
  * - DOM tab：读取当前页面的索引化 DOM 树（data-luomi-index），供快速定位元素
+ * - 源码 tab：读取当前页面 HTML（outerHTML）
  *
  * 通过 preload 暴露的 window.api.browserAutomation.execute 调用 main 进程的
  * luomiAutomationExecutor（与后端 AI 工具走同一执行器）。
@@ -15,7 +16,7 @@ import LumiButton from '../common/LumiButton.vue'
 const input = ref('')
 const output = ref('')
 const loading = ref(false)
-const mode = ref<'script' | 'dom'>('script')
+const mode = ref<'script' | 'dom' | 'html'>('script')
 
 const emit = defineEmits<{
   close: []
@@ -104,15 +105,37 @@ const formatDomTree = (node: DomTreeNode | undefined, depth: number): string => 
   return lines.join('\n')
 }
 
-// 切换到 DOM tab 时自动获取 DOM 树
+/** 读取当前页 HTML 源码 */
+const fetchHtml = async (): Promise<void> => {
+  if (loading.value) return
+  loading.value = true
+  output.value = '正在读取页面源码...'
+  try {
+    const result = await window.api?.browserAutomation?.execute('get_html', {})
+    if (result?.success) {
+      const data = result.data as { html?: string } | undefined
+      output.value = truncate(typeof data?.html === 'string' ? data.html : JSON.stringify(data, null, 2))
+    } else {
+      output.value = `[错误] ${result?.error || '读取页面源码失败'}`
+    }
+  } catch (e: unknown) {
+    output.value = `[错误] 源码读取失败：${e instanceof Error ? e.message : String(e)}`
+  } finally {
+    loading.value = false
+  }
+}
+
+// 切换到 DOM/源码 tab 时自动获取
 watch(mode, (m) => {
   if (m === 'dom') {
     fetchDomTree()
+  } else if (m === 'html') {
+    fetchHtml()
   }
 })
 
 /** 切换 tab 模式（供父组件通过 ref 调用） */
-const switchMode = (m: 'script' | 'dom'): void => {
+const switchMode = (m: 'script' | 'dom' | 'html'): void => {
   mode.value = m
 }
 
@@ -134,6 +157,12 @@ defineExpose({ switchMode })
           @click="mode = 'dom'"
         >
           DOM
+        </button>
+        <button
+          :class="['dev-tab', { active: mode === 'html' }]"
+          @click="mode = 'html'"
+        >
+          源码
         </button>
       </div>
       <div class="dev-actions">
@@ -162,10 +191,10 @@ defineExpose({ switchMode })
       <div class="dev-input-area">
         <textarea
           v-model="input"
-          :placeholder="mode === 'script' ? '输入 JavaScript 代码...' : 'DOM 内容将显示在这里'"
+          :placeholder="mode === 'script' ? '输入 JavaScript 代码...' : mode === 'html' ? '页面源码将显示在这里' : 'DOM 内容将显示在这里'"
           class="dev-input"
-          :readonly="mode === 'dom'"
-          :class="{ 'is-readonly': mode === 'dom' }"
+          :readonly="mode !== 'script'"
+          :class="{ 'is-readonly': mode !== 'script' }"
         ></textarea>
         <LumiButton
           v-if="mode === 'script'"

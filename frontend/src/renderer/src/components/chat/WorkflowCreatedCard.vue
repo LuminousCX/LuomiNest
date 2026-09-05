@@ -3,7 +3,7 @@
  * 工作流创建卡片
  *
  * 在对话气泡中显示"已创建工作流"字样，可点击跳转到工作流页面。
- * 当 AI 在标准/超长模式下创建工作流计划时，此卡片会出现在助手消息中。
+ * 当 AI 在专业模式下创建工作流计划时，此卡片会出现在助手消息中。
  */
 import { Workflow, ChevronRight, ListChecks } from 'lucide-vue-next'
 
