@@ -77,6 +77,10 @@ const clear = () => {
   emit('update:modelValue', props.type === 'number' || props.modelModifiers?.number ? null : '')
   inputRef.value?.focus()
 }
+
+defineExpose({
+  focus: () => inputRef.value?.focus(),
+})
 </script>
 
 <template>

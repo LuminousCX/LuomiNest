@@ -18,6 +18,8 @@ import {
 } from 'lucide-vue-next'
 import type { LuomiNestTask, TaskPriority, TaskStatus } from './types'
 import { formatDateStr } from './types'
+import LumiModal from '../common/LumiModal.vue'
+import LumiButton from '../common/LumiButton.vue'
 
 interface SelectOption<T extends string> {
   value: T
@@ -119,21 +121,19 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="luomi-modal">
-      <div v-if="visible" class="luomi-modal-overlay" @click.self="closeModal">
-        <div class="luomi-modal">
-          <div class="luomi-modal-header">
-            <h2 class="luomi-modal-title">
-              <component :is="modalIcon" :size="18" />
-              {{ modalTitle }}
-            </h2>
-            <button class="luomi-modal-close" @click="closeModal">
-              <X :size="18" />
-            </button>
-          </div>
+  <LumiModal
+    :visible="visible"
+    :width="520"
+    @update:visible="emit('update:visible', $event)"
+  >
+    <template #title>
+      <span class="luomi-modal-title">
+        <component :is="modalIcon" :size="18" />
+        {{ modalTitle }}
+      </span>
+    </template>
 
-          <div class="luomi-modal-body custom-scrollbar--thin">
+    <div class="luomi-form-stack">
             <div class="luomi-form-group">
               <label class="luomi-form-label">
                 <Type :size="13" />
@@ -272,56 +272,30 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
             </div>
           </div>
 
-          <div class="luomi-modal-footer">
-            <button class="luomi-btn luomi-btn-ghost" @click="closeModal">
-              <RotateCcw v-if="mode === 'create'" :size="14" />
-              取消
-            </button>
-            <button
-              v-if="mode === 'edit'"
-              class="luomi-btn luomi-btn-danger"
-              @click="handleDelete"
-            >
-              <Trash2 :size="14" />
-              删除
-            </button>
-            <button class="luomi-btn luomi-btn-primary" @click="handleSave" :disabled="!draft.title.trim()">
-              <Save :size="14" />
-              {{ submitLabel }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
+    <template #footer>
+      <LumiButton variant="secondary" size="sm" @click="closeModal">
+        <template #icon>
+          <RotateCcw v-if="mode === 'create'" :size="14" />
+        </template>
+        取消
+      </LumiButton>
+      <LumiButton v-if="mode === 'edit'" variant="danger" size="sm" @click="handleDelete">
+        <template #icon>
+          <Trash2 :size="14" />
+        </template>
+        删除
+      </LumiButton>
+      <LumiButton variant="primary" size="sm" :disabled="!draft.title.trim()" @click="handleSave">
+        <template #icon>
+          <Save :size="14" />
+        </template>
+        {{ submitLabel }}
+      </LumiButton>
+    </template>
+  </LumiModal>
 </template>
 
 <style scoped>
-.luomi-modal-overlay {
-  background: var(--overlay-backdrop);
-  backdrop-filter: var(--glass-blur);
-}
-
-.luomi-modal {
-  width: 520px;
-  max-height: 85vh;
-  background: var(--surface);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.luomi-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-5) var(--space-6) var(--space-4);
-  border-bottom: 1px solid var(--workspace-border);
-}
-
 .luomi-modal-title {
   display: flex;
   align-items: center;
@@ -331,40 +305,10 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
   color: var(--text-primary);
 }
 
-.luomi-modal-close {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.luomi-modal-close:hover {
-  background: var(--workspace-hover);
-  color: var(--text-primary);
-}
-
-.luomi-modal-body {
-  padding: var(--space-5) var(--space-6);
-  overflow-y: auto;
+.luomi-form-stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-}
-
-.luomi-modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-6);
-  border-top: 1px solid var(--workspace-border);
 }
 
 .luomi-form-group {
@@ -622,79 +566,6 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
   border: 2px solid var(--surface);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-}
-
-.luomi-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  font-weight: 600;
-  border: 1px solid var(--workspace-border);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  font-family: inherit;
-}
-
-.luomi-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.luomi-btn-ghost {
-  background: var(--workspace-bg);
-  color: var(--text-secondary);
-}
-
-.luomi-btn-ghost:hover:not(:disabled) {
-  background: var(--workspace-hover);
-}
-
-.luomi-btn-primary {
-  background: var(--lumi-brand);
-  border-color: var(--lumi-brand);
-  color: var(--text-inverse);
-}
-
-.luomi-btn-primary:hover:not(:disabled) {
-  background: var(--lumi-brand-hover);
-}
-
-.luomi-btn-danger {
-  background: var(--task-red-soft);
-  border-color: var(--task-red);
-  color: var(--task-red);
-}
-
-.luomi-btn-danger:hover:not(:disabled) {
-  background: var(--task-red);
-  color: var(--text-inverse);
-}
-
-.luomi-modal-enter-active {
-  transition: all var(--duration-normal) var(--ease-in-out);
-}
-
-.luomi-modal-leave-active {
-  transition: all var(--duration-leave) var(--ease-in-out);
-}
-
-.luomi-modal-enter-from {
-  opacity: 0;
-}
-
-.luomi-modal-enter-from .luomi-modal {
-  transform: scale(0.95) translateY(10px);
-}
-
-.luomi-modal-leave-to {
-  opacity: 0;
-}
-
-.luomi-modal-leave-to .luomi-modal {
-  transform: scale(0.95) translateY(10px);
 }
 
 </style>

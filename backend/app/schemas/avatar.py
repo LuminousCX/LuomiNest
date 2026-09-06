@@ -17,6 +17,8 @@ from __future__ import annotations
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 
+from app.core.constants.voice import DEFAULT_EDGE_VOICE
+
 
 # ---------------------------------------------------------------------------
 # 模型能力声明
@@ -48,7 +50,7 @@ class AvatarBinding(BaseModel):
     expression_map 把 12 个语义 emotion ID 映射到当前模型的原生表情名。
     前后端共享同一份 manifest，消除历史前后端 binding 不一致问题。
     """
-    voice: str = Field("zh-CN-XiaoxiaoNeural", description="TTS 语音 ID")
+    voice: str = Field(DEFAULT_EDGE_VOICE, description="TTS 语音 ID")
     voice_lang: str = Field("zh", description="语音语言代码")
     expression_map: dict[str, str] = Field(default_factory=dict, description="emotion → expression 映射")
     default_expression: str = Field("neutral", description="默认表情")

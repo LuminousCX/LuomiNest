@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref } from 'vue'
 import {
   Bot,
   Users,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-vue-next'
 import { useAgentStore } from '../../stores/agent'
 import type { GroupInfo, GroupMessage, CollaborationPhase, CollaborationSubTask, AgentProfile } from '../../types'
+import { useAutoScroll } from '../../composables/useAutoScroll'
 
 const agentStore = useAgentStore()
 
@@ -110,17 +111,11 @@ const getTaskStatusClass = (status: string) => {
   }
 }
 
-const scrollToBottom = () => {
-  if (groupMessagesContainer.value) {
-    groupMessagesContainer.value.scrollTo({ top: groupMessagesContainer.value.scrollHeight, behavior: 'smooth' })
-  }
-}
-
-watch(() => props.messages, () => {
-  nextTick(() => {
-    scrollToBottom()
-  })
-}, { deep: true })
+const { scrollToBottom } = useAutoScroll(
+  groupMessagesContainer,
+  () => props.messages,
+  { deep: true, smooth: true }
+)
 
 defineExpose({ scrollToBottom })
 </script>
@@ -677,12 +672,6 @@ defineExpose({ scrollToBottom })
   cursor: not-allowed;
 }
 
-.spin-animation {
-  animation: luominest-spin 1s linear infinite;
-}
 
-@keyframes luominest-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+
 </style>

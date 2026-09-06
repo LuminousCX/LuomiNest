@@ -64,11 +64,7 @@ const removeHistory = (text: string, e: Event) => {
         @focus="onFocus"
         @blur="onBlur"
         @enter="handleSubmit"
-      >
-        <template #icon>
-          <Search :size="16" />
-        </template>
-      </LumiInput>
+      />
     </div>
 
     <Transition name="suggestions">

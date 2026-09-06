@@ -15,6 +15,7 @@ from typing import Any
 from loguru import logger
 
 from app.core.tools.registry import ToolBase, ToolResult
+from app.core.utils import utc_now_dt
 
 # 沙盒异常类型
 from app.security.sandbox import (
@@ -75,7 +76,7 @@ def _record_command(
     try:
         from app.api.v1.endpoints.console import CommandRecord, _add_command
 
-        now = datetime.now(timezone.utc)
+        now = utc_now_dt()
         record = CommandRecord(
             id=str(uuid.uuid4())[:8],
             command=command,

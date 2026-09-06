@@ -5,13 +5,14 @@ from loguru import logger
 
 from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
 from app.runtime.platform.adapters.wechat_crypto import LuomiNestWeChatCrypto
+from app.runtime.platform.infrastructure.token_manager import AppTokenMixin
 
 # 用户信息缓存：{openid: (nickname, expire_timestamp)}
 _user_info_cache: dict[str, tuple[str, float]] = {}
 _USER_INFO_TTL = 300  # 5 分钟
 
 
-class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
+class LuomiNestWeChatMPAdapter(AppTokenMixin, BasePlatformAdapter):
     """微信公众号适配器：通过公众号 API 收发消息。
 
     工作流程：
@@ -30,6 +31,9 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
     """
 
     platform_name = "wechat_mp"
+
+    # Token 相关日志前缀（AppTokenMixin）
+    token_log_prefix = "[WeChatMP]"
 
     API_BASE = "https://api.weixin.qq.com/cgi-bin"
 
@@ -83,32 +87,57 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
                 url=response.extra.get("template_url", ""),
             )
 
+        payload: dict[str, Any] = {
+            "touser": target,
+            "msgtype": "text",
+            "text": {"content": response.content},
+        }
+        return await self._post_api(
+            "/message/custom/send",
+            payload,
+            success_log=f"[WeChatMP] Sent message to {target}: {response.content[:50]}",
+            action="Send",
+        )
+
+    async def _post_api(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        success_log: str,
+        action: str,
+    ) -> bool:
+        """POST 公众号 API：取 token → 拼 access_token URL → post → errcode==0 判断 → 三段日志.
+
+        Args:
+            path: API 路径（如 /message/custom/send）
+            payload: 请求 JSON 体
+            success_log: errcode==0 时记录的 info 日志（完整文案）
+            action: 失败/异常日志中的动作标识（如 "Send" / "Template message"）
+        """
         token = await self._ensure_access_token()
         if not token:
             return False
 
         import httpx
 
-        url = f"{self.API_BASE}/message/custom/send?access_token={token}"
-        payload: dict[str, Any] = {
-            "touser": target,
-            "msgtype": "text",
-            "text": {"content": response.content},
-        }
+        from app.core.config import settings
+
+        url = f"{self.API_BASE}{path}?access_token={token}"
 
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with httpx.AsyncClient(timeout=settings.PLATFORM_HTTP_TIMEOUT) as client:
                 resp = await client.post(url, json=payload)
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get("errcode") == 0:
-                        logger.info(f"[WeChatMP] Sent message to {target}: {response.content[:50]}")
+                        logger.info(success_log)
                         return True
-                    logger.error(f"[WeChatMP] Send failed: {data.get('errmsg')}")
+                    logger.error(f"[WeChatMP] {action} failed: {data.get('errmsg')}")
                     return False
                 return False
         except Exception as e:
-            logger.error(f"[WeChatMP] Send exception: {e}")
+            logger.error(f"[WeChatMP] {action} exception: {e}")
             return False
 
     async def send_template_message(
@@ -126,13 +155,6 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
             data: 模板数据，格式如 {"first": {"value": "xxx", "color": "#173177"}}
             url: 点击模板消息跳转的链接（可选）
         """
-        token = await self._ensure_access_token()
-        if not token:
-            return False
-
-        import httpx
-
-        api_url = f"{self.API_BASE}/message/template/send?access_token={token}"
         payload: dict[str, Any] = {
             "touser": openid,
             "template_id": template_id,
@@ -141,20 +163,12 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
         if url:
             payload["url"] = url
 
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.post(api_url, json=payload)
-                if resp.status_code == 200:
-                    result = resp.json()
-                    if result.get("errcode") == 0:
-                        logger.info(f"[WeChatMP] Template message sent to {openid}, template={template_id}")
-                        return True
-                    logger.error(f"[WeChatMP] Template message failed: {result.get('errmsg')}")
-                    return False
-                return False
-        except Exception as e:
-            logger.error(f"[WeChatMP] Template message exception: {e}")
-            return False
+        return await self._post_api(
+            "/message/template/send",
+            payload,
+            success_log=f"[WeChatMP] Template message sent to {openid}, template={template_id}",
+            action="Template message",
+        )
 
     async def verify_url(self, signature: str, timestamp: str, nonce: str, echostr: str) -> str | None:
         """验证服务器地址有效性（公众号 GET 请求）。"""
@@ -230,6 +244,9 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
             logger.info(f"[WeChatMP] User subscribed: {from_user}")
             # 发送欢迎消息
             import httpx
+
+            from app.core.config import settings
+
             token = await self._ensure_access_token()
             if token:
                 url = f"{self.API_BASE}/message/custom/send?access_token={token}"
@@ -239,7 +256,7 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
                     "text": {"content": self._welcome_message},
                 }
                 try:
-                    async with httpx.AsyncClient(timeout=15) as client:
+                    async with httpx.AsyncClient(timeout=settings.PLATFORM_HTTP_TIMEOUT) as client:
                         await client.post(url, json=payload)
                 except Exception as e:
                     logger.error(f"[WeChatMP] Welcome message failed: {e}")
@@ -371,34 +388,21 @@ class LuomiNestWeChatMPAdapter(BasePlatformAdapter):
         if response and response.content:
             await self.send_message(response, from_user)
 
-    async def _refresh_access_token(self) -> bool:
+    # Token 管理（缓存/刷新骨架见 AppTokenMixin）
+
+    async def _fetch_token(self) -> tuple[str, int] | None:
         import httpx
+
+        from app.core.config import settings
 
         url = f"{self.API_BASE}/token?grant_type=client_credential&appid={self._app_id}&secret={self._app_secret}"
 
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.get(url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if "access_token" in data:
-                        self._access_token = data.get("access_token", "")
-                        expires_in = int(data.get("expires_in", 7200))
-                        self._token_expires = time.time() + expires_in - 300
-                        logger.info(f"[WeChatMP] Access token refreshed, expires in {expires_in}s")
-                        return True
-                    logger.error(f"[WeChatMP] Token refresh failed: {data.get('errmsg')}")
-                    return False
-                return False
-        except Exception as e:
-            logger.error(f"[WeChatMP] Token refresh exception: {e}")
-            return False
-
-    async def _ensure_access_token(self) -> str:
-        if self._access_token and time.time() < self._token_expires:
-            return self._access_token
-        async with self._token_lock:
-            if self._access_token and time.time() < self._token_expires:
-                return self._access_token
-            await self._refresh_access_token()
-            return self._access_token
+        async with httpx.AsyncClient(timeout=settings.PLATFORM_HTTP_TIMEOUT) as client:
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                if "access_token" in data:
+                    return data.get("access_token", ""), int(data.get("expires_in", 7200))
+                logger.error(f"[WeChatMP] Token refresh failed: {data.get('errmsg')}")
+                return None
+            return None

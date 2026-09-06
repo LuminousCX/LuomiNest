@@ -33,7 +33,8 @@ from app.schemas.avatar import (
 # ---------------------------------------------------------------------------
 
 # builtin manifest 是只读静态资源，跟随代码包发布（开发态位于 backend/app/data/）
-# 打包态不打包此文件，前端从 resources/live2d 直接加载内置模型，builtin manifest 仅用于开发态测试
+# 打包态由 luominest-backend.spec 一并打入 app/data/（工坊 UI 以 manifest 为单一真相源，
+# 缺此文件会导致打包版内置模型全部不可见）
 _BUILTIN_MANIFEST_PATH = Path(__file__).resolve().parent.parent / "data" / "avatar-manifest.json"
 # imported manifest 是用户可写数据，必须存放在 DATA_DIR 下：
 # - 开发态：backend/data/avatar/imported-manifest.json
@@ -84,8 +85,7 @@ class AvatarManifestManager:
 
     def _load_builtin(self) -> AvatarManifest:
         if not self._builtin_path.exists():
-            # 打包态不打包 builtin manifest（前端从 resources/live2d 加载内置模型），降级为 debug 日志
-            logger.debug(f"[AvatarManifest] Builtin manifest not found: {self._builtin_path}")
+            logger.warning(f"[AvatarManifest] Builtin manifest not found: {self._builtin_path}")
             return AvatarManifest(models=[])
         try:
             raw = json.loads(self._builtin_path.read_text(encoding="utf-8"))

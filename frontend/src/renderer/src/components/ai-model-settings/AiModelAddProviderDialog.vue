@@ -2,7 +2,6 @@
 import { ref, computed, watch } from 'vue'
 import {
   Plus,
-  X,
   ArrowLeft,
   ChevronRight,
   Cloud,
@@ -15,6 +14,7 @@ import {
   Check,
   AlertCircle,
 } from 'lucide-vue-next'
+import LumiModal from '../common/LumiModal.vue'
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
 import type { NewProviderForm, TestResult } from './types'
@@ -212,22 +212,24 @@ watch(() => props.visible, (visible) => {
 </script>
 
 <template>
-  <Transition name="dialog-fade">
-    <div v-if="visible" class="dialog-overlay" @click.self="shakeDialog">
-      <div :class="['dialog', 'add-dialog', { 'shake-animation': shakingDialog }]">
-        <div class="dialog-header">
-          <div class="dialog-header-left">
-            <div class="lumi-icon-wrap lumi-icon-wrap--sm dialog-header-icon">
-              <Plus :size="18" />
-            </div>
-            <h3>添加模型供应商</h3>
-          </div>
-          <button class="dialog-close" @click="close">
-            <X :size="18" />
-          </button>
-        </div>
+  <LumiModal
+    :visible="visible"
+    :shake="shakingDialog"
+    :mask-closable="false"
+    :width="560"
+    @mask-click="shakeDialog"
+    @update:visible="emit('update:visible', $event)"
+  >
+    <template #title>
+      <span class="dialog-title">
+        <span class="lumi-icon-wrap lumi-icon-wrap--sm dialog-header-icon">
+          <Plus :size="18" />
+        </span>
+        添加模型供应商
+      </span>
+    </template>
 
-        <div v-if="addProviderError" class="form-error-banner">
+    <div v-if="addProviderError" class="form-error-banner">
           <AlertCircle :size="16" />
           <span>{{ addProviderError }}</span>
         </div>
@@ -371,18 +373,11 @@ watch(() => props.visible, (visible) => {
             </button>
           </div>
         </div>
-      </div>
-    </div>
-  </Transition>
+  </LumiModal>
 </template>
 
 <style scoped>
-.add-dialog {
-  width: 560px;
-  max-height: 85vh;
-}
-
-.dialog-header-left {
+.dialog-title {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -587,102 +582,8 @@ watch(() => props.visible, (visible) => {
   color: var(--text-primary);
 }
 
-.dialog-overlay {
-  background: var(--overlay-bg);
-  z-index: 100;
-  backdrop-filter: blur(var(--space-1));
-}
-
-.dialog {
-  background: var(--workspace-card);
-  border-radius: var(--radius-xl);
-  padding: var(--space-6);
-  width: 480px;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: var(--shadow-xl);
-}
-
-.add-dialog {
-  width: 560px;
-  max-height: 85vh;
-}
-
-.dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-5);
-}
-
-.dialog-header h3 {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.dialog-close {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-normal);
-}
-
-.dialog-close:hover {
-  background: var(--workspace-hover);
-  color: var(--text-primary);
-}
-
-.dialog-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-normal);
-}
-
-.dialog-btn.cancel {
-  color: var(--text-muted);
-  background: var(--workspace-panel);
-}
-
-.dialog-btn.cancel:hover {
-  background: var(--workspace-hover);
-}
-
-.dialog-btn.confirm {
-  color: var(--text-inverse);
-  background: var(--lumi-primary);
-}
-
-.dialog-btn.confirm:hover {
-  background: var(--lumi-primary-hover);
-}
-
 .form-hint {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
   margin-top: calc(var(--space-1) * -1);
-}
-
-.form-error-banner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--lumi-accent-light);
-  color: var(--lumi-accent);
-  font-size: var(--text-base);
-  font-weight: 500;
 }
 
 .form-select-wrap {
@@ -715,26 +616,6 @@ watch(() => props.visible, (visible) => {
   color: var(--text-muted);
   pointer-events: none;
   transform: rotate(90deg);
-}
-
-.form-input {
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  transition: all var(--transition-normal);
-}
-
-.form-input:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 var(--space-1) var(--lumi-primary-glow);
-}
-
-.form-input::placeholder {
-  color: var(--text-muted);
 }
 
 .input-error {
@@ -845,38 +726,5 @@ watch(() => props.visible, (visible) => {
 .template-svg-icon.small :deep(svg) {
   width: var(--space-4);
   height: var(--space-4);
-}
-
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
-
-.dialog-fade-enter-active {
-  animation: dialog-in var(--duration-slow) var(--ease-in-out);
-}
-
-.dialog-fade-leave-active {
-  animation: dialog-in var(--duration-fast) var(--ease-in-out) reverse;
-}
-
-@keyframes dialog-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.shake-animation {
-  animation: dialog-shake var(--duration-slow) var(--ease-in-out);
-}
-
-@keyframes dialog-shake {
-  0%, 100% { transform: scale(1); }
-  20% { transform: scale(1.02); }
-  40% { transform: scale(0.98); }
-  60% { transform: scale(1.01); }
-  80% { transform: scale(0.99); }
 }
 </style>

@@ -632,6 +632,9 @@ class ConversationRepository(BaseRepository):
             self.list_meta, agent_id, include_hidden, domain, exclude_domain_prefix,
         )
 
+    async def count_messages_async(self, agent_id: Optional[str] = None) -> int:
+        return await asyncio.to_thread(self.count_messages, agent_id)
+
     async def search_async(self, keyword: str, agent_id: Optional[str] = None) -> list[dict]:
         return await asyncio.to_thread(self.search, keyword, agent_id)
 

@@ -31,6 +31,7 @@ import LumiEmptyState from '../common/LumiEmptyState.vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { getFileIcon } from '../../utils/file'
 import type { ChatMessage, ProviderLogo, AgentProfile } from '../../types'
+import { useAutoResizeTextarea } from '../../composables/useAutoResizeTextarea'
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -83,6 +84,7 @@ const emit = defineEmits<{
 
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const { autoResize, resetTextareaHeight } = useAutoResizeTextarea(textareaRef)
 const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
 const reasoningScrollRefs = ref<HTMLElement | HTMLElement[] | null>(null)
 const isNearBottom = ref(true)
@@ -152,19 +154,6 @@ const handleMessagesScroll = () => {
   const distanceFromBottom = scrollHeight - scrollTop - clientHeight
   isNearBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
   showScrollToBottomBtn.value = !isNearBottom.value && props.messages.length > 0
-}
-
-const resetTextareaHeight = () => {
-  if (textareaRef.value) {
-    textareaRef.value.style.height = 'auto'
-  }
-}
-
-const autoResize = () => {
-  if (textareaRef.value) {
-    textareaRef.value.style.height = 'auto'
-    textareaRef.value.style.height = `${Math.min(textareaRef.value.scrollHeight, 120)}px`
-  }
 }
 
 const focusTextarea = () => {
@@ -1689,14 +1678,8 @@ defineExpose({
   transform: translateY(16px) scale(0.97);
 }
 
-.spin-animation {
-  animation: luominest-spin 1s linear infinite;
-}
 
-@keyframes luominest-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+
 
 .provider-icon-mini {
   width: 18px;

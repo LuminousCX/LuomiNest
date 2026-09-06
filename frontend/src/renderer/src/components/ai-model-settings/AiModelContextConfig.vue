@@ -853,14 +853,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
   background: var(--lumi-accent);
 }
 
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+
 
 .empty-state {
   display: flex;

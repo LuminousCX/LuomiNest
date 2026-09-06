@@ -15,6 +15,7 @@ import PlatformConversationPanel from '../../components/platform/PlatformConvers
 import PlatformAddDialog from '../../components/platform/PlatformAddDialog.vue'
 import PlatformConfigDialog from '../../components/platform/PlatformConfigDialog.vue'
 import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
+import { formatShortDateTime } from '../../utils/format'
 
 const store = usePlatformStore()
 
@@ -65,18 +66,7 @@ const handleCreateConversation = async () => {
   }
 }
 
-const formatMessageTime = (ts: string) => {
-  if (!ts) return ''
-  try {
-    const d = new Date(ts)
-    return d.toLocaleString('zh-CN', {
-      month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
-    })
-  } catch {
-    return ts
-  }
-}
+const formatMessageTime = (ts: string) => (ts ? formatShortDateTime(ts) : '')
 
 onMounted(() => {
   store.refreshAll()

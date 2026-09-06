@@ -13,6 +13,7 @@ import {
 import LumiButton from '../common/LumiButton.vue'
 import SearchInput from '../common/SearchInput.vue'
 import { highlightSnippet } from '../../utils/highlight'
+import { formatDateCalendar } from '../../utils/format'
 import type { ConversationSearchResult } from '../../types'
 import type { TimeGroup } from './types'
 
@@ -51,8 +52,6 @@ const renamingTitleModel = computed<string>({
   set: (value) => emit('update:renamingTitle', value),
 })
 
-const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-
 const MODE_LABELS: Record<string, string> = {
   normal: '普通',
   standard: '专业',
@@ -63,20 +62,7 @@ const modeLabel = (chatMode?: string): string => {
   return MODE_LABELS[chatMode] || ''
 }
 
-const formatTime = (dateStr: string) => {
-  const d = new Date(dateStr)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
-  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-
-  if (diffDays <= 0) return time
-  if (diffDays === 1) return `昨天 ${time}`
-  if (diffDays <= 7) return `${WEEKDAYS[d.getDay()]} ${time}`
-  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
-}
+const formatTime = (dateStr: string) => formatDateCalendar(dateStr)
 
 const snippetHtml = (snippet: string): string =>
   highlightSnippet(snippet, props.searchQuery)

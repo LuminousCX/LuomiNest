@@ -474,9 +474,6 @@ const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
   flex-shrink: 0;
 }
 
-.spin-animation {
-  animation: spin 1.2s linear infinite;
-}
 
 /* 节点详情面板过渡 */
 .panel-slide-right-enter-active,

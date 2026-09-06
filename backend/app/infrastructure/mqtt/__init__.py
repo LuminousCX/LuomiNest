@@ -1,8 +1,7 @@
-"""MQTT 基础设施 — 客户端、发布助手与 Topic 规范。
+"""MQTT 基础设施 — 客户端与 Topic 规范。
 
 模块结构：
 - ``client.py``       LuomiNestMqttClient（paho-mqtt 异步封装，自动重连）
-- ``publisher.py``    mqtt_publish / publish_device_command 等业务发布入口
 - ``topic_manager.py``  统一 topic 前缀（luominest/）与构造/解析
 
 全局共享客户端通过 ``get_mqtt_client()`` 懒初始化（读取 settings

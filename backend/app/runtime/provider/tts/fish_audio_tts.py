@@ -9,7 +9,9 @@ import re
 import httpx
 from loguru import logger
 
+from app.core.config import settings
 from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.tts._http import post_json_for_audio
 from app.runtime.provider.tts.ports import TTSProvider
 
 
@@ -87,26 +89,22 @@ class FishAudioTTSProvider(TTSProvider):
         }
 
         # 统一超时治理（应急修复 B3）：硬编码 → Settings.TTS_HTTP_TIMEOUT
-        from app.core.config import settings as _settings
-
-        async with httpx.AsyncClient(timeout=_settings.TTS_HTTP_TIMEOUT) as client:
-            response = await client.post(
+        # 成功要求 200 + audio/* 响应；非 200 的 HTTPStatusError 转换回原有错误文案
+        try:
+            audio_bytes = await post_json_for_audio(
                 f"{self.base_url}/tts",
-                json=payload,
-                headers=headers,
+                payload,
+                headers,
+                settings.TTS_HTTP_TIMEOUT,
+                error_prefix="Fish Audio",
+                require_content_type="audio/",
+                empty_error="Fish Audio TTS 返回空音频数据",
             )
-
-            content_type = response.headers.get("content-type", "")
-            if response.status_code == 200 and content_type.startswith("audio/"):
-                audio_bytes = response.content
-            else:
-                error_text = response.text[:1024]
-                raise RuntimeError(
-                    f"Fish Audio API 请求失败: 状态码 {response.status_code}, 响应: {error_text}"
-                )
-
-        if not audio_bytes:
-            raise RuntimeError("Fish Audio TTS 返回空音频数据")
+        except httpx.HTTPStatusError as e:
+            error_text = e.response.text[:1024]
+            raise RuntimeError(
+                f"Fish Audio API 请求失败: 状态码 {e.response.status_code}, 响应: {error_text}"
+            ) from e
 
         logger.info(f"[FishAudioTTS] synthesized: {text[:60]}... (ref_id={ref_id})")
         return audio_bytes
@@ -119,9 +117,7 @@ class FishAudioTTSProvider(TTSProvider):
         base = self.base_url.replace("/v1", "")
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
-        from app.core.config import settings as _settings
-
-        async with httpx.AsyncClient(timeout=_settings.TTS_HTTP_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=settings.TTS_HTTP_TIMEOUT) as client:
             for sort_by in ["score", "task_count", "created_at"]:
                 params = {"title": character, "sort_by": sort_by}
                 response = await client.get(

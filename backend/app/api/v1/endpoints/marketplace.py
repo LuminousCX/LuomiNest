@@ -23,10 +23,14 @@ from app.infrastructure.install.install_service import (
     get_installed_item,
     is_installed,
     get_download_status,
+    get_download,
+    register_download,
+    update_download_state,
     get_all_install_status,
     get_installed_records_resolved,
 )
 from app.api.v1.deps import get_marketplace_stats_store
+from app.core.utils import ok
 from app.core.constants.colors import TAG_COLOR_MUTED
 from app.data.marketplace_catalog import (
     get_catalog_by_type,
@@ -416,11 +420,7 @@ async def _do_install(req: InstallRequest):
     except Exception as e:
         logger.error(f"[MarketplaceAPI] Install failed for {req.itemId}: {e}")
         # 更新任务状态为失败，防止进度轮询永久返回 queued
-        from app.infrastructure.install.install_service import _active_downloads
-        if req.itemId in _active_downloads:
-            _active_downloads[req.itemId]["status"] = "error"
-            _active_downloads[req.itemId]["message"] = str(e)
-            _active_downloads[req.itemId]["error"] = str(e)
+        update_download_state(req.itemId, status="error", message=str(e), error=str(e))
 
 
 @router.post("/install")
@@ -439,26 +439,16 @@ async def install_marketplace_item(req: InstallRequest, background_tasks: Backgr
         return current
 
     # 原子标记为排队中，防止并发请求创建重复后台任务
-    from app.infrastructure.install.install_service import _active_downloads
-    if req.itemId in _active_downloads:
-        return _active_downloads[req.itemId]
-    _active_downloads[req.itemId] = {
-        "itemId": req.itemId,
-        "status": "queued",
-        "progress": 0,
-        "message": "排队等待中...",
-        "speed": 0,
-        "eta": 0,
-        "downloadedBytes": 0,
-        "totalBytes": 0,
-        "startTime": __import__("time").time(),
-    }
+    existing = get_download(req.itemId)
+    if existing is not None:
+        return existing
+    state = register_download(req.itemId)
 
     # 在后台启动下载安装任务
     background_tasks.add_task(_do_install, req)
 
     # 立即返回初始状态
-    return _active_downloads[req.itemId]
+    return state
 
 
 @router.post("/uninstall")
@@ -467,7 +457,7 @@ async def uninstall_marketplace_item(req: UninstallRequest):
     result = await uninstall_item(req.itemId)
     if not result.get("success"):
         raise NotFoundError(result.get("error", "卸载失败"), code="MARKETPLACE_UNINSTALL_FAILED")
-    return {"code": 0, "message": "ok", "error": None, "data": result}
+    return ok(result)
 
 
 @router.get("/install-status")

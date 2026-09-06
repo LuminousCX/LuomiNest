@@ -1493,14 +1493,8 @@ watch(period, () => { loadData() })
   color: var(--text-muted);
 }
 
-.spin-animation {
-  animation: spin 0.8s linear infinite;
-}
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+
 
 @media (max-width: 1200px) {
   .main-content {

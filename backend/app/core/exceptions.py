@@ -132,24 +132,3 @@ class VoiceConfigError(LuomiNestError):
 
     def __init__(self, message: str = "语音配置无效"):
         super().__init__(message, "VOICE_CONFIG_INVALID", 422)
-
-
-def register_exception_handlers(app) -> None:
-    """注册统一异常处理器（保留入口，主流程已由 app_factory.py 内联注册）。
-
-    响应格式: {"code": 1, "message": "...", "error": {"code", "message"}, "data": None}
-    """
-    from fastapi import Request
-    from fastapi.responses import JSONResponse
-
-    @app.exception_handler(LuomiNestError)
-    async def luominest_error_handler(request: Request, exc: LuomiNestError):
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "code": 1,
-                "message": exc.message,
-                "error": {"code": exc.code, "message": exc.message},
-                "data": None,
-            },
-        )

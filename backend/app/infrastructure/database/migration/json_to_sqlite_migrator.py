@@ -78,6 +78,16 @@ def _read_json_file(path: str):
         return None
 
 
+def _store_path(filename: str) -> str:
+    """data/store/ 下的旧 JSON 文件路径。"""
+    return os.path.join(settings.DATA_DIR, "store", filename)
+
+
+def _data_path(*parts: str) -> str:
+    """DATA_DIR 下任意旧 JSON 文件路径。"""
+    return os.path.join(settings.DATA_DIR, *parts)
+
+
 # ──────────────────────────────────────────────────────────────────
 # 通用 JsonStore 格式迁移（dict[pk, value]）
 # ──────────────────────────────────────────────────────────────────
@@ -91,7 +101,7 @@ def _migrate_json_store_source(source: str, filename: str, store) -> int:
         logger.debug(f"[Migration] {source} already migrated, skipping")
         return 0
 
-    path = os.path.join(settings.DATA_DIR, "store", filename)
+    path = _store_path(filename)
     data = _read_json_file(path)
     if data is None:
         _mark_migrated(source, 0)
@@ -142,7 +152,7 @@ def _migrate_marketplace_stats() -> int:
     if _is_migrated("marketplace_stats"):
         return 0
 
-    path = os.path.join(settings.DATA_DIR, "store", "marketplace_stats.json")
+    path = _store_path("marketplace_stats.json")
     data = _read_json_file(path)
     if data is None:
         _mark_migrated("marketplace_stats", 0)
@@ -179,7 +189,7 @@ def _migrate_usage_records() -> int:
     if _is_migrated("usage_records"):
         return 0
 
-    path = os.path.join(settings.DATA_DIR, "store", "usage_records.json")
+    path = _store_path("usage_records.json")
     data = _read_json_file(path)
     if data is None:
         _mark_migrated("usage_records", 0)
@@ -203,7 +213,7 @@ def _migrate_user_config() -> int:
     if _is_migrated("user_config"):
         return 0
 
-    path = os.path.join(settings.DATA_DIR, "config", "user_config.json")
+    path = _data_path("config", "user_config.json")
     data = _read_json_file(path)
     if data is None:
         _mark_migrated("user_config", 0)
@@ -227,7 +237,7 @@ def _migrate_main_agent() -> int:
     if _is_migrated("main_agent"):
         return 0
 
-    path = os.path.join(settings.DATA_DIR, "main_agent.json")
+    path = _data_path("main_agent.json")
     data = _read_json_file(path)
     if data is None:
         _mark_migrated("main_agent", 0)
@@ -251,7 +261,7 @@ def _migrate_model_config() -> int:
     if _is_migrated("model_config"):
         return 0
 
-    path = os.path.join(settings.DATA_DIR, "model_config.json")
+    path = _data_path("model_config.json")
     data = _read_json_file(path)
     if data is None:
         _mark_migrated("model_config", 0)
@@ -283,7 +293,7 @@ def _migrate_conversations() -> int:
     all_convs: dict[str, dict] = {}
 
     # 来源 1：store/conversations.json（合并 dict）
-    merged_path = os.path.join(settings.DATA_DIR, "store", "conversations.json")
+    merged_path = _store_path("conversations.json")
     merged_data = _read_json_file(merged_path)
     if isinstance(merged_data, dict):
         for conv_id, conv in merged_data.items():
@@ -291,7 +301,7 @@ def _migrate_conversations() -> int:
                 all_convs[conv_id] = conv
 
     # 来源 2：conversations/{conv_id}.json（per-file）
-    conv_dir = os.path.join(settings.DATA_DIR, "conversations")
+    conv_dir = _data_path("conversations")
     if os.path.isdir(conv_dir):
         for filename in os.listdir(conv_dir):
             if not filename.endswith(".json") or filename == "_index.json":
@@ -470,7 +480,7 @@ def _migrate_agents_json_file() -> int:
 
     from app.infrastructure.database.models.agent import Agent
 
-    path = os.path.join(settings.DATA_DIR, "store", "agents.json")
+    path = _store_path("agents.json")
     data = _read_json_file(path)
     if not data or not isinstance(data, dict):
         _mark_migrated("agents_json_file", 0)
@@ -525,7 +535,7 @@ def _migrate_scheduled_tasks() -> int:
 
     from app.infrastructure.database.models.scheduled_task import ScheduledTaskORM
 
-    path = os.path.join(settings.DATA_DIR, "scheduled_tasks.json")
+    path = _data_path("scheduled_tasks.json")
     data = _read_json_file(path)
     if not data or not isinstance(data, dict):
         _mark_migrated("scheduled_tasks", 0)
@@ -746,7 +756,7 @@ def _migrate_plugin_states() -> int:
     if _is_migrated("plugin_states"):
         return 0
 
-    path = os.path.join(settings.DATA_DIR, "store", "cx_plugin_states.json")
+    path = _store_path("cx_plugin_states.json")
     data = _read_json_file(path)
     if data is None:
         _mark_migrated("plugin_states", 0)
@@ -775,7 +785,7 @@ def _migrate_skill_disabled() -> int:
     if _is_migrated("skill_disabled"):
         return 0
 
-    path = os.path.join(settings.DATA_DIR, "store", "cx_skill_disabled.json")
+    path = _store_path("cx_skill_disabled.json")
     data = _read_json_file(path)
     if data is None:
         _mark_migrated("skill_disabled", 0)

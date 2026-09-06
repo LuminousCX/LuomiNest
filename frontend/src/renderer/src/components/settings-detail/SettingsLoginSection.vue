@@ -385,12 +385,9 @@ onMounted(() => {
 
 .auth-loading__spinner {
   color: var(--lumi-primary);
-  animation: lumi-spin 1s linear infinite;
+  animation: spin 1s linear infinite;
 }
 
-@keyframes lumi-spin {
-  to { transform: rotate(360deg); }
-}
 
 /* ── 用户资料卡 ── */
 .auth-profile {

@@ -69,6 +69,6 @@ const handleClick = (e: MouseEvent) => {
 
 <style scoped>
 .lumi-btn__spinner {
-  animation: lumi-spin 1s linear infinite;
+  animation: spin 1s linear infinite;
 }
 </style>

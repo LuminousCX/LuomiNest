@@ -3,11 +3,12 @@
 定义定时任务的配置、状态与事件结构。
 任务类型支持：一次性定时、cron 表达式、间隔执行。
 """
-from datetime import datetime
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from app.core.utils import utc_now
 
 
 class LuomiTaskType(str, Enum):
@@ -75,5 +76,5 @@ class TaskEvent(BaseModel):
     message: str = ""
     result: str | None = None
     error: str | None = None
-    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+    timestamp: str = Field(default_factory=utc_now)
     payload: dict[str, Any] = Field(default_factory=dict)

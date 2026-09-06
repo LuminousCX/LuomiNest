@@ -14,7 +14,7 @@ from app.runtime.provider.tts.ports import TTSProvider
 TTS_FALLBACK_ORDER = ["edge-tts", "sherpa-onnx", "local"]
 
 
-class LuminousChenXiTTSRegistry:
+class LuomiNestTTSRegistry:
     """TTS 引擎注册表（单例）.
 
     管理所有 TTS 引擎的注册、查询和降级选择.
@@ -158,3 +158,7 @@ class LuminousChenXiTTSRegistry:
             f"所有 TTS 引擎均不可用: {'; '.join(errors)}. "
             f"请安装 edge-tts / sherpa-onnx / pyttsx3 中的至少一个，或配置云端引擎 API Key"
         )
+
+
+# 旧品牌类名别名（LuminousChenXi → LuomiNest），防止外部引用断裂
+LuminousChenXiTTSRegistry = LuomiNestTTSRegistry

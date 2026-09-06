@@ -152,9 +152,6 @@ defineEmits<{
   font-weight: 500;
 }
 
-.spin-animation {
-  animation: spin 1.2s linear infinite;
-}
 
 button:focus-visible {
   outline: none;

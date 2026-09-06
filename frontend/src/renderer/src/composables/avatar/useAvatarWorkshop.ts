@@ -47,6 +47,29 @@ const logger = createLuomiNestRendererLogger('AvatarWorkshop')
 const DEFAULT_MODE: AvatarRendererType = 'live2d'
 const DEFAULT_LIVE2D_MODEL_ID = 'builtin-live2d-llny'
 
+// 内置模型隐藏偏好：纯本地视图偏好（localStorage），不进入后端 manifest，
+// 桌宠窗口与 luominest-avatar:// 协议解析不受影响（仍可加载被隐藏的内置模型）
+const HIDDEN_BUILTIN_STORAGE_KEY = 'luominest.avatar.hidden-builtin-models'
+
+function loadHiddenBuiltinIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(HIDDEN_BUILTIN_STORAGE_KEY)
+    if (!raw) return new Set()
+    const parsed: unknown = JSON.parse(raw)
+    return new Set(Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function persistHiddenBuiltinIds(ids: Set<string>): void {
+  try {
+    localStorage.setItem(HIDDEN_BUILTIN_STORAGE_KEY, JSON.stringify([...ids]))
+  } catch {
+    // 持久化失败仅影响下次启动的记忆，不影响本次会话
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Composable
 // ---------------------------------------------------------------------------
@@ -89,6 +112,13 @@ export function useAvatarWorkshop() {
   /** 通过 Electron IPC 管理的本地导入模型（与 manifest 中的 imported 模型对应） */
   const importedModels = ref<PetModelInfo[]>([])
 
+  /** 被隐藏的内置模型 ID（本地偏好，工坊列表不显示，可随时恢复） */
+  const hiddenBuiltinIds = ref<Set<string>>(loadHiddenBuiltinIds())
+
+  /** 模型对工坊列表是否可见：imported 永远可见，builtin 受隐藏偏好控制 */
+  const isModelVisible = (m: AvatarManifestModel): boolean =>
+    !(m.source === 'builtin' && hiddenBuiltinIds.value.has(m.id))
+
   // ------------------------------------------------------------------
   // 计算属性
   // ------------------------------------------------------------------
@@ -101,10 +131,10 @@ export function useAvatarWorkshop() {
     AVATAR_MODEL_TYPES.filter(t => t.implemented),
   )
 
-  /** 当前类型下的所有模型 */
+  /** 当前类型下的所有可见模型（过滤掉被隐藏的内置模型） */
   const modelsByCurrentMode = computed<AvatarManifestModel[]>(() => {
     if (!manifest.value) return []
-    return manifest.value.models.filter(m => m.type === currentMode.value)
+    return manifest.value.models.filter(m => m.type === currentMode.value && isModelVisible(m))
   })
 
   /** 当前选中的模型对象 */
@@ -112,17 +142,24 @@ export function useAvatarWorkshop() {
     return modelsByCurrentMode.value.find(m => m.id === currentModelId.value) ?? null
   })
 
-  /** 各类型下的模型数量（用于 UI 徽章） */
+  /** 各类型下的可见模型数量（用于 UI 徽章，与列表一致） */
   const modelCountByType = computed<Record<AvatarRendererType, number>>(() => {
     const counts: Record<AvatarRendererType, number> = {
       live2d: 0, vrm: 0, pixel: 0, spine: 0, png: 0,
     }
     if (manifest.value) {
       for (const m of manifest.value.models) {
+        if (!isModelVisible(m)) continue
         counts[m.type] = (counts[m.type] ?? 0) + 1
       }
     }
     return counts
+  })
+
+  /** 已隐藏的内置模型列表（供"恢复显示"入口展示） */
+  const hiddenBuiltinModels = computed<AvatarManifestModel[]>(() => {
+    if (!manifest.value) return []
+    return manifest.value.models.filter(m => m.source === 'builtin' && hiddenBuiltinIds.value.has(m.id))
   })
 
   /** manifest 是否已加载 */
@@ -220,8 +257,8 @@ export function useAvatarWorkshop() {
       currentMode.value = mode
       logger.info(`Mode switched to ${mode}`)
 
-      // 自动选中该类型的第一个模型
-      const firstModel = manifest.value?.models.find(m => m.type === mode)
+      // 自动选中该类型的第一个可见模型（跳过被隐藏的内置模型）
+      const firstModel = manifest.value?.models.find(m => m.type === mode && isModelVisible(m))
       if (firstModel) {
         await switchModel(firstModel.id)
       } else {
@@ -373,6 +410,50 @@ export function useAvatarWorkshop() {
     }
   }
 
+  /**
+   * 隐藏内置模型（写入本地偏好，可随时恢复）
+   *
+   * 若隐藏的是当前选中的模型，自动切换到同类型第一个可见模型；
+   * 同类型已无可见模型时保留当前选中（仅列表为空）。
+   */
+  function hideBuiltinModel(modelId: string): void {
+    const target = manifest.value?.models.find(m => m.id === modelId)
+    if (!target || target.source !== 'builtin') return
+
+    const next = new Set(hiddenBuiltinIds.value)
+    next.add(modelId)
+    hiddenBuiltinIds.value = next
+    persistHiddenBuiltinIds(next)
+    logger.info(`Builtin model hidden: ${modelId}`)
+
+    if (currentModelId.value === modelId) {
+      const fallback = manifest.value?.models.find(
+        m => m.type === target.type && m.id !== modelId && isModelVisible(m),
+      )
+      if (fallback) {
+        void switchModel(fallback.id)
+      }
+    }
+  }
+
+  /** 恢复显示单个内置模型 */
+  function restoreBuiltinModel(modelId: string): void {
+    if (!hiddenBuiltinIds.value.has(modelId)) return
+    const next = new Set(hiddenBuiltinIds.value)
+    next.delete(modelId)
+    hiddenBuiltinIds.value = next
+    persistHiddenBuiltinIds(next)
+    logger.info(`Builtin model restored: ${modelId}`)
+  }
+
+  /** 恢复显示全部内置模型 */
+  function restoreAllBuiltinModels(): void {
+    if (hiddenBuiltinIds.value.size === 0) return
+    hiddenBuiltinIds.value = new Set()
+    persistHiddenBuiltinIds(hiddenBuiltinIds.value)
+    logger.info('All builtin models restored')
+  }
+
   // ------------------------------------------------------------------
   // 绑定更新
   // ------------------------------------------------------------------
@@ -429,13 +510,13 @@ export function useAvatarWorkshop() {
     if (manifest.value) {
       const exists = manifest.value.models.some(m => m.id === currentModelId.value)
       if (!exists) {
-        // 回退到当前类型的第一个模型
-        const firstModel = manifest.value.models.find(m => m.type === currentMode.value)
+        // 回退到当前类型的第一个可见模型
+        const firstModel = manifest.value.models.find(m => m.type === currentMode.value && isModelVisible(m))
         if (firstModel) {
           await switchModel(firstModel.id)
         } else {
-          // 当前类型无模型，回退到任意可用模型
-          const anyModel = manifest.value.models[0]
+          // 当前类型无可见模型，回退到任意可见模型
+          const anyModel = manifest.value.models.find(isModelVisible)
           if (anyModel) {
             await switchMode(anyModel.type)
           }
@@ -477,6 +558,7 @@ export function useAvatarWorkshop() {
     modelsByCurrentMode,
     currentModel,
     modelCountByType,
+    hiddenBuiltinModels,
     isManifestLoaded,
     stateSnapshot,
 
@@ -491,6 +573,9 @@ export function useAvatarWorkshop() {
     loadImportedModels,
     importModel,
     deleteModel,
+    hideBuiltinModel,
+    restoreBuiltinModel,
+    restoreAllBuiltinModels,
     updateBinding,
   }
 }

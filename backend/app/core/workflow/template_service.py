@@ -15,11 +15,11 @@ from typing import Any
 
 from loguru import logger
 from sqlalchemy import delete, select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.core.utils import utc_now
 from app.core.workflow.template_renderer import render_plan
 from app.infrastructure.database.models.workflow_template import WorkflowTemplateORM
+from app.infrastructure.database.repositories.base import BaseRepository
 from app.infrastructure.database.session import get_async_session
 
 
@@ -71,31 +71,30 @@ async def save_as_template(
     if isinstance(parameters_schema, dict):
         parameters_schema = json.dumps(parameters_schema, ensure_ascii=False)
 
-    async with get_async_session() as db:
-        stmt = sqlite_insert(WorkflowTemplateORM).values(
-            template_id=template_id,
-            name=name,
-            description=description,
-            plan_json=plan_json,
-            parameters_schema=parameters_schema,
-            auto_approve=auto_approve,
-            created_from=created_from,
-            source_session_id=source_session_id,
-            created_at=now,
-            updated_at=now,
-        )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["template_id"],
-            set_={
-                "name": name,
-                "description": description,
-                "plan_json": plan_json,
-                "parameters_schema": parameters_schema,
-                "auto_approve": auto_approve,
-                "updated_at": now,
-            },
-        )
-        await db.execute(stmt)
+    await BaseRepository.upsert_async(
+        WorkflowTemplateORM,
+        index_elements=["template_id"],
+        values={
+            "template_id": template_id,
+            "name": name,
+            "description": description,
+            "plan_json": plan_json,
+            "parameters_schema": parameters_schema,
+            "auto_approve": auto_approve,
+            "created_from": created_from,
+            "source_session_id": source_session_id,
+            "created_at": now,
+            "updated_at": now,
+        },
+        update_set={
+            "name": name,
+            "description": description,
+            "plan_json": plan_json,
+            "parameters_schema": parameters_schema,
+            "auto_approve": auto_approve,
+            "updated_at": now,
+        },
+    )
 
     logger.info(f"[TemplateService] Template saved: {template_id} ({name})")
     return template_id

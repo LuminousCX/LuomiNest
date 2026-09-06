@@ -62,6 +62,25 @@ const formatDateTime = (dateStr: string): string => {
   return `${date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} ${formatTime(dateStr)}`
 }
 
+const formatShortDateTime = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  if (!isValidDate(date)) return ''
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
+const formatSpeed = (bytesPerSec: number): string => {
+  if (bytesPerSec <= 0) return ''
+  if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`
+  if (bytesPerSec < 1048576) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`
+  return `${(bytesPerSec / 1048576).toFixed(1)} MB/s`
+}
+
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 const formatDateCalendar = (dateStr: string): string => {
@@ -95,6 +114,8 @@ export {
   formatTime,
   formatDateTime,
   formatDateCalendar,
+  formatShortDateTime,
+  formatSpeed,
   formatDuration,
   RELATIVE_THRESHOLD,
 }

@@ -10,6 +10,7 @@
  */
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useToast } from '../../../../composables/useToast'
+import { generateId } from '../../../../utils/id'
 import { cxPdfApi } from '../services/pdfApi'
 import type {
   CxPdfFileType,
@@ -183,7 +184,7 @@ const openFile = async (file: File) => {
     const extractResult = await cxPdfApi.extractDocument(file)
 
     // 3. 创建标签
-    const tabId = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const tabId = generateId('tab')
     const tab: CxPdfTab = {
       id: tabId,
       fileName: extractResult.fileName || file.name,

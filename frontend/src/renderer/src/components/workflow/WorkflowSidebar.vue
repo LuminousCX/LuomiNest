@@ -213,9 +213,6 @@ defineEmits<{
   flex-direction: column;
 }
 
-.spin-animation {
-  animation: spin 1.2s linear infinite;
-}
 
 button:focus-visible {
   outline: none;

@@ -24,7 +24,7 @@ from typing import Any, Callable
 
 from loguru import logger
 
-from app.core.utils import utc_now
+from app.core.utils import parse_llm_json, utc_now
 from app.infrastructure.database.config_namespace_store import ConfigNamespaceStore
 from app.runtime.plugin.skill.registry import luominest_skill_registry
 from app.runtime.provider.llm.adapter import llm_adapter
@@ -370,32 +370,16 @@ class CxSkillImprovementService:
         text: str,
         skill_id: str,
     ) -> dict[str, Any] | None:
-        """解析 LLM 的 JSON 响应，容错处理。"""
-        # 尝试从 markdown 代码块提取
-        candidates: list[str] = [text]
-        if "```json" in text:
-            start = text.find("```json") + 7
-            end = text.find("```", start)
-            if end > start:
-                candidates.insert(0, text[start:end].strip())
-        elif "```" in text:
-            start = text.find("```") + 3
-            end = text.find("```", start)
-            if end > start:
-                candidates.insert(0, text[start:end].strip())
+        """解析 LLM 的 JSON 响应，容错处理。
 
-        for cand in candidates:
-            try:
-                data = json.loads(cand)
-                if isinstance(data, dict):
-                    # 补全 suggestion_id
-                    if not data.get("suggestion_id"):
-                        ts = datetime.now().strftime("%Y%m%d%H%M%S")
-                        data["suggestion_id"] = f"sg-{skill_id}-{ts}"
-                    return data
-            except json.JSONDecodeError:
-                continue
-        return None
+        围栏/片段候选提取与截断修复统一走 core.utils.parse_llm_json
+        （原手写 candidates 构造已收口）；本处仅保留 suggestion_id 补全。
+        """
+        data = parse_llm_json(text)
+        if data is not None and not data.get("suggestion_id"):
+            ts = datetime.now().strftime("%Y%m%d%H%M%S")
+            data["suggestion_id"] = f"sg-{skill_id}-{ts}"
+        return data
 
     # ------------------------------------------------------------------
     # 建议查询与应用

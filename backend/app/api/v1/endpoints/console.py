@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query, Request
 from loguru import logger
 from pydantic import BaseModel
 
+from app.core.utils import utc_now_dt
 from app.security.sandbox import (
     SandboxCommandError,
     SandboxPermissionError,
@@ -297,7 +297,7 @@ async def execute_command(request: Request, req: ExecuteCommandRequest):
         )
 
     command_id = str(uuid.uuid4())[:8]
-    started_at = datetime.now(timezone.utc)
+    started_at = utc_now_dt()
     timeout = min(req.timeout or DEFAULT_COMMAND_TIMEOUT, MAX_COMMAND_TIMEOUT)
 
     logger.info(
@@ -326,7 +326,7 @@ async def execute_command(request: Request, req: ExecuteCommandRequest):
     if stderr and len(stderr) > MAX_OUTPUT_LENGTH:
         stderr = stderr[:MAX_OUTPUT_LENGTH] + "\n... [truncated]"
 
-    finished_at = datetime.now(timezone.utc)
+    finished_at = utc_now_dt()
     duration_ms = int((finished_at - started_at).total_seconds() * 1000)
     status = "success" if exit_code == 0 else "failed"
 

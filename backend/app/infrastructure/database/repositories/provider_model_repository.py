@@ -113,16 +113,8 @@ class ProviderModelRepository(BaseRepository):
             session.refresh(obj)
             return orm_to_dict(obj)
 
-    def delete_by_provider(self, provider_id: str) -> int:
-        """删除某供应商下的所有模型记录，返回删除数量。"""
-        from sqlalchemy import delete as sa_delete
-        with sync_session_factory() as session:
-            count = session.execute(
-                select(self.model).where(self.model.provider_id == provider_id)  # type: ignore[attr-defined]
-            ).scalars().all()
-            session.execute(sa_delete(self.model).where(self.model.provider_id == provider_id))  # type: ignore[attr-defined]
-            session.commit()
-            return len(count)
+    # delete_by_provider / delete_by_provider_async 收口至 BaseRepository（与
+    # ProviderCredentialRepository 的同义实现统一），行为不变：按 provider_id 删除并返回数量。
 
     # ── Async wrappers ──
 
@@ -142,6 +134,3 @@ class ProviderModelRepository(BaseRepository):
         updates: dict,
     ) -> Optional[dict]:
         return await asyncio.to_thread(self.update_by_provider_model, provider_id, model_id, updates)
-
-    async def delete_by_provider_async(self, provider_id: str) -> int:
-        return await asyncio.to_thread(self.delete_by_provider, provider_id)

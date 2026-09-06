@@ -1,19 +1,17 @@
 import asyncio
-import json
 import re
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
 from loguru import logger
 
-from app.core.utils import utc_now
-from app.infrastructure.database.json_store import groups_store, agents_store
+from app.core.utils import AsyncKeyLocks, parse_llm_json, utc_now
+from app.domains.social.agent_role_registry import AgentRoleRegistry
+from app.infrastructure.database.json_store import agents_store, groups_store
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
-from app.domains.social.agent_role_registry import AgentRoleRegistry
 
 
 def resolve_provider(agent: dict) -> str:
@@ -85,21 +83,8 @@ class CollaborationSession:
 
 
 def _extract_json_plan(text: str) -> dict | None:
-    patterns = [
-        r'```json\s*([\s\S]*?)\s*```',
-        r'```\s*([\s\S]*?)\s*```',
-        r'(\{[\s\S]*"tasks"[\s\S]*\})',
-    ]
-    for pattern in patterns:
-        matches = re.findall(pattern, text)
-        for match in matches:
-            try:
-                parsed = json.loads(match.strip())
-                if isinstance(parsed, dict) and "tasks" in parsed:
-                    return parsed
-            except json.JSONDecodeError:
-                continue
-    return None
+    """解析协作计划 JSON，统一走 core.utils.parse_llm_json（围栏提取 + 截断修复）。"""
+    return parse_llm_json(text, require_keys=("tasks",))
 
 
 def _find_agent_for_role(group: dict, role_id: str) -> dict | None:
@@ -146,7 +131,7 @@ class AgentOrchestrator:
 
     def __init__(self):
         self._active_sessions: dict[str, CollaborationSession] = {}
-        self._save_locks: dict[str, asyncio.Lock] = {}
+        self._save_locks = AsyncKeyLocks()
 
     async def orchestrate(
         self,
@@ -832,9 +817,8 @@ class AgentOrchestrator:
         # 临时 group（工作台协作触发）不持久化到 groups_store
         if group_id.startswith("temp_"):
             return
-        if group_id not in self._save_locks:
-            self._save_locks[group_id] = asyncio.Lock()
-        async with self._save_locks[group_id]:
+        lock = await self._save_locks.get(group_id)
+        async with lock:
             fresh_group = groups_store.get(group_id)
             if not fresh_group:
                 logger.warning(f"[Orchestrator] Group {group_id} not found when saving messages")

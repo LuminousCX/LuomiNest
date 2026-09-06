@@ -9,7 +9,8 @@ import {
   Wifi,
   WifiOff,
   Save,
-  Globe
+  Globe,
+  Cpu
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
 import LumiButton from '../common/LumiButton.vue'
@@ -148,14 +149,14 @@ onMounted(() => {
   <div :class="['settings-panel', 'animate-slide-up', { 'is-embedded': embedded }]">
     <!-- 加载 / 错误状态 -->
     <div v-if="sttLoading" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact stt-state">
+      <div class="settings-card__body settings-card__body--compact settings-state">
         <Loader2 :size="20" class="spin-animation" />
         <span>正在检测 STT 引擎...</span>
       </div>
     </div>
 
     <div v-else-if="sttError" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact stt-state stt-state--error">
+      <div class="settings-card__body settings-card__body--compact settings-state settings-state--error">
         <AlertCircle :size="18" />
         <span>{{ sttError }}</span>
         <LumiButton size="sm" @click="fetchSttInfo">重试</LumiButton>
@@ -263,7 +264,7 @@ onMounted(() => {
         <div class="settings-card__body settings-card__body--compact">
           <div class="settings-data-row">
             <span class="settings-data-row__label">计算设备</span>
-            <span :class="['stt-badge', modelStore.sttDevice?.type === 'gpu' ? 'stt-badge--success' : 'stt-badge--primary']">
+            <span :class="['settings-badge', modelStore.sttDevice?.type === 'gpu' ? 'settings-badge--success' : 'settings-badge--primary']">
               {{ sttDeviceLabel }}
             </span>
           </div>
@@ -298,11 +299,11 @@ onMounted(() => {
             :class="['settings-list-row', { 'settings-list-row--disabled': !engine.available }]"
           >
             <div class="settings-list-row__info">
-              <div class="stt-engine-name">
+              <div class="settings-engine-name">
                 <component
                   :is="engine.online ? Wifi : WifiOff"
                   :size="14"
-                  :class="engine.online ? 'stt-engine-name__online' : 'stt-engine-name__offline'"
+                  :class="engine.online ? 'settings-engine-name__online' : 'settings-engine-name__offline'"
                 />
                 <span>{{ engine.name }}</span>
               </div>
@@ -310,7 +311,7 @@ onMounted(() => {
                 {{ engine.description }}
               </span>
             </div>
-            <span :class="['stt-badge', engine.available ? 'stt-badge--success' : 'stt-badge--danger']">
+            <span :class="['settings-badge', engine.available ? 'settings-badge--success' : 'settings-badge--danger']">
               <Check v-if="engine.available" :size="12" />
               <AlertCircle v-else :size="12" />
               <span>{{ engine.available ? '可用' : '未安装' }}</span>
@@ -323,107 +324,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.stt-state {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--text-muted);
-  font-size: var(--text-base);
-}
-
-.stt-state--error {
-  color: var(--lumi-danger);
-  background: var(--lumi-danger-light);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-}
-
-.stt-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-md);
-}
-
-.stt-badge--success {
-  background: var(--lumi-success-light);
-  color: var(--lumi-success);
-}
-
-.stt-badge--primary {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.stt-badge--danger {
-  background: var(--lumi-danger-light);
-  color: var(--lumi-danger);
-}
-
-.stt-engine-name {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.stt-engine-name__online {
-  color: var(--lumi-success);
-}
-
-.stt-engine-name__offline {
-  color: var(--text-muted);
-}
-
 .stt-checkbox {
   width: 18px;
   height: 18px;
   accent-color: var(--lumi-primary);
   cursor: pointer;
-}
-
-.spin-animation {
-  animation: lumi-spin 1s linear infinite;
-}
-
-/* ── 嵌入模式：去除 settings-card 边框 / 背景 / 蓝条 / 圆角 ── */
-.is-embedded {
-  max-width: none;
-  margin: 0;
-  padding: var(--space-6) var(--space-7);
-  overflow: visible;
-  flex: none;
-  gap: var(--space-7);
-}
-
-.is-embedded .settings-card {
-  background: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
-.is-embedded .settings-card::before {
-  display: none !important;
-}
-
-.is-embedded .settings-card:hover {
-  box-shadow: none !important;
-  border-color: transparent !important;
-  transform: none !important;
-}
-
-.is-embedded .settings-card__header {
-  padding-left: 0;
-}
-
-.is-embedded .settings-card__body {
-  padding-left: 0;
-  padding-right: 0;
 }
 </style>

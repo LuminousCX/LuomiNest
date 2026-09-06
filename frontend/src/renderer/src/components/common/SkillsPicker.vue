@@ -4,13 +4,14 @@ import { useRouter } from 'vue-router'
 import {
   Sparkles,
   X,
-  Search,
   Blocks,
   Check,
   ChevronDown,
 } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../../stores/marketplace'
 import { usePluginsStore } from '../../stores/plugins'
+import SearchInput from './SearchInput.vue'
+import { vClickOutside } from '../../directives/clickOutside'
 
 const props = defineProps<{
   selectedIds: string[]
@@ -25,9 +26,9 @@ const marketplaceStore = useMarketplaceStore()
 const pluginsStore = usePluginsStore()
 
 const showDropdown = ref(false)
-const dropdownRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
 const triggerBtnRef = ref<HTMLElement | null>(null)
+const searchInputRef = ref<InstanceType<typeof SearchInput> | null>(null)
 
 /** 技能选项（合并后的统一结构） */
 interface SkillOption {
@@ -70,10 +71,7 @@ const selectedSkills = computed(() => {
 const toggleDropdown = () => {
   showDropdown.value = !showDropdown.value
   if (showDropdown.value) {
-    nextTick(() => {
-      const input = dropdownRef.value?.querySelector('.luomi-skills-search-input') as HTMLInputElement | null
-      input?.focus()
-    })
+    nextTick(() => searchInputRef.value?.focus())
   }
 }
 
@@ -102,11 +100,8 @@ const goToMarket = () => {
   router.push('/market?tab=skill')
 }
 
-const handleClickOutside = (e: MouseEvent) => {
+const handleClickOutside = () => {
   if (!showDropdown.value) return
-  const target = e.target as Node
-  if (dropdownRef.value?.contains(target)) return
-  if (triggerBtnRef.value?.contains(target)) return
   closeDropdown()
 }
 
@@ -120,18 +115,16 @@ const handleEscape = (e: KeyboardEvent) => {
 onMounted(() => {
   // 加载后端已加载技能（backend/skills），与市场技能合并供选择
   void pluginsStore.refreshSkills()
-  document.addEventListener('click', handleClickOutside, true)
   document.addEventListener('keydown', handleEscape)
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', handleClickOutside, true)
   document.removeEventListener('keydown', handleEscape)
 })
 </script>
 
 <template>
-  <div class="luomi-skills-picker">
+  <div v-click-outside.capture="handleClickOutside" class="luomi-skills-picker">
     <!-- 选中技能 chips 区（显示在输入框上方，由父组件决定插入位置） -->
     <Transition name="luomi-skills-chips-fade">
       <div v-if="selectedSkills.length > 0" class="luomi-skills-chips">
@@ -172,17 +165,13 @@ onBeforeUnmount(() => {
 
     <!-- 下拉面板 -->
     <Transition name="luomi-skills-dropdown-fade">
-      <div v-if="showDropdown" ref="dropdownRef" class="luomi-skills-dropdown">
+      <div v-if="showDropdown" class="luomi-skills-dropdown">
         <div class="luomi-skills-dropdown-header">
-          <div class="luomi-skills-search">
-            <Search :size="13" class="luomi-skills-search-icon" />
-            <input
-              v-model="searchQuery"
-              type="text"
-              class="luomi-skills-search-input"
-              placeholder="搜索已安装的技能..."
-            />
-          </div>
+          <SearchInput
+            ref="searchInputRef"
+            v-model="searchQuery"
+            placeholder="搜索已安装的技能..."
+          />
         </div>
 
         <div class="luomi-skills-dropdown-list">
@@ -397,41 +386,6 @@ onBeforeUnmount(() => {
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--divider-soft);
   flex-shrink: 0;
-}
-
-.luomi-skills-search {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px 10px;
-  background: var(--surface-hover);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-light);
-  transition: all var(--transition-fast);
-}
-
-.luomi-skills-search:focus-within {
-  border-color: var(--lumi-brand-border);
-  background: var(--surface);
-}
-
-.luomi-skills-search-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.luomi-skills-search-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-  min-width: 0;
-}
-
-.luomi-skills-search-input::placeholder {
-  color: var(--text-muted);
 }
 
 .luomi-skills-dropdown-list {

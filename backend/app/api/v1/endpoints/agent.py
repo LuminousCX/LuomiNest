@@ -1,15 +1,13 @@
 import uuid
-import os
-import shutil
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.api.v1.deps import get_agents_store, get_conversation_store
-from app.core.config import settings
 from app.core.constants.colors import DEFAULT_AGENT_COLOR
 from app.core.utils import utc_now, ok
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.engines.memory.store import remove_agent_memory
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -160,9 +158,8 @@ async def delete_agent(
     
     conversation_store.delete_by_agent_id(agent_id)
     
-    agent_memory_dir = os.path.join(settings.DATA_DIR, "memory", "agents", agent_id)
-    if os.path.exists(agent_memory_dir):
-        shutil.rmtree(agent_memory_dir)
+    # 旧文件布局记忆目录清理（收口到 store.remove_agent_memory，rmtree 前存在性判断与原行为一致）
+    if remove_agent_memory(agent_id):
         logger.info(f"[API] DELETE /agents/{agent_id} - Memory directory removed")
     
     return ok({"deleted": True})

@@ -241,7 +241,4 @@ onMounted(() => {
   object-fit: cover;
 }
 
-.spin-animation {
-  animation: lumi-spin 1s linear infinite;
-}
 </style>

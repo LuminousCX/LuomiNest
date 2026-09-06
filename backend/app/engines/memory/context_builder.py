@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from app.core.utils import utc_now_dt
+
 from .models import FactItem, MemoryData, FACT_SCOPE_AGENT, FACT_SCOPE_CONVERSATION, summaries_to_markdown
 from .store import MemoryStore
 from .fact_manager import _extract_content_words
@@ -63,7 +65,7 @@ class ContextBuilder:
             if f.expires_at:
                 try:
                     exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
-                    if exp_time <= datetime.now(datetime.UTC):
+                    if exp_time <= utc_now_dt():
                         continue
                 except (ValueError, TypeError):
                     pass
@@ -77,7 +79,7 @@ class ContextBuilder:
                 if f.expires_at:
                     try:
                         exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
-                        if exp_time <= datetime.now(datetime.UTC):
+                        if exp_time <= utc_now_dt():
                             continue
                     except (ValueError, TypeError):
                         pass

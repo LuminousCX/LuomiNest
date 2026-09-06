@@ -21,6 +21,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from loguru import logger
 
 from app.core.config import settings
+from app.core.utils import utc_now
 from app.core.scheduler.models import (
     LuomiTaskStatus,
     LuomiTaskType,
@@ -320,7 +321,7 @@ class LuomiSchedulerManager:
             "interval_seconds": config.interval_seconds,
             "payload": config.payload,
             "source": config.source,
-            "created_at": datetime.now().isoformat(),
+            "created_at": utc_now(),
             "last_run_time": None,
             "last_result": None,
             "last_error": None,
@@ -382,7 +383,7 @@ class LuomiSchedulerManager:
             "interval_seconds": config.interval_seconds,
             "payload": config.payload,
             "source": config.source,
-            "created_at": datetime.now().isoformat(),
+            "created_at": utc_now(),
             "last_run_time": None,
             "last_result": None,
             "last_error": None,
@@ -406,7 +407,7 @@ class LuomiSchedulerManager:
             return
 
         info["status"] = LuomiTaskStatus.RUNNING.value
-        info["last_run_time"] = datetime.now().isoformat()
+        info["last_run_time"] = utc_now()
 
         logger.info(f"[LuomiScheduler] 任务触发: id={task_id}, name={info.get('name')}")
 

@@ -83,6 +83,50 @@ def get_download_status(item_id: str) -> Optional[dict]:
     return status
 
 
+def get_download(item_id: str) -> Optional[dict]:
+    """获取下载任务的原始状态（纯读取，不做错误状态过期清理）。
+
+    与 get_download_status 的区别：本函数不清理过期错误状态，
+    供需要原始状态判断的场景使用（如 install 端点的并发去重检查）。
+    """
+    return _active_downloads.get(item_id)
+
+
+def register_download(item_id: str) -> dict:
+    """注册新的下载任务（queued 初始状态）并返回状态字典。
+
+    get-or-create 语义：同 ID 任务已存在时直接返回现有状态、
+    不覆盖，供 install 端点防止并发请求创建重复后台任务。
+    """
+    if item_id in _active_downloads:
+        return _active_downloads[item_id]
+    _active_downloads[item_id] = {
+        "itemId": item_id,
+        "status": "queued",
+        "progress": 0,
+        "message": "排队等待中...",
+        "speed": 0,
+        "eta": 0,
+        "downloadedBytes": 0,
+        "totalBytes": 0,
+        "startTime": time.time(),
+    }
+    return _active_downloads[item_id]
+
+
+def update_download_state(item_id: str, **fields) -> Optional[dict]:
+    """更新下载任务的任意状态字段（仅对已存在的任务生效）。
+
+    任务不存在时不创建、静默忽略并返回 None；存在则原地更新
+    并返回状态字典。
+    """
+    state = _active_downloads.get(item_id)
+    if state is None:
+        return None
+    state.update(fields)
+    return state
+
+
 async def download_item(
     item_id: str,
     download_url: str,

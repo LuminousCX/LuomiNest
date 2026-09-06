@@ -3,12 +3,12 @@
 聚合统计用 SQL GROUP BY（替代 Python 全表扫描）。
 """
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Optional
 
 from sqlalchemy import delete as sa_delete, func, select
 
-from app.core.utils import utc_now
+from app.core.utils import utc_now, utc_now_dt
 from app.infrastructure.database.models.usage_record import UsageRecord
 from app.infrastructure.database.session import sync_session_factory
 
@@ -52,7 +52,7 @@ class UsageRepository:
         with sync_session_factory() as session:
             stmt = select(UsageRecord)
             if days is not None:
-                cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+                cutoff = (utc_now_dt() - timedelta(days=days)).isoformat()
                 stmt = stmt.where(UsageRecord.timestamp >= cutoff)
             objs = session.execute(stmt).scalars().all()
             from app.infrastructure.database.repositories.base import orm_to_dict
@@ -106,7 +106,7 @@ class UsageRepository:
         """SQL GROUP BY 聚合统计。"""
         cutoff = None
         if days is not None:
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            cutoff = (utc_now_dt() - timedelta(days=days)).isoformat()
 
         with sync_session_factory() as session:
             # 汇总

@@ -502,13 +502,24 @@
   color: var(--text-muted);
 }
 
+.form-error-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--lumi-accent-light);
+  color: var(--lumi-accent);
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+
 /* -------------------------------------------------------
    7. 弹窗 (Modal / Dialog)
    ------------------------------------------------------- */
 .lumi-modal-overlay,
 .luomi-modal-overlay,
 .create-dialog-overlay,
-.confirm-dialog-overlay,
 .dialog-overlay,
 .wizard-overlay {
   position: fixed;

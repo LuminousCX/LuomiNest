@@ -4,7 +4,7 @@
  *
  * 会话搜索（走后端）与本地过滤搜索共用，保证全应用搜索框样式一致。
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Search, Loader2 } from 'lucide-vue-next'
 import LumiInput from './LumiInput.vue'
 
@@ -27,16 +27,25 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'update:modelValue': [value: string | number | null]
   enter: [event: KeyboardEvent]
+  focus: [event: FocusEvent]
+  blur: [event: FocusEvent]
 }>()
 
 const model = computed<string>({
   get: () => (props.modelValue ?? '') as string,
   set: (value) => emit('update:modelValue', value),
 })
+
+const inputRef = ref<InstanceType<typeof LumiInput> | null>(null)
+
+defineExpose({
+  focus: () => inputRef.value?.focus(),
+})
 </script>
 
 <template>
   <LumiInput
+    ref="inputRef"
     v-model="model"
     type="text"
     :placeholder="placeholder"
@@ -44,6 +53,8 @@ const model = computed<string>({
     :disabled="disabled"
     clearable
     @enter="emit('enter', $event)"
+    @focus="emit('focus', $event)"
+    @blur="emit('blur', $event)"
   >
     <template #icon>
       <Loader2 v-if="loading && model" :size="14" class="search-input-spinner" />
@@ -54,15 +65,6 @@ const model = computed<string>({
 
 <style scoped>
 .search-input-spinner {
-  animation: search-input-spin 0.9s linear infinite;
-}
-
-@keyframes search-input-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  animation: spin 0.9s linear infinite;
 }
 </style>

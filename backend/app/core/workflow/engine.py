@@ -21,7 +21,7 @@ from typing import Any, Awaitable, Callable
 
 from loguru import logger
 
-from app.core.utils import utc_now
+from app.core.utils import AsyncKeyLocks, parse_llm_json, utc_now
 from app.runtime.provider.llm.types import RouteHint
 from app.core.workflow.event_emitter import WorkflowEventEmitter
 from app.core.workflow.internal_registry import internal_tool_registry
@@ -165,146 +165,14 @@ Rules:
 - node_type values: "input" for user request entry, "tool" for tool calls, "agent" for subagent delegation, "condition" for conditional branching, "output" for final result"""
 
 
-def _repair_truncated_json(text: str) -> str | None:
-    """尝试修复因 token 限制截断的不完整 JSON。
-
-    当 LLM 输出因 finish_reason=length 被截断时，JSON 可能不完整。
-    策略：跟踪字符串上下文和括号栈，记录所有"安全截断点"（逗号后或闭合括号后），
-    从后往前尝试每个截断点，补全未闭合的括号后解析。
-
-    Returns:
-        修复后的 JSON 字符串（已验证可解析），或 None（无法修复）
-    """
-    text = text.strip()
-    if not text:
-        return None
-
-    # 定位第一个 { 开始位置
-    start = text.find("{")
-    if start == -1:
-        return None
-    text = text[start:]
-
-    in_string = False
-    escape = False
-    stack: list[str] = []
-    # 记录 (截断位置, 当时的栈状态快照)
-    safe_cuts: list[tuple[int, list[str]]] = []
-
-    for i, ch in enumerate(text):
-        if escape:
-            escape = False
-            continue
-        if ch == "\\" and in_string:
-            escape = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if ch in "{[":
-            stack.append(ch)
-        elif ch == "}":
-            if stack and stack[-1] == "{":
-                stack.pop()
-                if not stack:
-                    safe_cuts.append((i + 1, []))
-        elif ch == "]":
-            if stack and stack[-1] == "[":
-                stack.pop()
-                if stack:
-                    safe_cuts.append((i + 1, list(stack)))
-        elif ch == ",":
-            safe_cuts.append((i + 1, list(stack)))
-
-    # 如果栈为空，JSON 可能已经完整
-    if not stack:
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, dict):
-                return text
-        except json.JSONDecodeError as e:
-            logger.debug("Initial JSON parse failed, will try safe-cut repair: {}", e)
-
-    # 从后往前尝试每个安全截断点
-    for cut_pos, cut_stack in reversed(safe_cuts):
-        if cut_stack:
-            # 仍有未闭合的括号，需截断并补全
-            repaired = text[:cut_pos].rstrip()
-            if repaired.endswith(","):
-                repaired = repaired[:-1]
-            for opener in reversed(cut_stack):
-                repaired += "]" if opener == "[" else "}"
-        else:
-            # 栈为空，截断点处是完整 JSON
-            repaired = text[:cut_pos]
-
-        try:
-            parsed = json.loads(repaired)
-            if isinstance(parsed, dict):
-                return repaired
-        except json.JSONDecodeError:
-            continue
-
-    return None
-
-
 def _extract_json_plan(text: str) -> dict[str, Any] | None:
     """从 LLM 响应中提取 JSON 执行计划
 
-    尝试多种策略：
-    1. ```json ... ``` 代码块
-    2. ``` ... ``` 代码块
-    3. 包含 "tasks" 的 JSON 片段
-    4. 直接解析整个文本为 JSON
-    5. 截断修复（finish_reason=length 时 JSON 不完整）
+    候选提取（```json / ``` 围栏、{...} 片段、整段文本）与截断修复
+    （finish_reason=length 时 JSON 不完整）已统一收口到
+    core.utils.parse_llm_json；本处仅保留工作流计划的 "tasks" 键约束。
     """
-    # 策略 1-3：正则匹配
-    patterns = [
-        r'```json\s*([\s\S]*?)\s*```',
-        r'```\s*([\s\S]*?)\s*```',
-        r'(\{[\s\S]*"tasks"[\s\S]*\})',
-    ]
-    for pattern in patterns:
-        matches = re.findall(pattern, text)
-        for match in matches:
-            try:
-                parsed = json.loads(match.strip())
-                if isinstance(parsed, dict) and "tasks" in parsed:
-                    return parsed
-            except json.JSONDecodeError:
-                # 尝试修复截断的 JSON
-                repaired = _repair_truncated_json(match)
-                if repaired:
-                    try:
-                        parsed = json.loads(repaired)
-                        if isinstance(parsed, dict) and "tasks" in parsed:
-                            logger.warning("[WorkflowEngine] JSON plan repaired from truncated output")
-                            return parsed
-                    except json.JSONDecodeError:
-                        continue
-
-    # 策略 4：直接尝试解析整个文本为 JSON
-    try:
-        parsed = json.loads(text.strip())
-        if isinstance(parsed, dict) and "tasks" in parsed:
-            return parsed
-    except json.JSONDecodeError:
-        pass
-
-    # 策略 5：截断修复
-    repaired = _repair_truncated_json(text)
-    if repaired:
-        try:
-            parsed = json.loads(repaired)
-            if isinstance(parsed, dict) and "tasks" in parsed:
-                logger.warning("[WorkflowEngine] JSON plan repaired from truncated output")
-                return parsed
-        except json.JSONDecodeError:
-            pass
-
-    return None
+    return parse_llm_json(text, require_keys=("tasks",))
 
 
 _THINK_TAG_PATTERN = re.compile(r'<think>([\s\S]*?)</think>', re.IGNORECASE)
@@ -370,20 +238,20 @@ class WorkflowEngine:
         self.planning_temperature = planning_temperature
         self.synthesis_temperature = synthesis_temperature
         self._active_sessions: dict[str, WorkflowSession] = {}
-        self._session_locks: dict[str, asyncio.Lock] = {}
+        self._session_locks: AsyncKeyLocks = AsyncKeyLocks()
         self._dict_lock = asyncio.Lock()
 
     async def _register_session(self, session: WorkflowSession) -> None:
         """注册会话到字典（加锁保护，防止并发 submit 竞态）"""
         async with self._dict_lock:
             self._active_sessions[session.session_id] = session
-            self._session_locks[session.session_id] = asyncio.Lock()
+            await self._session_locks.get(session.session_id)
 
     async def _unregister_session(self, session_id: str) -> None:
         """从字典移除会话（加锁保护）"""
         async with self._dict_lock:
             self._active_sessions.pop(session_id, None)
-            self._session_locks.pop(session_id, None)
+            self._session_locks.discard(session_id)
 
     def _create_session(
         self,

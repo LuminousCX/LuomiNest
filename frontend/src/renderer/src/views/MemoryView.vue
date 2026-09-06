@@ -18,7 +18,7 @@ import { useMemoryStore, CATEGORY_LABELS, CATEGORY_COLORS, FACT_CATEGORIES } fro
 import type { FactItem, FactCategory } from '../stores/memory'
 import { useToast } from '../composables/useToast'
 import LumiButton from '../components/common/LumiButton.vue'
-import MemoryConfirmDialog from '../components/memory/MemoryConfirmDialog.vue'
+import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import MemoryLayerNav from '../components/memory/MemoryLayerNav.vue'
 import MemoryProfileTab from '../components/memory/MemoryProfileTab.vue'
 import MemoryFactsTab from '../components/memory/MemoryFactsTab.vue'
@@ -572,12 +572,12 @@ window.addEventListener('click', closeMenu)
       </div>
     </div>
 
-    <MemoryConfirmDialog
-      :show="showConfirm"
+    <ConfirmDialog
+      :visible="showConfirm"
       :title="confirmTitle"
       :message="confirmMessage"
       :danger="confirmDanger"
-      :is-processing="isProcessing"
+      :loading="isProcessing"
       @cancel="cancelConfirm"
       @confirm="executeConfirm"
     />

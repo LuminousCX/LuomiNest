@@ -394,9 +394,6 @@ button:focus-visible {
   line-height: var(--leading-normal);
 }
 
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
 
 @keyframes pulse {
   0%, 100% { opacity: 0.4; transform: scale(0.8); }

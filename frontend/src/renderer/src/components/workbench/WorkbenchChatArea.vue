@@ -1755,9 +1755,6 @@ button:focus-visible {
   color: var(--text-secondary);
 }
 
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
 
 .msg-appear-enter-active,
 .msg-appear-leave-active {

@@ -7,6 +7,7 @@ from typing import Any
 from loguru import logger
 
 from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
+from app.runtime.platform.infrastructure.token_manager import parse_target
 
 
 class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
@@ -509,12 +510,8 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
             return f"group:{event.get('group_id')}"
         return f"private:{event.get('user_id')}"
 
-    @staticmethod
-    def _parse_target(target: str) -> tuple[str, str]:
-        if ":" in target:
-            t_type, t_id = target.split(":", 1)
-            return t_type, t_id
-        return "private", target
+    # 目标解析逻辑与 qq_official 一致，统一收口到 infrastructure.token_manager
+    _parse_target = staticmethod(parse_target)
 
     def _find_connection(self) -> Any:
         for conn in self._connections.values():

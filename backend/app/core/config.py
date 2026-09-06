@@ -162,6 +162,12 @@ class Settings(BaseSettings):
     TTS_DOWNLOAD_TIMEOUT: float = 600.0     # 模型下载超时（sherpa-onnx 大模型慢网络）
     TTS_LOCAL_PROC_TIMEOUT: float = 120.0   # 本地推理/子进程超时（pyttsx3 worker/sherpa 合成）
 
+    # STT 模型下载超时（sherpa-onnx SenseVoice 模型下载，原 STT 模块内硬编码 600 秒）
+    MODEL_DOWNLOAD_TIMEOUT: int = 600
+
+    # 平台适配器 HTTP 请求超时（QQ 官方/微信公众号/企业微信 REST 调用，原各适配器内联 timeout=15）
+    PLATFORM_HTTP_TIMEOUT: int = 15
+
     # Agent 集群调用配置
     APP_SELF_BASE_URL: str = "http://localhost:8000"
     A2A_SERVERS: list[dict] = []  # 每项: {name, url, enabled, api_key}

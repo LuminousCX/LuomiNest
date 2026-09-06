@@ -6,12 +6,15 @@
 
 import base64
 import io
+import json
 import wave
+from urllib.parse import urlencode
 
-import httpx
 from loguru import logger
 
+from app.core.config import settings
 from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.tts._http import post_json_for_audio
 from app.runtime.provider.tts.ports import TTSProvider
 
 
@@ -75,7 +78,7 @@ class GeminiTTSProvider(TTSProvider):
         elif voice in self.DEFAULT_VOICES:
             voice = self.DEFAULT_VOICES[voice]
 
-        url = f"{self.base_url}/models/{self.model}:generateContent"
+        url = f"{self.base_url}/models/{self.model}:generateContent?{urlencode({'key': self.api_key})}"
 
         payload = {
             "contents": [{"parts": [{"text": text}]}],
@@ -91,15 +94,15 @@ class GeminiTTSProvider(TTSProvider):
             },
         }
 
-        params = {"key": self.api_key}
-
         # 统一超时治理（应急修复 B3）：硬编码 → Settings.TTS_HTTP_TIMEOUT
-        from app.core.config import settings as _settings
-
-        async with httpx.AsyncClient(timeout=_settings.TTS_HTTP_TIMEOUT) as client:
-            response = await client.post(url, json=payload, params=params)
-            response.raise_for_status()
-            result = response.json()
+        audio_bytes = await post_json_for_audio(
+            url,
+            payload,
+            None,
+            settings.TTS_HTTP_TIMEOUT,
+            error_prefix="Gemini TTS",
+        )
+        result = json.loads(audio_bytes)
 
         # 提取 base64 编码的 PCM 数据
         try:

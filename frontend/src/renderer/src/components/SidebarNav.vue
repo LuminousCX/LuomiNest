@@ -699,21 +699,34 @@ const handleNavigate = (path: string) => {
   position: absolute;
   left: var(--space-1);
   top: 50%;
-  width: calc(var(--space-1) + 1px);
+  width: var(--space-1);
   height: 1px;
   background: var(--border);
   transform: translateY(-50%);
+  transition: background var(--transition-fast), opacity var(--transition-fast);
 }
 
 .tree-node {
   position: absolute;
-  left: calc(var(--space-1) + var(--space-1) + 1px);
+  left: var(--space-2);
   top: 50%;
-  width: calc(var(--space-1) + 1px);
-  height: calc(var(--space-1) + 1px);
+  width: var(--space-1);
+  height: var(--space-1);
   border-radius: var(--radius-full);
   background: var(--border);
   transform: translate(-50%, -50%);
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+/* 激活子项：节点点亮为品牌色并微微放大，连接枝干同步染色，形成“当前所在”的指向 */
+.tree-child.active .tree-node {
+  background: var(--nav-item-active-color);
+  transform: translate(-50%, -50%) scale(1.25);
+}
+
+.tree-child.active .tree-branch {
+  background: var(--nav-item-active-color);
+  opacity: 0.45;
 }
 
 .tree-child.last .tree-line::before {

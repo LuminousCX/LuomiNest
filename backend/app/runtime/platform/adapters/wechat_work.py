@@ -1,15 +1,15 @@
 import asyncio
 import re
-import time
 from typing import Any
 
 from loguru import logger
 
 from app.runtime.platform.adapters.wechat_crypto import LuomiNestWeChatCrypto
 from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
+from app.runtime.platform.infrastructure.token_manager import AppTokenMixin
 
 
-class LuomiNestWeComAdapter(BasePlatformAdapter):
+class LuomiNestWeComAdapter(AppTokenMixin, BasePlatformAdapter):
     """企业微信适配器：通过企业微信 API 收发消息。
 
     工作流程：
@@ -30,6 +30,9 @@ class LuomiNestWeComAdapter(BasePlatformAdapter):
     """
 
     platform_name = "wechat_work"
+
+    # Token 相关日志前缀（AppTokenMixin）
+    token_log_prefix = "[WeCom]"
 
     API_BASE = "https://qyapi.weixin.qq.com/cgi-bin"
 
@@ -196,6 +199,8 @@ class LuomiNestWeComAdapter(BasePlatformAdapter):
         """发送消息到企业微信 API，自动处理 token 过期刷新。"""
         import httpx
 
+        from app.core.config import settings
+
         token = await self._ensure_access_token()
         if not token:
             return False
@@ -203,7 +208,7 @@ class LuomiNestWeComAdapter(BasePlatformAdapter):
         url = f"{self.API_BASE}/message/send?access_token={token}"
 
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with httpx.AsyncClient(timeout=settings.PLATFORM_HTTP_TIMEOUT) as client:
                 resp = await client.post(url, json=payload)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -219,7 +224,7 @@ class LuomiNestWeComAdapter(BasePlatformAdapter):
                         retry_url = (
                             f"{self.API_BASE}/message/send?access_token={new_token}"
                         )
-                        async with httpx.AsyncClient(timeout=15) as retry_client:
+                        async with httpx.AsyncClient(timeout=settings.PLATFORM_HTTP_TIMEOUT) as retry_client:
                             retry_resp = await retry_client.post(
                                 retry_url, json=payload
                             )
@@ -470,45 +475,27 @@ class LuomiNestWeComAdapter(BasePlatformAdapter):
             await self.send_message(response, send_target)
 
     # ------------------------------------------------------------------
-    # Token 管理
+    # Token 管理（缓存/刷新骨架见 AppTokenMixin）
     # ------------------------------------------------------------------
 
-    async def _refresh_access_token(self) -> bool:
+    async def _fetch_token(self) -> tuple[str, int] | None:
         import httpx
+
+        from app.core.config import settings
 
         url = (
             f"{self.API_BASE}/gettoken"
             f"?corpid={self._corp_id}&corpsecret={self._secret}"
         )
 
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.get(url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get("errcode") == 0:
-                        self._access_token = data.get("access_token", "")
-                        expires_in = int(data.get("expires_in", 7200))
-                        self._token_expires = time.time() + expires_in - 300
-                        logger.info(
-                            "[WeCom] Access token refreshed, expires in {}s",
-                            expires_in,
-                        )
-                        return True
-                    logger.error(
-                        "[WeCom] Token refresh failed: {}", data.get("errmsg")
-                    )
-                    return False
-                return False
-        except Exception as e:
-            logger.error("[WeCom] Token refresh exception: {}", e)
-            return False
-
-    async def _ensure_access_token(self) -> str:
-        if self._access_token and time.time() < self._token_expires:
-            return self._access_token
-        async with self._token_lock:
-            if self._access_token and time.time() < self._token_expires:
-                return self._access_token
-            await self._refresh_access_token()
-            return self._access_token
+        async with httpx.AsyncClient(timeout=settings.PLATFORM_HTTP_TIMEOUT) as client:
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("errcode") == 0:
+                    return data.get("access_token", ""), int(data.get("expires_in", 7200))
+                logger.error(
+                    "[WeCom] Token refresh failed: {}", data.get("errmsg")
+                )
+                return None
+            return None
