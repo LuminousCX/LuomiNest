@@ -241,9 +241,6 @@ defineEmits<{
   background: color-mix(in srgb, var(--lumi-danger) 8%, transparent);
 }
 
-.spin-animation {
-  animation: spin 1.2s linear infinite;
-}
 
 button:focus-visible {
   outline: none;

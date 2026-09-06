@@ -9,10 +9,10 @@ from typing import Any
 
 from loguru import logger
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.core.utils import utc_now
 from app.infrastructure.database.models.scheduled_task import ScheduledTaskORM
+from app.infrastructure.database.repositories.base import BaseRepository
 from app.infrastructure.database.session import get_async_session
 
 
@@ -28,33 +28,32 @@ async def save_scheduled_task(
     is_active: bool = True,
 ) -> None:
     """保存或更新定时任务（upsert）"""
-    async with get_async_session() as db:
-        stmt = sqlite_insert(ScheduledTaskORM).values(
-            task_id=task_id,
-            name=name,
-            schedule_cron=schedule_cron,
-            schedule_type=schedule_type,
-            action=action,
-            description=description,
-            context=context,
-            created_from=created_from,
-            is_active=is_active,
-            created_at=utc_now(),
-        )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["task_id"],
-            set_={
-                "name": name,
-                "schedule_cron": schedule_cron,
-                "schedule_type": schedule_type,
-                "action": action,
-                "description": description,
-                "context": context,
-                "is_active": is_active,
-            },
-        )
-        await db.execute(stmt)
-        logger.debug(f"[ScheduledTaskPersistence] Task {task_id} saved (name={name})")
+    await BaseRepository.upsert_async(
+        ScheduledTaskORM,
+        index_elements=["task_id"],
+        values={
+            "task_id": task_id,
+            "name": name,
+            "schedule_cron": schedule_cron,
+            "schedule_type": schedule_type,
+            "action": action,
+            "description": description,
+            "context": context,
+            "created_from": created_from,
+            "is_active": is_active,
+            "created_at": utc_now(),
+        },
+        update_set={
+            "name": name,
+            "schedule_cron": schedule_cron,
+            "schedule_type": schedule_type,
+            "action": action,
+            "description": description,
+            "context": context,
+            "is_active": is_active,
+        },
+    )
+    logger.debug(f"[ScheduledTaskPersistence] Task {task_id} saved (name={name})")
 
 
 async def list_scheduled_tasks() -> list[dict[str, Any]]:
@@ -99,18 +98,17 @@ async def delete_scheduled_task(task_id: str) -> bool:
 
 async def update_last_run(task_id: str) -> None:
     """更新任务最后执行时间"""
-    async with get_async_session() as db:
-        stmt = sqlite_insert(ScheduledTaskORM).values(
-            task_id=task_id,
-            name="",
-            schedule_cron="",
-            schedule_type="cron",
-            action="",
-            created_at=utc_now(),
-            last_run_at=utc_now(),
-        )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["task_id"],
-            set_={"last_run_at": utc_now()},
-        )
-        await db.execute(stmt)
+    await BaseRepository.upsert_async(
+        ScheduledTaskORM,
+        index_elements=["task_id"],
+        values={
+            "task_id": task_id,
+            "name": "",
+            "schedule_cron": "",
+            "schedule_type": "cron",
+            "action": "",
+            "created_at": utc_now(),
+            "last_run_at": utc_now(),
+        },
+        update_set={"last_run_at": utc_now()},
+    )

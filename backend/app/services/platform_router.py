@@ -5,7 +5,7 @@ import traceback
 import uuid
 from loguru import logger
 
-from app.core.utils import utc_now
+from app.core.utils import AsyncKeyLocks, extract_llm_text, utc_now
 from app.runtime.platform.base import PlatformMessage, PlatformResponse, get_standard_tools_for_platform
 from app.runtime.platform.session import (
     MAIN_AGENT_ID,
@@ -43,8 +43,7 @@ class LuomiNestPlatformRouter:
     """
 
     def __init__(self) -> None:
-        self._processing_locks: dict[str, asyncio.Lock] = {}
-        self._locks_guard = asyncio.Lock()
+        self._processing_locks = AsyncKeyLocks()
         self._background_tasks: set[asyncio.Task] = set()
 
     def _spawn_background_task(self, coro) -> asyncio.Task:
@@ -55,12 +54,7 @@ class LuomiNestPlatformRouter:
         return task
 
     async def _get_session_lock(self, session_key: str) -> asyncio.Lock:
-        if session_key in self._processing_locks:
-            return self._processing_locks[session_key]
-        async with self._locks_guard:
-            if session_key not in self._processing_locks:
-                self._processing_locks[session_key] = asyncio.Lock()
-            return self._processing_locks[session_key]
+        return await self._processing_locks.get(session_key)
 
     def _resolve_instance_model(self, instance_id: str) -> tuple[str, str, str, float, int]:
         """解析平台实例的模型配置，空值回退到全局主模型配置。
@@ -571,20 +565,8 @@ class LuomiNestPlatformRouter:
 
     @staticmethod
     def _extract_assistant_text(result) -> str:
-        if isinstance(result, str):
-            return result
-        if isinstance(result, dict):
-            if "content" in result and isinstance(result["content"], str):
-                return result["content"]
-            if "choices" in result:
-                choices = result["choices"]
-                if choices and isinstance(choices, list):
-                    first = choices[0]
-                    if isinstance(first, dict):
-                        msg = first.get("message", {})
-                        if isinstance(msg, dict) and msg.get("content"):
-                            return msg["content"]
-        return str(result) if result else ""
+        # choices[0].message.content / content 字段提取已收口到 core.utils.extract_llm_text
+        return extract_llm_text(result)
 
     @staticmethod
     def _extract_usage(result) -> dict:

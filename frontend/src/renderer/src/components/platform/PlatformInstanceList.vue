@@ -2,14 +2,15 @@
 import { ref, computed } from 'vue'
 import {
   Globe, Radio, Cable, Link, MessageCircle, Send, Gamepad2, Home, Smartphone,
-  Search, Play, Square, Plus, Trash2, Settings,
+  Play, Square, Plus, Trash2, Settings,
   AlertCircle,
 } from 'lucide-vue-next'
 import { usePlatformStore } from '../../stores/platform'
 import type { PlatformInstance } from '../../types'
 import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
-import LumiInput from '../../components/common/LumiInput.vue'
+import SearchInput from '../common/SearchInput.vue'
+import { formatDateRelative } from '../../utils/format'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
 
@@ -48,23 +49,8 @@ const getIcon = (iconName: string) => {
   return iconMap[iconName] || Globe
 }
 
-const formatLastSync = (lastSync: string) => {
-  if (!lastSync) return '未同步'
-  try {
-    const date = new Date(lastSync)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMin = Math.floor(diffMs / 60000)
-    if (diffMin < 1) return '刚刚'
-    if (diffMin < 60) return `${diffMin} 分钟前`
-    const diffHour = Math.floor(diffMin / 60)
-    if (diffHour < 24) return `${diffHour} 小时前`
-    const diffDay = Math.floor(diffHour / 24)
-    return `${diffDay} 天前`
-  } catch {
-    return '未同步'
-  }
-}
+const formatLastSync = (lastSync: string) =>
+  lastSync ? formatDateRelative(lastSync) : '未同步'
 
 const getStatusLabel = (status: string) => {
   switch (status) {
@@ -107,9 +93,7 @@ const handleConfig = (instance: PlatformInstance) => {
 <template>
   <div class="platform-list-panel">
     <div class="panel-toolbar">
-      <LumiInput v-model="searchQuery" type="search" placeholder="搜索平台..." class="search-input">
-        <template #icon><Search :size="14" /></template>
-      </LumiInput>
+      <SearchInput v-model="searchQuery" placeholder="搜索平台..." class="search-input" />
       <div class="filter-group">
         <button :class="['filter-btn', { active: activeFilter === 'all' }]" @click="activeFilter = 'all'">全部</button>
         <button :class="['filter-btn', { active: activeFilter === 'active' }]" @click="activeFilter = 'active'">活跃</button>

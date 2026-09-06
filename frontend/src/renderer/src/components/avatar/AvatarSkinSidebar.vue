@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,11 +11,22 @@ import {
   Box,
   Ghost,
   Bone,
-  Image
+  Image,
+  EyeOff,
+  Eye,
+  Trash2,
+  RotateCcw,
+  ChevronDown
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 import type { ManifestSkinItem } from './types'
 import type { AvatarRendererType } from '@/types/avatar'
+
+export interface HiddenSkinItem {
+  id: string
+  name: string
+  type: AvatarRendererType
+}
 
 const props = defineProps<{
   skinSidebarVisible: boolean
@@ -24,6 +36,7 @@ const props = defineProps<{
   selectedSkin: number
   currentMode: string
   modelCountByType: Record<AvatarRendererType, number>
+  hiddenModels: HiddenSkinItem[]
 }>()
 
 const emit = defineEmits<{
@@ -31,6 +44,10 @@ const emit = defineEmits<{
   'skin-select': [index: number]
   'import-click': []
   'switch-mode': [modeId: string]
+  'hide-model': [id: string]
+  'delete-model': [id: string]
+  'restore-model': [id: string]
+  'restore-all': []
 }>()
 
 // 模型类型标签配置（与 AVATAR_MODEL_TYPES 对齐）
@@ -50,6 +67,31 @@ const TYPE_LABELS: Record<AvatarRendererType, string> = {
   spine: 'Spine',
   png: 'PNG Tuber',
 }
+
+// 删除导入模型采用二次点击确认：首次点击进入确认态，3 秒未再次点击自动复位
+const confirmingDeleteId = ref<string | null>(null)
+let confirmResetTimer: ReturnType<typeof setTimeout> | null = null
+
+function onCardAction(skin: ManifestSkinItem) {
+  if (skin.source === 'builtin') {
+    emit('hide-model', skin.id)
+    return
+  }
+  if (confirmingDeleteId.value === skin.id) {
+    if (confirmResetTimer) clearTimeout(confirmResetTimer)
+    confirmingDeleteId.value = null
+    emit('delete-model', skin.id)
+    return
+  }
+  confirmingDeleteId.value = skin.id
+  if (confirmResetTimer) clearTimeout(confirmResetTimer)
+  confirmResetTimer = setTimeout(() => {
+    confirmingDeleteId.value = null
+  }, 3000)
+}
+
+// 已隐藏列表展开状态
+const hiddenListExpanded = ref(false)
 </script>
 
 <template>
@@ -123,12 +165,45 @@ const TYPE_LABELS: Record<AvatarRendererType, string> = {
               <span v-if="skin.capabilities.focusTracking" class="cap-badge focus" title="Focus Tracking">Track</span>
             </div>
           </div>
+          <!-- 悬浮操作：内置模型隐藏 / 导入模型删除 -->
+          <button
+            :class="['skin-action-btn', { danger: skin.source !== 'builtin', confirming: confirmingDeleteId === skin.id }]"
+            :title="skin.source === 'builtin'
+              ? '隐藏该内置模型（可在下方恢复）'
+              : (confirmingDeleteId === skin.id ? '再次点击确认删除' : '删除该导入模型')"
+            @click.stop="onCardAction(skin)"
+          >
+            <Trash2 v-if="skin.source !== 'builtin'" :size="13" />
+            <EyeOff v-else :size="13" />
+          </button>
         </div>
 
         <!-- 空列表提示 -->
         <div v-if="props.skinList.length === 0" class="empty-list-hint">
           <Palette :size="24" />
           <span>当前类型暂无模型</span>
+        </div>
+      </div>
+
+      <!-- 已隐藏的内置模型（可恢复） -->
+      <div v-if="props.hiddenModels.length > 0" class="hidden-section">
+        <button class="hidden-toggle" @click="hiddenListExpanded = !hiddenListExpanded">
+          <EyeOff :size="12" />
+          <span>已隐藏 {{ props.hiddenModels.length }} 个内置模型</span>
+          <ChevronDown :size="12" :class="['hidden-chevron', { expanded: hiddenListExpanded }]" />
+        </button>
+        <div v-if="hiddenListExpanded" class="hidden-list">
+          <div v-for="hidden in props.hiddenModels" :key="hidden.id" class="hidden-item">
+            <span class="hidden-name">{{ hidden.name }}</span>
+            <span class="hidden-type">{{ TYPE_LABELS[hidden.type] }}</span>
+            <button class="hidden-restore-btn" title="恢复显示" @click="emit('restore-model', hidden.id)">
+              <Eye :size="12" />
+            </button>
+          </div>
+          <button class="hidden-restore-all" @click="emit('restore-all')">
+            <RotateCcw :size="11" />
+            <span>全部恢复</span>
+          </button>
         </div>
       </div>
 
@@ -310,6 +385,157 @@ const TYPE_LABELS: Record<AvatarRendererType, string> = {
   border: 1px solid var(--border-light);
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-in-out);
+  position: relative;
+}
+
+/* 卡片悬浮操作按钮（内置隐藏 / 导入删除），hover 时浮现避免干扰正常点击 */
+.skin-action-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-in-out), background var(--duration-fast) var(--ease-in-out), color var(--duration-fast) var(--ease-in-out);
+}
+
+.skin-card:hover .skin-action-btn,
+.skin-action-btn:focus-visible {
+  opacity: 1;
+}
+
+.skin-action-btn:hover {
+  background: var(--overlay-subtle);
+  color: var(--text);
+}
+
+.skin-action-btn.danger:hover {
+  background: var(--task-red-soft);
+  color: var(--lumi-danger);
+}
+
+.skin-action-btn.confirming {
+  opacity: 1;
+  background: var(--lumi-danger);
+  color: var(--text-inverse);
+}
+
+.hidden-section {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--divider-soft);
+  padding-top: var(--space-2);
+}
+
+.hidden-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-in-out), color var(--duration-fast) var(--ease-in-out);
+}
+
+.hidden-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.hidden-chevron {
+  margin-left: auto;
+  transition: transform var(--duration-fast) var(--ease-in-out);
+}
+
+.hidden-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.hidden-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1) 2px 0;
+}
+
+.hidden-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+}
+
+.hidden-item:hover {
+  background: var(--surface-hover);
+}
+
+.hidden-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hidden-type {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.hidden-restore-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--duration-fast) var(--ease-in-out), color var(--duration-fast) var(--ease-in-out);
+}
+
+.hidden-restore-btn:hover {
+  background: var(--lumi-primary-subtle);
+  color: var(--lumi-primary);
+}
+
+.hidden-restore-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 4px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-in-out), color var(--duration-fast) var(--ease-in-out);
+}
+
+.hidden-restore-all:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .skin-card:hover {

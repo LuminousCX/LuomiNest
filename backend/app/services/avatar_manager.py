@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass, field
 from loguru import logger
 
+from app.core.constants.voice import DEFAULT_EDGE_VOICE
+
 
 # Semantic emotion IDs supported across all avatars.
 # The LLM is instructed to emit only these IDs inside <exp:...> tags.
@@ -63,21 +65,21 @@ _DEFAULT_EXPRESSION_MAP: dict[str, str] = {
 LUOMINEST_AVATAR_BINDINGS: dict[str, AvatarBinding] = {
     "llny": AvatarBinding(
         model_id="llny",
-        voice="zh-CN-XiaoxiaoNeural",
+        voice=DEFAULT_EDGE_VOICE,
         voice_lang="zh",
         expression_map=_LLNy_EXPRESSION_MAP,
         default_expression="- -",
     ),
     "hiyori": AvatarBinding(
         model_id="hiyori",
-        voice="zh-CN-XiaoxiaoNeural",
+        voice=DEFAULT_EDGE_VOICE,
         voice_lang="zh",
         expression_map=dict(_DEFAULT_EXPRESSION_MAP),
         default_expression="neutral",
     ),
     "shizuku": AvatarBinding(
         model_id="shizuku",
-        voice="zh-CN-XiaoxiaoNeural",
+        voice=DEFAULT_EDGE_VOICE,
         voice_lang="zh",
         expression_map=dict(_DEFAULT_EXPRESSION_MAP),
         default_expression="neutral",

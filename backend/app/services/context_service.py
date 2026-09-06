@@ -16,7 +16,7 @@ from app.core.domain_policy import (
 )
 from app.infrastructure.database.json_store import agents_store
 from app.core.context import get_context_manager
-from app.core.utils import extract_text_from_content
+from app.core.utils import AsyncKeyLocks, extract_text_from_content
 from app.engines.memory import get_memory_engine, get_track_engine
 from app.engines.memory.memory_engine import (
     _CORRECTION_HINT,
@@ -54,20 +54,14 @@ def _owner_engine_for(agent_id: str | None):
 
 class ContextService:
     def __init__(self):
-        self._memory_locks: dict[str | None, asyncio.Lock] = {}
-        self._memory_locks_guard = asyncio.Lock()
+        self._memory_locks = AsyncKeyLocks()
 
     @staticmethod
     def _get_llm_adapter():
         return llm_adapter
 
     async def _get_memory_lock(self, agent_id: str | None) -> asyncio.Lock:
-        if agent_id in self._memory_locks:
-            return self._memory_locks[agent_id]
-        async with self._memory_locks_guard:
-            if agent_id not in self._memory_locks:
-                self._memory_locks[agent_id] = asyncio.Lock()
-            return self._memory_locks[agent_id]
+        return await self._memory_locks.get(agent_id)
 
     @staticmethod
     def _extract_user_text(msg: dict) -> str:

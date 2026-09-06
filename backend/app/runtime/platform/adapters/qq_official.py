@@ -6,6 +6,7 @@ from loguru import logger
 
 from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
 from app.runtime.platform.infrastructure.retry import RetryConfig, async_retry
+from app.runtime.platform.infrastructure.token_manager import AppTokenMixin, parse_target
 
 
 class _RateLimiter:
@@ -66,7 +67,7 @@ class RateLimitError(Exception):
         super().__init__(f"Rate limit exceeded, retry after {retry_after}s")
 
 
-class LuomiNestQQOfficialAdapter(BasePlatformAdapter):
+class LuomiNestQQOfficialAdapter(AppTokenMixin, BasePlatformAdapter):
     """QQ 官方机器人适配器：通过 QQ 开放平台 OpenAPI 收发消息。
 
     工作流程：
@@ -84,6 +85,9 @@ class LuomiNestQQOfficialAdapter(BasePlatformAdapter):
     """
 
     platform_name = "qq_official"
+
+    # Token 相关日志前缀（AppTokenMixin）
+    token_log_prefix = "[QQOfficial]"
 
     API_BASE = "https://api.sgroup.qq.com"
 
@@ -156,6 +160,8 @@ class LuomiNestQQOfficialAdapter(BasePlatformAdapter):
         """带速率限制重试的消息发送。"""
         import httpx
 
+        from app.core.config import settings
+
         if target_type == "group":
             url = f"{self.API_BASE}/v2/groups/{target_id}/messages"
         else:
@@ -174,7 +180,7 @@ class LuomiNestQQOfficialAdapter(BasePlatformAdapter):
 
         async def _do_send() -> bool:
             await self._rate_limiter.acquire()
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with httpx.AsyncClient(timeout=settings.PLATFORM_HTTP_TIMEOUT) as client:
                 resp = await client.post(url, json=payload, headers=headers)
                 self._rate_limiter.update_from_headers(dict(resp.headers))
 
@@ -416,43 +422,23 @@ class LuomiNestQQOfficialAdapter(BasePlatformAdapter):
         return urls
 
     # ------------------------------------------------------------------
-    # Token 管理
+    # Token 管理（缓存/刷新骨架见 AppTokenMixin）
     # ------------------------------------------------------------------
 
-    async def _refresh_access_token(self) -> bool:
+    async def _fetch_token(self) -> tuple[str, int] | None:
         import httpx
+
+        from app.core.config import settings
 
         url = f"{self.API_BASE}/app/getAppAccessToken"
         payload = {"appId": self._app_id, "clientSecret": self._app_secret}
 
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.post(url, json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    self._access_token = data.get("access_token", "")
-                    expires_in = int(data.get("expires_in", 7200))
-                    self._token_expires = time.time() + expires_in - 300
-                    logger.info(f"[QQOfficial] Access token refreshed, expires in {expires_in}s")
-                    return True
-                logger.error(f"[QQOfficial] Token refresh failed: {resp.status_code} {resp.text[:200]}")
-                return False
-        except Exception as e:
-            logger.error(f"[QQOfficial] Token refresh exception: {e}")
-            return False
+        async with httpx.AsyncClient(timeout=settings.PLATFORM_HTTP_TIMEOUT) as client:
+            resp = await client.post(url, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("access_token", ""), int(data.get("expires_in", 7200))
+            logger.error(f"[QQOfficial] Token refresh failed: {resp.status_code} {resp.text[:200]}")
+            return None
 
-    async def _ensure_access_token(self) -> str:
-        if self._access_token and time.time() < self._token_expires:
-            return self._access_token
-        async with self._token_lock:
-            if self._access_token and time.time() < self._token_expires:
-                return self._access_token
-            await self._refresh_access_token()
-            return self._access_token
-
-    @staticmethod
-    def _parse_target(target: str) -> tuple[str, str]:
-        if ":" in target:
-            t_type, t_id = target.split(":", 1)
-            return t_type, t_id
-        return "private", target
+    _parse_target = staticmethod(parse_target)

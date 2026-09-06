@@ -23,7 +23,7 @@ export const useWorkbenchHistory = (options: UseWorkbenchHistoryOptions) => {
   const searchQuery = ref('')
   const { results: searchResults, isSearching } = useDebouncedSearch<ConversationSearchResult[]>(
     searchQuery,
-    (q) => chatStore.searchConversations(q),
+    (q, signal) => chatStore.searchConversations(q, undefined, signal),
     300,
   )
 

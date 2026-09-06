@@ -1,5 +1,6 @@
 import hashlib
 import re
+import shutil
 import threading
 from contextlib import contextmanager
 from datetime import datetime
@@ -59,6 +60,37 @@ _USER_KEY_ALLOWED = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 # 历史版本 owner 数据所在目录（按优先级兜底；M2=B 零迁移过渡）
 _LEGACY_OWNER_KEYS = ("main", "_default")
 
+# SQLite 行级隔离键前缀（owner 轨道）：owner:{agent_key}
+OWNER_PREFIX = "owner:"
+
+
+def owner_key_for(owner: str) -> str:
+    """owner 标识 → SQLite 行级隔离键（owner:{owner}）。"""
+    return f"{OWNER_PREFIX}{owner}"
+
+
+def agents_root() -> Path:
+    """记忆双轨 agents 根目录：{DATA_DIR}/memory/agents。"""
+    return Path(settings.DATA_DIR) / "memory" / "agents"
+
+
+def agent_memory_dir(agent_id: str) -> Path:
+    """Agent 记忆目录：{DATA_DIR}/memory/agents/{agent_id}。"""
+    return agents_root() / agent_id
+
+
+def remove_agent_memory(agent_id: str) -> bool:
+    """删除 Agent 的旧文件布局记忆目录（存在才删）。
+
+    Returns:
+        是否实际执行了删除（目录不存在时返回 False，与既有调用点行为一致）。
+    """
+    agent_dir = agent_memory_dir(agent_id)
+    if agent_dir.exists():
+        shutil.rmtree(agent_dir)
+        return True
+    return False
+
 
 def sanitize_track_key(user_key: str) -> str:
     """校验并返回路径安全的 user_key；非法时抛 ValueError（防路径穿越）。"""
@@ -74,7 +106,7 @@ def resolve_owner_agent_key(base_dir: Path | None = None) -> str:
     规范目录为 ``agents/{MAIN_AGENT_ID}``；不存在时按优先级回退到历史
     目录（main / _default），保证存量数据零迁移可读；均不存在时返回规范名。
     """
-    agents_dir = Path(base_dir) if base_dir else Path(settings.DATA_DIR) / "memory" / "agents"
+    agents_dir = Path(base_dir) if base_dir else agents_root()
     if (agents_dir / MAIN_AGENT_ID).exists():
         return MAIN_AGENT_ID
     for legacy_key in _LEGACY_OWNER_KEYS:
@@ -113,8 +145,8 @@ def store_path_for_owner_key(
     users:{key} → memory/users/{key}；tmp: 测试轨不映射（抛 ValueError）。
     """
     root = Path(memory_root) if memory_root else Path(settings.DATA_DIR) / "memory"
-    if owner_key.startswith("owner:"):
-        base = root / "agents" / owner_key[len("owner:"):]
+    if owner_key.startswith(OWNER_PREFIX):
+        base = root / "agents" / owner_key[len(OWNER_PREFIX):]
     elif owner_key.startswith("users:"):
         base = root / "users" / owner_key[len("users:"):]
     else:
@@ -146,11 +178,11 @@ def _derive_owner_key(storage_path: Path) -> str:
     if parts and parts[0] == "users" and len(parts) > 1:
         return f"users:{parts[1]}"
     if parts and parts[0] == "agents" and len(parts) > 1:
-        return f"owner:{parts[1]}"
+        return owner_key_for(parts[1])
     if parts and parts[0] == "agents":
-        return f"owner:{MAIN_AGENT_ID}"
+        return owner_key_for(MAIN_AGENT_ID)
     # 旧布局根目录（memory/memory.json 时代）兜底
-    return f"owner:{MAIN_AGENT_ID}"
+    return owner_key_for(MAIN_AGENT_ID)
 
 
 def _derive_conversation_id(storage_path: Path) -> str:

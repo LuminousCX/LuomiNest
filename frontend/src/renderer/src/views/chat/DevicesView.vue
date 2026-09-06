@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { Wifi, Users, Home, Cpu, Plus, Search, Settings2, ChevronRight, Activity, MessageSquare, Clock } from 'lucide-vue-next'
+import { ref, computed, onMounted } from 'vue'
+import { Wifi, Users, Home, Cpu, Plus, Settings2, ChevronRight, Activity, MessageSquare, Clock } from 'lucide-vue-next'
 import { useApi } from '../../composables/useApi'
 import { formatDateRelative } from '../../utils/format'
+import SearchInput from '../../components/common/SearchInput.vue'
 import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
-import LumiInput from '../../components/common/LumiInput.vue'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
 
@@ -59,6 +59,22 @@ const PROTOCOL_MAP: Record<string, string> = {
 
 const searchQuery = ref('')
 const activeTab = ref<'devices' | 'groups'>('devices')
+
+// 搜索过滤（此前仅有输入框而无过滤逻辑）
+const filteredDevices = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return devices.value
+  return devices.value.filter((d) => d.name.toLowerCase().includes(q))
+})
+const filteredGroups = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return groups.value
+  return groups.value.filter(
+    (g) =>
+      g.name.toLowerCase().includes(q) ||
+      g.members.some((m) => m.toLowerCase().includes(q)),
+  )
+})
 
 const devices = ref<Device[]>([])
 const groups = ref<Group[]>([])
@@ -137,9 +153,7 @@ onMounted(() => {
     <div class="devices-content">
       <div class="main-panel">
         <template v-if="activeTab === 'devices'">
-          <LumiInput v-model="searchQuery" type="search" placeholder="搜索设备..." class="search-input">
-            <template #icon><Search :size="14" /></template>
-          </LumiInput>
+          <SearchInput v-model="searchQuery" placeholder="搜索设备..." class="search-input" />
           <div class="device-list">
             <div v-if="loading" class="state-tip">加载中...</div>
             <LumiEmptyState
@@ -150,13 +164,13 @@ onMounted(() => {
               size="md"
             />
             <LumiEmptyState
-              v-else-if="devices.length === 0"
+              v-else-if="filteredDevices.length === 0"
               icon="folder"
               title="暂无设备"
               size="md"
             />
             <LumiCard
-              v-for="d in devices"
+              v-for="d in filteredDevices"
               v-else
               :key="d.id"
               class="device-card"
@@ -182,18 +196,16 @@ onMounted(() => {
           </div>
         </template>
         <template v-else>
-          <LumiInput v-model="searchQuery" type="search" placeholder="搜索群组..." class="search-input">
-            <template #icon><Search :size="14" /></template>
-          </LumiInput>
+          <SearchInput v-model="searchQuery" placeholder="搜索群组..." class="search-input" />
           <div class="group-list">
             <LumiEmptyState
-              v-if="groups.length === 0"
+              v-if="filteredGroups.length === 0"
               icon="folder"
               title="暂无群组"
               size="md"
             />
             <LumiCard
-              v-for="g in groups"
+              v-for="g in filteredGroups"
               v-else
               :key="g.id"
               class="group-card"

@@ -7,6 +7,7 @@ import {
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 import SkillsPicker from '../common/SkillsPicker.vue'
+import { useAutoResizeTextarea } from '../../composables/useAutoResizeTextarea'
 import type { ProviderLogo } from '../../types'
 import type { ChatModeLevel, WorkflowModeOption } from './types'
 
@@ -32,6 +33,7 @@ const emit = defineEmits<{
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const { autoResize, resetTextareaHeight } = useAutoResizeTextarea(textareaRef)
 
 const inputTextModel = computed<string>({
   get: () => props.inputText,
@@ -49,19 +51,6 @@ const toggleWorkflowMode = () => {
     emit('select-chat-mode', 'normal')
   } else {
     emit('select-chat-mode', 'standard')
-  }
-}
-
-const resetTextareaHeight = () => {
-  if (textareaRef.value) {
-    textareaRef.value.style.height = 'auto'
-  }
-}
-
-const autoResize = () => {
-  if (textareaRef.value) {
-    textareaRef.value.style.height = 'auto'
-    textareaRef.value.style.height = `${Math.min(textareaRef.value.scrollHeight, 120)}px`
   }
 }
 

@@ -49,6 +49,27 @@ const ttsBindings = ref<Record<string, TtsBindingInfo>>({})
 /** 翻译管线开关（voice_config.translation.enabled，默认关闭） */
 const translationEnabled = ref(false)
 
+/** 计算设备徽标文本 */
+const ttsDeviceLabel = computed(() => {
+  const device = ttsDevice.value
+  if (!device) return '未知'
+  if (device.type === 'gpu') return 'GPU 加速'
+  return device.type.toUpperCase()
+})
+
+/** 设备检测提示行 */
+const ttsDeviceHint = computed(() => {
+  const device = ttsDevice.value
+  if (!device) return '尚未获取到计算设备信息，请确认后端服务已启动。'
+  const parts: string[] = []
+  if (device.type === 'gpu' && device.gpu_count && device.gpu_count > 1) {
+    parts.push(`检测到 ${device.gpu_count} 张 GPU`)
+  }
+  if (device.vendor) parts.push(device.vendor)
+  if (device.note) parts.push(device.note)
+  return parts.length > 0 ? parts.join(' · ') : '设备就绪。'
+})
+
 const fetchTtsInfo = async () => {
   ttsLoading.value = true
   ttsError.value = null
@@ -338,14 +359,14 @@ onMounted(() => {
   <div :class="['settings-panel', 'animate-slide-up', { 'is-embedded': embedded }]">
     <!-- 加载 / 错误状态 -->
     <div v-if="ttsLoading" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact tts-state">
+      <div class="settings-card__body settings-card__body--compact settings-state">
         <Loader2 :size="20" class="spin-animation" />
         <span>正在检测 TTS 引擎与设备...</span>
       </div>
     </div>
 
     <div v-else-if="ttsError" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact tts-state tts-state--error">
+      <div class="settings-card__body settings-card__body--compact settings-state settings-state--error">
         <AlertCircle :size="18" />
         <span>{{ ttsError }}</span>
         <LumiButton size="sm" @click="fetchTtsInfo">重试</LumiButton>
@@ -527,7 +548,7 @@ onMounted(() => {
         <div class="settings-card__body settings-card__body--compact">
           <div class="settings-data-row">
             <span class="settings-data-row__label">计算设备</span>
-            <span :class="['tts-badge', ttsDevice?.type === 'gpu' ? 'tts-badge--success' : 'tts-badge--primary']">
+            <span :class="['settings-badge', ttsDevice?.type === 'gpu' ? 'settings-badge--success' : 'settings-badge--primary']">
               {{ ttsDeviceLabel }}
             </span>
           </div>
@@ -562,11 +583,11 @@ onMounted(() => {
             :class="['settings-list-row', { 'settings-list-row--disabled': !engine.available }]"
           >
             <div class="settings-list-row__info">
-              <div class="tts-engine-name">
+              <div class="settings-engine-name">
                 <component
                   :is="engine.online ? Wifi : WifiOff"
                   :size="14"
-                  :class="engine.online ? 'tts-engine-name__online' : 'tts-engine-name__offline'"
+                  :class="engine.online ? 'settings-engine-name__online' : 'settings-engine-name__offline'"
                 />
                 <span>{{ engine.name }}</span>
               </div>
@@ -574,7 +595,7 @@ onMounted(() => {
                 {{ engine.online ? '在线合成，需网络连接' : '离线合成，无需网络' }}
               </span>
             </div>
-            <span :class="['tts-badge', engine.available ? 'tts-badge--success' : 'tts-badge--danger']">
+            <span :class="['settings-badge', engine.available ? 'settings-badge--success' : 'settings-badge--danger']">
               <Check v-if="engine.available" :size="12" />
               <AlertCircle v-else :size="12" />
               <span>{{ engine.available ? '可用' : '未安装' }}</span>
@@ -618,63 +639,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.tts-state {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--text-muted);
-  font-size: var(--text-base);
-}
-
-.tts-state--error {
-  color: var(--lumi-danger);
-  background: var(--lumi-danger-light);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-}
-
-.tts-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-md);
-}
-
-.tts-badge--primary {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.tts-badge--success {
-  background: var(--lumi-success-light);
-  color: var(--lumi-success);
-}
-
-.tts-badge--danger {
-  background: var(--lumi-danger-light);
-  color: var(--lumi-danger);
-}
-
-.tts-engine-name {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.tts-engine-name__online {
-  color: var(--lumi-success);
-}
-
-.tts-engine-name__offline {
-  color: var(--text-muted);
-}
-
 .tts-binding-meta {
   display: flex;
   flex-wrap: wrap;
@@ -695,46 +659,6 @@ onMounted(() => {
 .tts-binding-meta__value {
   color: var(--text-primary);
   font-family: var(--font-mono);
-}
-
-.spin-animation {
-  animation: lumi-spin 1s linear infinite;
-}
-
-/* ── 嵌入模式：去除 settings-card 边框 / 背景 / 蓝条 / 圆角 ── */
-.is-embedded {
-  max-width: none;
-  margin: 0;
-  padding: var(--space-6) var(--space-7);
-  overflow: visible;
-  flex: none;
-  gap: var(--space-7);
-}
-
-.is-embedded .settings-card {
-  background: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
-.is-embedded .settings-card::before {
-  display: none !important;
-}
-
-.is-embedded .settings-card:hover {
-  box-shadow: none !important;
-  border-color: transparent !important;
-  transform: none !important;
-}
-
-.is-embedded .settings-card__header {
-  padding-left: 0;
-}
-
-.is-embedded .settings-card__body {
-  padding-left: 0;
-  padding-right: 0;
 }
 
 /* ── 翻译管线开关（minimalist，颜色全走 CSS 变量） ── */

@@ -187,17 +187,8 @@ class ProviderCredentialRepository(BaseRepository):
                 obj.last_used_at = utcnow_iso()
                 session.commit()
 
-    def delete_by_provider(self, provider_id: str) -> int:
-        """删除 provider 的所有凭证，返回删除数量。"""
-        with sync_session_factory() as session:
-            objs = session.execute(
-                select(ProviderCredential).where(ProviderCredential.provider_id == provider_id)
-            ).scalars().all()
-            count = len(objs)
-            for obj in objs:
-                session.delete(obj)
-            session.commit()
-            return count
+    # delete_by_provider / delete_by_provider_async 收口至 BaseRepository（与
+    # ProviderModelRepository 的同义实现统一），行为不变：按 provider_id 删除并返回数量。
 
     # ── Async wrappers ──
 
@@ -221,6 +212,3 @@ class ProviderCredentialRepository(BaseRepository):
 
     async def update_last_used_async(self, credential_id: str) -> None:
         await asyncio.to_thread(self.update_last_used, credential_id)
-
-    async def delete_by_provider_async(self, provider_id: str) -> int:
-        return await asyncio.to_thread(self.delete_by_provider, provider_id)

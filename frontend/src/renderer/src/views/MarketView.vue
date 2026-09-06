@@ -15,6 +15,7 @@ import LumiEmptyState from '../components/common/LumiEmptyState.vue'
 import LumiButton from '../components/common/LumiButton.vue'
 import type { MarketplaceFilter, MarketplaceItem, MarketplaceType } from '../types/marketplace'
 import { formatDateTime } from '../utils/format'
+import { vClickOutside } from '../directives/clickOutside'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,9 +44,6 @@ watch(() => route.query.tab, (tab) => {
 
 // 初始化时加载仓库来源数据
 onMounted(async () => {
-  // 先注册点击监听，确保 onUnmounted 能正确移除（即使初始化中途组件卸载）
-  document.addEventListener('click', closeSourceDropdown)
-
   // 优先从后端获取目录数据（失败时保持 Mock 数据）
   await store.fetchCatalogFromBackend()
   await repoSourceStore.fetchSources()
@@ -77,16 +75,12 @@ const handleQuickSwitchSource = async (sourceId: string) => {
   }
 }
 
-const closeSourceDropdown = (e: MouseEvent) => {
-  const target = e.target as HTMLElement
-  if (!target.closest('.source-quick-switch')) {
-    showSourceDropdown.value = false
-  }
+const closeSourceDropdown = () => {
+  showSourceDropdown.value = false
 }
 
 onUnmounted(() => {
   store.cleanup()
-  document.removeEventListener('click', closeSourceDropdown)
 })
 
 const categories = computed(() => store.getCategories(activeTab.value))
@@ -209,7 +203,7 @@ function toggleFilters() {
       <MarketplaceSearch />
 
       <!-- 发布源快速切换 -->
-      <div class="source-quick-switch">
+      <div v-click-outside="closeSourceDropdown" class="source-quick-switch">
         <button
           class="source-quick-btn"
           :disabled="registryStore.loading || registryStore.switching"

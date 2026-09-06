@@ -6,45 +6,20 @@
 参考: Open-LLM-VTuber 的 fun_asr.py 实现.
 """
 
-import asyncio
-import io
-import os
 import re
-import sys
-from pathlib import Path
 
 import numpy as np
-import soundfile as sf
 from loguru import logger
 
 from app.runtime.provider.engine_capabilities import EngineCapabilities
-from app.runtime.provider.stt.ports import STTProvider
-
-
-def _resolve_model_root() -> Path:
-    """解析 STT 模型根目录（按优先级）：
-    1. LUOMINEST_STT_MODEL_DIR 环境变量（绝对路径覆盖，运维/测试用）
-    2. 打包态：sys.executable 同级（内置模型，只读），仅在目录存在且非空时使用
-    3. 打包态回退：settings.DATA_DIR / "models" / "stt"（用户下载目录，可写）
-    4. 开发态：__file__ 在 backend/app/runtime/provider/stt/，parents[4] = backend/
-    """
-    env_dir = os.environ.get("LUOMINEST_STT_MODEL_DIR")
-    if env_dir:
-        return Path(env_dir)
-    if getattr(sys, "frozen", False):
-        builtin_root = Path(sys.executable).parent / "models" / "stt"
-        if builtin_root.exists() and any(builtin_root.iterdir()):
-            return builtin_root
-        from app.core.config import settings
-        return Path(settings.DATA_DIR) / "models" / "stt"
-    return Path(__file__).resolve().parents[4] / "models" / "stt"
+from app.runtime.provider.model_paths import resolve_model_dir
+from app.runtime.provider.stt.base import BaseSTTProvider
 
 
 # 模型根目录（开发态：backend/models/stt/；打包态：userData/Data/backend/models/stt/）
-_MODEL_ROOT = _resolve_model_root()
-
-# 采样率
-_SAMPLE_RATE = 16000
+_MODEL_ROOT = resolve_model_dir(
+    "stt", "LUOMINEST_STT_MODEL_DIR", require_nonempty_builtin=True
+)
 
 # 模型别名到完整 ModelScope ID 的映射
 MODEL_ALIAS_TO_FULL_ID = {
@@ -73,7 +48,7 @@ def _clean_sense_voice_text(text: str) -> str:
     return text.strip()
 
 
-class FunASRSTTProvider(STTProvider):
+class FunASRSTTProvider(BaseSTTProvider):
     """FunASR STT Provider（单例）.
 
     使用阿里达摩院 FunASR，默认加载 SenseVoiceSmall 模型.
@@ -152,42 +127,7 @@ class FunASRSTTProvider(STTProvider):
             f"language={language}, use_itn={use_itn}"
         )
 
-    async def transcribe(self, audio_data: bytes, format: str = "wav") -> str:
-        if not audio_data:
-            return ""
-
-        # 解码音频
-        audio_np = await asyncio.to_thread(self._decode_audio, audio_data, format)
-
-        # 识别
-        text = await asyncio.to_thread(self._transcribe_sync, audio_np)
-
-        return text
-
-    def _decode_audio(self, audio_data: bytes, format: str) -> np.ndarray:
-        """将音频 bytes 解码为 16kHz 单声道 numpy 数组."""
-        buffer = io.BytesIO(audio_data)
-        audio_np, sr = sf.read(buffer, dtype="float32")
-
-        if audio_np.ndim > 1:
-            audio_np = audio_np[:, 0]
-
-        if sr != _SAMPLE_RATE:
-            audio_np = self._resample(audio_np, sr, _SAMPLE_RATE)
-
-        return audio_np
-
-    def _resample(self, audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
-        """简单线性插值重采样."""
-        if orig_sr == target_sr:
-            return audio
-        ratio = target_sr / orig_sr
-        n_samples = int(len(audio) * ratio)
-        indices = np.arange(n_samples) / ratio
-        indices = np.clip(indices, 0, len(audio) - 1)
-        return np.interp(indices, np.arange(len(audio)), audio).astype(np.float32)
-
-    def _transcribe_sync(self, audio: np.ndarray) -> str:
+    def _recognize_sync(self, audio: np.ndarray) -> str:
         """同步识别音频."""
         import torch
 

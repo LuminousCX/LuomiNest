@@ -1,10 +1,8 @@
 import asyncio
-import json
-import re
 
 from loguru import logger
 
-from app.core.utils import utc_now, extract_llm_text
+from app.core.utils import parse_llm_json, utc_now, extract_llm_text
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
 from .models import MemoryData, FactItem, FACT_CATEGORIES, _SUMMARY_SECTION_MAP, summaries_to_markdown
@@ -60,7 +58,7 @@ class MemoryExtractor:
             response_text = extract_llm_text(result)
             logger.info(f"[Memory] LLM fact extract response: {response_text}")
 
-            parsed = self._parse_llm_json(response_text)
+            parsed = parse_llm_json(response_text)
             if parsed is None:
                 return "", []
 
@@ -181,7 +179,7 @@ class MemoryExtractor:
             response_text = extract_llm_text(result)
             logger.info(f"[Memory] Distill response: {response_text[:300]}")
 
-            parsed = self._parse_llm_json(response_text)
+            parsed = parse_llm_json(response_text)
             if parsed is None:
                 return None
 
@@ -308,7 +306,7 @@ class MemoryExtractor:
             response_text = extract_llm_text(result)
             logger.info(f"[Memory] Summary sections extract response: {response_text[:300]}")
 
-            parsed = self._parse_llm_json(response_text)
+            parsed = parse_llm_json(response_text)
             if parsed is None:
                 return None
 
@@ -351,25 +349,7 @@ class MemoryExtractor:
             return None
 
     # --- 公共解析方法（消除 extract_facts 和 distill_conversation 的重复代码） ---
-
-    @staticmethod
-    def _parse_llm_json(response_text: str) -> dict | None:
-        """从 LLM 响应中解析 JSON，处理 ``` 包裹等格式。"""
-        json_str = response_text
-        if "```" in json_str:
-            json_match = re.search(
-                r"```(?:json)?\s*(\{.*?\})\s*```", json_str, re.DOTALL
-            )
-            if json_match:
-                json_str = json_match.group(1)
-        json_str = json_str.strip()
-        try:
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            logger.warning(
-                f"[Memory] Failed to parse LLM JSON response: {e}, raw: {response_text[:200]}"
-            )
-            return None
+    # JSON 解析已统一收口到 core.utils.parse_llm_json（原 _parse_llm_json 已删除）
 
     def _parse_facts_from_raw(
         self, raw_facts: list, source: str = "conversation", conversation_id: str | None = None, original_message: str = ""

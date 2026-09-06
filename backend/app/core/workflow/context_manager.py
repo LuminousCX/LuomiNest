@@ -11,14 +11,13 @@
 - claude-code: microCompact（工具结果清理）+ autoCompact（LLM 摘要）+ reactiveCompact（截断）
 - LuomiNest: app/core/context/__init__.py 的 ContextTruncator 和 LLMSummaryCompressor
 """
-import json
 from typing import Any
 
 from loguru import logger
 
 from app.runtime.provider.llm.types import RouteHint
 from app.core.context import ContextTruncator, TokenCounter
-from app.core.utils import extract_text_from_content
+from app.core.utils import extract_llm_text, extract_text_from_content
 
 # ===== 阈值常量 =====
 # Layer 1: 工具结果压缩阈值
@@ -204,11 +203,8 @@ class WorkflowContextManager:
                 route_hint=RouteHint.REASONER,
             )
 
-            summary_content = ""
-            if isinstance(result, dict):
-                summary_content = result.get("content", "") or ""
-            elif isinstance(result, str):
-                summary_content = result
+            # dict/str 返回值文本提取统一走 core.utils.extract_llm_text
+            summary_content = extract_llm_text(result)
 
             if not summary_content.strip():
                 logger.warning("[WorkflowCtx] Layer 2 summary is empty, skip compression")

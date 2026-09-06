@@ -1,28 +1,19 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import {
   MessageSquare, RefreshCw, Bot, User,
   Image as ImageIcon, Cpu,
 } from 'lucide-vue-next'
 import { usePlatformStore } from '../../stores/platform'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
+import { formatShortDateTime } from '../../utils/format'
+import { useAutoScroll } from '../../composables/useAutoScroll'
 
 const store = usePlatformStore()
 
 const conversationMessagesRef = ref<HTMLElement | null>(null)
 
-const formatMessageTime = (ts: string) => {
-  if (!ts) return ''
-  try {
-    const d = new Date(ts)
-    return d.toLocaleString('zh-CN', {
-      month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
-    })
-  } catch {
-    return ts
-  }
-}
+const formatMessageTime = (ts: string) => (ts ? formatShortDateTime(ts) : '')
 
 const getRoleIcon = (role: string) => {
   return role === 'assistant' ? Bot : User
@@ -32,11 +23,7 @@ const getRoleLabel = (role: string) => {
   return role === 'assistant' ? 'LuomiNest' : role === 'system' ? '系统' : '用户'
 }
 
-watch(() => store.selectedConversationDetail, () => {
-  if (conversationMessagesRef.value) {
-    conversationMessagesRef.value.scrollTop = conversationMessagesRef.value.scrollHeight
-  }
-}, { flush: 'post' })
+useAutoScroll(conversationMessagesRef, () => store.selectedConversationDetail)
 </script>
 
 <template>

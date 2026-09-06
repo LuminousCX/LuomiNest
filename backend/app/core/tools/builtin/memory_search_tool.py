@@ -21,6 +21,7 @@ from app.core.agents.memory_access import (
     MEMORY_ACCESS_NONE,
 )
 from app.core.tools.registry import ToolBase, ToolResult
+from app.core.utils import utc_now_dt
 
 
 class LuomiNestMemorySearchTool(ToolBase):
@@ -111,7 +112,7 @@ class LuomiNestMemorySearchTool(ToolBase):
 
         # 反查 fact 内容（仅有效事实：is_latest 且未过期，向量索引过期条目兜底过滤）
         try:
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             memory_data = engine.load_data()
             valid_facts = []
@@ -121,7 +122,7 @@ class LuomiNestMemorySearchTool(ToolBase):
                 if f.expires_at:
                     try:
                         exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
-                        if exp_time <= datetime.now(timezone.utc):
+                        if exp_time <= utc_now_dt():
                             continue
                     except (ValueError, TypeError):
                         pass

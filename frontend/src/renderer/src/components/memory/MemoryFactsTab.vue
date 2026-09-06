@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { BookOpen, Plus, Search, Filter, ChevronDown, Check, X, Save, Loader2, Archive, Tag, Edit3, Trash2 } from 'lucide-vue-next'
+import SearchInput from '../common/SearchInput.vue'
 import { CATEGORY_LABELS, CATEGORY_COLORS, FACT_CATEGORIES } from '../../stores/memory'
 import type { FactItem, FactCategory } from '../../stores/memory'
 
@@ -59,13 +60,10 @@ function formatExpiresAt(iso: string): string {
 
   <div class="facts-search-bar">
     <div class="search-input-wrap">
-      <Search :size="14" />
-      <input
-        :value="searchQuery"
-        @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
-        type="text"
+      <SearchInput
+        :model-value="searchQuery"
         placeholder="搜索事实..."
-        class="facts-search-input"
+        @update:model-value="(v) => emit('update:searchQuery', String(v ?? ''))"
       />
     </div>
     <div class="filter-dropdown">
@@ -227,22 +225,6 @@ function formatExpiresAt(iso: string): string {
 
 .search-input-wrap {
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  background: var(--surface);
-}
-
-.facts-search-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-size: var(--text-base);
-  outline: none;
 }
 
 .filter-dropdown {

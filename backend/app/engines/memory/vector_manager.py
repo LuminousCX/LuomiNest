@@ -4,8 +4,8 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from app.core.config import settings
 from app.engines.memory.models import FactItem, FACT_SCOPE_CONVERSATION
+from .store import agent_memory_dir
 from .vector_store import VectorStore, VectorEntry, LLMEmbeddingProvider, LocalEmbeddingProvider, ScoredFact
 
 
@@ -15,7 +15,7 @@ class VectorSearchManager:
     def __init__(self, agent_id: str, provider: Any, storage_path: Path | None = None, owner_key: str | None = None) -> None:
         self._agent_id: str = agent_id
         if storage_path is None:
-            storage_path = Path(settings.DATA_DIR) / "memory" / "agents" / agent_id / "vectors"
+            storage_path = agent_memory_dir(agent_id) / "vectors"
         # owner_key：行级隔离键（owner:… / users:…），缺省按路径推导（与 MemoryStore 一致）
         self._store: VectorStore = VectorStore(storage_path, provider, owner_key=owner_key)
 

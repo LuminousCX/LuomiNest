@@ -8,6 +8,7 @@
 - message_batch: 文本批量聚合器
 - sanitizer: 日志敏感信息脱敏
 - truncation: 消息长度安全截断
+- token_manager: 云端平台 access_token 缓存/刷新 Mixin 与 target 解析
 
 所有模块相互独立，无循环依赖。
 """
@@ -36,6 +37,10 @@ from app.runtime.platform.infrastructure.truncation import (
     TruncateMode,
     truncate,
 )
+from app.runtime.platform.infrastructure.token_manager import (
+    AppTokenMixin,
+    parse_target,
+)
 
 __all__ = [
     # retry
@@ -56,4 +61,7 @@ __all__ = [
     "MessageTruncator",
     "TruncateMode",
     "truncate",
+    # token_manager
+    "AppTokenMixin",
+    "parse_target",
 ]

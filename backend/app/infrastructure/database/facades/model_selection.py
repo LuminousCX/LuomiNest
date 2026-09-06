@@ -6,7 +6,7 @@
   llm_adapter.default_provider 与 settings.LLM_DEFAULT_MODEL 运行时镜像）。
 - 所有对话入口（工作台 / 对话页 / 平台接入 / 皮套工坊 / 桌面宠物）与
   记忆中枢统一通过本 Facade 解析主模型，不再各自维护 provider/model 副本。
-- 推理模型（reasoner_*）仅由工作台专业模式（standard/ultra）按轮路由，
+- 推理模型（reasoner_*）仅由工作台专业模式（standard）按轮路由，
   不属于"主模型"，不在本 Facade 范围内。
 """
 from loguru import logger

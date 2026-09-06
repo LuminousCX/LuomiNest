@@ -237,7 +237,7 @@ class BasePlatformAdapter(ABC):
 def get_standard_tools_for_platform(provider_name: str | None = None, model: str | None = None) -> list[dict[str, Any]]:
     """获取平台域对话的标准工具子集（双层注入第一层）。
 
-    平台域不使用 normal/ultra 全量工具集（上下文长度原因），
+    平台域不使用 normal 全量工具集（上下文长度原因），
     只注入 standard 层级的工具子集：
     - console.execute（命令行）
     - memory.search（记忆查询）

@@ -174,6 +174,8 @@ datas = [
     (str(PROJECT_ROOT / 'config'), 'config'),
     (str(PROJECT_ROOT / 'plugins'), 'plugins'),
     (str(PROJECT_ROOT / 'skills'), 'skills'),
+    # 内置皮套清单：工坊 UI 以 /avatar/manifest 为单一真相源，缺此文件打包版内置模型全部不可见
+    (str(PROJECT_ROOT / 'app' / 'data' / 'avatar-manifest.json'), 'app/data'),
     (str(PROJECT_ROOT.parent / 'LICENSE'), '.'),
 ]
 

@@ -12,13 +12,12 @@
 """
 from fastapi import APIRouter
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.exceptions import LuomiNestError, NotFoundError
-from app.core.utils import ok, sse_response, sse_data
+from app.core.utils import ok, sse_data, sse_response
 from app.core.workflow import (
     WorkflowMode,
-    WorkflowPhase,
     internal_tool_registry,
     workflow_engine,
 )
@@ -33,9 +32,17 @@ class WorkflowSubmitRequest(BaseModel):
     model: str | None = Field(None, description="LLM model（可选）")
     mode: WorkflowMode = Field(
         WorkflowMode.STANDARD,
-        description="工作流执行模式：standard(标准)/ultra(超长)",
+        description="工作流执行模式：standard(标准)；历史值 ultra 自动归一",
     )
     conversation_id: str | None = Field(None, description="关联对话 ID（可选）")
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _normalize_legacy_ultra(cls, v):
+        """ULTRA 模式已移除：旧客户端传入 ultra 时归一为 standard"""
+        if isinstance(v, str) and v.lower() == "ultra":
+            return WorkflowMode.STANDARD
+        return v
 
 
 class PlanConfirmationRequest(BaseModel):

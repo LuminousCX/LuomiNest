@@ -60,6 +60,7 @@ const {
   availableModelTypes,
   manifest,
   importedModels,
+  hiddenBuiltinModels,
 } = workshop
 
 // ===========================================================================
@@ -426,6 +427,39 @@ async function handleSkinSelect(idx: number) {
   const skin = skinList.value[idx]
   if (!skin) return
   await workshop.switchModel(skin.id)
+}
+
+// ===========================================================================
+// 模型管理：隐藏内置 / 恢复 / 删除导入
+// ===========================================================================
+
+// 已隐藏内置模型（轻量结构供侧边栏恢复区展示）
+const hiddenSkinItems = computed(() =>
+  hiddenBuiltinModels.value.map(m => ({ id: m.id, name: m.name, type: m.type })),
+)
+
+function handleHideModel(id: string) {
+  workshop.hideBuiltinModel(id)
+}
+
+function handleRestoreModel(id: string) {
+  workshop.restoreBuiltinModel(id)
+}
+
+function handleRestoreAll() {
+  workshop.restoreAllBuiltinModels()
+}
+
+async function handleDeleteModel(id: string) {
+  const model = manifest.value?.models.find(m => m.id === id)
+  if (!model) return
+  // Electron 侧按模型名管理文件（与 resolveModelLoadInfo 的匹配规则一致）
+  const imported = importedModels.value.find(m => m.name === model.name)
+  if (!imported) {
+    toast.error('未找到该模型的本地文件记录，请重启应用后重试')
+    return
+  }
+  await workshop.deleteModel(imported.name)
 }
 
 // ===========================================================================
@@ -878,10 +912,15 @@ onBeforeUnmount(() => {
         :selected-skin="selectedSkin"
         :current-mode="currentMode"
         :model-count-by-type="workshop.modelCountByType.value"
+        :hidden-models="hiddenSkinItems"
         @toggle-sidebar="toggleSkinSidebar"
         @skin-select="handleSkinSelect"
         @import-click="handleImportClick"
         @switch-mode="selectMode"
+        @hide-model="handleHideModel"
+        @delete-model="handleDeleteModel"
+        @restore-model="handleRestoreModel"
+        @restore-all="handleRestoreAll"
       />
     </div>
   </div>

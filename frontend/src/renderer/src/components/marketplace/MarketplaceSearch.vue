@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { Search, Clock, X, TrendingUp, ArrowRight } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../../stores/marketplace'
 import { debounce } from '../../utils/debounce'
-import LumiInput from '../../components/common/LumiInput.vue'
+import SearchInput from '../common/SearchInput.vue'
 
 const store = useMarketplaceStore()
 
@@ -55,20 +55,16 @@ const removeHistory = (text: string, e: Event) => {
 <template>
   <div class="market-search">
     <div class="search-input-wrap">
-      <LumiInput
+      <SearchInput
         v-model="localQuery"
         size="md"
-        clearable
         placeholder="搜索插件或技能..."
+        :loading="false"
         @update:model-value="onInput"
         @focus="onFocus"
         @blur="onBlur"
         @enter="handleSubmit"
-      >
-        <template #icon>
-          <Search :size="16" />
-        </template>
-      </LumiInput>
+      />
     </div>
 
     <Transition name="suggestions">

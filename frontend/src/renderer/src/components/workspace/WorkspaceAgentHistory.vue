@@ -3,7 +3,6 @@ import { computed } from 'vue'
 import {
   Bot,
   ChevronLeft,
-  Search,
   Plus,
   SquareCheck,
   MessageSquare,
@@ -13,6 +12,9 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-vue-next'
+import SearchInput from '../common/SearchInput.vue'
+import { highlightSnippet } from '../../utils/highlight'
+import { formatDateCalendar } from '../../utils/format'
 import type { AgentProfile } from '../../types'
 import type { TimeGroup, ConversationSearchResult } from './types'
 
@@ -56,37 +58,10 @@ const renamingTitleModel = computed<string>({
   set: (value) => emit('update:renamingTitle', value),
 })
 
-const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const formatConvTime = (dateStr: string) => formatDateCalendar(dateStr)
 
-const formatConvTime = (dateStr: string) => {
-  const d = new Date(dateStr)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
-  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-
-  if (diffDays <= 0) return time
-  if (diffDays === 1) return `昨天 ${time}`
-  if (diffDays <= 7) return `${WEEKDAYS[d.getDay()]} ${time}`
-  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
-}
-
-const highlightSnippet = (snippet: string): string => {
-  if (!snippet) return ''
-  const escaped = snippet
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-  const q = props.searchQuery.trim()
-  if (!q) return escaped
-  const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`(${escapedQ})`, 'gi')
-  return escaped.replace(regex, '<mark>$1</mark>')
-}
+const snippetHtml = (snippet: string): string =>
+  highlightSnippet(snippet, props.searchQuery)
 </script>
 
 <template>
@@ -106,8 +81,7 @@ const highlightSnippet = (snippet: string): string => {
 
     <div class="sidebar-header">
       <div class="conv-search">
-        <Search :size="14" class="search-icon" />
-        <input v-model="searchQueryModel" type="text" placeholder="搜索对话..." />
+        <SearchInput v-model="searchQueryModel" placeholder="搜索对话..." :loading="isSearching" />
       </div>
       <div class="sidebar-actions">
         <button class="new-conv-btn" title="创建新对话" @click="emit('new-conversation')">
@@ -154,7 +128,7 @@ const highlightSnippet = (snippet: string): string => {
             <MessageSquare :size="14" class="conv-item-icon" />
             <div class="conv-item-content">
               <span class="conv-item-title">{{ result.title }}</span>
-              <span class="conv-item-snippet" v-html="highlightSnippet(result.snippet)"></span>
+              <span class="conv-item-snippet" v-html="snippetHtml(result.snippet)"></span>
             </div>
           </div>
           <div v-if="searchResults.length === 0" class="conv-empty">
@@ -299,38 +273,7 @@ const highlightSnippet = (snippet: string): string => {
 }
 
 .conv-search {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px 10px;
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--workspace-border);
-  transition: all var(--transition-fast);
   margin-bottom: var(--space-2);
-}
-
-.conv-search:focus-within {
-  border-color: var(--lumi-brand-border);
-}
-
-.conv-search .search-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.conv-search input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  min-width: 0;
-}
-
-.conv-search input::placeholder {
-  color: var(--text-muted);
 }
 
 .sidebar-actions {
@@ -600,12 +543,6 @@ const highlightSnippet = (snippet: string): string => {
   font-size: var(--text-sm);
 }
 
-.spin-animation {
-  animation: luominest-spin 1s linear infinite;
-}
 
-@keyframes luominest-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+
 </style>

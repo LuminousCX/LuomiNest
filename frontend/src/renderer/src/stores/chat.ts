@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import type { ChatMessage, ApiMessage, MessageVersion, Conversation, ConversationListItem, ConversationSearchResult, ChatStreamChunk } from '../types'
+import type { ChatMode } from '../types/workflow'
 
 interface RawMessageVersion {
   content: string
@@ -358,13 +359,17 @@ export const useChatStore = defineStore('chat', () => {
     cancelConversationRequest()
   }
 
-  const searchConversations = async (keyword: string, agentId?: string): Promise<ConversationSearchResult[]> => {
+  const searchConversations = async (
+    keyword: string,
+    agentId?: string,
+    signal?: AbortSignal,
+  ): Promise<ConversationSearchResult[]> => {
     if (!keyword.trim()) return []
     const targetAgentId = agentId || activeAgentId.value
     try {
       let query = `?keyword=${encodeURIComponent(keyword.trim())}`
       if (targetAgentId) query += `&agent_id=${targetAgentId}`
-      return await apiGet<ConversationSearchResult[]>(`/chat/conversations/search${query}`)
+      return await apiGet<ConversationSearchResult[]>(`/chat/conversations/search${query}`, { signal })
     } catch (error) {
       logger.warn('Search failed:', error)
       return []
@@ -384,7 +389,7 @@ export const useChatStore = defineStore('chat', () => {
       fileContent?: string
       fileType?: string
       fileName?: string
-      chatMode?: 'normal' | 'standard' | 'ultra'
+      chatMode?: ChatMode
       skillIds?: string[]
       _preserveVersions?: MessageVersion[]
       onChunk?: (chunk: ChatStreamChunk) => void

@@ -509,9 +509,6 @@ const handleRemoveProvider = async (providerId: string) => {
   height: var(--space-4);
 }
 
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
 
 .expand-enter-active {
   animation: expand-in var(--duration-slow) var(--ease-in-out);

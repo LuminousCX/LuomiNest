@@ -8,52 +8,29 @@
 import asyncio
 import io
 import os
-import shutil
-import sys
-import tarfile
-import tempfile
 from pathlib import Path
 
-import httpx
 import soundfile as sf
 from loguru import logger
 
 from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.model_downloader import download_and_extract_model
+from app.runtime.provider.model_paths import resolve_model_dir
 from app.runtime.provider.tts.ports import TTSProvider
 
 
-def _resolve_model_dir() -> Path:
-    # 解析 vits-melo-tts-zh_en 模型目录（按优先级）：
-    # 1. LUOMINEST_TTS_MODEL_DIR 环境变量（绝对路径覆盖，运维/测试用）
-    # 2. 打包态：sys.executable 同级（内置模型，只读），仅在目录存在时使用
-    # 3. 打包态回退：settings.DATA_DIR / "models" / "tts" / "vits-melo-tts-zh_en"（可写，用于自动下载）
-    # 4. 开发态：__file__ 在 backend/app/runtime/provider/tts/，parents[4] = backend/
-    env_dir = os.environ.get("LUOMINEST_TTS_MODEL_DIR")
-    if env_dir:
-        return Path(env_dir)
-    if getattr(sys, "frozen", False):
-        builtin_dir = Path(sys.executable).parent / "models" / "tts" / "vits-melo-tts-zh_en"
-        if builtin_dir.exists():
-            return builtin_dir
-        # 打包态未内置 TTS 模型（精简安装），下载到用户数据目录避免写入只读的 Program Files
-        from app.core.config import settings
-        return Path(settings.DATA_DIR) / "models" / "tts" / "vits-melo-tts-zh_en"
-    return Path(__file__).resolve().parents[4] / "models" / "tts" / "vits-melo-tts-zh_en"
-
-
-_DEFAULT_MODEL_DIR = _resolve_model_dir()
+# vits-melo-tts-zh_en 模型目录（按优先级）：
+# 1. LUOMINEST_TTS_MODEL_DIR 环境变量（绝对路径覆盖，运维/测试用）
+# 2. 打包态：sys.executable 同级（内置模型，只读），仅在目录存在时使用
+# 3. 打包态回退：settings.DATA_DIR / "models" / "tts" / "vits-melo-tts-zh_en"（可写，用于自动下载）
+# 4. 开发态：backend/models/tts/vits-melo-tts-zh_en
+_DEFAULT_MODEL_DIR = resolve_model_dir("tts", "LUOMINEST_TTS_MODEL_DIR", "vits-melo-tts-zh_en")
 
 # 模型下载地址（sherpa-onnx GitHub Releases）
 _MODEL_DOWNLOAD_URL = (
     "https://github.com/k2-fsa/sherpa-onnx/releases/download/"
     "tts-models/vits-melo-tts-zh_en.tar.bz2"
 )
-
-# 下载超时（秒），162MB 在慢网络下可能需要较长时间
-_DOWNLOAD_TIMEOUT = 600
-
-# 下载重试次数
-_MAX_RETRIES = 3
 
 
 async def _download_model(target_dir: Path) -> None:
@@ -62,89 +39,21 @@ async def _download_model(target_dir: Path) -> None:
     Args:
         target_dir: 模型目标目录（解压后应包含 model.onnx 等文件）
     """
-    target_dir.parent.mkdir(parents=True, exist_ok=True)
+    from app.core.config import settings
 
-    logger.info(f"[SherpaOnnxTTS] 开始下载模型: {_MODEL_DOWNLOAD_URL}")
-    logger.info(f"[SherpaOnnxTTS] 目标目录: {target_dir}")
-    logger.info(f"[SherpaOnnxTTS] 模型约 162MB，请耐心等待...")
-
-    last_error: Exception | None = None
-
-    for attempt in range(1, _MAX_RETRIES + 1):
-        try:
-            await _download_and_extract_once(target_dir)
-            logger.info(f"[SherpaOnnxTTS] 模型下载完成（第 {attempt} 次尝试）")
-            return
-        except Exception as e:
-            last_error = e
-            logger.warning(f"[SherpaOnnxTTS] 下载失败（第 {attempt}/{_MAX_RETRIES} 次）: {e}")
-            if attempt < _MAX_RETRIES:
-                logger.info(f"[SherpaOnnxTTS] 等待 3 秒后重试...")
-                await asyncio.sleep(3)
-
-    raise RuntimeError(
-        f"模型自动下载失败（已重试 {_MAX_RETRIES} 次）: {last_error}. "
-        f"请手动下载 {_MODEL_DOWNLOAD_URL} 并解压到 {target_dir}"
+    await download_and_extract_model(
+        _MODEL_DOWNLOAD_URL,
+        target_dir,
+        log_prefix="[SherpaOnnxTTS]",
+        download_label="模型",
+        size_hint="约 162MB",
+        timeout=settings.TTS_DOWNLOAD_TIMEOUT,
+        tmp_prefix="sherpa_tts_",
+        archive_name="vits-melo-tts-zh_en.tar.bz2",
+        extracted_dirname="vits-melo-tts-zh_en",
+        expected_files=("model.onnx",),
+        missing_error=lambda d: f"解压后未找到 model.onnx: {d / 'model.onnx'}",
     )
-
-
-async def _download_and_extract_once(target_dir: Path) -> None:
-    """执行一次下载+解压流程."""
-    with tempfile.TemporaryDirectory(prefix="sherpa_tts_") as tmp_dir:
-        tmp_path = Path(tmp_dir)
-        archive_path = tmp_path / "vits-melo-tts-zh_en.tar.bz2"
-
-        # 流式下载，显示进度
-        # 统一超时治理（应急修复 B3）：模块级 600s 硬编码 → Settings.TTS_DOWNLOAD_TIMEOUT
-        from app.core.config import settings as _settings
-
-        async with httpx.AsyncClient(timeout=_settings.TTS_DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
-            async with client.stream("GET", _MODEL_DOWNLOAD_URL) as resp:
-                resp.raise_for_status()
-                total = int(resp.headers.get("content-length", 0))
-                downloaded = 0
-                last_log_pct = 0
-
-                with open(archive_path, "wb") as f:
-                    async for chunk in resp.aiter_bytes(chunk_size=65536):
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total > 0:
-                            pct = int(downloaded * 100 / total)
-                            if pct >= last_log_pct + 10:
-                                last_log_pct = pct
-                                logger.info(
-                                    f"[SherpaOnnxTTS] 下载进度: {pct}% "
-                                    f"({downloaded // 1048576}MB / {total // 1048576}MB)"
-                                )
-
-        logger.info(f"[SherpaOnnxTTS] 下载完成，开始解压...")
-
-        # 解压 tar.bz2
-        with tarfile.open(archive_path, "r:bz2") as tar:
-            tar.extractall(path=tmp_path)
-
-        # 解压后的目录名是 vits-melo-tts-zh_en
-        extracted_dir = tmp_path / "vits-melo-tts-zh_en"
-        if not extracted_dir.exists():
-            # 尝试查找解压后的目录
-            extracted_dirs = [d for d in tmp_path.iterdir() if d.is_dir() and d.name != ""]
-            if extracted_dirs:
-                extracted_dir = extracted_dirs[0]
-            else:
-                raise RuntimeError("解压后未找到模型目录")
-
-        # 移动到目标目录
-        if target_dir.exists():
-            shutil.rmtree(target_dir)
-        shutil.move(str(extracted_dir), str(target_dir))
-
-        # 验证关键文件
-        model_onnx = target_dir / "model.onnx"
-        if not model_onnx.exists():
-            raise FileNotFoundError(f"解压后未找到 model.onnx: {model_onnx}")
-
-        logger.info(f"[SherpaOnnxTTS] 解压完成: {target_dir}")
 
 
 class SherpaOnnxTTSProvider(TTSProvider):

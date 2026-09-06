@@ -20,6 +20,7 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.tools.registry import ToolBase, ToolResult
+from app.core.utils import extract_llm_text
 
 
 def _sanitize_luominest_server_name(name: str) -> str:
@@ -96,15 +97,9 @@ class LuomiNestA2ACallTool(ToolBase):
                     asyncio.to_thread(client.ask, query), timeout=timeout_seconds,
                 )
 
-            # 提取结果文本（兼容字符串/对象/dict）
-            if hasattr(result, "content"):
-                result_text = str(result.content)
-            elif isinstance(result, dict):
-                result_text = result.get("content") or result.get("text") or str(result)
-            elif isinstance(result, str):
-                result_text = result
-            else:
-                result_text = str(result)
+            # 提取结果文本（兼容字符串/对象/dict；统一走 core.utils.extract_llm_text，
+            # 覆盖 .content 属性、content/text 字段与 str() 兜底）
+            result_text = extract_llm_text(result)
 
             if not result_text or result_text.strip() in ("None", ""):
                 return ToolResult.fail("远程 Agent 未返回有效内容")

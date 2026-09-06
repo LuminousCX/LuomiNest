@@ -1,14 +1,11 @@
-import shutil
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-from app.core.config import settings
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.utils import ok
 from app.engines.memory import get_memory_engine
 from app.engines.memory.memory_engine import FactItem, FACT_CATEGORIES, _engines
+from app.engines.memory.store import OWNER_PREFIX, owner_key_for, remove_agent_memory
 from app.api.v1.deps import get_agents_store, get_conversation_store
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
@@ -226,10 +223,13 @@ async def list_conversation_dailies(
 @router.get("/recent-facts")
 async def get_recent_facts(agent_id: str | None = None, since: float = 30):
     """获取最近 N 秒内新增的事实（用于聊天中展示记忆提取结果）。"""
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta
+
+    from app.core.utils import utc_now_dt
+
     engine = get_memory_engine(agent_id)
     data = engine.load_data()
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=since)
+    cutoff = utc_now_dt() - timedelta(seconds=since)
     recent = []
     for f in data.facts:
         try:
@@ -298,13 +298,13 @@ async def list_memory_agents(agents_store=Depends(get_agents_store)):
     with sync_session_factory() as session:
         profile_rows = session.execute(
             select(MemoryProfile.owner_key, MemoryProfile.name).where(
-                MemoryProfile.owner_key.like("owner:%")
+                MemoryProfile.owner_key.like(f"{OWNER_PREFIX}%")
             )
         ).all()
         fact_counts = dict(
             session.execute(
                 select(MemoryFact.owner_key, func.count())
-                .where(MemoryFact.owner_key.like("owner:%"))
+                .where(MemoryFact.owner_key.like(f"{OWNER_PREFIX}%"))
                 .group_by(MemoryFact.owner_key)
             ).all()
         )
@@ -312,7 +312,7 @@ async def list_memory_agents(agents_store=Depends(get_agents_store)):
     owner_keys = sorted(set(names.keys()) | set(fact_counts.keys()))
 
     for owner_key in owner_keys:
-        agent_id = owner_key[len("owner:"):]
+        agent_id = owner_key[len(OWNER_PREFIX):]
         if agent_id == "_default":
             continue
         agent = await agents_store.get_async(agent_id)
@@ -359,15 +359,13 @@ async def delete_agent_memory(agent_id: str):
     )
     from app.infrastructure.database.session import sync_session_factory
 
-    owner_key = f"owner:{agent_id}"
+    owner_key = owner_key_for(agent_id)
     with sync_session_factory() as session:
         for table in (MemoryFact, MemorySummary, MemoryProfile, MemoryKnowledge, MemoryDaily, MemoryVector):
             session.execute(sa_delete(table).where(table.owner_key == owner_key))
         session.commit()
     # 清理旧文件布局（迁移前遗留，兼容保留）
-    agent_dir = Path(settings.DATA_DIR) / "memory" / "agents" / agent_id
-    if agent_dir.exists():
-        shutil.rmtree(agent_dir)
+    remove_agent_memory(agent_id)
     key = agent_id
     _engines.pop(key, None)
     return ok()

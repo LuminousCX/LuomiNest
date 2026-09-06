@@ -50,6 +50,7 @@ const hasError = computed(() => !!props.error)
 const inputClasses = computed(() => {
   const list = ['lumi-input']
   list.push(`lumi-input--${props.size}`)
+  if (slots.icon) list.push('has-icon')
   if (hasError.value) list.push('is-error')
   if (props.success) list.push('is-success')
   return list
@@ -76,6 +77,10 @@ const clear = () => {
   emit('update:modelValue', props.type === 'number' || props.modelModifiers?.number ? null : '')
   inputRef.value?.focus()
 }
+
+defineExpose({
+  focus: () => inputRef.value?.focus(),
+})
 </script>
 
 <template>
@@ -165,5 +170,10 @@ const clear = () => {
   min-height: 44px;
   font-size: var(--text-md);
   padding: 0 var(--space-5);
+}
+
+/* 带 icon 时为图标让位（scoped 特异性需覆盖上方 size 的 padding 简写） */
+.lumi-input.has-icon {
+  padding-left: var(--space-8);
 }
 </style>

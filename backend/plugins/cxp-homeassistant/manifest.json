@@ -1,0 +1,7 @@
+{
+  "id": "cxp-homeassistant",
+  "type": "plugin",
+  "name": "cxp-homeassistant",
+  "version": "1.0.0",
+  "description": "plugin package: cxp-homeassistant"
+}

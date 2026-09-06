@@ -110,6 +110,7 @@ log.log
 # AI 助手配置文件
 # ============================================================
 .claudcode/
+.zcode/
 .trae/
 .codebuddy/
 .notion/
@@ -152,7 +153,7 @@ backend/models/
 **/knowledge.md
 **/daily/
 
-# 打包版数据位于系统 userData（%APPDATA%/LuomiNest 等），仓库外，天然不入库
+# 打包版数据位于系统 userData（%APPDATA%/luominest-desktop，与开发版共用，经确认维持共用），仓库外，天然不入库
 
 # ============================================================
 # 项目文档（可选，根据需要决定是否忽略）
@@ -160,7 +161,7 @@ backend/models/
 项目文档/
 文档/
 /tools/
-Docs/
+/firmware/Docs/
 doc/
 *.pdf
 

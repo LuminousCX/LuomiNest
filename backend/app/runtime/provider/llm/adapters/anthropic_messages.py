@@ -5,8 +5,8 @@ AnthropicMessagesProvider：Anthropic 原生 Messages API（POST /v1/messages）
 （POST /chat/completions → 404）的真实缺陷（onion §4.1.1 缺陷 1）。
 
 本模块是六边形架构中的适配器：向内实现 ports.py 的 LLMProvider 端口，
-向外对接 Anthropic 原生协议；与 chat_completions.py 相互独立，
-不互相引用私有实现（重试/错误分类/推理清洗在本模块自持一份）。
+向外对接 Anthropic 原生协议；重试常量/错误分类/推理清洗/tool_calls 合并
+等逐字重复的实现收口于 common.py（共享），协议差异部分自持。
 
 协议要点：
 1. 鉴权头为 x-api-key（非 Authorization: Bearer），必须携带 anthropic-version
@@ -20,15 +20,21 @@ AnthropicMessagesProvider：Anthropic 原生 Messages API（POST /v1/messages）
 """
 import asyncio
 import json
-import re
 import uuid
-from collections import Counter
 from typing import Any, AsyncIterator
 
 import httpx
 from loguru import logger
 
 from app.core.exceptions import ProviderError
+from app.runtime.provider.llm.adapters.common import (
+    MAX_RETRIES,
+    RETRY_BASE_DELAY,
+    ProviderClientMixin,
+    classify_error,
+    clean_reasoning_content,
+    merge_tool_calls,
+)
 from app.runtime.provider.llm.ports import LLMProvider
 from app.runtime.provider.llm.types import LLMRequest, LLMResponse, ProviderCapabilities, StreamEvent
 from app.runtime.provider.llm.capabilities import get_capabilities as _get_capabilities
@@ -63,78 +69,6 @@ def _map_stop_reason(stop_reason: str | None) -> str:
     if not stop_reason:
         return "stop"
     return _STOP_REASON_MAP.get(stop_reason, stop_reason)
-
-
-# ──────────────────────────────────────────────────────────────
-# 推理内容清理（与 chat_completions 同款规则，自持一份避免跨适配器私有互引）
-# ──────────────────────────────────────────────────────────────
-
-def _clean_reasoning_content(raw_reasoning: str) -> str:
-    """清理推理内容，去除模型名称、重复文本等噪声。
-
-    处理场景与 chat_completions._clean_reasoning_content 一致：
-      - 纯模型名重复：qwen3-vl:8bqwen3-vl:8b...
-      - 模型名片段：vl:8bqwen3-vl:8b...
-      - 行首/行尾的模型标识符
-    """
-    if not raw_reasoning:
-        return ""
-
-    text = raw_reasoning.strip()
-
-    # 场景1：检测连续重复的模型名称模式
-    model_name_pattern = r'[a-zA-Z0-9]+(?:-[a-zA-Z0-9.]+)*:[a-zA-Z0-9._-]+'
-    matches = re.findall(model_name_pattern, text)
-    if matches:
-        total_model_chars = sum(len(m) for m in matches)
-        ratio = total_model_chars / len(text) if text else 0
-        if ratio > 0.6 and len(text) > 10:
-            return ""
-        model_counts = Counter(matches)
-        most_common_model, count = model_counts.most_common(1)[0] if model_counts else ("", 0)
-        if count >= 3 and len(most_common_model) >= 5:
-            return ""
-
-    # 场景2：移除行首/行尾的模型名
-    text = re.sub(r'^[a-zA-Z0-9_-]+:[a-zA-Z0-9._-]+\s*', '', text)
-    text = re.sub(r'\s*[a-zA-Z0-9_-]+:[a-zA-Z0-9._-]+$', '', text)
-
-    # 场景3：移除孤立的模型名片段
-    if len(text.strip()) < 8:
-        if re.search(r':[a-zA-Z0-9._-]', text):
-            return ""
-
-    return text.strip()
-
-
-# ──────────────────────────────────────────────────────────────
-# 错误分类与重试（策略与 chat_completions 一致，自持一份）
-# ──────────────────────────────────────────────────────────────
-
-_RETRIABLE_STATUS_CODES = {429, 500, 502, 503, 529}
-_MAX_RETRIES = 2
-_RETRY_BASE_DELAY = 1.0
-
-
-def _classify_error(exc: Exception) -> tuple[bool, str]:
-    """将异常分类为可重试/不可重试，并返回原因标签。"""
-    msg = str(exc).lower()
-    status = getattr(getattr(exc, "response", None), "status_code", None)
-    if status in (401, 403):
-        return False, "auth"
-    if status == 402:
-        return False, "billing"
-    if status == 404:
-        return False, "model_not_found"
-    if status in _RETRIABLE_STATUS_CODES:
-        return True, "transient"
-    if "rate_limit" in msg or "too many requests" in msg or "429" in msg or "overloaded" in msg:
-        return True, "rate_limit"
-    if "timeout" in msg or "timed out" in msg:
-        return True, "timeout"
-    if "connection" in msg or "connect" in msg:
-        return True, "connection"
-    return False, "unknown"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -446,7 +380,7 @@ def tool_use_blocks_to_openai_tool_calls(content_blocks: list[dict]) -> list[dic
 # AnthropicMessagesProvider 实现
 # ──────────────────────────────────────────────────────────────
 
-class AnthropicMessagesProvider(LLMProvider):
+class AnthropicMessagesProvider(ProviderClientMixin, LLMProvider):
     """Anthropic 原生 Messages API 供应商实现。
 
     通过 base_url / api_key / default_model 区分不同接入点
@@ -474,24 +408,11 @@ class AnthropicMessagesProvider(LLMProvider):
     # ── 基础属性 ──
 
     @property
-    def client(self) -> httpx.AsyncClient:
-        """懒加载 httpx 客户端（复用连接池）。"""
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=120.0)
-        return self._client
-
-    @property
     def api_base(self) -> str:
         """API 根地址：base_url 已含 /v1 时直接使用，否则补 /v1。"""
         if self.base_url.endswith("/v1"):
             return self.base_url
         return f"{self.base_url}/v1"
-
-    async def aclose(self) -> None:
-        """关闭 httpx 客户端。"""
-        if self._client is not None and not self._client.is_closed:
-            await self._client.aclose()
-            self._client = None
 
     # ── 能力声明 ──
 
@@ -502,12 +423,6 @@ class AnthropicMessagesProvider(LLMProvider):
             return False
         caps = self.get_capabilities(actual_model)
         return caps.supports_tool_calls
-
-    def supports_multimodal(self, model: str = "") -> bool:
-        """是否支持多模态（视觉）。"""
-        actual_model = model or self.default_model
-        caps = self.get_capabilities(actual_model)
-        return caps.supports_vision
 
     def get_capabilities(self, model: str | None = None) -> ProviderCapabilities:
         """获取当前 provider 的能力声明（以 provider_name 为 key 查能力表）。"""
@@ -578,31 +493,12 @@ class AnthropicMessagesProvider(LLMProvider):
         raw_reasoning = "\n".join(p for p in reasoning_parts if p)
         return LLMResponse(
             content="".join(content_parts),
-            reasoning=_clean_reasoning_content(raw_reasoning),
+            reasoning=clean_reasoning_content(raw_reasoning),
             tool_calls=tool_calls or None,
             finish_reason=_map_stop_reason(data.get("stop_reason")),
             usage=_normalize_usage(data.get("usage")),
             raw=data,
         )
-
-    @staticmethod
-    def _merge_tool_calls(collected: dict[int, dict]) -> StreamEvent:
-        """合并流式累积的 tool_calls 为完整列表，发射 tool_calls_complete 事件。
-
-        与 chat_completions 的合并逻辑保持一致（OpenAI function calling 格式）。
-        """
-        merged = []
-        for idx in sorted(collected.keys()):
-            entry = collected[idx]
-            merged.append({
-                "id": entry["id"] or f"call_{idx}",
-                "type": "function",
-                "function": {
-                    "name": entry["name"],
-                    "arguments": entry["arguments"],
-                },
-            })
-        return StreamEvent("tool_calls_complete", {"tool_calls": merged})
 
     async def _map_stream_events(
         self,
@@ -673,7 +569,7 @@ class AnthropicMessagesProvider(LLMProvider):
                 elif delta_type == "thinking_delta" and enable_reasoning:
                     raw_reasoning = delta.get("thinking") or ""
                     if raw_reasoning:
-                        reasoning = _clean_reasoning_content(raw_reasoning)
+                        reasoning = clean_reasoning_content(raw_reasoning)
                         if reasoning:
                             yield StreamEvent("reasoning", {"reasoning": reasoning})
                 elif delta_type == "input_json_delta":
@@ -709,7 +605,7 @@ class AnthropicMessagesProvider(LLMProvider):
                 # 与 chat_completions 的 [DONE] 时序一致：先 done，再 tool_calls_complete
                 yield StreamEvent("done")
                 if collected_tool_calls:
-                    yield self._merge_tool_calls(collected_tool_calls)
+                    yield merge_tool_calls(collected_tool_calls)
                 return
 
             if event_type == "error":
@@ -724,7 +620,7 @@ class AnthropicMessagesProvider(LLMProvider):
 
         # 流正常结束（未收到 message_stop），仅合并 tool_calls
         if collected_tool_calls:
-            yield self._merge_tool_calls(collected_tool_calls)
+            yield merge_tool_calls(collected_tool_calls)
 
     # ── 非流式聊天 ──
 
@@ -756,14 +652,14 @@ class AnthropicMessagesProvider(LLMProvider):
     async def chat_stream(self, request: LLMRequest) -> AsyncIterator[StreamEvent]:
         """流式聊天，统一返回 StreamEvent 流（事件协议与 chat_completions 完全一致）。
 
-        带重试机制（_MAX_RETRIES=2，仅对可重试错误生效），
+        带重试机制（MAX_RETRIES=2，仅对可重试错误生效），
         SSE 事件映射见 _map_stream_events。
         """
         payload = self._build_payload(request, stream=True)
         enable_reasoning = request.extra.get("enable_reasoning", True)
 
         last_error: Exception | None = None
-        for attempt in range(_MAX_RETRIES + 1):
+        for attempt in range(MAX_RETRIES + 1):
             try:
                 client = httpx.AsyncClient(timeout=180.0) if self._client is None else self.client
                 client_owned = self._client is None
@@ -783,12 +679,12 @@ class AnthropicMessagesProvider(LLMProvider):
                         await client.aclose()
             except Exception as e:
                 last_error = e
-                retriable, reason = _classify_error(e)
-                if not retriable or attempt >= _MAX_RETRIES:
+                retriable, reason = classify_error(e)
+                if not retriable or attempt >= MAX_RETRIES:
                     break
-                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                delay = RETRY_BASE_DELAY * (2 ** attempt)
                 logger.warning(
-                    f"[AnthropicProvider] Stream retry ({reason}): attempt {attempt + 1}/{_MAX_RETRIES}, delay={delay}s"
+                    f"[AnthropicProvider] Stream retry ({reason}): attempt {attempt + 1}/{MAX_RETRIES}, delay={delay}s"
                 )
                 await asyncio.sleep(delay)
 

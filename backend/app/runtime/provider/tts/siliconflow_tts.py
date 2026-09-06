@@ -4,10 +4,11 @@
 默认使用 CosyVoice2-0.5B 模型，支持自定义模型和音色.
 """
 
-import httpx
 from loguru import logger
 
+from app.core.config import settings
 from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.tts._http import post_json_for_audio
 from app.runtime.provider.tts.ports import TTSProvider
 
 
@@ -102,17 +103,14 @@ class SiliconFlowTTSProvider(TTSProvider):
         }
 
         # 统一超时治理（应急修复 B3）：硬编码 → Settings.TTS_HTTP_TIMEOUT
-        from app.core.config import settings as _settings
-
-        async with httpx.AsyncClient(timeout=_settings.TTS_HTTP_TIMEOUT) as client:
-            response = await client.post(self.base_url, json=payload, headers=headers)
-            response.raise_for_status()
-
-            # SiliconFlow 返回二进制音频数据
-            audio_bytes = response.content
-
-        if not audio_bytes:
-            raise RuntimeError("SiliconFlow TTS 返回空音频数据")
+        # SiliconFlow 返回二进制音频数据
+        audio_bytes = await post_json_for_audio(
+            self.base_url,
+            payload,
+            headers,
+            settings.TTS_HTTP_TIMEOUT,
+            error_prefix="SiliconFlow TTS",
+        )
 
         logger.info(f"[SiliconFlowTTS] synthesized: {text[:60]}... (voice={voice})")
         return audio_bytes

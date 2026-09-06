@@ -22,14 +22,16 @@ import {
   Trash2,
   AlertCircle,
   Loader2,
-  X,
-  Save,
   Image as ImageIcon
 } from 'lucide-vue-next'
+import SearchInput from '../common/SearchInput.vue'
+import LumiModal from '../common/LumiModal.vue'
+import LumiButton from '../common/LumiButton.vue'
 import { usePlatformStore } from '../../stores/platform'
 import { useModelStore } from '../../stores/model'
 import type { PlatformAdapterType, PlatformInstance } from '../../types'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
+import { formatDateRelative } from '../../utils/format'
 
 const logger = createLuomiNestRendererLogger('Settings')
 
@@ -75,22 +77,8 @@ const filteredPlatformInstances = computed(() => {
   return list
 })
 
-const formatLastSync = (lastSync: string) => {
-  if (!lastSync) return '未同步'
-  try {
-    const date = new Date(lastSync)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMin = Math.floor(diffMs / 60000)
-    if (diffMin < 1) return '刚刚'
-    if (diffMin < 60) return `${diffMin} 分钟前`
-    const diffHour = Math.floor(diffMin / 60)
-    if (diffHour < 24) return `${diffHour} 小时前`
-    return `${Math.floor(diffHour / 24)} 天前`
-  } catch {
-    return '未同步'
-  }
-}
+const formatLastSync = (lastSync: string) =>
+  lastSync ? formatDateRelative(lastSync) : '未同步'
 
 const getStatusLabel = (status: string) => {
   switch (status) {
@@ -312,7 +300,7 @@ onMounted(() => {
       </div>
       <div class="platform-card-body">
         <div class="platform-toolbar">
-          <input v-model="platformSearchQuery" type="text" class="platform-search" placeholder="搜索平台..." />
+          <SearchInput v-model="platformSearchQuery" placeholder="搜索平台..." />
           <div class="platform-filter-group">
             <button :class="['platform-filter-btn', { active: platformFilter === 'all' }]" @click="platformFilter = 'all'">全部</button>
             <button :class="['platform-filter-btn', { active: platformFilter === 'active' }]" @click="platformFilter = 'active'">运行中</button>
@@ -380,13 +368,7 @@ onMounted(() => {
     </div>
   </div>
 
-  <Teleport to="body">
-    <div v-if="showAddPlatformDialog" class="platform-dialog-overlay" @click.self="closeAddPlatformDialog">
-      <div class="platform-dialog">
-        <div class="platform-dialog-header">
-          <h2 class="platform-dialog-title">添加平台</h2>
-          <button class="platform-dialog-close" @click="closeAddPlatformDialog"><X :size="18" /></button>
-        </div>
+    <LumiModal :visible="showAddPlatformDialog" title="添加平台" size="lg" :z-index="1000" @close="closeAddPlatformDialog">
 
         <div v-if="!selectedAdapterType" class="platform-dialog-body">
           <p class="platform-dialog-desc">选择要接入的平台类型：</p>
@@ -437,25 +419,14 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="platform-dialog-footer">
-          <button class="platform-dialog-btn cancel" @click="closeAddPlatformDialog">取消</button>
-          <button
-            v-if="selectedAdapterType"
-            class="platform-dialog-btn confirm"
-            @click="handleCreatePlatform"
-            :disabled="!newPlatformName.trim()"
-          >确认添加</button>
-          <button v-else class="platform-dialog-btn confirm" @click="closeAddPlatformDialog">关闭</button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <LumiButton size="sm" @click="closeAddPlatformDialog">取消</LumiButton>
+          <LumiButton v-if="selectedAdapterType" variant="primary" size="sm" :disabled="!newPlatformName.trim()" @click="handleCreatePlatform">确认添加</LumiButton>
+          <LumiButton v-else variant="primary" size="sm" @click="closeAddPlatformDialog">关闭</LumiButton>
+        </template>
+    </LumiModal>
 
-    <div v-if="showEditPlatformDialog && editingInstance" class="platform-dialog-overlay" @click.self="closeEditPlatformDialog">
-      <div class="platform-dialog">
-        <div class="platform-dialog-header">
-          <h2 class="platform-dialog-title">平台配置 - {{ editingInstance.name }}</h2>
-          <button class="platform-dialog-close" @click="closeEditPlatformDialog"><X :size="18" /></button>
-        </div>
+    <LumiModal v-if="editingInstance" :visible="showEditPlatformDialog" :title="'平台配置 - ' + editingInstance.name" size="lg" :z-index="1000" @close="closeEditPlatformDialog">
         <div class="platform-dialog-body">
           <div class="platform-form-group">
             <label class="platform-form-label">实例名称</label>
@@ -481,35 +452,26 @@ onMounted(() => {
             <div class="platform-error-display">{{ editingInstance.errorMessage }}</div>
           </div>
         </div>
-        <div class="platform-dialog-footer">
-          <button class="platform-dialog-btn cancel" @click="closeEditPlatformDialog">取消</button>
-          <button class="platform-dialog-btn confirm" @click="handleSavePlatformConfig">保存配置</button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <LumiButton size="sm" @click="closeEditPlatformDialog">取消</LumiButton>
+          <LumiButton variant="primary" size="sm" @click="handleSavePlatformConfig">保存配置</LumiButton>
+        </template>
+    </LumiModal>
 
-    <div v-if="showMainAgentDialog" class="platform-dialog-overlay" @click.self="closeMainAgentDialog">
-      <div class="platform-dialog">
-        <div class="platform-dialog-header">
-          <h2 class="platform-dialog-title">主 Agent 配置</h2>
-          <button class="platform-dialog-close" @click="closeMainAgentDialog"><X :size="18" /></button>
-        </div>
+    <LumiModal :visible="showMainAgentDialog" title="主 Agent 配置" size="lg" :z-index="1000" @close="closeMainAgentDialog">
         <div class="platform-dialog-body">
           <div class="platform-form-group">
             <label class="platform-form-label">系统提示词</label>
             <textarea v-model="mainAgentEdit.systemPrompt" class="platform-form-textarea" rows="6" placeholder="主 Agent 的系统提示词，决定其角色与行为"></textarea>
           </div>
         </div>
-        <div class="platform-dialog-footer">
-          <button class="platform-dialog-btn cancel" @click="closeMainAgentDialog" :disabled="mainAgentSaving">取消</button>
-          <button class="platform-dialog-btn confirm" @click="handleSaveMainAgent" :disabled="mainAgentSaving">
-            <Save :size="13" />
-            <span>{{ mainAgentSaving ? '保存中...' : '保存配置' }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
+        <template #footer>
+          <LumiButton size="sm" :disabled="mainAgentSaving" @click="closeMainAgentDialog">取消</LumiButton>
+          <LumiButton variant="primary" size="sm" :loading="mainAgentSaving" @click="handleSaveMainAgent">
+            {{ mainAgentSaving ? '保存中...' : '保存配置' }}
+          </LumiButton>
+        </template>
+    </LumiModal>
 </template>
 
 <style scoped>
@@ -710,21 +672,6 @@ onMounted(() => {
   display: flex;
   gap: var(--space-2);
   margin-bottom: var(--space-3);
-}
-
-.platform-search {
-  flex: 1;
-  padding: var(--space-2) var(--space-3);
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-base);
-  color: var(--text-primary);
-}
-
-.platform-search:focus {
-  outline: none;
-  border-color: var(--lumi-primary);
 }
 
 .platform-filter-group {
@@ -955,65 +902,6 @@ onMounted(() => {
   background: var(--lumi-primary-hover);
 }
 
-.platform-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay-bg);
-  backdrop-filter: blur(var(--space-1));
-  -webkit-backdrop-filter: blur(var(--space-1));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: platform-fade-in var(--duration-fast) var(--ease-in-out);
-}
-
-.platform-dialog {
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-  width: 560px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  animation: platform-slide-up var(--duration-slow) var(--ease-default);
-  box-shadow: 0 var(--space-6) var(--space-9) calc(var(--space-3) * -1) var(--overlay-subtle);
-}
-
-.platform-dialog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border-light);
-}
-
-.platform-dialog-title {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.platform-dialog-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  background: transparent;
-  border: none;
-}
-
-.platform-dialog-close:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
 .platform-dialog-body {
   flex: 1;
   overflow-y: auto;
@@ -1227,66 +1115,5 @@ onMounted(() => {
   font-size: var(--text-base);
   font-weight: 500;
   color: var(--lumi-primary);
-}
-
-.platform-dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--border-light);
-}
-
-.platform-dialog-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: none;
-}
-
-.platform-dialog-btn.cancel {
-  background: var(--surface, var(--workspace-panel));
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-
-.platform-dialog-btn.cancel:hover:not(:disabled) {
-  background: var(--surface-hover);
-}
-
-.platform-dialog-btn.confirm {
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-}
-
-.platform-dialog-btn.confirm:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-}
-
-.platform-dialog-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-@keyframes platform-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes platform-slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(var(--space-3)) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 </style>

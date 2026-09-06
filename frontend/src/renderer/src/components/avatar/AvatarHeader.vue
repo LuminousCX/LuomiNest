@@ -148,13 +148,10 @@ const emit = defineEmits<{
 }
 
 .desktop-mode-toggle .spin {
-  animation: luominest-spin var(--duration-normal) linear infinite;
+  animation: spin var(--duration-normal) linear infinite;
 }
 
-@keyframes luominest-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+
 
 .toggle-label {
   font-weight: var(--font-semibold);

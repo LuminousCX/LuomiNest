@@ -1,7 +1,8 @@
-"""指数退避重试器。
+"""指数退避重试器（tenacity 执行层）。
 
 为异步操作提供可配置的重试机制，支持指数退避、抖动、
-可重试异常区分以及自定义重试回调。
+可重试异常区分以及自定义重试回调。对外接口（RetryConfig /
+async_retry / RetryCallback）与延迟公式不变，重试调度由 tenacity 承担。
 """
 
 from __future__ import annotations
@@ -9,10 +10,12 @@ from __future__ import annotations
 import asyncio
 import functools
 import random
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, TypeVar
 
 from loguru import logger
+from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt
 
 F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
 
@@ -59,21 +62,13 @@ def async_retry(
     """带指数退避的异步重试执行器。
 
     可作为装饰器或直接调用：
-
-    .. code-block:: python
-
-        # 装饰器用法
-        @async_retry(config=RetryConfig(max_retries=5))
-        async def fetch_data():
-            ...
-
-        # 直接调用
-        result = await async_retry(some_func, config=RetryConfig())
+    ``@async_retry(config=RetryConfig(max_retries=5))`` 装饰异步函数，
+    或 ``await async_retry(fn, config=RetryConfig())`` 直接执行。
 
     Args:
         func: 要执行的异步函数。
         config: 重试配置，为 None 时使用默认配置。
-        on_retry: 每次重试前的回调，签名 (attempt, exception, delay)。
+        on_retry: 每次重试前的回调，签名 (attempt, exception, delay)，支持同步或异步。
 
     Returns:
         被装饰函数的返回值。
@@ -104,43 +99,57 @@ async def _execute_with_retry(
     config: RetryConfig,
     on_retry: RetryCallback | None,
 ) -> Any:
-    """核心重试执行逻辑。"""
-    last_exception: Exception | None = None
+    """核心重试执行逻辑（tenacity AsyncRetrying）。"""
+    # tenacity 的 before_sleep 钩子是同步的；异步 on_retry 回调先挂起到
+    # pending，由自定义 sleep 在真正睡眠前 await，保持"回调→睡眠"的原顺序。
+    pending: Awaitable[Any] | None = None
 
-    for attempt in range(config.max_retries + 1):
-        try:
-            return await func(*args, **kwargs)
-        except config.retryable_exceptions as e:
-            last_exception = e
-            if attempt >= config.max_retries:
-                logger.error(
-                    f"[Retry] {func.__qualname__} 已达最大重试次数 "
-                    f"({config.max_retries})，放弃重试"
-                )
-                raise
+    def _before_sleep(retry_state: Any) -> None:
+        nonlocal pending
+        exc = retry_state.outcome.exception()
+        delay = retry_state.next_action.sleep
+        attempt = retry_state.attempt_number
+        logger.warning(
+            f"[Retry] {func.__qualname__} 第 {attempt}/{config.max_retries} "
+            f"次重试，{delay:.2f}s 后重试 | 异常: {type(exc).__name__}: {exc}"
+        )
+        if on_retry is not None:
+            try:
+                result = on_retry(attempt, exc, delay)
+                if asyncio.iscoroutine(result):
+                    pending = result
+            except Exception as cb_err:
+                logger.error(f"[Retry] on_retry 回调执行失败: {cb_err}")
 
-            delay = _calculate_delay(config, attempt + 1)
-            logger.warning(
-                f"[Retry] {func.__qualname__} 第 {attempt + 1}/{config.max_retries} "
-                f"次重试，{delay:.2f}s 后重试 | 异常: {type(e).__name__}: {e}"
-            )
+    async def _sleep_with_callback(seconds: float) -> None:
+        nonlocal pending
+        if pending is not None:
+            callback, pending = pending, None
+            try:
+                await callback
+            except Exception as cb_err:
+                logger.error(f"[Retry] on_retry 回调执行失败: {cb_err}")
+        await asyncio.sleep(seconds)
 
-            if on_retry is not None:
-                try:
-                    result = on_retry(attempt + 1, e, delay)
-                    if asyncio.iscoroutine(result):
-                        await result
-                except Exception as cb_err:
-                    logger.error(f"[Retry] on_retry 回调执行失败: {cb_err}")
+    retrying = AsyncRetrying(
+        stop=stop_after_attempt(config.max_retries + 1),
+        wait=lambda rs: _calculate_delay(config, rs.attempt_number),
+        retry=retry_if_exception_type(config.retryable_exceptions),
+        reraise=True,
+        before_sleep=_before_sleep,
+        sleep=_sleep_with_callback,
+    )
 
-            await asyncio.sleep(delay)
-        except BaseException:
-            # 不可重试的异常直接抛出
-            raise
-
-    # 理论上不会到这里，但保险起见
-    if last_exception is not None:
-        raise last_exception
+    try:
+        async for attempt_state in retrying:
+            with attempt_state:
+                return await func(*args, **kwargs)
+    except config.retryable_exceptions:
+        logger.error(
+            f"[Retry] {func.__qualname__} 已达最大重试次数 "
+            f"({config.max_retries})，放弃重试"
+        )
+        raise
 
     # 显式兜底，避免隐式返回 None（满足静态分析规则）
     raise RuntimeError("Unexpected retry flow: no result returned and no exception captured")

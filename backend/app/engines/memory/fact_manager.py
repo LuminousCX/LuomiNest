@@ -1,5 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from loguru import logger
+
+from app.core.utils import utc_now_dt
 
 from .models import MemoryData, FactItem, ArchivedFact
 from .store import MemoryStore
@@ -56,7 +58,7 @@ class FactManager:
 
     def _filter_valid_facts(self, facts: list[FactItem]) -> list[FactItem]:
         """过滤出未过期的有效事实（is_latest=True 且未过期）。"""
-        now = datetime.now(timezone.utc)
+        now = utc_now_dt()
         valid = []
         for fact in facts:
             if not fact.is_latest:
@@ -77,7 +79,7 @@ class FactManager:
         """清理已过期的事实，返回清理数量。"""
         data = self._store.load_data()
         original_count = len(data.facts)
-        now = datetime.now(timezone.utc)
+        now = utc_now_dt()
         remaining = []
         for fact in data.facts:
             if not fact.is_latest:
@@ -149,7 +151,7 @@ class FactManager:
 
     def _cleanup_expired(self, data: MemoryData) -> None:
         """删除已过期的（is_latest 且 expires_at 早于当前时间）事实。"""
-        now = datetime.now(timezone.utc)
+        now = utc_now_dt()
         remaining = []
         for fact in data.facts:
             if not fact.is_latest:

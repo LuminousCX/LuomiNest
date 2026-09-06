@@ -8,7 +8,6 @@
 - append_message/append_messages/update_message 为热路径增量写入
 - migrate_from_json_store() 供 Phase 5 迁移器调用
 """
-import asyncio
 from typing import Optional
 
 from app.infrastructure.database.repositories import ConversationRepository
@@ -139,33 +138,37 @@ class ConversationFacade:
         return migrated
 
     # ── Async wrappers ──
+    # 均为纯转发（无缓存/事件/字段加工等附加逻辑），直接 await repo 的 *_async，
+    # 消除 facade 与 repo 双层重复的 to_thread 包装；执行语义不变（仍在 worker 线程跑同步 repo 方法）。
 
     async def get_async(self, conversation_id: str) -> Optional[dict]:
-        return await asyncio.to_thread(self.get, conversation_id)
+        return await self._repo.get_async(conversation_id)
 
     async def get_meta_async(self, conversation_id: str) -> Optional[dict]:
-        return await asyncio.to_thread(self.get_meta, conversation_id)
+        return await self._repo.get_meta_async(conversation_id)
 
     async def get_paginated_async(self, conversation_id: str, limit: int = 100, before_id: Optional[str] = None) -> Optional[dict]:
-        return await asyncio.to_thread(self.get_paginated, conversation_id, limit, before_id)
+        return await self._repo.get_paginated_async(conversation_id, limit, before_id)
 
     async def set_async(self, conversation_id: str, conv: dict) -> None:
-        await asyncio.to_thread(self.set, conversation_id, conv)
+        # 保持原语义：转发 repo.save 但不透出其返回值（仍返回 None）
+        await self._repo.save_async(conversation_id, conv)
 
     async def append_message_async(self, conversation_id: str, message: dict) -> bool:
-        return await asyncio.to_thread(self.append_message, conversation_id, message)
+        return await self._repo.append_message_async(conversation_id, message)
 
     async def append_messages_async(self, conversation_id: str, messages: list[dict]) -> bool:
-        return await asyncio.to_thread(self.append_messages, conversation_id, messages)
+        return await self._repo.append_messages_async(conversation_id, messages)
 
     async def update_message_async(self, conversation_id: str, mid: str, message: dict) -> bool:
-        return await asyncio.to_thread(self.update_message, conversation_id, mid, message)
+        return await self._repo.update_message_async(conversation_id, mid, message)
 
     async def update_meta_async(self, conversation_id: str, updates: dict) -> Optional[dict]:
-        return await asyncio.to_thread(self.update_meta, conversation_id, updates)
+        return await self._repo.update_meta_async(conversation_id, updates)
 
     async def delete_async(self, conversation_id: str) -> None:
-        await asyncio.to_thread(self.delete, conversation_id)
+        # 保持原语义：吞掉 repo.delete 的 bool 返回，仍返回 None
+        await self._repo.delete_async(conversation_id)
 
     async def list_conversations_async(
         self,
@@ -174,45 +177,48 @@ class ConversationFacade:
         domain: Optional[str] = None,
         exclude_domain_prefix: Optional[str] = None,
     ) -> list[dict]:
-        return await asyncio.to_thread(
-            self.list_conversations, agent_id, include_hidden, domain, exclude_domain_prefix,
+        return await self._repo.list_meta_async(
+            agent_id,
+            include_hidden=include_hidden,
+            domain=domain,
+            exclude_domain_prefix=exclude_domain_prefix,
         )
 
     async def count_messages_async(self, agent_id: Optional[str] = None) -> int:
-        return await asyncio.to_thread(self.count_messages, agent_id)
+        return await self._repo.count_messages_async(agent_id)
 
     async def search_conversations_async(self, keyword: str, agent_id: Optional[str] = None) -> list[dict]:
-        return await asyncio.to_thread(self.search_conversations, keyword, agent_id)
+        return await self._repo.search_async(keyword, agent_id)
 
     async def soft_delete_async(self, conversation_id: str) -> bool:
-        return await asyncio.to_thread(self.soft_delete, conversation_id)
+        return await self._repo.soft_delete_async(conversation_id)
 
     async def list_trash_async(self, agent_id: Optional[str] = None) -> list[dict]:
-        return await asyncio.to_thread(self.list_trash, agent_id)
+        return await self._repo.list_trash_async(agent_id)
 
     async def restore_async(self, conversation_id: str) -> bool:
-        return await asyncio.to_thread(self.restore, conversation_id)
+        return await self._repo.restore_async(conversation_id)
 
     async def permanent_delete_async(self, conversation_id: str) -> bool:
-        return await asyncio.to_thread(self.permanent_delete, conversation_id)
+        return await self._repo.permanent_delete_async(conversation_id)
 
     async def empty_trash_async(self, agent_id: Optional[str] = None) -> int:
-        return await asyncio.to_thread(self.empty_trash, agent_id)
+        return await self._repo.empty_trash_async(agent_id)
 
     async def batch_restore_async(self, conversation_ids: list[str]) -> int:
-        return await asyncio.to_thread(self.batch_restore, conversation_ids)
+        return await self._repo.batch_restore_async(conversation_ids)
 
     async def batch_permanent_delete_async(self, conversation_ids: list[str]) -> int:
-        return await asyncio.to_thread(self.batch_permanent_delete, conversation_ids)
+        return await self._repo.batch_permanent_delete_async(conversation_ids)
 
     async def batch_soft_delete_async(self, conversation_ids: list[str]) -> int:
-        return await asyncio.to_thread(self.batch_soft_delete, conversation_ids)
+        return await self._repo.batch_soft_delete_async(conversation_ids)
 
     async def rename_async(self, conversation_id: str, new_title: str) -> bool:
-        return await asyncio.to_thread(self.rename, conversation_id, new_title)
+        return await self._repo.rename_async(conversation_id, new_title)
 
     async def delete_by_agent_id_async(self, agent_id: str) -> int:
-        return await asyncio.to_thread(self.delete_by_agent_id, agent_id)
+        return await self._repo.delete_by_agent_id_async(agent_id)
 
 
 # ── 单例 ──

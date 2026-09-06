@@ -6,7 +6,7 @@
 - 旧库若仍存在 messages 列，由 engine._migrate_columns 回填到
   conversation_messages 表后 DROP（幂等）。
 - deleted_at 非空表示软删除（回收站）。
-- chat_mode 标记对话模式（normal/standard/ultra），切换模式需新建对话以隔离上下文。
+- chat_mode 标记对话模式（normal/standard），切换模式需新建对话以隔离上下文。
 - domain/scene/user_key 为对话域字段（洋葱架构 §5.2/§12.1）：
   - domain 决定列表隔离边界（workbench | agent:{id} | platform:{instId}，创建后不可变）
   - scene 标记来源（workbench | avatar | platform，默认 workbench）

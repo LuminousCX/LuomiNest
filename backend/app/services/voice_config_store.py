@@ -20,13 +20,16 @@ from typing import Any
 
 from loguru import logger
 
+from app.core.constants.voice import DEFAULT_EDGE_VOICE
+from app.core.utils import utc_now
+
 # voice_config 默认结构（全局默认，§7.2）
 DEFAULT_VOICE_CONFIG: dict[str, Any] = {
     "schema_version": 1,
     "tts": {
         "engine": "auto",
         "model": "",
-        "voice": "zh-CN-XiaoxiaoNeural",
+        "voice": DEFAULT_EDGE_VOICE,
         "lang": "auto",
         "speed": 1.0,
     },
@@ -111,9 +114,8 @@ class LuomiNestVoiceConfigStore:
                 meta = config.get("_migration_meta") or {}
                 if not meta.get("done"):
                     meta["done"] = True
-                    from datetime import datetime
-
-                    meta["migrated_at"] = datetime.now().isoformat(timespec="seconds")
+                    # UTC 统一：原 datetime.now() 为本地时间无时区，与全库 UTC ISO 串混存（故意修复）
+                    meta["migrated_at"] = utc_now()
                     config["_migration_meta"] = meta
                     store.set(VOICE_CONFIG_KEY, config)
                     logger.info("[VoiceConfigStore] voice_config initialized (migrated from model_config)")

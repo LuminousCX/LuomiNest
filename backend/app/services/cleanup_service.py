@@ -1,10 +1,11 @@
 import asyncio
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from loguru import logger
 
 from app.core.config import settings
+from app.core.utils import utc_now_dt
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.usage_store import usage_store
 
@@ -26,7 +27,7 @@ class LumiCleanupService:
     def cleanup_trash(self, days: int | None = None) -> int:
         """永久删除回收站中超过指定天数的对话。"""
         retention = days or self.TRASH_RETENTION_DAYS
-        cutoff = datetime.now(timezone.utc) - timedelta(days=retention)
+        cutoff = utc_now_dt() - timedelta(days=retention)
         cutoff_str = cutoff.isoformat()
 
         trash_items = conversation_store.list_trash()
@@ -59,7 +60,7 @@ class LumiCleanupService:
         if not os.path.exists(downloads_dir):
             return 0
 
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age)
+        cutoff = utc_now_dt() - timedelta(hours=max_age)
         cutoff_ts = cutoff.timestamp()
         deleted = 0
 

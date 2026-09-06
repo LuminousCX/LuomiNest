@@ -4,10 +4,13 @@
 支持语速、音量、音调调节，默认输出 MP3 格式.
 """
 
-import httpx
+import json
+
 from loguru import logger
 
+from app.core.config import settings
 from app.runtime.provider.engine_capabilities import EngineCapabilities
+from app.runtime.provider.tts._http import post_json_for_audio
 from app.runtime.provider.tts.ports import TTSProvider
 
 
@@ -110,12 +113,14 @@ class MiniMaxTTSProvider(TTSProvider):
         }
 
         # 统一超时治理（应急修复 B3）：硬编码 → Settings.TTS_HTTP_TIMEOUT
-        from app.core.config import settings as _settings
-
-        async with httpx.AsyncClient(timeout=_settings.TTS_HTTP_TIMEOUT) as client:
-            response = await client.post(self.base_url, json=payload, headers=headers)
-            response.raise_for_status()
-            result = response.json()
+        audio_bytes = await post_json_for_audio(
+            self.base_url,
+            payload,
+            headers,
+            settings.TTS_HTTP_TIMEOUT,
+            error_prefix="MiniMax TTS",
+        )
+        result = json.loads(audio_bytes)
 
         # 检查状态码
         base_resp = result.get("base_resp", {})

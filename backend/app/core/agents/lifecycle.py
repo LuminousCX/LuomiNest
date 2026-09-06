@@ -16,11 +16,13 @@
 """
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
 from loguru import logger
+
+from app.core.utils import utc_now_dt
 
 
 class LuomiNestTaskStatus(str, Enum):
@@ -63,29 +65,29 @@ class LuomiNestTaskRecord:
     def mark_running(self) -> None:
         """标记为运行中"""
         self.status = LuomiNestTaskStatus.RUNNING
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = utc_now_dt()
 
     def mark_completed(self, result: str) -> None:
         """标记为已完成"""
         self.status = LuomiNestTaskStatus.COMPLETED
         self.result = result
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = utc_now_dt()
 
     def mark_failed(self, error: str) -> None:
         """标记为失败"""
         self.status = LuomiNestTaskStatus.FAILED
         self.error = error
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = utc_now_dt()
 
     def mark_cancelled(self) -> None:
         """标记为已取消"""
         self.status = LuomiNestTaskStatus.CANCELLED
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = utc_now_dt()
 
     def mark_timed_out(self) -> None:
         """标记为超时"""
         self.status = LuomiNestTaskStatus.TIMED_OUT
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = utc_now_dt()
 
     def request_cancel(self) -> None:
         """请求取消（协作式，子 Agent 在迭代边界检查 cancel_event）"""

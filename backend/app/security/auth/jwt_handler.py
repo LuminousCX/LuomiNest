@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from enum import Enum
 
 from jose import JWTError, jwt
@@ -14,6 +14,7 @@ from jose.exceptions import ExpiredSignatureError, JWSSignatureError
 from loguru import logger
 
 from app.core.config import settings
+from app.core.utils import utc_now_dt
 from app.security.crypto.secret_key_manager import (
     JWT_SECRET_KEY_FILE_NAME,
     load_or_create_secret_key,
@@ -86,7 +87,7 @@ def create_access_token(
         编码后的 JWT 字符串。
     """
     secret = _ensure_jwt_secret()
-    now = datetime.now(UTC)
+    now = utc_now_dt()
     expires = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload = {
@@ -115,7 +116,7 @@ def create_refresh_token(
         编码后的 JWT 字符串。
     """
     secret = _ensure_jwt_secret()
-    now = datetime.now(UTC)
+    now = utc_now_dt()
     expires = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
     payload = {

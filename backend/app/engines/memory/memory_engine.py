@@ -5,13 +5,13 @@ import re
 import shutil
 import threading
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from app.core.utils import utc_now
+from app.core.utils import utc_now, utc_now_dt
 
 from app.core.config import settings
 from app.runtime.provider.llm.adapter import llm_adapter
@@ -38,6 +38,7 @@ from .prompts import (
 )
 from .store import (
     MemoryStore,
+    agent_memory_dir,
     resolve_owner_agent_key,
     resolve_track_dir,
     sanitize_track_key,
@@ -67,7 +68,7 @@ class MemoryEngine:
         if storage_path:
             path = Path(storage_path)
         else:
-            path = Path(settings.DATA_DIR) / "memory" / "agents" / self._agent_id
+            path = agent_memory_dir(self._agent_id)
 
         self._store = MemoryStore(path)
         # 会话级 store 的根目录：轨道引擎指向自身轨道目录（users/{key}/conversations/…），
@@ -171,7 +172,7 @@ class MemoryEngine:
             if fact.expires_at:
                 try:
                     exp_time = datetime.fromisoformat(fact.expires_at.replace("Z", "+00:00"))
-                    if exp_time <= datetime.now(timezone.utc):
+                    if exp_time <= utc_now_dt():
                         continue
                 except (ValueError, TypeError):
                     # 保持兼容：当 expires_at 非法时，按“无有效过期时间”处理，不阻止提升。
@@ -592,7 +593,7 @@ def get_conversation_store(agent_id: str | None, conversation_id: str) -> Memory
         if key in _conversation_stores:
             return _conversation_stores[key]
         agent_key = agent_id or "_default"
-        path = Path(settings.DATA_DIR) / "memory" / "agents" / agent_key / "conversations" / conversation_id
+        path = agent_memory_dir(agent_key) / "conversations" / conversation_id
         store = MemoryStore(path)
         _conversation_stores[key] = store
         return store
@@ -606,7 +607,7 @@ def get_memory_engine(agent_id: str | None = None) -> MemoryEngine:
         if key in _engines:
             return _engines[key]
         _migrate_legacy()
-        path = Path(settings.DATA_DIR) / "memory" / "agents" / key
+        path = agent_memory_dir(key)
         engine = MemoryEngine(storage_path=path, agent_id=key)
         _engines[key] = engine
         return engine

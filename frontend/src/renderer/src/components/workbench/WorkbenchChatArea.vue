@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import {
   Loader2,
   AlertTriangle,
@@ -29,10 +29,12 @@ import WorkflowCreatedCard from '../chat/WorkflowCreatedCard.vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { useClipboard } from '../../composables/useClipboard'
 import { usePlatformStore } from '../../stores/platform'
+import { useChatStore } from '../../stores/chat'
 import type { ChatMessage } from '../../types'
 import type { ToolActivity, SubagentActivity, WorkflowPendingPlan } from './types'
 
 const platformStore = usePlatformStore()
+const chatStore = useChatStore()
 const mainAgentAvatar = computed(() => platformStore.mainAgent?.avatar || null)
 const mainAgentColor = computed(() => platformStore.mainAgent?.color || 'var(--lumi-primary)')
 
@@ -58,6 +60,27 @@ const props = defineProps<{
   isCompressing: boolean
   hasMoreMessages: boolean
 }>()
+
+// 消费搜索关键词：从历史面板点击搜索结果后，滚动到首条命中消息并高亮
+// pendingSearchKeyword 在 loadConversation 之前写入，故同时 watch 消息长度等加载完成
+watch(
+  [() => chatStore.pendingSearchKeyword, () => props.messages.length],
+  async ([kw]) => {
+    if (!kw) return
+    await nextTick()
+    const q = kw.toLowerCase()
+    const rows = messagesContainer.value?.querySelectorAll('.message-row') ?? []
+    for (const el of rows) {
+      if ((el.textContent || '').toLowerCase().includes(q)) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('search-highlight')
+        setTimeout(() => el.classList.remove('search-highlight'), 2000)
+        break
+      }
+    }
+    chatStore.pendingSearchKeyword = ''
+  },
+)
 
 const emit = defineEmits<{
   'toggle-reasoning': [msgId: string]
@@ -1732,9 +1755,6 @@ button:focus-visible {
   color: var(--text-secondary);
 }
 
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
 
 .msg-appear-enter-active,
 .msg-appear-leave-active {
@@ -1856,5 +1876,14 @@ button:focus-visible {
 .compress-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.search-highlight {
+  animation: search-highlight-pulse var(--duration-slow) var(--ease-out-expo);
+}
+
+@keyframes search-highlight-pulse {
+  0% { background: var(--lumi-brand-border); }
+  100% { background: transparent; }
 }
 </style>

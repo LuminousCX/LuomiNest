@@ -12,13 +12,13 @@ import {
   useStageBackgroundStore,
   STAGE_BG_PRESET_COLORS
 } from '@/stores/stage-background'
+import { vClickOutside } from '@/directives/clickOutside'
 
 const stageBg = useStageBackgroundStore()
 const toast = useToast()
 
 const expanded = ref(false)
 const uploading = ref(false)
-const rootRef = ref<HTMLElement | null>(null)
 const colorInputRef = ref<HTMLInputElement | null>(null)
 
 // ─── 当前激活的球（用于高亮环 + 对勾） ───
@@ -39,11 +39,9 @@ function closeMenu() {
   expanded.value = false
 }
 
-function handleOutsideClick(e: MouseEvent) {
+function handleOutsideClick() {
   if (!expanded.value) return
-  if (rootRef.value && !rootRef.value.contains(e.target as Node)) {
-    closeMenu()
-  }
+  closeMenu()
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -51,13 +49,10 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
-  // capture 阶段监听，确保在球自身点击处理之前判定外部点击
-  document.addEventListener('click', handleOutsideClick, true)
   document.addEventListener('keydown', handleKeydown)
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', handleOutsideClick, true)
   document.removeEventListener('keydown', handleKeydown)
 })
 
@@ -117,7 +112,7 @@ async function handleImageClick() {
 </script>
 
 <template>
-  <div ref="rootRef" class="stage-bg-menu" :class="{ open: expanded }">
+  <div v-click-outside.capture="handleOutsideClick" class="stage-bg-menu" :class="{ open: expanded }">
     <!-- 触发球 -->
     <button
       class="bg-trigger-ball"

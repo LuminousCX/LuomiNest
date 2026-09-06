@@ -23,7 +23,7 @@ from typing import Any
 from loguru import logger
 
 from app.core.config import get_settings
-from app.core.utils import utc_now
+from app.core.utils import parse_llm_json, utc_now
 from app.infrastructure.database.config_namespace_store import ConfigNamespaceStore
 from app.runtime.plugin.cxplugin.kv_store import PluginKVStore
 from app.runtime.plugin.cxplugin.registry import luominest_plugin_registry
@@ -284,27 +284,12 @@ class CxPluginConfigAssistant:
 """
 
     def _parse_config_response(self, text: str) -> dict[str, Any] | None:
-        """解析 LLM 返回的 JSON 配置建议。"""
-        candidates: list[str] = [text]
-        if "```json" in text:
-            start = text.find("```json") + 7
-            end = text.find("```", start)
-            if end > start:
-                candidates.insert(0, text[start:end].strip())
-        elif "```" in text:
-            start = text.find("```") + 3
-            end = text.find("```", start)
-            if end > start:
-                candidates.insert(0, text[start:end].strip())
+        """解析 LLM 返回的 JSON 配置建议。
 
-        for cand in candidates:
-            try:
-                data = json.loads(cand)
-                if isinstance(data, dict):
-                    return data
-            except json.JSONDecodeError:
-                continue
-        return None
+        围栏/片段候选提取与截断修复统一走 core.utils.parse_llm_json
+        （原手写 candidates 构造已收口）。
+        """
+        return parse_llm_json(text)
 
     # ------------------------------------------------------------------
     # Patch 校验与应用

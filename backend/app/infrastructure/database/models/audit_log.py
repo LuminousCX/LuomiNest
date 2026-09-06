@@ -6,11 +6,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.utils import utc_now_dt
 from app.infrastructure.database.base import Base
 
 
@@ -28,7 +29,7 @@ class AuditLog(Base):
         String(36), primary_key=True, default=_generate_uuid
     )
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), index=True
+        DateTime, default=utc_now_dt, index=True
     )
     user_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True, index=True

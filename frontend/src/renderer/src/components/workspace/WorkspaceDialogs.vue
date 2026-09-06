@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Bot, AlertTriangle } from 'lucide-vue-next'
+import { Bot } from 'lucide-vue-next'
 import type { AgentProfile, AgentRoleDefinition } from '../../types'
 import type { PresetAvatar, AgentFormState } from '../../composables/useWorkspaceAgentDialogs'
+import ConfirmDialog from '../common/ConfirmDialog.vue'
+import LumiModal from '../common/LumiModal.vue'
+import LumiButton from '../common/LumiButton.vue'
 
 const props = defineProps<{
   showCreateDialog: boolean
@@ -128,11 +131,13 @@ const addAgentRoleModel = computed({
 </script>
 
 <template>
-  <Transition name="dialog-fade">
-    <div v-if="showCreateDialog" class="create-dialog-overlay" @click.self="emit('update:showCreateDialog', false)">
-      <div class="create-dialog">
-        <h3>创建自定义 Agent</h3>
-        <Transition name="toast-slide">
+  <LumiModal
+    :visible="showCreateDialog"
+    title="创建自定义 Agent"
+    :width="460"
+    @update:visible="emit('update:showCreateDialog', $event)"
+  >
+    <Transition name="toast-slide">
           <div v-if="createError" class="dialog-error">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"/>
@@ -201,25 +206,19 @@ const addAgentRoleModel = computed({
             </button>
           </div>
         </div>
-        <div class="dialog-actions">
-          <button class="dialog-btn cancel" @click="emit('update:showCreateDialog', false)">取消</button>
-          <button
-            :class="['dialog-btn confirm', { disabled: !createName.trim() }]"
-            :disabled="!createName.trim()"
-            @click="emit('create-agent')"
-          >
-            创建
-          </button>
-        </div>
-      </div>
-    </div>
-  </Transition>
+    <template #footer>
+      <LumiButton variant="secondary" size="sm" @click="emit('update:showCreateDialog', false)">取消</LumiButton>
+      <LumiButton variant="primary" size="sm" :disabled="!createName.trim()" @click="emit('create-agent')">创建</LumiButton>
+    </template>
+  </LumiModal>
 
-  <Transition name="dialog-fade">
-    <div v-if="showEditDialog" class="create-dialog-overlay" @click.self="emit('update:showEditDialog', false)">
-      <div class="create-dialog">
-        <h3>编辑 Agent</h3>
-        <div class="form-group">
+  <LumiModal
+    :visible="showEditDialog"
+    title="编辑 Agent"
+    :width="460"
+    @update:visible="emit('update:showEditDialog', $event)"
+  >
+    <div class="form-group">
           <label class="form-label">
             名称
             <span class="required-mark">*</span>
@@ -272,46 +271,28 @@ const addAgentRoleModel = computed({
             </button>
           </div>
         </div>
-        <div class="dialog-actions">
-          <button class="dialog-btn delete" @click="emit('delete-agent')">
-            删除
-          </button>
-          <div class="flex-1"></div>
-          <button class="dialog-btn cancel" @click="emit('update:showEditDialog', false)">取消</button>
-          <button
-            :class="['dialog-btn confirm', { disabled: !editName.trim() }]"
-            :disabled="!editName.trim()"
-            @click="emit('update-agent')"
-          >
-            保存
-          </button>
-        </div>
-      </div>
-    </div>
-  </Transition>
+    <template #footer>
+      <LumiButton variant="danger-ghost" size="sm" class="edit-delete-btn" @click="emit('delete-agent')">删除</LumiButton>
+      <LumiButton variant="secondary" size="sm" @click="emit('update:showEditDialog', false)">取消</LumiButton>
+      <LumiButton variant="primary" size="sm" :disabled="!editName.trim()" @click="emit('update-agent')">保存</LumiButton>
+    </template>
+  </LumiModal>
 
-  <Transition name="dialog-fade">
-    <div v-if="showConfirmDialog" class="confirm-dialog-overlay" @click.self="emit('cancel')">
-      <div class="confirm-dialog">
-        <div class="confirm-dialog-icon">
-          <AlertTriangle :size="24" />
-        </div>
-        <p class="confirm-dialog-message">{{ confirmMessage }}</p>
-        <div class="confirm-dialog-actions">
-          <button class="dialog-btn confirm" @click="emit('confirm')">
-            确定
-          </button>
-          <button class="dialog-btn cancel" @click="emit('cancel')">取消</button>
-        </div>
-      </div>
-    </div>
-  </Transition>
+  <ConfirmDialog
+    :visible="showConfirmDialog"
+    :message="confirmMessage"
+    :danger="confirmIsDanger"
+    @confirm="emit('confirm')"
+    @cancel="emit('cancel')"
+  />
 
-  <Transition name="dialog-fade">
-    <div v-if="showCreateGroupDialog" class="create-dialog-overlay" @click.self="emit('update:showCreateGroupDialog', false)">
-      <div class="create-dialog">
-        <h3>创建群组</h3>
-        <div class="form-group">
+  <LumiModal
+    :visible="showCreateGroupDialog"
+    title="创建群组"
+    :width="460"
+    @update:visible="emit('update:showCreateGroupDialog', $event)"
+  >
+    <div class="form-group">
           <label class="form-label">
             群组名称
             <span class="required-mark">*</span>
@@ -322,25 +303,19 @@ const addAgentRoleModel = computed({
           <label class="form-label">描述</label>
           <input v-model="newGroupDescModel" type="text" class="form-input" placeholder="群组用途描述" />
         </div>
-        <div class="dialog-actions">
-          <button class="dialog-btn cancel" @click="emit('update:showCreateGroupDialog', false)">取消</button>
-          <button
-            :class="['dialog-btn confirm', { disabled: !newGroupNameModel.trim() }]"
-            :disabled="!newGroupNameModel.trim()"
-            @click="emit('create-group')"
-          >
-            创建
-          </button>
-        </div>
-      </div>
-    </div>
-  </Transition>
+    <template #footer>
+      <LumiButton variant="secondary" size="sm" @click="emit('update:showCreateGroupDialog', false)">取消</LumiButton>
+      <LumiButton variant="primary" size="sm" :disabled="!newGroupNameModel.trim()" @click="emit('create-group')">创建</LumiButton>
+    </template>
+  </LumiModal>
 
-  <Transition name="dialog-fade">
-    <div v-if="showAddAgentDialog" class="create-dialog-overlay" @click.self="emit('update:showAddAgentDialog', false)">
-      <div class="create-dialog">
-        <h3>添加 Agent 到群组</h3>
-        <div v-if="availableAgentsForGroup.length === 0" class="dialog-empty">
+  <LumiModal
+    :visible="showAddAgentDialog"
+    title="添加 Agent 到群组"
+    :width="460"
+    @update:visible="emit('update:showAddAgentDialog', $event)"
+  >
+    <div v-if="availableAgentsForGroup.length === 0" class="dialog-empty">
           <Bot :size="24" />
           <p>所有 Agent 都已在群组中，或暂无可用 Agent</p>
         </div>
@@ -376,47 +351,14 @@ const addAgentRoleModel = computed({
             </button>
           </div>
         </div>
-        <div class="dialog-actions">
-          <button class="dialog-btn cancel" @click="emit('update:showAddAgentDialog', false)">取消</button>
-          <button
-            :class="['dialog-btn confirm', { disabled: !addAgentIdModel }]"
-            :disabled="!addAgentIdModel"
-            @click="emit('add-agent-to-group')"
-          >
-            添加
-          </button>
-        </div>
-      </div>
-    </div>
-  </Transition>
+    <template #footer>
+      <LumiButton variant="secondary" size="sm" @click="emit('update:showAddAgentDialog', false)">取消</LumiButton>
+      <LumiButton variant="primary" size="sm" :disabled="!addAgentIdModel" @click="emit('add-agent-to-group')">添加</LumiButton>
+    </template>
+  </LumiModal>
 </template>
 
 <style scoped>
-.create-dialog-overlay,
-.confirm-dialog-overlay {
-  background: var(--overlay-bg);
-  backdrop-filter: blur(4px);
-  padding: var(--space-4);
-}
-
-.create-dialog {
-  width: 100%;
-  max-width: 460px;
-  max-height: 90vh;
-  overflow-y: auto;
-  background: var(--surface);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  padding: var(--space-6);
-}
-
-.create-dialog h3 {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 var(--space-5);
-}
-
 .form-group {
   margin-bottom: var(--space-4);
 }
@@ -532,67 +474,8 @@ const addAgentRoleModel = computed({
   object-fit: cover;
 }
 
-.dialog-btn {
-  padding: 10px var(--space-5);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: none;
-}
-
-.dialog-btn.cancel {
-  color: var(--text-secondary);
-  background: var(--workspace-panel);
-}
-
-.dialog-btn.cancel:hover {
-  background: var(--workspace-hover);
-}
-
-.dialog-btn.confirm:hover:not(.disabled) {
-  background: var(--lumi-brand-hover);
-}
-
-.dialog-btn.delete:hover {
-  background: var(--task-red-soft);
-}
-
-.confirm-dialog {
-  width: 100%;
-  max-width: 380px;
-  background: var(--surface);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  padding: var(--space-6);
-  text-align: center;
-}
-
-.confirm-dialog-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-full);
-  background: var(--lumi-accent-light);
-  color: var(--lumi-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto var(--space-4);
-}
-
-.confirm-dialog-message {
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  margin: 0 0 var(--space-5);
-  line-height: 1.5;
-}
-
-.confirm-dialog-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
+.edit-delete-btn {
+  margin-right: auto;
 }
 
 .dialog-empty {
@@ -733,16 +616,6 @@ const addAgentRoleModel = computed({
 .error-close:hover {
   background: color-mix(in srgb, var(--lumi-danger), transparent 80%);
   transform: rotate(90deg);
-}
-
-.dialog-fade-enter-active,
-.dialog-fade-leave-active {
-  transition: all var(--duration-normal) var(--ease-default);
-}
-
-.dialog-fade-enter-from,
-.dialog-fade-leave-to {
-  opacity: 0;
 }
 
 .toast-slide-enter-active {

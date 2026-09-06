@@ -132,13 +132,14 @@ export const useApi = () => {
       method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
       body?: unknown
       timeout?: number
+      signal?: AbortSignal
     } = {}
   ): Promise<T> => {
-    const { method = 'GET', body, timeout = 15000 } = options
-    
+    const { method = 'GET', body, timeout = 15000, signal } = options
+
     loading.value = true
     error.value = null
-    
+
     try {
       const authHeaders = await getAuthHeaders()
       const headers: Record<string, string> = { ...authHeaders }
@@ -146,9 +147,10 @@ export const useApi = () => {
         headers['Content-Type'] = 'application/json'
       }
 
+      const timeoutSignal = AbortSignal.timeout(timeout)
       const fetchOptions: RequestInit = {
         method,
-        signal: AbortSignal.timeout(timeout),
+        signal: signal ? AbortSignal.any([timeoutSignal, signal]) : timeoutSignal,
         headers,
       }
 
@@ -198,7 +200,8 @@ export const useApi = () => {
     }
   }
 
-  const apiGet = <T>(path: string): Promise<T> => request<T>(path)
+  const apiGet = <T>(path: string, options?: { signal?: AbortSignal }): Promise<T> =>
+    request<T>(path, options)
 
   const apiPost = <T>(path: string, body?: unknown): Promise<T> =>
     request<T>(path, { method: 'POST', body })

@@ -22,6 +22,7 @@ import {
   X,
   Volume2,
 } from 'lucide-vue-next'
+import type { ChatMode } from '../../types/workflow'
 import FileUpload from '../../components/FileUpload.vue'
 import SuggestedQuestions from '../../components/SuggestedQuestions.vue'
 import SkillsPicker from '../common/SkillsPicker.vue'
@@ -30,6 +31,7 @@ import LumiEmptyState from '../common/LumiEmptyState.vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { getFileIcon } from '../../utils/file'
 import type { ChatMessage, ProviderLogo, AgentProfile } from '../../types'
+import { useAutoResizeTextarea } from '../../composables/useAutoResizeTextarea'
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -39,8 +41,8 @@ const props = defineProps<{
   hasProvider: boolean
   currentModel: string
   currentProviderLogo: ProviderLogo
-  chatMode: 'normal' | 'standard' | 'ultra'
-  chatModeOptions: { value: 'normal' | 'standard' | 'ultra'; label: string; title: string }[]
+  chatMode: ChatMode
+  chatModeOptions: { value: ChatMode; label: string; title: string }[]
   inputText: string
   canSend: boolean
   isUploading: boolean
@@ -74,7 +76,7 @@ const emit = defineEmits<{
   'update:inputText': [value: string]
   send: []
   cancel: []
-  'select-chat-mode': [value: 'normal' | 'standard' | 'ultra']
+  'select-chat-mode': [value: ChatMode]
   'clear-quote': []
   'file-preview': [file: { name: string; type?: string; content?: string }]
   'update:selectedSkillIds': [ids: string[]]
@@ -82,6 +84,7 @@ const emit = defineEmits<{
 
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const { autoResize, resetTextareaHeight } = useAutoResizeTextarea(textareaRef)
 const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
 const reasoningScrollRefs = ref<HTMLElement | HTMLElement[] | null>(null)
 const isNearBottom = ref(true)
@@ -104,7 +107,7 @@ const toggleWorkflowMode = () => {
   }
 }
 
-const selectMode = (value: 'normal' | 'standard' | 'ultra') => {
+const selectMode = (value: ChatMode) => {
   emit('select-chat-mode', value)
 }
 
@@ -151,19 +154,6 @@ const handleMessagesScroll = () => {
   const distanceFromBottom = scrollHeight - scrollTop - clientHeight
   isNearBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
   showScrollToBottomBtn.value = !isNearBottom.value && props.messages.length > 0
-}
-
-const resetTextareaHeight = () => {
-  if (textareaRef.value) {
-    textareaRef.value.style.height = 'auto'
-  }
-}
-
-const autoResize = () => {
-  if (textareaRef.value) {
-    textareaRef.value.style.height = 'auto'
-    textareaRef.value.style.height = `${Math.min(textareaRef.value.scrollHeight, 120)}px`
-  }
 }
 
 const focusTextarea = () => {
@@ -1688,14 +1678,8 @@ defineExpose({
   transform: translateY(16px) scale(0.97);
 }
 
-.spin-animation {
-  animation: luominest-spin 1s linear infinite;
-}
 
-@keyframes luominest-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+
 
 .provider-icon-mini {
   width: 18px;

@@ -518,7 +518,4 @@ onMounted(() => {
   background: var(--lumi-accent);
 }
 
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
 </style>

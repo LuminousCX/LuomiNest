@@ -9,11 +9,11 @@ from typing import Any
 
 from loguru import logger
 from sqlalchemy import Integer, func, select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.core.utils import utc_now
 from app.infrastructure.database.models.workflow_node import WorkflowNodeORM
 from app.infrastructure.database.models.workflow_session import WorkflowSessionORM
+from app.infrastructure.database.repositories.base import BaseRepository, build_upsert_stmt
 from app.infrastructure.database.session import get_async_session
 
 
@@ -30,70 +30,69 @@ async def save_workflow_session(
     completed_at: str | None = None,
 ) -> None:
     """保存或更新工作流会话（upsert）"""
-    async with get_async_session() as db:
-        stmt = sqlite_insert(WorkflowSessionORM).values(
-            session_id=session_id,
-            user_message=user_message,
-            mode=mode,
-            phase=phase,
-            analysis=analysis,
-            plan_json=plan_json,
-            final_result=final_result,
-            error=error,
-            conversation_id=conversation_id,
-            created_at=utc_now(),
-            completed_at=completed_at,
-        )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["session_id"],
-            set_={
-                "phase": phase,
-                "analysis": analysis,
-                "plan_json": plan_json,
-                "final_result": final_result,
-                "error": error,
-                "completed_at": completed_at,
-            },
-        )
-        await db.execute(stmt)
-        logger.debug(f"[WorkflowPersistence] Session {session_id} saved (phase={phase})")
+    await BaseRepository.upsert_async(
+        WorkflowSessionORM,
+        index_elements=["session_id"],
+        values={
+            "session_id": session_id,
+            "user_message": user_message,
+            "mode": mode,
+            "phase": phase,
+            "analysis": analysis,
+            "plan_json": plan_json,
+            "final_result": final_result,
+            "error": error,
+            "conversation_id": conversation_id,
+            "created_at": utc_now(),
+            "completed_at": completed_at,
+        },
+        update_set={
+            "phase": phase,
+            "analysis": analysis,
+            "plan_json": plan_json,
+            "final_result": final_result,
+            "error": error,
+            "completed_at": completed_at,
+        },
+    )
+    logger.debug(f"[WorkflowPersistence] Session {session_id} saved (phase={phase})")
 
 
 async def save_workflow_nodes(
     session_id: str,
     tasks: list[dict[str, Any]],
 ) -> None:
-    """保存工作流节点（批量 upsert）"""
+    """保存工作流节点（批量 upsert，单事务）"""
     async with get_async_session() as db:
         for task in tasks:
             node_id = task.get("task_id", f"node_{task.get('title', 'unknown')}")
-            stmt = sqlite_insert(WorkflowNodeORM).values(
-                node_id=node_id,
-                session_id=session_id,
-                title=task.get("title", ""),
-                description=task.get("description"),
-                node_type=task.get("node_type", "tool"),
-                tool_name=task.get("tool_name"),
-                arguments_json=json.dumps(task.get("arguments", {}), ensure_ascii=False) if task.get("arguments") else None,
-                depends_on_json=json.dumps(task.get("depends_on", []), ensure_ascii=False) if task.get("depends_on") else None,
-                priority=task.get("priority", "normal"),
-                status=task.get("status", "pending"),
-                result=task.get("result"),
-                error=task.get("error"),
-                started_at=task.get("started_at"),
-                completed_at=task.get("completed_at"),
-            )
-            stmt = stmt.on_conflict_do_update(
+            await db.execute(build_upsert_stmt(
+                WorkflowNodeORM,
                 index_elements=["node_id"],
-                set_={
+                values={
+                    "node_id": node_id,
+                    "session_id": session_id,
+                    "title": task.get("title", ""),
+                    "description": task.get("description"),
+                    "node_type": task.get("node_type", "tool"),
+                    "tool_name": task.get("tool_name"),
+                    "arguments_json": json.dumps(task.get("arguments", {}), ensure_ascii=False) if task.get("arguments") else None,
+                    "depends_on_json": json.dumps(task.get("depends_on", []), ensure_ascii=False) if task.get("depends_on") else None,
+                    "priority": task.get("priority", "normal"),
                     "status": task.get("status", "pending"),
                     "result": task.get("result"),
                     "error": task.get("error"),
                     "started_at": task.get("started_at"),
                     "completed_at": task.get("completed_at"),
                 },
-            )
-            await db.execute(stmt)
+                update_set={
+                    "status": task.get("status", "pending"),
+                    "result": task.get("result"),
+                    "error": task.get("error"),
+                    "started_at": task.get("started_at"),
+                    "completed_at": task.get("completed_at"),
+                },
+            ))
         logger.debug(f"[WorkflowPersistence] {len(tasks)} nodes saved for session {session_id}")
 
 

@@ -5,11 +5,11 @@ import {
   Users,
   User,
   Plus,
-  Search,
   Hash,
   MoreVertical,
   Trash2,
 } from 'lucide-vue-next'
+import SearchInput from '../common/SearchInput.vue'
 import type { AgentProfile, GroupInfo } from '../../types'
 import type { ContactType } from './types'
 
@@ -55,8 +55,7 @@ const filteredGroups = computed(() => {
   <div class="contact-panel">
     <div class="contact-header">
       <div class="contact-search">
-        <Search :size="14" class="search-icon" />
-        <input v-model="searchQueryModel" type="text" placeholder="搜索联系人..." />
+        <SearchInput v-model="searchQueryModel" placeholder="搜索联系人..." />
       </div>
       <button class="contact-add-btn" title="新建 Agent" @click="emit('create-agent')">
         <Plus :size="14" />
@@ -152,38 +151,6 @@ const filteredGroups = computed(() => {
 
 .contact-search {
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px 10px;
-  background: var(--workspace-panel);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--workspace-border);
-  transition: all var(--transition-fast);
-}
-
-.contact-search:focus-within {
-  border-color: var(--lumi-brand-border);
-  background: var(--surface);
-}
-
-.contact-search .search-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.contact-search input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  min-width: 0;
-}
-
-.contact-search input::placeholder {
-  color: var(--text-muted);
 }
 
 .contact-add-btn {

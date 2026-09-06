@@ -2,12 +2,13 @@ import asyncio
 import os
 import shutil
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
 
 from app.core.config import settings
+from app.core.utils import utc_now_dt
 
 
 class LumiBackupManager:
@@ -25,7 +26,7 @@ class LumiBackupManager:
 
     def create_backup(self, label: str = "") -> str | None:
         """创建数据备份，返回备份文件路径。"""
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        timestamp = utc_now_dt().strftime("%Y%m%d_%H%M%S")
         suffix = f"_{label}" if label else ""
         backup_name = f"luominest_backup_{timestamp}{suffix}.zip"
         backup_path = os.path.join(self._backup_dir, backup_name)

@@ -3,12 +3,11 @@
  *
  * 对话模式（ChatMode）语义分离：
  * - normal: 普通对话模式（非工作流），工具最少，仅任务视图操作 + 表情操控
- * - standard: 标准工作流模式，均衡裁剪，排除细粒度浏览器自动化工具
- * - ultra: 超长工作流模式，全部工具传给 LLM
+ * - standard: 专业工作流模式，工作流规划 + 全量工具（历史 ultra 超长模式已移除）
  */
 
 /** 对话模式 */
-export type ChatMode = 'normal' | 'standard' | 'ultra'
+export type ChatMode = 'normal' | 'standard'
 
 /** 工作流节点类型（供前端流程图渲染分类） */
 export type WorkflowNodeType = 'input' | 'agent' | 'tool' | 'condition' | 'output'
@@ -126,13 +125,8 @@ export const CHAT_MODE_OPTIONS: ChatModeOption[] = [
   },
   {
     value: 'standard',
-    label: '标准',
-    title: '标准模式：工作流规划，平衡速度与深度，排除细粒度浏览器工具',
-  },
-  {
-    value: 'ultra',
-    label: '超长',
-    title: '超长模式：工作流规划，全部工具可用，适合复杂长任务',
+    label: '专业',
+    title: '专业模式：工作流规划 + 全量工具，适合复杂长任务',
   },
 ]
 

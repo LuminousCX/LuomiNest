@@ -21,6 +21,7 @@ import {
   Search,
   ArrowRight
 } from 'lucide-vue-next'
+import { vClickOutside } from '../../directives/clickOutside'
 
 // --- 类型定义 ---
 interface SearchEngine {
@@ -79,7 +80,6 @@ const selectedEngine = ref(searchEngines[0])
 const showEngineDropdown = ref(false)
 const isSearching = ref(false)
 const isSearchFocused = ref(false)
-const searchBoxRef = ref<HTMLElement | null>(null)
 const engineBtnRef = ref<HTMLElement | null>(null)
 const dropdownPos = ref({ left: 0, top: 0 })
 let searchResetTimer: ReturnType<typeof setTimeout> | null = null
@@ -186,12 +186,8 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 const handleWebsiteClick = (url: string) => emit('search', url)
 
-const handleDocumentClick = (e: MouseEvent) => {
-  if (
-    showEngineDropdown.value &&
-    searchBoxRef.value &&
-    !searchBoxRef.value.contains(e.target as Node)
-  ) {
+const handleDocumentClick = () => {
+  if (showEngineDropdown.value) {
     showEngineDropdown.value = false
   }
 }
@@ -200,11 +196,9 @@ const handleDocumentClick = (e: MouseEvent) => {
 onMounted(() => {
   updateClock()
   clockTimer = setInterval(updateClock, 1000)
-  document.addEventListener('click', handleDocumentClick)
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', handleDocumentClick)
   window.removeEventListener('resize', updateDropdownPos)
   window.removeEventListener('scroll', updateDropdownPos, true)
   if (searchResetTimer) clearTimeout(searchResetTimer)
@@ -238,7 +232,7 @@ onBeforeUnmount(() => {
         </header>
 
         <!-- ==================== 搜索框 ==================== -->
-        <div ref="searchBoxRef" class="search-wrap home-stagger-enter" style="animation-delay: 80ms">
+        <div v-click-outside="handleDocumentClick" class="search-wrap home-stagger-enter" style="animation-delay: 80ms">
           <div
             class="search-row"
             :class="{ 'search-row--focus': isSearchFocused || showEngineDropdown }"

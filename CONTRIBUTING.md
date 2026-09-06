@@ -251,8 +251,7 @@ LuomiNest/
 │   └── embedded/esp32-p4/   # ESP32-P4 main controller (components: app / bsp / drivers)
 │
 ├── docker/                  # Docker configuration
-├── docs/                    # VitePress documentation site
-├── 文档/                    # Project design documents
+├── 文档/                    # Project documentation (single source, entry README.md)
 └── .github/                 # GitHub configuration
 ```
 
@@ -349,6 +348,63 @@ Please include:
 
 Keep PRs focused. Smaller PRs review faster.
 
+## Model Assets Policy (Avatar / Voice Models)
+
+Model asset files distributed with LuomiNest — built-in avatar models (Live2D, PixelPet,
+PNG Tuber, and future VRM/Spine samples) and bundled voice models — follow a
+**maintainer-only distribution** rule. This section explains what that means, why it
+exists, and what you can still contribute.
+
+### Official Built-in Assets Are Maintained by the Core Team Only
+
+The following paths are **not open for community contributions**. Pull Requests whose
+purpose is to add, replace, or swap model assets under these paths will be closed
+without review:
+
+- `frontend/src/renderer/public/live2d/` — built-in Live2D models
+- `frontend/src/renderer/public/pixel/` — built-in PixelPet models
+- `frontend/src/renderer/public/png/` — built-in PNG Tuber models
+- `backend/models/` — bundled voice models
+- `backend/app/data/avatar-manifest.json` — built-in model manifest
+
+Code changes that happen to touch these paths (e.g. a renderer fix that also adjusts a
+manifest entry) are fine; wholesale asset additions/replacements are not.
+
+### Why This Rule Exists
+
+- Most avatar and voice model files circulating online **do not carry a license that
+  permits redistribution**. Re-hosting them in this repository would expose every user
+  of the project — and the project itself — to copyright claims.
+- Binary model archives cannot be meaningfully reviewed for safety or licensing. Given
+  that LuomiNest is an open platform anyone can clone and re-run, accepting third-party
+  model submissions would turn the official repository into an unreviewed distribution
+  channel. The only safe default is: official assets only.
+
+### Your Own Models Stay on Your Machine
+
+Models you import through the in-app avatar workshop (**皮套工坊 → Import Model**) are
+copied into the application data directory (Electron `userData`), which lives **outside
+the git repository**. They are never committed, and must not be submitted back to this
+repository — through a PR or any other channel.
+
+Locally you are free to do what you want:
+
+- Import and delete your own models (deletion removes the local copy)
+- Hide built-in models you don't want (a local preference, restorable at any time)
+- Modify or experiment with models in your local data directory
+
+None of this affects the repository, and none of it can be pushed back to it.
+
+### Want a New Official Built-in Model?
+
+Open an Issue **before** preparing any PR, including:
+
+1. The model's source and a link to its license
+2. Confirmation that the license permits redistribution in an AGPL project
+
+Maintainers will decide case by case. Once approved, the asset is added by the core
+team so that every built-in model in the repository has a verified, documented license.
+
 ## Report Bugs and Feature Requests
 
 - Bug report: [Submit Bug Report](https://github.com/LuminousCX/LuomiNest/issues/new?template=bug_report.yaml)
@@ -372,7 +428,7 @@ By contributing, you agree your contributions will be licensed under the [GNU AG
 
 - Check [Issues](https://github.com/LuminousCX/LuomiNest/issues)
 - Join [Discussions](https://github.com/LuminousCX/LuomiNest/discussions)
-- Read [Documentation](docs/)
+- Read [Documentation](文档/README.md)
 
 ---
 

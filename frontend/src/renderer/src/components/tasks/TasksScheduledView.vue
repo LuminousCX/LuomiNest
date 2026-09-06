@@ -11,11 +11,13 @@ import {
   Trash2,
   Plus,
   Repeat,
-  CalendarDays,
-  X
+  CalendarDays
 } from 'lucide-vue-next'
 import type { ScheduledTaskInfo } from '../../stores/taskStream'
 import type { ScheduledTask } from '../../types/workflow'
+import { formatShortDateTime } from '../../utils/format'
+import LumiModal from '../common/LumiModal.vue'
+import LumiButton from '../common/LumiButton.vue'
 
 /** 数据库循环任务创建载荷 */
 interface CreateDbTaskPayload {
@@ -41,20 +43,8 @@ const emit = defineEmits<{
   'refresh-db': []
 }>()
 
-const formatScheduledTime = (isoStr: string | null): string => {
-  if (!isoStr) return '未知'
-  try {
-    const dt = new Date(isoStr)
-    return dt.toLocaleString('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch {
-    return isoStr
-  }
-}
+const formatScheduledTime = (isoStr: string | null): string =>
+  isoStr ? formatShortDateTime(isoStr) : '未知'
 
 // ===== 循环任务创建表单 =====
 type RepeatType = 'daily' | 'weekly' | 'monthly'
@@ -264,19 +254,19 @@ const SOURCE_LABELS: Record<string, string> = {
     </div>
 
     <!-- 创建循环任务表单 -->
-    <div v-if="showCreateForm" class="create-form-overlay" @click.self="closeCreateForm">
-      <div class="create-form">
-        <div class="form-header">
-          <div class="form-title">
-            <Plus :size="18" />
-            <span>新建循环任务</span>
-          </div>
-          <button class="form-close-btn" @click="closeCreateForm">
-            <X :size="18" />
-          </button>
-        </div>
+    <LumiModal
+      :visible="showCreateForm"
+      :width="480"
+      @close="closeCreateForm"
+    >
+      <template #title>
+        <span class="form-title">
+          <Plus :size="18" />
+          <span>新建循环任务</span>
+        </span>
+      </template>
 
-        <div class="form-body">
+      <div class="form-stack">
           <div class="form-field">
             <label class="form-label">任务名称 <span class="required">*</span></label>
             <input
@@ -364,17 +354,18 @@ const SOURCE_LABELS: Record<string, string> = {
             <AlertCircle :size="14" />
             <span>{{ formError }}</span>
           </div>
-        </div>
-
-        <div class="form-footer">
-          <button class="form-cancel-btn" @click="closeCreateForm">取消</button>
-          <button class="form-submit-btn" @click="handleCreateTask">
-            <Plus :size="14" />
-            创建任务
-          </button>
-        </div>
       </div>
-    </div>
+
+      <template #footer>
+        <LumiButton variant="secondary" size="sm" @click="closeCreateForm">取消</LumiButton>
+        <LumiButton variant="primary" size="sm" @click="handleCreateTask">
+          <template #icon>
+            <Plus :size="14" />
+          </template>
+          创建任务
+        </LumiButton>
+      </template>
+    </LumiModal>
 
     <!-- 运行时任务（内存调度器） -->
     <div class="runtime-section">
@@ -625,7 +616,6 @@ const SOURCE_LABELS: Record<string, string> = {
 }
 
 .scheduled-status-icon .spin-animation {
-  animation: spin 1s linear infinite;
   color: var(--lumi-brand);
 }
 
@@ -768,41 +758,6 @@ const SOURCE_LABELS: Record<string, string> = {
 }
 
 /* ===== 创建表单 ===== */
-.create-form-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fade-in var(--duration-enter) var(--ease-in-out);
-}
-
-.create-form {
-  width: 480px;
-  max-width: 90vw;
-  max-height: 85vh;
-  background: var(--workspace-bg, var(--workspace-card));
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-lg);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: slide-up var(--duration-enter) var(--ease-in-out);
-}
-
-.form-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--workspace-border);
-}
-
 .form-title {
   display: flex;
   align-items: center;
@@ -812,29 +767,7 @@ const SOURCE_LABELS: Record<string, string> = {
   color: var(--text);
 }
 
-.form-close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: var(--text-muted);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-in-out);
-}
-
-.form-close-btn:hover {
-  color: var(--text);
-  background: var(--workspace-hover);
-}
-
-.form-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-5);
+.form-stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -934,68 +867,5 @@ const SOURCE_LABELS: Record<string, string> = {
   color: var(--lumi-danger);
   background: var(--lumi-danger-light);
   border-radius: var(--radius-sm);
-}
-
-.form-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--workspace-border);
-}
-
-.form-cancel-btn {
-  padding: 8px var(--space-4);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-in-out);
-}
-
-.form-cancel-btn:hover {
-  background: var(--workspace-hover);
-}
-
-.form-submit-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px var(--space-4);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-inverse, #fff);
-  background: var(--lumi-brand);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: opacity var(--duration-fast) var(--ease-in-out);
-}
-
-.form-submit-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.form-submit-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 </style>

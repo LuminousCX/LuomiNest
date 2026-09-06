@@ -40,9 +40,9 @@ export type WorkflowPhase =
 
 /** 工作流执行模式（仅工作流模式，普通模式见 ChatMode）
  * - standard: 标准模式，平衡速度与深度（默认），排除细粒度浏览器自动化工具
- * - ultra: 超长模式，最大能力，适合复杂长任务，全部工具可用
+ * - （历史 ultra 超长模式已移除；提交 ultra 由后端归一为 standard）
  */
-export type WorkflowMode = 'standard' | 'ultra'
+export type WorkflowMode = 'standard'
 
 /** 工作流子任务状态 */
 export type WorkflowTaskStatus =

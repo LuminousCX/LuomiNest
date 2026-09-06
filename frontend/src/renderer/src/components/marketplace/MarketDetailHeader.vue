@@ -7,7 +7,7 @@ import {
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 import type { MarketplaceItem, InstallProgress } from '../../types/marketplace'
-import { formatDownloadCount } from '../../utils/format'
+import { formatDownloadCount, formatSpeed } from '../../utils/format'
 import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
 
 const props = defineProps<{
@@ -35,13 +35,6 @@ const downloadDisplay = computed(() => {
 const likeDisplay = computed(() => {
   return props.item.likeCount || 0
 })
-
-const formatSpeed = (bytesPerSec: number): string => {
-  if (bytesPerSec <= 0) return ''
-  if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`
-  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`
-  return `${(bytesPerSec / 1024 / 1024).toFixed(1)} MB/s`
-}
 
 const formatEta = (seconds: number): string => {
   if (seconds <= 0) return ''

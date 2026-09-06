@@ -1,6 +1,7 @@
 import io
 import os
 import edge_tts
+from app.core.constants.voice import DEFAULT_EDGE_VOICE
 from app.runtime.provider.engine_capabilities import EngineCapabilities
 from app.runtime.provider.tts.ports import TTSProvider
 
@@ -9,7 +10,7 @@ class EdgeTTSProvider(TTSProvider):
     provider_name = "edge-tts"
 
     DEFAULT_VOICES = {
-        "zh": "zh-CN-XiaoxiaoNeural",
+        "zh": DEFAULT_EDGE_VOICE,
         "en": "en-US-JennyNeural",
         "ja": "ja-JP-NanamiNeural",
     }
@@ -24,7 +25,7 @@ class EdgeTTSProvider(TTSProvider):
         online=True,
         languages=("zh", "en", "ja", "ko", "yue"),
         voices=[
-            {"value": "zh-CN-XiaoxiaoNeural", "label": "晓晓（女·温柔）", "langs": ["zh"]},
+            {"value": DEFAULT_EDGE_VOICE, "label": "晓晓（女·温柔）", "langs": ["zh"]},
             {"value": "zh-CN-YunxiNeural", "label": "云希（男·阳光）", "langs": ["zh"]},
             {"value": "zh-CN-YunjianNeural", "label": "云健（男·沉稳）", "langs": ["zh"]},
             {"value": "zh-CN-XiaoyiNeural", "label": "晓艺（女·活泼）", "langs": ["zh"]},
@@ -33,7 +34,7 @@ class EdgeTTSProvider(TTSProvider):
             {"value": "ja-JP-NanamiNeural", "label": "七海（JA·Female）", "langs": ["ja"]},
             {"value": "ja-JP-KeitaNeural", "label": "圭太（JA·Male）", "langs": ["ja"]},
         ],
-        default_voice="zh-CN-XiaoxiaoNeural",
+        default_voice=DEFAULT_EDGE_VOICE,
         description="微软免费神经语音，多语言，开箱默认引擎",
     )
 
@@ -56,7 +57,7 @@ class EdgeTTSProvider(TTSProvider):
         from app.core.config import settings
 
         if voice == "default" or not voice:
-            voice = self.DEFAULT_VOICES.get("zh", "zh-CN-XiaoxiaoNeural")
+            voice = self.DEFAULT_VOICES.get("zh", DEFAULT_EDGE_VOICE)
         # Allow callers to pass a language code ('zh'/'ja'/'en') instead of a full voice name.
         elif voice in self.DEFAULT_VOICES:
             voice = self.DEFAULT_VOICES[voice]

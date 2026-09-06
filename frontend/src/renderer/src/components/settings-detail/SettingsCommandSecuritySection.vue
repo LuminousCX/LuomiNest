@@ -358,7 +358,4 @@ onMounted(async () => {
   margin-top: var(--space-1);
 }
 
-.spin-animation {
-  animation: lumi-spin 1s linear infinite;
-}
 </style>
