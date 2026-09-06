@@ -713,21 +713,6 @@ onMounted(() => {
   margin-bottom: var(--space-3);
 }
 
-.platform-search {
-  flex: 1;
-  padding: var(--space-2) var(--space-3);
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-base);
-  color: var(--text-primary);
-}
-
-.platform-search:focus {
-  outline: none;
-  border-color: var(--lumi-primary);
-}
-
 .platform-filter-group {
   display: flex;
   gap: var(--space-1);

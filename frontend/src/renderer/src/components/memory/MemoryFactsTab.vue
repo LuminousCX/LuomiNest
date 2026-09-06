@@ -225,22 +225,6 @@ function formatExpiresAt(iso: string): string {
 
 .search-input-wrap {
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  background: var(--surface);
-}
-
-.facts-search-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-size: var(--text-base);
-  outline: none;
 }
 
 .filter-dropdown {

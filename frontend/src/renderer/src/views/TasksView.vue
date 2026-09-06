@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { Search, Plus } from 'lucide-vue-next'
+import { Plus } from 'lucide-vue-next'
 import { useTaskStreamStore } from '../stores/taskStream'
 import { getItem, setItem } from '../utils/storage'
 import type { ViewMode, TaskStatus, LuomiNestTask, CalendarDay, MonthGrid } from '../components/tasks/types'
@@ -550,7 +550,6 @@ const timeSlotOptions = [
       </div>
       <div class="tasks-page-header__right">
         <div class="tasks-search-box">
-          <Search :size="14" class="tasks-search-icon" />
           <SearchInput v-model="searchQuery" placeholder="搜索任务..." />
         </div>
         <button class="tasks-create-btn" @click="() => openCreateModal()">
@@ -720,36 +719,7 @@ const timeSlotOptions = [
 }
 
 .tasks-search-box {
-  position: relative;
-}
-
-.tasks-search-box input {
-  width: 200px;
-  padding: 7px 12px 7px var(--space-7);
-  border-radius: var(--radius-md);
-  background: var(--workspace-card);
-  border: 1px solid var(--workspace-border);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  outline: none;
-  transition: all var(--transition-fast);
-}
-
-.tasks-search-box input:focus {
-  border-color: var(--lumi-brand-light);
-  box-shadow: 0 0 0 3px var(--lumi-brand-glow);
-}
-
-.tasks-search-box input::placeholder {
-  color: var(--text-muted);
-}
-
-.tasks-search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
+  width: 220px;
 }
 
 .tasks-create-btn {

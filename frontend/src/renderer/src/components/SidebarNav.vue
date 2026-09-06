@@ -629,7 +629,7 @@ const handleNavigate = (path: string) => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--radius-xs) var(--space-2) var(--radius-xs) var(--space-5);
+  padding: var(--radius-xs) var(--space-2) var(--radius-xs) var(--space-6);
   cursor: pointer;
   border-radius: var(--nav-item-radius);
   color: var(--text-muted);
