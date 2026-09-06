@@ -20,12 +20,15 @@ const props = defineProps<{
   aiModelSaving: boolean
   newProvider: NewProvider
   newProviderFormValid: boolean
+  testState: 'idle' | 'testing' | 'ok' | 'fail'
+  testResultText: string
 }>()
 
 const emit = defineEmits<{
   'update:addTemplateCategory': [category: TemplateCategory]
   'select-template': [templateId: string]
   'add-provider-and-next': []
+  'test-connection': []
   next: []
   prev: []
 }>()
@@ -109,6 +112,23 @@ const currentTemplates = computed(() =>
         <div class="form-group">
           <label>{{ i18n.aiModelDefaultModel }}</label>
           <LumiInput v-model="newProvider.defaultModel" type="text" placeholder="gpt-4o-mini" />
+        </div>
+        <div class="test-row">
+          <LumiButton
+            variant="ghost"
+            size="md"
+            :loading="testState === 'testing'"
+            :disabled="!newProvider.baseUrl.trim() || testState === 'testing'"
+            @click="$emit('test-connection')"
+          >
+            {{ testState === 'testing' ? i18n.testTesting : i18n.testBtn }}
+          </LumiButton>
+          <span
+            v-if="testResultText"
+            :class="['test-result', { ok: testState === 'ok', fail: testState === 'fail' }]"
+          >
+            {{ testResultText }}
+          </span>
         </div>
       </div>
 
@@ -336,6 +356,26 @@ const currentTemplates = computed(() =>
   font-size: var(--text-xs);
   font-weight: var(--font-medium);
   color: var(--text-secondary);
+}
+
+.test-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.test-result {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  min-width: 0;
+}
+
+.test-result.ok {
+  color: var(--lumi-success);
+}
+
+.test-result.fail {
+  color: var(--lumi-danger);
 }
 
 .skip-hint {

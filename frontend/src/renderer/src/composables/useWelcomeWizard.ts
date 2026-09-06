@@ -13,6 +13,7 @@ import { useI18n } from 'vue-i18n'
 import { Bot, Zap, Globe, Palette } from 'lucide-vue-next'
 import { useModelStore } from '../stores/model'
 import { useLocaleStore } from '../stores/locale'
+import { useApi } from './useApi'
 import type { AppLocale } from '../i18n'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 
@@ -71,18 +72,25 @@ export interface WelcomeI18nText {
   aiModelCategoryCloud: string
   aiModelCategoryLocal: string
   aiModelCategoryAggregator: string
+  testBtn: string
+  testTesting: string
   readyTitle: string
   readyDesc: string
   btnNext: string
   btnStart: string
   btnBack: string
-  agreeText: string
   skip: string
+}
+
+export interface WizardCurrentUser {
+  user_id: string
+  username: string
+  display_name: string | null
 }
 
 // ===== 静态数据 =====
 
-export const TOTAL_STEPS = 4
+export const TOTAL_STEPS = 5
 
 export const FEATURES: FeatureItem[] = [
   { icon: Bot, color: '--lumi-indigo', theme: 'Bot', key: 'featAgent', keyDesc: 'featAgentDesc' },
@@ -98,6 +106,7 @@ export const useWelcomeWizard = () => {
   const modelStore = useModelStore()
   const localeStore = useLocaleStore()
   const { t } = useI18n()
+  const { apiGet, apiPost } = useApi()
 
   const VERSION = ref('')
   const currentStep = ref(0)
@@ -141,12 +150,13 @@ export const useWelcomeWizard = () => {
     aiModelCategoryCloud: t('welcome.aiModelCategoryCloud'),
     aiModelCategoryLocal: t('welcome.aiModelCategoryLocal'),
     aiModelCategoryAggregator: t('welcome.aiModelCategoryAggregator'),
+    testBtn: t('welcome.testBtn'),
+    testTesting: t('welcome.testTesting'),
     readyTitle: t('welcome.readyTitle'),
     readyDesc: t('welcome.readyDesc'),
     btnNext: t('welcome.btnNext'),
     btnStart: t('welcome.btnStart'),
     btnBack: t('welcome.btnBack'),
-    agreeText: t('welcome.agreeText'),
     skip: t('common.skip'),
   }))
 
@@ -189,6 +199,10 @@ export const useWelcomeWizard = () => {
   const aiModelSaving = ref(false)
   const aiModelError = ref('')
 
+  // --- 连通性测试（testProvider，向导内即可发现填错的 key/地址） ---
+  const testState = ref<'idle' | 'testing' | 'ok' | 'fail'>('idle')
+  const testResultText = ref('')
+
   const newProvider = reactive<NewProvider>({
     id: '',
     name: '',
@@ -201,6 +215,8 @@ export const useWelcomeWizard = () => {
 
   const handleTemplateSelect = (templateId: string): void => {
     selectedTemplate.value = templateId
+    testState.value = 'idle'
+    testResultText.value = ''
     const tmpl = modelStore.allTemplates.find(t => t.id === templateId)
     if (tmpl) {
       newProvider.id = tmpl.id
@@ -253,6 +269,103 @@ export const useWelcomeWizard = () => {
     }
   }
 
+  /**
+   * 测试所选供应商连通性（不落库，仅用表单当前值探测）。
+   */
+  const testConnection = async (): Promise<void> => {
+    if (testState.value === 'testing') return
+    testState.value = 'testing'
+    testResultText.value = ''
+    try {
+      const result = await modelStore.testProvider({
+        vendor: newProvider.vendor,
+        baseUrl: newProvider.baseUrl.trim(),
+        apiKey: newProvider.apiKey,
+        defaultModel: newProvider.defaultModel.trim(),
+      })
+      if (result.success) {
+        testState.value = 'ok'
+        testResultText.value = t('welcome.testOk', { count: result.models.length })
+      } else {
+        testState.value = 'fail'
+        testResultText.value = result.error || t('welcome.testFail')
+      }
+    } catch (e: unknown) {
+      testState.value = 'fail'
+      testResultText.value = (e instanceof Error && e.message) ? e.message : t('welcome.testFail')
+    }
+  }
+
+  // --- Account Step ---
+  // 与 SettingsLoginSection.vue 共用同一组 localStorage key，保证两处登录态互通
+  const JWT_ACCESS_TOKEN_KEY = 'lumi_jwt_access_token'
+  const JWT_REFRESH_TOKEN_KEY = 'lumi_jwt_refresh_token'
+
+  const accountSubmitting = ref(false)
+  const accountError = ref('')
+  /** null=检测中，false=未登录（显示创建表单），true 伴随 currentUser=已登录（显示账户卡） */
+  const hasAccount = ref<boolean | null>(null)
+  const currentUser = ref<WizardCurrentUser | null>(null)
+
+  const accountForm = reactive({
+    username: '',
+    displayName: '',
+    password: '',
+    confirmPassword: '',
+  })
+
+  const accountFormValid = computed<boolean>(() => {
+    const u = accountForm.username.trim().length >= 3
+    const p = accountForm.password.length >= 6
+    const cp = accountForm.password === accountForm.confirmPassword
+    return u && p && cp
+  })
+
+  const checkExistingAccount = async (): Promise<void> => {
+    const token = localStorage.getItem(JWT_ACCESS_TOKEN_KEY)
+    if (!token) {
+      hasAccount.value = false
+      return
+    }
+    try {
+      currentUser.value = await apiGet<WizardCurrentUser>('/auth/me')
+      hasAccount.value = true
+    } catch {
+      localStorage.removeItem(JWT_ACCESS_TOKEN_KEY)
+      localStorage.removeItem(JWT_REFRESH_TOKEN_KEY)
+      hasAccount.value = false
+    }
+  }
+
+  /**
+   * 创建本地账户并自动登录（POST /auth/register → /auth/login），
+   * JWT 存 localStorage 后进入下一步。
+   */
+  const registerAndNext = async (): Promise<void> => {
+    if (!accountFormValid.value || accountSubmitting.value) return
+    accountSubmitting.value = true
+    accountError.value = ''
+    try {
+      await apiPost('/auth/register', {
+        username: accountForm.username.trim(),
+        password: accountForm.password,
+        display_name: accountForm.displayName.trim() || null,
+      })
+      const resp = await apiPost<{ access_token: string; refresh_token: string }>('/auth/login', {
+        username: accountForm.username.trim(),
+        password: accountForm.password,
+      })
+      localStorage.setItem(JWT_ACCESS_TOKEN_KEY, resp.access_token)
+      if (resp.refresh_token) localStorage.setItem(JWT_REFRESH_TOKEN_KEY, resp.refresh_token)
+      nextStep()
+    } catch (e: unknown) {
+      logger.warn('Wizard register failed:', e)
+      accountError.value = (e instanceof Error && e.message) ? e.message : t('welcome.accountErrorFallback')
+    } finally {
+      accountSubmitting.value = false
+    }
+  }
+
   onMounted(async () => {
     try {
       VERSION.value = await window.api?.app?.getVersion() || ''
@@ -262,6 +375,7 @@ export const useWelcomeWizard = () => {
     modelStore.fetchProviders().catch((e: unknown) => logger.warn('fetchProviders failed:', e))
     modelStore.fetchTemplates().catch((e: unknown) => logger.warn('fetchTemplates failed:', e))
     modelStore.fetchModelConfig().catch((e: unknown) => logger.warn('fetchModelConfig failed:', e))
+    checkExistingAccount().catch((e: unknown) => logger.warn('checkExistingAccount failed:', e))
   })
 
   return {
@@ -279,6 +393,16 @@ export const useWelcomeWizard = () => {
     newProviderFormValid,
     handleTemplateSelect,
     addProviderAndNext,
+    testState,
+    testResultText,
+    testConnection,
+    accountSubmitting,
+    accountError,
+    hasAccount,
+    currentUser,
+    accountForm,
+    accountFormValid,
+    registerAndNext,
     nextStep,
     prevStep,
     startApp,
