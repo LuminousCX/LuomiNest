@@ -15,6 +15,7 @@ import { useWelcomeWizard, TOTAL_STEPS } from '../composables/useWelcomeWizard'
 const {
   currentStep,
   selectedLang,
+  selectLang,
   agreed,
   i18n,
   addTemplateCategory,
@@ -50,7 +51,7 @@ const {
           key="step-0"
           :i18n="i18n"
           :selected-lang="selectedLang"
-          @update:selected-lang="selectedLang = $event"
+          @update:selected-lang="selectLang"
           @next="nextStep"
         />
 

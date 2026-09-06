@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Zap } from 'lucide-vue-next'
 import { useApi } from '../composables/useApi'
 import LumiButton from '../components/common/LumiButton.vue'
@@ -19,11 +20,14 @@ interface LuomiNestApi {
 }
 
 const router = useRouter()
+const { t } = useI18n()
 const { checkHealth } = useApi()
 
 const progressPercent = ref(0)
 const backendStatus = ref<'pending' | 'loading' | 'ready' | 'error'>('pending')
-const statusText = ref('正在启动 LuomiNest 后端服务...')
+/** 状态文案的 i18n key（保持响应式，语言切换时自动跟随） */
+const statusKey = ref('splash.starting')
+const statusText = computed(() => t(statusKey.value))
 const healthRetries = ref(0)
 const MAX_RETRIES = 15
 let pollTimer: ReturnType<typeof setTimeout> | null = null
@@ -55,12 +59,12 @@ const startLoading = async (): Promise<void> => {
   if (status === 'ready') {
     stopProgressAnimation()
     progressPercent.value = 100
-    statusText.value = '后端服务已就绪'
+    statusKey.value = 'splash.ready'
     setTimeout(() => router.push('/login'), 400)
   } else {
     stopProgressAnimation()
     progressPercent.value = 100
-    statusText.value = '后端服务未响应'
+    statusKey.value = 'splash.notResponding'
   }
 }
 
@@ -88,18 +92,18 @@ const retryBackend = async (): Promise<void> => {
   healthRetries.value = 0
   backendStatus.value = 'loading'
   progressPercent.value = 0
-  statusText.value = '正在重新连接后端服务...'
+  statusKey.value = 'splash.reconnecting'
   await pollBackend()
   const status: string = backendStatus.value
   if (status === 'ready') {
     stopProgressAnimation()
     progressPercent.value = 100
-    statusText.value = '后端服务已就绪'
+    statusKey.value = 'splash.ready'
     setTimeout(() => router.push('/login'), 400)
   } else {
     stopProgressAnimation()
     progressPercent.value = 100
-    statusText.value = '后端服务未响应'
+    statusKey.value = 'splash.notResponding'
   }
 }
 
@@ -123,12 +127,12 @@ onMounted(() => {
   if (subscribeBackendStage) {
     unsubscribe = subscribeBackendStage((data) => {
       const stageMap: Record<string, string> = {
-        spawning: '正在启动后端进程...',
-        waiting: '等待后端健康检查...',
-        ready: '后端服务已就绪',
-        failed: '后端服务启动失败'
+        spawning: 'splash.stageSpawning',
+        waiting: 'splash.stageWaiting',
+        ready: 'splash.ready',
+        failed: 'splash.stageFailed'
       }
-      statusText.value = stageMap[data.stage] ?? statusText.value
+      statusKey.value = stageMap[data.stage] ?? statusKey.value
     })
   }
   startLoading()
@@ -160,13 +164,13 @@ onBeforeUnmount(() => {
       <p class="splash-status animate-fade-in">{{ statusText }}</p>
 
       <div v-if="backendStatus === 'error'" class="splash-error animate-fade-in">
-        <p class="error-hint">后端服务未响应，请确认 LuomiNest 后端已启动</p>
+        <p class="error-hint">{{ t('splash.errorHint') }}</p>
         <div class="error-actions">
           <LumiButton variant="primary" size="sm" @click="retryBackend">
             <template #icon>
               <Zap :size="13" />
             </template>
-            重新连接
+            {{ t('splash.retry') }}
           </LumiButton>
         </div>
       </div>
@@ -177,7 +181,7 @@ onBeforeUnmount(() => {
         <div class="footer-bar-fill" :style="{ width: progressPercent + '%' }"></div>
       </div>
       <LumiButton variant="ghost" size="sm" class="footer-skip" @click="skipToLogin">
-        跳过
+        {{ t('common.skip') }}
       </LumiButton>
     </div>
   </div>

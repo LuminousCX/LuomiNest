@@ -125,6 +125,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (!assertTrustedSender(event)) return
     configStore.setSTTConfig(updates)
   })
+  ipcMain.handle('config:getLocale', (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return configStore.getLocale()
+  })
+  ipcMain.handle('config:setLocale', (event: IpcMainInvokeEvent, locale: string) => {
+    if (!assertTrustedSender(event)) return
+    if (typeof locale !== 'string' || !locale) return
+    configStore.setLocale(locale)
+  })
   ipcMain.handle('config:getAll', (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getAll()

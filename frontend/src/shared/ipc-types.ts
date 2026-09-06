@@ -75,6 +75,8 @@ export interface AppConfig {
   reasonerEffort?: string
   tts?: TTSConfig
   stt?: STTConfig
+  /** 界面语言（zh-CN / en-US / ja-JP） */
+  locale?: string
 }
 
 /* ============================================================================
@@ -392,6 +394,8 @@ export interface ElectronApi {
     setTTS: (updates: Partial<TTSConfig>) => Promise<void>
     getSTT: () => Promise<STTConfig>
     setSTT: (updates: Partial<STTConfig>) => Promise<void>
+    getLocale: () => Promise<string | undefined>
+    setLocale: (locale: string) => Promise<void>
     getAll: () => Promise<AppConfig>
   }
   cache: {

@@ -5,15 +5,16 @@
 import { Globe, Check, ChevronRight } from 'lucide-vue-next'
 import LumiBrandStar from '../common/LumiBrandStar.vue'
 import LumiButton from '../common/LumiButton.vue'
-import type { WelcomeI18nText, LangCode } from '../../composables/useWelcomeWizard'
+import type { WelcomeI18nText } from '../../composables/useWelcomeWizard'
+import type { AppLocale } from '../../i18n'
 
 defineProps<{
   i18n: WelcomeI18nText
-  selectedLang: LangCode
+  selectedLang: AppLocale
 }>()
 
 const emit = defineEmits<{
-  'update:selectedLang': [lang: LangCode]
+  'update:selectedLang': [lang: AppLocale]
   next: []
 }>()
 </script>
@@ -39,20 +40,28 @@ const emit = defineEmits<{
       </div>
       <div class="lang-options">
         <button
-          :class="['lang-card', { active: selectedLang === 'zh' }]"
-          @click="emit('update:selectedLang', 'zh')"
+          :class="['lang-card', { active: selectedLang === 'zh-CN' }]"
+          @click="emit('update:selectedLang', 'zh-CN')"
         >
           <span class="lang-flag">中</span>
           <span class="lang-label">{{ i18n.langZh }}</span>
-          <Check v-if="selectedLang === 'zh'" :size="16" class="lang-check" />
+          <Check v-if="selectedLang === 'zh-CN'" :size="16" class="lang-check" />
         </button>
         <button
-          :class="['lang-card', { active: selectedLang === 'en' }]"
-          @click="emit('update:selectedLang', 'en')"
+          :class="['lang-card', { active: selectedLang === 'en-US' }]"
+          @click="emit('update:selectedLang', 'en-US')"
         >
           <span class="lang-flag">EN</span>
           <span class="lang-label">{{ i18n.langEn }}</span>
-          <Check v-if="selectedLang === 'en'" :size="16" class="lang-check" />
+          <Check v-if="selectedLang === 'en-US'" :size="16" class="lang-check" />
+        </button>
+        <button
+          :class="['lang-card', { active: selectedLang === 'ja-JP' }]"
+          @click="emit('update:selectedLang', 'ja-JP')"
+        >
+          <span class="lang-flag">日</span>
+          <span class="lang-label">{{ i18n.langJa }}</span>
+          <Check v-if="selectedLang === 'ja-JP'" :size="16" class="lang-check" />
         </button>
       </div>
     </div>

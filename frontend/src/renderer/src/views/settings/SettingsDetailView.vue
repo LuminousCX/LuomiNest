@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   ArrowLeft,
   Palette,
@@ -10,7 +11,8 @@ import {
   Settings,
   Brain,
   Puzzle,
-  LogIn
+  LogIn,
+  Languages
 } from 'lucide-vue-next'
 import SettingsAppearanceSection from '../../components/settings-detail/SettingsAppearanceSection.vue'
 import SettingsNotificationsSection from '../../components/settings-detail/SettingsNotificationsSection.vue'
@@ -20,61 +22,70 @@ import SettingsMainAgentSection from '../../components/settings-detail/SettingsM
 import SettingsMcpSection from '../../components/settings-detail/SettingsMcpSection.vue'
 import SettingsPluginsSection from '../../components/settings-detail/SettingsPluginsSection.vue'
 import SettingsLoginSection from '../../components/settings-detail/SettingsLoginSection.vue'
+import SettingsLanguageSection from '../../components/settings-detail/SettingsLanguageSection.vue'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const section = computed(() => route.params.section as string)
 
-const sectionMap: Record<string, { label: string; icon: typeof Palette; desc: string }> = {
+// 标签走 vue-i18n，语言切换时 computed 重新求值
+const sectionMap = computed<Record<string, { label: string; icon: typeof Palette; desc: string }>>(() => ({
   appearance: {
-    label: '外观主题',
+    label: t('settings.appearance'),
     icon: Palette,
-    desc: '自定义界面颜色与风格'
+    desc: t('settings.appearanceDesc')
   },
   notifications: {
-    label: '通知设置',
+    label: t('settings.notifications'),
     icon: Bell,
-    desc: '配置消息提醒方式'
+    desc: t('settings.notificationsDesc')
+  },
+  language: {
+    label: t('settings.languageSection'),
+    icon: Languages,
+    desc: t('settings.languageSectionDesc')
   },
   privacy: {
-    label: '隐私安全',
+    label: t('settings.privacy'),
     icon: Shield,
-    desc: '数据加密与访问控制'
+    desc: t('settings.privacyDesc')
   },
   platforms: {
-    label: '消息平台',
+    label: t('settings.platforms'),
     icon: Globe,
-    desc: 'QQ / 微信 / Discord 等'
+    desc: t('settings.platformsDesc')
   },
   mcp: {
-    label: 'MCP 工具',
+    label: t('settings.mcp'),
     icon: Settings,
-    desc: '外部工具接入协议'
+    desc: t('settings.mcpDesc')
   },
   'main-agent': {
-    label: '主智能体',
+    label: t('settings.mainAgent'),
     icon: Brain,
-    desc: '工作台主 Agent 的人格、模型与行为配置'
+    desc: t('settings.mainAgentDesc')
   },
   plugins: {
-    label: '插件与技能',
+    label: t('settings.plugins'),
     icon: Puzzle,
-    desc: '前端插件 / 后端插件 / 技能管理'
+    desc: t('settings.pluginsDesc')
   },
   auth: {
-    label: '登录 / 注册',
+    label: t('settings.auth'),
     icon: LogIn,
-    desc: '本地账户登录、注册与 JWT 管理'
+    desc: t('settings.authDesc')
   }
-}
+}))
 
-const currentSection = computed(() => sectionMap[section.value] ?? null)
+const currentSection = computed(() => sectionMap.value[section.value] ?? null)
 
 const sectionComponent = computed(() => {
   switch (section.value) {
     case 'appearance': return SettingsAppearanceSection
     case 'notifications': return SettingsNotificationsSection
+    case 'language': return SettingsLanguageSection
     case 'privacy': return SettingsSecuritySection
     case 'platforms': return SettingsPlatformsSection
     case 'mcp': return SettingsMcpSection
@@ -108,9 +119,9 @@ const sectionComponent = computed(() => {
     </template>
 
     <div v-else class="settings-not-found animate-fade-in">
-      <h2>设置项未找到</h2>
-      <p>请返回设置主页选择有效的设置项</p>
-      <button class="settings-not-found__btn" @click="router.push('/settings')">返回设置</button>
+      <h2>{{ t('settings.notFoundTitle') }}</h2>
+      <p>{{ t('settings.notFoundDesc') }}</p>
+      <button class="settings-not-found__btn" @click="router.push('/settings')">{{ t('settings.backToSettings') }}</button>
     </div>
   </div>
 </template>

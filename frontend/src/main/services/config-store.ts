@@ -42,6 +42,8 @@ interface AppConfig {
   welcomeCompleted: boolean
   /** 关闭窗口最小化到托盘的首次提示是否已展示 */
   closeToTrayPrompted: boolean
+  /** 界面语言（zh-CN / en-US / ja-JP），渲染层 stores/locale.ts 经 IPC 读写 */
+  locale: string
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -78,6 +80,7 @@ const DEFAULT_CONFIG: AppConfig = {
   installDate: '',
   welcomeCompleted: false,
   closeToTrayPrompted: false,
+  locale: 'zh-CN',
 }
 
 let cachedConfig: AppConfig | null = null
@@ -175,6 +178,11 @@ export const configStore = {
   getCloseToTrayPrompted: (): boolean => loadConfig().closeToTrayPrompted,
   setCloseToTrayPrompted: (value: boolean): void => {
     configStore.set('closeToTrayPrompted', value)
+  },
+
+  getLocale: (): string => loadConfig().locale,
+  setLocale: (locale: string): void => {
+    configStore.set('locale', locale)
   },
 
   getAll: (): AppConfig => loadConfig(),
