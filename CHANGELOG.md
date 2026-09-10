@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `BaseRepository` 新增通用 `upsert_async` / `delete_by_provider_async`：5 份手写 upsert、2 份逐字重复的删除方法收口；conversation 门面 22 个 `*_async` 直连 repository 去掉双层 to_thread 包装
 - Settings 新增 `MODEL_DOWNLOAD_TIMEOUT`(=600)、`PLATFORM_HTTP_TIMEOUT`(=15)，替换平台适配器散落的硬编码超时
 - 大文件拆分（对外导出与行为不变）：`core/context/__init__`（789 行 5 类 → 5 模块）与 `core/workflow/register_tools.py`（2024 行 → tool_domains/ 7 个域模块 + 入口）
+- 前端聊天公共层：`composables/useChatScroll`（滚动/ResizeObserver/贴底判断/isLastAssistantMessage 三份合一）、`composables/useChatSession`（输入态/模式切换守卫/发送参数公共编排）、`utils/ttsTextFilter.createCodeBlockFilter`（filterCodeForTts 两份合一）、`styles/chat.css`（逐字相同的聊天气泡样式入 `.lumi-chat-*` 命名空间，两端不同视觉体系原地保留）
+- 备份恢复加固配套：`restore_backup` 增加 zip 完整性预检与解出库 `PRAGMA integrity_check`，不通过拒绝落盘；新增 `tests/unit/test_backup_manager.py`（备份存活/一致性、list_backups、损坏 zip 拒绝）
+- `package.json` 新增 `clean:out`（rmSync maxRetries 兜底文件锁）置于 build 链头部
 
 ### Changed
 
@@ -33,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `runtime/platform/infrastructure/retry.py` 重试调度改由 tenacity 承担（该依赖此前已声明但全库零使用）：对外 `RetryConfig` / `async_retry` / `RetryCallback` 接口、延迟公式与日志格式不变，异步 `on_retry` 经自定义 sleep 钩子保持"回调→睡眠"顺序，替换前 7 项行为用例全过
 - `domains/social/agent_orchestrator._extract_json_plan` 收口到 `core/utils.parse_llm_json`（LLM JSON 提取第 5 处合一，顺带获得截断修复能力）
 - 测试目录归位：tests/ 内 15 个 Phase 期独立自验脚本（模块级 `sys.exit` / `asyncio.run`，pytest 收集即 INTERNALERROR，且写死旧项目绝对路径）移至 `backend/scripts/selfcheck/` 并修复路径；`tests/` 仅保留 pytest 套件
+- 记忆子系统异步化：`vector_store` / `extractor` / `memory_engine` / `context_service` 的同步 SQLite 读写与余弦扫描全部 `asyncio.to_thread` 化（对齐 repo 层既有约定），`batch_add` N+1 合并为单查询
+- 非流式回复的记忆写入+蒸馏改为后台任务（对照 platform_router 模式），响应不再等待 LLM/embedding 往返；推荐问题生成移至 done 事件之后后台执行并写入 assistant version（前端 SSE 收到 done 即停读、事后推送不可达；done 不再被推荐问题 LLM 阻塞，推荐问题随对话重载展示）
+- 构建产物治理：out/ 构建前清理，安装包不再打入陈旧 hash chunk（实测 1519 文件 94MB → 124 文件 9.7MB）
 
 ### Fixed
 
@@ -44,12 +50,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `voice_config_store` 迁移动作时间戳由本地无时区 `datetime.now()` 修正为 UTC（与同文件其他 UTC ISO 串混存导致排序/比较错乱）
 - 桌面端启动报 `Error: Electron uninstall`：pnpm 已不读取 package.json 的 `pnpm` 字段（且原文件键名重复），`onlyBuiltDependencies` 白名单与 `overrides` 全部失效，electron 二进制下载脚本被 pnpm 10 默认拦截；构建白名单统一迁至 pnpm-workspace.yaml `allowBuilds`（补 `vue-demi`），移除 package.json 两处死配置
 - 存储位置核验：dev（`backend/data/`）与打包版（userData/Data/backend）后端数据分离正确、gitignore 覆盖实测通过（db/密钥/上传/记忆均不可入库）、API key 为 Fernet 密文落盘且 SECRET_KEY 机器指纹绑定加密；修正 `.gitignore` 中打包版 userData 路径注释（实际为 `%APPDATA%/luominest-desktop`，与开发版共用，经确认维持共用）
+- 自动备份"死亡螺旋"修复：`backup_manager.py` 缺失 `timezone` 导入致 `_auto_cleanup` 必抛 NameError、外层 except 把刚创建的备份删掉（data/backups 长期零产出的根因）；`create_backup` 活库改经 sqlite3 backup API 取在线一致快照，`-wal`/`-shm` 中间态不再入包
 
 ### Removed
 
 - 移除超长（ULTRA）工作流模式及其高迭代预算配置
 - 移除 29 个浏览器自动化工具中的 27 个交互类工具（导航/点击/输入/标签页管理等）及 `browser.search`、`create_browser_tab`；仅保留页面截图与读取当前页 HTML 两个观察类工具，交互能力保留在前端开发者面板
 - 后端死代码清理：`services/browser_automation_client.py`（废弃兼容门面）、`infrastructure/mqtt/publisher.py`（零引用）、3 个 0 字节 security 占位文件（tls_manager/oauth_provider/audit exporter）、5 个仅剩 `__pycache__` 的空壳目录、`core/exceptions.register_exception_handlers`（从未注册）、`deps.py` 8 个无消费者的 Depends 工厂
+- Alembic 迁移双轨废弃（`scripts/migrate/`、pyproject 依赖、selfcheck 迁移用例）：运行时零引用且版本漂移落后两个版本，schema 演进统一走 `engine.py` 幂等 ALTER；运行库残留 `alembic_version` 表无害保留
+- `endpoints/mcp.py` 安全环境变量死副本删除（与 `core/tools/mcp/manager.py` 逐字重复且本文件零调用的重构残留）
 
 ---
 
