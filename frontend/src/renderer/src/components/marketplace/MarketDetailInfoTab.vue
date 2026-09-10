@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { ExternalLink } from 'lucide-vue-next'
 import type { MarketplaceItem } from '../../types/marketplace'
 import { formatFileSize, formatDateRelative } from '../../utils/format'
@@ -7,55 +8,57 @@ const props = defineProps<{
   item: MarketplaceItem
 }>()
 
+const { t } = useI18n()
+
 </script>
 
 <template>
   <div class="tab-content">
     <div class="info-section">
-      <h3 class="info-title">详细介绍</h3>
+      <h3 class="info-title">{{ t('market.info.detailTitle') }}</h3>
       <p class="info-text">{{ item.description || item.summary }}</p>
     </div>
 
     <div class="info-section">
-      <h3 class="info-title">信息</h3>
+      <h3 class="info-title">{{ t('market.info.infoTitle') }}</h3>
       <div class="info-grid">
         <div class="info-item">
-          <span class="info-label">版本</span>
+          <span class="info-label">{{ t('market.info.version') }}</span>
           <span class="info-value">v{{ item.version }}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">大小</span>
+          <span class="info-label">{{ t('market.info.size') }}</span>
           <span class="info-value">{{ formatFileSize(item.size) }}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">许可证</span>
-          <span class="info-value">{{ item.license || '未指定' }}</span>
+          <span class="info-label">{{ t('market.info.license') }}</span>
+          <span class="info-value">{{ item.license || t('market.info.notSpecified') }}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">最低版本</span>
-          <span class="info-value">{{ item.minAppVersion || '无要求' }}</span>
+          <span class="info-label">{{ t('market.info.minVersion') }}</span>
+          <span class="info-value">{{ item.minAppVersion || t('market.info.noRequirement') }}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">更新日期</span>
+          <span class="info-label">{{ t('market.info.updated') }}</span>
           <span class="info-value">{{ formatDateRelative(item.updatedAt) }}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">创建日期</span>
+          <span class="info-label">{{ t('market.info.created') }}</span>
           <span class="info-value">{{ formatDateRelative(item.createdAt) }}</span>
         </div>
       </div>
     </div>
 
     <div v-if="item.homepage || item.repository" class="info-section">
-      <h3 class="info-title">链接</h3>
+      <h3 class="info-title">{{ t('market.info.links') }}</h3>
       <div class="info-links">
         <a v-if="item.homepage" :href="item.homepage" target="_blank" class="info-link">
           <ExternalLink :size="14" />
-          主页
+          {{ t('market.info.homepage') }}
         </a>
         <a v-if="item.repository" :href="item.repository" target="_blank" class="info-link">
           <ExternalLink :size="14" />
-          仓库
+          {{ t('market.info.repository') }}
         </a>
       </div>
     </div>

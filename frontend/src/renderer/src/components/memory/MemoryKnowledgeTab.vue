@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { FileText, Edit3, X, Save, Loader2, BookOpen } from 'lucide-vue-next'
 import type { KnowledgeSection } from '../../stores/memory'
 
@@ -9,6 +10,8 @@ interface Props {
   knowledgeHasChanges: boolean
   knowledgeSectionCards: KnowledgeSection[]
 }
+
+const { t } = useI18n()
 
 defineProps<Props>()
 
@@ -23,16 +26,16 @@ const emit = defineEmits<{
 <template>
   <div class="detail-header">
     <FileText :size="22" :style="{ color: 'var(--lumi-sky)' }" />
-    <h3>知识记忆</h3>
+    <h3>{{ t('memory.knowledge.title') }}</h3>
     <div class="detail-actions">
       <button v-if="!isEditingKnowledge" class="h-btn primary" @click="emit('startEditKnowledge')">
-        <Edit3 :size="14" /> 编辑
+        <Edit3 :size="14" /> {{ t('memory.knowledge.edit') }}
       </button>
       <template v-else>
-        <button class="h-btn" @click="emit('cancelEditKnowledge')"><X :size="14" /> 取消</button>
+        <button class="h-btn" @click="emit('cancelEditKnowledge')"><X :size="14" /> {{ t('memory.knowledge.cancel') }}</button>
         <button class="h-btn primary" @click="emit('saveEditKnowledge')" :disabled="isSaving || !knowledgeHasChanges">
           <Loader2 v-if="isSaving" :size="14" class="spin-animation" />
-          <Save v-else :size="14" /> 保存
+          <Save v-else :size="14" /> {{ t('memory.knowledge.save') }}
         </button>
       </template>
     </div>
@@ -43,22 +46,22 @@ const emit = defineEmits<{
       :value="editKnowledgeContent"
       @input="emit('update:editKnowledgeContent', ($event.target as HTMLTextAreaElement).value)"
       class="memory-editor"
-      placeholder="编辑知识记忆..."
+      :placeholder="t('memory.knowledge.editPlaceholder')"
     ></textarea>
-    <div class="editor-hint">使用 ## 标题创建知识章节，- 开头添加知识点</div>
+    <div class="editor-hint">{{ t('memory.knowledge.editorHint') }}</div>
   </div>
   <div v-else class="markdown-preview">
     <div v-if="knowledgeSectionCards.length === 0" class="empty-section">
       <BookOpen :size="28" />
-      <p>暂无知识记忆</p>
-      <p class="empty-hint">对话中AI会自动提取并存储知识信息</p>
+      <p>{{ t('memory.knowledge.empty') }}</p>
+      <p class="empty-hint">{{ t('memory.knowledge.emptyHint') }}</p>
     </div>
     <template v-else>
       <div v-for="(section, idx) in knowledgeSectionCards" :key="idx" class="memory-section-card" :style="{ '--ms-color': 'var(--lumi-sky)' }">
         <div class="ms-header">
           <div class="ms-dot"></div>
           <span class="ms-label">{{ section.title }}</span>
-          <span class="ms-count">{{ section.content.split('\n').filter((l: string) => l.trim()).length }} 条</span>
+          <span class="ms-count">{{ section.content.split('\n').filter((l: string) => l.trim()).length }} {{ t('memory.knowledge.itemCountSuffix') }}</span>
         </div>
         <div class="ms-body">
           <p v-for="(line, lidx) in section.content.split('\n').filter((l: string) => l.trim())" :key="lidx" class="ms-line">{{ line.replace(/^-\s*/, '') }}</p>

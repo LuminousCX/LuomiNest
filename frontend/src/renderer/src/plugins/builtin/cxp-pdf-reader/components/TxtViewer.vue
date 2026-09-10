@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 /**
  * TxtViewer — TXT 文档查看器。
  *
@@ -6,6 +7,8 @@
  */
 import { computed } from 'vue'
 import { FileText } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   text: string
@@ -25,14 +28,14 @@ const stats = computed(() => {
   <div class="txt-viewer">
     <div v-if="!text" class="txt-empty">
       <FileText :size="48" class="empty-icon" />
-      <p class="empty-text">文档内容为空</p>
-      <p class="empty-hint">后端可能未提取到文本内容</p>
+      <p class="empty-text">{{ t('pdfReader.txt.empty') }}</p>
+      <p class="empty-hint">{{ t('pdfReader.txt.emptyHint') }}</p>
     </div>
 
     <div v-else class="txt-container">
       <div class="txt-meta">
-        <span>{{ stats.lines }} 行</span>
-        <span>{{ stats.chars }} 字符</span>
+        <span>{{ t('pdfReader.txt.lineCount', { n: stats.lines }) }}</span>
+        <span>{{ t('pdfReader.txt.charCount', { n: stats.chars }) }}</span>
       </div>
       <pre class="txt-content">{{ text }}</pre>
     </div>

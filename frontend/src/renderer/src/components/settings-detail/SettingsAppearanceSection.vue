@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Palette,
   Sparkles
@@ -16,6 +17,7 @@ import '../../styles/views/settings-shared.css'
 
 const themeStore = useThemeStore()
 const toast = useToast()
+const { t } = useI18n()
 
 // ─── Skin Editor ─────────────────────────────
 const editorVisible = ref(false)
@@ -32,7 +34,7 @@ function openSkinEditor(id: string) {
       ...skin,
       id: `custom-skin-${Date.now()}`,
       type: 'custom',
-      name: `${skin.name} 副本`
+      name: t('settingsEx.appearance.skinCopyName', { name: skin.name })
     }
     editorMode.value = 'create'
   } else {
@@ -50,7 +52,7 @@ function openNewSkinEditor() {
 
 function handleApplySkin(id: string) {
   themeStore.setSkin(id)
-  toast.success('皮肤已应用')
+  toast.success(t('settingsEx.appearance.skinApplied'))
 }
 
 function closeEditor() {
@@ -61,17 +63,17 @@ function closeEditor() {
 function handleSaveSkin(skin: Skin) {
   if (editorMode.value === 'edit' && skin.type === 'custom') {
     themeStore.updateCustomSkin(skin.id, skin)
-    toast.success('皮肤已保存')
+    toast.success(t('settingsEx.appearance.skinSaved'))
   } else {
     themeStore.addCustomSkin(skin)
-    toast.success('皮肤已创建')
+    toast.success(t('settingsEx.appearance.skinCreated'))
   }
   closeEditor()
 }
 
 function handleDeleteSkin(id: string) {
   themeStore.deleteCustomSkin(id)
-  toast.info('皮肤已删除')
+  toast.info(t('settingsEx.appearance.skinDeleted'))
 }
 
 // ─── Color Theme ─────────────────────────────
@@ -79,7 +81,7 @@ function handleColorThemeSelect(id: string) {
   const activeSkin = themeStore.activeSkin
   if (activeSkin?.type === 'custom') {
     themeStore.updateCustomSkin(activeSkin.id, { colorThemeId: id })
-    toast.success('已更新皮肤配色')
+    toast.success(t('settingsEx.appearance.colorThemeUpdated'))
   } else {
     themeStore.setColorTheme(id)
   }
@@ -102,7 +104,7 @@ function getSkinPreviewStyle(skin?: Skin): Record<string, string> {
 
 const activeColorThemeName = computed(() => {
   const theme = themeStore.activeTheme
-  return theme?.name ?? '默认蓝'
+  return theme?.name ?? t('settingsEx.appearance.defaultSkinName')
 })
 </script>
 
@@ -116,11 +118,11 @@ const activeColorThemeName = computed(() => {
       >
         <div v-if="themeStore.activeSkin?.background.image" class="appearance-hero__overlay" />
         <div class="appearance-hero__glass">
-          <h2 class="appearance-hero__title">{{ themeStore.activeSkin?.name ?? '默认蓝' }}</h2>
+          <h2 class="appearance-hero__title">{{ themeStore.activeSkin?.name ?? t('settingsEx.appearance.defaultSkinName') }}</h2>
           <p class="appearance-hero__desc">
-            {{ themeStore.activeSkin?.type === 'preset' ? '预设皮肤' : '自定义皮肤' }} ·
-            {{ themeStore.isDark ? '深色' : '浅色' }}模式 ·
-            配色：{{ activeColorThemeName }}
+            {{ themeStore.activeSkin?.type === 'preset' ? t('settingsEx.appearance.presetSkin') : t('settingsEx.appearance.customSkin') }} ·
+            {{ t('settingsEx.appearance.modeLabel', { mode: themeStore.isDark ? t('settingsEx.appearance.modeDark') : t('settingsEx.appearance.modeLight') }) }} ·
+            {{ t('settingsEx.appearance.colorScheme', { name: activeColorThemeName }) }}
           </p>
         </div>
       </div>
@@ -130,10 +132,10 @@ const activeColorThemeName = computed(() => {
     <section class="settings-card">
       <div class="settings-card__header">
         <Sparkles :size="18" />
-        <span class="settings-card__title">皮肤包</span>
+        <span class="settings-card__title">{{ t('settingsEx.appearance.skinSection') }}</span>
       </div>
       <div class="settings-card__body">
-        <p class="settings-card__hint">点击预设皮肤直接应用；悬浮到当前预设可点击编辑。自定义皮肤点击即可编辑。</p>
+        <p class="settings-card__hint">{{ t('settingsEx.appearance.skinHint') }}</p>
         <ThemeSkinSelector
           :active-id="themeStore.activeSkinId"
           @apply="handleApplySkin"
@@ -147,10 +149,10 @@ const activeColorThemeName = computed(() => {
     <section class="settings-card">
       <div class="settings-card__header">
         <Palette :size="18" />
-        <span class="settings-card__title">色彩主题</span>
+        <span class="settings-card__title">{{ t('settingsEx.appearance.colorSection') }}</span>
       </div>
       <div class="settings-card__body">
-        <p class="settings-card__hint">快速切换当前皮肤的配色方案</p>
+        <p class="settings-card__hint">{{ t('settingsEx.appearance.colorHint') }}</p>
         <div class="theme-preset-grid">
           <button
             v-for="id in PRESET_THEME_IDS"
@@ -159,7 +161,7 @@ const activeColorThemeName = computed(() => {
               'theme-preset-card',
               { 'theme-preset-card--active': themeStore.activeColorThemeId === id }
             ]"
-            :aria-label="`选择${presetThemeNames[id]}主题`"
+            :aria-label="t('settingsEx.appearance.selectTheme', { name: presetThemeNames[id] })"
             @click="handleColorThemeSelect(id)"
           >
             <div class="theme-preset-card__preview">

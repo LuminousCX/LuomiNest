@@ -24,6 +24,7 @@ import { useTaskStreamStore } from './taskStream'
 import { useMemoryStore } from './memory'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { i18n } from '../i18n'
 import type { WorkflowTemplate, SaveAsTemplateRequest } from '../types/workflow'
 
 const logger = createLuomiNestRendererLogger('Workflow')
@@ -501,7 +502,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
           taskStreamStore.handleSubagentEvent({
             subagent_id: `workflow_${event.tab_id}`,
             status: 'completed',
-            task: event.title || event.purpose || '浏览器导航',
+            task: event.title || event.purpose || i18n.global.t('workflow.route.browserNav'),
             depth: 0,
             browser_action: 'open_tab',
             browser_tab_id: event.tab_id,
@@ -518,10 +519,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
         if (event.task_id) {
           taskStreamStore.handleTaskEvent({
             task_id: event.task_id,
-            task_name: event.name || '工作流创建的任务',
+            task_name: event.name || i18n.global.t('workflow.route.createdTask'),
             status: 'pending',
             task_type: 'cron',
-            message: `工作流创建: ${event.name}`,
+            message: i18n.global.t('workflow.route.createdMsg', { name: event.name }),
             timestamp: new Date().toISOString(),
             payload: {
               schedule: event.schedule,
@@ -561,7 +562,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
             taskStreamStore.handleSubagentEvent({
               subagent_id: generateId('workflow_market'),
               status: 'completed',
-              task: `扩展市场: ${event.action === 'installed' ? '安装' : '卸载'} ${event.metadata?.item_id ?? ''}`,
+              task: i18n.global.t('workflow.route.marketTask', {
+                action: i18n.global.t(event.action === 'installed' ? 'workflow.route.install' : 'workflow.route.uninstall'),
+                id: event.metadata?.item_id ?? '',
+              }),
               depth: 0,
               result: event.output || event.error,
             })
@@ -578,7 +582,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
           taskStreamStore.handleSubagentEvent({
             subagent_id: `workflow_platform_${event.metadata.instance_id}`,
             status: 'completed',
-            task: `平台实例: ${event.action} ${event.metadata.instance_id}`,
+            task: i18n.global.t('workflow.route.platformTask', { action: event.action, id: event.metadata.instance_id }),
             depth: 0,
             result: event.output || event.error,
           })
@@ -592,9 +596,9 @@ export const useWorkflowStore = defineStore('workflow', () => {
           taskStreamStore.handleSubagentEvent({
             subagent_id: `workflow_smart_home_${event.metadata.device_id}`,
             status: 'completed',
-            task: `智能家居控制: ${event.metadata.device_id} ${event.action}`,
+            task: i18n.global.t('workflow.route.smartHomeTask', { id: event.metadata.device_id, action: event.action }),
             depth: 0,
-            progress: event.success ? '操作成功' : '操作失败',
+            progress: i18n.global.t(event.success ? 'workflow.route.opSuccess' : 'workflow.route.opFailed'),
             result: event.output || event.error,
           })
         }

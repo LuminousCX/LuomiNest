@@ -1,0 +1,151 @@
+{
+  "pdfReader": {
+    "viewTitle": "PDF リーダー",
+    "openReaderCommand": "PDF リーダーを開く",
+    "view": {
+      "extracting": "ドキュメントの内容を抽出しています...",
+      "unsupportedPreview": "このファイル形式はプレビュー表示に対応していません",
+      "dropToOpen": "ドロップしてドキュメントを開きます",
+      "toast": {
+        "historyCleared": "最近開いた履歴を消去しました",
+        "unsupportedFileType": "サポートされていないファイル形式です：{name}（PDF/Word/TXT のみ対応）",
+        "opened": "開きました：{name}",
+        "openFailed": "ファイルを開けませんでした：{message}",
+        "reselectFile": "ファイルを選択し直してください：{name}"
+      }
+    },
+    "api": {
+      "requestFailed": "リクエスト失敗 ({status})",
+      "operationFailed": "操作に失敗しました (code: {code})"
+    },
+    "toolbar": {
+      "toggleSidebar": "アウトラインサイドバーの切り替え",
+      "openFile": "ファイルを開く (PDF/Word/TXT)",
+      "open": "開く",
+      "search": "検索",
+      "aiAssistant": "AI アシスタント",
+      "notes": "ノート",
+      "settings": "設定",
+      "toggleAiPanel": "AI パネルの切り替え",
+      "searchPlaceholder": "ドキュメント内を検索...",
+      "noMatch": "一致なし",
+      "prevMatch": "前の一致へ",
+      "nextMatch": "次の一致へ",
+      "closeSearch": "検索を閉じる",
+      "prevPage": "前のページ",
+      "nextPage": "次のページ",
+      "zoomOut": "縮小",
+      "zoomIn": "拡大"
+    },
+    "canvas": {
+      "loading": "PDF を読み込んでいます...",
+      "loadFailed": "PDF の読み込みに失敗しました：{message}",
+      "renderFailed": "ページの描画に失敗しました：{message}",
+      "retry": "再試行",
+      "prevPage": "前のページ",
+      "nextPage": "次のページ",
+      "rendering": "描画中"
+    },
+    "sidebar": {
+      "title": "アウトライン",
+      "collapse": "サイドバーを折りたたむ",
+      "empty": "このドキュメントにはアウトラインがありません",
+      "emptyHint": "PDF 内蔵の目次は空になります"
+    },
+    "dropzone": {
+      "title": "PDF / Word / TXT ファイルをここにドラッグ",
+      "or": "または",
+      "selectFile": "ファイルを選択",
+      "hint": "対応形式：PDF (.pdf)、Word (.docx)、プレーンテキスト (.txt)",
+      "recent": "最近開いた項目",
+      "clearHistory": "履歴を消去",
+      "clear": "消去",
+      "reopen": "開き直す：{name}",
+      "justNow": "たった今",
+      "minutesAgo": "{n} 分前",
+      "hoursAgo": "{n} 時間前",
+      "daysAgo": "{n} 日前",
+      "monthDay": "{m}月{d}日"
+    },
+    "docx": {
+      "empty": "ドキュメントの内容が空です",
+      "emptyHint": "バックエンドがテキストを抽出できなかった可能性があります"
+    },
+    "aiPanel": {
+      "title": "AI アシスタント",
+      "collapse": "AI パネルを折りたたむ",
+      "tab": {
+        "summary": "要約",
+        "translate": "翻訳",
+        "chat": "質問"
+      },
+      "summarizeAll": "全文を要約",
+      "reset": "リセット",
+      "summarizing": "AI がドキュメントを要約しています...",
+      "summary": "要約",
+      "keyPoints": "要点",
+      "summaryEmptyText": "「全文を要約」ボタンをクリックしてください",
+      "summaryEmptyHint": "ドキュメントの要約と要点を生成します",
+      "targetLang": "対象言語",
+      "pageRange": "ページ範囲（任意）",
+      "pageRangePlaceholder": "例：1-5 または 1,3,5",
+      "translateBtn": "翻訳",
+      "translating": "AI がドキュメントを翻訳しています...",
+      "translateResult": "翻訳結果",
+      "translateEmptyText": "対象言語を選択して「翻訳」をクリックしてください",
+      "translateEmptyHint": "ドキュメントの内容を翻訳します",
+      "lang": {
+        "zh": "中国語",
+        "en": "英語",
+        "ja": "日本語",
+        "ko": "韓国語"
+      },
+      "chatEmptyText": "ドキュメントについて AI に質問してください",
+      "chatEmptyHint": "ドキュメントの内容に基づいて回答します",
+      "me": "自分",
+      "thinking": "AI が考えています...",
+      "chatInputPlaceholder": "質問を入力... (Enter で送信、Shift+Enter で改行)",
+      "send": "送信",
+      "clearChat": "会話を消去",
+      "error": {
+        "summaryFailed": "要約に失敗しました：{message}",
+        "aiSummaryFailed": "AI 要約に失敗しました：{message}",
+        "translateFailed": "翻訳に失敗しました：{message}",
+        "aiTranslateFailed": "AI 翻訳に失敗しました：{message}",
+        "chatFailed": "質問に失敗しました：{message}",
+        "aiChatFailed": "AI 質問に失敗しました：{message}"
+      }
+    },
+    "tabs": {
+      "newTabTitle": "新しいタブ（ファイルを開く）"
+    },
+    "txt": {
+      "empty": "ドキュメントの内容が空です",
+      "emptyHint": "バックエンドがテキストを抽出できなかった可能性があります",
+      "lineCount": "{n} 行",
+      "charCount": "{n} 文字"
+    },
+    "statusBar": {
+      "file": "ファイル：",
+      "page": "ページ："
+    }
+  },
+  "helloPanel": {
+    "title": "サンプルパネル",
+    "sayHelloCommand": "サンプル：挨拶する",
+    "notifyTitle": "LuomiNest プラグインシステム",
+    "notifyBody": "サンプルプラグインの通知が発火しました",
+    "helloMessage": "Hello from LuomiNest frontend plugin! (第 {n} 回クリック)",
+    "subtitle": "hello-panel フロントエンドプラグインによる提供 — LuomiNest デュアルトラック拡張システムの検証",
+    "infoTitle": "プラグイン情報",
+    "pluginId": "プラグイン ID",
+    "version": "バージョン",
+    "contributions": "コントリビューション",
+    "contributionsValue": "ビュー（このページ）+ コマンド（say-hello）",
+    "routePath": "ルートパス",
+    "demoTitle": "インタラクションデモ",
+    "demoDesc": "下のボタンをクリックしてプラグインコマンドを実行し、コントリビューション機構がエンドツーエンドで動作することを確認できます。",
+    "sayHello": "say-hello コマンドを実行",
+    "notify": "システム通知を送信"
+  }
+}

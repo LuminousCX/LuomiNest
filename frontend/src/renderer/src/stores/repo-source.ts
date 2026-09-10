@@ -4,6 +4,7 @@ import type { RepoSource, RepoSourceType, MarketplaceItem } from '../types/marke
 import { useApi } from '../composables/useApi'
 import { getStringItem, setStringItem } from '../utils/storage'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { i18n } from '../i18n'
 
 const logger = createLuomiNestRendererLogger('RepoSource')
 
@@ -73,9 +74,9 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
   const groupedSources = computed(() => {
     const groups: { type: RepoSourceType; label: string; icon: string; items: RepoSource[] }[] = [
       { type: 'github', label: 'GitHub', icon: 'Github', items: githubSources.value },
-      { type: 'cloud', label: '云端', icon: 'Cloud', items: cloudSources.value },
+      { type: 'cloud', label: i18n.global.t('market.source.groupCloud'), icon: 'Cloud', items: cloudSources.value },
       { type: 'cdn', label: 'CDN', icon: 'Globe', items: cdnSources.value },
-      { type: 'custom', label: '自定义', icon: 'Plus', items: customSources.value },
+      { type: 'custom', label: i18n.global.t('market.source.groupCustom'), icon: 'Plus', items: customSources.value },
     ]
     return groups.filter(g => g.items.length > 0)
   })
@@ -116,7 +117,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: unknown) {
-      error.value = getErrorMessage(e) || '操作失败'
+      error.value = getErrorMessage(e) || i18n.global.t('market.error.operationFailed')
     }
   }
 
@@ -129,7 +130,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: unknown) {
-      error.value = getErrorMessage(e) || '操作失败'
+      error.value = getErrorMessage(e) || i18n.global.t('market.error.operationFailed')
     }
   }
 
@@ -142,7 +143,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: unknown) {
-      error.value = getErrorMessage(e) || '操作失败'
+      error.value = getErrorMessage(e) || i18n.global.t('market.error.operationFailed')
     }
   }
 

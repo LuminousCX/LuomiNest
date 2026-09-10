@@ -20,6 +20,7 @@ import { useTtsEngineStore } from '../stores/tts-engine'
 import { useAvatarControlStore } from '../stores/avatar-control'
 import { useModelStore } from '../stores/model'
 import { useToast } from './useToast'
+import { i18n } from '../i18n'
 import { resolveExpressionByModelUrl } from '../config/luominest-models'
 import { LUOMINEST_BUILTIN_MODELS } from '../config/luominest-models'
 import { MAIN_AGENT_ID, MAIN_AGENT_PROFILE } from '../constants'
@@ -183,7 +184,7 @@ export const useDesktopPetChatBridge = (): void => {
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e)
       logger.error('sendMessage failed:', errMsg)
-      toast.error(`桌宠对话失败：${errMsg}`)
+      toast.error(i18n.global.t('pet.chat.sendMessageFailed', { message: errMsg }))
     } finally {
       isProcessing = false
       window.api.desktopPet.setStreamingState(false).catch(() => {})

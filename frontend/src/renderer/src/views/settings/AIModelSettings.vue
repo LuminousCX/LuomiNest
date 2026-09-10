@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import {
   ArrowLeft,
@@ -23,6 +24,7 @@ import SettingsSttSection from '../../components/settings-detail/SettingsSttSect
 const router = useRouter()
 const modelStore = useModelStore()
 const route = useRoute()
+const { t } = useI18n()
 
 const props = defineProps<{
   initialTile?: string
@@ -30,13 +32,13 @@ const props = defineProps<{
 
 const activeTile = ref(props.initialTile || (route.meta?.initialTile as string) || 'main')
 
-const modelTiles = [
-  { id: 'main', label: '主模型', icon: Zap, tag: '快速响应' },
-  { id: 'reasoner', label: '推理模型', icon: Atom, tag: 'Agent' },
-  { id: 'context', label: '高级设置', icon: Settings2, tag: '上下文' },
-  { id: 'tts', label: '语音合成', icon: Volume2, tag: 'TTS' },
-  { id: 'stt', label: '语音识别', icon: Mic, tag: 'STT' },
-]
+const modelTiles = computed(() => [
+  { id: 'main', label: t('aiModel.tiles.main.label'), icon: Zap, tag: t('aiModel.tiles.main.tag') },
+  { id: 'reasoner', label: t('aiModel.tiles.reasoner.label'), icon: Atom, tag: t('aiModel.tiles.reasoner.tag') },
+  { id: 'context', label: t('aiModel.tiles.context.label'), icon: Settings2, tag: t('aiModel.tiles.context.tag') },
+  { id: 'tts', label: t('aiModel.tiles.tts.label'), icon: Volume2, tag: t('aiModel.tiles.tts.tag') },
+  { id: 'stt', label: t('aiModel.tiles.stt.label'), icon: Mic, tag: t('aiModel.tiles.stt.tag') },
+])
 
 const showAddDialog = ref(false)
 const showEditDialog = ref(false)
@@ -75,8 +77,8 @@ onMounted(async () => {
         <Cpu :size="24" />
       </div>
       <div>
-        <h1 class="page-title">模型设置</h1>
-        <p class="page-subtitle">配置大语言模型、语音合成与语音识别引擎</p>
+        <h1 class="page-title">{{ t('aiModel.page.title') }}</h1>
+        <p class="page-subtitle">{{ t('aiModel.page.subtitle') }}</p>
       </div>
     </div>
 
@@ -100,7 +102,7 @@ onMounted(async () => {
         <div v-if="showProviderActions" class="sidebar-footer">
           <button class="add-provider-btn" @click="openAddDialog">
             <Plus :size="16" />
-            <span>添加供应商</span>
+            <span>{{ t('aiModel.addProvider') }}</span>
           </button>
         </div>
       </div>

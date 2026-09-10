@@ -10,6 +10,7 @@
  * 消息渲染使用主项目 utils/markdown 的 renderMarkdown（marked + DOMPurify）。
  */
 import { ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Sparkles,
   Languages,
@@ -38,6 +39,7 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+const { t } = useI18n()
 
 // ---------------------------------------------------------------------------
 // Tab 切换
@@ -46,11 +48,11 @@ const toast = useToast()
 type TabId = 'summary' | 'translate' | 'chat'
 const activeTab = ref<TabId>('summary')
 
-const tabs = [
-  { id: 'summary' as const, label: '总结', icon: Sparkles },
-  { id: 'translate' as const, label: '翻译', icon: Languages },
-  { id: 'chat' as const, label: '问答', icon: MessageSquare },
-]
+const tabs = computed(() => [
+  { id: 'summary' as const, label: t('pdfReader.aiPanel.tab.summary'), icon: Sparkles },
+  { id: 'translate' as const, label: t('pdfReader.aiPanel.tab.translate'), icon: Languages },
+  { id: 'chat' as const, label: t('pdfReader.aiPanel.tab.chat'), icon: MessageSquare },
+])
 
 // ---------------------------------------------------------------------------
 // 总结 Tab
@@ -85,11 +87,11 @@ const handleSummarize = async () => {
     const msg = e instanceof Error ? e.message : String(e)
     summaryState.value = {
       loading: false,
-      error: `总结失败：${msg}`,
+      error: t('pdfReader.aiPanel.error.summaryFailed', { message: msg }),
       summary: '',
       keyPoints: [],
     }
-    toast.error(`AI 总结失败：${msg}`)
+    toast.error(t('pdfReader.aiPanel.error.aiSummaryFailed', { message: msg }))
   }
 }
 
@@ -103,12 +105,12 @@ const summaryHtml = computed(() => renderMarkdown(summaryState.value.summary))
 // 翻译 Tab
 // ---------------------------------------------------------------------------
 
-const TRANSLATE_LANGS = [
-  { label: '中文', value: 'zh' },
-  { label: '英文', value: 'en' },
-  { label: '日文', value: 'ja' },
-  { label: '韩文', value: 'ko' },
-]
+const TRANSLATE_LANGS = computed(() => [
+  { label: t('pdfReader.aiPanel.lang.zh'), value: 'zh' },
+  { label: t('pdfReader.aiPanel.lang.en'), value: 'en' },
+  { label: t('pdfReader.aiPanel.lang.ja'), value: 'ja' },
+  { label: t('pdfReader.aiPanel.lang.ko'), value: 'ko' },
+])
 
 interface TranslateState {
   loading: boolean
@@ -151,10 +153,10 @@ const handleTranslate = async () => {
     translateState.value = {
       ...translateState.value,
       loading: false,
-      error: `翻译失败：${msg}`,
+      error: t('pdfReader.aiPanel.error.translateFailed', { message: msg }),
       translation: '',
     }
-    toast.error(`AI 翻译失败：${msg}`)
+    toast.error(t('pdfReader.aiPanel.error.aiTranslateFailed', { message: msg }))
   }
 }
 
@@ -226,11 +228,11 @@ const handleSendMessage = async () => {
     const errorMsg: ChatMessage = {
       id: `msg-${Date.now()}-e`,
       role: 'assistant',
-      content: `问答失败：${msg}`,
+      content: t('pdfReader.aiPanel.error.chatFailed', { message: msg }),
       error: true,
     }
     chatMessages.value.push(errorMsg)
-    toast.error(`AI 问答失败：${msg}`)
+    toast.error(t('pdfReader.aiPanel.error.aiChatFailed', { message: msg }))
   } finally {
     chatLoading.value = false
     await scrollToBottom()
@@ -277,11 +279,11 @@ watch(
       <div class="ai-header">
         <div class="header-title">
           <Sparkles :size="16" />
-          <span>AI 助手</span>
+          <span>{{ t('pdfReader.aiPanel.title') }}</span>
         </div>
         <button
           class="header-close"
-          title="折叠 AI 面板"
+          :title="t('pdfReader.aiPanel.collapse')"
           @click="emit('toggle')"
         >
           <PanelRightClose :size="16" />
@@ -313,12 +315,12 @@ watch(
               @click="handleSummarize"
             >
               <Sparkles :size="14" />
-              <span>总结全文</span>
+              <span>{{ t('pdfReader.aiPanel.summarizeAll') }}</span>
             </button>
             <button
               v-if="summaryState.summary || summaryState.error"
               class="action-btn"
-              title="重置"
+              :title="t('pdfReader.aiPanel.reset')"
               @click="handleResetSummary"
             >
               <RotateCcw :size="14" />
@@ -327,7 +329,7 @@ watch(
 
           <div v-if="summaryState.loading" class="pane-loading">
             <Loader2 :size="20" class="loading-spin" />
-            <span>AI 正在总结文档...</span>
+            <span>{{ t('pdfReader.aiPanel.summarizing') }}</span>
           </div>
 
           <div v-else-if="summaryState.error" class="pane-error">
@@ -339,7 +341,7 @@ watch(
             <div class="result-section">
               <div class="section-title">
                 <FileText :size="14" />
-                <span>摘要</span>
+                <span>{{ t('pdfReader.aiPanel.summary') }}</span>
               </div>
               <div class="markdown-content" v-html="summaryHtml" />
             </div>
@@ -347,7 +349,7 @@ watch(
             <div v-if="summaryState.keyPoints.length > 0" class="result-section">
               <div class="section-title">
                 <ListChecks :size="14" />
-                <span>关键点</span>
+                <span>{{ t('pdfReader.aiPanel.keyPoints') }}</span>
               </div>
               <ul class="key-points">
                 <li v-for="(point, idx) in summaryState.keyPoints" :key="idx">
@@ -359,8 +361,8 @@ watch(
 
           <div v-else class="pane-empty">
             <Sparkles :size="32" class="empty-icon" />
-            <p class="empty-text">点击"总结全文"按钮</p>
-            <p class="empty-hint">AI 将生成文档摘要与关键点</p>
+            <p class="empty-text">{{ t('pdfReader.aiPanel.summaryEmptyText') }}</p>
+            <p class="empty-hint">{{ t('pdfReader.aiPanel.summaryEmptyHint') }}</p>
           </div>
         </div>
 
@@ -368,7 +370,7 @@ watch(
         <div v-show="activeTab === 'translate'" class="tab-pane">
           <div class="pane-form">
             <label class="form-row">
-              <span class="form-label">目标语言</span>
+              <span class="form-label">{{ t('pdfReader.aiPanel.targetLang') }}</span>
               <select v-model="translateState.targetLang" class="form-select">
                 <option v-for="lang in TRANSLATE_LANGS" :key="lang.value" :value="lang.value">
                   {{ lang.label }}
@@ -376,12 +378,12 @@ watch(
               </select>
             </label>
             <label class="form-row">
-              <span class="form-label">页码范围（可选）</span>
+              <span class="form-label">{{ t('pdfReader.aiPanel.pageRange') }}</span>
               <input
                 v-model="translateState.pageRange"
                 type="text"
                 class="form-input"
-                placeholder="如：1-5 或 1,3,5"
+                :placeholder="t('pdfReader.aiPanel.pageRangePlaceholder')"
               />
             </label>
             <div class="pane-actions">
@@ -391,12 +393,12 @@ watch(
                 @click="handleTranslate"
               >
                 <Languages :size="14" />
-                <span>翻译</span>
+                <span>{{ t('pdfReader.aiPanel.translateBtn') }}</span>
               </button>
               <button
                 v-if="translateState.translation || translateState.error"
                 class="action-btn"
-                title="重置"
+                :title="t('pdfReader.aiPanel.reset')"
                 @click="handleResetTranslate"
               >
                 <RotateCcw :size="14" />
@@ -406,7 +408,7 @@ watch(
 
           <div v-if="translateState.loading" class="pane-loading">
             <Loader2 :size="20" class="loading-spin" />
-            <span>AI 正在翻译文档...</span>
+            <span>{{ t('pdfReader.aiPanel.translating') }}</span>
           </div>
 
           <div v-else-if="translateState.error" class="pane-error">
@@ -418,7 +420,7 @@ watch(
             <div class="result-section">
               <div class="section-title">
                 <Languages :size="14" />
-                <span>翻译结果</span>
+                <span>{{ t('pdfReader.aiPanel.translateResult') }}</span>
               </div>
               <div class="markdown-content" v-html="translationHtml" />
             </div>
@@ -426,8 +428,8 @@ watch(
 
           <div v-else class="pane-empty">
             <Languages :size="32" class="empty-icon" />
-            <p class="empty-text">选择目标语言后点击"翻译"</p>
-            <p class="empty-hint">AI 将翻译文档内容</p>
+            <p class="empty-text">{{ t('pdfReader.aiPanel.translateEmptyText') }}</p>
+            <p class="empty-hint">{{ t('pdfReader.aiPanel.translateEmptyHint') }}</p>
           </div>
         </div>
 
@@ -436,8 +438,8 @@ watch(
           <div ref="chatScrollRef" class="chat-messages">
             <div v-if="chatMessages.length === 0" class="chat-empty">
               <MessageSquare :size="32" class="empty-icon" />
-              <p class="empty-text">向 AI 提问关于文档的问题</p>
-              <p class="empty-hint">AI 将基于文档内容回答</p>
+              <p class="empty-text">{{ t('pdfReader.aiPanel.chatEmptyText') }}</p>
+              <p class="empty-hint">{{ t('pdfReader.aiPanel.chatEmptyHint') }}</p>
             </div>
 
             <div
@@ -448,7 +450,7 @@ watch(
             >
               <div class="msg-avatar">
                 <Sparkles v-if="msg.role === 'assistant'" :size="14" />
-                <span v-else>我</span>
+                <span v-else>{{ t('pdfReader.aiPanel.me') }}</span>
               </div>
               <div class="msg-content">
                 <div v-if="msg.error" class="msg-error">{{ msg.content }}</div>
@@ -463,7 +465,7 @@ watch(
               <div class="msg-content">
                 <div class="msg-typing">
                   <Loader2 :size="14" class="loading-spin" />
-                  <span>AI 正在思考...</span>
+                  <span>{{ t('pdfReader.aiPanel.thinking') }}</span>
                 </div>
               </div>
             </div>
@@ -474,7 +476,7 @@ watch(
               <textarea
                 v-model="chatInput"
                 class="chat-input"
-                placeholder="输入你的问题... (Enter 发送, Shift+Enter 换行)"
+                :placeholder="t('pdfReader.aiPanel.chatInputPlaceholder')"
                 rows="2"
                 :disabled="chatLoading"
                 @keydown="handleChatKeydown"
@@ -482,7 +484,7 @@ watch(
               <button
                 class="send-btn"
                 :disabled="!chatInput.trim() || chatLoading"
-                title="发送"
+                :title="t('pdfReader.aiPanel.send')"
                 @click="handleSendMessage"
               >
                 <Send :size="16" />
@@ -491,7 +493,7 @@ watch(
             <div v-if="chatMessages.length > 0" class="chat-actions">
               <button class="link-btn" @click="handleClearChat">
                 <RotateCcw :size="12" />
-                <span>清空对话</span>
+                <span>{{ t('pdfReader.aiPanel.clearChat') }}</span>
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { MessageCircle } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
@@ -28,6 +29,7 @@ import { useWorkspaceConvList } from '../composables/useWorkspaceConvList'
 import { useWorkspaceMessages } from '../composables/useWorkspaceMessages'
 
 const router = useRouter()
+const { t } = useI18n()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const modelStore = useModelStore()
@@ -181,12 +183,12 @@ function handleChatTrigger(event: CustomEvent) {
 function handleMemoryChatTrigger(event: CustomEvent) {
   const text = event.detail?.text
   if (text) {
-    inputText.value = `关于我之前提到的「${text.slice(0, 80)}」，请帮我进一步分析。`
+    inputText.value = t('workspace.memoryChatPrompt', { text: text.slice(0, 80) })
   }
 }
 
 function handleMemoryChatTriggerDirect(text: string) {
-  inputText.value = `关于我之前提到的「${text.slice(0, 80)}」，请帮我进一步分析。`
+  inputText.value = t('workspace.memoryChatPrompt', { text: text.slice(0, 80) })
 }
 
 (window as unknown as Record<string, unknown>).__memoryChatTrigger = handleMemoryChatTriggerDirect
@@ -343,8 +345,8 @@ onBeforeUnmount(() => {
             <MessageCircle :size="36" />
           </div>
         </div>
-        <h3>选择一个联系人开始对话</h3>
-        <p>在左侧选择 Agent 或群聊，开始你的对话</p>
+        <h3>{{ t('workspace.workspaceEmptyTitle') }}</h3>
+        <p>{{ t('workspace.workspaceEmptyDesc') }}</p>
       </div>
     </main>
 
@@ -384,7 +386,7 @@ onBeforeUnmount(() => {
       @update:show-edit-dialog="showEditDialog = $event"
       @update:edit-form="editAgentForm = $event"
       @update-agent="handleUpdateAgent"
-      @delete-agent="openConfirmDialog('确定要删除该 Agent 吗？此操作无法撤销。', handleDeleteAgent, true)"
+      @delete-agent="openConfirmDialog(t('workspace.confirmDeleteAgent'), handleDeleteAgent, true)"
       @confirm="handleConfirmDialogConfirm"
       @cancel="handleConfirmDialogCancel"
       @update:show-create-group-dialog="showCreateGroupDialog = $event"

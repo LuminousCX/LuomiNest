@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { TrendingUp, Clock, Star, Download, Filter } from 'lucide-vue-next'
 import type { LucideIcon } from 'lucide-vue-next'
 import type { MarketplaceFilter, InstallStatus } from '../../types/marketplace'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   filter: MarketplaceFilter
@@ -12,16 +15,16 @@ const emit = defineEmits<{
 }>()
 
 const sortOptions: { value: MarketplaceFilter['sortBy']; label: string; icon: LucideIcon }[] = [
-  { value: 'popular', label: '最热', icon: TrendingUp },
-  { value: 'newest', label: '最新', icon: Clock },
-  { value: 'rating', label: '评分', icon: Star },
-  { value: 'downloads', label: '安装量', icon: Download },
+  { value: 'popular', label: t('market.filters.popular'), icon: TrendingUp },
+  { value: 'newest', label: t('market.filters.newest'), icon: Clock },
+  { value: 'rating', label: t('market.filters.rating'), icon: Star },
+  { value: 'downloads', label: t('market.filters.downloads'), icon: Download },
 ]
 
 const installStatusOptions: { value: InstallStatus | 'all'; label: string }[] = [
-  { value: 'all', label: '全部' },
-  { value: 'installed', label: '已安装' },
-  { value: 'none', label: '未安装' },
+  { value: 'all', label: t('market.filters.all') },
+  { value: 'installed', label: t('market.filters.installed') },
+  { value: 'none', label: t('market.filters.none') },
 ]
 </script>
 
@@ -30,7 +33,7 @@ const installStatusOptions: { value: InstallStatus | 'all'; label: string }[] = 
     <div class="filter-section">
       <div class="filter-label">
         <Filter :size="14" />
-        <span>排序</span>
+        <span>{{ t('market.filters.sortLabel') }}</span>
       </div>
       <div class="filter-options">
         <button
@@ -48,7 +51,7 @@ const installStatusOptions: { value: InstallStatus | 'all'; label: string }[] = 
     <div class="filter-section">
       <div class="filter-label">
         <Download :size="14" />
-        <span>状态</span>
+        <span>{{ t('market.filters.statusLabel') }}</span>
       </div>
       <div class="filter-options">
         <button

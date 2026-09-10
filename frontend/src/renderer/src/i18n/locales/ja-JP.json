@@ -1,6 +1,13 @@
 {
   "common": {
-    "skip": "スキップ"
+    "skip": "スキップ",
+    "empty": "データがありません",
+    "time": {
+      "justNow": "たった今",
+      "minutesAgo": "{n} 分前",
+      "hoursAgo": "{n} 時間前",
+      "daysAgo": "{n} 日前"
+    }
   },
   "welcome": {
     "title": "ようこそ",
@@ -158,5 +165,32 @@
     "login": "ログイン",
     "loggingIn": "ログイン中...",
     "skipUse": "スキップして使ってみる"
+  },
+  "route": {
+    "welcome": "Welcome - LuomiNest",
+    "loading": "Loading - LuomiNest",
+    "login": "ログイン - LuomiNest",
+    "workbench": "ワークベンチ - LuomiNest",
+    "workspace": "会話 - LuomiNest",
+    "platform": "プラットフォーム連携 - LuomiNest",
+    "devices": "デバイスとグループ - LuomiNest",
+    "desktopPet": "LuomiNest Desktop Pet",
+    "petChat": "LuomiNest Companion Chat",
+    "models": "モデル設定 - LuomiNest",
+    "about": "開発者について - LuomiNest",
+    "license": "プロジェクト参照 - LuomiNest",
+    "privacyDetail": "プライバシーとコンプライアンス - LuomiNest",
+    "avatar": "アバターワークショップ - LuomiNest",
+    "stats": "データ統計 - LuomiNest",
+    "console": "コンソール - LuomiNest",
+    "tasks": "スケジュール - LuomiNest",
+    "smartHome": "スマートホーム - LuomiNest",
+    "workflow": "ワークフロー - LuomiNest",
+    "browser": "ブラウザ - LuomiNest",
+    "settings": "設定 - LuomiNest",
+    "memory": "メモリハブ - LuomiNest",
+    "market": "拡張マーケット - LuomiNest",
+    "marketDetail": "マーケット詳細 - LuomiNest",
+    "agentCreate": "エージェント作成 - LuomiNest"
   }
 }

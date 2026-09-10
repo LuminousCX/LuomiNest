@@ -6,6 +6,7 @@
  * 下方显示最近打开记录（仅文件名 + 时间），点击触发 reopen-item 事件。
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { FileText, FolderOpen, Trash2, Clock, FileUp } from 'lucide-vue-next'
 import type { CxPdfFileType } from '../services/pdfApi'
 
@@ -26,6 +27,8 @@ const emit = defineEmits<{
   'click-select': []
 }>()
 
+const { t } = useI18n()
+
 // 文件类型图标颜色
 const fileTypeColor = (fileType: CxPdfFileType): string => {
   switch (fileType) {
@@ -43,12 +46,12 @@ const formatTime = (ts: number): string => {
   const minute = 60 * 1000
   const hour = 60 * minute
   const day = 24 * hour
-  if (diff < minute) return '刚刚'
-  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`
-  if (diff < day) return `${Math.floor(diff / hour)} 小时前`
-  if (diff < 7 * day) return `${Math.floor(diff / day)} 天前`
+  if (diff < minute) return t('pdfReader.dropzone.justNow')
+  if (diff < hour) return t('pdfReader.dropzone.minutesAgo', { n: Math.floor(diff / minute) })
+  if (diff < day) return t('pdfReader.dropzone.hoursAgo', { n: Math.floor(diff / hour) })
+  if (diff < 7 * day) return t('pdfReader.dropzone.daysAgo', { n: Math.floor(diff / day) })
   const date = new Date(ts)
-  return `${date.getMonth() + 1}月${date.getDate()}日`
+  return t('pdfReader.dropzone.monthDay', { m: date.getMonth() + 1, d: date.getDate() })
 }
 
 const hasHistory = computed(() => props.history.length > 0)
@@ -70,18 +73,18 @@ const hasHistory = computed(() => props.history.length > 0)
         <FileUp :size="64" />
       </div>
 
-      <h2 class="drop-title">拖拽 PDF / Word / TXT 文件到此处</h2>
-      <p class="drop-subtitle">或</p>
+      <h2 class="drop-title">{{ t('pdfReader.dropzone.title') }}</h2>
+      <p class="drop-subtitle">{{ t('pdfReader.dropzone.or') }}</p>
       <button
         class="select-btn"
         @click.stop="emit('click-select')"
       >
         <FolderOpen :size="16" />
-        <span>选择文件</span>
+        <span>{{ t('pdfReader.dropzone.selectFile') }}</span>
       </button>
 
       <p class="drop-hint">
-        支持的格式：PDF (.pdf)、Word (.docx)、纯文本 (.txt)
+        {{ t('pdfReader.dropzone.hint') }}
       </p>
     </div>
 
@@ -90,15 +93,15 @@ const hasHistory = computed(() => props.history.length > 0)
       <div class="history-header">
         <div class="history-title">
           <Clock :size="14" />
-          <span>最近打开</span>
+          <span>{{ t('pdfReader.dropzone.recent') }}</span>
         </div>
         <button
           class="clear-btn"
-          title="清空记录"
+          :title="t('pdfReader.dropzone.clearHistory')"
           @click.stop="emit('clear-history')"
         >
           <Trash2 :size="14" />
-          <span>清空</span>
+          <span>{{ t('pdfReader.dropzone.clear') }}</span>
         </button>
       </div>
 
@@ -107,7 +110,7 @@ const hasHistory = computed(() => props.history.length > 0)
           v-for="(item, idx) in props.history"
           :key="`${item.fileName}-${idx}`"
           class="history-item"
-          :title="`重新打开：${item.fileName}`"
+          :title="t('pdfReader.dropzone.reopen', { name: item.fileName })"
           @click.stop="emit('reopen-item', item)"
         >
           <FileText

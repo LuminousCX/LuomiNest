@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Plus,
   ArrowLeft,
@@ -29,6 +30,7 @@ const emit = defineEmits<{
 
 const modelStore = useModelStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const showApiKey = ref(false)
 const addProviderError = ref('')
@@ -40,11 +42,11 @@ const testingProvider = ref(false)
 const testResult = ref<TestResult | null>(null)
 const shakingDialog = ref(false)
 
-const templateCategories = [
-  { id: 'cloud', label: '云端 API', icon: Cloud },
-  { id: 'local', label: '本地推理', icon: Monitor },
-  { id: 'aggregator', label: '聚合网关', icon: Network },
-]
+const templateCategories = computed(() => [
+  { id: 'cloud', label: t('aiModel.addDialog.categoryCloud'), icon: Cloud },
+  { id: 'local', label: t('aiModel.addDialog.categoryLocal'), icon: Monitor },
+  { id: 'aggregator', label: t('aiModel.addDialog.categoryAggregator'), icon: Network },
+])
 
 const newProvider = ref<NewProviderForm>({
   id: '',
@@ -69,10 +71,10 @@ const isValidUrl = (url: string): boolean => {
 
 const newProviderValidation = computed(() => {
   const errors: string[] = []
-  if (!newProvider.value.id.trim()) errors.push('标识 ID 不能为空')
-  if (!newProvider.value.baseUrl.trim()) errors.push('API 地址不能为空')
-  if (newProvider.value.baseUrl.trim() && !isValidUrl(newProvider.value.baseUrl)) errors.push('API 地址格式不正确')
-  if (newProvider.value.vendor !== 'ollama' && !newProvider.value.apiKey.trim()) errors.push('API Key 不能为空')
+  if (!newProvider.value.id.trim()) errors.push(t('aiModel.addDialog.errIdEmpty'))
+  if (!newProvider.value.baseUrl.trim()) errors.push(t('aiModel.addDialog.errBaseUrlEmpty'))
+  if (newProvider.value.baseUrl.trim() && !isValidUrl(newProvider.value.baseUrl)) errors.push(t('aiModel.addDialog.errBaseUrlInvalid'))
+  if (newProvider.value.vendor !== 'ollama' && !newProvider.value.apiKey.trim()) errors.push(t('aiModel.addDialog.errApiKeyEmpty'))
   return errors
 })
 
@@ -139,11 +141,11 @@ const handleVendorChange = () => {
 
 const handleTestProvider = async () => {
   if (!newProvider.value.baseUrl.trim()) {
-    toast.warning('请先填写 API 地址')
+    toast.warning(t('aiModel.addDialog.warnFillBaseUrl'))
     return
   }
   if (newProvider.value.vendor !== 'ollama' && !newProvider.value.apiKey.trim()) {
-    toast.warning('请先填写 API Key')
+    toast.warning(t('aiModel.addDialog.warnFillApiKey'))
     return
   }
   testingProvider.value = true
@@ -161,18 +163,18 @@ const handleTestProvider = async () => {
       error: result.error || '',
     }
     if (result.success) {
-      toast.success(`检测成功，共获取到 ${result.models.length} 个模型`)
+      toast.success(t('aiModel.addDialog.testSuccessToast', { count: result.models.length }))
     } else {
-      toast.error(`检测失败：${result.error || '未知错误'}`)
+      toast.error(t('aiModel.addDialog.testFailedToast', { message: result.error || t('aiModel.common.unknownError') }))
     }
   } catch (e: unknown) {
-    const errMsg = (e instanceof Error ? e.message : String(e)) || '网络错误'
+    const errMsg = (e instanceof Error ? e.message : String(e)) || t('aiModel.addDialog.networkError')
     testResult.value = {
       success: false,
       modelCount: 0,
       error: errMsg,
     }
-    toast.error(`检测失败：${errMsg}`)
+    toast.error(t('aiModel.addDialog.testFailedToast', { message: errMsg }))
   } finally {
     testingProvider.value = false
   }
@@ -197,10 +199,10 @@ const handleAddProvider = async () => {
       isDefault: newProvider.value.isDefault,
     })
     close()
-    toast.success(`供应商「${newProvider.value.name.trim() || newProvider.value.id.trim()}」添加成功`)
+    toast.success(t('aiModel.addDialog.addSuccessToast', { name: newProvider.value.name.trim() || newProvider.value.id.trim() }))
   } catch (e: unknown) {
-    addProviderError.value = (e instanceof Error ? e.message : String(e)) || '添加失败'
-    toast.error(`添加供应商失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
+    addProviderError.value = (e instanceof Error ? e.message : String(e)) || t('aiModel.addDialog.addFailed')
+    toast.error(t('aiModel.addDialog.addFailedToast', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
   } finally {
     addProviderLoading.value = false
   }
@@ -225,7 +227,7 @@ watch(() => props.visible, (visible) => {
         <span class="lumi-icon-wrap lumi-icon-wrap--sm dialog-header-icon">
           <Plus :size="18" />
         </span>
-        添加模型供应商
+        {{ t('aiModel.addDialog.title') }}
       </span>
     </template>
 
@@ -235,7 +237,7 @@ watch(() => props.visible, (visible) => {
         </div>
 
         <div v-if="addDialogStep === 'select'" class="add-step">
-          <div class="step-hint">选择一个供应商模板快速开始，或选择 Custom 自定义配置</div>
+          <div class="step-hint">{{ t('aiModel.addDialog.stepHint') }}</div>
 
           <div class="category-tabs">
             <button
@@ -272,7 +274,7 @@ watch(() => props.visible, (visible) => {
         <div v-if="addDialogStep === 'configure'" class="add-step">
           <button class="back-to-select" @click="addDialogStep = 'select'">
             <ArrowLeft :size="14" />
-            <span>返回选择模板</span>
+            <span>{{ t('aiModel.addDialog.backToTemplates') }}</span>
           </button>
 
           <div v-if="selectedTemplate" class="selected-template-badge">
@@ -286,21 +288,21 @@ watch(() => props.visible, (visible) => {
           <div class="config-form-compact">
             <div class="form-group">
               <label class="form-label">
-                标识 ID
+                {{ t('aiModel.addDialog.idLabel') }}
                 <span class="required-mark">*</span>
               </label>
-              <input v-model="newProvider.id" type="text" class="form-input" :class="{ 'input-error': !newProvider.id.trim() && addProviderError }" placeholder="如: my-ollama" />
-              <span class="form-hint">唯一标识，不可与已有供应商重复</span>
+              <input v-model="newProvider.id" type="text" class="form-input" :class="{ 'input-error': !newProvider.id.trim() && addProviderError }" :placeholder="t('aiModel.addDialog.idPlaceholder')" />
+              <span class="form-hint">{{ t('aiModel.addDialog.idHint') }}</span>
             </div>
             <div class="form-group">
-              <label class="form-label">显示名称</label>
-              <input v-model="newProvider.name" type="text" class="form-input" placeholder="如: My Ollama" />
+              <label class="form-label">{{ t('aiModel.addDialog.nameLabel') }}</label>
+              <input v-model="newProvider.name" type="text" class="form-input" :placeholder="t('aiModel.addDialog.namePlaceholder')" />
             </div>
             <div class="form-group">
-              <label class="form-label">类型</label>
+              <label class="form-label">{{ t('aiModel.addDialog.typeLabel') }}</label>
               <div class="form-select-wrap">
                 <select v-model="newProvider.vendor" class="form-select" @change="handleVendorChange">
-                  <option value="openai_compatible">OpenAI 兼容</option>
+                  <option value="openai_compatible">{{ t('aiModel.addDialog.vendorOpenaiCompatible') }}</option>
                   <option value="ollama">Ollama</option>
                   <option value="anthropic">Anthropic</option>
                 </select>
@@ -309,14 +311,14 @@ watch(() => props.visible, (visible) => {
             </div>
             <div class="form-group">
               <label class="form-label">
-                API 地址
+                {{ t('aiModel.addDialog.baseUrlLabel') }}
                 <span class="required-mark">*</span>
               </label>
               <input v-model="newProvider.baseUrl" type="text" class="form-input" :class="{ 'input-error': !newProvider.baseUrl.trim() && addProviderError }" placeholder="http://localhost:11434/v1" />
               <span class="form-hint">Ollama: http://localhost:11434/v1 | 其他: 含 /v1 后缀</span>
             </div>
             <div class="form-group">
-              <label class="form-label">API Key</label>
+              <label class="form-label">{{ t('aiModel.addDialog.apiKeyLabel') }}</label>
               <div class="api-key-row">
                 <input v-model="newProvider.apiKey" :type="showApiKey ? 'text' : 'password'" class="form-input" :class="{ 'input-error': newProvider.vendor !== 'ollama' && !newProvider.apiKey.trim() && addProviderError }" placeholder="sk-..." />
                 <button class="eye-btn" @click="showApiKey = !showApiKey">
@@ -324,10 +326,10 @@ watch(() => props.visible, (visible) => {
                   <EyeOff v-else :size="14" />
                 </button>
               </div>
-              <span class="form-hint">Ollama 自动填充，其他供应商需填写真实密钥</span>
+              <span class="form-hint">{{ t('aiModel.addDialog.apiKeyHint') }}</span>
             </div>
             <div class="form-group">
-              <label class="form-label">API 连通性检测</label>
+              <label class="form-label">{{ t('aiModel.addDialog.testTitle') }}</label>
               <div class="test-provider-row">
                 <button
                   class="test-btn"
@@ -336,20 +338,20 @@ watch(() => props.visible, (visible) => {
                 >
                   <Loader2 v-if="testingProvider" :size="14" class="spin-animation" />
                   <Zap v-else :size="14" />
-                  {{ testingProvider ? '检测中...' : '检测 API / TOKEN' }}
+                  {{ testingProvider ? t('aiModel.addDialog.testing') : t('aiModel.addDialog.testButton') }}
                 </button>
                 <div v-if="testResult" :class="['test-result', testResult.success ? 'success' : 'error']">
                   <Check v-if="testResult.success" :size="14" />
                   <AlertCircle v-else :size="14" />
-                  <span v-if="testResult.success">可用，共 {{ testResult.modelCount }} 个模型</span>
-                  <span v-else>{{ testResult.error || '不可用' }}</span>
+                  <span v-if="testResult.success">{{ t('aiModel.addDialog.testOk', { count: testResult.modelCount }) }}</span>
+                  <span v-else>{{ testResult.error || t('aiModel.addDialog.testUnavailable') }}</span>
                 </div>
               </div>
-              <span class="form-hint">检测会调用供应商 /models 接口验证 API 地址与密钥是否可用</span>
+              <span class="form-hint">{{ t('aiModel.addDialog.testHint') }}</span>
             </div>
             <div class="form-group">
               <div class="toggle-row">
-                <label class="form-label">设为默认</label>
+                <label class="form-label">{{ t('aiModel.addDialog.setDefault') }}</label>
                 <button
                   :class="['toggle-switch', { active: newProvider.isDefault }]"
                   @click="newProvider.isDefault = !newProvider.isDefault"
@@ -361,7 +363,7 @@ watch(() => props.visible, (visible) => {
           </div>
 
           <div class="dialog-actions">
-            <button class="dialog-btn cancel" @click="addDialogStep = 'select'">上一步</button>
+            <button class="dialog-btn cancel" @click="addDialogStep = 'select'">{{ t('aiModel.addDialog.prevStep') }}</button>
             <button
               :class="['dialog-btn confirm', { disabled: !newProviderFormValid || addProviderLoading }]"
               :disabled="!newProviderFormValid || addProviderLoading"
@@ -369,7 +371,7 @@ watch(() => props.visible, (visible) => {
             >
               <Loader2 v-if="addProviderLoading" :size="16" class="spin-animation" />
               <Check v-else :size="16" />
-              添加
+              {{ t('aiModel.addDialog.add') }}
             </button>
           </div>
         </div>

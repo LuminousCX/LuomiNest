@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { Calendar, FileText, Archive, Plus, Loader2 } from 'lucide-vue-next'
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
   newDailyContent: string
   isAddingDaily: boolean
 }
+
+const { t } = useI18n()
 
 defineProps<Props>()
 
@@ -27,7 +30,7 @@ function getDailyCount(_date: string): number {
 
 function getWeekday(dateStr: string): string {
   const date = new Date(dateStr)
-  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  const weekdays = [t('memory.history.wd0'), t('memory.history.wd1'), t('memory.history.wd2'), t('memory.history.wd3'), t('memory.history.wd4'), t('memory.history.wd5'), t('memory.history.wd6')]
   return weekdays[date.getDay()]
 }
 </script>
@@ -35,17 +38,17 @@ function getWeekday(dateStr: string): string {
 <template>
   <div class="detail-header">
     <Calendar :size="22" :style="{ color: 'var(--lumi-amber)' }" />
-    <h3>对话历史</h3>
+    <h3>{{ t('memory.history.title') }}</h3>
   </div>
 
   <div v-if="conversationDailies.length > 0" class="conversation-filter">
-    <label class="filter-label">按对话筛选</label>
+    <label class="filter-label">{{ t('memory.history.filterByConv') }}</label>
     <select
       :value="selectedConversationId"
       class="conversation-select"
       @change="emit('switchConversation', ($event.target as HTMLSelectElement).value || null); emit('update:selectedConversationId', ($event.target as HTMLSelectElement).value || null)"
     >
-      <option :value="null">全部对话</option>
+      <option :value="null">{{ t('memory.history.allConvs') }}</option>
       <option v-for="conv in conversationDailies" :key="conv.id" :value="conv.id">
         {{ conv.title || (conv.id.length > 12 ? conv.id.slice(0, 8) + '...' : conv.id) }}
       </option>
@@ -54,10 +57,10 @@ function getWeekday(dateStr: string): string {
 
   <div class="daily-layout">
     <div class="daily-sidebar">
-      <div class="section-title">日期列表</div>
+      <div class="section-title">{{ t('memory.history.dateList') }}</div>
       <div v-if="dailies.length === 0" class="empty-section small">
         <Archive :size="20" />
-        <p>暂无记录</p>
+        <p>{{ t('memory.history.noRecords') }}</p>
       </div>
       <div v-else class="daily-dates">
         <div
@@ -76,7 +79,7 @@ function getWeekday(dateStr: string): string {
     <div class="daily-main">
       <div v-if="!selectedDailyDate" class="empty-section">
         <Calendar :size="28" />
-        <p>选择日期查看记录</p>
+        <p>{{ t('memory.history.pickDate') }}</p>
       </div>
       <template v-else>
         <div class="daily-header">
@@ -85,7 +88,7 @@ function getWeekday(dateStr: string): string {
         </div>
         <div v-if="dailyLines.length === 0" class="empty-section small">
           <Archive :size="20" />
-          <p>当天无记录</p>
+          <p>{{ t('memory.history.noDayRecords') }}</p>
         </div>
         <div v-else class="memo-items">
           <div v-for="(line, idx) in dailyLines" :key="idx" class="memo-item">
@@ -101,7 +104,7 @@ function getWeekday(dateStr: string): string {
               :value="newDailyContent"
               @input="emit('update:newDailyContent', ($event.target as HTMLInputElement).value)"
               type="text"
-              placeholder="添加记录..."
+              :placeholder="t('memory.history.addRecord')"
               class="add-daily-input"
               @keydown.enter="emit('handleAddDaily')"
             />

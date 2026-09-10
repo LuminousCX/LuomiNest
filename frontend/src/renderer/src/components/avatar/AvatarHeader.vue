@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import {
   RotateCcw,
   Maximize2,
@@ -11,6 +12,8 @@ import {
   Loader
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   isDesktopMode: boolean
@@ -31,8 +34,8 @@ const emit = defineEmits<{
 <template>
   <div class="avatar-header">
     <div class="avatar-header__left">
-      <h1 class="avatar-title">皮套工坊</h1>
-      <p class="avatar-desc">Live2D 形象管理、动作编辑与场景配置</p>
+      <h1 class="avatar-title">{{ t('avatar.header.title') }}</h1>
+      <p class="avatar-desc">{{ t('avatar.header.desc') }}</p>
     </div>
     <div class="avatar-header__actions">
       <div

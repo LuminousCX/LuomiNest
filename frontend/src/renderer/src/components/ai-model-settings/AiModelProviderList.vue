@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Settings2,
   ChevronRight,
@@ -25,6 +26,7 @@ const emit = defineEmits<{
 
 const modelStore = useModelStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const providers = computed(() => modelStore.providers)
 const showProviderList = ref(true)
@@ -37,14 +39,14 @@ const getProviderIcon = (providerId: string): string => {
   return tmpl?.svgIcon || ''
 }
 
-const PROTOCOL_LABELS: Record<string, string> = {
-  auto: '自动协议',
+const protocolLabels = computed<Record<string, string>>(() => ({
+  auto: t('aiModel.providerList.protocolAuto'),
   chat_completions: 'Chat Completions',
   anthropic_messages: 'Anthropic Messages',
-}
+}))
 
 const protocolLabel = (protocol: string): string => {
-  return PROTOCOL_LABELS[protocol] || protocol || PROTOCOL_LABELS.auto
+  return protocolLabels.value[protocol] || protocol || protocolLabels.value.auto
 }
 
 const toggleModelPicker = (providerId: string) => {
@@ -73,10 +75,10 @@ const saveSelectedModels = async (providerId: string) => {
   try {
     const selected = localSelectedModels.value[providerId] || []
     await modelStore.updateProvider(providerId, { selectedModels: selected })
-    toast.success(`已保存 ${selected.length} 个模型`)
+    toast.success(t('aiModel.providerList.savedModelsToast', { count: selected.length }))
     expandedModelPicker.value = ''
   } catch (e: unknown) {
-    toast.error(`保存失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
+    toast.error(t('aiModel.providerList.saveFailedToast', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
   } finally {
     savingSelectedModels.value = ''
   }
@@ -85,10 +87,10 @@ const saveSelectedModels = async (providerId: string) => {
 const handleFetchModels = async (providerId: string) => {
   try {
     await modelStore.fetchProviderModels(providerId)
-    toast.info('模型列表已刷新')
+    toast.info(t('aiModel.providerList.refreshedToast'))
   } catch (e: unknown) {
     logger.error('Failed to fetch models:', e)
-    toast.error(`获取模型列表失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
+    toast.error(t('aiModel.providerList.fetchFailedToast', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
   }
 }
 
@@ -96,10 +98,10 @@ const handleRemoveProvider = async (providerId: string) => {
   try {
     const p = providers.value.find(pr => pr.id === providerId)
     await modelStore.removeProvider(providerId)
-    toast.success(`供应商「${p?.name || providerId}」已删除`)
+    toast.success(t('aiModel.providerList.removedToast', { name: p?.name || providerId }))
   } catch (e: unknown) {
     logger.error('Failed to remove provider:', e)
-    toast.error(`删除供应商失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
+    toast.error(t('aiModel.providerList.removeFailedToast', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
   }
 }
 </script>
@@ -109,7 +111,7 @@ const handleRemoveProvider = async (providerId: string) => {
     <div class="provider-section-header" @click="showProviderList = !showProviderList">
       <div class="provider-section-title">
         <Settings2 :size="14" />
-        <span>供应商管理</span>
+        <span>{{ t('aiModel.providerList.title') }}</span>
         <span class="provider-count">{{ providers.length }}</span>
       </div>
       <ChevronRight :size="14" :class="['chevron-toggle', { expanded: showProviderList }]" />
@@ -122,14 +124,14 @@ const handleRemoveProvider = async (providerId: string) => {
               <div v-if="getProviderIcon(provider.id)" class="provider-svg-icon" v-html="getProviderIcon(provider.id)"></div>
               <Server v-else :size="14" class="provider-item-icon" />
               <span class="provider-item-name">{{ provider.name }}</span>
-              <span v-if="provider.isDefault" class="default-badge">默认</span>
+              <span v-if="provider.isDefault" class="default-badge">{{ t('aiModel.providerList.defaultBadge') }}</span>
               <span class="protocol-badge">{{ protocolLabel(provider.protocol) }}</span>
-              <span v-if="provider.selectedModels.length > 0" class="selected-count-badge">{{ provider.selectedModels.length }} 模型</span>
+              <span v-if="provider.selectedModels.length > 0" class="selected-count-badge">{{ t('aiModel.providerList.modelsBadge', { count: provider.selectedModels.length }) }}</span>
             </div>
             <div class="provider-item-detail">
               <span class="detail-text">{{ provider.baseUrl }}</span>
               <span class="detail-sep">|</span>
-              <span class="detail-text">{{ provider.defaultModel || '未设置' }}</span>
+              <span class="detail-text">{{ provider.defaultModel || t('aiModel.providerList.notSet') }}</span>
               <template v-if="provider.apiKeyPrefix">
                 <span class="detail-sep">|</span>
                 <span class="detail-text key-prefix-text">{{ provider.apiKeyPrefix }}</span>
@@ -137,24 +139,24 @@ const handleRemoveProvider = async (providerId: string) => {
             </div>
           </div>
           <div class="provider-item-actions">
-            <button class="action-btn" title="多选模型" @click="toggleModelPicker(provider.id)">
+            <button class="action-btn" :title="t('aiModel.providerList.tipMultiSelect')" @click="toggleModelPicker(provider.id)">
               <CheckSquare :size="13" />
             </button>
-            <button class="action-btn" title="获取模型" @click="handleFetchModels(provider.id)">
+            <button class="action-btn" :title="t('aiModel.providerList.tipFetch')" @click="handleFetchModels(provider.id)">
               <Search :size="13" />
             </button>
-            <button class="action-btn" title="编辑" @click="emit('edit-provider', provider.id)">
+            <button class="action-btn" :title="t('aiModel.providerList.tipEdit')" @click="emit('edit-provider', provider.id)">
               <Edit3 :size="13" />
             </button>
-            <button class="action-btn danger" title="删除" @click="handleRemoveProvider(provider.id)">
+            <button class="action-btn danger" :title="t('aiModel.providerList.tipDelete')" @click="handleRemoveProvider(provider.id)">
               <Trash2 :size="13" />
             </button>
           </div>
           <Transition name="expand">
             <div v-if="expandedModelPicker === provider.id" class="model-picker-panel">
               <div class="model-picker-header">
-                <span class="model-picker-title">多选可用模型（显示到工作台/对话页）</span>
-                <span v-if="provider.models.length === 0" class="model-picker-hint">暂无模型列表，请先点击搜索图标获取</span>
+                <span class="model-picker-title">{{ t('aiModel.providerList.pickerTitle') }}</span>
+                <span v-if="provider.models.length === 0" class="model-picker-hint">{{ t('aiModel.providerList.pickerEmpty') }}</span>
               </div>
               <div v-if="provider.models.length > 0" class="model-picker-list">
                 <label
@@ -171,7 +173,7 @@ const handleRemoveProvider = async (providerId: string) => {
                 </label>
               </div>
               <div v-if="provider.models.length > 0" class="model-picker-footer">
-                <span class="model-picker-count">已选 {{ (localSelectedModels[provider.id] || []).length }} 个</span>
+                <span class="model-picker-count">{{ t('aiModel.providerList.selectedCount', { count: (localSelectedModels[provider.id] || []).length }) }}</span>
                 <button
                   class="model-picker-save"
                   :disabled="savingSelectedModels === provider.id"
@@ -179,17 +181,17 @@ const handleRemoveProvider = async (providerId: string) => {
                 >
                   <Loader2 v-if="savingSelectedModels === provider.id" :size="12" class="spin-animation" />
                   <Check v-else :size="12" />
-                  保存
+                  {{ t('aiModel.providerList.save') }}
                 </button>
               </div>
             </div>
           </Transition>
         </div>
         <div v-if="providers.length === 0" class="empty-provider">
-          <p>暂无供应商</p>
+          <p>{{ t('aiModel.providerList.empty') }}</p>
           <button class="add-inline-btn" @click="emit('add-provider')">
             <Plus :size="14" />
-            添加供应商
+            {{ t('aiModel.providerList.addProvider') }}
           </button>
         </div>
       </div>

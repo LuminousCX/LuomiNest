@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Inbox,
   Search,
@@ -20,10 +21,15 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   icon: 'inbox',
-  title: '暂无数据',
+  title: undefined,
   description: '',
   size: 'md'
 })
+
+const { t } = useI18n()
+
+/** 未显式传 title 时按当前语言显示默认空状态标题 */
+const displayTitle = computed(() => props.title ?? t('common.empty'))
 
 const iconMap: Record<string, LucideIcon> = {
   inbox: Inbox,
@@ -52,7 +58,7 @@ const iconSize = computed(() => {
 <template>
   <div class="lumi-empty" :class="`lumi-empty--${size}`">
     <component :is="iconComponent" class="lumi-empty__icon" :size="iconSize" />
-    <div v-if="title" class="lumi-empty__title">{{ title }}</div>
+    <div v-if="displayTitle" class="lumi-empty__title">{{ displayTitle }}</div>
     <div v-if="description" class="lumi-empty__desc">{{ description }}</div>
     <div v-if="$slots.action" class="lumi-empty__action">
       <slot name="action" />

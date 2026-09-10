@@ -7,6 +7,7 @@
 import { shallowRef, watch, type Ref, type ShallowRef } from 'vue'
 import type { Node, Edge, NodeMouseEvent } from '@vue-flow/core'
 import dagre from 'dagre'
+import { i18n } from '../i18n'
 import {
   Bot,
   FileText,
@@ -99,7 +100,7 @@ const buildFlowFromSession = (session: WorkflowSession | null): { nodes: Node[];
     type: 'wfNode',
     position: { x: 0, y: 0 },
     data: {
-      label: '用户输入',
+      label: i18n.global.t('workflow.node.userInput'),
       nodeType: 'input',
       status: 'completed',
       toolName: '',
@@ -170,7 +171,7 @@ const buildFlowFromSession = (session: WorkflowSession | null): { nodes: Node[];
         type: 'wfNode',
         position: { x: 0, y: 0 },
         data: {
-          label: '执行结果',
+          label: i18n.global.t('workflow.node.result'),
           nodeType: 'output',
           status: session.phase === 'completed' ? 'completed' : 'running',
           toolName: '',

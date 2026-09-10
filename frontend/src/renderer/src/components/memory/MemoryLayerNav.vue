@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { Activity } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import type { LayerTab, MemoryStats } from './types'
+
+const { t } = useI18n()
 
 interface Props {
   layerTabs: LayerTab[]
@@ -38,34 +41,34 @@ const emit = defineEmits<{
         </div>
       </div>
       <div class="nav-stats">
-        <span v-if="tab.id === 'profile'" class="nav-stat">{{ hasSummary ? '已总结' : '未总结' }}</span>
-        <span v-else-if="tab.id === 'facts'" class="nav-stat">{{ factCount }} 条</span>
-        <span v-else-if="tab.id === 'knowledge'" class="nav-stat">{{ knowledgeSectionCount > 0 ? knowledgeSectionCount + ' 节' : '空' }}</span>
-        <span v-else-if="tab.id === 'history'" class="nav-stat">{{ dailyCount }} 天</span>
+        <span v-if="tab.id === 'profile'" class="nav-stat">{{ hasSummary ? t('memory.nav.summarized') : t('memory.nav.notSummarized') }}</span>
+        <span v-else-if="tab.id === 'facts'" class="nav-stat">{{ t('memory.nav.factUnit', { n: factCount }) }}</span>
+        <span v-else-if="tab.id === 'knowledge'" class="nav-stat">{{ knowledgeSectionCount > 0 ? t('memory.nav.sectionUnit', { n: knowledgeSectionCount }) : t('memory.nav.empty') }}</span>
+        <span v-else-if="tab.id === 'history'" class="nav-stat">{{ t('memory.nav.dayUnit', { n: dailyCount }) }}</span>
       </div>
     </div>
 
     <div class="stats-overview">
       <div class="stats-header">
         <Activity :size="16" />
-        <span>记忆概览</span>
+        <span>{{ t('memory.nav.overview') }}</span>
       </div>
       <div class="stats-grid">
         <div class="stat-item">
           <span class="stat-value">{{ memoryStats.totalFacts }}</span>
-          <span class="stat-label">事实</span>
+          <span class="stat-label">{{ t('memory.nav.statFacts') }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-value">{{ memoryStats.dailyCount }}</span>
-          <span class="stat-label">天数</span>
+          <span class="stat-label">{{ t('memory.nav.statDays') }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-value">{{ knowledgeSectionCount }}</span>
-          <span class="stat-label">知识</span>
+          <span class="stat-label">{{ t('memory.nav.statKnowledge') }}</span>
         </div>
         <div class="stat-item">
-          <span class="stat-value">{{ memoryStats.hasProfile ? '有' : '无' }}</span>
-          <span class="stat-label">档案</span>
+          <span class="stat-value">{{ memoryStats.hasProfile ? t('memory.nav.has') : t('memory.nav.none') }}</span>
+          <span class="stat-label">{{ t('memory.nav.statProfile') }}</span>
         </div>
       </div>
       <div class="category-bars">

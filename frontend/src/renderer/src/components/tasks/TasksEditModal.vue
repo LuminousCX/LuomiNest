@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Plus,
   X,
@@ -46,6 +47,8 @@ const emit = defineEmits<{
   save: [task: LuomiNestTask]
   delete: [taskId: number]
 }>()
+
+const { t } = useI18n()
 
 const defaultTask: LuomiNestTask = {
   id: 0,
@@ -115,9 +118,9 @@ const handleDelete = () => {
   closeModal()
 }
 
-const modalTitle = props.mode === 'create' ? '创建新任务' : '编辑任务'
-const submitLabel = props.mode === 'create' ? '创建任务' : '保存'
-const modalIcon = props.mode === 'create' ? Plus : Edit3
+const modalTitle = computed(() => props.mode === 'create' ? t('tasks.modal.createTitle') : t('tasks.modal.editTitle'))
+const submitLabel = computed(() => props.mode === 'create' ? t('tasks.modal.createSubmit') : t('tasks.modal.saveSubmit'))
+const modalIcon = computed(() => props.mode === 'create' ? Plus : Edit3)
 </script>
 
 <template>
@@ -137,12 +140,12 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
             <div class="luomi-form-group">
               <label class="luomi-form-label">
                 <Type :size="13" />
-                任务标题
+                {{ t('tasks.modal.titleLabel') }}
               </label>
               <input
                 v-model="draft.title"
                 class="luomi-form-input"
-                placeholder="输入任务标题..."
+                :placeholder="t('tasks.modal.titlePlaceholder')"
                 @keydown.enter="handleSave"
               />
             </div>
@@ -150,12 +153,12 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
             <div class="luomi-form-group">
               <label class="luomi-form-label">
                 <Edit3 :size="13" />
-                任务描述
+                {{ t('tasks.modal.descLabel') }}
               </label>
               <textarea
                 v-model="draft.desc"
                 class="luomi-form-textarea"
-                placeholder="描述任务详情..."
+                :placeholder="t('tasks.modal.descPlaceholder')"
                 rows="3"
               ></textarea>
             </div>
@@ -164,7 +167,7 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
               <div class="luomi-form-group luomi-form-half">
                 <label class="luomi-form-label">
                   <Flag :size="13" />
-                  优先级
+                  {{ t('tasks.modal.priorityLabel') }}
                 </label>
                 <div class="luomi-form-select-group">
                   <button
@@ -181,7 +184,7 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
               <div class="luomi-form-group luomi-form-half">
                 <label class="luomi-form-label">
                   <Circle :size="13" />
-                  状态
+                  {{ t('tasks.modal.statusLabel') }}
                 </label>
                 <div class="luomi-form-select-group">
                   <button
@@ -200,7 +203,7 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
               <div class="luomi-form-group luomi-form-half">
                 <label class="luomi-form-label">
                   <Calendar :size="13" />
-                  截止日期
+                  {{ t('tasks.modal.dueLabel') }}
                 </label>
                 <input
                   v-model="draft.dueDate"
@@ -212,7 +215,7 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
               <div class="luomi-form-group luomi-form-half">
                 <label class="luomi-form-label">
                   <Timer :size="13" />
-                  时间段
+                  {{ t('tasks.modal.timeSlotLabel') }}
                 </label>
                 <select v-model="draft.timeSlot" class="luomi-form-select">
                   <option v-for="slot in timeSlotOptions" :key="slot" :value="slot">{{ slot }}</option>
@@ -223,7 +226,7 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
             <div class="luomi-form-group">
               <label class="luomi-form-label">
                 <Palette :size="13" />
-                任务颜色
+                {{ t('tasks.modal.colorLabel') }}
               </label>
               <div class="luomi-color-picker">
                 <button
@@ -241,7 +244,7 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
             <div class="luomi-form-group">
               <label class="luomi-form-label">
                 <Tag :size="13" />
-                标签
+                {{ t('tasks.modal.tagsLabel') }}
               </label>
               <div class="luomi-tags-input">
                 <span v-for="tag in draft.tags" :key="tag" class="luomi-tag-item">
@@ -251,7 +254,7 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
                 <input
                   v-model="newTagInput"
                   class="luomi-tag-input"
-                  placeholder="添加标签..."
+                  :placeholder="t('tasks.modal.tagsPlaceholder')"
                   @keydown.enter.prevent="addTag"
                 />
               </div>
@@ -259,7 +262,7 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
 
             <div v-if="draft.status === 'progress'" class="luomi-form-group">
               <label class="luomi-form-label">
-                进度: {{ draft.progress }}%
+                {{ t('tasks.modal.progressLabel', { n: draft.progress }) }}
               </label>
               <input
                 v-model.number="draft.progress"
@@ -277,13 +280,13 @@ const modalIcon = props.mode === 'create' ? Plus : Edit3
         <template #icon>
           <RotateCcw v-if="mode === 'create'" :size="14" />
         </template>
-        取消
+        {{ t('tasks.modal.cancel') }}
       </LumiButton>
       <LumiButton v-if="mode === 'edit'" variant="danger" size="sm" @click="handleDelete">
         <template #icon>
           <Trash2 :size="14" />
         </template>
-        删除
+        {{ t('tasks.modal.delete') }}
       </LumiButton>
       <LumiButton variant="primary" size="sm" :disabled="!draft.title.trim()" @click="handleSave">
         <template #icon>

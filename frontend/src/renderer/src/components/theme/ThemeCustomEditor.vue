@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { ColorTheme, ThemeColorSet } from '../../stores/theme-types'
 import ColorPickerInput from './ColorPickerInput.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   theme: ColorTheme | null
@@ -92,67 +95,67 @@ function handleSave() {
 <template>
   <div class="theme-editor-overlay" @click.self="emit('cancel')">
     <div class="theme-editor">
-      <h3 class="theme-editor__title">{{ isEdit ? '编辑自定义主题' : '新建自定义主题' }}</h3>
+      <h3 class="theme-editor__title">{{ isEdit ? t('theme.customEditor.editTitle') : t('theme.customEditor.createTitle') }}</h3>
 
       <!-- Name -->
       <div class="theme-editor__field">
-        <label class="theme-editor__field-label">主题名称</label>
+        <label class="theme-editor__field-label">{{ t('theme.customEditor.nameLabel') }}</label>
         <input
           v-model="name"
           type="text"
           class="theme-editor__name-input"
-          placeholder="输入主题名称"
+          :placeholder="t('theme.customEditor.namePlaceholder')"
           maxlength="20"
         />
       </div>
 
       <!-- Colors -->
       <div class="theme-editor__field">
-        <label class="theme-editor__field-label">三色配色</label>
+        <label class="theme-editor__field-label">{{ t('theme.customEditor.colorsLabel') }}</label>
         <div class="theme-editor__colors">
-          <ColorPickerInput v-model="primary" label="主色" />
-          <ColorPickerInput v-model="secondary" label="辅色" />
-          <ColorPickerInput v-model="accent" label="强调色" />
+          <ColorPickerInput v-model="primary" :label="t('theme.customEditor.primary')" />
+          <ColorPickerInput v-model="secondary" :label="t('theme.customEditor.secondary')" />
+          <ColorPickerInput v-model="accent" :label="t('theme.customEditor.accent')" />
         </div>
       </div>
 
       <!-- Preview -->
       <div class="theme-editor__field">
-        <label class="theme-editor__field-label">实时预览</label>
+        <label class="theme-editor__field-label">{{ t('theme.customEditor.livePreview') }}</label>
         <div class="theme-editor__preview">
-          <span class="theme-editor__preview-title">UI 元素预览</span>
+          <span class="theme-editor__preview-title">{{ t('theme.customEditor.uiPreview') }}</span>
           <div class="theme-editor__preview-row">
             <button
               class="theme-editor__preview-btn"
               :style="{ background: primary }"
-            >主色按钮</button>
+            >{{ t('theme.customEditor.primaryButton') }}</button>
             <button
               class="theme-editor__preview-btn"
               :style="{ background: secondary }"
-            >辅色按钮</button>
+            >{{ t('theme.customEditor.secondaryButton') }}</button>
             <button
               class="theme-editor__preview-btn"
               :style="{ background: accent }"
-            >强调按钮</button>
+            >{{ t('theme.customEditor.accentButton') }}</button>
           </div>
           <div
             class="theme-editor__preview-card"
             :style="{ borderColor: secondary }"
           >
-            这是一个卡片元素，边框使用辅色。
+            {{ t('theme.customEditor.cardPreview') }}
           </div>
           <span
             class="theme-editor__preview-link"
             :style="{ color: accent }"
-          >这是一个强调色链接</span>
+          >{{ t('theme.customEditor.linkPreview') }}</span>
         </div>
       </div>
 
       <!-- Actions -->
       <div class="theme-editor__actions">
-        <button class="theme-editor__btn" @click="emit('cancel')">取消</button>
+        <button class="theme-editor__btn" @click="emit('cancel')">{{ t('theme.customEditor.cancel') }}</button>
         <button class="theme-editor__btn theme-editor__btn--primary" @click="handleSave">
-          {{ isEdit ? '保存' : '创建' }}
+          {{ isEdit ? t('theme.customEditor.save') : t('theme.customEditor.create') }}
         </button>
       </div>
     </div>

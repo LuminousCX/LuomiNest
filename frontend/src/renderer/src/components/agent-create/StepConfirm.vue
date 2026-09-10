@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 /**
  * 智能体创建向导 - 步骤4：确认创建
  *
@@ -10,6 +11,8 @@ import {
   SKILL_ITEMS, STYLE_TAGS,
   type AvatarOption, type AgentFormData
 } from '../../composables/useAgentCreateForm'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   formData: AgentFormData
@@ -58,24 +61,24 @@ const enabledSkills = computed(() =>
           </div>
           <div>
             <h2 class="confirm-name">{{ formData.name }}</h2>
-            <p class="confirm-style">{{ STYLE_TAGS.find(t => t.id === formData.selectedStyle)?.label }} 风格</p>
+            <p class="confirm-style">{{ STYLE_TAGS.find(tag => tag.id === formData.selectedStyle)?.label }} {{ t('agentCreate.confirm.styleSuffix') }}</p>
           </div>
         </div>
         <div class="confirm-divider"></div>
         <div class="confirm-details">
           <div class="detail-row">
-            <span class="detail-label">描述</span>
-            <span class="detail-value">{{ formData.description || '未设置' }}</span>
+            <span class="detail-label">{{ t('agentCreate.confirm.description') }}</span>
+            <span class="detail-value">{{ formData.description || t('agentCreate.confirm.notSet') }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">已选技能</span>
-            <span class="detail-value">{{ enabledSkills.length }} 项</span>
+            <span class="detail-label">{{ t('agentCreate.confirm.skills') }}</span>
+            <span class="detail-value">{{ t('agentCreate.confirm.skillCount', { n: enabledSkills.length }) }}</span>
           </div>
         </div>
       </LumiCard>
 
       <LumiCard class="confirm-card side-confirm" padding="md">
-        <h4 class="side-title">已启用技能</h4>
+        <h4 class="side-title">{{ t('agentCreate.confirm.enabledSkills') }}</h4>
         <div class="enabled-skills-list">
           <div
             v-for="skill in enabledSkills"
@@ -85,7 +88,7 @@ const enabledSkills = computed(() =>
             <component :is="skill.icon" :size="14" />
             <span>{{ skill.name }}</span>
           </div>
-          <p v-if="enabledSkills.length === 0" class="no-skills">暂无启用技能</p>
+          <p v-if="enabledSkills.length === 0" class="no-skills">{{ t('agentCreate.confirm.noSkills') }}</p>
         </div>
       </LumiCard>
     </div>

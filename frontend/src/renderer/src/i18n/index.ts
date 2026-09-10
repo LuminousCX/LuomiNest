@@ -1,14 +1,13 @@
 /**
  * vue-i18n 实例（全局唯一）
  *
- * 语言包按域拆分 key（common / welcome / nav / settings / splash / login），
- * 三语言全量打包（M1 规模小，无需懒加载）；fallback 为中文，保证任何缺失 key 不白屏。
- * 初始语言同步读 localStorage，避免非中文用户首屏闪中文。
+ * 语言包组织：
+ * - 根级整包 locales/<lang>.json：核心域（common / welcome / nav / settings / splash / login）
+ * - 按域拆分 locales/<lang>/<domain>.json：M3 起各领域迁移时增量添加（workspace / avatar / …）
+ *   两者都会被下方 glob 收集合并，顶层 key 全局唯一（各域互不重叠）。
+ * fallback 为中文，保证任何缺失 key 不白屏；初始语言同步读 localStorage，避免非中文用户首屏闪中文。
  */
-import { createI18n } from 'vue-i18n'
-import zhCN from './locales/zh-CN.json'
-import enUS from './locales/en-US.json'
-import jaJP from './locales/ja-JP.json'
+import { createI18n, type DefaultLocaleMessageSchema } from 'vue-i18n'
 
 export const DEFAULT_LOCALE: AppLocale = 'zh-CN'
 
@@ -37,14 +36,34 @@ function getInitialLocale(): AppLocale {
   }
 }
 
+/** 收集某个语言的全部 JSON（根级整包 + 按域拆分文件），合并为一个 messages 对象 */
+function collectLocaleMessages(locale: AppLocale): Record<string, unknown> {
+  const modules = import.meta.glob('./locales/**/*.json', { eager: true }) as Record<
+    string,
+    { default: Record<string, unknown> }
+  >
+  const merged: Record<string, unknown> = {}
+  for (const [path, mod] of Object.entries(modules)) {
+    const rest = path.replace('./locales/', '')
+    const fileLocale = rest.endsWith('.json')
+      ? rest.slice(0, -'.json'.length)
+      : rest.split('/')[0]
+    if (fileLocale !== locale) continue
+    Object.assign(merged, mod.default)
+  }
+  return merged
+}
+
+// glob 收集的 messages 是宽类型（Record<string, unknown>），断言为 vue-i18n 的消息 schema，
+// 保证 Composer 泛型推断正常（i18n.global.locale 保持可写的 Ref 而非退化为 string）
 export const i18n = createI18n({
   legacy: false,
   locale: getInitialLocale(),
   fallbackLocale: 'zh-CN',
   messages: {
-    'zh-CN': zhCN,
-    'en-US': enUS,
-    'ja-JP': jaJP,
+    'zh-CN': collectLocaleMessages('zh-CN') as DefaultLocaleMessageSchema,
+    'en-US': collectLocaleMessages('en-US') as DefaultLocaleMessageSchema,
+    'ja-JP': collectLocaleMessages('ja-JP') as DefaultLocaleMessageSchema,
   },
   missingWarn: false,
   fallbackWarn: false,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Star, Download, Users,
   Check, AlertCircle, RefreshCw, Trash2,
@@ -28,6 +29,8 @@ const emit = defineEmits<{
   toggleLike: []
 }>()
 
+const { t } = useI18n()
+
 const downloadDisplay = computed(() => {
   return formatDownloadCount(props.item.downloadCount)
 })
@@ -38,9 +41,9 @@ const likeDisplay = computed(() => {
 
 const formatEta = (seconds: number): string => {
   if (seconds <= 0) return ''
-  if (seconds < 60) return `${Math.round(seconds)}秒`
-  if (seconds < 3600) return `${Math.round(seconds / 60)}分钟`
-  return `${Math.round(seconds / 3600)}小时`
+  if (seconds < 60) return t('market.detail.sec', { n: Math.round(seconds) })
+  if (seconds < 3600) return t('market.detail.min', { n: Math.round(seconds / 60) })
+  return t('market.detail.hour', { n: Math.round(seconds / 3600) })
 }
 </script>
 
@@ -54,10 +57,10 @@ const formatEta = (seconds: number): string => {
         <h1 class="hero-title">{{ item.name }}</h1>
         <span v-if="item.author?.verified" class="verified-badge">
           <Check :size="12" />
-          认证
+          {{ t('market.detail.verified') }}
         </span>
       </div>
-      <p class="hero-author">by {{ item.author?.name || '未知' }}</p>
+      <p class="hero-author">by {{ item.author?.name || t('market.detail.unknownAuthor') }}</p>
       <p class="hero-summary">{{ item.summary }}</p>
       <div class="hero-stats">
         <div class="hero-stat">
@@ -68,12 +71,12 @@ const formatEta = (seconds: number): string => {
         <div class="hero-stat">
           <Download :size="14" />
           <span class="stat-value">{{ downloadDisplay }}</span>
-          <span class="stat-label">下载</span>
+          <span class="stat-label">{{ t('market.detail.downloads') }}</span>
         </div>
         <div class="hero-stat">
           <Users :size="14" />
           <span class="stat-value">{{ item.installedCount }}</span>
-          <span class="stat-label">安装</span>
+          <span class="stat-label">{{ t('market.detail.installs') }}</span>
         </div>
         <button
           :class="['hero-stat', 'hero-like-btn', { liked: item.isLiked }]"
@@ -82,7 +85,7 @@ const formatEta = (seconds: number): string => {
         >
           <Heart :size="14" :fill="item.isLiked ? 'currentColor' : 'none'" />
           <span class="stat-value">{{ likeDisplay }}</span>
-          <span class="stat-label">喜欢</span>
+          <span class="stat-label">{{ t('market.detail.likes') }}</span>
         </button>
       </div>
       <div class="hero-tags">
@@ -102,7 +105,7 @@ const formatEta = (seconds: number): string => {
             <template #icon>
               <RefreshCw :size="12" />
             </template>
-            {{ errorType === 'uninstall' ? '重试卸载' : '重试安装' }}
+            {{ errorType === 'uninstall' ? t('market.detail.retryUninstall') : t('market.detail.retryInstall') }}
           </LumiButton>
         </div>
 
@@ -113,11 +116,11 @@ const formatEta = (seconds: number): string => {
           <div class="progress-info">
             <span class="progress-message">
               <Loader2 :size="13" class="spin-animation" />
-              {{ downloadProgress.message || (downloadProgress.status === 'downloading' ? '正在下载...' : '正在安装...') }}
+              {{ downloadProgress.message || (downloadProgress.status === 'downloading' ? t('market.detail.downloading') : t('market.detail.installing')) }}
             </span>
             <span class="progress-stats">
               <span v-if="downloadProgress.speed" class="progress-speed">{{ formatSpeed(downloadProgress.speed) }}</span>
-              <span v-if="downloadProgress.eta" class="progress-eta">剩余 {{ formatEta(downloadProgress.eta) }}</span>
+              <span v-if="downloadProgress.eta" class="progress-eta">{{ t('market.detail.etaLeft', { time: formatEta(downloadProgress.eta) }) }}</span>
               <span class="progress-pct">{{ Math.round(downloadProgress.progress) }}%</span>
             </span>
           </div>
@@ -133,7 +136,7 @@ const formatEta = (seconds: number): string => {
         <template v-if="installStatus === 'installed'">
           <button class="action-btn installed-btn" disabled>
             <Check :size="16" />
-            <span>已安装 v{{ item.version }}</span>
+            <span>{{ t('market.detail.installedVersion', { version: item.version }) }}</span>
           </button>
           <button
             class="action-btn uninstall-btn"
@@ -142,21 +145,21 @@ const formatEta = (seconds: number): string => {
           >
             <Trash2 v-if="!uninstallLoading" :size="14" />
             <Loader2 v-else :size="14" class="spin-animation" />
-            <span>{{ uninstallLoading ? '卸载中...' : '卸载' }}</span>
+            <span>{{ uninstallLoading ? t('market.detail.uninstalling') : t('market.detail.uninstall') }}</span>
           </button>
         </template>
 
         <template v-else-if="installStatus === 'downloading' || installStatus === 'installing' || installStatus === 'updating'">
           <button class="action-btn operating-btn" disabled>
             <Loader2 :size="14" class="spin-animation" />
-            <span>{{ downloadProgress?.message || '处理中...' }}</span>
+            <span>{{ downloadProgress?.message || t('market.detail.processing') }}</span>
           </button>
         </template>
 
         <template v-else-if="installStatus === 'error'">
           <button class="action-btn install-btn" @click="emit('retry')">
             <RefreshCw :size="14" />
-            <span>{{ errorType === 'uninstall' ? '重试卸载' : '重试安装' }}</span>
+            <span>{{ errorType === 'uninstall' ? t('market.detail.retryUninstall') : t('market.detail.retryInstall') }}</span>
           </button>
         </template>
 
@@ -168,7 +171,7 @@ const formatEta = (seconds: number): string => {
           >
             <Download v-if="!installLoading" :size="14" />
             <Loader2 v-else :size="14" class="spin-animation" />
-            <span>{{ installLoading ? '请求中...' : '安装' }}</span>
+            <span>{{ installLoading ? t('market.detail.requesting') : t('market.status.install') }}</span>
           </button>
         </template>
       </div>

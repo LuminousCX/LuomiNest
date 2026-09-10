@@ -9,6 +9,7 @@
  */
 import { ref } from 'vue'
 import type { AgentProfile } from '../types'
+import { i18n } from '../i18n'
 import { useAgentStore } from '../stores/agent'
 import { useToast } from './useToast'
 
@@ -125,7 +126,7 @@ export const useWorkspaceAgentDialogs = (options: UseWorkspaceAgentDialogsOption
       showCreateDialog.value = false
       newAgentForm.value = createEmptyForm()
     } catch (e: unknown) {
-      createDialogError.value = extractErrorMessage(e, '创建 Agent 失败')
+      createDialogError.value = extractErrorMessage(e, i18n.global.t('workspace.createAgentFailed'))
     }
   }
 
@@ -161,7 +162,7 @@ export const useWorkspaceAgentDialogs = (options: UseWorkspaceAgentDialogsOption
       showEditDialog.value = false
       editingAgentId.value = null
     } catch (e: unknown) {
-      toast.error(extractErrorMessage(e, '更新 Agent 失败'))
+      toast.error(extractErrorMessage(e, i18n.global.t('workspace.updateAgentFailed')))
     }
   }
 
@@ -174,7 +175,7 @@ export const useWorkspaceAgentDialogs = (options: UseWorkspaceAgentDialogsOption
       editingAgentId.value = null
       options.onAgentDeleted(deletedId)
     } catch (e: unknown) {
-      toast.error(extractErrorMessage(e, '删除 Agent 失败'))
+      toast.error(extractErrorMessage(e, i18n.global.t('workspace.deleteAgentFailed')))
     }
   }
 

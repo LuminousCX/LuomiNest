@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   RefreshCw, Plus, Server, Shield, Zap,
   FileText, MessageSquare, Trash, Eye, MessageCircle,
@@ -18,6 +19,7 @@ import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
 import { formatShortDateTime } from '../../utils/format'
 
 const store = usePlatformStore()
+const { t } = useI18n()
 
 const rightTab = ref<'conversations' | 'logs'>('conversations')
 const showAddDialog = ref(false)
@@ -75,15 +77,15 @@ onMounted(() => {
 
 <template>
   <div class="platform-view">
-    <LumiPageHeader title="平台接入" desc="第三方平台对话浏览 — 管理平台连接、查看对话与握手日志">
+    <LumiPageHeader :title="t('platform.title')" :desc="t('platform.desc')">
       <template #actions>
         <LumiButton variant="secondary" size="sm" :disabled="store.loading" @click="handleRefresh">
           <template #icon><RefreshCw :size="15" :class="{ 'spin-animation': store.loading }" /></template>
-          刷新
+          {{ t('platform.refresh') }}
         </LumiButton>
         <LumiButton variant="primary" size="sm" @click="showAddDialog = true">
           <template #icon><Plus :size="15" /></template>
-          添加平台
+          {{ t('platform.addPlatform') }}
         </LumiButton>
       </template>
     </LumiPageHeader>
@@ -93,21 +95,21 @@ onMounted(() => {
         <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--brand"><Server :size="18" /></div>
         <div class="stat-info">
           <span class="stat-value">{{ store.stats.totalPlatforms }}</span>
-          <span class="stat-label">已接入平台</span>
+          <span class="stat-label">{{ t('platform.stat.platforms') }}</span>
         </div>
       </LumiCard>
       <LumiCard class="stat-card" :style="{ animationDelay: '0.10s' }" padding="md">
         <div class="lumi-icon-wrap lumi-icon-wrap--md stat-active"><Zap :size="18" /></div>
         <div class="stat-info">
           <span class="stat-value">{{ store.stats.activeConnections }}</span>
-          <span class="stat-label">活跃连接</span>
+          <span class="stat-label">{{ t('platform.stat.active') }}</span>
         </div>
       </LumiCard>
       <LumiCard class="stat-card" :style="{ animationDelay: '0.15s' }" padding="md">
         <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--brand"><Shield :size="18" /></div>
         <div class="stat-info">
           <span class="stat-value">{{ store.stats.totalMessages }}</span>
-          <span class="stat-label">消息总量</span>
+          <span class="stat-label">{{ t('platform.stat.messages') }}</span>
         </div>
       </LumiCard>
     </div>
@@ -129,8 +131,8 @@ onMounted(() => {
           <div class="detail-empty">
             <LumiEmptyState
               :icon="Eye"
-              title="选择平台查看详情"
-              description="从左侧列表选择一个平台实例，查看其对话记录与日志"
+              :title="t('platform.selectInstance')"
+              :description="t('platform.selectInstanceDesc')"
               size="md"
             />
           </div>
@@ -141,23 +143,23 @@ onMounted(() => {
           <div class="detail-tabs">
             <button :class="['detail-tab', { active: rightTab === 'conversations' }]" @click="rightTab = 'conversations'">
               <MessageSquare :size="14" />
-              <span>对话</span>
+              <span>{{ t('platform.tabConversations') }}</span>
               <span v-if="store.selectedConversations.length" class="tab-count">
                 {{ store.selectedConversations.length }}
               </span>
             </button>
             <button :class="['detail-tab', { active: rightTab === 'logs' }]" @click="rightTab = 'logs'">
               <FileText :size="14" />
-              <span>日志</span>
+              <span>{{ t('platform.tabLogs') }}</span>
               <span class="tab-count">{{ store.logTotal }}</span>
             </button>
             <div class="detail-tab-actions">
               <template v-if="rightTab === 'logs'">
                 <div class="log-filter-group">
-                  <button :class="['log-filter-btn', { active: !store.logLevelFilter }]" @click="handleLogLevelFilter(null)">全部</button>
-                  <button :class="['log-filter-btn', { active: store.logLevelFilter === 'error' }]" @click="handleLogLevelFilter('error')">错误</button>
-                  <button :class="['log-filter-btn', { active: store.logLevelFilter === 'warning' }]" @click="handleLogLevelFilter('warning')">警告</button>
-                  <button :class="['log-filter-btn', { active: store.logLevelFilter === 'success' }]" @click="handleLogLevelFilter('success')">成功</button>
+                  <button :class="['log-filter-btn', { active: !store.logLevelFilter }]" @click="handleLogLevelFilter(null)">{{ t('platform.filterAll') }}</button>
+                  <button :class="['log-filter-btn', { active: store.logLevelFilter === 'error' }]" @click="handleLogLevelFilter('error')">{{ t('platform.filterError') }}</button>
+                  <button :class="['log-filter-btn', { active: store.logLevelFilter === 'warning' }]" @click="handleLogLevelFilter('warning')">{{ t('platform.filterWarning') }}</button>
+                  <button :class="['log-filter-btn', { active: store.logLevelFilter === 'success' }]" @click="handleLogLevelFilter('success')">{{ t('platform.filterSuccess') }}</button>
                 </div>
                 <LumiButton
                   v-if="store.selectedInstanceId"
@@ -165,7 +167,7 @@ onMounted(() => {
                   icon-only
                   variant="ghost"
                   class="tab-action-btn"
-                  aria-label="清空日志"
+                  :aria-label="t('platform.clearLogs')"
                   @click="handleClearLogs"
                 >
                   <template #icon><Trash :size="13" /></template>
@@ -173,13 +175,13 @@ onMounted(() => {
               </template>
               <template v-if="rightTab === 'conversations' && store.selectedConversationDetail">
                 <div class="conv-detail-header-info">
-                  <span class="conv-detail-title-text">{{ store.selectedConversationDetail.title || '对话详情' }}</span>
+                  <span class="conv-detail-title-text">{{ store.selectedConversationDetail.title || t('platform.conversationDetail') }}</span>
                   <span class="conv-detail-meta">
                     {{ store.selectedConversationDetail.platformName }}
                     <template v-if="store.selectedConversationDetail.senderName">
                       · {{ store.selectedConversationDetail.senderName }}
                     </template>
-                    <template v-if="store.selectedConversationDetail.isGroup"> · 群聊</template>
+                    <template v-if="store.selectedConversationDetail.isGroup"> · {{ t('platform.groupChat') }}</template>
                   </span>
                 </div>
               </template>
@@ -193,7 +195,7 @@ onMounted(() => {
               <div class="conv-section-header">
                 <MessageCircle :size="12" />
                 <span>{{ store.selectedInstance.name }}</span>
-                <span class="conv-section-count">{{ store.selectedConversations.length }} 个对话</span>
+                <span class="conv-section-count">{{ t('platform.conversationCount', { n: store.selectedConversations.length }) }}</span>
               </div>
               <button
                 class="conv-new-btn"
@@ -201,14 +203,14 @@ onMounted(() => {
                 @click="handleCreateConversation"
               >
                 <Plus :size="13" />
-                <span>{{ creatingConversation ? '创建中...' : '新建对话' }}</span>
+                <span>{{ creatingConversation ? t('platform.creating') : t('platform.newConversation') }}</span>
               </button>
               <div class="conv-list">
                 <div v-if="store.selectedConversations.length === 0" class="conv-list-empty-wrap">
                   <LumiEmptyState
                     :icon="MessageSquare"
-                    title="暂无对话记录"
-                    description="该平台暂未推送任何对话"
+                    :title="t('platform.noConversations')"
+                    :description="t('platform.noConversationsDesc')"
                     size="sm"
                   />
                 </div>
@@ -226,10 +228,10 @@ onMounted(() => {
                   </span>
                   <span class="conv-item-time">{{ formatMessageTime(c.time) }}</span>
                 </div>
-                <span class="conv-item-title">{{ c.title || '未命名对话' }}</span>
+                <span class="conv-item-title">{{ c.title || t('platform.unnamedConversation') }}</span>
                 <div class="conv-item-footer">
-                  <span class="conv-item-preview">{{ c.preview || '暂无消息' }}</span>
-                  <span class="conv-item-count">{{ c.messageCount }} 条</span>
+                  <span class="conv-item-preview">{{ c.preview || t('platform.noMessages') }}</span>
+                  <span class="conv-item-count">{{ t('platform.messageCount', { n: c.messageCount }) }}</span>
                 </div>
               </div>
               </div>
@@ -238,14 +240,14 @@ onMounted(() => {
             <div class="conv-detail-sub-panel">
               <div class="detail-notice">
                 <Eye :size="14" />
-                <span>只读模式 — 对话来自第三方平台推送</span>
+                <span>{{ t('platform.readonlyNotice') }}</span>
               </div>
               <PlatformConversationPanel v-if="store.selectedConversationDetail" />
               <div v-else class="conv-detail-empty-wrap">
                 <LumiEmptyState
                   :icon="Eye"
-                  title="选择对话查看详情"
-                  description="从左侧对话列表中选择一个对话，查看消息内容"
+                  :title="t('platform.selectConversation')"
+                  :description="t('platform.selectConversationDesc')"
                   size="sm"
                 />
               </div>

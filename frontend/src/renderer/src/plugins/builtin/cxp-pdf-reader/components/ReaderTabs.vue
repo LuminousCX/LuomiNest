@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 /**
  * ReaderTabs — PDF 阅读器多标签栏。
  *
@@ -16,6 +17,8 @@ interface CxPdfTab {
   pageCount: number
   loaded: boolean
 }
+
+const { t } = useI18n()
 
 const props = defineProps<{
   tabs: CxPdfTab[]
@@ -84,7 +87,7 @@ const handleClose = (e: MouseEvent, tabId: string) => {
 
       <button
         class="tab-new"
-        title="新建标签（打开文件）"
+        :title="t('pdfReader.tabs.newTabTitle')"
         @click="emit('new-tab')"
       >
         <Plus :size="14" />

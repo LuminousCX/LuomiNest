@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Info,
   Check,
@@ -16,6 +17,7 @@ import { useToast } from '../../composables/useToast'
 
 const modelStore = useModelStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const providers = computed(() => modelStore.providers)
 const contextOverrides = computed(() => modelStore.contextOverrides)
@@ -62,8 +64,8 @@ const providerNameMap = computed(() => {
 const isContextWindowValid = computed(() => {
   const val = contextWindowSize.value
   if (val === 0) return { valid: true, error: '' }
-  if (val < 4096) return { valid: false, error: '上下文窗口大小不能小于 4096 tokens' }
-  if (val > 2000000) return { valid: false, error: '上下文窗口大小不能超过 2,000,000 tokens' }
+  if (val < 4096) return { valid: false, error: t('aiModel.context.errWindowTooSmall') }
+  if (val > 2000000) return { valid: false, error: t('aiModel.context.errWindowTooLarge') }
   return { valid: true, error: '' }
 })
 
@@ -91,17 +93,17 @@ const handleSaveGlobal = async () => {
       summaryProvider: summaryProvider.value,
     })
     saveStatus.value = 'saved'
-    toast.success('上下文配置已保存')
+    toast.success(t('aiModel.context.savedToast'))
     setTimeout(() => { saveStatus.value = 'idle' }, 2000)
   } catch {
     saveStatus.value = 'error'
-    toast.error('上下文配置保存失败')
+    toast.error(t('aiModel.context.saveErrorToast'))
     setTimeout(() => { saveStatus.value = 'idle' }, 3000)
   }
 }
 
 const formatTokens = (n: number) => {
-  if (n === 0) return '自动'
+  if (n === 0) return t('aiModel.context.auto')
   if (n >= 1000000) return `${(n / 1000000).toFixed(2)}M`
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
   return `${n}`
@@ -135,7 +137,7 @@ const scheduleUpdateModel = (item: typeof contextOverrides.value[0]) => {
         maxContextTokens: item.maxContextTokens,
       })
     } catch {
-      toast.error(`模型 ${item.name || item.modelId} 保存失败`)
+      toast.error(t('aiModel.context.modelSaveFailed', { name: item.name || item.modelId }))
     } finally {
       updatingModels.value.delete(key)
     }
@@ -182,8 +184,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
             <SlidersHorizontal :size="18" />
           </div>
           <div class="section-header-text">
-            <h3 class="section-title">上下文与压缩</h3>
-            <span class="section-tag">全局</span>
+            <h3 class="section-title">{{ t('aiModel.context.title') }}</h3>
+            <span class="section-tag">{{ t('aiModel.context.tagGlobal') }}</span>
           </div>
         </div>
         <button
@@ -196,8 +198,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
 
       <Transition name="info-expand">
         <div v-if="showInfo" class="section-info-panel">
-          <p>配置 LLM 上下文窗口大小和对话压缩策略，优化长对话场景下的性能与成本。</p>
-          <p class="info-tip">上下文窗口为 0 时自动从模型配置的最大上下文长度推断；LM 摘要压缩比例推荐 40% - 50%。</p>
+          <p>{{ t('aiModel.context.info') }}</p>
+          <p class="info-tip">{{ t('aiModel.context.infoTip') }}</p>
         </div>
       </Transition>
 
@@ -205,8 +207,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
         <!-- 上下文窗口大小 -->
         <div class="form-group">
           <div class="form-label-row">
-            <label class="form-label">全局上下文窗口大小</label>
-            <span class="form-value">{{ contextWindowSize === 0 ? '自动' : formatTokens(contextWindowSize) }}</span>
+            <label class="form-label">{{ t('aiModel.context.globalWindowSize') }}</label>
+            <span class="form-value">{{ contextWindowSize === 0 ? t('aiModel.context.auto') : formatTokens(contextWindowSize) }}</span>
           </div>
           <input
             type="range"
@@ -217,7 +219,7 @@ watch(() => modelStore.modelConfig, (cfg) => {
             class="form-slider"
           />
           <div class="slider-meta">
-            <span class="slider-meta-label">自动</span>
+            <span class="slider-meta-label">{{ t('aiModel.context.auto') }}</span>
             <input
               type="number"
               v-model.number="contextWindowSize"
@@ -232,35 +234,35 @@ watch(() => modelStore.modelConfig, (cfg) => {
           <span v-if="saveValidationError && !isContextWindowValid.valid" class="form-hint hint-error">
             {{ saveValidationError }}
           </span>
-          <span v-else class="form-hint">设为 0 自动按各模型最大上下文推断；手动设置将覆盖所有模型</span>
+          <span v-else class="form-hint">{{ t('aiModel.context.windowHint') }}</span>
         </div>
 
         <!-- 压缩阈值 -->
         <div class="form-group">
           <div class="form-label-row">
-            <label class="form-label">压缩阈值</label>
+            <label class="form-label">{{ t('aiModel.context.compressionThreshold') }}</label>
             <span class="form-value">{{ (compressionThreshold * 100).toFixed(0) }}%</span>
           </div>
           <input type="range" v-model.number="compressionThreshold" min="0.5" max="0.95" step="0.05" class="form-slider" />
-          <div class="slider-labels"><span>早压缩</span><span>晚压缩</span></div>
-          <span class="form-hint">当上下文使用率超过此阈值时触发压缩，值越高压缩越晚触发</span>
+          <div class="slider-labels"><span>{{ t('aiModel.context.compressEarly') }}</span><span>{{ t('aiModel.context.compressLate') }}</span></div>
+          <span class="form-hint">{{ t('aiModel.context.thresholdHint') }}</span>
         </div>
 
         <!-- LM 摘要压缩比例 -->
         <div class="form-group">
           <div class="form-label-row">
-            <label class="form-label">LM 摘要压缩保留比例</label>
+            <label class="form-label">{{ t('aiModel.context.summaryRatioLabel') }}</label>
             <span class="form-value" :class="{ 'value-recommended': compressionRatio >= 40 && compressionRatio <= 50 }">{{ compressionRatio }}%</span>
           </div>
           <input type="range" v-model.number="compressionRatio" min="1" max="100" step="1" class="form-slider" />
-          <div class="slider-labels"><span>1% 激进</span><span class="recommended-badge">推荐 40% - 50%</span><span>100% 不压缩</span></div>
-          <span class="form-hint">摘要后保留的历史上下文占比，数值越低压缩越激进；100% 表示不压缩</span>
+          <div class="slider-labels"><span>{{ t('aiModel.context.ratioAggressive') }}</span><span class="recommended-badge">{{ t('aiModel.context.ratioRecommended') }}</span><span>{{ t('aiModel.context.ratioNone') }}</span></div>
+          <span class="form-hint">{{ t('aiModel.context.ratioHint') }}</span>
         </div>
 
         <!-- 启用 LLM 摘要压缩 -->
         <div class="form-group">
           <div class="toggle-row">
-            <label class="form-label">启用 LLM 摘要压缩</label>
+            <label class="form-label">{{ t('aiModel.context.enableLlmCompress') }}</label>
             <button
               :class="['toggle-switch', { active: llmCompressEnabled }]"
               @click="llmCompressEnabled = !llmCompressEnabled"
@@ -268,17 +270,17 @@ watch(() => modelStore.modelConfig, (cfg) => {
               <span class="toggle-knob" />
             </button>
           </div>
-          <span class="form-hint">开启后，超长对话将使用 LLM 生成摘要以压缩上下文</span>
+          <span class="form-hint">{{ t('aiModel.context.llmCompressHint') }}</span>
         </div>
 
         <!-- 摘要模型（仅启用压缩时显示） -->
         <Transition name="fade-slide">
           <div v-if="llmCompressEnabled" class="summary-config-area">
             <div class="form-group">
-              <label class="form-label">摘要供应商</label>
+              <label class="form-label">{{ t('aiModel.context.summaryProvider') }}</label>
               <div class="form-select-wrap">
                 <select v-model="summaryProvider" class="form-select" @change="onSummaryProviderChange">
-                  <option value="">使用主模型供应商</option>
+                  <option value="">{{ t('aiModel.context.useMainProvider') }}</option>
                   <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
                 <svg class="select-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -286,16 +288,16 @@ watch(() => modelStore.modelConfig, (cfg) => {
             </div>
 
             <div class="form-group">
-              <label class="form-label">摘要模型</label>
+              <label class="form-label">{{ t('aiModel.context.summaryModel') }}</label>
               <div class="form-select-wrap">
                 <select v-model="summaryModel" class="form-select">
-                  <option value="">使用主模型</option>
+                  <option value="">{{ t('aiModel.context.useMainModel') }}</option>
                   <option v-for="m in summaryAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </select>
                 <svg class="select-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
               </div>
               <span v-if="summaryProvider && summaryAvailableModels.length === 0" class="form-hint hint-warn">
-                该供应商暂无模型列表
+                {{ t('aiModel.context.noProviderModels') }}
               </span>
             </div>
           </div>
@@ -310,7 +312,7 @@ watch(() => modelStore.modelConfig, (cfg) => {
           <Check v-else-if="saveStatus === 'saved'" :size="16" />
           <AlertCircle v-else-if="saveStatus === 'error'" :size="16" />
           <Check v-else :size="16" />
-          {{ saveStatus === 'saving' ? '保存中...' : saveStatus === 'saved' ? '已保存' : saveStatus === 'error' ? (saveValidationError || '保存失败') : '保存全局配置' }}
+          {{ saveStatus === 'saving' ? t('aiModel.common.saving') : saveStatus === 'saved' ? t('aiModel.common.saved') : saveStatus === 'error' ? (saveValidationError || t('aiModel.common.saveFailed')) : t('aiModel.context.saveGlobal') }}
         </button>
       </div>
     </div>
@@ -323,21 +325,21 @@ watch(() => modelStore.modelConfig, (cfg) => {
             <Bot :size="18" />
           </div>
           <div class="section-header-text">
-            <h3 class="section-title">模型上下文覆盖</h3>
-            <span class="section-tag">按模型</span>
+            <h3 class="section-title">{{ t('aiModel.context.overridesTitle') }}</h3>
+            <span class="section-tag">{{ t('aiModel.context.tagModel') }}</span>
           </div>
         </div>
-        <span class="section-count">{{ contextOverrides.length }} 个模型</span>
+        <span class="section-count">{{ t('aiModel.context.modelCount', { count: contextOverrides.length }) }}</span>
       </div>
 
       <div class="section-info-panel section-info-panel--inline">
-        <p><MessageSquareText :size="14" /> 此处按模型维度单独设置最大上下文长度与启用状态；未覆盖的模型将使用上方全局设置或自动推断。</p>
+        <p><MessageSquareText :size="14" /> {{ t('aiModel.context.overridesInfo') }}</p>
       </div>
 
       <div v-if="contextOverrides.length === 0" class="empty-state">
         <Bot :size="32" />
-        <p>暂无模型数据</p>
-        <span class="empty-hint">请先添加供应商，系统会自动拉取并存储模型列表</span>
+        <p>{{ t('aiModel.context.emptyTitle') }}</p>
+        <span class="empty-hint">{{ t('aiModel.context.emptyHint') }}</span>
       </div>
 
       <div v-else class="model-groups">
@@ -370,7 +372,7 @@ watch(() => modelStore.modelConfig, (cfg) => {
 
               <div class="model-card-summary">
                 <span class="token-badge">
-                  {{ item.enabled ? (item.maxContextTokens === 0 ? '自动推断' : `最大 ${formatTokens(item.maxContextTokens)}`) : '已禁用' }}
+                  {{ item.enabled ? (item.maxContextTokens === 0 ? t('aiModel.context.autoInferred') : t('aiModel.context.maxBadge', { value: formatTokens(item.maxContextTokens) })) : t('aiModel.context.disabledBadge') }}
                 </span>
                 <Loader2 v-if="updatingModels.has(`${item.providerId}/${item.modelId}`)" :size="14" class="spin-animation" />
               </div>
@@ -379,8 +381,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
                 <div v-if="isExpanded(`${providerId}/${item.modelId}`)" class="model-card-body">
                   <div class="form-group form-group--compact">
                     <div class="form-label-row">
-                      <label class="form-label">最大上下文长度</label>
-                      <span class="form-value">{{ item.maxContextTokens === 0 ? '自动' : formatTokens(item.maxContextTokens) }}</span>
+                      <label class="form-label">{{ t('aiModel.context.maxContextLength') }}</label>
+                      <span class="form-value">{{ item.maxContextTokens === 0 ? t('aiModel.context.auto') : formatTokens(item.maxContextTokens) }}</span>
                     </div>
                     <input
                       type="range"
@@ -392,7 +394,7 @@ watch(() => modelStore.modelConfig, (cfg) => {
                       @change="scheduleUpdateModel(item)"
                     />
                     <div class="slider-meta">
-                      <span class="slider-meta-label">自动</span>
+                      <span class="slider-meta-label">{{ t('aiModel.context.auto') }}</span>
                       <input
                         type="number"
                         v-model.number="item.maxContextTokens"
@@ -405,7 +407,7 @@ watch(() => modelStore.modelConfig, (cfg) => {
                       />
                       <span class="slider-meta-label">{{ formatTokens(sliderMaxForModel(item)) }}</span>
                     </div>
-                    <span class="form-hint">0 表示按模型 ID 自动推断；自定义值将覆盖全局设置</span>
+                    <span class="form-hint">{{ t('aiModel.context.overrideHint') }}</span>
                   </div>
                 </div>
               </Transition>

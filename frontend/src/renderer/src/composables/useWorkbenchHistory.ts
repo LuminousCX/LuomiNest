@@ -5,6 +5,7 @@
  * agentId 通过 options 传入（主 Agent 固定标识）。
  */
 import { ref, computed } from 'vue'
+import { i18n } from '../i18n'
 import { useChatStore } from '../stores/chat'
 import { useDebouncedSearch } from './useDebouncedSearch'
 import { useToast } from './useToast'
@@ -33,10 +34,10 @@ export const useWorkbenchHistory = (options: UseWorkbenchHistoryOptions) => {
     const now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const groups: TimeGroup[] = [
-      { label: '今天', items: [] },
-      { label: '昨天', items: [] },
-      { label: '近7天', items: [] },
-      { label: '更早', items: [] },
+      { label: i18n.global.t('chat.today'), items: [] },
+      { label: i18n.global.t('chat.yesterday'), items: [] },
+      { label: i18n.global.t('chat.last7Days'), items: [] },
+      { label: i18n.global.t('chat.earlier'), items: [] },
     ]
 
     for (const conv of chatStore.conversations) {
@@ -73,7 +74,7 @@ export const useWorkbenchHistory = (options: UseWorkbenchHistoryOptions) => {
       await chatStore.deleteConversation(convId, agentId)
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      toast.error(`删除对话失败：${errMsg}`)
+      toast.error(i18n.global.t('chat.deleteConvFailed', { msg: errMsg }))
     }
   }
 
@@ -94,7 +95,7 @@ export const useWorkbenchHistory = (options: UseWorkbenchHistoryOptions) => {
       return
     }
     if (newTitle.length > 200) {
-      toast.warning('标题过长，请限制在 200 字符以内')
+      toast.warning(i18n.global.t('chat.titleTooLong'))
       return
     }
     const success = await chatStore.renameConversation(renamingConvId.value, newTitle, agentId)
@@ -102,7 +103,7 @@ export const useWorkbenchHistory = (options: UseWorkbenchHistoryOptions) => {
       renamingConvId.value = null
       renamingTitle.value = ''
     } else {
-      toast.error('重命名对话失败，请重试')
+      toast.error(i18n.global.t('chat.renameFailed'))
     }
   }
 

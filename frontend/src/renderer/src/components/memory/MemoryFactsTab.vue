@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { BookOpen, Plus, Search, Filter, ChevronDown, Check, X, Save, Loader2, Archive, Tag, Edit3, Trash2 } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import SearchInput from '../common/SearchInput.vue'
-import { CATEGORY_LABELS, CATEGORY_COLORS, FACT_CATEGORIES } from '../../stores/memory'
+import { categoryLabel, CATEGORY_COLORS, FACT_CATEGORIES } from '../../stores/memory'
 import type { FactItem, FactCategory } from '../../stores/memory'
+
+const { t } = useI18n()
 
 interface Props {
   factCount: number
@@ -50,10 +53,10 @@ function formatExpiresAt(iso: string): string {
 <template>
   <div class="detail-header">
     <BookOpen :size="22" :style="{ color: 'var(--lumi-success)' }" />
-    <h3>记忆事实</h3>
+    <h3>{{ t('memory.facts.title') }}</h3>
     <div class="detail-actions">
       <button class="h-btn primary" @click="emit('startAddFact')">
-        <Plus :size="14" /> 添加事实
+        <Plus :size="14" /> {{ t('memory.facts.add') }}
       </button>
     </div>
   </div>
@@ -62,14 +65,14 @@ function formatExpiresAt(iso: string): string {
     <div class="search-input-wrap">
       <SearchInput
         :model-value="searchQuery"
-        placeholder="搜索事实..."
+        :placeholder="t('memory.facts.searchPlaceholder')"
         @update:model-value="(v) => emit('update:searchQuery', String(v ?? ''))"
       />
     </div>
     <div class="filter-dropdown">
       <button class="filter-btn" @click="emit('update:filterCategory', filterCategory === 'all' ? '' : 'all')">
         <Filter :size="14" />
-        <span>{{ filterCategory === 'all' ? '全部分类' : CATEGORY_LABELS[filterCategory] || '筛选' }}</span>
+        <span>{{ filterCategory === 'all' ? t('memory.facts.allCategories') : categoryLabel(filterCategory) || t('memory.facts.filter') }}</span>
         <ChevronDown :size="14" />
       </button>
       <div v-if="filterCategory !== 'all'" class="filter-options">
@@ -81,7 +84,7 @@ function formatExpiresAt(iso: string): string {
           @click="emit('update:filterCategory', filterCategory === cat ? 'all' : cat)"
         >
           <Check v-if="filterCategory === cat" :size="12" />
-          {{ CATEGORY_LABELS[cat] }}
+          {{ categoryLabel(cat) }}
         </button>
       </div>
     </div>
@@ -93,11 +96,11 @@ function formatExpiresAt(iso: string): string {
         :value="newFactContent"
         @input="emit('update:newFactContent', ($event.target as HTMLInputElement).value)"
         type="text"
-        placeholder="输入事实内容..."
+        :placeholder="t('memory.facts.contentPlaceholder')"
         class="add-fact-input"
       />
       <select :value="newFactCategory" @change="emit('update:newFactCategory', ($event.target as HTMLSelectElement).value as FactCategory)" class="add-fact-select">
-        <option v-for="cat in FACT_CATEGORIES" :key="cat" :value="cat">{{ CATEGORY_LABELS[cat] }}</option>
+        <option v-for="cat in FACT_CATEGORIES" :key="cat" :value="cat">{{ categoryLabel(cat) }}</option>
       </select>
       <button class="h-btn primary" @click="emit('confirmAddFact')" :disabled="!newFactContent.trim() || saving">
         <Loader2 v-if="saving" :size="14" class="spin-animation" />
@@ -109,14 +112,14 @@ function formatExpiresAt(iso: string): string {
 
   <div v-if="factCount === 0 && !showAddFact" class="empty-section">
     <Archive :size="28" />
-    <p>暂无记忆事实</p>
-    <p class="empty-hint">对话中AI会自动提取并存储用户信息</p>
+    <p>{{ t('memory.facts.empty') }}</p>
+    <p class="empty-hint">{{ t('memory.facts.emptyHint') }}</p>
   </div>
 
   <div v-else-if="filteredFactCount === 0" class="empty-section">
     <Search :size="28" />
-    <p>没有找到匹配的事实</p>
-    <p class="empty-hint">尝试调整搜索关键词或筛选条件</p>
+    <p>{{ t('memory.facts.noMatch') }}</p>
+    <p class="empty-hint">{{ t('memory.facts.noMatchHint') }}</p>
   </div>
 
   <div v-else class="facts-grid">
@@ -125,7 +128,7 @@ function formatExpiresAt(iso: string): string {
         <div class="fact-category-header" :style="{ '--cat-color': CATEGORY_COLORS[cat] || 'var(--task-sky)' }">
           <div class="cat-dot"></div>
           <Tag :size="13" :style="{ color: CATEGORY_COLORS[cat] || 'var(--task-sky)' }" />
-          <span class="cat-label">{{ CATEGORY_LABELS[cat] || cat }}</span>
+          <span class="cat-label">{{ categoryLabel(cat) || cat }}</span>
           <span class="cat-count">{{ items.length }}</span>
         </div>
         <div class="fact-items">
@@ -144,7 +147,7 @@ function formatExpiresAt(iso: string): string {
                   class="add-fact-input"
                 />
                 <select :value="editFactCategory" @change="emit('update:editFactCategory', ($event.target as HTMLSelectElement).value as FactCategory)" class="add-fact-select">
-                  <option v-for="c in FACT_CATEGORIES" :key="c" :value="c">{{ CATEGORY_LABELS[c] }}</option>
+                  <option v-for="c in FACT_CATEGORIES" :key="c" :value="c">{{ categoryLabel(c) }}</option>
                 </select>
                 <button class="h-btn primary" @click="emit('saveEditFact')" :disabled="saving">
                   <Save :size="13" />
@@ -155,9 +158,9 @@ function formatExpiresAt(iso: string): string {
             <template v-else>
               <div class="fact-main">
                 <span class="fact-text" :class="{ 'fact-deprecated': !fact.is_latest }">{{ fact.content }}</span>
-                <span v-if="!fact.is_latest" class="fact-badge deprecated">已替代</span>
-                <span v-if="fact.expires_at" class="fact-badge expires">过期: {{ formatExpiresAt(fact.expires_at) }}</span>
-                <span v-if="fact.source_error" class="fact-error">避免: {{ fact.source_error }}</span>
+                <span v-if="!fact.is_latest" class="fact-badge deprecated">{{ t('memory.facts.deprecated') }}</span>
+                <span v-if="fact.expires_at" class="fact-badge expires">{{ t('memory.facts.expires', { date: formatExpiresAt(fact.expires_at) }) }}</span>
+                <span v-if="fact.source_error" class="fact-error">{{ t('memory.facts.avoid', { msg: fact.source_error }) }}</span>
               </div>
               <div class="fact-actions">
                 <button class="fact-btn" @click="emit('startEditFact', fact)"><Edit3 :size="12" /></button>

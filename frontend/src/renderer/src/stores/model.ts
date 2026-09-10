@@ -4,6 +4,7 @@ import type { ModelProvider, ModelInfo, ModelConfig, ProviderTemplate, TTSConfig
 import { useApi } from '../composables/useApi'
 import { PROVIDER_LOGOS } from '../config/provider-logos'
 import { getItem, setItem } from '../utils/storage'
+import { i18n } from '../i18n'
 
 const unwrapData = <T>(result: T | { data: T }): T => {
   if (typeof result === 'object' && result !== null && 'data' in result) {
@@ -12,14 +13,13 @@ const unwrapData = <T>(result: T | { data: T }): T => {
   return result as T
 }
 
-const LOCAL_TEMPLATES: ProviderTemplate[] = [
+const LOCAL_TEMPLATES: Array<Omit<ProviderTemplate, 'description'>> = [
   {
     id: 'openai',
     name: 'OpenAI',
     vendor: 'openai_compatible',
     baseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-4o-mini',
-    description: 'GPT-4o / o3 等旗舰模型',
     category: 'cloud',
     color: PROVIDER_LOGOS.openai.color,
     initials: PROVIDER_LOGOS.openai.initials,
@@ -32,7 +32,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.anthropic.com/v1',
     defaultModel: 'claude-sonnet-4-20250514',
-    description: 'Claude Opus / Sonnet 系列',
     category: 'cloud',
     color: PROVIDER_LOGOS.anthropic.color,
     initials: PROVIDER_LOGOS.anthropic.initials,
@@ -45,7 +44,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.deepseek.com',
     defaultModel: 'deepseek-chat',
-    description: 'DeepSeek V3 / R1 推理模型',
     category: 'cloud',
     color: PROVIDER_LOGOS.deepseek.color,
     initials: PROVIDER_LOGOS.deepseek.initials,
@@ -58,7 +56,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     defaultModel: 'gemini-2.0-flash',
-    description: 'Gemini 2.0 Flash / Pro',
     category: 'cloud',
     color: PROVIDER_LOGOS.google.color,
     initials: PROVIDER_LOGOS.google.initials,
@@ -71,7 +68,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.mistral.ai/v1',
     defaultModel: 'mistral-small-latest',
-    description: 'Mistral / Codestral 系列',
     category: 'cloud',
     color: PROVIDER_LOGOS.mistral.color,
     initials: PROVIDER_LOGOS.mistral.initials,
@@ -84,7 +80,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.groq.com/openai/v1',
     defaultModel: 'llama-3.3-70b-versatile',
-    description: 'LPU 超高速推理',
     category: 'cloud',
     color: PROVIDER_LOGOS.groq.color,
     initials: PROVIDER_LOGOS.groq.initials,
@@ -97,7 +92,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.x.ai/v1',
     defaultModel: 'grok-3-mini-beta',
-    description: 'Grok 系列模型',
     category: 'cloud',
     color: PROVIDER_LOGOS.xai.color,
     initials: PROVIDER_LOGOS.xai.initials,
@@ -110,7 +104,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.moonshot.cn/v1',
     defaultModel: 'moonshot-v1-8k',
-    description: '月之暗面 Kimi 长上下文',
     category: 'cloud',
     color: PROVIDER_LOGOS.moonshot.color,
     initials: PROVIDER_LOGOS.moonshot.initials,
@@ -123,7 +116,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     defaultModel: 'glm-4-flash',
-    description: 'GLM-4 系列',
     category: 'cloud',
     color: PROVIDER_LOGOS.zhipu.color,
     initials: PROVIDER_LOGOS.zhipu.initials,
@@ -136,7 +128,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     defaultModel: 'qwen-plus',
-    description: '阿里云通义千问系列',
     category: 'cloud',
     color: PROVIDER_LOGOS.dashscope.color,
     initials: PROVIDER_LOGOS.dashscope.initials,
@@ -149,7 +140,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.siliconflow.cn/v1',
     defaultModel: 'Qwen/Qwen2.5-7B-Instruct',
-    description: '硅基流动多模型平台',
     category: 'aggregator',
     color: PROVIDER_LOGOS.siliconflow.color,
     initials: PROVIDER_LOGOS.siliconflow.initials,
@@ -162,7 +152,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://openrouter.ai/api/v1',
     defaultModel: 'openai/gpt-4o-mini',
-    description: '聚合 200+ 模型网关',
     category: 'aggregator',
     color: PROVIDER_LOGOS.openrouter.color,
     initials: PROVIDER_LOGOS.openrouter.initials,
@@ -175,7 +164,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.together.xyz/v1',
     defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-    description: '开源模型云端推理',
     category: 'aggregator',
     color: PROVIDER_LOGOS.together.color,
     initials: PROVIDER_LOGOS.together.initials,
@@ -187,7 +175,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.fireworks.ai/inference/v1',
     defaultModel: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
-    description: '高速开源模型推理',
     category: 'aggregator',
     color: PROVIDER_LOGOS.fireworks.color,
     initials: PROVIDER_LOGOS.fireworks.initials,
@@ -199,7 +186,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'ollama',
     baseUrl: 'http://localhost:11434/v1',
     defaultModel: 'qwen2.5:7b',
-    description: '本地 Ollama 推理引擎',
     category: 'local',
     color: PROVIDER_LOGOS.ollama.color,
     initials: PROVIDER_LOGOS.ollama.initials,
@@ -212,7 +198,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'http://localhost:1234/v1',
     defaultModel: '',
-    description: '本地 LM Studio 推理',
     category: 'local',
     color: PROVIDER_LOGOS.lmstudio.color,
     initials: PROVIDER_LOGOS.lmstudio.initials,
@@ -225,7 +210,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'http://localhost:8000/v1',
     defaultModel: '',
-    description: '本地 vLLM 高性能推理',
     category: 'local',
     color: PROVIDER_LOGOS.vllm.color,
     initials: PROVIDER_LOGOS.vllm.initials,
@@ -238,7 +222,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://inference-api.nousresearch.com/v1',
     defaultModel: 'deephermes-3-llama-3-8b-preview:free',
-    description: 'Nous Research Hermes 系列模型',
     category: 'cloud',
     color: PROVIDER_LOGOS.nous.color,
     initials: PROVIDER_LOGOS.nous.initials,
@@ -250,7 +233,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
     defaultModel: 'meta/llama-3.1-70b-instruct',
-    description: 'NVIDIA NIM 云端推理',
     category: 'cloud',
     color: PROVIDER_LOGOS.nvidia.color,
     initials: PROVIDER_LOGOS.nvidia.initials,
@@ -263,7 +245,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.stepfun.ai/v1',
     defaultModel: 'step-2-16k',
-    description: '阶跃星辰 Step 系列模型',
     category: 'cloud',
     color: PROVIDER_LOGOS.stepfun.color,
     initials: PROVIDER_LOGOS.stepfun.initials,
@@ -276,7 +257,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api-inference.huggingface.co/v1',
     defaultModel: 'meta-llama/Llama-3.3-70B-Instruct',
-    description: 'HuggingFace 推理 API 聚合',
     category: 'aggregator',
     color: PROVIDER_LOGOS.huggingface.color,
     initials: PROVIDER_LOGOS.huggingface.initials,
@@ -288,7 +268,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.arcee.ai/api/v1',
     defaultModel: 'arcee-blitz',
-    description: 'Arcee AI 模型融合平台',
     category: 'cloud',
     color: PROVIDER_LOGOS.arcee.color,
     initials: PROVIDER_LOGOS.arcee.initials,
@@ -300,7 +279,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.gmi-serving.com/v1',
     defaultModel: 'gmi-cloud-1',
-    description: 'GMI 云端推理服务',
     category: 'cloud',
     color: PROVIDER_LOGOS.gmi.color,
     initials: PROVIDER_LOGOS.gmi.initials,
@@ -312,7 +290,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.minimax.chat/v1',
     defaultModel: 'MiniMax-Text-01',
-    description: 'MiniMax 文本模型',
     category: 'cloud',
     color: PROVIDER_LOGOS.minimax.color,
     initials: PROVIDER_LOGOS.minimax.initials,
@@ -325,7 +302,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://sdk.vercel.ai/api/v1',
     defaultModel: 'openai/gpt-4o-mini',
-    description: 'Vercel AI 网关聚合',
     category: 'aggregator',
     color: PROVIDER_LOGOS.vercel.color,
     initials: PROVIDER_LOGOS.vercel.initials,
@@ -337,7 +313,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     defaultModel: 'doubao-pro-32k',
-    description: '火山引擎豆包大模型',
     category: 'cloud',
     color: PROVIDER_LOGOS.volcengine.color,
     initials: PROVIDER_LOGOS.volcengine.initials,
@@ -350,7 +325,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://aihubmix.com/v1',
     defaultModel: 'gpt-4o-mini',
-    description: 'AiHubMix 多模型聚合网关',
     category: 'aggregator',
     color: PROVIDER_LOGOS.aihubmix.color,
     initials: PROVIDER_LOGOS.aihubmix.initials,
@@ -363,7 +337,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://qianfan.baidubce.com/v2',
     defaultModel: 'ernie-4.0-turbo-8k',
-    description: '百度千帆文心大模型',
     category: 'cloud',
     color: PROVIDER_LOGOS.qianfan.color,
     initials: PROVIDER_LOGOS.qianfan.initials,
@@ -376,7 +349,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://api.xiaomimimo.com/v1',
     defaultModel: 'mimo-v2-flash',
-    description: '小米 MiMo 系列模型',
     category: 'cloud',
     color: PROVIDER_LOGOS.xiaomimimo.color,
     initials: PROVIDER_LOGOS.xiaomimimo.initials,
@@ -389,7 +361,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: 'https://YOUR_RESOURCE.openai.azure.com/openai/deployments',
     defaultModel: 'gpt-4o',
-    description: 'Azure OpenAI 服务',
     category: 'cloud',
     color: PROVIDER_LOGOS.azure.color,
     initials: PROVIDER_LOGOS.azure.initials,
@@ -402,7 +373,6 @@ const LOCAL_TEMPLATES: ProviderTemplate[] = [
     vendor: 'openai_compatible',
     baseUrl: '',
     defaultModel: '',
-    description: '自定义 OpenAI 兼容端点',
     category: 'aggregator',
     color: '#6b7280',
     initials: 'CU',
@@ -497,95 +467,12 @@ interface RawModelConfig {
   summary_provider?: string
 }
 
-const TTS_VOICES = [
-  { value: 'zh-CN-XiaoxiaoNeural', label: '晓晓（女·温柔）' },
-  { value: 'zh-CN-YunxiNeural', label: '云希（男·阳光）' },
-  { value: 'zh-CN-YunjianNeural', label: '云健（男·沉稳）' },
-  { value: 'zh-CN-XiaoyiNeural', label: '晓艺（女·活泼）' },
-  { value: 'en-US-JennyNeural', label: 'Jenny（EN·Female）' },
-  { value: 'en-US-GuyNeural', label: 'Guy（EN·Male）' },
-  { value: 'ja-JP-NanamiNeural', label: '七海（JA·Female）' },
-  { value: 'ja-JP-KeitaNeural', label: '圭太（JA·Male）' },
-] as const
-
-/** TTS 引擎选项（与后端 engine_meta 对应） */
-const TTS_ENGINE_OPTIONS = [
-  { value: 'auto', label: '自动（按降级链选择）', category: 'auto', needsApiKey: false },
-  { value: 'edge-tts', label: 'Edge TTS（在线·免费）', category: 'cloud-free', needsApiKey: false },
-  { value: 'gemini', label: 'Gemini TTS（Google·免费层）', category: 'cloud-paid', needsApiKey: true },
-  { value: 'minimax', label: 'MiniMax TTS（高质量）', category: 'cloud-paid', needsApiKey: true },
-  { value: 'siliconflow', label: 'SiliconFlow TTS（CosyVoice2 云端）', category: 'cloud-paid', needsApiKey: true },
-  { value: 'fish-audio', label: 'Fish Audio TTS（多语言）', category: 'cloud-paid', needsApiKey: true },
-  { value: 'sherpa-onnx', label: 'Sherpa-ONNX TTS（离线神经网络）', category: 'local', needsApiKey: false },
-  { value: 'local', label: '本地 TTS（pyttsx3·CPU）', category: 'local', needsApiKey: false },
-] as const
-
-/** 各引擎音色列表 */
-const TTS_ENGINE_VOICES: Record<string, Array<{ value: string; label: string }>> = {
-  'edge-tts': [...TTS_VOICES],
-  'gemini': [
-    { value: 'Leda', label: 'Leda' },
-    { value: 'Puck', label: 'Puck' },
-    { value: 'Charon', label: 'Charon' },
-    { value: 'Aoede', label: 'Aoede' },
-    { value: 'Fenrir', label: 'Fenrir' },
-    { value: 'Kore', label: 'Kore' },
-    { value: 'Orus', label: 'Orus' },
-    { value: 'Zephyr', label: 'Zephyr' },
-    { value: 'Sulochan', label: 'Sulochan' },
-    { value: 'Algenib', label: 'Algenib' },
-    { value: 'Achernar', label: 'Achernar' },
-    { value: 'Aldebaran', label: 'Aldebaran' },
-    { value: 'Bellatrix', label: 'Bellatrix' },
-    { value: 'Castor', label: 'Castor' },
-    { value: 'Pollux', label: 'Pollux' },
-  ],
-  'minimax': [
-    { value: 'English_Graceful_Lady', label: 'English Graceful Lady（英文优雅女声）' },
-    { value: 'English_Trustworth_Man', label: 'English Trustworth Man（英文可靠男声）' },
-    { value: 'Chinese_Gentle_Lady', label: 'Chinese Gentle Lady（中文温柔女声）' },
-    { value: 'Chinese_Serene_Man', label: 'Chinese Serene Man（中文沉稳男声）' },
-    { value: 'Chinese_Expressive_Girl', label: 'Chinese Expressive Girl（中文活泼女孩）' },
-    { value: 'Chinese_Fresh_Girl', label: 'Chinese Fresh Girl（中文清新女声）' },
-    { value: 'Japanese_Calm_Woman', label: 'Japanese Calm Woman（日文冷静女声）' },
-  ],
-  'siliconflow': [
-    { value: 'FunAudioLLM/CosyVoice2-0.5B:alex', label: 'Alex（英文男声）' },
-    { value: 'FunAudioLLM/CosyVoice2-0.5B:benjamin', label: 'Benjamin（英文男声）' },
-    { value: 'FunAudioLLM/CosyVoice2-0.5B:bella', label: 'Bella（英文女声）' },
-    { value: 'FunAudioLLM/CosyVoice2-0.5B:claire', label: 'Claire（英文女声）' },
-    { value: 'FunAudioLLM/CosyVoice2-0.5B:david', label: 'David（英文男声）' },
-    { value: 'FunAudioLLM/CosyVoice2-0.5B:diana', label: 'Diana（英文女声）' },
-    { value: 'FunAudioLLM/CosyVoice2-0.5B:emily', label: 'Emily（英文女声）' },
-    { value: 'FunAudioLLM/CosyVoice2-0.5B:grace', label: 'Grace（英文女声）' },
-  ],
-  'fish-audio': [
-    { value: '', label: '请输入 reference_id 或角色名称' },
-  ],
-  'sherpa-onnx': [
-    { value: 'zh-female', label: '中文女声' },
-    { value: 'en-female', label: '英文女声' },
-  ],
-  'local': [],
-  'auto': [],
-}
-
-/** 各引擎默认模型 */
+/** 各引擎默认模型（模型 ID，非用户可见文案） */
 const TTS_ENGINE_DEFAULT_MODEL: Record<string, string> = {
   'gemini': 'gemini-2.5-flash-preview-tts',
   'minimax': 'speech-2.8-hd',
   'siliconflow': 'FunAudioLLM/CosyVoice2-0.5B',
 }
-const STT_LANGUAGES = [
-  { value: 'zh-CN', label: '中文（简体）' },
-  { value: 'zh-TW', label: '中文（繁体）' },
-  { value: 'en-US', label: 'English' },
-  { value: 'ja-JP', label: '日本語' },
-  { value: 'ko-KR', label: '한국어' },
-  { value: 'fr-FR', label: 'Français' },
-  { value: 'de-DE', label: 'Deutsch' },
-  { value: 'es-ES', label: 'Español' },
-] as const
 
 export interface ContextOverrideItem {
   id: string
@@ -639,6 +526,100 @@ export const useModelStore = defineStore('model', () => {
 
   const contextOverrides = ref<ContextOverrideItem[]>([])
 
+  // ── 用户可见的静态选项：标签经 i18n（computed 包裹，随语言切换响应式更新） ──
+
+  /** 本地供应商模板（description 按 aiModel.templates.<id> 从 i18n 解析） */
+  const localTemplates = computed<ProviderTemplate[]>(() =>
+    LOCAL_TEMPLATES.map((t) => ({
+      ...t,
+      description: i18n.global.t(`aiModel.templates.${t.id}`),
+    })),
+  )
+
+  const ttsVoices = computed(() => [
+    { value: 'zh-CN-XiaoxiaoNeural', label: i18n.global.t('aiModel.ttsVoices.xiaoxiao') },
+    { value: 'zh-CN-YunxiNeural', label: i18n.global.t('aiModel.ttsVoices.yunxi') },
+    { value: 'zh-CN-YunjianNeural', label: i18n.global.t('aiModel.ttsVoices.yunjian') },
+    { value: 'zh-CN-XiaoyiNeural', label: i18n.global.t('aiModel.ttsVoices.xiaoyi') },
+    { value: 'en-US-JennyNeural', label: i18n.global.t('aiModel.ttsVoices.jenny') },
+    { value: 'en-US-GuyNeural', label: i18n.global.t('aiModel.ttsVoices.guy') },
+    { value: 'ja-JP-NanamiNeural', label: i18n.global.t('aiModel.ttsVoices.nanami') },
+    { value: 'ja-JP-KeitaNeural', label: i18n.global.t('aiModel.ttsVoices.keita') },
+  ])
+
+  /** TTS 引擎选项（与后端 engine_meta 对应） */
+  const ttsEngineOptions = computed(() => [
+    { value: 'auto', label: i18n.global.t('aiModel.ttsEngines.auto'), category: 'auto', needsApiKey: false },
+    { value: 'edge-tts', label: i18n.global.t('aiModel.ttsEngines.edge-tts'), category: 'cloud-free', needsApiKey: false },
+    { value: 'gemini', label: i18n.global.t('aiModel.ttsEngines.gemini'), category: 'cloud-paid', needsApiKey: true },
+    { value: 'minimax', label: i18n.global.t('aiModel.ttsEngines.minimax'), category: 'cloud-paid', needsApiKey: true },
+    { value: 'siliconflow', label: i18n.global.t('aiModel.ttsEngines.siliconflow'), category: 'cloud-paid', needsApiKey: true },
+    { value: 'fish-audio', label: i18n.global.t('aiModel.ttsEngines.fish-audio'), category: 'cloud-paid', needsApiKey: true },
+    { value: 'sherpa-onnx', label: i18n.global.t('aiModel.ttsEngines.sherpa-onnx'), category: 'local', needsApiKey: false },
+    { value: 'local', label: i18n.global.t('aiModel.ttsEngines.local'), category: 'local', needsApiKey: false },
+  ])
+
+  /** 各引擎音色列表 */
+  const ttsEngineVoices = computed<Record<string, Array<{ value: string; label: string }>>>(() => ({
+    'edge-tts': [...ttsVoices.value],
+    'gemini': [
+      { value: 'Leda', label: 'Leda' },
+      { value: 'Puck', label: 'Puck' },
+      { value: 'Charon', label: 'Charon' },
+      { value: 'Aoede', label: 'Aoede' },
+      { value: 'Fenrir', label: 'Fenrir' },
+      { value: 'Kore', label: 'Kore' },
+      { value: 'Orus', label: 'Orus' },
+      { value: 'Zephyr', label: 'Zephyr' },
+      { value: 'Sulochan', label: 'Sulochan' },
+      { value: 'Algenib', label: 'Algenib' },
+      { value: 'Achernar', label: 'Achernar' },
+      { value: 'Aldebaran', label: 'Aldebaran' },
+      { value: 'Bellatrix', label: 'Bellatrix' },
+      { value: 'Castor', label: 'Castor' },
+      { value: 'Pollux', label: 'Pollux' },
+    ],
+    'minimax': [
+      { value: 'English_Graceful_Lady', label: i18n.global.t('aiModel.engineVoices.minimax.gracefulLady') },
+      { value: 'English_Trustworth_Man', label: i18n.global.t('aiModel.engineVoices.minimax.trustworthyMan') },
+      { value: 'Chinese_Gentle_Lady', label: i18n.global.t('aiModel.engineVoices.minimax.gentleLady') },
+      { value: 'Chinese_Serene_Man', label: i18n.global.t('aiModel.engineVoices.minimax.sereneMan') },
+      { value: 'Chinese_Expressive_Girl', label: i18n.global.t('aiModel.engineVoices.minimax.expressiveGirl') },
+      { value: 'Chinese_Fresh_Girl', label: i18n.global.t('aiModel.engineVoices.minimax.freshGirl') },
+      { value: 'Japanese_Calm_Woman', label: i18n.global.t('aiModel.engineVoices.minimax.calmWoman') },
+    ],
+    'siliconflow': [
+      { value: 'FunAudioLLM/CosyVoice2-0.5B:alex', label: i18n.global.t('aiModel.engineVoices.siliconflow.alex') },
+      { value: 'FunAudioLLM/CosyVoice2-0.5B:benjamin', label: i18n.global.t('aiModel.engineVoices.siliconflow.benjamin') },
+      { value: 'FunAudioLLM/CosyVoice2-0.5B:bella', label: i18n.global.t('aiModel.engineVoices.siliconflow.bella') },
+      { value: 'FunAudioLLM/CosyVoice2-0.5B:claire', label: i18n.global.t('aiModel.engineVoices.siliconflow.claire') },
+      { value: 'FunAudioLLM/CosyVoice2-0.5B:david', label: i18n.global.t('aiModel.engineVoices.siliconflow.david') },
+      { value: 'FunAudioLLM/CosyVoice2-0.5B:diana', label: i18n.global.t('aiModel.engineVoices.siliconflow.diana') },
+      { value: 'FunAudioLLM/CosyVoice2-0.5B:emily', label: i18n.global.t('aiModel.engineVoices.siliconflow.emily') },
+      { value: 'FunAudioLLM/CosyVoice2-0.5B:grace', label: i18n.global.t('aiModel.engineVoices.siliconflow.grace') },
+    ],
+    'fish-audio': [
+      { value: '', label: i18n.global.t('aiModel.engineVoices.fish-audio.input') },
+    ],
+    'sherpa-onnx': [
+      { value: 'zh-female', label: i18n.global.t('aiModel.engineVoices.sherpa-onnx.zhFemale') },
+      { value: 'en-female', label: i18n.global.t('aiModel.engineVoices.sherpa-onnx.enFemale') },
+    ],
+    'local': [],
+    'auto': [],
+  }))
+
+  const sttLanguages = computed(() => [
+    { value: 'zh-CN', label: i18n.global.t('aiModel.sttLanguages.zhCN') },
+    { value: 'zh-TW', label: i18n.global.t('aiModel.sttLanguages.zhTW') },
+    { value: 'en-US', label: i18n.global.t('aiModel.sttLanguages.en') },
+    { value: 'ja-JP', label: i18n.global.t('aiModel.sttLanguages.ja') },
+    { value: 'ko-KR', label: i18n.global.t('aiModel.sttLanguages.ko') },
+    { value: 'fr-FR', label: i18n.global.t('aiModel.sttLanguages.fr') },
+    { value: 'de-DE', label: i18n.global.t('aiModel.sttLanguages.de') },
+    { value: 'es-ES', label: i18n.global.t('aiModel.sttLanguages.es') },
+  ])
+
   const defaultProvider = computed(() =>
     providers.value.find(p => p.isDefault)
   )
@@ -655,7 +636,7 @@ export const useModelStore = defineStore('model', () => {
 
   const allTemplates = computed(() => {
     const backendIds = new Set(templates.value.map(t => t.id))
-    const unique = LOCAL_TEMPLATES.filter(t => !backendIds.has(t.id))
+    const unique = localTemplates.value.filter(t => !backendIds.has(t.id))
     return [...templates.value, ...unique]
   })
 
@@ -747,7 +728,7 @@ export const useModelStore = defineStore('model', () => {
       const result = await apiGet<RawTemplate[]>('/models/providers/templates')
       const raw = Array.isArray(result) ? result : []
       templates.value = raw.map(t => {
-        const local = LOCAL_TEMPLATES.find(lt => lt.id === t.id)
+        const local = localTemplates.value.find(lt => lt.id === t.id)
         return {
           id: t.id,
           name: t.name,
@@ -1141,10 +1122,10 @@ export const useModelStore = defineStore('model', () => {
     updateTTSConfig,
     updateSTTConfig,
     fetchSTTEngines,
-    TTS_VOICES,
-    TTS_ENGINE_OPTIONS,
-    TTS_ENGINE_VOICES,
+    TTS_VOICES: ttsVoices,
+    TTS_ENGINE_OPTIONS: ttsEngineOptions,
+    TTS_ENGINE_VOICES: ttsEngineVoices,
     TTS_ENGINE_DEFAULT_MODEL,
-    STT_LANGUAGES,
+    STT_LANGUAGES: sttLanguages,
   }
 })

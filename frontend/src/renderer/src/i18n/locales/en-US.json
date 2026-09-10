@@ -1,6 +1,13 @@
 {
   "common": {
-    "skip": "Skip"
+    "skip": "Skip",
+    "empty": "No data yet",
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{n} min ago",
+      "hoursAgo": "{n} h ago",
+      "daysAgo": "{n} d ago"
+    }
   },
   "welcome": {
     "title": "Welcome to",
@@ -158,5 +165,32 @@
     "login": "Sign In",
     "loggingIn": "Signing in...",
     "skipUse": "Skip and explore first"
+  },
+  "route": {
+    "welcome": "Welcome - LuomiNest",
+    "loading": "Loading - LuomiNest",
+    "login": "Sign In - LuomiNest",
+    "workbench": "Workbench - LuomiNest",
+    "workspace": "Conversations - LuomiNest",
+    "platform": "Platforms - LuomiNest",
+    "devices": "Devices & Groups - LuomiNest",
+    "desktopPet": "LuomiNest Desktop Pet",
+    "petChat": "LuomiNest Companion Chat",
+    "models": "Models - LuomiNest",
+    "about": "About the Developer - LuomiNest",
+    "license": "Project References - LuomiNest",
+    "privacyDetail": "Privacy & Compliance - LuomiNest",
+    "avatar": "Avatar Workshop - LuomiNest",
+    "stats": "Data Stats - LuomiNest",
+    "console": "Console - LuomiNest",
+    "tasks": "Schedule - LuomiNest",
+    "smartHome": "Smart Home - LuomiNest",
+    "workflow": "Workflows - LuomiNest",
+    "browser": "Browser - LuomiNest",
+    "settings": "Settings - LuomiNest",
+    "memory": "Memory Hub - LuomiNest",
+    "market": "Marketplace - LuomiNest",
+    "marketDetail": "Marketplace Details - LuomiNest",
+    "agentCreate": "Create Agent - LuomiNest"
   }
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Bot,
   Users,
@@ -22,6 +23,7 @@ import { useAgentStore } from '../../stores/agent'
 import type { GroupInfo, GroupMessage, CollaborationPhase, CollaborationSubTask, AgentProfile } from '../../types'
 import { useAutoScroll } from '../../composables/useAutoScroll'
 
+const { t } = useI18n()
 const agentStore = useAgentStore()
 
 /** 根据 senderId 查找 agent 的头像 URL */
@@ -61,12 +63,12 @@ const groupChatInputModel = computed<string>({
 const phaseLabel = computed(() => {
   if (!props.collaborationPhase) return ''
   const labels: Record<CollaborationPhase, string> = {
-    analyzing: '分析中',
-    dispatching: '分配任务',
-    executing: '执行中',
-    synthesizing: '综合结果',
-    completed: '已完成',
-    failed: '失败',
+    analyzing: t('workspace.phaseAnalyzing'),
+    dispatching: t('workspace.phaseDispatching'),
+    executing: t('workspace.phaseExecuting'),
+    synthesizing: t('workspace.phaseSynthesizing'),
+    completed: t('workspace.phaseCompleted'),
+    failed: t('workspace.phaseFailed'),
   }
   return labels[props.collaborationPhase]
 })
@@ -130,22 +132,22 @@ defineExpose({ scrollToBottom })
         <div class="chat-title-text">
           <h3>{{ group?.name }}</h3>
           <span class="chat-status-line">
-            {{ group?.members.length }} 成员 · {{ group?.aiCount }} AI
+            {{ t('workspace.membersSummary', { members: group?.members.length, ai: group?.aiCount }) }}
           </span>
         </div>
       </div>
       <div class="chat-actions">
         <button
           :class="['chat-action-btn', { active: collaborationMode }]"
-          title="协作模式"
+          :title="t('workspace.collabMode')"
           @click="emit('toggle-collaboration-mode')"
         >
           <Zap :size="15" />
         </button>
-        <button class="chat-action-btn" title="添加 Agent" @click="emit('add-agent')">
+        <button class="chat-action-btn" :title="t('workspace.addAgent')" @click="emit('add-agent')">
           <UserPlus :size="15" />
         </button>
-        <button class="chat-action-btn" title="更多">
+        <button class="chat-action-btn" :title="t('workspace.more')">
           <MoreVertical :size="15" />
         </button>
       </div>
@@ -154,7 +156,7 @@ defineExpose({ scrollToBottom })
     <div class="collaboration-bar" v-if="collaborationMode">
       <div class="collab-mode-indicator">
         <Zap :size="12" />
-        <span>多 Agent 协作模式</span>
+        <span>{{ t('workspace.collabModeBanner') }}</span>
       </div>
       <div class="collab-phase" v-if="collaborationActive && collaborationPhase">
         <component
@@ -224,12 +226,12 @@ defineExpose({ scrollToBottom })
         <div class="collab-progress-inner">
           <Loader2 :size="14" class="spin-animation" />
           <span class="collab-progress-text">
-            <template v-if="collaborationPhase === 'analyzing'">调度员正在分析任务...</template>
-            <template v-else-if="collaborationPhase === 'dispatching'">正在分配子任务...</template>
+            <template v-if="collaborationPhase === 'analyzing'">{{ t('workspace.collabAnalyzing') }}</template>
+            <template v-else-if="collaborationPhase === 'dispatching'">{{ t('workspace.collabDispatching') }}</template>
             <template v-else-if="collaborationPhase === 'executing'">
-              Agent 团队执行中 ({{ collaborationTasks.filter(t => t.status === 'completed').length }}/{{ collaborationTasks.length }})
+              {{ t('workspace.collabExecuting', { done: collaborationTasks.filter(tk => tk.status === 'completed').length, total: collaborationTasks.length }) }}
             </template>
-            <template v-else-if="collaborationPhase === 'synthesizing'">调度员正在综合结果...</template>
+            <template v-else-if="collaborationPhase === 'synthesizing'">{{ t('workspace.collabSynthesizing') }}</template>
           </span>
         </div>
       </div>
@@ -239,24 +241,24 @@ defineExpose({ scrollToBottom })
           <Loader2 :size="14" class="spin-animation" />
           <span class="collab-progress-text">
             {{ respondingAgentNames.length > 0
-              ? `${respondingAgentNames.join('、')} 正在思考...`
-              : 'Agent 正在响应...' }}
+              ? t('workspace.agentsThinking', { names: respondingAgentNames.join('、') })
+              : t('workspace.agentResponding') }}
           </span>
         </div>
       </div>
 
       <div v-if="messages.length === 0 && !collaborationActive" class="chat-empty">
         <MessageCircle :size="32" />
-        <p>群聊已创建，添加 Agent 开始协作</p>
+        <p>{{ t('workspace.groupEmpty') }}</p>
       </div>
     </div>
 
     <div class="group-chat-input-bar">
       <div class="input-tools">
-        <button class="input-tool-btn" title="图片">
+        <button class="input-tool-btn" :title="t('workspace.image')">
           <ImagePlus :size="16" />
         </button>
-        <button class="input-tool-btn" title="语音">
+        <button class="input-tool-btn" :title="t('workspace.voice')">
           <Mic :size="16" />
         </button>
       </div>
@@ -264,7 +266,7 @@ defineExpose({ scrollToBottom })
         <input
           v-model="groupChatInputModel"
           type="text"
-          :placeholder="collaborationMode ? '输入消息，Agent 团队将协作处理...' : '发送消息到群聊...'"
+          :placeholder="collaborationMode ? t('workspace.phGroupCollab') : t('workspace.phGroupChat')"
           :disabled="sendingGroupMessage || collaborationActive || agentsResponding"
           @keydown.enter="emit('send-group-message')"
         />

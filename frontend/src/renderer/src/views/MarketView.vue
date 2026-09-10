@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { Puzzle, Sparkles, SlidersHorizontal, X, Bot, Database, Globe, Check, Loader2, Github, RefreshCw } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
@@ -19,6 +20,7 @@ import { vClickOutside } from '../directives/clickOutside'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const store = useMarketplaceStore()
 const repoSourceStore = useRepoSourceStore()
 const registryStore = useRegistrySourceStore()
@@ -120,30 +122,30 @@ const headerConfig = computed(() => {
   if (activeTab.value === 'plugin') {
     return {
       icon: Puzzle,
-      title: '插件市场',
-      subtitle: '扩展 LuomiNest 的能力边界',
-      allLabel: '全部插件',
+      title: t('market.tab.plugin'),
+      subtitle: t('market.plugin.subtitle'),
+      allLabel: t('market.plugin.allLabel'),
       emptyIcon: Puzzle,
-      emptyText: '没有找到匹配的插件',
+      emptyText: t('market.plugin.empty'),
     }
   }
   if (activeTab.value === 'skill') {
     return {
       icon: Sparkles,
-      title: '技能市场',
-      subtitle: '赋予 AI 更丰富的专业技能',
-      allLabel: '全部技能',
+      title: t('market.tab.skill'),
+      subtitle: t('market.skill.subtitle'),
+      allLabel: t('market.skill.allLabel'),
       emptyIcon: Sparkles,
-      emptyText: '没有找到匹配的技能',
+      emptyText: t('market.skill.empty'),
     }
   }
   return {
     icon: Bot,
-    title: '智能体市场',
-    subtitle: '打造专属 AI 智能助手',
-    allLabel: '全部智能体',
+    title: t('market.tab.agent'),
+    subtitle: t('market.agent.subtitle'),
+    allLabel: t('market.agent.allLabel'),
     emptyIcon: Bot,
-    emptyText: '没有找到匹配的智能体',
+    emptyText: t('market.agent.empty'),
   }
 })
 
@@ -171,8 +173,8 @@ function toggleFilters() {
   <div class="market-view">
     <div class="market-header animate-fade-in">
       <div class="market-header__text">
-        <h1 class="market-title">扩展</h1>
-        <p class="market-desc">插件、技能与智能体，一站式管理</p>
+        <h1 class="market-title">{{ t('market.title') }}</h1>
+        <p class="market-desc">{{ t('market.desc') }}</p>
       </div>
       <div class="market-switch">
         <button
@@ -180,21 +182,21 @@ function toggleFilters() {
           @click="switchTab('plugin')"
         >
           <Puzzle :size="14" />
-          <span>插件市场</span>
+          <span>{{ t('market.tab.plugin') }}</span>
         </button>
         <button
           :class="['switch-btn', { active: activeTab === 'skill' }]"
           @click="switchTab('skill')"
         >
           <Sparkles :size="14" />
-          <span>技能市场</span>
+          <span>{{ t('market.tab.skill') }}</span>
         </button>
         <button
           :class="['switch-btn', { active: activeTab === 'agent' }]"
           @click="switchTab('agent')"
         >
           <Bot :size="14" />
-          <span>智能体市场</span>
+          <span>{{ t('market.tab.agent') }}</span>
         </button>
       </div>
     </div>
@@ -211,7 +213,7 @@ function toggleFilters() {
         >
           <Globe :size="14" />
           <span class="source-quick-label">
-            {{ registryStore.activeSource?.name || '发布源' }}
+            {{ registryStore.activeSource?.name || t('market.sourceFallback') }}
           </span>
           <Loader2
             v-if="registryStore.loading || registryStore.switching"
@@ -227,10 +229,10 @@ function toggleFilters() {
             @click.stop
           >
             <div class="source-quick-dropdown-header">
-              <span>选择发布源</span>
+              <span>{{ t('market.selectSource') }}</span>
               <button
                 class="source-quick-refresh"
-                title="重新测试延迟"
+                :title="t('market.retestLatency')"
                 :disabled="registryStore.loading"
                 @click="registryStore.pingSources()"
               >
@@ -288,11 +290,11 @@ function toggleFilters() {
         <div class="sidebar-filter-toggle">
           <button :class="['filter-toggle-btn', { active: showFilters }]" @click="toggleFilters">
             <SlidersHorizontal :size="14" />
-            <span>筛选</span>
+            <span>{{ t('market.filters') }}</span>
           </button>
           <button :class="['filter-toggle-btn', { active: showRepoSource }]" @click="showRepoSource = !showRepoSource">
             <Database :size="14" />
-            <span>来源</span>
+            <span>{{ t('market.sources') }}</span>
           </button>
         </div>
 
@@ -305,7 +307,7 @@ function toggleFilters() {
         <Transition name="filter-slide">
           <div v-if="showFilters" class="sidebar-filters">
             <div class="filters-header">
-              <span>筛选条件</span>
+              <span>{{ t('market.filterConditions') }}</span>
               <button class="close-filters" @click="showFilters = false">
                 <X :size="14" />
               </button>
@@ -319,29 +321,29 @@ function toggleFilters() {
         <!-- 远程数据源指示器 -->
         <div v-if="useRemoteData" class="remote-source-indicator">
           <Database :size="13" />
-          <span>数据来源: {{ repoSourceStore.activeSource?.name || '远程仓库' }}</span>
+          <span>{{ t('market.dataSource', { name: repoSourceStore.activeSource?.name || t('market.remoteFallback') }) }}</span>
           <span v-if="repoSourceStore.activeSource?.lastSyncedAt" class="indicator-sync-time">
-            同步于 {{ formatDateTime(repoSourceStore.activeSource.lastSyncedAt) }}
+            {{ t('market.syncedAt', { time: formatDateTime(repoSourceStore.activeSource.lastSyncedAt) }) }}
           </span>
         </div>
         <div v-else-if="repoSourceStore.activeSource?.status === 'loading'" class="remote-source-indicator loading">
           <Database :size="13" class="spin-animation" />
-          <span>正在同步 {{ repoSourceStore.activeSource?.name || '远程仓库' }}...</span>
+          <span>{{ t('market.syncing', { name: repoSourceStore.activeSource?.name || t('market.remoteFallback') }) }}</span>
         </div>
 
         <MarketplaceBanner
           v-if="installedBannerItems.length > 0 && activeCategory === 'all' && !store.searchQuery"
           :items="installedBannerItems"
-          :title="activeTab === 'plugin' ? '已安装插件' : activeTab === 'skill' ? '已安装技能' : '已安装智能体'"
+          :title="activeTab === 'plugin' ? t('market.installedPlugins') : activeTab === 'skill' ? t('market.installedSkills') : t('market.installedAgents')"
           :type="activeTab"
         />
 
         <div class="items-section">
           <div class="section-header">
             <h3 class="section-title">
-              {{ activeCategory === 'all' ? headerConfig.allLabel : categories.find(c => c.id === activeCategory)?.name || (activeTab === 'plugin' ? '插件' : activeTab === 'skill' ? '技能' : '智能体') }}
+              {{ activeCategory === 'all' ? headerConfig.allLabel : categories.find(c => c.id === activeCategory)?.name || (activeTab === 'plugin' ? t('market.type.plugin') : activeTab === 'skill' ? t('market.type.skill') : t('market.type.agent')) }}
             </h3>
-            <span class="section-count">{{ filteredItems.length }} 个</span>
+            <span class="section-count">{{ t('market.count', { n: filteredItems.length }) }}</span>
           </div>
 
           <div v-if="filteredItems.length > 0" class="items-grid">
@@ -356,11 +358,11 @@ function toggleFilters() {
             v-else
             :icon="headerConfig.emptyIcon"
             :title="headerConfig.emptyText"
-            description="尝试调整筛选条件或搜索关键词"
+            :description="t('market.emptyDescription')"
           >
             <template #action>
               <LumiButton variant="outline" size="sm" @click="activeCategory = 'all'; store.clearSearch()">
-                重置筛选
+                {{ t('market.resetFilters') }}
               </LumiButton>
             </template>
           </LumiEmptyState>

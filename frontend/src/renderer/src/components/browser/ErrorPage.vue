@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { WifiOff, ShieldAlert, SearchX, Globe, ServerCrash, LockKeyhole, RefreshCw } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 
@@ -15,21 +16,23 @@ const emit = defineEmits<{
   newTab: []
 }>()
 
+const { t } = useI18n()
+
 const errorConfig = computed(() => {
   const c = props.code
-  if (c === -2 || c === -105) return { icon: Globe, heading: '找不到网址', suggestion: '请检查网址是否有拼写错误。' }
-  if (c === -3) return { icon: WifiOff, heading: '无法访问此网站', suggestion: '请检查您的网络连接。' }
-  if (c === -7 || c === -118) return { icon: WifiOff, heading: '连接超时', suggestion: '服务器响应时间过长，请稍后重试。' }
-  if (c === -21) return { icon: ShieldAlert, heading: '访问被拒绝', suggestion: '您没有权限访问此页面。' }
-  if (c === -100 || c === -324) return { icon: ServerCrash, heading: '连接被重置', suggestion: '连接被服务器重置，请稍后重试。' }
-  if (c === -101) return { icon: ServerCrash, heading: '连接被拒绝', suggestion: '服务器拒绝了连接请求。' }
-  if (c === -102 || c === -106) return { icon: WifiOff, heading: '无法连接到互联网', suggestion: '请检查您的网络设置，包括防火墙和代理配置。' }
-  if (c === -200) return { icon: LockKeyhole, heading: '您的连接不是私密连接', suggestion: '攻击者可能正试图窃取您的信息。建议不要继续访问此网站。' }
-  if (c === -300) return { icon: SearchX, heading: '网址无效', suggestion: '输入的网址格式不正确，请检查后重试。' }
-  if (c === -502) return { icon: ServerCrash, heading: '服务器错误 (502)', suggestion: '服务器作为网关或代理时收到了无效响应。' }
-  if (c === -503) return { icon: ServerCrash, heading: '服务器错误 (503)', suggestion: '服务器暂时无法处理请求，请稍后重试。' }
-  if (c === -504) return { icon: ServerCrash, heading: '服务器错误 (504)', suggestion: '网关服务器响应超时。' }
-  return { icon: SearchX, heading: '无法访问此网站', suggestion: '页面加载失败。' }
+  if (c === -2 || c === -105) return { icon: Globe, heading: t('browser.error.notFound'), suggestion: t('browser.error.notFoundHint') }
+  if (c === -3) return { icon: WifiOff, heading: t('browser.error.cannotReach'), suggestion: t('browser.error.cannotReachHint') }
+  if (c === -7 || c === -118) return { icon: WifiOff, heading: t('browser.error.timeout'), suggestion: t('browser.error.timeoutHint') }
+  if (c === -21) return { icon: ShieldAlert, heading: t('browser.error.denied'), suggestion: t('browser.error.deniedHint') }
+  if (c === -100 || c === -324) return { icon: ServerCrash, heading: t('browser.error.reset'), suggestion: t('browser.error.resetHint') }
+  if (c === -101) return { icon: ServerCrash, heading: t('browser.error.refused'), suggestion: t('browser.error.refusedHint') }
+  if (c === -102 || c === -106) return { icon: WifiOff, heading: t('browser.error.noInternet'), suggestion: t('browser.error.noInternetHint') }
+  if (c === -200) return { icon: LockKeyhole, heading: t('browser.error.notPrivate'), suggestion: t('browser.error.notPrivateHint') }
+  if (c === -300) return { icon: SearchX, heading: t('browser.error.invalidUrl'), suggestion: t('browser.error.invalidUrlHint') }
+  if (c === -502) return { icon: ServerCrash, heading: t('browser.error.server502'), suggestion: t('browser.error.server502Hint') }
+  if (c === -503) return { icon: ServerCrash, heading: t('browser.error.server503'), suggestion: t('browser.error.server503Hint') }
+  if (c === -504) return { icon: ServerCrash, heading: t('browser.error.server504'), suggestion: t('browser.error.server504Hint') }
+  return { icon: SearchX, heading: t('browser.error.cannotReach'), suggestion: t('browser.error.defaultHint') }
 })
 
 const displayHeading = computed(() => props.title || errorConfig.value.heading)
@@ -55,17 +58,17 @@ const displayUrl = computed(() => {
       <h1 class="error-heading">{{ displayHeading }}</h1>
       
       <div v-if="displayUrl" class="error-url">
-        <span>{{ displayUrl }}</span> 拒绝了连接。
+        <span>{{ displayUrl }}</span> {{ t('browser.error.refusedSuffix') }}
       </div>
       
       <p class="error-suggestion">{{ displayMessage }}</p>
       
       <div class="error-details">
         <details>
-          <summary>详细信息</summary>
+          <summary>{{ t('browser.error.details') }}</summary>
           <div class="details-content">
-            <p>错误代码: ERR_{{ Math.abs(code) }}</p>
-            <p v-if="url">请求 URL: {{ url }}</p>
+            <p>{{ t('browser.error.code', { n: Math.abs(code) }) }}</p>
+            <p v-if="url">{{ t('browser.error.requestUrl', { url }) }}</p>
           </div>
         </details>
       </div>
@@ -75,18 +78,18 @@ const displayUrl = computed(() => {
           <template #icon>
             <RefreshCw :size="16" />
           </template>
-          重新加载
+          {{ t('browser.error.reload') }}
         </LumiButton>
       </div>
 
       <div class="error-suggestions">
-        <h3>请尝试以下办法：</h3>
+        <h3>{{ t('browser.error.tryTitle') }}</h3>
         <ul>
-          <li>检查网络连接</li>
-          <li>检查代理服务器和防火墙</li>
-          <li>检查网址是否正确</li>
+          <li>{{ t('browser.error.checkNetwork') }}</li>
+          <li>{{ t('browser.error.checkProxy') }}</li>
+          <li>{{ t('browser.error.checkUrl') }}</li>
           <li>
-            <button class="btn-link" @click="emit('newTab')">打开新标签页</button>
+            <button class="btn-link" @click="emit('newTab')">{{ t('browser.error.newTab') }}</button>
           </li>
         </ul>
       </div>

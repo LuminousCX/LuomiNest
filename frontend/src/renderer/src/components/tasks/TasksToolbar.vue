@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Plus,
   Filter,
@@ -33,6 +34,8 @@ const emit = defineEmits<{
   openCreate: []
 }>()
 
+const { t } = useI18n()
+
 const currentViewModel = computed<ViewMode>({
   get: () => props.currentView,
   set: (value) => emit('update:currentView', value)
@@ -40,12 +43,12 @@ const currentViewModel = computed<ViewMode>({
 
 
 
-const viewList: { value: ViewMode; label: string; icon: typeof LayoutGrid }[] = [
-  { value: 'card', label: '卡片', icon: LayoutGrid },
-  { value: 'week', label: '周视图', icon: CalendarRange },
-  { value: 'month', label: '月视图', icon: CalendarDays },
-  { value: 'scheduled', label: '定时任务', icon: Timer }
-]
+const viewList = computed<{ value: ViewMode; label: string; icon: typeof LayoutGrid }[]>(() => [
+  { value: 'card', label: t('tasks.view.card'), icon: LayoutGrid },
+  { value: 'week', label: t('tasks.view.week'), icon: CalendarRange },
+  { value: 'month', label: t('tasks.view.month'), icon: CalendarDays },
+  { value: 'scheduled', label: t('tasks.view.scheduled'), icon: Timer }
+])
 
 const showIndicator = (view: ViewMode) => {
   if (view === 'card') return true
@@ -79,7 +82,7 @@ const showIndicator = (view: ViewMode) => {
       </div>
       <button class="today-btn" @click="emit('goToday')">
         <Clock :size="12" />
-        今天
+        {{ t('tasks.today') }}
       </button>
     </div>
   </div>
@@ -91,7 +94,7 @@ const showIndicator = (view: ViewMode) => {
       <div class="pill-icon"><Clock :size="16" /></div>
       <div class="pill-content">
         <strong>{{ tasks.filter(t => t.status === 'progress').length }}</strong>
-        <span>进行中</span>
+        <span>{{ t('tasks.status.progress') }}</span>
       </div>
       <div class="pill-trend positive">&#8599;</div>
     </div>
@@ -99,7 +102,7 @@ const showIndicator = (view: ViewMode) => {
       <div class="pill-icon"><CheckCircle2 :size="16" /></div>
       <div class="pill-content">
         <strong>{{ tasks.filter(t => t.status === 'done').length }}</strong>
-        <span>已完成</span>
+        <span>{{ t('tasks.status.done') }}</span>
       </div>
       <div class="pill-trend positive">&#8599;</div>
     </div>
@@ -107,13 +110,13 @@ const showIndicator = (view: ViewMode) => {
       <div class="pill-icon"><Circle :size="16" /></div>
       <div class="pill-content">
         <strong>{{ tasks.filter(t => t.status === 'pending').length }}</strong>
-        <span>待处理</span>
+        <span>{{ t('tasks.status.pending') }}</span>
       </div>
       <div class="pill-trend neutral">&#8212;</div>
     </div>
     <div class="insight-pill">
       <div class="insight-head">
-        <span>团队效率</span>
+        <span>{{ t('tasks.teamEfficiency') }}</span>
         <span class="insight-growth">&#8599; +19.24%</span>
       </div>
       <div class="insight-grid">
@@ -133,7 +136,7 @@ const showIndicator = (view: ViewMode) => {
     <div class="bottom-bar-left">
       <button class="filter-btn">
         <Filter :size="14" />
-        筛选
+        {{ t('tasks.filter') }}
       </button>
       <div class="color-filters">
         <button
@@ -151,7 +154,7 @@ const showIndicator = (view: ViewMode) => {
     <div class="bottom-bar-right">
       <button class="trash-btn" @click="emit('openCreate')">
         <Trash2 :size="14" />
-        <span>回收站</span>
+        <span>{{ t('tasks.trash') }}</span>
         <span v-if="tasks.filter(t => t.status === 'done').length > 0" class="trash-count">
           {{ tasks.filter(t => t.status === 'done').length }}
         </span>

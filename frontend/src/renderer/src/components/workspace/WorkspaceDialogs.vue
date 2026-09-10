@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Bot } from 'lucide-vue-next'
 import type { AgentProfile, AgentRoleDefinition } from '../../types'
 import type { PresetAvatar, AgentFormState } from '../../composables/useWorkspaceAgentDialogs'
 import ConfirmDialog from '../common/ConfirmDialog.vue'
 import LumiModal from '../common/LumiModal.vue'
 import LumiButton from '../common/LumiButton.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   showCreateDialog: boolean
@@ -133,7 +136,7 @@ const addAgentRoleModel = computed({
 <template>
   <LumiModal
     :visible="showCreateDialog"
-    title="创建自定义 Agent"
+    :title="t('workspace.createAgentTitle')"
     :width="460"
     @update:visible="emit('update:showCreateDialog', $event)"
   >
@@ -155,35 +158,35 @@ const addAgentRoleModel = computed({
         </Transition>
         <div class="form-group">
           <label class="form-label">
-            名称
+            {{ t('workspace.fieldName') }}
             <span class="required-mark">*</span>
           </label>
-          <input v-model="createName" type="text" class="form-input" placeholder="如: 小助手" />
+          <input v-model="createName" type="text" class="form-input" :placeholder="t('workspace.phName')" />
         </div>
         <div class="form-group">
-          <label class="form-label">描述</label>
-          <input v-model="createDescription" type="text" class="form-input" placeholder="如: 通用对话助手" />
+          <label class="form-label">{{ t('workspace.fieldDescription') }}</label>
+          <input v-model="createDescription" type="text" class="form-input" :placeholder="t('workspace.phDescription')" />
         </div>
         <div class="form-group">
-          <label class="form-label">系统提示词</label>
+          <label class="form-label">{{ t('workspace.fieldSystemPrompt') }}</label>
           <textarea
             v-model="createSystemPrompt"
             class="form-input form-textarea"
-            placeholder="定义 Agent 的角色和行为..."
+            :placeholder="t('workspace.phSystemPrompt')"
             rows="4"
           ></textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">头像</label>
+          <label class="form-label">{{ t('workspace.fieldAvatar') }}</label>
           <div class="avatar-mode-toggle">
             <button
               :class="['mode-btn', { active: createAvatarMode === 'color' }]"
               @click="createAvatarMode = 'color'"
-            >颜色</button>
+            >{{ t('workspace.avatarModeColor') }}</button>
             <button
               :class="['mode-btn', { active: createAvatarMode === 'preset' }]"
               @click="createAvatarMode = 'preset'"
-            >预设头像</button>
+            >{{ t('workspace.avatarModePreset') }}</button>
           </div>
           <div v-if="createAvatarMode === 'color'" class="color-picker">
             <button
@@ -207,48 +210,48 @@ const addAgentRoleModel = computed({
           </div>
         </div>
     <template #footer>
-      <LumiButton variant="secondary" size="sm" @click="emit('update:showCreateDialog', false)">取消</LumiButton>
-      <LumiButton variant="primary" size="sm" :disabled="!createName.trim()" @click="emit('create-agent')">创建</LumiButton>
+      <LumiButton variant="secondary" size="sm" @click="emit('update:showCreateDialog', false)">{{ t('workspace.cancel') }}</LumiButton>
+      <LumiButton variant="primary" size="sm" :disabled="!createName.trim()" @click="emit('create-agent')">{{ t('workspace.create') }}</LumiButton>
     </template>
   </LumiModal>
 
   <LumiModal
     :visible="showEditDialog"
-    title="编辑 Agent"
+    :title="t('workspace.editAgentTitle')"
     :width="460"
     @update:visible="emit('update:showEditDialog', $event)"
   >
     <div class="form-group">
           <label class="form-label">
-            名称
+            {{ t('workspace.fieldName') }}
             <span class="required-mark">*</span>
           </label>
-          <input v-model="editName" type="text" class="form-input" placeholder="如: 小助手" />
+          <input v-model="editName" type="text" class="form-input" :placeholder="t('workspace.phName')" />
         </div>
         <div class="form-group">
-          <label class="form-label">描述</label>
-          <input v-model="editDescription" type="text" class="form-input" placeholder="如: 通用对话助手" />
+          <label class="form-label">{{ t('workspace.fieldDescription') }}</label>
+          <input v-model="editDescription" type="text" class="form-input" :placeholder="t('workspace.phDescription')" />
         </div>
         <div class="form-group">
-          <label class="form-label">系统提示词</label>
+          <label class="form-label">{{ t('workspace.fieldSystemPrompt') }}</label>
           <textarea
             v-model="editSystemPrompt"
             class="form-input form-textarea"
-            placeholder="定义 Agent 的角色和行为..."
+            :placeholder="t('workspace.phSystemPrompt')"
             rows="4"
           ></textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">头像</label>
+          <label class="form-label">{{ t('workspace.fieldAvatar') }}</label>
           <div class="avatar-mode-toggle">
             <button
               :class="['mode-btn', { active: editAvatarMode === 'color' }]"
               @click="editAvatarMode = 'color'"
-            >颜色</button>
+            >{{ t('workspace.avatarModeColor') }}</button>
             <button
               :class="['mode-btn', { active: editAvatarMode === 'preset' }]"
               @click="editAvatarMode = 'preset'"
-            >预设头像</button>
+            >{{ t('workspace.avatarModePreset') }}</button>
           </div>
           <div v-if="editAvatarMode === 'color'" class="color-picker">
             <button
@@ -272,9 +275,9 @@ const addAgentRoleModel = computed({
           </div>
         </div>
     <template #footer>
-      <LumiButton variant="danger-ghost" size="sm" class="edit-delete-btn" @click="emit('delete-agent')">删除</LumiButton>
-      <LumiButton variant="secondary" size="sm" @click="emit('update:showEditDialog', false)">取消</LumiButton>
-      <LumiButton variant="primary" size="sm" :disabled="!editName.trim()" @click="emit('update-agent')">保存</LumiButton>
+      <LumiButton variant="danger-ghost" size="sm" class="edit-delete-btn" @click="emit('delete-agent')">{{ t('workspace.delete') }}</LumiButton>
+      <LumiButton variant="secondary" size="sm" @click="emit('update:showEditDialog', false)">{{ t('workspace.cancel') }}</LumiButton>
+      <LumiButton variant="primary" size="sm" :disabled="!editName.trim()" @click="emit('update-agent')">{{ t('workspace.save') }}</LumiButton>
     </template>
   </LumiModal>
 
@@ -288,36 +291,36 @@ const addAgentRoleModel = computed({
 
   <LumiModal
     :visible="showCreateGroupDialog"
-    title="创建群组"
+    :title="t('workspace.createGroupTitle')"
     :width="460"
     @update:visible="emit('update:showCreateGroupDialog', $event)"
   >
     <div class="form-group">
           <label class="form-label">
-            群组名称
+            {{ t('workspace.fieldGroupName') }}
             <span class="required-mark">*</span>
           </label>
-          <input v-model="newGroupNameModel" type="text" class="form-input" placeholder="如: 项目讨论组" />
+          <input v-model="newGroupNameModel" type="text" class="form-input" :placeholder="t('workspace.phGroupName')" />
         </div>
         <div class="form-group">
-          <label class="form-label">描述</label>
-          <input v-model="newGroupDescModel" type="text" class="form-input" placeholder="群组用途描述" />
+          <label class="form-label">{{ t('workspace.fieldDescription') }}</label>
+          <input v-model="newGroupDescModel" type="text" class="form-input" :placeholder="t('workspace.phGroupDesc')" />
         </div>
     <template #footer>
-      <LumiButton variant="secondary" size="sm" @click="emit('update:showCreateGroupDialog', false)">取消</LumiButton>
-      <LumiButton variant="primary" size="sm" :disabled="!newGroupNameModel.trim()" @click="emit('create-group')">创建</LumiButton>
+      <LumiButton variant="secondary" size="sm" @click="emit('update:showCreateGroupDialog', false)">{{ t('workspace.cancel') }}</LumiButton>
+      <LumiButton variant="primary" size="sm" :disabled="!newGroupNameModel.trim()" @click="emit('create-group')">{{ t('workspace.create') }}</LumiButton>
     </template>
   </LumiModal>
 
   <LumiModal
     :visible="showAddAgentDialog"
-    title="添加 Agent 到群组"
+    :title="t('workspace.addAgentTitle')"
     :width="460"
     @update:visible="emit('update:showAddAgentDialog', $event)"
   >
     <div v-if="availableAgentsForGroup.length === 0" class="dialog-empty">
           <Bot :size="24" />
-          <p>所有 Agent 都已在群组中，或暂无可用 Agent</p>
+          <p>{{ t('workspace.noAvailableAgents') }}</p>
         </div>
         <div v-else class="agent-select-list">
           <div
@@ -332,13 +335,13 @@ const addAgentRoleModel = computed({
             </div>
             <div class="agent-select-info">
               <span class="agent-select-name">{{ agent.name }}</span>
-              <span class="agent-select-desc">{{ agent.description || '暂无描述' }}</span>
+              <span class="agent-select-desc">{{ agent.description || t('workspace.noDescription') }}</span>
             </div>
           </div>
         </div>
         <div v-if="addAgentIdModel" class="form-group">
-          <label class="form-label">角色定位</label>
-          <input v-model="addAgentRoleModel" type="text" class="form-input" placeholder="如: 调度员、数据专员、计算专员、审核专员" />
+          <label class="form-label">{{ t('workspace.fieldRole') }}</label>
+          <input v-model="addAgentRoleModel" type="text" class="form-input" :placeholder="t('workspace.phRole')" />
           <div class="role-suggestions" v-if="agentRoles.length > 0">
             <button
               v-for="role in agentRoles"
@@ -352,8 +355,8 @@ const addAgentRoleModel = computed({
           </div>
         </div>
     <template #footer>
-      <LumiButton variant="secondary" size="sm" @click="emit('update:showAddAgentDialog', false)">取消</LumiButton>
-      <LumiButton variant="primary" size="sm" :disabled="!addAgentIdModel" @click="emit('add-agent-to-group')">添加</LumiButton>
+      <LumiButton variant="secondary" size="sm" @click="emit('update:showAddAgentDialog', false)">{{ t('workspace.cancel') }}</LumiButton>
+      <LumiButton variant="primary" size="sm" :disabled="!addAgentIdModel" @click="emit('add-agent-to-group')">{{ t('workspace.add') }}</LumiButton>
     </template>
   </LumiModal>
 </template>

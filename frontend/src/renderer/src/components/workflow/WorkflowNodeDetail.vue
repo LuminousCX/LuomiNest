@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 /**
  * 工作流节点详情面板 - 显示选中节点的详细信息
  */
 import { Clock } from 'lucide-vue-next'
 import type { Node } from '@vue-flow/core'
 import { STATUS_ICON, STATUS_COLOR } from '../../composables/useWorkflowFlow'
+
+const { t } = useI18n()
 
 defineProps<{
   selectedNode: Node
@@ -18,28 +21,28 @@ defineEmits<{
 <template>
   <aside class="node-detail-panel">
     <div class="panel-header">
-      <span class="panel-title">节点详情</span>
-      <button class="panel-close" title="关闭" aria-label="关闭" @click="$emit('close')">&times;</button>
+      <span class="panel-title">{{ t('workflow.nodeDetail.title') }}</span>
+      <button class="panel-close" :title="t('workflow.nodeDetail.close')" :aria-label="t('workflow.nodeDetail.close')" @click="$emit('close')">&times;</button>
     </div>
     <div class="panel-body">
       <div class="detail-field">
-        <label>节点名称</label>
+        <label>{{ t('workflow.nodeDetail.name') }}</label>
         <div class="detail-value">{{ selectedNode.data.label }}</div>
       </div>
       <div class="detail-field">
-        <label>节点类型</label>
+        <label>{{ t('workflow.nodeDetail.type') }}</label>
         <div class="detail-badge" :class="`wf-node-${selectedNode.data.nodeType}`">{{ selectedNode.data.nodeType }}</div>
       </div>
       <div v-if="selectedNode.data.toolName" class="detail-field">
-        <label>工具名称</label>
+        <label>{{ t('workflow.nodeDetail.tool') }}</label>
         <div class="detail-value detail-mono">{{ selectedNode.data.toolName }}</div>
       </div>
       <div v-if="selectedNode.data.description" class="detail-field">
-        <label>描述</label>
+        <label>{{ t('workflow.nodeDetail.desc') }}</label>
         <div class="detail-value detail-desc">{{ selectedNode.data.description }}</div>
       </div>
       <div class="detail-field">
-        <label>状态</label>
+        <label>{{ t('workflow.nodeDetail.status') }}</label>
         <div class="detail-status" :style="{ color: STATUS_COLOR[selectedNode.data.status] }">
           <component
             :is="STATUS_ICON[selectedNode.data.status] || Clock"

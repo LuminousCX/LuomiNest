@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Puzzle,
   Package,
@@ -34,14 +35,15 @@ import SkillEditDialog from './SkillEditDialog.vue'
 import PluginConfigAssistantDialog from './PluginConfigAssistantDialog.vue'
 
 const store = usePluginsStore()
+const { t } = useI18n()
 
 const activeTab = ref<'frontend' | 'backend' | 'skills'>('frontend')
 
-const tabs = [
-  { id: 'frontend' as const, label: '前端插件', icon: Puzzle },
-  { id: 'backend' as const, label: '后端插件', icon: Package },
-  { id: 'skills' as const, label: '技能', icon: Brain },
-]
+const tabs = computed(() => [
+  { id: 'frontend' as const, label: t('settingsEx.plugins.tabFrontend'), icon: Puzzle },
+  { id: 'backend' as const, label: t('settingsEx.plugins.tabBackend'), icon: Package },
+  { id: 'skills' as const, label: t('settingsEx.plugins.tabSkills'), icon: Brain },
+])
 
 onMounted(() => {
   store.initAll()
@@ -50,26 +52,26 @@ onMounted(() => {
 // ---------------- 前端插件状态徽章 ----------------
 const frontendStatusBadge = (status: CxFrontendPluginInstance['status']) => {
   switch (status) {
-    case 'active': return { text: '已激活', cls: 'active', icon: CheckCircle2 }
-    case 'inactive': return { text: '已停用', cls: 'inactive', icon: XCircle }
-    case 'error': return { text: '错误', cls: 'error', icon: AlertCircle }
-    default: return { text: '已发现', cls: 'discovered', icon: Tag }
+    case 'active': return { text: t('settingsEx.plugins.statusActive'), cls: 'active', icon: CheckCircle2 }
+    case 'inactive': return { text: t('settingsEx.plugins.statusInactive'), cls: 'inactive', icon: XCircle }
+    case 'error': return { text: t('settingsEx.plugins.statusError'), cls: 'error', icon: AlertCircle }
+    default: return { text: t('settingsEx.plugins.statusDiscovered'), cls: 'discovered', icon: Tag }
   }
 }
 
 // ---------------- 后端插件状态徽章 ----------------
 const backendStatusBadge = (plugin: CxBackendPlugin) => {
-  if (plugin.is_active) return { text: '运行中', cls: 'active', icon: CheckCircle2 }
-  if (plugin.status === 'error') return { text: '错误', cls: 'error', icon: AlertCircle }
-  if (plugin.status === 'disabled') return { text: '已禁用', cls: 'inactive', icon: XCircle }
+  if (plugin.is_active) return { text: t('settingsEx.plugins.statusRunning'), cls: 'active', icon: CheckCircle2 }
+  if (plugin.status === 'error') return { text: t('settingsEx.plugins.statusError'), cls: 'error', icon: AlertCircle }
+  if (plugin.status === 'disabled') return { text: t('settingsEx.plugins.statusDisabled'), cls: 'inactive', icon: XCircle }
   return { text: plugin.status, cls: 'discovered', icon: Tag }
 }
 
 // ---------------- 技能状态徽章 ----------------
 const skillStatusBadge = (skill: CxBackendSkill) => {
-  if (skill.is_active) return { text: '已启用', cls: 'active', icon: CheckCircle2 }
-  if (skill.status === 'error') return { text: '错误', cls: 'error', icon: AlertCircle }
-  return { text: '已禁用', cls: 'inactive', icon: XCircle }
+  if (skill.is_active) return { text: t('settingsEx.plugins.statusEnabled'), cls: 'active', icon: CheckCircle2 }
+  if (skill.status === 'error') return { text: t('settingsEx.plugins.statusError'), cls: 'error', icon: AlertCircle }
+  return { text: t('settingsEx.plugins.statusDisabled'), cls: 'inactive', icon: XCircle }
 }
 
 // ---------------- 操作处理 ----------------
@@ -116,7 +118,7 @@ const handleSkillSaved = () => {
 }
 
 const handleDeleteSkill = async (skill: CxBackendSkill) => {
-  if (!window.confirm(`确认删除技能「${skill.name}」？此操作不可恢复。`)) return
+  if (!window.confirm(t('settingsEx.plugins.confirmDeleteSkill', { name: skill.name }))) return
   await store.deleteSkill(skill.id)
 }
 
@@ -133,9 +135,9 @@ const openPluginAssistant = (plugin: CxBackendPlugin) => {
 
 // ---------------- 统计摘要 ----------------
 const summary = computed(() => ({
-  frontend: `${store.frontendStats.active}/${store.frontendStats.total} 已激活`,
-  backend: `${store.backendStats.active}/${store.backendStats.total} 运行中`,
-  skills: `${store.skillStats.active}/${store.skillStats.total} 已启用`,
+  frontend: t('settingsEx.plugins.summaryFrontend', { active: store.frontendStats.active, total: store.frontendStats.total }),
+  backend: t('settingsEx.plugins.summaryBackend', { active: store.backendStats.active, total: store.backendStats.total }),
+  skills: t('settingsEx.plugins.summarySkills', { active: store.skillStats.active, total: store.skillStats.total }),
 }))
 </script>
 
@@ -164,7 +166,7 @@ const summary = computed(() => ({
         @click="store.initAll()"
       >
         <RefreshCw :size="14" :class="['refresh-icon', { spinning: store.loadingBackend }]" />
-        <span>刷新</span>
+        <span>{{ t('settingsEx.plugins.refresh') }}</span>
       </LumiButton>
       <LumiButton
         v-if="activeTab === 'backend'"
@@ -174,7 +176,7 @@ const summary = computed(() => ({
         @click="store.reloadAllBackendPlugins()"
       >
         <RefreshCw :size="14" />
-        <span>重载全部</span>
+        <span>{{ t('settingsEx.plugins.reloadAll') }}</span>
       </LumiButton>
       <LumiButton
         v-if="activeTab === 'skills'"
@@ -184,7 +186,7 @@ const summary = computed(() => ({
         @click="store.reloadAllSkills()"
       >
         <RefreshCw :size="14" />
-        <span>重载全部</span>
+        <span>{{ t('settingsEx.plugins.reloadAll') }}</span>
       </LumiButton>
       <LumiButton
         v-if="activeTab === 'skills'"
@@ -194,7 +196,7 @@ const summary = computed(() => ({
         @click="openCreateSkill"
       >
         <Plus :size="14" />
-        <span>新建技能</span>
+        <span>{{ t('settingsEx.plugins.createSkill') }}</span>
       </LumiButton>
     </div>
 
@@ -203,8 +205,8 @@ const summary = computed(() => ({
       <LumiEmptyState
         v-if="!store.frontendPlugins.length"
         :icon="PackageIcon"
-        title="暂无前端插件"
-        description="将插件放入 frontend/src/renderer/src/plugins/builtin/ 目录即可被自动发现"
+        :title="t('settingsEx.plugins.frontendEmptyTitle')"
+        :description="t('settingsEx.plugins.frontendEmptyDesc')"
       />
       <LumiCard
         v-for="plugin in store.frontendPlugins"
@@ -221,7 +223,7 @@ const summary = computed(() => ({
               <span class="plugin-name">{{ plugin.manifest.name }}</span>
               <span class="plugin-version">v{{ plugin.manifest.version }}</span>
               <span v-if="plugin.manifest.builtin" class="builtin-badge">
-                <Lock :size="11" /> 内置
+                <Lock :size="11" /> {{ t('settingsEx.plugins.builtin') }}
               </span>
             </div>
             <span class="plugin-id">{{ plugin.manifest.id }}</span>
@@ -239,8 +241,8 @@ const summary = computed(() => ({
         </div>
 
         <div class="plugin-meta">
-          <span v-if="plugin.manifest.author" class="meta-item">作者：{{ plugin.manifest.author }}</span>
-          <span class="meta-item">贡献：{{ plugin.registeredViewIds.length }} 视图 / {{ plugin.registeredCommandIds.length }} 命令 / {{ plugin.registeredThemeIds.length }} 主题</span>
+          <span v-if="plugin.manifest.author" class="meta-item">{{ t('settingsEx.plugins.author', { name: plugin.manifest.author }) }}</span>
+          <span class="meta-item">{{ t('settingsEx.plugins.contributions', { views: plugin.registeredViewIds.length, commands: plugin.registeredCommandIds.length, themes: plugin.registeredThemeIds.length }) }}</span>
         </div>
 
         <div class="plugin-actions">
@@ -252,7 +254,7 @@ const summary = computed(() => ({
             @click="handleFrontendToggle(plugin)"
           >
             <Power :size="13" />
-            <span>{{ plugin.status === 'active' ? '停用' : '启用' }}</span>
+            <span>{{ plugin.status === 'active' ? t('settingsEx.plugins.disable') : t('settingsEx.plugins.enable') }}</span>
           </LumiButton>
         </div>
       </LumiCard>
@@ -262,13 +264,13 @@ const summary = computed(() => ({
     <div v-else-if="activeTab === 'backend'" class="plugin-list">
       <div v-if="store.loadingBackend && !store.backendPlugins.length" class="loading-state">
         <Loader2 :size="22" class="spinning" />
-        <span>加载后端插件中...</span>
+        <span>{{ t('settingsEx.plugins.loadingBackend') }}</span>
       </div>
       <LumiEmptyState
         v-else-if="!store.backendPlugins.length"
         :icon="PackageIcon"
-        title="暂无后端插件"
-        description="将插件放入 backend/plugins/ 目录并重启后端即可被发现"
+        :title="t('settingsEx.plugins.backendEmptyTitle')"
+        :description="t('settingsEx.plugins.backendEmptyDesc')"
       />
       <LumiCard
         v-for="plugin in store.backendPlugins"
@@ -285,7 +287,7 @@ const summary = computed(() => ({
               <span class="plugin-name">{{ plugin.name }}</span>
               <span class="plugin-version">v{{ plugin.version }}</span>
               <span v-if="plugin.reserved" class="builtin-badge">
-                <Lock :size="11" /> 保留
+                <Lock :size="11" /> {{ t('settingsEx.plugins.reserved') }}
               </span>
             </div>
             <span class="plugin-id">{{ plugin.id }}</span>
@@ -303,9 +305,9 @@ const summary = computed(() => ({
         </div>
 
         <div class="plugin-meta">
-          <span v-if="plugin.author" class="meta-item">作者：{{ plugin.author }}</span>
-          <span class="meta-item">平台：{{ plugin.platform }}</span>
-          <span v-if="plugin.permissions?.length" class="meta-item">权限：{{ plugin.permissions.join(', ') }}</span>
+          <span v-if="plugin.author" class="meta-item">{{ t('settingsEx.plugins.author', { name: plugin.author }) }}</span>
+          <span class="meta-item">{{ t('settingsEx.plugins.platform', { value: plugin.platform }) }}</span>
+          <span v-if="plugin.permissions?.length" class="meta-item">{{ t('settingsEx.plugins.permissions', { value: plugin.permissions.join(', ') }) }}</span>
         </div>
 
         <div class="plugin-actions">
@@ -317,7 +319,7 @@ const summary = computed(() => ({
             @click="handleBackendToggle(plugin)"
           >
             <Power :size="13" />
-            <span>{{ plugin.is_active ? '禁用' : '启用' }}</span>
+            <span>{{ plugin.is_active ? t('settingsEx.plugins.disableAlt') : t('settingsEx.plugins.enable') }}</span>
           </LumiButton>
           <LumiButton
             variant="ghost"
@@ -326,7 +328,7 @@ const summary = computed(() => ({
             @click="store.reloadBackendPlugin(plugin.id)"
           >
             <RefreshCw :size="13" />
-            <span>重载</span>
+            <span>{{ t('settingsEx.plugins.reload') }}</span>
           </LumiButton>
           <LumiButton
             v-if="plugin.settings && Object.keys(plugin.settings).length > 0"
@@ -336,7 +338,7 @@ const summary = computed(() => ({
             @click="openPluginAssistant(plugin)"
           >
             <Sparkles :size="13" />
-            <span>AI 配置</span>
+            <span>{{ t('settingsEx.plugins.aiConfig') }}</span>
           </LumiButton>
         </div>
       </LumiCard>
@@ -346,13 +348,13 @@ const summary = computed(() => ({
     <div v-else class="plugin-list">
       <div v-if="store.loadingBackend && !store.skills.length" class="loading-state">
         <Loader2 :size="22" class="spinning" />
-        <span>加载技能中...</span>
+        <span>{{ t('settingsEx.plugins.loadingSkills') }}</span>
       </div>
       <LumiEmptyState
         v-else-if="!store.skills.length"
         :icon="BrainIcon"
-        title="暂无技能"
-        description="将 SKILL.md 放入 backend/skills/ 目录即可被自动发现"
+        :title="t('settingsEx.plugins.skillsEmptyTitle')"
+        :description="t('settingsEx.plugins.skillsEmptyDesc')"
       />
       <LumiCard
         v-for="skill in store.skills"
@@ -382,9 +384,9 @@ const summary = computed(() => ({
         </div>
 
         <div class="plugin-meta">
-          <span v-if="skill.author" class="meta-item">作者：{{ skill.author }}</span>
-          <span class="meta-item">分类：{{ skill.category || '未分类' }}</span>
-          <span v-if="skill.source_format" class="meta-item">格式：{{ skill.source_format }}</span>
+          <span v-if="skill.author" class="meta-item">{{ t('settingsEx.plugins.author', { name: skill.author }) }}</span>
+          <span class="meta-item">{{ t('settingsEx.plugins.category', { value: skill.category || t('settingsEx.plugins.uncategorized') }) }}</span>
+          <span v-if="skill.source_format" class="meta-item">{{ t('settingsEx.plugins.format', { value: skill.source_format }) }}</span>
         </div>
 
         <div class="plugin-actions">
@@ -396,7 +398,7 @@ const summary = computed(() => ({
             @click="handleSkillToggle(skill)"
           >
             <Power :size="13" />
-            <span>{{ skill.is_active ? '禁用' : '启用' }}</span>
+            <span>{{ skill.is_active ? t('settingsEx.plugins.disableAlt') : t('settingsEx.plugins.enable') }}</span>
           </LumiButton>
           <LumiButton
             variant="ghost"
@@ -405,7 +407,7 @@ const summary = computed(() => ({
             @click="store.reloadSkill(skill.id)"
           >
             <RefreshCw :size="13" />
-            <span>重载</span>
+            <span>{{ t('settingsEx.plugins.reload') }}</span>
           </LumiButton>
           <LumiButton
             variant="outline"
@@ -414,7 +416,7 @@ const summary = computed(() => ({
             @click="openEditSkill(skill.id)"
           >
             <Pencil :size="13" />
-            <span>编辑</span>
+            <span>{{ t('settingsEx.plugins.edit') }}</span>
           </LumiButton>
           <LumiButton
             variant="danger-ghost"
@@ -423,7 +425,7 @@ const summary = computed(() => ({
             @click="handleDeleteSkill(skill)"
           >
             <Trash2 :size="13" />
-            <span>删除</span>
+            <span>{{ t('settingsEx.plugins.delete') }}</span>
           </LumiButton>
         </div>
       </LumiCard>

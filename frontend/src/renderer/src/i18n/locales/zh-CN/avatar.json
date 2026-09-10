@@ -1,0 +1,194 @@
+{
+  "avatar": {
+    "common": {
+      "unknownError": "未知错误"
+    },
+    "header": {
+      "title": "皮套工坊",
+      "desc": "Live2D 形象管理、动作编辑与场景配置"
+    },
+    "view": {
+      "ttsError": "语音合成失败：{message}",
+      "modelFileNotFound": "未找到该模型的本地文件记录，请重启应用后重试",
+      "desktopWindowOpenFailed": "桌宠窗口打开失败，请重试",
+      "switchDesktopModeFailed": "切换桌宠模式失败：{message}",
+      "desktopWindowCloseFailed": "桌宠窗口关闭失败，可能需要手动关闭",
+      "switchInlineModeFailed": "切回内联模式失败：{message}",
+      "sendMessageFailed": "发送消息失败：{message}"
+    },
+    "workshop": {
+      "manifestLoadFailed": "加载模型清单失败",
+      "unknownModelType": "未知模型类型：{type}",
+      "rendererNotImplemented": "{name} 渲染器尚未实现，敬请期待",
+      "importFailed": "导入失败：{message}",
+      "importSuccess": "模型导入成功",
+      "deleteFailed": "删除失败：{message}",
+      "deleteSuccess": "模型已删除",
+      "selectModelFirst": "请先选择一个模型",
+      "bindingUpdated": "绑定配置已更新",
+      "updateFailed": "更新失败：{message}"
+    },
+    "live2d": {
+      "cubismCoreMissing": "Live2DCubismCore 未加载，请检查 cubism-core/live2dcubismcore.min.js 是否存在",
+      "webglNotSupported": "当前设备不支持 WebGL，Live2D 无法渲染，请检查显卡驱动或硬件加速是否开启。",
+      "graphicsInitFailed": "图形初始化失败：{message}"
+    },
+    "stageBg": {
+      "settings": "舞台背景设置",
+      "resetDefault": "恢复默认背景",
+      "colorRed": "红色底",
+      "colorYellow": "黄色底",
+      "colorGreen": "绿色底",
+      "customColor": "自定义颜色",
+      "customImage": "自定义背景图片",
+      "uploadFailed": "上传背景图片失败：{message}",
+      "applied": "背景图片已应用（{width}×{height}）",
+      "envUnavailable": "当前环境不可用",
+      "bgUrlInvalid": "背景图片地址格式异常"
+    },
+    "sidebar": {
+      "hideBuiltinHint": "隐藏该内置模型（可在下方恢复）",
+      "confirmDelete": "再次点击确认删除",
+      "deleteImported": "删除该导入模型",
+      "emptyList": "当前类型暂无模型",
+      "hiddenCount": "已隐藏 {n} 个内置模型",
+      "restoreOne": "恢复显示",
+      "restoreAll": "全部恢复"
+    }
+  },
+  "pet": {
+    "controls": {
+      "resetPose": "重置姿势",
+      "pin": "置顶",
+      "unpin": "取消置顶",
+      "close": "关闭宠物"
+    },
+    "chat": {
+      "sendMessageFailed": "桌宠对话失败：{message}"
+    }
+  },
+  "theme": {
+    "skins": {
+      "classicBlue": "辰汐蓝",
+      "classicPurple": "紫罗兰",
+      "classicRed": "中国红",
+      "classicGreen": "翡翠绿",
+      "classicOrange": "暖橘橙",
+      "pearlWhite": "珍珠白",
+      "roseDream": "玫瑰梦境",
+      "midnightAurora": "深夜极光",
+      "softSunset": "柔光落日",
+      "deepSpaceNebula": "深空星云",
+      "oceanBreeze": "海风轻拂",
+      "sakuraRain": "樱花雨",
+      "forestMist": "林间薄雾",
+      "defaultSample": "默认范例"
+    },
+    "backgrounds": {
+      "none": "无",
+      "blue": "辰汐蓝",
+      "purple": "紫罗兰",
+      "red": "中国红",
+      "green": "翡翠绿",
+      "orange": "暖橘橙",
+      "dreamPink": "梦幻粉",
+      "dreamPinkHot": "霓虹粉",
+      "deepSpace": "深空",
+      "ocean": "海洋",
+      "sunset": "落日",
+      "aurora": "极光",
+      "dots": "网点",
+      "grid": "网格"
+    },
+    "legacy": {
+      "migratedSkinName": "我的皮肤",
+      "migratedThemeSkinName": "我的自定义主题"
+    },
+    "editor": {
+      "editTitle": "编辑皮肤",
+      "createTitle": "新建皮肤",
+      "close": "关闭",
+      "livePreview": "实时预览",
+      "defaultName": "我的皮肤",
+      "sampleText": "这是一段示例文字",
+      "primaryButton": "主按钮",
+      "nameLabel": "皮肤名称",
+      "namePlaceholder": "输入皮肤名称",
+      "colorThemeLabel": "色彩主题",
+      "customColorsLabel": "自定义颜色",
+      "selectColorTheme": "选择{name}颜色主题",
+      "editColorTheme": "编辑{name}颜色主题",
+      "createCustomColor": "新建自定义颜色",
+      "modeLabel": "主题模式",
+      "modeLight": "浅色",
+      "modeDark": "深色",
+      "modeSystem": "跟随系统",
+      "backgroundLabel": "背景",
+      "noneOption": "无",
+      "customBgTitle": "当前自定义背景",
+      "customBgName": "自定义",
+      "uploadCustomBg": "上传自定义背景",
+      "remove": "移除",
+      "fitLabel": "背景适配",
+      "fitCover": "覆盖",
+      "fitContain": "适应",
+      "fitCenter": "居中",
+      "fitRight": "居右",
+      "effectsLabel": "效果调节",
+      "blur": "模糊度",
+      "opacity": "透明度",
+      "glass": "毛玻璃强度",
+      "ambient": "氛围光强度",
+      "radius": "圆角倾向",
+      "delete": "删除",
+      "cancel": "取消",
+      "save": "保存",
+      "create": "创建",
+      "selectBgFailed": "选择背景图片失败：{message}",
+      "bgUrlInvalid": "背景图片地址格式异常",
+      "bgUploaded": "背景图片已上传 ({width}×{height})",
+      "customColorCreated": "自定义颜色已创建",
+      "customColorUpdated": "自定义颜色已更新",
+      "nameRequired": "请输入皮肤名称",
+      "finishColorEditFirst": "请先保存或取消自定义颜色编辑"
+    },
+    "selector": {
+      "presetSection": "预设皮肤",
+      "applySkin": "应用{name}皮肤",
+      "editBasedOn": "以{name}为基础编辑",
+      "edit": "编辑",
+      "customSection": "自定义皮肤",
+      "editSkin": "编辑{name}皮肤",
+      "createAria": "新建自定义皮肤",
+      "createTitle": "新建自定义皮肤",
+      "createHint": "创建一套新的视觉方案"
+    },
+    "customEditor": {
+      "editTitle": "编辑自定义主题",
+      "createTitle": "新建自定义主题",
+      "nameLabel": "主题名称",
+      "namePlaceholder": "输入主题名称",
+      "colorsLabel": "三色配色",
+      "primary": "主色",
+      "secondary": "辅色",
+      "accent": "强调色",
+      "livePreview": "实时预览",
+      "uiPreview": "UI 元素预览",
+      "primaryButton": "主色按钮",
+      "secondaryButton": "辅色按钮",
+      "accentButton": "强调按钮",
+      "cardPreview": "这是一个卡片元素，边框使用辅色。",
+      "linkPreview": "这是一个强调色链接",
+      "cancel": "取消",
+      "save": "保存",
+      "create": "创建"
+    },
+    "presets": {
+      "blue": "辰汐蓝",
+      "purple": "紫罗兰",
+      "red": "中国红",
+      "green": "翡翠绿",
+      "orange": "暖橘橙"
+    }
+  }
+}

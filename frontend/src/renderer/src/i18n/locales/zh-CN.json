@@ -1,6 +1,13 @@
 {
   "common": {
-    "skip": "跳过"
+    "skip": "跳过",
+    "empty": "暂无数据",
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{n} 分钟前",
+      "hoursAgo": "{n} 小时前",
+      "daysAgo": "{n} 天前"
+    }
   },
   "welcome": {
     "title": "欢迎来到",
@@ -158,5 +165,32 @@
     "login": "登录",
     "loggingIn": "登录中...",
     "skipUse": "跳过，直接使用"
+  },
+  "route": {
+    "welcome": "Welcome - LuomiNest",
+    "loading": "Loading - LuomiNest",
+    "login": "Login - LuomiNest",
+    "workbench": "工作台 - LuomiNest",
+    "workspace": "对话 - LuomiNest",
+    "platform": "平台接入 - LuomiNest",
+    "devices": "设备与群组 - LuomiNest",
+    "desktopPet": "LuomiNest Desktop Pet",
+    "petChat": "LuomiNest Companion Chat",
+    "models": "模型设置 - LuomiNest",
+    "about": "关于开发者 - LuomiNest",
+    "license": "项目参考 - LuomiNest",
+    "privacyDetail": "隐私与合规 - LuomiNest",
+    "avatar": "皮套工坊 - LuomiNest",
+    "stats": "数据统计 - LuomiNest",
+    "console": "控制台 - LuomiNest",
+    "tasks": "计划视图 - LuomiNest",
+    "smartHome": "智能家居 - LuomiNest",
+    "workflow": "工作流 - LuomiNest",
+    "browser": "浏览器 - LuomiNest",
+    "settings": "设置 - LuomiNest",
+    "memory": "记忆中枢 - LuomiNest",
+    "market": "扩展 - LuomiNest",
+    "marketDetail": "市场详情 - LuomiNest",
+    "agentCreate": "创建智能体 - LuomiNest"
   }
 }

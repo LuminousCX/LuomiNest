@@ -11,6 +11,7 @@
  * 用于判断当前是否有可操作的活跃标签页。
  */
 import { ref, watch, type Ref } from 'vue'
+import { i18n } from '../i18n'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import type { Tab } from './useBrowserTabs'
 
@@ -95,13 +96,13 @@ export const useBrowserActions = (options: UseBrowserActionsOptions) => {
       const result = await window.api?.browserAutomation?.execute('screenshot')
       if (result?.success && result.data?.screenshot) {
         screenshotUrl.value = String(result.data.screenshot)
-        displayToast('截图已生成')
+        displayToast(i18n.global.t('browser.actions.screenshotOk'))
       } else {
-        displayToast(`截图失败：${result?.error || '未知错误'}`)
+        displayToast(i18n.global.t('browser.actions.screenshotFail', { msg: result?.error || i18n.global.t('browser.actions.unknownError') }))
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      displayToast(`截图异常：${message}`)
+      displayToast(i18n.global.t('browser.actions.screenshotError', { msg: message }))
     } finally {
       screenshotLoading.value = false
     }
@@ -110,31 +111,31 @@ export const useBrowserActions = (options: UseBrowserActionsOptions) => {
   /** 快速点击：弹窗输入选择器后执行点击 */
   const quickClick = async (): Promise<void> => {
     const selector = await showPrompt(
-      '请输入要点击的元素选择器或 DOM 索引（如 5 或 #search）'
+      i18n.global.t('browser.actions.clickPrompt')
     )
     if (!selector) return
     try {
       const result = await window.api?.browserAutomation?.execute('click', { selector })
       if (result?.success) {
-        displayToast('点击成功')
+        displayToast(i18n.global.t('browser.actions.clickOk'))
       } else {
-        displayToast(`点击失败：${result?.error || '元素未找到'}`)
+        displayToast(i18n.global.t('browser.actions.clickFail', { msg: result?.error || i18n.global.t('browser.actions.elementNotFound') }))
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      displayToast(`点击异常：${message}`)
+      displayToast(i18n.global.t('browser.actions.clickError', { msg: message }))
     }
   }
 
   /** 快速填表：弹窗输入 selector|text 后执行填表 */
   const quickFill = async (): Promise<void> => {
     const input = await showPrompt(
-      '请输入选择器和文本，格式: selector|text（如 #search|你好）'
+      i18n.global.t('browser.actions.fillPrompt')
     )
     if (!input) return
     const sep = input.indexOf('|')
     if (sep === -1) {
-      displayToast('格式错误，请使用 selector|text 格式')
+      displayToast(i18n.global.t('browser.actions.fillFormatError'))
       return
     }
     const selector = input.slice(0, sep)
@@ -144,30 +145,30 @@ export const useBrowserActions = (options: UseBrowserActionsOptions) => {
         selector, text, clear: true
       })
       if (result?.success) {
-        displayToast('填表成功')
+        displayToast(i18n.global.t('browser.actions.fillOk'))
       } else {
-        displayToast(`填表失败：${result?.error || '元素未找到'}`)
+        displayToast(i18n.global.t('browser.actions.fillFail', { msg: result?.error || i18n.global.t('browser.actions.elementNotFound') }))
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      displayToast(`填表异常：${message}`)
+      displayToast(i18n.global.t('browser.actions.fillError', { msg: message }))
     }
   }
 
   /** AI 搜索：弹窗输入问题后发送搜索请求 */
   const aiSearch = async (): Promise<void> => {
-    const query = await showPrompt('请输入要向 AI 搜索的问题')
+    const query = await showPrompt(i18n.global.t('browser.actions.searchPrompt'))
     if (!query) return
     try {
       const result = await window.api?.browserSearch?.search(query)
       if (result) {
-        displayToast('AI 搜索请求已发送')
+        displayToast(i18n.global.t('browser.actions.searchSent'))
       } else {
-        displayToast('AI 搜索无响应')
+        displayToast(i18n.global.t('browser.actions.searchNoResponse'))
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      displayToast(`AI 搜索异常：${message}`)
+      displayToast(i18n.global.t('browser.actions.searchError', { msg: message }))
     }
   }
 
@@ -180,7 +181,7 @@ export const useBrowserActions = (options: UseBrowserActionsOptions) => {
   const handleQuickAction = async (action: string): Promise<void> => {
     // ai-search 不需要打开网页，其余动作需要先有活跃标签页
     if (action !== 'ai-search' && !getActiveTab()?.url) {
-      displayToast('请先打开一个网页再使用此功能')
+      displayToast(i18n.global.t('browser.actions.needOpenPage'))
       return
     }
 

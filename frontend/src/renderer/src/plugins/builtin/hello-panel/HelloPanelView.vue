@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Sparkles, Bell } from 'lucide-vue-next'
 import type { CxPluginContext } from '../../types'
 
@@ -10,19 +11,20 @@ defineProps<{
 
 const clickCount = ref(0)
 const lastMessage = ref('')
+const { t } = useI18n()
 
 const handleSayHello = () => {
   clickCount.value++
-  lastMessage.value = `Hello from LuomiNest frontend plugin! (第 ${clickCount.value} 次点击)`
+  lastMessage.value = t('helloPanel.helloMessage', { n: clickCount.value })
 }
 
 const handleNotify = () => {
   if (window.Notification?.permission === 'granted') {
-    new Notification('LuomiNest 插件系统', { body: '示例插件通知已触发' })
+    new Notification(t('helloPanel.notifyTitle'), { body: t('helloPanel.notifyBody') })
   } else if (window.Notification?.permission !== 'denied') {
     window.Notification?.requestPermission().then((perm) => {
       if (perm === 'granted') {
-        new Notification('LuomiNest 插件系统', { body: '示例插件通知已触发' })
+        new Notification(t('helloPanel.notifyTitle'), { body: t('helloPanel.notifyBody') })
       }
     })
   }
@@ -36,45 +38,45 @@ const handleNotify = () => {
         <Sparkles :size="28" />
       </div>
       <div>
-        <h1 class="page-title">示例面板</h1>
-        <p class="page-subtitle">由 hello-panel 前端插件贡献 — 验证 LuomiNest 双轨扩展系统</p>
+        <h1 class="page-title">{{ t('helloPanel.title') }}</h1>
+        <p class="page-subtitle">{{ t('helloPanel.subtitle') }}</p>
       </div>
     </div>
 
     <div class="panel-body">
       <div class="info-card animate-slide-up">
-        <h3 class="card-title">插件信息</h3>
+        <h3 class="card-title">{{ t('helloPanel.infoTitle') }}</h3>
         <dl class="info-list">
           <div class="info-row">
-            <dt>插件 ID</dt>
+            <dt>{{ t('helloPanel.pluginId') }}</dt>
             <dd><code>hello-panel</code></dd>
           </div>
           <div class="info-row">
-            <dt>版本</dt>
+            <dt>{{ t('helloPanel.version') }}</dt>
             <dd><code>1.0.0</code></dd>
           </div>
           <div class="info-row">
-            <dt>贡献点</dt>
-            <dd>视图（本页面）+ 命令（say-hello）</dd>
+            <dt>{{ t('helloPanel.contributions') }}</dt>
+            <dd>{{ t('helloPanel.contributionsValue') }}</dd>
           </div>
           <div class="info-row">
-            <dt>路由路径</dt>
+            <dt>{{ t('helloPanel.routePath') }}</dt>
             <dd><code>/plugins/hello-panel/panel</code></dd>
           </div>
         </dl>
       </div>
 
       <div class="action-card animate-slide-up" style="animation-delay: 80ms">
-        <h3 class="card-title">交互演示</h3>
-        <p class="card-desc">点击下方按钮触发插件命令，验证贡献点机制端到端可用。</p>
+        <h3 class="card-title">{{ t('helloPanel.demoTitle') }}</h3>
+        <p class="card-desc">{{ t('helloPanel.demoDesc') }}</p>
         <div class="actions">
           <button class="action-btn primary" @click="handleSayHello">
             <Sparkles :size="16" />
-            <span>执行 say-hello 命令</span>
+            <span>{{ t('helloPanel.sayHello') }}</span>
           </button>
           <button class="action-btn" @click="handleNotify">
             <Bell :size="16" />
-            <span>发送系统通知</span>
+            <span>{{ t('helloPanel.notify') }}</span>
           </button>
         </div>
         <Transition name="fade-slide">

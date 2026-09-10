@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Timer,
   RotateCcw,
@@ -43,21 +44,23 @@ const emit = defineEmits<{
   'refresh-db': []
 }>()
 
+const { t } = useI18n()
+
 const formatScheduledTime = (isoStr: string | null): string =>
-  isoStr ? formatShortDateTime(isoStr) : '未知'
+  isoStr ? formatShortDateTime(isoStr) : t('tasks.scheduled.unknown')
 
 // ===== 循环任务创建表单 =====
 type RepeatType = 'daily' | 'weekly' | 'monthly'
 
-const WEEKDAY_OPTIONS = [
-  { value: 1, label: '周一' },
-  { value: 2, label: '周二' },
-  { value: 3, label: '周三' },
-  { value: 4, label: '周四' },
-  { value: 5, label: '周五' },
-  { value: 6, label: '周六' },
-  { value: 0, label: '周日' }
-]
+const WEEKDAY_OPTIONS = computed(() => [
+  { value: 1, label: t('tasks.wd1') },
+  { value: 2, label: t('tasks.wd2') },
+  { value: 3, label: t('tasks.wd3') },
+  { value: 4, label: t('tasks.wd4') },
+  { value: 5, label: t('tasks.wd5') },
+  { value: 6, label: t('tasks.wd6') },
+  { value: 0, label: t('tasks.wd0') }
+])
 
 const showCreateForm = ref(false)
 const formError = ref('')
@@ -112,26 +115,27 @@ const buildCronExpression = (): string => {
   }
 }
 
-/** 将 cron 表达式转为中文可读描述 */
+/** 将 cron 表达式转为本地化可读描述 */
 const cronToChinese = (cron: string, scheduleType: string): string => {
-  if (!cron || scheduleType === 'once') return '单次任务'
-  if (scheduleType === 'interval') return '间隔执行'
+  if (!cron || scheduleType === 'once') return t('tasks.cron.once')
+  if (scheduleType === 'interval') return t('tasks.cron.interval')
   const parts = cron.trim().split(/\s+/)
   if (parts.length < 5) return cron
   const [minute, hour, dom, , dow] = parts
   const timeStr = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
   if (dom !== '*' && dow === '*') {
-    return `每月 ${dom} 日 ${timeStr}`
+    return t('tasks.cron.monthly', { d: dom, time: timeStr })
   }
   if (dom === '*' && dow !== '*') {
     const dowMap: Record<string, string> = {
-      '0': '周日', '1': '周一', '2': '周二', '3': '周三',
-      '4': '周四', '5': '周五', '6': '周六', '7': '周日'
+      '0': 'tasks.wd0', '1': 'tasks.wd1', '2': 'tasks.wd2', '3': 'tasks.wd3',
+      '4': 'tasks.wd4', '5': 'tasks.wd5', '6': 'tasks.wd6', '7': 'tasks.wd0'
     }
-    return `每${dowMap[dow] || `周${dow}`} ${timeStr}`
+    const day = dowMap[dow] ? t(dowMap[dow]) : String(dow)
+    return t('tasks.cron.weekly', { day, time: timeStr })
   }
   if (dom === '*' && dow === '*') {
-    return `每天 ${timeStr}`
+    return t('tasks.cron.daily', { time: timeStr })
   }
   return cron
 }
@@ -142,24 +146,24 @@ const repeatPreview = computed(() => {
 
 const validateForm = (): boolean => {
   if (!form.value.name.trim()) {
-    formError.value = '请输入任务名称'
+    formError.value = t('tasks.scheduled.errName')
     return false
   }
   if (!form.value.action.trim()) {
-    formError.value = '请输入执行指令'
+    formError.value = t('tasks.scheduled.errAction')
     return false
   }
   if (!/^\d{1,2}:\d{2}$/.test(form.value.time)) {
-    formError.value = '时间格式应为 HH:MM'
+    formError.value = t('tasks.scheduled.errTimeFormat')
     return false
   }
   const [h, m] = form.value.time.split(':').map(Number)
   if (h < 0 || h > 23 || m < 0 || m > 59) {
-    formError.value = '时间范围无效'
+    formError.value = t('tasks.scheduled.errTimeRange')
     return false
   }
   if (form.value.repeatType === 'monthly' && (form.value.monthlyDay < 1 || form.value.monthlyDay > 31)) {
-    formError.value = '日期范围应为 1-31'
+    formError.value = t('tasks.scheduled.errDayRange')
     return false
   }
   return true
@@ -181,11 +185,11 @@ const handleCreateTask = () => {
 }
 
 // ===== 来源标签映射 =====
-const SOURCE_LABELS: Record<string, string> = {
-  manual: '手动',
-  workflow: '工作流',
-  normal_chat: '对话'
-}
+const SOURCE_LABELS = computed<Record<string, string>>(() => ({
+  manual: t('tasks.scheduled.sourceManual'),
+  workflow: t('tasks.scheduled.sourceWorkflow'),
+  normal_chat: t('tasks.scheduled.sourceChat')
+}))
 </script>
 
 <template>
@@ -195,25 +199,25 @@ const SOURCE_LABELS: Record<string, string> = {
       <div class="scheduled-header">
         <div class="scheduled-title">
           <Repeat :size="18" />
-          <span>循环任务</span>
+          <span>{{ t('tasks.scheduled.dbTitle') }}</span>
           <span class="scheduled-count">{{ dbScheduledTasks.length }}</span>
         </div>
         <div class="header-actions">
           <button class="scheduled-refresh-btn" @click="emit('refresh-db')">
             <RotateCcw :size="14" />
-            刷新
+            {{ t('tasks.scheduled.refresh') }}
           </button>
           <button class="create-btn" @click="openCreateForm">
             <Plus :size="14" />
-            新建循环任务
+            {{ t('tasks.scheduled.create') }}
           </button>
         </div>
       </div>
 
       <div v-if="dbScheduledTasks.length === 0" class="scheduled-empty db-empty">
         <Repeat :size="40" />
-        <p>暂无循环任务</p>
-        <span>创建每日/每周/每月循环任务，由数据库持久化存储</span>
+        <p>{{ t('tasks.scheduled.dbEmptyTitle') }}</p>
+        <span>{{ t('tasks.scheduled.dbEmptyHint') }}</span>
       </div>
 
       <div v-else class="scheduled-list">
@@ -231,7 +235,7 @@ const SOURCE_LABELS: Record<string, string> = {
               <div class="scheduled-card-meta">
                 <span class="scheduled-type">{{ cronToChinese(task.schedule_cron, task.schedule_type) }}</span>
                 <span class="source-tag">{{ SOURCE_LABELS[task.created_from] || task.created_from }}</span>
-                <span v-if="!task.is_active" class="inactive-tag">已停用</span>
+                <span v-if="!task.is_active" class="inactive-tag">{{ t('tasks.scheduled.inactive') }}</span>
               </div>
             </div>
             <button class="scheduled-delete-btn" @click="emit('delete-db-task', task.task_id)">
@@ -240,14 +244,14 @@ const SOURCE_LABELS: Record<string, string> = {
           </div>
 
           <div v-if="task.action" class="scheduled-card-desc">
-            <span class="desc-label">指令：</span>{{ task.action }}
+            <span class="desc-label">{{ t('tasks.scheduled.actionPrefix') }}</span>{{ task.action }}
           </div>
           <div v-if="task.description" class="scheduled-card-desc">
-            <span class="desc-label">描述：</span>{{ task.description }}
+            <span class="desc-label">{{ t('tasks.scheduled.descPrefix') }}</span>{{ task.description }}
           </div>
           <div class="scheduled-card-meta footer-meta">
-            <span>创建：{{ formatScheduledTime(task.created_at) }}</span>
-            <span v-if="task.last_run_at">上次执行：{{ formatScheduledTime(task.last_run_at) }}</span>
+            <span>{{ t('tasks.scheduled.createdAt', { time: formatScheduledTime(task.created_at) }) }}</span>
+            <span v-if="task.last_run_at">{{ t('tasks.scheduled.lastRun', { time: formatScheduledTime(task.last_run_at) }) }}</span>
           </div>
         </div>
       </div>
@@ -262,65 +266,65 @@ const SOURCE_LABELS: Record<string, string> = {
       <template #title>
         <span class="form-title">
           <Plus :size="18" />
-          <span>新建循环任务</span>
+          <span>{{ t('tasks.scheduled.modalTitle') }}</span>
         </span>
       </template>
 
       <div class="form-stack">
           <div class="form-field">
-            <label class="form-label">任务名称 <span class="required">*</span></label>
+            <label class="form-label">{{ t('tasks.scheduled.nameLabel') }} <span class="required">*</span></label>
             <input
               v-model="form.name"
               type="text"
               class="form-input"
-              placeholder="例如：每日早报"
+              :placeholder="t('tasks.scheduled.namePlaceholder')"
               maxlength="64"
             />
           </div>
 
           <div class="form-field">
-            <label class="form-label">执行指令 <span class="required">*</span></label>
+            <label class="form-label">{{ t('tasks.scheduled.fieldAction') }} <span class="required">*</span></label>
             <textarea
               v-model="form.action"
               class="form-input form-textarea"
-              placeholder="AI 将执行的指令，例如：整理今日待办并生成早报"
+              :placeholder="t('tasks.scheduled.actionPlaceholder')"
               rows="3"
               maxlength="500"
             />
           </div>
 
           <div class="form-field">
-            <label class="form-label">描述（可选）</label>
+            <label class="form-label">{{ t('tasks.scheduled.fieldDesc') }}</label>
             <input
               v-model="form.description"
               type="text"
               class="form-input"
-              placeholder="任务的补充说明"
+              :placeholder="t('tasks.scheduled.descPlaceholder')"
               maxlength="200"
             />
           </div>
 
           <div class="form-field">
-            <label class="form-label">循环频率</label>
+            <label class="form-label">{{ t('tasks.scheduled.repeatLabel') }}</label>
             <div class="repeat-type-group">
               <button
                 :class="['repeat-type-btn', { active: form.repeatType === 'daily' }]"
                 @click="form.repeatType = 'daily'"
-              >每天</button>
+              >{{ t('tasks.scheduled.daily') }}</button>
               <button
                 :class="['repeat-type-btn', { active: form.repeatType === 'weekly' }]"
                 @click="form.repeatType = 'weekly'"
-              >每周</button>
+              >{{ t('tasks.scheduled.weekly') }}</button>
               <button
                 :class="['repeat-type-btn', { active: form.repeatType === 'monthly' }]"
                 @click="form.repeatType = 'monthly'"
-              >每月</button>
+              >{{ t('tasks.scheduled.monthly') }}</button>
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-field">
-              <label class="form-label">执行时间</label>
+              <label class="form-label">{{ t('tasks.scheduled.timeLabel') }}</label>
               <input
                 v-model="form.time"
                 type="time"
@@ -329,7 +333,7 @@ const SOURCE_LABELS: Record<string, string> = {
             </div>
 
             <div v-if="form.repeatType === 'weekly'" class="form-field">
-              <label class="form-label">星期</label>
+              <label class="form-label">{{ t('tasks.scheduled.weekdayLabel') }}</label>
               <select v-model="form.weeklyDay" class="form-input">
                 <option v-for="opt in WEEKDAY_OPTIONS" :key="opt.value" :value="opt.value">
                   {{ opt.label }}
@@ -338,16 +342,16 @@ const SOURCE_LABELS: Record<string, string> = {
             </div>
 
             <div v-if="form.repeatType === 'monthly'" class="form-field">
-              <label class="form-label">日期</label>
+              <label class="form-label">{{ t('tasks.scheduled.dayLabel') }}</label>
               <select v-model="form.monthlyDay" class="form-input">
-                <option v-for="d in 31" :key="d" :value="d">{{ d }} 日</option>
+                <option v-for="d in 31" :key="d" :value="d">{{ t('tasks.scheduled.dayUnit', { n: d }) }}</option>
               </select>
             </div>
           </div>
 
           <div class="form-preview">
             <Clock :size="14" />
-            <span>预览：{{ repeatPreview }}</span>
+            <span>{{ t('tasks.scheduled.preview', { desc: repeatPreview }) }}</span>
           </div>
 
           <div v-if="formError" class="form-error">
@@ -357,12 +361,12 @@ const SOURCE_LABELS: Record<string, string> = {
       </div>
 
       <template #footer>
-        <LumiButton variant="secondary" size="sm" @click="closeCreateForm">取消</LumiButton>
+        <LumiButton variant="secondary" size="sm" @click="closeCreateForm">{{ t('tasks.scheduled.cancel') }}</LumiButton>
         <LumiButton variant="primary" size="sm" @click="handleCreateTask">
           <template #icon>
             <Plus :size="14" />
           </template>
-          创建任务
+          {{ t('tasks.scheduled.createTask') }}
         </LumiButton>
       </template>
     </LumiModal>
@@ -372,19 +376,19 @@ const SOURCE_LABELS: Record<string, string> = {
       <div class="scheduled-header">
         <div class="scheduled-title">
           <Timer :size="18" />
-          <span>运行时任务</span>
+          <span>{{ t('tasks.scheduled.runtimeTitle') }}</span>
           <span class="scheduled-count">{{ scheduledTasks.length }}</span>
         </div>
         <button class="scheduled-refresh-btn" @click="emit('refresh')">
           <RotateCcw :size="14" />
-          刷新
+          {{ t('tasks.scheduled.refresh') }}
         </button>
       </div>
 
       <div v-if="scheduledTasks.length === 0" class="scheduled-empty runtime-empty">
         <Timer :size="40" />
-        <p>暂无运行时任务</p>
-        <span>主 Agent 可通过 create_scheduled_task 工具创建定时任务</span>
+        <p>{{ t('tasks.scheduled.runtimeEmptyTitle') }}</p>
+        <span>{{ t('tasks.scheduled.runtimeEmptyHint') }}</span>
       </div>
 
       <div v-else class="scheduled-list">
@@ -406,10 +410,10 @@ const SOURCE_LABELS: Record<string, string> = {
               <div class="scheduled-card-meta">
                 <span class="scheduled-type">{{ task.task_type }}</span>
                 <span v-if="task.next_run_time" class="scheduled-next">
-                  下次: {{ formatScheduledTime(task.next_run_time) }}
+                  {{ t('tasks.scheduled.next', { time: formatScheduledTime(task.next_run_time) }) }}
                 </span>
                 <span v-if="task.last_run_time" class="scheduled-last">
-                  上次: {{ formatScheduledTime(task.last_run_time) }}
+                  {{ t('tasks.scheduled.last', { time: formatScheduledTime(task.last_run_time) }) }}
                 </span>
               </div>
             </div>
@@ -423,7 +427,7 @@ const SOURCE_LABELS: Record<string, string> = {
           <div v-if="task.last_result" class="scheduled-card-result">
             <div class="scheduled-result-label">
               <CheckCircle2 :size="12" />
-              <span>执行结果</span>
+              <span>{{ t('tasks.scheduled.resultLabel') }}</span>
             </div>
             <div class="scheduled-result-content">{{ task.last_result }}</div>
           </div>
@@ -431,7 +435,7 @@ const SOURCE_LABELS: Record<string, string> = {
           <div v-if="task.last_error" class="scheduled-card-error">
             <div class="scheduled-error-label">
               <XCircle :size="12" />
-              <span>错误信息</span>
+              <span>{{ t('tasks.scheduled.errorLabel') }}</span>
             </div>
             <div class="scheduled-error-content">{{ task.last_error }}</div>
           </div>

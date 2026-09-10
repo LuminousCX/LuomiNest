@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Bot,
   ChevronLeft,
@@ -17,6 +18,8 @@ import { highlightSnippet } from '../../utils/highlight'
 import { formatDateCalendar } from '../../utils/format'
 import type { AgentProfile } from '../../types'
 import type { TimeGroup, ConversationSearchResult } from './types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   agent: AgentProfile | null
@@ -67,7 +70,7 @@ const snippetHtml = (snippet: string): string =>
 <template>
   <div class="agent-history-panel">
     <div class="left-panel-header">
-      <button class="back-btn" title="返回联系人" @click="emit('back')">
+      <button class="back-btn" :title="t('workspace.backToContacts')" @click="emit('back')">
         <ChevronLeft :size="16" />
       </button>
       <div class="left-panel-title">
@@ -81,16 +84,16 @@ const snippetHtml = (snippet: string): string =>
 
     <div class="sidebar-header">
       <div class="conv-search">
-        <SearchInput v-model="searchQueryModel" placeholder="搜索对话..." :loading="isSearching" />
+        <SearchInput v-model="searchQueryModel" :placeholder="t('chat.searchConversations')" :loading="isSearching" />
       </div>
       <div class="sidebar-actions">
-        <button class="new-conv-btn" title="创建新对话" @click="emit('new-conversation')">
+        <button class="new-conv-btn" :title="t('workspace.newConvTitle')" @click="emit('new-conversation')">
           <Plus :size="14" />
-          <span>新对话</span>
+          <span>{{ t('chat.newConversation') }}</span>
         </button>
         <button
           :class="['batch-toggle-btn', { active: batchMode }]"
-          title="批量操作"
+          :title="t('workspace.batchOps')"
           @click="emit('toggle-batch-mode')"
         >
           <SquareCheck :size="14" />
@@ -99,16 +102,16 @@ const snippetHtml = (snippet: string): string =>
     </div>
 
     <div v-if="batchMode" class="batch-toolbar">
-      <button class="batch-action-btn" @click="emit('select-all')">全选</button>
-      <span class="batch-count">已选 {{ selectedIds.size }} 项</span>
+      <button class="batch-action-btn" @click="emit('select-all')">{{ t('workspace.selectAll') }}</button>
+      <span class="batch-count">{{ t('workspace.selectedCount', { n: selectedIds.size }) }}</span>
       <button
         :class="['batch-delete-btn', { disabled: selectedIds.size === 0 }]"
         :disabled="selectedIds.size === 0"
-        title="批量删除"
+        :title="t('workspace.batchDelete')"
         @click="emit('batch-delete')"
       >
         <Trash2 :size="13" />
-        删除
+        {{ t('workspace.delete') }}
       </button>
     </div>
 
@@ -116,7 +119,7 @@ const snippetHtml = (snippet: string): string =>
       <template v-if="isSearchMode">
         <div v-if="isSearching" class="conv-empty">
           <Loader2 :size="20" class="spin-animation" />
-          <span>搜索中...</span>
+          <span>{{ t('chat.searching') }}</span>
         </div>
         <template v-else>
           <div
@@ -133,7 +136,7 @@ const snippetHtml = (snippet: string): string =>
           </div>
           <div v-if="searchResults.length === 0" class="conv-empty">
             <MessageSquare :size="24" />
-            <span>未找到匹配的会话</span>
+            <span>{{ t('chat.noMatchConv') }}</span>
           </div>
         </template>
       </template>
@@ -175,10 +178,10 @@ const snippetHtml = (snippet: string): string =>
                 </template>
               </div>
               <template v-if="!batchMode">
-                <button v-if="renamingConvId !== conv.id" class="conv-item-rename" title="重命名" @click.stop="emit('start-rename', conv.id, conv.title)">
+                <button v-if="renamingConvId !== conv.id" class="conv-item-rename" :title="t('chat.rename')" @click.stop="emit('start-rename', conv.id, conv.title)">
                   <Pencil :size="13" />
                 </button>
-                <button class="conv-item-delete" title="删除对话" @click.stop="emit('delete-conversation', conv.id)">
+                <button class="conv-item-delete" :title="t('chat.deleteConv')" @click.stop="emit('delete-conversation', conv.id)">
                   <Trash2 :size="13" />
                 </button>
               </template>
@@ -188,7 +191,7 @@ const snippetHtml = (snippet: string): string =>
 
         <div v-if="timeGroups.length === 0" class="conv-empty">
           <MessageSquare :size="24" />
-          <span>暂无历史记录</span>
+          <span>{{ t('chat.noHistory') }}</span>
         </div>
       </template>
     </div>

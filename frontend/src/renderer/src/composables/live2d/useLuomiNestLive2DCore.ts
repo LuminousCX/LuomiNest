@@ -17,6 +17,7 @@
  */
 import { Ticker, Application } from 'pixi.js'
 import type { Ref } from 'vue'
+import { i18n } from '../../i18n'
 
 /* ============================================================================
  * 常量
@@ -82,7 +83,7 @@ export const loadCubism4Module = async (): Promise<CubismLive2DModelCtor> => {
   if (live2DModelCtor) return live2DModelCtor
   const core = (window as unknown as { Live2DCubismCore?: unknown }).Live2DCubismCore
   if (typeof core === 'undefined') {
-    throw new Error('Live2DCubismCore 未加载，请检查 cubism-core/live2dcubismcore.min.js 是否存在')
+    throw new Error(i18n.global.t('avatar.live2d.cubismCoreMissing'))
   }
   const mod = await import('pixi-live2d-display-mulmotion/cubism4')
   live2DModelCtor = mod.Live2DModel
@@ -494,7 +495,7 @@ export const initLuomiNestPixiApp = (
   // Live2D（pixi-live2d-display）强依赖 WebGL，PixiJS 7 已移除 Canvas 2D 渲染器，
   // 若 WebGL 不可用则无法渲染，直接报错而非无效降级。
   if (!gpu.webglAvailable) {
-    const msg = '当前设备不支持 WebGL，Live2D 无法渲染，请检查显卡驱动或硬件加速是否开启。'
+    const msg = i18n.global.t('avatar.live2d.webglNotSupported')
     opts.onError?.(msg)
     opts.logger?.error(`WebGL not available: ${gpu.renderer}`)
     return null
@@ -537,7 +538,7 @@ export const initLuomiNestPixiApp = (
       return app
     } catch (canvasErr) {
       const message = canvasErr instanceof Error ? canvasErr.message : 'Unknown error'
-      opts.onError?.(`图形初始化失败：${message}`)
+      opts.onError?.(i18n.global.t('avatar.live2d.graphicsInitFailed', { message }))
       opts.logger?.error(`PixiJS init failed: ${message}`)
       return null
     }

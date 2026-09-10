@@ -1,3 +1,5 @@
+import { i18n } from '../i18n'
+
 const RELATIVE_THRESHOLD = 7 * 24 * 60 * 60 * 1000
 
 const isValidDate = (d: Date): boolean => !isNaN(d.getTime())
@@ -9,18 +11,18 @@ const formatDateRelative = (dateStr: string): string => {
   const now = new Date()
   const diff = now.getTime() - date.getTime()
 
-  if (diff < 0) return date.toLocaleDateString('zh-CN')
+  if (diff < 0) return date.toLocaleDateString(i18n.global.locale.value)
 
   const minutes = Math.floor(diff / 60000)
   const hours = Math.floor(diff / 3600000)
   const days = Math.floor(diff / 86400000)
 
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes} 分钟前`
-  if (hours < 24) return `${hours} 小时前`
-  if (days < 7) return `${days} 天前`
+  if (minutes < 1) return i18n.global.t('common.time.justNow')
+  if (minutes < 60) return i18n.global.t('common.time.minutesAgo', { n: minutes })
+  if (hours < 24) return i18n.global.t('common.time.hoursAgo', { n: hours })
+  if (days < 7) return i18n.global.t('common.time.daysAgo', { n: days })
 
-  return date.toLocaleDateString('zh-CN', {
+  return date.toLocaleDateString(i18n.global.locale.value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

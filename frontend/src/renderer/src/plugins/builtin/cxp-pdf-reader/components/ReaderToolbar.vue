@@ -6,6 +6,7 @@
  * 所有状态由父组件管理，本组件只负责触发事件。
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   FolderOpen,
   Search,
@@ -48,6 +49,8 @@ const props = defineProps<{
   currentMatch: number
   totalMatches: number
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   'open-file': []
@@ -103,7 +106,7 @@ const handleSearchInput = (e: Event) => {
           class="toolbar-btn"
           :class="{ active: sidebarOpen }"
           :disabled="!hasActivePdf"
-          title="切换大纲侧边栏"
+          :title="t('pdfReader.toolbar.toggleSidebar')"
           @click="emit('toggle-sidebar')"
         >
           <PanelLeft :size="18" />
@@ -111,11 +114,11 @@ const handleSearchInput = (e: Event) => {
 
         <button
           class="toolbar-btn primary"
-          title="打开文件 (PDF/Word/TXT)"
+          :title="t('pdfReader.toolbar.openFile')"
           @click="emit('open-file')"
         >
           <FolderOpen :size="18" />
-          <span class="btn-label">打开</span>
+          <span class="btn-label">{{ t('pdfReader.toolbar.open') }}</span>
         </button>
 
         <div class="toolbar-divider" />
@@ -124,7 +127,7 @@ const handleSearchInput = (e: Event) => {
           class="toolbar-btn"
           :class="{ active: searchOpen }"
           :disabled="!hasActivePdf"
-          title="搜索"
+          :title="t('pdfReader.toolbar.search')"
           @click="emit('toggle-search')"
         >
           <Search :size="18" />
@@ -134,7 +137,7 @@ const handleSearchInput = (e: Event) => {
           class="toolbar-btn"
           :class="{ active: aiPanelOpen }"
           :disabled="!hasActivePdf"
-          title="AI 助手"
+          :title="t('pdfReader.toolbar.aiAssistant')"
           @click="emit('toggle-ai')"
         >
           <Sparkles :size="18" />
@@ -143,7 +146,7 @@ const handleSearchInput = (e: Event) => {
         <button
           class="toolbar-btn"
           :disabled="!hasActivePdf"
-          title="笔记"
+          :title="t('pdfReader.toolbar.notes')"
           @click="emit('open-notes')"
         >
           <StickyNote :size="18" />
@@ -164,7 +167,7 @@ const handleSearchInput = (e: Event) => {
       <div class="toolbar-right">
         <button
           class="toolbar-btn"
-          title="设置"
+          :title="t('pdfReader.toolbar.settings')"
           @click="emit('open-settings')"
         >
           <Settings :size="18" />
@@ -173,7 +176,7 @@ const handleSearchInput = (e: Event) => {
           class="toolbar-btn"
           :class="{ active: aiPanelOpen }"
           :disabled="!hasActivePdf"
-          title="切换 AI 面板"
+          :title="t('pdfReader.toolbar.toggleAiPanel')"
           @click="emit('toggle-ai')"
         >
           <PanelRight :size="18" />
@@ -188,7 +191,7 @@ const handleSearchInput = (e: Event) => {
         <input
           type="text"
           class="search-input"
-          placeholder="在文档中搜索..."
+          :placeholder="t('pdfReader.toolbar.searchPlaceholder')"
           :value="searchQuery"
           @input="handleSearchInput"
         />
@@ -197,13 +200,13 @@ const handleSearchInput = (e: Event) => {
             {{ currentMatch }} / {{ totalMatches }}
           </template>
           <template v-else-if="searchQuery">
-            无匹配
+            {{ t('pdfReader.toolbar.noMatch') }}
           </template>
         </div>
         <button
           class="toolbar-btn small"
           :disabled="totalMatches === 0"
-          title="上一个"
+          :title="t('pdfReader.toolbar.prevMatch')"
           @click="emit('search-prev')"
         >
           <ChevronUp :size="16" />
@@ -211,14 +214,14 @@ const handleSearchInput = (e: Event) => {
         <button
           class="toolbar-btn small"
           :disabled="totalMatches === 0"
-          title="下一个"
+          :title="t('pdfReader.toolbar.nextMatch')"
           @click="emit('search-next')"
         >
           <ChevronDown :size="16" />
         </button>
         <button
           class="toolbar-btn small"
-          title="关闭搜索"
+          :title="t('pdfReader.toolbar.closeSearch')"
           @click="emit('toggle-search')"
         >
           <X :size="16" />
@@ -233,7 +236,7 @@ const handleSearchInput = (e: Event) => {
           <button
             class="toolbar-btn small"
             :disabled="currentPage <= 1"
-            title="上一页"
+            :title="t('pdfReader.toolbar.prevPage')"
             @click="handlePrevPage"
           >
             <ChevronLeft :size="16" />
@@ -255,7 +258,7 @@ const handleSearchInput = (e: Event) => {
           <button
             class="toolbar-btn small"
             :disabled="currentPage >= totalPages"
-            title="下一页"
+            :title="t('pdfReader.toolbar.nextPage')"
             @click="handleNextPage"
           >
             <ChevronRight :size="16" />
@@ -265,7 +268,7 @@ const handleSearchInput = (e: Event) => {
         <div class="zoom-control">
           <button
             class="toolbar-btn small"
-            title="缩小"
+            :title="t('pdfReader.toolbar.zoomOut')"
             @click="handleZoomOut"
           >
             <ZoomOut :size="16" />
@@ -273,7 +276,7 @@ const handleSearchInput = (e: Event) => {
           <span class="zoom-label">{{ scalePercent }}</span>
           <button
             class="toolbar-btn small"
-            title="放大"
+            :title="t('pdfReader.toolbar.zoomIn')"
             @click="handleZoomIn"
           >
             <ZoomIn :size="16" />

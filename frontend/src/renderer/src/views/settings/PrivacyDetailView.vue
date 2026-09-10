@@ -16,15 +16,17 @@ import {
   BookOpen,
   FileCheck
 } from 'lucide-vue-next'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import LumiSettingsBackground from '../../components/settings-detail/LumiSettingsBackground.vue'
 import '../../styles/views/settings-independent-bg.css'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const sections = [
   {
-    title: '数据收集',
+    key: 'dataCollection',
     content: [
       'LuomiNest 优先采用本地化数据处理策略。您的对话记录、个人设置和偏好数据默认存储在本地设备上。',
       '当您使用在线 AI 模型服务时，您的对话内容将通过加密连接传输至相应的模型提供商（如 OpenAI、Anthropic 等），以获取推理结果。传输完成后，对话内容不会在我们的服务器上保留副本。',
@@ -33,7 +35,7 @@ const sections = [
     ]
   },
   {
-    title: '数据存储',
+    key: 'dataStorage',
     content: [
       '所有用户数据（包括聊天记录、配置文件、角色数据等）默认存储在您的本地设备中。',
       '数据库文件使用 SQLite 格式存储，位于应用数据目录下。您可以随时通过文件管理器访问或删除这些数据。',
@@ -42,7 +44,7 @@ const sections = [
     ]
   },
   {
-    title: '数据传输',
+    key: 'dataTransfer',
     content: [
       '与外部服务的通信均通过 HTTPS/TLS 加密连接进行。',
       '当您连接第三方消息平台（如 QQ、微信、Discord 等）时，仅传输必要的消息内容，不会上传本地存储的其他数据。',
@@ -51,7 +53,7 @@ const sections = [
     ]
   },
   {
-    title: '第三方服务',
+    key: 'thirdParty',
     content: [
       'AI 模型服务：当您配置并使用第三方 AI 模型时，需遵守相应服务提供商的隐私政策。我们建议您在使用前阅读相关条款。',
       '消息平台：连接 QQ、微信、Discord 等平台时，需授权相应的机器人或 API 访问权限。我们仅请求完成核心功能所需的最小权限。',
@@ -60,7 +62,7 @@ const sections = [
     ]
   },
   {
-    title: '用户权利',
+    key: 'userRights',
     content: [
       '访问权：您可以随时查看存储在本地的所有数据。依据 GDPR 第 15 条及《个人信息保护法》第四章之规定，我们保障您对个人信息的知情权与访问权。',
       '删除权：您可以随时删除任何本地数据，包括对话记录、角色配置和应用设置。GDPR 第 17 条"被遗忘权"及《个人信息保护法》第四十七条均保障此项权利。',
@@ -71,7 +73,7 @@ const sections = [
     ]
   },
   {
-    title: '安全措施',
+    key: 'securityMeasures',
     content: [
       '所有网络通信均使用 TLS 1.2+ 加密。',
       '敏感配置（如 API 密钥）使用系统级安全存储（Windows Credential Manager / macOS Keychain）进行保护。',
@@ -82,7 +84,7 @@ const sections = [
     ]
   },
   {
-    title: '未成年人保护',
+    key: 'minorsProtection',
     content: [
       'LuomiNest 严格遵守各司法管辖区的未成年人保护法规。本应用不面向 13 周岁以下的未成年人提供服务。',
       '对于 14 周岁以下的用户，我们要求取得监护人的明确同意后方可使用本应用的拟人化互动功能。此规定直接对应《人工智能拟人化互动服务管理暂行办法》第十四条及《个人信息保护法》第三十一条。',
@@ -92,7 +94,7 @@ const sections = [
     ]
   },
   {
-    title: '法律法规依据',
+    key: 'legalBasis',
     content: [
       'LuomiNest 的设计与运营遵循以下法律法规框架，确保在各主要司法管辖区的合规性：',
       '《中华人民共和国网络安全法》（2017年6月1日施行）——确立网络安全等级保护制度，规范网络运营者的数据安全义务，是 LuomiNest 安全架构设计的顶层法律依据。',
@@ -104,7 +106,7 @@ const sections = [
     ]
   },
   {
-    title: '合规声明与免责',
+    key: 'complianceDisclaimer',
     content: [
       'LuomiNest 作为开源项目，遵循项目 LICENSE 中声明的许可协议。本软件按"原样"提供，不提供任何明示或暗示的保证或担保，包括但不限于对适销性、特定用途适用性的保证。',
       'LuomiNest 采用本地优先架构，默认情况下所有数据均在用户设备上处理和存储，不通过 LuomiNest 自有服务器中转任何用户数据。因此，LuomiNest 团队不充当《个人信息保护法》意义上的"个人信息处理者"角色，各模型服务提供商在其服务范围内承担相应的数据处理者责任。',
@@ -115,7 +117,7 @@ const sections = [
     ]
   },
   {
-    title: '各地区合规说明',
+    key: 'regionalCompliance',
     content: [],
     regions: [
       {
@@ -182,7 +184,7 @@ const sections = [
     ]
   },
   {
-    title: '政策更新',
+    key: 'policyUpdate',
     content: [
       '我们可能会不时更新本隐私政策。重大变更将在应用内以通知形式告知用户。',
       '当法律法规发生修订（如《人工智能拟人化互动服务管理暂行办法》配套细则出台），我们将及时对照新规调整本政策内容，确保 LuomiNest 持续合规。',
@@ -192,20 +194,25 @@ const sections = [
 ]
 
 const sectionIconMap: Record<string, typeof Shield> = {
-  '数据收集': Database,
-  '数据存储': HardDrive,
-  '数据传输': Wifi,
-  '第三方服务': Puzzle,
-  '用户权利': UserCheck,
-  '安全措施': Lock,
-  '未成年人保护': Users,
-  '法律法规依据': BookOpen,
-  '合规声明与免责': FileCheck,
-  '各地区合规说明': Globe,
-  '政策更新': FileText
+  dataCollection: Database,
+  dataStorage: HardDrive,
+  dataTransfer: Wifi,
+  thirdParty: Puzzle,
+  userRights: UserCheck,
+  securityMeasures: Lock,
+  minorsProtection: Users,
+  legalBasis: BookOpen,
+  complianceDisclaimer: FileCheck,
+  regionalCompliance: Globe,
+  policyUpdate: FileText
 }
 
-const sectionIcon = (title: string) => sectionIconMap[title] ?? Shield
+const sectionIcon = (key: string) => sectionIconMap[key] ?? Shield
+
+/** 分节标题经 i18n 解析（正文段落为固定法律文本，保留原文） */
+const viewSections = computed(() =>
+  sections.map((s) => ({ ...s, title: t(`privacy.sections.${s.key}`) })),
+)
 
 const regionSection = sections.find((s) => s.regions)
 const regionCount = regionSection?.regions?.length ?? 0
@@ -246,8 +253,8 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
         <ArrowLeft :size="18" />
       </button>
       <div>
-        <h1 class="lumi-settings-page__title">隐私与合规</h1>
-        <p class="lumi-settings-page__subtitle">LuomiNest 的数据保护政策与法律法规合规说明</p>
+        <h1 class="lumi-settings-page__title">{{ t('privacy.title') }}</h1>
+        <p class="lumi-settings-page__subtitle">{{ t('privacy.subtitle') }}</p>
       </div>
     </header>
 
@@ -255,45 +262,39 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
       <section class="privacy-hero lumi-settings-animate-slide">
         <div class="privacy-hero__content">
           <Shield :size="28" class="privacy-hero__icon" />
-          <h2 class="privacy-hero__title">隐私优先 · 合规为本</h2>
-          <p class="privacy-hero__desc">
-            LuomiNest 由 LuminousChenXi 团队开发。我们深知隐私的重要性，致力于保护用户的数据安全与法律合规。
-            本页面详细说明了本应用如何收集、使用、存储和保护您的信息，以及我们在各主要司法管辖区的法律法规合规情况。
-          </p>
+          <h2 class="privacy-hero__title">{{ t('privacy.hero.title') }}</h2>
+          <p class="privacy-hero__desc">{{ t('privacy.hero.desc') }}</p>
           <div class="privacy-hero__stats">
             <div class="privacy-hero__stat">
               <span class="privacy-hero__stat-value">{{ sections.length }}</span>
-              <span class="privacy-hero__stat-label">核心原则</span>
+              <span class="privacy-hero__stat-label">{{ t('privacy.stats.corePrinciples') }}</span>
             </div>
             <div class="privacy-hero__divider"></div>
             <div class="privacy-hero__stat">
               <span class="privacy-hero__stat-value">{{ regionCount }}</span>
-              <span class="privacy-hero__stat-label">合规地区</span>
+              <span class="privacy-hero__stat-label">{{ t('privacy.stats.regions') }}</span>
             </div>
             <div class="privacy-hero__divider"></div>
             <div class="privacy-hero__stat">
               <span class="privacy-hero__stat-value">AES-256</span>
-              <span class="privacy-hero__stat-label">加密标准</span>
+              <span class="privacy-hero__stat-label">{{ t('privacy.stats.encryption') }}</span>
             </div>
           </div>
         </div>
       </section>
 
       <section class="privacy-intro lumi-settings-animate-slide">
-        <p class="privacy-lead">
-          LuomiNest 优先采用本地化数据处理策略，默认将对话记录、个人设置和偏好数据保存在您的本地设备上。
-          当您使用在线服务时，数据通过加密连接传输，且不会在 LuomiNest 服务器上保留副本。
-        </p>
+        <p class="privacy-lead">{{ t('privacy.lead') }}</p>
       </section>
 
       <section
-        v-for="(section, sIdx) in sections"
-        :key="section.title"
+        v-for="(section, sIdx) in viewSections"
+        :key="section.key"
         :data-section-idx="sIdx"
         :class="['privacy-section', { visible: isVisible(sIdx) }]"
       >
         <h2 class="privacy-section__title">
-          <component :is="sectionIcon(section.title)" :size="14" />
+          <component :is="sectionIcon(section.key)" :size="14" />
           {{ section.title }}
         </h2>
         <p
@@ -318,12 +319,12 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
       >
         <h2 class="privacy-section__title">
           <Mail :size="14" />
-          联系我们
+          {{ t('privacy.sections.contact') }}
         </h2>
-        <p class="privacy-paragraph">如果您对本隐私政策有任何疑问、建议或投诉，请通过以下方式联系我们：</p>
+        <p class="privacy-paragraph">{{ t('privacy.contact.desc') }}</p>
         <ul class="privacy-list">
-          <li>GitHub Issues：<a href="https://github.com/LuminousCX/LuomiNest/issues" target="_blank" rel="noopener noreferrer">LuminousCX/LuomiNest</a></li>
-          <li>项目主页：<a href="https://github.com/LuminousCX/LuomiNest" target="_blank" rel="noopener noreferrer">github.com/LuminousCX/LuomiNest</a></li>
+          <li>{{ t('privacy.contact.githubLabel') }}<a href="https://github.com/LuminousCX/LuomiNest/issues" target="_blank" rel="noopener noreferrer">LuminousCX/LuomiNest</a></li>
+          <li>{{ t('privacy.contact.homepageLabel') }}<a href="https://github.com/LuminousCX/LuomiNest" target="_blank" rel="noopener noreferrer">github.com/LuminousCX/LuomiNest</a></li>
         </ul>
       </section>
     </div>

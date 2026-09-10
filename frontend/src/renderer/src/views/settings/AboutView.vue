@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   ArrowLeft,
   Mail,
@@ -23,6 +25,7 @@ import LumiSettingsBackground from '../../components/settings-detail/LumiSetting
 import '../../styles/views/settings-independent-bg.css'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const profileStats = [
   { icon: Github, label: 'Followers', value: '65+' },
@@ -42,39 +45,39 @@ const socialLinks = [
 const pinnedProjects = [
   {
     name: 'LuomiNest',
+    key: 'luomiNest',
     owner: 'LuminousCX',
-    desc: '分布式 AI 伴侣桌面平台，LuomiNest 本体项目。',
     url: 'https://github.com/LuminousCX/LuomiNest',
     tags: ['Vue 3', 'Electron', 'FastAPI']
   },
   {
     name: 'LuomiBlog',
+    key: 'luomiBlog',
     owner: 'luminous-ChenXi',
-    desc: 'AI 知识库博客系统，支持 Astro / Vue 双前端。',
     url: 'https://github.com/luminous-ChenXi/LuomiBlog',
     tags: ['Astro', 'Vue', 'Spring Boot']
   },
   {
     name: 'AsrNest',
+    key: 'asrNest',
     owner: 'luminous-ChenXi',
-    desc: '现代全媒体 / 图床管理平台，AI 预审、CDN 加速。',
     url: 'https://github.com/luminous-ChenXi/AsrNest',
     tags: ['Spring Boot', 'Vue 3', 'AI']
   },
   {
     name: 'AsrNest Backend',
+    key: 'asrNestBackend',
     owner: 'luminous-ChenXi',
-    desc: 'AsrNest 后端服务，负责图片处理与业务 API。',
     url: 'https://github.com/luminous-ChenXi/AsrNest-Backend',
     tags: ['Java', 'MySQL', 'Redis']
   }
 ]
 
-const techStacks = [
-  { category: '后端 / 运维', icon: Code, items: ['Java', 'Python', 'Node.js', 'Nginx', 'Docker', 'K8s', 'MySQL', 'MongoDB'] },
-  { category: '前端 / 建站', icon: Globe, items: ['Vue', 'Astro', 'HTML/CSS', 'TypeScript', 'WordPress'] },
-  { category: '创作 / 设计', icon: Palette, items: ['UE5', 'Blender', 'AE', 'PS'] }
-]
+const techStacks = computed(() => [
+  { category: t('about.techStacks.backend'), icon: Code, items: ['Java', 'Python', 'Node.js', 'Nginx', 'Docker', 'K8s', 'MySQL', 'MongoDB'] },
+  { category: t('about.techStacks.frontend'), icon: Globe, items: ['Vue', 'Astro', 'HTML/CSS', 'TypeScript', 'WordPress'] },
+  { category: t('about.techStacks.creative'), icon: Palette, items: ['UE5', 'Blender', 'AE', 'PS'] }
+])
 </script>
 
 <template>
@@ -85,8 +88,8 @@ const techStacks = [
         <ArrowLeft :size="18" />
       </button>
       <div>
-        <h1 class="lumi-settings-page__title">关于开发者</h1>
-        <p class="lumi-settings-page__subtitle">LuomiNest 项目主导者</p>
+        <h1 class="lumi-settings-page__title">{{ t('about.title') }}</h1>
+        <p class="lumi-settings-page__subtitle">{{ t('about.subtitle') }}</p>
       </div>
     </header>
 
@@ -103,7 +106,7 @@ const techStacks = [
               <p class="about-role">Full-Stack Developer & Digital Creative Explorer</p>
               <p class="about-motto">
                 “Nothing but youth and dreams can live up to the future!”<br />
-                唯有青春与梦想，不可辜负。
+                {{ t('about.mottoZh') }}
               </p>
 
               <div class="about-stats">
@@ -134,12 +137,11 @@ const techStacks = [
         <section class="lumi-settings-section lumi-settings-animate-slide">
           <div class="lumi-settings-section__header">
             <Sparkles :size="14" />
-            <span>About Me / 关于我</span>
+            <span>{{ t('about.sections.aboutMe') }}</span>
           </div>
           <div class="about-section">
             <p class="about-section__text">
-              我是一名<strong>全栈开发者与数字创意探索者</strong>，热衷于将前沿技术（AI、云原生）与创意构想（二次元、游戏开发）相结合。
-              我的目标是构建既技术扎实又富有创意的实用项目。LuomiNest 由我主导设计与开发。
+              {{ t('about.aboutMe.p1a') }}<strong>{{ t('about.aboutMe.p1Strong') }}</strong>{{ t('about.aboutMe.p1b') }}
             </p>
             <p class="about-section__text">
               I am a Full-Stack Developer & Digital Creative Explorer, passionately bridging the gap between
@@ -153,13 +155,10 @@ const techStacks = [
         <section class="lumi-settings-section lumi-settings-animate-slide">
           <div class="lumi-settings-section__header">
             <Cpu :size="14" />
-            <span>Technical Focus / 技术聚焦</span>
+            <span>{{ t('about.sections.technicalFocus') }}</span>
           </div>
           <div class="about-section">
-            <p class="about-section__text">
-              全栈开发（Java / Spring Boot / Vue）· 云原生（Docker / Nginx / K8s）·
-              内容创作工具链（UE5 / Blender / AE / PS）· AI Agent 与桌面端工程。
-            </p>
+            <p class="about-section__text">{{ t('about.technicalFocusText') }}</p>
           </div>
         </section>
 
@@ -167,13 +166,10 @@ const techStacks = [
         <section class="lumi-settings-section lumi-settings-animate-slide">
           <div class="lumi-settings-section__header">
             <Palette :size="14" />
-            <span>Creative Practice / 创意实践</span>
+            <span>{{ t('about.sections.creativePractice') }}</span>
           </div>
           <div class="about-section">
-            <p class="about-section__text">
-              绘画与视觉设计 · 探索 AIGC 辅助工作流 · 二次元角色与 Live2D 互动呈现 ·
-              独立游戏原型与数字资产创作。
-            </p>
+            <p class="about-section__text">{{ t('about.creativePracticeText') }}</p>
           </div>
         </section>
 
@@ -181,7 +177,7 @@ const techStacks = [
         <section class="lumi-settings-section lumi-settings-animate-slide">
           <div class="lumi-settings-section__header">
             <Zap :size="14" />
-            <span>Core Projects / 核心项目</span>
+            <span>{{ t('about.sections.coreProjects') }}</span>
           </div>
           <div class="about-projects">
             <a
@@ -197,7 +193,7 @@ const techStacks = [
                 <ExternalLink :size="12" />
               </div>
               <span class="about-project__owner">{{ project.owner }}</span>
-              <p class="about-project__desc">{{ project.desc }}</p>
+              <p class="about-project__desc">{{ t('about.projects.' + project.key) }}</p>
               <div class="about-project__tags">
                 <span v-for="tag in project.tags" :key="tag" class="lumi-settings-tag">{{ tag }}</span>
               </div>
@@ -209,7 +205,7 @@ const techStacks = [
         <section class="lumi-settings-section lumi-settings-animate-slide">
           <div class="lumi-settings-section__header">
             <Code :size="14" />
-            <span>Tech Stack / 技术栈</span>
+            <span>{{ t('about.sections.techStack') }}</span>
           </div>
           <div class="about-tech">
             <div v-for="stack in techStacks" :key="stack.category" class="about-tech__row">
@@ -228,7 +224,7 @@ const techStacks = [
         <section class="lumi-settings-section lumi-settings-animate-slide">
           <div class="lumi-settings-section__header">
             <Mail :size="14" />
-            <span>Contact / 联系方式</span>
+            <span>{{ t('about.sections.contact') }}</span>
           </div>
           <div class="about-contact">
             <a href="mailto:luminouschenxi@outlook.com" class="about-contact__item">
@@ -254,9 +250,9 @@ const techStacks = [
         <section class="lumi-settings-card lumi-settings-animate-slide">
           <div class="about-support">
             <Heart :size="14" class="about-support__icon" />
-            <span>如果你觉得我的项目对你有帮助，欢迎通过</span>
-            <a href="https://afdian.com/a/luminous_chenxi" target="_blank" rel="noopener noreferrer">爱发电</a>
-            <span>支持我</span>
+            <span>{{ t('about.support.before') }}</span>
+            <a href="https://afdian.com/a/luminous_chenxi" target="_blank" rel="noopener noreferrer">{{ t('about.support.afdian') }}</a>
+            <span>{{ t('about.support.after') }}</span>
           </div>
         </section>
 

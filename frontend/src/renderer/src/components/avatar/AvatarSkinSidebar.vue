@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,6 +22,8 @@ import {
 import LumiButton from '../common/LumiButton.vue'
 import type { ManifestSkinItem } from './types'
 import type { AvatarRendererType } from '@/types/avatar'
+
+const { t } = useI18n()
 
 export interface HiddenSkinItem {
   id: string
@@ -169,8 +172,8 @@ const hiddenListExpanded = ref(false)
           <button
             :class="['skin-action-btn', { danger: skin.source !== 'builtin', confirming: confirmingDeleteId === skin.id }]"
             :title="skin.source === 'builtin'
-              ? '隐藏该内置模型（可在下方恢复）'
-              : (confirmingDeleteId === skin.id ? '再次点击确认删除' : '删除该导入模型')"
+              ? t('avatar.sidebar.hideBuiltinHint')
+              : (confirmingDeleteId === skin.id ? t('avatar.sidebar.confirmDelete') : t('avatar.sidebar.deleteImported'))"
             @click.stop="onCardAction(skin)"
           >
             <Trash2 v-if="skin.source !== 'builtin'" :size="13" />
@@ -181,7 +184,7 @@ const hiddenListExpanded = ref(false)
         <!-- 空列表提示 -->
         <div v-if="props.skinList.length === 0" class="empty-list-hint">
           <Palette :size="24" />
-          <span>当前类型暂无模型</span>
+          <span>{{ t('avatar.sidebar.emptyList') }}</span>
         </div>
       </div>
 
@@ -189,20 +192,20 @@ const hiddenListExpanded = ref(false)
       <div v-if="props.hiddenModels.length > 0" class="hidden-section">
         <button class="hidden-toggle" @click="hiddenListExpanded = !hiddenListExpanded">
           <EyeOff :size="12" />
-          <span>已隐藏 {{ props.hiddenModels.length }} 个内置模型</span>
+          <span>{{ t('avatar.sidebar.hiddenCount', { n: props.hiddenModels.length }) }}</span>
           <ChevronDown :size="12" :class="['hidden-chevron', { expanded: hiddenListExpanded }]" />
         </button>
         <div v-if="hiddenListExpanded" class="hidden-list">
           <div v-for="hidden in props.hiddenModels" :key="hidden.id" class="hidden-item">
             <span class="hidden-name">{{ hidden.name }}</span>
             <span class="hidden-type">{{ TYPE_LABELS[hidden.type] }}</span>
-            <button class="hidden-restore-btn" title="恢复显示" @click="emit('restore-model', hidden.id)">
+            <button class="hidden-restore-btn" :title="t('avatar.sidebar.restoreOne')" @click="emit('restore-model', hidden.id)">
               <Eye :size="12" />
             </button>
           </div>
           <button class="hidden-restore-all" @click="emit('restore-all')">
             <RotateCcw :size="11" />
-            <span>全部恢复</span>
+            <span>{{ t('avatar.sidebar.restoreAll') }}</span>
           </button>
         </div>
       </div>

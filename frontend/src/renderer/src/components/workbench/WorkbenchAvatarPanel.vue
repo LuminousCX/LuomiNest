@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { VNodeRef } from 'vue'
 import {
   Loader2,
@@ -12,6 +13,8 @@ import {
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 import type { LuomiNestModelInfo } from '../../config/luominest-models'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   isDesktopMode: boolean
@@ -38,9 +41,9 @@ const emit = defineEmits<{
 }>()
 // 此页面方便用户切换角色形象
 const statusText = computed(() => {
-  if (props.isSpeaking) return '正在说话'
-  if (props.isSynthesizing) return '合成语音中'
-  return `${props.currentModelInfo.name} 已就绪`
+  if (props.isSpeaking) return t('workbench.speaking')
+  if (props.isSynthesizing) return t('workbench.synthesizing')
+  return t('workbench.modelReady', { name: props.currentModelInfo.name })
 })
 </script>
 
@@ -48,7 +51,7 @@ const statusText = computed(() => {
   <div class="avatar-main">
     <div class="avatar-header">
       <div class="avatar-title">
-        <span>陪伴形象</span>
+        <span>{{ t('workbench.companionAvatar') }}</span>
       </div>
       <div class="avatar-model-selector">
         <LumiButton
@@ -71,7 +74,7 @@ const statusText = computed(() => {
         <Transition name="fade">
           <div v-if="isModelLoading && !isModelReady" class="avatar-loading">
             <Loader2 :size="28" class="spin-animation" />
-            <span>加载模型中...</span>
+            <span>{{ t('workbench.loadingModel') }}</span>
           </div>
         </Transition>
         <Transition name="fade">
@@ -100,9 +103,9 @@ const statusText = computed(() => {
           <Monitor :size="40" />
         </div>
         <div class="hint-content">
-          <h3>桌宠模式已开启</h3>
-          <p>模型已切换到桌面宠物窗口，请直接在桌面上与角色互动。</p>
-          <p class="hint-sub">工作台的对话、表情和动作会同步到桌宠。前往"皮套工坊"可切换回内联模式。</p>
+          <h3>{{ t('workbench.desktopPetTitle') }}</h3>
+          <p>{{ t('workbench.desktopPetDesc') }}</p>
+          <p class="hint-sub">{{ t('workbench.desktopPetHint') }}</p>
         </div>
       </div>
     </div>
@@ -113,7 +116,7 @@ const statusText = computed(() => {
           variant="outline"
           size="sm"
           icon-only
-          :aria-label="ttsEnabled ? '关闭语音播报' : '开启语音播报'"
+          :aria-label="ttsEnabled ? t('workbench.ttsOff') : t('workbench.ttsOn')"
           :class="['ctrl-btn', { active: ttsEnabled }]"
           @click="emit('toggle-tts')"
         >
@@ -126,7 +129,7 @@ const statusText = computed(() => {
           variant="outline"
           size="sm"
           icon-only
-          :aria-label="subtitleEnabled ? '关闭字幕' : '开启字幕'"
+          :aria-label="subtitleEnabled ? t('workbench.subtitleOff') : t('workbench.subtitleOn')"
           :class="['ctrl-btn', { active: subtitleEnabled }]"
           @click="emit('toggle-subtitle')"
         >
@@ -139,7 +142,7 @@ const statusText = computed(() => {
           variant="danger"
           size="sm"
           icon-only
-          aria-label="停止播放"
+          :aria-label="t('workbench.stopPlayback')"
           class="ctrl-btn stop-btn"
           @click="emit('stop-tts')"
         >
@@ -148,7 +151,7 @@ const statusText = computed(() => {
           </template>
         </LumiButton>
       </div>
-      <p class="avatar-tip">主 Agent 工作台 · 支持工具调用与子 Agent 协作</p>
+      <p class="avatar-tip">{{ t('workbench.avatarTip') }}</p>
     </div>
   </div>
 </template>

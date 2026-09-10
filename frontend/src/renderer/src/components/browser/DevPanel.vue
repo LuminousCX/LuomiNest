@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Play, X, RefreshCw } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
+
+const { t } = useI18n()
 
 /**
  * 浏览器开发者面板。
@@ -37,7 +40,7 @@ interface DomTreeNode {
 /** 截断过长输出，附加提示 */
 const truncate = (text: string): string => {
   if (text.length > MAX_OUTPUT) {
-    return text.slice(0, MAX_OUTPUT) + '\n\n...（已截断，完整结果见控制台）'
+    return text.slice(0, MAX_OUTPUT) + '\n\n' + t('browser.dev.truncated')
   }
   return text
 }
@@ -47,17 +50,17 @@ const executeScript = async (): Promise<void> => {
   const script = input.value.trim()
   if (!script || loading.value) return
   loading.value = true
-  output.value = '执行中...'
+  output.value = t('browser.dev.executing')
   try {
     const result = await window.api?.browserAutomation?.execute('execute_js', { script })
     if (result?.success) {
       const data = result.data?.result
       output.value = truncate(typeof data === 'string' ? data : JSON.stringify(data, null, 2))
     } else {
-      output.value = `[错误] ${result?.error || '脚本执行失败'}`
+      output.value = t('browser.dev.errorPrefix', { msg: result?.error || t('browser.dev.scriptFailed') })
     }
   } catch (e: unknown) {
-    output.value = `[错误] 浏览器脚本执行失败：${e instanceof Error ? e.message : String(e)}`
+    output.value = t('browser.dev.scriptError', { msg: e instanceof Error ? e.message : String(e) })
   } finally {
     loading.value = false
   }
@@ -67,19 +70,19 @@ const executeScript = async (): Promise<void> => {
 const fetchDomTree = async (): Promise<void> => {
   if (loading.value) return
   loading.value = true
-  output.value = '正在读取 DOM 树...'
+  output.value = t('browser.dev.readingDom')
   try {
     const result = await window.api?.browserAutomation?.execute('get_dom_tree', { maxDepth: 8, maxElements: 150 })
     if (result?.success) {
       const tree = result.data?.tree
       const total = result.data?.totalCount ?? 0
-      const header = `共索引 ${total} 个可交互元素\n页面：${result.data?.title || ''}\n${result.data?.url || ''}\n${'─'.repeat(40)}\n`
-      output.value = truncate(header + formatDomTree(tree as DomTreeNode | undefined, 0))
+      const header = t('browser.dev.domHeader', { n: total, title: result.data?.title || '', url: result.data?.url || '' })
+      output.value = truncate(header + '─'.repeat(40) + '\n' + formatDomTree(tree as DomTreeNode | undefined, 0))
     } else {
-      output.value = `[错误] ${result?.error || '读取 DOM 失败'}`
+      output.value = t('browser.dev.errorPrefix', { msg: result?.error || t('browser.dev.domFailed') })
     }
   } catch (e: unknown) {
-    output.value = `[错误] DOM 读取失败：${e instanceof Error ? e.message : String(e)}`
+    output.value = t('browser.dev.domError', { msg: e instanceof Error ? e.message : String(e) })
   } finally {
     loading.value = false
   }
@@ -109,17 +112,17 @@ const formatDomTree = (node: DomTreeNode | undefined, depth: number): string => 
 const fetchHtml = async (): Promise<void> => {
   if (loading.value) return
   loading.value = true
-  output.value = '正在读取页面源码...'
+  output.value = t('browser.dev.readingHtml')
   try {
     const result = await window.api?.browserAutomation?.execute('get_html', {})
     if (result?.success) {
       const data = result.data as { html?: string } | undefined
       output.value = truncate(typeof data?.html === 'string' ? data.html : JSON.stringify(data, null, 2))
     } else {
-      output.value = `[错误] ${result?.error || '读取页面源码失败'}`
+      output.value = t('browser.dev.errorPrefix', { msg: result?.error || t('browser.dev.htmlFailed') })
     }
   } catch (e: unknown) {
-    output.value = `[错误] 源码读取失败：${e instanceof Error ? e.message : String(e)}`
+    output.value = t('browser.dev.htmlError', { msg: e instanceof Error ? e.message : String(e) })
   } finally {
     loading.value = false
   }
@@ -150,7 +153,7 @@ defineExpose({ switchMode })
           :class="['dev-tab', { active: mode === 'script' }]"
           @click="mode = 'script'"
         >
-          脚本
+          {{ t('browser.dev.tabScript') }}
         </button>
         <button
           :class="['dev-tab', { active: mode === 'dom' }]"
@@ -162,7 +165,7 @@ defineExpose({ switchMode })
           :class="['dev-tab', { active: mode === 'html' }]"
           @click="mode = 'html'"
         >
-          源码
+          {{ t('browser.dev.tabHtml') }}
         </button>
       </div>
       <div class="dev-actions">
@@ -171,7 +174,7 @@ defineExpose({ switchMode })
           variant="ghost"
           size="sm"
           icon-only
-          aria-label="刷新 DOM"
+          :aria-label="t('browser.dev.refreshDom')"
           :disabled="loading"
           @click="fetchDomTree"
         >
@@ -179,7 +182,7 @@ defineExpose({ switchMode })
             <RefreshCw :size="14" />
           </template>
         </LumiButton>
-        <LumiButton variant="ghost" size="sm" icon-only aria-label="关闭" @click="emit('close')">
+        <LumiButton variant="ghost" size="sm" icon-only :aria-label="t('browser.dev.close')" @click="emit('close')">
           <template #icon>
             <X :size="16" />
           </template>
@@ -191,7 +194,7 @@ defineExpose({ switchMode })
       <div class="dev-input-area">
         <textarea
           v-model="input"
-          :placeholder="mode === 'script' ? '输入 JavaScript 代码...' : mode === 'html' ? '页面源码将显示在这里' : 'DOM 内容将显示在这里'"
+          :placeholder="mode === 'script' ? t('browser.dev.scriptPlaceholder') : mode === 'html' ? t('browser.dev.htmlPlaceholder') : t('browser.dev.domPlaceholder')"
           class="dev-input"
           :readonly="mode !== 'script'"
           :class="{ 'is-readonly': mode !== 'script' }"
@@ -206,13 +209,13 @@ defineExpose({ switchMode })
           <template #icon>
             <Play :size="14" />
           </template>
-          执行
+          {{ t('browser.dev.execute') }}
         </LumiButton>
       </div>
 
       <div class="dev-output">
         <pre v-if="output">{{ output }}</pre>
-        <span v-else class="output-placeholder">输出将显示在这里</span>
+        <span v-else class="output-placeholder">{{ t('browser.dev.outputPlaceholder') }}</span>
       </div>
     </div>
   </div>

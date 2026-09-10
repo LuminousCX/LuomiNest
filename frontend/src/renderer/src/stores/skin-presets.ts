@@ -1,9 +1,13 @@
 import type { Skin } from './theme-types'
+import { i18n } from '../i18n'
 
 /**
  * LuomiNest 皮肤包预设
  * 每套皮肤 = 色彩主题 + 背景 + 毛玻璃/氛围光强度
  * 参考 Codex 的沉浸式设计，提供从极简到情感化的多种氛围
+ *
+ * name 使用 getter 惰性求值：每次读取都经过 i18n.global.t，
+ * 使消费方（computed / 模板渲染）能随语言切换获得对应翻译。
  */
 export const presetSkins: Skin[] = [
   // ────────────────────────────────────────────
@@ -11,7 +15,7 @@ export const presetSkins: Skin[] = [
   // ────────────────────────────────────────────
   {
     id: 'skin-classic-blue',
-    name: '辰汐蓝',
+    get name() { return i18n.global.t('theme.skins.classicBlue') },
     type: 'preset',
     colorThemeId: 'blue',
     mode: 'system',
@@ -22,7 +26,7 @@ export const presetSkins: Skin[] = [
   },
   {
     id: 'skin-classic-purple',
-    name: '紫罗兰',
+    get name() { return i18n.global.t('theme.skins.classicPurple') },
     type: 'preset',
     colorThemeId: 'purple',
     mode: 'system',
@@ -33,7 +37,7 @@ export const presetSkins: Skin[] = [
   },
   {
     id: 'skin-classic-red',
-    name: '中国红',
+    get name() { return i18n.global.t('theme.skins.classicRed') },
     type: 'preset',
     colorThemeId: 'red',
     mode: 'system',
@@ -44,7 +48,7 @@ export const presetSkins: Skin[] = [
   },
   {
     id: 'skin-classic-green',
-    name: '翡翠绿',
+    get name() { return i18n.global.t('theme.skins.classicGreen') },
     type: 'preset',
     colorThemeId: 'green',
     mode: 'system',
@@ -55,7 +59,7 @@ export const presetSkins: Skin[] = [
   },
   {
     id: 'skin-classic-orange',
-    name: '暖橘橙',
+    get name() { return i18n.global.t('theme.skins.classicOrange') },
     type: 'preset',
     colorThemeId: 'orange',
     mode: 'system',
@@ -70,7 +74,7 @@ export const presetSkins: Skin[] = [
   // ────────────────────────────────────────────
   {
     id: 'skin-pearl-white',
-    name: '珍珠白',
+    get name() { return i18n.global.t('theme.skins.pearlWhite') },
     type: 'preset',
     colorThemeId: 'blue',
     mode: 'light',
@@ -86,7 +90,7 @@ export const presetSkins: Skin[] = [
   },
   {
     id: 'skin-rose-dream',
-    name: '玫瑰梦境',
+    get name() { return i18n.global.t('theme.skins.roseDream') },
     type: 'preset',
     colorThemeId: 'purple',
     mode: 'light',
@@ -102,7 +106,7 @@ export const presetSkins: Skin[] = [
   },
   {
     id: 'skin-midnight-aurora',
-    name: '深夜极光',
+    get name() { return i18n.global.t('theme.skins.midnightAurora') },
     type: 'preset',
     colorThemeId: 'green',
     mode: 'dark',
@@ -118,7 +122,7 @@ export const presetSkins: Skin[] = [
   },
   {
     id: 'skin-soft-sunset',
-    name: '柔光落日',
+    get name() { return i18n.global.t('theme.skins.softSunset') },
     type: 'preset',
     colorThemeId: 'orange',
     mode: 'system',
@@ -134,7 +138,7 @@ export const presetSkins: Skin[] = [
   },
   {
     id: 'skin-deep-space',
-    name: '深空星云',
+    get name() { return i18n.global.t('theme.skins.deepSpaceNebula') },
     type: 'preset',
     colorThemeId: 'blue',
     mode: 'dark',
@@ -154,7 +158,7 @@ export const presetSkins: Skin[] = [
   // ────────────────────────────────────────────
   {
     id: 'skin-ocean-breeze',
-    name: '海风轻拂',
+    get name() { return i18n.global.t('theme.skins.oceanBreeze') },
     type: 'preset',
     colorThemeId: 'blue',
     mode: 'light',
@@ -170,7 +174,7 @@ export const presetSkins: Skin[] = [
   },
   {
     id: 'skin-sakura-rain',
-    name: '樱花雨',
+    get name() { return i18n.global.t('theme.skins.sakuraRain') },
     type: 'preset',
     colorThemeId: 'red',
     mode: 'light',
@@ -186,7 +190,7 @@ export const presetSkins: Skin[] = [
   },
   {
     id: 'skin-forest-mist',
-    name: '林间薄雾',
+    get name() { return i18n.global.t('theme.skins.forestMist') },
     type: 'preset',
     colorThemeId: 'green',
     mode: 'dark',
@@ -206,7 +210,7 @@ export const presetSkins: Skin[] = [
   // ────────────────────────────────────────────
   {
     id: 'skin-default-sample',
-    name: '默认范例',
+    get name() { return i18n.global.t('theme.skins.defaultSample') },
     type: 'preset',
     colorThemeId: 'blue',
     mode: 'light',

@@ -8,6 +8,7 @@
  * - useBrowserActions：DevPanel、截图、快速点击/填表、AI 搜索、toast、prompt 对话框
  */
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import TabBar from '../components/browser/TabBar.vue'
 import NavBar from '../components/browser/NavBar.vue'
 import BookmarkBar from '../components/browser/BookmarkBar.vue'
@@ -18,6 +19,8 @@ import { useBrowserNavigation } from '../composables/useBrowserNavigation'
 import { useBrowserTabs } from '../composables/useBrowserTabs'
 import { useBrowserActions, type DevPanelHandle } from '../composables/useBrowserActions'
 import { X, Camera } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 // 导航状态：地址栏 + 前进/后退 + 侧栏宽度同步
 const {
@@ -148,7 +151,7 @@ onUnmounted(() => {
     <div v-if="showCaptchaBanner" class="captcha-banner">
       <div class="captcha-banner-content">
         <span class="captcha-icon">&#9888;</span>
-        <span>检测到人机验证页面，请在下方完成验证后继续浏览</span>
+        <span>{{ t('browser.captchaBanner') }}</span>
       </div>
     </div>
 
@@ -182,13 +185,13 @@ onUnmounted(() => {
         <div class="screenshot-header">
           <div class="screenshot-title">
             <Camera :size="16" />
-            <span>页面截图</span>
+            <span>{{ t('browser.screenshotTitle') }}</span>
           </div>
-          <button class="screenshot-close" @click="closeScreenshot" aria-label="关闭">
+          <button class="screenshot-close" @click="closeScreenshot" :aria-label="t('browser.close')">
             <X :size="18" />
           </button>
         </div>
-        <img :src="screenshotUrl" class="screenshot-image" alt="页面截图" />
+        <img :src="screenshotUrl" class="screenshot-image" :alt="t('browser.screenshotAlt')" />
       </div>
     </div>
 
@@ -198,7 +201,7 @@ onUnmounted(() => {
         <div class="prompt-modal" @click.stop>
           <div class="prompt-header">
             <span class="prompt-title">{{ promptState.title }}</span>
-            <button class="prompt-close" @click="cancelPrompt" aria-label="取消">
+            <button class="prompt-close" @click="cancelPrompt" :aria-label="t('browser.cancel')">
               <X :size="16" />
             </button>
           </div>
@@ -214,8 +217,8 @@ onUnmounted(() => {
             />
           </div>
           <div class="prompt-actions">
-            <button class="prompt-btn prompt-btn-cancel" @click="cancelPrompt">取消</button>
-            <button class="prompt-btn prompt-btn-confirm" @click="submitPrompt">确定</button>
+            <button class="prompt-btn prompt-btn-cancel" @click="cancelPrompt">{{ t('browser.cancel') }}</button>
+            <button class="prompt-btn prompt-btn-confirm" @click="submitPrompt">{{ t('browser.confirm') }}</button>
           </div>
         </div>
       </div>

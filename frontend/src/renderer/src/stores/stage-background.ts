@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed } from 'vue'
 import { useSectionSettings } from '../composables/useSectionSettings'
 import { useThemeStore } from './theme'
+import { i18n } from '../i18n'
 
 /**
  * 皮套工坊舞台背景设置
@@ -88,7 +89,7 @@ export const useStageBackgroundStore = defineStore('avatar-stage-background', ()
   async function uploadImage(): Promise<StageBgUploadResult> {
     const api = window.api?.dialog
     if (!api) {
-      return { success: false, error: '当前环境不可用' }
+      return { success: false, error: i18n.global.t('avatar.stageBg.envUnavailable') }
     }
 
     const result = await api.selectBackgroundImage()
@@ -97,7 +98,7 @@ export const useStageBackgroundStore = defineStore('avatar-stage-background', ()
     }
     if (typeof result.url !== 'string' || !result.url.startsWith('luominest-bg:')) {
       console.error('[StageBackground] invalid background url:', result.url)
-      return { success: false, error: '背景图片地址格式异常' }
+      return { success: false, error: i18n.global.t('avatar.stageBg.bgUrlInvalid') }
     }
 
     const previous = settings.imageUrl

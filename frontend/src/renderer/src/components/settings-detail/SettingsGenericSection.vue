@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ChevronRight } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import type { SectionActionItem, SectionItem, SectionTimeRangeItem, SectionValue } from './types'
 
 defineProps<{
@@ -14,21 +16,23 @@ const emit = defineEmits<{
   select: [key: string]
 }>()
 
+const { t } = useI18n()
+
 /** 动作行缺省文案（按 type 推断，可用 item.actionText 覆盖） */
-const ACTION_DEFAULT_TEXT: Record<SectionActionItem['type'], string> = {
-  list: '查看',
-  button: '前往',
-  connect: '连接',
-  action: '配置'
-}
+const ACTION_DEFAULT_TEXT = computed<Record<SectionActionItem['type'], string>>(() => ({
+  list: t('settingsEx.generic.actionView'),
+  button: t('settingsEx.generic.actionGo'),
+  connect: t('settingsEx.generic.actionConnect'),
+  action: t('settingsEx.generic.actionConfigure')
+}))
 
 function isActionItem(item: SectionItem): item is SectionActionItem {
   return item.type === 'list' || item.type === 'button' || item.type === 'connect' || item.type === 'action'
 }
 
 function actionText(item: SectionItem): string {
-  if (!isActionItem(item)) return ACTION_DEFAULT_TEXT.action
-  return item.actionText ?? ACTION_DEFAULT_TEXT[item.type]
+  if (!isActionItem(item)) return ACTION_DEFAULT_TEXT.value.action
+  return item.actionText ?? ACTION_DEFAULT_TEXT.value[item.type]
 }
 
 /** 时间段拆分为 [开始, 结束]，允许空值 */
@@ -92,7 +96,7 @@ function readControlValue(event: Event): string {
               :type="item.type"
               class="settings-form-input settings-row-field"
               :value="item.value"
-              :placeholder="item.placeholder ?? (item.type === 'password' ? '请输入密码' : '请输入')"
+              :placeholder="item.placeholder ?? (item.type === 'password' ? t('settingsEx.generic.passwordPlaceholder') : t('settingsEx.generic.inputPlaceholder'))"
               :aria-label="item.label"
               autocomplete="off"
               @change="emit('change', item.key, readControlValue($event))"
@@ -118,15 +122,15 @@ function readControlValue(event: Event): string {
                 type="time"
                 class="settings-form-input settings-row-field settings-row-field--time"
                 :value="splitTimeRange(item)[0]"
-                :aria-label="`${item.label}开始时间`"
+                :aria-label="t('settingsEx.generic.timeStartAria', { label: item.label })"
                 @change="updateTimeRange(item, 'start', readControlValue($event))"
               />
-              <span class="settings-row-time__sep">至</span>
+              <span class="settings-row-time__sep">{{ t('settingsEx.generic.timeSeparator') }}</span>
               <input
                 type="time"
                 class="settings-form-input settings-row-field settings-row-field--time"
                 :value="splitTimeRange(item)[1]"
-                :aria-label="`${item.label}结束时间`"
+                :aria-label="t('settingsEx.generic.timeEndAria', { label: item.label })"
                 @change="updateTimeRange(item, 'end', readControlValue($event))"
               />
             </div>

@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { UploadCloud } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   visible: boolean
@@ -20,11 +23,11 @@ const props = defineProps<{
             <span class="particle p5"></span>
           </div>
         </div>
-        <h3 class="drop-title">在此处拖放文件</h3>
+        <h3 class="drop-title">{{ t('workspace.drop.title') }}</h3>
         <p class="drop-desc">
-          支持图片、文档、代码等常见格式
+          {{ t('workspace.drop.formats') }}
         </p>
-        <p class="drop-hint">或按 Ctrl+V 粘贴文件</p>
+        <p class="drop-hint">{{ t('workspace.drop.pasteHint') }}</p>
       </div>
     </div>
   </Transition>

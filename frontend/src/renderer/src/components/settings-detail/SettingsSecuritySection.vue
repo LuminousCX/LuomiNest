@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import SettingsGenericSection from './SettingsGenericSection.vue'
 import SettingsCommandSecuritySection from './SettingsCommandSecuritySection.vue'
 import { useSectionSettings } from '../../composables/useSectionSettings'
@@ -7,6 +8,7 @@ import { useToast } from '../../composables/useToast'
 import type { SectionItem, SectionValue } from './types'
 
 const toast = useToast()
+const { t } = useI18n()
 
 // accessPassword 为敏感信息：仅会话内保留在内存，不进入持久化通道
 const state = useSectionSettings(
@@ -21,28 +23,28 @@ const state = useSectionSettings(
 )
 
 const items = computed<SectionItem[]>(() => [
-  { key: 'e2eEncryption', label: '端到端加密', desc: '所有对话数据加密存储', type: 'toggle', value: state.e2eEncryption },
-  { key: 'localStorageOnly', label: '本地存储', desc: '数据仅保存在本地设备', type: 'toggle', value: state.localStorageOnly },
+  { key: 'e2eEncryption', label: t('settingsEx.security.e2eEncryption'), desc: t('settingsEx.security.e2eDesc'), type: 'toggle', value: state.e2eEncryption },
+  { key: 'localStorageOnly', label: t('settingsEx.security.localStorageOnly'), desc: t('settingsEx.security.localStorageDesc'), type: 'toggle', value: state.localStorageOnly },
   {
     key: 'autoClean',
-    label: '自动清除',
-    desc: '定期清除过期对话记录',
+    label: t('settingsEx.security.autoClean'),
+    desc: t('settingsEx.security.autoCleanDesc'),
     type: 'select',
     value: state.autoClean,
     options: [
-      { label: '从不', value: 'never' },
-      { label: '7 天后', value: '7d' },
-      { label: '30 天后', value: '30d' },
-      { label: '90 天后', value: '90d' }
+      { label: t('settingsEx.security.never'), value: 'never' },
+      { label: t('settingsEx.security.after7d'), value: '7d' },
+      { label: t('settingsEx.security.after30d'), value: '30d' },
+      { label: t('settingsEx.security.after90d'), value: '90d' }
     ]
   },
   {
     key: 'accessPassword',
-    label: '访问控制',
-    desc: '设置应用启动密码',
+    label: t('settingsEx.security.accessControl'),
+    desc: t('settingsEx.security.accessControlDesc'),
     type: 'password',
     value: state.accessPassword,
-    placeholder: '输入启动密码'
+    placeholder: t('settingsEx.security.accessPasswordPlaceholder')
   }
 ])
 
@@ -50,7 +52,7 @@ function handleChange(key: string, value: SectionValue) {
   const target = state as Record<string, SectionValue>
   target[key] = value
   if (key === 'accessPassword' && value) {
-    toast.info('访问控制功能开发中，密码仅在当前会话保留，暂不保存')
+    toast.info(t('settingsEx.security.accessPasswordDevToast'))
   }
 }
 </script>

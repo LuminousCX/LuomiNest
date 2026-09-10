@@ -6,6 +6,7 @@
  */
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { i18n } from '../i18n'
 import {
   FileText, Brain, Terminal, Presentation,
   FileSpreadsheet, FileCode
@@ -37,17 +38,27 @@ const PRESET_AGENT_AVATARS: AvatarOption[] = [
   { id: 'pa8', emoji: '', color: 'var(--lumi-amber)', imageUrl: 'luominest-avatar://png/agents/daily-assistant.png' }
 ]
 
-export const STEP_TITLES = ['身份设置', '技能配置', '高级设置', '确认创建']
-export const STEP_SUBTITLES = ['定义智能体基础信息', '选择并配置能力模块', '定义系统提示词', '预览并完成创建']
+export const STEP_TITLES = computed<string[]>(() => [
+  i18n.global.t('agentCreate.stepTitle1'),
+  i18n.global.t('agentCreate.stepTitle2'),
+  i18n.global.t('agentCreate.stepTitle3'),
+  i18n.global.t('agentCreate.stepTitle4'),
+])
+export const STEP_SUBTITLES = computed<string[]>(() => [
+  i18n.global.t('agentCreate.stepSubtitle1'),
+  i18n.global.t('agentCreate.stepSubtitle2'),
+  i18n.global.t('agentCreate.stepSubtitle3'),
+  i18n.global.t('agentCreate.stepSubtitle4'),
+])
 export const TOTAL_STEPS = 4
 
-export const AVATAR_CATEGORIES = [
-  { id: 'presets', label: '预设' },
-  { id: 'classic', label: '经典' },
-  { id: 'cute', label: '萌系' },
-  { id: 'tech', label: '科技' },
-  { id: 'artistic', label: '艺术' }
-]
+export const AVATAR_CATEGORIES = computed<{ id: string; label: string }[]>(() => [
+  { id: 'presets', label: i18n.global.t('agentCreate.catPresets') },
+  { id: 'classic', label: i18n.global.t('agentCreate.catClassic') },
+  { id: 'cute', label: i18n.global.t('agentCreate.catCute') },
+  { id: 'tech', label: i18n.global.t('agentCreate.catTech') },
+  { id: 'artistic', label: i18n.global.t('agentCreate.catArtistic') }
+])
 
 export const AVATAR_OPTIONS: Record<string, AvatarOption[]> = {
   presets: PRESET_AGENT_AVATARS,
@@ -73,14 +84,14 @@ export const AVATAR_OPTIONS: Record<string, AvatarOption[]> = {
   ]
 }
 
-export const STYLE_TAGS = [
-  { id: 'professional', label: '专业' },
-  { id: 'friendly', label: '友好' },
-  { id: 'creative', label: '创意' },
-  { id: 'concise', label: '简洁' },
-  { id: 'casual', label: '随意' },
-  { id: 'expert', label: '专家' }
-]
+export const STYLE_TAGS = computed<{ id: string; label: string }[]>(() => [
+  { id: 'professional', label: i18n.global.t('agentCreate.styleProfessional') },
+  { id: 'friendly', label: i18n.global.t('agentCreate.styleFriendly') },
+  { id: 'creative', label: i18n.global.t('agentCreate.styleCreative') },
+  { id: 'concise', label: i18n.global.t('agentCreate.styleConcise') },
+  { id: 'casual', label: i18n.global.t('agentCreate.styleCasual') },
+  { id: 'expert', label: i18n.global.t('agentCreate.styleExpert') }
+])
 
 // 2026-08 全局模型统一：Agent 不再单独选择模型，统一使用全局主模型，
 // 因此创建向导不再提供 MODEL_OPTIONS。
@@ -258,7 +269,7 @@ export const useAgentCreateForm = () => {
       logger.error('Failed to create agent:', err)
       // 兼容 axios 错误（response.data.detail）与普通 Error
       const axiosErr = err as { response?: { data?: { detail?: string } } }
-      const fallback = err instanceof Error ? err.message : '创建失败'
+      const fallback = err instanceof Error ? err.message : i18n.global.t('agentCreate.createFailed')
       errorMessage.value = axiosErr?.response?.data?.detail || fallback
     }
   }

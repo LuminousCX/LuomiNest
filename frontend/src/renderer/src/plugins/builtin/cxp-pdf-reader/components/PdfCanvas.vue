@@ -12,6 +12,7 @@
  * - 支持键盘翻页（由父组件已绑定全局监听，这里仅处理组件内 wheel 滚动）
  */
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-vue-next'
 
 // 本地 PDF worker：通过 Vite 的 ?url 后缀将 pdf.worker.min.mjs 作为资源打包，
@@ -42,6 +43,8 @@ const props = defineProps<{
   searchQuery: string
   searchMatchIndex: number
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   'page-change': [page: number]
@@ -93,7 +96,7 @@ const loadPdf = async () => {
     await renderPage()
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    errorMsg.value = `PDF 加载失败：${msg}`
+    errorMsg.value = t('pdfReader.canvas.loadFailed', { message: msg })
     loading.value = false
   }
 }
@@ -154,7 +157,7 @@ const renderPage = async () => {
   } catch (e) {
     if (!renderCancelled) {
       const msg = e instanceof Error ? e.message : String(e)
-      errorMsg.value = `页面渲染失败：${msg}`
+      errorMsg.value = t('pdfReader.canvas.renderFailed', { message: msg })
     }
   } finally {
     rendering.value = false
@@ -300,13 +303,13 @@ onUnmounted(() => {
     <!-- 加载中 -->
     <div v-if="loading" class="pdf-loading">
       <Loader2 :size="32" class="loading-spin" />
-      <p class="loading-text">正在加载 PDF...</p>
+      <p class="loading-text">{{ t('pdfReader.canvas.loading') }}</p>
     </div>
 
     <!-- 错误 -->
     <div v-else-if="errorMsg" class="pdf-error">
       <p class="error-text">{{ errorMsg }}</p>
-      <button class="retry-btn" @click="loadPdf">重试</button>
+      <button class="retry-btn" @click="loadPdf">{{ t('pdfReader.canvas.retry') }}</button>
     </div>
 
     <!-- 渲染区域 -->
@@ -320,7 +323,7 @@ onUnmounted(() => {
       <button
         class="floating-nav prev"
         :disabled="currentPage <= 1"
-        title="上一页"
+        :title="t('pdfReader.canvas.prevPage')"
         @click="prevPage"
       >
         <ChevronLeft :size="20" />
@@ -328,7 +331,7 @@ onUnmounted(() => {
       <button
         class="floating-nav next"
         :disabled="currentPage >= totalPages"
-        title="下一页"
+        :title="t('pdfReader.canvas.nextPage')"
         @click="nextPage"
       >
         <ChevronRight :size="20" />
@@ -338,7 +341,7 @@ onUnmounted(() => {
       <Transition name="fade">
         <div v-if="rendering" class="rendering-indicator">
           <Loader2 :size="14" class="loading-spin" />
-          <span>渲染中</span>
+          <span>{{ t('pdfReader.canvas.rendering') }}</span>
         </div>
       </Transition>
     </div>

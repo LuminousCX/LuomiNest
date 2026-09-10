@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Globe,
   Radio,
@@ -37,6 +38,7 @@ const logger = createLuomiNestRendererLogger('Settings')
 
 const platformStore = usePlatformStore()
 const modelStore = useModelStore()
+const { t } = useI18n()
 
 const platformIconMap: Record<string, any> = {
   Globe, Radio, Cable, Link, MessageCircle, Send, Gamepad2, Home, Smartphone,
@@ -78,15 +80,15 @@ const filteredPlatformInstances = computed(() => {
 })
 
 const formatLastSync = (lastSync: string) =>
-  lastSync ? formatDateRelative(lastSync) : '未同步'
+  lastSync ? formatDateRelative(lastSync) : t('settingsEx.platforms.notSynced')
 
 const getStatusLabel = (status: string) => {
   switch (status) {
-    case 'running': return '运行中'
-    case 'stopped': return '已停止'
-    case 'error': return '错误'
-    case 'pending': return '等待中'
-    default: return '未知'
+    case 'running': return t('settingsEx.platforms.statusRunning')
+    case 'stopped': return t('settingsEx.platforms.statusStopped')
+    case 'error': return t('settingsEx.platforms.statusError')
+    case 'pending': return t('settingsEx.platforms.statusPending')
+    default: return t('settingsEx.platforms.statusUnknown')
   }
 }
 
@@ -213,48 +215,48 @@ onMounted(() => {
     <div class="platform-card">
       <div class="platform-card-header">
         <Brain :size="18" />
-        <span class="platform-card-title">主 Agent 配置</span>
+        <span class="platform-card-title">{{ t('settingsEx.platforms.mainAgentTitle') }}</span>
         <button class="platform-header-btn" @click="openMainAgentDialog">
           <Edit3 :size="13" />
-          <span>编辑</span>
+          <span>{{ t('settingsEx.platforms.edit') }}</span>
         </button>
       </div>
       <div class="platform-card-body">
         <div v-if="platformStore.mainAgent" class="main-agent-grid">
           <div class="main-agent-item">
-            <span class="main-agent-label">供应商</span>
-            <span class="main-agent-value">{{ platformStore.mainAgent.providerName || platformStore.mainAgent.provider || '未配置' }}</span>
+            <span class="main-agent-label">{{ t('settingsEx.platforms.provider') }}</span>
+            <span class="main-agent-value">{{ platformStore.mainAgent.providerName || platformStore.mainAgent.provider || t('settingsEx.platforms.notConfigured') }}</span>
           </div>
           <div class="main-agent-item">
-            <span class="main-agent-label">模型</span>
-            <span class="main-agent-value mono">{{ platformStore.mainAgent.model || '未配置' }}</span>
+            <span class="main-agent-label">{{ t('settingsEx.platforms.model') }}</span>
+            <span class="main-agent-value mono">{{ platformStore.mainAgent.model || t('settingsEx.platforms.notConfigured') }}</span>
           </div>
           <div class="main-agent-item">
-            <span class="main-agent-label">图片识别</span>
+            <span class="main-agent-label">{{ t('settingsEx.platforms.imageRecognition') }}</span>
             <span :class="['main-agent-badge', platformStore.mainAgent.supportsMultimodal ? 'supported' : 'unsupported']">
               <ImageIcon :size="12" />
-              <span>{{ platformStore.mainAgent.supportsMultimodal ? '支持多模态' : '不支持图片' }}</span>
+              <span>{{ platformStore.mainAgent.supportsMultimodal ? t('settingsEx.platforms.multimodalYes') : t('settingsEx.platforms.multimodalNo') }}</span>
             </span>
           </div>
           <div class="main-agent-item">
-            <span class="main-agent-label">温度</span>
+            <span class="main-agent-label">{{ t('settingsEx.platforms.temperature') }}</span>
             <span class="main-agent-value mono">{{ platformStore.mainAgent.temperature }}</span>
           </div>
           <div class="main-agent-item">
-            <span class="main-agent-label">最大 Tokens</span>
+            <span class="main-agent-label">{{ t('settingsEx.platforms.maxTokens') }}</span>
             <span class="main-agent-value mono">{{ platformStore.mainAgent.maxTokens }}</span>
           </div>
           <div class="main-agent-item full-width">
-            <span class="main-agent-label">系统提示词</span>
-            <span class="main-agent-prompt">{{ platformStore.mainAgent.systemPrompt || '（未设置，使用默认提示词）' }}</span>
+            <span class="main-agent-label">{{ t('settingsEx.platforms.systemPrompt') }}</span>
+            <span class="main-agent-prompt">{{ platformStore.mainAgent.systemPrompt || t('settingsEx.platforms.systemPromptEmpty') }}</span>
           </div>
         </div>
         <div v-else class="main-agent-empty">
           <Loader2 :size="16" class="spin-animation" />
-          <span>正在加载主 Agent 配置...</span>
+          <span>{{ t('settingsEx.platforms.mainAgentLoading') }}</span>
         </div>
         <div class="main-agent-hint">
-          主 Agent 是工作台页面的核心智能体，所有平台消息将共享其记忆与配置。子 Agent 不共享此记忆。
+          {{ t('settingsEx.platforms.mainAgentHint') }}
         </div>
       </div>
     </div>
@@ -264,21 +266,21 @@ onMounted(() => {
         <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary"><Server :size="16" /></div>
         <div class="platform-stat-info">
           <span class="platform-stat-value">{{ platformStore.stats.totalPlatforms }}</span>
-          <span class="platform-stat-label">已接入平台</span>
+          <span class="platform-stat-label">{{ t('settingsEx.platforms.statPlatforms') }}</span>
         </div>
       </div>
       <div class="platform-stat-card">
         <div class="lumi-icon-wrap lumi-icon-wrap--md platform-stat-active"><Zap :size="16" /></div>
         <div class="platform-stat-info">
           <span class="platform-stat-value">{{ platformStore.stats.activeConnections }}</span>
-          <span class="platform-stat-label">活跃连接</span>
+          <span class="platform-stat-label">{{ t('settingsEx.platforms.statConnections') }}</span>
         </div>
       </div>
       <div class="platform-stat-card">
         <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--primary"><MessageCircle :size="16" /></div>
         <div class="platform-stat-info">
           <span class="platform-stat-value">{{ platformStore.stats.totalMessages }}</span>
-          <span class="platform-stat-label">消息总量</span>
+          <span class="platform-stat-label">{{ t('settingsEx.platforms.statMessages') }}</span>
         </div>
       </div>
     </div>
@@ -286,25 +288,25 @@ onMounted(() => {
     <div class="platform-card">
       <div class="platform-card-header">
         <Globe :size="18" />
-        <span class="platform-card-title">平台实例</span>
+        <span class="platform-card-title">{{ t('settingsEx.platforms.instancesTitle') }}</span>
         <div class="platform-header-actions">
           <button class="platform-header-btn" @click="handleRefreshPlatforms" :disabled="platformStore.loading">
             <RefreshCw :size="13" :class="{ 'spin-animation': platformStore.loading }" />
-            <span>刷新</span>
+            <span>{{ t('settingsEx.platforms.refresh') }}</span>
           </button>
           <button class="platform-header-btn primary" @click="openAddPlatformDialog()">
             <Plus :size="13" />
-            <span>添加平台</span>
+            <span>{{ t('settingsEx.platforms.addPlatform') }}</span>
           </button>
         </div>
       </div>
       <div class="platform-card-body">
         <div class="platform-toolbar">
-          <SearchInput v-model="platformSearchQuery" placeholder="搜索平台..." />
+          <SearchInput v-model="platformSearchQuery" :placeholder="t('settingsEx.platforms.searchPlaceholder')" />
           <div class="platform-filter-group">
-            <button :class="['platform-filter-btn', { active: platformFilter === 'all' }]" @click="platformFilter = 'all'">全部</button>
-            <button :class="['platform-filter-btn', { active: platformFilter === 'active' }]" @click="platformFilter = 'active'">运行中</button>
-            <button :class="['platform-filter-btn', { active: platformFilter === 'stopped' }]" @click="platformFilter = 'stopped'">已停止</button>
+            <button :class="['platform-filter-btn', { active: platformFilter === 'all' }]" @click="platformFilter = 'all'">{{ t('settingsEx.platforms.filterAll') }}</button>
+            <button :class="['platform-filter-btn', { active: platformFilter === 'active' }]" @click="platformFilter = 'active'">{{ t('settingsEx.platforms.filterRunning') }}</button>
+            <button :class="['platform-filter-btn', { active: platformFilter === 'stopped' }]" @click="platformFilter = 'stopped'">{{ t('settingsEx.platforms.filterStopped') }}</button>
           </div>
         </div>
 
@@ -326,7 +328,7 @@ onMounted(() => {
                 <div class="pi-meta">
                   <span>{{ inst.displayName }}</span>
                   <span class="pi-dot">·</span>
-                  <span>{{ inst.messageCount }} 条消息</span>
+                  <span>{{ t('settingsEx.platforms.messageCount', { count: inst.messageCount }) }}</span>
                   <span class="pi-dot">·</span>
                   <span>{{ formatLastSync(inst.lastSync) }}</span>
                 </div>
@@ -341,15 +343,15 @@ onMounted(() => {
                 class="pi-action-btn"
                 :class="inst.status === 'running' ? 'stop' : 'start'"
                 @click="handleTogglePlatform(inst)"
-                :title="inst.status === 'running' ? '停止' : '启动'"
+                :title="inst.status === 'running' ? t('settingsEx.platforms.stop') : t('settingsEx.platforms.start')"
               >
                 <Square v-if="inst.status === 'running'" :size="12" />
                 <Play v-else :size="12" />
               </button>
-              <button class="pi-action-btn config" @click="openEditPlatformDialog(inst)" title="配置">
+              <button class="pi-action-btn config" @click="openEditPlatformDialog(inst)" :title="t('settingsEx.platforms.config')">
                 <Settings :size="12" />
               </button>
-              <button class="pi-action-btn delete" @click="handleDeletePlatform(inst)" title="删除">
+              <button class="pi-action-btn delete" @click="handleDeletePlatform(inst)" :title="t('settingsEx.platforms.delete')">
                 <Trash2 :size="12" />
               </button>
             </div>
@@ -357,10 +359,10 @@ onMounted(() => {
 
           <div v-if="filteredPlatformInstances.length === 0" class="platform-empty">
             <Globe :size="28" class="platform-empty-icon" />
-            <span class="platform-empty-text">暂无平台实例</span>
+            <span class="platform-empty-text">{{ t('settingsEx.platforms.emptyText') }}</span>
             <button class="platform-empty-btn" @click="openAddPlatformDialog()">
               <Plus :size="13" />
-              添加平台
+              {{ t('settingsEx.platforms.addPlatform') }}
             </button>
           </div>
         </div>
@@ -368,10 +370,10 @@ onMounted(() => {
     </div>
   </div>
 
-    <LumiModal :visible="showAddPlatformDialog" title="添加平台" size="lg" :z-index="1000" @close="closeAddPlatformDialog">
+    <LumiModal :visible="showAddPlatformDialog" :title="t('settingsEx.platforms.addDialogTitle')" size="lg" :z-index="1000" @close="closeAddPlatformDialog">
 
         <div v-if="!selectedAdapterType" class="platform-dialog-body">
-          <p class="platform-dialog-desc">选择要接入的平台类型：</p>
+          <p class="platform-dialog-desc">{{ t('settingsEx.platforms.selectType') }}</p>
           <div class="adapter-type-list">
             <button
               v-for="at in platformStore.adapterTypes"
@@ -386,25 +388,25 @@ onMounted(() => {
                 <span class="adapter-type-name">{{ at.displayName }}</span>
                 <span class="adapter-type-desc">{{ at.description }}</span>
               </div>
-              <span :class="['adapter-type-cat', at.category]">{{ at.category === 'social' ? '社交' : at.category === 'iot' ? 'IoT' : at.category === 'game' ? '游戏' : '通用' }}</span>
+              <span :class="['adapter-type-cat', at.category]">{{ at.category === 'social' ? t('settingsEx.platforms.categorySocial') : at.category === 'iot' ? 'IoT' : at.category === 'game' ? t('settingsEx.platforms.categoryGame') : t('settingsEx.platforms.categoryGeneral') }}</span>
             </button>
           </div>
         </div>
 
         <div v-else class="platform-dialog-body">
           <div class="platform-form-group">
-            <label class="platform-form-label">平台名称</label>
-            <input v-model="newPlatformName" type="text" class="platform-form-input" placeholder="输入平台实例名称" />
+            <label class="platform-form-label">{{ t('settingsEx.platforms.nameLabel') }}</label>
+            <input v-model="newPlatformName" type="text" class="platform-form-input" :placeholder="t('settingsEx.platforms.namePlaceholder')" />
           </div>
           <div class="platform-form-group">
-            <label class="platform-form-label">平台类型</label>
+            <label class="platform-form-label">{{ t('settingsEx.platforms.typeLabel') }}</label>
             <div class="platform-type-badge">
               <component :is="getPlatformIcon(selectedAdapterType.icon)" :size="14" />
               <span>{{ selectedAdapterType.displayName }}</span>
             </div>
           </div>
           <div v-if="Object.keys(selectedAdapterType.configMetadata).length > 0" class="platform-form-group">
-            <label class="platform-form-label">连接配置</label>
+            <label class="platform-form-label">{{ t('settingsEx.platforms.connectionConfig') }}</label>
             <div class="platform-config-fields">
               <div v-for="(meta, key) in selectedAdapterType.configMetadata" :key="key" class="platform-config-field">
                 <label class="platform-config-label">{{ meta.label || key }}</label>
@@ -420,26 +422,26 @@ onMounted(() => {
         </div>
 
         <template #footer>
-          <LumiButton size="sm" @click="closeAddPlatformDialog">取消</LumiButton>
-          <LumiButton v-if="selectedAdapterType" variant="primary" size="sm" :disabled="!newPlatformName.trim()" @click="handleCreatePlatform">确认添加</LumiButton>
-          <LumiButton v-else variant="primary" size="sm" @click="closeAddPlatformDialog">关闭</LumiButton>
+          <LumiButton size="sm" @click="closeAddPlatformDialog">{{ t('settingsEx.platforms.cancel') }}</LumiButton>
+          <LumiButton v-if="selectedAdapterType" variant="primary" size="sm" :disabled="!newPlatformName.trim()" @click="handleCreatePlatform">{{ t('settingsEx.platforms.confirmAdd') }}</LumiButton>
+          <LumiButton v-else variant="primary" size="sm" @click="closeAddPlatformDialog">{{ t('settingsEx.platforms.close') }}</LumiButton>
         </template>
     </LumiModal>
 
-    <LumiModal v-if="editingInstance" :visible="showEditPlatformDialog" :title="'平台配置 - ' + editingInstance.name" size="lg" :z-index="1000" @close="closeEditPlatformDialog">
+    <LumiModal v-if="editingInstance" :visible="showEditPlatformDialog" :title="t('settingsEx.platforms.editDialogTitle', { name: editingInstance.name })" size="lg" :z-index="1000" @close="closeEditPlatformDialog">
         <div class="platform-dialog-body">
           <div class="platform-form-group">
-            <label class="platform-form-label">实例名称</label>
+            <label class="platform-form-label">{{ t('settingsEx.platforms.instanceName') }}</label>
             <input v-model="editingInstance.name" type="text" class="platform-form-input" />
           </div>
           <div class="platform-form-group">
-            <label class="platform-form-label">状态</label>
+            <label class="platform-form-label">{{ t('settingsEx.platforms.statusLabel') }}</label>
             <div class="platform-status-display">
               <span :class="['pi-status', editingInstance.status]">{{ getStatusLabel(editingInstance.status) }}</span>
             </div>
           </div>
           <div v-if="Object.keys(editConfig).length > 0" class="platform-form-group">
-            <label class="platform-form-label">连接配置</label>
+            <label class="platform-form-label">{{ t('settingsEx.platforms.connectionConfig') }}</label>
             <div class="platform-config-fields">
               <div v-for="(_val, key) in editConfig" :key="key" class="platform-config-field">
                 <label class="platform-config-label">{{ key }}</label>
@@ -448,27 +450,27 @@ onMounted(() => {
             </div>
           </div>
           <div v-if="editingInstance.errorMessage" class="platform-form-group">
-            <label class="platform-form-label">错误信息</label>
+            <label class="platform-form-label">{{ t('settingsEx.platforms.errorLabel') }}</label>
             <div class="platform-error-display">{{ editingInstance.errorMessage }}</div>
           </div>
         </div>
         <template #footer>
-          <LumiButton size="sm" @click="closeEditPlatformDialog">取消</LumiButton>
-          <LumiButton variant="primary" size="sm" @click="handleSavePlatformConfig">保存配置</LumiButton>
+          <LumiButton size="sm" @click="closeEditPlatformDialog">{{ t('settingsEx.platforms.cancel') }}</LumiButton>
+          <LumiButton variant="primary" size="sm" @click="handleSavePlatformConfig">{{ t('settingsEx.platforms.saveConfig') }}</LumiButton>
         </template>
     </LumiModal>
 
-    <LumiModal :visible="showMainAgentDialog" title="主 Agent 配置" size="lg" :z-index="1000" @close="closeMainAgentDialog">
+    <LumiModal :visible="showMainAgentDialog" :title="t('settingsEx.platforms.mainAgentTitle')" size="lg" :z-index="1000" @close="closeMainAgentDialog">
         <div class="platform-dialog-body">
           <div class="platform-form-group">
-            <label class="platform-form-label">系统提示词</label>
-            <textarea v-model="mainAgentEdit.systemPrompt" class="platform-form-textarea" rows="6" placeholder="主 Agent 的系统提示词，决定其角色与行为"></textarea>
+            <label class="platform-form-label">{{ t('settingsEx.platforms.systemPrompt') }}</label>
+            <textarea v-model="mainAgentEdit.systemPrompt" class="platform-form-textarea" rows="6" :placeholder="t('settingsEx.platforms.promptPlaceholder')"></textarea>
           </div>
         </div>
         <template #footer>
-          <LumiButton size="sm" :disabled="mainAgentSaving" @click="closeMainAgentDialog">取消</LumiButton>
+          <LumiButton size="sm" :disabled="mainAgentSaving" @click="closeMainAgentDialog">{{ t('settingsEx.platforms.cancel') }}</LumiButton>
           <LumiButton variant="primary" size="sm" :loading="mainAgentSaving" @click="handleSaveMainAgent">
-            {{ mainAgentSaving ? '保存中...' : '保存配置' }}
+            {{ mainAgentSaving ? t('settingsEx.platforms.saving') : t('settingsEx.platforms.saveConfig') }}
           </LumiButton>
         </template>
     </LumiModal>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { MessageCircle, Send } from 'lucide-vue-next'
 import type { MarketplaceReview } from '../../types/marketplace'
 import MarketplaceRating from './MarketplaceRating.vue'
@@ -15,6 +16,7 @@ const props = defineProps<{
 }>()
 
 const store = useMarketplaceStore()
+const { t } = useI18n()
 const sortBy = ref<'newest' | 'rating'>('newest')
 const showReplyInput = ref<string | null>(null)
 const replyContent = ref('')
@@ -53,7 +55,7 @@ function submitReview() {
   store.addReview(props.itemId, {
     itemId: props.itemId,
     userId: 'current-user',
-    userName: '我',
+    userName: t('market.review.me'),
     rating: newReviewRating.value,
     content: newReviewContent.value.trim(),
   })
@@ -66,7 +68,7 @@ function submitReply(reviewId: string) {
   if (!replyContent.value.trim()) return
   store.addReviewReply(props.itemId, reviewId, {
     userId: 'current-user',
-    userName: '我',
+    userName: t('market.review.me'),
     content: replyContent.value.trim(),
   })
   replyContent.value = ''
@@ -80,7 +82,7 @@ function submitReply(reviewId: string) {
       <div class="rating-big">
         <span class="rating-number">{{ averageRating.toFixed(1) }}</span>
         <MarketplaceRating :model-value="averageRating" :readonly="true" :size="14" />
-        <span class="rating-count">{{ reviews.length }} 条评价</span>
+        <span class="rating-count">{{ t('market.review.count', { n: reviews.length }) }}</span>
       </div>
       <div class="rating-bars">
         <div v-for="(count, idx) in ratingDistribution" :key="idx" class="rating-bar-row">
@@ -101,33 +103,33 @@ function submitReply(reviewId: string) {
         <button
           :class="['sort-btn', { active: sortBy === 'newest' }]"
           @click="sortBy = 'newest'"
-        >最新</button>
+        >{{ t('market.review.newest') }}</button>
         <button
           :class="['sort-btn', { active: sortBy === 'rating' }]"
           @click="sortBy = 'rating'"
-        >评分</button>
+        >{{ t('market.review.rating') }}</button>
       </div>
       <LumiButton variant="primary" size="sm" @click="showReviewForm = !showReviewForm">
         <MessageCircle :size="14" />
-        写评价
+        {{ t('market.review.write') }}
       </LumiButton>
     </div>
 
     <Transition name="review-form">
       <div v-if="showReviewForm" class="review-form">
         <div class="form-rating">
-          <span class="form-label">评分</span>
+          <span class="form-label">{{ t('market.review.ratingLabel') }}</span>
           <MarketplaceRating v-model="newReviewRating" :size="20" />
         </div>
         <textarea
           v-model="newReviewContent"
           class="lumi-textarea review-textarea"
-          placeholder="分享你的使用体验..."
+          :placeholder="t('market.review.placeholder')"
           rows="3"
         ></textarea>
         <div class="form-actions">
           <LumiButton variant="ghost" size="sm" @click="showReviewForm = false">
-            取消
+            {{ t('market.review.cancel') }}
           </LumiButton>
           <LumiButton
             variant="primary"
@@ -136,7 +138,7 @@ function submitReply(reviewId: string) {
             @click="submitReview"
           >
             <Send :size="13" />
-            发布
+            {{ t('market.review.publish') }}
           </LumiButton>
         </div>
       </div>
@@ -157,7 +159,7 @@ function submitReply(reviewId: string) {
         <p class="review-content">{{ review.content }}</p>
         <div class="review-interactions">
           <button class="reply-btn" @click="showReplyInput = showReplyInput === review.id ? null : review.id">
-            回复
+            {{ t('market.review.reply') }}
           </button>
         </div>
 
@@ -177,14 +179,14 @@ function submitReply(reviewId: string) {
             <LumiInput
               v-model="replyContent"
               size="sm"
-              placeholder="写回复..."
+              :placeholder="t('market.review.replyPlaceholder')"
               @enter="submitReply(review.id)"
             />
             <LumiButton
               variant="outline"
               size="sm"
               icon-only
-              aria-label="发送回复"
+              :aria-label="t('market.review.sendReply')"
               :disabled="!replyContent.trim()"
               @click="submitReply(review.id)"
             >
@@ -199,8 +201,8 @@ function submitReply(reviewId: string) {
       <LumiEmptyState
         v-if="reviews.length === 0"
         :icon="MessageCircle"
-        title="暂无评价"
-        description="快来写第一条吧！"
+        :title="t('market.review.emptyTitle')"
+        :description="t('market.review.emptyHint')"
       />
     </div>
   </div>

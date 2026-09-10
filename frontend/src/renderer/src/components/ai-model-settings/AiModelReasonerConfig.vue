@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Info,
   ChevronRight,
@@ -17,6 +18,7 @@ const logger = createLuomiNestRendererLogger('AiModel')
 
 const modelStore = useModelStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const providers = computed(() => modelStore.providers)
 const showInfo = ref(false)
@@ -30,6 +32,12 @@ const reasonerModelConfig = ref<ReasonerModelConfig>({
 })
 
 const saveValidationError = ref('')
+
+const effortOptions = computed(() => [
+  { value: 'low', label: t('aiModel.reasoner.effortLow') },
+  { value: 'medium', label: t('aiModel.reasoner.effortMedium') },
+  { value: 'high', label: t('aiModel.reasoner.effortHigh') },
+])
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
 const reasonerAvailableModels = computed(() => {
@@ -43,10 +51,10 @@ const reasonerAvailableModels = computed(() => {
 
 const reasonerConfigValid = computed(() => {
   if (!reasonerModelConfig.value.selectedProvider) {
-    return { valid: false, error: '请选择供应商' }
+    return { valid: false, error: t('aiModel.common.errSelectProvider') }
   }
   if (!reasonerModelConfig.value.model) {
-    return { valid: false, error: '请选择模型' }
+    return { valid: false, error: t('aiModel.common.errSelectModel') }
   }
   return { valid: true, error: '' }
 })
@@ -60,13 +68,13 @@ const handleFetchModels = async (providerId: string) => {
   try {
     const models = await modelStore.fetchProviderModels(providerId)
     if (models.length > 0) {
-      toast.success(`已获取 ${models.length} 个模型`)
+      toast.success(t('aiModel.common.fetchSuccess', { count: models.length }))
     } else {
-      toast.warning('未获取到模型，请检查供应商配置或网络连接')
+      toast.warning(t('aiModel.common.fetchEmpty'))
     }
   } catch (e: unknown) {
     logger.error('Failed to fetch models:', e)
-    toast.error(`获取模型列表失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
+    toast.error(t('aiModel.common.fetchFailed', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
   }
 }
 
@@ -89,11 +97,11 @@ const handleSaveReasonerConfig = async () => {
       reasonerEffort: reasonerModelConfig.value.reasoningEffort,
     })
     saveStatus.value = 'saved'
-    toast.success('推理模型配置已保存')
+    toast.success(t('aiModel.reasoner.savedToast'))
     setTimeout(() => { saveStatus.value = 'idle' }, 2000)
   } catch {
     saveStatus.value = 'error'
-    toast.error('推理模型配置保存失败')
+    toast.error(t('aiModel.reasoner.saveErrorToast'))
     setTimeout(() => { saveStatus.value = 'idle' }, 3000)
   }
 }
@@ -115,8 +123,8 @@ onMounted(() => {
     <div class="section-header">
       <div class="section-header-left">
         <div class="section-header-text">
-          <h3 class="section-title">推理模型</h3>
-          <span class="section-tag">复杂 Agent 任务</span>
+          <h3 class="section-title">{{ t('aiModel.reasoner.title') }}</h3>
+          <span class="section-tag">{{ t('aiModel.reasoner.tag') }}</span>
         </div>
       </div>
       <button
@@ -128,20 +136,20 @@ onMounted(() => {
     </div>
     <Transition name="info-expand">
       <div v-if="showInfo" class="section-info-panel">
-        <p>推理模型用于复杂逻辑推理、数学计算、代码分析等需要深度思考的场景。当主模型未配置时，推理模型将作为默认模型使用。</p>
-        <p class="info-tip">推荐使用 DeepSeek-R1、Claude Opus、o1 等具备推理能力的模型。</p>
+        <p>{{ t('aiModel.reasoner.info') }}</p>
+        <p class="info-tip">{{ t('aiModel.reasoner.infoTip') }}</p>
       </div>
     </Transition>
 
     <div class="config-form">
       <div class="form-group">
         <label class="form-label">
-          供应商
+          {{ t('aiModel.common.provider') }}
           <span class="required-mark">*</span>
         </label>
         <div class="form-select-wrap">
           <select v-model="reasonerModelConfig.selectedProvider" class="form-select" :class="{ 'select-error': saveValidationError && !reasonerModelConfig.selectedProvider }" @change="onReasonerProviderChange">
-            <option value="">请选择供应商</option>
+            <option value="">{{ t('aiModel.common.selectProvider') }}</option>
             <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
           <ChevronRight :size="14" class="select-icon" />
@@ -151,23 +159,23 @@ onMounted(() => {
         </span>
       </div>
       <div class="form-group">
-        <label class="form-label">模型</label>
+        <label class="form-label">{{ t('aiModel.common.model') }}</label>
         <div class="form-select-wrap">
           <select v-model="reasonerModelConfig.model" class="form-select">
-            <option value="">请选择模型</option>
+            <option value="">{{ t('aiModel.common.selectModel') }}</option>
             <option v-for="m in reasonerAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
           </select>
           <ChevronRight :size="14" class="select-icon" />
         </div>
         <div v-if="reasonerModelConfig.selectedProvider && reasonerAvailableModels.length === 0" class="fetch-models-row">
-          <span class="form-hint">暂无模型列表</span>
+          <span class="form-hint">{{ t('aiModel.common.noModels') }}</span>
           <button class="fetch-btn" @click="handleFetchModels(reasonerModelConfig.selectedProvider)">
             <RefreshCw :size="12" />
-            获取
+            {{ t('aiModel.common.fetch') }}
           </button>
         </div>
         <span v-if="reasonerModelConfig.model && reasonerAvailableModels.length > 0 && !reasonerAvailableModels.find(m => m.id === reasonerModelConfig.model)" class="form-hint hint-warn">
-          当前供应商可能不支持此模型，请求时可能报错
+          {{ t('aiModel.common.modelMismatch') }}
         </span>
       </div>
       <div class="form-group">
@@ -176,7 +184,7 @@ onMounted(() => {
           <span class="form-value">{{ reasonerModelConfig.temperature }}</span>
         </div>
         <input type="range" v-model.number="reasonerModelConfig.temperature" min="0" max="2" step="0.1" class="form-slider" />
-        <div class="slider-labels"><span>精确</span><span>创意</span></div>
+        <div class="slider-labels"><span>{{ t('aiModel.common.precise') }}</span><span>{{ t('aiModel.common.creative') }}</span></div>
       </div>
       <div class="form-group">
         <div class="form-label-row">
@@ -186,10 +194,10 @@ onMounted(() => {
         <input type="range" v-model.number="reasonerModelConfig.maxTokens" min="1024" max="32768" step="1024" class="form-slider" />
       </div>
       <div class="form-group">
-        <label class="form-label">推理强度</label>
+        <label class="form-label">{{ t('aiModel.reasoner.reasoningEffort') }}</label>
         <div class="effort-group">
           <button
-            v-for="effort in [{ value: 'low', label: '低' }, { value: 'medium', label: '中' }, { value: 'high', label: '高' }]"
+            v-for="effort in effortOptions"
             :key="effort.value"
             :class="['effort-btn', { active: reasonerModelConfig.reasoningEffort === effort.value }]"
             @click="reasonerModelConfig.reasoningEffort = effort.value"
@@ -208,7 +216,7 @@ onMounted(() => {
         <Check v-else-if="saveStatus === 'saved'" :size="16" />
         <AlertCircle v-else-if="saveStatus === 'error'" :size="16" />
         <Check v-else :size="16" />
-        {{ saveStatus === 'saving' ? '保存中...' : saveStatus === 'saved' ? '已保存' : saveStatus === 'error' ? (saveValidationError || '保存失败') : '保存配置' }}
+        {{ saveStatus === 'saving' ? t('aiModel.common.saving') : saveStatus === 'saved' ? t('aiModel.common.saved') : saveStatus === 'error' ? (saveValidationError || t('aiModel.common.saveFailed')) : t('aiModel.common.saveConfig') }}
       </button>
     </div>
   </div>

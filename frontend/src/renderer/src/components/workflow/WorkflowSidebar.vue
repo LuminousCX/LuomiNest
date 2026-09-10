@@ -2,9 +2,10 @@
 /**
  * 工作流侧栏 - 实时会话指示 + 历史会话列表
  */
+import { useI18n } from 'vue-i18n'
 import { Play, Loader2, CheckCircle2, XCircle, Zap, Clock, AlertCircle } from 'lucide-vue-next'
 import type { WorkflowSession } from '../../types/workflow'
-import { PHASE_LABELS, formatWorkflowTime } from '../../composables/useWorkflowSessions'
+import { phaseLabel, formatWorkflowTime } from '../../composables/useWorkflowSessions'
 
 defineProps<{
   sessions: WorkflowSession[]
@@ -20,6 +21,8 @@ defineEmits<{
   'select-session': [sessionId: string]
   'show-live': []
 }>()
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -27,7 +30,7 @@ defineEmits<{
     <div class="sidebar-section">
       <div class="section-label">
         <Zap :size="14" />
-        <span>实时工作流</span>
+        <span>{{ t('workflow.sidebar.liveTitle') }}</span>
       </div>
       <button
         class="session-item"
@@ -40,10 +43,10 @@ defineEmits<{
         </div>
         <div class="session-item-info">
           <span class="session-item-title">
-            {{ hasLiveSession ? '当前执行中' : '无实时工作流' }}
+            {{ hasLiveSession ? t('workflow.sidebar.current') : t('workflow.sidebar.none') }}
           </span>
           <span class="session-item-meta">
-            {{ isRunning ? (PHASE_LABELS[livePhase] || '') : '空闲' }}
+            {{ isRunning ? phaseLabel(livePhase) : t('workflow.sidebar.idle') }}
           </span>
         </div>
       </button>
@@ -52,14 +55,14 @@ defineEmits<{
     <div class="sidebar-section sidebar-sessions">
       <div class="section-label">
         <Clock :size="14" />
-        <span>历史工作流</span>
+        <span>{{ t('workflow.sidebar.historyTitle') }}</span>
       </div>
       <div v-if="isLoadingSessions" class="loading-hint">
         <Loader2 :size="14" class="spin-animation" />
-        <span>加载中...</span>
+        <span>{{ t('workflow.sidebar.loading') }}</span>
       </div>
       <div v-else-if="sessions.length === 0" class="empty-hint">
-        暂无历史工作流
+        {{ t('workflow.sidebar.empty') }}
       </div>
       <div v-else class="session-list">
         <button
@@ -69,16 +72,16 @@ defineEmits<{
           :class="{ active: selectedSessionId === session.session_id }"
           @click="$emit('select-session', session.session_id)"
         >
-          <div class="session-item-icon" :class="session.phase === 'completed' ? 'completed' : session.phase === 'failed' ? 'failed' : (session.session_id === liveSessionId && isRunning) ? 'running' : 'stale'">
+          <div class="session-item-icon" :class="{ completed: session.phase === 'completed', failed: session.phase === 'failed', running: session.session_id === liveSessionId && isRunning }">
             <CheckCircle2 v-if="session.phase === 'completed'" :size="14" />
             <XCircle v-else-if="session.phase === 'failed'" :size="14" />
             <Loader2 v-else-if="session.session_id === liveSessionId && isRunning" :size="14" class="spin-animation" />
             <AlertCircle v-else :size="14" />
           </div>
           <div class="session-item-info">
-            <span class="session-item-title">{{ session.user_message?.slice(0, 30) || '未命名工作流' }}</span>
+            <span class="session-item-title">{{ session.user_message?.slice(0, 30) || t('workflow.sidebar.unnamed') }}</span>
             <span class="session-item-meta">
-              {{ formatWorkflowTime(session.created_at) }} · {{ session.stats?.total ?? 0 }} 个任务
+              {{ formatWorkflowTime(session.created_at) }} · {{ t('workflow.sidebar.taskCount', { n: session.stats?.total ?? 0 }) }}
             </span>
           </div>
         </button>

@@ -1,8 +1,10 @@
 import type { ColorTheme } from './theme-types'
+import { i18n } from '../i18n'
 
 /**
  * 5 个预设主题 - 莫兰迪风格三色配色
  * 每个主题包含 light/dark 两套完整变量
+ * name 用 getter 惰性求值：语言切换后展示名随之更新（预设对象只读展示、从不序列化）
  */
 export const presetThemes: ColorTheme[] = [
   // ────────────────────────────────────────────
@@ -10,7 +12,7 @@ export const presetThemes: ColorTheme[] = [
   // ────────────────────────────────────────────
   {
     id: 'blue',
-    name: '辰汐蓝',
+    get name() { return i18n.global.t('theme.presets.blue') },
     type: 'preset',
     light: {
       primary: '#147EBC',
@@ -45,7 +47,7 @@ export const presetThemes: ColorTheme[] = [
   // ────────────────────────────────────────────
   {
     id: 'purple',
-    name: '紫罗兰',
+    get name() { return i18n.global.t('theme.presets.purple') },
     type: 'preset',
     light: {
       primary: '#7C3AED',
@@ -80,7 +82,7 @@ export const presetThemes: ColorTheme[] = [
   // ────────────────────────────────────────────
   {
     id: 'red',
-    name: '中国红',
+    get name() { return i18n.global.t('theme.presets.red') },
     type: 'preset',
     light: {
       primary: '#C0392B',
@@ -115,7 +117,7 @@ export const presetThemes: ColorTheme[] = [
   // ────────────────────────────────────────────
   {
     id: 'green',
-    name: '翡翠绿',
+    get name() { return i18n.global.t('theme.presets.green') },
     type: 'preset',
     light: {
       primary: '#059669',
@@ -150,7 +152,7 @@ export const presetThemes: ColorTheme[] = [
   // ────────────────────────────────────────────
   {
     id: 'orange',
-    name: '暖橘橙',
+    get name() { return i18n.global.t('theme.presets.orange') },
     type: 'preset',
     light: {
       primary: '#EA580C',
@@ -181,13 +183,13 @@ export const presetThemes: ColorTheme[] = [
   }
 ]
 
-/** 预设主题 ID → 名称映射 */
+/** 预设主题 ID → 名称映射（getter 惰性求值，随语言切换更新） */
 export const presetThemeNames: Record<string, string> = {
-  blue: '辰汐蓝',
-  purple: '紫罗兰',
-  red: '中国红',
-  green: '翡翠绿',
-  orange: '暖橘橙'
+  get blue() { return i18n.global.t('theme.presets.blue') },
+  get purple() { return i18n.global.t('theme.presets.purple') },
+  get red() { return i18n.global.t('theme.presets.red') },
+  get green() { return i18n.global.t('theme.presets.green') },
+  get orange() { return i18n.global.t('theme.presets.orange') }
 }
 
 /** 预设主题 ID → 三色预览色（primary / secondary / accent） */

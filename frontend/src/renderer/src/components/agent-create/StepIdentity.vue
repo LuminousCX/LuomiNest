@@ -5,6 +5,7 @@
  * 表单区（名称/头像/描述/风格/模型）+ 实时预览区
  */
 import { Upload, CircleDot } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import LumiInput from '../common/LumiInput.vue'
 import LumiCard from '../common/LumiCard.vue'
 import {
@@ -20,6 +21,8 @@ defineProps<{
   currentStep: number
 }>()
 
+const { t } = useI18n()
+
 const emit = defineEmits<{
   'select-avatar': [avatarId: string]
   'select-style': [styleId: string]
@@ -31,16 +34,16 @@ const emit = defineEmits<{
   <div class="step-content step-layout-split">
     <div class="form-area">
       <div class="form-group">
-        <label class="form-label">名称<span class="required">*</span></label>
+        <label class="form-label">{{ t('agentCreate.fieldName') }}<span class="required">*</span></label>
         <LumiInput
           v-model="formData.name"
           type="text"
-          placeholder="给你的智能体起个名字..."
+          :placeholder="t('agentCreate.phName')"
         />
       </div>
 
       <div class="form-group">
-        <label class="form-label">智能体头像</label>
+        <label class="form-label">{{ t('agentCreate.fieldAvatar') }}</label>
         <div class="avatar-section">
           <div class="avatar-categories">
             <button
@@ -64,7 +67,7 @@ const emit = defineEmits<{
               <img v-if="avatar.imageUrl" :src="avatar.imageUrl" class="avatar-img" :alt="avatar.id" />
               <span v-else class="avatar-emoji">{{ avatar.emoji }}</span>
             </button>
-            <button class="avatar-item upload-avatar" title="上传自定义头像">
+            <button class="avatar-item upload-avatar" :title="t('agentCreate.uploadAvatar')">
               <Upload :size="18" />
             </button>
           </div>
@@ -72,17 +75,17 @@ const emit = defineEmits<{
       </div>
 
       <div class="form-group">
-        <label class="form-label">描述</label>
+        <label class="form-label">{{ t('agentCreate.fieldDescription') }}</label>
         <textarea
           v-model="formData.description"
           class="lumi-textarea"
           rows="3"
-          placeholder="简要描述这个智能体的定位和能力..."
+          :placeholder="t('agentCreate.phDescription')"
         ></textarea>
       </div>
 
       <div class="form-group">
-        <label class="form-label">风格</label>
+        <label class="form-label">{{ t('agentCreate.fieldStyle') }}</label>
         <div class="tag-list">
           <button
             v-for="tag in STYLE_TAGS"
@@ -99,9 +102,9 @@ const emit = defineEmits<{
     <div class="preview-area">
       <div class="preview-header">
         <CircleDot :size="14" />
-        <span>智能体预览</span>
+        <span>{{ t('agentCreate.preview') }}</span>
       </div>
-      <p class="preview-hint">实时预览智能体效果</p>
+      <p class="preview-hint">{{ t('agentCreate.previewHint') }}</p>
 
       <LumiCard class="preview-card" padding="md">
         <div
@@ -111,13 +114,13 @@ const emit = defineEmits<{
           <img v-if="selectedAvatar.imageUrl" :src="selectedAvatar.imageUrl" class="preview-avatar-img" />
           <span v-else class="preview-avatar-emoji">{{ selectedAvatar.emoji }}</span>
         </div>
-        <h3 class="preview-name">{{ formData.name || '未命名智能体' }}</h3>
-        <p class="preview-badge">{{ STYLE_TAGS.find(t => t.id === formData.selectedStyle)?.label || '风格' }} · 已验证</p>
-        <p class="preview-desc">{{ formData.description || '暂无描述信息。添加描述可帮助理解智能体的定位与用途。' }}</p>
+        <h3 class="preview-name">{{ formData.name || t('agentCreate.unnamedAgent') }}</h3>
+        <p class="preview-badge">{{ STYLE_TAGS.find(tag => tag.id === formData.selectedStyle)?.label || t('agentCreate.styleFallback') }} · {{ t('agentCreate.verified') }}</p>
+        <p class="preview-desc">{{ formData.description || t('agentCreate.noDescription') }}</p>
       </LumiCard>
 
       <div class="step-indicator">
-        简览步骤 • 第 {{ currentStep + 1 }} / {{ TOTAL_STEPS }} 步
+        {{ t('agentCreate.stepOverview', { n: currentStep + 1, total: TOTAL_STEPS }) }}
       </div>
     </div>
   </div>

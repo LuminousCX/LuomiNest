@@ -5,7 +5,10 @@
  * 从 DesktopPetView.vue 拆分，仅负责控制面板 UI（reset pose / always-on-top toggle / close）。
  * 显示/隐藏与 pin 状态由父组件控制，操作通过 emit 上报。
  */
+import { useI18n } from 'vue-i18n'
 import { RotateCcw, X, Pin, PinOff } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 defineProps<{
   visible: boolean
@@ -29,19 +32,19 @@ const emit = defineEmits<{
   >
     <Transition name="controls-fade">
       <div v-if="visible" class="controls-panel">
-        <button class="control-btn" title="重置姿势" @click="emit('reset-pose')">
+        <button class="control-btn" :title="t('pet.controls.resetPose')" @click="emit('reset-pose')">
           <RotateCcw :size="16" />
         </button>
         <button
           class="control-btn"
           :class="{ active: isAlwaysOnTop }"
-          :title="isAlwaysOnTop ? '取消置顶' : '置顶'"
+          :title="isAlwaysOnTop ? t('pet.controls.unpin') : t('pet.controls.pin')"
           @click="emit('toggle-always-on-top')"
         >
           <Pin v-if="isAlwaysOnTop" :size="16" />
           <PinOff v-else :size="16" />
         </button>
-        <button class="control-btn danger" title="关闭宠物" @click="emit('close')">
+        <button class="control-btn danger" :title="t('pet.controls.close')" @click="emit('close')">
           <X :size="16" />
         </button>
       </div>

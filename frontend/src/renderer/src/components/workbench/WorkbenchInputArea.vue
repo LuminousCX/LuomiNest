@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, ref } from 'vue'
 import {
   Send,
@@ -22,6 +23,8 @@ const props = defineProps<{
   chatModeOptions: WorkflowModeOption[]
   selectedSkillIds: string[]
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   'update:inputText': [value: string]
@@ -71,7 +74,7 @@ defineExpose({
       <textarea
         ref="textareaRef"
         v-model="inputTextModel"
-        placeholder="与陪伴 AI 对话..."
+        :placeholder="t('workbench.input.placeholder')"
         rows="1"
         class="chat-input"
         :disabled="!isBackendReady"
@@ -84,7 +87,7 @@ defineExpose({
                点击徽章跳转到 设置 → 模型设置 -->
           <div
             class="model-badge"
-            title="当前使用全局主模型，点击前往 设置 → 模型设置 切换"
+            :title="t('workbench.input.globalModelTitle')"
             @click="emit('go-settings')"
           >
             <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
@@ -97,13 +100,13 @@ defineExpose({
             :class="['workflow-toggle', { active: isWorkflowMode }]"
             variant="secondary"
             size="sm"
-            :title="isWorkflowMode ? '专业模式已开启：长任务将自动分解并调度内部模块' : '当前为普通模式：点击切换专业模式'"
+            :title="isWorkflowMode ? t('workbench.input.proOn') : t('workbench.input.proOff')"
             @click="toggleWorkflowMode"
           >
             <template #icon>
               <Wand2 :size="15" />
             </template>
-            <span class="workflow-toggle-text">{{ isWorkflowMode ? '专业' : '普通' }}</span>
+            <span class="workflow-toggle-text">{{ isWorkflowMode ? t('workbench.input.proLabel') : t('workbench.input.normalLabel') }}</span>
           </LumiButton>
           <div v-if="isWorkflowMode" class="workflow-mode-selector">
             <LumiButton
@@ -125,7 +128,7 @@ defineExpose({
             variant="danger"
             size="md"
             icon-only
-            aria-label="停止生成"
+            :aria-label="t('workbench.input.stop')"
             class="send-btn stop"
             @click="emit('cancel')"
           >
@@ -138,7 +141,7 @@ defineExpose({
             variant="primary"
             size="md"
             icon-only
-            aria-label="发送"
+            :aria-label="t('workbench.input.send')"
             class="send-btn"
             :disabled="!canSend"
             @click="emit('send')"

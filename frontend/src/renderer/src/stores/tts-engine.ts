@@ -20,6 +20,7 @@ import { API_ENDPOINTS } from '../config/api'
 import { filterTtsText } from '../utils/ttsTextFilter'
 import { interceptEmotionTags } from '../utils/emotionTagInterceptor'
 import type { ChatStreamChunk } from '../types'
+import { i18n } from '../i18n'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import {
   useAvatarAudioEngine,
@@ -172,7 +173,7 @@ export const useTtsEngineStore = defineStore('ttsEngine', () => {
         const errorData = await response.json().catch(() => ({}))
         const ttsErr = typeof errorData?.error === 'string'
           ? errorData.error
-          : errorData?.error?.message || errorData?.detail || `语音合成请求失败 (${response.status})`
+          : errorData?.error?.message || errorData?.detail || i18n.global.t('settingsEx.ttsEngineStore.requestFailed', { status: response.status })
         throw new Error(ttsErr)
       }
 

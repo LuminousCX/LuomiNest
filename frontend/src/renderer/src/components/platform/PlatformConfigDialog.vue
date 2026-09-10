@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Cpu, Image as ImageIcon, RefreshCw, RotateCcw,
   AlertCircle, CheckCircle2, XCircle, Clock,
@@ -16,6 +17,7 @@ const logger = createLuomiNestRendererLogger('Platform')
 
 const store = usePlatformStore()
 const modelStore = useModelStore()
+const { t } = useI18n()
 
 const props = defineProps<{
   visible: boolean
@@ -69,11 +71,11 @@ const getStatusColor = (status: string) => {
 
 const getStatusLabel = (status: string) => {
   switch (status) {
-    case 'running': return '运行中'
-    case 'stopped': return '已停止'
-    case 'error': return '错误'
-    case 'pending': return '等待中'
-    default: return '未知'
+    case 'running': return t('platform.status.running')
+    case 'stopped': return t('platform.status.stopped')
+    case 'error': return t('platform.status.error')
+    case 'pending': return t('platform.status.pending')
+    default: return t('platform.status.unknown')
   }
 }
 
@@ -180,10 +182,10 @@ watch(() => props.instance, async (instance) => {
 </script>
 
 <template>
-  <LumiModal :visible="visible" :title="`平台配置 - ${instance?.name || ''}`" size="lg" @close="closeConfigDialog" @update:visible="emit('update:visible', $event)">
+  <LumiModal :visible="visible" :title="t('platform.configTitle', { name: instance?.name || '' })" size="lg" @close="closeConfigDialog" @update:visible="emit('update:visible', $event)">
     <div class="dialog-body">
       <div class="form-group">
-        <label class="form-label">状态</label>
+        <label class="form-label">{{ t('platform.statusLabel') }}</label>
         <div class="status-display">
           <component :is="getStatusIcon(instance?.status || '')" :size="16" :style="{ color: getStatusColor(instance?.status || '') }" />
           <span :style="{ color: getStatusColor(instance?.status || '') }">{{ getStatusLabel(instance?.status || '') }}</span>
@@ -193,37 +195,37 @@ watch(() => props.instance, async (instance) => {
       <div class="form-group">
         <label class="form-label">
           <Cpu :size="12" />
-          模型配置
-          <span v-if="effectiveModelConfig?.isOverridden" class="badge overridden">独立配置</span>
-          <span v-else-if="effectiveModelConfig" class="badge inherited">继承主 Agent</span>
+          {{ t('platform.modelConfig') }}
+          <span v-if="effectiveModelConfig?.isOverridden" class="badge overridden">{{ t('platform.badgeOverridden') }}</span>
+          <span v-else-if="effectiveModelConfig" class="badge inherited">{{ t('platform.badgeInherited') }}</span>
         </label>
 
         <div v-if="modelConfigLoading" class="model-config-loading">
           <RefreshCw :size="14" class="spin-animation" />
-          <span>加载模型配置...</span>
+          <span>{{ t('platform.loadingModelConfig') }}</span>
         </div>
 
         <div v-else-if="effectiveModelConfig" class="model-config-section">
           <div v-if="isGameCategory" class="vision-hint">
             <ImageIcon :size="12" />
-            <span>游戏类平台需要支持图片识别（vision）的模型</span>
+            <span>{{ t('platform.visionHint') }}</span>
           </div>
 
           <div class="model-current-info">
             <div class="info-row">
-              <span class="info-label">当前生效:</span>
+              <span class="info-label">{{ t('platform.currentEffective') }}</span>
               <span class="info-value">{{ effectiveModelConfig.effective.providerName || effectiveModelConfig.effective.provider }}</span>
               <span class="info-sep">/</span>
               <span class="info-value">{{ effectiveModelConfig.effective.model }}</span>
               <span
                 :class="['vision-tag', { supported: effectiveModelConfig.effective.supportsMultimodal }]"
-                :title="effectiveModelConfig.effective.supportsMultimodal ? '支持图片识别' : '不支持图片识别'"
+                :title="effectiveModelConfig.effective.supportsMultimodal ? t('platform.visionSupported') : t('platform.visionUnsupported')"
               >
                 {{ effectiveModelConfig.effective.supportsMultimodal ? 'Vision' : 'No Vision' }}
               </span>
             </div>
             <div class="info-row main-agent-info">
-              <span class="info-label">主 Agent 默认:</span>
+              <span class="info-label">{{ t('platform.mainAgentDefault') }}</span>
               <span class="info-value">{{ effectiveModelConfig.mainAgent.providerName || effectiveModelConfig.mainAgent.provider }}</span>
               <span class="info-sep">/</span>
               <span class="info-value">{{ effectiveModelConfig.mainAgent.model }}</span>
@@ -232,55 +234,55 @@ watch(() => props.instance, async (instance) => {
 
           <div class="config-fields">
             <div class="config-field">
-              <label class="config-field-label">供应商 (空 = 继承主 Agent)</label>
+              <label class="config-field-label">{{ t('platform.providerLabel') }}</label>
               <select
                 v-model="modelEditConfig.provider"
                 class="form-input form-select"
                 @change="handleProviderChange"
               >
-                <option value="">继承主 Agent</option>
+                <option value="">{{ t('platform.inheritMainAgent') }}</option>
                 <option v-for="p in availableProviders" :key="p.id" :value="p.id">
-                  {{ p.name }}{{ p.isDefault ? ' (默认)' : '' }}
+                  {{ p.name }}{{ p.isDefault ? t('platform.defaultSuffix') : '' }}
                 </option>
               </select>
             </div>
             <div class="config-field">
-              <label class="config-field-label">模型 (空 = 继承主 Agent)</label>
+              <label class="config-field-label">{{ t('platform.modelLabel') }}</label>
               <select v-model="modelEditConfig.model" class="form-input form-select" :disabled="!modelEditConfig.provider">
-                <option value="">继承主 Agent</option>
+                <option value="">{{ t('platform.inheritMainAgent') }}</option>
                 <option v-for="m in availableModels" :key="m.id" :value="m.id">
                   {{ m.name || m.id }}
                 </option>
               </select>
             </div>
             <div class="config-field">
-              <label class="config-field-label">System Prompt (空 = 继承主 Agent)</label>
+              <label class="config-field-label">{{ t('platform.systemPromptLabel') }}</label>
               <textarea
                 v-model="modelEditConfig.systemPrompt"
                 class="form-input form-textarea"
                 rows="3"
-                placeholder="留空继承主 Agent 的 System Prompt"
+                :placeholder="t('platform.systemPromptPlaceholder')"
               ></textarea>
             </div>
             <div class="config-field-row">
               <div class="config-field">
-                <label class="config-field-label">Temperature (空 = 继承)</label>
+                <label class="config-field-label">{{ t('platform.temperatureLabel') }}</label>
                 <LumiInput
                   v-model.number="modelEditConfig.temperature"
                   type="number"
                   step="0.1"
                   min="0"
                   max="2"
-                  placeholder="继承"
+                  :placeholder="t('platform.inherit')"
                 />
               </div>
               <div class="config-field">
-                <label class="config-field-label">Max Tokens (空 = 继承)</label>
+                <label class="config-field-label">{{ t('platform.maxTokensLabel') }}</label>
                 <LumiInput
                   v-model.number="modelEditConfig.maxTokens"
                   type="number"
                   min="1"
-                  placeholder="继承"
+                  :placeholder="t('platform.inherit')"
                 />
               </div>
             </div>
@@ -292,13 +294,13 @@ watch(() => props.instance, async (instance) => {
             :disabled="modelConfigSaving || !effectiveModelConfig.isOverridden"
           >
             <RotateCcw :size="12" />
-            <span>重置为继承主 Agent</span>
+            <span>{{ t('platform.resetToInherit') }}</span>
           </button>
         </div>
       </div>
 
       <div v-if="Object.keys(editConfig).length > 0" class="form-group">
-        <label class="form-label">连接配置</label>
+        <label class="form-label">{{ t('platform.connectionConfig') }}</label>
         <div class="config-fields">
           <div v-for="(_val, key) in editConfig" :key="key" class="config-field">
             <label class="config-field-label">{{ key }}</label>
@@ -307,13 +309,13 @@ watch(() => props.instance, async (instance) => {
         </div>
       </div>
       <div v-if="instance?.errorMessage" class="form-group">
-        <label class="form-label">错误信息</label>
+        <label class="form-label">{{ t('platform.errorLabel') }}</label>
         <div class="error-display">{{ instance.errorMessage }}</div>
       </div>
     </div>
     <template #footer>
-      <LumiButton variant="secondary" size="sm" @click="closeConfigDialog">取消</LumiButton>
-      <LumiButton variant="primary" size="sm" @click="handleSaveConfig">保存配置</LumiButton>
+      <LumiButton variant="secondary" size="sm" @click="closeConfigDialog">{{ t('platform.cancel') }}</LumiButton>
+      <LumiButton variant="primary" size="sm" @click="handleSaveConfig">{{ t('platform.saveConfig') }}</LumiButton>
     </template>
   </LumiModal>
 </template>

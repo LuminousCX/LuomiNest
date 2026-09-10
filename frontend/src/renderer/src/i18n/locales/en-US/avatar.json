@@ -1,0 +1,194 @@
+{
+  "avatar": {
+    "common": {
+      "unknownError": "Unknown error"
+    },
+    "header": {
+      "title": "Avatar Workshop",
+      "desc": "Manage Live2D avatars, motions and stage settings"
+    },
+    "view": {
+      "ttsError": "Speech synthesis failed: {message}",
+      "modelFileNotFound": "Local file record for this model not found. Please restart the app and try again.",
+      "desktopWindowOpenFailed": "Failed to open the desktop pet window. Please try again.",
+      "switchDesktopModeFailed": "Failed to switch to desktop pet mode: {message}",
+      "desktopWindowCloseFailed": "Failed to close the desktop pet window. You may need to close it manually.",
+      "switchInlineModeFailed": "Failed to switch back to inline mode: {message}",
+      "sendMessageFailed": "Failed to send message: {message}"
+    },
+    "workshop": {
+      "manifestLoadFailed": "Failed to load model manifest",
+      "unknownModelType": "Unknown model type: {type}",
+      "rendererNotImplemented": "The {name} renderer is not implemented yet. Stay tuned.",
+      "importFailed": "Import failed: {message}",
+      "importSuccess": "Model imported successfully",
+      "deleteFailed": "Delete failed: {message}",
+      "deleteSuccess": "Model deleted",
+      "selectModelFirst": "Please select a model first",
+      "bindingUpdated": "Binding configuration updated",
+      "updateFailed": "Update failed: {message}"
+    },
+    "live2d": {
+      "cubismCoreMissing": "Live2DCubismCore is not loaded. Please check that cubism-core/live2dcubismcore.min.js exists.",
+      "webglNotSupported": "WebGL is not supported on this device, so Live2D cannot render. Please check your graphics driver or hardware acceleration settings.",
+      "graphicsInitFailed": "Graphics initialization failed: {message}"
+    },
+    "stageBg": {
+      "settings": "Stage background settings",
+      "resetDefault": "Restore default background",
+      "colorRed": "Red background",
+      "colorYellow": "Yellow background",
+      "colorGreen": "Green background",
+      "customColor": "Custom color",
+      "customImage": "Custom background image",
+      "uploadFailed": "Failed to upload background image: {message}",
+      "applied": "Background image applied ({width}×{height})",
+      "envUnavailable": "Unavailable in the current environment",
+      "bgUrlInvalid": "Invalid background image URL"
+    },
+    "sidebar": {
+      "hideBuiltinHint": "Hide this built-in model (can be restored below)",
+      "confirmDelete": "Click again to confirm deletion",
+      "deleteImported": "Delete this imported model",
+      "emptyList": "No models for this type yet",
+      "hiddenCount": "{n} built-in models hidden",
+      "restoreOne": "Show again",
+      "restoreAll": "Restore all"
+    }
+  },
+  "pet": {
+    "controls": {
+      "resetPose": "Reset pose",
+      "pin": "Pin on top",
+      "unpin": "Unpin",
+      "close": "Close pet"
+    },
+    "chat": {
+      "sendMessageFailed": "Desktop pet chat failed: {message}"
+    }
+  },
+  "theme": {
+    "skins": {
+      "classicBlue": "Tide Blue",
+      "classicPurple": "Violet",
+      "classicRed": "China Red",
+      "classicGreen": "Jade Green",
+      "classicOrange": "Warm Orange",
+      "pearlWhite": "Pearl White",
+      "roseDream": "Rose Dream",
+      "midnightAurora": "Midnight Aurora",
+      "softSunset": "Soft Sunset",
+      "deepSpaceNebula": "Deep Space Nebula",
+      "oceanBreeze": "Ocean Breeze",
+      "sakuraRain": "Sakura Rain",
+      "forestMist": "Forest Mist",
+      "defaultSample": "Default Sample"
+    },
+    "backgrounds": {
+      "none": "None",
+      "blue": "Tide Blue",
+      "purple": "Violet",
+      "red": "China Red",
+      "green": "Jade Green",
+      "orange": "Warm Orange",
+      "dreamPink": "Dream Pink",
+      "dreamPinkHot": "Neon Pink",
+      "deepSpace": "Deep Space",
+      "ocean": "Ocean",
+      "sunset": "Sunset",
+      "aurora": "Aurora",
+      "dots": "Dots",
+      "grid": "Grid"
+    },
+    "legacy": {
+      "migratedSkinName": "My Skin",
+      "migratedThemeSkinName": "My Custom Theme"
+    },
+    "editor": {
+      "editTitle": "Edit Skin",
+      "createTitle": "New Skin",
+      "close": "Close",
+      "livePreview": "Live Preview",
+      "defaultName": "My Skin",
+      "sampleText": "This is a sample text",
+      "primaryButton": "Primary Button",
+      "nameLabel": "Skin Name",
+      "namePlaceholder": "Enter skin name",
+      "colorThemeLabel": "Color Theme",
+      "customColorsLabel": "Custom Colors",
+      "selectColorTheme": "Select {name} color theme",
+      "editColorTheme": "Edit {name} color theme",
+      "createCustomColor": "New Custom Color",
+      "modeLabel": "Theme Mode",
+      "modeLight": "Light",
+      "modeDark": "Dark",
+      "modeSystem": "Follow System",
+      "backgroundLabel": "Background",
+      "noneOption": "None",
+      "customBgTitle": "Current custom background",
+      "customBgName": "Custom",
+      "uploadCustomBg": "Upload Custom Background",
+      "remove": "Remove",
+      "fitLabel": "Background Fit",
+      "fitCover": "Cover",
+      "fitContain": "Contain",
+      "fitCenter": "Center",
+      "fitRight": "Right",
+      "effectsLabel": "Effects",
+      "blur": "Blur",
+      "opacity": "Opacity",
+      "glass": "Glass Intensity",
+      "ambient": "Ambient Light",
+      "radius": "Corner Tendency",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "save": "Save",
+      "create": "Create",
+      "selectBgFailed": "Failed to select background image: {message}",
+      "bgUrlInvalid": "Invalid background image URL",
+      "bgUploaded": "Background image uploaded ({width}×{height})",
+      "customColorCreated": "Custom color created",
+      "customColorUpdated": "Custom color updated",
+      "nameRequired": "Please enter a skin name",
+      "finishColorEditFirst": "Please save or cancel the custom color editor first"
+    },
+    "selector": {
+      "presetSection": "Preset Skins",
+      "applySkin": "Apply {name} skin",
+      "editBasedOn": "Edit based on {name}",
+      "edit": "Edit",
+      "customSection": "Custom Skins",
+      "editSkin": "Edit {name} skin",
+      "createAria": "New custom skin",
+      "createTitle": "New Custom Skin",
+      "createHint": "Create a new visual scheme"
+    },
+    "customEditor": {
+      "editTitle": "Edit Custom Theme",
+      "createTitle": "New Custom Theme",
+      "nameLabel": "Theme Name",
+      "namePlaceholder": "Enter theme name",
+      "colorsLabel": "Three-Color Palette",
+      "primary": "Primary",
+      "secondary": "Secondary",
+      "accent": "Accent",
+      "livePreview": "Live Preview",
+      "uiPreview": "UI Element Preview",
+      "primaryButton": "Primary Button",
+      "secondaryButton": "Secondary Button",
+      "accentButton": "Accent Button",
+      "cardPreview": "This is a card element with a secondary-colored border.",
+      "linkPreview": "This is an accent-colored link",
+      "cancel": "Cancel",
+      "save": "Save",
+      "create": "Create"
+    },
+    "presets": {
+      "blue": "Chenxi Blue",
+      "purple": "Violet",
+      "red": "China Red",
+      "green": "Jade Green",
+      "orange": "Warm Orange"
+    }
+  }
+}

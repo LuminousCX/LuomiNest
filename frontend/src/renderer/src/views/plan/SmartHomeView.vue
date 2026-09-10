@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Component } from 'vue'
 import { Lightbulb, Thermometer, Droplets, Lock, Wifi, Power, Settings2, Wind, Eye, Plus, Activity } from 'lucide-vue-next'
 import LumiButton from '../../components/common/LumiButton.vue'
@@ -7,6 +8,7 @@ import LumiCard from '../../components/common/LumiCard.vue'
 import { useApi } from '../../composables/useApi'
 
 const { apiGet } = useApi()
+const { t } = useI18n()
 
 interface Device {
   id: string
@@ -63,7 +65,7 @@ const fetchData = async () => {
     rooms.value = roomsRes?.data?.rooms || []
     automations.value = automationsRes?.data?.automations || []
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : '加载失败'
+    error.value = e instanceof Error ? e.message : t('smartHome.devices.loadFailed')
   } finally {
     loading.value = false
   }
@@ -83,17 +85,17 @@ const toggleScene = (sceneId: string) => {
   <div class="smart-home-view">
     <div class="sh-header animate-fade-in">
       <div class="sh-header__info">
-        <h1 class="sh-title">智能家居</h1>
-        <p class="sh-desc">物联网智能居家计划与设备控制</p>
+        <h1 class="sh-title">{{ t('smartHome.title') }}</h1>
+        <p class="sh-desc">{{ t('smartHome.desc') }}</p>
       </div>
       <div class="sh-header__actions">
         <LumiButton variant="secondary" size="sm">
           <template #icon><Settings2 :size="14" /></template>
-          <span>设置</span>
+          <span>{{ t('smartHome.settings') }}</span>
         </LumiButton>
         <LumiButton variant="primary" size="sm">
           <template #icon><Plus :size="14" /></template>
-          <span>添加设备</span>
+          <span>{{ t('smartHome.addDevice') }}</span>
         </LumiButton>
       </div>
     </div>
@@ -102,7 +104,7 @@ const toggleScene = (sceneId: string) => {
       <div class="left-col">
         <LumiCard class="section-card" padding="md">
           <div class="section-header">
-            <span class="section-title">房间</span>
+            <span class="section-title">{{ t('smartHome.rooms') }}</span>
           </div>
           <div class="room-grid">
             <div v-for="r in rooms" :key="r.id" class="room-card">
@@ -110,14 +112,14 @@ const toggleScene = (sceneId: string) => {
                 <component :is="r.icon" :size="18" />
               </div>
               <span class="room-name">{{ r.name }}</span>
-              <span class="room-count">{{ r.active }}/{{ r.devices }} 在线</span>
+              <span class="room-count">{{ t('smartHome.onlineCount', { active: r.active, devices: r.devices }) }}</span>
             </div>
           </div>
         </LumiCard>
 
         <LumiCard class="section-card" padding="md">
           <div class="section-header">
-            <span class="section-title">场景</span>
+            <span class="section-title">{{ t('smartHome.scenes') }}</span>
           </div>
           <div class="scene-list">
             <div
@@ -144,7 +146,7 @@ const toggleScene = (sceneId: string) => {
       <div class="center-col">
         <LumiCard class="section-card full" padding="md">
           <div class="section-header">
-            <span class="section-title">设备控制</span>
+            <span class="section-title">{{ t('smartHome.deviceControl') }}</span>
             <Wifi :size="14" class="section-icon" />
           </div>
           <div class="device-grid">
@@ -171,7 +173,7 @@ const toggleScene = (sceneId: string) => {
       <div class="right-col">
         <LumiCard class="section-card" padding="md">
           <div class="section-header">
-            <span class="section-title">自动化</span>
+            <span class="section-title">{{ t('smartHome.automations') }}</span>
             <Activity :size="14" class="section-icon" />
           </div>
           <div class="automation-list">

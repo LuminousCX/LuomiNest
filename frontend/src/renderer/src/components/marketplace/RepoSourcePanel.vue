@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Github, Cloud, Globe, Plus, Link2, Unlink, RefreshCw,
   ChevronDown, ChevronRight, Loader2, Check, AlertCircle,
@@ -16,6 +17,7 @@ import { formatDateRelative } from '../../utils/format'
 
 const store = useRepoSourceStore()
 const registryStore = useRegistrySourceStore()
+const { t } = useI18n()
 
 const expandedSourceIds = ref<Set<string>>(new Set(['github-official']))
 const showAddDialog = ref(false)
@@ -24,16 +26,16 @@ const showRepoSources = ref(false)
 
 const TYPE_CONFIG: Record<RepoSourceType, { icon: LucideIcon; label: string; color: string }> = {
   github: { icon: Github, label: 'GitHub', color: 'var(--task-sky)' },
-  cloud: { icon: Cloud, label: '云端', color: 'var(--lumi-info)' },
+  cloud: { icon: Cloud, label: 'Cloud', color: 'var(--lumi-info)' },
   cdn: { icon: Globe, label: 'CDN', color: 'var(--lumi-sky)' },
-  custom: { icon: Plus, label: '自定义', color: 'var(--lumi-amber)' },
+  custom: { icon: Plus, label: 'Custom', color: 'var(--lumi-amber)' },
 }
 
-const SUB_MARKET_TYPE_LABEL: Record<string, string> = {
-  plugin: '插件',
-  skill: '技能',
-  agent: '智能体',
-}
+const SUB_MARKET_TYPE_LABEL = computed<Record<string, string>>(() => ({
+  plugin: t('market.source.subType.plugin'),
+  skill: t('market.source.subType.skill'),
+  agent: t('market.source.subType.agent'),
+}))
 
 onMounted(() => {
   store.fetchSources()
@@ -86,10 +88,10 @@ const handleAddCustom = async () => {
   try {
     const parsed = new URL(addForm.value.url.trim())
     if (!['http:', 'https:'].includes(parsed.protocol)) {
-      throw new Error('仅支持 http/https 协议')
+      throw new Error(t('market.error.httpOnly'))
     }
   } catch {
-    alert('请输入有效的 URL 地址（以 http:// 或 https:// 开头）')
+    alert(t('market.error.invalidUrl'))
     return
   }
   const result = await store.addCustomSource({
@@ -126,10 +128,10 @@ const getStatusClass = (source: RepoSource) => {
 }
 
 const getStatusText = (source: RepoSource) => {
-  if (source.status === 'loading') return '同步中...'
-  if (source.status === 'loaded') return '已同步'
-  if (source.status === 'error') return '同步失败'
-  return '未同步'
+  if (source.status === 'loading') return t('market.source.syncingStatus')
+  if (source.status === 'loaded') return t('market.source.synced')
+  if (source.status === 'error') return t('market.source.syncFailed')
+  return t('market.source.notSynced')
 }
 
 const getSourceItemCount = (sourceId: string): number => {
@@ -188,11 +190,11 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
     <!-- 发布源选择器 -->
     <div class="registry-source-section">
       <div class="section-header">
-        <span class="section-title">发布源</span>
+        <span class="section-title">{{ t('market.source.registryTitle') }}</span>
         <button
           class="ping-btn"
           :disabled="registryStore.loading || registryStore.switching"
-          title="测试各发布源延迟"
+          :title="t('market.source.testLatencyTitle')"
           @click="handlePingRegistrySources"
         >
           <Loader2
@@ -201,7 +203,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
             class="spin-animation"
           />
           <RefreshCw v-else :size="13" />
-          <span>测延迟</span>
+          <span>{{ t('market.source.testLatency') }}</span>
         </button>
       </div>
 
@@ -268,7 +270,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
       </div>
 
       <p class="registry-source-hint">
-        切换发布源可改变插件市场的加载速度。不可用源已自动禁用。
+        {{ t('market.source.hint') }}
       </p>
     </div>
 
@@ -278,11 +280,11 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
         class="repo-source-section-toggle-left"
         role="button"
         tabindex="0"
-        aria-label="展开或收起仓库来源"
+        :aria-label="t('market.source.repoToggleLabel')"
         @click="showRepoSources = !showRepoSources"
         @keydown="onToggleRepoKeydown"
       >
-        <span class="section-title">仓库来源</span>
+        <span class="section-title">{{ t('market.source.repoTitle') }}</span>
         <component :is="showRepoSources ? ChevronDown : ChevronRight" :size="14" />
       </div>
       <LumiButton
@@ -290,8 +292,8 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
         variant="ghost"
         size="sm"
         icon-only
-        aria-label="添加自定义来源"
-        title="添加自定义来源"
+        :aria-label="t('market.source.addCustom')"
+        :title="t('market.source.addCustom')"
         @click.stop="showAddDialog = true"
       >
         <template #icon>
@@ -303,7 +305,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
     <template v-if="showRepoSources">
       <div v-if="store.loading" class="panel-loading">
         <Loader2 :size="20" class="spin-animation" />
-        <span>加载中...</span>
+        <span>{{ t('market.source.loading') }}</span>
       </div>
 
       <div v-else class="source-list">
@@ -334,7 +336,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
 
           <div class="source-right">
             <span v-if="getSourceItemCount(source.id) > 0" class="source-item-count">
-              {{ getSourceItemCount(source.id) }} 项
+              {{ t('market.source.itemsCount', { n: getSourceItemCount(source.id) }) }}
             </span>
             <component
               v-if="getStatusIcon(source)"
@@ -345,7 +347,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
             <button
               class="lumi-toggle"
               :class="{ 'is-active': source.enabled }"
-              :title="source.enabled ? '禁用' : '启用'"
+              :title="source.enabled ? t('market.source.disable') : t('market.source.enable')"
               @click.stop="handleToggleSource(source.id)"
             ></button>
           </div>
@@ -376,7 +378,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
             </div>
 
             <div v-if="source.subMarkets && source.subMarkets.length > 0" class="sub-markets">
-              <div class="sub-markets-label">子市场</div>
+              <div class="sub-markets-label">{{ t('market.source.subMarkets') }}</div>
               <div
                 v-for="sm in source.subMarkets"
                 :key="sm.id"
@@ -397,7 +399,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
                     :href="sm.url"
                     target="_blank"
                     class="sub-market-link"
-                    title="在浏览器中打开"
+                    :title="t('market.source.openInBrowser')"
                     @click.stop
                   >
                     <ExternalLink :size="13" />
@@ -406,7 +408,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
                     v-if="sm.linked"
                     class="sub-action-btn sync-sub-btn"
                     :disabled="source.status === 'loading' || source.status === 'syncing'"
-                    title="同步此子市场"
+                    :title="t('market.source.syncSubMarket')"
                     @click="handleSyncSubMarket(source.id, sm.id)"
                   >
                     <RefreshCw :size="12" :class="{ 'spin-animation': source.status === 'loading' }" />
@@ -414,20 +416,20 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
                   <button
                     v-if="sm.linked"
                     class="unlink-btn"
-                    title="取消链接"
+                    :title="t('market.source.unlink')"
                     @click="handleUnlink(source.id, sm.id)"
                   >
                     <Unlink :size="13" />
-                    <span>取消链接</span>
+                    <span>{{ t('market.source.unlink') }}</span>
                   </button>
                   <button
                     v-else
                     class="link-btn"
-                    title="重新链接"
+                    :title="t('market.source.relink')"
                     @click="handleLink(source.id, sm.id)"
                   >
                     <Link2 :size="13" />
-                    <span>重新链接</span>
+                    <span>{{ t('market.source.relink') }}</span>
                   </button>
                 </div>
               </div>
@@ -440,16 +442,16 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
                 @click="handleSync(source.id)"
               >
                 <RefreshCw :size="13" :class="{ 'spin-animation': source.status === 'loading' }" />
-                <span>{{ source.status === 'loading' ? '同步中...' : '同步' }}</span>
+                <span>{{ source.status === 'loading' ? t('market.source.syncingStatus') : t('market.source.sync') }}</span>
               </button>
               <button
                 v-if="getSourceItemCount(source.id) > 0"
                 class="action-btn cache-btn"
                 @click="handleClearCache(source.id)"
-                title="清除缓存"
+                :title="t('market.source.clearCache')"
               >
                 <Database :size="13" />
-                <span>清除缓存</span>
+                <span>{{ t('market.source.clearCache') }}</span>
               </button>
               <button
                 v-if="source.type === 'custom'"
@@ -457,7 +459,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
                 @click="handleDeleteSource(source.id)"
               >
                 <Trash2 :size="13" />
-                <span>删除</span>
+                <span>{{ t('market.source.delete') }}</span>
               </button>
             </div>
           </div>
@@ -467,24 +469,24 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
     </template>
 
     <!-- Add Custom Source Dialog -->
-    <LumiModal v-model:visible="showAddDialog" title="添加自定义仓库来源">
+    <LumiModal v-model:visible="showAddDialog" :title="t('market.source.addDialogTitle')">
       <div class="dialog-body">
         <div class="form-field">
-          <label>名称</label>
-          <LumiInput v-model="addForm.name" placeholder="输入仓库名称" />
+          <label>{{ t('market.source.fieldName') }}</label>
+          <LumiInput v-model="addForm.name" :placeholder="t('market.source.namePlaceholder')" />
         </div>
         <div class="form-field">
-          <label>URL</label>
-          <LumiInput v-model="addForm.url" placeholder="输入仓库地址（如 GitHub 仓库 URL）" />
+          <label>{{ t('market.source.fieldUrl') }}</label>
+          <LumiInput v-model="addForm.url" :placeholder="t('market.source.urlPlaceholder')" />
         </div>
         <div class="form-field">
-          <label>描述</label>
-          <textarea v-model="addForm.description" class="lumi-textarea" placeholder="输入仓库描述（可选）" rows="3" />
+          <label>{{ t('market.source.fieldDesc') }}</label>
+          <textarea v-model="addForm.description" class="lumi-textarea" :placeholder="t('market.source.descPlaceholder')" rows="3" />
         </div>
       </div>
       <template #footer>
         <LumiButton variant="ghost" size="md" @click="showAddDialog = false">
-          取消
+          {{ t('market.source.cancel') }}
         </LumiButton>
         <LumiButton
           variant="primary"
@@ -492,7 +494,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
           :disabled="!addForm.name.trim()"
           @click="handleAddCustom"
         >
-          添加
+          {{ t('market.source.add') }}
         </LumiButton>
       </template>
     </LumiModal>

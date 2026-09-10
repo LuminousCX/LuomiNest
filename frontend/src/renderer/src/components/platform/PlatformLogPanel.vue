@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   FileText, AlertCircle, Timer, Layers,
 } from 'lucide-vue-next'
@@ -7,6 +8,7 @@ import { usePlatformStore } from '../../stores/platform'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 
 const store = usePlatformStore()
+const { t } = useI18n()
 
 const expandedLogIds = ref<Set<string>>(new Set())
 
@@ -43,29 +45,29 @@ const getLogLevelClass = (level: string) => {
 
 const getLogEventLabel = (event: string) => {
   const map: Record<string, string> = {
-    instance_created: '实例创建',
-    instance_started: '启动成功',
-    instance_stopped: '停止实例',
-    instance_removed: '实例移除',
-    start_failed: '启动失败',
-    stop_failed: '停止失败',
-    handshake_init: '握手初始化',
-    handshake_ok: '握手成功',
-    handshake_fail: '握手失败',
-    connection_attempting: '尝试连接',
-    connection_established: '连接建立',
-    connection_lost: '连接断开',
-    connection_reconnecting: '重新连接',
-    message_received: '消息接收',
-    message_sent: '消息发送',
-    message_failed: '消息失败',
-    llm_call_start: 'LLM 调用开始',
-    llm_call_success: 'LLM 调用成功',
-    llm_call_failed: 'LLM 调用失败',
-    model_config_updated: '模型配置更新',
-    config_updated: '配置更新',
-    screenshot_received: '截图接收',
-    error: '异常',
+    instance_created: t('platform.log.instanceCreated'),
+    instance_started: t('platform.log.instanceStarted'),
+    instance_stopped: t('platform.log.instanceStopped'),
+    instance_removed: t('platform.log.instanceRemoved'),
+    start_failed: t('platform.log.startFailed'),
+    stop_failed: t('platform.log.stopFailed'),
+    handshake_init: t('platform.log.handshakeInit'),
+    handshake_ok: t('platform.log.handshakeOk'),
+    handshake_fail: t('platform.log.handshakeFail'),
+    connection_attempting: t('platform.log.connectionAttempting'),
+    connection_established: t('platform.log.connectionEstablished'),
+    connection_lost: t('platform.log.connectionLost'),
+    connection_reconnecting: t('platform.log.connectionReconnecting'),
+    message_received: t('platform.log.messageReceived'),
+    message_sent: t('platform.log.messageSent'),
+    message_failed: t('platform.log.messageFailed'),
+    llm_call_start: t('platform.log.llmCallStart'),
+    llm_call_success: t('platform.log.llmCallSuccess'),
+    llm_call_failed: t('platform.log.llmCallFailed'),
+    model_config_updated: t('platform.log.modelConfigUpdated'),
+    config_updated: t('platform.log.configUpdated'),
+    screenshot_received: t('platform.log.screenshotReceived'),
+    error: t('platform.log.error'),
   }
   return map[event] || event
 }
@@ -94,12 +96,12 @@ const isTraceableLog = (event: string) => {
 
 const getPerfLabel = (key: string) => {
   const map: Record<string, string> = {
-    elapsed: '总耗时',
-    llm_elapsed: 'LLM 耗时',
-    total_tokens: '总 Tokens',
-    prompt_tokens: 'Prompt Tokens',
-    completion_tokens: 'Completion Tokens',
-    retry_count: '重试次数',
+    elapsed: t('platform.log.perfElapsed'),
+    llm_elapsed: t('platform.log.perfLlmElapsed'),
+    total_tokens: t('platform.log.perfTotalTokens'),
+    prompt_tokens: t('platform.log.perfPromptTokens'),
+    completion_tokens: t('platform.log.perfCompletionTokens'),
+    retry_count: t('platform.log.perfRetryCount'),
   }
   return map[key] || key
 }
@@ -107,7 +109,7 @@ const getPerfLabel = (key: string) => {
 const getPerfUnit = (key: string) => {
   if (key.includes('elapsed')) return ' ms'
   if (key.includes('tokens')) return ''
-  if (key === 'retry_count') return ' 次'
+  if (key === 'retry_count') return t('platform.log.unitTimes')
   return ''
 }
 
@@ -146,7 +148,7 @@ const isLogExpanded = (logId: string) => expandedLogIds.value.has(logId)
           </span>
           <span class="log-time">{{ formatLogDate(log.timestamp) }}{{ formatLogTime(log.timestamp) }}</span>
           <span v-if="getLogDetailEntries(log.details).length > 0" class="log-expand-hint">
-            {{ isLogExpanded(log.id) ? '收起' : '详情' }}
+            {{ isLogExpanded(log.id) ? t('platform.log.collapse') : t('platform.log.expand') }}
           </span>
         </div>
         <div class="log-message">{{ log.message }}</div>
@@ -176,13 +178,13 @@ const isLogExpanded = (logId: string) => expandedLogIds.value.has(logId)
       <LumiEmptyState
         v-if="store.logs.length === 0"
         :icon="FileText"
-        :title="store.selectedInstanceId ? '暂无日志记录' : '选择平台查看日志'"
+        :title="store.selectedInstanceId ? t('platform.log.emptyNoInstance') : t('platform.log.emptySelectInstance')"
         size="md"
       />
     </div>
     <div class="detail-notice">
       <FileText :size="14" />
-      <span>平台日志 — 连接握手、消息收发、LLM 调用、异常详情（点击展开）</span>
+      <span>{{ t('platform.log.notice') }}</span>
     </div>
   </div>
 </template>
