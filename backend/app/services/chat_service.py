@@ -91,6 +91,15 @@ class ChatService:
         self._llm_semaphore = asyncio.Semaphore(settings.LLM_MAX_CONCURRENT_REQUESTS)
         self._context = context
         self._suggestions = suggestions
+        # 后台任务引用集：防止任务被 GC 回收（与 platform_router 同模式）
+        self._background_tasks: set[asyncio.Task] = set()
+
+    def _spawn_background_task(self, coro) -> asyncio.Task:
+        """启动后台任务并保存引用，防止被 GC 回收。"""
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
 
     @staticmethod
     async def persist_conv(conv_id: str, conv: dict) -> None:
@@ -457,7 +466,6 @@ class ChatService:
         })
 
         async def generator():
-            suggested_questions: list[str] = []
             # 模型路由通知（如专业模式推理模型退化为主模型）：头部空 chunk 带出，前端 toast
             if notice:
                 yield sse_data(ChatStreamChunk(
@@ -483,19 +491,19 @@ class ChatService:
                 state["provider"] = provider
 
                 # 推荐问题生成 + 消息持久化
+                # 推荐问题改为 done 事件之后后台生成：前端 apiStream 收到 done chunk 即停止
+                # 读取 SSE，事后推送不可达；生成完成后写入最新 assistant version，
+                # 随对话加载返回（事件协议不变）
                 try:
                     if not state["aborted"] and state["content"]:
-                        try:
-                            suggested_questions = await self._suggestions.generate_suggestions_for_conv(
-                                conv_id=conv_id,
-                                messages=[dict(m) for m in conv["messages"]],
-                                agent_id=agent_id,
-                                provider=provider,
-                                model=model,
-                            )
-                        except Exception as sq_err:
-                            logger.warning(f"[STREAM] Suggested questions failed: conv={conv_id}, error={sq_err}")
-                        state["suggested_questions"] = suggested_questions if suggested_questions else None
+                        self._spawn_background_task(self._generate_suggestions_after_done(
+                            conv_id=conv_id,
+                            conv=conv,
+                            messages=[dict(m) for m in conv["messages"]],
+                            agent_id=agent_id,
+                            provider=provider,
+                            model=model,
+                        ))
 
                     persist_state = dict(state)
                     if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
@@ -528,7 +536,7 @@ class ChatService:
 
                     done_chunk = ChatStreamChunk(
                         id=chat_id, content="", model=model, provider=provider,
-                        done=True, suggested_questions=suggested_questions or None,
+                        done=True, suggested_questions=None,
                         context_tokens=context_tokens,
                         context_max_tokens=context_max_tokens,
                     )
@@ -577,6 +585,76 @@ class ChatService:
         if agent_id and not conv.get("agent_id"):
             conv["agent_id"] = agent_id
         return agent_id
+
+    async def _post_turn_memory_pipeline(
+        self,
+        conv_id: str,
+        messages: list[dict],
+        agent_id: str | None,
+        adapter,
+        domain: str,
+        scene: str,
+        user_key: str,
+    ) -> None:
+        """回复返回后的记忆写入 + 蒸馏，保持先写入后蒸馏的顺序（后台任务体内串行）。"""
+        try:
+            await self._context.schedule_memory_update(
+                messages, conv_id, agent_id,
+                llm_adapter=adapter,
+                domain=domain, scene=scene, user_key=user_key,
+            )
+        except Exception as mem_err:
+            logger.warning(f"[ChatService] Memory update failed: conv={conv_id}, error={mem_err}")
+
+        try:
+            await distillation_service.maybe_distill(
+                agent_id, conv_id, messages, adapter,
+                domain=domain, user_key=user_key,
+            )
+        except Exception as distill_err:
+            logger.warning(f"[ChatService] Distillation failed: conv={conv_id}, error={distill_err}")
+
+    async def _generate_suggestions_after_done(
+        self,
+        conv_id: str,
+        conv: dict,
+        messages: list[dict],
+        agent_id: str | None,
+        provider: str | None,
+        model: str | None,
+    ) -> None:
+        """done 事件后生成推荐问题并补写会话存储。
+
+        前端 apiStream 收到 done chunk 即停止读取 SSE，事后推送不可达，
+        只能写入最新 assistant version（与 save_assistant_message 的持久化形状一致），
+        随对话加载返回。
+        """
+        try:
+            questions = await self._suggestions.generate_suggestions_for_conv(
+                conv_id=conv_id, messages=messages, agent_id=agent_id,
+                provider=provider, model=model,
+            )
+        except Exception as sq_err:
+            logger.warning(f"[STREAM] Suggested questions failed: conv={conv_id}, error={sq_err}")
+            return
+        if not questions:
+            return
+        # 从尾部向前定位本轮 assistant 消息（期间用户可能已发出新消息）
+        for msg in reversed(conv.get("messages", [])):
+            if msg.get("role") != "assistant":
+                continue
+            version_list = msg.get("versions")
+            if version_list:
+                current = msg.get("current_version")
+                idx = current if isinstance(current, int) and 0 <= current < len(version_list) else len(version_list) - 1
+                version_list[idx]["suggested_questions"] = questions
+            else:
+                msg["suggested_questions"] = questions
+            break
+        try:
+            await self.persist_conv(conv_id, conv)
+        except Exception as persist_err:
+            logger.error(f"[STREAM] Suggestions persist failed: conv={conv_id}, error={persist_err}")
 
     async def trigger_final_distill(self, conv_id: str, conv: dict, adapter) -> None:
         """对话结束前触发最终蒸馏（离开/删除/批量删除共用）。"""
@@ -916,23 +994,17 @@ class ChatService:
             await self.persist_conv(conv_id, conv)
 
         # 非流式路径单触发：记忆更新 + 增量蒸馏（DomainPolicy 门控，B6/B7）
-        # （schedule_memory_update 内部已吞掉全部异常，try/except 仅作防御）
-        try:
-            await self._context.schedule_memory_update(
-                [dict(m) for m in conv["messages"]], conv_id, agent_id,
-                llm_adapter=adapter,
-                domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
-            )
-        except Exception as mem_err:
-            logger.warning(f"[ChatService] Memory update failed: conv={conv_id}, error={mem_err}")
-
-        try:
-            await distillation_service.maybe_distill(
-                agent_id, conv_id, conv["messages"], adapter,
-                domain=conv_domain, user_key=conv_user_key,
-            )
-        except Exception as distill_err:
-            logger.warning(f"[ChatService] Distillation failed: conv={conv_id}, error={distill_err}")
+        # 后台执行：内部含 LLM/embedding 往返，不应阻塞响应返回；
+        # schedule_memory_update 内部已吞掉全部异常，except 仅作防御
+        self._spawn_background_task(self._post_turn_memory_pipeline(
+            conv_id=conv_id,
+            messages=[dict(m) for m in conv["messages"]],
+            agent_id=agent_id,
+            adapter=adapter,
+            domain=conv_domain,
+            scene=conv_scene,
+            user_key=conv_user_key,
+        ))
 
         elapsed = time.time() - start_time
         logger.success(

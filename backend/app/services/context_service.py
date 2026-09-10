@@ -145,11 +145,11 @@ class ContextService:
         return None
 
     @staticmethod
-    def execute_memory_action(engine, action: dict) -> None:
+    async def execute_memory_action(engine, action: dict) -> None:
         """执行自然语言记忆操作。"""
         if action["action"] == "forget":
             target = action["target"]
-            data = engine.load_data()
+            data = await asyncio.to_thread(engine.load_data)
             removed = 0
             for fact in list(data.facts):
                 if target in fact.content.casefold() and fact.is_latest:
@@ -157,7 +157,7 @@ class ContextService:
                     fact.confidence = 0.1
                     removed += 1
             if removed > 0:
-                engine._store.save_data(data)
+                await asyncio.to_thread(engine._store.save_data, data)
                 logger.info(f"[Memory] Forgot {removed} facts matching '{target}'")
 
         elif action["action"] == "correct":
@@ -438,8 +438,11 @@ Examples:
             blocks: list[str] = []
 
             # ① owner 轨（主人记忆优先，§8.5.5）
+            # build_context 的同步组装含 SQLite 读，放 to_thread 执行避免阻塞事件循环
             owner_engine = _owner_engine_for(agent_id)
-            owner_ctx = owner_engine.build_context(query=query, conversation_id=thread_id)
+            owner_ctx = await asyncio.to_thread(
+                owner_engine.build_context_sync, query=query, conversation_id=thread_id
+            )
             if owner_ctx:
                 blocks.append(owner_ctx)
 
@@ -447,7 +450,9 @@ Examples:
             if policy.memory_track == TRACK_USERS and user_key:
                 try:
                     user_engine = get_track_engine(TRACK_USERS, user_key)
-                    user_ctx = user_engine.build_context(query=query, conversation_id=thread_id)
+                    user_ctx = await asyncio.to_thread(
+                        user_engine.build_context_sync, query=query, conversation_id=thread_id
+                    )
                     if user_ctx:
                         blocks.append(f"[当前用户记忆]\n{user_ctx}")
                 except Exception as user_err:
@@ -508,7 +513,7 @@ Examples:
             # 自然语言记忆操作检测
             memory_action = ContextService.detect_memory_action(str(content))
             if memory_action:
-                ContextService.execute_memory_action(engine, memory_action)
+                await ContextService.execute_memory_action(engine, memory_action)
                 logger.info(f"[Memory] Natural language action: {memory_action}")
 
             if llm_adapter:
@@ -538,7 +543,9 @@ Examples:
                             daily_lines.append(f"[助手] {assistant_content}")
                         break
                 if daily_lines:
-                    engine.append_daily("\n".join(daily_lines), conversation_id=thread_id)
+                    await asyncio.to_thread(
+                        engine.append_daily, "\n".join(daily_lines), conversation_id=thread_id
+                    )
 
             # 蒸馏统一由 distillation_service 处理，此处不再内嵌蒸馏
         except Exception as e:

@@ -5,7 +5,7 @@ from loguru import logger
 from app.core.utils import parse_llm_json, utc_now, extract_llm_text
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
-from .models import MemoryData, FactItem, FACT_CATEGORIES, _SUMMARY_SECTION_MAP, summaries_to_markdown
+from .models import FACT_SCOPE_AGENT, FactItem, FACT_CATEGORIES, _SUMMARY_SECTION_MAP, summaries_to_markdown
 from .prompts import _FACT_EXTRACT_PROMPT, _DISTILL_PROMPT, _MERGE_SUMMARY_PROMPT, _SUMMARY_EXTRACT_PROMPT, _KNOWLEDGE_EXTRACT_PROMPT
 from .store import MemoryStore
 from .fact_manager import FactManager
@@ -63,7 +63,7 @@ class MemoryExtractor:
                 return "", []
 
             profile_name = parsed.get("profile_name", "").strip()[:20]
-            facts = self._parse_facts_from_raw(parsed.get("facts", []))
+            facts = await self._parse_facts_from_raw(parsed.get("facts", []))
 
             return profile_name, facts
 
@@ -87,7 +87,7 @@ class MemoryExtractor:
 
         updates = {}
         async with self._async_lock:
-            data = self._store.load_data()
+            data = await asyncio.to_thread(self._store.load_data)
 
             if profile_name:
                 old_name = data.profile.name
@@ -102,7 +102,7 @@ class MemoryExtractor:
             from .models import FACT_SCOPE_AGENT
             agent_facts = [f for f in facts if f.category in FACT_SCOPE_AGENT]
             self._fact_manager.merge_facts(data, agent_facts)
-            self._store.save_data(data)
+            await asyncio.to_thread(self._store.save_data, data)
 
         # 返回提取到的所有facts，由MemoryEngine层决定对话级facts的写入
         updates["facts"] = facts
@@ -150,7 +150,7 @@ class MemoryExtractor:
                 f"- {m}" for m in assistant_msgs[-5:]
             )
 
-        data = self._store.load_data()
+        data = await asyncio.to_thread(self._store.load_data)
         current_name = data.profile.name or "(未知)"
         current_facts = "\n".join(
             f"  - [{f.category}|{f.confidence:.1f}] {f.content}"
@@ -186,13 +186,13 @@ class MemoryExtractor:
             now = utc_now()
 
             profile_name = parsed.get("profile_name", "").strip()
-            valid_facts = self._parse_facts_from_raw(parsed.get("facts", []), source="distill", conversation_id=conversation_id)
+            valid_facts = await self._parse_facts_from_raw(parsed.get("facts", []), source="distill", conversation_id=conversation_id)
             raw_summary = parsed.get("summary", {})
             static_facts = parsed.get("static_facts", [])
             dynamic_context = parsed.get("dynamic_context", [])
 
             async with self._async_lock:
-                data = self._store.load_data()
+                data = await asyncio.to_thread(self._store.load_data)
 
                 # 蒸馏提取的用户名写入档案（与 update_profile_from_message 一致的逻辑）
                 if profile_name:
@@ -220,13 +220,13 @@ class MemoryExtractor:
                     data.profile.static_facts = [str(f)[:200] for f in static_facts if isinstance(f, str) and f.strip()]
                     data.profile.updated_at = now
 
-                self._store.save_data(data)
+                await asyncio.to_thread(self._store.save_data, data)
 
                 # 对话级数据写入conversation store
                 if conversation_id and (conv_facts or dynamic_context):
                     from .memory_engine import get_conversation_store
                     conv_store = get_conversation_store(self._agent_id, conversation_id)
-                    conv_data = conv_store.load_data()
+                    conv_data = await asyncio.to_thread(conv_store.load_data)
 
                     if conv_facts:
                         self._fact_manager.merge_facts(conv_data, conv_facts)
@@ -235,12 +235,12 @@ class MemoryExtractor:
                         conv_data.profile.dynamic_context = [str(c)[:200] for c in dynamic_context if isinstance(c, str) and c.strip()]
                         conv_data.profile.updated_at = now
 
-                    conv_store.save_data(conv_data)
+                    await asyncio.to_thread(conv_store.save_data, conv_data)
                 elif isinstance(dynamic_context, list) and dynamic_context:
                     # 无conversation_id时，dynamic_context写入Agent级（兼容旧逻辑）
                     data.profile.dynamic_context = [str(c)[:200] for c in dynamic_context if isinstance(c, str) and c.strip()]
                     data.profile.updated_at = now
-                    self._store.save_data(data)
+                    await asyncio.to_thread(self._store.save_data, data)
 
             logger.info(
                 f"[Memory] Distill completed: name={data.profile.name}, facts={len(data.facts)}"
@@ -351,7 +351,7 @@ class MemoryExtractor:
     # --- 公共解析方法（消除 extract_facts 和 distill_conversation 的重复代码） ---
     # JSON 解析已统一收口到 core.utils.parse_llm_json（原 _parse_llm_json 已删除）
 
-    def _parse_facts_from_raw(
+    async def _parse_facts_from_raw(
         self, raw_facts: list, source: str = "conversation", conversation_id: str | None = None, original_message: str = ""
     ) -> list[FactItem]:
         """从 LLM 返回的原始事实列表中解析出有效的 FactItem。"""
@@ -396,10 +396,10 @@ class MemoryExtractor:
 
             # 处理 LLM 标记的 supersedes：按作用域分别应用
             if supersedes:
-                data = self._store.load_data()
+                data = await asyncio.to_thread(self._store.load_data)
                 if category in FACT_SCOPE_AGENT:
                     self._fact_manager.apply_supersedes(data, supersedes, content)
-                    self._store.save_data(data)
+                    await asyncio.to_thread(self._store.save_data, data)
                 else:
                     # 对话级 supersedes 不写入 Agent 级 store
                     logger.debug(f"[Memory] Skipping conversation-scoped supersedes for agent store: {supersedes[:30]}")
