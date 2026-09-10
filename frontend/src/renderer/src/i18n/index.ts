@@ -44,10 +44,11 @@ function collectLocaleMessages(locale: AppLocale): Record<string, unknown> {
   >
   const merged: Record<string, unknown> = {}
   for (const [path, mod] of Object.entries(modules)) {
+    // './locales/zh-CN.json' → 'zh-CN.json'；'./locales/zh-CN/chat.json' → 'zh-CN/chat.json'
     const rest = path.replace('./locales/', '')
-    const fileLocale = rest.endsWith('.json')
-      ? rest.slice(0, -'.json'.length)
-      : rest.split('/')[0]
+    const parts = rest.split('/')
+    // 根级文件取文件名去后缀；子目录文件取第一段目录名
+    const fileLocale = parts.length === 1 ? parts[0].replace(/\.json$/, '') : parts[0]
     if (fileLocale !== locale) continue
     Object.assign(merged, mod.default)
   }
