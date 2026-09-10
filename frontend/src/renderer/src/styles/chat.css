@@ -1,0 +1,47 @@
+/**
+ * 聊天消息流公共样式（工作台 WorkbenchChatArea / 对话页 WorkspaceAgentChat 共享）
+ *
+ * 原规则在两个组件的 <style scoped> 中各存一份且值完全一致；抽到这里统一加
+ * .lumi-chat- 前缀避免污染全局，组件模板节点同步挂载对应类名。
+ * 两端特有样式（气泡配色/动画节奏/输入区等）仍留在各自 scoped 样式中。
+ * keyframes 全局只保留一份：lumi-chat-pulse（流式圆点/子Agent徽章共用）、
+ * lumi-chat-search-pulse（搜索命中高亮）。
+ */
+
+.lumi-chat-messages-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.lumi-chat-message-sender {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.lumi-chat-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.lumi-chat-reasoning-chevron.rotated {
+  transform: rotate(-90deg);
+}
+
+.lumi-chat-search-highlight {
+  animation: lumi-chat-search-pulse var(--duration-slow) var(--ease-out-expo);
+}
+
+@keyframes lumi-chat-search-pulse {
+  0% { background: var(--lumi-brand-border); }
+  100% { background: transparent; }
+}
+
+@keyframes lumi-chat-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}

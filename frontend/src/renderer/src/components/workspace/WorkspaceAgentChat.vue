@@ -33,6 +33,7 @@ import { renderMarkdown } from '../../utils/markdown'
 import { getFileIcon } from '../../utils/file'
 import type { ChatMessage, ProviderLogo, AgentProfile } from '../../types'
 import { useAutoResizeTextarea } from '../../composables/useAutoResizeTextarea'
+import { useChatScroll, isLastAssistantMessage as checkLastAssistantMessage } from '../../composables/useChatScroll'
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -90,9 +91,14 @@ const { autoResize, resetTextareaHeight } = useAutoResizeTextarea(textareaRef)
 const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
 const reasoningScrollRefs = ref<HTMLElement | HTMLElement[] | null>(null)
 const isNearBottom = ref(true)
-const SCROLL_BOTTOM_THRESHOLD = 120
 const showScrollToBottomBtn = ref(false)
-let resizeObserver: ResizeObserver | null = null
+
+const { scrollToBottom, setupResizeObserver, teardownResizeObserver, handleScroll } = useChatScroll({
+  container: messagesContainer,
+  isNearBottom,
+  showScrollToBottomBtn,
+  getMessageCount: () => props.messages.length,
+})
 
 const inputTextModel = computed<string>({
   get: () => props.inputText,
@@ -113,15 +119,6 @@ const selectMode = (value: ChatMode) => {
   emit('select-chat-mode', value)
 }
 
-const scrollToBottom = (force = false) => {
-  if (!messagesContainer.value) return
-  if (!force && !isNearBottom.value) return
-  messagesContainer.value.scrollTo({
-    top: messagesContainer.value.scrollHeight,
-    behavior: force ? 'auto' : 'smooth'
-  })
-}
-
 const scrollToSearchResult = (keyword: string) => {
   if (!messagesContainer.value) return
   const q = keyword.toLowerCase()
@@ -130,32 +127,16 @@ const scrollToSearchResult = (keyword: string) => {
     const text = el.textContent?.toLowerCase() || ''
     if (text.includes(q)) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      el.classList.add('search-highlight')
-      setTimeout(() => el.classList.remove('search-highlight'), 2000)
+      el.classList.add('lumi-chat-search-highlight')
+      setTimeout(() => el.classList.remove('lumi-chat-search-highlight'), 2000)
       return
     }
   }
   scrollToBottom(true)
 }
 
-const setupResizeObserver = () => {
-  if (!messagesContainer.value) return
-  const inner = messagesContainer.value.querySelector('.messages-container') as HTMLElement
-  if (!inner) return
-  resizeObserver = new ResizeObserver(() => {
-    if (isNearBottom.value) {
-      scrollToBottom(true)
-    }
-  })
-  resizeObserver.observe(inner)
-}
-
 const handleMessagesScroll = () => {
-  if (!messagesContainer.value) return
-  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
-  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-  isNearBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
-  showScrollToBottomBtn.value = !isNearBottom.value && props.messages.length > 0
+  handleScroll()
 }
 
 const focusTextarea = () => {
@@ -226,18 +207,7 @@ const getVersionIndex = (msg: ChatMessage): number => {
   return msg.currentVersion ?? 0
 }
 
-const isLastAssistantMessage = (msgId: string) => {
-  const msgs = props.messages
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].role === 'assistant' && !msgs[i].done) return false
-  }
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].role === 'assistant') {
-      return msgs[i].id === msgId
-    }
-  }
-  return false
-}
+const isLastAssistantMessage = (msgId: string) => checkLastAssistantMessage(props.messages, msgId)
 
 watch(() => props.messages, async (msgs) => {
   for (const msg of msgs) {
@@ -269,7 +239,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  resizeObserver?.disconnect()
+  teardownResizeObserver()
 })
 
 defineExpose({
@@ -311,7 +281,7 @@ defineExpose({
     </div>
 
     <div class="chat-area">
-      <div ref="messagesContainer" class="messages-scroll" @scroll="handleMessagesScroll">
+      <div ref="messagesContainer" class="messages-scroll lumi-chat-messages-scroll" @scroll="handleMessagesScroll">
         <div class="messages-container">
           <TransitionGroup name="msg-appear" tag="div">
             <div
@@ -321,12 +291,12 @@ defineExpose({
             >
               <div class="message-avatar" v-if="msg.role === 'assistant'">
                 <div class="avatar-assistant" :style="agent?.avatar ? {} : { background: `color-mix(in srgb, ${agent?.color || 'var(--lumi-brand)'} 10%, transparent)`, color: agent?.color || 'var(--lumi-brand)' }">
-                  <img v-if="agent?.avatar" :src="agent.avatar" class="chat-avatar-img" :alt="agent?.name || ''" />
+                  <img v-if="agent?.avatar" :src="agent.avatar" class="chat-avatar-img lumi-chat-avatar-img" :alt="agent?.name || ''" />
                   <Bot v-else :size="16" />
                 </div>
               </div>
               <div class="message-body">
-                <div class="message-sender" v-if="msg.role === 'assistant'">{{ agent?.name || 'LuomiNest' }}</div>
+                <div class="message-sender lumi-chat-message-sender" v-if="msg.role === 'assistant'">{{ agent?.name || 'LuomiNest' }}</div>
                 <div
                   v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
                   class="reasoning-section"
@@ -340,7 +310,7 @@ defineExpose({
                       <template v-else-if="msg.reasoningContent && msg.reasoningContent.length > 0">{{ showReasoning[msg.id] ? t('chat.thinkingProcess') : t('chat.thinkingCollapsed') }}</template>
                       <template v-else>{{ t('chat.thinkingDone') }}</template>
                     </span>
-                    <ChevronDown :size="12" class="reasoning-chevron" :class="{ rotated: !showReasoning[msg.id] }" />
+                    <ChevronDown :size="12" class="reasoning-chevron lumi-chat-reasoning-chevron" :class="{ rotated: !showReasoning[msg.id] }" />
                   </div>
                   <div
                     v-show="showReasoning[msg.id] !== false"
@@ -726,12 +696,6 @@ defineExpose({
   position: relative;
 }
 
-.messages-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-6);
-}
-
 .messages-container {
   max-width: 800px;
   margin: 0 auto;
@@ -768,13 +732,6 @@ defineExpose({
   overflow: hidden;
 }
 
-.chat-avatar-img {
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  object-fit: cover;
-}
-
 .message-row:hover .avatar-assistant {
   transform: scale(1.08);
 }
@@ -783,13 +740,6 @@ defineExpose({
   max-width: 85%;
   min-width: 0;
   position: relative;
-}
-
-.message-sender {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: var(--space-1);
 }
 
 .message-content {
@@ -1121,12 +1071,7 @@ defineExpose({
   height: 6px;
   border-radius: var(--radius-full);
   background: var(--lumi-brand);
-  animation: streaming-pulse 1.2s var(--ease-in-out) infinite;
-}
-
-@keyframes streaming-pulse {
-  0%, 100% { opacity: 0.4; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.2); }
+  animation: lumi-chat-pulse 1.2s var(--ease-in-out) infinite;
 }
 
 .conv-loading-overlay {
@@ -1613,10 +1558,6 @@ defineExpose({
   transition: transform var(--duration-leave) var(--ease-default);
 }
 
-.reasoning-chevron.rotated {
-  transform: rotate(-90deg);
-}
-
 .reasoning-content {
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-base);
@@ -1703,14 +1644,5 @@ defineExpose({
 .provider-svg-mini :deep(svg) {
   width: var(--space-4);
   height: var(--space-4);
-}
-
-.search-highlight {
-  animation: search-highlight-pulse var(--duration-slow) var(--ease-out-expo);
-}
-
-@keyframes search-highlight-pulse {
-  0% { background: var(--lumi-brand-border); }
-  100% { background: transparent; }
 }
 </style>

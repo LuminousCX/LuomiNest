@@ -5,15 +5,15 @@
  * 版本切换、消息删除（含范围计算）、回退到起点、引用、推理折叠、上下文用量等逻辑。
  * 跨关注点副作用（删除确认弹窗）通过 openConfirmDialog 回调交回视图处理。
  */
-import { ref, computed, watch, nextTick } from 'vue'
+import { computed, watch, nextTick } from 'vue'
 import type { Ref } from 'vue'
 import type { AgentProfile, ChatMessage } from '../types'
-import type { ChatModeLevel, WorkflowModeOption } from '../components/workbench/types'
+import type { ChatModeLevel } from '../components/workbench/types'
 import { i18n } from '../i18n'
 import { useChatStore } from '../stores/chat'
 import { useModelStore } from '../stores/model'
 import { useApi } from './useApi'
-import { useToast } from './useToast'
+import { useChatSession } from './useChatSession'
 import { getProviderLogo } from '../config/provider-logos'
 
 /** WorkspaceAgentChat 子组件实例的最小接口（避免依赖具体组件类型） */
@@ -66,10 +66,19 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   const { localSelectedAgent, localSelectedConvId, agentChatRef, fileUpload, openConfirmDialog } = options
   const { isUploading, parsedContent, fileName, fileType, uploadingFile, clearUploadState } = fileUpload
 
-  // —— 输入与 UI 状态 ——
-  const inputText = ref('')
-  const selectedSkillIds = ref<string[]>([])
-  const showReasoning = ref<Record<string, boolean>>({})
+  // 输入/模式等与工作台共用的会话状态（useChatSession 公共层）
+  const {
+    inputText,
+    selectedSkillIds,
+    showReasoning,
+    chatMode,
+    chatModeOptions,
+    isWorkflowMode,
+    selectChatMode,
+    resolveSendParams,
+  } = useChatSession({
+    getActiveConvId: () => localSelectedConvId.value,
+  })
 
   // —— 消息与流式状态 ——
   const messages = computed<ChatMessage[]>(() => {
@@ -97,16 +106,7 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   const currentProviderLogo = computed(() => getProviderLogo(currentProvider.value))
   const hasProvider = computed(() => modelStore.providers.length > 0)
 
-  // —— 对话模式（普通/专业） ——
-  const toast = useToast()
-  const chatMode = ref<ChatModeLevel>('normal')
-  const chatModeOptions = computed<WorkflowModeOption[]>(() => [
-    { value: 'normal', label: i18n.global.t('chat.modeNormal'), title: i18n.global.t('chat.modeNormalTitle') },
-    { value: 'standard', label: i18n.global.t('chat.modePro'), title: i18n.global.t('chat.modeProTitle') },
-  ])
-  const isWorkflowMode = computed(() => chatMode.value !== 'normal')
-
-  // 切换对话时从存储的 chat_mode 字段同步
+  // —— 对话模式同步：切换对话时从存储的 chat_mode 字段读取 ——
   watch(localSelectedConvId, (convId) => {
     if (convId) {
       const conv = chatStore.convData[convId]
@@ -115,23 +115,6 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
       chatMode.value = 'normal'
     }
   })
-
-  const selectChatMode = (mode: ChatModeLevel): void => {
-    // 上下文隔离：如果当前对话已有消息，禁止切换模式
-    const convId = localSelectedConvId.value
-    if (convId) {
-      const currentMsgs = chatStore.convMessages[convId] || []
-      if (currentMsgs.length > 0 && chatMode.value !== mode) {
-        toast.warning(i18n.global.t('chat.modeSwitchBlocked'))
-        return
-      }
-    }
-
-    // 2026-08 全局模型统一：切换模式不再改动全局主模型。
-    // 专业模式（standard）由后端按轮路由到推理模型，
-    // 推理模型不可用时后端退化为主模型并通过 SSE notice 通知前端 toast。
-    chatMode.value = mode
-  }
 
   // —— 发送消息 ——
   const canSend = computed(() => {
@@ -160,15 +143,9 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     clearUploadState()
 
     const agent = localSelectedAgent.value
-    // 2026-08 全局模型统一：对话页一律使用全局主模型发送
-    const resolved = modelStore.resolveModel
 
     const sendOptions: SendMessageOptions = {
-      model: resolved?.model || undefined,
-      provider: resolved?.provider || undefined,
-      temperature: modelStore.modelConfig.defaultTemperature,
-      maxTokens: modelStore.modelConfig.defaultMaxTokens,
-      topP: modelStore.modelConfig.defaultTopP,
+      ...resolveSendParams(),
       chatMode: chatMode.value,
       skillIds: selectedSkillIds.value,
     }

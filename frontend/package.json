@@ -7,9 +7,10 @@
   "packageManager": "pnpm@10.34.5",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "pnpm run clean:out && electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
+    "clean:out": "node -e \"const fs=require('fs');const p='out';try{fs.rmSync(p,{recursive:true,force:true,maxRetries:10,retryDelay:300});console.log('Cleaned out/')}catch(e){if(e.code!=='ENOENT')console.warn('Clean warning:',e.message)}\"",
     "clean:dist": "node -e \"const fs=require('fs');const p='release/dist';try{fs.rmSync(p,{recursive:true,force:true,maxRetries:5,retryDelay:200});console.log('Cleaned release/dist')}catch(e){if(e.code!=='ENOENT')console.warn('Clean warning:',e.message)}\"",
     "build:win-dir": "pnpm run clean:dist && pnpm run build && electron-builder --win dir",
     "build:linux": "pnpm run build && electron-builder --linux",

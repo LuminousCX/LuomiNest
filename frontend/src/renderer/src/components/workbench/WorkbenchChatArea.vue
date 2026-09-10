@@ -29,6 +29,7 @@ import LumiEmptyState from '../common/LumiEmptyState.vue'
 import WorkflowCreatedCard from '../chat/WorkflowCreatedCard.vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { useClipboard } from '../../composables/useClipboard'
+import { useChatScroll, isLastAssistantMessage as checkLastAssistantMessage } from '../../composables/useChatScroll'
 import { usePlatformStore } from '../../stores/platform'
 import { useChatStore } from '../../stores/chat'
 import type { ChatMessage } from '../../types'
@@ -75,8 +76,8 @@ watch(
     for (const el of rows) {
       if ((el.textContent || '').toLowerCase().includes(q)) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        el.classList.add('search-highlight')
-        setTimeout(() => el.classList.remove('search-highlight'), 2000)
+        el.classList.add('lumi-chat-search-highlight')
+        setTimeout(() => el.classList.remove('lumi-chat-search-highlight'), 2000)
         break
       }
     }
@@ -158,57 +159,29 @@ const formatTokens = (n: number): string => {
   return n.toLocaleString('en-US')
 }
 
-const isLastAssistantMessage = (msgId: string) => {
-  const msgs = props.messages
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].role === 'assistant' && !msgs[i].done) return false
-  }
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].role === 'assistant') {
-      return msgs[i].id === msgId
-    }
-  }
-  return false
-}
+// isNearBottom/showScrollToBottomBtn 的权威来源是父级（props 只读）：
+// 桥接为"读取 props、写入吞掉"的 computed，滚动度量经 emit 上抛由父级重算
+const isNearBottom = computed<boolean>({
+  get: () => props.isNearBottom,
+  set: () => {},
+})
+const showScrollToBottomBtn = computed<boolean>({
+  get: () => props.showScrollToBottomBtn,
+  set: () => {},
+})
 
-const scrollToBottom = (force = false) => {
-  if (!messagesContainer.value) return
-  if (!force && !props.isNearBottom) return
-  messagesContainer.value.scrollTo({
-    top: messagesContainer.value.scrollHeight,
-    behavior: force ? 'auto' : 'smooth',
-  })
-}
+const { getMetrics, scrollToBottom, setupResizeObserver, teardownResizeObserver, handleScroll } = useChatScroll({
+  container: messagesContainer,
+  isNearBottom,
+  showScrollToBottomBtn,
+  getMessageCount: () => props.messages.length,
+})
 
-const getMetrics = () => {
-  if (!messagesContainer.value) return null
-  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
-  return { scrollTop, scrollHeight, clientHeight }
-}
+const isLastAssistantMessage = (msgId: string) => checkLastAssistantMessage(props.messages, msgId)
 
 const handleMessagesScroll = () => {
-  if (!messagesContainer.value) return
-  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
-  emit('scroll', { scrollTop, scrollHeight, clientHeight })
-}
-
-let resizeObserver: ResizeObserver | null = null
-
-const setupResizeObserver = () => {
-  if (!messagesContainer.value) return
-  const inner = messagesContainer.value.querySelector('.messages-container') as HTMLElement
-  if (!inner) return
-  resizeObserver = new ResizeObserver(() => {
-    if (props.isNearBottom) {
-      scrollToBottom(true)
-    }
-  })
-  resizeObserver.observe(inner)
-}
-
-const teardownResizeObserver = () => {
-  resizeObserver?.disconnect()
-  resizeObserver = null
+  const metrics = handleScroll()
+  if (metrics) emit('scroll', metrics)
 }
 
 defineExpose({
@@ -243,7 +216,7 @@ defineExpose({
       <span class="main-agent-model">{{ currentModel }}</span>
     </div>
 
-    <div ref="messagesContainer" class="messages-scroll" @scroll="handleMessagesScroll">
+    <div ref="messagesContainer" class="messages-scroll lumi-chat-messages-scroll" @scroll="handleMessagesScroll">
       <div class="messages-container">
         <div v-if="hasMoreMessages && messages.length > 0" class="load-more-wrapper">
           <LumiButton
@@ -268,12 +241,12 @@ defineExpose({
                 class="avatar-assistant"
                 :style="!mainAgentAvatar ? { background: `color-mix(in srgb, ${mainAgentColor} 10%, transparent)`, color: mainAgentColor } : {}"
               >
-                <img v-if="mainAgentAvatar" :src="mainAgentAvatar" class="chat-avatar-img" :alt="t('workbench.mainAgent')" />
+                <img v-if="mainAgentAvatar" :src="mainAgentAvatar" class="chat-avatar-img lumi-chat-avatar-img" :alt="t('workbench.mainAgent')" />
                 <Bot v-else :size="16" />
               </div>
             </div>
             <div class="message-body">
-              <div v-if="msg.role === 'assistant'" class="message-sender">
+              <div v-if="msg.role === 'assistant'" class="message-sender lumi-chat-message-sender">
                 {{ t('workbench.mainAgent') }}
               </div>
               <div
@@ -289,7 +262,7 @@ defineExpose({
                     <template v-else-if="msg.reasoningContent && msg.reasoningContent.length > 0">{{ showReasoning[msg.id] ? t('chat.thinkingProcess') : t('chat.thinkingCollapsed') }}</template>
                     <template v-else>{{ t('chat.thinkingDone') }}</template>
                   </span>
-                  <ChevronDown :size="12" class="reasoning-chevron" :class="{ rotated: !showReasoning[msg.id] }" />
+                  <ChevronDown :size="12" class="reasoning-chevron lumi-chat-reasoning-chevron" :class="{ rotated: !showReasoning[msg.id] }" />
                 </div>
                 <div
                   v-show="showReasoning[msg.id] !== false"
@@ -788,12 +761,6 @@ button:focus-visible {
   font-family: var(--font-mono);
 }
 
-.messages-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-6);
-}
-
 .messages-container {
   max-width: 820px;
   margin: 0 auto;
@@ -845,24 +812,10 @@ button:focus-visible {
   overflow: hidden;
 }
 
-.chat-avatar-img {
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  object-fit: cover;
-}
-
 .message-body {
   flex: 1;
   min-width: 0;
   max-width: calc(100% - 44px);
-}
-
-.message-sender {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: var(--space-1);
 }
 
 .reasoning-section {
@@ -889,10 +842,6 @@ button:focus-visible {
 .reasoning-chevron {
   margin-left: auto;
   transition: transform var(--transition-fast);
-}
-
-.reasoning-chevron.rotated {
-  transform: rotate(-90deg);
 }
 
 .reasoning-content {
@@ -1105,7 +1054,7 @@ button:focus-visible {
   padding: var(--space-1) var(--space-2);
   background: var(--lumi-primary-light);
   border-radius: var(--radius-full);
-  animation: pulse var(--duration-slow) var(--ease-in-out) infinite;
+  animation: lumi-chat-pulse var(--duration-slow) var(--ease-in-out) infinite;
 }
 
 .subagent-activities-list {
@@ -1689,12 +1638,7 @@ button:focus-visible {
   height: 6px;
   border-radius: var(--radius-full);
   background: var(--lumi-primary);
-  animation: pulse 1s var(--ease-in-out) infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.4; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.2); }
+  animation: lumi-chat-pulse 1s var(--ease-in-out) infinite;
 }
 
 .assistant-msg-actions {
@@ -1878,14 +1822,5 @@ button:focus-visible {
 .compress-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.search-highlight {
-  animation: search-highlight-pulse var(--duration-slow) var(--ease-out-expo);
-}
-
-@keyframes search-highlight-pulse {
-  0% { background: var(--lumi-brand-border); }
-  100% { background: transparent; }
 }
 </style>

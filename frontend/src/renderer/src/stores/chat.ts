@@ -377,6 +377,130 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 流式回调工厂：sendMessage 与 regenerateMessage 共用
+   *
+   * 统一处理：content/reasoning 累加、done 时 context_tokens 回写、完成时版本 push、
+   * 错误 [Error] 追加、AbortController 清理与 convStreaming 复位。
+   * 两条路径的差异点：
+   * - 发送：非 done chunk 清空推荐问题（等 done 一次性写入）；出错时清空未完成的推荐
+   * - 重生成：流式期间保留消息上已有的推荐问题（新版本未生成前不清空）
+   */
+  const createStreamCallbacks = (
+    streamingConvId: string,
+    targetAgentId: string,
+    opts: {
+      isRegenerate: boolean
+      errorToastKey: string
+      onChunk?: (chunk: ChatStreamChunk) => void
+    }
+  ) => {
+    let streamDoneSuggestions: string[] | undefined = undefined
+
+    const removeAbortController = (): void => {
+      const newControllers = { ...convAbortControllers.value }
+      delete newControllers[streamingConvId]
+      convAbortControllers.value = newControllers
+    }
+
+    const onChunk = (chunk: ChatStreamChunk): void => {
+      const msgsList = convMessages.value[streamingConvId]
+      if (!msgsList) return
+      const lastIdx = msgsList.length - 1
+      if (lastIdx >= 0 && msgsList[lastIdx]?.role === 'assistant') {
+        const lastMsg = msgsList[lastIdx]
+        if (chunk.done) {
+          logger.debug('done chunk suggestions:', chunk.suggested_questions)
+          if (chunk.suggested_questions && chunk.suggested_questions.length > 0) {
+            if (opts.isRegenerate) {
+              streamDoneSuggestions = chunk.suggested_questions
+            }
+            lastMsg.suggestedQuestions = chunk.suggested_questions
+          }
+          if (chunk.context_tokens !== undefined) {
+            convContextTokens.value = { ...convContextTokens.value, [streamingConvId]: chunk.context_tokens }
+          }
+          if (chunk.context_max_tokens !== undefined && chunk.context_max_tokens > 0) {
+            convContextMaxTokens.value = { ...convContextMaxTokens.value, [streamingConvId]: chunk.context_max_tokens }
+          }
+        }
+        // 直接修改响应式代理属性，避免每个 chunk 都拷贝整个消息数组
+        lastMsg.content += (chunk.content || '')
+        lastMsg.reasoningContent += (chunk.reasoning_content || '')
+        if (opts.isRegenerate) {
+          lastMsg.suggestedQuestions = streamDoneSuggestions ?? lastMsg.suggestedQuestions
+        } else if (!chunk.done) {
+          lastMsg.suggestedQuestions = undefined
+        }
+      }
+      if (chunk.usage) {
+        lastUsage.value = chunk.usage
+      }
+      opts.onChunk?.(chunk)
+    }
+
+    const onComplete = async (): Promise<void> => {
+      removeAbortController()
+
+      const completeMsgList = convMessages.value[streamingConvId] || []
+      const completeLastIndex = completeMsgList.length - 1
+      if (completeLastIndex >= 0 && completeMsgList[completeLastIndex]?.role === 'assistant') {
+        const lastMsg = completeMsgList[completeLastIndex]
+        lastMsg.done = true
+        if (lastMsg.versions && lastMsg.versions.length > 0) {
+          const newVersion: MessageVersion = {
+            content: lastMsg.content,
+            reasoningContent: lastMsg.reasoningContent || undefined,
+            model: lastMsg.model,
+            provider: lastMsg.provider,
+            suggestedQuestions: lastMsg.suggestedQuestions || undefined,
+          }
+          lastMsg.versions = [...lastMsg.versions, newVersion]
+          lastMsg.currentVersion = lastMsg.versions.length - 1
+        }
+        // 只有这条消息有推荐问题时，才设置当前推荐消息ID
+        if (lastMsg.suggestedQuestions && lastMsg.suggestedQuestions.length > 0) {
+          currentSuggestionMessageId.value = lastMsg.id
+        }
+      }
+      convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
+      if (targetAgentId) {
+        await fetchConversations(targetAgentId)
+      }
+    }
+
+    const onError = (err: string): void => {
+      removeAbortController()
+
+      const errorMsgList = convMessages.value[streamingConvId]
+      if (errorMsgList) {
+        const errorLastIndex = errorMsgList.length - 1
+        if (errorLastIndex >= 0 && errorMsgList[errorLastIndex]?.role === 'assistant') {
+          const lastMsg = errorMsgList[errorLastIndex]
+          lastMsg.content = lastMsg.content
+            ? `${lastMsg.content}\n\n[Error] ${err}`
+            : `[Error] ${err}`
+          lastMsg.done = true
+          if (!opts.isRegenerate) {
+            lastMsg.suggestedQuestions = undefined
+          }
+        }
+        if (!opts.isRegenerate && currentSuggestionMessageId.value) {
+          const found = errorMsgList.some((m: ChatMessage) => m.id === currentSuggestionMessageId.value)
+          if (!found) currentSuggestionMessageId.value = null
+        }
+      }
+      convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
+      lastError.value = err
+      toast.error(i18n.global.t(opts.errorToastKey, { msg: err }))
+      if (targetAgentId) {
+        fetchConversations(targetAgentId)
+      }
+    }
+
+    return { onChunk, onComplete, onError }
+  }
+
   const sendMessage = async (
     content: string,
     options?: {
@@ -541,93 +665,18 @@ export const useChatStore = defineStore('chat', () => {
 
     const streamingConvId = convId
 
+    const { onChunk, onComplete, onError } = createStreamCallbacks(streamingConvId, targetAgentId, {
+      isRegenerate: false,
+      errorToastKey: 'chat.conversationFailed',
+      onChunk: options?.onChunk,
+    })
+
     await apiStream(
       endpoint,
       requestBody,
-      (chunk: ChatStreamChunk) => {
-        const msgsList = convMessages.value[streamingConvId]
-        if (!msgsList) return
-        const lastIdx = msgsList.length - 1
-        if (lastIdx >= 0 && msgsList[lastIdx]?.role === 'assistant') {
-          // 直接修改响应式代理属性，避免每个 chunk 都拷贝整个消息数组
-          const lastMsg = msgsList[lastIdx]
-          lastMsg.content += (chunk.content || '')
-          lastMsg.reasoningContent += (chunk.reasoning_content || '')
-          if (chunk.done) {
-            logger.debug('done chunk suggestions:', chunk.suggested_questions)
-            if (chunk.suggested_questions && chunk.suggested_questions.length > 0) {
-              lastMsg.suggestedQuestions = chunk.suggested_questions
-            }
-            if (chunk.context_tokens !== undefined) {
-              convContextTokens.value = { ...convContextTokens.value, [streamingConvId]: chunk.context_tokens }
-            }
-            if (chunk.context_max_tokens !== undefined && chunk.context_max_tokens > 0) {
-              convContextMaxTokens.value = { ...convContextMaxTokens.value, [streamingConvId]: chunk.context_max_tokens }
-            }
-          } else {
-            lastMsg.suggestedQuestions = undefined
-          }
-        }
-        if (chunk.usage) {
-          lastUsage.value = chunk.usage
-        }
-        options?.onChunk?.(chunk)
-      },
-      async () => {
-        const newControllers = { ...convAbortControllers.value }
-        delete newControllers[streamingConvId]
-        convAbortControllers.value = newControllers
-
-        const completeMsgList = convMessages.value[streamingConvId] || []
-        const completeLastIndex = completeMsgList.length - 1
-        if (completeLastIndex >= 0 && completeMsgList[completeLastIndex]?.role === 'assistant') {
-          const lastMsg = completeMsgList[completeLastIndex]
-          lastMsg.done = true
-          if (lastMsg.versions && lastMsg.versions.length > 0) {
-            const newVersion: MessageVersion = {
-              content: lastMsg.content,
-              reasoningContent: lastMsg.reasoningContent || undefined,
-              model: lastMsg.model,
-              provider: lastMsg.provider,
-              suggestedQuestions: lastMsg.suggestedQuestions || undefined,
-            }
-            lastMsg.versions = [...lastMsg.versions, newVersion]
-            lastMsg.currentVersion = lastMsg.versions.length - 1
-          }
-          // 只有这条消息有推荐问题时，才设置当前推荐消息ID
-          if (lastMsg.suggestedQuestions && lastMsg.suggestedQuestions.length > 0) {
-            currentSuggestionMessageId.value = lastMsg.id
-          }
-        }
-        convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
-        await fetchConversations(targetAgentId)
-      },
-      (err: string) => {
-        const newControllers = { ...convAbortControllers.value }
-        delete newControllers[streamingConvId]
-        convAbortControllers.value = newControllers
-
-        const errorMsgList = convMessages.value[streamingConvId]
-        if (errorMsgList) {
-          const errorLastIndex = errorMsgList.length - 1
-          if (errorLastIndex >= 0 && errorMsgList[errorLastIndex]?.role === 'assistant') {
-            const lastMsg = errorMsgList[errorLastIndex]
-            lastMsg.content = lastMsg.content
-              ? `${lastMsg.content}\n\n[Error] ${err}`
-              : `[Error] ${err}`
-            lastMsg.done = true
-            lastMsg.suggestedQuestions = undefined
-          }
-        }
-        if (currentSuggestionMessageId.value && errorMsgList) {
-          const found = errorMsgList.some((m: ChatMessage) => m.id === currentSuggestionMessageId.value)
-          if (!found) currentSuggestionMessageId.value = null
-        }
-        convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
-        lastError.value = err
-        toast.error(i18n.global.t('chat.conversationFailed', { msg: err }))
-        fetchConversations(targetAgentId)
-      },
+      onChunk,
+      onComplete,
+      onError,
       controller.signal
     )
   }
@@ -736,91 +785,18 @@ export const useChatStore = defineStore('chat', () => {
     convAbortControllers.value = { ...convAbortControllers.value, [convId]: controller }
     const streamingConvId = convId
 
-    let streamDoneSuggestions: string[] | undefined = undefined
+    const { onChunk, onComplete, onError } = createStreamCallbacks(streamingConvId, targetAgentId, {
+      isRegenerate: true,
+      errorToastKey: 'chat.regenerateFailed',
+      onChunk: options?.onChunk,
+    })
 
     await apiStream(
       `/chat/conversations/${convId}/regenerate`,
       requestBody,
-      (chunk: ChatStreamChunk) => {
-        const msgsList = convMessages.value[streamingConvId]
-        if (!msgsList) return
-        const lastIdx = msgsList.length - 1
-        if (lastIdx >= 0 && msgsList[lastIdx]?.role === 'assistant') {
-          const lastMsg = msgsList[lastIdx]
-          if (chunk.done && chunk.suggested_questions && chunk.suggested_questions.length > 0) {
-            streamDoneSuggestions = chunk.suggested_questions
-          }
-          if (chunk.done && chunk.context_tokens !== undefined) {
-            convContextTokens.value = { ...convContextTokens.value, [streamingConvId]: chunk.context_tokens }
-          }
-          if (chunk.done && chunk.context_max_tokens !== undefined && chunk.context_max_tokens > 0) {
-            convContextMaxTokens.value = { ...convContextMaxTokens.value, [streamingConvId]: chunk.context_max_tokens }
-          }
-          // 直接修改响应式代理属性，避免每个 chunk 都拷贝整个消息数组
-          lastMsg.content += (chunk.content || '')
-          lastMsg.reasoningContent += (chunk.reasoning_content || '')
-          lastMsg.suggestedQuestions = streamDoneSuggestions ?? lastMsg.suggestedQuestions
-        }
-        if (chunk.usage) {
-          lastUsage.value = chunk.usage
-        }
-        options?.onChunk?.(chunk)
-      },
-      async () => {
-        const newControllers = { ...convAbortControllers.value }
-        delete newControllers[streamingConvId]
-        convAbortControllers.value = newControllers
-
-        const completeMsgList = convMessages.value[streamingConvId] || []
-        const completeLastIndex = completeMsgList.length - 1
-        if (completeLastIndex >= 0 && completeMsgList[completeLastIndex]?.role === 'assistant') {
-          const lastMsg = completeMsgList[completeLastIndex]
-          lastMsg.done = true
-          if (lastMsg.versions && lastMsg.versions.length > 0) {
-            const newVersion: MessageVersion = {
-              content: lastMsg.content,
-              reasoningContent: lastMsg.reasoningContent || undefined,
-              model: lastMsg.model,
-              provider: lastMsg.provider,
-              suggestedQuestions: lastMsg.suggestedQuestions || undefined,
-            }
-            lastMsg.versions = [...lastMsg.versions, newVersion]
-            lastMsg.currentVersion = lastMsg.versions.length - 1
-          }
-          // 明确设置推荐问题：如果流式回调中已更新就用新的，否则清除旧的（新版本尚未生成推荐问题）
-          lastMsg.suggestedQuestions = lastMsg.suggestedQuestions || undefined
-          if (lastMsg.suggestedQuestions && lastMsg.suggestedQuestions.length > 0) {
-            currentSuggestionMessageId.value = lastMsg.id
-          }
-        }
-        convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
-        if (targetAgentId) {
-          await fetchConversations(targetAgentId)
-        }
-      },
-      (err: string) => {
-        const newControllers = { ...convAbortControllers.value }
-        delete newControllers[streamingConvId]
-        convAbortControllers.value = newControllers
-
-        const errorMsgList = convMessages.value[streamingConvId]
-        if (errorMsgList) {
-          const errorLastIndex = errorMsgList.length - 1
-          if (errorLastIndex >= 0 && errorMsgList[errorLastIndex]?.role === 'assistant') {
-            const lastMsg = errorMsgList[errorLastIndex]
-            lastMsg.content = lastMsg.content
-              ? `${lastMsg.content}\n\n[Error] ${err}`
-              : `[Error] ${err}`
-            lastMsg.done = true
-          }
-        }
-        convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
-        lastError.value = err
-        toast.error(i18n.global.t('chat.regenerateFailed', { msg: err }))
-        if (targetAgentId) {
-          fetchConversations(targetAgentId)
-        }
-      },
+      onChunk,
+      onComplete,
+      onError,
       controller.signal
     )
   }

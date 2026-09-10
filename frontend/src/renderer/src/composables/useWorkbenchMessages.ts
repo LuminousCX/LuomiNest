@@ -15,10 +15,12 @@ import { useWorkflowStore } from '../stores/workflow'
 import { useStatsStore } from '../stores/stats'
 import { useTaskStreamStore } from '../stores/taskStream'
 import { useToast } from './useToast'
+import { useChatSession } from './useChatSession'
+import { updateScrollBottomState, type ScrollMetrics } from './useChatScroll'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { generateId } from '../utils/id'
 import type { ChatStreamChunk, SubagentEvent, ChatMessage } from '../types'
-import type { ToolActivity, SubagentActivity, ChatModeLevel, WorkflowModeOption } from '../components/workbench/types'
+import type { ToolActivity, SubagentActivity, ChatModeLevel } from '../components/workbench/types'
 import type { NavigationTarget } from './useTaskNavigation'
 import WorkbenchChatArea from '../components/workbench/WorkbenchChatArea.vue'
 import WorkbenchInputArea from '../components/workbench/WorkbenchInputArea.vue'
@@ -89,12 +91,22 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   const taskStreamStore = useTaskStreamStore()
   const toast = useToast()
 
+  // 输入/模式等与对话页共用的会话状态（useChatSession 公共层）
+  const {
+    inputText,
+    selectedSkillIds,
+    showReasoning,
+    chatMode,
+    chatModeOptions: CHAT_MODE_OPTIONS,
+    isWorkflowMode,
+    selectChatMode,
+    resolveSendParams,
+  } = useChatSession({
+    getActiveConvId: () => chatStore.currentConvId,
+  })
+
   // 对话面板状态
-  const inputText = ref('')
-  const selectedSkillIds = ref<string[]>([])
-  const showReasoning = ref<Record<string, boolean>>({})
   const isNearBottom = ref(true)
-  const SCROLL_BOTTOM_THRESHOLD = 120
   const showScrollToBottomBtn = ref(false)
 
   const messages = computed(() => chatStore.messages)
@@ -106,14 +118,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   const contextPercent = computed(() => chatStore.currentContextPercent)
   const isCompressing = ref(false)
   const hasMoreMessages = computed(() => chatStore.currentHasMore)
-
-  // 对话模式（普通/专业）—— 选项统一定义在 types/workflow.ts
-  const chatMode = ref<ChatModeLevel>('normal')
-  const CHAT_MODE_OPTIONS = computed<WorkflowModeOption[]>(() => [
-    { value: 'normal', label: i18n.global.t('chat.modeNormal'), title: i18n.global.t('chat.modeNormalTitle') },
-    { value: 'standard', label: i18n.global.t('chat.modePro'), title: i18n.global.t('chat.modeProTitle') },
-  ])
-  const isWorkflowMode = computed(() => chatMode.value !== 'normal')
 
   // 切换对话时同步 chatMode（从对话存储的 chat_mode 字段读取）
   // 监听 currentConversation?.chat_mode 确保异步加载完成后也能同步
@@ -137,11 +141,8 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     chatAreaRef.value?.scrollToBottom(force)
   }
 
-  const handleMessagesScroll = (metrics: { scrollTop: number; scrollHeight: number; clientHeight: number }): void => {
-    const { scrollTop, scrollHeight, clientHeight } = metrics
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-    isNearBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
-    showScrollToBottomBtn.value = !isNearBottom.value && messages.value.length > 0
+  const handleMessagesScroll = (metrics: ScrollMetrics): void => {
+    updateScrollBottomState(metrics, isNearBottom, showScrollToBottomBtn, messages.value.length)
   }
 
   /**
@@ -226,23 +227,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     }
   }
 
-  const selectChatMode = (mode: ChatModeLevel): void => {
-    // 上下文隔离：如果当前对话已有消息，禁止切换模式，三种模式间不允许相互切换
-    const currentConvId = chatStore.currentConvId
-    if (currentConvId) {
-      const currentMessages = chatStore.convMessages[currentConvId] || []
-      if (currentMessages.length > 0 && chatMode.value !== mode) {
-        toast.warning(i18n.global.t('chat.modeSwitchBlocked'))
-        return
-      }
-    }
-
-    // 2026-08 全局模型统一：切换模式不再改动全局主模型。
-    // 专业模式（standard）由后端按轮路由到推理模型（设置页配置），
-    // 推理模型不可用时后端退化为主模型并通过 SSE notice 通知前端 toast。
-    chatMode.value = mode
-  }
-
   const sendMessage = async (): Promise<void> => {
     if (!canSend.value) return
 
@@ -263,11 +247,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
 
     const sendOptions: WorkbenchSendMessageOptions = {
       agentId,
-      model: resolved?.model || undefined,
-      provider: resolved?.provider || undefined,
-      temperature: modelStore.modelConfig.defaultTemperature,
-      maxTokens: modelStore.modelConfig.defaultMaxTokens,
-      topP: modelStore.modelConfig.defaultTopP,
+      ...resolveSendParams(),
       chatMode: chatMode.value,
       skillIds: selectedSkillIds.value,
       onChunk: createChunkHandler(false),
