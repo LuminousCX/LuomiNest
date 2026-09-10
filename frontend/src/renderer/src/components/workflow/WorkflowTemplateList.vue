@@ -12,8 +12,11 @@
  * - delete: 删除模板
  */
 import { Loader2, Play, Clock, Trash2 } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import type { WorkflowTemplate } from '../../types/workflow'
 import { formatDateRelative } from '../../utils/format'
+
+const { t } = useI18n()
 
 defineProps<{
   templates: WorkflowTemplate[]
@@ -31,11 +34,11 @@ defineEmits<{
   <div class="template-list">
     <div v-if="templatesLoading" class="template-loading">
       <Loader2 :size="20" class="spin-animation" />
-      <span>加载中...</span>
+      <span>{{ t('workflow.templates.loading') }}</span>
     </div>
     <div v-else-if="templates.length === 0" class="template-empty">
-      <p class="template-empty-title">暂无模板</p>
-      <p class="template-empty-hint">在工作流执行过程中，点击「保存为模板」可创建可复用模板</p>
+      <p class="template-empty-title">{{ t('workflow.templates.emptyTitle') }}</p>
+      <p class="template-empty-hint">{{ t('workflow.templates.emptyHint') }}</p>
     </div>
     <div v-else class="template-grid">
       <div
@@ -46,32 +49,32 @@ defineEmits<{
         <div class="template-card-header">
           <div class="template-card-info">
             <h3 class="template-card-name">{{ tpl.name }}</h3>
-            <p class="template-card-desc">{{ tpl.description || '无描述' }}</p>
+            <p class="template-card-desc">{{ tpl.description || t('workflow.templates.noDesc') }}</p>
           </div>
           <span
             class="template-card-badge"
             :class="tpl.created_from === 'ai' ? 'badge-ai' : 'badge-user'"
           >
-            {{ tpl.created_from === 'ai' ? 'AI 生成' : '用户创建' }}
+            {{ tpl.created_from === 'ai' ? t('workflow.templates.badgeAi') : t('workflow.templates.badgeUser') }}
           </span>
         </div>
         <div class="template-card-meta">
           <span>{{ formatDateRelative(tpl.updated_at) }}</span>
           <span class="meta-divider">·</span>
-          <span>{{ tpl.auto_approve ? '免审批' : '需审批' }}</span>
+          <span>{{ tpl.auto_approve ? t('workflow.templates.noApproval') : t('workflow.templates.needApproval') }}</span>
         </div>
         <div class="template-card-actions">
           <button class="action-btn action-btn-primary" @click="$emit('run', tpl)">
             <Play :size="13" />
-            <span>运行</span>
+            <span>{{ t('workflow.templates.run') }}</span>
           </button>
           <button class="action-btn action-btn-secondary" @click="$emit('schedule', tpl)">
             <Clock :size="13" />
-            <span>定时</span>
+            <span>{{ t('workflow.templates.schedule') }}</span>
           </button>
           <button class="action-btn action-btn-danger" @click="$emit('delete', tpl)">
             <Trash2 :size="13" />
-            <span>删除</span>
+            <span>{{ t('workflow.templates.delete') }}</span>
           </button>
         </div>
       </div>

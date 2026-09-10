@@ -5,6 +5,8 @@
  * （{code, message, data}，code===0 表示成功，符合工作区规则：API 响应必须包含错误码）。
  */
 
+import { i18n } from '../../../../i18n'
+
 // 插件专属 API 路径前缀（与后端 endpoint 对齐）
 const PLUGIN_API_BASE = '/plugins/cxp-pdf-reader'
 
@@ -146,7 +148,7 @@ const pdfRequest = async <T>(
     const errData = await resp.json().catch(() => null)
     const msg = (errData as { detail?: string; message?: string })?.detail
       || (errData as { message?: string })?.message
-      || `请求失败 (${resp.status})`
+      || i18n.global.t('pdfReader.api.requestFailed', { status: resp.status })
     throw new Error(msg)
   }
 
@@ -160,7 +162,7 @@ const pdfRequest = async <T>(
     if (envelope.code === PDF_API_SUCCESS_CODE) {
       return envelope.data as T
     }
-    throw new Error(envelope.message || `操作失败 (code: ${envelope.code})`)
+    throw new Error(envelope.message || i18n.global.t('pdfReader.api.operationFailed', { code: envelope.code }))
   }
   return parsed as T
 }

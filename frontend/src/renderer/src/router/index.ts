@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { i18n } from '../i18n'
 import type { RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
@@ -10,85 +11,85 @@ const routes: RouteRecordRaw[] = [
     path: '/welcome',
     name: 'Welcome',
     component: () => import('../views/WelcomeView.vue'),
-    meta: { title: 'Welcome - LuomiNest', icon: 'Sparkles' }
+    meta: { titleKey: 'route.welcome', icon: 'Sparkles' }
   },
   {
     path: '/splash',
     name: 'Splash',
     component: () => import('../views/SplashView.vue'),
-    meta: { title: 'Loading - LuomiNest' }
+    meta: { titleKey: 'route.loading' }
   },
   {
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue'),
-    meta: { title: 'Login - LuomiNest' }
+    meta: { titleKey: 'route.login' }
   },
   {
     path: '/workbench',
     name: 'Workbench',
     component: () => import('../views/WorkbenchView.vue'),
-    meta: { title: '工作台 - LuomiNest', icon: 'Sparkles' }
+    meta: { titleKey: 'route.workbench', icon: 'Sparkles' }
   },
   {
     path: '/workspace',
     name: 'Workspace',
     component: () => import('../views/WorkspaceView.vue'),
-    meta: { title: '对话 - LuomiNest', icon: 'MessageCircle' }
+    meta: { titleKey: 'route.workspace', icon: 'MessageCircle' }
   },
   {
     path: '/chat/platform',
     name: 'ChatPlatform',
     component: () => import('../views/chat/PlatformView.vue'),
-    meta: { title: '平台接入 - LuomiNest', icon: 'Globe' }
+    meta: { titleKey: 'route.platform', icon: 'Globe' }
   },
   {
     path: '/chat/devices',
     name: 'ChatDevices',
     component: () => import('../views/chat/DevicesView.vue'),
-    meta: { title: '设备与群组 - LuomiNest', icon: 'Wifi' }
+    meta: { titleKey: 'route.devices', icon: 'Wifi' }
   },
   {
     path: '/desktop-pet',
     name: 'DesktopPet',
     component: () => import('../views/DesktopPetView.vue'),
-    meta: { title: 'LuomiNest Desktop Pet' }
+    meta: { titleKey: 'route.desktopPet' }
   },
   {
     path: '/desktop-pet-chat',
     name: 'DesktopPetChat',
     component: () => import('../views/DesktopPetChatView.vue'),
-    meta: { title: 'LuomiNest Companion Chat' }
+    meta: { titleKey: 'route.petChat' }
   },
   {
     path: '/settings/ai-model',
     name: 'SettingsAIModel',
     component: () => import('../views/settings/AIModelSettings.vue'),
-    meta: { title: '模型设置 - LuomiNest', icon: 'Cpu' }
+    meta: { titleKey: 'route.models', icon: 'Cpu' }
   },
   {
     path: '/settings/about',
     name: 'SettingsAbout',
     component: () => import('../views/settings/AboutView.vue'),
-    meta: { title: '关于开发者 - LuomiNest' }
+    meta: { titleKey: 'route.about' }
   },
   {
     path: '/settings/license',
     name: 'SettingsLicense',
     component: () => import('../views/settings/LicenseView.vue'),
-    meta: { title: '项目参考 - LuomiNest' }
+    meta: { titleKey: 'route.license' }
   },
   {
     path: '/settings/privacy-detail',
     name: 'SettingsPrivacyDetail',
     component: () => import('../views/settings/PrivacyDetailView.vue'),
-    meta: { title: '隐私与合规 - LuomiNest' }
+    meta: { titleKey: 'route.privacyDetail' }
   },
   {
     path: '/avatar',
     name: 'Avatar',
     component: () => import('../views/AvatarView.vue'),
-    meta: { title: '皮套工坊 - LuomiNest', icon: 'Palette' }
+    meta: { titleKey: 'route.avatar', icon: 'Palette' }
   },
   {
     path: '/panel/usage',
@@ -98,61 +99,61 @@ const routes: RouteRecordRaw[] = [
     path: '/panel/data-stats',
     name: 'PanelDataStats',
     component: () => import('../views/panel/DataStatsView.vue'),
-    meta: { title: '数据统计 - LuomiNest', icon: 'BarChart3' }
+    meta: { titleKey: 'route.stats', icon: 'BarChart3' }
   },
   {
     path: '/panel/console',
     name: 'PanelConsole',
     component: () => import('../views/panel/ConsoleView.vue'),
-    meta: { title: '控制台 - LuomiNest', icon: 'Terminal' }
+    meta: { titleKey: 'route.console', icon: 'Terminal' }
   },
   {
     path: '/tasks',
     name: 'Tasks',
     component: () => import('../views/TasksView.vue'),
-    meta: { title: '计划视图 - LuomiNest', icon: 'CheckSquare' }
+    meta: { titleKey: 'route.tasks', icon: 'CheckSquare' }
   },
   {
     path: '/plan/smart-home',
     name: 'PlanSmartHome',
     component: () => import('../views/plan/SmartHomeView.vue'),
-    meta: { title: '智能家居 - LuomiNest', icon: 'Home' }
+    meta: { titleKey: 'route.smartHome', icon: 'Home' }
   },
   {
     path: '/workflow',
     name: 'Workflow',
     component: () => import('../views/WorkflowView.vue'),
-    meta: { title: '工作流 - LuomiNest', icon: 'GitBranch' }
+    meta: { titleKey: 'route.workflow', icon: 'GitBranch' }
   },
   {
     path: '/browser',
     name: 'Browser',
     component: () => import('../views/BrowserView.vue'),
-    meta: { title: '浏览器 - LuomiNest', icon: 'Globe' }
+    meta: { titleKey: 'route.browser', icon: 'Globe' }
   },
   {
     path: '/settings',
     name: 'Settings',
     component: () => import('../views/SettingsView.vue'),
-    meta: { title: '设置 - LuomiNest', icon: 'Settings' }
+    meta: { titleKey: 'route.settings', icon: 'Settings' }
   },
   {
     path: '/settings/:section',
     name: 'SettingsDetail',
     component: () => import('../views/settings/SettingsDetailView.vue'),
-    meta: { title: '设置 - LuomiNest', icon: 'Settings' }
+    meta: { titleKey: 'route.settings', icon: 'Settings' }
   },
   {
     path: '/memory',
     name: 'Memory',
     component: () => import('../views/MemoryView.vue'),
-    meta: { title: '记忆中枢 - LuomiNest', icon: 'Brain' }
+    meta: { titleKey: 'route.memory', icon: 'Brain' }
   },
   {
     path: '/market',
     name: 'Market',
     component: () => import('../views/MarketView.vue'),
-    meta: { title: '扩展 - LuomiNest', icon: 'Package' }
+    meta: { titleKey: 'route.market', icon: 'Package' }
   },
   {
     path: '/market/plugins',
@@ -166,13 +167,13 @@ const routes: RouteRecordRaw[] = [
     path: '/market/detail/:type/:id',
     name: 'MarketDetail',
     component: () => import('../views/MarketDetailView.vue'),
-    meta: { title: '市场详情 - LuomiNest', icon: 'Package' }
+    meta: { titleKey: 'route.marketDetail', icon: 'Package' }
   },
   {
     path: '/agent/create',
     name: 'AgentCreate',
     component: () => import('../views/AgentCreateView.vue'),
-    meta: { title: '创建智能体 - LuomiNest', icon: 'Sparkles' }
+    meta: { titleKey: 'route.agentCreate', icon: 'Sparkles' }
   },
 ]
 
@@ -232,9 +233,9 @@ if (typeof window !== 'undefined') {
 }
 
 router.beforeEach(async (to) => {
-  const title = to.meta.title as string | undefined
-  if (title) {
-    document.title = title
+  // 窗口标题按当前语言求值（语言切换后下一次导航生效）
+  if (to.meta.titleKey) {
+    document.title = i18n.global.t(String(to.meta.titleKey))
   }
 
   // 已完成欢迎向导的用户访问 /welcome → 跳过到 /splash

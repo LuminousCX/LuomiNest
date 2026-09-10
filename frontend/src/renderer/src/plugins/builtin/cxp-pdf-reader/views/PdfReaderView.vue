@@ -9,6 +9,7 @@
  * 状态在视图内通过 ref/computed 管理，不创建 store。
  */
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useToast } from '../../../../composables/useToast'
 import { generateId } from '../../../../utils/id'
 import { cxPdfApi } from '../services/pdfApi'
@@ -64,6 +65,7 @@ const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.txt']
 // ---------------------------------------------------------------------------
 
 const toast = useToast()
+const { t } = useI18n()
 
 const tabs = ref<CxPdfTab[]>([])
 const activeTabId = ref<string | null>(null)
@@ -145,7 +147,7 @@ const addHistory = (fileName: string, fileType: CxPdfFileType) => {
 const clearHistory = () => {
   history.value = []
   persistHistory()
-  toast.info('已清空最近打开记录')
+  toast.info(t('pdfReader.view.toast.historyCleared'))
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +172,7 @@ const isAcceptedFile = (file: File): boolean => {
 
 const openFile = async (file: File) => {
   if (!isAcceptedFile(file)) {
-    toast.error(`不支持的文件类型：${file.name}（仅支持 PDF/Word/TXT）`)
+    toast.error(t('pdfReader.view.toast.unsupportedFileType', { name: file.name }))
     return
   }
 
@@ -228,10 +230,10 @@ const openFile = async (file: File) => {
     // 6. 记录历史
     addHistory(tab.fileName, tab.fileType)
 
-    toast.success(`已打开：${tab.fileName}`)
+    toast.success(t('pdfReader.view.toast.opened', { name: tab.fileName }))
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    toast.error(`打开文件失败：${msg}`)
+    toast.error(t('pdfReader.view.toast.openFailed', { message: msg }))
   } finally {
     loading.value = false
   }
@@ -252,7 +254,7 @@ const handleFileInputChange = (e: Event) => {
 
 const handleReopenFromHistory = (item: CxHistoryItem) => {
   // 历史记录仅保存文件名，无法重新打开原文件 — 提示用户重新选择
-  toast.info(`请重新选择文件：${item.fileName}`)
+  toast.info(t('pdfReader.view.toast.reselectFile', { name: item.fileName }))
   fileInputRef.value?.click()
 }
 
@@ -526,7 +528,7 @@ watch(activeTabId, () => {
         <!-- 加载中 -->
         <div v-else-if="loading" class="reader-loading">
           <div class="loading-spinner" />
-          <p class="loading-text">正在提取文档内容...</p>
+          <p class="loading-text">{{ t('pdfReader.view.extracting') }}</p>
         </div>
 
         <!-- PDF 渲染 -->
@@ -557,7 +559,7 @@ watch(activeTabId, () => {
 
         <!-- 未知类型 -->
         <div v-else class="reader-unsupported">
-          <p>暂不支持此文件类型的可视化预览</p>
+          <p>{{ t('pdfReader.view.unsupportedPreview') }}</p>
         </div>
       </div>
 
@@ -590,7 +592,7 @@ watch(activeTabId, () => {
               <path d="M12 11v6M9 14l3 3 3-3" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </div>
-          <p class="drag-overlay-text">松开以打开文档</p>
+          <p class="drag-overlay-text">{{ t('pdfReader.view.dropToOpen') }}</p>
         </div>
       </div>
     </Transition>

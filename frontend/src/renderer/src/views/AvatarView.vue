@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import type { VNodeRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Smile } from 'lucide-vue-next'
 import { useLuomiNestLive2D } from '@/composables/useLuomiNestLive2D'
 import { useAvatarTTS } from '@/composables/useAvatarTTS'
@@ -35,6 +36,8 @@ import { createCodeBlockFilter } from '@/utils/codeBlockFilter'
 // ===========================================================================
 // 基础 stores & composables
 // ===========================================================================
+
+const { t } = useI18n()
 
 const avatarControl = useAvatarControlStore()
 const modelStore = useModelStore()
@@ -256,7 +259,7 @@ const updateTtsDrivers = (): void => {
         stageRenderer.syncLipParam(value)
       }
     },
-    onTtsError: (err: Error) => toast.warning(`语音合成失败：${err.message}`),
+    onTtsError: (err: Error) => toast.warning(t('avatar.view.ttsError', { message: err.message })),
   })
 }
 
@@ -456,7 +459,7 @@ async function handleDeleteModel(id: string) {
   // Electron 侧按模型名管理文件（与 resolveModelLoadInfo 的匹配规则一致）
   const imported = importedModels.value.find(m => m.name === model.name)
   if (!imported) {
-    toast.error('未找到该模型的本地文件记录，请重启应用后重试')
+    toast.error(t('avatar.view.modelFileNotFound'))
     return
   }
   await workshop.deleteModel(imported.name)
@@ -601,7 +604,7 @@ async function switchToDesktopMode() {
     // 3. 通过 store 打开桌宠窗口（内部已防御性复制 + 错误处理）
     const opened = await avatarControl.openDesktopPet(petModelInfo ?? undefined)
     if (!opened) {
-      toast.error('桌宠窗口打开失败，请重试')
+      toast.error(t('avatar.view.desktopWindowOpenFailed'))
       return // 保持内联模式，不切换 displayMode
     }
 
@@ -609,7 +612,7 @@ async function switchToDesktopMode() {
     await workshop.switchDisplayMode('desktop')
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    toast.error(`切换桌宠模式失败：${msg}`)
+    toast.error(t('avatar.view.switchDesktopModeFailed', { message: msg }))
     // 回滚：确保 displayMode 与实际窗口状态一致
     await workshop.switchDisplayMode('inline')
   } finally {
@@ -632,7 +635,7 @@ async function switchToInlineMode() {
     // 1. 关闭桌宠窗口
     const closed = await avatarControl.closeDesktopPet()
     if (!closed) {
-      toast.warning('桌宠窗口关闭失败，可能需要手动关闭')
+      toast.warning(t('avatar.view.desktopWindowCloseFailed'))
     }
 
     // 2. 切换 displayMode
@@ -642,7 +645,7 @@ async function switchToInlineMode() {
     await safeLoadCurrentModel()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    toast.error(`切回内联模式失败：${msg}`)
+    toast.error(t('avatar.view.switchInlineModeFailed', { message: msg }))
   } finally {
     isSwitchingDisplayMode.value = false
   }
@@ -725,7 +728,7 @@ async function handleChatSend() {
     await chatStore.sendMessage(text, options)
   } catch (e: unknown) {
     const errMsg = e instanceof Error ? e.message : String(e)
-    toast.error(`发送消息失败：${errMsg}`)
+    toast.error(t('avatar.view.sendMessageFailed', { message: errMsg }))
   } finally {
     isChatStreaming.value = false
   }

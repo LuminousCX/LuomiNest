@@ -7,6 +7,7 @@
 import { ref, computed } from 'vue'
 import { useWorkflowStore } from '../stores/workflow'
 import { useApi } from './useApi'
+import { i18n } from '../i18n'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import type { WorkflowSession } from '../types/workflow'
 
@@ -14,14 +15,10 @@ const logger = createLuomiNestRendererLogger('Workflow')
 
 // ===== 静态数据 =====
 
-export const PHASE_LABELS: Record<string, string> = {
-  analyzing: '分析中',
-  planning: '规划中',
-  waiting_confirmation: '待确认',
-  executing: '执行中',
-  synthesizing: '综合中',
-  completed: '已完成',
-  failed: '已失败',
+/** 工作流阶段 → 本地化标签（未知阶段回退为空串，与原 PHASE_LABELS[idx] || '' 行为一致） */
+export const phaseLabel = (phase: string): string => {
+  const key = 'workflow.phase.' + phase
+  return i18n.global.te(key) ? i18n.global.t(key) : ''
 }
 
 /** 格式化 ISO 时间为 MM/DD HH:mm */

@@ -12,6 +12,7 @@ import {
   Globe,
   Cpu
 } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import { useModelStore } from '../../stores/model'
 import LumiButton from '../common/LumiButton.vue'
 
@@ -19,6 +20,7 @@ const props = defineProps<{
   embedded?: boolean
 }>()
 
+const { t } = useI18n()
 const modelStore = useModelStore()
 
 const sttLoading = ref(false)
@@ -42,7 +44,7 @@ const fetchSttInfo = async () => {
     await modelStore.fetchSTTEngines()
     syncSttForm()
   } catch (e) {
-    sttError.value = e instanceof Error ? e.message : '获取 STT 信息失败'
+    sttError.value = e instanceof Error ? e.message : t('settingsEx.stt.fetchFail')
   } finally {
     sttLoading.value = false
   }
@@ -70,10 +72,10 @@ const saveSttConfig = async () => {
       autoSend: sttForm.value.autoSend,
       autoSendDelay: sttForm.value.autoSendDelay,
     })
-    sttSaveResult.value = { ok: true, msg: '配置已保存' }
+    sttSaveResult.value = { ok: true, msg: t('settingsEx.stt.saved') }
     setTimeout(() => { sttSaveResult.value = null }, 3000)
   } catch (e) {
-    sttSaveResult.value = { ok: false, msg: e instanceof Error ? e.message : '保存失败' }
+    sttSaveResult.value = { ok: false, msg: e instanceof Error ? e.message : t('settingsEx.stt.saveFail') }
   } finally {
     sttSaving.value = false
   }
@@ -84,17 +86,17 @@ const sttEngineOptions = computed(() => {
   const remote = modelStore.sttEngines as Array<{ id: string; name?: string }>
   if (remote && remote.length > 0) {
     return [
-      { value: 'auto', label: '自动选择' },
+      { value: 'auto', label: t('settingsEx.stt.engineAuto') },
       ...remote.map(e => ({ value: e.id, label: e.name || e.id })),
-      { value: 'browser', label: '浏览器内置（Web Speech，在线免费）' },
+      { value: 'browser', label: t('settingsEx.stt.engineBrowser') },
     ]
   }
   return [
-    { value: 'auto', label: '自动选择' },
-    { value: 'sherpa-onnx', label: 'Sherpa-ONNX（离线，SenseVoice）' },
-    { value: 'funasr', label: 'FunASR（离线，阿里达摩院）' },
-    { value: 'faster-whisper', label: 'Faster Whisper（离线，CTranslate2）' },
-    { value: 'browser', label: '浏览器内置（Web Speech，在线免费）' },
+    { value: 'auto', label: t('settingsEx.stt.engineAuto') },
+    { value: 'sherpa-onnx', label: t('settingsEx.stt.engineSherpa') },
+    { value: 'funasr', label: t('settingsEx.stt.engineFunasr') },
+    { value: 'faster-whisper', label: t('settingsEx.stt.engineWhisper') },
+    { value: 'browser', label: t('settingsEx.stt.engineBrowser') },
   ]
 })
 
@@ -131,13 +133,13 @@ const sttDeviceLabel = computed(() => {
 const sttDeviceHint = computed(() => {
   const dev = modelStore.sttDevice
   if (!dev || dev.type !== 'gpu') {
-    return '未检测到 GPU，本地 STT (Sherpa-ONNX / FunASR) 使用 CPU 推理。在线 STT 在云端识别，不受本地设备限制。'
+    return t('settingsEx.stt.hintNoGpu')
   }
-  const gpuCount = dev.gpu_count && dev.gpu_count > 1 ? `（${dev.gpu_count} 块 GPU）` : ''
+  const gpuCount = dev.gpu_count && dev.gpu_count > 1 ? t('settingsEx.stt.gpuCountSuffix', { n: dev.gpu_count }) : ''
   if (dev.cuda_available) {
-    return `检测到 GPU${gpuCount}，硬件支持 CUDA 加速。Faster Whisper 可自动使用 GPU (CTranslate2)，本地推理延迟更低。`
+    return t('settingsEx.stt.hintCuda', { gpus: gpuCount })
   }
-  return `检测到 GPU${gpuCount}，硬件支持图形/通用计算。未安装 CUDA 版 PyTorch，本地 STT 当前以 CPU 推理；在线 STT 在云端识别，不受本地设备限制。`
+  return t('settingsEx.stt.hintGpuNoCuda', { gpus: gpuCount })
 })
 
 onMounted(() => {
@@ -151,7 +153,7 @@ onMounted(() => {
     <div v-if="sttLoading" class="settings-card">
       <div class="settings-card__body settings-card__body--compact settings-state">
         <Loader2 :size="20" class="spin-animation" />
-        <span>正在检测 STT 引擎...</span>
+        <span>{{ t('settingsEx.stt.detecting') }}</span>
       </div>
     </div>
 
@@ -159,7 +161,7 @@ onMounted(() => {
       <div class="settings-card__body settings-card__body--compact settings-state settings-state--error">
         <AlertCircle :size="18" />
         <span>{{ sttError }}</span>
-        <LumiButton size="sm" @click="fetchSttInfo">重试</LumiButton>
+        <LumiButton size="sm" @click="fetchSttInfo">{{ t('settingsEx.stt.retry') }}</LumiButton>
       </div>
     </div>
 
@@ -168,11 +170,11 @@ onMounted(() => {
       <section class="settings-card settings-card--accent">
         <div class="settings-card__header">
           <Settings :size="18" />
-          <span class="settings-card__title">引擎配置</span>
+          <span class="settings-card__title">{{ t('settingsEx.stt.engineConfig') }}</span>
         </div>
         <div class="settings-card__body">
           <div class="settings-form-row">
-            <label class="settings-form-label">STT 引擎</label>
+            <label class="settings-form-label">{{ t('settingsEx.stt.engineLabel') }}</label>
             <select v-model="sttForm.engine" class="settings-form-select">
               <option v-for="opt in sttEngineOptions" :key="opt.value" :value="opt.value">
                 {{ opt.label }}
@@ -181,7 +183,7 @@ onMounted(() => {
           </div>
 
           <div class="settings-form-row">
-            <label class="settings-form-label">模型</label>
+            <label class="settings-form-label">{{ t('settingsEx.stt.model') }}</label>
             <select v-model="sttForm.model" class="settings-form-select">
               <option v-for="opt in sttModelOptions" :key="opt.value" :value="opt.value">
                 {{ opt.label }}
@@ -190,7 +192,7 @@ onMounted(() => {
           </div>
 
           <div class="settings-form-row">
-            <label class="settings-form-label">识别语言</label>
+            <label class="settings-form-label">{{ t('settingsEx.stt.language') }}</label>
             <select v-model="sttForm.language" class="settings-form-select">
               <option v-for="lang in modelStore.STT_LANGUAGES" :key="lang.value" :value="lang.value">
                 {{ lang.label }}
@@ -214,7 +216,7 @@ onMounted(() => {
               @click="saveSttConfig"
             >
               <Save :size="14" />
-              <span>保存配置</span>
+              <span>{{ t('settingsEx.stt.save') }}</span>
             </LumiButton>
           </div>
         </div>
@@ -224,13 +226,13 @@ onMounted(() => {
       <section class="settings-card">
         <div class="settings-card__header">
           <Mic :size="18" />
-          <span class="settings-card__title">行为设置</span>
+          <span class="settings-card__title">{{ t('settingsEx.stt.behavior') }}</span>
         </div>
         <div class="settings-card__body">
           <div class="settings-list-row">
             <div class="settings-list-row__info">
-              <span class="settings-list-row__title">自动发送</span>
-              <span class="settings-list-row__desc">语音识别完成后自动发送消息</span>
+              <span class="settings-list-row__title">{{ t('settingsEx.stt.autoSend') }}</span>
+              <span class="settings-list-row__desc">{{ t('settingsEx.stt.autoSendDesc') }}</span>
             </div>
             <div class="settings-list-row__control">
               <input
@@ -242,7 +244,7 @@ onMounted(() => {
           </div>
 
           <div v-if="sttForm.autoSend" class="settings-form-row">
-            <label class="settings-form-label">自动发送延迟 ({{ delayLabel }})</label>
+            <label class="settings-form-label">{{ t('settingsEx.stt.autoSendDelay', { d: delayLabel }) }}</label>
             <input
               v-model.number="sttForm.autoSendDelay"
               type="range"
@@ -259,26 +261,26 @@ onMounted(() => {
       <section class="settings-card">
         <div class="settings-card__header">
           <Cpu :size="18" />
-          <span class="settings-card__title">设备检测</span>
+          <span class="settings-card__title">{{ t('settingsEx.stt.device') }}</span>
         </div>
         <div class="settings-card__body settings-card__body--compact">
           <div class="settings-data-row">
-            <span class="settings-data-row__label">计算设备</span>
+            <span class="settings-data-row__label">{{ t('settingsEx.stt.computeDevice') }}</span>
             <span :class="['settings-badge', modelStore.sttDevice?.type === 'gpu' ? 'settings-badge--success' : 'settings-badge--primary']">
               {{ sttDeviceLabel }}
             </span>
           </div>
           <div class="settings-data-row">
-            <span class="settings-data-row__label">设备名称</span>
-            <span class="settings-data-row__value">{{ modelStore.sttDevice?.name || '未知' }}</span>
+            <span class="settings-data-row__label">{{ t('settingsEx.stt.deviceName') }}</span>
+            <span class="settings-data-row__value">{{ modelStore.sttDevice?.name || t('settingsEx.stt.unknown') }}</span>
           </div>
           <div v-if="modelStore.sttDevice?.gpu_count && modelStore.sttDevice.gpu_count > 1" class="settings-data-row">
-            <span class="settings-data-row__label">GPU 数量</span>
+            <span class="settings-data-row__label">{{ t('settingsEx.stt.gpuCountLabel') }}</span>
             <span class="settings-data-row__value">{{ modelStore.sttDevice.gpu_count }}</span>
           </div>
           <div v-if="modelStore.sttDevice?.cuda_available" class="settings-data-row">
-            <span class="settings-data-row__label">CUDA 版本</span>
-            <span class="settings-data-row__value">{{ modelStore.sttDevice.cuda_version || '未知' }}</span>
+            <span class="settings-data-row__label">{{ t('settingsEx.stt.cudaVersion') }}</span>
+            <span class="settings-data-row__value">{{ modelStore.sttDevice.cuda_version || t('settingsEx.stt.unknown') }}</span>
           </div>
           <p class="settings-card__hint" style="margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--divider-soft);">
             {{ sttDeviceHint }}
@@ -290,7 +292,7 @@ onMounted(() => {
       <section v-if="modelStore.sttEngines.length > 0" class="settings-card">
         <div class="settings-card__header">
           <Globe :size="18" />
-          <span class="settings-card__title">可用引擎</span>
+          <span class="settings-card__title">{{ t('settingsEx.stt.availableEngines') }}</span>
         </div>
         <div class="settings-card__body settings-card__body--compact">
           <div
@@ -314,7 +316,7 @@ onMounted(() => {
             <span :class="['settings-badge', engine.available ? 'settings-badge--success' : 'settings-badge--danger']">
               <Check v-if="engine.available" :size="12" />
               <AlertCircle v-else :size="12" />
-              <span>{{ engine.available ? '可用' : '未安装' }}</span>
+              <span>{{ engine.available ? t('settingsEx.stt.available') : t('settingsEx.stt.notInstalled') }}</span>
             </span>
           </div>
         </div>

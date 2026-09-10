@@ -1,3 +1,5 @@
+import { i18n } from '../i18n'
+
 export interface ChartPoint {
   x: number
   y: number
@@ -149,10 +151,11 @@ export const aggregateByDay = (
   }
 
   if (sorted.length <= targetPoints) {
-    const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
     return sorted.map((item) => {
       const date = item.date ? new Date(item.date) : null
-      const label = date && !isNaN(date.getTime()) ? weekdays[date.getDay()] : item.date.slice(5)
+      const label = date && !isNaN(date.getTime())
+        ? i18n.global.t(`stats.wd${date.getDay()}`)
+        : item.date.slice(5)
       return { ...item, label }
     })
   }

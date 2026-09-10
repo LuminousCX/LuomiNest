@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Sparkles,
   Send,
@@ -31,6 +32,7 @@ const emit = defineEmits<{
 }>()
 
 const store = usePluginsStore()
+const { t } = useI18n()
 
 const userRequest = ref('')
 const loadingConfig = ref(false)
@@ -44,7 +46,7 @@ const currentConfig = ref<CxPluginConfigResult | null>(null)
 const suggestion = ref<CxConfigSuggestion | null>(null)
 const explanation = ref<CxPluginConfigExplain | null>(null)
 
-const pluginDisplayName = computed(() => props.pluginName ?? props.pluginId ?? '插件')
+const pluginDisplayName = computed(() => props.pluginName ?? props.pluginId ?? t('settingsEx.pluginAssistant.unnamedPlugin'))
 
 const loadConfig = async () => {
   if (!props.pluginId) return
@@ -60,7 +62,7 @@ const loadConfig = async () => {
 const handleSuggest = async () => {
   if (!props.pluginId) return
   if (!userRequest.value.trim()) {
-    errorMessage.value = '请描述希望对插件配置进行的修改'
+    errorMessage.value = t('settingsEx.pluginAssistant.errEmptyRequest')
     return
   }
   generating.value = true
@@ -70,7 +72,7 @@ const handleSuggest = async () => {
     const result = await store.suggestPluginConfig(props.pluginId, userRequest.value.trim())
     suggestion.value = result
     if (!result) {
-      errorMessage.value = '生成配置建议失败，请查看错误提示'
+      errorMessage.value = t('settingsEx.pluginAssistant.errSuggestFailed')
     }
   } finally {
     generating.value = false
@@ -114,7 +116,7 @@ const handleExplain = async () => {
 
 const handleReset = async () => {
   if (!props.pluginId) return
-  if (!window.confirm(`确认将插件「${pluginDisplayName.value}」的配置重置为默认值？`)) return
+  if (!window.confirm(t('settingsEx.pluginAssistant.confirmReset', { name: pluginDisplayName.value }))) return
   resetting.value = true
   errorMessage.value = ''
   try {
@@ -130,7 +132,7 @@ const handleClose = () => {
 }
 
 const formatValue = (v: unknown): string => {
-  if (v === null || v === undefined) return '（空）'
+  if (v === null || v === undefined) return t('settingsEx.pluginAssistant.emptyValue')
   if (typeof v === 'boolean') return v ? 'true' : 'false'
   if (typeof v === 'object') return JSON.stringify(v)
   return String(v)
@@ -139,11 +141,11 @@ const formatValue = (v: unknown): string => {
 const patchOpLabel = (op: string): string => {
   switch (op) {
     case 'set':
-      return '设置'
+      return t('settingsEx.pluginAssistant.opSet')
     case 'remove':
-      return '删除'
+      return t('settingsEx.pluginAssistant.opRemove')
     case 'reset':
-      return '重置'
+      return t('settingsEx.pluginAssistant.opReset')
     default:
       return op
   }
@@ -168,7 +170,7 @@ watch(
 <template>
   <LumiModal
     :visible="visible"
-    :title="`AI 配置助手：${pluginDisplayName}`"
+    :title="t('settingsEx.pluginAssistant.title', { name: pluginDisplayName })"
     size="lg"
     @close="handleClose"
     @update:visible="emit('update:visible', $event)"
@@ -178,7 +180,7 @@ watch(
       <section class="section">
         <header class="section-header">
           <Sparkles :size="14" />
-          <span>当前配置</span>
+          <span>{{ t('settingsEx.pluginAssistant.currentConfig') }}</span>
           <LumiButton
             variant="ghost"
             size="sm"
@@ -187,7 +189,7 @@ watch(
             @click="handleExplain"
           >
             <Lightbulb :size="13" />
-            <span>AI 解释</span>
+            <span>{{ t('settingsEx.pluginAssistant.aiExplain') }}</span>
           </LumiButton>
           <LumiButton
             variant="ghost"
@@ -197,13 +199,13 @@ watch(
             @click="handleReset"
           >
             <RotateCcw :size="13" />
-            <span>重置默认</span>
+            <span>{{ t('settingsEx.pluginAssistant.resetDefault') }}</span>
           </LumiButton>
         </header>
 
         <div v-if="loadingConfig" class="loading-state">
           <Loader2 :size="14" class="spinning" />
-          <span>加载配置中...</span>
+          <span>{{ t('settingsEx.pluginAssistant.loadingConfig') }}</span>
         </div>
         <div v-else-if="currentConfig && Object.keys(currentConfig.settings).length" class="config-grid">
           <div v-for="(val, key) in currentConfig.settings" :key="String(key)" class="config-item">
@@ -211,14 +213,14 @@ watch(
             <span class="config-value">{{ formatValue(val) }}</span>
           </div>
         </div>
-        <p v-else class="empty-text">插件暂无可配置项</p>
+        <p v-else class="empty-text">{{ t('settingsEx.pluginAssistant.noConfigItems') }}</p>
       </section>
 
       <!-- AI 解释结果 -->
       <section v-if="explanation" class="section explain-section">
         <header class="section-header">
           <Lightbulb :size="14" />
-          <span>AI 配置解释</span>
+          <span>{{ t('settingsEx.pluginAssistant.explainTitle') }}</span>
         </header>
         <p class="explain-text">{{ explanation.explanation }}</p>
       </section>
@@ -227,12 +229,12 @@ watch(
       <section class="section">
         <header class="section-header">
           <Sparkles :size="14" />
-          <span>用自然语言描述配置需求</span>
+          <span>{{ t('settingsEx.pluginAssistant.requestTitle') }}</span>
         </header>
         <div class="request-row">
           <LumiInput
             v-model="userRequest"
-            placeholder="例如：把超时时间改为 30 秒；启用调试日志"
+            :placeholder="t('settingsEx.pluginAssistant.requestPlaceholder')"
             :error="errorMessage ? errorMessage : false"
             :disabled="generating || applying"
             @enter="handleSuggest"
@@ -245,19 +247,19 @@ watch(
             @click="handleSuggest"
           >
             <Send :size="13" />
-            <span>生成建议</span>
+            <span>{{ t('settingsEx.pluginAssistant.generate') }}</span>
           </LumiButton>
         </div>
-        <p class="form-hint">AI 会读取插件配置声明并生成可应用的 patch</p>
+        <p class="form-hint">{{ t('settingsEx.pluginAssistant.requestHint') }}</p>
       </section>
 
       <!-- 建议结果 -->
       <section v-if="suggestion" class="section suggestion-section">
         <header class="section-header">
           <Sparkles :size="14" />
-          <span>AI 建议</span>
+          <span>{{ t('settingsEx.pluginAssistant.suggestionTitle') }}</span>
           <span v-if="suggestion.confidence" class="confidence-badge">
-            置信度 {{ Math.round(suggestion.confidence * 100) }}%
+            {{ t('settingsEx.pluginAssistant.confidence', { value: Math.round(suggestion.confidence * 100) }) }}
           </span>
         </header>
 
@@ -289,7 +291,7 @@ watch(
             :disabled="applying"
             @click="suggestion = null"
           >
-            取消
+            {{ t('settingsEx.pluginAssistant.cancel') }}
           </LumiButton>
           <LumiButton
             variant="primary"
@@ -299,7 +301,7 @@ watch(
             @click="handleApply"
           >
             <CheckCircle2 :size="13" />
-            <span>应用配置</span>
+            <span>{{ t('settingsEx.pluginAssistant.apply') }}</span>
           </LumiButton>
         </div>
       </section>
@@ -313,7 +315,7 @@ watch(
 
     <template #footer>
       <div class="dialog-footer">
-        <LumiButton variant="ghost" size="sm" @click="handleClose">关闭</LumiButton>
+        <LumiButton variant="ghost" size="sm" @click="handleClose">{{ t('settingsEx.pluginAssistant.close') }}</LumiButton>
       </div>
     </template>
   </LumiModal>

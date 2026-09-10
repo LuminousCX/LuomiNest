@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Send,
   Paperclip,
@@ -82,6 +83,7 @@ const emit = defineEmits<{
   'update:selectedSkillIds': [ids: string[]]
 }>()
 
+const { t } = useI18n()
 const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const { autoResize, resetTextareaHeight } = useAutoResizeTextarea(textareaRef)
@@ -285,12 +287,12 @@ defineExpose({
       <div class="warning-content">
         <AlertTriangle :size="20" />
         <div class="warning-text">
-          <p class="warning-title">后端服务未连接</p>
-          <p class="warning-desc">请确保 LuomiNest 后端服务已启动 (端口 18000)</p>
+          <p class="warning-title">{{ t('workspace.backendNotConnected') }}</p>
+          <p class="warning-desc">{{ t('workspace.backendNotConnectedDesc') }}</p>
         </div>
         <button class="retry-btn" @click="emit('check-backend')">
           <RotateCcw :size="14" />
-          重试
+          {{ t('workspace.retry') }}
         </button>
       </div>
     </div>
@@ -299,11 +301,11 @@ defineExpose({
       <div class="warning-content">
         <Wand2 :size="20" />
         <div class="warning-text">
-          <p class="warning-title">尚未配置模型供应商</p>
-          <p class="warning-desc">请先前往设置页面添加 Ollama 或其他模型供应商</p>
+          <p class="warning-title">{{ t('workspace.noProviderTitle') }}</p>
+          <p class="warning-desc">{{ t('workspace.noProviderDesc') }}</p>
         </div>
         <button class="retry-btn" @click="emit('go-settings')">
-          去设置
+          {{ t('workspace.goSettings') }}
         </button>
       </div>
     </div>
@@ -333,10 +335,10 @@ defineExpose({
                     <Loader2 v-if="!msg.done && !msg.content && !msg.reasoningContent" :size="12" class="spin-animation" />
                     <Wand2 v-else :size="12" />
                     <span>
-                      <template v-if="!msg.done && !msg.content && !msg.reasoningContent">等待模型中...</template>
-                      <template v-else-if="!msg.done && !msg.content && msg.reasoningContent">思考中...</template>
-                      <template v-else-if="msg.reasoningContent && msg.reasoningContent.length > 0">{{ showReasoning[msg.id] ? '思考过程' : '思考过程（已折叠）' }}</template>
-                      <template v-else>思考完成</template>
+                      <template v-if="!msg.done && !msg.content && !msg.reasoningContent">{{ t('chat.waitingModel') }}</template>
+                      <template v-else-if="!msg.done && !msg.content && msg.reasoningContent">{{ t('chat.thinking') }}</template>
+                      <template v-else-if="msg.reasoningContent && msg.reasoningContent.length > 0">{{ showReasoning[msg.id] ? t('chat.thinkingProcess') : t('chat.thinkingCollapsed') }}</template>
+                      <template v-else>{{ t('chat.thinkingDone') }}</template>
                     </span>
                     <ChevronDown :size="12" class="reasoning-chevron" :class="{ rotated: !showReasoning[msg.id] }" />
                   </div>
@@ -353,11 +355,11 @@ defineExpose({
                 <div v-if="msg.role === 'assistant' && msg.content && msg.content !== '[已中断]'" class="message-content markdown-body">
                   <div v-html="renderMarkdown(msg.content)"></div>
                   <span v-if="msg.interrupted" class="interrupted-inline">
-                    <AlertTriangle :size="12" /> 已中断
+                    <AlertTriangle :size="12" /> {{ t('chat.interrupted') }}
                   </span>
                 </div>
                 <div v-else-if="(msg.interrupted || msg.content === '[已中断]') && msg.role === 'assistant'" class="interrupted-only">
-                  <AlertTriangle :size="12" /> 已中断
+                  <AlertTriangle :size="12" /> {{ t('chat.interrupted') }}
                 </div>
                 <div v-if="msg.role === 'assistant' && !msg.done && msg.content" class="streaming-indicator">
                   <span class="streaming-dot"></span>
@@ -370,7 +372,7 @@ defineExpose({
                       class="v-btn"
                       :disabled="getVersionIndex(msg) <= 0"
                       @click="emit('switch-version', msg.id, getVersionIndex(msg) - 1)"
-                      title="上一版本"
+                      :title="t('workspace.prevVersion')"
                     >
                       <ChevronLeft :size="14" />
                     </button>
@@ -379,21 +381,21 @@ defineExpose({
                       class="v-btn"
                       :disabled="getVersionIndex(msg) >= msg.versions.length - 1"
                       @click="emit('switch-version', msg.id, getVersionIndex(msg) + 1)"
-                      title="下一版本"
+                      :title="t('workspace.nextVersion')"
                     >
                       <ChevronRight :size="14" />
                     </button>
                   </div>
-                  <button class="u-btn" title="复制" @click="emit('copy-message', msg.id, msg.content)">
+                  <button class="u-btn" :title="t('workspace.copy')" @click="emit('copy-message', msg.id, msg.content)">
                     <Check v-if="copiedId === msg.id" :size="14" />
                     <Copy v-else :size="14" />
                   </button>
-                  <button class="u-btn" title="引用" @click="emit('quote-message', msg)">
+                  <button class="u-btn" :title="t('workspace.quote')" @click="emit('quote-message', msg)">
                     <Quote :size="14" />
                   </button>
                   <button
                     class="u-btn"
-                    :title="isTtsSpeaking && ttsSpeakingMsgId === msg.id ? '停止朗读' : '朗读'"
+                    :title="isTtsSpeaking && ttsSpeakingMsgId === msg.id ? t('workspace.stopReading') : t('workspace.readAloud')"
                     @click="isTtsSpeaking && ttsSpeakingMsgId === msg.id ? emit('tts-stop') : emit('tts-speak', msg.content, msg.id)"
                   >
                     <div v-if="isTtsSpeaking && ttsSpeakingMsgId === msg.id" class="tts-bars">
@@ -407,12 +409,12 @@ defineExpose({
                   <button
                     v-if="isLastAssistantMessage(msg.id)"
                     class="u-btn"
-                    title="重新生成"
+                    :title="t('workspace.regenerate')"
                     @click="emit('regenerate', msg.id)"
                   >
                     <RotateCcw :size="14" />
                   </button>
-                  <button class="u-btn u-btn-danger" title="删除" @click="emit('delete-message', msg.id)">
+                  <button class="u-btn u-btn-danger" :title="t('workspace.delete')" @click="emit('delete-message', msg.id)">
                     <Trash2 :size="14" />
                   </button>
                 </div>
@@ -427,19 +429,19 @@ defineExpose({
                 <!-- 用户消息 -->
                 <div v-if="msg.role === 'user'" class="user-msg-layout">
                   <div class="user-msg-btns">
-                    <button class="u-btn u-btn-hover" title="复制" @click="emit('copy-message', msg.id, msg.content)">
+                    <button class="u-btn u-btn-hover" :title="t('workspace.copy')" @click="emit('copy-message', msg.id, msg.content)">
                       <Check v-if="copiedId === msg.id" :size="14" />
                       <Copy v-else :size="14" />
                     </button>
-                    <button class="u-btn u-btn-hover" title="引用" @click="emit('quote-message', msg)">
+                    <button class="u-btn u-btn-hover" :title="t('workspace.quote')" @click="emit('quote-message', msg)">
                       <Quote :size="14" />
                     </button>
-                    <button class="u-btn u-btn-hover u-btn-danger" title="删除" @click="emit('delete-message', msg.id)">
+                    <button class="u-btn u-btn-hover u-btn-danger" :title="t('workspace.delete')" @click="emit('delete-message', msg.id)">
                       <Trash2 :size="14" />
                     </button>
                     <button
                       class="u-btn"
-                      title="回退到本轮对话发起前"
+                      :title="t('workspace.rollbackToStart')"
                       @click="emit('go-back-to-start', msg)"
                     >
                       <Undo2 :size="14" />
@@ -449,10 +451,10 @@ defineExpose({
                     <div v-if="msg.quote && (msg.quote.content || (msg.quote.id))" class="message-quote-block" :class="msg.quote.role">
                       <Quote :size="12" class="quote-block-icon" />
                       <div class="quote-block-content">
-                        <span class="quote-block-label">{{ msg.quote.role === 'assistant' ? '助手' : '用户' }}</span>
+                        <span class="quote-block-label">{{ msg.quote.role === 'assistant' ? t('workspace.roleAssistant') : t('workspace.roleUser') }}</span>
                         <span class="quote-block-text line-clamp-3">
                           <span v-if="msg.quote.content">{{ msg.quote.content.slice(0, 150) }}{{ msg.quote.content.length > 150 ? '...' : '' }}</span>
-                          <span v-else class="quote-block-empty">（该消息无文字内容）</span>
+                          <span v-else class="quote-block-empty">{{ t('workspace.quoteNoContent') }}</span>
                         </span>
                       </div>
                     </div>
@@ -478,14 +480,14 @@ defineExpose({
           <LumiEmptyState
             v-if="messages.length === 0 && !isLoadingCurrentConv"
             :icon="Bot"
-            title="选择一个Agent开始对话"
-            description="或直接在下方输入框中提问"
+            :title="t('workspace.chatEmptyTitle')"
+            :description="t('workspace.chatEmptyDesc')"
           >
             <template #action>
               <div class="empty-quick-actions">
-                <button class="quick-action" @click="inputTextModel = '你好，请介绍一下你自己'">打个招呼</button>
-                <button class="quick-action" @click="inputTextModel = '帮我写一段 Python 代码'">写段代码</button>
-                <button class="quick-action" @click="inputTextModel = '解释一下什么是大语言模型'">了解 LLM</button>
+                <button class="quick-action" @click="inputTextModel = t('chat.quickGreetPrompt')">{{ t('chat.quickGreet') }}</button>
+                <button class="quick-action" @click="inputTextModel = t('chat.quickCodePrompt')">{{ t('chat.quickCode') }}</button>
+                <button class="quick-action" @click="inputTextModel = t('chat.quickLLMPrompt')">{{ t('chat.quickLLM') }}</button>
               </div>
             </template>
           </LumiEmptyState>
@@ -496,7 +498,7 @@ defineExpose({
         <div v-if="isLoadingCurrentConv" class="conv-loading-overlay">
           <div class="conv-loading-content">
             <Loader2 :size="20" class="spin-animation" />
-            <span>加载对话中...</span>
+            <span>{{ t('workspace.loadingConversation') }}</span>
           </div>
         </div>
       </Transition>
@@ -519,7 +521,7 @@ defineExpose({
         <div v-if="quotedMessage" class="quote-preview">
           <Quote :size="14" class="quote-preview-icon" />
           <div class="quote-preview-content">
-            <span class="quote-preview-label">{{ quotedMessage.role === 'assistant' ? '助手' : '用户' }}</span>
+            <span class="quote-preview-label">{{ quotedMessage.role === 'assistant' ? t('workspace.roleAssistant') : t('workspace.roleUser') }}</span>
             <span class="quote-preview-text">{{ quotedMessage.content.slice(0, 80) }}{{ quotedMessage.content.length > 80 ? '...' : '' }}</span>
           </div>
           <button class="quote-preview-cancel" @click="emit('clear-quote')">
@@ -529,7 +531,7 @@ defineExpose({
         <textarea
           ref="textareaRef"
           v-model="inputTextModel"
-          placeholder="可以描述任务或提问任何问题"
+          :placeholder="t('workspace.inputPlaceholder')"
           rows="1"
           class="chat-input"
           :disabled="!isBackendReady"
@@ -542,7 +544,7 @@ defineExpose({
                  切换请前往 设置 → 模型设置 -->
             <div
               class="model-badge"
-              title="当前使用全局主模型，可在 设置 → 模型设置 中切换"
+              :title="t('workspace.modelBadgeTitle')"
             >
               <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
               <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
@@ -554,13 +556,13 @@ defineExpose({
               :class="['workflow-toggle', { active: isWorkflowMode }]"
               variant="secondary"
               size="sm"
-              :title="isWorkflowMode ? '专业模式已开启：长任务将自动分解并调度内部模块' : '当前为普通模式：点击切换专业模式'"
+              :title="isWorkflowMode ? t('workspace.modeProOnTitle') : t('workspace.modeProOffTitle')"
               @click="toggleWorkflowMode"
             >
               <template #icon>
                 <Wand2 :size="15" />
               </template>
-              <span class="workflow-toggle-text">{{ isWorkflowMode ? '专业' : '普通' }}</span>
+              <span class="workflow-toggle-text">{{ isWorkflowMode ? t('chat.modePro') : t('chat.modeNormal') }}</span>
             </LumiButton>
             <div v-if="isWorkflowMode" class="workflow-mode-selector">
               <LumiButton
@@ -577,10 +579,10 @@ defineExpose({
             </div>
           </div>
           <div class="toolbar-right">
-            <button class="tool-btn icon-only" title="附件" @click="fileUploadRef?.triggerFileSelect()">
+            <button class="tool-btn icon-only" :title="t('workspace.attachment')" @click="fileUploadRef?.triggerFileSelect()">
               <Paperclip :size="16" />
             </button>
-            <button class="tool-btn icon-only" title="语音">
+            <button class="tool-btn icon-only" :title="t('workspace.voice')">
               <Mic :size="16" />
             </button>
             <LumiButton
@@ -588,7 +590,7 @@ defineExpose({
               variant="danger"
               size="sm"
               class="send-btn"
-              title="停止生成"
+              :title="t('workspace.stopGenerating')"
               @click="emit('cancel')"
             >
               <template #icon>
@@ -601,7 +603,7 @@ defineExpose({
               size="sm"
               class="send-btn"
               :disabled="!canSend"
-              title="发送"
+              :title="t('workspace.send')"
               @click="emit('send')"
             >
               <template #icon>

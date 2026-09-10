@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 /**
  * 智能体创建向导 - 步骤2：技能配置
  *
@@ -6,6 +7,8 @@
  */
 import { Plus } from 'lucide-vue-next'
 import { SKILL_ITEMS, type AgentFormData } from '../../composables/useAgentCreateForm'
+
+const { t } = useI18n()
 
 defineProps<{
   formData: AgentFormData
@@ -19,7 +22,7 @@ const emit = defineEmits<{
 <template>
   <div class="step-content step-layout-full">
     <div class="skills-intro">
-      <p>基于智能体定位推荐的能力模块，创建时全量启用。可用开关控制是否启能。</p>
+      <p>{{ t('agentCreate.skills.hint') }}</p>
     </div>
     <div class="skills-list">
       <div
@@ -37,13 +40,13 @@ const emit = defineEmits<{
         <button
           :class="['lumi-toggle', { 'is-active': formData.skills[skill.id] }]"
           @click="emit('toggle-skill', skill.id)"
-          :aria-label="formData.skills[skill.id] ? '关闭' : '开启'"
+          :aria-label="formData.skills[skill.id] ? t('agentCreate.skills.off') : t('agentCreate.skills.on')"
         ></button>
       </div>
     </div>
     <button class="add-skill-pack-btn">
       <Plus :size="16" />
-      <span>从推荐技能包添加</span>
+      <span>{{ t('agentCreate.skills.addFromPack') }}</span>
     </button>
   </div>
 </template>

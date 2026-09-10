@@ -25,6 +25,7 @@ import { useRepoSourceStore } from './repo-source'
 import { getItem, setItem } from '../utils/storage'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { i18n } from '../i18n'
 
 const logger = createLuomiNestRendererLogger('Marketplace')
 
@@ -401,7 +402,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       itemId,
       status: 'downloading',
       progress: 0,
-      message: '正在下载...',
+      message: i18n.global.t('market.progress.downloading'),
     }
     setProgress(itemId, progress)
     simulateInstall(itemId)
@@ -445,7 +446,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
             ...current,
             status: 'installing',
             progress: 0,
-            message: '正在安装...',
+            message: i18n.global.t('market.progress.installing'),
           })
           simulateInstalling(itemId)
         }
@@ -478,7 +479,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           itemId,
           status: 'installed',
           progress: 100,
-          message: '安装完成',
+          message: i18n.global.t('market.progress.installed'),
         })
         const updateInstalledItem = (items: MarketplaceItem[]) => {
           const item = items.find(i => i.id === itemId)
@@ -548,7 +549,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       itemId,
       status: 'installed',
       progress: 100,
-      message: '安装完成',
+      message: i18n.global.t('market.progress.installed'),
     })
     const updateInstalledItem = (items: MarketplaceItem[]) => {
       const item = items.find(i => i.id === itemId)
@@ -578,7 +579,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       itemId,
       status: 'updating',
       progress: 0,
-      message: '正在更新...',
+      message: i18n.global.t('market.progress.updating'),
     }
     setProgress(itemId, progress)
 
@@ -600,7 +601,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           itemId,
           status: 'installed',
           progress: 100,
-          message: '更新完成',
+          message: i18n.global.t('market.progress.updated'),
         })
         const updateItemVersion = (items: MarketplaceItem[]) => {
           const item = items.find(i => i.id === itemId)

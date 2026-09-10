@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   ChevronRight,
   Palette,
@@ -11,7 +12,8 @@ import {
   MessageCircle,
   Puzzle,
   User,
-  LogIn
+  LogIn,
+  Languages
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import LumiCard from '../components/common/LumiCard.vue'
@@ -35,38 +37,41 @@ defineProps<{
 }>()
 
 const router = useRouter()
+const { t } = useI18n()
 
-const settingGroups = ref<SettingGroup[]>([
+// 标签走 vue-i18n，语言切换时 computed 重新求值
+const settingGroups = computed<SettingGroup[]>(() => [
   {
-    title: '偏好',
+    title: t('settings.groupPreferences'),
     items: [
-      { label: '外观主题', desc: '自定义界面颜色与风格', route: '/settings/appearance', icon: Palette, iconColor: 'var(--lumi-brand)' },
-      { label: '通知设置', desc: '配置消息提醒方式', route: '/settings/notifications', icon: Bell, iconColor: 'var(--lumi-warning)' }
+      { label: t('settings.language'), desc: t('settings.languageDesc'), route: '/settings/language', icon: Languages, iconColor: 'var(--lumi-info)' },
+      { label: t('settings.appearance'), desc: t('settings.appearanceDesc'), route: '/settings/appearance', icon: Palette, iconColor: 'var(--lumi-brand)' },
+      { label: t('settings.notifications'), desc: t('settings.notificationsDesc'), route: '/settings/notifications', icon: Bell, iconColor: 'var(--lumi-warning)' }
     ]
   },
   {
-    title: '系统配置',
+    title: t('settings.groupSystem'),
     items: [
-      { label: '主智能体', desc: '工作台主 Agent 的人格、模型与行为', route: '/settings/main-agent', icon: Bot, iconColor: 'var(--lumi-primary)' },
-      { label: '模型设置', desc: 'LLM 推理引擎、语音合成与语音识别', route: '/settings/ai-model', icon: Brain, iconColor: 'var(--lumi-accent)' },
-      { label: '登录 / 注册', desc: '本地账户登录、注册与 JWT 管理', route: '/settings/auth', icon: LogIn, iconColor: 'var(--lumi-warning)' },
-      { label: '隐私安全', desc: '数据加密与访问控制', route: '/settings/privacy', icon: Shield, iconColor: 'var(--lumi-danger)' }
+      { label: t('settings.mainAgent'), desc: t('settings.mainAgentDesc'), route: '/settings/main-agent', icon: Bot, iconColor: 'var(--lumi-primary)' },
+      { label: t('settings.aiModel'), desc: t('settings.aiModelDesc'), route: '/settings/ai-model', icon: Brain, iconColor: 'var(--lumi-accent)' },
+      { label: t('settings.auth'), desc: t('settings.authDesc'), route: '/settings/auth', icon: LogIn, iconColor: 'var(--lumi-warning)' },
+      { label: t('settings.privacy'), desc: t('settings.privacyDesc'), route: '/settings/privacy', icon: Shield, iconColor: 'var(--lumi-danger)' }
     ]
   },
   {
-    title: '连接与扩展',
+    title: t('settings.groupConnection'),
     items: [
-      { label: '消息平台', desc: 'QQ / 微信 / Discord 等', route: '/settings/platforms', icon: MessageCircle, iconColor: 'var(--lumi-secondary)' },
-      { label: '插件与技能', desc: '前端插件 / 后端插件 / 技能管理', route: '/settings/plugins', icon: Puzzle, iconColor: 'var(--lumi-brand)' }
+      { label: t('settings.platforms'), desc: t('settings.platformsDesc'), route: '/settings/platforms', icon: MessageCircle, iconColor: 'var(--lumi-secondary)' },
+      { label: t('settings.plugins'), desc: t('settings.pluginsDesc'), route: '/settings/plugins', icon: Puzzle, iconColor: 'var(--lumi-brand)' }
     ]
   }
 ])
 
-const footerLinks = [
-  { label: '关于开发者', route: '/settings/about' },
-  { label: '项目参考', route: '/settings/license' },
-  { label: '隐私与合规', route: '/settings/privacy-detail' }
-]
+const footerLinks = computed(() => [
+  { label: t('settings.aboutDev'), route: '/settings/about' },
+  { label: t('settings.license'), route: '/settings/license' },
+  { label: t('settings.privacyCompliance'), route: '/settings/privacy-detail' }
+])
 
 const navigateTo = (route: string) => {
   router.push(route)
@@ -81,8 +86,8 @@ const navigateTo = (route: string) => {
           <User :size="28" />
         </div>
         <div class="settings-hero__content">
-          <h1 class="settings-hero__title">设置</h1>
-          <p class="settings-hero__subtitle">自定义你的 LuomiNest 体验</p>
+          <h1 class="settings-hero__title">{{ t('settings.title') }}</h1>
+          <p class="settings-hero__subtitle">{{ t('settings.subtitle') }}</p>
         </div>
         <div class="settings-hero__line">
           <span class="settings-hero__dot" />

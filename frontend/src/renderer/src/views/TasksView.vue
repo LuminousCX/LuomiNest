@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Plus } from 'lucide-vue-next'
 import { useTaskStreamStore } from '../stores/taskStream'
 import { getItem, setItem } from '../utils/storage'
@@ -19,6 +20,7 @@ import TasksScheduledView from '../components/tasks/TasksScheduledView.vue'
 import TasksEditModal from '../components/tasks/TasksEditModal.vue'
 
 const taskStreamStore = useTaskStreamStore()
+const { t } = useI18n()
 
 const STORAGE_KEY = 'luominest-tasks-state'
 
@@ -334,7 +336,7 @@ const monthGrid = computed((): MonthGrid => {
     cells,
     year,
     month,
-    monthLabel: `${year}年 ${month + 1}月`
+    monthLabel: t('tasks.monthLabel', { y: year, m: month + 1 })
   }
 })
 
@@ -345,25 +347,25 @@ const currentNavLabel = computed(() => {
     const first = cardDays.value[0]
     const last = cardDays.value[3]
     if (first.month === last.month) {
-      return `${first.year}年${first.month}月 ${first.date}日 - ${last.date}日`
+      return t('tasks.rangeSameMonth', { y: first.year, m: first.month, d1: first.date, d2: last.date })
     }
     if (first.year === last.year) {
-      return `${first.year}年${first.month}月${first.date}日 - ${last.month}月${last.date}日`
+      return t('tasks.rangeSameYear', { y: first.year, m: first.month, d1: first.date, m2: last.month, d2: last.date })
     }
-    return `${first.year}年${first.month}月${first.date}日 - ${last.year}年${last.month}月${last.date}日`
+    return t('tasks.rangeCrossYear', { y: first.year, m: first.month, d1: first.date, y2: last.year, m2: last.month, d2: last.date })
   }
   if (currentView.value === 'week') {
     const first = weekDays.value[0]
     const last = weekDays.value[6]
     if (first.month === last.month) {
-      return `${first.year}年${first.month}月 ${first.date}日 - ${last.date}日`
+      return t('tasks.rangeSameMonth', { y: first.year, m: first.month, d1: first.date, d2: last.date })
     }
     if (first.year === last.year) {
-      return `${first.year}年${first.month}月${first.date}日 - ${last.month}月${last.date}日`
+      return t('tasks.rangeSameYear', { y: first.year, m: first.month, d1: first.date, m2: last.month, d2: last.date })
     }
-    return `${first.year}年${first.month}月${first.date}日 - ${last.year}年${last.month}月${last.date}日`
+    return t('tasks.rangeCrossYear', { y: first.year, m: first.month, d1: first.date, y2: last.year, m2: last.month, d2: last.date })
   }
-  return `${viewDate.value.getFullYear()}年 ${viewDate.value.getMonth() + 1}月`
+  return t('tasks.monthLabel', { y: viewDate.value.getFullYear(), m: viewDate.value.getMonth() + 1 })
 })
 
 const filteredTasks = computed(() => {
@@ -505,25 +507,25 @@ const toggleTaskStatus = (task: LuomiNestTask) => {
   }
 }
 
-const colorOptions = [
-  { varName: '--task-pink', label: '粉色' },
-  { varName: '--task-yellow', label: '黄色' },
-  { varName: '--task-blue', label: '蓝色' },
-  { varName: '--task-sky', label: '天蓝' },
-  { varName: '--task-green', label: '绿色' }
-]
+const colorOptions = computed(() => [
+  { varName: '--task-pink', label: t('tasks.color.pink') },
+  { varName: '--task-yellow', label: t('tasks.color.yellow') },
+  { varName: '--task-blue', label: t('tasks.color.blue') },
+  { varName: '--task-sky', label: t('tasks.color.sky') },
+  { varName: '--task-green', label: t('tasks.color.green') }
+])
 
-const priorityOptions: { value: 'high' | 'medium' | 'low'; label: string }[] = [
-  { value: 'high', label: '高优先级' },
-  { value: 'medium', label: '中优先级' },
-  { value: 'low', label: '低优先级' }
-]
+const priorityOptions = computed<{ value: 'high' | 'medium' | 'low'; label: string }[]>(() => [
+  { value: 'high', label: t('tasks.priority.high') },
+  { value: 'medium', label: t('tasks.priority.medium') },
+  { value: 'low', label: t('tasks.priority.low') }
+])
 
-const statusOptions: { value: 'done' | 'progress' | 'pending'; label: string }[] = [
-  { value: 'pending', label: '待处理' },
-  { value: 'progress', label: '进行中' },
-  { value: 'done', label: '已完成' }
-]
+const statusOptions = computed<{ value: 'done' | 'progress' | 'pending'; label: string }[]>(() => [
+  { value: 'pending', label: t('tasks.status.pending') },
+  { value: 'progress', label: t('tasks.status.progress') },
+  { value: 'done', label: t('tasks.status.done') }
+])
 
 const timeSlotOptions = [
   '08:00 - 09:00',
@@ -545,16 +547,16 @@ const timeSlotOptions = [
   <div class="tasks-view custom-scrollbar">
     <div class="tasks-page-header animate-fade-in">
       <div class="tasks-page-header__left">
-        <h1 class="tasks-page-title">计划视图</h1>
-        <p class="tasks-page-desc">项目管理、任务跟踪与团队协作</p>
+        <h1 class="tasks-page-title">{{ t('tasks.title') }}</h1>
+        <p class="tasks-page-desc">{{ t('tasks.desc') }}</p>
       </div>
       <div class="tasks-page-header__right">
         <div class="tasks-search-box">
-          <SearchInput v-model="searchQuery" placeholder="搜索任务..." />
+          <SearchInput v-model="searchQuery" :placeholder="t('tasks.searchPlaceholder')" />
         </div>
         <button class="tasks-create-btn" @click="() => openCreateModal()">
           <Plus :size="16" />
-          <span>新建任务</span>
+          <span>{{ t('tasks.create') }}</span>
         </button>
         <div class="tasks-page-avatars">
           <img v-for="(member, i) in teamMembers" :key="i" :src="member" class="tasks-avatar" alt="member" />

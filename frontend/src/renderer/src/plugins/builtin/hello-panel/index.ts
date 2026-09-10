@@ -6,6 +6,7 @@
  */
 
 import type { CxPluginModule } from '../../types'
+import { i18n } from '../../../i18n'
 import HelloPanelView from './HelloPanelView.vue'
 
 export const activate: CxPluginModule['activate'] = (context) => {
@@ -15,7 +16,7 @@ export const activate: CxPluginModule['activate'] = (context) => {
   context.registerView({
     path: 'panel',
     name: 'panel',
-    title: '示例面板',
+    title: i18n.global.t('helloPanel.title'),
     icon: 'Sparkles',
     showInSidebar: true,
     sidebarGroup: 'bottom',
@@ -25,7 +26,7 @@ export const activate: CxPluginModule['activate'] = (context) => {
   // 注册命令贡献点 — 可通过命令面板或代码触发
   context.registerCommand({
     id: 'say-hello',
-    title: '示例：打个招呼',
+    title: i18n.global.t('helloPanel.sayHelloCommand'),
     keybinding: 'CmdOrCtrl+Shift+H',
     handler: () => {
       const message = `[hello-panel] Hello from LuomiNest frontend plugin at ${new Date().toLocaleTimeString()}`

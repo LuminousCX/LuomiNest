@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { Star, FileText, Tag, ArrowLeft } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../stores/marketplace'
@@ -16,6 +17,7 @@ import type { MarketplaceType, MarketplaceItem, InstallProgress } from '../types
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const store = useMarketplaceStore()
 const repoSourceStore = useRepoSourceStore()
 const api = useApi()
@@ -89,7 +91,7 @@ function startProgressPolling(id: string) {
           }, 2000)
         }
         if (result.status === 'error') {
-          installError.value = result.error || result.message || '安装失败'
+          installError.value = result.error || result.message || t('market.error.installFailed')
         }
       }
     } catch {
@@ -109,7 +111,7 @@ async function handleInstall() {
   if (!item.value) return
   const downloadUrl = item.value.versions?.[0]?.downloadUrl
   if (!downloadUrl) {
-    installError.value = '此条目没有可用的下载地址'
+    installError.value = t('market.error.noDownloadUrl')
     errorType.value = 'install'
     return
   }
@@ -128,7 +130,7 @@ async function handleInstall() {
     downloadProgress.value = result
     startProgressPolling(item.value.id)
   } catch (e: unknown) {
-    installError.value = (e instanceof Error ? e.message : (e == null ? '' : String(e))) || '安装请求失败'
+    installError.value = (e instanceof Error ? e.message : (e == null ? '' : String(e))) || t('market.error.installRequestFailed')
     errorType.value = 'install'
   } finally {
     installLoading.value = false
@@ -148,7 +150,7 @@ async function handleUninstall() {
     }
     downloadProgress.value = null
   } catch (e: unknown) {
-    installError.value = (e instanceof Error ? e.message : (e == null ? '' : String(e))) || '卸载失败'
+    installError.value = (e instanceof Error ? e.message : (e == null ? '' : String(e))) || t('market.error.uninstallFailed')
     errorType.value = 'uninstall'
   } finally {
     uninstallLoading.value = false
@@ -217,7 +219,7 @@ onUnmounted(() => {
     <div class="detail-topbar animate-fade-in">
       <button class="back-btn" @click="goBack">
         <ArrowLeft :size="18" />
-        <span>{{ itemType === 'plugin' ? '插件市场' : itemType === 'skill' ? '技能市场' : '智能体市场' }}</span>
+        <span>{{ itemType === 'plugin' ? t('market.tab.plugin') : itemType === 'skill' ? t('market.tab.skill') : t('market.tab.agent') }}</span>
       </button>
     </div>
 
@@ -249,21 +251,21 @@ onUnmounted(() => {
           @click="activeTab = 'info'"
         >
           <FileText :size="15" />
-          详情
+          {{ t('market.detail.info') }}
         </button>
         <button
           :class="['tab-btn', { active: activeTab === 'versions' }]"
           @click="activeTab = 'versions'"
         >
           <Tag :size="15" />
-          版本 ({{ item.versions?.length || 0 }})
+          {{ t('market.detail.versions', { n: item.versions?.length || 0 }) }}
         </button>
         <button
           :class="['tab-btn', { active: activeTab === 'reviews' }]"
           @click="activeTab = 'reviews'"
         >
           <Star :size="15" />
-          评价 ({{ item.ratingCount || 0 }})
+          {{ t('market.detail.reviews', { n: item.ratingCount || 0 }) }}
         </button>
       </div>
 
@@ -296,11 +298,11 @@ onUnmounted(() => {
   <div v-else class="detail-not-found">
     <LumiEmptyState
       icon="file"
-      title="未找到该商品"
-      description="该商品可能已被移除或链接有误"
+      :title="t('market.detail.notFoundTitle')"
+      :description="t('market.detail.notFoundDesc')"
     >
       <template #action>
-        <button class="back-btn" @click="goBack">返回市场</button>
+        <button class="back-btn" @click="goBack">{{ t('market.detail.backToMarket') }}</button>
       </template>
     </LumiEmptyState>
   </div>

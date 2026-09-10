@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 /**
  * ReaderStatusBar — PDF 阅读器底部状态栏。
  *
@@ -7,6 +8,8 @@
 import { computed } from 'vue'
 import { FileText, FileType2, ZoomIn } from 'lucide-vue-next'
 import type { CxPdfFileType } from '../services/pdfApi'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   currentPage: number
@@ -49,14 +52,14 @@ const shortFileName = computed<string>(() => {
     </div>
 
     <div class="status-section">
-      <span class="status-label">文件：</span>
+      <span class="status-label">{{ t('pdfReader.statusBar.file') }}</span>
       <span class="status-value" :title="fileName">{{ shortFileName || '—' }}</span>
     </div>
 
     <div class="status-spacer" />
 
     <div class="status-section">
-      <span class="status-label">页码：</span>
+      <span class="status-label">{{ t('pdfReader.statusBar.page') }}</span>
       <span class="status-value">{{ currentPage }} / {{ totalPages }}</span>
     </div>
 

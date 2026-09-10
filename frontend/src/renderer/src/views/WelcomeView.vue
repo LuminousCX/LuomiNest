@@ -8,6 +8,7 @@
  */
 import StepLanguage from '../components/welcome/StepLanguage.vue'
 import StepFeatures from '../components/welcome/StepFeatures.vue'
+import StepAccount from '../components/welcome/StepAccount.vue'
 import StepAiModel from '../components/welcome/StepAiModel.vue'
 import StepReady from '../components/welcome/StepReady.vue'
 import { useWelcomeWizard, TOTAL_STEPS } from '../composables/useWelcomeWizard'
@@ -15,6 +16,7 @@ import { useWelcomeWizard, TOTAL_STEPS } from '../composables/useWelcomeWizard'
 const {
   currentStep,
   selectedLang,
+  selectLang,
   agreed,
   i18n,
   addTemplateCategory,
@@ -25,6 +27,16 @@ const {
   newProviderFormValid,
   handleTemplateSelect,
   addProviderAndNext,
+  testState,
+  testResultText,
+  testConnection,
+  accountSubmitting,
+  accountError,
+  hasAccount,
+  currentUser,
+  accountForm,
+  accountFormValid,
+  registerAndNext,
   nextStep,
   prevStep,
   startApp,
@@ -50,7 +62,7 @@ const {
           key="step-0"
           :i18n="i18n"
           :selected-lang="selectedLang"
-          @update:selected-lang="selectedLang = $event"
+          @update:selected-lang="selectLang"
           @next="nextStep"
         />
 
@@ -62,9 +74,23 @@ const {
           @prev="prevStep"
         />
 
-        <StepAiModel
+        <StepAccount
           v-else-if="currentStep === 2"
           key="step-2"
+          :has-account="hasAccount"
+          :current-user="currentUser"
+          :account-form="accountForm"
+          :account-form-valid="accountFormValid"
+          :account-submitting="accountSubmitting"
+          :account-error="accountError"
+          @register="registerAndNext"
+          @next="nextStep"
+          @prev="prevStep"
+        />
+
+        <StepAiModel
+          v-else-if="currentStep === 3"
+          key="step-3"
           :i18n="i18n"
           :add-template-category="addTemplateCategory"
           :selected-template="selectedTemplate"
@@ -72,16 +98,19 @@ const {
           :ai-model-saving="aiModelSaving"
           :new-provider="newProvider"
           :new-provider-form-valid="newProviderFormValid"
+          :test-state="testState"
+          :test-result-text="testResultText"
           @update:add-template-category="addTemplateCategory = $event"
           @select-template="handleTemplateSelect"
           @add-provider-and-next="addProviderAndNext"
+          @test-connection="testConnection"
           @next="nextStep"
           @prev="prevStep"
         />
 
         <StepReady
-          v-else-if="currentStep === 3"
-          key="step-3"
+          v-else-if="currentStep === 4"
+          key="step-4"
           :i18n="i18n"
           :agreed="agreed"
           @update:agreed="agreed = $event"

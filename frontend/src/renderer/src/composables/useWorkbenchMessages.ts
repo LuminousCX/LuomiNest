@@ -8,6 +8,7 @@
  */
 import { ref, computed, watch, nextTick } from 'vue'
 import type { Ref } from 'vue'
+import { i18n } from '../i18n'
 import { useChatStore } from '../stores/chat'
 import { useModelStore } from '../stores/model'
 import { useWorkflowStore } from '../stores/workflow'
@@ -108,10 +109,10 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
 
   // 对话模式（普通/专业）—— 选项统一定义在 types/workflow.ts
   const chatMode = ref<ChatModeLevel>('normal')
-  const CHAT_MODE_OPTIONS: WorkflowModeOption[] = [
-    { value: 'normal', label: '普通', title: '普通模式：工具最少（任务视图操作 + 表情操控）' },
-    { value: 'standard', label: '专业', title: '专业模式：工作流规划 + 全量工具，适合复杂长任务' },
-  ]
+  const CHAT_MODE_OPTIONS = computed<WorkflowModeOption[]>(() => [
+    { value: 'normal', label: i18n.global.t('chat.modeNormal'), title: i18n.global.t('chat.modeNormalTitle') },
+    { value: 'standard', label: i18n.global.t('chat.modePro'), title: i18n.global.t('chat.modeProTitle') },
+  ])
   const isWorkflowMode = computed(() => chatMode.value !== 'normal')
 
   // 切换对话时同步 chatMode（从对话存储的 chat_mode 字段读取）
@@ -231,7 +232,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     if (currentConvId) {
       const currentMessages = chatStore.convMessages[currentConvId] || []
       if (currentMessages.length > 0 && chatMode.value !== mode) {
-        toast.warning('当前对话已有内容，无法切换模式。请新建对话后再选择所需模式。')
+        toast.warning(i18n.global.t('chat.modeSwitchBlocked'))
         return
       }
     }
@@ -278,7 +279,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
       await chatStore.sendMessage(content, sendOptions)
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      toast.error(`发送消息失败：${errMsg}`)
+      toast.error(i18n.global.t('chat.sendFailed', { msg: errMsg }))
     }
     await nextTick()
     scrollToBottom(true)
@@ -297,7 +298,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     if (!convId) {
       try {
         const conv = await chatStore.createConversation(
-          content.slice(0, 30) || '新对话',
+          content.slice(0, 30) || i18n.global.t('chat.newConversation'),
           agentId,
           resolved?.model,
           resolved?.provider,
@@ -306,13 +307,13 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
         convId = conv?.id || ''
       } catch (e: unknown) {
         const errMsg = e instanceof Error ? e.message : String(e)
-        toast.error(`创建对话失败：${errMsg}`)
+        toast.error(i18n.global.t('chat.createConvFailed', { msg: errMsg }))
         return
       }
     }
 
     if (!convId) {
-      toast.error('请先选择或创建对话')
+      toast.error(i18n.global.t('chat.selectOrCreateConv'))
       return
     }
 
@@ -413,17 +414,17 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
         },
         onFinalResult: (result: string) => {
           // final_result 覆盖 content（后端已清理 think 标签，是干净的最终回复）
-          finalizeAssistant(result || '工作流执行完成')
+          finalizeAssistant(result || i18n.global.t('chat.workflowDone'))
         },
         onError: (errMsg: string) => {
           // SSE 连接错误或工作流引擎错误：更新 assistantMessage 为错误状态，避免 UI 卡住
-          finalizeAssistant(`工作流执行失败：${errMsg}`)
+          finalizeAssistant(i18n.global.t('chat.workflowFailed', { msg: errMsg }))
         },
       })
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      toast.error(`工作流执行失败：${errMsg}`)
-      finalizeAssistant(`工作流执行失败：${errMsg}`)
+      toast.error(i18n.global.t('chat.workflowFailed', { msg: errMsg }))
+      finalizeAssistant(i18n.global.t('chat.workflowFailed', { msg: errMsg }))
     }
     await nextTick()
     scrollToBottom(true)
@@ -448,7 +449,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
       })
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      toast.error(`重新生成失败：${errMsg}`)
+      toast.error(i18n.global.t('chat.regenerateFailed', { msg: errMsg }))
     }
     await nextTick()
     scrollToBottom(true)
@@ -463,7 +464,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
       await chatStore.loadMoreMessages(convId)
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      toast.error(`加载历史消息失败：${errMsg}`)
+      toast.error(i18n.global.t('chat.loadHistoryFailed', { msg: errMsg }))
     }
     await nextTick()
     // 保持滚动位置：prepending 消息后恢复用户当前视口
@@ -480,11 +481,11 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     try {
       const result = await chatStore.compressConversation(convId)
       if (result.compressed) {
-        toast.success(`上下文压缩成功：${result.tokens_before} → ${result.tokens_after} tokens`)
+        toast.success(i18n.global.t('chat.compressSuccess', { before: result.tokens_before, after: result.tokens_after }))
       }
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      toast.error(`上下文压缩失败：${errMsg}`)
+      toast.error(i18n.global.t('chat.compressFailed', { msg: errMsg }))
     } finally {
       isCompressing.value = false
     }

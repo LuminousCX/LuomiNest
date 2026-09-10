@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Brain,
   RefreshCw,
@@ -14,7 +15,7 @@ import {
   Download,
   Upload,
 } from 'lucide-vue-next'
-import { useMemoryStore, CATEGORY_LABELS, CATEGORY_COLORS, FACT_CATEGORIES } from '../stores/memory'
+import { useMemoryStore, categoryLabel, CATEGORY_COLORS, FACT_CATEGORIES } from '../stores/memory'
 import type { FactItem, FactCategory } from '../stores/memory'
 import { useToast } from '../composables/useToast'
 import LumiButton from '../components/common/LumiButton.vue'
@@ -32,6 +33,7 @@ const logger = createLuomiNestRendererLogger('Memory')
 
 const memoryStore = useMemoryStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const showMenu = ref(false)
 const menuPosition = ref({ x: 0, y: 0 })
@@ -43,11 +45,11 @@ const confirmMessage = ref('')
 const confirmDanger = ref(false)
 const isProcessing = ref(false)
 
-const layerTabs = ref<LayerTab[]>([
-  { id: 'profile', name: '用户画像', sub: 'AI眼中的你', icon: Brain, color: 'var(--task-sky)', desc: '展示AI理解的用户身份、偏好和目标' },
-  { id: 'facts', name: '记忆事实', sub: '结构化知识', icon: BookOpen, color: 'var(--lumi-success)', desc: '按类别存储的事实信息，支持搜索和管理' },
-  { id: 'knowledge', name: '知识记忆', sub: '学到的知识', icon: FileText, color: 'var(--lumi-sky)', desc: '从对话中提取的可复用知识点' },
-  { id: 'history', name: '对话历史', sub: '每日记录', icon: Calendar, color: 'var(--lumi-amber)', desc: '按日期分组的对话摘要' },
+const layerTabs = computed<LayerTab[]>(() => [
+  { id: 'profile', name: t('memory.layer.profile.name'), sub: t('memory.layer.profile.sub'), icon: Brain, color: 'var(--task-sky)', desc: t('memory.layer.profile.desc') },
+  { id: 'facts', name: t('memory.layer.facts.name'), sub: t('memory.layer.facts.sub'), icon: BookOpen, color: 'var(--lumi-success)', desc: t('memory.layer.facts.desc') },
+  { id: 'knowledge', name: t('memory.layer.knowledge.name'), sub: t('memory.layer.knowledge.sub'), icon: FileText, color: 'var(--lumi-sky)', desc: t('memory.layer.knowledge.desc') },
+  { id: 'history', name: t('memory.layer.history.name'), sub: t('memory.layer.history.sub'), icon: Calendar, color: 'var(--lumi-amber)', desc: t('memory.layer.history.desc') },
 ])
 
 const activeTab = ref('profile')
@@ -138,7 +140,7 @@ const dailyLines = computed(() => {
 const memoryStats = computed(() => {
   const facts = memoryStore.facts
   const categories = FACT_CATEGORIES.map(cat => ({
-    name: CATEGORY_LABELS[cat],
+    name: categoryLabel(cat),
     count: facts.filter(f => f.category === cat).length,
     color: CATEGORY_COLORS[cat],
   }))
@@ -183,7 +185,7 @@ async function confirmAddFact() {
     confidence: 0.8,
   })
   showAddFact.value = false
-  toast.success('事实已添加')
+  toast.success(t('memory.toast.factAdded'))
 }
 
 function startEditFact(fact: FactItem) {
@@ -203,14 +205,14 @@ async function saveEditFact() {
     category: editFactCategory.value,
   })
   editingFactId.value = null
-  toast.success('事实已更新')
+  toast.success(t('memory.toast.factUpdated'))
 }
 
 async function deleteFact(factId: string) {
-  const confirmed = await confirmDeletion('删除事实', '确定要删除这条事实吗？')
+  const confirmed = await confirmDeletion(t('memory.confirm.deleteFactTitle'), t('memory.confirm.deleteFactMessage'))
   if (!confirmed) return
   await memoryStore.removeFact(factId)
-  toast.success('事实已删除')
+  toast.success(t('memory.toast.factDeleted'))
 }
 
 function startEditKnowledge() {
@@ -233,7 +235,7 @@ async function saveEditKnowledge() {
     knowledgeSavedContent.value = editKnowledgeContent.value
     isEditingKnowledge.value = false
     editKnowledgeContent.value = ''
-    toast.success('知识记忆已保存')
+    toast.success(t('memory.toast.knowledgeSaved'))
   } finally {
     isSaving.value = false
   }
@@ -259,7 +261,7 @@ async function saveEditSummary() {
     summarySavedContent.value = editSummaryContent.value
     isEditingSummary.value = false
     editSummaryContent.value = ''
-    toast.success('AI总结已保存')
+    toast.success(t('memory.toast.summarySaved'))
   } finally {
     isSaving.value = false
   }
@@ -276,7 +278,7 @@ async function handleAddDaily() {
   try {
     await memoryStore.appendDaily(newDailyContent.value.trim(), selectedDailyDate.value || undefined, selectedAgentId.value, selectedConversationId.value)
     newDailyContent.value = ''
-    toast.success('记录已添加')
+    toast.success(t('memory.toast.recordAdded'))
   } finally {
     isAddingDaily.value = false
   }
@@ -337,28 +339,28 @@ const openConfirm = (action: ConfirmAction) => {
 
   switch (action) {
     case 'clearFacts':
-      confirmTitle.value = '清空事实库'
-      confirmMessage.value = `确定要清空该 Agent 的所有 ${factCount.value} 条事实吗？`
+      confirmTitle.value = t('memory.confirm.clearFactsTitle')
+      confirmMessage.value = t('memory.confirm.clearFactsMessage', { n: factCount.value })
       confirmDanger.value = true
       break
     case 'clearKnowledge':
-      confirmTitle.value = '清空知识记忆'
-      confirmMessage.value = '确定要清空所有知识记忆吗？'
+      confirmTitle.value = t('memory.confirm.clearKnowledgeTitle')
+      confirmMessage.value = t('memory.confirm.clearKnowledgeMessage')
       confirmDanger.value = true
       break
     case 'clearDailies':
-      confirmTitle.value = '清空对话历史'
-      confirmMessage.value = `确定要清空所有 ${memoryStore.dailies.length} 天的对话记录吗？`
+      confirmTitle.value = t('memory.confirm.clearDailiesTitle')
+      confirmMessage.value = t('memory.confirm.clearDailiesMessage', { n: memoryStore.dailies.length })
       confirmDanger.value = true
       break
     case 'clearSummary':
-      confirmTitle.value = '重置AI总结'
-      confirmMessage.value = '确定要重置所有AI总结吗？'
+      confirmTitle.value = t('memory.confirm.clearSummaryTitle')
+      confirmMessage.value = t('memory.confirm.clearSummaryMessage')
       confirmDanger.value = true
       break
     case 'resetAll':
-      confirmTitle.value = '清空全部记忆'
-      confirmMessage.value = '警告：这将删除所有记忆数据（包括档案、事实、知识、对话和总结），无法恢复！确定要继续吗？'
+      confirmTitle.value = t('memory.confirm.resetAllTitle')
+      confirmMessage.value = t('memory.confirm.resetAllMessage')
       confirmDanger.value = true
       break
   }
@@ -380,31 +382,31 @@ let executeConfirm = async () => {
     switch (confirmAction.value) {
       case 'clearFacts':
         await memoryStore.clearFacts(selectedAgentId.value)
-        toast.success('事实库已清空')
+        toast.success(t('memory.toast.factsCleared'))
         break
       case 'clearKnowledge':
         await memoryStore.clearKnowledge(selectedAgentId.value)
-        toast.success('知识记忆已清空')
+        toast.success(t('memory.toast.knowledgeCleared'))
         break
       case 'clearDailies':
         await memoryStore.clearDailies(selectedAgentId.value)
         selectedDailyDate.value = ''
-        toast.success('对话历史已清空')
+        toast.success(t('memory.toast.historyCleared'))
         break
       case 'clearSummary':
         await memoryStore.clearSummary(selectedAgentId.value)
-        toast.success('AI总结已重置')
+        toast.success(t('memory.toast.summaryReset'))
         break
       case 'resetAll':
         await memoryStore.resetAll(selectedAgentId.value)
-        toast.success('所有记忆已重置')
+        toast.success(t('memory.toast.allReset'))
         break
     }
     showConfirm.value = false
     confirmAction.value = null
   } catch (error) {
     logger.error('操作失败:', error)
-    toast.error('操作失败，请重试')
+    toast.error(t('memory.toast.operationFailed'))
   } finally {
     isProcessing.value = false
   }
@@ -462,7 +464,7 @@ function exportMemory() {
   a.download = `memory-backup-${new Date().toISOString().split('T')[0]}.json`
   a.click()
   URL.revokeObjectURL(url)
-  toast.success('记忆数据已导出')
+  toast.success(t('memory.toast.exported'))
 }
 
 async function importMemory() {
@@ -497,9 +499,9 @@ async function importMemory() {
       }
 
       await loadData()
-      toast.success('记忆数据已导入')
+      toast.success(t('memory.toast.imported'))
     } catch (error) {
-      toast.error('导入失败，请检查文件格式')
+      toast.error(t('memory.toast.importFailed'))
     }
   }
   input.click()
@@ -529,20 +531,20 @@ window.addEventListener('click', closeMenu)
   <div class="memory-view">
     <div class="memory-header animate-fade-in">
       <div class="memory-header__left">
-        <h1 class="memory-title">记忆中枢</h1>
-        <p class="memory-desc">AI 驱动的用户画像、事实库与知识记忆管理</p>
+        <h1 class="memory-title">{{ t('memory.title') }}</h1>
+        <p class="memory-desc">{{ t('memory.desc') }}</p>
       </div>
       <div class="memory-header__actions">
-        <LumiButton variant="ghost" size="sm" icon-only @click="exportMemory" title="导出记忆">
+        <LumiButton variant="ghost" size="sm" icon-only @click="exportMemory" :title="t('memory.exportTitle')">
           <template #icon><Download :size="15" /></template>
         </LumiButton>
-        <LumiButton variant="ghost" size="sm" icon-only @click="importMemory" title="导入记忆">
+        <LumiButton variant="ghost" size="sm" icon-only @click="importMemory" :title="t('memory.importTitle')">
           <template #icon><Upload :size="15" /></template>
         </LumiButton>
-        <LumiButton variant="ghost" size="sm" icon-only @click="loadData" title="刷新">
+        <LumiButton variant="ghost" size="sm" icon-only @click="loadData" :title="t('memory.refresh')">
           <template #icon><RefreshCw :size="15" :class="{ 'spin-animation': memoryStore.loading }" /></template>
         </LumiButton>
-        <LumiButton variant="ghost" size="sm" icon-only @click="toggleMenu" title="更多">
+        <LumiButton variant="ghost" size="sm" icon-only @click="toggleMenu" :title="t('memory.more')">
           <template #icon><MoreVertical :size="15" /></template>
         </LumiButton>
       </div>
@@ -551,24 +553,24 @@ window.addEventListener('click', closeMenu)
     <div v-if="showMenu" class="dropdown-menu" :style="{ left: menuPosition.x + 'px', top: menuPosition.y + 'px' }">
       <div class="menu-item" @click="openConfirm('clearFacts')">
         <Trash2 :size="16" />
-        <span>清空事实库 ({{ factCount }})</span>
+        <span>{{ t('memory.menu.clearFacts', { n: factCount }) }}</span>
       </div>
       <div class="menu-item" @click="openConfirm('clearKnowledge')">
         <BookOpen :size="16" />
-        <span>清空知识记忆</span>
+        <span>{{ t('memory.menu.clearKnowledge') }}</span>
       </div>
       <div class="menu-item" @click="openConfirm('clearDailies')">
         <Calendar :size="16" />
-        <span>清空对话历史</span>
+        <span>{{ t('memory.menu.clearDailies') }}</span>
       </div>
       <div class="menu-item" @click="openConfirm('clearSummary')">
         <Sparkles :size="16" />
-        <span>重置AI总结</span>
+        <span>{{ t('memory.menu.clearSummary') }}</span>
       </div>
       <div class="menu-divider"></div>
       <div class="menu-item danger" @click="openConfirm('resetAll')">
         <Eraser :size="16" />
-        <span>清空全部记忆 ⚠️</span>
+        <span>{{ t('memory.menu.resetAll') }}</span>
       </div>
     </div>
 
@@ -584,7 +586,7 @@ window.addEventListener('click', closeMenu)
 
     <div v-if="memoryStore.loading && !profile.name && memoryStore.facts.length === 0" class="memory-loading">
       <Loader2 :size="24" class="spin-animation" />
-      <span>加载记忆数据...</span>
+      <span>{{ t('memory.loading') }}</span>
     </div>
 
     <div v-else class="memory-body">

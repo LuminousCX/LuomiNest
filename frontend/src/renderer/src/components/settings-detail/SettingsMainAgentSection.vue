@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Brain, Check, AlertCircle, Save, Loader2 } from 'lucide-vue-next'
 import { usePlatformStore } from '../../stores/platform'
 import { PRESET_AGENT_AVATARS, type PresetAvatar } from '../../composables/useWorkspaceAgentDialogs'
@@ -9,6 +10,7 @@ import { createLuomiNestRendererLogger } from '../../utils/logger'
 const logger = createLuomiNestRendererLogger('Settings')
 
 const platformStore = usePlatformStore()
+const { t } = useI18n()
 
 const presetAvatars: PresetAvatar[] = PRESET_AGENT_AVATARS
 const agentColors: string[] = [
@@ -63,10 +65,10 @@ const handleSaveMainAgentConfig = async () => {
       color: mainAgentEdit.value.avatarMode === 'color' ? mainAgentEdit.value.color : '',
       avatar: mainAgentEdit.value.avatarMode === 'preset' ? (mainAgentEdit.value.avatar || '') : '',
     })
-    mainAgentSaveMsg.value = { type: 'success', text: '主智能体配置已保存' }
+    mainAgentSaveMsg.value = { type: 'success', text: t('settingsEx.mainAgent.savedToast') }
     setTimeout(() => { mainAgentSaveMsg.value = null }, 3000)
   } catch (e) {
-    mainAgentSaveMsg.value = { type: 'error', text: `保存失败: ${e instanceof Error ? e.message : String(e)}` }
+    mainAgentSaveMsg.value = { type: 'error', text: t('settingsEx.mainAgent.saveFailed', { message: e instanceof Error ? e.message : String(e) }) }
   } finally {
     mainAgentSaving.value = false
   }
@@ -82,7 +84,7 @@ onMounted(() => {
     <div v-if="mainAgentLoading" class="settings-card">
       <div class="settings-card__body settings-card__body--compact main-agent-loading">
         <Loader2 :size="20" class="spin-animation" />
-        <span>正在加载主智能体配置...</span>
+        <span>{{ t('settingsEx.mainAgent.loading') }}</span>
       </div>
     </div>
 
@@ -90,18 +92,18 @@ onMounted(() => {
       <section class="settings-card">
         <div class="settings-card__header">
           <Brain :size="18" />
-          <span class="settings-card__title">人格与系统提示</span>
+          <span class="settings-card__title">{{ t('settingsEx.mainAgent.personaTitle') }}</span>
         </div>
         <div class="settings-card__body">
           <div class="settings-form-row">
-            <label class="settings-form-label">系统提示词</label>
+            <label class="settings-form-label">{{ t('settingsEx.mainAgent.systemPrompt') }}</label>
             <textarea
               v-model="mainAgentEdit.systemPrompt"
               class="settings-form-textarea main-agent-prompt"
               rows="10"
-              placeholder="主智能体的系统提示词，决定其角色、人格与行为准则。例如：你是 LuomiNest 的主控智能体，负责与用户交互、调度子 Agent、管理记忆与工具..."
+              :placeholder="t('settingsEx.mainAgent.promptPlaceholder')"
             />
-            <span class="settings-form-hint">提示词会作为系统消息注入到主 Agent 的每次对话开头，影响其角色定位与行为方式</span>
+            <span class="settings-form-hint">{{ t('settingsEx.mainAgent.promptHint') }}</span>
           </div>
         </div>
       </section>
@@ -109,18 +111,18 @@ onMounted(() => {
       <section class="settings-card">
         <div class="settings-card__header">
           <Brain :size="18" />
-          <span class="settings-card__title">主 Agent 头像</span>
+          <span class="settings-card__title">{{ t('settingsEx.mainAgent.avatarTitle') }}</span>
         </div>
         <div class="settings-card__body">
           <div class="settings-mode-selector">
             <button
               :class="['settings-mode-btn', { active: mainAgentEdit.avatarMode === 'color' }]"
               @click="mainAgentEdit.avatarMode = 'color'"
-            >颜色</button>
+            >{{ t('settingsEx.mainAgent.modeColor') }}</button>
             <button
               :class="['settings-mode-btn', { active: mainAgentEdit.avatarMode === 'preset' }]"
               @click="mainAgentEdit.avatarMode = 'preset'"
-            >预设头像</button>
+            >{{ t('settingsEx.mainAgent.modePreset') }}</button>
           </div>
 
           <div v-if="mainAgentEdit.avatarMode === 'color'" class="color-picker">
@@ -163,7 +165,7 @@ onMounted(() => {
           @click="handleSaveMainAgentConfig"
         >
           <Save :size="14" />
-          <span>{{ mainAgentSaving ? '保存中...' : '保存配置' }}</span>
+          <span>{{ mainAgentSaving ? t('settingsEx.mainAgent.saving') : t('settingsEx.mainAgent.saveConfig') }}</span>
         </LumiButton>
       </div>
     </template>

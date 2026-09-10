@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Wifi, Users, Home, Cpu, Plus, Settings2, ChevronRight, Activity, MessageSquare, Clock } from 'lucide-vue-next'
 import { useApi } from '../../composables/useApi'
 import { formatDateRelative } from '../../utils/format'
@@ -59,6 +60,7 @@ const PROTOCOL_MAP: Record<string, string> = {
 
 const searchQuery = ref('')
 const activeTab = ref<'devices' | 'groups'>('devices')
+const { t } = useI18n()
 
 // 搜索过滤（此前仅有输入框而无过滤逻辑）
 const filteredDevices = computed(() => {
@@ -94,7 +96,7 @@ const mapInstanceToDevice = (inst: RawInstance): Device => {
     type: adapterType === 'home_assistant' ? 'hub' : 'iot',
     status: status === 'running' ? 'online' : 'offline',
     protocol: PROTOCOL_MAP[adapterType] || adapterType || '—',
-    lastActive: lastSync ? formatDateRelative(lastSync) : '未知',
+    lastActive: lastSync ? formatDateRelative(lastSync) : t('smartHome.devices.unknown'),
     messages: inst.message_count ?? inst.messageCount ?? 0,
   }
 }
@@ -112,7 +114,7 @@ const fetchDevices = async () => {
     })
     devices.value = filtered.map(mapInstanceToDevice)
   } catch (e: unknown) {
-    error.value = (e instanceof Error ? e.message : (e == null ? '' : String(e))) || '加载设备列表失败'
+    error.value = (e instanceof Error ? e.message : (e == null ? '' : String(e))) || t('smartHome.devices.loadFailedDefault')
     devices.value = []
   } finally {
     loading.value = false
@@ -126,15 +128,15 @@ onMounted(() => {
 
 <template>
   <div class="devices-view">
-    <LumiPageHeader title="设备与群组" desc="物联网设备管理、人机混合群组、历史聊天记录">
+    <LumiPageHeader :title="t('smartHome.devices.title')" :desc="t('smartHome.devices.desc')">
       <template #actions>
         <LumiButton variant="secondary" size="sm">
           <template #icon><Settings2 :size="15" /></template>
-          配置
+          {{ t('smartHome.devices.config') }}
         </LumiButton>
         <LumiButton variant="primary" size="sm">
           <template #icon><Plus :size="15" /></template>
-          添加设备
+          {{ t('smartHome.devices.add') }}
         </LumiButton>
       </template>
     </LumiPageHeader>
@@ -142,31 +144,31 @@ onMounted(() => {
     <div class="tab-bar">
       <button :class="['tab-btn', { active: activeTab === 'devices' }]" @click="activeTab = 'devices'">
         <Wifi :size="14" />
-        设备
+        {{ t('smartHome.devices.tabDevices') }}
       </button>
       <button :class="['tab-btn', { active: activeTab === 'groups' }]" @click="activeTab = 'groups'">
         <Users :size="14" />
-        群组
+        {{ t('smartHome.devices.tabGroups') }}
       </button>
     </div>
 
     <div class="devices-content">
       <div class="main-panel">
         <template v-if="activeTab === 'devices'">
-          <SearchInput v-model="searchQuery" placeholder="搜索设备..." class="search-input" />
+          <SearchInput v-model="searchQuery" :placeholder="t('smartHome.devices.searchDevices')" class="search-input" />
           <div class="device-list">
-            <div v-if="loading" class="state-tip">加载中...</div>
+            <div v-if="loading" class="state-tip">{{ t('smartHome.devices.loading') }}</div>
             <LumiEmptyState
               v-else-if="error"
               icon="error"
-              title="加载失败"
+              :title="t('smartHome.devices.loadFailed')"
               :description="error"
               size="md"
             />
             <LumiEmptyState
               v-else-if="filteredDevices.length === 0"
               icon="folder"
-              title="暂无设备"
+              :title="t('smartHome.devices.empty')"
               size="md"
             />
             <LumiCard
@@ -196,12 +198,12 @@ onMounted(() => {
           </div>
         </template>
         <template v-else>
-          <SearchInput v-model="searchQuery" placeholder="搜索群组..." class="search-input" />
+          <SearchInput v-model="searchQuery" :placeholder="t('smartHome.devices.searchGroups')" class="search-input" />
           <div class="group-list">
             <LumiEmptyState
               v-if="filteredGroups.length === 0"
               icon="folder"
-              title="暂无群组"
+              :title="t('smartHome.devices.emptyGroups')"
               size="md"
             />
             <LumiCard
@@ -222,7 +224,7 @@ onMounted(() => {
                 <span class="group-members">{{ g.members.join(', ') }}</span>
               </div>
               <div class="group-right">
-                <span :class="['group-type-badge', g.type]">{{ g.type === 'hybrid' ? '人机混合' : 'IoT群组' }}</span>
+                <span :class="['group-type-badge', g.type]">{{ g.type === 'hybrid' ? t('smartHome.devices.badgeHybrid') : t('smartHome.devices.badgeIot') }}</span>
               </div>
             </LumiCard>
           </div>
@@ -233,20 +235,20 @@ onMounted(() => {
         <LumiCard class="side-section" padding="md">
           <div class="side-header">
             <Activity :size="14" />
-            <span>设备状态</span>
+            <span>{{ t('smartHome.devices.statusTitle') }}</span>
           </div>
           <div class="status-grid">
             <div class="status-item">
               <span class="status-value online">{{ devices.filter(d => d.status === 'online').length }}</span>
-              <span class="status-label">在线</span>
+              <span class="status-label">{{ t('smartHome.devices.online') }}</span>
             </div>
             <div class="status-item">
               <span class="status-value offline">{{ devices.filter(d => d.status === 'offline').length }}</span>
-              <span class="status-label">离线</span>
+              <span class="status-label">{{ t('smartHome.devices.offline') }}</span>
             </div>
             <div class="status-item">
               <span class="status-value">{{ devices.reduce((s, d) => s + d.messages, 0) }}</span>
-              <span class="status-label">消息数</span>
+              <span class="status-label">{{ t('smartHome.devices.messages') }}</span>
             </div>
           </div>
         </LumiCard>
@@ -254,13 +256,13 @@ onMounted(() => {
         <LumiCard class="side-section" padding="md">
           <div class="side-header">
             <Clock :size="14" />
-            <span>最近对话</span>
+            <span>{{ t('smartHome.devices.recentChats') }}</span>
           </div>
           <div class="recent-list">
             <LumiEmptyState
               v-if="recentChats.length === 0"
               icon="file"
-              title="暂无最近对话"
+              :title="t('smartHome.devices.noRecent')"
               size="sm"
             />
             <div v-for="rc in recentChats" :key="rc.id" class="recent-item">

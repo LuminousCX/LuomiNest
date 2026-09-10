@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Check, Plus, Pencil } from 'lucide-vue-next'
 import { useThemeStore } from '../../stores/theme'
 import type { Skin } from '../../stores/theme-types'
 import { getThemePreviewColors } from '../../stores/theme-presets'
 import { MAX_CUSTOM_SKINS } from '../../stores/theme-types'
+
+const { t } = useI18n()
 
 defineProps<{
   activeId: string
@@ -73,7 +76,7 @@ function handleCreate() {
   <div class="skin-selector">
     <!-- 预设皮肤：海报网格，点击应用，悬浮显示编辑 -->
     <div class="skin-selector__section">
-      <div class="skin-selector__label">预设皮肤</div>
+      <div class="skin-selector__label">{{ t('theme.selector.presetSection') }}</div>
       <div class="preset-grid">
         <div
           v-for="skin in presetSkins"
@@ -84,7 +87,7 @@ function handleCreate() {
           ]"
           role="button"
           tabindex="0"
-          :aria-label="`应用${skin.name}皮肤`"
+          :aria-label="t('theme.selector.applySkin', { name: skin.name })"
           @click="handleApply(skin)"
           @keydown="onCardKeydown($event, skin)"
         >
@@ -98,13 +101,13 @@ function handleCreate() {
                 class="preset-card__edit"
                 role="button"
                 tabindex="0"
-                :aria-label="`以${skin.name}为基础编辑`"
+                :aria-label="t('theme.selector.editBasedOn', { name: skin.name })"
                 @click.stop="handleEdit(skin)"
                 @keydown.enter.stop="handleEdit(skin)"
                 @keydown.space.stop.prevent="handleEdit(skin)"
               >
                 <Pencil :size="12" />
-                <span>编辑</span>
+                <span>{{ t('theme.selector.edit') }}</span>
               </span>
             </div>
             <div class="preset-card__overlay" />
@@ -127,7 +130,7 @@ function handleCreate() {
     <!-- 自定义皮肤：长条状列表，点击编辑 -->
     <div v-if="customSkins.length > 0 || canAddCustom" class="skin-selector__section">
       <div class="skin-selector__label">
-        <span>自定义皮肤</span>
+        <span>{{ t('theme.selector.customSection') }}</span>
         <span class="skin-selector__count">{{ customSkins.length }}/{{ MAX_CUSTOM_SKINS }}</span>
       </div>
       <div class="custom-list">
@@ -140,7 +143,7 @@ function handleCreate() {
           ]"
           role="button"
           tabindex="0"
-          :aria-label="`应用${skin.name}皮肤`"
+          :aria-label="t('theme.selector.applySkin', { name: skin.name })"
           @click="handleApply(skin)"
           @keydown="onCardKeydown($event, skin)"
         >
@@ -164,7 +167,7 @@ function handleCreate() {
               class="custom-card__edit-btn"
               role="button"
               tabindex="0"
-              :aria-label="`编辑${skin.name}皮肤`"
+              :aria-label="t('theme.selector.editSkin', { name: skin.name })"
               @click.stop="handleEdit(skin)"
               @keydown.enter.stop="handleEdit(skin)"
               @keydown.space.stop.prevent="handleEdit(skin)"
@@ -177,15 +180,15 @@ function handleCreate() {
         <button
           v-if="canAddCustom"
           class="custom-card custom-card--add"
-          aria-label="新建自定义皮肤"
+          :aria-label="t('theme.selector.createAria')"
           @click="handleCreate"
         >
           <div class="custom-card__thumb custom-card__thumb--add">
             <Plus :size="20" />
           </div>
           <div class="custom-card__info">
-            <span class="custom-card__name">新建自定义皮肤</span>
-            <span class="custom-card__hint">创建一套新的视觉方案</span>
+            <span class="custom-card__name">{{ t('theme.selector.createTitle') }}</span>
+            <span class="custom-card__hint">{{ t('theme.selector.createHint') }}</span>
           </div>
         </button>
       </div>

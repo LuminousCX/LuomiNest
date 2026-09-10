@@ -1,0 +1,151 @@
+{
+  "pdfReader": {
+    "viewTitle": "PDF Reader",
+    "openReaderCommand": "Open PDF Reader",
+    "view": {
+      "extracting": "Extracting document content...",
+      "unsupportedPreview": "Visual preview is not supported for this file type",
+      "dropToOpen": "Release to open the document",
+      "toast": {
+        "historyCleared": "Recent files cleared",
+        "unsupportedFileType": "Unsupported file type: {name} (only PDF/Word/TXT are supported)",
+        "opened": "Opened: {name}",
+        "openFailed": "Failed to open file: {message}",
+        "reselectFile": "Please select the file again: {name}"
+      }
+    },
+    "api": {
+      "requestFailed": "Request failed ({status})",
+      "operationFailed": "Operation failed (code: {code})"
+    },
+    "toolbar": {
+      "toggleSidebar": "Toggle outline sidebar",
+      "openFile": "Open file (PDF/Word/TXT)",
+      "open": "Open",
+      "search": "Search",
+      "aiAssistant": "AI Assistant",
+      "notes": "Notes",
+      "settings": "Settings",
+      "toggleAiPanel": "Toggle AI panel",
+      "searchPlaceholder": "Search in document...",
+      "noMatch": "No matches",
+      "prevMatch": "Previous match",
+      "nextMatch": "Next match",
+      "closeSearch": "Close search",
+      "prevPage": "Previous page",
+      "nextPage": "Next page",
+      "zoomOut": "Zoom out",
+      "zoomIn": "Zoom in"
+    },
+    "canvas": {
+      "loading": "Loading PDF...",
+      "loadFailed": "Failed to load PDF: {message}",
+      "renderFailed": "Page rendering failed: {message}",
+      "retry": "Retry",
+      "prevPage": "Previous page",
+      "nextPage": "Next page",
+      "rendering": "Rendering"
+    },
+    "sidebar": {
+      "title": "Outline",
+      "collapse": "Collapse sidebar",
+      "empty": "This document has no outline",
+      "emptyHint": "The built-in PDF table of contents will be empty"
+    },
+    "dropzone": {
+      "title": "Drag PDF / Word / TXT files here",
+      "or": "or",
+      "selectFile": "Select File",
+      "hint": "Supported formats: PDF (.pdf), Word (.docx), plain text (.txt)",
+      "recent": "Recent",
+      "clearHistory": "Clear history",
+      "clear": "Clear",
+      "reopen": "Reopen: {name}",
+      "justNow": "Just now",
+      "minutesAgo": "{n} minutes ago",
+      "hoursAgo": "{n} hours ago",
+      "daysAgo": "{n} days ago",
+      "monthDay": "{m}/{d}"
+    },
+    "docx": {
+      "empty": "Document is empty",
+      "emptyHint": "The backend may not have extracted any text content"
+    },
+    "aiPanel": {
+      "title": "AI Assistant",
+      "collapse": "Collapse AI panel",
+      "tab": {
+        "summary": "Summary",
+        "translate": "Translate",
+        "chat": "Chat"
+      },
+      "summarizeAll": "Summarize Full Text",
+      "reset": "Reset",
+      "summarizing": "AI is summarizing the document...",
+      "summary": "Summary",
+      "keyPoints": "Key Points",
+      "summaryEmptyText": "Click the \"Summarize Full Text\" button",
+      "summaryEmptyHint": "AI will generate a summary and key points of the document",
+      "targetLang": "Target language",
+      "pageRange": "Page range (optional)",
+      "pageRangePlaceholder": "e.g. 1-5 or 1,3,5",
+      "translateBtn": "Translate",
+      "translating": "AI is translating the document...",
+      "translateResult": "Translation",
+      "translateEmptyText": "Select a target language and click \"Translate\"",
+      "translateEmptyHint": "AI will translate the document content",
+      "lang": {
+        "zh": "Chinese",
+        "en": "English",
+        "ja": "Japanese",
+        "ko": "Korean"
+      },
+      "chatEmptyText": "Ask AI questions about the document",
+      "chatEmptyHint": "AI will answer based on the document content",
+      "me": "Me",
+      "thinking": "AI is thinking...",
+      "chatInputPlaceholder": "Type your question... (Enter to send, Shift+Enter for a new line)",
+      "send": "Send",
+      "clearChat": "Clear conversation",
+      "error": {
+        "summaryFailed": "Summarization failed: {message}",
+        "aiSummaryFailed": "AI summarization failed: {message}",
+        "translateFailed": "Translation failed: {message}",
+        "aiTranslateFailed": "AI translation failed: {message}",
+        "chatFailed": "Chat failed: {message}",
+        "aiChatFailed": "AI chat failed: {message}"
+      }
+    },
+    "tabs": {
+      "newTabTitle": "New tab (open a file)"
+    },
+    "txt": {
+      "empty": "The document is empty",
+      "emptyHint": "The backend may not have extracted any text",
+      "lineCount": "{n} lines",
+      "charCount": "{n} characters"
+    },
+    "statusBar": {
+      "file": "File: ",
+      "page": "Page: "
+    }
+  },
+  "helloPanel": {
+    "title": "Example Panel",
+    "sayHelloCommand": "Example: Say Hello",
+    "notifyTitle": "LuomiNest Plugin System",
+    "notifyBody": "Sample plugin notification triggered",
+    "helloMessage": "Hello from LuomiNest frontend plugin! (click #{n})",
+    "subtitle": "Contributed by the hello-panel frontend plugin — verifying the LuomiNest dual-track extension system",
+    "infoTitle": "Plugin Info",
+    "pluginId": "Plugin ID",
+    "version": "Version",
+    "contributions": "Contributions",
+    "contributionsValue": "View (this page) + command (say-hello)",
+    "routePath": "Route path",
+    "demoTitle": "Interactive Demo",
+    "demoDesc": "Click the buttons below to trigger plugin commands and verify the contribution mechanism works end to end.",
+    "sayHello": "Run say-hello command",
+    "notify": "Send system notification"
+  }
+}

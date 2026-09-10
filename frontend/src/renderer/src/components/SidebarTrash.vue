@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   ArrowLeft,
   SquareCheck,
@@ -20,6 +21,7 @@ import { formatDateTime } from '../utils/format'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 
 const logger = createLuomiNestRendererLogger('SidebarTrash')
+const { t } = useI18n()
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -99,9 +101,9 @@ const trashConfirmAction = ref('')
 const trashConfirmTargetId = ref('')
 
 const trashConfirmMessage = computed(() => {
-  if (trashConfirmAction.value === 'empty-trash') return '确定要清空回收站吗？所有对话将被永久删除，无法恢复。'
-  if (trashConfirmAction.value === 'batch-permanent-delete') return `确定要永久删除选中的 ${trashSelectedIds.value.size} 个对话吗？此操作无法撤销。`
-  if (trashConfirmAction.value === 'permanent-delete') return '确定要永久删除这个对话吗？此操作无法撤销。'
+  if (trashConfirmAction.value === 'empty-trash') return t('workspace.trash.confirmEmpty')
+  if (trashConfirmAction.value === 'batch-permanent-delete') return t('workspace.trash.confirmBatchDelete', { n: trashSelectedIds.value.size })
+  if (trashConfirmAction.value === 'permanent-delete') return t('workspace.trash.confirmDeleteOne')
   return ''
 })
 
@@ -129,13 +131,13 @@ const handleTrashConfirm = async () => {
 <template>
   <div class="sidebar-trash">
     <div class="trash-header">
-      <button class="trash-back-btn" title="返回" @click="emit('close')">
+      <button class="trash-back-btn" :title="t('workspace.trash.back')" @click="emit('close')">
         <ArrowLeft :size="16" />
       </button>
-      <span class="trash-title">回收站</span>
+      <span class="trash-title">{{ t('workspace.trash.title') }}</span>
       <button
         :class="['batch-toggle-btn', { active: trashBatchMode }]"
-        title="批量操作"
+        :title="t('workspace.trash.batch')"
         @click="toggleTrashBatchMode"
       >
         <SquareCheck :size="15" />
@@ -143,8 +145,8 @@ const handleTrashConfirm = async () => {
     </div>
 
     <div v-if="trashBatchMode" class="batch-toolbar">
-      <button class="batch-action-btn" @click="selectAllTrash">全选</button>
-      <span class="batch-count">已选 {{ trashSelectedIds.size }} 项</span>
+      <button class="batch-action-btn" @click="selectAllTrash">{{ t('workspace.trash.selectAll') }}</button>
+      <span class="batch-count">{{ t('workspace.trash.selectedCount', { n: trashSelectedIds.size }) }}</span>
       <LumiButton
         variant="primary"
         size="sm"
@@ -154,7 +156,7 @@ const handleTrashConfirm = async () => {
         <template #icon>
           <Undo2 :size="13" />
         </template>
-        恢复
+        {{ t('workspace.trash.restore') }}
       </LumiButton>
       <LumiButton
         variant="danger"
@@ -165,19 +167,19 @@ const handleTrashConfirm = async () => {
         <template #icon>
           <Trash2 :size="13" />
         </template>
-        删除
+        {{ t('workspace.trash.delete') }}
       </LumiButton>
     </div>
 
     <div class="trash-toolbar" v-if="!trashBatchMode && chatTrashStore.trashItems.length > 0">
-      <button class="empty-trash-btn" title="清空回收站" @click="handleEmptyTrash">
+      <button class="empty-trash-btn" :title="t('workspace.trash.empty')" @click="handleEmptyTrash">
         <Trash2 :size="12" />
-        清空回收站
+        {{ t('workspace.trash.empty') }}
       </button>
     </div>
 
     <div class="trash-list">
-      <LumiEmptyState v-if="chatTrashStore.trashItems.length === 0" :icon="Trash2" title="回收站为空" size="sm" />
+      <LumiEmptyState v-if="chatTrashStore.trashItems.length === 0" :icon="Trash2" :title="t('workspace.trash.emptyTitle')" size="sm" />
       <div
         v-for="item in chatTrashStore.trashItems"
         :key="item.id"
@@ -195,25 +197,25 @@ const handleTrashConfirm = async () => {
           <span class="trash-item-deleted-time">{{ formatDateTime(item.deleted_at) }}</span>
         </div>
         <div v-if="!trashBatchMode" class="trash-item-actions">
-          <button class="trash-action-btn restore" title="恢复" @click.stop="handleRestoreItem(item.id)">
+          <button class="trash-action-btn restore" :title="t('workspace.trash.restore')" @click.stop="handleRestoreItem(item.id)">
             <Undo2 :size="13" />
           </button>
-          <button class="trash-action-btn delete" title="永久删除" @click.stop="handlePermanentDeleteItem(item.id)">
+          <button class="trash-action-btn delete" :title="t('workspace.trash.permanentDelete')" @click.stop="handlePermanentDeleteItem(item.id)">
             <Trash2 :size="13" />
           </button>
         </div>
       </div>
     </div>
 
-    <LumiModal v-model:visible="showTrashConfirm" title="确认删除" size="sm">
+    <LumiModal v-model:visible="showTrashConfirm" :title="t('workspace.trash.confirmTitle')" size="sm">
       <div class="confirm-dialog-content">
         <div class="confirm-dialog-icon">
           <AlertTriangle :size="24" />
         </div>
         <p class="confirm-dialog-message">{{ trashConfirmMessage }}</p>
         <div class="confirm-dialog-actions">
-          <LumiButton variant="danger" size="md" @click="handleTrashConfirm">删除</LumiButton>
-          <LumiButton variant="secondary" size="md" @click="showTrashConfirm = false">取消</LumiButton>
+          <LumiButton variant="danger" size="md" @click="handleTrashConfirm">{{ t('workspace.trash.delete') }}</LumiButton>
+          <LumiButton variant="secondary" size="md" @click="showTrashConfirm = false">{{ t('workspace.trash.cancel') }}</LumiButton>
         </div>
       </div>
     </LumiModal>

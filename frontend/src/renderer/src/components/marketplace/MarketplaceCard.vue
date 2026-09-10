@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Star, Download, Heart, Check, Loader2 } from 'lucide-vue-next'
 import type { MarketplaceItem, InstallProgress } from '../../types/marketplace'
@@ -15,6 +16,7 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
+const { t } = useI18n()
 const store = useMarketplaceStore()
 const api = useApi()
 
@@ -28,16 +30,16 @@ const isOperating = computed(() =>
 
 const installLabel = computed(() => {
   if (!installProgress.value) {
-    if (props.item.installStatus === 'installed') return '已安装'
-    return '安装'
+    if (props.item.installStatus === 'installed') return t('market.status.installed')
+    return t('market.status.install')
   }
   switch (installProgress.value.status) {
-    case 'downloading': return '下载中'
-    case 'installing': return '安装中'
-    case 'updating': return '更新中'
-    case 'installed': return '已完成'
-    case 'error': return '失败'
-    default: return '安装'
+    case 'downloading': return t('market.status.downloading')
+    case 'installing': return t('market.status.installing')
+    case 'updating': return t('market.status.updating')
+    case 'installed': return t('market.status.done')
+    case 'error': return t('market.status.failed')
+    default: return t('market.status.install')
   }
 })
 
@@ -92,8 +94,8 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
         :theme="item.icon"
       />
       <div class="card-badge-area">
-        <span v-if="item.featured" class="badge badge-featured">推荐</span>
-        <span v-if="item.installStatus === 'installed'" class="badge badge-installed">已安装</span>
+        <span v-if="item.featured" class="badge badge-featured">{{ t('market.card.featured') }}</span>
+        <span v-if="item.installStatus === 'installed'" class="badge badge-installed">{{ t('market.card.installed') }}</span>
       </div>
     </div>
 
@@ -134,7 +136,7 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
       <div class="card-actions">
         <button
           :class="['fav-btn', { active: item.isLiked }]"
-          aria-label="喜欢"
+          :aria-label="t('market.card.like')"
           @click="handleLike"
         >
           <Heart :size="15" :fill="item.isLiked ? 'currentColor' : 'none'" />
@@ -154,7 +156,7 @@ const likeDisplay = computed(() => formatDownloadCount(props.item.likeCount || 0
         </button>
         <button v-else class="install-btn installed" disabled>
           <Check :size="14" />
-          <span>已安装</span>
+          <span>{{ t('market.card.installed') }}</span>
         </button>
       </div>
     </div>

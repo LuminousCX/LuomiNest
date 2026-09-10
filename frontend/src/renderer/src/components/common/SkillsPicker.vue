@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   Sparkles,
   X,
@@ -21,6 +22,7 @@ const emit = defineEmits<{
   'update:selectedIds': [ids: string[]]
 }>()
 
+const { t } = useI18n()
 const router = useRouter()
 const marketplaceStore = useMarketplaceStore()
 const pluginsStore = usePluginsStore()
@@ -139,14 +141,14 @@ onBeforeUnmount(() => {
             <span class="luomi-skill-chip-name">{{ skill.name }}</span>
             <button
               class="luomi-skill-chip-remove"
-              :title="`移除 ${skill.name}`"
+              :title="t('chat.removeSkill', { name: skill.name })"
               @click.stop="removeSkill(skill.id)"
             >
               <X :size="11" />
             </button>
           </span>
         </TransitionGroup>
-        <button class="luomi-skills-clear" @click.stop="clearAll">清空</button>
+        <button class="luomi-skills-clear" @click.stop="clearAll">{{ t('chat.clearSkills') }}</button>
       </div>
     </Transition>
 
@@ -154,11 +156,11 @@ onBeforeUnmount(() => {
     <button
       ref="triggerBtnRef"
       :class="['luomi-skills-trigger', { active: selectedIds.length > 0 }]"
-      :title="selectedIds.length > 0 ? `已选 ${selectedIds.length} 个技能` : '选择已安装的技能'"
+      :title="selectedIds.length > 0 ? t('chat.selectedSkillCount', { n: selectedIds.length }) : t('chat.pickSkills')"
       @click.stop="toggleDropdown"
     >
       <Sparkles :size="15" />
-      <span class="luomi-skills-trigger-text">技能</span>
+      <span class="luomi-skills-trigger-text">{{ t('chat.skills') }}</span>
       <span v-if="selectedIds.length > 0" class="luomi-skills-badge">{{ selectedIds.length }}</span>
       <ChevronDown :size="12" class="luomi-skills-trigger-chevron" :class="{ rotated: showDropdown }" />
     </button>
@@ -170,7 +172,7 @@ onBeforeUnmount(() => {
           <SearchInput
             ref="searchInputRef"
             v-model="searchQuery"
-            placeholder="搜索已安装的技能..."
+            :placeholder="t('chat.searchSkills')"
           />
         </div>
 
@@ -196,21 +198,21 @@ onBeforeUnmount(() => {
           <div v-if="filteredSkills.length === 0" class="luomi-skills-empty">
             <Blocks :size="28" />
             <p class="luomi-skills-empty-title">
-              {{ availableSkills.length === 0 ? '暂无可用技能' : '未找到匹配的技能' }}
+              {{ availableSkills.length === 0 ? t('chat.noSkills') : t('chat.noMatchSkills') }}
             </p>
             <p class="luomi-skills-empty-desc">
-              {{ availableSkills.length === 0 ? '前往市场安装技能，或在设置-插件与技能中创建' : '试试其他关键词' }}
+              {{ availableSkills.length === 0 ? t('chat.noSkillsHint') : t('chat.tryOtherKeywords') }}
             </p>
             <button v-if="availableSkills.length === 0" class="luomi-skills-empty-action" @click.stop="goToMarket">
-              去市场看看
+              {{ t('chat.goMarket') }}
             </button>
           </div>
         </div>
 
         <div class="luomi-skills-dropdown-footer">
-          <span class="luomi-skills-count">已选 {{ selectedIds.length }} / {{ availableSkills.length }} 个</span>
+          <span class="luomi-skills-count">{{ t('chat.selectedSummary', { n: selectedIds.length, total: availableSkills.length }) }}</span>
           <button class="luomi-skills-manage" @click.stop="goToMarket">
-            管理技能
+            {{ t('chat.manageSkills') }}
           </button>
         </div>
       </div>

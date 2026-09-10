@@ -1,0 +1,151 @@
+{
+  "pdfReader": {
+    "viewTitle": "PDF 阅读",
+    "openReaderCommand": "打开 PDF 阅读器",
+    "view": {
+      "extracting": "正在提取文档内容...",
+      "unsupportedPreview": "暂不支持此文件类型的可视化预览",
+      "dropToOpen": "松开以打开文档",
+      "toast": {
+        "historyCleared": "已清空最近打开记录",
+        "unsupportedFileType": "不支持的文件类型：{name}（仅支持 PDF/Word/TXT）",
+        "opened": "已打开：{name}",
+        "openFailed": "打开文件失败：{message}",
+        "reselectFile": "请重新选择文件：{name}"
+      }
+    },
+    "api": {
+      "requestFailed": "请求失败 ({status})",
+      "operationFailed": "操作失败 (code: {code})"
+    },
+    "toolbar": {
+      "toggleSidebar": "切换大纲侧边栏",
+      "openFile": "打开文件 (PDF/Word/TXT)",
+      "open": "打开",
+      "search": "搜索",
+      "aiAssistant": "AI 助手",
+      "notes": "笔记",
+      "settings": "设置",
+      "toggleAiPanel": "切换 AI 面板",
+      "searchPlaceholder": "在文档中搜索...",
+      "noMatch": "无匹配",
+      "prevMatch": "上一个",
+      "nextMatch": "下一个",
+      "closeSearch": "关闭搜索",
+      "prevPage": "上一页",
+      "nextPage": "下一页",
+      "zoomOut": "缩小",
+      "zoomIn": "放大"
+    },
+    "canvas": {
+      "loading": "正在加载 PDF...",
+      "loadFailed": "PDF 加载失败：{message}",
+      "renderFailed": "页面渲染失败：{message}",
+      "retry": "重试",
+      "prevPage": "上一页",
+      "nextPage": "下一页",
+      "rendering": "渲染中"
+    },
+    "sidebar": {
+      "title": "大纲",
+      "collapse": "折叠侧边栏",
+      "empty": "该文档没有大纲",
+      "emptyHint": "PDF 内置目录将为空"
+    },
+    "dropzone": {
+      "title": "拖拽 PDF / Word / TXT 文件到此处",
+      "or": "或",
+      "selectFile": "选择文件",
+      "hint": "支持的格式：PDF (.pdf)、Word (.docx)、纯文本 (.txt)",
+      "recent": "最近打开",
+      "clearHistory": "清空记录",
+      "clear": "清空",
+      "reopen": "重新打开：{name}",
+      "justNow": "刚刚",
+      "minutesAgo": "{n} 分钟前",
+      "hoursAgo": "{n} 小时前",
+      "daysAgo": "{n} 天前",
+      "monthDay": "{m}月{d}日"
+    },
+    "docx": {
+      "empty": "文档内容为空",
+      "emptyHint": "后端可能未提取到文本内容"
+    },
+    "aiPanel": {
+      "title": "AI 助手",
+      "collapse": "折叠 AI 面板",
+      "tab": {
+        "summary": "总结",
+        "translate": "翻译",
+        "chat": "问答"
+      },
+      "summarizeAll": "总结全文",
+      "reset": "重置",
+      "summarizing": "AI 正在总结文档...",
+      "summary": "摘要",
+      "keyPoints": "关键点",
+      "summaryEmptyText": "点击\"总结全文\"按钮",
+      "summaryEmptyHint": "AI 将生成文档摘要与关键点",
+      "targetLang": "目标语言",
+      "pageRange": "页码范围（可选）",
+      "pageRangePlaceholder": "如：1-5 或 1,3,5",
+      "translateBtn": "翻译",
+      "translating": "AI 正在翻译文档...",
+      "translateResult": "翻译结果",
+      "translateEmptyText": "选择目标语言后点击\"翻译\"",
+      "translateEmptyHint": "AI 将翻译文档内容",
+      "lang": {
+        "zh": "中文",
+        "en": "英文",
+        "ja": "日文",
+        "ko": "韩文"
+      },
+      "chatEmptyText": "向 AI 提问关于文档的问题",
+      "chatEmptyHint": "AI 将基于文档内容回答",
+      "me": "我",
+      "thinking": "AI 正在思考...",
+      "chatInputPlaceholder": "输入你的问题... (Enter 发送, Shift+Enter 换行)",
+      "send": "发送",
+      "clearChat": "清空对话",
+      "error": {
+        "summaryFailed": "总结失败：{message}",
+        "aiSummaryFailed": "AI 总结失败：{message}",
+        "translateFailed": "翻译失败：{message}",
+        "aiTranslateFailed": "AI 翻译失败：{message}",
+        "chatFailed": "问答失败：{message}",
+        "aiChatFailed": "AI 问答失败：{message}"
+      }
+    },
+    "tabs": {
+      "newTabTitle": "新建标签（打开文件）"
+    },
+    "txt": {
+      "empty": "文档内容为空",
+      "emptyHint": "后端可能未提取到文本内容",
+      "lineCount": "{n} 行",
+      "charCount": "{n} 字符"
+    },
+    "statusBar": {
+      "file": "文件：",
+      "page": "页码："
+    }
+  },
+  "helloPanel": {
+    "title": "示例面板",
+    "sayHelloCommand": "示例：打个招呼",
+    "notifyTitle": "LuomiNest 插件系统",
+    "notifyBody": "示例插件通知已触发",
+    "helloMessage": "Hello from LuomiNest frontend plugin! (第 {n} 次点击)",
+    "subtitle": "由 hello-panel 前端插件贡献 — 验证 LuomiNest 双轨扩展系统",
+    "infoTitle": "插件信息",
+    "pluginId": "插件 ID",
+    "version": "版本",
+    "contributions": "贡献点",
+    "contributionsValue": "视图（本页面）+ 命令（say-hello）",
+    "routePath": "路由路径",
+    "demoTitle": "交互演示",
+    "demoDesc": "点击下方按钮触发插件命令，验证贡献点机制端到端可用。",
+    "sayHello": "执行 say-hello 命令",
+    "notify": "发送系统通知"
+  }
+}

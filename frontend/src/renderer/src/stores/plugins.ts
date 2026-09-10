@@ -31,6 +31,7 @@ import type {
   CxPluginScaffoldWriteResult,
 } from '../plugins/types'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { i18n } from '../i18n'
 
 const logger = createLuomiNestRendererLogger('PluginsStore')
 
@@ -79,9 +80,9 @@ export const usePluginsStore = defineStore('plugins', () => {
       const ok = await cxFrontendPluginLoader.enablePlugin(pluginId)
       if (ok) {
         refreshFrontend()
-        toast.success(`前端插件已启用：${pluginId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.enableFrontendOk', { id: pluginId }))
       } else {
-        toast.error(`前端插件启用失败：${pluginId}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.enableFrontendFail', { id: pluginId }))
       }
       return ok
     })
@@ -91,9 +92,9 @@ export const usePluginsStore = defineStore('plugins', () => {
       const ok = await cxFrontendPluginLoader.disablePlugin(pluginId)
       if (ok) {
         refreshFrontend()
-        toast.success(`前端插件已禁用：${pluginId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.disableFrontendOk', { id: pluginId }))
       } else {
-        toast.error(`前端插件禁用失败：${pluginId}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.disableFrontendFail', { id: pluginId }))
       }
       return ok
     })
@@ -114,7 +115,7 @@ export const usePluginsStore = defineStore('plugins', () => {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('Failed to load backend plugins:', msg)
-      toast.error(`加载后端插件失败：${msg}`)
+      toast.error(i18n.global.t('settingsEx.pluginsStore.loadBackendFail', { message: msg }))
     } finally {
       loadingBackend.value = false
     }
@@ -126,10 +127,10 @@ export const usePluginsStore = defineStore('plugins', () => {
         // useApi 已自动解包信封并抛出业务错误，成功时直接返回 data
         await apiPost<CxBackendPlugin>(`/plugins/${pluginId}/enable`)
         await refreshBackend()
-        toast.success(`后端插件已启用：${pluginId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.enableBackendOk', { id: pluginId }))
         return true
       } catch (e) {
-        toast.error(`后端插件启用失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.enableBackendFail', { message: e instanceof Error ? e.message : String(e) }))
         return false
       }
     })
@@ -139,10 +140,10 @@ export const usePluginsStore = defineStore('plugins', () => {
       try {
         await apiPost<CxBackendPlugin>(`/plugins/${pluginId}/disable`)
         await refreshBackend()
-        toast.success(`后端插件已禁用：${pluginId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.disableBackendOk', { id: pluginId }))
         return true
       } catch (e) {
-        toast.error(`后端插件禁用失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.disableBackendFail', { message: e instanceof Error ? e.message : String(e) }))
         return false
       }
     })
@@ -152,10 +153,10 @@ export const usePluginsStore = defineStore('plugins', () => {
       try {
         await apiPost<CxBackendPlugin>(`/plugins/${pluginId}/reload`)
         await refreshBackend()
-        toast.success(`后端插件已重载：${pluginId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.reloadBackendOk', { id: pluginId }))
         return true
       } catch (e) {
-        toast.error(`后端插件重载失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadBackendFail', { message: e instanceof Error ? e.message : String(e) }))
         return false
       }
     })
@@ -165,10 +166,10 @@ export const usePluginsStore = defineStore('plugins', () => {
       try {
         const result = await apiPost<{ loaded_count: number }>('/plugins/reload-all')
         await refreshBackend()
-        toast.success(`已重载全部后端插件（共 ${result?.loaded_count ?? 0} 个）`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.reloadAllBackendOk', { count: result?.loaded_count ?? 0 }))
         return true
       } catch (e) {
-        toast.error(`重载全部后端插件失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadAllBackendFail', { message: e instanceof Error ? e.message : String(e) }))
         return false
       }
     })
@@ -188,7 +189,7 @@ export const usePluginsStore = defineStore('plugins', () => {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.warn('Failed to load skills:', msg)
-      toast.error(`加载技能列表失败：${msg}`)
+      toast.error(i18n.global.t('settingsEx.pluginsStore.loadSkillsFail', { message: msg }))
     } finally {
       loadingBackend.value = false
     }
@@ -199,10 +200,10 @@ export const usePluginsStore = defineStore('plugins', () => {
       try {
         await apiPost<CxBackendSkill>(`/skills/${skillId}/enable`)
         await refreshSkills()
-        toast.success(`技能已启用：${skillId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.enableSkillOk', { id: skillId }))
         return true
       } catch (e) {
-        toast.error(`技能启用失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.enableSkillFail', { message: e instanceof Error ? e.message : String(e) }))
         return false
       }
     })
@@ -212,10 +213,10 @@ export const usePluginsStore = defineStore('plugins', () => {
       try {
         await apiPost<CxBackendSkill>(`/skills/${skillId}/disable`)
         await refreshSkills()
-        toast.success(`技能已禁用：${skillId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.disableSkillOk', { id: skillId }))
         return true
       } catch (e) {
-        toast.error(`技能禁用失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.disableSkillFail', { message: e instanceof Error ? e.message : String(e) }))
         return false
       }
     })
@@ -225,10 +226,10 @@ export const usePluginsStore = defineStore('plugins', () => {
       try {
         await apiPost<CxBackendSkill>(`/skills/${skillId}/reload`)
         await refreshSkills()
-        toast.success(`技能已重载：${skillId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.reloadSkillOk', { id: skillId }))
         return true
       } catch (e) {
-        toast.error(`技能重载失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadSkillFail', { message: e instanceof Error ? e.message : String(e) }))
         return false
       }
     })
@@ -238,10 +239,10 @@ export const usePluginsStore = defineStore('plugins', () => {
       try {
         const result = await apiPost<{ loaded_count: number }>('/skills/reload-all')
         await refreshSkills()
-        toast.success(`已重载全部技能（共 ${result?.loaded_count ?? 0} 个）`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.reloadAllSkillsOk', { count: result?.loaded_count ?? 0 }))
         return true
       } catch (e) {
-        toast.error(`重载全部技能失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadAllSkillsFail', { message: e instanceof Error ? e.message : String(e) }))
         return false
       }
     })
@@ -257,7 +258,7 @@ export const usePluginsStore = defineStore('plugins', () => {
       return result?.content ?? ''
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      toast.error(`读取技能原文失败：${msg}`)
+      toast.error(i18n.global.t('settingsEx.pluginsStore.readSkillRawFail', { message: msg }))
       return null
     }
   }
@@ -274,7 +275,7 @@ export const usePluginsStore = defineStore('plugins', () => {
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      toast.error(`技能校验失败：${msg}`)
+      toast.error(i18n.global.t('settingsEx.pluginsStore.validateSkillFail', { message: msg }))
       return null
     }
   }
@@ -293,10 +294,10 @@ export const usePluginsStore = defineStore('plugins', () => {
           overwrite,
         })
         await refreshSkills()
-        toast.success(`技能已保存：${skillId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.writeSkillOk', { id: skillId }))
         return result
       } catch (e) {
-        toast.error(`技能保存失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.writeSkillFail', { message: e instanceof Error ? e.message : String(e) }))
         return null
       }
     })
@@ -309,10 +310,10 @@ export const usePluginsStore = defineStore('plugins', () => {
           skill_id: skillId,
         })
         await refreshSkills()
-        toast.success(`技能已删除：${skillId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.deleteSkillOk', { id: skillId }))
         return true
       } catch (e) {
-        toast.error(`技能删除失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.deleteSkillFail', { message: e instanceof Error ? e.message : String(e) }))
         return false
       }
     })
@@ -329,7 +330,7 @@ export const usePluginsStore = defineStore('plugins', () => {
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      toast.error(`读取插件配置失败：${msg}`)
+      toast.error(i18n.global.t('settingsEx.pluginsStore.readPluginConfigFail', { message: msg }))
       return null
     }
   }
@@ -344,10 +345,10 @@ export const usePluginsStore = defineStore('plugins', () => {
           '/plugins/assistant/config/reset',
           { plugin_id: pluginId },
         )
-        toast.success(`插件配置已重置：${pluginId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.resetPluginConfigOk', { id: pluginId }))
         return result
       } catch (e) {
-        toast.error(`重置插件配置失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.resetPluginConfigFail', { message: e instanceof Error ? e.message : String(e) }))
         return null
       }
     })
@@ -364,7 +365,7 @@ export const usePluginsStore = defineStore('plugins', () => {
           { plugin_id: pluginId, user_request: userRequest },
         )
       } catch (e) {
-        toast.error(`生成配置建议失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.suggestFail', { message: e instanceof Error ? e.message : String(e) }))
         return null
       }
     })
@@ -391,10 +392,10 @@ export const usePluginsStore = defineStore('plugins', () => {
             skip_invalid: skipInvalid,
           },
         )
-        toast.success(`配置已应用：${result?.applied ?? 0} 项`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.applyOk', { count: result?.applied ?? 0 }))
         return result
       } catch (e) {
-        toast.error(`应用配置失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.applyFail', { message: e instanceof Error ? e.message : String(e) }))
         return null
       }
     })
@@ -410,7 +411,7 @@ export const usePluginsStore = defineStore('plugins', () => {
           { plugin_id: pluginId },
         )
       } catch (e) {
-        toast.error(`配置解释失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.explainFail', { message: e instanceof Error ? e.message : String(e) }))
         return null
       }
     })
@@ -441,10 +442,10 @@ export const usePluginsStore = defineStore('plugins', () => {
             settings_decl: payload.settingsDecl,
           },
         )
-        toast.success(`脚手架已生成：${payload.pluginId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.scaffoldOk', { id: payload.pluginId }))
         return result
       } catch (e) {
-        toast.error(`生成脚手架失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.scaffoldFail', { message: e instanceof Error ? e.message : String(e) }))
         return null
       }
     })
@@ -461,10 +462,10 @@ export const usePluginsStore = defineStore('plugins', () => {
           { plugin_id: pluginId, overwrite },
         )
         await refreshBackend()
-        toast.success(`脚手架已写入磁盘：${pluginId}`)
+        toast.success(i18n.global.t('settingsEx.pluginsStore.scaffoldWriteOk', { id: pluginId }))
         return result
       } catch (e) {
-        toast.error(`写入脚手架失败：${e instanceof Error ? e.message : String(e)}`)
+        toast.error(i18n.global.t('settingsEx.pluginsStore.scaffoldWriteFail', { message: e instanceof Error ? e.message : String(e) }))
         return null
       }
     })

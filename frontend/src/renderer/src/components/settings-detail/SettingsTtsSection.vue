@@ -14,6 +14,7 @@ import {
   Play,
   Languages
 } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
 import { API_ENDPOINTS } from '../../config/api'
@@ -26,19 +27,20 @@ const props = defineProps<{
 
 const modelStore = useModelStore()
 const toast = useToast()
+const { t } = useI18n()
 
 /** TTS 语言选项（v0.5 决策：auto/zh/en/ja/ko/yue 全量） */
-const TTS_LANGUAGE_OPTIONS = [
-  { value: 'auto', label: '自动检测' },
-  { value: 'zh', label: '中文' },
-  { value: 'en', label: 'English' },
-  { value: 'ja', label: '日本語' },
-  { value: 'ko', label: '한국어' },
-  { value: 'yue', label: '粵語' },
-] as const
+const TTS_LANGUAGE_OPTIONS = computed(() => [
+  { value: 'auto', label: t('settingsEx.tts.languages.auto') },
+  { value: 'zh', label: t('settingsEx.tts.languages.zh') },
+  { value: 'en', label: t('settingsEx.tts.languages.en') },
+  { value: 'ja', label: t('settingsEx.tts.languages.ja') },
+  { value: 'ko', label: t('settingsEx.tts.languages.ko') },
+  { value: 'yue', label: t('settingsEx.tts.languages.yue') },
+])
 
-const LANG_LABELS: Record<string, string> = Object.fromEntries(
-  TTS_LANGUAGE_OPTIONS.map(o => [o.value, o.label]),
+const LANG_LABELS = computed<Record<string, string>>(() =>
+  Object.fromEntries(TTS_LANGUAGE_OPTIONS.value.map(o => [o.value, o.label])),
 )
 
 const ttsLoading = ref(false)
@@ -52,22 +54,22 @@ const translationEnabled = ref(false)
 /** 计算设备徽标文本 */
 const ttsDeviceLabel = computed(() => {
   const device = ttsDevice.value
-  if (!device) return '未知'
-  if (device.type === 'gpu') return 'GPU 加速'
+  if (!device) return t('settingsEx.tts.deviceUnknown')
+  if (device.type === 'gpu') return t('settingsEx.tts.deviceGpu')
   return device.type.toUpperCase()
 })
 
 /** 设备检测提示行 */
 const ttsDeviceHint = computed(() => {
   const device = ttsDevice.value
-  if (!device) return '尚未获取到计算设备信息，请确认后端服务已启动。'
+  if (!device) return t('settingsEx.tts.deviceHintNone')
   const parts: string[] = []
   if (device.type === 'gpu' && device.gpu_count && device.gpu_count > 1) {
-    parts.push(`检测到 ${device.gpu_count} 张 GPU`)
+    parts.push(t('settingsEx.tts.deviceGpuCount', { count: device.gpu_count }))
   }
   if (device.vendor) parts.push(device.vendor)
   if (device.note) parts.push(device.note)
-  return parts.length > 0 ? parts.join(' · ') : '设备就绪。'
+  return parts.length > 0 ? parts.join(' · ') : t('settingsEx.tts.deviceReady')
 })
 
 const fetchTtsInfo = async () => {
@@ -79,7 +81,7 @@ const fetchTtsInfo = async () => {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
     if (!resp.ok) {
-      throw new Error(`请求失败 (${resp.status})`)
+      throw new Error(t('settingsEx.tts.requestFailed', { status: resp.status }))
     }
     const json = await resp.json()
     if (json.error) {
@@ -100,7 +102,7 @@ const fetchTtsInfo = async () => {
       translationEnabled.value = !!cfg.translation?.enabled
     }
   } catch (e) {
-    ttsError.value = e instanceof Error ? e.message : '获取 TTS 信息失败'
+    ttsError.value = e instanceof Error ? e.message : t('settingsEx.tts.fetchFailed')
   } finally {
     ttsLoading.value = false
   }
@@ -117,7 +119,7 @@ const ttsConfigForm = ref({
 })
 const ttsConfigSaving = ref(false)
 const ttsConfigTesting = ref(false)
-const ttsTestText = '你好，这是语音合成测试。'
+const ttsTestText = computed(() => t('settingsEx.tts.testText'))
 const ttsTestResult = ref<{ ok: boolean; msg: string } | null>(null)
 
 /** 当前引擎的能力声明（后端 CAPABILITIES，G1：替代前端硬编码） */
@@ -129,7 +131,7 @@ const ttsEngineCaps = computed<TtsEngineInfo | null>(() => {
 const ttsEngineOptions = computed(() => {
   if (ttsEngines.value.length > 0) {
     return [
-      { value: 'auto', label: '自动（按降级链选择）', needsApiKey: false },
+      { value: 'auto', label: t('settingsEx.tts.engineAuto'), needsApiKey: false },
       ...ttsEngines.value.map(e => ({
         value: e.id,
         label: e.name || e.id,
@@ -182,7 +184,7 @@ const checkLangSupport = (): boolean => {
   if (!caps.languages.includes(lang)) {
     const engineName = ttsEngineCaps.value?.name || engine
     toast.warning(
-      `当前语音引擎 ${engineName} 不支持${LANG_LABELS[lang] || lang}。可更换支持该语言的引擎，或开启翻译管线（翻译后合成）`,
+      t('settingsEx.tts.langNotSupported', { engine: engineName, lang: LANG_LABELS.value[lang] || lang }),
     )
     return false
   }
@@ -232,11 +234,11 @@ const onTranslationToggle = async () => {
       },
       body: JSON.stringify({ translation: { enabled: next } }),
     })
-    if (!resp.ok) throw new Error(`请求失败 (${resp.status})`)
+    if (!resp.ok) throw new Error(t('settingsEx.tts.requestFailed', { status: resp.status }))
     translationEnabled.value = next
-    toast.success(next ? '翻译管线已开启：语言不匹配时自动翻译后合成' : '翻译管线已关闭')
+    toast.success(next ? t('settingsEx.tts.translationOn') : t('settingsEx.tts.translationOff'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '翻译管线设置失败')
+    toast.error(e instanceof Error ? e.message : t('settingsEx.tts.translationSaveFailed'))
   }
 }
 
@@ -281,11 +283,11 @@ const saveTtsConfig = async () => {
         },
       }),
     })
-    ttsTestResult.value = { ok: true, msg: '配置已保存' }
-    toast.success('TTS 配置已保存')
+    ttsTestResult.value = { ok: true, msg: t('settingsEx.tts.configSaved') }
+    toast.success(t('settingsEx.tts.savedToast'))
   } catch (e) {
-    ttsTestResult.value = { ok: false, msg: e instanceof Error ? e.message : '保存失败' }
-    toast.error(e instanceof Error ? e.message : '保存失败')
+    ttsTestResult.value = { ok: false, msg: e instanceof Error ? e.message : t('settingsEx.tts.saveFailed') }
+    toast.error(e instanceof Error ? e.message : t('settingsEx.tts.saveFailed'))
   } finally {
     ttsConfigSaving.value = false
   }
@@ -294,9 +296,9 @@ const saveTtsConfig = async () => {
 /** 信封错误解析（统一 error 对象/旧字符串兼容） */
 const parseEnvelopeError = (errJson: unknown, status: number): string => {
   const ej = errJson as { error?: string | { code?: string; message?: string }; message?: string } | null
-  if (!ej) return `请求失败 (${status})`
+  if (!ej) return t('settingsEx.tts.requestFailed', { status })
   if (typeof ej.error === 'string') return ej.error
-  return ej.error?.message || ej.message || `请求失败 (${status})`
+  return ej.error?.message || ej.message || t('settingsEx.tts.requestFailed', { status })
 }
 
 const testTtsSynthesize = async () => {
@@ -311,7 +313,7 @@ const testTtsSynthesize = async () => {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
-        text: ttsTestText,
+        text: ttsTestText.value,
         voice: ttsConfigForm.value.voice || 'default',
         engine: ttsConfigForm.value.engine,
         model: ttsConfigForm.value.model,
@@ -327,7 +329,7 @@ const testTtsSynthesize = async () => {
       // LANG_NOT_SUPPORTED → 行动建议通知（§11.3）
       const errCode = (errJson as { error?: { code?: string } } | null)?.error?.code
       if (errCode === 'LANG_NOT_SUPPORTED') {
-        toast.warning(`${errMsg}。可更换引擎/音色，或开启翻译管线（翻译后合成）`)
+        toast.warning(t('settingsEx.tts.langNotSupportedAction', { message: errMsg }))
       } else {
         toast.error(errMsg)
       }
@@ -335,15 +337,15 @@ const testTtsSynthesize = async () => {
     }
     const blob = await resp.blob()
     if (blob.size === 0) {
-      throw new Error('返回空音频')
+      throw new Error(t('settingsEx.tts.emptyAudio'))
     }
     const url = URL.createObjectURL(blob)
     const audio = new Audio(url)
     audio.onended = () => URL.revokeObjectURL(url)
     await audio.play()
-    ttsTestResult.value = { ok: true, msg: '测试成功，正在播放' }
+    ttsTestResult.value = { ok: true, msg: t('settingsEx.tts.testSuccess') }
   } catch (e) {
-    ttsTestResult.value = { ok: false, msg: e instanceof Error ? e.message : '测试失败' }
+    ttsTestResult.value = { ok: false, msg: e instanceof Error ? e.message : t('settingsEx.tts.testFailed') }
   } finally {
     ttsConfigTesting.value = false
   }
@@ -361,7 +363,7 @@ onMounted(() => {
     <div v-if="ttsLoading" class="settings-card">
       <div class="settings-card__body settings-card__body--compact settings-state">
         <Loader2 :size="20" class="spin-animation" />
-        <span>正在检测 TTS 引擎与设备...</span>
+        <span>{{ t('settingsEx.tts.loading') }}</span>
       </div>
     </div>
 
@@ -369,7 +371,7 @@ onMounted(() => {
       <div class="settings-card__body settings-card__body--compact settings-state settings-state--error">
         <AlertCircle :size="18" />
         <span>{{ ttsError }}</span>
-        <LumiButton size="sm" @click="fetchTtsInfo">重试</LumiButton>
+        <LumiButton size="sm" @click="fetchTtsInfo">{{ t('settingsEx.tts.retry') }}</LumiButton>
       </div>
     </div>
 
@@ -378,11 +380,11 @@ onMounted(() => {
       <section class="settings-card settings-card--accent">
         <div class="settings-card__header">
           <Settings :size="18" />
-          <span class="settings-card__title">引擎配置</span>
+          <span class="settings-card__title">{{ t('settingsEx.tts.engineConfig') }}</span>
         </div>
         <div class="settings-card__body">
           <div class="settings-form-row">
-            <label class="settings-form-label">TTS 引擎</label>
+            <label class="settings-form-label">{{ t('settingsEx.tts.engineLabel') }}</label>
             <select
               v-model="ttsConfigForm.engine"
               class="settings-form-select"
@@ -399,7 +401,7 @@ onMounted(() => {
           </div>
 
           <div class="settings-form-row">
-            <label class="settings-form-label">语言</label>
+            <label class="settings-form-label">{{ t('settingsEx.tts.languageLabel') }}</label>
             <select
               v-model="ttsConfigForm.lang"
               class="settings-form-select"
@@ -416,17 +418,17 @@ onMounted(() => {
           </div>
 
           <div v-if="ttsNeedsApiKey" class="settings-form-row">
-            <label class="settings-form-label">API Key</label>
+            <label class="settings-form-label">{{ t('settingsEx.tts.apiKeyLabel') }}</label>
             <input
               v-model="ttsConfigForm.apiKey"
               type="password"
               class="settings-form-input"
-              placeholder="输入 API Key"
+              :placeholder="t('settingsEx.tts.apiKeyPlaceholder')"
             />
           </div>
 
           <div v-if="ttsVoiceOptions.length > 0" class="settings-form-row">
-            <label class="settings-form-label">音色</label>
+            <label class="settings-form-label">{{ t('settingsEx.tts.voiceLabel') }}</label>
             <select v-model="ttsConfigForm.voice" class="settings-form-select">
               <option
                 v-for="v in ttsVoiceOptions"
@@ -443,28 +445,28 @@ onMounted(() => {
             class="settings-form-row"
           >
             <label class="settings-form-label">
-              {{ ttsConfigForm.engine === 'fish-audio' ? 'Reference ID / 角色名' : '音色 ID' }}
+              {{ ttsConfigForm.engine === 'fish-audio' ? t('settingsEx.tts.voiceRefLabel') : t('settingsEx.tts.voiceIdLabel') }}
             </label>
             <input
               v-model="ttsConfigForm.voice"
               type="text"
               class="settings-form-input"
-              :placeholder="ttsConfigForm.engine === 'fish-audio' ? '32位十六进制 ID 或角色名称' : '系统语音 ID'"
+              :placeholder="ttsConfigForm.engine === 'fish-audio' ? t('settingsEx.tts.voiceRefPlaceholder') : t('settingsEx.tts.voiceIdPlaceholder')""
             />
           </div>
 
           <div v-if="ttsShowModel" class="settings-form-row">
-            <label class="settings-form-label">模型</label>
+            <label class="settings-form-label">{{ t('settingsEx.tts.modelLabel') }}</label>
             <input
               v-model="ttsConfigForm.model"
               type="text"
               class="settings-form-input"
-              :placeholder="modelStore.TTS_ENGINE_DEFAULT_MODEL[ttsConfigForm.engine] || '模型名称'"
+              :placeholder="modelStore.TTS_ENGINE_DEFAULT_MODEL[ttsConfigForm.engine] || t('settingsEx.tts.modelPlaceholder')""
             />
           </div>
 
           <div v-if="ttsShowSpeed" class="settings-form-row">
-            <label class="settings-form-label">语速 ({{ ttsConfigForm.speed.toFixed(1) }}x)</label>
+            <label class="settings-form-label">{{ t('settingsEx.tts.speedLabel', { speed: ttsConfigForm.speed.toFixed(1) }) }}</label>
             <input
               v-model.number="ttsConfigForm.speed"
               type="range"
@@ -476,12 +478,12 @@ onMounted(() => {
           </div>
 
           <div v-if="ttsShowBaseUrl" class="settings-form-row">
-            <label class="settings-form-label">API 地址（可选）</label>
+            <label class="settings-form-label">{{ t('settingsEx.tts.baseUrlLabel') }}</label>
             <input
               v-model="ttsConfigForm.baseUrl"
               type="text"
               class="settings-form-input"
-              placeholder="留空使用默认地址"
+              :placeholder="t('settingsEx.tts.baseUrlPlaceholder')"
             />
           </div>
 
@@ -490,10 +492,10 @@ onMounted(() => {
             <div class="tts-translation-row__info">
               <label class="settings-form-label">
                 <Languages :size="14" />
-                <span>翻译管线</span>
+                <span>{{ t('settingsEx.tts.translationLabel') }}</span>
               </label>
               <span class="tts-translation-row__hint">
-                开启后，目标语言与引擎/音色语言不匹配时自动翻译再合成（LLM 翻译，消耗 token）
+                {{ t('settingsEx.tts.translationHint') }}
               </span>
             </div>
             <button
@@ -523,7 +525,7 @@ onMounted(() => {
               @click="saveTtsConfig"
             >
               <Save :size="14" />
-              <span>保存配置</span>
+              <span>{{ t('settingsEx.tts.saveConfig') }}</span>
             </LumiButton>
             <LumiButton
               variant="outline"
@@ -533,7 +535,7 @@ onMounted(() => {
               @click="testTtsSynthesize"
             >
               <Play v-if="!ttsConfigTesting" :size="14" />
-              <span>{{ ttsConfigTesting ? '测试中...' : '测试语音' }}</span>
+              <span>{{ ttsConfigTesting ? t('settingsEx.tts.testing') : t('settingsEx.tts.testVoice') }}</span>
             </LumiButton>
           </div>
         </div>
@@ -543,26 +545,26 @@ onMounted(() => {
       <section class="settings-card">
         <div class="settings-card__header">
           <Cpu :size="18" />
-          <span class="settings-card__title">设备检测</span>
+          <span class="settings-card__title">{{ t('settingsEx.tts.deviceDetection') }}</span>
         </div>
         <div class="settings-card__body settings-card__body--compact">
           <div class="settings-data-row">
-            <span class="settings-data-row__label">计算设备</span>
+            <span class="settings-data-row__label">{{ t('settingsEx.tts.computeDevice') }}</span>
             <span :class="['settings-badge', ttsDevice?.type === 'gpu' ? 'settings-badge--success' : 'settings-badge--primary']">
               {{ ttsDeviceLabel }}
             </span>
           </div>
           <div class="settings-data-row">
-            <span class="settings-data-row__label">设备名称</span>
-            <span class="settings-data-row__value">{{ ttsDevice?.name || '未知' }}</span>
+            <span class="settings-data-row__label">{{ t('settingsEx.tts.deviceName') }}</span>
+            <span class="settings-data-row__value">{{ ttsDevice?.name || t('settingsEx.tts.deviceUnknown') }}</span>
           </div>
           <div v-if="ttsDevice?.gpu_count && ttsDevice.gpu_count > 1" class="settings-data-row">
-            <span class="settings-data-row__label">GPU 数量</span>
+            <span class="settings-data-row__label">{{ t('settingsEx.tts.gpuCount') }}</span>
             <span class="settings-data-row__value">{{ ttsDevice.gpu_count }}</span>
           </div>
           <div v-if="ttsDevice?.cuda_available" class="settings-data-row">
-            <span class="settings-data-row__label">CUDA 版本</span>
-            <span class="settings-data-row__value">{{ ttsDevice.cuda_version || '未知' }}</span>
+            <span class="settings-data-row__label">{{ t('settingsEx.tts.cudaVersion') }}</span>
+            <span class="settings-data-row__value">{{ ttsDevice.cuda_version || t('settingsEx.tts.deviceUnknown') }}</span>
           </div>
           <p class="settings-card__hint" style="margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--divider-soft);">
             {{ ttsDeviceHint }}
@@ -574,7 +576,7 @@ onMounted(() => {
       <section class="settings-card">
         <div class="settings-card__header">
           <Volume2 :size="18" />
-          <span class="settings-card__title">可用引擎</span>
+          <span class="settings-card__title">{{ t('settingsEx.tts.availableEngines') }}</span>
         </div>
         <div class="settings-card__body settings-card__body--compact">
           <div
@@ -592,13 +594,13 @@ onMounted(() => {
                 <span>{{ engine.name }}</span>
               </div>
               <span class="settings-list-row__desc">
-                {{ engine.online ? '在线合成，需网络连接' : '离线合成，无需网络' }}
+                {{ engine.online ? t('settingsEx.tts.onlineDesc') : t('settingsEx.tts.offlineDesc') }}
               </span>
             </div>
             <span :class="['settings-badge', engine.available ? 'settings-badge--success' : 'settings-badge--danger']">
               <Check v-if="engine.available" :size="12" />
               <AlertCircle v-else :size="12" />
-              <span>{{ engine.available ? '可用' : '未安装' }}</span>
+              <span>{{ engine.available ? t('settingsEx.tts.available') : t('settingsEx.tts.notInstalled') }}</span>
             </span>
           </div>
         </div>
@@ -608,7 +610,7 @@ onMounted(() => {
       <section class="settings-card">
         <div class="settings-card__header">
           <Palette :size="18" />
-          <span class="settings-card__title">角色语音绑定</span>
+          <span class="settings-card__title">{{ t('settingsEx.tts.voiceBinding') }}</span>
         </div>
         <div class="settings-card__body settings-card__body--compact">
           <div
@@ -619,15 +621,15 @@ onMounted(() => {
             <div class="settings-list-row__title">{{ modelId }}</div>
             <div class="tts-binding-meta">
               <span class="tts-binding-meta__item">
-                <span class="tts-binding-meta__label">语音</span>
+                <span class="tts-binding-meta__label">{{ t('settingsEx.tts.bindingVoice') }}</span>
                 <span class="tts-binding-meta__value">{{ binding.voice }}</span>
               </span>
               <span class="tts-binding-meta__item">
-                <span class="tts-binding-meta__label">语言</span>
+                <span class="tts-binding-meta__label">{{ t('settingsEx.tts.bindingLang') }}</span>
                 <span class="tts-binding-meta__value">{{ binding.voice_lang }}</span>
               </span>
               <span class="tts-binding-meta__item">
-                <span class="tts-binding-meta__label">默认表情</span>
+                <span class="tts-binding-meta__label">{{ t('settingsEx.tts.bindingExpression') }}</span>
                 <span class="tts-binding-meta__value">{{ binding.default_expression }}</span>
               </span>
             </div>

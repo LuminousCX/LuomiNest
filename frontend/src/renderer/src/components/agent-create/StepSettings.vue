@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 /**
  * 智能体创建向导 - 步骤3：高级设置
  *
@@ -9,6 +10,8 @@
 import LumiCard from '../common/LumiCard.vue'
 import type { AgentFormData } from '../../composables/useAgentCreateForm'
 
+const { t } = useI18n()
+
 defineProps<{
   formData: AgentFormData
 }>()
@@ -17,13 +20,13 @@ defineProps<{
 <template>
   <div class="step-content step-layout-full">
     <LumiCard class="settings-card" padding="md">
-      <h3 class="card-title">系统提示词</h3>
+      <h3 class="card-title">{{ t('agentCreate.settings.systemPrompt') }}</h3>
       <div class="form-group">
         <textarea
           v-model="formData.systemPrompt"
           class="lumi-textarea system-prompt-area"
           rows="10"
-          placeholder="定义智能体的角色、行为准则和约束条件...&#10;&#10;例如：你是一个专业的编程助手，专注于提供高质量的代码解决方案。"
+          :placeholder="t('agentCreate.settings.promptPlaceholder')"
         ></textarea>
       </div>
     </LumiCard>

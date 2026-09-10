@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { Globe, Edit3, X, Save, Loader2, Sparkles } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import type { MemoryProfile, SummarySections } from '../../stores/memory'
+
+const { t } = useI18n()
 
 interface Props {
   profile: MemoryProfile
@@ -28,16 +31,16 @@ const emit = defineEmits<{
 <template>
   <div class="detail-header">
     <Globe :size="22" :style="{ color: 'var(--task-sky)' }" />
-    <h3>用户画像</h3>
+    <h3>{{ t('memory.profile.title') }}</h3>
     <div class="detail-actions">
       <button v-if="!isEditingSummary" class="h-btn primary" @click="emit('startEditSummary')">
-        <Edit3 :size="14" /> 编辑
+        <Edit3 :size="14" /> {{ t('memory.profile.edit') }}
       </button>
       <template v-else>
-        <button class="h-btn" @click="emit('cancelEditSummary')"><X :size="14" /> 取消</button>
+        <button class="h-btn" @click="emit('cancelEditSummary')"><X :size="14" /> {{ t('memory.profile.cancel') }}</button>
         <button class="h-btn primary" @click="emit('saveEditSummary')" :disabled="isSaving || !summaryHasChanges">
           <Loader2 v-if="isSaving" :size="14" class="spin-animation" />
-          <Save v-else :size="14" /> 保存
+          <Save v-else :size="14" /> {{ t('memory.profile.save') }}
         </button>
       </template>
     </div>
@@ -47,18 +50,18 @@ const emit = defineEmits<{
     <div class="profile-top">
       <div class="profile-avatar-lg">{{ profile.name?.[0] || '?' }}</div>
       <div class="profile-info">
-        <span class="profile-name">{{ profile.name || '未知用户' }}</span>
-        <span class="profile-label">AI 记住的你</span>
+        <span class="profile-name">{{ profile.name || t('memory.profile.unknownUser') }}</span>
+        <span class="profile-label">{{ t('memory.profile.aiYou') }}</span>
       </div>
     </div>
     <div v-if="profile.static_facts && profile.static_facts.length > 0" class="profile-section">
-      <div class="profile-section-label">稳定偏好</div>
+      <div class="profile-section-label">{{ t('memory.profile.staticLabel') }}</div>
       <div class="profile-tags">
         <span v-for="(fact, idx) in profile.static_facts" :key="idx" class="profile-tag static">{{ fact }}</span>
       </div>
     </div>
     <div v-if="profile.dynamic_context && profile.dynamic_context.length > 0" class="profile-section">
-      <div class="profile-section-label">当前状态</div>
+      <div class="profile-section-label">{{ t('memory.profile.dynamicLabel') }}</div>
       <div class="profile-tags">
         <span v-for="(ctx, idx) in profile.dynamic_context" :key="idx" class="profile-tag dynamic">{{ ctx }}</span>
       </div>
@@ -70,9 +73,9 @@ const emit = defineEmits<{
       :value="editSummaryContent"
       @input="emit('update:editSummaryContent', ($event.target as HTMLTextAreaElement).value)"
       class="memory-editor"
-      placeholder="编辑 AI 总结内容..."
+      :placeholder="t('memory.profile.editPlaceholder')"
     ></textarea>
-    <div class="editor-hint">支持 Markdown 格式，使用 ## 作为段落标题</div>
+    <div class="editor-hint">{{ t('memory.profile.markdownHint') }}</div>
   </div>
   <template v-else>
     <div
@@ -90,14 +93,14 @@ const emit = defineEmits<{
           <p v-for="(line, idx) in summarySections[sectionName as keyof SummarySections].split('\n').filter((l: string) => l.trim())" :key="idx" class="distilled-line">{{ line.replace(/^-\s*/, '') }}</p>
         </template>
         <template v-else>
-          <p class="empty-hint">暂无内容</p>
+          <p class="empty-hint">{{ t('memory.profile.empty') }}</p>
         </template>
       </div>
     </div>
     <div v-if="!hasSummary" class="empty-section summary-empty">
       <Sparkles :size="28" />
-      <p>AI 还不了解你</p>
-      <p class="empty-hint">与 Agent 对话后，AI 会自动总结你的信息</p>
+      <p>{{ t('memory.profile.emptyTitle') }}</p>
+      <p class="empty-hint">{{ t('memory.profile.emptyHint') }}</p>
     </div>
   </template>
 </template>

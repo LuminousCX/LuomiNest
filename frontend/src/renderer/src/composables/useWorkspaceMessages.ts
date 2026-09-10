@@ -9,6 +9,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import type { Ref } from 'vue'
 import type { AgentProfile, ChatMessage } from '../types'
 import type { ChatModeLevel, WorkflowModeOption } from '../components/workbench/types'
+import { i18n } from '../i18n'
 import { useChatStore } from '../stores/chat'
 import { useModelStore } from '../stores/model'
 import { useApi } from './useApi'
@@ -87,7 +88,7 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   //    不再有 per-agent 模型覆盖；模型选择收口到设置页"模型设置"）——
   const currentModel = computed(() => {
     const resolved = modelStore.resolveModel
-    return resolved?.model || '未配置模型'
+    return resolved?.model || i18n.global.t('workspace.unconfiguredModel')
   })
   const currentProvider = computed(() => {
     const resolved = modelStore.resolveModel
@@ -99,10 +100,10 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   // —— 对话模式（普通/专业） ——
   const toast = useToast()
   const chatMode = ref<ChatModeLevel>('normal')
-  const chatModeOptions: WorkflowModeOption[] = [
-    { value: 'normal', label: '普通', title: '普通模式：工具最少（任务视图操作 + 表情操控）' },
-    { value: 'standard', label: '专业', title: '专业模式：工作流规划 + 全量工具，适合复杂长任务' },
-  ]
+  const chatModeOptions = computed<WorkflowModeOption[]>(() => [
+    { value: 'normal', label: i18n.global.t('chat.modeNormal'), title: i18n.global.t('chat.modeNormalTitle') },
+    { value: 'standard', label: i18n.global.t('chat.modePro'), title: i18n.global.t('chat.modeProTitle') },
+  ])
   const isWorkflowMode = computed(() => chatMode.value !== 'normal')
 
   // 切换对话时从存储的 chat_mode 字段同步
@@ -121,7 +122,7 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     if (convId) {
       const currentMsgs = chatStore.convMessages[convId] || []
       if (currentMsgs.length > 0 && chatMode.value !== mode) {
-        toast.warning('当前对话已有内容，无法切换模式。请新建对话后再选择所需模式。')
+        toast.warning(i18n.global.t('chat.modeSwitchBlocked'))
         return
       }
     }
@@ -148,10 +149,10 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     const currentFileType = fileType.value
 
     if (!content && fileContent) {
-      content = '请帮我分析上传的文件'
+      content = i18n.global.t('workspace.analyzeFile')
     }
     if (!content && chatStore.quotedMessage) {
-      content = '请看上面的引用内容'
+      content = i18n.global.t('workspace.checkQuote')
     }
 
     inputText.value = ''
@@ -276,7 +277,7 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     if (startIndex === -1) return
 
     openConfirmDialog(
-      '确定删除这条消息及其关联回复？此操作不可撤销。',
+      i18n.global.t('workspace.confirmDeleteMessage'),
       async () => {
         const currentConvIdLocal = currentConvId.value
         if (!currentConvIdLocal) return
@@ -308,7 +309,7 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
   // —— 回退到起点 ——
   const handleGoBackToStart = (msg: ChatMessage): void => {
     openConfirmDialog(
-      '确定回退这条消息？该消息及之后的所有消息将被删除，内容将恢复到输入框。',
+      i18n.global.t('workspace.confirmRollback'),
       async () => {
         const convId = currentConvId.value
         if (!convId) return

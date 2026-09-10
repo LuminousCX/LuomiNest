@@ -8,6 +8,7 @@
  * 侧栏与节点详情面板拆分至 components/workflow/ 子组件。
  */
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -51,6 +52,7 @@ const {
 
 // Tab 切换
 const activeTab = ref<'sessions' | 'templates'>('sessions')
+const { t } = useI18n()
 
 // 模板 Store
 const workflowStore = useWorkflowStore()
@@ -83,17 +85,17 @@ const handleRunTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
 
 /** 定时运行模板（简单弹窗输入 cron 表达式） */
 const handleScheduleTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
-  const schedule = window.prompt('请输入定时表达式（cron 格式，如 "0 9 * * *" 表示每天9点）', '0 9 * * *')
+  const schedule = window.prompt(t('workflow.promptCron'), '0 9 * * *')
   if (!schedule) return
   const taskId = await workflowStore.scheduleTemplate(tpl.template_id, schedule)
   if (taskId) {
-    window.alert('定时任务已创建')
+    window.alert(t('workflow.scheduleCreated'))
   }
 }
 
 /** 删除模板 */
 const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
-  if (!window.confirm(`确定要删除模板「${tpl.name}」吗？`)) return
+  if (!window.confirm(t('workflow.deleteConfirm', { name: tpl.name }))) return
   await workflowStore.deleteTemplate(tpl.template_id)
 }
 </script>
@@ -102,8 +104,8 @@ const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
   <div class="workflow-view">
     <div class="workflow-header animate-fade-in">
       <div class="workflow-header__text">
-        <h1 class="workflow-title">工作流画布</h1>
-        <p class="workflow-desc">AI 任务编排与可视化</p>
+        <h1 class="workflow-title">{{ t('workflow.title') }}</h1>
+        <p class="workflow-desc">{{ t('workflow.desc') }}</p>
       </div>
       <div class="workflow-header__actions">
         <div v-if="currentDisplaySession" class="session-progress">
@@ -112,23 +114,23 @@ const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
           </div>
           <span class="progress-text">{{ progressStats.completed }}/{{ progressStats.total }}</span>
         </div>
-        <LumiButton variant="secondary" size="sm" title="刷新会话列表" @click="loadSessions">
+        <LumiButton variant="secondary" size="sm" :title="t('workflow.refreshTitle')" @click="loadSessions">
           <template #icon>
             <WorkflowIcon :size="15" />
           </template>
-          刷新
+          {{ t('workflow.refresh') }}
         </LumiButton>
         <LumiButton
           v-if="isRunning"
           variant="danger"
           size="sm"
-          title="停止工作流"
+          :title="t('workflow.stopTitle')"
           @click="toggleRun"
         >
           <template #icon>
             <Square :size="15" />
           </template>
-          停止
+          {{ t('workflow.stop') }}
         </LumiButton>
       </div>
     </div>
@@ -140,14 +142,14 @@ const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
         :class="{ active: activeTab === 'sessions' }"
         @click="activeTab = 'sessions'"
       >
-        历史会话
+        {{ t('workflow.tabSessions') }}
       </button>
       <button
         class="workflow-tab"
         :class="{ active: activeTab === 'templates' }"
         @click="switchToTemplates"
       >
-        模板
+        {{ t('workflow.tabTemplates') }}
       </button>
     </div>
 
@@ -170,8 +172,8 @@ const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
           v-if="flowNodes.length === 0"
           class="canvas-empty-state"
           icon="inbox"
-          title="工作流画布"
-          description="在主 Agent 工作台开启专业模式后，AI 创建的执行计划将自动在此显示为流程图。"
+          :title="t('workflow.emptyTitle')"
+          :description="t('workflow.emptyDesc')"
           size="md"
         />
         <VueFlow

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { User, LogIn, UserPlus, LogOut, ShieldCheck, AlertCircle, Loader2, KeyRound } from 'lucide-vue-next'
 import { useApi } from '../../composables/useApi'
 import LumiButton from '../common/LumiButton.vue'
@@ -8,6 +9,7 @@ import { createLuomiNestRendererLogger } from '../../utils/logger'
 
 const logger = createLuomiNestRendererLogger('SettingsLogin')
 const { apiGet, apiPost } = useApi()
+const { t } = useI18n()
 
 // ── JWT Token 持久化（localStorage，供未来远程访问场景使用）──
 const JWT_ACCESS_TOKEN_KEY = 'lumi_jwt_access_token'
@@ -94,13 +96,13 @@ const handleLogin = async () => {
       password: formData.value.password,
     })
     setJwtTokens(resp.access_token, resp.refresh_token)
-    setBanner('success', '登录成功，正在加载用户信息')
+    setBanner('success', t('settingsEx.login.loginSuccess'))
     await loadCurrentUser()
     // 重置表单
     formData.value.password = ''
     formData.value.confirmPassword = ''
   } catch (e) {
-    setBanner('error', e instanceof Error ? e.message : '登录失败')
+    setBanner('error', e instanceof Error ? e.message : t('settingsEx.login.loginFailed'))
   } finally {
     submitting.value = false
   }
@@ -117,11 +119,11 @@ const handleRegister = async () => {
       password: formData.value.password,
       display_name: formData.value.display_name.trim() || null,
     })
-    setBanner('success', '注册成功，正在自动登录')
+    setBanner('success', t('settingsEx.login.registerSuccess'))
     // 注册成功后自动登录
     await handleLogin()
   } catch (e) {
-    setBanner('error', e instanceof Error ? e.message : '注册失败')
+    setBanner('error', e instanceof Error ? e.message : t('settingsEx.login.registerFailed'))
   } finally {
     submitting.value = false
   }
@@ -133,11 +135,11 @@ const handleLogout = async () => {
   clearBanner()
   try {
     await apiPost('/auth/logout')
-    setBanner('success', '已登出')
+    setBanner('success', t('settingsEx.login.loggedOut'))
   } catch (e) {
     // 登出失败仍清除本地 token（避免本地状态不一致）
     logger.warn('Logout API failed, clearing local tokens anyway:', e)
-    setBanner('info', '已清除本地登录态（服务端登出失败）')
+    setBanner('info', t('settingsEx.login.clearedLocally'))
   } finally {
     clearJwtTokens()
     currentUser.value = null
@@ -175,7 +177,7 @@ onMounted(() => {
     <section v-if="authState === 'loading'" class="settings-card">
       <div class="settings-card__body settings-card__body--compact auth-loading">
         <Loader2 :size="20" class="auth-loading__spinner" />
-        <span>正在加载账户信息...</span>
+        <span>{{ t('settingsEx.login.loading') }}</span>
       </div>
     </section>
 
@@ -184,7 +186,7 @@ onMounted(() => {
       <section class="settings-card">
         <div class="settings-card__header">
           <ShieldCheck :size="16" />
-          <span class="settings-card__title">当前账户</span>
+          <span class="settings-card__title">{{ t('settingsEx.login.currentAccount') }}</span>
         </div>
         <div class="settings-card__body">
           <div class="auth-profile">
@@ -195,24 +197,24 @@ onMounted(() => {
               <div class="auth-profile__name">{{ currentUser.display_name || currentUser.username }}</div>
               <div class="auth-profile__meta">@{{ currentUser.username }}</div>
               <div class="auth-profile__meta auth-profile__meta--muted">
-                用户 ID · {{ currentUser.user_id }}
+                {{ t('settingsEx.login.userIdLabel', { id: currentUser.user_id }) }}
               </div>
             </div>
           </div>
 
           <div class="auth-meta-grid">
             <div class="auth-meta-item">
-              <span class="auth-meta-item__label">账户状态</span>
+              <span class="auth-meta-item__label">{{ t('settingsEx.login.accountStatus') }}</span>
               <span class="auth-meta-item__value auth-meta-item__value--ok">
-                {{ currentUser.is_active ? '已激活' : '已禁用' }}
+                {{ currentUser.is_active ? t('settingsEx.login.active') : t('settingsEx.login.deactivated') }}
               </span>
             </div>
             <div class="auth-meta-item">
-              <span class="auth-meta-item__label">令牌版本</span>
+              <span class="auth-meta-item__label">{{ t('settingsEx.login.tokenVersion') }}</span>
               <span class="auth-meta-item__value">{{ currentUser.token_version }}</span>
             </div>
             <div class="auth-meta-item">
-              <span class="auth-meta-item__label">注册时间</span>
+              <span class="auth-meta-item__label">{{ t('settingsEx.login.registeredAt') }}</span>
               <span class="auth-meta-item__value">
                 {{ currentUser.created_at ? new Date(currentUser.created_at).toLocaleString('zh-CN') : '—' }}
               </span>
@@ -224,7 +226,7 @@ onMounted(() => {
               <template #icon>
                 <LogOut v-if="!submitting" :size="16" />
               </template>
-              登出
+              {{ t('settingsEx.login.logout') }}
             </LumiButton>
           </div>
         </div>
@@ -234,7 +236,7 @@ onMounted(() => {
         <div class="settings-card__body settings-card__body--compact">
           <div class="auth-tip">
             <KeyRound :size="14" />
-            <span>登出会使当前账户签发的所有 JWT 失效（通过 token_version 递增）。</span>
+            <span>{{ t('settingsEx.login.logoutTip') }}</span>
           </div>
         </div>
       </section>
@@ -245,7 +247,7 @@ onMounted(() => {
       <section class="settings-card">
         <div class="settings-card__header">
           <User :size="16" />
-          <span class="settings-card__title">登录 / 注册</span>
+          <span class="settings-card__title">{{ t('settingsEx.login.loginRegister') }}</span>
         </div>
         <div class="settings-card__body">
           <!-- 模式切换 Tab -->
@@ -259,7 +261,7 @@ onMounted(() => {
               @click="switchMode('login')"
             >
               <LogIn :size="14" />
-              登录
+              {{ t('settingsEx.login.login') }}
             </button>
             <button
               type="button"
@@ -270,7 +272,7 @@ onMounted(() => {
               @click="switchMode('register')"
             >
               <UserPlus :size="14" />
-              注册
+              {{ t('settingsEx.login.register') }}
             </button>
           </div>
 
@@ -285,12 +287,12 @@ onMounted(() => {
             <div class="auth-form-field">
               <label class="auth-form-field__label">
                 <User :size="13" />
-                用户名
+                {{ t('settingsEx.login.username') }}
               </label>
               <LumiInput
                 v-model="formData.username"
                 type="text"
-                placeholder="3-50 个字符"
+                :placeholder="t('settingsEx.login.usernamePlaceholder')"
                 autocomplete="username"
               />
             </div>
@@ -298,12 +300,12 @@ onMounted(() => {
             <div v-if="!isLoginMode" class="auth-form-field">
               <label class="auth-form-field__label">
                 <User :size="13" />
-                显示名（可选）
+                {{ t('settingsEx.login.displayName') }}
               </label>
               <LumiInput
                 v-model="formData.display_name"
                 type="text"
-                placeholder="留空则使用用户名"
+                :placeholder="t('settingsEx.login.displayNamePlaceholder')"
                 autocomplete="nickname"
               />
             </div>
@@ -311,12 +313,12 @@ onMounted(() => {
             <div class="auth-form-field">
               <label class="auth-form-field__label">
                 <KeyRound :size="13" />
-                密码
+                {{ t('settingsEx.login.password') }}
               </label>
               <LumiInput
                 v-model="formData.password"
                 type="password"
-                placeholder="至少 6 个字符"
+                :placeholder="t('settingsEx.login.passwordPlaceholder')"
                 autocomplete="current-password"
               />
             </div>
@@ -324,19 +326,19 @@ onMounted(() => {
             <div v-if="!isLoginMode" class="auth-form-field">
               <label class="auth-form-field__label">
                 <KeyRound :size="13" />
-                确认密码
+                {{ t('settingsEx.login.confirmPassword') }}
               </label>
               <LumiInput
                 v-model="formData.confirmPassword"
                 type="password"
-                placeholder="再次输入密码"
+                :placeholder="t('settingsEx.login.confirmPasswordPlaceholder')"
                 autocomplete="new-password"
               />
               <span
                 v-if="formData.confirmPassword && formData.password !== formData.confirmPassword"
                 class="auth-form-field__hint auth-form-field__hint--error"
               >
-                两次密码不一致
+                {{ t('settingsEx.login.passwordMismatch') }}
               </span>
             </div>
 
@@ -351,7 +353,7 @@ onMounted(() => {
               <template #icon>
                 <component :is="isLoginMode ? LogIn : UserPlus" v-if="!submitting" :size="16" />
               </template>
-              {{ isLoginMode ? (submitting ? '登录中...' : '登录') : (submitting ? '注册中...' : '注册') }}
+              {{ isLoginMode ? (submitting ? t('settingsEx.login.loggingIn') : t('settingsEx.login.login')) : (submitting ? t('settingsEx.login.registering') : t('settingsEx.login.register')) }}
             </LumiButton>
           </form>
         </div>
@@ -361,10 +363,7 @@ onMounted(() => {
         <div class="settings-card__body settings-card__body--compact">
           <div class="auth-tip">
             <ShieldCheck :size="14" />
-            <span>
-              桌面端默认开启本地免认证模式（LUOMINEST_NO_AUTH）。此栏目用于注册本地账户，
-              关闭 NO_AUTH 后将强制 JWT 认证，所有 API 调用需携带 Access Token。
-            </span>
+            <span>{{ t('settingsEx.login.noAuthTip') }}</span>
           </div>
         </div>
       </section>

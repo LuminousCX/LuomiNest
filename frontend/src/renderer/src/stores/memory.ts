@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useApi } from '../composables/useApi'
+import { i18n } from '../i18n'
 
 export interface MemoryProfile {
   name: string
@@ -47,14 +48,8 @@ export interface MemoryAgent {
 export const FACT_CATEGORIES = ['preference', 'knowledge', 'context', 'behavior', 'goal', 'correction'] as const
 export type FactCategory = typeof FACT_CATEGORIES[number]
 
-export const CATEGORY_LABELS: Record<string, string> = {
-  preference: '偏好',
-  knowledge: '知识',
-  context: '背景',
-  behavior: '行为',
-  goal: '目标',
-  correction: '纠正',
-}
+/** 事实类别的本地化标签（类别 id 为发给后端的数据，不做翻译） */
+export const categoryLabel = (cat: string): string => i18n.global.t(`memory.cat.${cat}`)
 
 export const CATEGORY_COLORS: Record<string, string> = {
   preference: 'var(--lumi-success)',

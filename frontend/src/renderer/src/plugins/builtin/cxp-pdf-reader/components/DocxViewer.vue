@@ -6,6 +6,7 @@
  * 大纲中的标题会被加粗显示。
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { FileText } from 'lucide-vue-next'
 import type { CxPdfOutlineItem } from '../services/pdfApi'
 
@@ -13,6 +14,8 @@ const props = defineProps<{
   text: string
   outline: CxPdfOutlineItem[]
 }>()
+
+const { t } = useI18n()
 
 // 标题集合（用于加粗匹配的段落）
 const headingSet = computed<Set<string>>(() => {
@@ -75,8 +78,8 @@ const headingFontSize = (level: number): string => {
   <div class="docx-viewer">
     <div v-if="!text" class="docx-empty">
       <FileText :size="48" class="empty-icon" />
-      <p class="empty-text">文档内容为空</p>
-      <p class="empty-hint">后端可能未提取到文本内容</p>
+      <p class="empty-text">{{ t('pdfReader.docx.empty') }}</p>
+      <p class="empty-hint">{{ t('pdfReader.docx.emptyHint') }}</p>
     </div>
 
     <article v-else class="docx-article">

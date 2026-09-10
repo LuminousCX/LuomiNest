@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   BarChart3,
   Brain,
@@ -30,6 +31,7 @@ import { generateAreaChartPaths, calculateTrend, aggregateByDay } from '../../ut
 const memoryStore = useMemoryStore()
 const statsStore = useStatsStore()
 const modelStore = useModelStore()
+const { t } = useI18n()
 
 const period = ref<7 | 30 | 90>(7)
 
@@ -38,18 +40,22 @@ let timeInterval: ReturnType<typeof setInterval>
 
 const greeting = computed(() => {
   const hour = currentTime.value.getHours()
-  if (hour < 6 || hour >= 23) return '夜深了'
-  if (hour < 9) return '早上好'
-  if (hour < 12) return '上午好'
-  if (hour < 14) return '中午好'
-  if (hour < 18) return '下午好'
-  return '晚上好'
+  if (hour < 6 || hour >= 23) return t('stats.greeting.lateNight')
+  if (hour < 9) return t('stats.greeting.morning')
+  if (hour < 12) return t('stats.greeting.forenoon')
+  if (hour < 14) return t('stats.greeting.noon')
+  if (hour < 18) return t('stats.greeting.afternoon')
+  return t('stats.greeting.evening')
 })
 
 const formattedDate = computed(() => {
   const d = currentTime.value
-  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${weekdays[d.getDay()]}`
+  return t('stats.date', {
+    y: d.getFullYear(),
+    m: d.getMonth() + 1,
+    d: d.getDate(),
+    week: t(`stats.wd${d.getDay()}`),
+  })
 })
 
 const profile = computed(() => memoryStore.profile)
@@ -109,10 +115,10 @@ const contextMetrics = computed(() => {
   const windowSize = modelStore.modelConfig.contextWindowSize || 32768
   const totalCtx = tok
   return [
-    { label: '累计上下文使用量', value: totalCtx, unit: 'tokens', max: Math.max(totalCtx, windowSize), color: 'var(--lumi-brand)' },
-    { label: '窗口使用率', value: windowSize > 0 ? Math.min(100, Math.round((totalCtx / windowSize) * 100)) : 0, unit: '%', max: 100, color: 'var(--lumi-success)' },
-    { label: '对话轮次', value: msg, unit: '轮', max: Math.max(msg * 2, 100), color: 'var(--lumi-warning)' },
-    { label: '对话数', value: conv, unit: '个', max: Math.max(conv * 2, 50), color: 'var(--lumi-info)' },
+    { label: t('stats.ctx.totalUsage'), value: totalCtx, unit: 'tokens', max: Math.max(totalCtx, windowSize), color: 'var(--lumi-brand)' },
+    { label: t('stats.ctx.windowRate'), value: windowSize > 0 ? Math.min(100, Math.round((totalCtx / windowSize) * 100)) : 0, unit: '%', max: 100, color: 'var(--lumi-success)' },
+    { label: t('stats.ctx.turns'), value: msg, unit: t('stats.ctx.unitTurns'), max: Math.max(msg * 2, 100), color: 'var(--lumi-warning)' },
+    { label: t('stats.ctx.conversations'), value: conv, unit: t('stats.ctx.unitCount'), max: Math.max(conv * 2, 50), color: 'var(--lumi-info)' },
   ]
 })
 
@@ -140,9 +146,9 @@ const tokenTrend = computed(() => {
 const memorySegments = computed(() => {
   const summaryValue = hasSummary.value ? 1 : 0
   const values = [
-    { label: '长期记忆', value: memoryLineCount.value, display: `${memoryLineCount.value} 行`, color: 'var(--lumi-brand)' },
-    { label: '蒸馏摘要', value: summaryValue, display: hasSummary.value ? '已蒸馏' : '未蒸馏', color: 'var(--lumi-success)' },
-    { label: '日常记录', value: dailyCount.value, display: `${dailyCount.value} 天`, color: 'var(--lumi-warning)' },
+    { label: t('stats.memory.longTerm'), value: memoryLineCount.value, display: t('stats.memory.lineUnit', { n: memoryLineCount.value }), color: 'var(--lumi-brand)' },
+    { label: t('stats.memory.distilledLabel'), value: summaryValue, display: hasSummary.value ? t('stats.memory.distilled') : t('stats.memory.notDistilled'), color: 'var(--lumi-success)' },
+    { label: t('stats.memory.daily'), value: dailyCount.value, display: t('stats.memory.dayUnit', { n: dailyCount.value }), color: 'var(--lumi-warning)' },
   ]
   const total = values.reduce((sum, item) => sum + item.value, 0) || 1
   const circumference = 251.2
@@ -173,7 +179,7 @@ const miniGridMetrics = computed(() => {
     metrics.push({
       label: p.name,
       value: p.requests,
-      unit: '次',
+      unit: t('stats.unitTimes'),
       change: Math.abs(trendValue),
       trend: trendValue >= 0 ? 'up' : 'down',
       color: idx === 0 ? 'var(--lumi-primary)' : 'var(--lumi-success)',
@@ -206,7 +212,7 @@ const recentActivities = computed(() => {
     const tokStr = r.total_tokens > 0 ? ` (${r.total_tokens.toLocaleString()} tokens)` : ''
     return {
       time: timeStr,
-      action: 'API 调用',
+      action: t('stats.activity.apiCall'),
       detail: `${r.provider} / ${r.model}${tokStr}`,
       type: 'api' as const,
     }
@@ -286,29 +292,29 @@ watch(period, () => { loadData() })
   <div class="data-stats-view">
     <div class="stats-header animate-fade-in">
       <div class="stats-header__text">
-        <h1 class="stats-title">数据统计</h1>
+        <h1 class="stats-title">{{ t('stats.title') }}</h1>
         <p class="stats-desc">{{ greeting }}，LuminousChenXi · {{ formattedDate }}</p>
       </div>
       <div class="stats-header__actions">
         <div class="period-tabs">
-          <button :class="['period-btn', { active: period === 7 }]" @click="period = 7">7天</button>
-          <button :class="['period-btn', { active: period === 30 }]" @click="period = 30">30天</button>
-          <button :class="['period-btn', { active: period === 90 }]" @click="period = 90">90天</button>
+          <button :class="['period-btn', { active: period === 7 }]" @click="period = 7">{{ t('stats.days', { n: 7 }) }}</button>
+          <button :class="['period-btn', { active: period === 30 }]" @click="period = 30">{{ t('stats.days', { n: 30 }) }}</button>
+          <button :class="['period-btn', { active: period === 90 }]" @click="period = 90">{{ t('stats.days', { n: 90 }) }}</button>
         </div>
-        <LumiButton variant="ghost" size="sm" icon-only aria-label="刷新" @click="handleRefresh">
+        <LumiButton variant="ghost" size="sm" icon-only :aria-label="t('stats.refresh')" @click="handleRefresh">
           <template #icon><RefreshCw :size="14" :class="{ 'spin-animation': isRefreshing }" /></template>
         </LumiButton>
       </div>
     </div>
 
     <div class="top-stats-row">
-      <LumiCard
-        v-for="(stat, idx) in [
-          { key: 'api', label: 'API 请求', sub: '周期调用总量', value: periodData.requests.toLocaleString(), color: 'var(--lumi-brand)' },
-          { key: 'token', label: 'Token 消耗', sub: '输入 + 输出', value: periodData.tokens, color: 'var(--lumi-success)' },
-          { key: 'memory', label: '记忆行数', sub: '长期记忆条目', value: memoryLineCount, color: 'var(--lumi-warning)' },
-          { key: 'context', label: '对话数', sub: '累计会话数量', value: periodData.conversations, color: 'var(--lumi-info)' },
-        ]"
+        <LumiCard
+          v-for="(stat, idx) in [
+            { key: 'api', label: t('stats.card.api.label'), sub: t('stats.card.api.sub'), value: periodData.requests.toLocaleString(), color: 'var(--lumi-brand)' },
+            { key: 'token', label: t('stats.card.token.label'), sub: t('stats.card.token.sub'), value: periodData.tokens, color: 'var(--lumi-success)' },
+            { key: 'memory', label: t('stats.card.memory.label'), sub: t('stats.card.memory.sub'), value: memoryLineCount, color: 'var(--lumi-warning)' },
+            { key: 'context', label: t('stats.card.context.label'), sub: t('stats.card.context.sub'), value: periodData.conversations, color: 'var(--lumi-info)' },
+          ]"
         :key="stat.key"
         class="stat-card"
         :style="{ animationDelay: `${(idx + 1) * 0.05}s` }"
@@ -331,7 +337,7 @@ watch(period, () => { loadData() })
         <LumiCard class="section-card chart-card" :style="{ animationDelay: '0.10s' }" padding="none">
           <template #title>
             <BarChart3 :size="16" />
-            <span>API 用量</span>
+            <span>{{ t('stats.chartTitle') }}</span>
           </template>
 
           <div class="chart-area" @mousemove="onChartMove" @mouseleave="onChartLeave">
@@ -412,12 +418,12 @@ watch(period, () => { loadData() })
                 }"
               >
                 <span class="ct-label">{{ hoveredPoint.label }}</span>
-                <span class="ct-value">{{ hoveredPoint.value.toLocaleString() }} 次</span>
+                <span class="ct-value">{{ t('stats.countTimes', { n: hoveredPoint.value.toLocaleString() }) }}</span>
               </div>
 
               <div class="chart-overlay-stats">
                 <div class="overlay-stat primary">
-                  <span class="os-label">API 请求</span>
+                  <span class="os-label">{{ t('stats.card.api.label') }}</span>
                   <div class="os-row">
                     <span class="os-value">{{ periodData.requests.toLocaleString() }}</span>
                     <span :class="['os-trend', requestTrend >= 0 ? 'up' : 'down']">
@@ -426,7 +432,7 @@ watch(period, () => { loadData() })
                   </div>
                 </div>
                 <div class="overlay-stat success">
-                  <span class="os-label">Token 消耗</span>
+                  <span class="os-label">{{ t('stats.card.token.label') }}</span>
                   <div class="os-row">
                     <span class="os-value">{{ periodData.tokens }}</span>
                     <span :class="['os-trend', tokenTrend >= 0 ? 'up' : 'down']">
@@ -482,7 +488,7 @@ watch(period, () => { loadData() })
                 <div class="provider-bar-fill" :style="{ width: p.pct + '%' }"></div>
               </div>
               <div class="provider-stats">
-                <span class="provider-requests">{{ p.requests }} 次</span>
+                <span class="provider-requests">{{ t('stats.countTimes', { n: p.requests }) }}</span>
                 <span class="provider-divider"></span>
                 <span class="provider-tokens">{{ p.tokens }} tokens</span>
               </div>
@@ -497,14 +503,14 @@ watch(period, () => { loadData() })
         <LumiCard class="section-card" :style="{ animationDelay: '0.18s' }" padding="md">
           <template #title>
             <Brain :size="16" />
-            <span>记忆统计</span>
+            <span>{{ t('stats.memory.title') }}</span>
           </template>
           <template #header>
             <div class="agent-selector">
               <Users :size="12" />
               <select v-model="selectedAgentId" class="agent-select" @change="onAgentChange">
                 <option v-for="a in memoryStore.memoryAgents" :key="a.id" :value="a.id">
-                  {{ a.name }}{{ a.fact_count !== undefined ? ` (${a.fact_count}条)` : '' }}
+                  {{ a.name }}{{ a.fact_count !== undefined ? t('stats.agentFactCount', { n: a.fact_count }) : '' }}
                 </option>
               </select>
             </div>
@@ -513,23 +519,23 @@ watch(period, () => { loadData() })
           <div class="memory-stats-grid">
             <div class="memory-stat-item">
               <Database :size="16" class="memory-stat-icon" />
-              <span class="memory-stat-label">长期记忆</span>
-              <span class="memory-stat-value">{{ memoryLineCount }} 行</span>
+              <span class="memory-stat-label">{{ t('stats.memory.longTerm') }}</span>
+              <span class="memory-stat-value">{{ t('stats.memory.lineUnit', { n: memoryLineCount }) }}</span>
             </div>
             <div class="memory-stat-item">
               <Sparkles :size="16" class="memory-stat-icon" />
-              <span class="memory-stat-label">蒸馏摘要</span>
-              <span class="memory-stat-value">{{ hasSummary ? '已蒸馏' : '未蒸馏' }}</span>
+              <span class="memory-stat-label">{{ t('stats.memory.distilledLabel') }}</span>
+              <span class="memory-stat-value">{{ hasSummary ? t('stats.memory.distilled') : t('stats.memory.notDistilled') }}</span>
             </div>
             <div class="memory-stat-item">
               <Calendar :size="16" class="memory-stat-icon" />
-              <span class="memory-stat-label">日常记录</span>
-              <span class="memory-stat-value">{{ dailyCount }} 天</span>
+              <span class="memory-stat-label">{{ t('stats.memory.daily') }}</span>
+              <span class="memory-stat-value">{{ t('stats.memory.dayUnit', { n: dailyCount }) }}</span>
             </div>
             <div class="memory-stat-item">
               <User :size="16" class="memory-stat-icon" />
-              <span class="memory-stat-label">用户档案</span>
-              <span class="memory-stat-value">{{ hasProfile ? '有' : '无' }}</span>
+              <span class="memory-stat-label">{{ t('stats.memory.userProfile') }}</span>
+              <span class="memory-stat-value">{{ hasProfile ? t('stats.memory.has') : t('stats.memory.none') }}</span>
             </div>
           </div>
 
@@ -555,7 +561,7 @@ watch(period, () => { loadData() })
               </svg>
               <div class="donut-center">
                 <span class="dc-value">{{ memoryLineCount }}</span>
-                <span class="dc-label">记忆行数</span>
+                <span class="dc-label">{{ t('stats.card.memory.label') }}</span>
               </div>
             </div>
             <div class="donut-legend">
@@ -569,7 +575,7 @@ watch(period, () => { loadData() })
 
           <div class="health-section">
             <div class="health-header">
-              <span class="health-label">记忆充实度</span>
+              <span class="health-label">{{ t('stats.memory.healthLabel') }}</span>
               <span class="health-value">{{ Math.min(100, Math.round((memoryLineCount / 50) * 100)) }}%</span>
             </div>
             <div class="health-bar-bg">
@@ -586,7 +592,7 @@ watch(period, () => { loadData() })
         <LumiCard class="section-card" :style="{ animationDelay: '0.14s' }" padding="md">
           <template #title>
             <Layers :size="16" />
-            <span>上下文监控</span>
+            <span>{{ t('stats.ctx.title') }}</span>
           </template>
           <template #header>
             <Cpu :size="14" class="section-icon-muted" />
@@ -615,7 +621,7 @@ watch(period, () => { loadData() })
         <LumiCard class="section-card" :style="{ animationDelay: '0.22s' }" padding="md">
           <template #title>
             <Clock :size="16" />
-            <span>最近活动</span>
+            <span>{{ t('stats.activity.title') }}</span>
           </template>
           <template #header>
             <MessageSquare :size="14" class="section-icon-muted" />
@@ -640,7 +646,7 @@ watch(period, () => { loadData() })
               </div>
             </div>
             <div v-if="!recentActivities.length" class="activity-empty">
-              暂无近期活动
+              {{ t('stats.activity.empty') }}
             </div>
           </div>
         </LumiCard>

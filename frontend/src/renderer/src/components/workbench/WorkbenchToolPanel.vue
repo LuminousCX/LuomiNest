@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Brain,
   Server,
@@ -9,6 +10,8 @@ import {
 } from 'lucide-vue-next'
 import type { PlatformInstance } from '../../types'
 import type { McpStatus, SubagentActivity } from './types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   memoryFactCount: number
@@ -36,15 +39,15 @@ const connectedMcpCount = computed(
     <div class="agent-panel lumi-card">
       <div class="agent-panel-header" @click="emit('toggle-panel', 'memory')">
         <Brain :size="14" />
-        <span class="agent-panel-title">记忆</span>
+        <span class="agent-panel-title">{{ t('workbench.memory') }}</span>
         <span class="agent-panel-badge">{{ memoryFactCount }}</span>
         <ChevronRight :size="14" class="agent-panel-chevron" :class="{ expanded: !collapsed.memory }" />
       </div>
       <Transition name="panel-slide">
         <div v-show="!collapsed.memory" class="agent-panel-body">
           <div class="memory-profile">
-            <span class="memory-label">用户画像</span>
-            <span class="memory-value">{{ memoryProfileName || '未设置' }}</span>
+            <span class="memory-label">{{ t('workbench.userProfile') }}</span>
+            <span class="memory-value">{{ memoryProfileName || t('workbench.notSet') }}</span>
           </div>
           <div class="memory-summary">{{ memorySummaryPreview }}</div>
         </div>
@@ -55,13 +58,13 @@ const connectedMcpCount = computed(
     <div class="agent-panel lumi-card">
       <div class="agent-panel-header" @click="emit('toggle-panel', 'mcp')">
         <Server :size="14" />
-        <span class="agent-panel-title">MCP 工具</span>
+        <span class="agent-panel-title">{{ t('workbench.mcpTools') }}</span>
         <span class="agent-panel-badge">{{ connectedMcpCount }}/{{ mcpStatus.servers.length }}</span>
         <ChevronRight :size="14" class="agent-panel-chevron" :class="{ expanded: !collapsed.mcp }" />
       </div>
       <Transition name="panel-slide">
         <div v-show="!collapsed.mcp" class="agent-panel-body">
-          <div v-if="mcpStatus.servers.length === 0" class="panel-empty">未配置 MCP 服务器</div>
+          <div v-if="mcpStatus.servers.length === 0" class="panel-empty">{{ t('workbench.noMcpServers') }}</div>
           <template v-else>
             <div
               v-for="server in mcpStatus.servers"
@@ -70,9 +73,9 @@ const connectedMcpCount = computed(
             >
               <span class="mcp-server-dot" :class="server.status"></span>
               <span class="mcp-server-name">{{ server.name }}</span>
-              <span class="mcp-server-tools">{{ server.tool_count }} 工具</span>
+              <span class="mcp-server-tools">{{ t('workbench.toolCount', { n: server.tool_count }) }}</span>
             </div>
-            <div class="mcp-total">共 {{ mcpStatus.totalTools }} 个工具可用</div>
+            <div class="mcp-total">{{ t('workbench.totalTools', { n: mcpStatus.totalTools }) }}</div>
           </template>
         </div>
       </Transition>
@@ -82,13 +85,13 @@ const connectedMcpCount = computed(
     <div class="agent-panel lumi-card">
       <div class="agent-panel-header" @click="emit('toggle-panel', 'platform')">
         <Radio :size="14" />
-        <span class="agent-panel-title">消息平台</span>
+        <span class="agent-panel-title">{{ t('workbench.platforms') }}</span>
         <span class="agent-panel-badge">{{ activePlatformCount }}/{{ platformInstances.length }}</span>
         <ChevronRight :size="14" class="agent-panel-chevron" :class="{ expanded: !collapsed.platform }" />
       </div>
       <Transition name="panel-slide">
         <div v-show="!collapsed.platform" class="agent-panel-body">
-          <div v-if="platformInstances.length === 0" class="panel-empty">未配置消息平台</div>
+          <div v-if="platformInstances.length === 0" class="panel-empty">{{ t('workbench.noPlatforms') }}</div>
           <template v-else>
             <div
               v-for="inst in platformInstances"
@@ -108,13 +111,13 @@ const connectedMcpCount = computed(
     <div class="agent-panel lumi-card">
       <div class="agent-panel-header" @click="emit('toggle-panel', 'subagent')">
         <Cpu :size="14" />
-        <span class="agent-panel-title">子 Agent</span>
+        <span class="agent-panel-title">{{ t('workbench.subagents') }}</span>
         <span class="agent-panel-badge">{{ subagentActivities.length }}</span>
         <ChevronRight :size="14" class="agent-panel-chevron" :class="{ expanded: !collapsed.subagent }" />
       </div>
       <Transition name="panel-slide">
         <div v-show="!collapsed.subagent" class="agent-panel-body">
-          <div v-if="subagentActivities.length === 0" class="panel-empty">主 Agent 按需创建子 Agent</div>
+          <div v-if="subagentActivities.length === 0" class="panel-empty">{{ t('workbench.noSubagents') }}</div>
           <template v-else>
             <div
               v-for="agent in subagentActivities"
@@ -125,7 +128,7 @@ const connectedMcpCount = computed(
               <span class="subagent-side-task">{{ agent.task }}</span>
               <span class="subagent-side-depth">d{{ agent.depth }}</span>
             </div>
-            <div class="mcp-total">共 {{ subagentActivities.length }} 个子 Agent</div>
+            <div class="mcp-total">{{ t('workbench.totalSubagents', { n: subagentActivities.length }) }}</div>
           </template>
         </div>
       </Transition>

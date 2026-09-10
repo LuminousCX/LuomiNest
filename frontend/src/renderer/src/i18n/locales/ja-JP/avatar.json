@@ -1,0 +1,194 @@
+{
+  "avatar": {
+    "common": {
+      "unknownError": "不明なエラー"
+    },
+    "header": {
+      "title": "アバターワークショップ",
+      "desc": "Live2D アバターの管理、モーション編集、ステージ設定"
+    },
+    "view": {
+      "ttsError": "音声合成に失敗しました：{message}",
+      "modelFileNotFound": "このモデルのローカルファイル記録が見つかりません。アプリを再起動してから再試行してください。",
+      "desktopWindowOpenFailed": "デスクトップペットウィンドウを開けませんでした。再試行してください。",
+      "switchDesktopModeFailed": "デスクトップペットモードへの切り替えに失敗しました：{message}",
+      "desktopWindowCloseFailed": "デスクトップペットウィンドウを閉じられませんでした。手動で閉じる必要がある場合があります。",
+      "switchInlineModeFailed": "インラインモードへの復帰に失敗しました：{message}",
+      "sendMessageFailed": "メッセージの送信に失敗しました：{message}"
+    },
+    "workshop": {
+      "manifestLoadFailed": "モデルマニフェストの読み込みに失敗しました",
+      "unknownModelType": "不明なモデルタイプ：{type}",
+      "rendererNotImplemented": "{name}レンダラーはまだ実装されていません。お楽しみに。",
+      "importFailed": "インポートに失敗しました：{message}",
+      "importSuccess": "モデルをインポートしました",
+      "deleteFailed": "削除に失敗しました：{message}",
+      "deleteSuccess": "モデルを削除しました",
+      "selectModelFirst": "先にモデルを選択してください",
+      "bindingUpdated": "バインディング設定を更新しました",
+      "updateFailed": "更新に失敗しました：{message}"
+    },
+    "live2d": {
+      "cubismCoreMissing": "Live2DCubismCore が読み込まれていません。cubism-core/live2dcubismcore.min.js が存在するか確認してください。",
+      "webglNotSupported": "このデバイスは WebGL に対応していないため、Live2D を描画できません。グラフィックドライバーまたはハードウェアアクセラレーションの設定を確認してください。",
+      "graphicsInitFailed": "グラフィックの初期化に失敗しました：{message}"
+    },
+    "stageBg": {
+      "settings": "ステージ背景設定",
+      "resetDefault": "デフォルト背景に戻す",
+      "colorRed": "赤色背景",
+      "colorYellow": "黄色背景",
+      "colorGreen": "緑色背景",
+      "customColor": "カスタムカラー",
+      "customImage": "カスタム背景画像",
+      "uploadFailed": "背景画像のアップロードに失敗しました：{message}",
+      "applied": "背景画像を適用しました（{width}×{height}）",
+      "envUnavailable": "現在の環境では利用できません",
+      "bgUrlInvalid": "背景画像のURL形式が不正です"
+    },
+    "sidebar": {
+      "hideBuiltinHint": "この内蔵モデルを非表示にする（下で復元できます）",
+      "confirmDelete": "もう一度クリックで削除を確認",
+      "deleteImported": "このインポート済みモデルを削除",
+      "emptyList": "このタイプのモデルはまだありません",
+      "hiddenCount": "内蔵モデル{n}個を非表示中",
+      "restoreOne": "再表示",
+      "restoreAll": "すべて再表示"
+    }
+  },
+  "pet": {
+    "controls": {
+      "resetPose": "ポーズをリセット",
+      "pin": "常に手前に表示",
+      "unpin": "固定を解除",
+      "close": "ペットを閉じる"
+    },
+    "chat": {
+      "sendMessageFailed": "デスクトップペットの会話に失敗しました：{message}"
+    }
+  },
+  "theme": {
+    "skins": {
+      "classicBlue": "辰汐ブルー",
+      "classicPurple": "バイオレット",
+      "classicRed": "中国紅",
+      "classicGreen": "翡翠緑",
+      "classicOrange": "ウォームオレンジ",
+      "pearlWhite": "パールホワイト",
+      "roseDream": "ローズドリーム",
+      "midnightAurora": "深夜のオーロラ",
+      "softSunset": "ソフトサンセット",
+      "deepSpaceNebula": "深宇宙の星雲",
+      "oceanBreeze": "海風のそよぎ",
+      "sakuraRain": "桜吹雪",
+      "forestMist": "林間の霧",
+      "defaultSample": "デフォルトサンプル"
+    },
+    "backgrounds": {
+      "none": "なし",
+      "blue": "辰汐ブルー",
+      "purple": "バイオレット",
+      "red": "中国紅",
+      "green": "翡翠緑",
+      "orange": "ウォームオレンジ",
+      "dreamPink": "ドリームピンク",
+      "dreamPinkHot": "ネオンピンク",
+      "deepSpace": "ディープスペース",
+      "ocean": "オーシャン",
+      "sunset": "サンセット",
+      "aurora": "オーロラ",
+      "dots": "ドット",
+      "grid": "グリッド"
+    },
+    "legacy": {
+      "migratedSkinName": "マイスキン",
+      "migratedThemeSkinName": "マイカスタムテーマ"
+    },
+    "editor": {
+      "editTitle": "スキンを編集",
+      "createTitle": "スキンを新規作成",
+      "close": "閉じる",
+      "livePreview": "リアルタイムプレビュー",
+      "defaultName": "マイスキン",
+      "sampleText": "これはサンプルテキストです",
+      "primaryButton": "メインボタン",
+      "nameLabel": "スキン名",
+      "namePlaceholder": "スキン名を入力",
+      "colorThemeLabel": "カラーテーマ",
+      "customColorsLabel": "カスタムカラー",
+      "selectColorTheme": "{name}カラーテーマを選択",
+      "editColorTheme": "{name}カラーテーマを編集",
+      "createCustomColor": "カスタムカラーを新規作成",
+      "modeLabel": "テーマモード",
+      "modeLight": "ライト",
+      "modeDark": "ダーク",
+      "modeSystem": "システムに従う",
+      "backgroundLabel": "背景",
+      "noneOption": "なし",
+      "customBgTitle": "現在のカスタム背景",
+      "customBgName": "カスタム",
+      "uploadCustomBg": "カスタム背景をアップロード",
+      "remove": "削除",
+      "fitLabel": "背景の表示方法",
+      "fitCover": "カバー",
+      "fitContain": "収める",
+      "fitCenter": "中央",
+      "fitRight": "右寄せ",
+      "effectsLabel": "エフェクト調整",
+      "blur": "ぼかし",
+      "opacity": "不透明度",
+      "glass": "すりガラスの強さ",
+      "ambient": "アンビエント光の強さ",
+      "radius": "角丸の傾向",
+      "delete": "削除",
+      "cancel": "キャンセル",
+      "save": "保存",
+      "create": "作成",
+      "selectBgFailed": "背景画像の選択に失敗しました：{message}",
+      "bgUrlInvalid": "背景画像のURL形式が不正です",
+      "bgUploaded": "背景画像をアップロードしました ({width}×{height})",
+      "customColorCreated": "カスタムカラーを作成しました",
+      "customColorUpdated": "カスタムカラーを更新しました",
+      "nameRequired": "スキン名を入力してください",
+      "finishColorEditFirst": "先にカスタムカラー編集を保存またはキャンセルしてください"
+    },
+    "selector": {
+      "presetSection": "プリセットスキン",
+      "applySkin": "{name}スキンを適用",
+      "editBasedOn": "{name}をベースに編集",
+      "edit": "編集",
+      "customSection": "カスタムスキン",
+      "editSkin": "{name}スキンを編集",
+      "createAria": "カスタムスキンを新規作成",
+      "createTitle": "カスタムスキンを新規作成",
+      "createHint": "新しいビジュアルスキームを作成します"
+    },
+    "customEditor": {
+      "editTitle": "カスタムテーマを編集",
+      "createTitle": "カスタムテーマを新規作成",
+      "nameLabel": "テーマ名",
+      "namePlaceholder": "テーマ名を入力",
+      "colorsLabel": "3色配色",
+      "primary": "プライマリ",
+      "secondary": "セカンダリ",
+      "accent": "アクセント",
+      "livePreview": "リアルタイムプレビュー",
+      "uiPreview": "UI 要素プレビュー",
+      "primaryButton": "メインボタン",
+      "secondaryButton": "サブボタン",
+      "accentButton": "アクセントボタン",
+      "cardPreview": "これはカード要素です。枠線にセカンダリカラーを使用しています。",
+      "linkPreview": "これはアクセントカラーのリンクです",
+      "cancel": "キャンセル",
+      "save": "保存",
+      "create": "作成"
+    },
+    "presets": {
+      "blue": "辰汐ブルー",
+      "purple": "バイオレット",
+      "red": "チャイニーズレッド",
+      "green": "ジェードグリーン",
+      "orange": "ウォームオレンジ"
+    }
+  }
+}

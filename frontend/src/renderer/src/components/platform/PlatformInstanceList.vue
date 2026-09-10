@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Globe, Radio, Cable, Link, MessageCircle, Send, Gamepad2, Home, Smartphone,
   Play, Square, Plus, Trash2, Settings,
@@ -17,6 +18,7 @@ import { createLuomiNestRendererLogger } from '../../utils/logger'
 const logger = createLuomiNestRendererLogger('Platform')
 
 const store = usePlatformStore()
+const { t } = useI18n()
 
 const emit = defineEmits<{
   select: [instance: PlatformInstance]
@@ -50,15 +52,15 @@ const getIcon = (iconName: string) => {
 }
 
 const formatLastSync = (lastSync: string) =>
-  lastSync ? formatDateRelative(lastSync) : '未同步'
+  lastSync ? formatDateRelative(lastSync) : t('platform.notSynced')
 
 const getStatusLabel = (status: string) => {
   switch (status) {
-    case 'running': return '运行中'
-    case 'stopped': return '已停止'
-    case 'error': return '错误'
-    case 'pending': return '等待中'
-    default: return '未知'
+    case 'running': return t('platform.status.running')
+    case 'stopped': return t('platform.status.stopped')
+    case 'error': return t('platform.status.error')
+    case 'pending': return t('platform.status.pending')
+    default: return t('platform.status.unknown')
   }
 }
 
@@ -93,11 +95,11 @@ const handleConfig = (instance: PlatformInstance) => {
 <template>
   <div class="platform-list-panel">
     <div class="panel-toolbar">
-      <SearchInput v-model="searchQuery" placeholder="搜索平台..." class="search-input" />
+      <SearchInput v-model="searchQuery" :placeholder="t('platform.searchPlaceholder')" class="search-input" />
       <div class="filter-group">
-        <button :class="['filter-btn', { active: activeFilter === 'all' }]" @click="activeFilter = 'all'">全部</button>
-        <button :class="['filter-btn', { active: activeFilter === 'active' }]" @click="activeFilter = 'active'">活跃</button>
-        <button :class="['filter-btn', { active: activeFilter === 'disconnected' }]" @click="activeFilter = 'disconnected'">断开</button>
+        <button :class="['filter-btn', { active: activeFilter === 'all' }]" @click="activeFilter = 'all'">{{ t('platform.filterAll') }}</button>
+        <button :class="['filter-btn', { active: activeFilter === 'active' }]" @click="activeFilter = 'active'">{{ t('platform.filterActive') }}</button>
+        <button :class="['filter-btn', { active: activeFilter === 'disconnected' }]" @click="activeFilter = 'disconnected'">{{ t('platform.filterDisconnected') }}</button>
       </div>
     </div>
 
@@ -123,14 +125,14 @@ const handleConfig = (instance: PlatformInstance) => {
           <span :class="['status-dot', p.status]" :title="getStatusLabel(p.status)"></span>
         </div>
         <div class="card-bottom">
-          <span class="card-messages">{{ p.messageCount }} 条消息</span>
+          <span class="card-messages">{{ t('platform.msgCount', { n: p.messageCount }) }}</span>
           <div class="card-actions">
             <LumiButton
               size="sm"
               icon-only
               :variant="p.status === 'running' ? 'danger-ghost' : 'ghost'"
               :class="['card-action-btn', p.status === 'running' ? 'stop' : 'start']"
-              :aria-label="p.status === 'running' ? '停止' : '启动'"
+              :aria-label="p.status === 'running' ? t('platform.stop') : t('platform.start')"
               @click.stop="handleToggleStatus(p)"
             >
               <template #icon>
@@ -143,7 +145,7 @@ const handleConfig = (instance: PlatformInstance) => {
               icon-only
               variant="ghost"
               class="card-action-btn config"
-              aria-label="配置"
+              :aria-label="t('platform.config')"
               @click.stop="handleConfig(p)"
             >
               <template #icon><Settings :size="12" /></template>
@@ -153,7 +155,7 @@ const handleConfig = (instance: PlatformInstance) => {
               icon-only
               variant="danger-ghost"
               class="card-action-btn delete"
-              aria-label="删除"
+              :aria-label="t('platform.delete')"
               @click.stop="handleDelete(p)"
             >
               <template #icon><Trash2 :size="12" /></template>
@@ -169,13 +171,13 @@ const handleConfig = (instance: PlatformInstance) => {
       <LumiEmptyState
         v-if="filteredInstances.length === 0"
         icon="folder"
-        title="暂无平台实例"
+        :title="t('platform.emptyTitle')"
         size="md"
       >
         <template #action>
           <LumiButton variant="primary" size="sm" @click="emit('add')">
             <template #icon><Plus :size="14" /></template>
-            添加平台
+            {{ t('platform.add') }}
           </LumiButton>
         </template>
       </LumiEmptyState>

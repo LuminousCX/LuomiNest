@@ -48,6 +48,8 @@ const api = {
     setTTS: (updates: Partial<TTSConfig>) => ipcRenderer.invoke('config:setTTS', updates),
     getSTT: () => ipcRenderer.invoke('config:getSTT'),
     setSTT: (updates: Partial<STTConfig>) => ipcRenderer.invoke('config:setSTT', updates),
+    getLocale: () => ipcRenderer.invoke('config:getLocale'),
+    setLocale: (locale: string) => ipcRenderer.invoke('config:setLocale', locale),
     getAll: () => ipcRenderer.invoke('config:getAll'),
   },
 

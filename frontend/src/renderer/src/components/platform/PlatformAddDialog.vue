@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Globe, Radio, Cable, Link, MessageCircle, Send, Gamepad2, Home, Smartphone,
 } from 'lucide-vue-next'
@@ -13,6 +14,7 @@ import { createLuomiNestRendererLogger } from '../../utils/logger'
 const logger = createLuomiNestRendererLogger('Platform')
 
 const store = usePlatformStore()
+const { t } = useI18n()
 
 const props = defineProps<{
   visible: boolean
@@ -71,9 +73,9 @@ watch(() => props.visible, (visible) => {
 </script>
 
 <template>
-  <LumiModal :visible="visible" title="添加平台" size="lg" @close="closeAddDialog" @update:visible="emit('update:visible', $event)">
+  <LumiModal :visible="visible" :title="t('platform.addTitle')" size="lg" @close="closeAddDialog" @update:visible="emit('update:visible', $event)">
     <div v-if="!selectedAdapterType" class="dialog-body">
-      <p class="dialog-desc">选择要接入的平台类型：</p>
+      <p class="dialog-desc">{{ t('platform.chooseType') }}</p>
       <div class="adapter-type-grid">
         <button
           v-for="at in store.adapterTypes"
@@ -88,25 +90,25 @@ watch(() => props.visible, (visible) => {
             <span class="atc-name">{{ at.displayName }}</span>
             <span class="atc-desc">{{ at.description }}</span>
           </div>
-          <span class="atc-category" :class="at.category">{{ at.category === 'social' ? '社交' : at.category === 'iot' ? 'IoT' : '通用' }}</span>
+          <span class="atc-category" :class="at.category">{{ at.category === 'social' ? t('platform.category.social') : at.category === 'iot' ? t('platform.category.iot') : t('platform.category.general') }}</span>
         </button>
       </div>
     </div>
 
     <div v-else class="dialog-body">
       <div class="form-group">
-        <label class="form-label">平台名称</label>
-        <LumiInput v-model="newPlatformName" type="text" placeholder="输入平台实例名称" />
+        <label class="form-label">{{ t('platform.fieldName') }}</label>
+        <LumiInput v-model="newPlatformName" type="text" :placeholder="t('platform.namePlaceholder')" />
       </div>
       <div class="form-group">
-        <label class="form-label">平台类型</label>
+        <label class="form-label">{{ t('platform.fieldType') }}</label>
         <div class="form-type-badge">
           <component :is="getIcon(selectedAdapterType.icon)" :size="14" />
           <span>{{ selectedAdapterType.displayName }}</span>
         </div>
       </div>
       <div v-if="Object.keys(selectedAdapterType.configMetadata).length > 0" class="form-group">
-        <label class="form-label">连接配置</label>
+        <label class="form-label">{{ t('platform.fieldConnection') }}</label>
         <div class="config-fields">
           <div v-for="(meta, key) in selectedAdapterType.configMetadata" :key="key" class="config-field">
             <label class="config-field-label">{{ meta.label || key }}</label>
@@ -121,15 +123,15 @@ watch(() => props.visible, (visible) => {
     </div>
 
     <template #footer>
-      <LumiButton variant="secondary" size="sm" @click="closeAddDialog">取消</LumiButton>
+      <LumiButton variant="secondary" size="sm" @click="closeAddDialog">{{ t('platform.cancel') }}</LumiButton>
       <LumiButton
         v-if="selectedAdapterType"
         variant="primary"
         size="sm"
         :disabled="!newPlatformName.trim()"
         @click="handleCreate"
-      >确认添加</LumiButton>
-      <LumiButton v-else variant="primary" size="sm" @click="closeAddDialog">关闭</LumiButton>
+      >{{ t('platform.confirmAdd') }}</LumiButton>
+      <LumiButton v-else variant="primary" size="sm" @click="closeAddDialog">{{ t('platform.close') }}</LumiButton>
     </template>
   </LumiModal>
 </template>

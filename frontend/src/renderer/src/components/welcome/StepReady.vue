@@ -1,10 +1,15 @@
 <script setup lang="ts">
 /**
- * 欢迎向导 - 步骤3：准备就绪 + 条款同意
+ * 欢迎向导 - 步骤4：准备就绪 + 条款同意
+ *
+ * 条款内容为摘要式弹窗（三语），完整文本见 设置→隐私与合规 与仓库 LICENSE。
  */
+import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Check, ArrowRight, Shield } from 'lucide-vue-next'
 import LumiBrandStar from '../common/LumiBrandStar.vue'
 import LumiButton from '../common/LumiButton.vue'
+import LumiModal from '../common/LumiModal.vue'
 import type { WelcomeI18nText } from '../../composables/useWelcomeWizard'
 
 defineProps<{
@@ -17,6 +22,9 @@ defineEmits<{
   prev: []
   start: []
 }>()
+
+const { t } = useI18n()
+const termsVisible = ref(false)
 </script>
 
 <template>
@@ -40,7 +48,12 @@ defineEmits<{
       <span class="agree-custom">
         <Check :size="12" v-if="agreed" />
       </span>
-      <span class="agree-text">{{ i18n.agreeText }}</span>
+      <span class="agree-text">
+        {{ t('welcome.agreePrefix') }}
+        <button type="button" class="terms-link" @click.prevent="termsVisible = true">
+          {{ t('welcome.termsLink') }}
+        </button>
+      </span>
     </label>
 
     <div class="step-actions animate-slide-up">
@@ -52,6 +65,37 @@ defineEmits<{
         <ArrowRight :size="16" />
       </LumiButton>
     </div>
+
+    <LumiModal
+      :visible="termsVisible"
+      :title="t('welcome.termsTitle')"
+      size="md"
+      @update:visible="termsVisible = $event"
+    >
+      <div class="terms-body">
+        <section class="terms-section">
+          <h4>{{ t('welcome.termsLocalTitle') }}</h4>
+          <p>{{ t('welcome.termsLocalBody') }}</p>
+        </section>
+        <section class="terms-section">
+          <h4>{{ t('welcome.termsAccountTitle') }}</h4>
+          <p>{{ t('welcome.termsAccountBody') }}</p>
+        </section>
+        <section class="terms-section">
+          <h4>{{ t('welcome.termsThirdpartyTitle') }}</h4>
+          <p>{{ t('welcome.termsThirdpartyBody') }}</p>
+        </section>
+        <section class="terms-section">
+          <h4>{{ t('welcome.termsLicenseTitle') }}</h4>
+          <p>{{ t('welcome.termsLicenseBody') }}</p>
+        </section>
+        <div class="terms-footer">
+          <LumiButton variant="primary" size="md" @click="termsVisible = false">
+            {{ t('welcome.termsClose') }}
+          </LumiButton>
+        </div>
+      </div>
+    </LumiModal>
   </div>
 </template>
 
@@ -87,8 +131,7 @@ defineEmits<{
 }
 
 .ready-shield {
-  position: absolute;
-  bottom: -2px;
+  position: absolute;  bottom: -2px;
   right: -2px;
   width: 28px;
   height: 28px;
@@ -156,6 +199,43 @@ defineEmits<{
 .agree-text {
   font-size: var(--text-base);
   color: var(--text-muted);
+}
+
+.terms-link {
+  font-size: inherit;
+  color: var(--lumi-brand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: opacity var(--transition-fast);
+}
+
+.terms-link:hover {
+  opacity: 0.8;
+}
+
+.terms-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.terms-section h4 {
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text);
+  margin-bottom: var(--space-1);
+}
+
+.terms-section p {
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.terms-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
 }
 
 .step-actions {

@@ -10,6 +10,7 @@
  */
 
 import type { CxPluginModule } from '../../types'
+import { i18n } from '../../../i18n'
 import PdfReaderView from './views/PdfReaderView.vue'
 
 export const activate: CxPluginModule['activate'] = (context) => {
@@ -19,7 +20,7 @@ export const activate: CxPluginModule['activate'] = (context) => {
   context.registerView({
     path: 'reader',
     name: 'reader',
-    title: 'PDF 阅读',
+    title: i18n.global.t('pdfReader.viewTitle'),
     icon: 'FileText',
     showInSidebar: true,
     sidebarGroup: 'bottom',
@@ -29,7 +30,7 @@ export const activate: CxPluginModule['activate'] = (context) => {
   // 注册命令贡献点 — 通过快捷键或命令面板触发，跳转到 PDF 阅读视图
   context.registerCommand({
     id: 'open-pdf-reader',
-    title: '打开 PDF 阅读器',
+    title: i18n.global.t('pdfReader.openReaderCommand'),
     keybinding: 'CmdOrCtrl+Shift+R',
     handler: () => {
       window.location.hash = '#/plugins/cxp-pdf-reader/reader'

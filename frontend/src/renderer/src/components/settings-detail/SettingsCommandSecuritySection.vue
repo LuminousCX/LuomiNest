@@ -10,6 +10,7 @@
  * 保存后立即生效：控制台手动执行、AI 工具调用（cli / console.execute）共用同一策略。
  */
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Shield, Plus, Trash2, Check, AlertCircle, Loader2, Info, Save } from 'lucide-vue-next'
 import { useApi } from '../../composables/useApi'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
@@ -18,6 +19,7 @@ import LumiButton from '../common/LumiButton.vue'
 const logger = createLuomiNestRendererLogger('Settings')
 
 const { apiGet, apiPut } = useApi()
+const { t } = useI18n()
 
 interface CommandPolicy {
   default_whitelist: string[]
@@ -65,7 +67,7 @@ const parseInput = (raw: string): string[] => {
 const handleAddExtra = (): void => {
   const items = parseInput(extraInput.value)
   if (items.length === 0) {
-    extraError.value = '请输入命令名称'
+    extraError.value = t('settingsEx.cmdSecurity.errEmptyCommand')
     return
   }
   extraError.value = ''
@@ -80,7 +82,7 @@ const handleAddExtra = (): void => {
 const handleAddBlacklist = (): void => {
   const items = parseInput(blacklistInput.value)
   if (items.length === 0) {
-    blacklistError.value = '请输入命令名称'
+    blacklistError.value = t('settingsEx.cmdSecurity.errEmptyCommand')
     return
   }
   blacklistError.value = ''
@@ -108,10 +110,10 @@ const handleSave = async (): Promise<void> => {
       extra_whitelist: policy.value.extra_whitelist,
       blacklist: policy.value.blacklist,
     })
-    saveMsg.value = { type: 'success', text: '命令安全策略已保存并立即生效' }
+    saveMsg.value = { type: 'success', text: t('settingsEx.cmdSecurity.savedMsg') }
     setTimeout(() => { saveMsg.value = null }, 3000)
   } catch (e) {
-    saveMsg.value = { type: 'error', text: `保存失败: ${e instanceof Error ? e.message : String(e)}` }
+    saveMsg.value = { type: 'error', text: t('settingsEx.cmdSecurity.saveFailed', { message: e instanceof Error ? e.message : String(e) }) }
   } finally {
     saving.value = false
   }
@@ -140,7 +142,7 @@ onMounted(async () => {
     <div v-if="loading" class="settings-card">
       <div class="settings-card__body settings-card__body--compact command-loading">
         <Loader2 :size="20" class="spin-animation" />
-        <span>正在加载命令安全策略...</span>
+        <span>{{ t('settingsEx.cmdSecurity.loading') }}</span>
       </div>
     </div>
 
@@ -148,20 +150,17 @@ onMounted(async () => {
       <section class="settings-card">
         <div class="settings-card__header">
           <Shield :size="18" />
-          <span class="settings-card__title">命令白名单 / 黑名单</span>
+          <span class="settings-card__title">{{ t('settingsEx.cmdSecurity.title') }}</span>
         </div>
         <div class="settings-card__body">
           <div class="settings-form-hint command-policy-hint">
             <Info :size="14" />
-            <span>
-              控制控制台手动执行与 AI 工具调用（cli / 工作流 console.execute）可执行的命令。
-              白名单外的命令与黑名单内的命令都会被安全拦截，并在工作台工具卡片中标注"已拦截"。
-            </span>
+            <span>{{ t('settingsEx.cmdSecurity.policyHint') }}</span>
           </div>
 
           <!-- 默认白名单（只读） -->
           <div class="settings-form-row">
-            <label class="settings-form-label">默认白名单（内置）</label>
+            <label class="settings-form-label">{{ t('settingsEx.cmdSecurity.defaultWhitelist') }}</label>
             <div class="command-tags">
               <span
                 v-for="cmd in policy.default_whitelist"
@@ -169,22 +168,22 @@ onMounted(async () => {
                 class="command-tag command-tag--default"
               >{{ cmd }}</span>
             </div>
-            <span class="settings-form-hint">内置安全命令，不可修改。如需放行更多命令，请在下方"额外白名单"中添加</span>
+            <span class="settings-form-hint">{{ t('settingsEx.cmdSecurity.defaultWhitelistHint') }}</span>
           </div>
 
           <!-- 额外白名单 -->
           <div class="settings-form-row">
-            <label class="settings-form-label">额外白名单</label>
+            <label class="settings-form-label">{{ t('settingsEx.cmdSecurity.extraWhitelist') }}</label>
             <div class="command-add-row">
               <input
                 v-model="extraInput"
                 class="settings-form-input command-add-input"
-                placeholder="输入命令名，多个用空格或逗号分隔"
+                :placeholder="t('settingsEx.cmdSecurity.inputPlaceholder')"
                 @keydown.enter.prevent="handleAddExtra"
               />
               <LumiButton variant="primary" size="sm" @click="handleAddExtra">
                 <Plus :size="14" />
-                <span>添加</span>
+                <span>{{ t('settingsEx.cmdSecurity.add') }}</span>
               </LumiButton>
             </div>
             <span v-if="extraError" class="settings-form-error">{{ extraError }}</span>
@@ -195,29 +194,29 @@ onMounted(async () => {
                 class="command-tag command-tag--extra"
               >
                 {{ cmd }}
-                <button class="command-tag__remove" :title="`移除 ${cmd}`" @click="removeExtra(cmd)">
+                <button class="command-tag__remove" :title="t('settingsEx.cmdSecurity.removeCommand', { cmd })"" @click="removeExtra(cmd)">
                   <Trash2 :size="12" />
                 </button>
               </span>
               <span v-if="policy.extra_whitelist.length === 0" class="command-tag--empty">
-                未添加额外命令
+                {{ t('settingsEx.cmdSecurity.extraEmpty') }}
               </span>
             </div>
           </div>
 
           <!-- 黑名单 -->
           <div class="settings-form-row">
-            <label class="settings-form-label">黑名单</label>
+            <label class="settings-form-label">{{ t('settingsEx.cmdSecurity.blacklist') }}</label>
             <div class="command-add-row">
               <input
                 v-model="blacklistInput"
                 class="settings-form-input command-add-input"
-                placeholder="输入命令名，多个用空格或逗号分隔"
+                :placeholder="t('settingsEx.cmdSecurity.inputPlaceholder')"
                 @keydown.enter.prevent="handleAddBlacklist"
               />
               <LumiButton variant="danger" size="sm" @click="handleAddBlacklist">
                 <Plus :size="14" />
-                <span>添加</span>
+                <span>{{ t('settingsEx.cmdSecurity.add') }}</span>
               </LumiButton>
             </div>
             <span v-if="blacklistError" class="settings-form-error">{{ blacklistError }}</span>
@@ -228,15 +227,15 @@ onMounted(async () => {
                 class="command-tag command-tag--blacklist"
               >
                 {{ cmd }}
-                <button class="command-tag__remove" :title="`移除 ${cmd}`" @click="removeBlacklist(cmd)">
+                <button class="command-tag__remove" :title="t('settingsEx.cmdSecurity.removeCommand', { cmd })"" @click="removeBlacklist(cmd)">
                   <Trash2 :size="12" />
                 </button>
               </span>
               <span v-if="policy.blacklist.length === 0" class="command-tag--empty">
-                未添加黑名单命令
+                {{ t('settingsEx.cmdSecurity.blacklistEmpty') }}
               </span>
             </div>
-            <span class="settings-form-hint">黑名单优先级最高：即使在白名单内也会被拦截</span>
+            <span class="settings-form-hint">{{ t('settingsEx.cmdSecurity.blacklistHint') }}</span>
           </div>
         </div>
       </section>
@@ -257,7 +256,7 @@ onMounted(async () => {
           @click="handleSave"
         >
           <Save :size="14" />
-          <span>{{ saving ? '保存中...' : '保存策略' }}</span>
+          <span>{{ saving ? t('settingsEx.cmdSecurity.saving') : t('settingsEx.cmdSecurity.savePolicy') }}</span>
         </LumiButton>
       </div>
     </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Terminal, Play, Square, Copy, ChevronRight, AlertTriangle, Info,
   CheckCircle2, XCircle, Maximize2, Minimize2, Upload, RotateCcw,
@@ -17,6 +18,7 @@ import { formatTime, formatDuration } from '../../utils/format'
 import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
 
 const { apiGet, apiPost, apiDelete } = useApi()
+const { t } = useI18n()
 
 /** 工具调用记录列表项（来自 /workflow/tool-records） */
 interface ToolRecordListItem {
@@ -48,6 +50,7 @@ const isLoadingLogs = ref(false)
 const isLoadingToolRecords = ref(false)
 const isUploading = ref(false)
 const uploadResult = ref<string | null>(null)
+const uploadResultIsError = ref(false)
 
 const logFilterSource = ref<'all' | 'frontend' | 'backend'>('all')
 const logFilterLevel = ref<'all' | 'info' | 'warn' | 'error' | 'success'>('all')
@@ -90,9 +93,9 @@ const filteredToolRecords = computed(() => {
 
 const statusLabel = (status: CommandRecord['status']) => {
   const map: Record<CommandRecord['status'], string> = {
-    success: '成功',
-    failed: '失败',
-    running: '运行中',
+    success: t('console.success'),
+    failed: t('console.failed'),
+    running: t('console.running'),
   }
   return map[status]
 }
@@ -168,15 +171,17 @@ const uploadLogs = async () => {
   if (filteredLogs.value.length === 0) return
   isUploading.value = true
   uploadResult.value = null
+  uploadResultIsError.value = false
   try {
     const resp = await apiPost<LogUploadResponse>('/console/logs/upload', {
       logs: filteredLogs.value,
       uploaded_by: 'frontend',
       session_id: generateId('session'),
     })
-    uploadResult.value = `上传成功 (ID: ${resp.upload_id}, 共 ${resp.received_count} 条)`
+    uploadResult.value = t('console.uploadSuccess', { id: resp.upload_id, n: resp.received_count })
   } catch (e: unknown) {
-    uploadResult.value = `上传失败: ${e instanceof Error ? e.message : String(e)}`
+    uploadResult.value = t('console.uploadFailed', { msg: e instanceof Error ? e.message : String(e) })
+    uploadResultIsError.value = true
   } finally {
     isUploading.value = false
     setTimeout(() => { uploadResult.value = null }, 4000)
@@ -203,6 +208,7 @@ const copyLogs = () => {
 
 const isExecuting = ref(false)
 const executeResult = ref<string | null>(null)
+const executeResultIsError = ref(false)
 
 const handleCommand = async () => {
   const cmd = commandInput.value.trim()
@@ -211,7 +217,7 @@ const handleCommand = async () => {
 
   // 本地命令
   if (cmd === 'help') {
-    executeResult.value = '可用命令: help 查看帮助, refresh 刷新, clear 清空, 其他命令将真实执行（受白名单限制）'
+    executeResult.value = t('console.help')
     setTimeout(() => { executeResult.value = null }, 4000)
     return
   }
@@ -237,19 +243,22 @@ const handleCommand = async () => {
   // 真实执行命令
   isExecuting.value = true
   executeResult.value = null
+  executeResultIsError.value = false
   try {
     const resp = await apiPost<ExecuteCommandResponse>('/console/execute', {
       command: cmd,
       executed_by: 'user',
     })
     if (resp.status === 'success') {
-      executeResult.value = `执行成功 (${resp.duration_ms}ms, exit=${resp.exit_code})`
+      executeResult.value = t('console.execSuccess', { ms: resp.duration_ms, code: resp.exit_code })
     } else {
-      executeResult.value = `执行失败: ${resp.error || '未知错误'}`
+      executeResult.value = t('console.execFailed', { msg: resp.error || t('console.unknownError') })
+      executeResultIsError.value = true
     }
     await fetchCommands()
   } catch (e: unknown) {
-    executeResult.value = `执行失败: ${e instanceof Error ? e.message : String(e)}`
+    executeResult.value = t('console.execFailed', { msg: e instanceof Error ? e.message : String(e) })
+    executeResultIsError.value = true
   } finally {
     isExecuting.value = false
     setTimeout(() => { executeResult.value = null }, 5000)
@@ -276,14 +285,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="console-view">
-    <LumiPageHeader title="控制台" desc="AI 命令执行记录、系统日志与运行状态">
+    <LumiPageHeader :title="t('console.title')" :desc="t('console.desc')">
       <template #actions>
         <LumiButton
           variant="ghost"
           size="sm"
           icon-only
           :class="['header-action-btn', { 'is-active': false }]"
-          aria-label="复制内容"
+          :aria-label="t('console.copy')"
           @click="copyLogs"
         >
           <template #icon><Copy :size="14" /></template>
@@ -293,7 +302,7 @@ onBeforeUnmount(() => {
           size="sm"
           icon-only
           :class="['header-action-btn', { 'is-active': isExpanded }]"
-          :aria-label="isExpanded ? '退出全屏' : '全屏'"
+          :aria-label="isExpanded ? t('console.exitFullscreen') : t('console.fullscreen')"
           @click="isExpanded = !isExpanded"
         >
           <template #icon>
@@ -307,15 +316,15 @@ onBeforeUnmount(() => {
     <div class="tab-bar">
       <button :class="['tab-btn', { active: activeTab === 'console' }]" @click="activeTab = 'console'">
         <Terminal :size="14" />
-        命令行
+        {{ t('console.tabConsole') }}
       </button>
       <button :class="['tab-btn', { active: activeTab === 'logs' }]" @click="activeTab = 'logs'">
         <Info :size="14" />
-        系统日志
+        {{ t('console.tabLogs') }}
       </button>
       <button :class="['tab-btn', { active: activeTab === 'workflow' }]" @click="activeTab = 'workflow'">
         <Workflow :size="14" />
-        工作流
+        {{ t('console.tabWorkflow') }}
       </button>
     </div>
 
@@ -326,24 +335,24 @@ onBeforeUnmount(() => {
           <div class="filter-group">
             <button class="filter-btn" @click="showCmdFilter = !showCmdFilter">
               <Filter :size="13" />
-              <span>{{ cmdFilterStatus === 'all' ? '全部状态' : statusLabel(cmdFilterStatus) }}</span>
+              <span>{{ cmdFilterStatus === 'all' ? t('console.allStatus') : statusLabel(cmdFilterStatus) }}</span>
               <ChevronDown :size="12" />
             </button>
             <div v-if="showCmdFilter" class="filter-dropdown">
-              <button :class="['filter-option', { active: cmdFilterStatus === 'all' }]" @click="cmdFilterStatus = 'all'; showCmdFilter = false">全部</button>
-              <button :class="['filter-option', { active: cmdFilterStatus === 'success' }]" @click="cmdFilterStatus = 'success'; showCmdFilter = false">成功</button>
-              <button :class="['filter-option', { active: cmdFilterStatus === 'failed' }]" @click="cmdFilterStatus = 'failed'; showCmdFilter = false">失败</button>
-              <button :class="['filter-option', { active: cmdFilterStatus === 'running' }]" @click="cmdFilterStatus = 'running'; showCmdFilter = false">运行中</button>
+              <button :class="['filter-option', { active: cmdFilterStatus === 'all' }]" @click="cmdFilterStatus = 'all'; showCmdFilter = false">{{ t('console.all') }}</button>
+              <button :class="['filter-option', { active: cmdFilterStatus === 'success' }]" @click="cmdFilterStatus = 'success'; showCmdFilter = false">{{ t('console.success') }}</button>
+              <button :class="['filter-option', { active: cmdFilterStatus === 'failed' }]" @click="cmdFilterStatus = 'failed'; showCmdFilter = false">{{ t('console.failed') }}</button>
+              <button :class="['filter-option', { active: cmdFilterStatus === 'running' }]" @click="cmdFilterStatus = 'running'; showCmdFilter = false">{{ t('console.running') }}</button>
             </div>
           </div>
-          <span class="record-count">{{ filteredCommands.length }} 条记录</span>
+          <span class="record-count">{{ t('console.recordCount', { n: filteredCommands.length }) }}</span>
         </div>
         <LumiButton
           variant="ghost"
           size="sm"
           icon-only
           :loading="isLoadingCommands"
-          aria-label="刷新"
+          :aria-label="t('console.refresh')"
           @click="fetchCommands"
         >
           <template #icon><RefreshCw :size="14" /></template>
@@ -369,11 +378,11 @@ onBeforeUnmount(() => {
                 <span v-if="cmd.exit_code !== null" class="meta-item">exit: {{ cmd.exit_code }}</span>
               </div>
               <div v-if="cmd.output" class="cmd-output">
-                <span class="output-label">输出:</span>
+                <span class="output-label">{{ t('console.outputLabel') }}</span>
                 <code>{{ cmd.output }}</code>
               </div>
               <div v-if="cmd.error" class="cmd-error">
-                <span class="output-label">错误:</span>
+                <span class="output-label">{{ t('console.errorLabel') }}</span>
                 <code>{{ cmd.error }}</code>
               </div>
               <div v-if="cmd.rollback_command" class="cmd-rollback">
@@ -385,7 +394,7 @@ onBeforeUnmount(() => {
           <LumiEmptyState
             v-if="filteredCommands.length === 0 && !isLoadingCommands"
             icon="file"
-            title="暂无命令记录"
+            :title="t('console.emptyCommands')"
             size="md"
           />
         </div>
@@ -399,29 +408,29 @@ onBeforeUnmount(() => {
           <div class="filter-group">
             <button class="filter-btn" @click="showLogFilter = !showLogFilter">
               <Filter :size="13" />
-              <span>{{ logFilterSource === 'all' ? '全部来源' : logFilterSource === 'frontend' ? '前端' : '后端' }}</span>
+              <span>{{ logFilterSource === 'all' ? t('console.allSources') : logFilterSource === 'frontend' ? t('console.frontend') : t('console.backend') }}</span>
               <ChevronDown :size="12" />
             </button>
             <div v-if="showLogFilter" class="filter-dropdown">
-              <button :class="['filter-option', { active: logFilterSource === 'all' }]" @click="logFilterSource = 'all'; showLogFilter = false">全部来源</button>
+              <button :class="['filter-option', { active: logFilterSource === 'all' }]" @click="logFilterSource = 'all'; showLogFilter = false">{{ t('console.allSources') }}</button>
               <button :class="['filter-option', { active: logFilterSource === 'frontend' }]" @click="logFilterSource = 'frontend'; showLogFilter = false">
-                <Monitor :size="12" /> 前端
+                <Monitor :size="12" /> {{ t('console.frontend') }}
               </button>
               <button :class="['filter-option', { active: logFilterSource === 'backend' }]" @click="logFilterSource = 'backend'; showLogFilter = false">
-                <Server :size="12" /> 后端
+                <Server :size="12" /> {{ t('console.backend') }}
               </button>
             </div>
           </div>
           <div class="filter-group">
             <select v-model="logFilterLevel" class="level-select">
-              <option value="all">全部级别</option>
+              <option value="all">{{ t('console.allLevels') }}</option>
               <option value="info">Info</option>
               <option value="warn">Warn</option>
               <option value="error">Error</option>
               <option value="success">Success</option>
             </select>
           </div>
-          <span class="record-count">{{ filteredLogs.length }} 条日志</span>
+          <span class="record-count">{{ t('console.logCount', { n: filteredLogs.length }) }}</span>
         </div>
         <div class="toolbar-right">
           <LumiButton
@@ -429,7 +438,7 @@ onBeforeUnmount(() => {
             size="sm"
             icon-only
             :loading="isLoadingLogs"
-            aria-label="刷新"
+            :aria-label="t('console.refresh')"
             @click="fetchLogs"
           >
             <template #icon><RefreshCw :size="14" /></template>
@@ -442,11 +451,11 @@ onBeforeUnmount(() => {
             @click="uploadLogs"
           >
             <template #icon><Upload :size="14" /></template>
-            <span>{{ isUploading ? '上传中...' : '上传日志' }}</span>
+            <span>{{ isUploading ? t('console.uploading') : t('console.uploadLogs') }}</span>
           </LumiButton>
         </div>
       </div>
-      <div v-if="uploadResult" :class="['upload-toast', { error: uploadResult.includes('失败') }]">
+      <div v-if="uploadResult" :class="['upload-toast', { error: uploadResultIsError }]">
         {{ uploadResult }}
       </div>
 
@@ -458,7 +467,7 @@ onBeforeUnmount(() => {
             <span :class="['log-source', log.source]">
               <Monitor v-if="log.source === 'frontend'" :size="11" />
               <Server v-else :size="11" />
-              {{ log.source === 'frontend' ? '前端' : '后端' }}
+              {{ log.source === 'frontend' ? t('console.frontend') : t('console.backend') }}
             </span>
             <span v-if="log.module" class="log-module">{{ log.module }}</span>
             <span class="log-message">{{ log.message }}</span>
@@ -466,7 +475,7 @@ onBeforeUnmount(() => {
           <LumiEmptyState
             v-if="filteredLogs.length === 0 && !isLoadingLogs"
             icon="file"
-            title="暂无日志"
+            :title="t('console.emptyLogs')"
             size="md"
           />
         </div>
@@ -480,23 +489,23 @@ onBeforeUnmount(() => {
           <div class="filter-group">
             <button class="filter-btn" @click="showToolFilter = !showToolFilter">
               <Filter :size="13" />
-              <span>{{ toolFilterStatus === 'all' ? '全部状态' : toolFilterStatus === 'success' ? '成功' : '失败' }}</span>
+              <span>{{ toolFilterStatus === 'all' ? t('console.allStatus') : toolFilterStatus === 'success' ? t('console.success') : t('console.failed') }}</span>
               <ChevronDown :size="12" />
             </button>
             <div v-if="showToolFilter" class="filter-dropdown">
-              <button :class="['filter-option', { active: toolFilterStatus === 'all' }]" @click="toolFilterStatus = 'all'; showToolFilter = false">全部</button>
-              <button :class="['filter-option', { active: toolFilterStatus === 'success' }]" @click="toolFilterStatus = 'success'; showToolFilter = false">成功</button>
-              <button :class="['filter-option', { active: toolFilterStatus === 'failed' }]" @click="toolFilterStatus = 'failed'; showToolFilter = false">失败</button>
+              <button :class="['filter-option', { active: toolFilterStatus === 'all' }]" @click="toolFilterStatus = 'all'; showToolFilter = false">{{ t('console.all') }}</button>
+              <button :class="['filter-option', { active: toolFilterStatus === 'success' }]" @click="toolFilterStatus = 'success'; showToolFilter = false">{{ t('console.success') }}</button>
+              <button :class="['filter-option', { active: toolFilterStatus === 'failed' }]" @click="toolFilterStatus = 'failed'; showToolFilter = false">{{ t('console.failed') }}</button>
             </div>
           </div>
-          <span class="record-count">{{ filteredToolRecords.length }} 条记录</span>
+          <span class="record-count">{{ t('console.recordCount', { n: filteredToolRecords.length }) }}</span>
         </div>
         <LumiButton
           variant="ghost"
           size="sm"
           icon-only
           :loading="isLoadingToolRecords"
-          aria-label="刷新"
+          :aria-label="t('console.refresh')"
           @click="fetchToolRecords"
         >
           <template #icon><RefreshCw :size="14" /></template>
@@ -524,38 +533,38 @@ onBeforeUnmount(() => {
                 <span class="meta-item"><Clock :size="12" />{{ formatDuration(record.duration_ms) }}</span>
                 <span class="meta-item"><Clock :size="12" />{{ formatTime(record.created_at, { seconds: true }) }}</span>
                 <span :class="['cmd-badge', record.success ? 'success' : 'failed']">
-                  {{ record.success ? '成功' : '失败' }}
+                  {{ record.success ? t('console.success') : t('console.failed') }}
                 </span>
               </div>
             </div>
 
             <div v-if="record.result_preview" class="cmd-card-body">
               <div class="cmd-output">
-                <span class="output-label">预览:</span>
+                <span class="output-label">{{ t('console.previewLabel') }}</span>
                 <code>{{ record.result_preview }}</code>
               </div>
             </div>
 
             <!-- 展开详情 -->
             <div v-if="expandedRecordId === record.record_id" class="tool-detail">
-              <div v-if="isLoadingRecordDetail" class="detail-loading">加载中...</div>
+              <div v-if="isLoadingRecordDetail" class="detail-loading">{{ t('console.loading') }}</div>
               <template v-else-if="expandedRecordDetail">
                 <div class="detail-section">
-                  <span class="output-label">参数:</span>
+                  <span class="output-label">{{ t('console.argsLabel') }}</span>
                   <pre class="detail-json">{{ JSON.stringify(expandedRecordDetail.arguments, null, 2) }}</pre>
                 </div>
                 <div class="detail-section">
-                  <span class="output-label">结果:</span>
+                  <span class="output-label">{{ t('console.resultLabel') }}</span>
                   <pre class="detail-json">{{ expandedRecordDetail.result }}</pre>
                 </div>
               </template>
-              <div v-else class="detail-loading">加载失败</div>
+              <div v-else class="detail-loading">{{ t('console.loadFailed') }}</div>
             </div>
           </div>
           <LumiEmptyState
             v-if="filteredToolRecords.length === 0 && !isLoadingToolRecords"
             icon="file"
-            title="暂无工具调用记录"
+            :title="t('console.emptyTools')"
             size="md"
           />
         </div>
@@ -568,7 +577,7 @@ onBeforeUnmount(() => {
         v-model="commandInput"
         type="text"
         class="command-input"
-        :placeholder="isExecuting ? '执行中...' : '输入命令 (help 查看帮助, 受白名单限制)...'"
+        :placeholder="isExecuting ? t('console.executingPlaceholder') : t('console.inputPlaceholder')"
         :disabled="isExecuting"
         @enter="handleCommand"
       />
@@ -577,7 +586,7 @@ onBeforeUnmount(() => {
         size="sm"
         icon-only
         :disabled="isExecuting"
-        aria-label="执行命令"
+        :aria-label="t('console.execute')"
         @click="handleCommand"
       >
         <template #icon>
@@ -587,7 +596,7 @@ onBeforeUnmount(() => {
       </LumiButton>
     </div>
     <Transition name="fade">
-      <div v-if="executeResult" :class="['execute-toast', { error: executeResult.includes('失败') }]">
+      <div v-if="executeResult" :class="['execute-toast', { error: executeResultIsError }]">
         {{ executeResult }}
       </div>
     </Transition>

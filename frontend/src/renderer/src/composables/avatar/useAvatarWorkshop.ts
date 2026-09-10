@@ -24,6 +24,7 @@
 import { ref, computed, readonly } from 'vue'
 import { useApi } from '../useApi'
 import { useToast } from '../useToast'
+import { i18n } from '../../i18n'
 import { createLuomiNestRendererLogger } from '@/utils/logger'
 import {
   AVATAR_MODEL_TYPES,
@@ -187,7 +188,7 @@ export function useAvatarWorkshop() {
       manifest.value = result
       logger.info(`Manifest loaded: ${result.models.length} models`)
     } catch (err) {
-      workshopError.value = err instanceof Error ? err.message : '加载模型清单失败'
+      workshopError.value = err instanceof Error ? err.message : i18n.global.t('avatar.workshop.manifestLoadFailed')
       logger.error('fetchManifest failed', err)
     } finally {
       isLoadingManifest.value = false
@@ -240,11 +241,11 @@ export function useAvatarWorkshop() {
 
     const typeInfo = AVATAR_MODEL_TYPES.find(t => t.type === mode)
     if (!typeInfo) {
-      toast.error(`未知模型类型：${mode}`)
+      toast.error(i18n.global.t('avatar.workshop.unknownModelType', { type: mode }))
       return false
     }
     if (!typeInfo.implemented) {
-      toast.warning(`${typeInfo.label} 渲染器尚未实现，敬请期待`)
+      toast.warning(i18n.global.t('avatar.workshop.rendererNotImplemented', { name: typeInfo.label }))
       return false
     }
     if (isSwitchingMode.value) {
@@ -359,7 +360,7 @@ export function useAvatarWorkshop() {
       const result = await window.api.avatar.importModel()
       if (!result.success || !result.modelInfo) {
         if (result.error && result.error !== 'Cancelled') {
-          toast.error(`导入失败：${result.error}`)
+          toast.error(i18n.global.t('avatar.workshop.importFailed', { message: result.error }))
         }
         return null
       }
@@ -370,12 +371,12 @@ export function useAvatarWorkshop() {
         fetchManifest(),
       ])
 
-      toast.success('模型导入成功')
+      toast.success(i18n.global.t('avatar.workshop.importSuccess'))
       logger.info(`Model imported: ${result.modelInfo.name}`)
       return result.modelInfo
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      toast.error(`导入失败：${msg}`)
+      toast.error(i18n.global.t('avatar.workshop.importFailed', { message: msg }))
       logger.error('importModel failed', err)
       return null
     }
@@ -390,7 +391,9 @@ export function useAvatarWorkshop() {
     try {
       const result = await window.api.avatar.deleteModel(modelName)
       if (!result.success) {
-        toast.error(`删除失败：${result.error ?? '未知错误'}`)
+        toast.error(i18n.global.t('avatar.workshop.deleteFailed', {
+          message: result.error ?? i18n.global.t('avatar.common.unknownError'),
+        }))
         return false
       }
 
@@ -399,12 +402,12 @@ export function useAvatarWorkshop() {
         fetchManifest(),
       ])
 
-      toast.success('模型已删除')
+      toast.success(i18n.global.t('avatar.workshop.deleteSuccess'))
       logger.info(`Model deleted: ${modelName}`)
       return true
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      toast.error(`删除失败：${msg}`)
+      toast.error(i18n.global.t('avatar.workshop.deleteFailed', { message: msg }))
       logger.error('deleteModel failed', err)
       return false
     }
@@ -468,7 +471,7 @@ export function useAvatarWorkshop() {
     updates: Partial<AvatarBinding>,
   ): Promise<boolean> {
     if (!currentModelId.value) {
-      toast.warning('请先选择一个模型')
+      toast.warning(i18n.global.t('avatar.workshop.selectModelFirst'))
       return false
     }
 
@@ -478,12 +481,12 @@ export function useAvatarWorkshop() {
         updates,
       )
       currentBinding.value = result
-      toast.success('绑定配置已更新')
+      toast.success(i18n.global.t('avatar.workshop.bindingUpdated'))
       logger.info('Binding updated', updates)
       return true
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      toast.error(`更新失败：${msg}`)
+      toast.error(i18n.global.t('avatar.workshop.updateFailed', { message: msg }))
       logger.error('updateBinding failed', err)
       return false
     }

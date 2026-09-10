@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Info,
   ChevronRight,
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 
 const modelStore = useModelStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const providers = computed(() => modelStore.providers)
 const showInfo = ref(false)
@@ -49,10 +51,10 @@ const mainAvailableModels = computed(() => {
 
 const mainConfigValid = computed(() => {
   if (!mainModelConfig.value.selectedProvider) {
-    return { valid: false, error: '请选择供应商' }
+    return { valid: false, error: t('aiModel.common.errSelectProvider') }
   }
   if (!mainModelConfig.value.model) {
-    return { valid: false, error: '请选择模型' }
+    return { valid: false, error: t('aiModel.common.errSelectModel') }
   }
   return { valid: true, error: '' }
 })
@@ -66,13 +68,13 @@ const handleFetchModels = async (providerId: string) => {
   try {
     const models = await modelStore.fetchProviderModels(providerId)
     if (models.length > 0) {
-      toast.success(`已获取 ${models.length} 个模型`)
+      toast.success(t('aiModel.common.fetchSuccess', { count: models.length }))
     } else {
-      toast.warning('未获取到模型，请检查供应商配置或网络连接')
+      toast.warning(t('aiModel.common.fetchEmpty'))
     }
   } catch (e: unknown) {
     logger.error('Failed to fetch models:', e)
-    toast.error(`获取模型列表失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
+    toast.error(t('aiModel.common.fetchFailed', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
   }
 }
 
@@ -95,11 +97,11 @@ const handleSaveMainConfig = async () => {
       defaultTopP: mainModelConfig.value.topP,
     })
     saveStatus.value = 'saved'
-    toast.success('主模型配置已保存')
+    toast.success(t('aiModel.main.savedToast'))
     setTimeout(() => { saveStatus.value = 'idle' }, 2000)
   } catch {
     saveStatus.value = 'error'
-    toast.error('主模型配置保存失败')
+    toast.error(t('aiModel.main.saveErrorToast'))
     setTimeout(() => { saveStatus.value = 'idle' }, 3000)
   }
 }
@@ -119,8 +121,8 @@ onMounted(() => {
     <div class="section-header">
       <div class="section-header-left">
         <div class="section-header-text">
-          <h3 class="section-title">主模型</h3>
-          <span class="section-tag">快速响应</span>
+          <h3 class="section-title">{{ t('aiModel.main.title') }}</h3>
+          <span class="section-tag">{{ t('aiModel.main.tag') }}</span>
         </div>
       </div>
       <button
@@ -132,20 +134,20 @@ onMounted(() => {
     </div>
     <Transition name="info-expand">
       <div v-if="showInfo" class="section-info-panel">
-        <p>主模型用于日常对话与快速响应场景。当推理模型未配置时，主模型也将承担复杂推理任务。</p>
-        <p class="info-tip">优先选择响应速度快、延迟低的模型，如 GPT-4o-mini、Claude Haiku 等。</p>
+        <p>{{ t('aiModel.main.info') }}</p>
+        <p class="info-tip">{{ t('aiModel.main.infoTip') }}</p>
       </div>
     </Transition>
 
     <div class="config-form">
       <div class="form-group">
         <label class="form-label">
-          供应商
+          {{ t('aiModel.common.provider') }}
           <span class="required-mark">*</span>
         </label>
         <div class="form-select-wrap">
           <select v-model="mainModelConfig.selectedProvider" class="form-select" :class="{ 'select-error': saveValidationError && !mainModelConfig.selectedProvider }" @change="onMainProviderChange">
-            <option value="">请选择供应商</option>
+            <option value="">{{ t('aiModel.common.selectProvider') }}</option>
             <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
           <ChevronRight :size="14" class="select-icon" />
@@ -154,31 +156,31 @@ onMounted(() => {
           {{ saveValidationError }}
         </span>
         <span v-else-if="providers.length === 0" class="form-hint hint-warn">
-          暂无供应商，请先点击左侧"添加供应商"
+          {{ t('aiModel.main.noProviders') }}
         </span>
       </div>
 
       <div class="form-group">
         <label class="form-label">
-          模型
+          {{ t('aiModel.common.model') }}
           <span class="required-mark">*</span>
         </label>
         <div class="form-select-wrap">
           <select v-model="mainModelConfig.model" class="form-select">
-            <option value="">请选择模型</option>
+            <option value="">{{ t('aiModel.common.selectModel') }}</option>
             <option v-for="m in mainAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
           </select>
           <ChevronRight :size="14" class="select-icon" />
         </div>
         <div v-if="mainModelConfig.selectedProvider && mainAvailableModels.length === 0" class="fetch-models-row">
-          <span class="form-hint">暂无模型列表</span>
+          <span class="form-hint">{{ t('aiModel.common.noModels') }}</span>
           <button class="fetch-btn" @click="handleFetchModels(mainModelConfig.selectedProvider)">
             <RefreshCw :size="12" />
-            获取
+            {{ t('aiModel.common.fetch') }}
           </button>
         </div>
         <span v-if="mainModelConfig.model && mainAvailableModels.length > 0 && !mainAvailableModels.find(m => m.id === mainModelConfig.model)" class="form-hint hint-warn">
-          当前供应商可能不支持此模型，请求时可能报错
+          {{ t('aiModel.common.modelMismatch') }}
         </span>
       </div>
 
@@ -188,7 +190,7 @@ onMounted(() => {
           <span class="form-value">{{ mainModelConfig.temperature }}</span>
         </div>
         <input type="range" v-model.number="mainModelConfig.temperature" min="0" max="2" step="0.1" class="form-slider" />
-        <div class="slider-labels"><span>精确</span><span>创意</span></div>
+        <div class="slider-labels"><span>{{ t('aiModel.common.precise') }}</span><span>{{ t('aiModel.common.creative') }}</span></div>
       </div>
 
       <div class="form-group">
@@ -216,7 +218,7 @@ onMounted(() => {
         <Check v-else-if="saveStatus === 'saved'" :size="16" />
         <AlertCircle v-else-if="saveStatus === 'error'" :size="16" />
         <Check v-else :size="16" />
-        {{ saveStatus === 'saving' ? '保存中...' : saveStatus === 'saved' ? '已保存' : saveStatus === 'error' ? (saveValidationError || '保存失败') : '保存配置' }}
+        {{ saveStatus === 'saving' ? t('aiModel.common.saving') : saveStatus === 'saved' ? t('aiModel.common.saved') : saveStatus === 'error' ? (saveValidationError || t('aiModel.common.saveFailed')) : t('aiModel.common.saveConfig') }}
       </button>
     </div>
 

@@ -3,6 +3,7 @@
  * 从 chat store 的 sendMessage 中解耦，保持核心流程清晰。
  */
 import type { ChatMessage } from '../types'
+import { i18n } from '../i18n'
 import { detectSearchIntent, extractSearchQuery } from './searchIntent'
 import { createLuomiNestRendererLogger } from './logger'
 
@@ -53,8 +54,8 @@ export const enrichWithUrlContent = async (
     updateLastAssistantMessage({
       content:
         urlsToFetch.length === 1
-          ? '正在获取网页内容...'
-          : `正在获取 ${urlsToFetch.length} 个网页内容...`,
+          ? i18n.global.t('chat.fetchingUrl')
+          : i18n.global.t('chat.fetchingUrls', { n: urlsToFetch.length }),
     })
 
     for (const url of urlsToFetch) {

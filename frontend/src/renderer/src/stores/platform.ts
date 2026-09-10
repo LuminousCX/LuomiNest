@@ -7,6 +7,7 @@ import type {
 } from '../types'
 import { useApi } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
+import { i18n } from '../i18n'
 
 interface RawLogEntry {
   id: string
@@ -437,11 +438,11 @@ export const usePlatformStore = defineStore('platform', () => {
         _lastMainAgentToastMsg = null
       } catch (e: unknown) {
         mainAgent.value = null
-        const msg = (e instanceof Error ? e.message : String(e)) || '未知错误'
+        const msg = (e instanceof Error ? e.message : String(e)) || i18n.global.t('platform.toast.unknownError')
         mainAgentError.value = msg
         if (_lastMainAgentToastMsg !== msg) {
           _lastMainAgentToastMsg = msg
-          toast.warning(`主 Agent 配置加载失败：${msg}。请在设置中检查 AI 模型配置。`, 5000)
+          toast.warning(i18n.global.t('platform.toast.mainAgentLoadFailed', { msg }), 5000)
         }
       } finally {
         _mainAgentFetchPromise = null
@@ -463,9 +464,9 @@ export const usePlatformStore = defineStore('platform', () => {
     try {
       await apiPatch('/platforms/main_agent', body)
       await fetchMainAgent(true)  // force: true, 确保 settings 保存后工作台显示最新头像
-      toast.success('主 Agent 配置已更新')
+      toast.success(i18n.global.t('platform.toast.mainAgentUpdated'))
     } catch (e: unknown) {
-      toast.error(`更新失败：${(e instanceof Error ? e.message : String(e)) || '未知错误'}`)
+      toast.error(i18n.global.t('platform.toast.updateFailed', { msg: (e instanceof Error ? e.message : String(e)) || i18n.global.t('platform.toast.unknownError') }))
       throw e
     }
   }
@@ -481,8 +482,8 @@ export const usePlatformStore = defineStore('platform', () => {
       return d?.conversation_id || d?.conversationId || null
     } catch (e: unknown) {
       const toast = useToast()
-      const msg = (e instanceof Error ? e.message : String(e)) || '未知错误'
-      toast.error(`创建对话失败：${msg}`)
+      const msg = (e instanceof Error ? e.message : String(e)) || i18n.global.t('platform.toast.unknownError')
+      toast.error(i18n.global.t('platform.toast.createConversationFailed', { msg }))
       throw e
     }
   }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import {
   Bot,
   Users,
@@ -14,6 +15,8 @@ const props = defineProps<{
   collaborationMode: boolean
 }>()
 
+const { t } = useI18n()
+
 const emit = defineEmits<{
   back: []
   'toggle-collaboration-mode': []
@@ -25,7 +28,7 @@ const emit = defineEmits<{
 <template>
   <div class="group-info-panel">
     <div class="left-panel-header">
-      <button class="back-btn" title="返回联系人" @click="emit('back')">
+      <button class="back-btn" :title="t('workspace.groupInfo.back')" @click="emit('back')">
         <ChevronLeft :size="16" />
       </button>
       <div class="left-panel-title">
@@ -34,7 +37,7 @@ const emit = defineEmits<{
         </div>
         <div class="left-panel-title-text">
           <span class="left-panel-name">{{ group?.name }}</span>
-          <span class="left-panel-sub">{{ group?.members.length }} 成员 · {{ group?.aiCount }} AI</span>
+          <span class="left-panel-sub">{{ t('workspace.groupInfo.memberCount', { m: group?.members.length ?? 0, a: group?.aiCount ?? 0 }) }}</span>
         </div>
       </div>
     </div>
@@ -42,22 +45,22 @@ const emit = defineEmits<{
     <div class="group-actions">
       <button
         :class="['group-action-btn', { active: collaborationMode }]"
-        title="协作模式"
+        :title="t('workspace.groupInfo.collabMode')"
         @click="emit('toggle-collaboration-mode')"
       >
         <Zap :size="14" />
-        <span>协作模式</span>
+        <span>{{ t('workspace.groupInfo.collabMode') }}</span>
       </button>
-      <button class="group-action-btn" title="添加 Agent" @click="emit('add-agent')">
+      <button class="group-action-btn" :title="t('workspace.groupInfo.addAgent')" @click="emit('add-agent')">
         <UserPlus :size="14" />
-        <span>添加成员</span>
+        <span>{{ t('workspace.groupInfo.addMember') }}</span>
       </button>
     </div>
 
     <div class="group-members">
       <div class="members-label">
         <Bot :size="12" />
-        <span>群成员</span>
+        <span>{{ t('workspace.groupInfo.members') }}</span>
       </div>
       <div
         v-for="member in group?.members"
@@ -71,13 +74,13 @@ const emit = defineEmits<{
           <span class="member-name">{{ member.name }}</span>
           <span class="member-role">{{ member.role }}</span>
         </div>
-        <button class="member-remove-btn" title="移除成员" @click="emit('remove-agent', member.agent_id)">
+        <button class="member-remove-btn" :title="t('workspace.groupInfo.removeMember')" @click="emit('remove-agent', member.agent_id)">
           <X :size="12" />
         </button>
       </div>
       <div v-if="!group?.members.length" class="conv-empty">
         <Bot :size="24" />
-        <span>暂无成员，点击上方添加</span>
+        <span>{{ t('workspace.groupInfo.emptyMembers') }}</span>
       </div>
     </div>
   </div>

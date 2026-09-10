@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Palette,
   Image as ImageIcon,
@@ -14,6 +15,7 @@ import {
 } from '@/stores/stage-background'
 import { vClickOutside } from '@/directives/clickOutside'
 
+const { t } = useI18n()
 const stageBg = useStageBackgroundStore()
 const toast = useToast()
 
@@ -91,20 +93,22 @@ async function handleImageClick() {
     if (!result.success) {
       // 用户取消选择时不提示（结构化 cancelled 标志，不依赖错误文案）
       if (!result.cancelled) {
-        toast.error(`上传背景图片失败：${result.error ?? '未知错误'}`)
+        toast.error(t('avatar.stageBg.uploadFailed', {
+          message: result.error ?? t('avatar.common.unknownError'),
+        }))
       }
       return
     }
     if (result.warning) {
       toast.warning(result.warning)
     } else {
-      toast.success(`背景图片已应用（${result.width}×${result.height}）`)
+      toast.success(t('avatar.stageBg.applied', { width: result.width, height: result.height }))
     }
     closeMenu()
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[StageBackgroundMenu] upload error:', err)
-    toast.error(`上传背景图片失败：${message}`)
+    toast.error(t('avatar.stageBg.uploadFailed', { message }))
   } finally {
     uploading.value = false
   }
@@ -117,8 +121,8 @@ async function handleImageClick() {
     <button
       class="bg-trigger-ball"
       :class="{ active: activeBallId !== 'default' }"
-      title="舞台背景设置"
-      aria-label="舞台背景设置"
+      :title="t('avatar.stageBg.settings')"
+      :aria-label="t('avatar.stageBg.settings')"
       :aria-expanded="expanded"
       @click="toggleMenu"
     >
@@ -132,8 +136,8 @@ async function handleImageClick() {
         class="bg-ball bg-ball--default"
         :class="{ 'is-active': activeBallId === 'default' }"
         :style="{ '--i': 0 }"
-        title="恢复默认背景"
-        aria-label="恢复默认背景"
+        :title="t('avatar.stageBg.resetDefault')"
+        :aria-label="t('avatar.stageBg.resetDefault')"
         :tabindex="expanded ? 0 : -1"
         @click="handleReset"
       >
@@ -147,8 +151,8 @@ async function handleImageClick() {
         class="bg-ball bg-ball--preset"
         :class="{ 'is-active': activeBallId === preset.id }"
         :style="{ '--i': idx + 1, '--ball-color': preset.hex }"
-        :title="`${preset.id === 'red' ? '红' : preset.id === 'yellow' ? '黄' : '绿'}色底`"
-        :aria-label="`${preset.id === 'red' ? '红' : preset.id === 'yellow' ? '黄' : '绿'}色底`"
+        :title="preset.id === 'red' ? t('avatar.stageBg.colorRed') : preset.id === 'yellow' ? t('avatar.stageBg.colorYellow') : t('avatar.stageBg.colorGreen')"
+        :aria-label="preset.id === 'red' ? t('avatar.stageBg.colorRed') : preset.id === 'yellow' ? t('avatar.stageBg.colorYellow') : t('avatar.stageBg.colorGreen')"
         :tabindex="expanded ? 0 : -1"
         @click="handlePresetColor(preset.hex)"
       >
@@ -160,8 +164,8 @@ async function handleImageClick() {
         class="bg-ball bg-ball--custom-color"
         :class="{ 'is-active': activeBallId === 'custom-color' }"
         :style="{ '--i': STAGE_BG_PRESET_COLORS.length + 1 }"
-        title="自定义颜色"
-        aria-label="自定义颜色"
+        :title="t('avatar.stageBg.customColor')"
+        :aria-label="t('avatar.stageBg.customColor')"
         :tabindex="expanded ? 0 : -1"
         @click="handleCustomColorClick"
       >
@@ -183,8 +187,8 @@ async function handleImageClick() {
         class="bg-ball bg-ball--image"
         :class="{ 'is-active': activeBallId === 'image' }"
         :style="{ '--i': STAGE_BG_PRESET_COLORS.length + 2 }"
-        title="自定义背景图片"
-        aria-label="自定义背景图片"
+        :title="t('avatar.stageBg.customImage')"
+        :aria-label="t('avatar.stageBg.customImage')"
         :disabled="uploading"
         :tabindex="expanded ? 0 : -1"
         @click="handleImageClick"

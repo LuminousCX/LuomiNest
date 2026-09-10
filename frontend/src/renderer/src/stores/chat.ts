@@ -27,6 +27,7 @@ interface RawConversation {
 }
 import { useApi } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
+import { i18n } from '../i18n'
 import { useAgentStore } from './agent'
 import { useChatTrashStore } from './chat-trash'
 import { enrichWithSearchResults, enrichWithUrlContent } from '../utils/chatSearchHelpers'
@@ -259,7 +260,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!targetAgentId) return null
 
     const conv = await apiPost<Conversation>('/chat/conversations', {
-      title: title || '新对话',
+      title: title || i18n.global.t('chat.newConversation'),
       agent_id: targetAgentId,
       model,
       provider,
@@ -624,7 +625,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
         lastError.value = err
-        toast.error(`对话失败：${err}`)
+        toast.error(i18n.global.t('chat.conversationFailed', { msg: err }))
         fetchConversations(targetAgentId)
       },
       controller.signal
@@ -815,7 +816,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         convStreaming.value = { ...convStreaming.value, [streamingConvId]: false }
         lastError.value = err
-        toast.error(`重新生成失败：${err}`)
+        toast.error(i18n.global.t('chat.regenerateFailed', { msg: err }))
         if (targetAgentId) {
           fetchConversations(targetAgentId)
         }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   MessageCircle,
   MessageSquare,
@@ -33,6 +34,7 @@ import { resolvePluginIcon } from '../plugins/plugin-icons'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const taskStreamStore = useTaskStreamStore()
 
 const isNavCollapsed = ref(true)
@@ -71,50 +73,51 @@ interface NavItem {
 
 const expandedGroups = ref<Set<string>>(new Set(['chat']))
 
-const navGroups: NavGroup[] = [
+// 标签走 vue-i18n，语言切换时 computed 重新求值
+const navGroups = computed<NavGroup[]>(() => [
   {
     id: 'chat',
-    label: '聊天',
+    label: t('nav.chat'),
     icon: MessageCircle,
     children: [
-      { id: '/workbench', label: '工作台', icon: Bot },
-      { id: '/workspace', label: '对话', icon: MessageSquare },
-      { id: '/chat/platform', label: '平台接入', icon: Globe },
-      { id: '/chat/devices', label: '设备与群组', icon: Wifi },
+      { id: '/workbench', label: t('nav.workbench'), icon: Bot },
+      { id: '/workspace', label: t('nav.workspace'), icon: MessageSquare },
+      { id: '/chat/platform', label: t('nav.platform'), icon: Globe },
+      { id: '/chat/devices', label: t('nav.devices'), icon: Wifi },
     ],
   },
   {
     id: 'panel',
-    label: '控制面板',
+    label: t('nav.panel'),
     icon: Settings2,
     children: [
-      { id: '/settings/ai-model', label: '模型配置', icon: Cpu },
-      { id: '/avatar', label: '皮套工坊', icon: Palette },
-      { id: '/panel/data-stats', label: '数据统计', icon: BarChart3 },
-      { id: '/memory', label: '记忆中枢', icon: Brain },
-      { id: '/market', label: '扩展市场', icon: Package },
-      { id: '/panel/console', label: '控制台', icon: Terminal },
+      { id: '/settings/ai-model', label: t('nav.modelConfig'), icon: Cpu },
+      { id: '/avatar', label: t('nav.avatarWorkshop'), icon: Palette },
+      { id: '/panel/data-stats', label: t('nav.dataStats'), icon: BarChart3 },
+      { id: '/memory', label: t('nav.memoryHub'), icon: Brain },
+      { id: '/market', label: t('nav.market'), icon: Package },
+      { id: '/panel/console', label: t('nav.console'), icon: Terminal },
     ],
   },
   {
     id: 'plan',
-    label: '计划任务',
+    label: t('nav.plan'),
     icon: CheckSquare,
     children: [
-      { id: '/tasks', label: '计划视图', icon: CalendarDays },
-      { id: '/plan/smart-home', label: '智能家居', icon: Home },
-      { id: '/workflow', label: '工作流', icon: GitBranch },
+      { id: '/tasks', label: t('nav.taskSchedule'), icon: CalendarDays },
+      { id: '/plan/smart-home', label: t('nav.smartHome'), icon: Home },
+      { id: '/workflow', label: t('nav.workflow'), icon: GitBranch },
     ],
   },
-]
+])
 
-const navItems: NavItem[] = [
-  { id: 'browser', label: '浏览器', icon: Globe, route: '/browser' },
-  { id: 'settings', label: '设置', icon: Settings, route: '/settings' },
-]
+const navItems = computed<NavItem[]>(() => [
+  { id: 'browser', label: t('nav.browser'), icon: Globe, route: '/browser' },
+  { id: 'settings', label: t('nav.settings'), icon: Settings, route: '/settings' },
+])
 
 const activeGroup = computed(() => {
-  for (const group of navGroups) {
+  for (const group of navGroups.value) {
     for (const child of group.children) {
       if (route.path === child.id || route.path.startsWith(child.id + '/')) {
         return group.id
@@ -196,12 +199,12 @@ const handleNavigate = (path: string) => {
         </div>
       </div>
       <div v-if="!isNavCollapsed" class="header-actions">
-        <button class="header-action-btn" aria-label="消息公告" title="消息公告">
+        <button class="header-action-btn" :aria-label="t('nav.announcements')" :title="t('nav.announcements')">
           <Bell :size="16" />
           <span class="header-action-dot"></span>
         </button>
       </div>
-      <button class="collapse-toggle-btn" :aria-label="isNavCollapsed ? '展开侧栏' : '收起侧栏'" :title="isNavCollapsed ? '展开侧栏' : '收起侧栏'" @click="isNavCollapsed = !isNavCollapsed">
+      <button class="collapse-toggle-btn" :aria-label="isNavCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')" :title="isNavCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')" @click="isNavCollapsed = !isNavCollapsed">
         <PanelLeftOpen v-if="isNavCollapsed" :size="18" />
         <PanelLeftClose v-else :size="18" />
       </button>
@@ -211,7 +214,7 @@ const handleNavigate = (path: string) => {
       <Search :size="14" class="nav-search-icon" />
       <input
         type="text"
-        placeholder="搜索..."
+        :placeholder="t('nav.searchPlaceholder')"
         class="nav-search-input"
         readonly
         @click="router.push('/workspace')"
@@ -221,7 +224,7 @@ const handleNavigate = (path: string) => {
 
     <div class="nav-content">
       <div class="nav-section">
-        <div v-if="!isNavCollapsed" class="section-label">导航</div>
+        <div v-if="!isNavCollapsed" class="section-label">{{ t('nav.sectionNavigate') }}</div>
 
         <div v-for="group in navGroups" :key="group.id" class="nav-group">
           <button
@@ -262,7 +265,7 @@ const handleNavigate = (path: string) => {
       </div>
 
       <div v-if="!isNavCollapsed" class="nav-section">
-        <div class="section-label">工具</div>
+        <div class="section-label">{{ t('nav.sectionTools') }}</div>
         <div class="nav-items">
           <button
             v-for="item in navItems"
@@ -279,7 +282,7 @@ const handleNavigate = (path: string) => {
       </div>
 
       <div v-if="!isNavCollapsed && pluginSidebarViews.length" class="nav-section">
-        <div class="section-label">插件</div>
+        <div class="section-label">{{ t('nav.sectionPlugins') }}</div>
         <div class="nav-items">
           <button
             v-for="pview in pluginSidebarViews"
@@ -295,9 +298,9 @@ const handleNavigate = (path: string) => {
     </div>
 
     <div class="nav-footer">
-      <button class="footer-btn" title="设置" @click="router.push('/settings')">
+      <button class="footer-btn" :title="t('nav.settings')" @click="router.push('/settings')">
         <Settings :size="15" />
-        <span v-if="!isNavCollapsed">设置</span>
+        <span v-if="!isNavCollapsed">{{ t('nav.settings') }}</span>
       </button>
     </div>
   </div>

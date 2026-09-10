@@ -1,65 +1,19 @@
 import { ref } from 'vue'
 import type { ChatStreamChunk } from '../types'
 import { API_ENDPOINTS } from '../config/api'
+import { i18n } from '../i18n'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 
 const logger = createLuomiNestRendererLogger('Api')
 
 const getApiUrl = (path: string) => `${API_ENDPOINTS.V1}${path}`
 
-// HTTP 状态码到中文友好提示的映射
-const HTTP_STATUS_MESSAGES: Record<number, string> = {
-  400: '请求参数错误，请检查输入',
-  401: '未授权，请检查 API Key 配置',
-  403: '无权限访问该资源',
-  404: '请求的资源不存在',
-  408: '请求超时，请检查网络后重试',
-  429: '请求过于频繁，请稍后重试',
-  500: '服务器内部错误，请查看后端日志',
-  502: '网关错误，后端服务可能未启动',
-  503: '服务暂不可用，请稍后重试',
-  504: '网关超时，请检查后端服务状态',
-}
-
-// 后端 err_code 到中文友好提示的映射
-const ERR_CODE_MESSAGES: Record<string, string> = {
-  LLM_ALL_PROVIDERS_FAILED: '所有 AI 模型均不可用，请在设置中检查模型配置',
-  LLM_PROVIDER_UNAUTHORIZED: 'AI 模型授权失败，请检查 API Key',
-  LLM_PROVIDER_UNAVAILABLE: 'AI 模型服务暂不可用，请稍后重试',
-  LLM_RATE_LIMITED: 'AI 模型请求过于频繁，请稍后重试',
-  TTS_NO_ENGINE: '未安装语音合成引擎，语音功能不可用',
-  TTS_SYNTHESIS_FAILED: '语音合成失败',
-  TTS_MODEL_NOT_FOUND: '语音模型未下载，请参考后端日志安装',
-  MEMORY_NOT_FOUND: '记忆数据不存在',
-  MEMORY_FACT_NOT_FOUND: '记忆条目不存在',
-  MEMORY_CATEGORY_INVALID: '记忆分类无效',
-  CONVERSATION_NOT_FOUND: '对话不存在，可能已被删除',
-  AGENT_NOT_FOUND: 'Agent 不存在',
-  AGENT_LIMIT_REACHED: 'Agent 数量已达上限（10 个）',
-  AGENT_NAME_DUPLICATED: 'Agent 名称已存在，请换一个名称',
-  A2A_MAX_DEPTH_EXCEEDED: '已达到最大 Agent 调用深度，无法继续递归调用',
-  MCP_SERVER_NOT_FOUND: 'MCP 服务器不存在',
-  MCP_CONFIG_INVALID: 'MCP 配置无效，请检查参数',
-  MCP_OPERATION_FAILED: 'MCP 操作失败，请查看后端日志',
-  MARKETPLACE_ITEM_NOT_FOUND: '市场条目不存在',
-  MARKETPLACE_ALREADY_INSTALLED: '该内容已安装，无需重复安装',
-  MARKETPLACE_UNINSTALL_FAILED: '卸载失败，请查看后端日志',
-  MARKETPLACE_SNAPSHOT_FAILED: '生成快照失败，请查看后端日志',
-  MARKETPLACE_SOURCE_NOT_FOUND: '发布源不存在',
-  MARKETPLACE_SOURCE_DISABLED: '该发布源已被禁用，无法切换',
-  MARKETPLACE_SOURCE_UNAVAILABLE: '发布源当前不可用，请检查网络',
-  MARKETPLACE_SOURCE_SWITCH_FAILED: '切换发布源失败，请稍后重试',
-  WORKFLOW_SESSION_NOT_FOUND: '工作流会话不存在或已结束',
-  WORKFLOW_RECORD_NOT_FOUND: '工具调用记录不存在',
-  WORKFLOW_TEMPLATE_NOT_FOUND: '工作流模板不存在',
-  SCHEDULER_TASK_NOT_FOUND: '定时任务不存在',
-  SCHEDULER_NOT_RUNNING: '调度器未启动，请稍后重试',
-  SCHEDULER_TASK_INVALID: '定时任务配置无效，请检查表达式',
-  SUBMARKET_NOT_FOUND: '子市场不存在',
-}
-
+// HTTP 状态码与后端 err_code 的用户可见文案迁移至 i18n（api.http.* / api.codes.*）。
+// te() 检查 key 是否存在：不存在的状态码/错误码走 fallback，保证后端新增码不会显示 key 本身。
 const statusToMessage = (status: number): string =>
-  HTTP_STATUS_MESSAGES[status] || `请求失败 (${status})`
+  i18n.global.te(`api.http.${status}`)
+    ? i18n.global.t(`api.http.${status}`)
+    : i18n.global.t('api.requestFailed', { status })
 
 let cachedAuthToken: string | null | undefined
 
@@ -83,10 +37,11 @@ interface ApiErrorBody {
 
 const extractErrorMessage = (errData: unknown, status: number): string => {
   const data = (errData ?? {}) as ApiErrorBody
-  // 1. 统一信封 error.code（LuomiNestError 家族 + HTTPException 兜底信封均产出）
+  // 1. 统一信封 error.code（LuomiNestError 家族 + HTTPException 兜底信封均产出）；
+  //    i18n 中已收录的错误码给出本地化文案，未收录的保持原样走后端 message
   const errCode = typeof data.error === 'object' ? data.error?.code : undefined
-  if (errCode && ERR_CODE_MESSAGES[errCode]) {
-    return ERR_CODE_MESSAGES[errCode]
+  if (errCode && i18n.global.te(`api.codes.${errCode}`)) {
+    return i18n.global.t(`api.codes.${errCode}`)
   }
 
   // 2. 兼容 error 为字符串的情况（TTS 接口等）
@@ -257,7 +212,7 @@ export const useApi = () => {
       }
 
       const reader = resp.body?.getReader()
-      if (!reader) throw new Error('无法读取响应流，请检查后端服务')
+      if (!reader) throw new Error(i18n.global.t('api.streamReadFailed'))
 
       const decoder = new TextDecoder()
       let buffer = ''

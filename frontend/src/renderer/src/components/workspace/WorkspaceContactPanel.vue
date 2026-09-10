@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Bot,
   Users,
@@ -12,6 +13,8 @@ import {
 import SearchInput from '../common/SearchInput.vue'
 import type { AgentProfile, GroupInfo } from '../../types'
 import type { ContactType } from './types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   agents: AgentProfile[]
@@ -55,9 +58,9 @@ const filteredGroups = computed(() => {
   <div class="contact-panel">
     <div class="contact-header">
       <div class="contact-search">
-        <SearchInput v-model="searchQueryModel" placeholder="搜索联系人..." />
+        <SearchInput v-model="searchQueryModel" :placeholder="t('workspace.searchContacts')" />
       </div>
-      <button class="contact-add-btn" title="新建 Agent" @click="emit('create-agent')">
+      <button class="contact-add-btn" :title="t('workspace.newAgent')" @click="emit('create-agent')">
         <Plus :size="14" />
       </button>
     </div>
@@ -82,9 +85,9 @@ const filteredGroups = computed(() => {
           </div>
           <div class="contact-info">
             <span class="contact-name">{{ agent.name }}</span>
-            <span class="contact-desc">{{ agent.description || '智能AI' }}</span>
+            <span class="contact-desc">{{ agent.description || t('workspace.defaultAgentDesc') }}</span>
           </div>
-          <button class="contact-edit-btn" title="编辑" @click.stop="emit('edit-agent', agent)">
+          <button class="contact-edit-btn" :title="t('workspace.edit')" @click.stop="emit('edit-agent', agent)">
             <MoreVertical :size="12" />
           </button>
         </div>
@@ -94,9 +97,9 @@ const filteredGroups = computed(() => {
       <div class="contact-section">
         <div class="contact-section-label">
           <Hash :size="12" />
-          <span>群聊</span>
+          <span>{{ t('workspace.groupChatLabel') }}</span>
           <span class="section-count">{{ filteredGroups.length }}</span>
-          <button class="section-add-btn" title="新建群组" @click="emit('create-group')">
+          <button class="section-add-btn" :title="t('workspace.newGroup')" @click="emit('create-group')">
             <Plus :size="12" />
           </button>
         </div>
@@ -114,20 +117,20 @@ const filteredGroups = computed(() => {
               <span class="contact-name">{{ group.name }}</span>
               <span class="contact-meta">{{ group.aiCount }} AI</span>
             </div>
-            <span class="contact-desc">{{ group.description || '暂无描述' }}</span>
+            <span class="contact-desc">{{ group.description || t('workspace.noDescription') }}</span>
           </div>
-          <button class="contact-edit-btn" title="删除群组" @click.stop="emit('delete-group', group.id)">
+          <button class="contact-edit-btn" :title="t('workspace.deleteGroup')" @click.stop="emit('delete-group', group.id)">
             <Trash2 :size="12" />
           </button>
         </div>
         <div v-if="filteredGroups.length === 0 && !searchQuery" class="contact-empty-mini">
-          暂无群组
+          {{ t('workspace.noGroups') }}
         </div>
       </div>
 
       <div v-if="filteredAgents.length === 0 && filteredGroups.length === 0" class="contact-empty">
         <Bot :size="28" />
-        <p>{{ searchQuery ? '未找到匹配的联系人' : '暂无联系人' }}</p>
+        <p>{{ searchQuery ? t('workspace.noMatchContacts') : t('workspace.noContacts') }}</p>
       </div>
     </div>
   </div>

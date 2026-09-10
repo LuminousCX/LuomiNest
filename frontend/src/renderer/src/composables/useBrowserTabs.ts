@@ -13,6 +13,7 @@ import { ref, computed, watch, type Ref } from 'vue'
 import type { TabInfo } from '@shared/ipc-types'
 import { useTaskStreamStore } from '../stores/taskStream'
 import { generateId } from '../utils/id'
+import { i18n } from '../i18n'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 
 const logger = createLuomiNestRendererLogger('Browser')
@@ -58,12 +59,12 @@ export const useBrowserTabs = (options: UseBrowserTabsOptions) => {
     try {
       const allTabs = await window.api?.tab.getAll() || []
       if (allTabs.length === 0) {
-        tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
+        tabs.value = [{ id: 'home', title: i18n.global.t('browser.tabs.newTab'), url: '', active: true }]
         showHomePage.value = true
       } else {
         tabs.value = allTabs.map((t: TabInfo) => ({
           id: t.id,
-          title: t.title || '加载中...',
+          title: t.title || i18n.global.t('browser.tabs.loading'),
           url: t.url,
           active: t.active,
           loading: t.loading,
@@ -83,7 +84,7 @@ export const useBrowserTabs = (options: UseBrowserTabsOptions) => {
       }
     } catch (e: unknown) {
       logger.error('Failed to sync tabs:', e)
-      tabs.value = [{ id: 'home', title: '新标签页', url: '', active: true }]
+      tabs.value = [{ id: 'home', title: i18n.global.t('browser.tabs.newTab'), url: '', active: true }]
     }
   }
 
@@ -92,7 +93,7 @@ export const useBrowserTabs = (options: UseBrowserTabsOptions) => {
     tabs.value.forEach(t => t.active = false)
 
     if (!url) {
-      tabs.value.push({ id: generateId('home'), title: '新标签页', url: '', active: true })
+      tabs.value.push({ id: generateId('home'), title: i18n.global.t('browser.tabs.newTab'), url: '', active: true })
       showHomePage.value = true
       addressBar.value = ''
       resetNavigation()
@@ -108,7 +109,7 @@ export const useBrowserTabs = (options: UseBrowserTabsOptions) => {
       if (newTab) {
         tabs.value.push({
           id: newTab.id,
-          title: newTab.title || '加载中...',
+          title: newTab.title || i18n.global.t('browser.tabs.loading'),
           url: newTab.url,
           active: true,
           loading: newTab.loading,
@@ -122,10 +123,10 @@ export const useBrowserTabs = (options: UseBrowserTabsOptions) => {
       logger.error('Failed to create tab:', e)
       tabs.value.push({
         id: generateId('error'),
-        title: '加载失败',
+        title: i18n.global.t('browser.tabs.loadFail'),
         url,
         active: true,
-        error: { code: -1, title: '加载失败', message }
+        error: { code: -1, title: i18n.global.t('browser.tabs.loadFail'), message }
       })
     }
   }
@@ -183,7 +184,7 @@ export const useBrowserTabs = (options: UseBrowserTabsOptions) => {
 
     // 无剩余标签页 → 回到默认首页
     if (tabs.value.length === 0) {
-      tabs.value = [{ id: generateId('home'), title: '新标签页', url: '', active: true }]
+      tabs.value = [{ id: generateId('home'), title: i18n.global.t('browser.tabs.newTab'), url: '', active: true }]
       showHomePage.value = true
       addressBar.value = ''
       resetNavigation()

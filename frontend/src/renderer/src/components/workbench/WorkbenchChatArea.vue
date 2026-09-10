@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Loader2,
   AlertTriangle,
@@ -33,6 +34,7 @@ import { useChatStore } from '../../stores/chat'
 import type { ChatMessage } from '../../types'
 import type { ToolActivity, SubagentActivity, WorkflowPendingPlan } from './types'
 
+const { t } = useI18n()
 const platformStore = usePlatformStore()
 const chatStore = useChatStore()
 const mainAgentAvatar = computed(() => platformStore.mainAgent?.avatar || null)
@@ -223,12 +225,12 @@ defineExpose({
       <div class="warning-content">
         <AlertTriangle :size="20" />
         <div class="warning-text">
-          <p class="warning-title">后端服务未连接</p>
-          <p class="warning-desc">请确保 LuomiNest 后端服务已启动</p>
+          <p class="warning-title">{{ t('workbench.backendNotConnected') }}</p>
+          <p class="warning-desc">{{ t('workbench.backendNotConnectedDesc') }}</p>
         </div>
         <LumiButton variant="danger" size="sm" class="retry-btn shrink-0" @click="emit('retry-backend')">
           <RotateCcw :size="14" />
-          <span>重试</span>
+          <span>{{ t('workbench.retry') }}</span>
         </LumiButton>
       </div>
     </div>
@@ -236,7 +238,7 @@ defineExpose({
     <div class="main-agent-bar">
       <div class="main-agent-badge">
         <Brain :size="14" />
-        <span>主智能体</span>
+        <span>{{ t('workbench.mainAgent') }}</span>
       </div>
       <span class="main-agent-model">{{ currentModel }}</span>
     </div>
@@ -252,7 +254,7 @@ defineExpose({
           >
             <Loader2 v-if="isLoadingCurrentConv" :size="12" class="spin-animation" />
             <ChevronDown v-else :size="12" />
-            {{ isLoadingCurrentConv ? '加载中...' : '加载更早的消息' }}
+            {{ isLoadingCurrentConv ? t('workbench.loading') : t('workbench.loadEarlier') }}
           </LumiButton>
         </div>
         <TransitionGroup name="msg-appear" tag="div">
@@ -266,13 +268,13 @@ defineExpose({
                 class="avatar-assistant"
                 :style="!mainAgentAvatar ? { background: `color-mix(in srgb, ${mainAgentColor} 10%, transparent)`, color: mainAgentColor } : {}"
               >
-                <img v-if="mainAgentAvatar" :src="mainAgentAvatar" class="chat-avatar-img" alt="主智能体" />
+                <img v-if="mainAgentAvatar" :src="mainAgentAvatar" class="chat-avatar-img" :alt="t('workbench.mainAgent')" />
                 <Bot v-else :size="16" />
               </div>
             </div>
             <div class="message-body">
               <div v-if="msg.role === 'assistant'" class="message-sender">
-                主智能体
+                {{ t('workbench.mainAgent') }}
               </div>
               <div
                 v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
@@ -282,10 +284,10 @@ defineExpose({
                   <Loader2 v-if="!msg.done && !msg.content && !msg.reasoningContent" :size="12" class="spin-animation" />
                   <Wand2 v-else :size="12" />
                   <span>
-                    <template v-if="!msg.done && !msg.content && !msg.reasoningContent">等待模型中...</template>
-                    <template v-else-if="!msg.done && !msg.content && msg.reasoningContent">思考中...</template>
-                    <template v-else-if="msg.reasoningContent && msg.reasoningContent.length > 0">{{ showReasoning[msg.id] ? '思考过程' : '思考过程（已折叠）' }}</template>
-                    <template v-else>思考完成</template>
+                    <template v-if="!msg.done && !msg.content && !msg.reasoningContent">{{ t('chat.waitingModel') }}</template>
+                    <template v-else-if="!msg.done && !msg.content && msg.reasoningContent">{{ t('chat.thinking') }}</template>
+                    <template v-else-if="msg.reasoningContent && msg.reasoningContent.length > 0">{{ showReasoning[msg.id] ? t('chat.thinkingProcess') : t('chat.thinkingCollapsed') }}</template>
+                    <template v-else>{{ t('chat.thinkingDone') }}</template>
                   </span>
                   <ChevronDown :size="12" class="reasoning-chevron" :class="{ rotated: !showReasoning[msg.id] }" />
                 </div>
@@ -303,7 +305,7 @@ defineExpose({
               >
                 <div class="tool-activities-header">
                   <Wrench :size="12" />
-                  <span>工具调用 ({{ toolActivities.length }})</span>
+                  <span>{{ t('workbench.toolCalls', { n: toolActivities.length }) }}</span>
                 </div>
                 <div class="tool-activities-list">
                   <div
@@ -322,9 +324,9 @@ defineExpose({
                       <span class="tool-activity-name">{{ activity.name }}</span>
                       <span v-if="activity.status === 'blocked'" class="tool-activity-blocked-badge">
                         <ShieldAlert :size="10" />
-                        已拦截
+                        {{ t('workbench.blocked') }}
                       </span>
-                      <span v-else-if="activity.iteration > 0" class="tool-activity-iteration">轮次 {{ activity.iteration + 1 }}</span>
+                      <span v-else-if="activity.iteration > 0" class="tool-activity-iteration">{{ t('workbench.round', { n: activity.iteration + 1 }) }}</span>
                       <ChevronDown
                         v-if="activity.output"
                         :size="12"
@@ -345,10 +347,10 @@ defineExpose({
                       <div class="tool-activity-blocked__reason">
                         <ShieldAlert :size="13" />
                         <span v-if="activity.blockedCommand">
-                          命令 <code class="tool-activity-blocked__cmd">{{ activity.blockedCommand }}</code>
-                          已被安全策略拦截{{ activity.blockedReason ? `（${activity.blockedReason}）` : '' }}
+                          {{ t('workbench.blockedCmdPrefix') }} <code class="tool-activity-blocked__cmd">{{ activity.blockedCommand }}</code>
+                          {{ t('workbench.blockedByPolicy') }}{{ activity.blockedReason ? t('workbench.blockedReason', { reason: activity.blockedReason }) : '' }}
                         </span>
-                        <span v-else>该操作已被安全策略拦截{{ activity.blockedReason ? `（${activity.blockedReason}）` : '' }}</span>
+                        <span v-else>{{ t('workbench.blockedAction') }}{{ activity.blockedReason ? t('workbench.blockedReason', { reason: activity.blockedReason }) : '' }}</span>
                       </div>
                       <LumiButton
                         variant="outline"
@@ -357,7 +359,7 @@ defineExpose({
                         @click.stop="emit('navigate-to-settings', 'privacy')"
                       >
                         <Settings :size="12" />
-                        <span>前往设置调整白名单/黑名单</span>
+                        <span>{{ t('workbench.goWhitelist') }}</span>
                       </LumiButton>
                     </div>
                   </div>
@@ -370,8 +372,8 @@ defineExpose({
               >
                 <div class="subagent-activities-header">
                   <Cpu :size="12" />
-                  <span>子 Agent 群组 ({{ subagentActivities.length }})</span>
-                  <span v-if="activeSubagentCount > 0" class="subagent-active-badge">{{ activeSubagentCount }} 执行中</span>
+                  <span>{{ t('workbench.subagentGroup', { n: subagentActivities.length }) }}</span>
+                  <span v-if="activeSubagentCount > 0" class="subagent-active-badge">{{ t('workbench.executingCount', { n: activeSubagentCount }) }}</span>
                 </div>
                 <div class="subagent-activities-list">
                   <div
@@ -388,20 +390,20 @@ defineExpose({
                       <div class="subagent-card-info">
                         <div class="subagent-card-title">
                           <span class="subagent-task">{{ agent.task }}</span>
-                          <span class="subagent-depth">深度 {{ agent.depth }}</span>
+                          <span class="subagent-depth">{{ t('workbench.depth', { n: agent.depth }) }}</span>
                         </div>
                         <div class="subagent-card-meta">
                           <template v-if="agent.status === 'running' && agent.progress">
                             <span class="subagent-progress">{{ agent.progress }}</span>
                           </template>
                           <template v-else-if="agent.status === 'completed'">
-                            <span class="subagent-status-text completed">已完成</span>
+                            <span class="subagent-status-text completed">{{ t('workbench.completed') }}</span>
                           </template>
                           <template v-else-if="agent.status === 'failed'">
-                            <span class="subagent-status-text failed">执行失败</span>
+                            <span class="subagent-status-text failed">{{ t('workbench.executeFailed') }}</span>
                           </template>
                           <span v-if="agent.toolCalls.length > 0" class="subagent-tools-count">
-                            {{ agent.toolCalls.length }} 次工具调用
+                            {{ t('workbench.toolCallCount', { n: agent.toolCalls.length }) }}
                           </span>
                         </div>
                       </div>
@@ -417,7 +419,7 @@ defineExpose({
                         <div v-if="agent.toolCalls.length > 0" class="subagent-tools-section">
                           <div class="subagent-tools-header" @click="emit('toggle-subagent-tools', agent.id)">
                             <Terminal :size="11" />
-                            <span>工具调用历史</span>
+                            <span>{{ t('workbench.toolCallHistory') }}</span>
                             <ChevronDown
                               :size="11"
                               class="subagent-tools-chevron"
@@ -450,7 +452,7 @@ defineExpose({
                         <div v-if="agent.result" class="subagent-result">
                           <div class="subagent-result-label">
                             <CheckCircle2 :size="11" />
-                            <span>执行结果</span>
+                            <span>{{ t('workbench.resultLabel') }}</span>
                           </div>
                           <div class="subagent-result-content markdown-body">
                             <div v-html="renderMarkdown(agent.result)"></div>
@@ -460,7 +462,7 @@ defineExpose({
                         <div v-if="agent.error" class="subagent-error">
                           <div class="subagent-error-label">
                             <XCircle :size="11" />
-                            <span>错误信息</span>
+                            <span>{{ t('workbench.errorLabel') }}</span>
                           </div>
                           <div class="subagent-error-content">{{ agent.error }}</div>
                         </div>
@@ -476,8 +478,8 @@ defineExpose({
               >
                 <div class="plan-confirmation-header">
                   <ClipboardList :size="14" />
-                  <span>执行计划待确认</span>
-                  <span class="plan-task-count">{{ workflowPendingPlan.tasks.length }} 个子任务</span>
+                  <span>{{ t('workbench.planPending') }}</span>
+                  <span class="plan-task-count">{{ t('workbench.subtaskCount', { n: workflowPendingPlan.tasks.length }) }}</span>
                 </div>
                 <div class="plan-confirmation-body">
                   <div v-if="workflowPendingPlan.plan" class="plan-summary">
@@ -509,18 +511,18 @@ defineExpose({
                     <textarea
                       v-model="feedbackModel"
                       class="lumi-textarea plan-feedback-input"
-                      placeholder="反馈（可选）：如需调整计划，请在此说明..."
+                      :placeholder="t('workbench.planFeedbackPlaceholder')"
                       rows="2"
                     ></textarea>
                   </div>
                   <div class="plan-confirmation-actions">
                     <LumiButton variant="secondary" size="sm" class="plan-btn plan-btn-reject" @click="emit('reject-plan')">
                       <X :size="14" />
-                      <span>拒绝执行</span>
+                      <span>{{ t('workbench.rejectPlan') }}</span>
                     </LumiButton>
                     <LumiButton variant="primary" size="sm" class="plan-btn plan-btn-confirm" @click="emit('confirm-plan')">
                       <Check :size="14" />
-                      <span>确认执行</span>
+                      <span>{{ t('workbench.confirmPlan') }}</span>
                     </LumiButton>
                   </div>
                 </div>
@@ -536,11 +538,11 @@ defineExpose({
               <div v-if="msg.role === 'assistant' && msg.content && msg.content !== '[已中断]'" class="message-content markdown-body">
                 <div v-html="renderMarkdown(msg.content)"></div>
                 <span v-if="msg.interrupted" class="interrupted-inline">
-                  <AlertTriangle :size="12" /> 已中断
+                  <AlertTriangle :size="12" /> {{ t('chat.interrupted') }}
                 </span>
               </div>
               <div v-else-if="(msg.interrupted || msg.content === '[已中断]') && msg.role === 'assistant'" class="interrupted-only">
-                <AlertTriangle :size="12" /> 已中断
+                <AlertTriangle :size="12" /> {{ t('chat.interrupted') }}
               </div>
               <div v-if="msg.role === 'assistant' && !msg.done && msg.content" class="streaming-indicator">
                 <span class="streaming-dot"></span>
@@ -552,7 +554,7 @@ defineExpose({
                   size="sm"
                   icon-only
                   class="u-btn"
-                  :aria-label="copiedId === msg.id ? '已复制' : '复制'"
+                  :aria-label="copiedId === msg.id ? t('workbench.copied') : t('workbench.copy')"
                   @click="handleCopyMessage(msg.id, msg.content)"
                 >
                   <template #icon>
@@ -565,7 +567,7 @@ defineExpose({
                   variant="ghost"
                   size="sm"
                   icon-only
-                  aria-label="重新生成"
+                  :aria-label="t('workbench.regenerate')"
                   class="u-btn"
                   @click="emit('regenerate', msg.id)"
                 >
@@ -580,7 +582,7 @@ defineExpose({
                 <div
                   v-if="contextTokens > 0"
                   class="context-ring-wrapper"
-                  :title="`当前对话上下文使用率：${contextPercent}%（${formatTokens(contextTokens)} / ${formatTokens(contextMaxTokens)} tokens）`"
+                  :title="t('workbench.contextTitle', { percent: contextPercent, used: formatTokens(contextTokens), max: formatTokens(contextMaxTokens) })"
                 >
                   <svg
                     class="context-ring-svg"
@@ -623,10 +625,10 @@ defineExpose({
                   </svg>
                 </div>
                 <span v-if="contextTokens > 0" class="context-tokens-text">
-                  当前对话上下文已使用 {{ formatTokens(contextTokens) }} tokens
+                  {{ t('workbench.contextUsed', { n: formatTokens(contextTokens) }) }}
                 </span>
                 <span v-else class="context-tokens-text">
-                  上下文压缩
+                  {{ t('workbench.contextCompress') }}
                 </span>
                 <LumiButton
                   variant="ghost"
@@ -637,7 +639,7 @@ defineExpose({
                 >
                   <Loader2 v-if="isCompressing" :size="12" class="spin-animation" />
                   <Minimize2 v-else :size="12" />
-                  <span>{{ isCompressing ? '压缩中...' : '压缩上下文' }}</span>
+                  <span>{{ isCompressing ? t('workbench.compressing') : t('workbench.compress') }}</span>
                 </LumiButton>
               </div>
 
@@ -648,7 +650,7 @@ defineExpose({
                     size="sm"
                     icon-only
                     class="u-btn u-btn-hover"
-                    :aria-label="copiedId === msg.id ? '已复制' : '复制'"
+                    :aria-label="copiedId === msg.id ? t('workbench.copied') : t('workbench.copy')"
                     @click="handleCopyMessage(msg.id, msg.content)"
                   >
                     <template #icon>
@@ -668,19 +670,19 @@ defineExpose({
         <LumiEmptyState
           v-if="messages.length === 0 && !isLoadingCurrentConv"
           :icon="Sparkles"
-          title="与陪伴 AI 开始对话"
-          description="右侧的 Live2D 将作为主 Agent 陪伴你"
+          :title="t('workbench.emptyTitle')"
+          :description="t('workbench.emptyDesc')"
         >
           <template #action>
             <div class="empty-quick-actions">
-              <LumiButton variant="outline" size="sm" class="quick-action" @click="emit('set-input-text', '你好，请介绍一下你自己')">
-                打个招呼
+              <LumiButton variant="outline" size="sm" class="quick-action" @click="emit('set-input-text', t('chat.quickGreetPrompt'))">
+                {{ t('chat.quickGreet') }}
               </LumiButton>
-              <LumiButton variant="outline" size="sm" class="quick-action" @click="emit('set-input-text', '帮我写一段 Python 代码')">
-                写段代码
+              <LumiButton variant="outline" size="sm" class="quick-action" @click="emit('set-input-text', t('chat.quickCodePrompt'))">
+                {{ t('chat.quickCode') }}
               </LumiButton>
-              <LumiButton variant="outline" size="sm" class="quick-action" @click="emit('set-input-text', '解释一下什么是大语言模型')">
-                了解 LLM
+              <LumiButton variant="outline" size="sm" class="quick-action" @click="emit('set-input-text', t('chat.quickLLMPrompt'))">
+                {{ t('chat.quickLLM') }}
               </LumiButton>
             </div>
           </template>
@@ -694,7 +696,7 @@ defineExpose({
         variant="secondary"
         size="md"
         icon-only
-        aria-label="滚动到底部"
+        :aria-label="t('workbench.scrollToBottom')"
         class="scroll-to-bottom-btn"
         @click="emit('scroll-to-bottom')"
       >
@@ -708,7 +710,7 @@ defineExpose({
       <div v-if="isLoadingCurrentConv" class="conv-loading-overlay">
         <div class="conv-loading-content">
           <Loader2 :size="20" class="spin-animation" />
-          <span>加载对话中...</span>
+          <span>{{ t('workbench.loadingConversation') }}</span>
         </div>
       </div>
     </Transition>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Plus,
   MessageSquare,
@@ -16,6 +17,8 @@ import { highlightSnippet } from '../../utils/highlight'
 import { formatDateCalendar } from '../../utils/format'
 import type { ConversationSearchResult } from '../../types'
 import type { TimeGroup } from './types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   searchQuery: string
@@ -52,14 +55,14 @@ const renamingTitleModel = computed<string>({
   set: (value) => emit('update:renamingTitle', value),
 })
 
-const MODE_LABELS: Record<string, string> = {
-  normal: '普通',
-  standard: '专业',
-}
+const MODE_LABELS = computed<Record<string, string>>(() => ({
+  normal: t('chat.modeNormal'),
+  standard: t('chat.modePro'),
+}))
 
 const modeLabel = (chatMode?: string): string => {
   if (!chatMode || chatMode === 'normal') return ''
-  return MODE_LABELS[chatMode] || ''
+  return MODE_LABELS.value[chatMode] || ''
 }
 
 const formatTime = (dateStr: string) => formatDateCalendar(dateStr)
@@ -83,24 +86,24 @@ const onStartRename = (convId: string, currentTitle: string) => {
   <div class="workbench-history-wrapper">
     <Transition name="history-slide">
       <div v-if="!isHistoryCollapsed" class="workbench-history">
-        <button class="history-collapse-triangle" aria-label="收起历史记录" @click="emit('collapse')">
+        <button class="history-collapse-triangle" :aria-label="t('workbench.collapseHistory')" @click="emit('collapse')">
           <ChevronLeft :size="14" />
         </button>
 
         <div class="history-search">
-          <SearchInput v-model="searchQueryModel" size="sm" placeholder="搜索对话..." :loading="isSearching" />
+          <SearchInput v-model="searchQueryModel" size="sm" :placeholder="t('chat.searchConversations')" :loading="isSearching" />
         </div>
 
         <LumiButton variant="primary" size="sm" block class="new-conv-btn" @click="emit('new-conversation')">
           <Plus :size="15" />
-          <span>新建对话</span>
+          <span>{{ t('workbench.newConversation') }}</span>
         </LumiButton>
 
         <div class="history-list">
           <template v-if="isSearchMode">
             <div v-if="isSearching" class="history-empty">
               <Loader2 :size="20" class="spin-animation" />
-              <span>搜索中...</span>
+              <span>{{ t('chat.searching') }}</span>
             </div>
             <template v-else>
               <div
@@ -117,7 +120,7 @@ const onStartRename = (convId: string, currentTitle: string) => {
               </div>
               <div v-if="searchResults.length === 0" class="history-empty">
                 <MessageSquare :size="24" />
-                <span>未找到匹配的会话</span>
+                <span>{{ t('chat.noMatchConv') }}</span>
               </div>
             </template>
           </template>
@@ -161,7 +164,7 @@ const onStartRename = (convId: string, currentTitle: string) => {
                       variant="ghost"
                       size="sm"
                       icon-only
-                      aria-label="重命名"
+                      :aria-label="t('chat.rename')"
                       class="history-item-rename"
                       @click.stop="onStartRename(conv.id, conv.title)"
                     >
@@ -173,7 +176,7 @@ const onStartRename = (convId: string, currentTitle: string) => {
                       variant="danger-ghost"
                       size="sm"
                       icon-only
-                      aria-label="删除对话"
+                      :aria-label="t('chat.deleteConv')"
                       class="history-item-delete"
                       @click.stop="emit('delete-conversation', conv.id)"
                     >
@@ -188,7 +191,7 @@ const onStartRename = (convId: string, currentTitle: string) => {
 
             <div v-if="timeGroups.length === 0" class="history-empty">
               <MessageSquare :size="24" />
-              <span>暂无历史记录</span>
+              <span>{{ t('chat.noHistory') }}</span>
             </div>
           </template>
         </div>
@@ -200,7 +203,7 @@ const onStartRename = (convId: string, currentTitle: string) => {
       variant="ghost"
       size="sm"
       icon-only
-      aria-label="展开历史记录"
+      :aria-label="t('workbench.expandHistory')"
       class="history-expand-toggle"
       @click="emit('expand')"
     >

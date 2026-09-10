@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { FileText, Save, ShieldCheck, AlertCircle, Loader2 } from 'lucide-vue-next'
 import LumiModal from '../common/LumiModal.vue'
 import LumiButton from '../common/LumiButton.vue'
@@ -21,6 +22,7 @@ const emit = defineEmits<{
 }>()
 
 const store = usePluginsStore()
+const { t } = useI18n()
 
 const skillIdInput = ref('')
 const content = ref('')
@@ -131,7 +133,7 @@ const loadRaw = async () => {
     if (raw !== null) {
       content.value = raw
     } else {
-      errorMessage.value = '无法读取技能原文'
+      errorMessage.value = t('settingsEx.skillEdit.errReadRaw')
     }
   } finally {
     loadingRaw.value = false
@@ -141,11 +143,11 @@ const loadRaw = async () => {
 const handleValidate = async () => {
   const id = resolveSkillId()
   if (!id) {
-    errorMessage.value = '请填写技能 ID（kebab-case）'
+    errorMessage.value = t('settingsEx.skillEdit.errNoId')
     return
   }
   if (!content.value.trim()) {
-    errorMessage.value = '内容不能为空'
+    errorMessage.value = t('settingsEx.skillEdit.errEmptyContent')
     return
   }
   validating.value = true
@@ -156,7 +158,7 @@ const handleValidate = async () => {
     const result = await store.validateSkill(id, normalizeSkillContent(content.value, id))
     validateResult.value = result
     if (result && !result.valid) {
-      errorMessage.value = result.errors.join('；') || '校验未通过'
+      errorMessage.value = result.errors.join('；') || t('settingsEx.skillEdit.validateFailed')
     }
   } finally {
     validating.value = false
@@ -166,15 +168,15 @@ const handleValidate = async () => {
 const handleSave = async () => {
   const id = resolveSkillId()
   if (!id) {
-    errorMessage.value = '请填写技能 ID（kebab-case）'
+    errorMessage.value = t('settingsEx.skillEdit.errNoId')
     return
   }
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)) {
-    errorMessage.value = '技能 ID 必须为 kebab-case（小写字母/数字/连字符，1-64 字符）'
+    errorMessage.value = t('settingsEx.skillEdit.errInvalidId')
     return
   }
   if (!content.value.trim()) {
-    errorMessage.value = '内容不能为空'
+    errorMessage.value = t('settingsEx.skillEdit.errEmptyContent')
     return
   }
 
@@ -187,7 +189,7 @@ const handleSave = async () => {
       emit('saved')
       emit('update:visible', false)
     } else {
-      errorMessage.value = '保存失败，请查看错误提示'
+      errorMessage.value = t('settingsEx.skillEdit.errSaveFailed')
     }
   } finally {
     saving.value = false
@@ -219,7 +221,7 @@ watch(
 <template>
   <LumiModal
     :visible="visible"
-    :title="isCreate ? '新建技能' : `编辑技能：${skillId}`"
+    :title="isCreate ? t('settingsEx.skillEdit.createTitle') : t('settingsEx.skillEdit.editTitle', { id: skillId })"
     size="lg"
     @close="handleClose"
     @update:visible="emit('update:visible', $event)"
@@ -229,33 +231,33 @@ watch(
       <div class="form-row">
         <label class="form-label">
           <FileText :size="14" />
-          <span>技能 ID</span>
+          <span>{{ t('settingsEx.skillEdit.skillId') }}</span>
         </label>
         <LumiInput
           v-model="skillIdInput"
-          :placeholder="'kebab-case，例如：travel-planner'"
+          :placeholder="t('settingsEx.skillEdit.idPlaceholder')"
           :disabled="!isCreate"
           :error="errorMessage && isCreate ? errorMessage : false"
         />
-        <p class="form-hint">小写字母 / 数字 / 连字符，1-64 字符，全局唯一</p>
+        <p class="form-hint">{{ t('settingsEx.skillEdit.idHint') }}</p>
       </div>
 
       <!-- SKILL.md 内容编辑区 -->
       <div class="form-row">
         <label class="form-label">
           <FileText :size="14" />
-          <span>SKILL.md 内容</span>
+          <span>{{ t('settingsEx.skillEdit.contentLabel') }}</span>
         </label>
         <div v-if="loadingRaw" class="loading-state">
           <Loader2 :size="16" class="spinning" />
-          <span>加载技能原文...</span>
+          <span>{{ t('settingsEx.skillEdit.loadingRaw') }}</span>
         </div>
         <textarea
           v-else
           v-model="content"
           class="skill-textarea"
           spellcheck="false"
-          placeholder="编辑 SKILL.md 内容，需包含 YAML frontmatter 与 Markdown 正文"
+          :placeholder="t('settingsEx.skillEdit.contentPlaceholder')"
         />
       </div>
 
@@ -263,7 +265,7 @@ watch(
       <div v-if="validateResult" class="validate-result">
         <div :class="['validate-badge', validateResult.valid ? 'valid' : 'invalid']">
           <component :is="validateResult.valid ? ShieldCheck : AlertCircle" :size="13" />
-          <span>{{ validateResult.valid ? '校验通过' : '校验未通过' }}</span>
+          <span>{{ validateResult.valid ? t('settingsEx.skillEdit.validatePassed') : t('settingsEx.skillEdit.validateFailed') }}</span>
         </div>
         <ul v-if="validateResult.errors.length" class="error-list">
           <li v-for="(err, idx) in validateResult.errors" :key="idx">{{ err }}</li>
@@ -279,7 +281,7 @@ watch(
 
     <template #footer>
       <div class="dialog-footer">
-        <LumiButton variant="ghost" size="sm" @click="handleClose">取消</LumiButton>
+        <LumiButton variant="ghost" size="sm" @click="handleClose">{{ t('settingsEx.skillEdit.cancel') }}</LumiButton>
         <LumiButton
           variant="outline"
           size="sm"
@@ -288,7 +290,7 @@ watch(
           @click="handleValidate"
         >
           <ShieldCheck :size="13" />
-          <span>校验</span>
+          <span>{{ t('settingsEx.skillEdit.validate') }}</span>
         </LumiButton>
         <LumiButton
           variant="primary"
@@ -298,7 +300,7 @@ watch(
           @click="handleSave"
         >
           <Save :size="13" />
-          <span>保存</span>
+          <span>{{ t('settingsEx.skillEdit.save') }}</span>
         </LumiButton>
       </div>
     </template>

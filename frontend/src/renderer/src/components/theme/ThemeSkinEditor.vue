@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   X,
   Upload,
@@ -38,6 +39,7 @@ const emit = defineEmits<{
 
 const themeStore = useThemeStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const isEdit = computed(() => props.mode === 'edit')
 const canDelete = computed(() => isEdit.value && props.skin?.type === 'custom')
@@ -49,7 +51,7 @@ function handleDelete() {
 }
 
 // ─── Form State ──────────────────────────────
-const name = ref(props.skin?.name ?? '我的皮肤')
+const name = ref(props.skin?.name ?? t('theme.editor.defaultName'))
 const colorThemeId = ref(props.skin?.colorThemeId ?? 'blue')
 const mode = ref<'light' | 'dark' | 'system'>(props.skin?.mode ?? 'system')
 const backgroundImage = ref<string | null>(props.skin?.background.image ?? null)
@@ -80,7 +82,7 @@ function resetFormFromSkin(skin: Skin | null) {
     ambientIntensity.value = skin.ambientIntensity
     radiusTendency.value = skin.radiusTendency ?? 50
   } else {
-    name.value = '我的皮肤'
+    name.value = t('theme.editor.defaultName')
     colorThemeId.value = 'blue'
     mode.value = 'system'
     backgroundImage.value = null
@@ -125,12 +127,14 @@ async function triggerFileUpload() {
     if (!result.success) {
       // 用户取消选择时不弹错误提示（结构化 cancelled 标志，不依赖错误文案）
       if (!result.cancelled) {
-        toast.error(`选择背景图片失败：${result.error ?? '未知错误'}`)
+        toast.error(t('theme.editor.selectBgFailed', {
+          message: result.error ?? t('avatar.common.unknownError'),
+        }))
       }
       return
     }
     if (typeof result.url !== 'string' || !result.url.startsWith('luominest-bg:')) {
-      toast.error('背景图片地址格式异常')
+      toast.error(t('theme.editor.bgUrlInvalid'))
       console.error('[ThemeSkinEditor] invalid background url:', result.url)
       return
     }
@@ -138,12 +142,12 @@ async function triggerFileUpload() {
     if (result.warning) {
       toast.warning(result.warning)
     } else {
-      toast.success(`背景图片已上传 (${result.width}×${result.height})`)
+      toast.success(t('theme.editor.bgUploaded', { width: result.width, height: result.height }))
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[ThemeSkinEditor] upload error:', err)
-    toast.error(`选择背景图片失败：${message}`)
+    toast.error(t('theme.editor.selectBgFailed', { message }))
   } finally {
     uploadingBackground.value = false
   }
@@ -225,10 +229,10 @@ function handleCustomColorThemeSave(theme: ColorTheme) {
   if (isCreatingCustomColorTheme.value) {
     themeStore.addCustomTheme(theme)
     colorThemeId.value = theme.id
-    toast.success('自定义颜色已创建')
+    toast.success(t('theme.editor.customColorCreated'))
   } else {
     themeStore.updateCustomTheme(theme.id, theme)
-    toast.success('自定义颜色已更新')
+    toast.success(t('theme.editor.customColorUpdated'))
   }
   customEditorVisible.value = false
   editingCustomTheme.value = null
@@ -244,13 +248,13 @@ function handleCustomColorThemeCancel() {
 // ─── Save ────────────────────────────────────
 function handleSave() {
   if (!name.value.trim()) {
-    toast.error('请输入皮肤名称')
+    toast.error(t('theme.editor.nameRequired'))
     return
   }
 
   // 如果自定义颜色编辑器还开着，提示先处理
   if (customEditorVisible.value) {
-    toast.info('请先保存或取消自定义颜色编辑')
+    toast.info(t('theme.editor.finishColorEditFirst'))
     return
   }
 
@@ -290,9 +294,9 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
     <div class="skin-editor">
       <div class="skin-editor__header">
         <h3 class="skin-editor__title">
-          {{ isEdit ? '编辑皮肤' : '新建皮肤' }}
+          {{ isEdit ? t('theme.editor.editTitle') : t('theme.editor.createTitle') }}
         </h3>
-        <button class="skin-editor__close" aria-label="关闭" @click="emit('cancel')">
+        <button class="skin-editor__close" :aria-label="t('theme.editor.close')" @click="emit('cancel')">
           <X :size="18" />
         </button>
       </div>
@@ -302,13 +306,13 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
         <div class="editor-section">
           <label class="editor-section__label">
             <Sparkles :size="14" />
-            实时预览
+            {{ t('theme.editor.livePreview') }}
           </label>
           <div class="skin-editor__preview" :style="previewBackgroundStyle">
             <div class="preview-glass" :style="previewGlassStyle">
-              <div class="preview-title">{{ name || '我的皮肤' }}</div>
-              <div class="preview-subtitle">这是一段示例文字</div>
-              <div class="preview-btn">主按钮</div>
+              <div class="preview-title">{{ name || t('theme.editor.defaultName') }}</div>
+              <div class="preview-subtitle">{{ t('theme.editor.sampleText') }}</div>
+              <div class="preview-btn">{{ t('theme.editor.primaryButton') }}</div>
             </div>
           </div>
         </div>
@@ -317,20 +321,20 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
         <div class="editor-section">
           <label class="editor-section__label">
             <Palette :size="14" />
-            皮肤名称
+            {{ t('theme.editor.nameLabel') }}
           </label>
           <input
             v-model="name"
             type="text"
             class="editor-input"
-            placeholder="输入皮肤名称"
+            :placeholder="t('theme.editor.namePlaceholder')"
             maxlength="20"
           />
         </div>
 
         <!-- Color Theme -->
         <div class="editor-section">
-          <label class="editor-section__label">色彩主题</label>
+          <label class="editor-section__label">{{ t('theme.editor.colorThemeLabel') }}</label>
 
           <!-- 预设主题 -->
           <div class="color-theme-grid">
@@ -355,7 +359,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
 
           <!-- 自定义颜色主题 -->
           <div v-if="themeStore.customThemes.length > 0" class="custom-theme-list">
-            <div class="custom-theme-list__label">自定义颜色</div>
+            <div class="custom-theme-list__label">{{ t('theme.editor.customColorsLabel') }}</div>
             <div class="custom-theme-grid">
               <div
                 v-for="theme in themeStore.customThemes"
@@ -363,7 +367,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
                 :class="['custom-theme-card', { active: colorThemeId === theme.id }]"
                 role="button"
                 tabindex="0"
-                :aria-label="`选择${theme.name}颜色主题`"
+                :aria-label="t('theme.editor.selectColorTheme', { name: theme.name })"
                 @click="colorThemeId = theme.id"
                 @keydown.enter.prevent="colorThemeId = theme.id"
                 @keydown.space.prevent="colorThemeId = theme.id"
@@ -381,7 +385,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
                   class="custom-theme-card__edit"
                   role="button"
                   tabindex="0"
-                  :aria-label="`编辑${theme.name}颜色主题`"
+                  :aria-label="t('theme.editor.editColorTheme', { name: theme.name })"
                   @click.stop="openEditCustomColorTheme(theme)"
                   @keydown.enter.stop="openEditCustomColorTheme(theme)"
                   @keydown.space.stop.prevent="openEditCustomColorTheme(theme)"
@@ -401,7 +405,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
             @click="openCreateCustomColorTheme"
           >
             <Plus :size="14" />
-            <span>新建自定义颜色</span>
+            <span>{{ t('theme.editor.createCustomColor') }}</span>
           </LumiButton>
 
           <!-- 自定义颜色编辑器 -->
@@ -415,13 +419,13 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
 
         <!-- Mode -->
         <div class="editor-section">
-          <label class="editor-section__label">主题模式</label>
+          <label class="editor-section__label">{{ t('theme.editor.modeLabel') }}</label>
           <div class="mode-selector">
             <button
               v-for="m in [
-                { id: 'light', label: '浅色', icon: Sun },
-                { id: 'dark', label: '深色', icon: Moon },
-                { id: 'system', label: '跟随系统', icon: Monitor }
+                { id: 'light', label: t('theme.editor.modeLight'), icon: Sun },
+                { id: 'dark', label: t('theme.editor.modeDark'), icon: Moon },
+                { id: 'system', label: t('theme.editor.modeSystem'), icon: Monitor }
               ]"
               :key="m.id"
               :class="['mode-btn', { active: mode === m.id }]"
@@ -437,7 +441,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
         <div class="editor-section">
           <label class="editor-section__label">
             <Image :size="14" />
-            背景
+            {{ t('theme.editor.backgroundLabel') }}
           </label>
           <div class="background-grid">
             <button
@@ -456,7 +460,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
                 }"
               />
               <div v-else class="background-option__none">
-                <span>无</span>
+                <span>{{ t('theme.editor.noneOption') }}</span>
               </div>
               <span class="background-option__name">{{ bg.name }}</span>
             </button>
@@ -466,13 +470,13 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
               v-if="activeBgPresetId === 'custom' && backgroundImage"
               :key="'custom-bg'"
               class="background-option background-option--custom background-option--active"
-              title="当前自定义背景"
+              :title="t('theme.editor.customBgTitle')"
             >
               <div
                 class="background-option__thumb"
                 :style="previewBackgroundStyle"
               />
-              <span class="background-option__name">自定义</span>
+              <span class="background-option__name">{{ t('theme.editor.customBgName') }}</span>
             </div>
           </div>
 
@@ -485,7 +489,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
               @click="triggerFileUpload"
             >
               <Upload :size="14" />
-              <span>上传自定义背景</span>
+              <span>{{ t('theme.editor.uploadCustomBg') }}</span>
             </LumiButton>
             <LumiButton
               v-if="activeBgPresetId === 'custom'"
@@ -493,22 +497,22 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
               size="sm"
               @click="removeCustomBackground"
             >
-              <Trash2 :size="14" />
-              <span>移除</span>
+                <Trash2 :size="14" />
+                <span>{{ t('theme.editor.remove') }}</span>
             </LumiButton>
           </div>
         </div>
 
         <!-- Background Fit -->
         <div class="editor-section">
-          <label class="editor-section__label">背景适配</label>
+          <label class="editor-section__label">{{ t('theme.editor.fitLabel') }}</label>
           <div class="fit-selector">
             <button
               v-for="fit in [
-                { id: 'cover', label: '覆盖' },
-                { id: 'contain', label: '适应' },
-                { id: 'center', label: '居中' },
-                { id: 'right', label: '居右' }
+                { id: 'cover', label: t('theme.editor.fitCover') },
+                { id: 'contain', label: t('theme.editor.fitContain') },
+                { id: 'center', label: t('theme.editor.fitCenter') },
+                { id: 'right', label: t('theme.editor.fitRight') }
               ]"
               :key="fit.id"
               :class="['fit-btn', { active: backgroundFit === fit.id }]"
@@ -523,11 +527,11 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
         <div class="editor-section">
           <label class="editor-section__label">
             <SlidersHorizontal :size="14" />
-            效果调节
+            {{ t('theme.editor.effectsLabel') }}
           </label>
 
           <div class="slider-row">
-            <span class="slider-row__label">模糊度</span>
+            <span class="slider-row__label">{{ t('theme.editor.blur') }}</span>
             <input
               v-model.number="backgroundBlur"
               type="range"
@@ -539,7 +543,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
           </div>
 
           <div class="slider-row">
-            <span class="slider-row__label">透明度</span>
+            <span class="slider-row__label">{{ t('theme.editor.opacity') }}</span>
             <input
               v-model.number="backgroundOpacity"
               type="range"
@@ -551,7 +555,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
           </div>
 
           <div class="slider-row">
-            <span class="slider-row__label">毛玻璃强度</span>
+            <span class="slider-row__label">{{ t('theme.editor.glass') }}</span>
             <input
               v-model.number="glassIntensity"
               type="range"
@@ -563,7 +567,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
           </div>
 
           <div class="slider-row">
-            <span class="slider-row__label">氛围光强度</span>
+            <span class="slider-row__label">{{ t('theme.editor.ambient') }}</span>
             <input
               v-model.number="ambientIntensity"
               type="range"
@@ -577,7 +581,7 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
           <div class="slider-row">
             <span class="slider-row__label">
               <Radius :size="12" />
-              圆角倾向
+              {{ t('theme.editor.radius') }}
             </span>
             <input
               v-model.number="radiusTendency"
@@ -598,12 +602,12 @@ function getCustomThemePreviewColors(theme: ColorTheme): string[] {
           @click="handleDelete"
         >
           <Trash2 :size="16" />
-          <span>删除</span>
+          <span>{{ t('theme.editor.delete') }}</span>
         </LumiButton>
         <div class="skin-editor__footer-spacer" />
-        <LumiButton variant="ghost" @click="emit('cancel')">取消</LumiButton>
+        <LumiButton variant="ghost" @click="emit('cancel')">{{ t('theme.editor.cancel') }}</LumiButton>
         <LumiButton variant="primary" @click="handleSave">
-          {{ isEdit ? '保存' : '创建' }}
+          {{ isEdit ? t('theme.editor.save') : t('theme.editor.create') }}
         </LumiButton>
       </div>
     </div>

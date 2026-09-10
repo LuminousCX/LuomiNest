@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ArrowRight, Lock, User, LogIn } from 'lucide-vue-next'
 import LumiBrandStar from '../components/common/LumiBrandStar.vue'
 import LumiButton from '../components/common/LumiButton.vue'
@@ -8,6 +9,7 @@ import LumiInput from '../components/common/LumiInput.vue'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 
 const localForm = ref({ username: '', password: '' })
 const isLoggingIn = ref(false)
@@ -62,19 +64,19 @@ const handleSkip = () => {
             <LumiBrandStar :size="40" />
           </div>
           <h1 class="login-title lumi-gradient-text">LuomiNest</h1>
-          <p class="login-subtitle">本地登录，数据保存在本机</p>
+          <p class="login-subtitle">{{ t('login.subtitle') }}</p>
         </div>
 
         <form class="login-form animate-slide-up" @submit.prevent="handleLocalLogin">
           <div class="form-field">
             <label class="field-label">
               <User :size="14" />
-              用户名
+              {{ t('login.username') }}
             </label>
             <LumiInput
               v-model="localForm.username"
               type="text"
-              placeholder="输入用户名"
+              :placeholder="t('login.usernamePlaceholder')"
               autocomplete="username"
             >
               <template #icon>
@@ -86,12 +88,12 @@ const handleSkip = () => {
           <div class="form-field">
             <label class="field-label">
               <Lock :size="14" />
-              密码
+              {{ t('login.password') }}
             </label>
             <LumiInput
               v-model="localForm.password"
               type="password"
-              placeholder="输入密码"
+              :placeholder="t('login.passwordPlaceholder')"
               autocomplete="current-password"
             >
               <template #icon>
@@ -111,14 +113,14 @@ const handleSkip = () => {
             <template #icon v-if="!isLoggingIn">
               <LogIn :size="16" />
             </template>
-            {{ isLoggingIn ? '登录中...' : '登录' }}
+            {{ isLoggingIn ? t('login.loggingIn') : t('login.login') }}
           </LumiButton>
         </form>
 
         <div class="login-footer animate-fade-in">
           <LumiButton variant="ghost" size="sm" @click="handleSkip">
             <span class="skip-content">
-              跳过，直接使用
+              {{ t('login.skipUse') }}
               <ArrowRight :size="14" />
             </span>
           </LumiButton>

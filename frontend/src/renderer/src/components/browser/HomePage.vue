@@ -22,6 +22,9 @@ import {
   ArrowRight
 } from 'lucide-vue-next'
 import { vClickOutside } from '../../directives/clickOutside'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // --- 类型定义 ---
 interface SearchEngine {
@@ -66,13 +69,13 @@ const websites: Website[] = [
   { name: '知乎', initial: '知', url: 'https://www.zhihu.com', className: 'ws-zhihu' }
 ]
 
-const quickActions: QuickAction[] = [
-  { icon: Code2, label: '执行脚本', color: 'var(--task-sky)', action: 'script' },
-  { icon: Camera, label: '页面截图', color: 'var(--lumi-info)', action: 'screenshot' },
-  { icon: MousePointerClick, label: '点击元素', color: 'var(--lumi-success)', action: 'click' },
-  { icon: Globe, label: '读取DOM', color: 'var(--lumi-amber)', action: 'dom' },
-  { icon: Send, label: '填表单', color: 'var(--lumi-accent)', action: 'fill' }
-]
+const quickActions = computed<QuickAction[]>(() => [
+  { icon: Code2, label: t('browser.action.script'), color: 'var(--task-sky)', action: 'script' },
+  { icon: Camera, label: t('browser.action.screenshot'), color: 'var(--lumi-info)', action: 'screenshot' },
+  { icon: MousePointerClick, label: t('browser.action.click'), color: 'var(--lumi-success)', action: 'click' },
+  { icon: Globe, label: t('browser.action.dom'), color: 'var(--lumi-amber)', action: 'dom' },
+  { icon: Send, label: t('browser.action.fill'), color: 'var(--lumi-accent)', action: 'fill' }
+])
 
 // --- 状态 ---
 const searchInput = ref('')
@@ -89,16 +92,15 @@ const currentTime = ref('')
 const currentDate = ref('')
 const currentWeek = ref('')
 let clockTimer: ReturnType<typeof setInterval> | null = null
-const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
-  if (hour < 6) return '夜深了'
-  if (hour < 9) return '早上好'
-  if (hour < 12) return '上午好'
-  if (hour < 14) return '中午好'
-  if (hour < 18) return '下午好'
-  return '晚上好'
+  if (hour < 6) return t('browser.greeting.lateNight')
+  if (hour < 9) return t('browser.greeting.morning')
+  if (hour < 12) return t('browser.greeting.forenoon')
+  if (hour < 14) return t('browser.greeting.noon')
+  if (hour < 18) return t('browser.greeting.afternoon')
+  return t('browser.greeting.evening')
 })
 
 // --- 网站品牌色 ---
@@ -124,8 +126,8 @@ const emit = defineEmits<{
 const updateClock = () => {
   const now = new Date()
   currentTime.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
-  currentDate.value = `${now.getMonth() + 1}月${now.getDate()}日`
-  currentWeek.value = weekDays[now.getDay()]
+  currentDate.value = t('browser.date', { m: now.getMonth() + 1, d: now.getDate() })
+  currentWeek.value = t(`browser.wd${now.getDay()}`)
 }
 
 const updateDropdownPos = () => {
@@ -252,7 +254,7 @@ onBeforeUnmount(() => {
 
             <input
               v-model="searchInput"
-              :placeholder="selectedEngine.id === 'ai' ? '向 AI 提问...' : `在 ${selectedEngine.name} 中搜索...`"
+              :placeholder="selectedEngine.id === 'ai' ? t('browser.searchPlaceholderAi') : t('browser.searchPlaceholder', { name: selectedEngine.name })"
               class="search-input"
               @focus="isSearchFocused = true"
               @blur="isSearchFocused = false"
@@ -262,7 +264,7 @@ onBeforeUnmount(() => {
             <button
               class="search-submit"
               :disabled="!searchInput.trim() || isSearching"
-              aria-label="搜索"
+              :aria-label="t('browser.search')"
               @click="handleSearch"
             >
               <ArrowRight v-if="!isSearching" :size="18" />
@@ -300,7 +302,7 @@ onBeforeUnmount(() => {
         <section class="home-section home-stagger-enter" style="animation-delay: 160ms">
           <header class="section-head">
             <span class="section-marker" />
-            <h2 class="section-label">常用网站</h2>
+            <h2 class="section-label">{{ t('browser.section.websites') }}</h2>
           </header>
           <div class="home-card">
             <div class="tiles-grid tiles-grid--4">
@@ -323,7 +325,7 @@ onBeforeUnmount(() => {
         <section class="home-section home-stagger-enter" style="animation-delay: 240ms">
           <header class="section-head">
             <span class="section-marker section-marker--accent" />
-            <h2 class="section-label">开发者工具</h2>
+            <h2 class="section-label">{{ t('browser.section.devtools') }}</h2>
           </header>
           <div class="home-card">
             <div class="tiles-grid tiles-grid--5">

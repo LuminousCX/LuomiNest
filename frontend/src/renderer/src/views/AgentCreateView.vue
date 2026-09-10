@@ -7,6 +7,7 @@
  * 各步骤模板与样式拆分至 components/agent-create/ 子组件。
  */
 import { X, Sparkles, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import LumiButton from '../components/common/LumiButton.vue'
 import StepIdentity from '../components/agent-create/StepIdentity.vue'
 import StepSkills from '../components/agent-create/StepSkills.vue'
@@ -33,6 +34,8 @@ const {
   handleClose,
 } = useAgentCreateForm()
 
+const { t } = useI18n()
+
 const dismissError = (): void => {
   errorMessage.value = ''
 }
@@ -48,14 +51,14 @@ const dismissError = (): void => {
           </div>
           <div class="header-titles">
             <h2 class="wizard-title">{{ STEP_TITLES[currentStep] }}</h2>
-            <p class="wizard-subtitle">第 {{ currentStep + 1 }} 步 > {{ STEP_SUBTITLES[currentStep] }}</p>
+            <p class="wizard-subtitle">{{ t('agentCreate.stepProgress', { n: currentStep + 1, subtitle: STEP_SUBTITLES[currentStep] }) }}</p>
           </div>
         </div>
         <LumiButton
           variant="ghost"
           size="sm"
           icon-only
-          aria-label="关闭"
+          :aria-label="t('agentCreate.close')"
           @click="handleClose"
         >
           <template #icon><X :size="18" /></template>
@@ -109,7 +112,7 @@ const dismissError = (): void => {
           @click="goPrev"
         >
           <ChevronLeft :size="16" />
-          <span>上一步</span>
+          <span>{{ t('agentCreate.prevStep') }}</span>
         </LumiButton>
         <LumiButton
           variant="primary"
@@ -117,7 +120,7 @@ const dismissError = (): void => {
           :disabled="!canGoNext"
           @click="goNext"
         >
-          <span>{{ currentStep === TOTAL_STEPS - 1 ? '创建 Agent' : `下一步: ${currentStep === 0 ? '技能' : currentStep === 1 ? '设置' : '确认'}` }}</span>
+          <span>{{ currentStep === TOTAL_STEPS - 1 ? t('agentCreate.createAgent') : t('agentCreate.nextStep', { name: currentStep === 0 ? t('agentCreate.stepSkills') : currentStep === 1 ? t('agentCreate.stepSettings') : t('agentCreate.stepConfirm') }) }}</span>
           <ChevronRight :size="16" />
         </LumiButton>
       </div>

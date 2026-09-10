@@ -11,6 +11,7 @@ import type { AgentProfile, ConversationListItem, ConversationSearchResult } fro
 import { useChatStore } from '../stores/chat'
 import { useChatTrashStore } from '../stores/chat-trash'
 import { useDebouncedSearch } from './useDebouncedSearch'
+import { i18n } from '../i18n'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 
 const logger = createLuomiNestRendererLogger('WorkspaceConvList')
@@ -20,7 +21,13 @@ interface TimeGroup {
   items: ConversationListItem[]
 }
 
-const TIME_GROUPS: readonly string[] = ['今天', '昨天', '近7天', '更早']
+/** 时间分组标签随语言切换（今天/昨天/近7天/更早） */
+const TIME_GROUPS = (): readonly string[] => [
+  i18n.global.t('chat.timeGroups.today'),
+  i18n.global.t('chat.timeGroups.yesterday'),
+  i18n.global.t('chat.timeGroups.week'),
+  i18n.global.t('chat.timeGroups.earlier'),
+]
 
 export interface UseWorkspaceConvListOptions {
   localSelectedAgent: Ref<AgentProfile | null>
@@ -45,7 +52,7 @@ export const useWorkspaceConvList = (options: UseWorkspaceConvListOptions) => {
     const now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
-    const groups: TimeGroup[] = TIME_GROUPS.map(label => ({ label, items: [] }))
+    const groups: TimeGroup[] = TIME_GROUPS().map(label => ({ label, items: [] }))
 
     const convs = localSelectedAgent.value
       ? (chatStore.agentConversations[localSelectedAgent.value.id] || [])

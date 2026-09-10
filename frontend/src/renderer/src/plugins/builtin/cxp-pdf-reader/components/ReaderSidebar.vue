@@ -6,6 +6,7 @@
  * 可折叠（由 isOpen 控制）。
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ChevronRight, ListTree, PanelLeftClose } from 'lucide-vue-next'
 import type { CxPdfOutlineItem } from '../services/pdfApi'
 
@@ -19,6 +20,8 @@ const emit = defineEmits<{
   'page-change': [page: number]
   toggle: []
 }>()
+
+const { t } = useI18n()
 
 // 扁平化大纲（用于当前章节判定）
 interface FlatItem {
@@ -63,11 +66,11 @@ const isCurrent = (idx: number): boolean => idx === currentChapterIdx.value
       <div class="sidebar-header">
         <div class="header-title">
           <ListTree :size="16" />
-          <span>大纲</span>
+          <span>{{ t('pdfReader.sidebar.title') }}</span>
         </div>
         <button
           class="sidebar-close"
-          title="折叠侧边栏"
+          :title="t('pdfReader.sidebar.collapse')"
           @click="emit('toggle')"
         >
           <PanelLeftClose :size="16" />
@@ -77,8 +80,8 @@ const isCurrent = (idx: number): boolean => idx === currentChapterIdx.value
       <div class="sidebar-body">
         <div v-if="flatOutline.length === 0" class="empty-outline">
           <ListTree :size="32" class="empty-icon" />
-          <p class="empty-text">该文档没有大纲</p>
-          <p class="empty-hint">PDF 内置目录将为空</p>
+          <p class="empty-text">{{ t('pdfReader.sidebar.empty') }}</p>
+          <p class="empty-hint">{{ t('pdfReader.sidebar.emptyHint') }}</p>
         </div>
 
         <ul v-else class="outline-list">

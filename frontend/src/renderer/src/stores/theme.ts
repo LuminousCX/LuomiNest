@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch, toRaw } from 'vue'
 import { getItem, setItem, getStringItem, setStringItem } from '../utils/storage'
+import { i18n } from '../i18n'
 import type { BackgroundConfig, BackgroundFit, ColorTheme, Skin, ThemeConfig } from './theme-types'
 import { MAX_CUSTOM_THEMES, MAX_CUSTOM_SKINS } from './theme-types'
 import { presetThemes } from './theme-presets'
@@ -325,7 +326,9 @@ export const useThemeStore = defineStore('theme', () => {
     }
     const migratedSkin: Skin = {
       id: skinId,
-      name: isCustomColor ? '我的自定义主题' : '我的皮肤',
+      name: isCustomColor
+        ? i18n.global.t('theme.legacy.migratedThemeSkinName')
+        : i18n.global.t('theme.legacy.migratedSkinName'),
       type: 'custom',
       colorThemeId: colorId,
       mode,

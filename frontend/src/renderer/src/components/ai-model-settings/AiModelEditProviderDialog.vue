@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   ChevronRight,
   Check,
@@ -24,6 +25,7 @@ const emit = defineEmits<{
 
 const modelStore = useModelStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const editProviderError = ref('')
 const editProviderLoading = ref(false)
@@ -60,9 +62,9 @@ const isValidUrl = (url: string): boolean => {
 
 const editProviderValidation = computed(() => {
   const errors: string[] = []
-  if (!editProvider.value.name.trim()) errors.push('显示名称不能为空')
-  if (!editProvider.value.baseUrl.trim()) errors.push('API 地址不能为空')
-  if (editProvider.value.baseUrl.trim() && !isValidUrl(editProvider.value.baseUrl)) errors.push('API 地址格式不正确')
+  if (!editProvider.value.name.trim()) errors.push(t('aiModel.editDialog.errNameEmpty'))
+  if (!editProvider.value.baseUrl.trim()) errors.push(t('aiModel.editDialog.errBaseUrlEmpty'))
+  if (editProvider.value.baseUrl.trim() && !isValidUrl(editProvider.value.baseUrl)) errors.push(t('aiModel.editDialog.errBaseUrlInvalid'))
   return errors
 })
 
@@ -141,11 +143,11 @@ const handleEditProvider = async () => {
     }
     await modelStore.updateProvider(editingProviderId.value, updates)
     close()
-    toast.success(`供应商「${editProvider.value.name}」已更新`)
+    toast.success(t('aiModel.editDialog.updateSuccessToast', { name: editProvider.value.name }))
   } catch (e: unknown) {
-    const errMsg = (e instanceof Error ? e.message : (e == null ? '' : String(e))) || '更新失败'
+    const errMsg = (e instanceof Error ? e.message : (e == null ? '' : String(e))) || t('aiModel.editDialog.updateFailed')
     editProviderError.value = errMsg
-    toast.error(`更新供应商失败：${errMsg}`)
+    toast.error(t('aiModel.editDialog.updateFailedToast', { message: errMsg }))
   } finally {
     editProviderLoading.value = false
   }
@@ -170,7 +172,7 @@ watch(() => props.providerId, (providerId) => {
     :shake="shakingDialog"
     :mask-closable="false"
     :width="480"
-    :title="`编辑供应商 - ${editProvider.name}`"
+    :title="t('aiModel.editDialog.title', { name: editProvider.name })"
     @mask-click="shakeDialog"
     @update:visible="emit('update:visible', $event)"
   >
@@ -180,14 +182,14 @@ watch(() => props.providerId, (providerId) => {
         </div>
 
         <div class="form-group">
-          <label class="form-label">显示名称</label>
-          <input v-model="editProvider.name" type="text" class="form-input" placeholder="显示名称" />
+          <label class="form-label">{{ t('aiModel.editDialog.nameLabel') }}</label>
+          <input v-model="editProvider.name" type="text" class="form-input" :placeholder="t('aiModel.editDialog.namePlaceholder')" />
         </div>
         <div class="form-group">
-          <label class="form-label">类型</label>
+          <label class="form-label">{{ t('aiModel.editDialog.typeLabel') }}</label>
           <div class="form-select-wrap">
             <select v-model="editProvider.vendor" class="form-select">
-              <option value="openai_compatible">OpenAI 兼容</option>
+              <option value="openai_compatible">{{ t('aiModel.editDialog.vendorOpenaiCompatible') }}</option>
               <option value="ollama">Ollama</option>
               <option value="anthropic">Anthropic</option>
             </select>
@@ -195,60 +197,60 @@ watch(() => props.providerId, (providerId) => {
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">接入协议</label>
+          <label class="form-label">{{ t('aiModel.editDialog.protocolLabel') }}</label>
           <div class="form-select-wrap">
             <select v-model="editProvider.protocol" class="form-select">
-              <option value="auto">自动（按供应商推断）</option>
-              <option value="chat_completions">Chat Completions（OpenAI 兼容）</option>
-              <option value="anthropic_messages">Anthropic Messages（原生）</option>
+              <option value="auto">{{ t('aiModel.editDialog.protocolAuto') }}</option>
+              <option value="chat_completions">{{ t('aiModel.editDialog.protocolChatCompletions') }}</option>
+              <option value="anthropic_messages">{{ t('aiModel.editDialog.protocolAnthropicMessages') }}</option>
             </select>
             <ChevronRight :size="14" class="select-icon" />
           </div>
-          <span class="form-hint">自动：Anthropic 供应商走原生 Messages 协议，其余走 Chat Completions</span>
+          <span class="form-hint">{{ t('aiModel.editDialog.protocolHint') }}</span>
         </div>
         <div class="form-group">
-          <label class="form-label">API 地址</label>
-          <input v-model="editProvider.baseUrl" type="text" class="form-input" placeholder="API 地址" />
+          <label class="form-label">{{ t('aiModel.editDialog.baseUrlLabel') }}</label>
+          <input v-model="editProvider.baseUrl" type="text" class="form-input" :placeholder="t('aiModel.editDialog.baseUrlPlaceholder')" />
         </div>
         <div class="form-group">
-          <label class="form-label">API Key</label>
+          <label class="form-label">{{ t('aiModel.editDialog.apiKeyLabel') }}</label>
           <div v-if="editProvider.apiKeyPrefix" class="current-key-hint">
-            当前密钥: <code>{{ editProvider.apiKeyPrefix }}</code>
+            {{ t('aiModel.editDialog.currentKey') }} <code>{{ editProvider.apiKeyPrefix }}</code>
           </div>
           <div class="input-with-eye">
             <input
               v-model="editProvider.apiKey"
               :type="showApiKey ? 'text' : 'password'"
               class="form-input"
-              placeholder="留空则不修改"
+              :placeholder="t('aiModel.editDialog.keyPlaceholder')"
             />
             <button
               type="button"
               class="eye-toggle"
-              :title="showApiKey ? '隐藏' : '显示'"
+              :title="showApiKey ? t('aiModel.editDialog.hide') : t('aiModel.editDialog.show')""
               @click="showApiKey = !showApiKey"
             >
               <Eye v-if="!showApiKey" :size="16" />
               <EyeOff v-else :size="16" />
             </button>
           </div>
-          <span class="form-hint">留空表示不修改现有密钥</span>
+          <span class="form-hint">{{ t('aiModel.editDialog.keyHint') }}</span>
         </div>
         <div class="form-group">
-          <label class="form-label">默认模型</label>
+          <label class="form-label">{{ t('aiModel.editDialog.defaultModelLabel') }}</label>
           <div class="form-select-wrap">
             <select v-model="editModelSelect" class="form-select" @change="onEditModelSelectChange">
-              <option value="">请选择模型</option>
+              <option value="">{{ t('aiModel.editDialog.selectModel') }}</option>
               <option v-for="m in editTemplateDefaultModels" :key="m" :value="m">{{ m }}</option>
-              <option value="__custom__">自定义模型...</option>
+              <option value="__custom__">{{ t('aiModel.editDialog.customModel') }}</option>
             </select>
             <ChevronRight :size="14" class="select-icon" />
           </div>
-          <input v-if="editModelSelect === '__custom__'" v-model="editProvider.defaultModel" type="text" class="form-input" placeholder="输入自定义模型名称" style="margin-top: var(--space-2);" />
+          <input v-if="editModelSelect === '__custom__'" v-model="editProvider.defaultModel" type="text" class="form-input" :placeholder="t('aiModel.editDialog.customModelPlaceholder')" style="margin-top: var(--space-2);" />
         </div>
         <div class="form-group">
           <div class="toggle-row">
-            <label class="form-label">设为默认</label>
+            <label class="form-label">{{ t('aiModel.editDialog.setDefault') }}</label>
             <button
               :class="['toggle-switch', { active: editProvider.isDefault }]"
               @click="editProvider.isDefault = !editProvider.isDefault"
@@ -258,7 +260,7 @@ watch(() => props.providerId, (providerId) => {
           </div>
         </div>
     <template #footer>
-      <LumiButton variant="secondary" size="sm" @click="close">取消</LumiButton>
+      <LumiButton variant="secondary" size="sm" @click="close">{{ t('aiModel.editDialog.cancel') }}</LumiButton>
       <LumiButton
         variant="primary"
         size="sm"
@@ -269,7 +271,7 @@ watch(() => props.providerId, (providerId) => {
         <template #icon>
           <Check :size="14" />
         </template>
-        保存
+        {{ t('aiModel.editDialog.save') }}
       </LumiButton>
     </template>
   </LumiModal>
