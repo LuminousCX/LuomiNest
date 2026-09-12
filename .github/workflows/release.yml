@@ -144,6 +144,11 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+        with:
+          # 显式钉住与 frontend/package.json packageManager 一致的版本：
+          # action-setup 只在仓库根找 packageManager 字段，而本仓库声明在 frontend/ 下，
+          # 不传 version 会直接失败
+          version: 10.34.5
 
       - name: Get pnpm store directory
         shell: bash
