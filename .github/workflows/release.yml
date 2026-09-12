@@ -197,13 +197,13 @@ jobs:
           else
             source .venv/bin/activate
           fi
-          pip install --upgrade pip
-          pip install pyinstaller
+          # Windows venv 内 pip.exe 无法自替换，升级/安装一律走 python -m pip
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
           # Install dev deps only - voice deps (torch, faster-whisper, etc.)
           # are heavy and not needed for the bundled backend. They are
           # lazily imported at runtime and fall back gracefully.
-          pip install -e ".[dev]"
-
+          python -m pip install -e ".[dev]"
       - name: Build backend
         shell: bash
         run: |
