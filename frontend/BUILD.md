@@ -188,6 +188,29 @@ bash ./build.sh
 
 ---
 
+## CI 排障实录（2026-09-12 全链路首次跑通）
+
+`release.yml` 首次全流程验证时踩过的坑，已全部修复并三平台跑通。改动 CI 时先对照此清单：
+
+| # | 症状 | 根因 | 修复 |
+|---|------|------|------|
+| 1 | 三平台 `Setup pnpm` 全挂 | `pnpm/action-setup@v4` 不带 `version` 时只在**仓库根**找 `packageManager` 字段，本仓库声明在 `frontend/package.json` | 显式 `version: 10.34.5`（与 packageManager 一致） |
+| 2 | Windows `Install backend dependencies` 挂，报 `To modify pip, please run ...` | venv 内 `pip.exe` 无法自替换（Windows 特有） | 统一 `python -m pip` |
+| 3 | macOS `Build macOS packages` 挂，报 `Cannot read properties of null (reading 'channel')` | electron-builder 拿到 `GH_TOKEN` 就会生成自动更新元数据（updateInfo），项目未配置 publish/channel | `package.json` 的 `build.publish: null` + 打包步骤**不传** `GH_TOKEN` + `--publish never`；Release 统一由 `create-release` job 创建 |
+| 4 | Linux `Build Linux packages` 挂，报 `Please specify project homepage` | deb 包元数据硬性要求 `homepage` | `package.json` 补 `homepage` 字段 |
+
+其他注意：
+
+- **TTS 模型**：`extraResources` 硬引用 `backend/models/tts/vits-melo-tts-zh_en`（~162MB，不进 git），CI 有专门的下载步骤——删掉它三平台打包全挂。
+- **不要给打包步骤传 `GH_TOKEN`**：除非像 airi 那样配齐了 `publish: { provider: github, channel: ... }` 全套更新配置。
+- **发布操作速查**：
+  - master 上版本号变更并 push → 自动打 `v0.8.0-dev.N` **预发布**（detect job 对比 HEAD~1 版本号）
+  - `git tag v0.8.0 && git push origin v0.8.0` → **正式 Release**（六件套产物自动上传）
+  - 手动验证构建：Actions 页 Run workflow（workflow_dispatch），或 API dispatch
+- **签名现状**：Windows 无代码签名证书（日志里 `signing with signtool.exe` 只是编辑 exe 元数据，不是真签名）；macOS 未签名未公证，`CSC_IDENTITY_AUTO_DISCOVERY=false`。拿到证书后在 `mac` 段配 `CSC_LINK`/公证即可。
+
+---
+
 ## 常见问题
 
 ### 1. 后端构建失败：spec 文件未找到

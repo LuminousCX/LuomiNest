@@ -7,10 +7,10 @@
 **分布式多用户关系型 AI 智能体平台**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.7.7-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.0-green.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D.svg?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
-[![Electron](https://img.shields.io/badge/Electron-41-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Electron](https://img.shields.io/badge/Electron-44-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![CodeRabbit](https://img.shields.io/endpoint?url=https://coderabbit.ai/api/badges/LuminousCX/LuomiNest&label=CodeRabbit)](https://coderabbit.ai)
 [![GitHub Stars](https://img.shields.io/github/stars/LuminousCX/LuomiNest?style=social)](https://github.com/LuminousCX/LuomiNest/stargazers)
@@ -188,9 +188,11 @@ LuomiNest/
 
 ## 文档
 
-## 文档
-
 项目维护着一套完整的中文文档体系（概览 / 架构 / 接口 / 数据模型 / 功能实现 / 部署 / 开发指南 / 路线图），**仅随本地工作区提供，不随本仓库分发**。
+
+### 打包与发布
+
+桌面客户端的打包、跨平台产物与发布流程见 **[frontend/BUILD.md](frontend/BUILD.md)**：本地一键打包（`build-all.ps1`）、GitHub Actions 全平台发布（推 `v*` 标签即出正式 Release，master 版本号变更自动出 dev 预发布）、各平台产物形态与排障指南。
 
 ## 贡献
 
