@@ -73,10 +73,9 @@ async def init_db() -> None:
 async def _migrate_columns(conn) -> None:
     """为已有表添加缺失列（SQLite ALTER TABLE ADD COLUMN，幂等）。
 
-    另负责 messages JSON 列 → conversation_messages 独立表的存量回填
-    （前端后端项目锐评 · 高优先级 #1）：
-    1. conversation_messages 表由 create_all 新建（含 FK + 索引）；
-    2. 若旧库 conversations 仍带 messages JSON 列且消息表为空 → 逐行回填；
+    另负责消息 JSON 列 → 独立消息表的存量回填（前端后端项目锐评 · 高优先级 #1）：
+    1. conversation_messages / group_messages 表由 create_all 新建（含 FK + 索引）；
+    2. 若旧库 conversations / groups 仍带 messages JSON 列且消息表为空 → 逐行回填；
     3. 回填成功后 DROP 旧列（SQLite 3.35+ 支持），避免双写不一致。
     """
     from sqlalchemy import text, inspect
@@ -144,6 +143,48 @@ async def _migrate_columns(conn) -> None:
                         logger.info("[DB] Migrated conversations table: dropped legacy messages column")
                     except Exception as e:
                         logger.debug(f"[DB] Drop legacy messages column skipped: {e}")
+
+        # ── 群聊消息独立表回填（旧库，机制与 conversations.messages 回填一致） ──
+        if "groups" in inspector.get_table_names():
+            group_cols = {c["name"] for c in inspector.get_columns("groups")}
+            if "group_messages" in inspector.get_table_names() and "messages" in group_cols:
+                group_msg_count = sync_conn.execute(
+                    text("SELECT COUNT(*) FROM group_messages")
+                ).scalar() or 0
+                group_backfill_ok = group_msg_count > 0  # 已有行视为已回填（幂等）
+                if group_msg_count == 0:
+                    try:
+                        sync_conn.execute(
+                            text(
+                                """
+                                INSERT INTO group_messages
+                                    (group_id, mid, sender_type, content, data, created_at)
+                                SELECT g.id,
+                                       COALESCE(json_extract(value, '$.id'), ''),
+                                       COALESCE(json_extract(value, '$.sender_type'),
+                                                json_extract(value, '$.senderType'), ''),
+                                       COALESCE(json_extract(value, '$.content'), ''),
+                                       value,
+                                       COALESCE(json_extract(value, '$.timestamp'), g.updated_at, '')
+                                FROM groups g, json_each(g.messages)
+                                WHERE g.messages IS NOT NULL AND g.messages != '[]'
+                                """
+                            )
+                        )
+                        group_backfilled = sync_conn.execute(
+                            text("SELECT COUNT(*) FROM group_messages")
+                        ).scalar() or 0
+                        group_backfill_ok = True
+                        logger.info(f"[DB] Migrated groups.messages JSON → group_messages: {group_backfilled} rows")
+                    except Exception as e:
+                        logger.warning(f"[DB] group_messages backfill skipped: {e}")
+                # 仅当回填成功才移除旧列（防数据丢失：回填失败时保留 messages 列可人工恢复）
+                if group_backfill_ok:
+                    try:
+                        sync_conn.execute(text("ALTER TABLE groups DROP COLUMN messages"))
+                        logger.info("[DB] Migrated groups table: dropped legacy messages column")
+                    except Exception as e:
+                        logger.debug(f"[DB] Drop legacy groups messages column skipped: {e}")
 
         # conversations 表历史列兜底（存量库补齐）
         if "conversations" in inspector.get_table_names():

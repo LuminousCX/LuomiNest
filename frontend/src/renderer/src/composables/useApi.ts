@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import type { ChatStreamChunk } from '../types'
 import { API_ENDPOINTS } from '../config/api'
 import { i18n } from '../i18n'
+import { whenBackendReady } from './useBackendGate'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 
 const logger = createLuomiNestRendererLogger('Api')
@@ -91,6 +92,10 @@ export const useApi = () => {
     } = {}
   ): Promise<T> => {
     const { method = 'GET', body, timeout = 15000, signal } = options
+
+    // 等待后端就绪（启动期门闩）：主进程「先建窗口、后启后端」，
+    // 提前发出的请求只会撞 ECONNREFUSED。超时会兜底放行走正常错误路径。
+    await whenBackendReady()
 
     loading.value = true
     error.value = null
@@ -198,6 +203,8 @@ export const useApi = () => {
       : controller.signal
 
     try {
+      // 与 request() 相同的启动期门闩：流式请求同样不能早于后端就绪发出
+      await whenBackendReady()
       const authHeaders = await getAuthHeaders()
       const resp = await fetch(getApiUrl(path), {
         method: 'POST',

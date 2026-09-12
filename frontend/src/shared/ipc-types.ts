@@ -267,57 +267,256 @@ export interface AppPathsInfo {
 }
 
 /* ============================================================================
- * 桌面宠物 IPC channel 常量
+ * 全量 IPC channel 常量（唯一真相源）
  * ========================================================================== */
 
 /**
- * 桌面宠物窗口的 IPC channel 白名单。
+ * LuomiNest 全量 IPC channel 常量，按域 + 通信方向两级分组：
+ * - 域：window / app / config / tab / desktopPet ...（与 preload api 的命名空间对应）
+ * - 方向：
+ *   - invoke：renderer → main 请求应答（preload ipcRenderer.invoke ↔ main ipcMain.handle）
+ *   - send  ：renderer → main 单向（ipcRenderer.send ↔ ipcMain.on）
+ *   - push  ：main → renderer 单向（webContents.send ↔ ipcRenderer.on）
+ *
+ * main / preload 两端禁止手写 channel 字符串，一律引用本常量；并配合下方
+ * IpcInvokeChannel / IpcSendChannel / IpcPushChannel 联合类型做编译期收窄，
+ * 新增或改名 channel 未登记到本常量时两端直接编译报错，杜绝隐式契约漂移。
+ */
+export const IpcChannels = {
+  window: {
+    invoke: {
+      minimize: 'window:minimize',
+      maximize: 'window:maximize',
+      close: 'window:close',
+      isMaximized: 'window:isMaximized',
+    },
+  },
+  app: {
+    invoke: {
+      getVersion: 'app:getVersion',
+      getName: 'app:getName',
+      getPaths: 'app:getPaths',
+      getWelcomeCompleted: 'app:getWelcomeCompleted',
+      setWelcomeCompleted: 'app:setWelcomeCompleted',
+    },
+  },
+  auth: {
+    invoke: {
+      getToken: 'auth:getToken',
+    },
+  },
+  config: {
+    invoke: {
+      getTheme: 'config:getTheme',
+      setTheme: 'config:setTheme',
+      getThemeConfig: 'config:getThemeConfig',
+      setThemeConfig: 'config:setThemeConfig',
+      getTTS: 'config:getTTS',
+      setTTS: 'config:setTTS',
+      getSTT: 'config:getSTT',
+      setSTT: 'config:setSTT',
+      getLocale: 'config:getLocale',
+      setLocale: 'config:setLocale',
+      getAll: 'config:getAll',
+    },
+  },
+  cache: {
+    invoke: {
+      getSize: 'cache:getSize',
+      getBreakdown: 'cache:getBreakdown',
+      clearAll: 'cache:clearAll',
+      clearDir: 'cache:clearDir',
+    },
+  },
+  tab: {
+    invoke: {
+      create: 'tab:create',
+      activate: 'tab:activate',
+      close: 'tab:close',
+      getAll: 'tab:getAll',
+      getActive: 'tab:getActive',
+      reload: 'tab:reload',
+      navigate: 'tab:navigate',
+      goBack: 'tab:goBack',
+      goForward: 'tab:goForward',
+      getNavigationState: 'tab:getNavigationState',
+      hideAll: 'tab:hideAll',
+      showActive: 'tab:showActive',
+      setBoundsConfig: 'tab:setBoundsConfig',
+      cleanup: 'tab:cleanup',
+      getCookies: 'tab:getCookies',
+      clearData: 'tab:clearData',
+    },
+    push: {
+      // main/index.ts 通过 tabManager 回调向主窗口广播；new-tab-request / navigation-state
+      // 由 tab.ts 以 `tab:${event}` 动态拼接，event 后缀必须与本表保持一致
+      updated: 'tab:updated',
+      newTabRequest: 'tab:new-tab-request',
+      navigationState: 'tab:navigation-state',
+    },
+  },
+  browser: {
+    invoke: {
+      search: 'browser:search',
+      fetchUrl: 'browser:fetchUrl',
+      automation: 'browser:automation',
+    },
+  },
+  avatar: {
+    invoke: {
+      importModel: 'avatar:importModel',
+      listImportedModels: 'avatar:listImportedModels',
+      deleteModel: 'avatar:deleteModel',
+      getImportedModelsPath: 'avatar:getImportedModelsPath',
+      // 协作者头像缓存（collaborator-avatars.ts）
+      getCollaboratorAvatar: 'avatar:getCollaboratorAvatar',
+      updateCollaboratorAvatars: 'avatar:updateCollaboratorAvatars',
+    },
+  },
+  desktopPet: {
+    invoke: {
+      // 主应用窗口 → main：桌宠窗口生命周期 / 模型与动作控制
+      open: 'desktop-pet:open',
+      close: 'desktop-pet:close',
+      isRunning: 'desktop-pet:isRunning',
+      loadModel: 'desktop-pet:loadModel',
+      show: 'desktop-pet:show',
+      hide: 'desktop-pet:hide',
+      triggerMotion: 'desktop-pet:triggerMotion',
+      triggerExpression: 'desktop-pet:triggerExpression',
+      setPosition: 'desktop-pet:setPosition',
+      setScale: 'desktop-pet:setScale',
+      driveLipSync: 'desktop-pet:driveLipSync',
+      drivePadEmotion: 'desktop-pet:drivePadEmotion',
+      setCoreParam: 'desktop-pet:setCoreParam',
+      getModelCapabilities: 'desktop-pet:getModelCapabilities',
+      sendSubtitle: 'desktop-pet:sendSubtitle',
+      hideSubtitle: 'desktop-pet:hideSubtitle',
+      setStreamingState: 'desktop-pet:setStreamingState',
+    },
+    send: {
+      // 桌宠窗口 → main 单向（桌宠窗口 preload 白名单 SEND）
+      setIgnoreMouseEvents: 'desktop-pet:set-ignore-mouse-events',
+      setAlwaysOnTop: 'desktop-pet:set-always-on-top',
+      startDrag: 'desktop-pet:start-drag',
+      dragWindow: 'desktop-pet:drag-window',
+      endDrag: 'desktop-pet:end-drag',
+      modelCapabilitiesResponse: 'desktop-pet:model-capabilities-response',
+      showContextMenu: 'desktop-pet:show-context-menu',
+      // 桌宠窗口 → main → 主应用窗口：聊天消息转发
+      sendChatMessage: 'desktop-pet:send-chat-message',
+      cancelChat: 'desktop-pet:cancel-chat',
+      // 多模型扩展：渲染器向主进程上报就绪状态（向后兼容，旧版不发送无影响，仅白名单登记）
+      rendererReady: 'desktop-pet:renderer-ready',
+    },
+    push: {
+      // main → 桌宠窗口 / 主应用窗口单向（桌宠窗口 preload 白名单 ON）
+      loadModel: 'desktop-pet:load-model',
+      triggerMotion: 'desktop-pet:trigger-motion',
+      triggerExpression: 'desktop-pet:trigger-expression',
+      setScale: 'desktop-pet:set-scale',
+      lipSync: 'desktop-pet:lip-sync',
+      padEmotion: 'desktop-pet:pad-emotion',
+      setCoreParam: 'desktop-pet:set-core-param',
+      getModelCapabilities: 'desktop-pet:get-model-capabilities',
+      subtitle: 'desktop-pet:subtitle',
+      subtitleHide: 'desktop-pet:subtitle-hide',
+      // 主进程 → 桌宠窗口：窗口可见性变化（隐藏时降低帧率 / 显示时恢复）
+      visibilityChanged: 'desktop-pet:visibility-changed',
+      // 主进程 → 主应用窗口：转发桌宠窗口的聊天请求
+      chatMessage: 'desktop-pet:chat-message',
+      chatCancel: 'desktop-pet:chat-cancel',
+      // 主进程 → 桌宠窗口：流式状态反馈（输入区切换发送/取消按钮）
+      streamingState: 'desktop-pet:streaming-state',
+      // 多模型扩展：主进程通知渲染器模型能力变更（向后兼容，旧版忽略，仅白名单登记）
+      capabilityChanged: 'desktop-pet:capability-changed',
+      // 注意：set-position 未列入桌宠窗口 ON 白名单（历史行为，保持不变），仅 main 侧发送使用
+      setPosition: 'desktop-pet:set-position',
+    },
+  },
+  dialog: {
+    invoke: {
+      selectBackgroundImage: 'dialog:selectBackgroundImage',
+      deleteBackgroundImage: 'dialog:deleteBackgroundImage',
+    },
+  },
+  backend: {
+    invoke: {
+      subscribe: 'backend:subscribe',
+    },
+    push: {
+      stage: 'backend:stage',
+    },
+  },
+} as const
+
+/** 全部域对象类型的联合 */
+type IpcDomain = (typeof IpcChannels)[keyof typeof IpcChannels]
+
+/** 提取域对象中指定方向分组下的 channel 字面量联合（该域未声明该分组时为 never） */
+type ChannelsInGroup<T, G extends 'invoke' | 'send' | 'push'> = T extends Record<G, infer C> ? C[keyof C] : never
+
+/** renderer → main 请求应答通道全集（preload ipcRenderer.invoke ↔ main ipcMain.handle） */
+export type IpcInvokeChannel = ChannelsInGroup<IpcDomain, 'invoke'>
+
+/** renderer → main 单向通道全集（ipcRenderer.send ↔ ipcMain.on） */
+export type IpcSendChannel = ChannelsInGroup<IpcDomain, 'send'>
+
+/** main → renderer 单向通道全集（webContents.send ↔ ipcRenderer.on） */
+export type IpcPushChannel = ChannelsInGroup<IpcDomain, 'push'>
+
+/* ============================================================================
+ * 桌面宠物窗口 IPC channel 白名单（派生自 IpcChannels.desktopPet）
+ * ========================================================================== */
+
+/**
+ * 桌面宠物窗口的 IPC channel 白名单（成员与顺序保持既有行为不变）。
  *
  * SEND：renderer → main（通过 ipcRenderer.send，由 desktop-pet.ts 用 ipcMain.on 注册）
  * ON：main → renderer（通过 webContents.send，由 DesktopPetView 用 ipcRenderer.on 监听）
  *
  * preload/index.ts 的 ALLOWED_SEND_CHANNELS / ALLOWED_ON_CHANNELS 必须引用本常量，
- * 避免魔法字符串散落。
+ * 避免魔法字符串散落。注意：ON 白名单不含 desktop-pet:set-position（历史行为）。
  */
 export const DesktopPetIpcChannels = {
   SEND: [
-    'desktop-pet:set-ignore-mouse-events',
-    'desktop-pet:set-always-on-top',
-    'desktop-pet:start-drag',
-    'desktop-pet:drag-window',
-    'desktop-pet:end-drag',
-    'desktop-pet:model-capabilities-response',
-    'desktop-pet:show-context-menu',
+    IpcChannels.desktopPet.send.setIgnoreMouseEvents,
+    IpcChannels.desktopPet.send.setAlwaysOnTop,
+    IpcChannels.desktopPet.send.startDrag,
+    IpcChannels.desktopPet.send.dragWindow,
+    IpcChannels.desktopPet.send.endDrag,
+    IpcChannels.desktopPet.send.modelCapabilitiesResponse,
+    IpcChannels.desktopPet.send.showContextMenu,
     // 桌宠窗口 → 主进程 → 主应用窗口：聊天消息转发
-    'desktop-pet:send-chat-message',
-    'desktop-pet:cancel-chat',
+    IpcChannels.desktopPet.send.sendChatMessage,
+    IpcChannels.desktopPet.send.cancelChat,
     // 多模型扩展：渲染器向主进程上报就绪状态（向后兼容，旧版不发送无影响）
-    'desktop-pet:renderer-ready',
+    IpcChannels.desktopPet.send.rendererReady,
   ] as const,
   ON: [
-    'desktop-pet:load-model',
-    'desktop-pet:trigger-motion',
-    'desktop-pet:trigger-expression',
-    'desktop-pet:set-scale',
-    'desktop-pet:lip-sync',
-    'desktop-pet:pad-emotion',
-    'desktop-pet:set-core-param',
-    'desktop-pet:get-model-capabilities',
-    'desktop-pet:subtitle',
-    'desktop-pet:subtitle-hide',
+    IpcChannels.desktopPet.push.loadModel,
+    IpcChannels.desktopPet.push.triggerMotion,
+    IpcChannels.desktopPet.push.triggerExpression,
+    IpcChannels.desktopPet.push.setScale,
+    IpcChannels.desktopPet.push.lipSync,
+    IpcChannels.desktopPet.push.padEmotion,
+    IpcChannels.desktopPet.push.setCoreParam,
+    IpcChannels.desktopPet.push.getModelCapabilities,
+    IpcChannels.desktopPet.push.subtitle,
+    IpcChannels.desktopPet.push.subtitleHide,
     // 主进程 → 桌宠窗口：窗口可见性变化（隐藏时降低帧率 / 显示时恢复）
-    'desktop-pet:visibility-changed',
+    IpcChannels.desktopPet.push.visibilityChanged,
     // 主进程 → 主应用窗口：转发桌宠窗口的聊天请求
-    'desktop-pet:chat-message',
-    'desktop-pet:chat-cancel',
+    IpcChannels.desktopPet.push.chatMessage,
+    IpcChannels.desktopPet.push.chatCancel,
     // 主进程 → 桌宠窗口：流式状态反馈（输入区切换发送/取消按钮）
-    'desktop-pet:streaming-state',
+    IpcChannels.desktopPet.push.streamingState,
     // 多模型扩展：主进程通知渲染器模型能力变更（向后兼容，旧版忽略）
-    'desktop-pet:capability-changed',
-    'backend:stage',
-    'tab:updated',
-    'tab:new-tab-request',
-    'tab:navigation-state',
+    IpcChannels.desktopPet.push.capabilityChanged,
+    IpcChannels.backend.push.stage,
+    IpcChannels.tab.push.updated,
+    IpcChannels.tab.push.newTabRequest,
+    IpcChannels.tab.push.navigationState,
   ] as const,
 } as const
 

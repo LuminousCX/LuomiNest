@@ -56,8 +56,9 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     build: {
-      // 不清空 out 目录：避免 OS 级文件锁（Defender/Search Indexer 持有 live2d 目录句柄）导致 EBUSY 失败。
-      // closeBundle 插件会在构建后清理 live2d 死代码，下次构建不会有残留。
+      // out/ 的清理由 package.json 的 clean:out 脚本负责（build 链开头执行），
+      // rmSync 带 maxRetries/retryDelay 可扛住 Defender/Search Indexer 持有
+      // live2d 目录句柄等 OS 级文件锁；Vite 自身的 emptyOutDir 遇锁会直接失败，故保持 false。
       emptyOutDir: false,
       rollupOptions: {
         input: {

@@ -132,3 +132,40 @@ export const filterTtsText = (text: string): string => {
 
   return result.trim()
 }
+
+/**
+ * 代码块过滤状态机（跨 chunk 保持状态）
+ *
+ * 流式输出按 chunk 到达，``` 围栏可能被拆在相邻两个 chunk 里，
+ * 因此过滤器必须在多次调用间记住"当前是否处于代码块内"。
+ * 发送/重生成开始时调用 resetCodeBlockFilter 复位状态。
+ */
+export interface CodeBlockFilter {
+  filterCodeForTts: (content: string) => string
+  resetCodeBlockFilter: () => void
+}
+
+export const createCodeBlockFilter = (): CodeBlockFilter => {
+  let inCodeBlock = false
+
+  const filterCodeForTts = (content: string): string => {
+    if (!content) return ''
+    const parts = content.split('```')
+    let result = ''
+    for (let i = 0; i < parts.length; i++) {
+      if (i === 0) {
+        if (!inCodeBlock) result += parts[i]
+      } else {
+        inCodeBlock = !inCodeBlock
+        if (!inCodeBlock) result += parts[i]
+      }
+    }
+    return result
+  }
+
+  const resetCodeBlockFilter = (): void => {
+    inCodeBlock = false
+  }
+
+  return { filterCodeForTts, resetCodeBlockFilter }
+}

@@ -14,6 +14,7 @@ import { registerAvatarProtocol, verifyAvatarResources, registerAvatarIpc } from
 import { registerBackgroundProtocol } from './services/bg-protocol'
 import { registerCollaboratorAvatarIpc, updateCollaboratorAvatars } from './services/collaborator-avatars'
 import { createLuomiNestLogger } from './services/luomi-logger'
+import { IpcChannels } from '@shared/ipc-types'
 
 const logger = createLuomiNestLogger('Main')
 
@@ -169,10 +170,12 @@ const createWindow = (): void => {
   tabManager.setCallbacks(
     (tabId, updates) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('tab:updated', { tabId, updates })
+        mainWindow.webContents.send(IpcChannels.tab.push.updated, { tabId, updates })
       }
     },
     (event, data) => {
+      // event 为 'new-tab-request' | 'navigation-state' 后缀（见 tab.ts），与
+      // IpcChannels.tab.push 中 newTabRequest / navigationState 保持一致
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send(`tab:${event}`, data)
       }

@@ -22,7 +22,6 @@ dependencies = [
     "websockets>=16.1.1",
     "paho-mqtt>=2.1.0",
     "sqlalchemy[asyncio]>=2.0.52",
-    "alembic>=1.19.2",
     "numpy>=2.5.2",
     "psutil>=7.2.2",
     "cryptography>=50.0.1",

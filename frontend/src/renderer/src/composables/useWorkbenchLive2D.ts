@@ -20,6 +20,7 @@ import { useLuomiNestLive2D } from './useLuomiNestLive2D'
 import { useToast } from './useToast'
 import { getProviderLogo } from '../config/provider-logos'
 import { LUOMINEST_BUILTIN_MODELS, getAvatarBinding, resolveExpressionByModelUrl } from '../config/luominest-models'
+import { createCodeBlockFilter } from '../utils/ttsTextFilter'
 
 export interface UseWorkbenchLive2DOptions {
   isDesktopMode: ComputedRef<boolean>
@@ -54,27 +55,8 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
   const currentModelInfo = ref(LUOMINEST_BUILTIN_MODELS[0])
   const currentBinding = computed(() => getAvatarBinding(currentModelInfo.value.id))
 
-  // 代码块过滤状态（跨 chunk 保持，发送/重生成时需重置）
-  let inCodeBlock = false
-
-  const filterCodeForTts = (content: string): string => {
-    if (!content) return ''
-    const parts = content.split('```')
-    let result = ''
-    for (let i = 0; i < parts.length; i++) {
-      if (i === 0) {
-        if (!inCodeBlock) result += parts[i]
-      } else {
-        inCodeBlock = !inCodeBlock
-        if (!inCodeBlock) result += parts[i]
-      }
-    }
-    return result
-  }
-
-  const resetCodeBlockFilter = (): void => {
-    inCodeBlock = false
-  }
+  // 代码块过滤状态（跨 chunk 保持，发送/重生成时需重置；随本 composable 生命周期隔离）
+  const { filterCodeForTts, resetCodeBlockFilter } = createCodeBlockFilter()
 
   // ── 配置全局 TTS 引擎（voice / engine / ttsConfig / 开关） ──
   ttsEngine.setConfig({

@@ -1,7 +1,10 @@
 """Group 模型 — 群组（替代 groups.json）。
 
-members 与 messages 用 JSON 列存储（不拆独立表，与 Conversation 设计一致）。
-群聊消息结构：sender_id / sender_type / sender_name / content / role / timestamp。
+members 用 JSON 列存储（不拆独立表，与 Conversation 设计一致）。
+消息已拆至 group_messages 独立表（见 group_message.py）：追加为单行 INSERT，
+不再整列 JSON 重写；旧库若仍存在 messages 列，由 engine._migrate_columns
+回填到 group_messages 表后 DROP（幂等）。
+消息结构：sender_id / sender_type / sender_name / content / role / timestamp。
 """
 from typing import Optional
 
@@ -19,6 +22,5 @@ class Group(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     members: Mapped[list] = mapped_column(JSON, default=list)
-    messages: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[str] = mapped_column(String(64), default="")
     updated_at: Mapped[str] = mapped_column(String(64), default="", index=True)

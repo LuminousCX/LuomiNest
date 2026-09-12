@@ -332,14 +332,14 @@ class MemoryEngine:
         vm = self._get_vector_manager()
         
         facts = []
-        data = self._store.load_data()
+        data = await asyncio.to_thread(self._store.load_data)
         for f in data.facts:
             if f.is_latest:
                 facts.append(f)
-        
+
         if conversation_id:
             conv_store = self._get_conv_store(conversation_id)
-            conv_data = conv_store.load_data()
+            conv_data = await asyncio.to_thread(conv_store.load_data)
             for f in conv_data.facts:
                 if f.is_latest:
                     facts.append(f)
@@ -376,6 +376,17 @@ class MemoryEngine:
 
         return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id)
 
+    def build_context_sync(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
+        """同步上下文组装（与 build_context 的事件循环内回退分支相同，不含向量召回）。
+
+        供 async 调用方配合 asyncio.to_thread 使用：worker 线程中检测不到运行中的
+        事件循环，不能走 build_context 的分支（否则会嵌套 asyncio.run）。
+        """
+        conv_store = None
+        if conversation_id:
+            conv_store = self._get_conv_store(conversation_id)
+        return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id)
+
     def build_context(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
         """同步包装器：检测是否在事件循环中运行，选择合适的调用方式。"""
         try:
@@ -385,10 +396,7 @@ class MemoryEngine:
 
         if loop and loop.is_running():
             # 已在事件循环中，无法用 asyncio.run，使用同步回退
-            conv_store = None
-            if conversation_id:
-                conv_store = self._get_conv_store(conversation_id)
-            return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id)
+            return self.build_context_sync(max_chars, query=query, conversation_id=conversation_id)
 
         return asyncio.run(self.build_context_async(max_chars, query, conversation_id))
 
@@ -409,9 +417,9 @@ class MemoryEngine:
             conv_facts = [f for f in result["facts"] if f.category in FACT_SCOPE_CONVERSATION]
             if conv_facts:
                 conv_store = self._get_conv_store(conversation_id)
-                conv_data = conv_store.load_data()
+                conv_data = await asyncio.to_thread(conv_store.load_data)
                 self._fact_manager.merge_facts(conv_data, conv_facts)
-                conv_store.save_data(conv_data)
+                await asyncio.to_thread(conv_store.save_data, conv_data)
 
         # 增量向量化新提取的事实（embedding 失败不影响主流程，B2.3）
         new_facts = result.get("facts") or []
@@ -434,13 +442,14 @@ class MemoryEngine:
 
         # 蒸馏后增量向量化（agent 级 + 对话级 latest facts，B2.3）
         try:
-            data = self._store.load_data()
+            data = await asyncio.to_thread(self._store.load_data)
             agent_facts = [f for f in data.facts if f.is_latest]
             if agent_facts:
                 await self.vector_dedup(agent_facts)
             if conversation_id:
                 conv_store = self._get_conv_store(conversation_id)
-                conv_facts = [f for f in conv_store.load_data().facts if f.is_latest]
+                conv_data = await asyncio.to_thread(conv_store.load_data)
+                conv_facts = [f for f in conv_data.facts if f.is_latest]
                 if conv_facts:
                     await self.vector_dedup(conv_facts, conversation_id)
         except Exception as e:

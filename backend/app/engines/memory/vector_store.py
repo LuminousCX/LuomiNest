@@ -117,14 +117,20 @@ class VectorStore:
         self._scope_index: dict[str, set[str]] = {}
         self._conv_index: dict[str, set[str]] = {}
         self._loaded = False
+        self._load_lock = asyncio.Lock()
 
     def close(self) -> None:
         self._db.close()
 
-    def _ensure_loaded(self):
-        if not self._loaded:
-            self._load()
-            self._loaded = True
+    async def _ensure_loaded(self) -> None:
+        # 冷启动全量加载是同步 SQLite 读（BLOB 进内存），必须在 to_thread 中执行；
+        # asyncio.Lock 保证并发调用只触发一次加载（与原同步实现的原子性一致）
+        if self._loaded:
+            return
+        async with self._load_lock:
+            if not self._loaded:
+                await asyncio.to_thread(self._load)
+                self._loaded = True
 
     # ── 持久化（增量写，单事务） ──
 
@@ -164,19 +170,19 @@ class VectorStore:
     # ── 写入 ──
 
     async def add(self, entry: VectorEntry) -> None:
-        self._ensure_loaded()
+        await self._ensure_loaded()
         if entry.vector.size == 0:
             vectors = await self._provider.embed([entry.content])
             entry.vector = np.array(vectors[0], dtype=np.float32)
         self._cache[entry.fact_id] = entry
         self._update_indexes(entry, add=True)
         try:
-            self._persist_upsert(entry)
+            await asyncio.to_thread(self._persist_upsert, entry)
         except Exception as e:
             logger.warning(f"[VectorStore] Persist add failed for {entry.fact_id}: {e}")
 
     async def batch_add(self, entries: list[VectorEntry]) -> None:
-        self._ensure_loaded()
+        await self._ensure_loaded()
         if not entries:
             return
 
@@ -190,42 +196,68 @@ class VectorStore:
 
         # 批量落盘（单事务）
         try:
-            with self._db.session() as session:
-                for entry in entries:
-                    row = session.get(MemoryVector, entry.fact_id)
-                    if row is None:
-                        session.add(self._row_from_entry(entry))
-                    else:
-                        row.content = entry.content
-                        row.category = entry.category
-                        row.scope = entry.scope
-                        row.conversation_id = entry.conversation_id
-                        row.vector = self._vector_to_blob(entry.vector)
-                session.commit()
+            await asyncio.to_thread(self._persist_batch, entries)
         except Exception as e:
             logger.warning(f"[VectorStore] Batch persist failed ({len(entries)} entries): {e}")
 
+    def _persist_batch(self, entries: list[VectorEntry]) -> None:
+        # 一次性取回存量行再分流 upsert，避免逐条 session.get 的 N+1 查询
+        # （fact_id 为主键，与原逐条 get 一致，不按 owner_key 过滤）
+        with self._db.session() as session:
+            existing = {
+                row.fact_id: row
+                for row in session.execute(
+                    select(MemoryVector).where(
+                        MemoryVector.fact_id.in_([e.fact_id for e in entries])
+                    )
+                ).scalars()
+            }
+            for entry in entries:
+                row = existing.get(entry.fact_id)
+                if row is None:
+                    session.add(self._row_from_entry(entry))
+                else:
+                    row.content = entry.content
+                    row.category = entry.category
+                    row.scope = entry.scope
+                    row.conversation_id = entry.conversation_id
+                    row.vector = self._vector_to_blob(entry.vector)
+            session.commit()
+
+    def _persist_delete(self, fact_id: str) -> None:
+        with self._db.session() as session:
+            session.execute(
+                delete(MemoryVector).where(
+                    MemoryVector.fact_id == fact_id,
+                    MemoryVector.owner_key == self._owner_key,
+                )
+            )
+            session.commit()
+
+    def _persist_delete_by_conversation(self, conversation_id: str) -> None:
+        with self._db.session() as session:
+            session.execute(
+                delete(MemoryVector).where(
+                    MemoryVector.owner_key == self._owner_key,
+                    MemoryVector.conversation_id == conversation_id,
+                )
+            )
+            session.commit()
+
     async def remove(self, fact_id: str) -> None:
-        self._ensure_loaded()
+        await self._ensure_loaded()
         if fact_id not in self._cache:
             return
         entry = self._cache[fact_id]
         self._update_indexes(entry, add=False)
         del self._cache[fact_id]
         try:
-            with self._db.session() as session:
-                session.execute(
-                    delete(MemoryVector).where(
-                        MemoryVector.fact_id == fact_id,
-                        MemoryVector.owner_key == self._owner_key,
-                    )
-                )
-                session.commit()
+            await asyncio.to_thread(self._persist_delete, fact_id)
         except Exception as e:
             logger.warning(f"[VectorStore] Persist remove failed for {fact_id}: {e}")
 
     async def delete_by_conversation(self, conversation_id: str) -> int:
-        self._ensure_loaded()
+        await self._ensure_loaded()
         to_delete = list(self._conv_index.get(conversation_id, set()))
         for fact_id in to_delete:
             entry = self._cache.get(fact_id)
@@ -235,14 +267,7 @@ class VectorStore:
             del self._cache[fact_id]
         if to_delete:
             try:
-                with self._db.session() as session:
-                    session.execute(
-                        delete(MemoryVector).where(
-                            MemoryVector.owner_key == self._owner_key,
-                            MemoryVector.conversation_id == conversation_id,
-                        )
-                    )
-                    session.commit()
+                await asyncio.to_thread(self._persist_delete_by_conversation, conversation_id)
             except Exception as e:
                 logger.warning(f"[VectorStore] Persist delete_by_conversation failed: {e}")
         return len(to_delete)
@@ -254,10 +279,19 @@ class VectorStore:
         category: str | None = None, scope: str | None = None,
         conversation_id: str | None = None, min_score: float = 0.0
     ) -> list[ScoredFact]:
-        self._ensure_loaded()
+        await self._ensure_loaded()
         query_vec = np.array((await self._provider.embed([query]))[0], dtype=np.float32)
         candidates = self._get_candidates(category, scope, conversation_id)
+        results = await asyncio.to_thread(self._rank_candidates, query_vec, candidates, min_score)
+        return [
+            ScoredFact(fact_id=fid, score=score, category=self._cache[fid].category)
+            for fid, score in results[:k] if fid in self._cache
+        ]
 
+    def _rank_candidates(
+        self, query_vec: np.ndarray, candidates: set[str], min_score: float
+    ) -> list[tuple[str, float]]:
+        """逐候选余弦打分并降序排序（纯 CPU，放到线程避免阻塞事件循环）。"""
         results = []
         for fid in candidates:
             entry = self._cache.get(fid)
@@ -268,18 +302,19 @@ class VectorStore:
                 results.append((fid, score))
 
         results.sort(key=lambda x: x[1], reverse=True)
-        return [
-            ScoredFact(fact_id=fid, score=score, category=self._cache[fid].category)
-            for fid, score in results[:k] if fid in self._cache
-        ]
+        return results
 
     async def dedup_check(
         self, content: str, category: str, threshold: float = 0.85
     ) -> str | None:
-        self._ensure_loaded()
+        await self._ensure_loaded()
         query_vec = np.array((await self._provider.embed([content]))[0], dtype=np.float32)
         candidates = self._category_index.get(category, set())
+        return await asyncio.to_thread(self._best_match, query_vec, candidates, threshold)
 
+    def _best_match(
+        self, query_vec: np.ndarray, candidates: set[str], threshold: float
+    ) -> str | None:
         best_score, best_id = 0.0, None
         for fid in candidates:
             entry = self._cache.get(fid)

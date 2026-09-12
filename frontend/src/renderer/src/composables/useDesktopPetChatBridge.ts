@@ -27,29 +27,13 @@ import { MAIN_AGENT_ID, MAIN_AGENT_PROFILE } from '../constants'
 import { useAgentStore } from '../stores/agent'
 import type { ChatStreamChunk } from '../types'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { createCodeBlockFilter } from '../utils/ttsTextFilter'
 
 const logger = createLuomiNestRendererLogger('DesktopPetChatBridge')
 
 // 代码块过滤状态机：跳过 ``` 包裹的代码块，不送入 TTS（与工作台/皮套工坊一致）
-let inCodeBlock = false
-const filterCodeForTts = (content: string): string => {
-  if (!content) return ''
-  const parts = content.split('```')
-  let result = ''
-  for (let i = 0; i < parts.length; i++) {
-    if (i === 0) {
-      if (!inCodeBlock) result += parts[i]
-    } else {
-      inCodeBlock = !inCodeBlock
-      if (!inCodeBlock) result += parts[i]
-    }
-  }
-  return result
-}
-
-const resetCodeBlockFilter = (): void => {
-  inCodeBlock = false
-}
+// 模块级单例：本桥接在 App.vue 常驻，跨对话保持同一状态
+const { filterCodeForTts, resetCodeBlockFilter } = createCodeBlockFilter()
 
 export const useDesktopPetChatBridge = (): void => {
   const chatStore = useChatStore()

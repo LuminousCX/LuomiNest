@@ -5,6 +5,7 @@
 - all()/values() 返回 list[dict]
 - update() 自动设置 updated_at（与 JsonStore 一致）
 - invalidate() 为 no-op（SQL 始终读取最新）
+群组额外提供 GroupStoreFacade：群聊消息走 group_messages 独立表读写。
 """
 import asyncio
 from typing import Any, Callable, Optional
@@ -104,9 +105,47 @@ class JsonStoreFacade:
         return await asyncio.to_thread(self.mutate, key, updater_fn)
 
 
+class GroupStoreFacade(JsonStoreFacade):
+    """群组 Facade — 在通用 JsonStore 之上补充群聊消息独立表（group_messages）读写。
+
+    群组元数据沿用 JsonStore 方法签名；消息追加/查询委托 GroupRepository
+    的独立表方法（每消息一行，追加 O(1)）。
+    """
+
+    def append_message(self, group_id: str, message: dict) -> bool:
+        """追加单条群聊消息（群组不存在时返回 False）。"""
+        return self._repo.append_message(group_id, message)
+
+    def append_messages(self, group_id: str, messages: list[dict]) -> bool:
+        """批量追加多条群聊消息（单事务）。"""
+        return self._repo.append_messages(group_id, messages)
+
+    def get_messages(self, group_id: str, limit: int | None = None) -> list:
+        """按 seq 升序读取群聊消息（limit 取最新 N 条，仍按时间正序返回）。"""
+        return self._repo.get_messages(group_id, limit)
+
+    def get_meta(self, group_id: str):
+        """加载群组元数据（不含消息行）。"""
+        return self._repo.get_meta(group_id)
+
+    # ── Async wrappers ──
+
+    async def append_message_async(self, group_id: str, message: dict) -> bool:
+        return await asyncio.to_thread(self.append_message, group_id, message)
+
+    async def append_messages_async(self, group_id: str, messages: list[dict]) -> bool:
+        return await asyncio.to_thread(self.append_messages, group_id, messages)
+
+    async def get_messages_async(self, group_id: str, limit: int | None = None) -> list:
+        return await asyncio.to_thread(self.get_messages, group_id, limit)
+
+    async def get_meta_async(self, group_id: str):
+        return await asyncio.to_thread(self.get_meta, group_id)
+
+
 # ── 单例（与原 json_store.py 中的单例名一致）──
 
-from app.infrastructure.database.repositories import (
+from app.infrastructure.database.repositories import (  # noqa: E402
     AgentRepository,
     GroupRepository,
     PlatformRepository,
@@ -114,6 +153,6 @@ from app.infrastructure.database.repositories import (
 )
 
 agents_store = JsonStoreFacade(AgentRepository())
-groups_store = JsonStoreFacade(GroupRepository())
+groups_store = GroupStoreFacade(GroupRepository())
 platforms_store = JsonStoreFacade(PlatformRepository())
 repo_sources_store = JsonStoreFacade(RepoSourceRepository())

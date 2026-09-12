@@ -1,8 +1,11 @@
 import asyncio
+import contextlib
 import os
 import shutil
+import sqlite3
+import tempfile
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from loguru import logger
@@ -14,8 +17,8 @@ from app.core.utils import utc_now_dt
 class LumiBackupManager:
     """数据备份管理器。
 
-    将整个 DATA_DIR 打包为 zip 备份文件，
-    支持创建、恢复、列出、自动清理备份。
+    将 DATA_DIR 打包为 zip 备份文件（活库 luominest.db 先经 sqlite3 backup API
+    取在线一致快照，-wal/-shm 中间态不入包），支持创建、恢复、列出、自动清理备份。
     """
 
     MAX_BACKUPS = 10
@@ -37,14 +40,33 @@ class LumiBackupManager:
             return None
 
         try:
-            with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for root, dirs, files in os.walk(data_dir):
-                    if self._backup_dir in root:
-                        continue
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, data_dir)
-                        zf.write(file_path, arcname)
+            # 活库不能直接拷贝打包（写入中途会得到不一致快照），
+            # 先用 sqlite3 backup API 做在线一致快照，再以快照替代库文件入包
+            db_path = data_dir / "luominest.db"
+            snapshot_path = ""
+            if db_path.exists():
+                snapshot_path = self._snapshot_db(str(db_path))
+
+            try:
+                with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for root, _dirs, files in os.walk(data_dir):
+                        if self._backup_dir in root:
+                            continue
+                        for file in files:
+                            # -wal/-shm 是写时中间态，数据已含在快照中，不再打包
+                            if file in ("luominest.db-wal", "luominest.db-shm"):
+                                continue
+                            file_path = os.path.join(root, file)
+                            if file == "luominest.db" and os.path.abspath(file_path) == str(db_path):
+                                zf.write(snapshot_path, "luominest.db")
+                                continue
+                            arcname = os.path.relpath(file_path, data_dir)
+                            zf.write(file_path, arcname)
+            finally:
+                # 快照只是打包用的中间产物，用完即清理
+                if snapshot_path and os.path.exists(snapshot_path):
+                    with contextlib.suppress(OSError):
+                        os.remove(snapshot_path)
 
             size_mb = os.path.getsize(backup_path) / (1024 * 1024)
             logger.success(f"[Backup] Created: {backup_name} ({size_mb:.1f} MB)")
@@ -74,7 +96,26 @@ class LumiBackupManager:
 
         try:
             with zipfile.ZipFile(backup_path, "r") as zf:
+                # 预检 zip 完整性，损坏的备份直接拒绝，避免污染现有数据
+                bad_file = zf.testzip()
+                if bad_file is not None:
+                    logger.error(f"[Backup] Backup file corrupted at entry: {bad_file}")
+                    return False
                 zf.extractall(temp_restore)
+
+            # 覆盖现有数据前先校验解出的数据库完整性，坏库同样不能落盘
+            restored_db = temp_restore / "luominest.db"
+            if restored_db.exists():
+                integrity = self._check_db_integrity(str(restored_db))
+                if integrity != "ok":
+                    logger.error(f"[Backup] Restored database failed integrity check: {integrity}")
+                    return False
+
+            # Windows 下运行中的后端持有 luominest.db 句柄，直接覆盖会失败或产生不一致，
+            # 恢复前应先停止后端进程
+            logger.warning(
+                "[Backup] Restoring over live data; stop the backend first to avoid file-lock issues on Windows"
+            )
 
             for item in temp_restore.iterdir():
                 target = data_dir / item.name
@@ -93,6 +134,38 @@ class LumiBackupManager:
         finally:
             if temp_restore.exists():
                 shutil.rmtree(temp_restore, ignore_errors=True)
+
+    @staticmethod
+    def _snapshot_db(db_path: str) -> str:
+        """对活库执行 sqlite3 在线备份，生成一致性快照，返回快照临时文件路径。"""
+        fd, snapshot_path = tempfile.mkstemp(prefix="luominest_db_snapshot_", suffix=".db")
+        os.close(fd)
+        try:
+            src = sqlite3.connect(db_path)
+            try:
+                dst = sqlite3.connect(snapshot_path)
+                try:
+                    src.backup(dst)
+                finally:
+                    dst.close()
+            finally:
+                src.close()
+        except Exception:
+            # 快照失败时清理半成品临时文件
+            with contextlib.suppress(OSError):
+                os.remove(snapshot_path)
+            raise
+        return snapshot_path
+
+    @staticmethod
+    def _check_db_integrity(db_path: str) -> str:
+        """对 SQLite 数据库执行 PRAGMA integrity_check，返回首行检查结果。"""
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute("PRAGMA integrity_check").fetchone()
+            return row[0] if row else "no result"
+        finally:
+            conn.close()
 
     def list_backups(self) -> list[dict]:
         """列出所有备份文件。"""

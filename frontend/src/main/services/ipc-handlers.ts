@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, IpcMainInvokeEvent, app, dialog, type OpenDialogOptions, nativeImage } from 'electron'
+import { BrowserWindow, IpcMainInvokeEvent, app, dialog, type OpenDialogOptions, nativeImage } from 'electron'
 import { PATHS } from './paths'
 import { toBackgroundUrl } from './bg-protocol'
 import { configStore } from './config-store'
@@ -7,6 +7,8 @@ import { tabManager, luomiAutomationExecutor } from './browser'
 import { getLumiAuthToken } from './backend/auth-token'
 import { subscribeBackendStage } from './backend'
 import { createLuomiNestLogger } from './luomi-logger'
+import { handleIpc } from './typed-ipc'
+import { IpcChannels } from '@shared/ipc-types'
 import type { TTSConfig, STTConfig, ThemeConfig } from '@shared/ipc-types'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -34,11 +36,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     return true
   }
 
-  ipcMain.handle('window:minimize', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.window.invoke.minimize, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
     getMainWindow()?.minimize()
   })
-  ipcMain.handle('window:maximize', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.window.invoke.maximize, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
     const win = getMainWindow()
     if (win?.isMaximized()) {
@@ -47,25 +49,25 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
       win?.maximize()
     }
   })
-  ipcMain.handle('window:close', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.window.invoke.close, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
     getMainWindow()?.close()
   })
-  ipcMain.handle('window:isMaximized', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.window.invoke.isMaximized, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return false
     return getMainWindow()?.isMaximized() ?? false
   })
 
-  ipcMain.handle('app:getVersion', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.app.invoke.getVersion, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return app.getVersion()
   })
-  ipcMain.handle('app:getName', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.app.invoke.getName, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return app.getName()
   })
 
-  ipcMain.handle('app:getPaths', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.app.invoke.getPaths, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return {
       userData: PATHS.userData,
@@ -77,171 +79,171 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     }
   })
 
-  ipcMain.handle('app:getWelcomeCompleted', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.app.invoke.getWelcomeCompleted, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getWelcomeCompleted()
   })
 
-  ipcMain.handle('app:setWelcomeCompleted', (event: IpcMainInvokeEvent, value: boolean) => {
+  handleIpc(IpcChannels.app.invoke.setWelcomeCompleted, (event: IpcMainInvokeEvent, value: boolean) => {
     if (!assertTrustedSender(event)) return
     if (typeof value !== 'boolean') return
     configStore.setWelcomeCompleted(value)
   })
 
-  ipcMain.handle('auth:getToken', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.auth.invoke.getToken, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return getLumiAuthToken()
   })
 
-  ipcMain.handle('config:getTheme', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.config.invoke.getTheme, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getTheme()
   })
-  ipcMain.handle('config:setTheme', (event: IpcMainInvokeEvent, theme: 'light' | 'dark' | 'system') => {
+  handleIpc(IpcChannels.config.invoke.setTheme, (event: IpcMainInvokeEvent, theme: 'light' | 'dark' | 'system') => {
     if (!assertTrustedSender(event)) return
     configStore.setTheme(theme)
   })
-  ipcMain.handle('config:getThemeConfig', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.config.invoke.getThemeConfig, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return null
     return configStore.getThemeConfig()
   })
-  ipcMain.handle('config:setThemeConfig', (event: IpcMainInvokeEvent, config: ThemeConfig) => {
+  handleIpc(IpcChannels.config.invoke.setThemeConfig, (event: IpcMainInvokeEvent, config: ThemeConfig) => {
     if (!assertTrustedSender(event)) return
     configStore.setThemeConfig(config)
   })
-  ipcMain.handle('config:getTTS', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.config.invoke.getTTS, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getTTSConfig()
   })
-  ipcMain.handle('config:setTTS', (event: IpcMainInvokeEvent, updates: Partial<TTSConfig>) => {
+  handleIpc(IpcChannels.config.invoke.setTTS, (event: IpcMainInvokeEvent, updates: Partial<TTSConfig>) => {
     if (!assertTrustedSender(event)) return
     configStore.setTTSConfig(updates)
   })
-  ipcMain.handle('config:getSTT', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.config.invoke.getSTT, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getSTTConfig()
   })
-  ipcMain.handle('config:setSTT', (event: IpcMainInvokeEvent, updates: Partial<STTConfig>) => {
+  handleIpc(IpcChannels.config.invoke.setSTT, (event: IpcMainInvokeEvent, updates: Partial<STTConfig>) => {
     if (!assertTrustedSender(event)) return
     configStore.setSTTConfig(updates)
   })
-  ipcMain.handle('config:getLocale', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.config.invoke.getLocale, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getLocale()
   })
-  ipcMain.handle('config:setLocale', (event: IpcMainInvokeEvent, locale: string) => {
+  handleIpc(IpcChannels.config.invoke.setLocale, (event: IpcMainInvokeEvent, locale: string) => {
     if (!assertTrustedSender(event)) return
     if (typeof locale !== 'string' || !locale) return
     configStore.setLocale(locale)
   })
-  ipcMain.handle('config:getAll', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.config.invoke.getAll, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getAll()
   })
 
-  ipcMain.handle('cache:getSize', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.cache.invoke.getSize, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return cacheManager.getCacheSizeMB()
   })
-  ipcMain.handle('cache:getBreakdown', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.cache.invoke.getBreakdown, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return cacheManager.getCacheBreakdown()
   })
-  ipcMain.handle('cache:clearAll', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.cache.invoke.clearAll, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return false
     cacheManager.clearAllCache()
     return true
   })
-  ipcMain.handle('cache:clearDir', (event: IpcMainInvokeEvent, dirName: string) => {
+  handleIpc(IpcChannels.cache.invoke.clearDir, (event: IpcMainInvokeEvent, dirName: string) => {
     if (!assertTrustedSender(event)) return false
     if (typeof dirName !== 'string' || !dirName.trim()) return false
     cacheManager.clearCacheDir(dirName)
   })
 
-  ipcMain.handle('tab:create', async (event: IpcMainInvokeEvent, url?: string) => {
+  handleIpc(IpcChannels.tab.invoke.create, async (event: IpcMainInvokeEvent, url?: string) => {
     if (!assertTrustedSender(event)) return
     return tabManager.createTab(url)
   })
-  ipcMain.handle('tab:activate', async (event: IpcMainInvokeEvent, tabId: string) => {
+  handleIpc(IpcChannels.tab.invoke.activate, async (event: IpcMainInvokeEvent, tabId: string) => {
     if (!assertTrustedSender(event)) return
     if (typeof tabId !== 'string' || !tabId.trim()) return
     return tabManager.activateTab(tabId)
   })
-  ipcMain.handle('tab:close', async (event: IpcMainInvokeEvent, tabId: string) => {
+  handleIpc(IpcChannels.tab.invoke.close, async (event: IpcMainInvokeEvent, tabId: string) => {
     if (!assertTrustedSender(event)) return
     if (typeof tabId !== 'string' || !tabId.trim()) return
     return tabManager.closeTab(tabId)
   })
-  ipcMain.handle('tab:getAll', async (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.tab.invoke.getAll, async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return tabManager.getAllTabs()
   })
-  ipcMain.handle('tab:getActive', async (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.tab.invoke.getActive, async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return tabManager.getActiveTab()
   })
-  ipcMain.handle('tab:reload', async (event: IpcMainInvokeEvent, tabId?: string) => {
+  handleIpc(IpcChannels.tab.invoke.reload, async (event: IpcMainInvokeEvent, tabId?: string) => {
     if (!assertTrustedSender(event)) return
     return tabManager.reloadTab(tabId)
   })
-  ipcMain.handle('tab:navigate', async (event: IpcMainInvokeEvent, url: string, tabId?: string) => {
+  handleIpc(IpcChannels.tab.invoke.navigate, async (event: IpcMainInvokeEvent, url: string, tabId?: string) => {
     if (!assertTrustedSender(event)) return
     return tabManager.navigateTo(url, tabId)
   })
-  ipcMain.handle('tab:goBack', async (event: IpcMainInvokeEvent, tabId?: string) => {
+  handleIpc(IpcChannels.tab.invoke.goBack, async (event: IpcMainInvokeEvent, tabId?: string) => {
     if (!assertTrustedSender(event)) return
     return tabManager.goBack(tabId)
   })
-  ipcMain.handle('tab:goForward', async (event: IpcMainInvokeEvent, tabId?: string) => {
+  handleIpc(IpcChannels.tab.invoke.goForward, async (event: IpcMainInvokeEvent, tabId?: string) => {
     if (!assertTrustedSender(event)) return
     return tabManager.goForward(tabId)
   })
-  ipcMain.handle('tab:getNavigationState', async (event: IpcMainInvokeEvent, tabId?: string) => {
+  handleIpc(IpcChannels.tab.invoke.getNavigationState, async (event: IpcMainInvokeEvent, tabId?: string) => {
     if (!assertTrustedSender(event)) return
     return tabManager.getNavigationState(tabId)
   })
-  ipcMain.handle('tab:hideAll', async (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.tab.invoke.hideAll, async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
     return tabManager.hideAll()
   })
-  ipcMain.handle('tab:showActive', async (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.tab.invoke.showActive, async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
     return tabManager.showActive()
   })
-  ipcMain.handle('tab:setBoundsConfig', async (event: IpcMainInvokeEvent, config) => {
+  handleIpc(IpcChannels.tab.invoke.setBoundsConfig, async (event: IpcMainInvokeEvent, config) => {
     if (!assertTrustedSender(event)) return
     return tabManager.setBoundsConfig(config)
   })
-  ipcMain.handle('tab:cleanup', async (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.tab.invoke.cleanup, async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
     return tabManager.cleanup()
   })
-  ipcMain.handle('tab:getCookies', async (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.tab.invoke.getCookies, async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
     const { getCookies } = await import('./browser')
     return getCookies()
   })
-  ipcMain.handle('tab:clearData', async (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.tab.invoke.clearData, async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
     const { clearBrowserData } = await import('./browser')
     return clearBrowserData()
   })
 
-  ipcMain.handle('browser:search', async (event: IpcMainInvokeEvent, query: string) => {
+  handleIpc(IpcChannels.browser.invoke.search, async (event: IpcMainInvokeEvent, query: string) => {
     if (!assertTrustedSender(event)) return
     if (typeof query !== 'string' || !query.trim()) return
     const { browserSearch } = await import('./browser')
     return await browserSearch(query, getMainWindow())
   })
 
-  ipcMain.handle('browser:fetchUrl', async (event: IpcMainInvokeEvent, url: string) => {
+  handleIpc(IpcChannels.browser.invoke.fetchUrl, async (event: IpcMainInvokeEvent, url: string) => {
     if (!assertTrustedSender(event)) return
     if (typeof url !== 'string' || !url.trim()) return
     const { fetchUrl } = await import('./browser')
     return await fetchUrl(url, getMainWindow())
   })
 
-  ipcMain.handle('browser:automation', async (event: IpcMainInvokeEvent, action: string, args: Record<string, any>) => {
+  handleIpc(IpcChannels.browser.invoke.automation, async (event: IpcMainInvokeEvent, action: string, args: Record<string, any>) => {
     if (!assertTrustedSender(event)) {
       return { success: false, error: '未授权的调用方' }
     }
@@ -251,7 +253,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     return await luomiAutomationExecutor.execute(action, args || {})
   })
 
-  ipcMain.handle('dialog:selectBackgroundImage', async (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.dialog.invoke.selectBackgroundImage, async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return { success: false, error: '未授权的调用方' }
 
     const parentWindow = getMainWindow()
@@ -340,7 +342,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     }
   })
 
-  ipcMain.handle('dialog:deleteBackgroundImage', async (event: IpcMainInvokeEvent, imageUrl: string) => {
+  handleIpc(IpcChannels.dialog.invoke.deleteBackgroundImage, async (event: IpcMainInvokeEvent, imageUrl: string) => {
     if (!assertTrustedSender(event)) return { success: false, error: '未授权的调用方' }
     if (typeof imageUrl !== 'string' || !imageUrl.startsWith('luominest-bg://')) {
       return { success: false, error: '无效的背景图片地址' }
@@ -371,12 +373,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     }
   })
 
-  ipcMain.handle('backend:subscribe', (event: IpcMainInvokeEvent) => {
+  handleIpc(IpcChannels.backend.invoke.subscribe, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return
     const win = event.sender
     const unsubscribe = subscribeBackendStage((stage, detail) => {
       if (!win.isDestroyed()) {
-        win.send('backend:stage', { stage, detail })
+        win.send(IpcChannels.backend.push.stage, { stage, detail })
       }
     })
     win.once('destroyed', () => unsubscribe())
