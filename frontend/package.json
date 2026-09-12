@@ -2,6 +2,7 @@
   "name": "luominest-desktop",
   "version": "0.8.0",
   "description": "LuomiNest 辰汐分布式多用户关系型AI智能体平台 - 桌面客户端",
+  "homepage": "https://github.com/LuminousCX/LuomiNest",
   "author": "LuminousCX R&D Team",
   "main": "./out/main/index.js",
   "packageManager": "pnpm@10.34.5",
@@ -235,6 +236,7 @@
       "artifactName": "LuomiNest-${version}-mac-${arch}.dmg"
     },
     "asar": true,
+    "publish": null,
     "electronLanguages": [
       "zh-CN",
       "en-US"

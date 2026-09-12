@@ -200,10 +200,10 @@ jobs:
           # Windows venv 内 pip.exe 无法自替换，升级/安装一律走 python -m pip
           python -m pip install --upgrade pip
           python -m pip install pyinstaller
-          # Install dev deps only - voice deps (torch, faster-whisper, etc.)
-          # are heavy and not needed for the bundled backend. They are
-          # lazily imported at runtime and fall back gracefully.
-          python -m pip install -e ".[dev]"
+          # Install dev + extras deps - spec 的 hiddenimports 引用 extras 里的
+          # pgvector/redis/asyncpg；voice 重型依赖（torch 等）仍不装，运行时
+          # 懒加载、缺失时优雅降级。
+          python -m pip install -e ".[dev,extras]"
       - name: Build backend
         shell: bash
         run: |
@@ -263,8 +263,6 @@ jobs:
         run: |
           cd frontend
           pnpm exec electron-builder --linux AppImage deb --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build macOS packages
         if: matrix.platform == 'mac'
@@ -272,9 +270,10 @@ jobs:
           cd frontend
           pnpm exec electron-builder --mac --publish never
         env:
-          # 无 Apple 开发者证书：跳过签名身份探测，产出未签名 dmg/zip
+          # 无 Apple 开发者证书：跳过签名身份探测，产出未签名 dmg/zip。
+          # 注意不要给 electron-builder 传 GH_TOKEN——它会据此生成自动更新
+          # 元数据（updateInfo），项目未配置 publish/channel 时直接崩溃。
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

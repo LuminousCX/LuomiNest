@@ -1,6 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for LuomiNest backend.
-
 Bundles the FastAPI backend (main.py + app package) into a single executable.
 Voice/STT providers that depend on heavy native libs (torch, faster-whisper,
 sherpa-onnx, funasr) are NOT bundled by default - they are lazily imported
@@ -8,20 +7,15 @@ at runtime inside try/except blocks, so the backend starts fine without them.
 Users who need local voice features should install the `voice` extra into the
 runtime environment next to the executable.
 """
-
 import sys
 from pathlib import Path
-
 block_cipher = None
-
 # Project root (backend/)
 PROJECT_ROOT = Path(SPECPATH)
-
 # 后端 exe 图标（Windows），使任务管理器/通知显示项目图标而非默认图标
 ICON_PATH = str(PROJECT_ROOT.parent / 'frontend' / 'resources' / 'icon.ico')
 if not Path(ICON_PATH).exists():
     ICON_PATH = None
-
 # ---------------------------------------------------------------------------
 # Hidden imports - modules that PyInstaller's static analysis can't detect
 # because they are imported dynamically via importlib / importlib.import_module
@@ -38,7 +32,6 @@ hiddenimports = [
     'pydantic',
     'pydantic_settings',
     'pydantic.fields',
-
     # --- Uvicorn ---
     'uvicorn',
     'uvicorn.logging',
@@ -51,7 +44,6 @@ hiddenimports = [
     'uvicorn.protocols.websockets.auto',
     'uvicorn.lifespan',
     'uvicorn.lifespan.on',
-
     # --- Database ---
     'aiosqlite',
     'sqlalchemy',
@@ -61,32 +53,25 @@ hiddenimports = [
     'sqlalchemy.dialects.postgresql.asyncpg',
     'asyncpg',
     'pgvector',
-
     # --- Redis / MQTT ---
     'redis',
     'redis.asyncio',
     'paho.mqtt.client',
-
     # --- HTTP / WebSocket clients ---
     'httpx',
     'aiohttp',
     'websockets',
-
     # --- LLM providers ---
-    'litellm',
     'openai',
     'anthropic',
-
     # --- Auth / crypto ---
     'cryptography',
     'jose',
     'passlib',
     'passlib.handlers.bcrypt',
-
     # --- Document parsing ---
     'fitz',            # PyMuPDF
     'docx',            # python-docx
-
     # --- Utils ---
     'loguru',
     'orjson',
@@ -99,11 +84,9 @@ hiddenimports = [
     'apscheduler.triggers.date',
     'edge_tts',
     'mcp',
-
     # --- Sherpa-ONNX TTS（离线 TTS 引擎，含 native lib）---
     'sherpa_onnx',
     'soundfile',
-
     # --- App internal packages (dynamically imported in app_factory lifespan) ---
     'app.core.tools',
     'app.core.tools.builtin',
@@ -124,7 +107,6 @@ hiddenimports = [
     'app.runtime.provider.stt',
     'app.runtime.provider.llm',
 ]
-
 # ---------------------------------------------------------------------------
 # Packages to exclude - heavy / unused / platform-specific
 # ---------------------------------------------------------------------------
@@ -166,7 +148,6 @@ excludes = [
     'gi',
     'pygobject',
 ]
-
 # ---------------------------------------------------------------------------
 # Data files - ship config templates so the executable can run standalone
 # ---------------------------------------------------------------------------
@@ -178,10 +159,8 @@ datas = [
     (str(PROJECT_ROOT / 'app' / 'data' / 'avatar-manifest.json'), 'app/data'),
     (str(PROJECT_ROOT.parent / 'LICENSE'), '.'),
 ]
-
 # Filter out paths that don't exist (keeps spec robust on partial checkouts)
 datas = [(src, dst) for src, dst in datas if Path(src).exists()]
-
 a = Analysis(
     [str(PROJECT_ROOT / 'main.py')],
     pathex=[str(PROJECT_ROOT)],
@@ -197,9 +176,7 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
-
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
 exe = EXE(
     pyz,
     a.scripts,
@@ -220,7 +197,6 @@ exe = EXE(
     entitlements_file=None,
     icon=ICON_PATH,
 )
-
 coll = COLLECT(
     exe,
     a.binaries,
