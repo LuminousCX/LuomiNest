@@ -144,8 +144,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Get pnpm store directory
         shell: bash
@@ -171,6 +169,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libarchive-tools rpm libxtst6 libnss3 libnotify4
+
+      - name: Download TTS model
+        shell: bash
+        run: |
+          # electron-builder extraResources 引用 backend/models/tts/vits-melo-tts-zh_en，
+          # 模型不进 git（~162MB），CI 上必须先补齐，否则三平台打包全部失败。
+          # 后端运行时对 voice 依赖懒加载，但模型文件本身是 extraResources 的硬引用。
+          mkdir -p backend/models/tts
+          curl -L --fail --retry 3 -o /tmp/tts-model.tar.bz2 \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-melo-tts-zh_en.tar.bz2
+          tar -xjf /tmp/tts-model.tar.bz2 -C backend/models/tts
+          ls -la backend/models/tts/vits-melo-tts-zh_en
 
       - name: Install backend dependencies
         shell: bash
@@ -239,16 +249,15 @@ jobs:
         if: matrix.platform == 'win'
         run: |
           cd frontend
-          pnpm exec electron-builder --win
+          pnpm exec electron-builder --win --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           USE_HARD_LINKS: 'false'
 
       - name: Build Linux packages
         if: matrix.platform == 'linux'
         run: |
           cd frontend
-          pnpm exec electron-builder --linux AppImage deb
+          pnpm exec electron-builder --linux AppImage deb --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -256,8 +265,10 @@ jobs:
         if: matrix.platform == 'mac'
         run: |
           cd frontend
-          pnpm exec electron-builder --mac
+          pnpm exec electron-builder --mac --publish never
         env:
+          # 无 Apple 开发者证书：跳过签名身份探测，产出未签名 dmg/zip
+          CSC_IDENTITY_AUTO_DISCOVERY: false
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts

@@ -34,8 +34,8 @@ if ($Platform -eq "win") {
 
 # ── 版本号统一入口 ──────────────────────────────────────────
 # 版本唯一来源：backend/pyproject.toml
-# build-all.ps1 自动同步到 frontend/package.json（electron-builder/app.getVersion）
-# 以及 INNO Setup（ISCC -D 参数），确保所有位置版本一致。
+# build-all.ps1 自动同步到 frontend/package.json（electron-builder/app.getVersion），
+# 确保所有位置版本一致。
 $PyProjectPath = Join-Path $BackendDir "pyproject.toml"
 $AppVersion = if (Test-Path $PyProjectPath) {
     $content = Get-Content $PyProjectPath -Raw
@@ -50,30 +50,9 @@ $env:PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
 $env:PIP_TRUSTED_HOST = "pypi.tuna.tsinghua.edu.cn"
 
 # ============================================================
-# Pre-check: INNO Setup 6 (winget auto-install, Ollama-style installer)
+# Step 0: Pre-check (无外部安装器依赖：Windows 安装包由 electron-builder
+# NSIS 直接产出，与 GitHub Actions release.yml 同一条链路)
 # ============================================================
-# winget 可能安装到 per-machine (Program Files) 或 per-user (LocalAppData) 位置
-$InnoSetupCandidates = @(
-    "${env:ProgramFiles(x86)}\Inno Setup 6",
-    "${env:ProgramFiles}\Inno Setup 6",
-    "${env:LOCALAPPDATA}\Programs\Inno Setup 6"
-)
-$InnoSetupDir = $InnoSetupCandidates | Where-Object { Test-Path "$_\ISCC.exe" } | Select-Object -First 1
-if (-not $InnoSetupDir) {
-    Write-Host "INNO Setup 6 not found, installing via winget..." -ForegroundColor Yellow
-    & winget install --id JRSoftware.InnoSetup --silent --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[ERROR] INNO Setup install failed" -ForegroundColor Red
-        exit 1
-    }
-    $InnoSetupDir = $InnoSetupCandidates | Where-Object { Test-Path "$_\ISCC.exe" } | Select-Object -First 1
-    if (-not $InnoSetupDir) {
-        Write-Host "[ERROR] INNO Setup installed but ISCC.exe not found in expected paths" -ForegroundColor Red
-        exit 1
-    }
-}
-$Iscc = Join-Path $InnoSetupDir "ISCC.exe"
-Write-Host "INNO Setup compiler: $Iscc" -ForegroundColor Green
 
 $startTime = Get-Date
 
@@ -197,7 +176,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Frontend build complete" -ForegroundColor Green
 
 # ============================================================
-# Step 4: Package with electron-builder (win-unpacked) + INNO Setup
+# Step 4: Package with electron-builder
 # ============================================================
 Write-Host ""
 Write-Host "[Step 4/5] Creating platform packages..." -ForegroundColor Yellow
@@ -209,8 +188,8 @@ switch ($Platform) {
         & pnpm exec electron-builder --linux AppImage deb
     }
     default {
-        # electron-builder 产出 win-unpacked 目录（dir target），INNO Setup 接管安装器编译
-        & pnpm exec electron-builder --win dir
+        # Windows：electron-builder 直接产出 NSIS 安装包 + 便携版
+        & pnpm exec electron-builder --win
     }
 }
 if ($LASTEXITCODE -ne 0) {
@@ -218,23 +197,6 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-Host "Platform packages created" -ForegroundColor Green
-
-# Windows: 用 INNO Setup 编译 Ollama 风格安装器
-if ($Platform -eq "win") {
-    $WinUnpacked = Join-Path $ReleaseDir "win-unpacked"
-    if (-not (Test-Path $WinUnpacked)) {
-        Write-Host "[ERROR] win-unpacked not found: $WinUnpacked" -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "Compiling INNO Setup installer..." -ForegroundColor Yellow
-    Set-Location $FrontendDir
-    & $Iscc "-DLuomiNestAppVersion=$AppVersion" "build\luominest.iss"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[ERROR] INNO Setup compile failed" -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "INNO Setup installer compiled" -ForegroundColor Green
-}
 
 # ============================================================
 # Step 5: Summary

@@ -30,17 +30,20 @@ LuomiNest 提供本地打包和云端打包两种方式：
 ```
 
 ### 输出位置
-- **Windows**: `frontend/release/dist/LuomiNest-Setup-0.7.0.exe` (NSIS 安装包)
-- **Windows**: `frontend/release/dist/LuomiNest-Portable-0.7.0.exe` (便携版)
-- **Linux**: `frontend/release/dist/LuomiNest-0.7.0-linux-x64.AppImage`
-- **Linux**: `frontend/release/dist/LuomiNest-0.7.0-linux-x64.deb`
-- **macOS**: `frontend/release/dist/LuomiNest-0.7.0-mac-x64.dmg`
+- **Windows**: `frontend/release/dist/LuomiNest-Setup-0.8.0.exe` (NSIS 安装包)
+- **Windows**: `frontend/release/dist/LuomiNest-Portable-0.8.0.exe` (便携版)
+- **Linux**: `frontend/release/dist/LuomiNest-0.8.0-linux-x64.AppImage`
+- **Linux**: `frontend/release/dist/LuomiNest-0.8.0-linux-x64.deb`
+- **macOS**: `frontend/release/dist/LuomiNest-0.8.0-mac-arm64.dmg`
 
 ### 说明
 - 本地打包只构建**当前平台**的包
 - 跨平台构建请使用 GitHub Actions（见方式二）
-- 不再使用 WSL 交叉编译（脆弱且慢）
-- 不再使用 Inno Setup（与 electron-builder NSIS 重复）
+- Windows 安装包由 electron-builder NSIS 直接产出（与 CI 同一条链路），
+  Inno Setup 链路已移除（build/luominest.iss 已删除）
+- 架构策略：各平台产物对应构建 runner 的原生架构（Win/Linux x64、macOS arm64），
+  保证包内 PyInstaller 后端与 Electron 架构一致；后续需 arm64 Windows / Intel Mac 时再扩展矩阵
+- macOS 产物当前未签名（无 Apple 开发者证书），首次打开需右键 → 打开
 
 ---
 
@@ -50,8 +53,8 @@ LuomiNest 提供本地打包和云端打包两种方式：
 
 ```bash
 # 1. 推送版本标签触发自动发布
-git tag v0.7.0
-git push origin v0.7.0
+git tag v0.8.0
+git push origin v0.8.0
 
 # 2. 或手动触发（仅构建不上传 Release）
 gh workflow run release.yml
@@ -63,14 +66,17 @@ gh workflow run release.yml
 |------|--------|------|
 | Windows | `windows-latest` | NSIS 安装包 + 便携版 |
 | Linux | `ubuntu-latest` | AppImage + deb |
-| macOS | `macos-latest` | DMG + ZIP |
+| macOS | `macos-latest` | DMG + ZIP (arm64, 未签名) |
 
 ### 工作流特性
 - pnpm 缓存（加速依赖安装）
 - pip 缓存（加速 Python 依赖安装）
 - 仅安装 `.[dev]` 依赖（不装重型 voice 依赖如 torch）
+- 自动下载 TTS 模型（vits-melo-tts-zh_en ~162MB，extraResources 硬引用，不进 git）
+- macOS 跳过签名探测（`CSC_IDENTITY_AUTO_DISCOVERY=false`，产出未签名包）
+- electron-builder 统一 `--publish never`，Release 由 create-release job 统一创建
 - 自动创建 GitHub Release（含变更日志）
-- 预发布版本自动识别（tag 含 `-` 如 `v0.7.0-beta`）
+- 预发布版本自动识别（tag 含 `-` 如 `v0.8.0-beta`）
 
 ### 配置文件
 - 工作流: `.github/workflows/release.yml`
@@ -132,31 +138,31 @@ bash ./build.sh
 ## 打包产物详解
 
 ### Windows NSIS 安装包
-- **文件名**: `LuomiNest-Setup-0.7.0.exe`
-- **大小**: ~120MB（含后端）
+- **文件名**: `LuomiNest-Setup-0.8.0.exe`
+- **大小**: ~540MB（含 PyInstaller 后端与 TTS 模型，NSIS LZMA 压缩后）
+- **说明**: FileDescription/ProductName 等可执行文件元数据均来自 package.json（name/description/build.productName），禁止出现 Electron 字样
 - **特点**:
-  - 自定义安装路径
-  - 桌面快捷方式、开始菜单、开机自启选项
-  - 中英文双语
-  - 完整卸载支持
-  - 旧版本自动检测升级
+  - 自定义安装路径（assisted 安装向导，中英文界面）
+  - 桌面快捷方式、开始菜单
+  - 完整卸载支持（卸载保留用户数据）
+  - 无需管理员权限（per-user 安装）
 
 ### Windows 便携版
-- **文件名**: `LuomiNest-Portable-0.7.0.exe`
-- **大小**: ~120MB
-- **特点**: 单文件可执行，无需安装，数据保存在程序同目录
+- **文件名**: `LuomiNest-Portable-0.8.0.exe`
+- **大小**: ~540MB
+- **特点**: 单文件可执行，无需安装，解压即用
 
 ### Linux AppImage
-- **文件名**: `LuomiNest-0.7.0-linux-x64.AppImage`
+- **文件名**: `LuomiNest-0.8.0-linux-x64.AppImage`
 - **特点**: 免安装，chmod +x 后直接运行
 
 ### Linux deb
-- **文件名**: `LuomiNest-0.7.0-linux-x64.deb`
+- **文件名**: `LuomiNest-0.8.0-linux-x64.deb`
 - **特点**: Debian/Ubuntu 系包管理器安装
 
 ### macOS DMG
-- **文件名**: `LuomiNest-0.7.0-mac-x64.dmg`
-- **特点**: 标准 macOS 安装镜像
+- **文件名**: `LuomiNest-0.8.0-mac-arm64.dmg`
+- **特点**: Apple Silicon 原生，未签名（首次打开：右键 → 打开）
 
 ---
 
@@ -237,12 +243,13 @@ LuomiNest/
 │   ├── pyproject.toml           # Python 依赖配置
 │   └── main.py                  # 后端入口
 ├── frontend/
-│   ├── package.json             # electron-builder 配置
+│   ├── package.json             # electron-builder 配置（NSIS/portable/AppImage/deb/dmg）
 │   ├── build/
-│   │   ├── nsis-extra.nsh       # NSIS 自定义脚本
 │   │   ├── entitlements.mac.plist  # macOS 权限配置
-│   │   └── luominest.desktop    # Linux 桌面入口
+│   │   └── luominest.desktop    # Linux 桌面入口（参考）
+│   ├── generate-icon.js         # 从 icon.svg 生成 icon.ico/png/icon.mac.png
 │   └── resources/
+│       ├── icon.ico / icon.png / icon.mac.png
 │       └── backend/             # PyInstaller 输出（gitignore）
 ├── build-all.ps1                # 本地一键打包脚本
 └── Makefile                     # Make 命令（可选）
@@ -250,5 +257,5 @@ LuomiNest/
 
 ---
 
-*最后更新: 2026-06-23*
-*适用于 LuomiNest v0.7.0+*
+*最后更新: 2026-09-12*
+*适用于 LuomiNest v0.8.0+*

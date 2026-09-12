@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-12
+
+> 本版本合并 v0.7.7 之后的所有开发工作：9.11 调研 P0/P1/P2 全量修复、
+> 聊天体验优化与打包链路统一。
+
 ### Added
 
 - 工具检索（S1b）：`ToolRegistry` / `InternalToolRegistry` 新增 `search()` 轻量召回；workflow 工具注入改为「核心+召回全 schema、长尾仅名称、`tool.read` 按需取定义」；普通模式白名单并入召回结果与 meta 工具
@@ -44,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 构建产物治理：out/ 构建前清理，安装包不再打入陈旧 hash chunk（实测 1519 文件 94MB → 124 文件 9.7MB）
 - 消息列表窗口化渲染：初始仅挂载最近 40 条，向上滚动按锚点补偿前扩 30 条（视口零跳动），长会话 DOM 不再线性增长；搜索定位自动展开全量，历史行动画抑制保持视觉一致；WorkspaceAgentChat/WorkspaceGroupChat 共用
 - Electron IPC channel 全量常量化：100 个唯一 channel 收口 `shared/ipc-types.ts`（按域 + invoke/send/push 方向分组），main/preload 两端引用同一常量来源并经 `typed-ipc.ts` 类型收窄，channel 增改未登记即编译报错（运行时 channel 值零变化）
+- 版本号 0.7.7 → 0.8.0（frontend/package.json 与 backend/pyproject.toml）
+- 打包链路统一 electron-builder：Windows 改 NSIS 安装包 + 便携版（此前 electron-builder 只打 `dir` 中间产物、由 Inno Setup 接管安装器，与 CI/BUILD.md 宣称的链路互相矛盾），`build-all.ps1` 移除 Inno 依赖与 CI 完全同链路；架构收敛为构建 runner 原生（Win/Linux x64、macOS arm64），消除 arm64 包内装 x64 后端的残废产物；mac 图标新增 `icon.mac.png`（1024px，electron-builder 不接受 svg 低于 512px 的图标源）；可执行文件元数据（FileDescription）去除 "Electron桌面客户端" 字样，安装包/任务管理器/文件属性统一显示 LuomiNest
+- release.yml 修正：pnpm 版本改从 packageManager 字段读取（避免 action-setup 版本冲突）；新增 TTS 模型下载步骤（extraResources 硬引用 `vits-melo-tts-zh_en`，CI 上缺失会导致三平台打包全挂）；electron-builder 统一 `--publish never`（Release 由独立 job 创建，避免双重发布）；macOS 跳过签名探测产出未签名包
 
 ### Fixed
 
@@ -56,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 桌面端启动报 `Error: Electron uninstall`：pnpm 已不读取 package.json 的 `pnpm` 字段（且原文件键名重复），`onlyBuiltDependencies` 白名单与 `overrides` 全部失效，electron 二进制下载脚本被 pnpm 10 默认拦截；构建白名单统一迁至 pnpm-workspace.yaml `allowBuilds`（补 `vue-demi`），移除 package.json 两处死配置
 - 存储位置核验：dev（`backend/data/`）与打包版（userData/Data/backend）后端数据分离正确、gitignore 覆盖实测通过（db/密钥/上传/记忆均不可入库）、API key 为 Fernet 密文落盘且 SECRET_KEY 机器指纹绑定加密；修正 `.gitignore` 中打包版 userData 路径注释（实际为 `%APPDATA%/luominest-desktop`，与开发版共用，经确认维持共用）
 - 自动备份"死亡螺旋"修复：`backup_manager.py` 缺失 `timezone` 导入致 `_auto_cleanup` 必抛 NameError、外层 except 把刚创建的备份删掉（data/backups 长期零产出的根因）；`create_backup` 活库改经 sqlite3 backup API 取在线一致快照，`-wal`/`-shm` 中间态不再入包
+- dev 启动期控制台刷 `net::ERR_CONNECTION_REFUSED`：主进程「先建窗口、后启后端」，渲染层挂载即发的业务请求（agents/conversations 等）必撞后端未就绪且失败不重发；新增 `composables/useBackendGate` 就绪门闩（订阅主进程 backend stage 推送，preload 缺失时轮询 /health 兜底，30s 超时放行走正常错误路径），`useApi` 请求与 SSE 流式入口统一接入，`checkHealth` 探测请求绕过门闩防死锁
 
 ### Removed
 
@@ -65,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Alembic 迁移双轨废弃（`scripts/migrate/`、pyproject 依赖、selfcheck 迁移用例）：运行时零引用且版本漂移落后两个版本，schema 演进统一走 `engine.py` 幂等 ALTER；运行库残留 `alembic_version` 表无害保留
 - `endpoints/mcp.py` 安全环境变量死副本删除（与 `core/tools/mcp/manager.py` 逐字重复且本文件零调用的重构残留）
 - `groups.messages` JSON 整列拆为 `group_messages` 行式表（seq keyset 游标 + 复合索引 + FK CASCADE），消群聊路径写放大；存量数据幂等回填（兼容 snake/camelCase 键风格），仅回填成功才 DROP 旧列，真实库实测 14 项验证通过
+- Inno Setup 资产移除（`build/luominest.iss`、`build/ChineseSimplified.isl`）：安装器统一由 electron-builder NSIS 产出，双链路并存期已结束
 
 ---
 

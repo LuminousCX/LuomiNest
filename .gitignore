@@ -22,7 +22,6 @@ release/
 
 # Electron 构建配置目录（保留打包所需的配置文件）
 frontend/build/*
-!frontend/build/nsis-extra.nsh
 !frontend/build/entitlements.mac.plist
 !frontend/build/luominest.desktop
 

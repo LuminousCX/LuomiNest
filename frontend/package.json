@@ -1,7 +1,7 @@
 {
   "name": "luominest-desktop",
-  "version": "0.7.7",
-  "description": "LuomiNest 辰汐分布式多用户关系型AI智能体平台 - Electron桌面客户端",
+  "version": "0.8.0",
+  "description": "LuomiNest 辰汐分布式多用户关系型AI智能体平台 - 桌面客户端",
   "author": "LuminousCX R&D Team",
   "main": "./out/main/index.js",
   "packageManager": "pnpm@10.34.5",
@@ -120,10 +120,15 @@
     "win": {
       "target": [
         {
-          "target": "dir",
+          "target": "nsis",
           "arch": [
-            "x64",
-            "arm64"
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
           ]
         }
       ],
@@ -131,27 +136,32 @@
       "signAndEditExecutable": true,
       "requestedExecutionLevel": "asInvoker"
     },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "LuomiNest-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "LuomiNest-Portable-${version}.${ext}"
+    },
     "linux": {
       "target": [
         {
           "target": "AppImage",
           "arch": [
-            "x64",
-            "arm64"
+            "x64"
           ]
         },
         {
           "target": "deb",
           "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "tar.gz",
-          "arch": [
-            "x64",
-            "arm64"
+            "x64"
           ]
         }
       ],
@@ -179,20 +189,18 @@
         {
           "target": "dmg",
           "arch": [
-            "x64",
             "arm64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "x64",
             "arm64"
           ]
         }
       ],
       "category": "public.app-category.utilities",
-      "icon": "resources/icon.svg",
+      "icon": "resources/icon.mac.png",
       "artifactName": "LuomiNest-${version}-mac-${arch}.${ext}",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,

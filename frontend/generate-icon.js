@@ -7,6 +7,7 @@ const os = require('os');
 const svgPath = path.join(__dirname, 'resources', 'icon.svg');
 const icoPath = path.join(__dirname, 'resources', 'icon.ico');
 const pngPath = path.join(__dirname, 'resources', 'icon.png');
+const macPngPath = path.join(__dirname, 'resources', 'icon.mac.png');
 const tmpDir = os.tmpdir();
 
 const sizes = [256, 48, 32, 16];
@@ -24,6 +25,15 @@ async function generateIcon() {
     .png()
     .toFile(pngPath);
   console.log('icon.png generated (256x256)');
+
+  // Generate icon.mac.png (1024x1024) — electron-builder mac.icon requires
+  // a raster source of at least 512x512 to build the icns; svg is not accepted.
+  await sharp(svgPath)
+    .resize(1024, 1024)
+    .ensureAlpha()
+    .png()
+    .toFile(macPngPath);
+  console.log('icon.mac.png generated (1024x1024)');
 
   const pngPaths = await Promise.all(
     sizes.map(async (size) => {
