@@ -41,7 +41,8 @@ class GroupChatManager:
         事件类型：user_message, agents_start, agent_message_start, agent_message_delta,
                   agent_message_end, agent_error, agents_done, info, error
         """
-        group = groups_store.get(group_id)
+        # 仅需元数据（成员/名称等），消息历史按需走 get_messages 读取
+        group = groups_store.get_meta(group_id)
         if not group:
             yield {"type": "error", "data": {"message": f"Group {group_id} not found"}}
             return
@@ -55,11 +56,8 @@ class GroupChatManager:
             "timestamp": now,
         }
 
-        if "messages" not in group:
-            group["messages"] = []
-        group["messages"].append(message)
-        group["updated_at"] = now
-        groups_store.set(group_id, group)
+        # 追加用户消息：消息独立表单行 INSERT（O(1)），updated_at 随写入维护
+        groups_store.append_message(group_id, message)
 
         yield {
             "type": "user_message",
@@ -87,7 +85,9 @@ class GroupChatManager:
             }),
         }
 
-        recent_context = self._build_recent_context(group)
+        recent_context = self._build_recent_context(
+            groups_store.get_messages(group_id, limit=10)
+        )
 
         for member in ai_members:
             persist_msg: dict | None = None
@@ -100,15 +100,11 @@ class GroupChatManager:
                         persist_msg = event["data"]
 
                 if persist_msg:
-                    fresh_group = groups_store.get(group_id)
-                    if fresh_group:
-                        if "messages" not in fresh_group:
-                            fresh_group["messages"] = []
-                        fresh_group["messages"].append(persist_msg)
-                        fresh_group["updated_at"] = utc_now()
-                        groups_store.set(group_id, fresh_group)
+                    if groups_store.append_message(group_id, persist_msg):
                         # 更新 recent_context，让下一个 Agent 能看到本轮回复
-                        recent_context = self._build_recent_context(fresh_group)
+                        recent_context = self._build_recent_context(
+                            groups_store.get_messages(group_id, limit=10)
+                        )
 
             except Exception as e:
                 logger.error(f"[GroupChat] Agent {member.get('name')} 响应异常: {e}", exc_info=True)
@@ -333,9 +329,8 @@ class GroupChatManager:
         ]
 
     @staticmethod
-    def _build_recent_context(group: dict, max_messages: int = 10) -> str:
+    def _build_recent_context(messages: list, max_messages: int = 10) -> str:
         """构建近期对话上下文（兼容 camelCase 与 snake_case 消息格式）"""
-        messages = group.get("messages", [])
         if not messages:
             return ""
         recent = messages[-max_messages:]

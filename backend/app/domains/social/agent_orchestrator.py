@@ -819,24 +819,22 @@ class AgentOrchestrator:
             return
         lock = await self._save_locks.get(group_id)
         async with lock:
-            fresh_group = groups_store.get(group_id)
+            # 仅需元数据（成员信息），消息走独立表批量追加
+            fresh_group = groups_store.get_meta(group_id)
             if not fresh_group:
                 logger.warning(f"[Orchestrator] Group {group_id} not found when saving messages")
                 return
 
-            if "messages" not in fresh_group:
-                fresh_group["messages"] = []
-
             now = utc_now()
-
-            user_msg = {
-                "id": str(uuid.uuid4()),
-                "sender_id": "user",
-                "sender_type": "user",
-                "content": session.user_message,
-                "timestamp": now,
-            }
-            fresh_group["messages"].append(user_msg)
+            messages_to_save: list[dict] = [
+                {
+                    "id": str(uuid.uuid4()),
+                    "sender_id": "user",
+                    "sender_type": "user",
+                    "content": session.user_message,
+                    "timestamp": now,
+                }
+            ]
 
             if session.phase == CollaborationPhase.COMPLETED and session.sub_tasks:
                 for task in session.sub_tasks:
@@ -849,7 +847,7 @@ class AgentOrchestrator:
                                 member = m
                                 break
 
-                        task_msg = {
+                        messages_to_save.append({
                             "id": str(uuid.uuid4()),
                             "sender_id": task.agent_id or "agent",
                             "sender_name": agent_name,
@@ -862,13 +860,12 @@ class AgentOrchestrator:
                                 "task_id": task.task_id,
                                 "task_description": task.description,
                             },
-                        }
-                        fresh_group["messages"].append(task_msg)
+                        })
 
                 if session.final_result:
                     coordinator = _find_coordinator_agent(fresh_group)
                     coordinator_name = coordinator["name"] if coordinator else "调度员"
-                    synthesis_msg = {
+                    messages_to_save.append({
                         "id": str(uuid.uuid4()),
                         "sender_id": coordinator["id"] if coordinator else "coordinator",
                         "sender_name": coordinator_name,
@@ -880,13 +877,12 @@ class AgentOrchestrator:
                             "session_id": session.session_id,
                             "type": "synthesis",
                         },
-                    }
-                    fresh_group["messages"].append(synthesis_msg)
+                    })
 
             elif session.coordinator_response:
                 coordinator = _find_coordinator_agent(fresh_group)
                 coordinator_name = coordinator["name"] if coordinator else "Agent"
-                direct_msg = {
+                messages_to_save.append({
                     "id": str(uuid.uuid4()),
                     "sender_id": coordinator["id"] if coordinator else "agent",
                     "sender_name": coordinator_name,
@@ -894,11 +890,10 @@ class AgentOrchestrator:
                     "content": session.coordinator_response,
                     "timestamp": now,
                     "role": "调度员",
-                }
-                fresh_group["messages"].append(direct_msg)
+                })
 
             elif session.final_result:
-                error_msg = {
+                messages_to_save.append({
                     "id": str(uuid.uuid4()),
                     "sender_id": "system",
                     "sender_name": "系统",
@@ -906,11 +901,10 @@ class AgentOrchestrator:
                     "content": session.final_result,
                     "timestamp": now,
                     "role": "系统",
-                }
-                fresh_group["messages"].append(error_msg)
+                })
 
-            fresh_group["updated_at"] = now
-            groups_store.set(fresh_group["id"], fresh_group)
+            # 批量追加到群聊消息独立表（单事务，updated_at 取最后一条时间戳）
+            groups_store.append_messages(group_id, messages_to_save)
 
     def get_session(self, session_id: str) -> CollaborationSession | None:
         """获取指定 ID 的协作会话。

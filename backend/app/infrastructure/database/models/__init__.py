@@ -8,6 +8,7 @@ from app.infrastructure.database.models.config_item import ConfigItem
 from app.infrastructure.database.models.conversation import Conversation
 from app.infrastructure.database.models.conversation_message import ConversationMessage
 from app.infrastructure.database.models.group import Group
+from app.infrastructure.database.models.group_message import GroupMessage
 from app.infrastructure.database.models.marketplace_stat import MarketplaceStat
 from app.infrastructure.database.models.memory import (
     MemoryDaily,
@@ -39,6 +40,7 @@ __all__ = [
     "Conversation",
     "ConversationMessage",
     "Group",
+    "GroupMessage",
     "MarketplaceStat",
     "MemoryDaily",
     "MemoryFact",
