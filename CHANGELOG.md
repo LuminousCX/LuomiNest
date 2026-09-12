@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 存储位置核验：dev（`backend/data/`）与打包版（userData/Data/backend）后端数据分离正确、gitignore 覆盖实测通过（db/密钥/上传/记忆均不可入库）、API key 为 Fernet 密文落盘且 SECRET_KEY 机器指纹绑定加密；修正 `.gitignore` 中打包版 userData 路径注释（实际为 `%APPDATA%/luominest-desktop`，与开发版共用，经确认维持共用）
 - 自动备份"死亡螺旋"修复：`backup_manager.py` 缺失 `timezone` 导入致 `_auto_cleanup` 必抛 NameError、外层 except 把刚创建的备份删掉（data/backups 长期零产出的根因）；`create_backup` 活库改经 sqlite3 backup API 取在线一致快照，`-wal`/`-shm` 中间态不再入包
 - dev 启动期控制台刷 `net::ERR_CONNECTION_REFUSED`：主进程「先建窗口、后启后端」，渲染层挂载即发的业务请求（agents/conversations 等）必撞后端未就绪且失败不重发；新增 `composables/useBackendGate` 就绪门闩（订阅主进程 backend stage 推送，preload 缺失时轮询 /health 兜底，30s 超时放行走正常错误路径），`useApi` 请求与 SSE 流式入口统一接入，`checkHealth` 探测请求绕过门闩防死锁
+- 三平台可运行性审查（GUI/后端/产物三层静态审查 + win 产物实检）修复：Linux 后端构建 runner 降至 ubuntu-22.04（PyInstaller 不做 glibc 向后兼容，24.04 构建的二进制在 22.04/Debian 12 直接无法启动）；Linux 桌宠不再启用点击穿透（无 forward 通道，穿透后渲染层收不到鼠标事件会永久锁死交互）；deb 依赖补全 libgtk-3-0/libgbm1/xdg-utils 等（自定义 depends 整体替换默认列表导致极简系统装完无法建窗）；macOS 麦克风 entitlement 键名修正为 `com.apple.security.device.audio-input`（原键名无效，签名后语音权限会失效）；macOS 红绿灯与自绘标题栏品牌区重叠避让（preload 暴露 `app.platform`）；welcome/splash/login 极简布局新增窗口拖拽条（frameless 无 TitleBar 时整窗不可移动）
 
 ### Removed
 

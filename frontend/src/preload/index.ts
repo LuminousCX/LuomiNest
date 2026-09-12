@@ -49,6 +49,7 @@ const api: ElectronApi = {
     getPaths: () => invoke(IpcChannels.app.invoke.getPaths),
     getWelcomeCompleted: () => invoke(IpcChannels.app.invoke.getWelcomeCompleted),
     setWelcomeCompleted: (value: boolean) => invoke(IpcChannels.app.invoke.setWelcomeCompleted, value),
+    platform: process.platform as 'darwin' | 'win32' | 'linux' | string,
   },
 
   auth: {

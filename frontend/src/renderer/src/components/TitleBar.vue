@@ -5,6 +5,9 @@ import LumiBrandStar from './common/LumiBrandStar.vue'
 
 const isMaximized = ref(false)
 const appVersion = ref('')
+// macOS 原生红绿灯（traffic lights）绘制在 web 内容之上，占左侧约 76px；
+// 自绘品牌区需要避让，其余平台从边距处起排。
+const isMac = window.api?.app.platform === 'darwin'
 
 const handleMinimize = async () => {
   if (window.api) await window.api.window.minimize()
@@ -42,7 +45,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
 
 <template>
   <header class="lumi-title-bar">
-    <div class="title-drag-region">
+    <div class="title-drag-region" :class="{ 'title-drag-region--mac': isMac }">
       <div class="brand-mark">
         <LumiBrandStar :size="16" :animated="false" />
         <span class="brand-text lumi-gradient-text">LuomiNest</span>
@@ -88,6 +91,10 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   flex: 1;
   min-width: 0;
   height: 100%;
+}
+
+.title-drag-region--mac {
+  padding-left: 80px;
 }
 
 .brand-mark {

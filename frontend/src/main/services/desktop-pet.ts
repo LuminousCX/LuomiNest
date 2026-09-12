@@ -242,6 +242,10 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
   })
 
   const handleSetIgnoreMouseEvents = (_event: unknown, ignore: boolean) => {
+    // Linux 无 forward 通道：一旦进入穿透，窗口收不到任何鼠标事件，
+    // 渲染层永远无法翻回可点击态（桌宠永久不可交互）。Linux 直接不启用穿透，
+    // 整窗可点（代价：模型透明区域也会挡住下方窗口的点击）。
+    if (ignore && !supportsForwardedMouseMove) return
     if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
       if (ignore && supportsForwardedMouseMove) {
         desktopPetWindow.setIgnoreMouseEvents(ignore, { forward: true })

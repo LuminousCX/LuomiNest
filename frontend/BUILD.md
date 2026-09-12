@@ -211,6 +211,18 @@ bash ./build.sh
 
 ---
 
+## 已知平台限制（2026-09-12 三平台审查结论）
+
+三平台审查（GUI 层 / 后端层 / 产物实检）无 P0 阻塞，以下为**遗留已知项**，发布说明可引用：
+
+1. **macOS 未签名 dmg 必须真机验证一次**：arm64 上完全未签名的 Mach-O 会被内核 kill（表现为窗口出不来）。electron-builder 对 arm64 默认 ad-hoc 签名，通常可启动，但首次分发请在真实 Mac 上跑 `spctl -a LuomiNest.app` / `codesign -vv` 确认，并验证内嵌 PyInstaller 后端（`Contents/Resources/backend/luominest-backend`）同样存活。首启引导：右键 → 打开（或系统设置 → 隐私与安全性 → 仍要打开）。
+2. **原生 GNOME 无托盘扩展时**：关窗最小化到托盘后无托盘图标可点（KDE/Ubuntu 自带 AppIndicator 不受影响）。恢复方式：再次启动应用会唤起已有实例。发布说明建议 GNOME 用户安装 AppIndicator 扩展。
+3. **Google Fonts 外链**（`variables.css` 的 @import）：国内网络首次启动可能因字体请求超时出现裸样式/白屏（约 30s 后自愈，有 HTTP 缓存后不再发生）。根治方案是字体自托管（`@font-face` + 本地 woff2），涉及字体资产引入，待拍板。
+4. **MCP stdio 服务器**：macOS 由 Finder/Dock 启动的 GUI 进程 PATH 只有系统默认四目录，配置 `npx`/`uvx` 等裸命令会 FileNotFoundError——MCP 服务器命令建议填绝对路径（如 `/opt/homebrew/bin/node`）。
+5. **本地打包产物 ≠ CI 产物**：本地 `electron-builder` 直接跑不会重建 PyInstaller 后端（`build-all.ps1` 才会），打出的包可能内嵌陈旧后端。**对外分发一律使用 CI 产物**（tag 触发，每次从当前源码重建后端）。
+
+---
+
 ## 常见问题
 
 ### 1. 后端构建失败：spec 文件未找到

@@ -125,7 +125,9 @@ jobs:
         include:
           - os: windows-latest
             platform: win
-          - os: ubuntu-latest
+          # 注意不要升到 ubuntu-latest（24.04, glibc 2.39）：PyInstaller 不做
+          # glibc 向后兼容，22.04/Debian 12 用户的后端会报 GLIBC_2.3x not found。
+          - os: ubuntu-22.04
             platform: linux
           - os: macos-latest
             platform: mac

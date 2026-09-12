@@ -67,6 +67,9 @@ if (!isDesktopSurface.value && !isWelcomePage.value && !isLoginPage.value && !is
         <component :is="Component" :key="route.path" />
       </Transition>
     </router-view>
+    <!-- minimal 布局（welcome/splash/login/desktop-pet）无 TitleBar，frameless 窗口
+         需要一个拖拽区才能移动；desktop-pet 桌面悬浮窗口不提供拖拽条 -->
+    <div v-if="isMinimalLayout && !isDesktopSurface" class="minimal-drag-strip"></div>
     <ToastContainer />
     <div v-if="!isDesktopSurface" class="resize-handle resize-n"></div>
     <div v-if="!isDesktopSurface" class="resize-handle resize-s"></div>
@@ -80,6 +83,25 @@ if (!isDesktopSurface.value && !isWelcomePage.value && !isLoginPage.value && !is
 </template>
 
 <style scoped>
+.minimal-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  z-index: 10;
+  -webkit-app-region: drag;
+}
+
+/* 拖拽条覆盖层内的交互控件必须排除，否则按钮/输入框点击被拖拽吞掉。
+   splash/login 的状态按钮集中在页面中部，顶部 38px 无交互元素；
+   底部 skip 按钮不受影响。 */
+.minimal-drag-strip button,
+.minimal-drag-strip input,
+.minimal-drag-strip a {
+  -webkit-app-region: no-drag;
+}
+
 .lumi-app {
   display: flex;
   flex-direction: column;

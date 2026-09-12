@@ -580,6 +580,8 @@ export interface ElectronApi {
     getPaths: () => Promise<AppPathsInfo>
     getWelcomeCompleted: () => Promise<boolean>
     setWelcomeCompleted: (value: boolean) => Promise<void>
+    /** 当前操作系统（process.platform），渲染层平台差异用（如 mac 红绿灯避让） */
+    platform: 'darwin' | 'win32' | 'linux' | string
   }
   auth: {
     getToken: () => Promise<string | undefined>
