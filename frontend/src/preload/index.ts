@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
-import { DesktopPetIpcChannels } from '@shared/ipc-types'
+import { DesktopPetIpcChannels, IpcChannels } from '@shared/ipc-types'
 import type {
   TTSConfig,
   STTConfig,
@@ -7,6 +7,9 @@ import type {
   BrowserAutomationAction,
   BackendStageEvent,
   ThemeConfig,
+  ElectronApi,
+  IpcInvokeChannel,
+  IpcSendChannel,
 } from '@shared/ipc-types'
 
 export interface Tab {
@@ -19,141 +22,154 @@ export interface Tab {
   active?: boolean
 }
 
-const api = {
+/**
+ * invoke 通道收窄：仅接受 IpcChannels 登记的 invoke 通道，手写未登记的
+ * channel 字符串会编译报错，与 main 侧 handleIpc 保持同一常量来源。
+ * 返回类型 R 由 api 对象的 ElectronApi 上下文推断。
+ */
+const invoke = <C extends IpcInvokeChannel, R>(channel: C, ...args: unknown[]): Promise<R> =>
+  ipcRenderer.invoke(channel, ...args) as Promise<R>
+
+/** send 通道收窄（renderer → main 单向），与 main 侧 onIpc 保持同一常量来源 */
+const send = <C extends IpcSendChannel>(channel: C, ...args: unknown[]): void => {
+  ipcRenderer.send(channel, ...args)
+}
+
+const api: ElectronApi = {
   window: {
-    minimize: () => ipcRenderer.invoke('window:minimize'),
-    maximize: () => ipcRenderer.invoke('window:maximize'),
-    close: () => ipcRenderer.invoke('window:close'),
-    isMaximized: () => ipcRenderer.invoke('window:isMaximized')
+    minimize: () => invoke(IpcChannels.window.invoke.minimize),
+    maximize: () => invoke(IpcChannels.window.invoke.maximize),
+    close: () => invoke(IpcChannels.window.invoke.close),
+    isMaximized: () => invoke(IpcChannels.window.invoke.isMaximized)
   },
 
   app: {
-    getVersion: () => ipcRenderer.invoke('app:getVersion'),
-    getName: () => ipcRenderer.invoke('app:getName'),
-    getPaths: () => ipcRenderer.invoke('app:getPaths'),
-    getWelcomeCompleted: () => ipcRenderer.invoke('app:getWelcomeCompleted'),
-    setWelcomeCompleted: (value: boolean) => ipcRenderer.invoke('app:setWelcomeCompleted', value),
+    getVersion: () => invoke(IpcChannels.app.invoke.getVersion),
+    getName: () => invoke(IpcChannels.app.invoke.getName),
+    getPaths: () => invoke(IpcChannels.app.invoke.getPaths),
+    getWelcomeCompleted: () => invoke(IpcChannels.app.invoke.getWelcomeCompleted),
+    setWelcomeCompleted: (value: boolean) => invoke(IpcChannels.app.invoke.setWelcomeCompleted, value),
   },
 
   auth: {
-    getToken: () => ipcRenderer.invoke('auth:getToken'),
+    getToken: () => invoke(IpcChannels.auth.invoke.getToken),
   },
 
   config: {
-    getTheme: () => ipcRenderer.invoke('config:getTheme'),
-    setTheme: (theme: 'light' | 'dark' | 'system') => ipcRenderer.invoke('config:setTheme', theme),
-    getThemeConfig: () => ipcRenderer.invoke('config:getThemeConfig'),
-    setThemeConfig: (config: ThemeConfig) => ipcRenderer.invoke('config:setThemeConfig', config),
-    getTTS: () => ipcRenderer.invoke('config:getTTS'),
-    setTTS: (updates: Partial<TTSConfig>) => ipcRenderer.invoke('config:setTTS', updates),
-    getSTT: () => ipcRenderer.invoke('config:getSTT'),
-    setSTT: (updates: Partial<STTConfig>) => ipcRenderer.invoke('config:setSTT', updates),
-    getLocale: () => ipcRenderer.invoke('config:getLocale'),
-    setLocale: (locale: string) => ipcRenderer.invoke('config:setLocale', locale),
-    getAll: () => ipcRenderer.invoke('config:getAll'),
+    getTheme: () => invoke(IpcChannels.config.invoke.getTheme),
+    setTheme: (theme: 'light' | 'dark' | 'system') => invoke(IpcChannels.config.invoke.setTheme, theme),
+    getThemeConfig: () => invoke(IpcChannels.config.invoke.getThemeConfig),
+    setThemeConfig: (config: ThemeConfig) => invoke(IpcChannels.config.invoke.setThemeConfig, config),
+    getTTS: () => invoke(IpcChannels.config.invoke.getTTS),
+    setTTS: (updates: Partial<TTSConfig>) => invoke(IpcChannels.config.invoke.setTTS, updates),
+    getSTT: () => invoke(IpcChannels.config.invoke.getSTT),
+    setSTT: (updates: Partial<STTConfig>) => invoke(IpcChannels.config.invoke.setSTT, updates),
+    getLocale: () => invoke(IpcChannels.config.invoke.getLocale),
+    setLocale: (locale: string) => invoke(IpcChannels.config.invoke.setLocale, locale),
+    getAll: () => invoke(IpcChannels.config.invoke.getAll),
   },
 
   cache: {
-    getSize: () => ipcRenderer.invoke('cache:getSize'),
-    getBreakdown: () => ipcRenderer.invoke('cache:getBreakdown'),
-    clearAll: () => ipcRenderer.invoke('cache:clearAll'),
-    clearDir: (dirName: string) => ipcRenderer.invoke('cache:clearDir', dirName),
+    getSize: () => invoke(IpcChannels.cache.invoke.getSize),
+    getBreakdown: () => invoke(IpcChannels.cache.invoke.getBreakdown),
+    clearAll: () => invoke(IpcChannels.cache.invoke.clearAll),
+    clearDir: (dirName: string) => invoke(IpcChannels.cache.invoke.clearDir, dirName),
   },
 
   tab: {
-    create: (url?: string) => ipcRenderer.invoke('tab:create', url),
-    activate: (tabId: string) => ipcRenderer.invoke('tab:activate', tabId),
-    close: (tabId: string) => ipcRenderer.invoke('tab:close', tabId),
-    getAll: () => ipcRenderer.invoke('tab:getAll'),
-    getActive: () => ipcRenderer.invoke('tab:getActive'),
-    reload: (tabId?: string) => ipcRenderer.invoke('tab:reload', tabId),
-    navigate: (url: string, tabId?: string) => ipcRenderer.invoke('tab:navigate', url, tabId),
-    goBack: (tabId?: string) => ipcRenderer.invoke('tab:goBack', tabId),
-    goForward: (tabId?: string) => ipcRenderer.invoke('tab:goForward', tabId),
-    getNavigationState: (tabId?: string) => ipcRenderer.invoke('tab:getNavigationState', tabId),
-    hideAll: () => ipcRenderer.invoke('tab:hideAll'),
-    showActive: () => ipcRenderer.invoke('tab:showActive'),
+    create: (url?: string) => invoke(IpcChannels.tab.invoke.create, url),
+    activate: (tabId: string) => invoke(IpcChannels.tab.invoke.activate, tabId),
+    close: (tabId: string) => invoke(IpcChannels.tab.invoke.close, tabId),
+    getAll: () => invoke(IpcChannels.tab.invoke.getAll),
+    getActive: () => invoke(IpcChannels.tab.invoke.getActive),
+    reload: (tabId?: string) => invoke(IpcChannels.tab.invoke.reload, tabId),
+    navigate: (url: string, tabId?: string) => invoke(IpcChannels.tab.invoke.navigate, url, tabId),
+    goBack: (tabId?: string) => invoke(IpcChannels.tab.invoke.goBack, tabId),
+    goForward: (tabId?: string) => invoke(IpcChannels.tab.invoke.goForward, tabId),
+    getNavigationState: (tabId?: string) => invoke(IpcChannels.tab.invoke.getNavigationState, tabId),
+    hideAll: () => invoke(IpcChannels.tab.invoke.hideAll),
+    showActive: () => invoke(IpcChannels.tab.invoke.showActive),
     setBoundsConfig: (config: { sidebarWidth?: number; devPanelHeight?: number }) =>
-      ipcRenderer.invoke('tab:setBoundsConfig', config),
-    cleanup: () => ipcRenderer.invoke('tab:cleanup'),
-    getCookies: () => ipcRenderer.invoke('tab:getCookies'),
-    clearData: () => ipcRenderer.invoke('tab:clearData')
+      invoke(IpcChannels.tab.invoke.setBoundsConfig, config),
+    cleanup: () => invoke(IpcChannels.tab.invoke.cleanup),
+    getCookies: () => invoke(IpcChannels.tab.invoke.getCookies),
+    clearData: () => invoke(IpcChannels.tab.invoke.clearData)
   },
 
   browserSearch: {
-    search: (query: string) => ipcRenderer.invoke('browser:search', query),
-    fetchUrl: (url: string) => ipcRenderer.invoke('browser:fetchUrl', url)
+    search: (query: string) => invoke(IpcChannels.browser.invoke.search, query),
+    fetchUrl: (url: string) => invoke(IpcChannels.browser.invoke.fetchUrl, url)
   },
 
   browserAutomation: {
     execute: (action: BrowserAutomationAction, args?: Record<string, unknown>) =>
-      ipcRenderer.invoke('browser:automation', action, args || {})
+      invoke(IpcChannels.browser.invoke.automation, action, args || {})
   },
 
   avatar: {
-    importModel: () => ipcRenderer.invoke('avatar:importModel'),
-    listImportedModels: () => ipcRenderer.invoke('avatar:listImportedModels'),
-    deleteModel: (modelName: string) => ipcRenderer.invoke('avatar:deleteModel', modelName),
-    getImportedModelsPath: () => ipcRenderer.invoke('avatar:getImportedModelsPath'),
-    getCollaboratorAvatar: (key: string) => ipcRenderer.invoke('avatar:getCollaboratorAvatar', key),
-    updateCollaboratorAvatars: () => ipcRenderer.invoke('avatar:updateCollaboratorAvatars'),
+    importModel: () => invoke(IpcChannels.avatar.invoke.importModel),
+    listImportedModels: () => invoke(IpcChannels.avatar.invoke.listImportedModels),
+    deleteModel: (modelName: string) => invoke(IpcChannels.avatar.invoke.deleteModel, modelName),
+    getImportedModelsPath: () => invoke(IpcChannels.avatar.invoke.getImportedModelsPath),
+    getCollaboratorAvatar: (key: string) => invoke(IpcChannels.avatar.invoke.getCollaboratorAvatar, key),
+    updateCollaboratorAvatars: () => invoke(IpcChannels.avatar.invoke.updateCollaboratorAvatars),
   },
 
   desktopPet: {
-    open: (modelInfo?: PetModelInfo) => ipcRenderer.invoke('desktop-pet:open', modelInfo),
-    close: () => ipcRenderer.invoke('desktop-pet:close'),
-    isRunning: () => ipcRenderer.invoke('desktop-pet:isRunning'),
-    loadModel: (modelInfo: PetModelInfo) => ipcRenderer.invoke('desktop-pet:loadModel', modelInfo),
-    show: () => ipcRenderer.invoke('desktop-pet:show'),
-    hide: () => ipcRenderer.invoke('desktop-pet:hide'),
-    triggerMotion: (group: string, index: number) => ipcRenderer.invoke('desktop-pet:triggerMotion', group, index),
-    triggerExpression: (name: string) => ipcRenderer.invoke('desktop-pet:triggerExpression', name),
-    setPosition: (x: number, y: number) => ipcRenderer.invoke('desktop-pet:setPosition', x, y),
-    setScale: (scale: number) => ipcRenderer.invoke('desktop-pet:setScale', scale),
-    driveLipSync: (value: number) => ipcRenderer.invoke('desktop-pet:driveLipSync', value),
+    open: (modelInfo?: PetModelInfo) => invoke(IpcChannels.desktopPet.invoke.open, modelInfo),
+    close: () => invoke(IpcChannels.desktopPet.invoke.close),
+    isRunning: () => invoke(IpcChannels.desktopPet.invoke.isRunning),
+    loadModel: (modelInfo: PetModelInfo) => invoke(IpcChannels.desktopPet.invoke.loadModel, modelInfo),
+    show: () => invoke(IpcChannels.desktopPet.invoke.show),
+    hide: () => invoke(IpcChannels.desktopPet.invoke.hide),
+    triggerMotion: (group: string, index: number) => invoke(IpcChannels.desktopPet.invoke.triggerMotion, group, index),
+    triggerExpression: (name: string) => invoke(IpcChannels.desktopPet.invoke.triggerExpression, name),
+    setPosition: (x: number, y: number) => invoke(IpcChannels.desktopPet.invoke.setPosition, x, y),
+    setScale: (scale: number) => invoke(IpcChannels.desktopPet.invoke.setScale, scale),
+    driveLipSync: (value: number) => invoke(IpcChannels.desktopPet.invoke.driveLipSync, value),
     drivePadEmotion: (pleasure: number, arousal: number, dominance: number) =>
-      ipcRenderer.invoke('desktop-pet:drivePadEmotion', pleasure, arousal, dominance),
+      invoke(IpcChannels.desktopPet.invoke.drivePadEmotion, pleasure, arousal, dominance),
     setCoreParam: (paramId: string, value: number) =>
-      ipcRenderer.invoke('desktop-pet:setCoreParam', paramId, value),
-    getModelCapabilities: () => ipcRenderer.invoke('desktop-pet:getModelCapabilities'),
-    sendSubtitle: (text: string) => ipcRenderer.invoke('desktop-pet:sendSubtitle', text),
-    hideSubtitle: () => ipcRenderer.invoke('desktop-pet:hideSubtitle'),
-    setStreamingState: (isStreaming: boolean) => ipcRenderer.invoke('desktop-pet:setStreamingState', isStreaming),
+      invoke(IpcChannels.desktopPet.invoke.setCoreParam, paramId, value),
+    getModelCapabilities: () => invoke(IpcChannels.desktopPet.invoke.getModelCapabilities),
+    sendSubtitle: (text: string) => invoke(IpcChannels.desktopPet.invoke.sendSubtitle, text),
+    hideSubtitle: () => invoke(IpcChannels.desktopPet.invoke.hideSubtitle),
+    setStreamingState: (isStreaming: boolean) => invoke(IpcChannels.desktopPet.invoke.setStreamingState, isStreaming),
   },
 
   // 桌宠窗口内的聊天：桌宠窗口 → 主进程 → 主应用窗口
   // 主应用窗口通过 onDesktopPetChatMessage / onDesktopPetChatCancel 监听。
   desktopPetChat: {
-    sendMessage: (text: string) => ipcRenderer.send('desktop-pet:send-chat-message', text),
-    cancel: () => ipcRenderer.send('desktop-pet:cancel-chat'),
+    sendMessage: (text: string) => send(IpcChannels.desktopPet.send.sendChatMessage, text),
+    cancel: () => send(IpcChannels.desktopPet.send.cancelChat),
   },
 
   dialog: {
-    selectBackgroundImage: () => ipcRenderer.invoke('dialog:selectBackgroundImage'),
-    deleteBackgroundImage: (imageUrl: string) => ipcRenderer.invoke('dialog:deleteBackgroundImage', imageUrl),
+    selectBackgroundImage: () => invoke(IpcChannels.dialog.invoke.selectBackgroundImage),
+    deleteBackgroundImage: (imageUrl: string) => invoke(IpcChannels.dialog.invoke.deleteBackgroundImage, imageUrl),
   },
 
   // 主应用窗口监听桌宠窗口转发的聊天请求
   onDesktopPetChatMessage: (callback: (text: string) => void): (() => void) => {
     const handler = (_event: IpcRendererEvent, text: string) => callback(text)
-    ipcRenderer.on('desktop-pet:chat-message', handler)
-    return () => ipcRenderer.removeListener('desktop-pet:chat-message', handler as never)
+    ipcRenderer.on(IpcChannels.desktopPet.push.chatMessage, handler)
+    return () => ipcRenderer.removeListener(IpcChannels.desktopPet.push.chatMessage, handler as never)
   },
 
   onDesktopPetChatCancel: (callback: () => void): (() => void) => {
     const handler = () => callback()
-    ipcRenderer.on('desktop-pet:chat-cancel', handler)
-    return () => ipcRenderer.removeListener('desktop-pet:chat-cancel', handler as never)
+    ipcRenderer.on(IpcChannels.desktopPet.push.chatCancel, handler)
+    return () => ipcRenderer.removeListener(IpcChannels.desktopPet.push.chatCancel, handler as never)
   },
 
   backend: {
     subscribeStage: (callback: (data: BackendStageEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, data: BackendStageEvent) => callback(data)
-      ipcRenderer.on('backend:stage', handler)
-      ipcRenderer.invoke('backend:subscribe').catch((err: unknown) => {
+      ipcRenderer.on(IpcChannels.backend.push.stage, handler)
+      invoke(IpcChannels.backend.invoke.subscribe).catch((err: unknown) => {
         console.error('[Preload] Failed to subscribe to backend stage:', err)
       })
-      return () => ipcRenderer.removeListener('backend:stage', handler as never)
+      return () => ipcRenderer.removeListener(IpcChannels.backend.push.stage, handler as never)
     }
   }
 }
@@ -178,6 +194,7 @@ const electronBridge = {
     },
     send: (channel: string, ...args: unknown[]) => {
       if (ALLOWED_SEND_CHANNELS.has(channel)) {
+        // 白名单桥的底层实现必须直连 ipcRenderer.send（动态 channel，不走常量收窄）
         ipcRenderer.send(channel, ...args)
       } else {
         console.warn(`[Preload] Blocked ipcRenderer.send for unlisted channel: ${channel}`)

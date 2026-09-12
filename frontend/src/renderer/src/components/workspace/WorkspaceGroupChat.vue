@@ -22,6 +22,7 @@ import {
 import { useAgentStore } from '../../stores/agent'
 import type { GroupInfo, GroupMessage, CollaborationPhase, CollaborationSubTask, AgentProfile } from '../../types'
 import { useAutoScroll } from '../../composables/useAutoScroll'
+import { useChatWindow } from '../../composables/useChatWindow'
 
 const { t } = useI18n()
 const agentStore = useAgentStore()
@@ -119,6 +120,17 @@ const { scrollToBottom } = useAutoScroll(
   { deep: true, smooth: true }
 )
 
+// —— 消息窗口化渲染：初始仅挂载最近 N 条，向上滚动分批挂载（保留原生滚动条） ——
+const { visibleMessages, maybeLoadOlder } = useChatWindow<GroupMessage>({
+  messages: () => props.messages,
+  container: groupMessagesContainer,
+  rowSelector: '.msg-row',
+})
+
+const handleGroupScroll = () => {
+  maybeLoadOlder()
+}
+
 defineExpose({ scrollToBottom })
 </script>
 
@@ -182,9 +194,9 @@ defineExpose({ scrollToBottom })
       </div>
     </div>
 
-    <div ref="groupMessagesContainer" class="group-chat-messages">
+    <div ref="groupMessagesContainer" class="group-chat-messages" @scroll="handleGroupScroll">
       <div
-        v-for="msg in messages"
+        v-for="msg in visibleMessages"
         :key="msg.id"
         :class="['msg-row', msg.senderType, { 'collab-synthesis': msg.collaboration?.type === 'synthesis' }]"
       >

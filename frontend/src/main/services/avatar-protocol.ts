@@ -1,9 +1,11 @@
-import { app, dialog, protocol, IpcMainInvokeEvent, ipcMain } from 'electron'
+import { app, dialog, protocol, IpcMainInvokeEvent } from 'electron'
 import { join, dirname, basename, resolve, sep } from 'path'
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, statSync, copyFileSync } from 'fs'
 import { PATHS } from './paths'
 import { ImportedModelRecord, loadImportedModels, saveImportedModels } from './desktop-pet'
 import { createLuomiNestLogger } from './luomi-logger'
+import { handleIpc } from './typed-ipc'
+import { IpcChannels } from '@shared/ipc-types'
 
 const logger = createLuomiNestLogger('Avatar')
 
@@ -204,7 +206,7 @@ export function verifyAvatarResources(): void {
 }
 
 export function registerAvatarIpc(): void {
-  ipcMain.handle('avatar:importModel', async () => {
+  handleIpc(IpcChannels.avatar.invoke.importModel, async () => {
     try {
       const result = await dialog.showOpenDialog({
         title: 'Import LuomiNest Avatar Model',
@@ -283,11 +285,11 @@ export function registerAvatarIpc(): void {
     }
   })
 
-  ipcMain.handle('avatar:listImportedModels', () => {
+  handleIpc(IpcChannels.avatar.invoke.listImportedModels, () => {
     return loadImportedModels()
   })
 
-  ipcMain.handle('avatar:deleteModel', async (_e: IpcMainInvokeEvent, modelName: string) => {
+  handleIpc(IpcChannels.avatar.invoke.deleteModel, async (_e: IpcMainInvokeEvent, modelName: string) => {
     try {
       const destDir = resolve(PATHS.live2d, modelName)
       if (!destDir.startsWith(resolve(PATHS.live2d) + sep)) {
@@ -310,7 +312,7 @@ export function registerAvatarIpc(): void {
     }
   })
 
-  ipcMain.handle('avatar:getImportedModelsPath', () => {
+  handleIpc(IpcChannels.avatar.invoke.getImportedModelsPath, () => {
     return PATHS.live2d
   })
 }

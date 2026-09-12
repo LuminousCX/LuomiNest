@@ -1,8 +1,9 @@
 import { join } from 'path'
 import { readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'fs'
-import { ipcMain } from 'electron'
 import { PATHS } from './paths'
 import { createLuomiNestLogger } from './luomi-logger'
+import { handleIpc } from './typed-ipc'
+import { IpcChannels } from '@shared/ipc-types'
 
 const logger = createLuomiNestLogger('CollabAvatar')
 
@@ -106,9 +107,9 @@ export const getCollaboratorAvatarUrl = (key: string): string | null => {
 }
 
 export const registerCollaboratorAvatarIpc = (): void => {
-  ipcMain.handle('avatar:getCollaboratorAvatar', (_event, key: string) => {
+  handleIpc(IpcChannels.avatar.invoke.getCollaboratorAvatar, (_event, key: string) => {
     return { key, url: typeof key === 'string' ? getCollaboratorAvatarUrl(key) : null }
   })
 
-  ipcMain.handle('avatar:updateCollaboratorAvatars', () => updateCollaboratorAvatars())
+  handleIpc(IpcChannels.avatar.invoke.updateCollaboratorAvatars, () => updateCollaboratorAvatars())
 }

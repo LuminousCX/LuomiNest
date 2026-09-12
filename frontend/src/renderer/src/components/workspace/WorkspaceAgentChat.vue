@@ -29,11 +29,12 @@ import SuggestedQuestions from '../../components/SuggestedQuestions.vue'
 import SkillsPicker from '../common/SkillsPicker.vue'
 import LumiButton from '../common/LumiButton.vue'
 import LumiEmptyState from '../common/LumiEmptyState.vue'
-import { renderMarkdown } from '../../utils/markdown'
+import { renderMarkdown, renderMarkdownThrottled } from '../../utils/markdown'
 import { getFileIcon } from '../../utils/file'
 import type { ChatMessage, ProviderLogo, AgentProfile } from '../../types'
 import { useAutoResizeTextarea } from '../../composables/useAutoResizeTextarea'
 import { useChatScroll, isLastAssistantMessage as checkLastAssistantMessage } from '../../composables/useChatScroll'
+import { useChatWindow } from '../../composables/useChatWindow'
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -100,6 +101,13 @@ const { scrollToBottom, setupResizeObserver, teardownResizeObserver, handleScrol
   getMessageCount: () => props.messages.length,
 })
 
+// —— 消息窗口化渲染：初始仅挂载最近 N 条，向上滚动分批挂载（保留原生滚动条） ——
+const { renderedStart, historyBoundary, visibleMessages, maybeLoadOlder } = useChatWindow<ChatMessage>({
+  messages: () => props.messages,
+  container: messagesContainer,
+  rowSelector: '.message-row',
+})
+
 const inputTextModel = computed<string>({
   get: () => props.inputText,
   set: (value) => emit('update:inputText', value),
@@ -119,24 +127,34 @@ const selectMode = (value: ChatMode) => {
   emit('select-chat-mode', value)
 }
 
-const scrollToSearchResult = (keyword: string) => {
+const scrollToSearchResult = async (keyword: string): Promise<void> => {
   if (!messagesContainer.value) return
   const q = keyword.toLowerCase()
-  const msgElements = messagesContainer.value.querySelectorAll('.message-row')
-  for (const el of msgElements) {
-    const text = el.textContent?.toLowerCase() || ''
-    if (text.includes(q)) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      el.classList.add('lumi-chat-search-highlight')
-      setTimeout(() => el.classList.remove('lumi-chat-search-highlight'), 2000)
-      return
-    }
+  const findMatch = (): Element | undefined =>
+    Array.from(messagesContainer.value!.querySelectorAll('.message-row')).find(
+      (el) => el.textContent?.toLowerCase().includes(q)
+    )
+  let target = findMatch()
+  if (!target && renderedStart.value > 0) {
+    // 命中消息可能在未挂载的历史窗口之外：展开全量后再按 DOM 文本定位，
+    // 与全量渲染时的查找/高亮行为保持一致
+    renderedStart.value = 0
+    await nextTick()
+    target = findMatch()
+  }
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    target.classList.add('lumi-chat-search-highlight')
+    setTimeout(() => target.classList.remove('lumi-chat-search-highlight'), 2000)
+    return
   }
   scrollToBottom(true)
 }
 
 const handleMessagesScroll = () => {
   handleScroll()
+  // 接近顶部时向前挂载更早的历史消息
+  maybeLoadOlder()
 }
 
 const focusTextarea = () => {
@@ -193,10 +211,15 @@ const beautifyThinking = (text: string): string => {
   return paragraphs.join('\n\n')
 }
 
-const renderReasoningMarkdown = (text: string): string => {
-  if (!text) return ''
-  return renderMarkdown(beautifyThinking(text))
+const renderReasoningMarkdown = (msg: ChatMessage): string => {
+  // 流式期间按消息缓存 + 节流重解析，完成后精确渲染（最终 HTML 与全量渲染一致）
+  return renderMarkdownThrottled(`reasoning:${msg.id}`, msg.reasoningContent || '', !!msg.done, (text) =>
+    renderMarkdown(beautifyThinking(text))
+  )
 }
+
+const renderMessageHtml = (msg: ChatMessage): string =>
+  renderMarkdownThrottled(`content:${msg.id}`, msg.content, !!msg.done)
 
 const openFilePreview = (file: { name: string; type?: string; content?: string }) => {
   emit('file-preview', { name: file.name, type: file.type, content: file.content })
@@ -285,9 +308,9 @@ defineExpose({
         <div class="messages-container">
           <TransitionGroup name="msg-appear" tag="div">
             <div
-              v-for="msg in messages"
+              v-for="(msg, rowIdx) in visibleMessages"
               :key="msg.id"
-              :class="['message-row', msg.role]"
+              :class="['message-row', msg.role, { 'msg-history': rowIdx + renderedStart < historyBoundary }]"
             >
               <div class="message-avatar" v-if="msg.role === 'assistant'">
                 <div class="avatar-assistant" :style="agent?.avatar ? {} : { background: `color-mix(in srgb, ${agent?.color || 'var(--lumi-brand)'} 10%, transparent)`, color: agent?.color || 'var(--lumi-brand)' }">
@@ -317,13 +340,13 @@ defineExpose({
                     class="reasoning-content reasoning-markdown"
                     ref="reasoningScrollRefs"
                   >
-                    <div v-html="renderReasoningMarkdown(msg.reasoningContent || '')"></div>
+                    <div v-html="renderReasoningMarkdown(msg)"></div>
                   </div>
                 </div>
 
                 <!-- AI消息内容 -->
                 <div v-if="msg.role === 'assistant' && msg.content && msg.content !== '[已中断]'" class="message-content markdown-body">
-                  <div v-html="renderMarkdown(msg.content)"></div>
+                  <div v-html="renderMessageHtml(msg)"></div>
                   <span v-if="msg.interrupted" class="interrupted-inline">
                     <AlertTriangle :size="12" /> {{ t('chat.interrupted') }}
                   </span>
@@ -707,6 +730,21 @@ defineExpose({
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
+}
+
+/* 向上挂载的历史行不播放入场动画：全量渲染时滚动历史区不会有动画，
+   窗口化后分批挂载的旧行需要保持同样的静态表现 */
+.message-row.msg-history {
+  animation: none;
+}
+
+.message-row.msg-history.msg-appear-enter-active {
+  transition: none;
+}
+
+.message-row.msg-history.msg-appear-enter-from {
+  opacity: 1;
+  transform: none;
 }
 
 @keyframes msg-slide-in {
