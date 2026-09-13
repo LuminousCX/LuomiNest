@@ -128,6 +128,8 @@
     "aiModelDesc": "LLM 推論エンジン・音声合成・音声認識",
     "auth": "ログイン / 登録",
     "authDesc": "ローカルアカウントのログイン・登録・JWT 管理",
+    "cloud": "パスポートログイン",
+    "cloudDesc": "LuminousChenXi パスポートのデバイスフロー認証とクラウドクォータ",
     "privacy": "プライバシーとセキュリティ",
     "privacyDesc": "データ暗号化とアクセス制御",
     "platforms": "メッセージプラットフォーム",

@@ -6,10 +6,11 @@ import { cacheManager } from './cache-manager'
 import { tabManager, luomiAutomationExecutor } from './browser'
 import { getLumiAuthToken } from './backend/auth-token'
 import { subscribeBackendStage } from './backend'
+import { cloudAuth } from './cloud'
 import { createLuomiNestLogger } from './luomi-logger'
 import { handleIpc } from './typed-ipc'
 import { IpcChannels } from '@shared/ipc-types'
-import type { TTSConfig, STTConfig, ThemeConfig } from '@shared/ipc-types'
+import type { TTSConfig, STTConfig, ThemeConfig, CloudRoutingMode } from '@shared/ipc-types'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -382,5 +383,36 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
       }
     })
     win.once('destroyed', () => unsubscribe())
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.login, async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { state: 'loggedOut' }
+    return cloudAuth.login()
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.status, (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { state: 'loggedOut' }
+    return cloudAuth.getStatus()
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.logout, async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { state: 'loggedOut' }
+    return cloudAuth.logout()
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.openVerification, async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return false
+    return cloudAuth.openVerificationPage()
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.getRoutingMode, (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return 'off' as const
+    return cloudAuth.getRoutingMode()
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.setRoutingMode, (event: IpcMainInvokeEvent, mode: CloudRoutingMode) => {
+    if (!assertTrustedSender(event)) return
+    if (mode !== 'off' && mode !== 'all') return
+    cloudAuth.setRoutingMode(mode)
   })
 }

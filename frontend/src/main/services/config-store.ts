@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { PATHS } from './paths'
-import type { ThemeConfig } from '@shared/ipc-types'
+import type { ThemeConfig, CloudRoutingMode } from '@shared/ipc-types'
 
 interface WindowBounds {
   x?: number
@@ -8,6 +8,16 @@ interface WindowBounds {
   width: number
   height: number
   isMaximized: boolean
+}
+
+/** 云端通行证接入配置（dev 默认本机地址；生产端点由部署方下发或手工配置） */
+interface CloudConfig {
+  /** 通行证签发方（issuer）基础地址 */
+  issuer: string
+  /** 云端 API 基础地址 */
+  baseUrl: string
+  /** 云端资源路由模式 */
+  routingMode: CloudRoutingMode
 }
 
 interface AppConfig {
@@ -44,6 +54,8 @@ interface AppConfig {
   closeToTrayPrompted: boolean
   /** 界面语言（zh-CN / en-US / ja-JP），渲染层 stores/locale.ts 经 IPC 读写 */
   locale: string
+  /** 云端通行证接入配置 */
+  cloud: CloudConfig
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -81,6 +93,11 @@ const DEFAULT_CONFIG: AppConfig = {
   welcomeCompleted: false,
   closeToTrayPrompted: false,
   locale: 'zh-CN',
+  cloud: {
+    issuer: 'http://localhost:8080',
+    baseUrl: 'http://localhost:18001',
+    routingMode: 'off',
+  },
 }
 
 let cachedConfig: AppConfig | null = null
@@ -104,6 +121,7 @@ const loadConfig = (): AppConfig => {
       tts: { ...DEFAULT_CONFIG.tts, ...parsed.tts },
       stt: { ...DEFAULT_CONFIG.stt, ...parsed.stt },
       window: { ...DEFAULT_CONFIG.window, ...parsed.window },
+      cloud: { ...DEFAULT_CONFIG.cloud, ...parsed.cloud },
     }
     return cachedConfig
   } catch {
@@ -185,6 +203,13 @@ export const configStore = {
     configStore.set('locale', locale)
   },
 
+  getCloudConfig: (): CloudConfig => loadConfig().cloud,
+  setCloudRoutingMode: (mode: CloudRoutingMode): void => {
+    const config = loadConfig()
+    config.cloud = { ...config.cloud, routingMode: mode }
+    saveConfig(config)
+  },
+
   getAll: (): AppConfig => loadConfig(),
 
   reset: (): void => {
@@ -193,4 +218,4 @@ export const configStore = {
   },
 }
 
-export type { AppConfig, WindowBounds }
+export type { AppConfig, WindowBounds, CloudConfig }

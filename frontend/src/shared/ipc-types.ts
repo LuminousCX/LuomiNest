@@ -267,6 +267,38 @@ export interface AppPathsInfo {
 }
 
 /* ============================================================================
+ * 云端通行证（Device Flow 登录）
+ * ========================================================================== */
+
+/** 云端登录状态机 */
+export type CloudAuthState = 'loggedOut' | 'pendingAuth' | 'authorized' | 'error'
+
+/** 云端资源路由模式（off = 仅本地配置，all = 全部走云端） */
+export type CloudRoutingMode = 'off' | 'all'
+
+/**
+ * 云端账户摘要（由 main 进程组装；renderer 只见摘要，永不接触任何令牌）。
+ * 字段缺失时以空串/0 占位，不抛错。
+ */
+export interface CloudAccountInfo {
+  nickname: string
+  tier: string
+  coinBalance: number
+  quotaRemaining: number
+}
+
+/** 云端登录状态（cloud:status 应答与 cloud 状态推送共用） */
+export interface CloudAuthStatus {
+  state: CloudAuthState
+  /** pendingAuth 时展示给用户确认的授权码 */
+  userCode?: string
+  /** authorized 时的账户摘要（账户信息拉取失败时为 null） */
+  account?: CloudAccountInfo | null
+  /** error 时的错误码（renderer 侧映射为本地化文案，未知码原样展示） */
+  error?: string
+}
+
+/* ============================================================================
  * 全量 IPC channel 常量（唯一真相源）
  * ========================================================================== */
 
@@ -446,6 +478,21 @@ export const IpcChannels = {
     },
     push: {
       stage: 'backend:stage',
+    },
+  },
+  cloud: {
+    invoke: {
+      login: 'cloud:login',
+      status: 'cloud:status',
+      logout: 'cloud:logout',
+      // pendingAuth 下 renderer 请求 main 打开系统浏览器授权页
+      openVerification: 'cloud:openVerification',
+      getRoutingMode: 'cloud:getRoutingMode',
+      setRoutingMode: 'cloud:setRoutingMode',
+    },
+    push: {
+      // 登录状态机变化时 main 广播（login/status/logout/续期失败等均会触发）
+      status: 'cloud:status-changed',
     },
   },
 } as const
@@ -667,6 +714,17 @@ export interface ElectronApi {
   onDesktopPetChatCancel: (callback: () => void) => () => void
   backend: {
     subscribeStage: (callback: (data: BackendStageEvent) => void) => () => void
+  }
+  cloud: {
+    login: () => Promise<CloudAuthStatus>
+    status: () => Promise<CloudAuthStatus>
+    logout: () => Promise<CloudAuthStatus>
+    /** 用系统浏览器打开当前授权页（仅 pendingAuth 有效） */
+    openVerification: () => Promise<boolean>
+    getRoutingMode: () => Promise<CloudRoutingMode>
+    setRoutingMode: (mode: CloudRoutingMode) => Promise<void>
+    /** 订阅登录状态推送，返回取消订阅函数 */
+    onStatus: (callback: (data: CloudAuthStatus) => void) => () => void
   }
   dialog: {
     selectBackgroundImage: () => Promise<

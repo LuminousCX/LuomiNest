@@ -13,6 +13,7 @@ import { createDesktopPet, getDesktopPetWindow, registerDesktopPetIpc } from './
 import { registerAvatarProtocol, verifyAvatarResources, registerAvatarIpc } from './services/avatar-protocol'
 import { registerBackgroundProtocol } from './services/bg-protocol'
 import { registerCollaboratorAvatarIpc, updateCollaboratorAvatars } from './services/collaborator-avatars'
+import { initCloudAuth } from './services/cloud'
 import { createLuomiNestLogger } from './services/luomi-logger'
 import { IpcChannels } from '@shared/ipc-types'
 
@@ -329,6 +330,9 @@ app.whenReady().then(() => {
 
   logger.info('Starting backend service in background...')
   startBackendInBackground()
+
+  // 云端通行证登录态：订阅后端 ready push 重注入令牌 + 恢复上次登录态
+  initCloudAuth()
 
   // 注入人类化输入层（不依赖后端就绪，executor 是 main 进程单例）
   luomiAutomationExecutor.setHumanLayer(createLuminousHumanLayer('default'))

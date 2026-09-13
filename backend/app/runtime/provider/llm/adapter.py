@@ -14,6 +14,8 @@ from app.runtime.provider.llm.adapters.chat_completions import (
     PROVIDER_TEMPLATES,
 )
 from app.runtime.provider.llm.adapters.anthropic_messages import AnthropicMessagesProvider
+from app.runtime.provider.llm.adapters.cloud_proxy import get_cloud_proxy_provider
+from app.runtime.provider.llm.cloud_store import cloud_token_store
 from app.runtime.provider.llm.ports import LLMProvider
 from app.runtime.provider.llm.types import LLMRequest, ProviderCapabilities, RouteHint
 from app.runtime.provider.llm.capabilities import get_capabilities as _get_capabilities
@@ -372,6 +374,22 @@ class LLMAdapter:
         self._reasoner_max_tokens = config.get("reasoner_max_tokens")
         self._reasoner_effort = config.get("reasoner_effort", "") or ""
 
+    def _maybe_route_to_cloud(self, provider: LLMProvider) -> LLMProvider:
+        """云路由钩子（M4）：仅在已注入云端令牌且 routingMode=='all' 时生效。
+
+        chat / chat_stream 解析出目标 provider 与 model 后调用本钩子：
+        - 命中云路由 → 换成共享 CloudProxyProvider 懒建单例
+          （base_url / Bearer token 每请求实时取自 CloudTokenStore，令牌轮换无感知；
+            model 沿用原路由结果，由云端网关按 catalog 校验）
+        - 未命中（mode=off 或未注入）→ 原样返回，既有本地路由零改动
+        - embed 路由不接云网关（不走本钩子）
+        """
+        snapshot = cloud_token_store.get()
+        if cloud_token_store.configured and snapshot["routingMode"] == "all":
+            logger.info("[LLM] Cloud routing active (mode=all) → cloud gateway proxy")
+            return get_cloud_proxy_provider()
+        return provider
+
     async def chat(
         self,
         messages: list[dict],
@@ -399,6 +417,8 @@ class LLMAdapter:
 
         provider = self.get_provider(actual_provider_name)
         model = actual_model or provider.default_model
+        # 云路由钩子：mode=all 且已注入令牌时换共享 CloudProxyProvider（model 沿用原路由结果）
+        provider = self._maybe_route_to_cloud(provider)
         logger.info(f"[LLM] Chat request: provider={actual_provider_name}, model={model}, messages={len(messages)}, route={route_hint.value}")
 
         # Prompt 注入防护：净化 user 消息中的伪造系统级标签与守卫标记
@@ -510,6 +530,8 @@ class LLMAdapter:
 
         provider = self.get_provider(actual_provider_name)
         model = actual_model or provider.default_model
+        # 云路由钩子：mode=all 且已注入令牌时换共享 CloudProxyProvider（model 沿用原路由结果）
+        provider = self._maybe_route_to_cloud(provider)
         logger.info(f"[LLM] Stream request: provider={actual_provider_name}, model={model}, messages={len(messages)}, route={route_hint.value}")
 
         # Prompt 注入防护：净化 user 消息中的伪造系统级标签与守卫标记

@@ -6,6 +6,8 @@ import type {
   PetModelInfo,
   BrowserAutomationAction,
   BackendStageEvent,
+  CloudAuthStatus,
+  CloudRoutingMode,
   ThemeConfig,
   ElectronApi,
   IpcInvokeChannel,
@@ -171,6 +173,20 @@ const api: ElectronApi = {
         console.error('[Preload] Failed to subscribe to backend stage:', err)
       })
       return () => ipcRenderer.removeListener(IpcChannels.backend.push.stage, handler as never)
+    }
+  },
+
+  cloud: {
+    login: () => invoke(IpcChannels.cloud.invoke.login),
+    status: () => invoke(IpcChannels.cloud.invoke.status),
+    logout: () => invoke(IpcChannels.cloud.invoke.logout),
+    openVerification: () => invoke(IpcChannels.cloud.invoke.openVerification),
+    getRoutingMode: () => invoke(IpcChannels.cloud.invoke.getRoutingMode),
+    setRoutingMode: (mode: CloudRoutingMode) => invoke(IpcChannels.cloud.invoke.setRoutingMode, mode),
+    onStatus: (callback: (data: CloudAuthStatus) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, data: CloudAuthStatus) => callback(data)
+      ipcRenderer.on(IpcChannels.cloud.push.status, handler)
+      return () => ipcRenderer.removeListener(IpcChannels.cloud.push.status, handler as never)
     }
   }
 }

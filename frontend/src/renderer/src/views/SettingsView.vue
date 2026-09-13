@@ -13,6 +13,7 @@ import {
   Puzzle,
   User,
   LogIn,
+  Cloud,
   Languages
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
@@ -55,6 +56,7 @@ const settingGroups = computed<SettingGroup[]>(() => [
       { label: t('settings.mainAgent'), desc: t('settings.mainAgentDesc'), route: '/settings/main-agent', icon: Bot, iconColor: 'var(--lumi-primary)' },
       { label: t('settings.aiModel'), desc: t('settings.aiModelDesc'), route: '/settings/ai-model', icon: Brain, iconColor: 'var(--lumi-accent)' },
       { label: t('settings.auth'), desc: t('settings.authDesc'), route: '/settings/auth', icon: LogIn, iconColor: 'var(--lumi-warning)' },
+      { label: t('settings.cloud'), desc: t('settings.cloudDesc'), route: '/settings/cloud', icon: Cloud, iconColor: 'var(--lumi-secondary)' },
       { label: t('settings.privacy'), desc: t('settings.privacyDesc'), route: '/settings/privacy', icon: Shield, iconColor: 'var(--lumi-danger)' }
     ]
   },

@@ -12,6 +12,7 @@ import {
   Brain,
   Puzzle,
   LogIn,
+  Cloud,
   Languages
 } from 'lucide-vue-next'
 import SettingsAppearanceSection from '../../components/settings-detail/SettingsAppearanceSection.vue'
@@ -22,6 +23,7 @@ import SettingsMainAgentSection from '../../components/settings-detail/SettingsM
 import SettingsMcpSection from '../../components/settings-detail/SettingsMcpSection.vue'
 import SettingsPluginsSection from '../../components/settings-detail/SettingsPluginsSection.vue'
 import SettingsLoginSection from '../../components/settings-detail/SettingsLoginSection.vue'
+import SettingsCloudSection from '../../components/settings-detail/SettingsCloudSection.vue'
 import SettingsLanguageSection from '../../components/settings-detail/SettingsLanguageSection.vue'
 
 const route = useRoute()
@@ -76,6 +78,11 @@ const sectionMap = computed<Record<string, { label: string; icon: typeof Palette
     label: t('settings.auth'),
     icon: LogIn,
     desc: t('settings.authDesc')
+  },
+  cloud: {
+    label: t('settings.cloud'),
+    icon: Cloud,
+    desc: t('settings.cloudDesc')
   }
 }))
 
@@ -92,6 +99,7 @@ const sectionComponent = computed(() => {
     case 'main-agent': return SettingsMainAgentSection
     case 'plugins': return SettingsPluginsSection
     case 'auth': return SettingsLoginSection
+    case 'cloud': return SettingsCloudSection
     default: return null
   }
 })
