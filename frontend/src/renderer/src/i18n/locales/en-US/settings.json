@@ -259,6 +259,8 @@
       "tier": "Tier",
       "coinBalance": "Coin Balance",
       "quotaRemaining": "Quota Remaining (tokens)",
+      "quotaDetail": "Daily quota {total} · Used {used} · Resets at {time}",
+      "quotaBonus": "Bonus pack +{amount}",
       "honorTitle": "Title",
       "honorLevel": "Honor Level",
       "email": "Email",

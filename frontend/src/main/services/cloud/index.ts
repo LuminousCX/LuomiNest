@@ -252,8 +252,11 @@ const fetchAccount = async (accessToken: string): Promise<CloudAccountInfo> => {
     quotaRaw.quota && typeof quotaRaw.quota === 'object' && !Array.isArray(quotaRaw.quota)
       ? (quotaRaw.quota as Record<string, unknown>)
       : quotaRaw
+  const freeTotal = pickNumber(quotaData, ['freeTotal', 'free_total']) ?? 0
+  const freeUsed = pickNumber(quotaData, ['freeUsed', 'free_used']) ?? 0
   const freeQuota = pickNumber(quotaData, ['freeRemaining', 'free_remaining']) ?? 0
   const bonusQuota = pickNumber(quotaData, ['bonusRemaining', 'bonus_remaining']) ?? 0
+  const resetAt = pickString(quotaData, ['resetAt', 'reset_at']) || null
   return {
     // 主站 userinfo 优先，未拿到时回退从站资料；两者皆失败以占位符展示
     nickname:
@@ -264,6 +267,13 @@ const fetchAccount = async (accessToken: string): Promise<CloudAccountInfo> => {
     // 芙贝币余额只认主站 userinfo 的 coin_balance；拉取失败为 null（UI 显示"无法获取"，不用假 0）
     coinBalance: pickNumber(userinfoData, ['coin_balance', 'coinBalance']),
     quotaRemaining: freeQuota + bonusQuota,
+    quota: {
+      freeTotal,
+      freeUsed,
+      freeRemaining: freeQuota,
+      bonusRemaining: bonusQuota,
+      resetAt,
+    },
     avatar: pickString(userinfoData, ['avatar', 'picture']) || undefined,
     // 账户详情（全部来自主站 /userinfo，缺失即不展示对应行）
     title: pickString(userinfoData, ['title']) || undefined,

@@ -142,6 +142,28 @@ const coinBalanceText = computed(() => {
   return typeof balance === 'number' ? formatNumber(balance) : null
 })
 
+// ── 今日额度明细行（总额/已用/重置时间/加成包；数据缺失时整行不展示）──
+const quotaLine = computed(() => {
+  const quota = status.value.account?.quota
+  if (!quota || !quota.freeTotal) return null
+  let reset = '—'
+  if (quota.resetAt) {
+    const at = new Date(quota.resetAt)
+    if (!Number.isNaN(at.getTime()))
+      reset = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  const parts = [
+    t('settingsEx.cloud.quotaDetail', {
+      total: formatNumber(quota.freeTotal),
+      used: formatNumber(quota.freeUsed),
+      time: reset
+    })
+  ]
+  if (quota.bonusRemaining > 0)
+    parts.push(t('settingsEx.cloud.quotaBonus', { amount: formatNumber(quota.bonusRemaining) }))
+  return parts.join(' · ')
+})
+
 // ── 账户详情行（称号/荣誉/邮箱/注册/到期；缺失的字段不展示对应行）──
 const accountDetails = computed(() => {
   const account = status.value.account
@@ -263,6 +285,9 @@ onUnmounted(() => {
               </span>
             </div>
           </div>
+
+          <!-- 今日额度明细（总额/已用/重置/加成包，数据缺失自动隐藏） -->
+          <div v-if="quotaLine" class="cloud-quota-line">{{ quotaLine }}</div>
 
           <!-- 账户详情（称号/荣誉/邮箱/注册/到期，缺失字段自动隐藏） -->
           <ul v-if="accountDetails.length > 0" class="cloud-detail-list">
@@ -504,6 +529,14 @@ onUnmounted(() => {
 .cloud-profile__title {
   color: var(--lumi-warning);
   font-weight: 500;
+}
+
+/* ── 今日额度明细行 ── */
+.cloud-quota-line {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  letter-spacing: 0.2px;
 }
 
 /* ── 账户详情列表 ── */

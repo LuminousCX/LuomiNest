@@ -286,6 +286,8 @@ export interface CloudAccountInfo {
   /** 芙贝币余额（主站 /userinfo 的 coin_balance 为准；拉取失败为 null，界面显示"无法获取"而非假 0） */
   coinBalance: number | null
   quotaRemaining: number
+  /** 今日额度细分（总额/已用/剩余/加成包/重置时间；拉取失败为 null，界面只显示合计） */
+  quota?: CloudQuotaDetail | null
   /** 头像地址（主站 /userinfo 提供，可能缺失） */
   avatar?: string
   /** 称号（主站 honor_title，可能缺失） */
@@ -298,6 +300,16 @@ export interface CloudAccountInfo {
   tierExpiresAt?: string
   /** 注册日期（YYYY-MM-DD，可能缺失） */
   registeredAt?: string
+}
+
+/** 今日额度细分（云端按自然日重置的免费额度池 + 可选加成包） */
+export interface CloudQuotaDetail {
+  freeTotal: number
+  freeUsed: number
+  freeRemaining: number
+  bonusRemaining: number
+  /** 重置时间（ISO 字符串，可能缺失） */
+  resetAt: string | null
 }
 
 /** 云端可用模型目录条目（GET {baseUrl}/api/v1/llm/models 的 models 数组元素） */

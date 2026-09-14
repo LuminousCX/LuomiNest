@@ -259,6 +259,8 @@
       "tier": "ティア",
       "coinBalance": "コイン残高",
       "quotaRemaining": "残りクォータ（tokens）",
+      "quotaDetail": "本日のクォータ {total} · 使用済み {used} · {time} にリセット",
+      "quotaBonus": "ボーナス +{amount}",
       "honorTitle": "称号",
       "honorLevel": "栄誉ランク",
       "email": "メール",

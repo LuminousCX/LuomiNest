@@ -259,6 +259,8 @@
       "tier": "档位",
       "coinBalance": "芙贝币余额",
       "quotaRemaining": "剩余额度（tokens）",
+      "quotaDetail": "今日额度 {total} · 已用 {used} · {time} 重置",
+      "quotaBonus": "加成包 +{amount}",
       "honorTitle": "称号",
       "honorLevel": "荣誉等级",
       "email": "邮箱",
