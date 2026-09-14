@@ -129,7 +129,7 @@
     "auth": "Sign In / Sign Up",
     "authDesc": "Local account sign-in, registration and JWT",
     "cloud": "Passport Sign-In",
-    "cloudDesc": "LuminousChenXi passport device-flow sign-in and cloud quota",
+    "cloudDesc": "Luomi Passport device-flow sign-in and cloud quota",
     "privacy": "Privacy & Security",
     "privacyDesc": "Data encryption and access control",
     "platforms": "Messaging Platforms",

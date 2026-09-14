@@ -1,8 +1,13 @@
 class LuomiNestError(Exception):
-    def __init__(self, message: str, code: str = "UNKNOWN_ERROR", status_code: int = 500):
+    def __init__(self, message: str, code: str = "UNKNOWN_ERROR", status_code: int = 500,
+                 err_code: str | int | None = None):
         self.message = message
         self.code = code
         self.status_code = status_code
+        # 云链路业务错误码（数字字符串，如 "13005"；无业务码为 None）。
+        # 由云端网关错误信封解析而来，随异常冒泡并在各错误出口透传给前端，
+        # 前端按 errCode 映射本地化文案（errCode 不参与本模块的 code 体系）。
+        self.err_code = str(err_code) if err_code else None
         super().__init__(self.message)
 
 
@@ -12,10 +17,11 @@ class NotFoundError(LuomiNestError):
 
 
 class BadRequestError(LuomiNestError):
-    """请求参数或操作无效（400）。code 可覆盖为业务错误码。"""
+    """请求参数或操作无效（400）。code 可覆盖为业务错误码；err_code 携带云链路业务码（可选）。"""
 
-    def __init__(self, message: str = "请求无效", code: str = "BAD_REQUEST"):
-        super().__init__(message, code, 400)
+    def __init__(self, message: str = "请求无效", code: str = "BAD_REQUEST",
+                 err_code: str | int | None = None):
+        super().__init__(message, code, 400, err_code=err_code)
 
 
 class ConflictError(LuomiNestError):
@@ -60,9 +66,10 @@ class RateLimitError(LuomiNestError):
 
 
 class ProviderError(LuomiNestError):
-    def __init__(self, message: str = "LLM provider error", provider: str = "", code: str = "PROVIDER_ERROR", status_code: int = 502):
+    def __init__(self, message: str = "LLM provider error", provider: str = "", code: str = "PROVIDER_ERROR",
+                 status_code: int = 502, err_code: str | int | None = None):
         self.provider = provider
-        super().__init__(message, code, status_code)
+        super().__init__(message, code, status_code, err_code=err_code)
 
 
 class PluginError(LuomiNestError):
@@ -132,3 +139,22 @@ class VoiceConfigError(LuomiNestError):
 
     def __init__(self, message: str = "语音配置无效"):
         super().__init__(message, "VOICE_CONFIG_INVALID", 422)
+
+
+# ---------------------------------------------------------------------------
+# 错误出口公共提取（云链路 errCode 透传）
+# ---------------------------------------------------------------------------
+
+def error_content_and_code(exc: Exception) -> tuple[str, str | None]:
+    """从 LLM 调用异常中提取 (错误文案, errCode)，供各错误出口（SSE error chunk /
+    REST 错误响应 / 内部错误事件）统一使用。
+
+    - 业务异常（LuomiNestError，含云链路 ProviderError）：保留原始 message
+      （人类可读；云链路 message 已规避 429/rate_limit 等重试关键词）与结构化
+      errCode（如 "13005"），前端按 errCode 映射本地化文案；
+    - 非业务异常无业务信息：回退通用兜底文案（不泄露内部细节），errCode 为 None。
+    """
+    err_code = getattr(exc, "err_code", None)
+    if isinstance(exc, LuomiNestError) and exc.message:
+        return f"[Error] {exc.message}", err_code
+    return "[Error] An internal error occurred", err_code or None

@@ -198,24 +198,19 @@ firmware/server/frames/
 *.tsbuildinfo
 
 # ============================================================
-# 一次性调试/修复脚本（后端根目录）
+# 一次性调试/修复脚本（后端根目录，通配规则覆盖，不列专名）
 # ============================================================
-backend/check_memory.py
-backend/check_memory_status.py
-backend/check_name_facts.py
-backend/check_nuomi_memory.py
-backend/check_summary.py
-backend/clean_all_old_names.py
-backend/clean_hong.py
-backend/find_agent.py
-backend/fix_memory.py
-backend/fix_summary_sections.py
+backend/_*.py
+backend/*-scratch.py
+backend/check_*.py
+backend/clean_*.py
+backend/fix_*.py
+backend/find_*.py
 
 # ============================================================
 # 测试音频/临时媒体文件
 # ============================================================
 backend/_t.mp3
-backend/_comprehensive_check.py
 
 # ============================================================
 # 代码审查输出文件

@@ -246,7 +246,7 @@
     "cloud": {
       "loading": "Fetching cloud sign-in status...",
       "loggedOutTitle": "Passport Sign-In",
-      "loggedOutDesc": "Sign in with the LuminousChenXi passport to use cloud model quota and cross-device features. Device authorization requires no password.",
+      "loggedOutDesc": "Sign in with the Luomi Passport to use cloud model quota and cross-device features. Device authorization requires no password.",
       "login": "Sign In with Passport",
       "loggingIn": "Starting device authorization...",
       "retry": "Retry",
@@ -255,10 +255,19 @@
       "openVerification": "Open Authorization Page",
       "waiting": "Waiting for authorization, continuing automatically once confirmed...",
       "authorizedTitle": "Cloud Account",
-      "passportName": "LuminousChenXi Passport",
+      "passportName": "Luomi Passport",
       "tier": "Tier",
       "coinBalance": "Coin Balance",
       "quotaRemaining": "Quota Remaining (tokens)",
+      "honorTitle": "Title",
+      "honorLevel": "Honor Level",
+      "email": "Email",
+      "registeredAt": "Registered",
+      "tierExpires": "Tier Expires",
+      "balanceUnavailable": "Balance unavailable",
+      "backendInjected": "Injected into local backend (tail {tail})",
+      "backendNotInjected": "Cloud token not yet injected into the local backend",
+      "modelsTitle": "Available Cloud Models",
       "routingMode": "Cloud Mode",
       "routingModeHint": "When enabled, all AI calls go through the cloud gateway (consuming cloud quota); when disabled, only local model configuration is used.",
       "routingModeOn": "All via cloud",
@@ -982,6 +991,16 @@
       "SCHEDULER_NOT_RUNNING": "The scheduler is not running, please try again later",
       "SCHEDULER_TASK_INVALID": "Invalid scheduled task configuration, please check the expression",
       "SUBMARKET_NOT_FOUND": "The sub-market does not exist"
+    },
+    "cloudErrors": {
+      "13005": "Insufficient coin balance. Redeem on the Luomi Passport or complete the daily check-in before retrying",
+      "12001": "Today's cloud quota is exhausted. Try again tomorrow or redeem coins for more quota",
+      "12005": "This model is not in the cloud model catalog. Please switch to an available model in model settings",
+      "12004": "This model has been retired. Please switch to another model in model settings",
+      "11001": "Cloud sign-in has expired. Please sign in to the Luomi Passport again in Settings",
+      "11002": "Cloud sign-in has expired. Please sign in to the Luomi Passport again in Settings",
+      "13001": "Cloud sign-in has expired. Please sign in to the Luomi Passport again in Settings",
+      "13002": "Cloud sign-in has expired. Please sign in to the Luomi Passport again in Settings"
     }
   }
 }

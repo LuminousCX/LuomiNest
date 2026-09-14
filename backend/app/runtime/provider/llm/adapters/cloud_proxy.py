@@ -12,9 +12,10 @@
 
 错误透传：通过 httpx response event hook 在收到响应头即检查状态码（流式/非流式
 统一生效），>=400 时趁响应流未关闭读取错误响应体，解析 errCode/message 后抛
-ProviderError。异常 message 有意不含 429 / rate_limit 等可重试关键词：
-额度耗尽（QUOTA_EXCEEDED）是确定性错误，重试只会重复触发计费预检；
-errCode 字符串随异常冒泡，由 chat_service 既有错误事件路径与全局异常处理器展示。
+ProviderError；errCode 以 ``err_code`` 结构化字段随异常冒泡（chat_service /
+AgentRunner 各错误出口透传给前端，前端按 errCode 映射本地化文案）。异常 message
+有意不含 429 / rate_limit 等可重试关键词：
+额度耗尽（QUOTA_EXCEEDED）是确定性错误，重试只会重复触发计费预检。
 
 隐私纪律：本模块不含任何生产端点/域名/密钥；cloudBaseUrl 只来自运行时注入。
 """
@@ -38,8 +39,9 @@ _CLOUD_LLM_PATH_PREFIX = "/api/v1/llm"
 def _extract_error_fields(body_text: str) -> tuple[str, str]:
     """从云端网关错误响应体中尽力解析 (errCode, message)。
 
-    兼容 ``{"errCode": ..., "message": ...}`` 与 ``{"error": {"code": ..., "message": ...}}``
-    两种信封；解析失败返回空串（由调用方回退 HTTP 状态描述）。
+    兼容三种信封：从站失败信封 ``{"code": <数字>, "errCode": "XXX", "message": ...}``、
+    ``{"errCode": ..., "message": ...}`` 与 ``{"error": {"code": ..., "message": ...}}``；
+    解析失败返回空串（由调用方回退 HTTP 状态描述）。
     """
     err_code = ""
     message = ""
@@ -148,6 +150,7 @@ class CloudProxyProvider(OpenAICompatibleProvider):
             provider=self.provider_name,
             code="CLOUD_UPSTREAM_ERROR",
             status_code=response.status_code,
+            err_code=err_code or None,
         )
 
 

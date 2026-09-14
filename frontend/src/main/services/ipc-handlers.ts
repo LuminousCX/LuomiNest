@@ -415,4 +415,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (mode !== 'off' && mode !== 'all') return
     cloudAuth.setRoutingMode(mode)
   })
+
+  handleIpc(IpcChannels.cloud.invoke.fetchModels, async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return []
+    return cloudAuth.fetchModels()
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.getBackendStatus, async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return null
+    return cloudAuth.getBackendCloudStatus()
+  })
 }

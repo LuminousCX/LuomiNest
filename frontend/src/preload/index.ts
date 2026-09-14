@@ -183,6 +183,8 @@ const api: ElectronApi = {
     openVerification: () => invoke(IpcChannels.cloud.invoke.openVerification),
     getRoutingMode: () => invoke(IpcChannels.cloud.invoke.getRoutingMode),
     setRoutingMode: (mode: CloudRoutingMode) => invoke(IpcChannels.cloud.invoke.setRoutingMode, mode),
+    fetchModels: () => invoke(IpcChannels.cloud.invoke.fetchModels),
+    getBackendStatus: () => invoke(IpcChannels.cloud.invoke.getBackendStatus),
     onStatus: (callback: (data: CloudAuthStatus) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, data: CloudAuthStatus) => callback(data)
       ipcRenderer.on(IpcChannels.cloud.push.status, handler)

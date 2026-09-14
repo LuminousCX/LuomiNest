@@ -181,7 +181,7 @@ LuomiNest/
 ├── firmware/                    # ESP32 嵌入式固件
 │   └── embedded/esp32-p4/       # ESP32-P4 主控（组件化：app / bsp / drivers）
 │
-├── luominest-cloud/             # Java 云端服务（认证 + LLM 目录/配额，其余规划中）
+├── cloud/                       # 可选云服务（独立部署，默认不启用）
 ├── templates/                   # 插件开发模板
 └── docker/                      # Docker 部署配置
 ```

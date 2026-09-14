@@ -425,8 +425,9 @@ class SSEEmitMiddleware(AgentMiddleware):
         content: str,
         reasoning: str = "",
         emotion: str | None = None,
+        err_code: str | None = None,
     ) -> str:
-        """格式化 content/reasoning SSE 字符串。"""
+        """格式化 content/reasoning SSE 字符串（err_code 仅错误透传场景携带，可为云链路业务码）。"""
         chat_id = ctx.state.get("chat_id", "")
         model = ctx.state.get("model", "")
         provider = ctx.state.get("provider", "")
@@ -437,6 +438,7 @@ class SSEEmitMiddleware(AgentMiddleware):
             model=model,
             provider=provider,
             emotion=emotion,
+            errCode=err_code,
         )
         return sse_data(chunk)
 

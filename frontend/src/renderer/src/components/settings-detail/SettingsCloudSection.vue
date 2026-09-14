@@ -12,10 +12,17 @@ import {
   Gauge,
   KeyRound,
   AlertCircle,
-  ShieldCheck
+  ShieldCheck,
+  Cable,
+  Cpu
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
-import type { CloudAuthStatus, CloudRoutingMode } from '@shared/ipc-types'
+import type {
+  CloudAuthStatus,
+  CloudRoutingMode,
+  CloudModelInfo,
+  CloudBackendStatus
+} from '@shared/ipc-types'
 
 const { t, te } = useI18n()
 
@@ -26,11 +33,37 @@ const routingMode = ref<CloudRoutingMode>('off')
 const loginLoading = ref(false)
 const modeToggling = ref(false)
 
+// ── 云端可用模型 / 本地后端注入状态（拉取失败均静默降级，不阻塞页面）──
+const cloudModels = ref<CloudModelInfo[]>([])
+const backendStatus = ref<CloudBackendStatus | null>(null)
+
 let unsubscribe: (() => void) | null = null
+
+const loadCloudModels = async () => {
+  if (cloudModels.value.length > 0) return
+  try {
+    cloudModels.value = await window.api.cloud.fetchModels()
+  } catch {
+    cloudModels.value = []
+  }
+}
+
+const loadBackendStatus = async () => {
+  try {
+    backendStatus.value = await window.api.cloud.getBackendStatus()
+  } catch {
+    backendStatus.value = null
+  }
+}
 
 const applyStatus = (next: CloudAuthStatus) => {
   status.value = next
   loaded.value = true
+  // authorized 态按需加载模型目录（仅首次）与后端注入状态（便宜，随推送刷新）
+  if (next.state === 'authorized') {
+    void loadCloudModels()
+    void loadBackendStatus()
+  }
 }
 
 const refreshStatus = async () => {
@@ -103,6 +136,35 @@ const errorText = computed(() => {
 
 const formatNumber = (value: number): string => value.toLocaleString()
 
+// ── 余额展示：拉取失败（null）显示"无法获取余额"，不用假 0 ──
+const coinBalanceText = computed(() => {
+  const balance = status.value.account?.coinBalance
+  return typeof balance === 'number' ? formatNumber(balance) : null
+})
+
+// ── 账户详情行（称号/荣誉/邮箱/注册/到期；缺失的字段不展示对应行）──
+const accountDetails = computed(() => {
+  const account = status.value.account
+  if (!account) return []
+  const rows: Array<{ label: string; value: string }> = []
+  if (account.title) rows.push({ label: t('settingsEx.cloud.honorTitle'), value: account.title })
+  if (typeof account.honorLevel === 'number')
+    rows.push({ label: t('settingsEx.cloud.honorLevel'), value: `Lv.${account.honorLevel}` })
+  if (account.email) rows.push({ label: t('settingsEx.cloud.email'), value: account.email })
+  if (account.registeredAt)
+    rows.push({ label: t('settingsEx.cloud.registeredAt'), value: account.registeredAt })
+  if (account.tierExpiresAt)
+    rows.push({ label: t('settingsEx.cloud.tierExpires'), value: account.tierExpiresAt.slice(0, 10) })
+  return rows
+})
+
+// ── 本地后端注入状态文案（含令牌尾号，便于与后端日志比对）──
+const backendStatusLabel = computed(() => {
+  const backend = backendStatus.value
+  if (!backend?.configured) return t('settingsEx.cloud.backendNotInjected')
+  return t('settingsEx.cloud.backendInjected', { tail: backend.tokenTail4 || '----' })
+})
+
 onMounted(() => {
   unsubscribe = window.api.cloud.onStatus(applyStatus)
   void refreshStatus()
@@ -160,11 +222,21 @@ onUnmounted(() => {
         <div class="settings-card__body">
           <div class="cloud-profile">
             <div class="cloud-profile__avatar">
-              <User :size="32" />
+              <img
+                v-if="status.account?.avatar"
+                :src="status.account.avatar"
+                alt=""
+                class="cloud-profile__avatar-img"
+                referrerpolicy="no-referrer"
+              />
+              <User v-else :size="32" />
             </div>
             <div class="cloud-profile__info">
               <div class="cloud-profile__name">{{ status.account?.nickname || '—' }}</div>
-              <div class="cloud-profile__meta">{{ t('settingsEx.cloud.passportName') }}</div>
+              <div class="cloud-profile__meta">
+                <span v-if="status.account?.title" class="cloud-profile__title">{{ status.account.title }}</span>
+                <span>{{ t('settingsEx.cloud.passportName') }}</span>
+              </div>
             </div>
           </div>
 
@@ -177,7 +249,10 @@ onUnmounted(() => {
               <span class="cloud-meta-item__label">{{ t('settingsEx.cloud.coinBalance') }}</span>
               <span class="cloud-meta-item__value cloud-meta-item__value--coin">
                 <Coins :size="14" />
-                {{ formatNumber(status.account?.coinBalance ?? 0) }}
+                <span v-if="coinBalanceText">{{ coinBalanceText }}</span>
+                <span v-else class="cloud-meta-item__unavailable">
+                  {{ t('settingsEx.cloud.balanceUnavailable') }}
+                </span>
               </span>
             </div>
             <div class="cloud-meta-item">
@@ -188,6 +263,14 @@ onUnmounted(() => {
               </span>
             </div>
           </div>
+
+          <!-- 账户详情（称号/荣誉/邮箱/注册/到期，缺失字段自动隐藏） -->
+          <ul v-if="accountDetails.length > 0" class="cloud-detail-list">
+            <li v-for="row in accountDetails" :key="row.label" class="cloud-detail-list__item">
+              <span class="cloud-detail-list__label">{{ row.label }}</span>
+              <span class="cloud-detail-list__value">{{ row.value }}</span>
+            </li>
+          </ul>
 
           <div class="cloud-actions cloud-actions--end">
             <LumiButton variant="danger-ghost" size="md" @click="handleLogout">
@@ -222,6 +305,33 @@ onUnmounted(() => {
               <span class="cloud-toggle__thumb" />
             </button>
           </div>
+        </div>
+      </section>
+
+      <!-- 本地后端注入状态（拉取失败时展示未注入，不阻塞页面） -->
+      <section class="settings-card">
+        <div class="settings-card__body settings-card__body--compact">
+          <div class="cloud-backend-row">
+            <Cable :size="14" />
+            <span>{{ backendStatusLabel }}</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 云端可用模型（拉取失败静默降级为不显示） -->
+      <section v-if="cloudModels.length > 0" class="settings-card">
+        <div class="settings-card__header">
+          <Cpu :size="16" />
+          <span class="settings-card__title">{{ t('settingsEx.cloud.modelsTitle') }}</span>
+          <span class="cloud-models__count">{{ cloudModels.length }}</span>
+        </div>
+        <div class="settings-card__body">
+          <ul class="cloud-models">
+            <li v-for="model in cloudModels" :key="model.modelId" class="cloud-models__item">
+              <span class="cloud-models__name">{{ model.displayName }}</span>
+              <span class="cloud-models__id">{{ model.modelId }}</span>
+            </li>
+          </ul>
         </div>
       </section>
 
@@ -358,6 +468,13 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--lumi-primary) 12%, transparent);
   color: var(--lumi-primary);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.cloud-profile__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .cloud-profile__info {
@@ -377,8 +494,49 @@ onUnmounted(() => {
 }
 
 .cloud-profile__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--text-sm);
   color: var(--text-muted);
+}
+
+.cloud-profile__title {
+  color: var(--lumi-warning);
+  font-weight: 500;
+}
+
+/* ── 账户详情列表 ── */
+.cloud-detail-list {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.cloud-detail-list__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.cloud-detail-list__label {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.cloud-detail-list__value {
+  color: var(--text-secondary);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── 元信息网格 ── */
@@ -419,6 +577,71 @@ onUnmounted(() => {
 
 .cloud-meta-item__value--quota {
   color: var(--lumi-success);
+}
+
+.cloud-meta-item__unavailable {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* ── 本地后端注入状态行 ── */
+.cloud-backend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.cloud-backend-row svg {
+  color: var(--lumi-primary);
+  opacity: 0.7;
+}
+
+/* ── 云端可用模型列表（滚动区）── */
+.cloud-models__count {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.cloud-models {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.cloud-models__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+}
+
+.cloud-models__name {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-models__id {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .cloud-actions {

@@ -25,6 +25,8 @@ export interface TokenSet {
   refreshToken: string
   /** access token 有效期（秒） */
   expiresIn: number
+  /** OIDC ID Token（服务端返回时携带；仅用于解出 sub 存档，不参与鉴权） */
+  idToken?: string
 }
 
 /** token 端点业务错误（错误码字符串透传，如 authorization_pending / access_denied） */
@@ -66,7 +68,7 @@ const postForm = async (url: string, body: string): Promise<Record<string, unkno
 
 /**
  * 授权 scope 全集（D48：device_authorization 的 scope 就是本次 grant 的上限，
- * 缺省/少写拿到的票不含 coin.read，userinfo 永远没有芙贝余额）。
+ * 缺省/少写拿到的票不含 coin.read，userinfo 永远拿不到云积分余额）。
  */
 const SCOPE = 'openid profile email coin.read'
 
@@ -95,6 +97,7 @@ const toTokenSet = (data: Record<string, unknown>): TokenSet => ({
   accessToken: asString(data.access_token, 'access_token'),
   refreshToken: asString(data.refresh_token, 'refresh_token'),
   expiresIn: typeof data.expires_in === 'number' && data.expires_in > 0 ? data.expires_in : 0,
+  idToken: typeof data.id_token === 'string' && data.id_token ? data.id_token : undefined,
 })
 
 export interface DeviceTokenPollOptions {
@@ -167,5 +170,6 @@ export const refreshAccessToken = async (
     accessToken: asString(data.access_token, 'access_token'),
     expiresIn: typeof data.expires_in === 'number' && data.expires_in > 0 ? data.expires_in : 0,
     refreshToken: typeof data.refresh_token === 'string' && data.refresh_token ? data.refresh_token : undefined,
+    idToken: typeof data.id_token === 'string' && data.id_token ? data.id_token : undefined,
   }
 }

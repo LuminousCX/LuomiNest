@@ -23,6 +23,7 @@ from loguru import logger
 from app.core.agents.middleware.base import AgentContext, HookRegistry
 from app.core.agents.middleware.builtin import SSEEmitMiddleware
 from app.core.agents.middleware.pipeline import MiddlewarePipeline
+from app.core.exceptions import error_content_and_code
 from app.core.tools.orchestrator import tool_orchestrator
 from app.runtime.provider.llm.types import LLMResponse, StreamEvent
 
@@ -126,8 +127,10 @@ class AgentRunner:
                         f"[AgentRunner] run_stream LLM 调用失败: {e}", exc_info=True,
                     )
                     ctx.state["aborted"] = True
+                    # 保留业务错误 message 与 errCode（云链路 13005/12001/12005/11001 可达 UI）
+                    error_content, err_code = error_content_and_code(e)
                     yield SSEEmitMiddleware.format_content_sse(
-                        ctx, "[Error] An internal error occurred",
+                        ctx, error_content, err_code=err_code,
                     )
                     break
 
@@ -235,7 +238,11 @@ class AgentRunner:
                         exc_info=True,
                     )
                     ctx.state["aborted"] = True
-                    ctx.state["content"] = f"子 Agent LLM 调用失败: {e}"
+                    # 保留业务错误 message 与 errCode（云链路错误码可达上层/UI）
+                    error_content, err_code = error_content_and_code(e)
+                    ctx.state["content"] = error_content
+                    if err_code:
+                        ctx.state["errCode"] = err_code
                     break
 
                 # 解析响应到 ctx.state

@@ -652,6 +652,9 @@ def create_app() -> FastAPI:
             content={
                 "code": 1,
                 "message": exc.message,
+                # 云链路业务错误码（数字字符串，如 "13005"；无业务码为 null），
+                # 前端按 errCode 映射本地化文案
+                "errCode": getattr(exc, "err_code", None),
                 "error": {"code": exc.code, "message": exc.message},
                 "data": None,
             },

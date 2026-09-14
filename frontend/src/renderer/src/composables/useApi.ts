@@ -16,6 +16,18 @@ const statusToMessage = (status: number): string =>
     ? i18n.global.t(`api.http.${status}`)
     : i18n.global.t('api.requestFailed', { status })
 
+/**
+ * 云端业务错误码 → 本地化文案（与后端 CloudProxyProvider 的接口约定：
+ * errCode 为数字字符串，如 "13005" 余额不足 / "12001" 额度用尽 / "11001" 登录失效）。
+ * 未收录/缺失返回 null，调用方回退后端 message 原文。
+ * 供 REST 错误响应（extractErrorMessage）与 SSE 错误 chunk（chat store）共用。
+ */
+export const cloudErrCodeMessage = (errCode: unknown): string | null => {
+  if (typeof errCode !== 'string' && typeof errCode !== 'number') return null
+  const key = `api.cloudErrors.${String(errCode)}`
+  return i18n.global.te(key) ? i18n.global.t(key) : null
+}
+
 let cachedAuthToken: string | null | undefined
 
 const getAuthHeaders = async (): Promise<Record<string, string>> => {
@@ -44,6 +56,17 @@ const extractErrorMessage = (errData: unknown, status: number): string => {
   if (errCode && i18n.global.te(`api.codes.${errCode}`)) {
     return i18n.global.t(`api.codes.${errCode}`)
   }
+
+  // 1.5 云端业务错误码（CloudProxyProvider 透传的 errCode，位于 detail/error 对象）；
+  //     命中映射表显示本地化文案，未命中继续走后端 message 原文
+  const errSource: Record<string, unknown> | undefined =
+    typeof data.error === 'object' && data.error !== null
+      ? (data.error as Record<string, unknown>)
+      : typeof data.detail === 'object' && data.detail !== null
+        ? (data.detail as Record<string, unknown>)
+        : undefined
+  const cloudMsg = errSource ? cloudErrCodeMessage(errSource.errCode) : null
+  if (cloudMsg) return cloudMsg
 
   // 2. 兼容 error 为字符串的情况（TTS 接口等）
   let errMsg: unknown = ''
@@ -298,6 +321,7 @@ export const useApi = () => {
             subagent_event: raw.subagent_event || undefined,
             task_event: raw.task_event || undefined,
             iteration: raw.iteration ?? undefined,
+            errCode: typeof raw.errCode === 'string' ? raw.errCode : undefined,
           }
           onChunk(chunk)
           return chunk.done

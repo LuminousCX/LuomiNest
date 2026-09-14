@@ -168,7 +168,7 @@ async def luomi_auth_middleware(request: Request, call_next):
 
     认证顺序：
     1. 内部服务认证：X-LuomiNest-Internal-Token（INTERNAL_AUTH_TOKEN 配置时启用，
-       供 Java 后端等可信内部服务调用，可选 X-LuomiNest-Owner-User-Id 代理用户）
+       供可信内部服务调用，可选 X-LuomiNest-Owner-User-Id 代理用户）
     2. 根据 settings.AUTH_MODE 选择：
        - "local"（默认）：Bearer Token + 常量时间比较，Fail-Closed
        - "jwt"：JWT 验证，Fail-Closed，无 Token 或验证失败返回 401

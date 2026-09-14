@@ -129,7 +129,7 @@
     "auth": "登录 / 注册",
     "authDesc": "本地账户登录、注册与 JWT 管理",
     "cloud": "通行证登录",
-    "cloudDesc": "洛米辰汐通行证 Device Flow 登录与云端额度",
+    "cloudDesc": "洛米通行证 Device Flow 登录与云端额度",
     "privacy": "隐私安全",
     "privacyDesc": "数据加密与访问控制",
     "platforms": "消息平台",

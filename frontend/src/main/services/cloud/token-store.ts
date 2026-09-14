@@ -12,6 +12,8 @@ export interface StoredCloudTokens {
   refreshToken: string
   /** access token 过期时间（epoch ms） */
   accessExpiresAt: number
+  /** 通行证账户唯一标识（id_token.sub，登录/续期时解出存档，供后续同步/对账；登出随文件清除） */
+  passportSub?: string
 }
 
 /** 落盘格式：payload 为加密 base64 或明文 JSON 字符串，由 encrypted 标记区分 */
@@ -43,6 +45,7 @@ export const loadCloudTokens = (): StoredCloudTokens | null => {
       accessToken: parsed.accessToken,
       refreshToken: typeof parsed.refreshToken === 'string' ? parsed.refreshToken : '',
       accessExpiresAt: typeof parsed.accessExpiresAt === 'number' ? parsed.accessExpiresAt : 0,
+      passportSub: typeof parsed.passportSub === 'string' && parsed.passportSub ? parsed.passportSub : undefined,
     }
   } catch (err) {
     logger.warn('Failed to load cloud tokens, treat as signed out:', err instanceof Error ? err.message : err)

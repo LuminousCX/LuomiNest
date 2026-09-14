@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30  # 30天
     ALLOW_REGISTRATION: bool = True  # 是否允许新用户注册
 
-    # 内部服务认证 Token（用于 Java 后端等可信内部调用，留空则禁用内部认证）
+    # 内部服务认证 Token（供可信内部服务调用，留空则禁用内部认证）
     INTERNAL_AUTH_TOKEN: str = ""
 
     # 是否启用 API 文档（/docs, /redoc），生产环境建议关闭

@@ -19,6 +19,7 @@ from app.core.chat_mode import ChatMode, get_tool_config
 from app.core.config import settings
 from app.core.context import get_context_manager
 from app.core.domain_policy import resolve_domain_policy
+from app.core.exceptions import error_content_and_code
 from app.core.tools import tool_registry
 from app.core.tools.orchestrator import tool_orchestrator
 from app.core.utils import require_store, sse_data, sse_response, utc_now
@@ -231,7 +232,12 @@ class ChatService:
         except Exception as e:
             logger.error(f"[API] Non-stream error: {e}", exc_info=True)
             state["aborted"] = True
-            state["content"] = "[Error] An internal error occurred"
+            # 保留业务错误 message 与 errCode（云链路 13005/12001/12005/11001 可达 UI）；
+            # 非业务异常回退通用兜底文案
+            error_content, err_code = error_content_and_code(e)
+            state["content"] = error_content
+            if err_code:
+                state["errCode"] = err_code
 
     async def stream_chat(
         self,
@@ -340,7 +346,12 @@ class ChatService:
             yield sse_data(done_data)
         except Exception as e:
             logger.error(f"[STREAM] stream_chat error: {e}", exc_info=True)
-            yield sse_data(ChatStreamChunk(id=chat_id, content='[Error] An internal error occurred', model=model, provider=provider))
+            # 保留业务错误 message 与 errCode（云链路错误码可达 UI，前端映射本地化文案）
+            error_content, err_code = error_content_and_code(e)
+            yield sse_data(ChatStreamChunk(
+                id=chat_id, content=error_content, model=model, provider=provider,
+                errCode=err_code,
+            ))
             done_data = ChatStreamChunk(id=chat_id, content="", model=model, provider=provider, done=True)
             yield sse_data(done_data)
         finally:
@@ -477,9 +488,12 @@ class ChatService:
             except Exception as e:
                 logger.error(f"[STREAM] Aborted: conv={conv_id}, error={e}", exc_info=True)
                 state["aborted"] = True
+                # 保留业务错误 message 与 errCode（云链路错误码可达 UI，前端映射本地化文案）
+                error_content, err_code = error_content_and_code(e)
                 error_chunk = ChatStreamChunk(
-                    id=chat_id, content="[Error] An internal error occurred",
+                    id=chat_id, content=error_content,
                     model=model, provider=provider,
+                    errCode=err_code,
                 )
                 yield sse_data(error_chunk)
             finally:
@@ -779,6 +793,8 @@ class ChatService:
                 "content": gen_state["content"],
                 "model": resolved_model,
                 "provider": resolved_provider,
+                # 云链路业务错误码（无业务码时省略），由路由层随 REST 错误响应透出
+                **({"errCode": gen_state["errCode"]} if gen_state.get("errCode") else {}),
             }
 
         result_content = gen_state["content"] or ""
@@ -1017,6 +1033,8 @@ class ChatService:
             "model": resolved_model,
             "provider": resolved_provider,
             "notice": model_notice or None,
+            # 云链路业务错误码（非流式出错时携带；正常为 None）
+            "errCode": gen_state.get("errCode"),
         }
 
     async def compress_conversation(self, conv_id: str, conv: dict, adapter) -> dict:

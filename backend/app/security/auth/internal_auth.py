@@ -1,4 +1,4 @@
-"""内部服务认证模块 — 用于 Java 后端等可信内部调用。
+"""内部服务认证模块 — 供可信内部服务调用。
 
 提供基于共享 Token 的内部服务间认证，使用 ``secrets.compare_digest``
 进行常量时间比较以防止时序攻击。
@@ -29,7 +29,7 @@ OWNER_USER_ID_HEADER = "X-LuomiNest-Owner-User-Id"
 class InternalAuth:
     """内部认证管理器。
 
-    用于验证来自 Java 后端等可信内部服务的请求。
+    用于验证来自可信内部服务的请求。
     Token 通过 ``INTERNAL_AUTH_TOKEN`` 配置项设置，
     留空则禁用内部认证通道。
     """

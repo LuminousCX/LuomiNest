@@ -170,6 +170,11 @@ export interface ChatStreamChunk {
   context_max_tokens?: number
   /** 模型路由通知（如专业模式推理模型退化为主模型，右上角 toast 展示） */
   notice?: string
+  /**
+   * 云端业务错误码（Python CloudProxyProvider 透传的数字字符串，如 "13005"/"12001"）。
+   * 仅错误 chunk 携带；命中 i18n api.cloudErrors 映射时展示本地化文案。
+   */
+  errCode?: string
 }
 
 export interface Conversation {

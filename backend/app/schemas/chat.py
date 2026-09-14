@@ -41,6 +41,9 @@ class ChatResponse(BaseModel):
     model: str
     provider: str
     usage: dict[str, int] | None = None
+    # 云链路业务错误码（数字字符串，如 "13005"；无业务码为 null）。
+    # 非流式业务错误随 200 响应携带（content 以 "[Error] " 开头），前端映射本地化文案
+    errCode: str | None = None
 
 
 class ChatStreamChunk(BaseModel):
@@ -66,6 +69,9 @@ class ChatStreamChunk(BaseModel):
     context_max_tokens: int | None = None
     # 模型路由通知（如专业模式推理模型退化为主模型，前端右上角 toast 展示）
     notice: str | None = None
+    # 云链路业务错误码（数字字符串，如 "13005"；无业务码为 null）。
+    # 出现在错误 chunk 上，前端按 errCode 映射本地化文案（message 为人类可读兜底）
+    errCode: str | None = None
 
     @field_validator("content", "reasoning_content", mode="before")
     @classmethod

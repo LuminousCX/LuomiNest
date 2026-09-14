@@ -25,7 +25,7 @@ interface RawConversation {
   updated_at?: string
   updatedAt?: string
 }
-import { useApi } from '../composables/useApi'
+import { useApi, cloudErrCodeMessage } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
 import { i18n } from '../i18n'
 import { useAgentStore } from './agent'
@@ -425,7 +425,12 @@ export const useChatStore = defineStore('chat', () => {
           }
         }
         // 直接修改响应式代理属性，避免每个 chunk 都拷贝整个消息数组
-        lastMsg.content += (chunk.content || '')
+        // 云端错误 chunk（CloudProxyProvider 透传 errCode）：命中映射表用本地化文案，
+        // 未命中保留后端 message 原文
+        const cloudErrText = chunk.errCode ? cloudErrCodeMessage(chunk.errCode) : null
+        lastMsg.content += cloudErrText
+          ? `\n\n[Error] ${cloudErrText}`
+          : (chunk.content || '')
         lastMsg.reasoningContent += (chunk.reasoning_content || '')
         if (opts.isRegenerate) {
           lastMsg.suggestedQuestions = streamDoneSuggestions ?? lastMsg.suggestedQuestions

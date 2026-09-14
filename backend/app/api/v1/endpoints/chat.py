@@ -43,7 +43,11 @@ async def chat_completions(
     if body.stream:
         return result
     if result["aborted"]:
-        raise BadRequestError(result["content"].removeprefix("[Error] "))
+        # 云链路业务错误码（如 13005）随 REST 错误信封透出，前端映射本地化文案
+        raise BadRequestError(
+            result["content"].removeprefix("[Error] "),
+            err_code=result.get("errCode"),
+        )
     return ChatResponse(
         id=str(uuid.uuid4()),
         content=result["content"],
@@ -317,6 +321,7 @@ async def regenerate_message(
         content=result["content"],
         model=result["model"],
         provider=result["provider"],
+        errCode=result.get("errCode"),
     )
 
 
@@ -429,6 +434,7 @@ async def add_message(
         content=result["content"],
         model=result["model"],
         provider=result["provider"],
+        errCode=result.get("errCode"),
     )
 
 

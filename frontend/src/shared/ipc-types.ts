@@ -278,13 +278,40 @@ export type CloudRoutingMode = 'off' | 'all'
 
 /**
  * 云端账户摘要（由 main 进程组装；renderer 只见摘要，永不接触任何令牌）。
- * 字段缺失时以空串/0 占位，不抛错。
+ * 字段缺失时以空串占位，不抛错。
  */
 export interface CloudAccountInfo {
   nickname: string
   tier: string
-  coinBalance: number
+  /** 芙贝币余额（主站 /userinfo 的 coin_balance 为准；拉取失败为 null，界面显示"无法获取"而非假 0） */
+  coinBalance: number | null
   quotaRemaining: number
+  /** 头像地址（主站 /userinfo 提供，可能缺失） */
+  avatar?: string
+  /** 称号（主站 honor_title，可能缺失） */
+  title?: string
+  /** 荣誉等级（影响每日额度加成；拉取失败为 null） */
+  honorLevel?: number | null
+  /** 邮箱（可能缺失） */
+  email?: string
+  /** 档位到期时间（ISO 字符串，可能缺失；展示时取日期部分） */
+  tierExpiresAt?: string
+  /** 注册日期（YYYY-MM-DD，可能缺失） */
+  registeredAt?: string
+}
+
+/** 云端可用模型目录条目（GET {baseUrl}/api/v1/llm/models 的 models 数组元素） */
+export interface CloudModelInfo {
+  modelId: string
+  displayName: string
+}
+
+/** 本地后端云令牌注入状态（GET {backend}/api/v1/cloud/status，令牌只回传末 4 位） */
+export interface CloudBackendStatus {
+  configured: boolean
+  routingMode: CloudRoutingMode
+  cloudBaseUrl?: string | null
+  tokenTail4?: string | null
 }
 
 /** 云端登录状态（cloud:status 应答与 cloud 状态推送共用） */
@@ -489,6 +516,10 @@ export const IpcChannels = {
       openVerification: 'cloud:openVerification',
       getRoutingMode: 'cloud:getRoutingMode',
       setRoutingMode: 'cloud:setRoutingMode',
+      // 拉取云端可用模型目录（authorized 态设置页展示，失败静默降级）
+      fetchModels: 'cloud:fetchModels',
+      // 查询本地后端令牌注入状态（消费 Python GET /api/v1/cloud/status）
+      getBackendStatus: 'cloud:getBackendStatus',
     },
     push: {
       // 登录状态机变化时 main 广播（login/status/logout/续期失败等均会触发）
@@ -723,6 +754,10 @@ export interface ElectronApi {
     openVerification: () => Promise<boolean>
     getRoutingMode: () => Promise<CloudRoutingMode>
     setRoutingMode: (mode: CloudRoutingMode) => Promise<void>
+    /** 拉取云端可用模型目录（未登录/失败时返回空数组，界面静默降级） */
+    fetchModels: () => Promise<CloudModelInfo[]>
+    /** 查询本地后端令牌注入状态（后端未就绪/失败时返回 null，不阻塞页面） */
+    getBackendStatus: () => Promise<CloudBackendStatus | null>
     /** 订阅登录状态推送，返回取消订阅函数 */
     onStatus: (callback: (data: CloudAuthStatus) => void) => () => void
   }

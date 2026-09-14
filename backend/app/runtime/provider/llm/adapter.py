@@ -115,6 +115,53 @@ def _create_provider_from_config(config: dict) -> LLMProvider:
     )
 
 
+# ── 云从站模型目录解析（M4 云路由：本地模型名 → 目录内 modelId）──────────────
+
+# 云目录默认模型优先关键词（从站 V6 目录以 deepseek 系为主）
+CLOUD_FALLBACK_MODEL_KEYWORDS = ("deepseek-chat", "deepseek-flash")
+
+
+def bare_model_name(model: str) -> str:
+    """取裸模型名：剥离可能的 provider 前缀/命名空间（如 "vendor/model" → "model"）。
+
+    本地 model 一般为裸名（deepseek-chat / gpt-4o-mini / qwen3-vl:8b）；
+    冒号标签（ollama tag）属模型名本体，仅按 "/" 切命名空间。
+    """
+    name = (model or "").strip()
+    if "/" in name:
+        name = name.rsplit("/", 1)[-1]
+    return name
+
+
+def select_cloud_default_model(cloud_models: list[dict]) -> str:
+    """云目录默认模型选取规则：含 deepseek-chat/deepseek-flash 的条目优先，否则取第一个。
+
+    模块级纯函数（便于单测）；空目录返回空串（调用方据此时原样透传 model）。
+    """
+    for item in cloud_models:
+        model_id = str(item.get("modelId", ""))
+        if any(keyword in model_id for keyword in CLOUD_FALLBACK_MODEL_KEYWORDS):
+            return model_id
+    return str(cloud_models[0].get("modelId", "")) if cloud_models else ""
+
+
+def match_cloud_model_id(orig_model: str, cloud_models: list[dict]) -> str | None:
+    """本地模型名与云目录精确匹配：全名或裸名命中 modelId → 返回该 modelId；否则 None。
+
+    命中返回目录内的 modelId（裸名命中时即权威 modelId，避免带命名空间的
+    本地名在云端精确匹配失败触发 12005 MODEL_NOT_FOUND）。
+    """
+    if not cloud_models:
+        return None
+    model_ids = [str(item.get("modelId", "")) for item in cloud_models]
+    if orig_model in model_ids:
+        return orig_model
+    bare = bare_model_name(orig_model)
+    if bare in model_ids:
+        return bare
+    return None
+
+
 class LLMAdapter:
     def __init__(self):
         logger.info("[Adapter] Initializing LLMAdapter (lazy load mode)...")
@@ -374,21 +421,34 @@ class LLMAdapter:
         self._reasoner_max_tokens = config.get("reasoner_max_tokens")
         self._reasoner_effort = config.get("reasoner_effort", "") or ""
 
-    def _maybe_route_to_cloud(self, provider: LLMProvider) -> LLMProvider:
+    def _maybe_route_to_cloud(self, provider: LLMProvider, model: str) -> tuple[LLMProvider, str]:
         """云路由钩子（M4）：仅在已注入云端令牌且 routingMode=='all' 时生效。
 
         chat / chat_stream 解析出目标 provider 与 model 后调用本钩子：
         - 命中云路由 → 换成共享 CloudProxyProvider 懒建单例
-          （base_url / Bearer token 每请求实时取自 CloudTokenStore，令牌轮换无感知；
-            model 沿用原路由结果，由云端网关按 catalog 校验）
-        - 未命中（mode=off 或未注入）→ 原样返回，既有本地路由零改动
+          （base_url / Bearer token 每请求实时取自 CloudTokenStore，令牌轮换无感知）
+        - model 按云从站目录解析（注入 models 时）：全名/裸名命中 modelId → 透传该
+          modelId；未命中 → 替换为云目录默认模型（select_cloud_default_model）并记
+          info 日志，避免本地模板模型名必然触发云端 12005 MODEL_NOT_FOUND
+        - 目录为空（旧版注入无 models）→ model 原样透传，由云端从站校验并按
+          errCode 报错（MODEL_NOT_FOUND 等经错误透传链路可达 UI）
+        - 未命中云路由（mode=off 或未注入）→ provider/model 原样返回，本地路由零改动
         - embed 路由不接云网关（不走本钩子）
         """
         snapshot = cloud_token_store.get()
         if cloud_token_store.configured and snapshot["routingMode"] == "all":
             logger.info("[LLM] Cloud routing active (mode=all) → cloud gateway proxy")
-            return get_cloud_proxy_provider()
-        return provider
+            cloud_models = snapshot.get("models") or []
+            matched = match_cloud_model_id(model, cloud_models)
+            if matched is not None:
+                return get_cloud_proxy_provider(), matched
+            fallback = select_cloud_default_model(cloud_models)
+            if fallback:
+                logger.info(f"[LLM] cloud route model fallback: {model} -> {fallback}")
+                return get_cloud_proxy_provider(), fallback
+            # 目录为空（旧注入）：model 原样透传，云端报错经 errCode 透传链路提示
+            return get_cloud_proxy_provider(), model
+        return provider, model
 
     async def chat(
         self,
@@ -417,8 +477,8 @@ class LLMAdapter:
 
         provider = self.get_provider(actual_provider_name)
         model = actual_model or provider.default_model
-        # 云路由钩子：mode=all 且已注入令牌时换共享 CloudProxyProvider（model 沿用原路由结果）
-        provider = self._maybe_route_to_cloud(provider)
+        # 云路由钩子：mode=all 且已注入令牌时换共享 CloudProxyProvider，并按云目录解析 model
+        provider, model = self._maybe_route_to_cloud(provider, model)
         logger.info(f"[LLM] Chat request: provider={actual_provider_name}, model={model}, messages={len(messages)}, route={route_hint.value}")
 
         # Prompt 注入防护：净化 user 消息中的伪造系统级标签与守卫标记
@@ -452,7 +512,9 @@ class LLMAdapter:
         except Exception as e:
             elapsed = time.time() - start_time
             logger.error(f"[LLM] Chat failed: provider={actual_provider_name}, elapsed={elapsed:.2f}s, error={e}")
-            return await self._fallback_chat(messages, tools, stream, return_raw=return_raw, route_hint=route_hint, **kwargs)
+            return await self._fallback_chat(
+                messages, tools, stream, return_raw=return_raw, route_hint=route_hint, source_error=e, **kwargs,
+            )
 
     async def _fallback_chat(
         self,
@@ -461,6 +523,7 @@ class LLMAdapter:
         stream: bool = False,
         return_raw: bool = False,
         route_hint: RouteHint = RouteHint.CHAT,
+        source_error: Exception | None = None,
         **kwargs
     ) -> str | dict | AsyncIterator[dict]:
         self.ensure_providers_loaded()
@@ -500,6 +563,10 @@ class LLMAdapter:
                 continue
 
         logger.error(f"[LLM] All providers failed in fallback")
+        # 源头为业务错误（携带 errCode，如云链路 13005/12001/12005/11001）时，
+        # 透传原始异常保留 message/errCode/status，避免被通用兜底文案掩盖
+        if source_error is not None and getattr(source_error, "err_code", None):
+            raise source_error
         raise ProviderError(
             f"All LLM providers failed. Last error: {last_error}",
             code="LLM_ALL_PROVIDERS_FAILED",
@@ -530,8 +597,8 @@ class LLMAdapter:
 
         provider = self.get_provider(actual_provider_name)
         model = actual_model or provider.default_model
-        # 云路由钩子：mode=all 且已注入令牌时换共享 CloudProxyProvider（model 沿用原路由结果）
-        provider = self._maybe_route_to_cloud(provider)
+        # 云路由钩子：mode=all 且已注入令牌时换共享 CloudProxyProvider，并按云目录解析 model
+        provider, model = self._maybe_route_to_cloud(provider, model)
         logger.info(f"[LLM] Stream request: provider={actual_provider_name}, model={model}, messages={len(messages)}, route={route_hint.value}")
 
         # Prompt 注入防护：净化 user 消息中的伪造系统级标签与守卫标记
