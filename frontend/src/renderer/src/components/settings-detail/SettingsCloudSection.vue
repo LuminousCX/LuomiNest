@@ -14,7 +14,10 @@ import {
   AlertCircle,
   ShieldCheck,
   Cable,
-  Cpu
+  Cpu,
+  X,
+  Copy,
+  Check
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 import type {
@@ -97,6 +100,23 @@ const openVerification = async () => {
     await window.api.cloud.openVerification()
   } catch {
     // 打开失败保持等待态，用户可重试
+  }
+}
+
+// ── 等待授权态：复制用户码 / 取消本次授权 ──
+const copied = ref(false)
+let copyTimer: ReturnType<typeof setTimeout> | undefined
+
+const copyUserCode = async () => {
+  const code = status.value.userCode
+  if (!code) return
+  try {
+    await navigator.clipboard.writeText(code)
+    copied.value = true
+    if (copyTimer) clearTimeout(copyTimer)
+    copyTimer = setTimeout(() => (copied.value = false), 1500)
+  } catch {
+    // 剪贴板不可用时用户码仍可手动选中复制（user-select: all）
   }
 }
 
@@ -195,6 +215,7 @@ onMounted(() => {
 onUnmounted(() => {
   unsubscribe?.()
   unsubscribe = null
+  if (copyTimer) clearTimeout(copyTimer)
 })
 </script>
 
@@ -218,12 +239,25 @@ onUnmounted(() => {
         <div class="settings-card__body">
           <p class="cloud-pending__hint">{{ t('settingsEx.cloud.pendingHint') }}</p>
           <div class="cloud-user-code">{{ status.userCode || '—' }}</div>
+          <div class="cloud-code-tools">
+            <button type="button" class="cloud-copy-btn" @click="copyUserCode">
+              <Check v-if="copied" :size="13" />
+              <Copy v-else :size="13" />
+              <span>{{ t(copied ? 'settingsEx.cloud.copied' : 'settingsEx.cloud.copyUserCode') }}</span>
+            </button>
+          </div>
           <div class="cloud-actions">
             <LumiButton variant="primary" size="md" @click="openVerification">
               <template #icon>
                 <ExternalLink :size="16" />
               </template>
               {{ t('settingsEx.cloud.openVerification') }}
+            </LumiButton>
+            <LumiButton variant="ghost" size="md" @click="handleLogout">
+              <template #icon>
+                <X :size="16" />
+              </template>
+              {{ t('settingsEx.cloud.cancel') }}
             </LumiButton>
           </div>
           <div class="cloud-waiting">
@@ -464,6 +498,33 @@ onUnmounted(() => {
   text-align: center;
   color: var(--lumi-primary);
   user-select: all;
+}
+
+/* ── 用户码工具行（复制） ── */
+.cloud-code-tools {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-2);
+}
+
+.cloud-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--duration-fast, 0.15s) ease-in-out,
+    background var(--duration-fast, 0.15s) ease-in-out;
+}
+
+.cloud-copy-btn:hover {
+  color: var(--lumi-primary);
+  background: var(--surface-hover);
 }
 
 .cloud-waiting {
