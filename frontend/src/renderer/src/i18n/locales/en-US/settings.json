@@ -288,11 +288,13 @@
       "prefSyncHint": "After signing in, display preferences sync automatically: interface language, theme mode and consent records. Local changes upload after ~3 seconds, with a full alignment every 6 hours.",
       "prefSyncPrivacy": "Display preferences only (data minimization): conversations, memory, avatar assets, platform credentials and any keys are never synced.",
       "storageTip": "Sign-in tokens are stored only on this device with system-level encryption; the renderer and UI never touch token contents.",
+      "editProfile": "Edit profile on the main site (nickname / avatar / bio)",
       "errorTitle": "Cloud Sign-In Failed",
       "errors": {
         "access_denied": "Authorization was denied; you can start sign-in again",
         "expired_token": "The authorization code has expired; please start sign-in again",
-        "network": "Network error: unable to reach the sign-in service. Check your connection and retry",
+        "network": "Cannot reach the LuminousCX Passport (main site) service. Check your connection and retry; this is not an app issue",
+        "passport_unavailable": "The LuminousCX Passport (main site) is temporarily unavailable — this is not an app issue. Please try again later",
         "invalid_response": "Unexpected response from the sign-in service; please retry later",
         "cancelled": "Sign-in cancelled",
         "unknown": "Sign-in failed; please try again later"

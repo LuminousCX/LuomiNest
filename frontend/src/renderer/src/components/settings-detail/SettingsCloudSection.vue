@@ -391,6 +391,17 @@ onUnmounted(() => {
             </li>
           </ul>
 
+          <!-- 资料唯一事实源在主站：云端账户资料只读，编辑跳主站用户中心 -->
+          <a
+            class="cloud-edit-profile"
+            href="https://luminouschenxi.com/user"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ExternalLink :size="12" />
+            <span>{{ t('settingsEx.cloud.editProfile') }}</span>
+          </a>
+
           <div class="cloud-actions cloud-actions--end">
             <LumiButton
               variant="ghost"
@@ -745,6 +756,22 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── 主站资料编辑入口（云端资料只读） ── */
+.cloud-edit-profile {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--duration-fast, 0.15s) ease-in-out;
+}
+
+.cloud-edit-profile:hover {
+  color: var(--lumi-primary);
 }
 
 /* ── 元信息网格 ── */
