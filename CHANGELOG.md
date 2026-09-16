@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-16
+
+> 本版本聚焦「可诊断性」与「首次体验」：统一日志中心与诊断上传、首启引导合规化
+> （协议/隐私门禁 + 三语法律文本）、内置浏览器精简为只读、群友画像双轨记忆、
+> 云端群聊与显示偏好云同步客户端、Home Assistant 设备列表接入。
+>
+> This release focuses on diagnosability and first-run experience: unified log center
+> with diagnostic upload, compliance-ready onboarding (consent gate + trilingual legal
+> texts), read-only built-in browser, per-member persona memory tracks, cloud group
+> chat & display-preference sync clients, and Home Assistant device listing.
+
+### Added（新增）
+
+- 统一日志中心：前端/主进程/后端/平台四路日志归一，新日志页支持近 1000 条查看、来源与级别筛选、搜索、实时尾随（上翻暂停）、导出与轮转文件管理 — Unified log center: renderer/main/backend/platform logs merged into a new log page with recent-1000 view, source & level filters, search, live tail (pauses on scroll up), export and rotation-segment management
+- 诊断日志上传：登录洛米通行证后可在日志页手动上传近期日志用于问题排查；上传前自动抹除令牌片段并丢弃附件类数据，云端保留 30 天，绝不自动上传 — Diagnostic log upload: manually upload recent logs from the log page after signing in to Lumi Pass; secrets redacted and attachments dropped before upload, kept 30 days server-side, never automatic
+- 首次启动引导重编排：用户协议与隐私政策双勾选门禁（版本化同意记录）→ 语言选择 → 登录（洛米通行证 / 本地账号 / 稍后再说）→ 新手指引卡片 → 就绪 — Redesigned first-run wizard: dual-checkbox Terms & Privacy consent gate (versioned record) → language → sign-in (Lumi Pass / local account / later) → feature-tour cards → ready
+- 新增用户协议页，隐私政策扩写：中国《个人信息保护法》专章、美国州法（CCPA/CPRA、VCDPA、CPA、CTDPA、UCPA）统一权利行使入口、未成年人保护、第三方处理与数据安全措施（三语） — New Terms of Service page; Privacy Policy expanded with a PIPL chapter, US state-law rights (CCPA/CPRA, VCDPA, CPA, CTDPA, UCPA) with a unified exercise channel, minors' protection, third-party processing and security measures (trilingual)
+- 显示偏好云同步（可关闭）：语言、主题与协议同意记录跨设备同步，仅同步白名单字段；聊天、记忆、凭证等本地数据永不自动上云 — Optional display-preference sync: language, theme and consent record across devices, whitelisted fields only; chats, memories and credentials are never uploaded automatically
+- 云端群聊客户端（服务开通后可用）：联系人面板云端群分组、创建/邀请/消息线程、增量拉取与失焦暂停轮询；服务未开通时优雅空态 — Cloud group chat client (activates when the service is live): cloud-group section in contacts, create/invite/message thread with incremental fetch and focus-aware polling; graceful empty state while unavailable
+- 双轨记忆群友画像（实验性）：群聊按「平台+实例+成员」建画像轨，同一成员跨群共用；上下文自动注入在场群友画像摘要（受平台记忆写入开关控制） — Dual-track memory, member personas (experimental): per-member tracks keyed by platform+instance+sender shared across groups; in-context persona summaries injected for group chats (gated by the platform memory-write switch)
+- 智能家居：Home Assistant 设备列表接入（12 类设备域、只读传感器标注），聚合端点对离线实例统一容错并标注跳过 — Smart home: Home Assistant device listing (12 device domains, read-only sensors labeled); aggregation endpoints skip offline instances gracefully with per-instance status
+- 本地登录真化：替换演示性放行，注册/登录走真实后端鉴权；设置页云账号支持一键切换账号 — Local sign-in now performs real authentication (demo bypass removed); one-click account switching added for the cloud account
+
+### Changed（变更）
+
+- 内置浏览器精简为只读浏览：网址导航 + 加载成功自动截图（会话内历史、放大/复制/另存），移除表单填写、点击注入与 DOM 面板 — Built-in browser simplified to read-only browsing: URL navigation with automatic screenshots on load (session history, preview/copy/save); form filling, click injection and the DOM dev panel removed
+- AI 侧浏览器工具收敛为 `browser_visit`（导航→等待→自动截图）与 `browser_screenshot` — AI-facing browser tools narrowed to `browser_visit` (navigate → wait → auto-screenshot) and `browser_screenshot`
+- Splash 启动后恢复上次活跃页面（带路由表校验与防弹跳兜底）；云同步的偏好即时生效，无需重启 — Splash resumes the last active page (validated against the route table with anti-bounce fallback); synced preferences now apply immediately without restart
+- Python 测试安全网 150→203（域策略/轨迹目录/群友画像块/设备列表映射等）；平台实例日志增加 5MB 轮转 — Python test suite 150→203 (domain policy, track dirs, persona blocks, device mapping); platform instance logs now rotate at 5MB
+
+### Fixed（修复）
+
+- 打包版内置皮套模型不可见：`avatar-manifest.json` 纳入版本控制并随包分发 — Built-in avatar models invisible in packaged builds: `avatar-manifest.json` is now tracked and shipped
+
 ## [0.8.0] - 2026-09-12
 
 > 本版本合并 v0.7.7 之后的所有开发工作：9.11 调研 P0/P1/P2 全量修复、
