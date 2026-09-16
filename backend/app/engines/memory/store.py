@@ -386,6 +386,19 @@ class MemoryStore:
             self._cache = data
             return data
 
+    def mutate(self, fn):
+        """读-改-写原子化：在 store 锁内 load → fn(data) → save，返回 fn 的返回值。
+
+        FactManager 的单条写操作（add/remove/update/clear）原先为
+        load→改→save 三步无锁序列，并发调用会相互覆盖（后写者整体覆盖
+        先写者的修改）。收进同一锁段后序列化执行。
+        """
+        with self._lock:
+            data = self.load_data()
+            result = fn(data)
+            self.save_data(data)
+            return result
+
     def save_data(self, data: MemoryData) -> None:
         with self._lock:
             data.last_updated = utc_now()

@@ -76,7 +76,10 @@ class MemoryEngine:
         self._conversation_base_dir = Path(conversation_base_dir) if conversation_base_dir else None
         self._fact_manager = FactManager(self._store)
         self._async_lock = asyncio.Lock()
-        self._extractor = MemoryExtractor(self._store, self._fact_manager, self._async_lock, agent_id=self._agent_id)
+        self._extractor = MemoryExtractor(
+            self._store, self._fact_manager, self._async_lock,
+            agent_id=self._agent_id, conversation_base_dir=self._conversation_base_dir,
+        )
         self._context_builder = ContextBuilder(self._store)
         
         self._vector_manager: VectorSearchManager | None = None
@@ -297,7 +300,16 @@ class MemoryEngine:
         if self._vector_manager is None:
             if self._embedding_provider is None:
                 try:
-                    self._embedding_provider = llm_adapter.get_provider()
+                    raw = llm_adapter.get_provider()
+                    # 关键装配：LLMProvider.embed 是单文本协议（str → list[float]），
+                    # 直接注入 VectorStore 会与批量协议错配——历史缺陷曾致
+                    # vectors[i] 取到单个向量的第 i 个 float，全索引静默标量化。
+                    # 统一经 LLMEmbeddingProvider（批量协议，直连 /embeddings）包装。
+                    model = str(getattr(raw, "default_model", "") or "")
+                    if "embed" not in model.lower():
+                        model = "text-embedding-3-small"
+                    from .vector_store import LLMEmbeddingProvider
+                    self._embedding_provider = LLMEmbeddingProvider(raw, model=model)
                 except Exception as e:
                     logger.warning(f"[Memory] Failed to access llm_adapter for embedding provider: {e}")
 
@@ -316,6 +328,12 @@ class MemoryEngine:
                 owner_key=self._store.owner_key,
             )
         return self._vector_manager
+
+    @property
+    def write_lock(self) -> asyncio.Lock:
+        """引擎级写锁：与提取器写入段共用，供 API 端点/工作流工具串行化
+        读-改-写序列，避免与蒸馏/画像更新并发时相互覆盖。"""
+        return self._async_lock
 
     async def vector_dedup(self, facts: list[FactItem], conversation_id: str | None = None) -> list[FactItem]:
         """向量语义去重后的 facts"""
@@ -418,7 +436,8 @@ class MemoryEngine:
             if conv_facts:
                 conv_store = self._get_conv_store(conversation_id)
                 conv_data = await asyncio.to_thread(conv_store.load_data)
-                self._fact_manager.merge_facts(conv_data, conv_facts)
+                # merge_facts 为纯 CPU（分词+相似度），放线程池避免阻塞事件循环
+                await asyncio.to_thread(self._fact_manager.merge_facts, conv_data, conv_facts)
                 await asyncio.to_thread(conv_store.save_data, conv_data)
 
         # 增量向量化新提取的事实（embedding 失败不影响主流程，B2.3）

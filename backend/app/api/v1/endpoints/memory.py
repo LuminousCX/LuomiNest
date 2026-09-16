@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
@@ -161,14 +163,18 @@ async def create_fact(request: CreateFactRequest, agent_id: str | None = None):
         source_error=request.source_error,
         source="manual",
     )
-    engine.add_fact(fact)
+    # 引擎写锁：与蒸馏/画像更新的读-改-写序列互斥，避免并发覆盖
+    async with engine.write_lock:
+        await asyncio.to_thread(engine.add_fact, fact)
     return ok({"fact": fact.model_dump()})
 
 
 @router.delete("/facts/{fact_id}")
 async def delete_fact(fact_id: str, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
-    if engine.remove_fact(fact_id):
+    async with engine.write_lock:
+        removed = await asyncio.to_thread(engine.remove_fact, fact_id)
+    if removed:
         return ok()
     raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
 
@@ -178,7 +184,11 @@ async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | 
     if request.category is not None and request.category not in FACT_CATEGORIES:
         raise BadRequestError(f"Invalid category. Must be one of: {FACT_CATEGORIES}", code="MEMORY_CATEGORY_INVALID")
     engine = get_memory_engine(agent_id)
-    if engine.update_fact(fact_id, request.content, request.category, request.confidence):
+    async with engine.write_lock:
+        updated = await asyncio.to_thread(
+            engine.update_fact, fact_id, request.content, request.category, request.confidence
+        )
+    if updated:
         return ok()
     raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
 
@@ -375,7 +385,8 @@ async def delete_agent_memory(agent_id: str):
 async def clear_facts(agent_id: str | None = None):
     """清空所有事实"""
     engine = get_memory_engine(agent_id)
-    engine.clear_facts()
+    async with engine.write_lock:
+        await asyncio.to_thread(engine.clear_facts)
     return ok()
 
 

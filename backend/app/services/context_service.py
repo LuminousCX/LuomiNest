@@ -151,15 +151,20 @@ class ContextService:
         """执行自然语言记忆操作。"""
         if action["action"] == "forget":
             target = action["target"]
-            data = await asyncio.to_thread(engine.load_data)
-            removed = 0
-            for fact in list(data.facts):
-                if target in fact.content.casefold() and fact.is_latest:
-                    fact.is_latest = False
-                    fact.confidence = 0.1
-                    removed += 1
+
+            def _apply_forget(data) -> int:
+                removed = 0
+                for fact in list(data.facts):
+                    if target in fact.content.casefold() and fact.is_latest:
+                        fact.is_latest = False
+                        fact.confidence = 0.1
+                        removed += 1
+                return removed
+
+            # 引擎写锁 + store 原子 mutate：forget 与蒸馏/CRUD 并发时不相互覆盖
+            async with engine.write_lock:
+                removed = await asyncio.to_thread(engine._store.mutate, _apply_forget)
             if removed > 0:
-                await asyncio.to_thread(engine._store.save_data, data)
                 logger.info(f"[Memory] Forgot {removed} facts matching '{target}'")
 
         elif action["action"] == "correct":

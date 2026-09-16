@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 from loguru import logger
 
@@ -10,37 +11,60 @@ from .prompts import _FACT_EXTRACT_PROMPT, _DISTILL_PROMPT, _MERGE_SUMMARY_PROMP
 from .store import MemoryStore
 from .fact_manager import FactManager
 
+# 事实内容入库上限（与 API 端点 CreateFactRequest 的 max_length=500 对齐，
+# 防止 LLM 幻觉产出超长内容撑爆存储/向量索引/注入预算）
+FACT_CONTENT_MAX_CHARS = 500
+
 
 class MemoryExtractor:
     """LLM 交互层：事实提取、对话蒸馏、JSON 解析。"""
 
     FACT_CONFIDENCE_THRESHOLD = 0.7
 
-    def __init__(self, store: MemoryStore, fact_manager: FactManager, async_lock: asyncio.Lock, agent_id: str | None = None):
+    def __init__(self, store: MemoryStore, fact_manager: FactManager, async_lock: asyncio.Lock, agent_id: str | None = None, conversation_base_dir: Path | None = None):
         self._store = store
         self._agent_id = agent_id
         self._fact_manager = fact_manager
         self._async_lock = async_lock
+        # 轨道引擎的对话级 store 根目录（users/{key}/conversations/…）；
+        # None 时沿用 agents/{agent}/conversations 布局（owner 轨）
+        self._conversation_base_dir = conversation_base_dir
 
     @staticmethod
     def _get_llm_adapter():
         return llm_adapter
 
+    def _get_conv_store(self, conversation_id: str) -> MemoryStore:
+        """对话级 store（轨道感知）：与 MemoryEngine._get_conv_store 同规则。"""
+        if self._conversation_base_dir is not None:
+            from .memory_engine import get_conversation_store_at
+            return get_conversation_store_at(self._conversation_base_dir, conversation_id)
+        from .memory_engine import get_conversation_store
+        return get_conversation_store(self._agent_id, conversation_id)
+
     # --- 事实提取 ---
 
-    async def extract_facts(
+    async def _extract_raw(
         self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = ""
-    ) -> tuple[str, list[FactItem]]:
+    ) -> tuple[str, list[FactItem], list[tuple[str, str]]]:
+        """LLM 提取 + 解析（不落库）。
+
+        Returns:
+            (profile_name, facts, supersedes_ops)
+            supersedes_ops 为 (被替代文本, 新内容) 列表，由调用方在
+            写入事务内统一应用——替代旧版每条 supersedes 一次全量
+            load/save 的 N+1 写放大。
+        """
         stripped = message.strip()
         if not stripped:
-            return "", []
+            return "", [], []
 
         if llm_adapter is None:
             try:
                 llm_adapter = self._get_llm_adapter()
             except Exception as e:
                 logger.warning(f"[Memory] No LLM adapter available: {e}")
-                return "", []
+                return "", [], []
 
         try:
             prompt = _FACT_EXTRACT_PROMPT.format(message=stripped)
@@ -60,23 +84,42 @@ class MemoryExtractor:
 
             parsed = parse_llm_json(response_text)
             if parsed is None:
-                return "", []
+                return "", [], []
 
             profile_name = parsed.get("profile_name", "").strip()[:20]
-            facts = await self._parse_facts_from_raw(parsed.get("facts", []))
+            facts, supersedes_ops = await self._parse_facts_from_raw(parsed.get("facts", []))
 
-            return profile_name, facts
+            return profile_name, facts, supersedes_ops
 
         except Exception as e:
             logger.warning(f"[Memory] Fact extraction failed: {e}")
-            return "", []
+            return "", [], []
+
+    async def extract_facts(
+        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = ""
+    ) -> tuple[str, list[FactItem]]:
+        profile_name, facts, supersedes_ops = await self._extract_raw(
+            message, llm_adapter, correction_hint, context_messages
+        )
+
+        # supersedes 统一应用：1 次 load + 1 次 save（旧版每条一次全量替换）
+        if supersedes_ops:
+            async with self._async_lock:
+                data = await asyncio.to_thread(self._store.load_data)
+                for supersedes_text, new_content in supersedes_ops:
+                    self._fact_manager.apply_supersedes(data, supersedes_text, new_content)
+                await asyncio.to_thread(self._store.save_data, data)
+
+        return profile_name, facts
 
     # --- 档案更新（LLM 调用 + 数据写入，异步锁保护写入段） ---
 
     async def update_profile_from_message(
         self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = "", conversation_id: str | None = None
     ) -> dict[str, str]:
-        profile_name, facts = await self.extract_facts(message, llm_adapter, correction_hint, context_messages)
+        profile_name, facts, supersedes_ops = await self._extract_raw(
+            message, llm_adapter, correction_hint, context_messages
+        )
 
         # 给facts添加溯源信息
         for f in facts:
@@ -88,6 +131,10 @@ class MemoryExtractor:
         updates = {}
         async with self._async_lock:
             data = await asyncio.to_thread(self._store.load_data)
+
+            # supersedes 在同一事务段内统一应用（旧版在解析阶段逐条全量 save）
+            for supersedes_text, new_content in supersedes_ops:
+                self._fact_manager.apply_supersedes(data, supersedes_text, new_content)
 
             if profile_name:
                 old_name = data.profile.name
@@ -101,7 +148,8 @@ class MemoryExtractor:
             # 只合并Agent级共享的facts（preference/knowledge/correction）
             from .models import FACT_SCOPE_AGENT
             agent_facts = [f for f in facts if f.category in FACT_SCOPE_AGENT]
-            self._fact_manager.merge_facts(data, agent_facts)
+            # merge_facts 为纯 CPU（分词+相似度），放线程池避免阻塞事件循环
+            await asyncio.to_thread(self._fact_manager.merge_facts, data, agent_facts)
             await asyncio.to_thread(self._store.save_data, data)
 
         # 返回提取到的所有facts，由MemoryEngine层决定对话级facts的写入
@@ -186,13 +234,19 @@ class MemoryExtractor:
             now = utc_now()
 
             profile_name = parsed.get("profile_name", "").strip()
-            valid_facts = await self._parse_facts_from_raw(parsed.get("facts", []), source="distill", conversation_id=conversation_id)
+            valid_facts, supersedes_ops = await self._parse_facts_from_raw(
+                parsed.get("facts", []), source="distill", conversation_id=conversation_id
+            )
             raw_summary = parsed.get("summary", {})
             static_facts = parsed.get("static_facts", [])
             dynamic_context = parsed.get("dynamic_context", [])
 
             async with self._async_lock:
                 data = await asyncio.to_thread(self._store.load_data)
+
+                # supersedes 在同一事务段内统一应用（旧版解析阶段逐条全量 save）
+                for supersedes_text, new_content in supersedes_ops:
+                    self._fact_manager.apply_supersedes(data, supersedes_text, new_content)
 
                 # 蒸馏提取的用户名写入档案（与 update_profile_from_message 一致的逻辑）
                 if profile_name:
@@ -206,7 +260,7 @@ class MemoryExtractor:
                 from .models import FACT_SCOPE_AGENT, FACT_SCOPE_CONVERSATION
                 agent_facts = [f for f in valid_facts if f.category in FACT_SCOPE_AGENT]
                 conv_facts = [f for f in valid_facts if f.category in FACT_SCOPE_CONVERSATION]
-                self._fact_manager.merge_facts(data, agent_facts)
+                await asyncio.to_thread(self._fact_manager.merge_facts, data, agent_facts)
 
                 if isinstance(raw_summary, dict):
                     for cn_name, attr_name in _SUMMARY_SECTION_MAP.items():
@@ -222,14 +276,13 @@ class MemoryExtractor:
 
                 await asyncio.to_thread(self._store.save_data, data)
 
-                # 对话级数据写入conversation store
+                # 对话级数据写入conversation store（轨道感知：users 轨走自身根目录）
                 if conversation_id and (conv_facts or dynamic_context):
-                    from .memory_engine import get_conversation_store
-                    conv_store = get_conversation_store(self._agent_id, conversation_id)
+                    conv_store = self._get_conv_store(conversation_id)
                     conv_data = await asyncio.to_thread(conv_store.load_data)
 
                     if conv_facts:
-                        self._fact_manager.merge_facts(conv_data, conv_facts)
+                        await asyncio.to_thread(self._fact_manager.merge_facts, conv_data, conv_facts)
 
                     if isinstance(dynamic_context, list) and dynamic_context:
                         conv_data.profile.dynamic_context = [str(c)[:200] for c in dynamic_context if isinstance(c, str) and c.strip()]
@@ -353,20 +406,28 @@ class MemoryExtractor:
 
     async def _parse_facts_from_raw(
         self, raw_facts: list, source: str = "conversation", conversation_id: str | None = None, original_message: str = ""
-    ) -> list[FactItem]:
-        """从 LLM 返回的原始事实列表中解析出有效的 FactItem。"""
-        if not isinstance(raw_facts, list):
-            return []
+    ) -> tuple[list[FactItem], list[tuple[str, str]]]:
+        """从 LLM 返回的原始事实列表解析出有效的 FactItem。
 
-        facts = []
+        纯解析、不落库：supersedes 关系以 (被替代文本, 新内容) 列表返回，
+        由调用方在写入事务内统一应用——替代旧版每条 supersedes 一次
+        全量 load/save 的 N+1 写放大（K 条 supersedes = K 次全量替换写）。
+        仅 FACT_SCOPE_AGENT 类别收集 supersedes（与旧版落库规则一致，
+        对话级 supersedes 不写 Agent 级 store）。
+        """
+        if not isinstance(raw_facts, list):
+            return [], []
+
+        facts: list[FactItem] = []
+        supersedes_ops: list[tuple[str, str]] = []
         for raw in raw_facts:
             if not isinstance(raw, dict):
                 logger.warning(f"[Memory] Skipping non-dict fact entry: {type(raw)}")
                 continue
-            content = raw.get("content", "").strip()
+            content = raw.get("content", "").strip()[:FACT_CONTENT_MAX_CHARS]
             category = raw.get("category", "context")
             confidence = raw.get("confidence", 0.8)
-            source_error = raw.get("source_error", "")
+            source_error = raw.get("source_error", "").strip()[:200]
             expires_at = raw.get("expires_at", "") or None
             supersedes = raw.get("supersedes", "") or None
 
@@ -375,7 +436,8 @@ class MemoryExtractor:
             if category not in FACT_CATEGORIES:
                 category = "context"
             try:
-                confidence = float(confidence)
+                # 夹取到 [0,1]：LLM 偶发返回越界置信度会污染排序权重
+                confidence = min(1.0, max(0.0, float(confidence)))
                 if confidence < self.FACT_CONFIDENCE_THRESHOLD:
                     continue
             except (TypeError, ValueError):
@@ -394,14 +456,7 @@ class MemoryExtractor:
                 )
             )
 
-            # 处理 LLM 标记的 supersedes：按作用域分别应用
-            if supersedes:
-                data = await asyncio.to_thread(self._store.load_data)
-                if category in FACT_SCOPE_AGENT:
-                    self._fact_manager.apply_supersedes(data, supersedes, content)
-                    await asyncio.to_thread(self._store.save_data, data)
-                else:
-                    # 对话级 supersedes 不写入 Agent 级 store
-                    logger.debug(f"[Memory] Skipping conversation-scoped supersedes for agent store: {supersedes[:30]}")
+            if supersedes and category in FACT_SCOPE_AGENT:
+                supersedes_ops.append((str(supersedes), content))
 
-        return facts
+        return facts, supersedes_ops

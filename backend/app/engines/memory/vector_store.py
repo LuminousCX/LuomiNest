@@ -36,7 +36,13 @@ class EmbeddingProvider(Protocol):
 
 
 class LLMEmbeddingProvider:
-    """基于 LLM API 的嵌入提供器，通过 OpenAI 兼容接口获取文本向量。"""
+    """基于 LLM API 的嵌入提供器（批量协议：list[str] → list[list[float]]）。
+
+    直接经 OpenAI 兼容 /embeddings 端点批量获取向量，持有长生命周期
+    httpx 连接池（provider 的 base_url/api_key 变更时自动重建），避免
+    每次请求重建 TCP/TLS 连接。api_key 为空时不携带 Authorization 头
+    （本地推理服务如 Ollama 无需鉴权即可使用）。
+    """
 
     # 已知模型的维度映射
     _KNOWN_DIMS: dict[str, int] = {
@@ -53,28 +59,49 @@ class LLMEmbeddingProvider:
         else:
             self._dim = 1536
             logger.warning(f"[VectorStore] Unknown embedding model '{model}', defaulting to dim={self._dim}")
+        self._client: httpx.AsyncClient | None = None
+        self._client_key: tuple[str, str] | None = None
 
     @property
     def dim(self) -> int:
         return self._dim
 
+    async def _get_client(self) -> httpx.AsyncClient:
+        base_url = str(getattr(self._provider, "base_url", "") or "https://api.openai.com/v1")
+        api_key = str(getattr(self._provider, "api_key", "") or "")
+        key = (base_url, api_key)
+        if self._client is not None and not self._client.is_closed and self._client_key == key:
+            return self._client
+        old, self._client = self._client, httpx.AsyncClient(timeout=30.0)
+        self._client_key = key
+        if old is not None and not old.is_closed:
+            await old.aclose()
+        return self._client
+
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
 
-        base_url = getattr(self._provider, "base_url", "https://api.openai.com/v1")
-        api_key = getattr(self._provider, "api_key", None)
-        if not api_key:
-            raise ValueError("Embedding provider api_key is missing or empty")
+        base_url = str(getattr(self._provider, "base_url", "") or "https://api.openai.com/v1")
+        api_key = str(getattr(self._provider, "api_key", "") or "")
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{base_url}/embeddings",
-                headers={"Authorization": f"Bearer {api_key}"},
-                json={"model": self._model, "input": texts},
-            )
-            resp.raise_for_status()
-            return [d["embedding"] for d in resp.json()["data"]]
+        client = await self._get_client()
+        resp = await client.post(
+            f"{base_url.rstrip('/')}/embeddings",
+            headers=headers,
+            json={"model": self._model, "input": texts},
+        )
+        resp.raise_for_status()
+        return [d["embedding"] for d in resp.json()["data"]]
+
+    async def aclose(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+        self._client = None
+        self._client_key = None
 
 
 class LocalEmbeddingProvider:
@@ -109,6 +136,9 @@ class VectorStore:
 
     def __init__(self, storage_path: Path, provider: EmbeddingProvider, owner_key: str | None = None):
         self._path = Path(storage_path)
+        # 本地模式（临时/测试目录）下 memory.db 落在 storage_path 内，
+        # 目录不存在会导致 SQLite "unable to open database file"；生产全局模式无副作用
+        self._path.mkdir(parents=True, exist_ok=True)
         self._provider = provider
         self._owner_key = owner_key or _derive_owner_key(self._path)
         self._db = _MemoryDB(self._path)
@@ -121,6 +151,48 @@ class VectorStore:
 
     def close(self) -> None:
         self._db.close()
+
+    async def aclose(self) -> None:
+        """异步关闭：先关 embedding provider 的连接池（如有 aclose），再关 DB。"""
+        provider_close = getattr(self._provider, "aclose", None)
+        if callable(provider_close):
+            try:
+                await provider_close()
+            except Exception as e:
+                logger.debug(f"[VectorStore] Provider aclose failed (ignored): {e}")
+        self.close()
+
+    # ── 嵌入契约（批量协议校验，防 provider 实现错配静默产出标量垃圾） ──
+
+    def _coerce_vectors(self, vectors: Any, expected_count: int) -> list[np.ndarray]:
+        """校验 embed 返回结构并转为 float32 一维数组列表。
+
+        契约：vectors 必须是 list[list[float]] 且长度 == expected_count；
+        provider 声明 dim 时每条维度必须一致。违反契约抛 ValueError
+        （fail-loud），替代旧版 np.array(vectors[i]) 对标量静默产出 () 形状。
+        """
+        if not isinstance(vectors, (list, tuple)) or len(vectors) != expected_count:
+            got = len(vectors) if hasattr(vectors, "__len__") else "n/a"
+            raise ValueError(
+                f"embed returned {type(vectors).__name__} len={got}, "
+                f"expected list[list[float]] of length {expected_count}"
+            )
+        dim = getattr(self._provider, "dim", None)
+        out: list[np.ndarray] = []
+        for i, v in enumerate(vectors):
+            arr = np.asarray(v, dtype=np.float32)
+            if arr.ndim != 1 or (dim is not None and arr.shape[0] != dim):
+                raise ValueError(
+                    f"embed[{i}] shape={arr.shape}, expected ({dim},); "
+                    "provider likely returned a scalar/1D list instead of list[list[float]]"
+                )
+            out.append(arr)
+        return out
+
+    async def embed_batch(self, texts: list[str]) -> list[np.ndarray]:
+        """批量嵌入 + 契约校验（单次 HTTP 调用，供去重/入库共用）。"""
+        vectors = await self._provider.embed(texts)
+        return self._coerce_vectors(vectors, len(texts))
 
     async def _ensure_loaded(self) -> None:
         # 冷启动全量加载是同步 SQLite 读（BLOB 进内存），必须在 to_thread 中执行；
@@ -172,8 +244,7 @@ class VectorStore:
     async def add(self, entry: VectorEntry) -> None:
         await self._ensure_loaded()
         if entry.vector.size == 0:
-            vectors = await self._provider.embed([entry.content])
-            entry.vector = np.array(vectors[0], dtype=np.float32)
+            entry.vector = (await self.embed_batch([entry.content]))[0]
         self._cache[entry.fact_id] = entry
         self._update_indexes(entry, add=True)
         try:
@@ -181,16 +252,32 @@ class VectorStore:
         except Exception as e:
             logger.warning(f"[VectorStore] Persist add failed for {entry.fact_id}: {e}")
 
-    async def batch_add(self, entries: list[VectorEntry]) -> None:
+    async def batch_add(
+        self,
+        entries: list[VectorEntry],
+        pre_vectors: list[np.ndarray] | None = None,
+    ) -> None:
+        """批量写入。pre_vectors 提供时跳过嵌入（调用方已批量算好并复用）。
+
+        落盘失败时回滚内存 cache/索引（_persist_batch 单事务全有或全无），
+        避免出现"内存有、库里无"的永久缺口（该 fact 此后会被
+        dedup_and_add 的已索引检查跳过而无法补录）。
+        """
         await self._ensure_loaded()
         if not entries:
             return
 
-        texts = [e.content for e in entries]
-        vectors = await self._provider.embed(texts)
+        if pre_vectors is not None:
+            if len(pre_vectors) != len(entries):
+                raise ValueError(f"pre_vectors length {len(pre_vectors)} != entries length {len(entries)}")
+            for entry, vec in zip(entries, pre_vectors):
+                entry.vector = vec
+        else:
+            coerced = await self.embed_batch([e.content for e in entries])
+            for entry, vec in zip(entries, coerced):
+                entry.vector = vec
 
-        for i, entry in enumerate(entries):
-            entry.vector = np.array(vectors[i], dtype=np.float32)
+        for entry in entries:
             self._cache[entry.fact_id] = entry
             self._update_indexes(entry, add=True)
 
@@ -198,6 +285,9 @@ class VectorStore:
         try:
             await asyncio.to_thread(self._persist_batch, entries)
         except Exception as e:
+            for entry in entries:
+                self._update_indexes(entry, add=False)
+                self._cache.pop(entry.fact_id, None)
             logger.warning(f"[VectorStore] Batch persist failed ({len(entries)} entries): {e}")
 
     def _persist_batch(self, entries: list[VectorEntry]) -> None:
@@ -272,6 +362,39 @@ class VectorStore:
                 logger.warning(f"[VectorStore] Persist delete_by_conversation failed: {e}")
         return len(to_delete)
 
+    async def clear_for_rebuild(self, conversation_id: str = "") -> int:
+        """重建前清理：删除 agent 级向量 + 指定对话的向量（其他对话不动）。
+
+        修复"rebuild 只 upsert 不清旧"——被删除事实的向量残留在索引中
+        会被持续召回，且索引只增不减。conversation_id 为空时清理
+        conversation_id 为空的行（无对话归属的条目）。
+        """
+        await self._ensure_loaded()
+        target_conv = conversation_id or ""
+        to_drop = [
+            fid for fid, entry in self._cache.items()
+            if entry.scope == "agent" or entry.conversation_id == target_conv
+        ]
+        for fid in to_drop:
+            entry = self._cache.pop(fid)
+            self._update_indexes(entry, add=False)
+        if to_drop:
+            try:
+                await asyncio.to_thread(self._persist_clear_for_rebuild, target_conv)
+            except Exception as e:
+                logger.warning(f"[VectorStore] Persist clear_for_rebuild failed: {e}")
+        return len(to_drop)
+
+    def _persist_clear_for_rebuild(self, conversation_id: str) -> None:
+        with self._db.session() as session:
+            session.execute(
+                delete(MemoryVector).where(
+                    MemoryVector.owner_key == self._owner_key,
+                    (MemoryVector.scope == "agent") | (MemoryVector.conversation_id == conversation_id),
+                )
+            )
+            session.commit()
+
     # ── 检索（进程内 cache + 索引，与旧实现一致） ──
 
     async def search(
@@ -280,7 +403,7 @@ class VectorStore:
         conversation_id: str | None = None, min_score: float = 0.0
     ) -> list[ScoredFact]:
         await self._ensure_loaded()
-        query_vec = np.array((await self._provider.embed([query]))[0], dtype=np.float32)
+        query_vec = (await self.embed_batch([query]))[0]
         candidates = self._get_candidates(category, scope, conversation_id)
         results = await asyncio.to_thread(self._rank_candidates, query_vec, candidates, min_score)
         return [
@@ -305,10 +428,20 @@ class VectorStore:
         return results
 
     async def dedup_check(
-        self, content: str, category: str, threshold: float = 0.85
+        self,
+        content: str,
+        category: str,
+        threshold: float = 0.85,
+        query_vec: np.ndarray | None = None,
     ) -> str | None:
+        """语义判重。query_vec 提供时跳过嵌入（批量流程已算好直接复用）。"""
         await self._ensure_loaded()
-        query_vec = np.array((await self._provider.embed([content]))[0], dtype=np.float32)
+        if query_vec is None:
+            query_vec = (await self.embed_batch([content]))[0]
+        else:
+            dim = getattr(self._provider, "dim", None)
+            if dim is not None and query_vec.shape != (dim,):
+                raise ValueError(f"query_vec shape {query_vec.shape} != ({dim},)")
         candidates = self._category_index.get(category, set())
         return await asyncio.to_thread(self._best_match, query_vec, candidates, threshold)
 
@@ -332,22 +465,43 @@ class VectorStore:
         return
 
     def _load(self) -> None:
+        # 维度校验：provider 声明 dim 时，形状不符的行（历史接口错配产生的
+        # 标量垃圾 / 换嵌入模型后的旧维度）不可用于余弦计算，剔除并删除。
+        dim = getattr(self._provider, "dim", None)
+        invalid_ids: list[str] = []
         try:
             with self._db.session() as session:
                 rows = session.execute(
                     select(MemoryVector).where(MemoryVector.owner_key == self._owner_key)
                 ).scalars().all()
-            for row in rows:
-                entry = VectorEntry(
-                    fact_id=row.fact_id,
-                    content=row.content or "",
-                    category=row.category or "",
-                    scope=row.scope or "",
-                    conversation_id=row.conversation_id or "",
-                    vector=self._blob_to_vector(row.vector),
-                )
-                self._cache[entry.fact_id] = entry
-                self._update_indexes(entry, add=True)
+                for row in rows:
+                    vector = self._blob_to_vector(row.vector)
+                    if dim is not None and vector.shape != (dim,):
+                        invalid_ids.append(row.fact_id)
+                        continue
+                    entry = VectorEntry(
+                        fact_id=row.fact_id,
+                        content=row.content or "",
+                        category=row.category or "",
+                        scope=row.scope or "",
+                        conversation_id=row.conversation_id or "",
+                        vector=vector,
+                    )
+                    self._cache[entry.fact_id] = entry
+                    self._update_indexes(entry, add=True)
+                if invalid_ids:
+                    session.execute(
+                        delete(MemoryVector).where(
+                            MemoryVector.owner_key == self._owner_key,
+                            MemoryVector.fact_id.in_(invalid_ids),
+                        )
+                    )
+                    session.commit()
+                    logger.warning(
+                        f"[VectorStore] Dropped {len(invalid_ids)} invalid-dimension vector row(s) "
+                        "(stale index from earlier embedding mismatch or model change); "
+                        "run memory.vector_rebuild to re-index"
+                    )
         except Exception as e:
             logger.warning(f"[VectorStore] Load failed: {e}")
 

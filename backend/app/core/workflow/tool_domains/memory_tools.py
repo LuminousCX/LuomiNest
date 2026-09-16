@@ -4,6 +4,7 @@
 注册顺序与 schema 见 register_tools.register_internal_tools。
 """
 
+import asyncio
 import json
 from typing import Any
 
@@ -214,7 +215,8 @@ async def _memory_promote_conversation_facts(args: dict[str, Any]) -> WorkflowTa
 async def _memory_clear_facts(args: dict[str, Any]) -> WorkflowTaskResult:
     """清空所有事实"""
     engine = _require_memory_engine()
-    engine.clear_facts()
+    async with engine.write_lock:
+        await asyncio.to_thread(engine.clear_facts)
 
     logger.info("[Workflow:memory.clear_facts] all facts cleared")
     return WorkflowTaskResult(
@@ -265,7 +267,8 @@ async def _memory_create_fact(args: dict[str, Any]) -> WorkflowTaskResult:
         confidence=confidence,
         source="workflow",
     )
-    engine.add_fact(fact)
+    async with engine.write_lock:
+        await asyncio.to_thread(engine.add_fact, fact)
 
     emitter = _get_emitter()
     if emitter:
@@ -304,7 +307,8 @@ async def _memory_update_fact(args: dict[str, Any]) -> WorkflowTaskResult:
         )
 
     engine = _require_memory_engine()
-    success = engine.update_fact(fact_id, content, category, confidence)
+    async with engine.write_lock:
+        success = await asyncio.to_thread(engine.update_fact, fact_id, content, category, confidence)
     if not success:
         return WorkflowTaskResult(success=False, error=f"事实 {fact_id} 不存在")
 
@@ -333,7 +337,8 @@ async def _memory_delete_fact(args: dict[str, Any]) -> WorkflowTaskResult:
         return WorkflowTaskResult(success=False, error="Missing required parameter: fact_id")
 
     engine = _require_memory_engine()
-    success = engine.remove_fact(fact_id)
+    async with engine.write_lock:
+        success = await asyncio.to_thread(engine.remove_fact, fact_id)
     if not success:
         return WorkflowTaskResult(success=False, error=f"事实 {fact_id} 不存在")
 
