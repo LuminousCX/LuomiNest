@@ -17,9 +17,11 @@ import {
   Cpu,
   X,
   Copy,
-  Check
+  Check,
+  RefreshCw
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
+import ConfirmDialog from '../common/ConfirmDialog.vue'
 import type {
   CloudAuthStatus,
   CloudRoutingMode,
@@ -66,6 +68,7 @@ const applyStatus = (next: CloudAuthStatus) => {
   if (next.state === 'authorized') {
     void loadCloudModels()
     void loadBackendStatus()
+    void loadPrefSyncEnabled()
   }
 }
 
@@ -125,6 +128,59 @@ const handleLogout = async () => {
     applyStatus(await window.api.cloud.logout())
   } catch {
     // 失败时等待状态推送兜底
+  }
+}
+
+// ── 切换账号：确认后登出并立即重新发起 Device Flow ──
+const showSwitchConfirm = ref(false)
+const switching = ref(false)
+
+const confirmSwitchAccount = async () => {
+  if (switching.value) return
+  switching.value = true
+  try {
+    // 先登出清除本机令牌，再立即发起 Device Flow 登录新账号
+    applyStatus(await window.api.cloud.logout())
+  } catch {
+    // 登出失败也继续尝试重新登录，由状态推送兜底
+  }
+  try {
+    applyStatus(await window.api.cloud.login())
+  } catch {
+    applyStatus({ state: 'error', error: 'unknown' })
+  } finally {
+    switching.value = false
+    showSwitchConfirm.value = false
+  }
+}
+
+// ── 显示偏好多端同步开关（默认开，仅云登录后可见）──
+// 仅同步 locale / theme / 协议同意记录（最小必要），绝不同步聊天记录、记忆、皮套资产或密钥
+const prefSyncEnabled = ref(true)
+const prefSyncLoaded = ref(false)
+const prefSyncToggling = ref(false)
+
+const loadPrefSyncEnabled = async () => {
+  if (prefSyncLoaded.value) return
+  try {
+    prefSyncEnabled.value = (await window.api.cloud.getPrefSyncEnabled()) !== false
+    prefSyncLoaded.value = true
+  } catch {
+    // main 不可达时保持默认开
+  }
+}
+
+const togglePrefSync = async () => {
+  if (prefSyncToggling.value) return
+  prefSyncToggling.value = true
+  const next = !prefSyncEnabled.value
+  try {
+    await window.api.cloud.setPrefSyncEnabled(next)
+    prefSyncEnabled.value = next
+  } catch {
+    // 失败保持原状态
+  } finally {
+    prefSyncToggling.value = false
   }
 }
 
@@ -237,15 +293,19 @@ onUnmounted(() => {
           <span class="settings-card__title">{{ t('settingsEx.cloud.pendingTitle') }}</span>
         </div>
         <div class="settings-card__body">
-          <p class="cloud-pending__hint">{{ t('settingsEx.cloud.pendingHint') }}</p>
-          <div class="cloud-user-code">{{ status.userCode || '—' }}</div>
-          <div class="cloud-code-tools">
-            <button type="button" class="cloud-copy-btn" @click="copyUserCode">
-              <Check v-if="copied" :size="13" />
-              <Copy v-else :size="13" />
-              <span>{{ t(copied ? 'settingsEx.cloud.copied' : 'settingsEx.cloud.copyUserCode') }}</span>
-            </button>
-          </div>
+          <p class="cloud-pending__hint">
+            {{ status.userCode ? t('settingsEx.cloud.pendingHint') : t('settingsEx.cloud.directHint') }}
+          </p>
+          <template v-if="status.userCode">
+            <div class="cloud-user-code">{{ status.userCode }}</div>
+            <div class="cloud-code-tools">
+              <button type="button" class="cloud-copy-btn" @click="copyUserCode">
+                <Check v-if="copied" :size="13" />
+                <Copy v-else :size="13" />
+                <span>{{ t(copied ? 'settingsEx.cloud.copied' : 'settingsEx.cloud.copyUserCode') }}</span>
+              </button>
+            </div>
+          </template>
           <div class="cloud-actions">
             <LumiButton variant="primary" size="md" @click="openVerification">
               <template #icon>
@@ -332,7 +392,19 @@ onUnmounted(() => {
           </ul>
 
           <div class="cloud-actions cloud-actions--end">
-            <LumiButton variant="danger-ghost" size="md" @click="handleLogout">
+            <LumiButton
+              variant="ghost"
+              size="md"
+              :loading="switching"
+              :disabled="switching"
+              @click="showSwitchConfirm = true"
+            >
+              <template #icon>
+                <RefreshCw v-if="!switching" :size="16" />
+              </template>
+              {{ t('settingsEx.cloud.switchAccount') }}
+            </LumiButton>
+            <LumiButton variant="danger-ghost" size="md" :disabled="switching" @click="handleLogout">
               <template #icon>
                 <LogOut :size="16" />
               </template>
@@ -363,6 +435,35 @@ onUnmounted(() => {
             >
               <span class="cloud-toggle__thumb" />
             </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 多端同步开关（仅同步显示偏好：locale / theme / 协议同意记录，最小必要） -->
+      <section class="settings-card">
+        <div class="settings-card__body">
+          <div class="cloud-routing-row">
+            <div class="cloud-routing-row__info">
+              <label class="cloud-routing-row__label">
+                <RefreshCw :size="14" />
+                <span>{{ t('settingsEx.cloud.prefSync') }}</span>
+              </label>
+              <span class="cloud-routing-row__hint">{{ t('settingsEx.cloud.prefSyncHint') }}</span>
+            </div>
+            <button
+              type="button"
+              class="cloud-toggle"
+              role="switch"
+              :aria-checked="prefSyncEnabled"
+              :disabled="prefSyncToggling"
+              @click="togglePrefSync"
+            >
+              <span class="cloud-toggle__thumb" />
+            </button>
+          </div>
+          <div class="cloud-sync-note">
+            <ShieldCheck :size="13" />
+            <span>{{ t('settingsEx.cloud.prefSyncPrivacy') }}</span>
           </div>
         </div>
       </section>
@@ -457,6 +558,19 @@ onUnmounted(() => {
         </div>
       </section>
     </template>
+
+    <!-- 切换账号确认弹窗：登出后立即重新发起 Device Flow -->
+    <ConfirmDialog
+      :visible="showSwitchConfirm"
+      :title="t('settingsEx.cloud.switchConfirmTitle')"
+      :message="t('settingsEx.cloud.switchConfirmMessage')"
+      :confirm-text="t('settingsEx.cloud.switchConfirmOk')"
+      :cancel-text="t('settingsEx.cloud.cancel')"
+      :loading="switching"
+      @confirm="confirmSwitchAccount"
+      @cancel="showSwitchConfirm = false"
+      @update:visible="showSwitchConfirm = $event"
+    />
   </div>
 </template>
 
@@ -832,6 +946,26 @@ onUnmounted(() => {
 
 .cloud-toggle:hover {
   border-color: var(--lumi-primary);
+}
+
+/* ── 多端同步隐私说明 ── */
+.cloud-sync-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider-soft);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.cloud-sync-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--lumi-primary);
+  opacity: 0.7;
 }
 
 /* ── 错误横幅 ── */

@@ -13,13 +13,19 @@ import type {
 } from '@shared/ipc-types'
 import {
   CloudAuthError,
+  LOOPBACK_PORT,
+  buildAuthorizeUrl,
+  exchangeAuthorizationCode,
   pollForDeviceToken,
   refreshAccessToken,
   requestDeviceAuthorization,
 } from './auth-client'
-import type { DeviceAuthorization } from './auth-client'
+import type { AuthorizeStart, DeviceAuthorization, TokenSet } from './auth-client'
+import { LoopbackBindError, startLoopbackServer } from './loopback-login'
+import type { DirectLoginSession } from './loopback-login'
 import { clearCloudTokens, loadCloudTokens, saveCloudTokens } from './token-store'
 import type { StoredCloudTokens } from './token-store'
+import { cloudPrefsSync } from './prefs-sync'
 
 const logger = createLuomiNestLogger('CloudAuth')
 
@@ -65,6 +71,8 @@ let accountRefreshInFlight = false
 let sessionGeneration = 0
 /** 当前 pendingAuth 的授权页地址（「打开授权页」用） */
 let verificationUrl: string | null = null
+/** 当前直登回环会话（登出/重新登录时主动中止，防悬挂本地服务） */
+let directSession: DirectLoginSession | null = null
 /** 通行证账户唯一标识（id_token.sub 的内存副本，随登录态建立/清除，不外发 renderer） */
 let passportSub: string | null = null
 
@@ -181,8 +189,12 @@ const signOutLocally = (): void => {
   stopAccountTimer()
   sessionGeneration += 1
   verificationUrl = null
+  directSession?.cancel()
+  directSession = null
   passportSub = null
   clearCloudTokens()
+  // 停止显示偏好云同步的定时任务（最小侵入钩子）
+  cloudPrefsSync.onCloudSignedOut()
   setStatus({ state: 'loggedOut' })
 }
 
@@ -341,10 +353,38 @@ const injectToBackend = async (): Promise<void> => {
   }
 }
 
-/* ── 登录流程 ── */
+/* ── 登录流程 ──
+ * 通道一（默认）：授权码 + PKCE + 本地回环直登——浏览器授权后 302 回 127.0.0.1，
+ *   无需手输用户码（对标 Trae/ZCode 式"直接授权"）。
+ * 通道二（回退）：Device Flow——回环端口被占 / 多实例 / 服务端未部署直登回调时自动降级，
+ *   用户码手输路径保持不变。
+ * 两条通道共用 finishLogin 收尾（令牌落盘 → 授权态 → 注入后端 → 账户摘要）。 */
 
-/** 后台完成轮询并落盘令牌 */
-const completeLogin = async (generation: number, deviceAuth: DeviceAuthorization): Promise<void> => {
+/** 令牌落盘并进入登录态（两条登录通道共用的收尾） */
+const finishLogin = async (generation: number, tokens: TokenSet): Promise<void> => {
+  if (generation !== sessionGeneration) return
+  const persisted: StoredCloudTokens = {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    accessExpiresAt: Date.now() + tokens.expiresIn * 1000,
+    // id_token.sub 存档（cloud-tokens.json passportSub 字段），登出时随文件清除
+    passportSub: extractPassportSub(tokens.idToken),
+  }
+  passportSub = persisted.passportSub ?? null
+  persistTokens(persisted)
+  verificationUrl = null
+  directSession = null
+  setStatus({ state: 'authorized', account: null })
+  scheduleRefresh(persisted, generation)
+  startAccountTimer(generation)
+  await injectToBackend()
+  await refreshAccount(generation)
+  // 登录成功后对齐一次显示偏好（失败静默，见 prefs-sync.ts）
+  cloudPrefsSync.onCloudAuthorized()
+}
+
+/** 通道二收尾：Device Flow 轮询直到授权完成 */
+const completeDeviceLogin = async (generation: number, deviceAuth: DeviceAuthorization): Promise<void> => {
   const { issuer } = configStore.getCloudConfig()
   try {
     const tokens = await pollForDeviceToken(issuer, deviceAuth.deviceCode, {
@@ -352,28 +392,61 @@ const completeLogin = async (generation: number, deviceAuth: DeviceAuthorization
       expiresIn: deviceAuth.expiresIn,
       isCancelled: () => generation !== sessionGeneration,
     })
-    if (generation !== sessionGeneration) return
-    const persisted: StoredCloudTokens = {
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      accessExpiresAt: Date.now() + tokens.expiresIn * 1000,
-      // id_token.sub 存档（cloud-tokens.json passportSub 字段），登出时随文件清除
-      passportSub: extractPassportSub(tokens.idToken),
-    }
-    passportSub = persisted.passportSub ?? null
-    persistTokens(persisted)
-    verificationUrl = null
-    setStatus({ state: 'authorized', account: null })
-    scheduleRefresh(persisted, generation)
-    startAccountTimer(generation)
-    await injectToBackend()
-    await refreshAccount(generation)
+    await finishLogin(generation, tokens)
   } catch (err) {
     if (generation !== sessionGeneration) return
     if (err instanceof CloudAuthError && err.code === 'cancelled') return
     logger.warn('Device flow login failed:', err instanceof Error ? err.message : err)
     stopRefreshTimer()
     clearCloudTokens()
+    setStatus({ state: 'error', error: describeError(err) })
+  }
+}
+
+/** 通道一收尾：等回环回调拿到授权码 → 换令牌；失败按原因降级设备码或报错 */
+const completeDirectLogin = async (
+  generation: number,
+  start: AuthorizeStart,
+  session: DirectLoginSession
+): Promise<void> => {
+  const { issuer } = configStore.getCloudConfig()
+  try {
+    const code = await session.code
+    if (generation !== sessionGeneration) return
+    const tokens = await exchangeAuthorizationCode(issuer, code, start.verifier)
+    await finishLogin(generation, tokens)
+  } catch (err) {
+    if (generation !== sessionGeneration) return
+    if (err instanceof LoopbackBindError) return // ready 分支已发起降级，此处仅静默收尾
+    if (err instanceof CloudAuthError && err.code === 'cancelled') return
+    if (err instanceof CloudAuthError && err.code === 'access_denied') {
+      logger.warn('Direct login denied by user')
+      stopRefreshTimer()
+      clearCloudTokens()
+      setStatus({ state: 'error', error: 'access_denied' })
+      return
+    }
+    // 换码失败/超时（含服务端直登回调未部署）→ 自动降级 Device Flow 完整重试
+    logger.warn('Direct login failed, falling back to device flow:', err instanceof Error ? err.message : err)
+    await startDeviceFlowLogin(generation)
+  }
+}
+
+/** 通道二发起：Device Flow（原 login 主体，作回退通道） */
+const startDeviceFlowLogin = async (generation: number): Promise<void> => {
+  const { issuer } = configStore.getCloudConfig()
+  try {
+    const deviceAuth = await requestDeviceAuthorization(issuer)
+    if (generation !== sessionGeneration) return
+    verificationUrl = deviceAuth.verificationUriComplete
+    setStatus({ state: 'pendingAuth', userCode: deviceAuth.userCode })
+    // 优先自动打开系统浏览器授权页；失败时用户可在设置页手动打开
+    void shell.openExternal(deviceAuth.verificationUriComplete).catch((err: unknown) => {
+      logger.warn('Failed to open verification page:', err instanceof Error ? err.message : err)
+    })
+    void completeDeviceLogin(generation, deviceAuth)
+  } catch (err) {
+    logger.warn('Device authorization request failed:', err instanceof Error ? err.message : err)
     setStatus({ state: 'error', error: describeError(err) })
   }
 }
@@ -388,18 +461,22 @@ const login = async (): Promise<CloudAuthStatus> => {
   setStatus({ state: 'pendingAuth' })
 
   try {
-    const deviceAuth = await requestDeviceAuthorization(issuer)
-    if (generation !== sessionGeneration) return status
-    verificationUrl = deviceAuth.verificationUriComplete
-    setStatus({ state: 'pendingAuth', userCode: deviceAuth.userCode })
-    // 优先自动打开系统浏览器授权页；失败时用户可在设置页手动打开
-    void shell.openExternal(deviceAuth.verificationUriComplete).catch((err: unknown) => {
-      logger.warn('Failed to open verification page:', err instanceof Error ? err.message : err)
-    })
-    void completeLogin(generation, deviceAuth)
+    const start = buildAuthorizeUrl(issuer)
+    const session = startLoopbackServer(LOOPBACK_PORT, start.state)
+    directSession = session
+    verificationUrl = start.url
+    // 端口绑定成功才打开授权页；绑定失败（被占/多实例）就地降级设备码
+    void session.ready
+      .then(() => shell.openExternal(start.url))
+      .catch((err: unknown) => {
+        if (generation !== sessionGeneration) return
+        logger.warn('Loopback port unavailable, falling back to device flow:', err instanceof Error ? err.message : err)
+        void startDeviceFlowLogin(generation)
+      })
+    void completeDirectLogin(generation, start, session)
   } catch (err) {
-    logger.warn('Device authorization request failed:', err instanceof Error ? err.message : err)
-    setStatus({ state: 'error', error: describeError(err) })
+    logger.warn('Direct login setup failed, falling back to device flow:', err instanceof Error ? err.message : err)
+    await startDeviceFlowLogin(generation)
   }
   return status
 }
@@ -425,8 +502,21 @@ const openVerificationPage = async (): Promise<boolean> => {
   }
 }
 
-const getRoutingMode = (): CloudRoutingMode => configStore.getCloudConfig().routingMode
+/**
+ * 供云 API 客户端（如 cloud-groups）在 401 时主动续期：
+ * 复用 renewTokens 的现有路径（refresh_token 换新令牌 + 落盘 + 注入后端 +
+ * 重排定时续期）；续期失败会按现有语义回退未登录。
+ * 返回是否有可用的 access token（换到了新令牌，或令牌本就未变化但仍有效）。
+ */
+const renewTokensNow = async (): Promise<boolean> => {
+  const before = loadCloudTokens()
+  if (!before?.refreshToken) return false
+  await renewTokens(sessionGeneration)
+  const after = loadCloudTokens()
+  return !!after?.accessToken
+}
 
+const getRoutingMode = (): CloudRoutingMode => configStore.getCloudConfig().routingMode
 const setRoutingMode = (mode: CloudRoutingMode): void => {
   configStore.setCloudRoutingMode(mode)
   // 模式变化即时同步到本地后端
@@ -503,6 +593,8 @@ const restoreSession = (): void => {
     scheduleRefresh(tokens, generation)
     startAccountTimer(generation)
     void refreshAccount(generation)
+    // 恢复登录态同样恢复显示偏好云同步（失败静默）
+    cloudPrefsSync.onCloudAuthorized()
     return
   }
   if (tokens.refreshToken) {
@@ -530,3 +622,6 @@ export const cloudAuth = {
   fetchModels,
   getBackendCloudStatus,
 }
+
+/** 401 时供其他云 API 客户端触发一次令牌续期（走 renewTokens 现有路径） */
+export const renewCloudTokensNow = renewTokensNow

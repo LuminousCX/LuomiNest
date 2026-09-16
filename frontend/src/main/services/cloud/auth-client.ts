@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto'
 import { createLuomiNestLogger } from '../luomi-logger'
 
 const logger = createLuomiNestLogger('CloudAuthClient')
@@ -172,4 +173,58 @@ export const refreshAccessToken = async (
     refreshToken: typeof data.refresh_token === 'string' && data.refresh_token ? data.refresh_token : undefined,
     idToken: typeof data.id_token === 'string' && data.id_token ? data.id_token : undefined,
   }
+}
+
+/* ── 本地回环直登（授权码 + PKCE，对标 Trae/ZCode 式"直接授权"）──
+ * 浏览器授权后 302 回 127.0.0.1 固定端口，本地 HTTP 服务接码换取令牌；
+ * 无需手输用户码。Device Flow 保留为回退通道（端口被占/服务端未部署直登时）。
+ * 回调地址已在主站 PassportClientSeeder 按精确 URI 注册（2026-09-16）。 */
+
+export const LOOPBACK_PORT = 17870
+export const LOOPBACK_REDIRECT = `http://127.0.0.1:${LOOPBACK_PORT}/callback`
+
+export interface AuthorizeStart {
+  /** 授权页完整地址（含 PKCE challenge/state，可直接 shell.openExternal） */
+  url: string
+  /** CSRF 防护随机值（回环回调时必须原样带回） */
+  state: string
+  /** PKCE verifier：仅存本地，换码时上送以证明本机发起 */
+  verifier: string
+}
+
+const b64url = (input: Buffer): string => input.toString('base64url')
+
+/** 构造授权码流程的授权页地址（PKCE S256 强制，public client 无密钥） */
+export const buildAuthorizeUrl = (issuer: string): AuthorizeStart => {
+  const verifier = b64url(randomBytes(32))
+  const challenge = b64url(createHash('sha256').update(verifier).digest())
+  const state = b64url(randomBytes(16))
+  const url = new URL('/oauth2/authorize', issuer)
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('client_id', CLIENT_ID)
+  url.searchParams.set('redirect_uri', LOOPBACK_REDIRECT)
+  url.searchParams.set('scope', SCOPE)
+  url.searchParams.set('state', state)
+  url.searchParams.set('code_challenge', challenge)
+  url.searchParams.set('code_challenge_method', 'S256')
+  return { url: url.toString(), state, verifier }
+}
+
+/** 授权码换令牌（code 60 秒一次性；verifier 与 challenge 校验绑定同一次登录） */
+export const exchangeAuthorizationCode = async (
+  issuer: string,
+  code: string,
+  verifier: string
+): Promise<TokenSet> => {
+  const data = await postForm(
+    `${issuer}/oauth2/token`,
+    formBody({
+      client_id: CLIENT_ID,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: LOOPBACK_REDIRECT,
+      code_verifier: verifier,
+    })
+  )
+  return toTokenSet(data)
 }

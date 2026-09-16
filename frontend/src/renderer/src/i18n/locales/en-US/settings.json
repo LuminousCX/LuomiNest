@@ -252,6 +252,7 @@
       "retry": "Retry",
       "pendingTitle": "Awaiting Authorization",
       "pendingHint": "Device authorization started. Confirm the authorization page opened in your browser, or open it manually and enter the following user code:",
+      "directHint": "The authorization page opened in your browser. You will return to the app automatically once authorized. If nothing happens, check your browser windows or reopen it below.",
       "openVerification": "Open Authorization Page",
       "cancel": "Cancel",
       "copyUserCode": "Copy Code",
@@ -279,6 +280,13 @@
       "routingModeOff": "Local only",
       "logout": "Sign Out",
       "logoutTip": "Signing out clears the cloud tokens on this device; AI calls fall back to the local model configuration.",
+      "switchAccount": "Switch Account",
+      "switchConfirmTitle": "Switch Account",
+      "switchConfirmMessage": "The current Passport will be signed out and a new device authorization will start immediately (the authorization page opens in your browser). Continue?",
+      "switchConfirmOk": "Switch",
+      "prefSync": "Cross-Device Sync",
+      "prefSyncHint": "After signing in, display preferences sync automatically: interface language, theme mode and consent records. Local changes upload after ~3 seconds, with a full alignment every 6 hours.",
+      "prefSyncPrivacy": "Display preferences only (data minimization): conversations, memory, avatar assets, platform credentials and any keys are never synced.",
       "storageTip": "Sign-in tokens are stored only on this device with system-level encryption; the renderer and UI never touch token contents.",
       "errorTitle": "Cloud Sign-In Failed",
       "errors": {
@@ -768,6 +776,10 @@
       "dataCollection": "Data Collection",
       "dataStorage": "Data Storage",
       "dataTransfer": "Data Transfer",
+      "diagnosticLogs": "Diagnostic Log Upload",
+      "piplCompliance": "China PIPL Compliance",
+      "piplCrossBorder": "Cross-Border Transfer of Personal Information & Your Rights",
+      "usStateCompliance": "US State Privacy Law Compliance (CCPA/CPRA, VCDPA, CPA, CTDPA, UCPA)",
       "thirdParty": "Third-Party Services",
       "userRights": "User Rights",
       "securityMeasures": "Security Measures",
@@ -781,6 +793,31 @@
     "contact": {
       "title": "Contact Us",
       "desc": "If you have any questions, suggestions, or complaints about this privacy policy, please contact us in one of the following ways:",
+      "githubLabel": "GitHub Issues: ",
+      "homepageLabel": "Project homepage: "
+    }
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "subtitle": "LuomiNest Terms of Service · Version {version}",
+    "hero": {
+      "title": "Transparent Service · Clear Terms",
+      "desc": "These terms define the rights and obligations between you and the LuminousChenXi development team regarding the use of LuomiNest, covering the nature of the service, accounts, acceptable use, intellectual property, disclaimers, dispute resolution and data control. The consent record (agreement version and timestamp) can be reviewed under Settings → Privacy & Compliance."
+    },
+    "lead": "Please read these terms before using LuomiNest. By downloading, installing or using the app, you represent that you have read and agree to all of them; LuomiNest is a local-first AI desktop assistant, and most capabilities run locally on your device by default.",
+    "sections": {
+      "serviceNature": "Nature of the Service",
+      "accounts": "Accounts (Local Account & Chenxi Passport)",
+      "conduct": "Acceptable Use",
+      "ip": "Intellectual Property",
+      "disclaimer": "Disclaimer & Limitation of Liability",
+      "changes": "Service Changes & Termination",
+      "disputes": "Dispute Resolution & Governing Law",
+      "dataControl": "Discontinue & Delete Data Anytime",
+      "contact": "Contact Us"
+    },
+    "contact": {
+      "desc": "If you have any questions, suggestions, or complaints about these terms, please contact us in one of the following ways:",
       "githubLabel": "GitHub Issues: ",
       "homepageLabel": "Project homepage: "
     }

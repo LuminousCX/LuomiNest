@@ -252,6 +252,7 @@
       "retry": "重试",
       "pendingTitle": "等待授权确认",
       "pendingHint": "已发起设备授权。请确认浏览器打开的授权页，或在本机浏览器中手动打开后输入以下用户码完成登录：",
+      "directHint": "已在浏览器打开授权页，完成授权后将自动返回应用。如页面未响应，请检查浏览器窗口或点击下方按钮重新打开。",
       "openVerification": "打开授权页",
       "cancel": "取消",
       "copyUserCode": "复制用户码",
@@ -279,6 +280,13 @@
       "routingModeOff": "仅本地",
       "logout": "退出登录",
       "logoutTip": "退出登录后将清除本机云端令牌，AI 调用回落到本地模型配置。",
+      "switchAccount": "切换账号",
+      "switchConfirmTitle": "切换账号",
+      "switchConfirmMessage": "将退出当前通行证并立即重新发起设备授权登录（浏览器将打开授权页）。确认继续？",
+      "switchConfirmOk": "切换",
+      "prefSync": "多端同步",
+      "prefSyncHint": "登录后自动同步显示偏好：界面语言、主题模式与协议同意记录。本地变更约 3 秒后上传，每 6 小时对齐一次。",
+      "prefSyncPrivacy": "仅同步显示偏好（最小必要）：绝不同步聊天记录、记忆、皮套资产、平台凭证或任何密钥。",
       "storageTip": "登录令牌仅保存在本机（系统级加密存储），渲染进程与应用界面不会接触令牌内容。",
       "errorTitle": "云端登录失败",
       "errors": {
@@ -768,6 +776,10 @@
       "dataCollection": "数据收集",
       "dataStorage": "数据存储",
       "dataTransfer": "数据传输",
+      "diagnosticLogs": "诊断日志上传",
+      "piplCompliance": "中国《个人信息保护法》合规",
+      "piplCrossBorder": "个人信息跨境提供与您的权利",
+      "usStateCompliance": "美国州隐私法合规（CCPA/CPRA、VCDPA、CPA、CTDPA、UCPA）",
       "thirdParty": "第三方服务",
       "userRights": "用户权利",
       "securityMeasures": "安全措施",
@@ -781,6 +793,31 @@
     "contact": {
       "title": "联系我们",
       "desc": "如果您对本隐私政策有任何疑问、建议或投诉，请通过以下方式联系我们：",
+      "githubLabel": "GitHub Issues：",
+      "homepageLabel": "项目主页："
+    }
+  },
+  "terms": {
+    "title": "用户协议",
+    "subtitle": "LuomiNest 用户服务协议 · 版本 {version}",
+    "hero": {
+      "title": "透明服务 · 明确约定",
+      "desc": "本协议约定您与 LuminousChenXi 开发团队之间关于使用 LuomiNest 的权利义务，涵盖服务性质、账号、行为规范、知识产权、免责、争议解决与数据控制等内容。协议门禁记录（协议版本与同意时间）可在「设置 → 隐私与合规」查阅。"
+    },
+    "lead": "请在使用 LuomiNest 前阅读本协议。您下载、安装或使用本应用，即表示您已阅读并同意本协议的全部内容；本应用为本地优先的 AI 桌面助手，大部分能力默认在您的设备上本地运行。",
+    "sections": {
+      "serviceNature": "服务性质",
+      "accounts": "账号（本地账号与辰汐通行证）",
+      "conduct": "用户行为规范",
+      "ip": "知识产权",
+      "disclaimer": "免责声明与责任限制",
+      "changes": "服务变更与终止",
+      "disputes": "争议解决与适用法律",
+      "dataControl": "随时停用与删除数据",
+      "contact": "联系我们"
+    },
+    "contact": {
+      "desc": "如果您对本协议有任何疑问、建议或投诉，请通过以下方式联系我们：",
       "githubLabel": "GitHub Issues：",
       "homepageLabel": "项目主页："
     }
