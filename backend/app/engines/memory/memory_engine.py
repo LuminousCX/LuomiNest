@@ -622,6 +622,80 @@ def get_memory_engine(agent_id: str | None = None) -> MemoryEngine:
         return engine
 
 
+# --- 群友画像块（§8.5.10 本期实现：群成员轨读侧） ---
+
+# 画像块默认限幅：成员数 / 每人事实条数 / 总字符数
+GROUP_MEMBER_BLOCK_MAX_MEMBERS = 10
+GROUP_MEMBER_BLOCK_FACTS_PER_MEMBER = 8
+GROUP_MEMBER_BLOCK_MAX_CHARS = 3600
+
+
+def build_group_members_block(
+    members: list[dict],
+    *,
+    exclude_keys: set[str] | None = None,
+    max_members: int = GROUP_MEMBER_BLOCK_MAX_MEMBERS,
+    facts_per_member: int = GROUP_MEMBER_BLOCK_FACTS_PER_MEMBER,
+    max_chars: int = GROUP_MEMBER_BLOCK_MAX_CHARS,
+) -> str:
+    """构建「群友画像块」：逐成员读 users 轨 top 事实摘要（同步 SQLite 读）。
+
+    供平台群聊注入（context_service.inject_memory）与站内群聊
+    （GroupChatManager）共用；单轨读取复用 get_track_engine，不复制存取逻辑。
+    同步函数含 SQLite 读，调用方在事件循环内须用 asyncio.to_thread 包裹。
+
+    Args:
+        members: 成员条目列表，每项 {"sender_id": str, "sender_name": str,
+            "user_key": str}
+        exclude_keys: 需排除的 user_key 集合（如说话成员已单独注入完整记忆）
+        max_members: 成员数上限（超出按传入顺序截断，调用方应让最近发言优先）
+        facts_per_member: 每人事实条数上限（取最近生成的 top 条目）
+        max_chars: 块总长限幅（超出即停止追加）
+
+    Returns:
+        形如「[群友] 昵称(sender_id)：\\n- 事实…」的拼接文本；
+        无任何成员有事实时返回 ""（调用方跳过注入）。
+    """
+    exclude = exclude_keys or set()
+    sections: list[str] = []
+    used_chars = 0
+    seen: set[str] = set()
+
+    for member in members:
+        if len(sections) >= max_members or used_chars >= max_chars:
+            break
+        key = str((member or {}).get("user_key") or "").strip()
+        if not key or key in exclude or key in seen:
+            continue
+        seen.add(key)
+        try:
+            engine = get_track_engine(TRACK_USERS, key)
+            data = engine.load_data()
+        except Exception as e:
+            logger.warning(f"[Memory] Group member track read failed: key={key}, error={e}")
+            continue
+        facts = [f for f in data.facts if f.is_latest][-facts_per_member:]
+        if not facts:
+            continue
+        name = str((member.get("sender_name") or "").strip())
+        sender_id = str((member.get("sender_id") or "").strip())
+        if name and sender_id:
+            header = f"[群友] {name}({sender_id})："
+        elif name:
+            header = f"[群友] {name}："
+        else:
+            header = f"[群友] ({sender_id})："
+        section = "\n".join([header] + [f"- {f.content}" for f in facts])
+        if used_chars + len(section) > max_chars:
+            break
+        sections.append(section)
+        used_chars += len(section) + 2  # 段间空行
+
+    if not sections:
+        return ""
+    return "\n\n".join(sections)
+
+
 # --- 双轨引擎注册表（洋葱架构 §8.5.2 / §13 B18） ---
 
 _track_engines: dict[str, MemoryEngine] = {}

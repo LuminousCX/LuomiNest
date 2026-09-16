@@ -590,6 +590,115 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
         return result
 
     # ------------------------------------------------------------------
+    # 设备列表（供 smart_home /devices 聚合）
+    # ------------------------------------------------------------------
+
+    # 纳入设备列表的 HA 实体域（可控域 + 常见传感域）
+    DEVICE_DOMAINS: frozenset[str] = frozenset({
+        "light",
+        "switch",
+        "climate",
+        "cover",
+        "fan",
+        "media_player",
+        "sensor",
+        "binary_sensor",
+        "humidifier",
+        "water_heater",
+        "vacuum",
+        "lock",
+    })
+
+    # 每个域支持的控制动作（smart_home 控制端点通用动作的域级子集；传感域只读）
+    _DOMAIN_ACTIONS: dict[str, tuple[str, ...]] = {
+        "light": ("turn_on", "turn_off", "toggle", "set_brightness"),
+        "switch": ("turn_on", "turn_off", "toggle"),
+        "climate": ("turn_on", "turn_off", "toggle", "set_temperature"),
+        "cover": ("turn_on", "turn_off", "toggle"),
+        "fan": ("turn_on", "turn_off", "toggle"),
+        "media_player": ("turn_on", "turn_off", "toggle"),
+        "humidifier": ("turn_on", "turn_off", "toggle"),
+        "water_heater": ("turn_on", "turn_off", "set_temperature"),
+        "vacuum": ("turn_on", "turn_off"),
+        "lock": ("turn_on", "turn_off"),
+        # sensor / binary_sensor 只读，不支持控制动作
+    }
+
+    async def list_devices(self) -> list[dict[str, Any]]:
+        """拉取 HA 实体状态并映射为统一设备模型（供 smart_home /devices 聚合）。
+
+        - 通过 REST API GET /api/states 读取全部实体（复用 start() 建立的
+          Bearer 认证 HTTP 客户端）；
+        - 只保留常见设备域（light/switch/climate/...），字段与
+          mqtt_terminal / xiaomi_iot 适配器的设备模型对齐；
+        - 未启动（无 HTTP 客户端）或请求失败时返回空列表并 warn 日志，
+          绝不让聚合端点 500。
+        """
+        if not self._http_client:
+            self._log("warning", "device_list_failed", "HTTP 客户端未初始化，无法获取 HA 设备列表")
+            return []
+
+        try:
+            resp = await self._http_client.get("/api/states")
+            resp.raise_for_status()
+            states = resp.json()
+        except Exception as e:
+            self._log(
+                "warning",
+                "device_list_failed",
+                f"获取 HA 设备列表失败: {e}",
+                details={"error": str(e)},
+            )
+            return []
+
+        if not isinstance(states, list):
+            self._log("warning", "device_list_failed", "HA /api/states 返回格式异常，忽略本次结果")
+            return []
+
+        devices: list[dict[str, Any]] = []
+        for entity in states:
+            if not isinstance(entity, dict):
+                continue
+            device = self._convert_entity_to_device(entity)
+            if device is not None:
+                devices.append(device)
+
+        self._log("info", "device_list_fetched", f"获取到 {len(devices)} 个 HA 设备")
+        return devices
+
+    def _convert_entity_to_device(self, entity: dict[str, Any]) -> dict[str, Any] | None:
+        """将单个 HA 实体状态对象转换为统一设备模型；非设备域返回 None。"""
+        entity_id = str(entity.get("entity_id", "")).strip()
+        if not entity_id or "." not in entity_id:
+            return None
+
+        domain = entity_id.split(".", 1)[0]
+        if domain not in self.DEVICE_DOMAINS:
+            return None
+
+        state = str(entity.get("state", "unknown"))
+        attributes = entity.get("attributes")
+        if not isinstance(attributes, dict):
+            attributes = {}
+
+        friendly_name = attributes.get("friendly_name") or entity_id
+        # HA 用 unavailable/unknown 表示实体不可用或状态未知
+        online = state not in ("unavailable", "unknown")
+
+        return {
+            "device_id": entity_id,
+            "name": str(friendly_name),
+            "state": state,
+            "online": online,
+            "status": attributes,
+            "location": str(attributes.get("room") or attributes.get("area_id") or ""),
+            "domain": domain,
+            "supported_actions": list(self._DOMAIN_ACTIONS.get(domain, ())),
+            "source": self.platform_name,
+            "instance_id": self._instance_id,
+        }
+
+    # ------------------------------------------------------------------
     # 重连逻辑（ReconnectMixin）
     # ------------------------------------------------------------------
 

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   Terminal, Play, Square, Copy, ChevronRight, AlertTriangle, Info,
-  CheckCircle2, XCircle, Maximize2, Minimize2, Upload, RotateCcw,
+  CheckCircle2, XCircle, Maximize2, Minimize2, ScrollText, RotateCcw,
   Clock, User, Filter, RefreshCw, ChevronDown, Server, Monitor,
   Workflow, Wrench
 } from 'lucide-vue-next'
@@ -12,11 +13,11 @@ import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 import LumiInput from '../../components/common/LumiInput.vue'
 import { useApi } from '../../composables/useApi'
 import { copyToClipboard } from '../../utils/clipboard'
-import { generateId } from '../../utils/id'
-import type { CommandRecord, SystemLogEntry, LogUploadResponse, ExecuteCommandResponse } from '../../types'
+import type { CommandRecord, SystemLogEntry, ExecuteCommandResponse } from '../../types'
 import { formatTime, formatDuration } from '../../utils/format'
 import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
 
+const router = useRouter()
 const { apiGet, apiPost, apiDelete } = useApi()
 const { t } = useI18n()
 
@@ -48,9 +49,6 @@ const toolRecords = ref<ToolRecordListItem[]>([])
 const isLoadingCommands = ref(false)
 const isLoadingLogs = ref(false)
 const isLoadingToolRecords = ref(false)
-const isUploading = ref(false)
-const uploadResult = ref<string | null>(null)
-const uploadResultIsError = ref(false)
 
 const logFilterSource = ref<'all' | 'frontend' | 'backend'>('all')
 const logFilterLevel = ref<'all' | 'info' | 'warn' | 'error' | 'success'>('all')
@@ -167,25 +165,10 @@ const toggleRecordDetail = async (recordId: string) => {
   }
 }
 
-const uploadLogs = async () => {
-  if (filteredLogs.value.length === 0) return
-  isUploading.value = true
-  uploadResult.value = null
-  uploadResultIsError.value = false
-  try {
-    const resp = await apiPost<LogUploadResponse>('/console/logs/upload', {
-      logs: filteredLogs.value,
-      uploaded_by: 'frontend',
-      session_id: generateId('session'),
-    })
-    uploadResult.value = t('console.uploadSuccess', { id: resp.upload_id, n: resp.received_count })
-  } catch (e: unknown) {
-    uploadResult.value = t('console.uploadFailed', { msg: e instanceof Error ? e.message : String(e) })
-    uploadResultIsError.value = true
-  } finally {
-    isUploading.value = false
-    setTimeout(() => { uploadResult.value = null }, 4000)
-  }
+/** 跳转统一日志页（/panel/logs）：本页仅展示后端内存日志，
+ * 前端/主进程/平台日志与导出、诊断日志上传都收敛到「应用日志」页。 */
+const openLogsPage = () => {
+  router.push('/panel/logs')
 }
 
 const copyLogs = () => {
@@ -446,17 +429,13 @@ onBeforeUnmount(() => {
           <LumiButton
             variant="primary"
             size="sm"
-            :loading="isUploading"
-            :disabled="filteredLogs.length === 0"
-            @click="uploadLogs"
+            :title="t('console.openLogsPageHint')"
+            @click="openLogsPage"
           >
-            <template #icon><Upload :size="14" /></template>
-            <span>{{ isUploading ? t('console.uploading') : t('console.uploadLogs') }}</span>
+            <template #icon><ScrollText :size="14" /></template>
+            <span>{{ t('console.openLogsPage') }}</span>
           </LumiButton>
         </div>
-      </div>
-      <div v-if="uploadResult" :class="['upload-toast', { error: uploadResultIsError }]">
-        {{ uploadResult }}
       </div>
 
       <div class="console-body">
@@ -1009,22 +988,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.upload-toast {
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  background: var(--lumi-success-light);
-  color: var(--lumi-success);
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.upload-toast.error {
-  background: var(--lumi-accent-light);
-  color: var(--lumi-accent);
 }
 
 .command-bar {

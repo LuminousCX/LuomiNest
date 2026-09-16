@@ -1,12 +1,15 @@
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
 from loguru import logger
 
+from app.core.domain_policy import group_member_user_key
 from app.core.tools import tool_registry
 from app.core.tools.orchestrator import tool_orchestrator
 from app.core.utils import utc_now, to_camel_case
 from app.domains.social.agent_orchestrator import resolve_provider, resolve_model
+from app.engines.memory import build_group_members_block
 from app.infrastructure.database.json_store import groups_store, agents_store
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
@@ -20,6 +23,11 @@ GROUP_CHAT_TOOL_WHITELIST = frozenset({
     "list_files",
     "search_files",
 })
+
+# 站内群聊成员轨命名空间：{social}_{group_id}_{sender_id}（group_member_user_key，
+# 按「人」不按「群」）。写侧本期不接入：无写入路径时成员轨为空，画像块自动省略；
+# 平台 adapter 未来接入真实成员身份后即可复用同一套读取逻辑。
+MEMBER_TRACK_PLATFORM = "social"
 
 
 class GroupChatManager:
@@ -85,15 +93,20 @@ class GroupChatManager:
             }),
         }
 
+        recent_messages = groups_store.get_messages(group_id, limit=20)
         recent_context = self._build_recent_context(
             groups_store.get_messages(group_id, limit=10)
         )
+        # 群友画像条目（§8.5.10 本期实现）：近期发言成员 → 成员轨键，
+        # 供 _respond_as_agent_stream 构建画像块（读空轨时自动省略）
+        member_profiles = self._collect_member_tracks(recent_messages, group_id=group_id)
 
         for member in ai_members:
             persist_msg: dict | None = None
             try:
                 async for event in self._respond_as_agent_stream(
                     group, member, content, recent_context,
+                    member_profiles=member_profiles,
                 ):
                     yield event
                     if event["type"] in ("agent_message_end", "agent_error"):
@@ -131,6 +144,8 @@ class GroupChatManager:
         member: dict,
         user_message: str,
         recent_context: str,
+        *,
+        member_profiles: list[dict] | None = None,
     ) -> AsyncIterator[dict]:
         """单个 Agent 的流式响应（带工具循环）。
 
@@ -210,6 +225,21 @@ class GroupChatManager:
                     "role": "system",
                     "content": f"近期对话上下文:\n{recent_context}",
                 })
+            # 群友画像块（§8.5.10 本期实现）：成员轨 top 事实摘要，
+            # 复用 get_track_engine 读取（build_group_members_block），存取逻辑不复制
+            if member_profiles:
+                try:
+                    member_block = await asyncio.to_thread(
+                        build_group_members_block, member_profiles,
+                    )
+                except Exception as e:
+                    logger.warning(f"[GroupChat] 群友画像块构建失败: {e}")
+                    member_block = ""
+                if member_block:
+                    working_messages.append({
+                        "role": "system",
+                        "content": f"群友画像（来自长期记忆的成员简介）:\n{member_block}",
+                    })
             working_messages.append({"role": "user", "content": user_message})
 
             # 工具配置：白名单过滤
@@ -327,6 +357,37 @@ class GroupChatManager:
             t for t in all_tools
             if t.get("function", {}).get("name") in GROUP_CHAT_TOOL_WHITELIST
         ]
+
+    @staticmethod
+    def _collect_member_tracks(messages: list, *, group_id: str, max_members: int = 10) -> list[dict]:
+        """群消息历史 → 成员轨画像条目（build_group_members_block 的入参）。
+
+        仅收人类发言者（sender_type == "user"，Agent 成员无独立用户轨），
+        按 sender_id 去重，最近发言优先；user_key 归一为
+        ``{social}_{group_id}_{sender_id}``（domain_policy.group_member_user_key）。
+        兼容 camelCase 与 snake_case 消息格式（与 _build_recent_context 一致）。
+        """
+        members: list[dict] = []
+        seen: set[str] = set()
+        for msg in reversed(messages or []):
+            sender_type = msg.get("sender_type") or msg.get("senderType") or "user"
+            if sender_type != "user":
+                continue
+            sender_id = str(msg.get("sender_id") or msg.get("senderId") or "").strip()
+            if not sender_id or sender_id in seen:
+                continue
+            seen.add(sender_id)
+            sender_name = msg.get("sender_name") or msg.get("senderName") or ""
+            members.append({
+                "sender_id": sender_id,
+                "sender_name": str(sender_name),
+                "user_key": group_member_user_key(
+                    MEMBER_TRACK_PLATFORM, str(group_id or ""), sender_id,
+                ),
+            })
+            if len(members) >= max_members:
+                break
+        return members
 
     @staticmethod
     def _build_recent_context(messages: list, max_messages: int = 10) -> str:

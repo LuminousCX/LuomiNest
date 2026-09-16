@@ -1,4 +1,4 @@
-import { BrowserWindow, IpcMainInvokeEvent, app, dialog, type OpenDialogOptions, nativeImage } from 'electron'
+import { BrowserWindow, IpcMainInvokeEvent, app, dialog, net, shell, type OpenDialogOptions, nativeImage } from 'electron'
 import { PATHS } from './paths'
 import { toBackgroundUrl } from './bg-protocol'
 import { configStore } from './config-store'
@@ -6,15 +6,22 @@ import { cacheManager } from './cache-manager'
 import { tabManager, luomiAutomationExecutor } from './browser'
 import { getLumiAuthToken } from './backend/auth-token'
 import { subscribeBackendStage } from './backend'
-import { cloudAuth } from './cloud'
+import { cloudAuth, renewCloudTokensNow } from './cloud'
+import { cloudGroups } from './cloud/cloud-groups'
+import { cloudPrefsSync } from './cloud/prefs-sync'
+import { loadCloudTokens } from './cloud/token-store'
 import { createLuomiNestLogger } from './luomi-logger'
+import { logHub } from './log-hub'
 import { handleIpc } from './typed-ipc'
 import { IpcChannels } from '@shared/ipc-types'
-import type { TTSConfig, STTConfig, ThemeConfig, CloudRoutingMode } from '@shared/ipc-types'
+import type { TTSConfig, STTConfig, ThemeConfig, CloudRoutingMode, OnboardingConfig, LogQueryParams, LogUploadResult } from '@shared/ipc-types'
 import * as fs from 'fs'
 import * as path from 'path'
 
 const logger = createLuomiNestLogger('IpcHandlers')
+
+/** log:upload 请求超时（15s） */
+const LOG_UPLOAD_TIMEOUT_MS = 15_000
 
 let _mainWindow: BrowserWindow | null = null
 
@@ -91,6 +98,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     configStore.setWelcomeCompleted(value)
   })
 
+  handleIpc(IpcChannels.app.invoke.getOnboarding, (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return configStore.getOnboarding()
+  })
+
+  handleIpc(IpcChannels.app.invoke.setOnboarding, (event: IpcMainInvokeEvent, updates: Partial<OnboardingConfig>) => {
+    if (!assertTrustedSender(event)) return
+    if (!updates || typeof updates !== 'object') return
+    const safe: Partial<OnboardingConfig> = {}
+    if (typeof updates.agreementVersion === 'string') safe.agreementVersion = updates.agreementVersion
+    if (typeof updates.privacyVersion === 'string') safe.privacyVersion = updates.privacyVersion
+    if (typeof updates.agreedAt === 'string') safe.agreedAt = updates.agreedAt
+    if (typeof updates.tutorialDone === 'boolean') safe.tutorialDone = updates.tutorialDone
+    configStore.setOnboarding(safe)
+    // 引导同意记录属于云同步的显示偏好白名单，变更后触发节流上传
+    cloudPrefsSync.notifyLocalPrefChange()
+  })
+
   handleIpc(IpcChannels.auth.invoke.getToken, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return getLumiAuthToken()
@@ -103,6 +128,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   handleIpc(IpcChannels.config.invoke.setTheme, (event: IpcMainInvokeEvent, theme: 'light' | 'dark' | 'system') => {
     if (!assertTrustedSender(event)) return
     configStore.setTheme(theme)
+    // 主题属于云同步的显示偏好白名单，变更后触发节流上传
+    cloudPrefsSync.notifyLocalPrefChange()
   })
   handleIpc(IpcChannels.config.invoke.getThemeConfig, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return null
@@ -136,10 +163,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (!assertTrustedSender(event)) return
     if (typeof locale !== 'string' || !locale) return
     configStore.setLocale(locale)
+    // 语言属于云同步的显示偏好白名单，变更后触发节流上传
+    cloudPrefsSync.notifyLocalPrefChange()
   })
   handleIpc(IpcChannels.config.invoke.getAll, (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getAll()
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.getPrefSyncEnabled, (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return configStore.getPrefSyncEnabled()
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.setPrefSyncEnabled, (event: IpcMainInvokeEvent, enabled: boolean) => {
+    if (!assertTrustedSender(event)) return
+    if (typeof enabled !== 'boolean') return
+    configStore.setPrefSyncEnabled(enabled)
   })
 
   handleIpc(IpcChannels.cache.invoke.getSize, (event: IpcMainInvokeEvent) => {
@@ -424,5 +464,166 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   handleIpc(IpcChannels.cloud.invoke.getBackendStatus, async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return null
     return cloudAuth.getBackendCloudStatus()
+  })
+
+  /* ── 云端群聊（cloud-groups；服务端未上线时各通道返回结构化错误，界面降级空态） ── */
+
+  handleIpc(IpcChannels.cloud.invoke.groupList, async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { ok: false, error: { kind: 'not_logged_in' as const } }
+    return cloudGroups.list()
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.groupCreate, async (event: IpcMainInvokeEvent, name: unknown) => {
+    if (!assertTrustedSender(event)) return { ok: false, error: { kind: 'not_logged_in' as const } }
+    if (typeof name !== 'string' || !name.trim()) {
+      return { ok: false, error: { kind: 'server' as const, message: 'invalid group name' } }
+    }
+    return cloudGroups.create(name)
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.groupInvite, async (event: IpcMainInvokeEvent, groupId: unknown, userId: unknown) => {
+    if (!assertTrustedSender(event)) return { ok: false, error: { kind: 'not_logged_in' as const } }
+    if (typeof groupId !== 'string' || typeof userId !== 'string' || !groupId.trim() || !userId.trim()) {
+      return { ok: false, error: { kind: 'server' as const, message: 'invalid groupId/userId' } }
+    }
+    return cloudGroups.invite(groupId, userId)
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.groupMessages, async (event: IpcMainInvokeEvent, query: unknown) => {
+    if (!assertTrustedSender(event)) return { ok: false, error: { kind: 'not_logged_in' as const } }
+    const q = query && typeof query === 'object' ? (query as Record<string, unknown>) : {}
+    if (typeof q.groupId !== 'string' || !q.groupId.trim()) {
+      return { ok: false, error: { kind: 'server' as const, message: 'invalid groupId' } }
+    }
+    const sinceId = typeof q.sinceId === 'string' && q.sinceId ? q.sinceId : '0'
+    const limit = typeof q.limit === 'number' && Number.isFinite(q.limit) ? q.limit : 50
+    return cloudGroups.listMessages(q.groupId, sinceId, limit)
+  })
+
+  handleIpc(IpcChannels.cloud.invoke.groupSend, async (event: IpcMainInvokeEvent, groupId: unknown, content: unknown) => {
+    if (!assertTrustedSender(event)) return { ok: false, error: { kind: 'not_logged_in' as const } }
+    if (typeof groupId !== 'string' || typeof content !== 'string' || !content.trim()) {
+      return { ok: false, error: { kind: 'server' as const, message: 'invalid groupId/content' } }
+    }
+    return cloudGroups.sendMessage(groupId, content)
+  })
+
+  /* ── 统一日志系统（log-hub） ─────────────────────────────────────────── */
+
+  handleIpc(IpcChannels.log.invoke.append, (event: IpcMainInvokeEvent, entries: unknown) => {
+    // fire-and-forget：仅校验调用方与入参形状，不向渲染层返回业务结果
+    if (!assertTrustedSender(event)) return
+    logHub.appendFromRenderer(entries as Array<unknown>)
+  })
+
+  handleIpc(IpcChannels.log.invoke.query, (event: IpcMainInvokeEvent, params: LogQueryParams) => {
+    if (!assertTrustedSender(event)) return { total: 0, entries: [] }
+    return logHub.query(params && typeof params === 'object' ? params : {})
+  })
+
+  handleIpc(IpcChannels.log.invoke.clear, (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return
+    logHub.clear()
+    logger.info('[log:clear] memory log buffer cleared')
+  })
+
+  handleIpc(IpcChannels.log.invoke.export, (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return ''
+    try {
+      return logHub.exportBuffer()
+    } catch (err) {
+      logger.error('[log:export] failed:', err)
+      return ''
+    }
+  })
+
+  handleIpc(IpcChannels.log.invoke.getSegments, (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return []
+    return logHub.getLogSegments()
+  })
+
+  handleIpc(IpcChannels.log.invoke.openDir, async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return false
+    const error = await shell.openPath(PATHS.logs)
+    return !error
+  })
+
+  /**
+   * log:upload —— 诊断日志手动上传（辰汐云端统一链路）。
+   * 资格：仅辰汐通行证登录态可用（未登录返回 not_logged_in）；只由用户在日志页手动点击触发，绝不自动上传。
+   * 隐私：上报前经 log-hub.buildUploadEntries 脱敏——丢弃 data 附件（截图 dataURL 等）、
+   *       message 截断 2000 字符、抹除 Bearer / sk- / lcx_ 令牌片段。
+   * 契约：POST /api/v1/logs/ingest（Bearer 通行证令牌），body
+   *       { source:'luominest-desktop', appVersion, os, entries≤1000 }；
+   *       服务端 Result 信封 code==0 成功，data={reportId, received}；429=限频；413 语义=过大。
+   */
+  handleIpc(IpcChannels.log.invoke.upload, async (event: IpcMainInvokeEvent): Promise<LogUploadResult> => {
+    if (!assertTrustedSender(event)) return { ok: false, reason: 'server' }
+
+    const tokens = loadCloudTokens()
+    if (!tokens?.accessToken) {
+      return { ok: false, reason: 'not_logged_in' }
+    }
+
+    const endpoint = configStore.getLogUploadEndpoint()
+    const entries = logHub.buildUploadEntries()
+
+    const postIngest = async (accessToken: string): Promise<{ status: number; payload: Record<string, unknown> | null }> => {
+      try {
+        const response = await net.fetch(endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            source: 'luominest-desktop',
+            appVersion: app.getVersion(),
+            os: `${process.platform} ${process.arch}`,
+            entries,
+          }),
+          signal: AbortSignal.timeout(LOG_UPLOAD_TIMEOUT_MS),
+        })
+        const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+        return {
+          status: response.status,
+          payload: payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null,
+        }
+      } catch (err) {
+        // 网络失败 / 15s 超时（TimeoutError）/ 其他异常统一归为 network
+        logger.error('[log:upload] request failed:', err instanceof Error ? err.message : err)
+        return { status: 0, payload: null }
+      }
+    }
+
+    let result = await postIngest(tokens.accessToken)
+    if (result.status === 401) {
+      // 令牌过期：走现有续期路径后用新令牌重试一次（与 cloud-groups 同款自愈，不循环轰炸）
+      logger.debug('[log:upload] got 401; renewing tokens and retrying once')
+      const renewed = await renewCloudTokensNow()
+      const next = loadCloudTokens()
+      if (renewed && next?.accessToken) {
+        result = await postIngest(next.accessToken)
+      }
+    }
+
+    if (result.status === 0) return { ok: false, reason: 'network' }
+    if (result.status === 401) return { ok: false, reason: 'unauthorized', status: result.status }
+    if (result.status === 429) return { ok: false, reason: 'rate_limited', status: result.status }
+    if (result.status === 413) return { ok: false, reason: 'too_large', status: result.status }
+    if (result.status < 200 || result.status >= 300) {
+      return { ok: false, reason: 'server', status: result.status }
+    }
+
+    // Result 信封解析：code!=0 视为业务失败（HTTP 可能仍是 200）
+    const code = typeof result.payload?.code === 'number' ? result.payload.code : 0
+    if (code !== 0) {
+      logger.warn(`[log:upload] server rejected with envelope code=${code}`)
+      return { ok: false, reason: 'server', status: result.status }
+    }
+    const data =
+      result.payload?.data && typeof result.payload.data === 'object' && !Array.isArray(result.payload.data)
+        ? (result.payload.data as Record<string, unknown>)
+        : (result.payload ?? {})
+    const reportId = typeof data.reportId === 'string' && data.reportId ? data.reportId : undefined
+    logger.info(`[log:upload] uploaded ${entries.length} entries (reportId=${reportId ?? '-'})`)
+    return { ok: true, reportId, status: result.status }
   })
 }

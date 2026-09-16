@@ -9,9 +9,11 @@ import {
   Hash,
   MoreVertical,
   Trash2,
+  Cloud,
 } from 'lucide-vue-next'
 import SearchInput from '../common/SearchInput.vue'
 import type { AgentProfile, GroupInfo } from '../../types'
+import type { CloudGroupVo } from '@shared/ipc-types'
 import type { ContactType } from './types'
 
 const { t } = useI18n()
@@ -23,14 +25,20 @@ const props = defineProps<{
   selectedType: ContactType | null
   selectedAgentId: string | null
   selectedGroupId: string | null
+  /** 云端群（服务端未上线时 state='unavailable'，展示降级空态） */
+  cloudGroups: CloudGroupVo[]
+  cloudState: 'idle' | 'loading' | 'ready' | 'unavailable'
+  selectedCloudGroupId: string | null
 }>()
 
 const emit = defineEmits<{
   'update:searchQuery': [query: string]
   'select-agent': [agent: AgentProfile]
   'select-group': [group: GroupInfo]
+  'select-cloud-group': [group: CloudGroupVo]
   'create-agent': []
   'create-group': []
+  'create-cloud-group': []
   'delete-group': [groupId: string]
   'edit-agent': [agent: AgentProfile]
   'market-agent-installed': [agentId: string]
@@ -52,6 +60,27 @@ const filteredGroups = computed(() => {
   const q = props.searchQuery.toLowerCase()
   return props.groups.filter(g => g.name.toLowerCase().includes(q))
 })
+
+const filteredCloudGroups = computed(() => {
+  if (!props.searchQuery) return props.cloudGroups
+  const q = props.searchQuery.toLowerCase()
+  return props.cloudGroups.filter(g => g.name.toLowerCase().includes(q))
+})
+
+/** 云端群区域提示：未开通 / 未登录 */
+const cloudHint = computed(() => {
+  if (props.cloudState === 'unavailable') return t('workspace.cloud.unavailable')
+  if (props.cloudState === 'idle') return t('workspace.cloud.notLoggedIn')
+  return ''
+})
+
+/** 云端群角色 → 本地化文案（未知角色原样展示） */
+const cloudRoleLabel = (role: string): string => {
+  if (role === 'owner') return t('workspace.cloud.roleOwner')
+  if (role === 'admin') return t('workspace.cloud.roleAdmin')
+  if (role === 'member') return t('workspace.cloud.roleMember')
+  return role || t('workspace.cloud.roleMember')
+}
 </script>
 
 <template>
@@ -128,7 +157,39 @@ const filteredGroups = computed(() => {
         </div>
       </div>
 
-      <div v-if="filteredAgents.length === 0 && filteredGroups.length === 0" class="contact-empty">
+      <!-- 云端群分组（服务端未上线时降级为提示行，不报错） -->
+      <div class="contact-section">
+        <div class="contact-section-label">
+          <Cloud :size="12" />
+          <span>{{ t('workspace.cloud.sectionLabel') }}</span>
+          <span class="section-count">{{ filteredCloudGroups.length }}</span>
+          <button class="section-add-btn" :title="t('workspace.cloud.newGroup')" @click="emit('create-cloud-group')">
+            <Plus :size="12" />
+          </button>
+        </div>
+        <div
+          v-for="group in filteredCloudGroups"
+          :key="group.id"
+          :class="['contact-item', { active: selectedType === 'cloud-group' && selectedCloudGroupId === group.id }]"
+          @click="emit('select-cloud-group', group)"
+        >
+          <div class="contact-avatar cloud-avatar">
+            <Cloud :size="16" />
+          </div>
+          <div class="contact-info">
+            <div class="contact-top-row">
+              <span class="contact-name">{{ group.name }}</span>
+              <span class="contact-meta">{{ group.memberCount }}</span>
+            </div>
+            <span class="contact-desc">{{ cloudRoleLabel(group.myRole) }}</span>
+          </div>
+        </div>
+        <div v-if="cloudHint && filteredCloudGroups.length === 0" class="contact-empty-mini">
+          {{ cloudHint }}
+        </div>
+      </div>
+
+      <div v-if="filteredAgents.length === 0 && filteredGroups.length === 0 && filteredCloudGroups.length === 0" class="contact-empty">
         <Bot :size="28" />
         <p>{{ searchQuery ? t('workspace.noMatchContacts') : t('workspace.noContacts') }}</p>
       </div>
@@ -267,6 +328,11 @@ const filteredGroups = computed(() => {
 }
 
 .contact-avatar.group-avatar {
+  background: var(--lumi-brand-glow);
+  color: var(--lumi-brand);
+}
+
+.contact-avatar.cloud-avatar {
   background: var(--lumi-brand-glow);
   color: var(--lumi-brand);
 }

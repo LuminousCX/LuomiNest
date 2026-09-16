@@ -63,18 +63,6 @@ class SystemLogEntry(BaseModel):
     extra: dict | None = None
 
 
-class LogUploadRequest(BaseModel):
-    logs: list[SystemLogEntry]
-    uploaded_by: str = "frontend"
-    session_id: str | None = None
-
-
-class LogUploadResponse(BaseModel):
-    upload_id: str
-    received_count: int
-    status: str
-
-
 class ExecuteCommandRequest(BaseModel):
     command: str
     description: str = ""
@@ -383,25 +371,8 @@ async def get_system_logs(
     return result[offset : offset + limit]
 
 
-@router.post("/logs/upload", response_model=LogUploadResponse)
-async def upload_logs(req: LogUploadRequest):
-    """接收前端上传的日志并存入存储"""
-    upload_id = str(uuid.uuid4())[:12]
-    received = len(req.logs)
-
-    for log_entry in req.logs:
-        _add_log(log_entry)
-
-    logger.info(
-        f"[Console] Logs uploaded: upload_id={upload_id}, "
-        f"count={received}, source={req.uploaded_by}"
-    )
-    return LogUploadResponse(
-        upload_id=upload_id,
-        received_count=received,
-        status="accepted",
-    )
-
+# 说明：原 POST /console/logs/upload（把前端日志回环塞进本机内存 _log_store）已移除。
+# 日志上传走辰汐云端统一链路：桌面端 IPC log:upload → POST {logs 端点}/api/v1/logs/ingest。
 
 @router.delete("/logs")
 async def clear_system_logs():

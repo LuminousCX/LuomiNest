@@ -7,6 +7,7 @@ from loguru import logger
 
 from app.core.domain_policy import (
     MAIN_AGENT_ID,
+    KIND_PLATFORM,
     LEGACY_MAIN_AGENT_ID as _LEGACY_MAIN_AGENT_ID,
     TRACK_OWNER,
     TRACK_USERS,
@@ -25,6 +26,7 @@ from app.engines.memory.memory_engine import (
     _REINFORCEMENT_HINT,
     _REINFORCEMENT_PATTERNS_EN,
     _REINFORCEMENT_PATTERNS_ZH,
+    build_group_members_block,
 )
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.services.distillation_service import distillation_service
@@ -419,19 +421,29 @@ Examples:
         domain: str | None = None,
         scene: str = "",
         user_key: str = "",
+        group_members: list[dict] | None = None,
     ) -> list[dict]:
         """记忆注入（读），由 DomainPolicy.memory_read 判定（B7，§9 记忆策略矩阵）。
 
         - workbench（含 avatar 场景）：注入 owner 轨
-        - platform:{instId}：owner 优先 + 该用户 users/{user_key} 记忆（§8.5.5 注入顺序）
+        - platform:{instId}：owner 优先 + 说话成员 users/{track_user_key} 记忆
+          （私聊 = conversation.user_key；群聊 = 群成员轨，§8.5.10 本期实现）
         - agent:{id} / 未知域：不注入
         domain 缺省时按 agent_id 兜底推导（legacy 行为兼容）。
+
+        Args:
+            group_members: 群聊在场成员条目（不含说话成员），每项
+                {"sender_id", "sender_name", "user_key"}；平台域会据此叠加
+                「群友画像块」（每人 top 事实摘要，读不受写开关限制）。
+                私聊/工作台不传，行为与旧版完全一致。
         """
         policy = resolve_domain_policy(
             domain, scene=scene, agent_id=agent_id, user_key=user_key,
         )
         if not policy.memory_read:
             return messages
+        # 用户轨键以 policy 解析结果为准（群聊成员轨由 DomainPolicy 归一）
+        track_key = policy.track_user_key or user_key
         try:
             # query-aware：用用户最新消息作为 query 优化事实检索
             query = self.get_user_query(messages)
@@ -446,17 +458,28 @@ Examples:
             if owner_ctx:
                 blocks.append(owner_ctx)
 
-            # ② users 轨（平台私聊用户记忆，owner 之后注入）
-            if policy.memory_track == TRACK_USERS and user_key:
+            # ② users 轨（平台私聊用户 / 群聊说话成员记忆，owner 之后注入）
+            if policy.memory_track == TRACK_USERS and track_key:
                 try:
-                    user_engine = get_track_engine(TRACK_USERS, user_key)
+                    user_engine = get_track_engine(TRACK_USERS, track_key)
                     user_ctx = await asyncio.to_thread(
                         user_engine.build_context_sync, query=query, conversation_id=thread_id
                     )
                     if user_ctx:
                         blocks.append(f"[当前用户记忆]\n{user_ctx}")
                 except Exception as user_err:
-                    logger.warning(f"[Memory] User track read failed: user_key={user_key}, error={user_err}")
+                    logger.warning(f"[Memory] User track read failed: user_key={track_key}, error={user_err}")
+
+            # ③ 群友画像块（§8.5.10 本期实现）：在场成员轨 top 事实摘要。
+            # 读不受 platform_memory_write 开关限制（平台域读语义一致，写闸门在写侧）
+            if group_members and policy.kind == KIND_PLATFORM:
+                member_block = await asyncio.to_thread(
+                    build_group_members_block,
+                    group_members,
+                    exclude_keys={track_key} if track_key else None,
+                )
+                if member_block:
+                    blocks.append(f"[群友画像]\n{member_block}")
 
             if not blocks:
                 logger.info(f"[Memory] No memory context to inject, thread={thread_id}")

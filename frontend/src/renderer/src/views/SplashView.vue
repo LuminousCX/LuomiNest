@@ -49,6 +49,26 @@ const stopProgressAnimation = (): void => {
   }
 }
 
+/**
+ * 解析启动恢复目标：welcomeCompleted 后优先回到 config.lastActiveRoute（上次停留页面）。
+ * 仅接受路由表中真实存在的路径，且排除会与守卫互相弹跳的过渡路由
+ * （'/' 重定向 /welcome；welcomeCompleted 时 /welcome 又会被守卫弹回 /splash 造成死循环）。
+ * 无有效值时回落 /workspace（鉴权仍由 router 守卫兜底）。
+ */
+const BOUNCE_ROUTES = new Set(['/', '/welcome', '/splash'])
+
+const resolveResumeTarget = async (): Promise<string> => {
+  try {
+    const saved = (await window.api?.config?.getAll())?.lastActiveRoute
+    if (saved && !BOUNCE_ROUTES.has(saved) && router.getRoutes().some((r) => r.path === saved)) {
+      return saved
+    }
+  } catch {
+    // 配置读取失败回落默认目标
+  }
+  return '/workspace'
+}
+
 const startLoading = async (): Promise<void> => {
   backendStatus.value = 'loading'
   startProgressAnimation()
@@ -60,7 +80,11 @@ const startLoading = async (): Promise<void> => {
     stopProgressAnimation()
     progressPercent.value = 100
     statusKey.value = 'splash.ready'
-    setTimeout(() => router.push('/login'), 400)
+    // 不再硬编码跳 /login：进入受保护主界面，由 router 守卫决定去向
+    // （welcomeCompleted 为真；未认证会被守卫挡去 /login）
+    // 恢复目标优先取 config.lastActiveRoute（见 resolveResumeTarget）
+    const target = await resolveResumeTarget()
+    setTimeout(() => router.push(target), 400)
   } else {
     stopProgressAnimation()
     progressPercent.value = 100
@@ -99,7 +123,9 @@ const retryBackend = async (): Promise<void> => {
     stopProgressAnimation()
     progressPercent.value = 100
     statusKey.value = 'splash.ready'
-    setTimeout(() => router.push('/login'), 400)
+    // 同 startLoading：恢复目标优先取 config.lastActiveRoute，守卫继续兜底鉴权
+    const target = await resolveResumeTarget()
+    setTimeout(() => router.push(target), 400)
   } else {
     stopProgressAnimation()
     progressPercent.value = 100
@@ -110,7 +136,8 @@ const retryBackend = async (): Promise<void> => {
 const skipToLogin = (): void => {
   if (pollTimer) clearTimeout(pollTimer)
   stopProgressAnimation()
-  router.push('/login')
+  // 跳过等待同样进入受保护主界面，由 router 守卫决定去向
+  router.push('/workspace')
 }
 
 // 订阅主进程后端启动状态，实时更新文案

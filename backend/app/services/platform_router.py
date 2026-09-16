@@ -6,6 +6,7 @@ import uuid
 from loguru import logger
 
 from app.core.utils import AsyncKeyLocks, extract_llm_text, utc_now
+from app.core.domain_policy import group_member_user_key
 from app.runtime.platform.base import PlatformMessage, PlatformResponse, get_standard_tools_for_platform
 from app.runtime.platform.session import (
     MAIN_AGENT_ID,
@@ -221,6 +222,16 @@ class LuomiNestPlatformRouter:
             )
             return None
 
+        # 群成员轨（§8.5.10 本期实现）：群消息带 sender_id（PlatformMessage.user_id）
+        # 时解析 {platform}_{instance_id}_{sender_id} 成员轨（按「人」不按「群」）；
+        # 私聊沿用 conv.user_key，无 sender_id 的群消息维持现状（不建轨）
+        member_user_key = ""
+        if message.is_group and (message.user_id or "").strip():
+            member_user_key = group_member_user_key(message.platform, instance_id, message.user_id)
+        effective_user_key = conv.get("user_key") or member_user_key
+        # 在场其他成员（近期群消息去重，不含当前说话者）→ 群友画像块
+        group_members = self._collect_group_members(conv, message, instance_id)
+
         provider, model, _system_prompt, temperature, max_tokens = self._resolve_instance_model(instance_id)
 
         try:
@@ -258,7 +269,8 @@ class LuomiNestPlatformRouter:
         messages = [{"role": "system", "content": full_system}] + history_messages + [user_message]
 
         messages = context_service.inject_timestamp_prompt(messages)
-        # 记忆注入（DomainPolicy，§9）：平台域读 owner（优先）+ 该用户 users/{user_key} 记忆
+        # 记忆注入（DomainPolicy，§9）：平台域读 owner（优先）+ 说话成员用户轨
+        # （私聊 = conv.user_key；群聊 = 群成员轨 §8.5.10）+ 在场成员群友画像块
         messages = await context_service.inject_memory(
             messages,
             agent_id=MAIN_AGENT_ID,
@@ -267,7 +279,8 @@ class LuomiNestPlatformRouter:
             llm_adapter=llm_adapter,
             domain=conv.get("domain") or f"platform:{instance_id}",
             scene=conv.get("scene") or "platform",
-            user_key=conv.get("user_key") or "",
+            user_key=effective_user_key,
+            group_members=group_members,
         )
 
         # 平台对话使用更激进的 70% 压缩阈值
@@ -461,12 +474,14 @@ class LuomiNestPlatformRouter:
         )
 
         # 记忆写入（M5=C）：每平台实例独立开关 inst.config["memory_write"]，默认关（§9）；
-        # 开启后提炼写入 users/{user_key}/ 用户轨道，不污染主人记忆（§8.5.5）
+        # 开启后提炼写入 users/{track_user_key}/ 用户轨（私聊 = conv.user_key；
+        # 群聊 = 说话成员轨，关于某群友的事实写进该群友的轨道而非丢弃，§8.5.10），
+        # 不污染主人记忆（§8.5.5）
         memory_write_enabled = bool(inst.config.get("memory_write", False)) if inst else False
         self._spawn_background_task(self._schedule_memory_update(
             messages, conv_id, assistant_text,
             domain=conv.get("domain") or f"platform:{instance_id}",
-            user_key=conv.get("user_key") or "",
+            user_key=effective_user_key,
             memory_write=memory_write_enabled,
         ))
 
@@ -475,6 +490,42 @@ class LuomiNestPlatformRouter:
             message_type="text",
             reply_to=message.message_id,
         )
+
+    @staticmethod
+    def _collect_group_members(
+        conv: dict,
+        message: PlatformMessage,
+        instance_id: str,
+        *,
+        max_members: int = 10,
+    ) -> list[dict]:
+        """从会话近期群消息收集在场成员（不含当前说话者）→ 群友画像条目。
+
+        消息 platform.user_id 为发送者标识（各群聊 adapter 均已填充），
+        platform.sender_name 为昵称；按「人」去重（同一 sender_id 保留最近
+        昵称），最近发言的成员优先（超出 max_members 时截断）。
+        """
+        if not message.is_group:
+            return []
+        members: list[dict] = []
+        seen: set[str] = set()
+        speaker_id = (message.user_id or "").strip()
+        for msg in reversed(conv.get("messages", [])):
+            meta = msg.get("platform") or {}
+            if not meta.get("is_group"):
+                continue
+            sender_id = str(meta.get("user_id", "") or "").strip()
+            if not sender_id or sender_id == speaker_id or sender_id in seen:
+                continue
+            seen.add(sender_id)
+            members.append({
+                "sender_id": sender_id,
+                "sender_name": str(meta.get("sender_name", "") or ""),
+                "user_key": group_member_user_key(message.platform, instance_id, sender_id),
+            })
+            if len(members) >= max_members:
+                break
+        return members
 
     @staticmethod
     def _build_platform_context(message: PlatformMessage) -> str:

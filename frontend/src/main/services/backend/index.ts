@@ -5,6 +5,8 @@ import { existsSync } from 'fs'
 import { platform } from 'os'
 import { PATHS } from '../paths'
 import { createLuomiNestLogger } from '../luomi-logger'
+import { withHubSource } from '../log-hub'
+import type { LogLevel } from '@shared/ipc-types'
 import { getLumiAuthToken } from './auth-token'
 
 const logger = createLuomiNestLogger('Backend')
@@ -50,14 +52,20 @@ const routeBackendLog = (data: Buffer, source: 'stdout' | 'stderr') => {
   const text = data.toString('utf8').trim()
   if (!text) return
 
+  // 统一日志：转发 electron-log 的同时以 source='backend' 收录进 log-hub。
+  // 用 withHubSource 打标，避免该条日志被 electron-log hook 以 'main' 来源重复收录。
+  const logTo = (level: LogLevel, fn: (msg: string) => void) => {
+    withHubSource('backend', () => fn(text))
+  }
+
   if (source === 'stdout') {
-    logger.info(text)
+    logTo('info', logger.info)
     return
   }
 
   const match = text.match(LOG_LEVEL_PATTERN)
   if (!match) {
-    logger.info(text)
+    logTo('info', logger.info)
     return
   }
 
@@ -66,17 +74,17 @@ const routeBackendLog = (data: Buffer, source: 'stdout' | 'stderr') => {
     case 'DEBUG':
     case 'INFO':
     case 'SUCCESS':
-      logger.info(text)
+      logTo('info', logger.info)
       break
     case 'WARNING':
-      logger.warn(text)
+      logTo('warn', logger.warn)
       break
     case 'ERROR':
     case 'CRITICAL':
-      logger.error(text)
+      logTo('error', logger.error)
       break
     default:
-      logger.info(text)
+      logTo('info', logger.info)
   }
 }
 
@@ -188,6 +196,8 @@ export const startBackend = async (): Promise<boolean> => {
     PYTHONUNBUFFERED: '1',
     PYTHONIOENCODING: 'utf-8',
     LUOMINEST_DATA_DIR: PATHS.backendData,
+    // 统一日志：后端 loguru 据此把日志落盘到 userData/Logs/backend.log（打包与 dev 均传）
+    LUOMINEST_LOG_DIR: PATHS.logs,
   }
 
   if (isDev) {

@@ -9,13 +9,8 @@ import {
 } from 'vue'
 import type { Component } from 'vue'
 import {
-  Send,
   ChevronDown,
   Globe,
-  MousePointerClick,
-  Code2,
-  Camera,
-  Bot,
   Tv,
   Video,
   Search,
@@ -26,6 +21,11 @@ import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
+/**
+ * 浏览器首页（只读化，2026-09）：仅保留搜索入口与常用网站。
+ * 原开发者工具快捷操作（脚本/DOM/点击/填表/AI 搜索）已随浏览器只读化移除。
+ */
+
 // --- 类型定义 ---
 interface SearchEngine {
   id: string
@@ -33,13 +33,6 @@ interface SearchEngine {
   icon: Component
   url: string
   color: string
-}
-
-interface QuickAction {
-  icon: Component
-  label: string
-  color: string
-  action: string
 }
 
 interface Website {
@@ -54,8 +47,7 @@ const searchEngines: SearchEngine[] = [
   { id: 'bing', name: 'Bing', icon: Search, url: 'https://www.bing.com/search?q=', color: 'var(--lumi-brand)' },
   { id: 'google', name: 'Google', icon: Globe, url: 'https://www.google.com/search?q=', color: 'var(--lumi-info)' },
   { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=', color: 'var(--lumi-sky)' },
-  { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: 'var(--lumi-danger)' },
-  { id: 'ai', name: 'AI', icon: Bot, url: '', color: 'var(--lumi-accent)' }
+  { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: 'var(--lumi-danger)' }
 ]
 
 const websites: Website[] = [
@@ -68,14 +60,6 @@ const websites: Website[] = [
   { name: 'YouTube', initial: 'Y', url: 'https://www.youtube.com', className: 'ws-youtube' },
   { name: '知乎', initial: '知', url: 'https://www.zhihu.com', className: 'ws-zhihu' }
 ]
-
-const quickActions = computed<QuickAction[]>(() => [
-  { icon: Code2, label: t('browser.action.script'), color: 'var(--task-sky)', action: 'script' },
-  { icon: Camera, label: t('browser.action.screenshot'), color: 'var(--lumi-info)', action: 'screenshot' },
-  { icon: MousePointerClick, label: t('browser.action.click'), color: 'var(--lumi-success)', action: 'click' },
-  { icon: Globe, label: t('browser.action.dom'), color: 'var(--lumi-amber)', action: 'dom' },
-  { icon: Send, label: t('browser.action.fill'), color: 'var(--lumi-accent)', action: 'fill' }
-])
 
 // --- 状态 ---
 const searchInput = ref('')
@@ -120,7 +104,6 @@ const getWsColor = (className: string): string => wsColorMap[className] ?? 'var(
 // --- 事件 ---
 const emit = defineEmits<{
   search: [url: string]
-  action: [action: string]
 }>()
 
 const updateClock = () => {
@@ -165,11 +148,7 @@ const handleSearch = () => {
   if (!query) return
   isSearching.value = true
 
-  if (selectedEngine.value.id === 'ai') {
-    emit('action', 'ai-search')
-  } else {
-    emit('search', selectedEngine.value.url + encodeURIComponent(query))
-  }
+  emit('search', selectedEngine.value.url + encodeURIComponent(query))
 
   if (searchResetTimer) clearTimeout(searchResetTimer)
   searchResetTimer = window.setTimeout(() => {
@@ -254,7 +233,7 @@ onBeforeUnmount(() => {
 
             <input
               v-model="searchInput"
-              :placeholder="selectedEngine.id === 'ai' ? t('browser.searchPlaceholderAi') : t('browser.searchPlaceholder', { name: selectedEngine.name })"
+              :placeholder="t('browser.searchPlaceholder', { name: selectedEngine.name })"
               class="search-input"
               @focus="isSearchFocused = true"
               @blur="isSearchFocused = false"
@@ -321,29 +300,6 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <!-- ==================== 开发者工具 ==================== -->
-        <section class="home-section home-stagger-enter" style="animation-delay: 240ms">
-          <header class="section-head">
-            <span class="section-marker section-marker--accent" />
-            <h2 class="section-label">{{ t('browser.section.devtools') }}</h2>
-          </header>
-          <div class="home-card">
-            <div class="tiles-grid tiles-grid--5">
-              <button
-                v-for="action in quickActions"
-                :key="action.label"
-                class="home-tile"
-                :style="{ '--tile-accent': action.color }"
-                @click="emit('action', action.action)"
-              >
-                <span class="home-tile-icon home-tile-icon--gradient" :style="{ '--tile-accent': action.color }">
-                  <component :is="action.icon" :size="18" />
-                </span>
-                <span class="home-tile-label">{{ action.label }}</span>
-              </button>
-            </div>
-          </div>
-        </section>
       </div>
     </div>
   </div>

@@ -8,10 +8,18 @@ import type {
   BackendStageEvent,
   CloudAuthStatus,
   CloudRoutingMode,
+  OnboardingConfig,
+  RemotePrefsAppliedEvent,
   ThemeConfig,
   ElectronApi,
   IpcInvokeChannel,
   IpcSendChannel,
+  LogEntry,
+  LogQueryParams,
+  LogQueryResult,
+  LogSegmentInfo,
+  LogUploadResult,
+  CloudGroupMessageQuery,
 } from '@shared/ipc-types'
 
 export interface Tab {
@@ -51,6 +59,13 @@ const api: ElectronApi = {
     getPaths: () => invoke(IpcChannels.app.invoke.getPaths),
     getWelcomeCompleted: () => invoke(IpcChannels.app.invoke.getWelcomeCompleted),
     setWelcomeCompleted: (value: boolean) => invoke(IpcChannels.app.invoke.setWelcomeCompleted, value),
+    getOnboarding: () => invoke(IpcChannels.app.invoke.getOnboarding),
+    setOnboarding: (updates: Partial<OnboardingConfig>) => invoke(IpcChannels.app.invoke.setOnboarding, updates),
+    onRemotePrefsApplied: (callback: (data: RemotePrefsAppliedEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, data: RemotePrefsAppliedEvent) => callback(data)
+      ipcRenderer.on(IpcChannels.app.push.remotePrefsApplied, handler)
+      return () => ipcRenderer.removeListener(IpcChannels.app.push.remotePrefsApplied, handler as never)
+    },
     platform: process.platform as 'darwin' | 'win32' | 'linux' | string,
   },
 
@@ -185,10 +200,34 @@ const api: ElectronApi = {
     setRoutingMode: (mode: CloudRoutingMode) => invoke(IpcChannels.cloud.invoke.setRoutingMode, mode),
     fetchModels: () => invoke(IpcChannels.cloud.invoke.fetchModels),
     getBackendStatus: () => invoke(IpcChannels.cloud.invoke.getBackendStatus),
+    getPrefSyncEnabled: () => invoke(IpcChannels.cloud.invoke.getPrefSyncEnabled),
+    setPrefSyncEnabled: (enabled: boolean) => invoke(IpcChannels.cloud.invoke.setPrefSyncEnabled, enabled),
+    // 云端群聊（服务端未上线时返回 { ok:false, error:{kind:'unavailable'} }，界面降级空态）
+    groupList: () => invoke(IpcChannels.cloud.invoke.groupList),
+    groupCreate: (name: string) => invoke(IpcChannels.cloud.invoke.groupCreate, name),
+    groupInvite: (groupId: string, userId: string) => invoke(IpcChannels.cloud.invoke.groupInvite, groupId, userId),
+    groupMessages: (query: CloudGroupMessageQuery) => invoke(IpcChannels.cloud.invoke.groupMessages, query),
+    groupSend: (groupId: string, content: string) => invoke(IpcChannels.cloud.invoke.groupSend, groupId, content),
     onStatus: (callback: (data: CloudAuthStatus) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, data: CloudAuthStatus) => callback(data)
       ipcRenderer.on(IpcChannels.cloud.push.status, handler)
       return () => ipcRenderer.removeListener(IpcChannels.cloud.push.status, handler as never)
+    }
+  },
+
+  log: {
+    append: (entries: Array<Omit<LogEntry, 'seq' | 'source'>>) =>
+      invoke(IpcChannels.log.invoke.append, entries),
+    query: (params: LogQueryParams) => invoke(IpcChannels.log.invoke.query, params),
+    clear: () => invoke(IpcChannels.log.invoke.clear),
+    exportLogs: () => invoke(IpcChannels.log.invoke.export),
+    getSegments: () => invoke(IpcChannels.log.invoke.getSegments),
+    openDir: () => invoke(IpcChannels.log.invoke.openDir),
+    upload: () => invoke(IpcChannels.log.invoke.upload),
+    onAppended: (callback: (entries: LogEntry[]) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, entries: LogEntry[]) => callback(entries)
+      ipcRenderer.on(IpcChannels.log.push.onAppended, handler)
+      return () => ipcRenderer.removeListener(IpcChannels.log.push.onAppended, handler as never)
     }
   }
 }

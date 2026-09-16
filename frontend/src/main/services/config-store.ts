@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { PATHS } from './paths'
-import type { ThemeConfig, CloudRoutingMode } from '@shared/ipc-types'
+import type { ThemeConfig, CloudRoutingMode, OnboardingConfig } from '@shared/ipc-types'
 
 interface WindowBounds {
   x?: number
@@ -18,14 +18,35 @@ interface CloudConfig {
   baseUrl: string
   /** 云端资源路由模式 */
   routingMode: CloudRoutingMode
+  /**
+   * 显示偏好多端同步开关（默认开）。
+   * 隐私原则：仅同步 locale / theme / 协议同意记录等显示偏好（最小必要），
+   * 绝不同步聊天记录、记忆、皮套资产、平台凭证或任何密钥。
+   */
+  prefSyncEnabled: boolean
+}
+
+/** 统一日志上传配置（用户显式覆盖端点用；空串 = 使用内置默认端点 LOG_INGEST_ENDPOINT_PROD） */
+interface LogUploadConfig {
+  endpoint: string
 }
 
 /* ── 云端公开服务端点（公开服务域名，随分发是允许且必需的；不含任何密钥/内部路径）── */
 const CLOUD_ISSUER_PROD = 'https://passport.luminouschenxi.com'
 const CLOUD_BASE_URL_PROD = 'https://luominest.luminouschenxi.com'
+/** 诊断日志上报端点（辰汐云端日志接入服务；与 CLOUD_BASE_URL_PROD 同风格的公开服务域名） */
+export const LOG_INGEST_ENDPOINT_PROD = 'https://logs.luminouschenxi.com/api/v1/logs/ingest'
 /** 旧版默认本机端点（历史默认值，仅用于迁移检测） */
 const CLOUD_ISSUER_LEGACY = 'http://localhost:8080'
 const CLOUD_BASE_URL_LEGACY = 'http://localhost:18001'
+
+/** 首次启动引导的协议同意记录默认值（协议门禁不可跳过，未同意前不进入主界面） */
+const DEFAULT_ONBOARDING: OnboardingConfig = {
+  agreementVersion: '',
+  privacyVersion: '',
+  agreedAt: '',
+  tutorialDone: false,
+}
 
 interface AppConfig {
   theme: 'light' | 'dark' | 'system'
@@ -63,6 +84,10 @@ interface AppConfig {
   locale: string
   /** 云端通行证接入配置 */
   cloud: CloudConfig
+  /** 首次启动引导记录：协议/隐私同意版本与时间、新手教程完成标记 */
+  onboarding: OnboardingConfig
+  /** 统一日志上传端点（log:upload 使用） */
+  logUpload: LogUploadConfig
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -104,6 +129,11 @@ const DEFAULT_CONFIG: AppConfig = {
     issuer: CLOUD_ISSUER_PROD,
     baseUrl: CLOUD_BASE_URL_PROD,
     routingMode: 'off',
+    prefSyncEnabled: true,
+  },
+  onboarding: DEFAULT_ONBOARDING,
+  logUpload: {
+    endpoint: '',
   },
 }
 
@@ -151,6 +181,8 @@ const loadConfig = (): AppConfig => {
       stt: { ...DEFAULT_CONFIG.stt, ...parsed.stt },
       window: { ...DEFAULT_CONFIG.window, ...parsed.window },
       cloud: resolveCloudConfig(parsed.cloud),
+      onboarding: { ...DEFAULT_ONBOARDING, ...parsed.onboarding },
+      logUpload: { ...DEFAULT_CONFIG.logUpload, ...parsed.logUpload },
     }
     // 旧默认端点升级后回写落盘，避免下次启动重复迁移（dev 环境变量覆盖不落盘）
     if (!hasCloudEnvOverride() && JSON.stringify(cachedConfig.cloud) !== JSON.stringify(parsed.cloud)) {
@@ -226,6 +258,21 @@ export const configStore = {
     configStore.set('welcomeCompleted', value)
   },
 
+  getOnboarding: (): OnboardingConfig => loadConfig().onboarding,
+  /** 部分更新引导记录（合并写入，避免覆盖未传字段） */
+  setOnboarding: (updates: Partial<OnboardingConfig>): void => {
+    const config = loadConfig()
+    config.onboarding = { ...config.onboarding, ...updates }
+    saveConfig(config)
+  },
+
+  getPrefSyncEnabled: (): boolean => loadConfig().cloud.prefSyncEnabled !== false,
+  setPrefSyncEnabled: (enabled: boolean): void => {
+    const config = loadConfig()
+    config.cloud = { ...config.cloud, prefSyncEnabled: enabled }
+    saveConfig(config)
+  },
+
   getCloseToTrayPrompted: (): boolean => loadConfig().closeToTrayPrompted,
   setCloseToTrayPrompted: (value: boolean): void => {
     configStore.set('closeToTrayPrompted', value)
@@ -243,6 +290,21 @@ export const configStore = {
     saveConfig(config)
   },
 
+  getLogUploadConfig: (): LogUploadConfig => loadConfig().logUpload,
+  /**
+   * 诊断日志上报端点解析：用户显式配置的 logUpload.endpoint 优先（本地联调可指向自建服务），
+   * 未配置时使用内置生产默认端点（LOG_INGEST_ENDPOINT_PROD）。
+   */
+  getLogUploadEndpoint: (): string => {
+    const configured = loadConfig().logUpload.endpoint.trim()
+    return configured || LOG_INGEST_ENDPOINT_PROD
+  },
+  setLogUploadEndpoint: (endpoint: string): void => {
+    const config = loadConfig()
+    config.logUpload = { ...config.logUpload, endpoint: endpoint.trim() }
+    saveConfig(config)
+  },
+
   getAll: (): AppConfig => loadConfig(),
 
   reset: (): void => {
@@ -251,4 +313,4 @@ export const configStore = {
   },
 }
 
-export type { AppConfig, WindowBounds, CloudConfig }
+export type { AppConfig, WindowBounds, CloudConfig, LogUploadConfig }

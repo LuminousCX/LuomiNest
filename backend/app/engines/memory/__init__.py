@@ -12,6 +12,7 @@ from .memory_engine import (
     get_memory_engine,
     get_track_engine,
     get_conversation_store,
+    build_group_members_block,
     _engines,
     _track_engines,
 )
@@ -61,6 +62,7 @@ __all__ = [
     "get_memory_engine",
     "get_track_engine",
     "get_conversation_store",
+    "build_group_members_block",
     "init_memory",
     "shutdown_memory",
 ]

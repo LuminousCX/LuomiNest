@@ -28,13 +28,43 @@ def setup_console_encoding():
             # Best-effort on Windows: if code page update fails, continue startup.
             logger.debug(f"Failed to set Windows console code page to UTF-8: {e}")
 
+LOG_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+)
+
+
 def setup_logging():
     logger.remove()
     logger.add(
         sys.stderr,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        format=LOG_FORMAT,
         level="DEBUG" if "--debug" in sys.argv else "INFO"
     )
+    # 统一日志系统：文件落盘 + 5MB 轮转 + 保留 5 份。
+    # 打包后 Electron 侧经 LUOMINEST_LOG_DIR 注入 userData/Logs（backend.log 与 main.log 同目录）；
+    # 即使 stdio 管道转写未接住（如 Electron 先退出），后端自身也有完整落盘与分割。
+    # 无该环境变量时（纯 dev 直跑）fallback 到 backend/data/logs/backend.log。
+    log_dir = os.environ.get("LUOMINEST_LOG_DIR")
+    if not log_dir:
+        log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "logs")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        logger.add(
+            os.path.join(log_dir, "backend.log"),
+            format=(
+                "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
+                "{name}:{function}:{line} - {message}"
+            ),
+            rotation="5 MB",
+            retention=5,
+            enqueue=True,
+            encoding="utf-8",
+            level="INFO",
+        )
+    except Exception as e:
+        # 文件 sink 失败不阻塞启动，stderr sink 仍在
+        logger.warning(f"[LuomiNest] Failed to add file log sink at {log_dir}: {e}")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="LuomiNest Backend Server")

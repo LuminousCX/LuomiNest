@@ -293,8 +293,8 @@ async def lifespan(app: FastAPI):
         tool_registry.register(GetScheduledTaskTool())
         tool_registry.register(DeleteScheduledTaskTool())
 
-        # 浏览器观察工具集（2 个：screenshot/get_html，通过 WS 调用前端 Electron 执行；
-        # 交互类能力保留在前端 DevPanel，Agent 不做页面操作）
+        # 浏览器只读工具集（2 个：browser_visit/browser_screenshot，通过 WS 调用前端 Electron 执行；
+        # 内置浏览器已精简为只读：Agent 只访问网页 + 截图观察，不做页面交互）
         from app.core.tools.builtin.browser_automation import get_luominest_browser_automation_tools
         for _browser_tool in get_luominest_browser_automation_tools():
             tool_registry.register(_browser_tool)

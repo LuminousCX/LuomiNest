@@ -1,0 +1,55 @@
+{
+  "log": {
+    "nav": {
+      "title": "应用日志"
+    },
+    "route": {
+      "title": "应用日志 - LuomiNest"
+    },
+    "title": "应用日志",
+    "desc": "前端 / 主进程 / 后端 / 平台日志统一查看与导出",
+    "source": {
+      "all": "全部",
+      "renderer": "前端",
+      "main": "主进程",
+      "backend": "后端",
+      "platform": "平台"
+    },
+    "level": {
+      "all": "全部级别",
+      "debug": "调试",
+      "info": "信息",
+      "warn": "警告",
+      "error": "错误"
+    },
+    "searchPlaceholder": "搜索日志内容或模块...",
+    "following": "尾随中",
+    "paused": "已暂停",
+    "follow": "实时尾随",
+    "clear": "清空",
+    "export": "导出",
+    "upload": "上传诊断日志",
+    "uploading": "上传中...",
+    "uploadNeedLoginHint": "登录辰汐通行证后可上传诊断日志（设置 → 通行证登录）",
+    "uploadNotLoggedIn": "未登录辰汐通行证，请先在设置中登录",
+    "uploadUnauthorized": "登录态已失效，请重新登录后重试",
+    "uploadRateLimited": "上传过于频繁，请稍后再试",
+    "uploadTooLarge": "日志体积过大，请稍后重试或先导出到本地",
+    "uploadNetwork": "网络异常，上传失败",
+    "uploadOkReport": "上传成功（报告 ID: {id}）",
+    "uploadOkNoStatus": "上传成功",
+    "uploadFailed": "上传失败：{reason}",
+    "openDir": "打开日志目录",
+    "segments": "日志文件",
+    "segmentsEmpty": "暂无日志文件",
+    "openFolder": "打开所在目录",
+    "close": "关闭",
+    "count": "共 {n} 条",
+    "page": "{current} / {total} 页",
+    "jumpLatest": "跳到最新",
+    "empty": "暂无匹配日志",
+    "exportedTo": "已导出到 {path}",
+    "cleared": "已清空内存日志",
+    "error": "操作失败"
+  }
+}

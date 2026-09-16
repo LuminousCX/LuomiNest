@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import {
   ArrowLeft,
   Shield,
@@ -14,7 +14,10 @@ import {
   FileText,
   Mail,
   BookOpen,
-  FileCheck
+  FileCheck,
+  Scale,
+  Flag,
+  ScrollText
 } from 'lucide-vue-next'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -22,6 +25,7 @@ import LumiSettingsBackground from '../../components/settings-detail/LumiSetting
 import '../../styles/views/settings-independent-bg.css'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 
 const sections = [
@@ -53,9 +57,45 @@ const sections = [
     ]
   },
   {
+    key: 'diagnosticLogs',
+    content: [
+      '上传触发条件：诊断日志上传仅在您于「应用日志」页面主动点击「上传诊断日志」按钮时进行，LuomiNest 不会自动上传任何日志，也不存在后台静默上报。',
+      '处理目的：诊断日志仅用于问题诊断与技术支持。当您反馈使用问题时，诊断日志可帮助我们复现并定位故障原因，不用于任何营销、画像或其他目的。',
+      '数据去向与保存期限：上传的日志存储于辰汐云端日志服务，仅供问题诊断使用，保留 30 天后自动删除；您可随时通过本政策「联系我们」渠道申请提前删除。',
+      '上传前的自动脱敏：应用会在上传前自动丢弃附件类数据（如截图、dataURL 等大对象）、截断超长文本，并自动抹除日志中的令牌片段（如 Bearer 令牌、sk- 开头的 API Key、lcx_ 开头的通行证令牌），无需您手动处理。',
+      '功能准入：诊断日志上传需登录辰汐通行证后方可使用；未登录时该功能不可用。'
+    ]
+  },
+  {
+    key: 'piplCompliance',
+    content: [
+      '处理原则：依据《个人信息保护法》第五条、第六条，LuomiNest 遵循合法、正当、必要和诚信原则，处理个人信息应当具有明确、合理的目的，并限于实现该目的的最小范围（最小必要与目的限制）。显示偏好多端同步功能仅同步界面语言、主题模式与协议同意记录，即为该原则的直接体现。',
+      '敏感个人信息的单独同意：依据《个人信息保护法》第二十八条至第二十九条，只有在具有特定的目的和充分的必要性，并采取严格保护措施的情形下，方可处理敏感个人信息，且应当取得您的单独同意。LuomiNest 默认不在本地处理敏感个人信息；如您的使用场景涉及敏感个人信息，应用将在对应功能入口单独向您请求同意，而非以概括同意替代。',
+      '自动化决策说明：本应用的核心能力为 AI（自动化）处理。依据《个人信息保护法》第二十四条，我们在此说明：AI 推理由您自行配置的模型服务完成，LuomiNest 不利用算法对您进行用户画像刻画或在交易条件上实施不合理的差别待遇；您与 AI 交互时应用会明确告知对方为 AI 系统而非真人，您可随时中断或拒绝自动化处理（离线模式）。'
+    ]
+  },
+  {
+    key: 'piplCrossBorder',
+    content: [
+      '跨境提供条款：LuomiNest 默认不在本地服务器中转任何用户数据。但若您开启「辰汐通行证」登录及显示偏好多端同步等云端能力，相关显示偏好数据（界面语言、主题模式、协议同意记录）将存储于辰汐云端服务器，并可能依据业务需要在不同法域的服务节点间传输。此类传输仅限白名单内的显示偏好字段，绝不涉及聊天记录、记忆、皮套资产、平台凭证或任何密钥。',
+      '您可以随时在「设置 → 通行证登录」中关闭多端同步开关或退出通行证登录；退出后本机云端令牌即被清除，云端不再继续接收新的同步数据。',
+      '查阅、复制、更正、删除与注销权：依据《个人信息保护法》第四章，您有权查阅、复制您的个人信息，发现信息不准确或不完整的有权请求更正、补充，有权请求删除，并有权注销账号。本地数据的查阅/复制/删除可通过应用内设置与文件系统直接完成；通行证账号（云账号）的查阅、更正与注销请通过通行证服务的官方渠道办理。'
+    ]
+  },
+  {
+    key: 'usStateCompliance',
+    content: [
+      'CCPA / CPRA（加州消费者隐私法及修正案）：加州居民享有知情权（了解我们收集、使用、披露的个人信息的类别与具体内容）、删除权、更正权、数据可携权，以及在不因行使权利而受歧视（如降低服务质量、差别定价）的前提下行使上述权利的非歧视权。LuomiNest 的本地优先架构默认不出售、不共享您的个人信息；若您开启云同步，同步范围亦仅限显示偏好字段。',
+      '统一行使入口：行使上述任何权利，请使用与您账号关联的邮箱通过「设置 → 隐私与合规」的联系方式提交请求，或通过通行证服务官方渠道办理；我们将在验证您的身份后，在法定期限内（一般为 45 日，可依法延长）予以响应。',
+      '弗吉尼亚 VCDPA、科罗拉多 CPA、康涅狄格 CTDPA、犹他 UCPA 等州法：这些州法普遍赋予消费者知情权、删除权、更正权（部分州）、数据可携权，以及针对定向广告与特征画像处理的 opt-out 退出权。LuomiNest 默认不进行定向广告与特征画像处理；如相关能力未来引入，将在启用前单独告知并提供退出入口。',
+      '本应用不对行使法定隐私权利的消费者收取费用；对影响极小、重复提交等法定例外情形的请求，我们将依法说明理由并告知救济途径。'
+    ]
+  },
+  {
     key: 'thirdParty',
     content: [
       'AI 模型服务：当您配置并使用第三方 AI 模型时，需遵守相应服务提供商的隐私政策。我们建议您在使用前阅读相关条款。',
+      '第三方处理披露：您自行配置的 LLM 供应商（如 OpenAI、Anthropic 等）会在其服务范围内直接处理您的对话内容——对话文本将按该供应商自身的隐私政策与数据保留规则进行传输、暂存与（在其声明范围内的）使用。LuomiNest 仅负责把请求送达您指定的服务端点，不对此类处理承担替代责任；如您对特定供应商的数据实践有顾虑，请查阅其官方隐私政策或改用本地推理（如 Ollama / LM Studio）。',
       '消息平台：连接 QQ、微信、Discord 等平台时，需授权相应的机器人或 API 访问权限。我们仅请求完成核心功能所需的最小权限。',
       '扩展市场：从市场安装的第三方扩展/插件受其各自隐私政策约束。请在安装前确认扩展的可信度。',
       '根据 2025 年 11 月更新的苹果《App 审核指南》第 5.1.2(i) 条精神，任何涉及向第三方 AI 服务传输用户数据的行为，均须事先公开说明并获得用户明确授权。LuomiNest 已在各模型配置入口提供清晰的授权提示。'
@@ -77,6 +117,8 @@ const sections = [
     content: [
       '所有网络通信均使用 TLS 1.2+ 加密。',
       '敏感配置（如 API 密钥）使用系统级安全存储（Windows Credential Manager / macOS Keychain）进行保护。',
+      '云端登录令牌（access/refresh token）通过 Electron safeStorage 调用操作系统级加密能力（Windows DPAPI / macOS Keychain）加密后落盘，渲染进程与应用界面不会接触令牌内容；退出登录即随文件清除。',
+      '本地配置中的显示偏好（语言、主题、协议同意记录）以明文 JSON 存储于本机配置目录，因其不含敏感信息且便于用户自行查阅与迁移。',
       '应用支持启动密码保护，防止未授权访问。',
       '日志文件中不记录任何敏感信息（API 密钥、密码、对话内容等）。',
       '依据《网络安全法》第二十一条关于网络安全等级保护制度的要求，LuomiNest 在架构设计阶段即融入安全理念，实施数据分类分级管理、访问控制、安全审计等多层防护措施。',
@@ -88,6 +130,7 @@ const sections = [
     content: [
       'LuomiNest 严格遵守各司法管辖区的未成年人保护法规。本应用不面向 13 周岁以下的未成年人提供服务。',
       '对于 14 周岁以下的用户，我们要求取得监护人的明确同意后方可使用本应用的拟人化互动功能。此规定直接对应《人工智能拟人化互动服务管理暂行办法》第十四条及《个人信息保护法》第三十一条。',
+      '美国 COPPA（儿童在线隐私保护法）要求面向 13 周岁以下儿童收集个人信息前须取得可验证的监护人同意。LuomiNest 的本地优先架构默认不收集儿童个人信息；若开启云同步等能力，监护人应代为审阅并决定，相关同意与行使权利的入口与成人一致。',
       '本应用严禁向未成年人提供虚拟伴侣、虚拟亲属等虚拟亲密关系服务。该禁令源自《人工智能拟人化互动服务管理暂行办法》第八条第（四）项的明确规定。',
       '我们提供未成年人模式，支持监护人管控使用行为、限制使用时长，并在检测到极端情绪时进行及时干预。此设计响应了《人工智能拟人化互动服务管理暂行办法》第十八条关于防沉迷与极端情绪干预的要求。',
       '参考加州 SB 243 法案（全美首部 AI 伴侣聊天机器人法）的立法精神，系统内置定时 AI 身份提醒机制，确保未成年用户始终保持对交互对象属性的清醒认知。'
@@ -197,6 +240,10 @@ const sectionIconMap: Record<string, typeof Shield> = {
   dataCollection: Database,
   dataStorage: HardDrive,
   dataTransfer: Wifi,
+  diagnosticLogs: ScrollText,
+  piplCompliance: Scale,
+  piplCrossBorder: Globe,
+  usStateCompliance: Flag,
   thirdParty: Puzzle,
   userRights: UserCheck,
   securityMeasures: Lock,
@@ -243,13 +290,22 @@ onUnmounted(() => {
 })
 
 const isVisible = (idx: number) => visibleSections.value.has(idx)
+
+/** 从首启向导（StepAgreement）进入时回退向导；其余情况回设置主页 */
+const goBack = (): void => {
+  if (route.query.from === 'welcome' && window.history.length > 1) {
+    router.back()
+  } else {
+    router.push('/settings')
+  }
+}
 </script>
 
 <template>
   <div class="lumi-settings-page privacy-view">
     <LumiSettingsBackground />
     <header class="lumi-settings-page__header lumi-settings-animate-fade">
-      <button class="lumi-settings-page__back" @click="router.push('/settings')">
+      <button class="lumi-settings-page__back" @click="goBack">
         <ArrowLeft :size="18" />
       </button>
       <div>
@@ -285,6 +341,8 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 
       <section class="privacy-intro lumi-settings-animate-slide">
         <p class="privacy-lead">{{ t('privacy.lead') }}</p>
+        <!-- 法务审阅提示（产品自述文本，正式发布前建议经法务审阅；此行刻意不进 i18n） -->
+        <p class="legal-review-note">注：本隐私政策为产品自述文本，正式发布前建议经法务审阅。</p>
       </section>
 
       <section
@@ -335,4 +393,12 @@ const isVisible = (idx: number) => visibleSections.value.has(idx)
 
 <style scoped>
 /* 背景由 settings-independent-bg.css 独立控制 */
+
+/* 法务审阅小字提示 */
+.legal-review-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  opacity: 0.85;
+}
 </style>

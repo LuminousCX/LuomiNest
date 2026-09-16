@@ -4,6 +4,9 @@
  * 从 WelcomeView.vue 拆分：收纳步骤导航、i18n 文案、AI 模型供应商配置逻辑。
  * 静态数据（FEATURES）以命名导出供子组件直接 import。
  *
+ * 5 步流程（2026 重编排）：StepAgreement（协议/隐私门禁，不可跳过）→ StepLanguage →
+ * StepLogin（辰汐通行证 / 本地账号 / 跳过）→ StepTour（新手指引）→ StepReady。
+ *
  * 文案走全局 vue-i18n（stores/locale.ts 持久化语言选择），
  * 这里把 welcome.* 的 key 映射为 WelcomeI18nText 结构传给各步骤组件。
  */
@@ -110,7 +113,38 @@ export const useWelcomeWizard = () => {
 
   const VERSION = ref('')
   const currentStep = ref(0)
-  const agreed = ref(false)
+
+  /* ── 协议/隐私同意门禁（第 0 步，不可跳过） ── */
+  /** 协议版本与隐私政策版本（记录进 config.onboarding，便于后续版本升级重签） */
+  const AGREEMENT_VERSION = '1.0.0'
+  const PRIVACY_VERSION = '1.0.0'
+
+  const agreedTerms = ref(false)
+  const agreedPrivacy = ref(false)
+  /** 两个勾选框都勾上才能进入下一步 */
+  const agreementReady = computed(() => agreedTerms.value && agreedPrivacy.value)
+
+  /** 记录同意：写入 config.onboarding（协议门禁不可跳过，「跳过全部」也会补记） */
+  const recordAgreement = async (): Promise<void> => {
+    try {
+      await window.api?.app?.setOnboarding?.({
+        agreementVersion: AGREEMENT_VERSION,
+        privacyVersion: PRIVACY_VERSION,
+        agreedAt: new Date().toISOString(),
+      })
+    } catch (e: unknown) {
+      logger.warn('Failed to persist onboarding agreement:', e)
+    }
+  }
+
+  /** 标记新手教程完成（StepTour 最后一卡「开始使用」时调用） */
+  const markTutorialDone = async (): Promise<void> => {
+    try {
+      await window.api?.app?.setOnboarding?.({ tutorialDone: true })
+    } catch (e: unknown) {
+      logger.warn('Failed to persist tutorialDone:', e)
+    }
+  }
 
   /** 当前语言 = 全局 locale store（向导第 0 步的选择即全局切换） */
   const selectedLang = computed<AppLocale>(() => localeStore.locale)
@@ -169,6 +203,13 @@ export const useWelcomeWizard = () => {
     if (currentStep.value > 0) currentStep.value--
   }
 
+  /** 第 0 步（协议门禁）：记录同意后进入下一步（仅当两个勾选框都已勾选） */
+  const agreeAndNext = async (): Promise<void> => {
+    if (!agreementReady.value) return
+    await recordAgreement()
+    nextStep()
+  }
+
   /**
    * 标记欢迎向导已完成并跳转到 splash。
    * 持久化到主进程 config，使后续启动直接跳过欢迎页。
@@ -189,7 +230,17 @@ export const useWelcomeWizard = () => {
     completeAndEnterApp()
   }
 
+  /**
+   * 跳过剩余步骤直接进入应用。
+   * 跳过仅针对登录/教程：协议同意在第 0 步已记录；此处兜底补记，
+   * 保证任何进入主界面的路径都有 onboarding.agreementVersion。
+   */
   const skipWizard = (): void => {
+    if (!agreedTerms.value || !agreedPrivacy.value) {
+      agreedTerms.value = true
+      agreedPrivacy.value = true
+      recordAgreement()
+    }
     completeAndEnterApp()
   }
 
@@ -366,6 +417,31 @@ export const useWelcomeWizard = () => {
     }
   }
 
+  /**
+   * 登录已有本地账户（POST /auth/login），JWT 存 localStorage 后进入下一步。
+   * 与 SettingsLoginSection / LoginView 共用同一组 localStorage key。
+   */
+  const loginAndNext = async (): Promise<void> => {
+    const valid = accountForm.username.trim().length >= 3 && accountForm.password.length >= 6
+    if (!valid || accountSubmitting.value) return
+    accountSubmitting.value = true
+    accountError.value = ''
+    try {
+      const resp = await apiPost<{ access_token: string; refresh_token: string }>('/auth/login', {
+        username: accountForm.username.trim(),
+        password: accountForm.password,
+      })
+      localStorage.setItem(JWT_ACCESS_TOKEN_KEY, resp.access_token)
+      if (resp.refresh_token) localStorage.setItem(JWT_REFRESH_TOKEN_KEY, resp.refresh_token)
+      nextStep()
+    } catch (e: unknown) {
+      logger.warn('Wizard login failed:', e)
+      accountError.value = (e instanceof Error && e.message) ? e.message : t('welcome.accountErrorFallback')
+    } finally {
+      accountSubmitting.value = false
+    }
+  }
+
   onMounted(async () => {
     try {
       VERSION.value = await window.api?.app?.getVersion() || ''
@@ -383,8 +459,13 @@ export const useWelcomeWizard = () => {
     currentStep,
     selectedLang,
     selectLang,
-    agreed,
     i18n,
+    agreedTerms,
+    agreedPrivacy,
+    agreementReady,
+    agreeAndNext,
+    recordAgreement,
+    markTutorialDone,
     addTemplateCategory,
     selectedTemplate,
     aiModelSaving,
@@ -403,6 +484,7 @@ export const useWelcomeWizard = () => {
     accountForm,
     accountFormValid,
     registerAndNext,
+    loginAndNext,
     nextStep,
     prevStep,
     startApp,

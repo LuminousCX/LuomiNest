@@ -2,21 +2,40 @@
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowRight, Lock, User, LogIn } from 'lucide-vue-next'
+import { ArrowRight, Lock, User, LogIn, UserPlus } from 'lucide-vue-next'
 import LumiBrandStar from '../components/common/LumiBrandStar.vue'
 import LumiButton from '../components/common/LumiButton.vue'
 import LumiInput from '../components/common/LumiInput.vue'
+import { useApi } from '../composables/useApi'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
+const { apiPost } = useApi()
+
+// 与 SettingsLoginSection / 向导 StepLogin 共用同一组 localStorage key，保证登录态互通
+const JWT_ACCESS_TOKEN_KEY = 'lumi_jwt_access_token'
+const JWT_REFRESH_TOKEN_KEY = 'lumi_jwt_refresh_token'
 
 const localForm = ref({ username: '', password: '' })
 const isLoggingIn = ref(false)
+const loginError = ref('')
 
-const canLocalLogin = computed(() =>
-  localForm.value.username.trim().length > 0 && localForm.value.password.length > 0
+// 注册 / 登录双模式（没有账号？注册）
+type FormMode = 'login' | 'register'
+const formMode = ref<FormMode>('login')
+const registerForm = ref({ displayName: '', confirmPassword: '' })
+const isRegisterMode = computed(() => formMode.value === 'register')
+
+const confirmMismatch = computed(
+  () => registerForm.value.confirmPassword.length > 0 && localForm.value.password !== registerForm.value.confirmPassword
 )
+
+const canLocalLogin = computed(() => {
+  const base = localForm.value.username.trim().length >= 3 && localForm.value.password.length >= 6
+  if (!isRegisterMode.value) return base
+  return base && registerForm.value.confirmPassword.length > 0 && !confirmMismatch.value
+})
 
 // 登录成功后的目标路由：优先读取 redirect 查询参数，默认 /workspace
 const resolveRedirectTarget = (): string => {
@@ -34,14 +53,41 @@ const refreshAuthState = () => {
   }
 }
 
-const handleLocalLogin = async () => {
-  if (!canLocalLogin.value) return
+/** 持久化 JWT（与设置页登录态互通） */
+const persistTokens = (accessToken: string, refreshToken?: string): void => {
+  localStorage.setItem(JWT_ACCESS_TOKEN_KEY, accessToken)
+  if (refreshToken) localStorage.setItem(JWT_REFRESH_TOKEN_KEY, refreshToken)
+}
+
+/** 真实调用本地后端 /auth/register + /auth/login（参照 StepAccount / SettingsLoginSection） */
+const submitAuth = async (): Promise<void> => {
+  if (!canLocalLogin.value || isLoggingIn.value) return
   isLoggingIn.value = true
-  setTimeout(() => {
-    isLoggingIn.value = false
+  loginError.value = ''
+  try {
+    if (isRegisterMode.value) {
+      await apiPost('/auth/register', {
+        username: localForm.value.username.trim(),
+        password: localForm.value.password,
+        display_name: registerForm.value.displayName.trim() || null,
+      })
+    }
+    const resp = await apiPost<{ access_token: string; refresh_token: string }>('/auth/login', {
+      username: localForm.value.username.trim(),
+      password: localForm.value.password,
+    })
+    persistTokens(resp.access_token, resp.refresh_token)
     refreshAuthState()
     router.push(resolveRedirectTarget())
-  }, 800)
+  } catch (e: unknown) {
+    loginError.value = e instanceof Error && e.message ? e.message : t('login.errorFallback')
+  } finally {
+    isLoggingIn.value = false
+  }
+}
+
+const handleLocalLogin = (): void => {
+  void submitAuth()
 }
 
 const handleSkip = () => {
@@ -68,6 +114,10 @@ const handleSkip = () => {
         </div>
 
         <form class="login-form animate-slide-up" @submit.prevent="handleLocalLogin">
+          <div v-if="loginError" class="form-error-banner" role="alert">
+            <span>{{ loginError }}</span>
+          </div>
+
           <div class="form-field">
             <label class="field-label">
               <User :size="14" />
@@ -85,6 +135,23 @@ const handleSkip = () => {
             </LumiInput>
           </div>
 
+          <div v-if="isRegisterMode" class="form-field">
+            <label class="field-label">
+              <UserPlus :size="14" />
+              {{ t('login.displayName') }}
+            </label>
+            <LumiInput
+              v-model="registerForm.displayName"
+              type="text"
+              :placeholder="t('login.displayNamePlaceholder')"
+              autocomplete="nickname"
+            >
+              <template #icon>
+                <UserPlus :size="16" />
+              </template>
+            </LumiInput>
+          </div>
+
           <div class="form-field">
             <label class="field-label">
               <Lock :size="14" />
@@ -94,12 +161,30 @@ const handleSkip = () => {
               v-model="localForm.password"
               type="password"
               :placeholder="t('login.passwordPlaceholder')"
-              autocomplete="current-password"
+              :autocomplete="isRegisterMode ? 'new-password' : 'current-password'"
             >
               <template #icon>
                 <Lock :size="16" />
               </template>
             </LumiInput>
+          </div>
+
+          <div v-if="isRegisterMode" class="form-field">
+            <label class="field-label">
+              <Lock :size="14" />
+              {{ t('login.confirmPassword') }}
+            </label>
+            <LumiInput
+              v-model="registerForm.confirmPassword"
+              type="password"
+              :placeholder="t('login.confirmPasswordPlaceholder')"
+              autocomplete="new-password"
+            >
+              <template #icon>
+                <Lock :size="16" />
+              </template>
+            </LumiInput>
+            <span v-if="confirmMismatch" class="form-field-error">{{ t('login.passwordMismatch') }}</span>
           </div>
 
           <LumiButton
@@ -111,11 +196,27 @@ const handleSkip = () => {
             :disabled="!canLocalLogin || isLoggingIn"
           >
             <template #icon v-if="!isLoggingIn">
-              <LogIn :size="16" />
+              <LogIn v-if="!isRegisterMode" :size="16" />
+              <UserPlus v-else :size="16" />
             </template>
-            {{ isLoggingIn ? t('login.loggingIn') : t('login.login') }}
+            {{ isLoggingIn ? (isRegisterMode ? t('login.registering') : t('login.loggingIn')) : (isRegisterMode ? t('login.register') : t('login.login')) }}
           </LumiButton>
         </form>
+
+        <div class="login-switch animate-fade-in">
+          <template v-if="!isRegisterMode">
+            <span class="switch-hint">{{ t('login.noAccount') }}</span>
+            <button type="button" class="switch-link" @click="formMode = 'register'">
+              {{ t('login.toRegister') }}
+            </button>
+          </template>
+          <template v-else>
+            <span class="switch-hint">{{ t('login.haveAccount') }}</span>
+            <button type="button" class="switch-link" @click="formMode = 'login'">
+              {{ t('login.toLogin') }}
+            </button>
+          </template>
+        </div>
 
         <div class="login-footer animate-fade-in">
           <LumiButton variant="ghost" size="sm" @click="handleSkip">
@@ -236,6 +337,50 @@ const handleSkip = () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+.form-error-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--lumi-danger) 12%, transparent);
+  color: var(--lumi-danger);
+  font-size: var(--text-sm);
+}
+
+.login-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.switch-hint {
+  color: var(--text-muted);
+}
+
+.switch-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: var(--text-sm);
+  color: var(--lumi-brand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.switch-link:hover {
+  opacity: 0.8;
+}
+
+.form-field-error {
+  font-size: var(--text-xs);
+  color: var(--lumi-danger);
 }
 
 .form-field {

@@ -72,6 +72,7 @@ const settingGroups = computed<SettingGroup[]>(() => [
 const footerLinks = computed(() => [
   { label: t('settings.aboutDev'), route: '/settings/about' },
   { label: t('settings.license'), route: '/settings/license' },
+  { label: t('settings.terms'), route: '/settings/terms-detail' },
   { label: t('settings.privacyCompliance'), route: '/settings/privacy-detail' }
 ])
 

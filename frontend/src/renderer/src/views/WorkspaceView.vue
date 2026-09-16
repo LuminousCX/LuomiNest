@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessageCircle } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
@@ -20,11 +20,17 @@ import WorkspaceAgentHistory from '../components/workspace/WorkspaceAgentHistory
 import WorkspaceGroupInfo from '../components/workspace/WorkspaceGroupInfo.vue'
 import WorkspaceAgentChat from '../components/workspace/WorkspaceAgentChat.vue'
 import WorkspaceGroupChat from '../components/workspace/WorkspaceGroupChat.vue'
+import WorkspaceCloudGroupPanel from '../components/workspace/WorkspaceCloudGroupPanel.vue'
+import WorkspaceCloudGroupChat from '../components/workspace/WorkspaceCloudGroupChat.vue'
+import WorkspaceCloudGroupDialogs from '../components/workspace/WorkspaceCloudGroupDialogs.vue'
 import WorkspaceDialogs from '../components/workspace/WorkspaceDialogs.vue'
 import WorkspaceDropOverlay from '../components/workspace/WorkspaceDropOverlay.vue'
 import type { GroupInfo, AgentProfile } from '../types'
+import type { CloudGroupVo } from '@shared/ipc-types'
+import type { ContactType } from '../components/workspace/types'
 import { useWorkspaceAgentDialogs } from '../composables/useWorkspaceAgentDialogs'
 import { useWorkspaceGroupChat } from '../composables/useWorkspaceGroupChat'
+import { useWorkspaceCloudGroups } from '../composables/useWorkspaceCloudGroups'
 import { useWorkspaceConvList } from '../composables/useWorkspaceConvList'
 import { useWorkspaceMessages } from '../composables/useWorkspaceMessages'
 
@@ -45,19 +51,22 @@ const { copiedId, copy: copyMessage } = useClipboard()
 // —— 子组件 ref ——
 const agentChatRef = ref<InstanceType<typeof WorkspaceAgentChat> | null>(null)
 const groupChatRef = ref<InstanceType<typeof WorkspaceGroupChat> | null>(null)
+const cloudGroupChatRef = ref<InstanceType<typeof WorkspaceCloudGroupChat> | null>(null)
 
 // —— 联系人选择状态（视图持有，供 composable 共享） ——
-type ContactType = 'agent' | 'group'
+// ContactType 扩展了 'cloud-group'（云端群，服务端未上线时降级空态）
 const selectedType = ref<ContactType | null>(null)
 const contactSearchQuery = ref('')
 const localSelectedAgent = ref<AgentProfile | null>(null)
 const localSelectedConvId = ref<string | null>(null)
 const selectedGroupId = ref<string | null>(null)
+const selectedCloudGroupId = ref<string | null>(null)
 
 const selectAgent = async (agent: AgentProfile) => {
   localSelectedAgent.value = agent
   selectedType.value = 'agent'
   selectedGroupId.value = null
+  selectedCloudGroupId.value = null
   localSelectedConvId.value = null
   await chatStore.fetchConversations(agent.id)
   chatTrashStore.fetchTrash(agent.id)
@@ -66,15 +75,28 @@ const selectAgent = async (agent: AgentProfile) => {
 const selectGroup = (group: GroupInfo) => {
   selectedType.value = 'group'
   selectedGroupId.value = group.id
+  selectedCloudGroupId.value = null
   socialStore.currentGroup = group
   socialStore.fetchGroupMessages(group.id)
 }
 
+/** 选中云端群：拉消息并启动轮询（服务不可用时 store 内部降级为空态） */
+const selectCloudGroup = (group: CloudGroupVo) => {
+  selectedType.value = 'cloud-group'
+  selectedGroupId.value = null
+  selectedCloudGroupId.value = group.id
+  void socialStore.openCloudGroup(group.id)
+}
+
 const backToContacts = () => {
+  if (selectedType.value === 'cloud-group') {
+    socialStore.leaveCloudGroup()
+  }
   selectedType.value = null
   localSelectedAgent.value = null
   localSelectedConvId.value = null
   selectedGroupId.value = null
+  selectedCloudGroupId.value = null
   convList.resetBatchState()
 }
 
@@ -121,6 +143,32 @@ const groupChat = useWorkspaceGroupChat({
   groupChatRef,
 })
 
+// —— 云端群（创建/邀请对话框胶水 + 消息输入） ——
+const cloudGroups = useWorkspaceCloudGroups({
+  selectedCloudGroupId,
+  selectCloudGroup,
+})
+const cloudChatInput = ref('')
+
+const sendCloudMessage = async (): Promise<void> => {
+  const groupId = selectedCloudGroupId.value
+  const content = cloudChatInput.value
+  if (!groupId || !content.trim()) return
+  cloudChatInput.value = ''
+  const okSent = await socialStore.sendCloudMessage(groupId, content)
+  if (okSent) {
+    await nextTick()
+    cloudGroupChatRef.value?.scrollToBottom()
+  } else if (socialStore.cloudState !== 'unavailable') {
+    toast.error(t('workspace.cloud.sendFailed'))
+  }
+}
+
+/** 云群「重新检测」：交由 store 解除降级并重探，恢复时重开当前群 */
+const retryCloudGroups = async (): Promise<void> => {
+  await socialStore.recheckCloudGroups(selectedCloudGroupId.value)
+}
+
 const convList = useWorkspaceConvList({
   localSelectedAgent,
   localSelectedConvId,
@@ -153,6 +201,13 @@ const {
   agentsResponding, respondingAgentNames,
   sendGroupMessage, createGroup, deleteGroup, addAgentToGroup, removeAgentFromGroup,
 } = groupChat
+
+const {
+  showCreateCloudGroupDialog, showInviteCloudDialog,
+  newCloudGroupName, inviteCloudUserId, cloudDialogError,
+  creatingCloudGroup, invitingCloudMember, currentCloudGroup,
+  openCreateDialog, openInviteDialog, createCloudGroup, inviteCloudMember,
+} = cloudGroups
 
 const {
   convSearchQuery, searchResults, isSearching, isSearchMode,
@@ -205,11 +260,15 @@ onMounted(async () => {
       socialStore.fetchAgentRoles(),
     ])
   }
+  // 云端群列表：登录态下静默拉取（服务端未上线时降级为空态提示）
+  void socialStore.fetchCloudGroups()
   window.addEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
   window.addEventListener('luominest:memory-chat-trigger', handleMemoryChatTrigger as EventListener)
 })
 
 onBeforeUnmount(() => {
+  // 离开工作台页时停止云端群轮询
+  socialStore.leaveCloudGroup()
   window.removeEventListener('luominest:chat-trigger', handleChatTrigger as EventListener)
   window.removeEventListener('luominest:memory-chat-trigger', handleMemoryChatTrigger as EventListener)
   ;(window as unknown as Record<string, unknown>).__memoryChatTrigger = undefined
@@ -228,11 +287,16 @@ onBeforeUnmount(() => {
         :selected-type="selectedType"
         :selected-agent-id="localSelectedAgent?.id || null"
         :selected-group-id="selectedGroupId"
+        :cloud-groups="socialStore.cloudGroups"
+        :cloud-state="socialStore.cloudState"
+        :selected-cloud-group-id="selectedCloudGroupId"
         @update:search-query="contactSearchQuery = $event"
         @select-agent="selectAgent"
         @select-group="selectGroup"
+        @select-cloud-group="selectCloudGroup"
         @create-agent="showCreateDialog = true"
         @create-group="showCreateGroupDialog = true"
+        @create-cloud-group="openCreateDialog()"
         @delete-group="deleteGroup"
         @edit-agent="openEditDialog"
       />
@@ -271,6 +335,12 @@ onBeforeUnmount(() => {
         @toggle-collaboration-mode="collaborationMode = !collaborationMode"
         @add-agent="showAddAgentDialog = true"
         @remove-agent="removeAgentFromGroup(selectedGroup!.id, $event)"
+      />
+      <WorkspaceCloudGroupPanel
+        v-else-if="selectedType === 'cloud-group' && currentCloudGroup"
+        :group="currentCloudGroup"
+        @back="backToContacts"
+        @invite="openInviteDialog()"
       />
     </aside>
 
@@ -339,6 +409,22 @@ onBeforeUnmount(() => {
         @update:group-chat-input="groupChatInput = $event"
         @send-group-message="sendGroupMessage"
       />
+      <WorkspaceCloudGroupChat
+        v-else-if="selectedType === 'cloud-group'"
+        ref="cloudGroupChatRef"
+        :group="currentCloudGroup"
+        :messages="socialStore.cloudMessages"
+        :state="socialStore.cloudState"
+        :loading="socialStore.cloudMessagesLoading"
+        :sending="socialStore.cloudSending"
+        :can-load-more="socialStore.cloudCanLoadMore"
+        :input="cloudChatInput"
+        @invite="openInviteDialog()"
+        @update:input="cloudChatInput = $event"
+        @send="sendCloudMessage"
+        @load-more="socialStore.loadOlderCloudMessages()"
+        @retry="retryCloudGroups"
+      />
       <div v-else class="chat-empty-state">
         <div class="empty-visual">
           <div class="empty-orb">
@@ -397,6 +483,22 @@ onBeforeUnmount(() => {
       @update:add-agent-id="addAgentId = $event"
       @update:add-agent-role="addAgentRole = $event"
       @add-agent-to-group="addAgentToGroup"
+    />
+
+    <WorkspaceCloudGroupDialogs
+      :show-create-dialog="showCreateCloudGroupDialog"
+      :show-invite-dialog="showInviteCloudDialog"
+      :group-name="newCloudGroupName"
+      :invite-user-id="inviteCloudUserId"
+      :error-kind="cloudDialogError"
+      :creating="creatingCloudGroup"
+      :inviting="invitingCloudMember"
+      @update:show-create-dialog="showCreateCloudGroupDialog = $event"
+      @update:show-invite-dialog="showInviteCloudDialog = $event"
+      @update:group-name="newCloudGroupName = $event"
+      @update:invite-user-id="inviteCloudUserId = $event"
+      @create="createCloudGroup"
+      @invite="inviteCloudMember"
     />
   </div>
 </template>

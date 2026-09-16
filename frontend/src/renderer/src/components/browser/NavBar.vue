@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, RotateCw, Star, Search, Code2 } from 'lucide-vue-next'
+import { ArrowLeft, ArrowRight, RotateCw, Search, Camera, Square } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 defineProps<{
   url: string
   canGoBack?: boolean
   canGoForward?: boolean
-  showDevPanel?: boolean
+  /** 当前标签页是否加载中（加载中显示停止按钮） */
+  loading?: boolean
 }>()
 
 const emit = defineEmits<{
   back: []
   forward: []
   refresh: []
+  stop: []
   navigate: [url: string]
-  toggleDevPanel: []
+  screenshot: []
 }>()
 
 function handleKeydown(e: KeyboardEvent) {
@@ -33,31 +38,28 @@ function handleKeydown(e: KeyboardEvent) {
       <button class="nav-btn" :disabled="!canGoForward" @click="emit('forward')">
         <ArrowRight :size="16" />
       </button>
-      <button class="nav-btn" @click="emit('refresh')">
+      <button v-if="loading" class="nav-btn" :aria-label="t('browser.actions.stopLoad')" @click="emit('stop')">
+        <Square :size="13" />
+      </button>
+      <button v-else class="nav-btn" @click="emit('refresh')">
         <RotateCw :size="14" />
       </button>
     </div>
-    
+
     <div class="address-bar">
       <Search :size="15" class="addr-icon" />
       <input
         :value="url"
         type="text"
         class="addr-input"
-        placeholder="搜索或输入网址"
+        :placeholder="t('browser.addressPlaceholder')"
         @keydown="handleKeydown"
       />
     </div>
-    
+
     <div class="nav-right">
-      <button class="nav-btn">
-        <Star :size="15" />
-      </button>
-      <button 
-        :class="['nav-btn', 'dev-toggle', { active: showDevPanel }]"
-        @click="emit('toggleDevPanel')"
-      >
-        <Code2 :size="15" />
+      <button class="nav-btn" :aria-label="t('browser.screenshotTitle')" @click="emit('screenshot')">
+        <Camera :size="15" />
       </button>
     </div>
   </div>
@@ -111,11 +113,6 @@ function handleKeydown(e: KeyboardEvent) {
 .nav-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-.nav-btn.dev-toggle.active {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
 }
 
 .address-bar {

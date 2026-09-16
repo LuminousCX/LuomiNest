@@ -19,7 +19,7 @@ const isDesktopPetChatPage = computed(() => route.path === '/desktop-pet-chat')
 const isDesktopSurface = computed(() => isDesktopPetPage.value || isDesktopPetChatPage.value)
 const isMinimalLayout = computed(() => isWelcomePage.value || isSplashPage.value || isLoginPage.value || isDesktopSurface.value)
 const isBackgroundExcluded = computed(() =>
-  ['/settings/about', '/settings/license', '/settings/privacy-detail'].includes(route.path)
+  ['/settings/about', '/settings/license', '/settings/privacy-detail', '/settings/terms-detail'].includes(route.path)
 )
 const hasBackground = computed(() =>
   !isMinimalLayout.value && !isBackgroundExcluded.value && !!themeStore.effectiveBackground.image

@@ -49,6 +49,18 @@ class PlatformLogger:
     _instance = None
     _lock = threading.Lock()
 
+    # ── 实例日志文件尺寸控制 ──────────────────────────────────────────────
+    # 平台实例日志为 JSON 数组整文件重写（非追加），条目上限（_max_entries_per_instance）
+    # 无法约束单条体积（details 可能很大），文件仍可能无限膨胀。故在每次落盘前做
+    # 尺寸轮转：当前文件超过 5MB 时按 loguru/Logging 风格移位归档——
+    #   {id}.json → {id}.json.1 → {id}.json.2 → {id}.json.3（更旧的直接删除）
+    # 即保留最近 3 份归档 + 1 份当前文件；归档仅供人工排查，API 查询只读当前文件。
+    # 轮转后当前文件从内存缓存中最近的条目重新起写（截去历史大头），避免立即再次超限。
+    MAX_LOG_FILE_BYTES = 5 * 1024 * 1024
+    MAX_ROTATED_ARCHIVES = 3
+    # 轮转后重新起写时保留的最近条目数
+    ENTRIES_KEEP_AFTER_ROTATE = 500
+
     def __new__(cls):
         with cls._lock:
             if cls._instance is None:
@@ -88,6 +100,44 @@ class PlatformLogger:
     def _get_log_path(self, instance_id: str) -> str:
         return os.path.join(self._dir, f"{instance_id}.json")
 
+    def _get_archive_path(self, instance_id: str, generation: int) -> str:
+        """第 generation 代归档文件路径（.1 为最新归档，数字越大越旧）"""
+        return os.path.join(self._dir, f"{instance_id}.json.{generation}")
+
+    def _rotate_if_oversized(self, instance_id: str) -> bool:
+        """当前实例日志文件超过 5MB 时轮转：移位归档保留最近 3 份，更旧的删除。
+
+        返回是否发生了轮转（调用方据此从最近的条目重新起写当前文件）。
+        """
+        path = self._get_log_path(instance_id)
+        try:
+            if not (os.path.exists(path) and os.path.getsize(path) > self.MAX_LOG_FILE_BYTES):
+                return False
+        except OSError:
+            return False
+
+        # 移位归档：.2 → .3，.1 → .2，当前 → .1；保留最近 MAX_ROTATED_ARCHIVES 份
+        oldest = self._get_archive_path(instance_id, self.MAX_ROTATED_ARCHIVES)
+        if os.path.exists(oldest):
+            try:
+                os.remove(oldest)
+            except OSError as e:
+                logger.error(f"[PlatformLogger] Failed to remove oldest archive for {instance_id}: {e}")
+        for gen in range(self.MAX_ROTATED_ARCHIVES - 1, 0, -1):
+            src = self._get_archive_path(instance_id, gen)
+            if os.path.exists(src):
+                try:
+                    os.replace(src, self._get_archive_path(instance_id, gen + 1))
+                except OSError as e:
+                    logger.error(f"[PlatformLogger] Failed to shift archive {src}: {e}")
+        try:
+            os.replace(path, self._get_archive_path(instance_id, 1))
+        except OSError as e:
+            logger.error(f"[PlatformLogger] Failed to rotate log for {instance_id}: {e}")
+            return False
+        logger.info(f"[PlatformLogger] Rotated oversized log file for {instance_id} (>5MB)")
+        return True
+
     def _load_logs(self, instance_id: str) -> list[dict]:
         if instance_id in self._cache:
             return self._cache[instance_id]
@@ -104,14 +154,20 @@ class PlatformLogger:
         self._cache[instance_id] = []
         return []
 
-    def _save_logs(self, instance_id: str, logs: list[dict]):
+    def _save_logs(self, instance_id: str, logs: list[dict]) -> list[dict]:
+        """落盘并同步缓存；发生轮转时从最近的条目重新起写，返回实际落盘的条目列表。"""
         path = self._get_log_path(instance_id)
         try:
+            rotated = self._rotate_if_oversized(instance_id)
+            # 轮转后旧内容已归档，当前文件仅保留最近一段条目，避免立即再次超限
+            payload = logs[-self.ENTRIES_KEEP_AFTER_ROTATE:] if rotated else logs
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(logs, f, ensure_ascii=False, indent=2)
-            self._cache[instance_id] = logs
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            self._cache[instance_id] = payload
+            return payload
         except OSError as e:
             logger.error(f"[PlatformLogger] Failed to save logs for {instance_id}: {e}")
+            return logs
 
     def log(
         self,
@@ -140,7 +196,8 @@ class PlatformLogger:
             logs.append(entry)
             if len(logs) > self._max_entries_per_instance:
                 logs = logs[-self._max_entries_per_instance:]
-            self._save_logs(instance_id, logs)
+            # _save_logs 可能在轮转后截短条目列表，以返回值为准（保证索引计数一致）
+            logs = self._save_logs(instance_id, logs)
 
             if instance_id not in self._index:
                 self._index[instance_id] = {
@@ -223,12 +280,16 @@ class PlatformLogger:
 
     def clear_logs(self, instance_id: str) -> bool:
         with self._file_lock:
-            path = self._get_log_path(instance_id)
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                except OSError:
-                    return False
+            # 当前文件与全部轮转归档一并清除
+            for path in [self._get_log_path(instance_id)] + [
+                self._get_archive_path(instance_id, gen)
+                for gen in range(1, self.MAX_ROTATED_ARCHIVES + 1)
+            ]:
+                if os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        return False
             self._cache.pop(instance_id, None)
             self._index.pop(instance_id, None)
             self._save_index()

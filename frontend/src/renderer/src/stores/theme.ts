@@ -423,6 +423,15 @@ export const useThemeStore = defineStore('theme', () => {
     initialized = true
   }
 
+  // 远端云同步偏好实时生效：main 把远端 theme 写入 config 后推送到这里。
+  // 走 setActiveMode（applyMode + saveConfig）保证主题配置持久化同步；
+  // 防回环由 main 侧 prefs-sync 的抑制窗口负责（isDark watcher 的 setTheme 回写不会触发再上传）。
+  window.api?.app?.onRemotePrefsApplied?.((data) => {
+    const mode = data?.theme
+    if (mode !== 'light' && mode !== 'dark' && mode !== 'system') return
+    if (effectiveMode.value !== mode) setActiveMode(mode)
+  })
+
   return {
     // Legacy
     isDark,

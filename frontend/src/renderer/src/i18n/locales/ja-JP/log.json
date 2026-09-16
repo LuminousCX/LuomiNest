@@ -1,0 +1,55 @@
+{
+  "log": {
+    "nav": {
+      "title": "アプリログ"
+    },
+    "route": {
+      "title": "アプリログ - LuomiNest"
+    },
+    "title": "アプリログ",
+    "desc": "フロントエンド / メイン / バックエンド / プラットフォームのログを一元表示",
+    "source": {
+      "all": "すべて",
+      "renderer": "フロント",
+      "main": "メイン",
+      "backend": "バックエンド",
+      "platform": "プラットフォーム"
+    },
+    "level": {
+      "all": "すべてのレベル",
+      "debug": "デバッグ",
+      "info": "情報",
+      "warn": "警告",
+      "error": "エラー"
+    },
+    "searchPlaceholder": "ログ内容やモジュールを検索...",
+    "following": "追従中",
+    "paused": "一時停止中",
+    "follow": "リアルタイム追従",
+    "clear": "クリア",
+    "export": "エクスポート",
+    "upload": "診断ログをアップロード",
+    "uploading": "アップロード中...",
+    "uploadNeedLoginHint": "診断ログのアップロードには辰汐パスポートへのログインが必要です（設定 → パスポートログイン）",
+    "uploadNotLoggedIn": "辰汐パスポートに未ログインです。先に設定からログインしてください",
+    "uploadUnauthorized": "ログイン状態の有効期限が切れました。再ログイン後に再試行してください",
+    "uploadRateLimited": "アップロードが頻繁すぎます。しばらくしてから再試行してください",
+    "uploadTooLarge": "ログが大きすぎます。しばらくしてから再試行するか、先にローカルへエクスポートしてください",
+    "uploadNetwork": "ネットワークエラーによりアップロードに失敗しました",
+    "uploadOkReport": "アップロード成功（レポート ID: {id}）",
+    "uploadOkNoStatus": "アップロード成功",
+    "uploadFailed": "アップロード失敗：{reason}",
+    "openDir": "ログフォルダを開く",
+    "segments": "ログファイル",
+    "segmentsEmpty": "ログファイルはありません",
+    "openFolder": "フォルダを開く",
+    "close": "閉じる",
+    "count": "全 {n} 件",
+    "page": "{current} / {total} ページ",
+    "jumpLatest": "最新へ移動",
+    "empty": "該当するログはありません",
+    "exportedTo": "{path} にエクスポートしました",
+    "cleared": "メモリ上のログをクリアしました",
+    "error": "操作に失敗しました"
+  }
+}

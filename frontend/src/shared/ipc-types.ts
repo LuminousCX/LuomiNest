@@ -77,6 +77,16 @@ export interface AppConfig {
   stt?: STTConfig
   /** 界面语言（zh-CN / en-US / ja-JP） */
   locale?: string
+  /** 上次停留的路由（启动恢复用；SplashView 校验其存在于路由表后才消费） */
+  lastActiveRoute?: string
+  /** 日志上传端点（空串 = 使用内置默认端点，见 config-store LOG_INGEST_ENDPOINT_PROD） */
+  logUpload?: { endpoint: string }
+}
+
+/** app:remote-prefs-applied 推送载荷：远端云同步偏好已写入本地 config，渲染层即时应用 */
+export interface RemotePrefsAppliedEvent {
+  locale?: string
+  theme?: string
 }
 
 /* ============================================================================
@@ -318,6 +328,69 @@ export interface CloudModelInfo {
   displayName: string
 }
 
+/* ============================================================================
+ * 云端群聊（cloud-groups，服务端端点未上线时优雅降级）
+ * ========================================================================== */
+
+/** 云端群（服务端 GroupVo；id 为字符串雪花） */
+export interface CloudGroupVo {
+  id: string
+  name: string
+  ownerId: string
+  memberCount: number
+  /** 我在群内的角色（owner / admin / member ...，原样透传服务端值） */
+  myRole: string
+}
+
+/** 云端群消息（服务端 GroupMessageVo） */
+export interface CloudGroupMessageVo {
+  id: string
+  senderId: string
+  senderName: string
+  content: string
+  /** ISO 时间字符串 */
+  createdAt: string
+}
+
+/** 云端群列表载荷（groups + 当前用户 id，meId 用于渲染层区分自己的消息；缺失为空串） */
+export interface CloudGroupListPayload {
+  groups: CloudGroupVo[]
+  meId: string
+}
+
+/** 云端群结构化错误类别：
+ * - unavailable：服务端端点未上线（404/501）→ 界面显示「云端群聊服务暂未开通」空态；
+ * - unauthorized：401（续期重试后仍失败）；forbidden：403 非成员/无权限；
+ * - not_found：404 群不存在；rate_limited：429 频控；network：网络/超时；
+ * - server：其余服务端错误；not_logged_in：本地无登录态。
+ */
+export type CloudGroupErrorKind =
+  | 'not_logged_in'
+  | 'unavailable'
+  | 'unauthorized'
+  | 'forbidden'
+  | 'not_found'
+  | 'rate_limited'
+  | 'network'
+  | 'server'
+
+/** 云端群结构化错误（可跨 IPC 序列化） */
+export interface CloudGroupErrorInfo {
+  kind: CloudGroupErrorKind
+  status?: number
+  message?: string
+}
+
+/** cloud:* 群聊通道统一应答 */
+export type CloudGroupResult<T> = { ok: true; data: T } | { ok: false; error: CloudGroupErrorInfo }
+
+/** cloud:groupMessages 查询参数（sinceId='0' 从头拉，limit 服务端上限 200） */
+export interface CloudGroupMessageQuery {
+  groupId: string
+  sinceId: string
+  limit: number
+}
+
 /** 本地后端云令牌注入状态（GET {backend}/api/v1/cloud/status，令牌只回传末 4 位） */
 export interface CloudBackendStatus {
   configured: boolean
@@ -335,6 +408,91 @@ export interface CloudAuthStatus {
   account?: CloudAccountInfo | null
   /** error 时的错误码（renderer 侧映射为本地化文案，未知码原样展示） */
   error?: string
+}
+
+/**
+ * 首次启动引导记录（config.json onboarding 键）。
+ * agreementVersion / privacyVersion 非空即代表用户已同意对应版本的协议与隐私政策
+ * （协议门禁不可跳过）；agreedAt 为同意时间 ISO 字符串；tutorialDone 标记新手教程是否完成。
+ */
+export interface OnboardingConfig {
+  agreementVersion: string
+  privacyVersion: string
+  agreedAt: string
+  tutorialDone: boolean
+}
+
+/* ============================================================================
+ * 统一日志系统（log-hub）
+ * ========================================================================== */
+
+/** 日志来源：渲染层 / 主进程 / Python 后端 / 平台（Electron/Chromium 全局错误） */
+export type LogSource = 'renderer' | 'main' | 'backend' | 'platform'
+
+/** 统一后的日志级别（electron-log / loguru 级别映射后的收敛集） */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+/** 日志枢纽的单条内存条目（主进程环形缓冲 + 三端传输共用） */
+export interface LogEntry {
+  /** 单调递增序号（主进程内唯一，用于排序/去重） */
+  seq: number
+  /** ISO 时间戳 */
+  ts: string
+  level: LogLevel
+  source: LogSource
+  /** 模块标签，如 'Backend'、'Avatar'、'Workspace' */
+  scope: string
+  message: string
+  data?: unknown
+}
+
+/** log:query 过滤与分页参数（level/source 传 'all' 或缺省表示不过滤） */
+export interface LogQueryParams {
+  source?: LogSource | 'all'
+  level?: LogLevel | 'all'
+  /** 大小写不敏感子串匹配（message + scope） */
+  search?: string
+  offset?: number
+  limit?: number
+}
+
+/** log:query 应答（total 为过滤后的全量条数，entries 为分页切片） */
+export interface LogQueryResult {
+  total: number
+  entries: LogEntry[]
+}
+
+/** 日志段（userData/Logs 下 main.log、轮转/后端/导出文件）条目 */
+export interface LogSegmentInfo {
+  name: string
+  /** 字节数 */
+  size: number
+  /** 毫秒时间戳 */
+  mtimeMs: number
+}
+
+/** 日志上传单条条目（log:upload 上报契约：丢弃 data 附件字段，仅保留结构化元数据） */
+export type LogUploadEntry = Omit<LogEntry, 'data'>
+
+/** log:upload 失败类别：
+ * - not_logged_in：本地无辰汐通行证登录态；unauthorized：401（续期重试后仍失败）；
+ * - rate_limited：429 频控；too_large：413 语义（日志体积过大）；
+ * - network：网络/超时；server：其余服务端错误（含 Result 信封 code!=0）。
+ */
+export type LogUploadErrorReason =
+  | 'not_logged_in'
+  | 'unauthorized'
+  | 'rate_limited'
+  | 'too_large'
+  | 'network'
+  | 'server'
+
+/** log:upload 应答（成功时 reportId 为服务端返回的报表 ID） */
+export interface LogUploadResult {
+  ok: boolean
+  reportId?: string
+  status?: number
+  reason?: LogUploadErrorReason
 }
 
 /* ============================================================================
@@ -369,6 +527,14 @@ export const IpcChannels = {
       getPaths: 'app:getPaths',
       getWelcomeCompleted: 'app:getWelcomeCompleted',
       setWelcomeCompleted: 'app:setWelcomeCompleted',
+      // 首次启动引导记录（协议/隐私同意版本与时间、教程完成标记）
+      getOnboarding: 'app:getOnboarding',
+      setOnboarding: 'app:setOnboarding',
+    },
+    push: {
+      // 显示偏好云同步：main 把远端 locale/theme 写入本地 config 后推送渲染层即时应用
+      //（防回环：远程应用引发的本地回写不上传，见 prefs-sync 的抑制窗口）
+      remotePrefsApplied: 'app:remote-prefs-applied',
     },
   },
   auth: {
@@ -532,10 +698,41 @@ export const IpcChannels = {
       fetchModels: 'cloud:fetchModels',
       // 查询本地后端令牌注入状态（消费 Python GET /api/v1/cloud/status）
       getBackendStatus: 'cloud:getBackendStatus',
+      // 显示偏好多端同步开关（config cloud.prefSyncEnabled）
+      getPrefSyncEnabled: 'cloud:getPrefSyncEnabled',
+      setPrefSyncEnabled: 'cloud:setPrefSyncEnabled',
+      // 云端群聊（服务端未上线时各通道返回 { ok:false, error:{kind:'unavailable'} }，界面降级空态）
+      groupList: 'cloud:groupList',
+      groupCreate: 'cloud:groupCreate',
+      groupInvite: 'cloud:groupInvite',
+      groupMessages: 'cloud:groupMessages',
+      groupSend: 'cloud:groupSend',
     },
     push: {
       // 登录状态机变化时 main 广播（login/status/logout/续期失败等均会触发）
       status: 'cloud:status-changed',
+    },
+  },
+  log: {
+    invoke: {
+      // 渲染层批量上报（fire-and-forget，main 侧强制 source='renderer'）
+      append: 'log:append',
+      // 环形缓冲过滤分页查询
+      query: 'log:query',
+      // 清空内存环（不删磁盘文件）
+      clear: 'log:clear',
+      // 当前缓冲写 userData/Logs/export-<timestamp>.log，返回路径
+      export: 'log:export',
+      // 列出 userData/Logs 下 main.log 与轮转/后端/导出文件
+      getSegments: 'log:getSegments',
+      // shell.openPath(PATHS.logs)
+      openDir: 'log:openDir',
+      // 上传诊断日志到辰汐云端 ingest 端点（仅用户手动触发；Bearer 通行证令牌）
+      upload: 'log:upload',
+    },
+    push: {
+      // 新日志节流合并推送（约 300ms 一批），日志页实时尾随
+      onAppended: 'log:onAppended',
     },
   },
 } as const
@@ -670,6 +867,12 @@ export interface ElectronApi {
     getPaths: () => Promise<AppPathsInfo>
     getWelcomeCompleted: () => Promise<boolean>
     setWelcomeCompleted: (value: boolean) => Promise<void>
+    /** 读取首次启动引导记录（协议/隐私同意版本与时间、教程完成标记） */
+    getOnboarding: () => Promise<OnboardingConfig>
+    /** 部分更新引导记录（main 侧合并写入） */
+    setOnboarding: (updates: Partial<OnboardingConfig>) => Promise<void>
+    /** 订阅远端云同步偏好应用推送（locale/theme 已写入本地 config），返回取消订阅函数 */
+    onRemotePrefsApplied: (callback: (data: RemotePrefsAppliedEvent) => void) => () => void
     /** 当前操作系统（process.platform），渲染层平台差异用（如 mac 红绿灯避让） */
     platform: 'darwin' | 'win32' | 'linux' | string
   }
@@ -770,6 +973,19 @@ export interface ElectronApi {
     fetchModels: () => Promise<CloudModelInfo[]>
     /** 查询本地后端令牌注入状态（后端未就绪/失败时返回 null，不阻塞页面） */
     getBackendStatus: () => Promise<CloudBackendStatus | null>
+    /** 显示偏好多端同步开关（仅同步 locale/theme/协议同意记录，最小必要） */
+    getPrefSyncEnabled: () => Promise<boolean>
+    setPrefSyncEnabled: (enabled: boolean) => Promise<void>
+    /** 云端群列表（未登录/服务端未上线时返回结构化错误，界面降级空态） */
+    groupList: () => Promise<CloudGroupResult<CloudGroupListPayload>>
+    /** 创建云端群 */
+    groupCreate: (name: string) => Promise<CloudGroupResult<CloudGroupVo>>
+    /** 按用户 ID 邀请成员（仅群主/管理员；幂等） */
+    groupInvite: (groupId: string, userId: string) => Promise<CloudGroupResult<boolean>>
+    /** 增量拉取云端群消息（sinceId='0' 从头拉，id 升序） */
+    groupMessages: (query: CloudGroupMessageQuery) => Promise<CloudGroupResult<CloudGroupMessageVo[]>>
+    /** 发送云端群消息（content ≤ 2000） */
+    groupSend: (groupId: string, content: string) => Promise<CloudGroupResult<CloudGroupMessageVo>>
     /** 订阅登录状态推送，返回取消订阅函数 */
     onStatus: (callback: (data: CloudAuthStatus) => void) => () => void
   }
@@ -779,5 +995,24 @@ export interface ElectronApi {
       { success: false; error?: string; cancelled?: boolean }
     >
     deleteBackgroundImage: (imageUrl: string) => Promise<{ success: boolean; error?: string }>
+  }
+  /** 统一日志系统（log-hub 环形缓冲） */
+  log: {
+    /** 批量上报渲染层日志（fire-and-forget，失败静默丢弃） */
+    append: (entries: Array<Omit<LogEntry, 'seq' | 'source'>>) => Promise<void>
+    /** 过滤分页查询内存环 */
+    query: (params: LogQueryParams) => Promise<LogQueryResult>
+    /** 清空内存环（不删磁盘文件） */
+    clear: () => Promise<void>
+    /** 当前缓冲写 export-<timestamp>.log，返回文件路径 */
+    exportLogs: () => Promise<string>
+    /** 列出日志目录下的分割/导出文件 */
+    getSegments: () => Promise<LogSegmentInfo[]>
+    /** 打开日志目录（shell.openPath） */
+    openDir: () => Promise<boolean>
+    /** 上传诊断日志到辰汐云端（仅用户手动触发；未登录返回 { ok:false, reason:'not_logged_in' }） */
+    upload: () => Promise<LogUploadResult>
+    /** 订阅新日志节流推送（约 300ms 一批），返回取消订阅函数 */
+    onAppended: (callback: (entries: LogEntry[]) => void) => () => void
   }
 }

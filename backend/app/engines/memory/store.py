@@ -93,9 +93,14 @@ def remove_agent_memory(agent_id: str) -> bool:
 
 
 def sanitize_track_key(user_key: str) -> str:
-    """校验并返回路径安全的 user_key；非法时抛 ValueError（防路径穿越）。"""
+    """校验并返回路径安全的 user_key；非法时抛 ValueError（防路径穿越）。
+
+    白名单为字母数字与 -_.；额外拒绝 "." / ".." 整段（白名单正则会放行
+    纯点段，导致 users/.. 逃逸到上级目录）。群成员轨键由
+    domain_policy.group_member_user_key 构造，段级已保证不会产生纯点段。
+    """
     key = (user_key or "").strip()
-    if not _USER_KEY_ALLOWED.match(key):
+    if key in (".", "..") or not _USER_KEY_ALLOWED.match(key):
         raise ValueError(f"Invalid user_key for memory track: {user_key!r}")
     return key
 

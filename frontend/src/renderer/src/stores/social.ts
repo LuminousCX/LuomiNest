@@ -11,6 +11,12 @@ import type {
   MessageCollaboration,
   SearchResult,
 } from '../types'
+import type {
+  CloudGroupVo,
+  CloudGroupMessageVo,
+  CloudGroupErrorInfo,
+  CloudGroupErrorKind,
+} from '@shared/ipc-types'
 import { useApi } from '../composables/useApi'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
@@ -464,8 +470,273 @@ export const useSocialStore = defineStore('social', () => {
     return response.data || []
   }
 
-  return {
-    groups,
+  /* ================================================================
+   * 云端群聊（服务端端点未上线时优雅降级）
+   *
+   * 数据经由主进程 cloud-groups 客户端（window.api.cloud.group*）：
+   * - 服务端 404/501（未部署）→ cloudState='unavailable'，界面显示
+   *   「云端群聊服务暂未开通」空态，后续请求被短路（不重试轰炸）；
+   * - 轮询仅作用于当前打开的群，窗口失焦（document.hasFocus()=false）时暂停；
+   * - 连续多次轮询失败自动停止，恢复需重新打开该群。
+   * ================================================================ */
+
+  /** 消息分页：契约 limit≤200，首页 50 条，「加载更多」按 50 递增重拉 */
+  const CLOUD_PAGE_SIZE = 50
+  const CLOUD_PAGE_MAX = 200
+  /** 当前打开群的轮询间隔（3~5s 区间取中） */
+  const CLOUD_POLL_INTERVAL_MS = 4000
+  /** 轮询连续失败上限：达到后自停，避免错误风暴 */
+  const CLOUD_POLL_MAX_FAILURES = 5
+
+  const cloudGroups = ref<CloudGroupVo[]>([])
+  /** 当前用户云 ID（群列表附带；用于把「自己发的消息」右对齐；未知道时全部左对齐） */
+  const cloudMeId = ref('')
+  /** idle=未探测/未登录 loading=拉取中 ready=服务可用 unavailable=服务端未开通 */
+  const cloudState = ref<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
+  const currentCloudGroupId = ref<string | null>(null)
+  const cloudMessages = ref<GroupMessage[]>([])
+  const cloudMessagesLoading = ref(false)
+  const cloudSending = ref(false)
+  const cloudHistoryLimit = ref(CLOUD_PAGE_SIZE)
+  /** 还有更早历史可加载（服务端只支持 sinceId 升序增量，故「加载更多」以更大 limit 重拉） */
+  const cloudCanLoadMore = ref(false)
+
+  let cloudPollTimer: ReturnType<typeof setInterval> | null = null
+  let cloudPollFailures = 0
+  /** 每个群已见到的最大服务端消息 id（轮询 sinceId 增量基准） */
+  const cloudLastIdByGroup = new Map<string, string>()
+
+  /** 雪花 id 比较：BigInt 优先（64 位超出 Number 安全整数），退化字符串比较 */
+  const _compareCloudIds = (a: string, b: string): number => {
+    if (a === b) return 0
+    try {
+      const diff = BigInt(a) - BigInt(b)
+      return diff > 0n ? 1 : -1
+    } catch {
+      return a < b ? -1 : 1
+    }
+  }
+
+  const _logCloudError = (action: string, error: CloudGroupErrorInfo): void => {
+    if (error.kind !== 'unavailable') {
+      logger.warn(`Cloud groups ${action} failed: ${error.kind}`, error.message || '')
+    }
+  }
+
+  /** 服务端消息 → 渲染层 GroupMessage（自己的消息 senderType='user' 以右对齐） */
+  const _normalizeCloudMessage = (msg: CloudGroupMessageVo, groupId: string): GroupMessage => ({
+    id: `cloud-${msg.id}`,
+    groupId,
+    senderId: msg.senderId,
+    senderName: msg.senderName || msg.senderId,
+    senderType: !!msg.senderId && msg.senderId === cloudMeId.value ? 'user' : 'agent',
+    content: msg.content,
+    timestamp: msg.createdAt || new Date().toISOString(),
+  })
+
+  const _updateCloudLastId = (groupId: string, rawIds: string[]): void => {
+    const current = cloudLastIdByGroup.get(groupId) || '0'
+    const max = rawIds.reduce((acc, id) => (_compareCloudIds(id, acc) > 0 ? id : acc), current)
+    cloudLastIdByGroup.set(groupId, max)
+  }
+
+  /** 拉取云端群列表（unavailable 后短路：本次会话不再探测，避免重试轰炸） */
+  const fetchCloudGroups = async (): Promise<void> => {
+    if (cloudState.value === 'unavailable') return
+    cloudState.value = 'loading'
+    try {
+      const result = await window.api.cloud.groupList()
+      if (result.ok) {
+        cloudGroups.value = result.data.groups
+        if (result.data.meId) cloudMeId.value = result.data.meId
+        cloudState.value = 'ready'
+      } else if (result.error.kind === 'unavailable') {
+        logger.debug('Cloud groups service not available; degraded to empty state')
+        cloudGroups.value = []
+        cloudState.value = 'unavailable'
+      } else if (result.error.kind === 'not_logged_in') {
+        cloudGroups.value = []
+        cloudState.value = 'idle'
+      } else {
+        _logCloudError('list', result.error)
+        cloudState.value = cloudGroups.value.length > 0 ? 'ready' : 'idle'
+      }
+    } finally {
+      if (cloudState.value === 'loading') cloudState.value = 'idle'
+    }
+  }
+
+  /** 创建云端群；成功返回新群（调用方负责选中），失败返回 null */
+  const createCloudGroup = async (name: string): Promise<CloudGroupVo | null> => {
+    const result = await window.api.cloud.groupCreate(name)
+    if (result.ok) {
+      cloudGroups.value = [result.data, ...cloudGroups.value.filter(g => g.id !== result.data.id)]
+      return result.data
+    }
+    _logCloudError('create', result.error)
+    return null
+  }
+
+  /** 按用户 ID 邀请成员；失败返回错误类别（forbidden → 仅群主/管理员） */
+  const inviteCloudMember = async (groupId: string, userId: string): Promise<{ ok: boolean; kind?: CloudGroupErrorKind }> => {
+    const result = await window.api.cloud.groupInvite(groupId, userId)
+    if (result.ok) return { ok: true }
+    _logCloudError('invite', result.error)
+    return { ok: false, kind: result.error.kind }
+  }
+
+  /** 全量拉取当前页消息（sinceId='0' + cloudHistoryLimit；「加载更多」加大 limit 后重进） */
+  const fetchCloudMessages = async (groupId: string, silent = false): Promise<void> => {
+    if (cloudState.value === 'unavailable') return
+    if (!silent) cloudMessagesLoading.value = true
+    try {
+      const result = await window.api.cloud.groupMessages({ groupId, sinceId: '0', limit: cloudHistoryLimit.value })
+      if (result.ok) {
+        const sorted = [...result.data].sort((a, b) => _compareCloudIds(a.id, b.id))
+        cloudMessages.value = sorted.map(m => _normalizeCloudMessage(m, groupId))
+        _updateCloudLastId(groupId, sorted.map(m => m.id))
+        cloudCanLoadMore.value = sorted.length >= cloudHistoryLimit.value && cloudHistoryLimit.value < CLOUD_PAGE_MAX
+      } else {
+        _handleCloudMessagesError(result.error)
+      }
+    } finally {
+      cloudMessagesLoading.value = false
+    }
+  }
+
+  /** 消息查询失败分类处理：仅 unavailable 改变全局降级态，其余静默 */
+  const _handleCloudMessagesError = (error: CloudGroupErrorInfo): void => {
+    if (error.kind === 'unavailable') {
+      cloudState.value = 'unavailable'
+      stopCloudPolling()
+      return
+    }
+    _logCloudError('fetch messages', error)
+  }
+
+  /** 轮询 tick：窗口失焦/最小化时跳过（暂停），增量拉取 sinceId 之后的新消息 */
+  const _pollCloudMessages = async (): Promise<void> => {
+    const groupId = currentCloudGroupId.value
+    if (!groupId || cloudState.value === 'unavailable') return
+    if (document.hidden || !document.hasFocus()) return // 失焦暂停轮询
+    try {
+      const result = await window.api.cloud.groupMessages({
+        groupId,
+        sinceId: cloudLastIdByGroup.get(groupId) || '0',
+        limit: CLOUD_PAGE_SIZE,
+      })
+      if (result.ok) {
+        cloudPollFailures = 0
+        if (result.data.length > 0) {
+          const known = new Set(cloudMessages.value.map(m => m.id))
+          const fresh = result.data
+            .sort((a, b) => _compareCloudIds(a.id, b.id))
+            .filter(m => !known.has(`cloud-${m.id}`))
+          for (const raw of fresh) cloudMessages.value.push(_normalizeCloudMessage(raw, groupId))
+          _updateCloudLastId(groupId, fresh.map(m => m.id))
+        }
+      } else {
+        cloudPollFailures += 1
+        if (result.error.kind === 'unavailable') {
+          cloudState.value = 'unavailable'
+          stopCloudPolling()
+          return
+        }
+        if (cloudPollFailures >= CLOUD_POLL_MAX_FAILURES) {
+          logger.warn('Cloud group polling stopped after repeated failures')
+          stopCloudPolling()
+        }
+      }
+    } catch (err) {
+      logger.warn('Cloud group polling error:', err instanceof Error ? err.message : err)
+    }
+  }
+
+  const startCloudPolling = (): void => {
+    stopCloudPolling()
+    cloudPollFailures = 0
+    cloudPollTimer = setInterval(() => {
+      void _pollCloudMessages()
+    }, CLOUD_POLL_INTERVAL_MS)
+  }
+
+  const stopCloudPolling = (): void => {
+    if (cloudPollTimer) {
+      clearInterval(cloudPollTimer)
+      cloudPollTimer = null
+    }
+  }
+
+  /** 打开一个云端群：重置分页、拉首页消息并启动轮询 */
+  const openCloudGroup = async (groupId: string): Promise<void> => {
+    if (currentCloudGroupId.value !== groupId) {
+      currentCloudGroupId.value = groupId
+      cloudMessages.value = []
+      cloudHistoryLimit.value = CLOUD_PAGE_SIZE
+      cloudCanLoadMore.value = false
+      cloudLastIdByGroup.set(groupId, '0')
+      await fetchCloudMessages(groupId)
+    } else {
+      await fetchCloudMessages(groupId, true)
+    }
+    if (cloudState.value !== 'unavailable') startCloudPolling()
+  }
+
+  /** 离开当前云端群：停轮询、清空线程 */
+  const leaveCloudGroup = (): void => {
+    stopCloudPolling()
+    currentCloudGroupId.value = null
+    cloudMessages.value = []
+    cloudCanLoadMore.value = false
+  }
+
+  /** 解除 unavailable 降级（赋值收进辅助函数，避免调用方 TS 收窄误判） */
+  const _resetCloudState = (): void => {
+    cloudState.value = 'idle'
+  }
+
+  /** 用户手动「重新检测」：解除降级后重探服务可用性，恢复时重开当前群 */
+  const recheckCloudGroups = async (groupId: string | null): Promise<void> => {
+    _resetCloudState()
+    await fetchCloudGroups()
+    if (groupId && cloudState.value === 'ready') {
+      await openCloudGroup(groupId)
+    }
+  }
+
+  /** 加载更早历史：加大 limit 重拉（契约只有 sinceId 升序，无反向分页） */
+  const loadOlderCloudMessages = async (): Promise<void> => {
+    const groupId = currentCloudGroupId.value
+    if (!groupId || !cloudCanLoadMore.value || cloudMessagesLoading.value) return
+    cloudHistoryLimit.value = Math.min(cloudHistoryLimit.value + CLOUD_PAGE_SIZE, CLOUD_PAGE_MAX)
+    await fetchCloudMessages(groupId)
+  }
+
+  /** 发送消息：成功后本地追加（幂等去重），失败返回 false 供 UI 提示 */
+  const sendCloudMessage = async (groupId: string, content: string): Promise<boolean> => {
+    const text = content.trim()
+    if (!text || cloudSending.value) return false
+    cloudSending.value = true
+    try {
+      const result = await window.api.cloud.groupSend(groupId, text)
+      if (result.ok) {
+        const msg = _normalizeCloudMessage(result.data, groupId)
+        if (!cloudMessages.value.some(m => m.id === msg.id)) cloudMessages.value.push(msg)
+        _updateCloudLastId(groupId, [result.data.id])
+        return true
+      }
+      if (result.error.kind === 'unavailable') cloudState.value = 'unavailable'
+      _logCloudError('send', result.error)
+      return false
+    } finally {
+      cloudSending.value = false
+    }
+  }
+
+  const currentCloudGroup = (): CloudGroupVo | null =>
+    cloudGroups.value.find(g => g.id === currentCloudGroupId.value) || null
+
+  return {    groups,
     currentGroup,
     groupMessages,
     availableAgents,
@@ -491,5 +762,24 @@ export const useSocialStore = defineStore('social', () => {
     resetCollaboration,
     indexRAGContent,
     searchRAG,
+    // 云端群聊
+    cloudGroups,
+    cloudMeId,
+    cloudState,
+    currentCloudGroupId,
+    cloudMessages,
+    cloudMessagesLoading,
+    cloudSending,
+    cloudCanLoadMore,
+    fetchCloudGroups,
+    createCloudGroup,
+    inviteCloudMember,
+    fetchCloudMessages,
+    openCloudGroup,
+    leaveCloudGroup,
+    loadOlderCloudMessages,
+    sendCloudMessage,
+    recheckCloudGroups,
+    currentCloudGroup,
   }
 })

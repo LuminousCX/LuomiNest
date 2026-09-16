@@ -2,14 +2,21 @@
 /**
  * LuomiNest 欢迎向导
  *
- * 4 步向导壳层：背景装饰 + 跳过按钮 + 步骤内容 Transition + 步骤指示点。
+ * 5 步向导壳层：背景装饰 + 跳过按钮 + 步骤内容 Transition + 步骤指示点。
+ * 流程（2026 重编排）：
+ *   0. StepAgreement — 用户协议/隐私政策同意门禁（不可跳过，全局跳过按钮在此步隐藏）
+ *   1. StepLanguage  — 语言选择
+ *   2. StepLogin     — 辰汐通行证 / 本地账号 / 跳过（可稍后在设置补登）
+ *   3. StepTour      — 新手指引功能亮点
+ *   4. StepReady     — 准备就绪
  * 状态与逻辑由 useWelcomeWizard composable 管理，
  * 各步骤模板与样式拆分至 components/welcome/ 子组件。
  */
+import { ref, watch } from 'vue'
+import StepAgreement from '../components/welcome/StepAgreement.vue'
 import StepLanguage from '../components/welcome/StepLanguage.vue'
-import StepFeatures from '../components/welcome/StepFeatures.vue'
-import StepAccount from '../components/welcome/StepAccount.vue'
-import StepAiModel from '../components/welcome/StepAiModel.vue'
+import StepLogin from '../components/welcome/StepLogin.vue'
+import StepTour from '../components/welcome/StepTour.vue'
 import StepReady from '../components/welcome/StepReady.vue'
 import { useWelcomeWizard, TOTAL_STEPS } from '../composables/useWelcomeWizard'
 
@@ -17,19 +24,12 @@ const {
   currentStep,
   selectedLang,
   selectLang,
-  agreed,
   i18n,
-  addTemplateCategory,
-  selectedTemplate,
-  aiModelSaving,
-  aiModelError,
-  newProvider,
-  newProviderFormValid,
-  handleTemplateSelect,
-  addProviderAndNext,
-  testState,
-  testResultText,
-  testConnection,
+  agreedTerms,
+  agreedPrivacy,
+  agreementReady,
+  agreeAndNext,
+  markTutorialDone,
   accountSubmitting,
   accountError,
   hasAccount,
@@ -37,11 +37,27 @@ const {
   accountForm,
   accountFormValid,
   registerAndNext,
+  loginAndNext,
   nextStep,
   prevStep,
   startApp,
   skipWizard,
 } = useWelcomeWizard()
+
+/** 教程最后一卡「开始使用」：记录 tutorialDone 后进入准备就绪步 */
+const finishTour = (): void => {
+  markTutorialDone()
+  nextStep()
+}
+
+/** 已到达过的最远步骤：协议门禁步（0）未通过时不允许经步骤点跳过到后续步骤 */
+const maxVisitedStep = ref(0)
+watch(currentStep, (s) => {
+  if (s > maxVisitedStep.value) maxVisitedStep.value = s
+})
+const jumpTo = (idx: number): void => {
+  if (idx <= maxVisitedStep.value) currentStep.value = idx
+}
 </script>
 
 <template>
@@ -51,30 +67,35 @@ const {
       <div class="bg-orb bg-orb-2"></div>
     </div>
 
-    <button class="skip-btn" @click="skipWizard" :title="i18n.skip">
+    <!-- 协议门禁步隐藏全局跳过：跳过仅针对登录/教程，协议同意不可跳过 -->
+    <button v-if="currentStep > 0" class="skip-btn" @click="skipWizard" :title="i18n.skip">
       {{ i18n.skip }}
     </button>
 
     <div class="welcome-container">
       <Transition name="step-fade" mode="out-in">
-        <StepLanguage
+        <StepAgreement
           v-if="currentStep === 0"
           key="step-0"
+          :i18n="i18n"
+          :agreed-terms="agreedTerms"
+          :agreed-privacy="agreedPrivacy"
+          :agreement-ready="agreementReady"
+          @update:agreed-terms="agreedTerms = $event"
+          @update:agreed-privacy="agreedPrivacy = $event"
+          @next="agreeAndNext"
+        />
+
+        <StepLanguage
+          v-else-if="currentStep === 1"
+          key="step-1"
           :i18n="i18n"
           :selected-lang="selectedLang"
           @update:selected-lang="selectLang"
           @next="nextStep"
         />
 
-        <StepFeatures
-          v-else-if="currentStep === 1"
-          key="step-1"
-          :i18n="i18n"
-          @next="nextStep"
-          @prev="prevStep"
-        />
-
-        <StepAccount
+        <StepLogin
           v-else-if="currentStep === 2"
           key="step-2"
           :has-account="hasAccount"
@@ -84,39 +105,14 @@ const {
           :account-submitting="accountSubmitting"
           :account-error="accountError"
           @register="registerAndNext"
+          @login="loginAndNext"
           @next="nextStep"
           @prev="prevStep"
         />
 
-        <StepAiModel
-          v-else-if="currentStep === 3"
-          key="step-3"
-          :i18n="i18n"
-          :add-template-category="addTemplateCategory"
-          :selected-template="selectedTemplate"
-          :ai-model-error="aiModelError"
-          :ai-model-saving="aiModelSaving"
-          :new-provider="newProvider"
-          :new-provider-form-valid="newProviderFormValid"
-          :test-state="testState"
-          :test-result-text="testResultText"
-          @update:add-template-category="addTemplateCategory = $event"
-          @select-template="handleTemplateSelect"
-          @add-provider-and-next="addProviderAndNext"
-          @test-connection="testConnection"
-          @next="nextStep"
-          @prev="prevStep"
-        />
+        <StepTour v-else-if="currentStep === 3" key="step-3" @finish="finishTour" @prev="prevStep" />
 
-        <StepReady
-          v-else-if="currentStep === 4"
-          key="step-4"
-          :i18n="i18n"
-          :agreed="agreed"
-          @update:agreed="agreed = $event"
-          @prev="prevStep"
-          @start="startApp"
-        />
+        <StepReady v-else-if="currentStep === 4" key="step-4" :i18n="i18n" @prev="prevStep" @start="startApp" />
       </Transition>
 
       <div class="step-dots">
@@ -124,7 +120,8 @@ const {
           v-for="s in TOTAL_STEPS"
           :key="s - 1"
           :class="['dot', { active: currentStep === s - 1 }]"
-          @click="currentStep = s - 1"
+          :disabled="s - 1 > maxVisitedStep"
+          @click="jumpTo(s - 1)"
         ></button>
       </div>
     </div>
@@ -224,6 +221,11 @@ const {
   width: var(--space-6);
   border-radius: var(--radius-xs);
   background: var(--lumi-brand);
+}
+
+.dot:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .step-fade-enter-active {

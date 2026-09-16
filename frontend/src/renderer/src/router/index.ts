@@ -86,6 +86,12 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'route.privacyDetail' }
   },
   {
+    path: '/settings/terms-detail',
+    name: 'SettingsTermsDetail',
+    component: () => import('../views/settings/TermsDetailView.vue'),
+    meta: { titleKey: 'route.termsDetail' }
+  },
+  {
     path: '/avatar',
     name: 'Avatar',
     component: () => import('../views/AvatarView.vue'),
@@ -106,6 +112,12 @@ const routes: RouteRecordRaw[] = [
     name: 'PanelConsole',
     component: () => import('../views/panel/ConsoleView.vue'),
     meta: { titleKey: 'route.console', icon: 'Terminal' }
+  },
+  {
+    path: '/panel/logs',
+    name: 'PanelLogs',
+    component: () => import('../views/panel/LogsView.vue'),
+    meta: { titleKey: 'log.route.title', icon: 'ScrollText' }
   },
   {
     path: '/tasks',
@@ -186,7 +198,17 @@ const router = createRouter({
 // DesktopPet 为独立展示窗口：仅渲染 Live2D + IPC send 通信，不依赖 auth token，
 // 且其 webContents !== mainWindow.webContents，无法通过 assertTrustedSender 校验，
 // 故加入公开路由 allowlist，避免被路由守卫重定向到登录页（导致桌宠窗口显示主页面而非 Live2D）。
-const PUBLIC_ROUTES = new Set(['Welcome', 'Splash', 'Login', 'DesktopPet', 'DesktopPetChat'])
+// TermsDetail / PrivacyDetail：法务文本页公开可读，且首启向导（StepAgreement）未持有
+// 登录态时也会经 router push 打开它们查看完整协议，公开放行避免被守卫打断向导流程。
+const PUBLIC_ROUTES = new Set([
+  'Welcome',
+  'Splash',
+  'Login',
+  'DesktopPet',
+  'DesktopPetChat',
+  'SettingsTermsDetail',
+  'SettingsPrivacyDetail'
+])
 
 // Token 缓存：避免每次导航都走 IPC。登录/登出时通过 invalidateAuthToken() 清除
 let _cachedAuthToken: string | null | undefined

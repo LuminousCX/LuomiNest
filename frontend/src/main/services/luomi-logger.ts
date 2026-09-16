@@ -18,6 +18,7 @@ import { join } from 'path'
 import { mkdirSync } from 'fs'
 import log from 'electron-log'
 import { app } from 'electron'
+import { initLogHub } from './log-hub'
 
 const isDev = !app.isPackaged
 
@@ -32,9 +33,14 @@ const getLogsDir = (): string => {
 log.transports.file.resolvePathFn = () => join(getLogsDir(), 'main.log')
 log.transports.file.level = isDev ? 'debug' : 'info'
 log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] [{scope}] {text}'
+// 文件轮转：超过 5MB 时归档为 main.old.log 并重建 main.log（electron-log 5 默认 archiveLogFn）
+log.transports.file.maxSize = 5 * 1024 * 1024
 
 log.transports.console.level = isDev ? 'debug' : 'info'
 log.transports.console.format = '[{level}][{scope}] {text}'
+
+// 统一日志枢纽：把主进程 electron-log 日志喂进内存环形缓冲（log:query / log:onAppended 数据源）
+initLogHub()
 
 /** LuomiNest 日志器接口 */
 export interface LuomiNestLogger {

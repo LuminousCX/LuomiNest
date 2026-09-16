@@ -506,18 +506,6 @@ export interface SystemLogEntry {
   extra: Record<string, unknown> | null
 }
 
-export interface LogUploadRequest {
-  logs: SystemLogEntry[]
-  uploaded_by: string
-  session_id: string | null
-}
-
-export interface LogUploadResponse {
-  upload_id: string
-  received_count: number
-  status: string
-}
-
 export interface ExecuteCommandRequest {
   command: string
   description?: string

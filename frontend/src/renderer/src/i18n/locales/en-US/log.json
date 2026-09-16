@@ -1,0 +1,55 @@
+{
+  "log": {
+    "nav": {
+      "title": "App Logs"
+    },
+    "route": {
+      "title": "App Logs - LuomiNest"
+    },
+    "title": "App Logs",
+    "desc": "Unified viewer for renderer / main / backend / platform logs",
+    "source": {
+      "all": "All",
+      "renderer": "Renderer",
+      "main": "Main",
+      "backend": "Backend",
+      "platform": "Platform"
+    },
+    "level": {
+      "all": "All levels",
+      "debug": "Debug",
+      "info": "Info",
+      "warn": "Warn",
+      "error": "Error"
+    },
+    "searchPlaceholder": "Search messages or scopes...",
+    "following": "Following",
+    "paused": "Paused",
+    "follow": "Follow live",
+    "clear": "Clear",
+    "export": "Export",
+    "upload": "Upload diagnostic logs",
+    "uploading": "Uploading...",
+    "uploadNeedLoginHint": "Sign in with the Chenxi Passport to upload diagnostic logs (Settings → Passport Login)",
+    "uploadNotLoggedIn": "Not signed in to the Chenxi Passport. Sign in from Settings first",
+    "uploadUnauthorized": "Session expired. Please sign in again and retry",
+    "uploadRateLimited": "Uploading too frequently. Please try again later",
+    "uploadTooLarge": "Logs are too large. Try again later or export them locally first",
+    "uploadNetwork": "Network error. Upload failed",
+    "uploadOkReport": "Uploaded successfully (Report ID: {id})",
+    "uploadOkNoStatus": "Uploaded successfully",
+    "uploadFailed": "Upload failed: {reason}",
+    "openDir": "Open log directory",
+    "segments": "Log files",
+    "segmentsEmpty": "No log files",
+    "openFolder": "Open folder",
+    "close": "Close",
+    "count": "{n} entries",
+    "page": "Page {current} / {total}",
+    "jumpLatest": "Jump to latest",
+    "empty": "No matching logs",
+    "exportedTo": "Exported to {path}",
+    "cleared": "In-memory logs cleared",
+    "error": "Operation failed"
+  }
+}

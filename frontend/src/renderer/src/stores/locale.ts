@@ -40,6 +40,14 @@ export const useLocaleStore = defineStore('locale', () => {
     })
     .catch(() => {})
 
+  // 远端云同步偏好实时生效：main 把远端 locale 写入 config 后推送到这里。
+  // 防回环由 main 侧 prefs-sync 的抑制窗口负责（本次回写不会触发再上传）。
+  window.api?.app?.onRemotePrefsApplied?.((data) => {
+    if (!data?.locale) return
+    const normalized = normalizeLocale(data.locale)
+    if (normalized !== locale.value) setLocale(normalized)
+  })
+
   return {
     locale,
     setLocale,

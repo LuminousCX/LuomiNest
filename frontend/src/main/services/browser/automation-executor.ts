@@ -12,6 +12,10 @@
  * 人类化输入：
  * - human: true（默认）→ 使用 LuminousHumanMouse/Keyboard（Phase 3 接入）
  * - human: false → 直接 sendInputEvent
+ *
+ * 只读化说明（2026-09）：AI 工具面只暴露 navigate_and_screenshot（browser_visit）
+ * 与 screenshot；click/type/get_html 等动作保留在 executor 内部以兼容 WS 协议，
+ * 不再对 AI 暴露。
  */
 import { WebContents } from 'electron'
 
@@ -137,6 +141,81 @@ class LuomiAutomationExecutor {
       if (!url) return { success: false, error: '缺少 url 参数' }
       await wc.loadURL(url)
       return { success: true, data: { url } }
+    })
+
+    // 复合动作：导航 → 等待加载（did-finish-load + 稳定期）→ 自动截图
+    // 供 AI 工具 browser_visit 使用；超时也尽力截图并返回 ok:false + 已得信息
+    this.handlers.set('navigate_and_screenshot', async (args, wc) => {
+      const url = args.url as string
+      if (!url) return { success: false, error: '缺少 url 参数' }
+
+      // load 等待超时（默认 20s）；稳定期默认 1.5s（0~10s 可配）
+      const timeoutMs = Math.min(60, Math.max(5, Number(args.timeout_seconds) || 20)) * 1000
+      const stableMs = Math.min(10, Math.max(0, Number(args.wait_seconds ?? 1.5))) * 1000
+
+      let loadError: string | null = null
+      await new Promise<void>((resolve) => {
+        let settled = false
+        const finish = (): void => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          wc.removeListener('did-finish-load', onLoad)
+          wc.removeListener('did-fail-load', onFail)
+          resolve()
+        }
+        const timer = setTimeout(() => {
+          if (!loadError) loadError = `页面加载超时 (${timeoutMs / 1000}s)`
+          finish()
+        }, timeoutMs)
+        const onLoad = () => finish()
+        const onFail = (
+          _e: unknown,
+          errorCode: number,
+          errorDescription: string,
+          validatedUrl: string,
+          isMainFrame: boolean
+        ): void => {
+          // -3 ERR_ABORTED：被新导航取代，非真实失败，继续等待
+          if (!isMainFrame || errorCode === -3) return
+          if (!loadError) {
+            loadError = `页面加载失败 (${errorCode}): ${errorDescription}` + (validatedUrl ? ` — ${validatedUrl}` : '')
+          }
+        }
+        wc.on('did-finish-load', onLoad)
+        wc.on('did-fail-load', onFail)
+        wc.loadURL(url).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err)
+          if (!msg.includes('ERR_ABORTED') && !loadError) loadError = msg
+        })
+      })
+
+      // 渲染稳定期：load 完成后再等待片刻，让动态内容完成首帧渲染
+      if (stableMs > 0) {
+        await new Promise((r) => setTimeout(r, stableMs))
+      }
+
+      // 尽力截图：失败不阻断信息返回
+      let screenshot: string | undefined
+      try {
+        const image = await wc.capturePage()
+        screenshot = image.toDataURL()
+      } catch (e) {
+        logger.warn('navigate_and_screenshot 截图失败:', e)
+      }
+
+      return {
+        // WS 协议层恒为 success:true（success:false 会转为 RuntimeError），
+        // 加载成败通过 data.ok 表达，超时/失败时仍携带截图与已得信息
+        success: true,
+        data: {
+          ok: !loadError,
+          final_url: wc.getURL(),
+          title: wc.getTitle(),
+          screenshot,
+          ...(loadError ? { error: loadError } : {})
+        }
+      }
     })
 
     this.handlers.set('go_back', async (_args, wc) => {
