@@ -18,6 +18,7 @@
  * - 然后 usePngTuber 内部加载 spritesheet.png 并切割帧
  */
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Sparkles,
   Loader2,
@@ -30,6 +31,8 @@ import LumiButton from '../common/LumiButton.vue'
 import { usePngTuber } from '@/composables/avatar/usePngTuber'
 import { useStageBackgroundStore } from '@/stores/stage-background'
 import type { AvatarEmotion, AvatarMode } from './types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   isDesktopMode: boolean
@@ -65,6 +68,12 @@ const isLoading = ref(false)
 const loadError = ref<string | null>(null)
 
 onMounted(async () => {
+  // 无模型可加载时直接给出提示：fetch('') 会解析为当前文档自身（打包态返回
+  // index.html），导致 `<!DOCTYPE ... is not valid JSON` 假报错
+  if (!props.manifestUrl) {
+    loadError.value = t('avatar.workshop.noModelAvailable')
+    return
+  }
   isLoading.value = true
   try {
     await renderer.loadModel(props.manifestUrl)

@@ -150,7 +150,9 @@ const hiddenListExpanded = ref(false)
               <span class="skin-type">{{ TYPE_LABELS[skin.type] }}</span>
             </div>
             <div class="skin-tags">
-              <span class="skin-tag source-tag" :class="skin.source">{{ skin.source }}</span>
+              <span class="skin-tag source-tag" :class="skin.source">
+                {{ skin.source === 'builtin' ? t('avatar.sidebar.builtinTag') : t('avatar.sidebar.importedTag') }}
+              </span>
               <span v-for="tag in skin.tags" :key="tag" class="skin-tag">{{ tag }}</span>
             </div>
             <!-- 能力摘要 -->

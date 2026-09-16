@@ -1,0 +1,155 @@
+{
+  "schema_version": "1.0",
+  "models": [
+    {
+      "id": "builtin-live2d-llny",
+      "name": "LLny",
+      "type": "live2d",
+      "version": "cubism4",
+      "source": "builtin",
+      "path": "live2d/llny/llny.model3.json",
+      "thumbnail": "live2d/llny/thumbnail.png",
+      "tags": ["可爱"],
+      "capabilities": {
+        "expressions": ["- -", "口罩", "吐舌", "哭", "外套", "星星", "比心", "生气", "眼镜", "脸红", "脸黑", "荷包蛋", "阿尼亚"],
+        "motions": ["idel"],
+        "lip_sync": true,
+        "focus_tracking": true,
+        "pad_emotion": true,
+        "custom_params": ["ParamAngleX", "ParamAngleY", "ParamAngleZ", "ParamEyeBallX", "ParamEyeBallY", "ParamEyeLOpen", "ParamEyeROpen", "ParamMouthOpenY", "ParamMouthForm", "ParamBrowLY", "ParamBrowRY", "ParamBrowLForm", "ParamBrowRForm", "ParamCheek"]
+      },
+      "binding": {
+        "voice": "zh-CN-XiaoxiaoNeural",
+        "voice_lang": "zh",
+        "expression_map": {
+          "happy": "星星",
+          "sad": "哭",
+          "neutral": "- -",
+          "love": "脸红",
+          "surprise": "阿尼亚",
+          "angry": "生气",
+          "think": "眼镜",
+          "awkward": "脸黑",
+          "curious": "吐舌",
+          "shy": "脸红",
+          "excited": "比心",
+          "confused": "荷包蛋"
+        },
+        "default_expression": "- -"
+      }
+    },
+    {
+      "id": "builtin-live2d-hiyori",
+      "name": "Hiyori",
+      "type": "live2d",
+      "version": "cubism4",
+      "source": "builtin",
+      "path": "live2d/hiyori/Hiyori.model3.json",
+      "thumbnail": "live2d/hiyori/thumbnail.png",
+      "tags": ["日系", "少女"],
+      "capabilities": {
+        "expressions": [],
+        "motions": ["Hiyori_m01", "Hiyori_m02", "Hiyori_m03", "Hiyori_m04", "Hiyori_m05", "Hiyori_m06", "Hiyori_m07", "Hiyori_m08", "Hiyori_m09", "Hiyori_m10"],
+        "lip_sync": true,
+        "focus_tracking": true,
+        "pad_emotion": true,
+        "custom_params": ["ParamAngleX", "ParamAngleY", "ParamAngleZ", "ParamEyeBallX", "ParamEyeBallY", "ParamEyeLOpen", "ParamEyeROpen", "ParamMouthOpenY", "ParamBrowLY", "ParamBrowRY"]
+      },
+      "binding": {
+        "voice": "zh-CN-XiaoxiaoNeural",
+        "voice_lang": "zh",
+        "expression_map": {
+          "happy": "happy",
+          "sad": "sad",
+          "neutral": "neutral",
+          "love": "neutral",
+          "surprise": "surprised",
+          "angry": "angry",
+          "think": "neutral",
+          "awkward": "sad",
+          "curious": "happy",
+          "shy": "neutral",
+          "excited": "happy",
+          "confused": "sad"
+        },
+        "default_expression": "neutral"
+      }
+    },
+    {
+      "id": "builtin-pixel-default",
+      "name": "Pixel Pet",
+      "type": "pixel",
+      "version": "1.0",
+      "source": "builtin",
+      "path": "pixel/default-pet/manifest.json",
+      "thumbnail": "pixel/default-pet/thumbnail.png",
+      "tags": ["像素", "Q版", "桌宠"],
+      "capabilities": {
+        "expressions": [],
+        "motions": [],
+        "states": ["idle", "walk", "think", "talk", "happy", "sad", "sleep", "alert"],
+        "lip_sync": false,
+        "focus_tracking": false,
+        "pad_emotion": false,
+        "custom_params": null
+      },
+      "binding": {
+        "voice": "zh-CN-XiaoxiaoNeural",
+        "voice_lang": "zh",
+        "expression_map": {
+          "happy": "happy",
+          "sad": "sad",
+          "neutral": "idle",
+          "love": "happy",
+          "surprise": "alert",
+          "angry": "alert",
+          "think": "think",
+          "awkward": "sad",
+          "curious": "think",
+          "shy": "idle",
+          "excited": "happy",
+          "confused": "sad"
+        },
+        "default_expression": "idle"
+      }
+    },
+    {
+      "id": "builtin-png-codex",
+      "name": "Codex Pet",
+      "type": "png",
+      "version": "1.0",
+      "source": "builtin",
+      "path": "png/codex-pet/manifest.json",
+      "thumbnail": "png/codex-pet/thumbnail.png",
+      "tags": ["Codex", "Q版", "桌宠"],
+      "capabilities": {
+        "expressions": [],
+        "motions": [],
+        "states": ["idle", "running-right", "running-left", "waving", "jumping", "failed", "waiting", "running", "review"],
+        "lip_sync": false,
+        "focus_tracking": false,
+        "pad_emotion": false,
+        "custom_params": null
+      },
+      "binding": {
+        "voice": "zh-CN-XiaoxiaoNeural",
+        "voice_lang": "zh",
+        "expression_map": {
+          "happy": "waving",
+          "sad": "failed",
+          "neutral": "idle",
+          "love": "waving",
+          "surprise": "jumping",
+          "angry": "failed",
+          "think": "review",
+          "awkward": "failed",
+          "curious": "review",
+          "shy": "waving",
+          "excited": "jumping",
+          "confused": "review"
+        },
+        "default_expression": "idle"
+      }
+    }
+  ]
+}

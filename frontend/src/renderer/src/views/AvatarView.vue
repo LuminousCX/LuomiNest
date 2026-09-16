@@ -456,6 +456,11 @@ function handleRestoreAll() {
 async function handleDeleteModel(id: string) {
   const model = manifest.value?.models.find(m => m.id === id)
   if (!model) return
+  // 内置模型存储在安装目录只读区，不可删除，只能隐藏（与用户导入模型隔离）
+  if (model.source === 'builtin') {
+    toast.warning(t('avatar.workshop.deleteBuiltinBlocked'))
+    return
+  }
   // Electron 侧按模型名管理文件（与 resolveModelLoadInfo 的匹配规则一致）
   const imported = importedModels.value.find(m => m.name === model.name)
   if (!imported) {

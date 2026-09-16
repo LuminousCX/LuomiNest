@@ -154,6 +154,16 @@ Remove-Item -Recurse -Force $ResourcesBackend -ErrorAction SilentlyContinue
 Copy-Item -Recurse $BackendDistDir $ResourcesBackend
 Write-Host "Backend resources copied" -ForegroundColor Green
 
+# 内置皮套清单必须随包分发：缺失时打包版"当前类型暂无模型"、PNG Tuber 假报 DOCTYPE 错。
+# spec 对缺失文件静默跳过（已有硬失败兜底），这里对拷贝结果再做一道校验。
+$AvatarManifest = Join-Path $ResourcesBackend "_internal\app\data\avatar-manifest.json"
+if (-not (Test-Path $AvatarManifest)) {
+    Write-Host "[ERROR] avatar-manifest.json missing from backend resources: $AvatarManifest" -ForegroundColor Red
+    Write-Host "Packaged app would show no built-in avatar models." -ForegroundColor Red
+    exit 1
+}
+Write-Host "Builtin avatar manifest OK" -ForegroundColor Green
+
 # 清理不应被打包的运行时数据：SQLite 预建库、WAL/SHM、secret_key
 # 首次启动时由后端 init_db() 建表 + secret_key_manager 自动生成，避免状态不一致与密钥泄露。
 $BackendDataDir = Join-Path $ResourcesBackend "data"

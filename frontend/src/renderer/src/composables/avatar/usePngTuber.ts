@@ -43,6 +43,7 @@
 import { ref, type Ref } from 'vue'
 import { Application, AnimatedSprite, BaseTexture, Rectangle, Texture } from 'pixi.js'
 import { createLuomiNestRendererLogger } from '@/utils/logger'
+import { i18n } from '../../i18n'
 import type { AvatarCapability, AvatarRendererType } from '@/types/avatar'
 import type { IAvatarRenderer } from './IAvatarRenderer'
 
@@ -159,6 +160,13 @@ export function usePngTuber(
   // ------------------------------------------------------------------
 
   const loadModel = async (url: string, _opts?: { scale?: number }): Promise<void> => {
+    // 空 URL 会在 fetch 时解析为当前文档自身（打包态返回 index.html），
+    // 进而抛出 `<!DOCTYPE ... is not valid JSON` 假报错，这里直接早退
+    if (!url) {
+      error.value = i18n.global.t('avatar.workshop.noModelAvailable')
+      return
+    }
+
     isLoading.value = true
     error.value = null
     isReady.value = false

@@ -25,6 +25,8 @@
       "deleteFailed": "删除失败：{message}",
       "deleteSuccess": "模型已删除",
       "selectModelFirst": "请先选择一个模型",
+      "noModelAvailable": "该类型暂无可用模型，可在右侧模型库导入",
+      "deleteBuiltinBlocked": "内置模型不可删除，如需隐藏可在模型库点击隐藏按钮",
       "bindingUpdated": "绑定配置已更新",
       "updateFailed": "更新失败：{message}"
     },
@@ -47,6 +49,8 @@
       "bgUrlInvalid": "背景图片地址格式异常"
     },
     "sidebar": {
+      "builtinTag": "默认",
+      "importedTag": "导入",
       "hideBuiltinHint": "隐藏该内置模型（可在下方恢复）",
       "confirmDelete": "再次点击确认删除",
       "deleteImported": "删除该导入模型",

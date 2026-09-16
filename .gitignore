@@ -131,7 +131,17 @@ desktop.ini
 backend/data/
 
 # 根目录运行时数据（secret_key、插件状态等）
-data/
+/data/
+
+# 后端内置资源清单必须进版本库：缺失会导致打包版内置模型全部不可见
+!backend/app/data/avatar-manifest.json
+
+# 后端运行时生成的扩展市场索引快照（registry_sync 写入，不入库）
+backend/app/data/cxp-registry-index.json
+
+# 插件运行时数据（仓库根与 backend 下的插件目录）
+plugins/*/data/
+backend/plugins/*/data/
 
 # TTS/ASR 等大模型文件（由后端自动下载，不纳入版本控制）
 backend/models/

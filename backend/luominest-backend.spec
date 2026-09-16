@@ -151,12 +151,19 @@ excludes = [
 # ---------------------------------------------------------------------------
 # Data files - ship config templates so the executable can run standalone
 # ---------------------------------------------------------------------------
+# 内置皮套清单：工坊 UI 以 /avatar/manifest 为单一真相源，缺此文件打包版内置模型
+# 全部不可见（且旧版后端只会静默返回空清单，前端无任何报错），这里直接硬失败
+_avatar_manifest = PROJECT_ROOT / 'app' / 'data' / 'avatar-manifest.json'
+if not _avatar_manifest.exists():
+    raise SystemExit(
+        f'[spec] FATAL: bundled avatar manifest not found: {_avatar_manifest}. '
+        'Check that .gitignore does not exclude backend/app/data/avatar-manifest.json.'
+    )
 datas = [
     (str(PROJECT_ROOT / 'config'), 'config'),
     (str(PROJECT_ROOT / 'plugins'), 'plugins'),
     (str(PROJECT_ROOT / 'skills'), 'skills'),
-    # 内置皮套清单：工坊 UI 以 /avatar/manifest 为单一真相源，缺此文件打包版内置模型全部不可见
-    (str(PROJECT_ROOT / 'app' / 'data' / 'avatar-manifest.json'), 'app/data'),
+    (str(_avatar_manifest), 'app/data'),
     (str(PROJECT_ROOT.parent / 'LICENSE'), '.'),
 ]
 # Filter out paths that don't exist (keeps spec robust on partial checkouts)

@@ -25,6 +25,8 @@
       "deleteFailed": "削除に失敗しました：{message}",
       "deleteSuccess": "モデルを削除しました",
       "selectModelFirst": "先にモデルを選択してください",
+      "noModelAvailable": "このタイプで利用できるモデルはまだありません。ライブラリからインポートできます。",
+      "deleteBuiltinBlocked": "内蔵モデルは削除できません。非表示にするにはライブラリの非表示ボタンを使ってください。",
       "bindingUpdated": "バインディング設定を更新しました",
       "updateFailed": "更新に失敗しました：{message}"
     },
@@ -47,6 +49,8 @@
       "bgUrlInvalid": "背景画像のURL形式が不正です"
     },
     "sidebar": {
+      "builtinTag": "デフォルト",
+      "importedTag": "インポート",
       "hideBuiltinHint": "この内蔵モデルを非表示にする（下で復元できます）",
       "confirmDelete": "もう一度クリックで削除を確認",
       "deleteImported": "このインポート済みモデルを削除",

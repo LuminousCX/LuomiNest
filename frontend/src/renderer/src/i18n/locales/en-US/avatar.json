@@ -25,6 +25,8 @@
       "deleteFailed": "Delete failed: {message}",
       "deleteSuccess": "Model deleted",
       "selectModelFirst": "Please select a model first",
+      "noModelAvailable": "No model available for this type yet. Import one from the library.",
+      "deleteBuiltinBlocked": "Built-in models cannot be deleted. Hide them from the library instead.",
       "bindingUpdated": "Binding configuration updated",
       "updateFailed": "Update failed: {message}"
     },
@@ -47,6 +49,8 @@
       "bgUrlInvalid": "Invalid background image URL"
     },
     "sidebar": {
+      "builtinTag": "Built-in",
+      "importedTag": "Imported",
       "hideBuiltinHint": "Hide this built-in model (can be restored below)",
       "confirmDelete": "Click again to confirm deletion",
       "deleteImported": "Delete this imported model",
