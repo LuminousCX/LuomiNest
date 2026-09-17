@@ -147,6 +147,15 @@ class MemoryEngine:
     def clear_facts(self) -> None:
         self._fact_manager.clear_facts()
 
+    def forget_facts(self, matcher) -> int:
+        """按匹配器遗忘事实（引擎写锁 + store 原子 mutate，返回删除条数）。
+
+        matcher: callable(data) -> int，在 store 锁内 load→fn(data)→save，
+        返回被遗忘（降置信）的事实条数。供自然语言 forget 操作调用，
+        替代生产代码直接摸 engine._store.mutate。
+        """
+        return self._store.mutate(matcher)
+
     def promote_conversation_facts(self, conversation_id: str, fact_ids: list[str] | None = None) -> int:
         """方案A：将对话级facts提升到Agent级。
 
@@ -620,6 +629,17 @@ def get_memory_engine(agent_id: str | None = None) -> MemoryEngine:
         engine = MemoryEngine(storage_path=path, agent_id=key)
         _engines[key] = engine
         return engine
+
+
+def remove_engine(agent_id: str | None = None) -> None:
+    """从注册表移除指定 Agent 的记忆引擎缓存（不落盘，仅清缓存）。
+
+    替代生产代码直接摸 _engines.pop。删除内存后再次 get_memory_engine
+    会重新构建。
+    """
+    key = agent_id or "_default"
+    with _engine_lock:
+        _engines.pop(key, None)
 
 
 # --- 群友画像块（§8.5.10 本期实现：群成员轨读侧） ---

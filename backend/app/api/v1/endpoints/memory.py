@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.utils import ok
 from app.engines.memory import get_memory_engine
-from app.engines.memory.memory_engine import FactItem, FACT_CATEGORIES, _engines
+from app.engines.memory.memory_engine import FactItem, FACT_CATEGORIES, remove_engine
 from app.engines.memory.store import OWNER_PREFIX
 from app.api.v1.deps import get_agents_store, get_conversation_store
 
@@ -292,6 +292,5 @@ async def reset_all_memory(
     conversation_store.delete_by_agent_id(agent_id or "_default")
     
     # 清除缓存
-    key = agent_id or "_default"
-    _engines.pop(key, None)
+    remove_engine(agent_id)
     return ok()

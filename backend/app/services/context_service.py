@@ -163,7 +163,7 @@ class ContextService:
 
             # 引擎写锁 + store 原子 mutate：forget 与蒸馏/CRUD 并发时不相互覆盖
             async with engine.write_lock:
-                removed = await asyncio.to_thread(engine._store.mutate, _apply_forget)
+                removed = await asyncio.to_thread(engine.forget_facts, _apply_forget)
             if removed > 0:
                 logger.info(f"[Memory] Forgot {removed} facts matching '{target}'")
 
