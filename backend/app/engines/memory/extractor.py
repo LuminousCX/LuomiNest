@@ -193,7 +193,7 @@ class MemoryExtractor:
             logger.warning(f"[Memory] Knowledge extract failed: {e}")
             return None
 
-    # --- 公共解析方法（消除 extract_facts 和 distill_conversation 的重复代码） ---
+    # --- 公共解析方法（extract_facts 复用） ---
     # JSON 解析已统一收口到 core.utils.parse_llm_json（原 _parse_llm_json 已删除）
 
     async def _parse_facts_from_raw(
