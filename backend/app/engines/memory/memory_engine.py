@@ -144,6 +144,37 @@ class MemoryEngine:
     ) -> bool:
         return self._fact_manager.update_fact(fact_id, content, category, confidence)
 
+    async def remember_fact(self, fact: FactItem, conversation_id: str | None = None) -> None:
+        """写库 + 向量入库（事实↔向量生命周期联动，Phase 3）。
+
+        同步 add_fact 已把事实写进 store；此处补齐向量索引，使手动创建/工作流
+        创建的事实立即可被语义检索。embedding 失败不抛（与 update_profile_from_message
+        的 B2.3 降级策略一致），保证记忆主体写入不被向量子系统阻断。
+        """
+        await asyncio.to_thread(self.add_fact, fact)
+        try:
+            vm = self._get_vector_manager()
+            await vm.add_fact(fact, conversation_id)
+        except Exception as e:
+            logger.warning(f"[Memory] Vector add after remember_fact failed: {e}")
+
+    async def forget_fact_vector(self, fact_id: str) -> None:
+        """向量摘除（删库后即时清向量，Phase 3）。失败仅告警不阻断。"""
+        try:
+            if self._vector_manager is not None:
+                await self._vector_manager.remove(fact_id)
+        except Exception as e:
+            logger.warning(f"[Memory] Vector remove after delete_fact failed: {e}")
+
+    async def sync_fact_vector(self, fact: FactItem, conversation_id: str | None = None) -> None:
+        """事实更新后重同步向量：先摘旧向量再按新内容重嵌（Phase 3）。"""
+        try:
+            vm = self._get_vector_manager()
+            await vm.remove(fact.id)
+            await vm.add_fact(fact, conversation_id)
+        except Exception as e:
+            logger.warning(f"[Memory] Vector sync after update_fact failed: {e}")
+
     def clear_facts(self) -> None:
         self._fact_manager.clear_facts()
 

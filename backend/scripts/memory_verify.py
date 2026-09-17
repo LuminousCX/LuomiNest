@@ -419,6 +419,43 @@ async def t12_fact_content_guard(tmp: Path):
     check("低于阈值(0.7)的事实被丢弃", not any("低置信度" in f.content for f in data.facts))
 
 
+async def t13_fact_vector_lifecycle(tmp: Path):
+    """⑬ 事实↔向量生命周期联动：手动创建立即可检索；删除即时不再召回；更新重嵌。"""
+    from app.engines.memory.memory_engine import MemoryEngine
+    from app.engines.memory.models import FactItem
+
+    engine = MemoryEngine(
+        storage_path=tmp / "t13_agent", agent_id="t13_agent",
+        embedding_provider=FakeBatchEmbedding(),
+    )
+
+    # 创建：remember_fact 写库 + 向量入库，无需 rebuild 立即可检索
+    fact = FactItem(content="喜欢喝拿铁咖啡", category="preference", confidence=0.9)
+    await engine.remember_fact(fact)
+    hits = await engine.vector_retrieve("咖啡", k=5)
+    check("手动创建事实后立即可检索（无需 rebuild）",
+          any(h.fact_id == fact.id for h in hits), f"hits={[h.fact_id for h in hits]}")
+
+    # 删除：forget_fact_vector 即时摘除向量
+    await asyncio.to_thread(engine.remove_fact, fact.id)
+    await engine.forget_fact_vector(fact.id)
+    hits2 = await engine.vector_retrieve("咖啡", k=5)
+    check("删除事实后向量不再召回", all(h.fact_id != fact.id for h in hits2),
+          f"hits={[h.fact_id for h in hits2]}")
+
+    # 更新：sync_fact_vector 先摘旧再按新内容重嵌
+    fact2 = FactItem(content="喜欢喝拿铁咖啡", category="preference", confidence=0.9)
+    await engine.remember_fact(fact2)
+    updated = engine.update_fact(fact2.id, content="喜欢喝燕麦拿铁")
+    check("更新事实成功", updated)
+    data = engine.load_data()
+    fact2_new = next(f for f in data.facts if f.id == fact2.id)
+    await engine.sync_fact_vector(fact2_new)
+    hits3 = await engine.vector_retrieve("拿铁", k=5)
+    check("更新后向量按新内容重嵌", any(h.fact_id == fact2.id for h in hits3),
+          f"hits={[h.fact_id for h in hits3]}")
+
+
 async def main():
     tmp = Path(tempfile.mkdtemp(prefix="lumi-verify-"))
     print("=" * 72)
@@ -441,6 +478,7 @@ async def main():
             ("⑩ 并发写零丢失", t10_concurrent_writes),
             ("⑪ rebuild 清旧索引", t11_rebuild_clears_stale),
             ("⑫ 内容限长/置信度夹取/阈值过滤", t12_fact_content_guard),
+            ("⑬ 事实↔向量生命周期联动", t13_fact_vector_lifecycle),
         ]:
             print(f"\n── {name} ──")
             try:

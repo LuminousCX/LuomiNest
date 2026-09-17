@@ -72,6 +72,19 @@ class VectorSearchManager:
 
         return [f for f in facts if f.id in {e.fact_id for e in entries}]
 
+    async def add_fact(self, fact: FactItem, conversation_id: str | None = None) -> None:
+        """单条事实向量入库（事实↔向量生命周期联动：写库后即时索引）。"""
+        scope = "conversation" if fact.category in FACT_SCOPE_CONVERSATION else "agent"
+        entry = VectorEntry(
+            fact_id=fact.id, content=fact.content, category=fact.category,
+            scope=scope, conversation_id=conversation_id or ""
+        )
+        await self._store.add(entry)
+
+    async def remove(self, fact_id: str) -> None:
+        """单条事实向量移除（事实↔向量生命周期联动：删库后即时摘除）。"""
+        await self._store.remove(fact_id)
+
     async def retrieve(self, query: str, k: int = 10) -> list[ScoredFact]:
         return await self._store.search(query, k=k)
 

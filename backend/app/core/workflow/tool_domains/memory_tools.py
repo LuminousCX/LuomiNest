@@ -268,7 +268,7 @@ async def _memory_create_fact(args: dict[str, Any]) -> WorkflowTaskResult:
         source="workflow",
     )
     async with engine.write_lock:
-        await asyncio.to_thread(engine.add_fact, fact)
+        await engine.remember_fact(fact)
 
     emitter = _get_emitter()
     if emitter:
@@ -309,6 +309,11 @@ async def _memory_update_fact(args: dict[str, Any]) -> WorkflowTaskResult:
     engine = _require_memory_engine()
     async with engine.write_lock:
         success = await asyncio.to_thread(engine.update_fact, fact_id, content, category, confidence)
+        if success:
+            data = await asyncio.to_thread(engine.load_data)
+            fact = next((f for f in data.facts if f.id == fact_id), None)
+            if fact is not None:
+                await engine.sync_fact_vector(fact)
     if not success:
         return WorkflowTaskResult(success=False, error=f"事实 {fact_id} 不存在")
 
@@ -339,6 +344,8 @@ async def _memory_delete_fact(args: dict[str, Any]) -> WorkflowTaskResult:
     engine = _require_memory_engine()
     async with engine.write_lock:
         success = await asyncio.to_thread(engine.remove_fact, fact_id)
+        if success:
+            await engine.forget_fact_vector(fact_id)
     if not success:
         return WorkflowTaskResult(success=False, error=f"事实 {fact_id} 不存在")
 

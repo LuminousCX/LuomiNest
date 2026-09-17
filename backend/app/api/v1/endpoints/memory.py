@@ -138,7 +138,7 @@ async def create_fact(request: CreateFactRequest, agent_id: str | None = None):
     )
     # 引擎写锁：与蒸馏/画像更新的读-改-写序列互斥，避免并发覆盖
     async with engine.write_lock:
-        await asyncio.to_thread(engine.add_fact, fact)
+        await engine.remember_fact(fact)
     return ok({"fact": fact.model_dump()})
 
 
@@ -147,6 +147,8 @@ async def delete_fact(fact_id: str, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
     async with engine.write_lock:
         removed = await asyncio.to_thread(engine.remove_fact, fact_id)
+        if removed:
+            await engine.forget_fact_vector(fact_id)
     if removed:
         return ok()
     raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
@@ -161,6 +163,11 @@ async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | 
         updated = await asyncio.to_thread(
             engine.update_fact, fact_id, request.content, request.category, request.confidence
         )
+        if updated:
+            data = await asyncio.to_thread(engine.load_data)
+            fact = next((f for f in data.facts if f.id == fact_id), None)
+            if fact is not None:
+                await engine.sync_fact_vector(fact)
     if updated:
         return ok()
     raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
