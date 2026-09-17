@@ -687,7 +687,7 @@ class ChatService:
         from app.engines.memory import get_memory_engine
         engine = get_memory_engine(agent_id)
         engine.clear_conversation_data(conv_id)
-        distillation_service.reset_distill_state(conv_id)
+        distillation_service.set_distilled_turns(agent_id, conv_id, 0)
         conv_domain = conv.get("domain") or ""
         conv_scene = conv.get("scene") or ""
         conv_user_key = conv.get("user_key") or ""

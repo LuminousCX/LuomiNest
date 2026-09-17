@@ -301,6 +301,7 @@ class MemoryStore:
                             updated_at=profile_row.updated_at or "",
                             static_facts=list(profile_row.static_facts or []),
                             dynamic_context=list(profile_row.dynamic_context or []),
+                            distilled_turns=int(profile_row.distilled_turns or 0),
                         )
                     fact_rows = (
                         session.execute(
@@ -361,6 +362,7 @@ class MemoryStore:
                     profile.name = data.profile.name or ""
                     profile.static_facts = data.profile.static_facts or []
                     profile.dynamic_context = data.profile.dynamic_context or []
+                    profile.distilled_turns = int(data.profile.distilled_turns or 0)
                     profile.updated_at = data.profile.updated_at or utc_now()
 
                     # 事实全量替换（单事务；事实集合量级小，替换语义最稳）

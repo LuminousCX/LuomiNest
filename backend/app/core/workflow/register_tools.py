@@ -568,6 +568,14 @@ async def register_internal_tools() -> None:
                     "items": {"type": "object"},
                     "description": "要蒸馏的对话消息列表",
                 },
+                "agent_id": {
+                    "type": "string",
+                    "description": "Agent ID（可选，缺省用主 Agent）",
+                },
+                "conversation_id": {
+                    "type": "string",
+                    "description": "对话 ID（可选，用于对话级摘要隔离）",
+                },
             },
             "required": ["messages"],
         },

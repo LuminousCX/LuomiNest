@@ -434,13 +434,16 @@ async def _memory_get_profile(args: dict[str, Any]) -> WorkflowTaskResult:
 
 @_wf_catch("memory.distill")
 async def _memory_distill(args: dict[str, Any]) -> WorkflowTaskResult:
-    """蒸馏对话为记忆"""
+    """蒸馏对话为记忆（统一走 DistillationService 单管道）。"""
     messages = args.get("messages", [])
     if not messages:
         return WorkflowTaskResult(success=False, error="Missing required parameter: messages")
 
-    engine = _require_memory_engine()
-    result = await engine.distill_conversation(messages)
+    from app.services.distillation_service import distillation_service
+
+    agent_id = args.get("agent_id") or None
+    conversation_id = args.get("conversation_id") or None
+    success = await distillation_service.distill_and_merge(agent_id, conversation_id, messages)
 
     emitter = _get_emitter()
     if emitter:
@@ -448,12 +451,12 @@ async def _memory_distill(args: dict[str, Any]) -> WorkflowTaskResult:
             module="memory",
             action="distilled",
             success=True,
-            output="对话已蒸馏为记忆" if result else "无需蒸馏",
-            metadata={"has_change": bool(result)},
+            output="对话已蒸馏为记忆" if success else "无需蒸馏",
+            metadata={"has_change": bool(success)},
         )
 
     return WorkflowTaskResult(
         success=True,
-        output=result or "对话无需蒸馏",
-        metadata={"has_change": bool(result)},
+        output="对话已蒸馏为记忆" if success else "对话无需蒸馏",
+        metadata={"has_change": bool(success)},
     )

@@ -27,6 +27,8 @@ class ProfileData(BaseModel):
     static_facts: list[str] = Field(default_factory=list)
     # Dynamic: 近期上下文和临时状态（频繁更新，如正在做的项目、短期计划）
     dynamic_context: list[str] = Field(default_factory=list)
+    # 蒸馏游标：本 owner_key + conversation_id 上次蒸馏时的完整轮次数（防多 worker/重启重复蒸馏）
+    distilled_turns: int = 0
 
 
 class ArchivedFact(BaseModel):

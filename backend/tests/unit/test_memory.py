@@ -199,18 +199,18 @@ async def test_update_profile_from_message(memory_engine):
 
 @pytest.mark.asyncio
 async def test_distill_conversation(memory_engine):
+    """蒸馏统一走 DistillationService：五段摘要写入 summary（不再写 facts）。"""
     mock_adapter = AsyncMock()
-    mock_adapter.chat.return_value = '''{
-        "profile_name": "",
-        "facts": [{"content": "Distilled fact", "category": "preference", "confidence": 0.9}],
-        "summary": {"用户画像": "- Test user", "偏好设置": "", "兴趣目标": "", "近期状态": "", "事件时间线": ""}
-    }'''
-    
+    mock_adapter.chat.side_effect = [
+        "## 用户画像\n- Test user\n## 偏好设置\n\n## 兴趣目标\n\n## 近期状态\n\n## 事件时间线\n",
+        "知识点内容",
+    ]
+
     messages = [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi!"}]
-    result = await memory_engine.distill_conversation(messages, llm_adapter=mock_adapter)
-    
-    assert result is not None
-    assert "Test user" in result
-    
+    from app.services.distillation_service import DistillationService
+    with patch("app.services.distillation_service.get_memory_engine", return_value=memory_engine):
+        success = await DistillationService.distill_and_merge("_default", "", messages, llm_adapter=mock_adapter)
+
+    assert success is True
     data = memory_engine.load_data()
-    assert len(data.facts) == 1
+    assert "Test user" in data.summaries.user_profile.summary

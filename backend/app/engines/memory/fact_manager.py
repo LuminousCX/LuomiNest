@@ -64,7 +64,19 @@ def _extract_content_words(text: str) -> set[str]:
 
 
 class FactManager:
-    """事实生命周期管理：CRUD、去重、合并、纠正、矛盾处理、时间衰减。"""
+    """事实生命周期管理：CRUD、去重、合并、纠正、矛盾处理、时间衰减。
+
+    合并决策表（_reconcile_conflicts 单入口）：
+
+    | 条件                                  | 动作                          |
+    |---------------------------------------|-------------------------------|
+    | 精确/语义相似 + 矛盾（correction 或正反词） | 旧版归档(is_latest=False)，新版替代 |
+    | 相似 + 新版置信度更高                 | 旧版归档，原地更新内容         |
+    | 相似 + 新版置信度不高于旧版           | 丢弃新版（保留旧版）           |
+    | 不相似                                | 追加新事实                    |
+
+    矛盾检测见 _is_contradiction；归档版本存 ArchivedFact.history。
+    """
 
     MAX_FACTS = 100
 
@@ -216,43 +228,50 @@ class FactManager:
                 fact.confidence = min(fact.confidence, 0.3)
 
     def _merge_fact(self, data: MemoryData, fact: FactItem) -> None:
-        """合并单条事实：存在相似则检测矛盾，否则追加。归档旧版本到history。"""
+        """合并单条事实：存在相似则进入矛盾/更新决策，否则追加。"""
         existing = self._find_similar_fact(data, fact)
         if existing:
-            if self._is_contradiction(existing, fact):
-                # 矛盾检测到：归档旧版本，新事实替代
-                existing.history.append(ArchivedFact(
-                    content=existing.content,
-                    category=existing.category,
-                    confidence=existing.confidence,
-                    reason="conflict",
-                ))
-                existing.is_latest = False
-                fact.supersedes_id = existing.id
-                fact.is_latest = True
-                # 继承旧版本的history
-                fact.history = existing.history.copy()
-                data.facts.append(fact)
-                logger.info(f"[Memory] Contradiction detected, new fact supersedes old: {existing.content[:30]} -> {fact.content[:30]}")
-            elif fact.confidence > existing.confidence:
-                # 更高置信度：归档旧版本，更新内容
-                existing.history.append(ArchivedFact(
-                    content=existing.content,
-                    category=existing.category,
-                    confidence=existing.confidence,
-                    reason="superseded",
-                ))
-                existing.content = fact.content
-                existing.confidence = fact.confidence
-                existing.category = fact.category
-                existing.source_error = fact.source_error
-                existing.expires_at = fact.expires_at
-                if fact.source_conversation_id:
-                    existing.source_conversation_id = fact.source_conversation_id
-                if fact.source_message:
-                    existing.source_message = fact.source_message
+            self._reconcile_conflicts(data, existing, fact)
         else:
             data.facts.append(fact)
+
+    def _reconcile_conflicts(self, data: MemoryData, existing: FactItem, fact: FactItem) -> None:
+        """合并决策单入口（见类顶部决策表）：矛盾替代 / 高置信度更新 / 丢弃。
+
+        归档旧版本到 history，保证版本可追溯。
+        """
+        if self._is_contradiction(existing, fact):
+            # 矛盾检测到：归档旧版本，新事实替代
+            existing.history.append(ArchivedFact(
+                content=existing.content,
+                category=existing.category,
+                confidence=existing.confidence,
+                reason="conflict",
+            ))
+            existing.is_latest = False
+            fact.supersedes_id = existing.id
+            fact.is_latest = True
+            # 继承旧版本的history
+            fact.history = existing.history.copy()
+            data.facts.append(fact)
+            logger.info(f"[Memory] Contradiction detected, new fact supersedes old: {existing.content[:30]} -> {fact.content[:30]}")
+        elif fact.confidence > existing.confidence:
+            # 更高置信度：归档旧版本，更新内容
+            existing.history.append(ArchivedFact(
+                content=existing.content,
+                category=existing.category,
+                confidence=existing.confidence,
+                reason="superseded",
+            ))
+            existing.content = fact.content
+            existing.confidence = fact.confidence
+            existing.category = fact.category
+            existing.source_error = fact.source_error
+            existing.expires_at = fact.expires_at
+            if fact.source_conversation_id:
+                existing.source_conversation_id = fact.source_conversation_id
+            if fact.source_message:
+                existing.source_message = fact.source_message
 
     @staticmethod
     def _is_contradiction(existing: FactItem, new_fact: FactItem) -> bool:
@@ -288,9 +307,23 @@ class FactManager:
         return False
 
     def _trim_facts(self, data: MemoryData) -> None:
-        if len(data.facts) > self.MAX_FACTS:
-            data.facts.sort(key=lambda f: f.confidence, reverse=True)
-            data.facts = data.facts[: self.MAX_FACTS]
+        """事实数超上限时归档：按置信度保留前 MAX_FACTS，被挤出的最新事实
+        以 [记忆整理] 行追加到 daily（不再静默丢弃）。
+        """
+        if len(data.facts) <= self.MAX_FACTS:
+            return
+        data.facts.sort(key=lambda f: f.confidence, reverse=True)
+        evicted = data.facts[self.MAX_FACTS:]
+        data.facts = data.facts[: self.MAX_FACTS]
+        for fact in evicted:
+            if not fact.is_latest:
+                continue
+            try:
+                self._store.append_daily(
+                    f"[记忆整理] 已归档事实（超出 {self.MAX_FACTS} 条上限）：{fact.content[:80]}"
+                )
+            except Exception as e:
+                logger.warning(f"[Memory] trim archive to daily failed: {e}")
 
     @staticmethod
     def _find_similar_fact(data: MemoryData, fact: FactItem) -> FactItem | None:

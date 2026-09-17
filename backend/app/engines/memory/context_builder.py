@@ -14,10 +14,15 @@ class ContextBuilder:
 
     def __init__(self, store: MemoryStore):
         self._store = store
-        # 向量召回返回的 fact ID 集合，用于下游相关性排序/聚合
-        self._relevant_fact_ids: set[str] = set()
 
-    def build_context(self, max_chars: int | None = None, query: str = "", conversation_store=None, conversation_id: str | None = None) -> str:
+    def build_context(
+        self,
+        max_chars: int | None = None,
+        query: str = "",
+        conversation_store=None,
+        conversation_id: str | None = None,
+        relevant_fact_ids: set[str] | None = None,
+    ) -> str:
         budget = max_chars or self.MAX_INJECTION_CHARS
         sections = []
         used_chars = 0
@@ -43,7 +48,7 @@ class ContextBuilder:
                 dynamic_context = conv_data.profile.dynamic_context
         if not dynamic_context and data.profile.dynamic_context:
             dynamic_context = data.profile.dynamic_context
-        
+
         if dynamic_context:
             dynamic_lines = "\n".join(f"- {c}" for c in dynamic_context[-5:])
             section = f"=== [当前状态] ===\n{dynamic_lines}"
@@ -86,10 +91,10 @@ class ContextBuilder:
                 all_facts.append(f)
 
         # query-aware 排序：优先使用向量召回结果，再用关键词匹配
-        if self._relevant_fact_ids:
+        if relevant_fact_ids:
             # 使用向量召回的结果排序
             def vector_relevance(f: FactItem) -> float:
-                if f.id in self._relevant_fact_ids:
+                if f.id in relevant_fact_ids:
                     return 1.0 + f.confidence * 0.1
                 return f.confidence * 0.1
             all_facts.sort(key=vector_relevance, reverse=True)
@@ -107,9 +112,6 @@ class ContextBuilder:
         else:
             all_facts.sort(key=lambda f: f.confidence, reverse=True)
         
-        # 重置相关fact ID集合
-        self._relevant_fact_ids = set()
-
         if all_facts:
             fact_lines = []
             truncated = False
@@ -140,7 +142,7 @@ class ContextBuilder:
             daily_content = self._store.load_daily(conversation_id=conversation_id)
         else:
             daily_content = self._store.load_daily()
-        
+
         if daily_content.strip() and used_chars + len(daily_content) + 30 <= budget:
             sections.append("=== [每日记录] ===\n" + daily_content.strip())
             used_chars += len(daily_content) + 30
@@ -152,7 +154,7 @@ class ContextBuilder:
             summary_text = summaries_to_markdown(conv_data)
         if not summary_text.strip():
             summary_text = summaries_to_markdown(data)
-        
+
         if summary_text.strip():
             remaining = budget - used_chars - 50
             if remaining > 100:

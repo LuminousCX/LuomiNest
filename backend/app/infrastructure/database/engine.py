@@ -232,6 +232,15 @@ async def _migrate_columns(conn) -> None:
                 )
                 logger.info("[DB] Migrated conversations table: added ix_conversations_user_key index")
 
+        # 记忆蒸馏游标列（memory_profiles，Phase 4 防多 worker/重启重复蒸馏）
+        if "memory_profiles" in inspector.get_table_names():
+            mp_cols = {c["name"] for c in inspector.get_columns("memory_profiles")}
+            if "distilled_turns" not in mp_cols:
+                sync_conn.execute(
+                    text("ALTER TABLE memory_profiles ADD COLUMN distilled_turns INTEGER DEFAULT 0")
+                )
+                logger.info("[DB] Migrated memory_profiles table: added distilled_turns column")
+
         # providers 表添加 protocol 列（接入协议：auto | chat_completions | anthropic_messages）
         if "providers" in inspector.get_table_names():
             provider_cols = {c["name"] for c in inspector.get_columns("providers")}

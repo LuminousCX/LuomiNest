@@ -51,6 +51,32 @@ if TYPE_CHECKING:
     from .vector_manager import VectorSearchManager
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# 锁协议（并发安全设计，Phase 4 文档化）
+# ═══════════════════════════════════════════════════════════════════════
+# 本模块存在两级锁，职责不同、互不嵌套（避免死锁）：
+#
+# 1) store 锁（threading.RLock，MemoryStore 内部）：
+#    保护 SQLite 单库读写。所有同步方法（load_data/save_data/mutate/
+#    append_daily 等）内部自持；async 调用方须经 asyncio.to_thread 包裹，
+#    因为 store 的同步 API 在 worker 线程中执行，asyncio.Lock 不可用。
+#
+# 2) 引擎级写锁（asyncio.Lock，self._async_lock，经 write_lock 暴露）：
+#    串行化「读-改-写」跨步序列（API 端点 / 工作流工具 / 提取器写入段），
+#    防止与蒸馏/画像更新并发时相互覆盖。
+#
+# 规则：
+#   - 纯内存内变更（无跨 await 的中间态）→ 只走 store 锁（mutate 原子化）。
+#   - 跨 await 的读-改-写序列 → 先拿 write_lock，再在锁内用 store 同步 API
+#     （经 to_thread）完成，保证整段序列原子。
+#   - 严禁在持有 write_lock 时再 await 任何可能反向获取 store 锁的代码
+#     （本层所有 store 调用均已 to_thread，不重入 write_lock）。
+#   - forget_facts / remember_fact 等门面方法已封装上述顺序，调用方勿再
+#     直接摸 engine._store / _async_lock。
+# ═══════════════════════════════════════════════════════════════════════
+
+
+
 class MemoryEngine:
     """记忆引擎门面：组合存储、事实管理、LLM 提取、上下文组装等组件。"""
 
@@ -288,6 +314,25 @@ class MemoryEngine:
         data.summaries = SummaryData()
         self._store.save_data(data)
 
+    # --- 蒸馏游标 ---
+
+    def get_distilled_turns(self, conversation_id: str | None = None) -> int:
+        """读取蒸馏游标（上次蒸馏时的完整轮次数，防多 worker/重启重复蒸馏）。
+
+        conversation_id 非空读对话级 store，否则读 Agent 级 store。
+        """
+        store = self._get_conv_store(conversation_id) if conversation_id else self._store
+        return int(store.load_data().profile.distilled_turns or 0)
+
+    def set_distilled_turns(self, conversation_id: str | None, turns: int) -> None:
+        """写入蒸馏游标（store 原子 mutate，Phase 4 落盘替代内存 dict）。"""
+        store = self._get_conv_store(conversation_id) if conversation_id else self._store
+
+        def op(data: MemoryData) -> None:
+            data.profile.distilled_turns = int(turns)
+
+        store.mutate(op)
+
     # --- 每日记录 ---
 
     def load_daily(self, date: str | None = None, conversation_id: str | None = None) -> str:
@@ -410,16 +455,16 @@ class MemoryEngine:
             conv_store = self._get_conv_store(conversation_id)
 
         # 如果有查询，尝试向量召回增强
+        retrieved_ids: set[str] | None = None
         if query:
             try:
                 retrieved = await self.vector_retrieve(query, k=10)
                 if retrieved:
                     retrieved_ids = {r.fact_id for r in retrieved}
-                    self._context_builder._relevant_fact_ids = retrieved_ids
             except Exception as e:
                 logger.warning(f"[Memory] Vector retrieve failed: {e}")
 
-        return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id)
+        return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id, relevant_fact_ids=retrieved_ids)
 
     def build_context_sync(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
         """同步上下文组装（与 build_context 的事件循环内回退分支相同，不含向量召回）。
@@ -474,32 +519,6 @@ class MemoryEngine:
                 await self.vector_dedup(new_facts, conversation_id)
             except Exception as e:
                 logger.warning(f"[Memory] Vector dedup after profile update failed: {e}")
-
-        return result
-
-    async def distill_conversation(
-        self,
-        messages: list[dict],
-        llm_adapter=None,
-        correction_hint: str = "",
-        conversation_id: str | None = None,
-    ) -> str | None:
-        result = await self._extractor.distill_conversation(messages, llm_adapter, correction_hint, conversation_id)
-
-        # 蒸馏后增量向量化（agent 级 + 对话级 latest facts，B2.3）
-        try:
-            data = await asyncio.to_thread(self._store.load_data)
-            agent_facts = [f for f in data.facts if f.is_latest]
-            if agent_facts:
-                await self.vector_dedup(agent_facts)
-            if conversation_id:
-                conv_store = self._get_conv_store(conversation_id)
-                conv_data = await asyncio.to_thread(conv_store.load_data)
-                conv_facts = [f for f in conv_data.facts if f.is_latest]
-                if conv_facts:
-                    await self.vector_dedup(conv_facts, conversation_id)
-        except Exception as e:
-            logger.warning(f"[Memory] Vector sync after distill failed: {e}")
 
         return result
 
