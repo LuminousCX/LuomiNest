@@ -253,3 +253,7 @@ review_security_diff.txt
 # å¿½ç•¥ PyInstaller è‡ªåŠ¨ç”Ÿæˆçš„ä¸´æ—¶ specï¼Œä½†ä¿ç•™é¡¹ç›®æ­£å¼ spec
 *.spec
 !backend/luominest-backend.spec
+
+# ÁÙÊ±»ØÊÕÄ¿Â¼£¨²âÊÔ½Å±¾µÈ£¬¿É»Ö¸´£©
+.trash_mem_tests/
+
