@@ -6,7 +6,7 @@ from typing import Any
 
 from app.engines.memory.models import FactItem, FACT_SCOPE_CONVERSATION
 from .store import agent_memory_dir
-from .vector_store import VectorStore, VectorEntry, LLMEmbeddingProvider, LocalEmbeddingProvider, ScoredFact
+from .vector_store import VectorStore, VectorEntry, LLMEmbeddingProvider, ScoredFact
 
 
 class VectorSearchManager:

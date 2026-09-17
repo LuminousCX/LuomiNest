@@ -88,8 +88,6 @@ class TestMemoryEngine:
         data = memory_engine.load_data()
         data.profile.name = "TestUser"
         memory_engine.save_data(data)
-        
-        memory_engine._cache = None
         loaded = memory_engine.load_data()
         assert loaded.profile.name == "TestUser"
 

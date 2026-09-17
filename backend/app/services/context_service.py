@@ -388,33 +388,6 @@ Examples:
 
         return messages
 
-    @staticmethod
-    async def _detect_and_sync_profile_updates(messages: list[dict], llm_adapter=None, agent_id: str | None = None) -> bool:
-        # 记忆系统仅对主 Agent 生效
-        if not is_main_agent(agent_id):
-            return False
-        user_messages = []
-        for msg in messages:
-            if msg.get("role") == "user":
-                user_messages.append(ContextService._extract_user_text(msg))
-
-        if not user_messages:
-            return False
-
-        latest_user_msg = user_messages[-1]
-        hint = ContextService.build_correction_hint(messages)
-
-        try:
-            engine = get_memory_engine(agent_id)
-            result = await engine.update_profile_from_message(latest_user_msg, llm_adapter, hint)
-            if result:
-                logger.info(f"[Memory] Sync profile update: {result}")
-                return True
-        except Exception as e:
-            logger.warning(f"[Memory] Sync profile detection failed: {e}")
-
-        return False
-
     async def inject_memory(
         self,
         messages: list[dict],

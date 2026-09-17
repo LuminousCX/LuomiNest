@@ -7,7 +7,7 @@ from app.core.utils import parse_llm_json, utc_now, extract_llm_text
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
 from .models import FACT_SCOPE_AGENT, FactItem, FACT_CATEGORIES, _SUMMARY_SECTION_MAP, summaries_to_markdown
-from .prompts import _FACT_EXTRACT_PROMPT, _DISTILL_PROMPT, _MERGE_SUMMARY_PROMPT, _SUMMARY_EXTRACT_PROMPT, _KNOWLEDGE_EXTRACT_PROMPT
+from .prompts import _FACT_EXTRACT_PROMPT, _DISTILL_PROMPT, _KNOWLEDGE_EXTRACT_PROMPT
 from .store import MemoryStore
 from .fact_manager import FactManager
 
@@ -302,71 +302,6 @@ class MemoryExtractor:
 
         except Exception as e:
             logger.warning(f"[Memory] Distillation failed: {e}")
-            return None
-
-    async def merge_summary(
-        self, old_summary: str, new_summary: str, llm_adapter=None
-    ) -> str | None:
-        """将旧摘要与新观察合并为一份统一的摘要。"""
-        if llm_adapter is None:
-            try:
-                llm_adapter = self._get_llm_adapter()
-            except Exception as e:
-                logger.warning(f"[Memory] No LLM adapter available: {e}")
-                return None
-
-        try:
-            prompt = _MERGE_SUMMARY_PROMPT.format(
-                old_summary=old_summary,
-                new_summary=new_summary,
-            )
-
-            result = await llm_adapter.chat(
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=2000,
-                route_hint=RouteHint.CHAT,
-            )
-            response_text = extract_llm_text(result)
-            logger.info(f"[Memory] Merge response: {response_text[:300]}")
-
-            return response_text
-
-        except Exception as e:
-            logger.warning(f"[Memory] Summary merge failed: {e}")
-            return None
-
-    async def extract_summary_sections(
-        self, content: str, llm_adapter=None
-    ) -> dict | None:
-        """使用LLM从摘要内容中提取五个部分：用户画像、偏好设置、兴趣目标、近期状态、事件时间线。"""
-        if llm_adapter is None:
-            try:
-                llm_adapter = self._get_llm_adapter()
-            except Exception as e:
-                logger.warning(f"[Memory] No LLM adapter available: {e}")
-                return None
-
-        try:
-            prompt = _SUMMARY_EXTRACT_PROMPT.format(content=content)
-
-            result = await llm_adapter.chat(
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-                max_tokens=1000,
-                route_hint=RouteHint.CHAT,
-            )
-            response_text = extract_llm_text(result)
-            logger.info(f"[Memory] Summary sections extract response: {response_text[:300]}")
-
-            parsed = parse_llm_json(response_text)
-            if parsed is None:
-                return None
-
-            return parsed
-
-        except Exception as e:
-            logger.warning(f"[Memory] Summary sections extract failed: {e}")
             return None
 
     async def extract_knowledge(

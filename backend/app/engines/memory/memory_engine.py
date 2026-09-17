@@ -34,7 +34,6 @@ from .prompts import (
     _REINFORCEMENT_HINT,
     _REINFORCEMENT_PATTERNS_EN,
     _REINFORCEMENT_PATTERNS_ZH,
-    _SUMMARY_EXTRACT_PROMPT,
 )
 from .store import (
     MemoryStore,
@@ -240,13 +239,6 @@ class MemoryEngine:
             "事件时间线": data.summaries.timeline.summary,
         }
 
-    async def merge_summary(self, old_summary: str, new_summary: str, llm_adapter=None) -> str | None:
-        return await self._extractor.merge_summary(old_summary, new_summary, llm_adapter)
-
-    async def extract_summary_sections(self, content: str, llm_adapter=None) -> dict | None:
-        """使用LLM从摘要内容中提取五个部分。"""
-        return await self._extractor.extract_summary_sections(content, llm_adapter)
-
     async def extract_knowledge(self, conversation: str, existing_knowledge: str = "", llm_adapter=None) -> str | None:
         """使用LLM从对话中提取知识点，并与现有知识库合并。"""
         return await self._extractor.extract_knowledge(conversation, existing_knowledge, llm_adapter)
@@ -370,11 +362,6 @@ class MemoryEngine:
             return await self._vector_manager.delete_conversation(conversation_id)
         return 0
 
-    def vector_save(self) -> None:
-        """保存向量索引"""
-        if self._vector_manager:
-            self._vector_manager.save()
-
     # --- 上下文 ---
 
     async def build_context_async(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
@@ -481,17 +468,11 @@ class MemoryEngine:
     def reset_all(self) -> None:
         self._store.reset_all()
 
-    # --- 内部兼容方法（测试和 API debug 端点使用） ---
+    # --- 内部兼容方法（测试使用） ---
 
     @property
     def _path(self):
         return self._store._path
-
-    def _memory_file(self):
-        return self._store._memory_file()
-
-    def _knowledge_file(self):
-        return self._store._knowledge_file()
 
     def _find_similar_fact(self, data: MemoryData, fact: FactItem):
         return self._fact_manager._find_similar_fact(data, fact)

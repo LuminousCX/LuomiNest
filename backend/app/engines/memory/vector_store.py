@@ -104,24 +104,6 @@ class LLMEmbeddingProvider:
         self._client_key = None
 
 
-class LocalEmbeddingProvider:
-    def __init__(self, model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"):
-        from sentence_transformers import SentenceTransformer
-        self.model = SentenceTransformer(model_name)
-        self._dim = self.model.get_sentence_embedding_dimension()
-
-    @property
-    def dim(self) -> int:
-        return self._dim
-
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        if not texts:
-            return []
-        loop = asyncio.get_running_loop()
-        vectors = await loop.run_in_executor(None, self.model.encode, texts)
-        return vectors.tolist()
-
-
 class VectorStore:
     """向量存储 — SQLite BLOB 按行存储 + 增量写（替代 vectors.npz 全量重写）。
 

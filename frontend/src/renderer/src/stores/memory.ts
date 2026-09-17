@@ -76,11 +76,8 @@ export const useMemoryStore = defineStore('memory', () => {
   const dailyContent = ref('')
   const dailyDate = ref('')
   const dailies = ref<string[]>([])
-  const injectionContent = ref('')
   const loading = ref(false)
   const saving = ref(false)
-  const distilling = ref(false)
-  const recentFacts = ref<FactItem[]>([])
 
   const memoryAgents = ref<MemoryAgent[]>([])
   const currentAgentId = ref<string | null>(null)
@@ -180,16 +177,6 @@ export const useMemoryStore = defineStore('memory', () => {
     }
   }
 
-  const triggerDistill = async (messages: Array<Record<string, unknown>>, agentId?: string | null) => {
-    distilling.value = true
-    try {
-      await apiPost(`/memory/distill${agentQuery(agentId)}`, { messages })
-      await fetchSummary(agentId)
-    } finally {
-      distilling.value = false
-    }
-  }
-
   const fetchDaily = async (date?: string, agentId?: string | null, conversationId?: string | null) => {
     try {
       const params: string[] = []
@@ -240,37 +227,6 @@ export const useMemoryStore = defineStore('memory', () => {
     conversationDailies.value = []
   }
 }
-
-  const fetchInjectionContent = async (agentId?: string | null) => {
-    try {
-      const result = await apiGet<{ content: string; has_memory: boolean }>(`/memory/inject${agentQuery(agentId)}`)
-      injectionContent.value = result.content || ''
-      return result
-    } catch {
-      injectionContent.value = ''
-      return { content: '', has_memory: false }
-    }
-  }
-
-  const fetchProfile = async (agentId?: string | null) => {
-    try {
-      profile.value = await apiGet<MemoryProfile>(`/memory/profile${agentQuery(agentId)}`)
-    } catch {
-      profile.value = { name: '', updated_at: '', static_facts: [], dynamic_context: [] }
-    }
-  }
-
-  const fetchRecentFacts = async (agentId?: string | null, since: number = 30) => {
-    try {
-      const query = agentId ? `?agent_id=${agentId}&since=${since}` : `?since=${since}`
-      const result = await apiGet<{ facts: FactItem[] }>(`/memory/recent-facts${query}`)
-      recentFacts.value = result.facts || []
-      return result.facts || []
-    } catch {
-      recentFacts.value = []
-      return []
-    }
-  }
 
   const fetchMemoryAgents = async () => {
     try {
@@ -332,10 +288,8 @@ export const useMemoryStore = defineStore('memory', () => {
         dailyContent,
         dailyDate,
         dailies,
-        injectionContent,
         loading,
         saving,
-        distilling,
         memoryAgents,
         currentAgentId,
         fetchMemory,
@@ -347,16 +301,11 @@ export const useMemoryStore = defineStore('memory', () => {
         saveKnowledge,
         fetchSummary,
         saveSummary,
-        triggerDistill,
         fetchDaily,
         appendDaily,
         fetchDailies,
         fetchConversationDailies,
         conversationDailies,
-        fetchInjectionContent,
-        fetchProfile,
-        fetchRecentFacts,
-        recentFacts,
         fetchMemoryAgents,
         switchAgent,
         clearFacts,
