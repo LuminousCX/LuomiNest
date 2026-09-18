@@ -3,6 +3,7 @@ import shutil
 import sys
 import time
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -563,6 +564,30 @@ async def lifespan(app: FastAPI):
     logger.info("[LuomiNest] Shutting down application...")
 
 
+# 请求日志 query 脱敏的敏感参数键（不区分大小写）
+_SENSITIVE_QUERY_KEYS = frozenset({
+    "token", "access_token", "refresh_token", "auth", "authorization",
+    "github_token", "api_key", "apikey", "secret", "password", "passwd",
+    "credential", "credentials", "session", "sessionid",
+})
+
+
+def _redact_query(query: str) -> str:
+    """请求日志对 query string 做键级脱敏：敏感参数的值替换为 ***。
+
+    令牌经 query 通道传递（历史 WS 兜底、publish-local 的 github_token 等）
+    会随整串 query 落入持久日志，此处在输出前抹除敏感值。
+    """
+    redacted_parts: list[str] = []
+    for part in query.split("&"):
+        key, sep, value = part.partition("=")
+        if sep and key.lower().strip() in _SENSITIVE_QUERY_KEYS:
+            redacted_parts.append(f"{key}=***")
+        else:
+            redacted_parts.append(part)
+    return "&".join(redacted_parts)
+
+
 def create_app() -> FastAPI:
     logger.info("[AppFactory] Creating FastAPI application...")
 
@@ -582,10 +607,12 @@ def create_app() -> FastAPI:
     async def log_requests(request: Request, call_next):
         start_time = time.time()
 
-        request_id = id(request)
+        # id(request) 是会被复用的内存地址，无法用于请求追溯；改用随机 uuid
+        request_id = uuid4().hex
         method = request.method
         path = request.url.path
-        query = str(request.query_params) if request.query_params else ""
+        # 令牌类参数值脱敏：query 通道历史上有 ?token=/?github_token=，整串入日志即泄密
+        query = _redact_query(str(request.query_params)) if request.query_params else ""
 
         logger.info(f"[HTTP] --> {method} {path}{f'?{query}' if query else ''} (id={request_id})")
 

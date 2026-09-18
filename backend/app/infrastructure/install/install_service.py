@@ -11,6 +11,7 @@ import time
 import zipfile
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from loguru import logger
@@ -19,7 +20,28 @@ from app.core.config import settings
 from app.core.utils import utc_now
 from app.infrastructure.database.config_namespace_store import ConfigNamespaceStore
 from app.infrastructure.database.json_store import repo_sources_store
-from app.security.net.safe_url import assert_url_safe, create_safe_async_client, UnsafeUrlError
+from app.security.net.safe_url import (
+    TRUSTED_DOWNLOAD_HOSTS,
+    assert_url_safe,
+    create_safe_async_client,
+    is_trusted_host,
+    UnsafeUrlError,
+)
+
+# 安装包下载大小上限（与解压侧 500MB 上限一致）；content-length 缺失/谎报时按累计字节兜底
+_MAX_DOWNLOAD_ZIP_BYTES = 500 * 1024 * 1024
+
+
+def _resolve_download_target(name: str) -> Path:
+    """解析下载目录内的目标路径，resolve 后必须仍在下载目录内。
+
+    itemId/version 由请求拼入文件名与临时目录名，属纵深防御：API schema 的
+    字符集约束是第一层，此处防其它调用方/历史数据绕过 schema 直达文件系统。
+    """
+    target = (DOWNLOAD_DIR / name).resolve()
+    if not target.is_relative_to(DOWNLOAD_DIR.resolve()):
+        raise ValueError(f"下载目标路径逃逸出下载目录: {name}")
+    return target
 
 # 安装记录存储（config_items 为唯一权威源；遗留 installed_items.json
 # 首次访问时幂等并集合并，旧文件保留不删除）
@@ -181,10 +203,10 @@ async def download_item(
     _active_downloads[item_id] = download_state
 
     try:
-        # 确定下载目标路径
+        # 确定下载目标路径（resolve 校验：itemId/version 注入不致逃逸出下载目录）
         filename = f"{item_id}-{version}.zip"
-        dest_path = DOWNLOAD_DIR / filename
-        temp_path = DOWNLOAD_DIR / f"{filename}.tmp"
+        dest_path = _resolve_download_target(filename)
+        temp_path = _resolve_download_target(f"{filename}.tmp")
 
         # 如果有 download_url，从远程下载
         if download_url:
@@ -346,6 +368,15 @@ async def _download_from_url(item_id: str, url: str, dest_path: Path):
     """从 URL 下载文件，支持进度追踪"""
     state = _active_downloads[item_id]
 
+    # 来源白名单：插件/技能安装等价于任意代码热载入后端进程，仅允许受信任市场主机。
+    # assert_url_safe 只做 SSRF 防护（目标非内网），不保证来源可信——
+    # 任意公网源即供应链 RCE（历史漏洞）。
+    parsed = urlparse(url)
+    if not is_trusted_host(parsed.hostname or ""):
+        raise UnsafeUrlError(
+            f"不受信任的下载来源: {parsed.hostname}（仅允许: {', '.join(sorted(TRUSTED_DOWNLOAD_HOSTS))}）"
+        )
+
     # SSRF 预校验：快速拒绝不安全 URL（实际连接时的 DNS Rebinding 防护由 SafeAsyncHTTPTransport 提供）
     await assert_url_safe(url)
 
@@ -355,6 +386,8 @@ async def _download_from_url(item_id: str, url: str, dest_path: Path):
                 raise Exception(f"下载失败: HTTP {response.status_code}")
 
             total = int(response.headers.get("content-length", 0))
+            if total > _MAX_DOWNLOAD_ZIP_BYTES:
+                raise Exception(f"安装包过大: {total} 字节（上限 {_MAX_DOWNLOAD_ZIP_BYTES}）")
             state["totalBytes"] = total
             downloaded = 0
             last_time = time.time()
@@ -365,6 +398,10 @@ async def _download_from_url(item_id: str, url: str, dest_path: Path):
                     f.write(chunk)
                     downloaded += len(chunk)
                     state["downloadedBytes"] = downloaded
+
+                    # 分块累计上限：content-length 缺失或谎报时兜底
+                    if downloaded > _MAX_DOWNLOAD_ZIP_BYTES:
+                        raise Exception(f"安装包超过大小上限 {_MAX_DOWNLOAD_ZIP_BYTES} 字节，中止下载")
 
                     # 计算速度和剩余时间
                     now = time.time()
@@ -413,7 +450,7 @@ async def _create_simulated_package(item_id: str, item_type: str, dest_path: Pat
         "description": f"{item_type} package: {item_id}",
     }
 
-    temp_dir = DOWNLOAD_DIR / f"{item_id}_sim_tmp"
+    temp_dir = _resolve_download_target(f"{item_id}_sim_tmp")
     if temp_dir.exists():
         shutil.rmtree(temp_dir)
     temp_dir.mkdir(parents=True)

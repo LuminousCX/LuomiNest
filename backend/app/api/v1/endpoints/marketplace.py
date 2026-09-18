@@ -5,7 +5,7 @@ import json
 import os
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from loguru import logger
 
@@ -391,15 +391,17 @@ async def list_tags():
 
 
 class InstallRequest(BaseModel):
-    itemId: str
-    itemType: str  # plugin / skill / agent
-    itemName: str
-    version: str = "1.0.0"
+    # itemId/version/itemType 会被拼进下载文件名与临时目录路径：
+    # 约束字符集与长度阻断 ../ 路径注入（纵深防御另见 install_service._resolve_download_target）
+    itemId: str = Field(..., min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+    itemType: str = Field(..., min_length=1, max_length=32, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")  # plugin / skill / agent
+    itemName: str = Field(..., min_length=1, max_length=128)
+    version: str = Field("1.0.0", min_length=1, max_length=32, pattern=r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
     downloadUrl: Optional[str] = None
 
 
 class UninstallRequest(BaseModel):
-    itemId: str
+    itemId: str = Field(..., min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 async def _do_install(req: InstallRequest):
@@ -727,10 +729,16 @@ async def get_cached_registry():
     }
 
 
+class PublishLocalRegistryRequest(BaseModel):
+    """publish-local 请求体：GitHub Token 走 body 而非 Query（避免进请求日志/代理历史）。"""
+
+    github_token: Optional[str] = Field(None, max_length=256, description="可选 GitHub Token，覆盖 settings.GITHUB_TOKEN")
+
+
 @router.post("/registry/publish-local")
 async def publish_local_registry(
     background_tasks: BackgroundTasks,
-    github_token: Optional[str] = Query(None, description="可选 GitHub Token，覆盖 settings.GITHUB_TOKEN"),
+    body: Optional[PublishLocalRegistryRequest] = None,
 ):
     """将本地 backend/plugins 与 backend/skills 中的插件/技能元数据推送到远程
     cxp-registry 仓库的 index.json。
@@ -738,8 +746,10 @@ async def publish_local_registry(
     需要 GitHub PAT 有 luminous-ChenXi/LuomiNest-cxp-registry 仓库的 contents:write 权限。
     异步后台执行，立即返回任务 ID 供前端轮询。
 
-    安全说明：token 仅在本次请求中使用，不持久化。
+    安全说明：token 仅在本次请求中使用，不持久化；已从 Query 参数改为请求体传递。
     """
+    github_token = body.github_token if body else None
+
     async def _do_publish():
         try:
             result = await publish_local_plugins_to_registry(github_token=github_token)

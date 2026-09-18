@@ -1,6 +1,7 @@
 import base64
 import logging
-from fastapi import APIRouter, UploadFile, File
+
+from fastapi import APIRouter, File, Request, UploadFile
 
 from app.core.config import settings
 from app.core.utils import fail, ok
@@ -81,24 +82,41 @@ def _extract_docx_text(file_bytes: bytes) -> tuple[str | None, str]:
 
 
 @router.post("/forward")
-async def forward_file(file: UploadFile = File(...)):
+async def forward_file(request: Request, file: UploadFile = File(...)):
     """文件上传转发，提取文本/图片内容并统一信封返回。
 
     成功: {"code": 0, "message": "ok", "error": null, "data": {content, type, filename}}
     失败: {"code": 1, "message": "...", "error": {code, message}, "data": null}
     """
-    try:
-        file_bytes = await file.read()
-    except Exception as e:
-        logger.warning(f"[UploadForward] 文件读取失败: {e}")
-        return fail("文件读取失败，请重新上传", err_code="UPLOAD_READ_FAILED", status_code=400)
-
-    if len(file_bytes) > settings.FILE_MAX_SIZE:
+    # Content-Length 预检：超限请求在读入任何字节前直接拒绝（历史实现先全量 read 进内存再查上限）
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > settings.FILE_MAX_SIZE:
         return fail(
             f"文件大小超过限制 ({settings.FILE_MAX_SIZE // 1024 // 1024}MB)",
             err_code="UPLOAD_TOO_LARGE",
             status_code=400,
         )
+
+    # 分块读取并限累计大小：文本/图片解析需要完整字节，但不给无上限的内存放大机会
+    chunks: list[bytes] = []
+    received = 0
+    try:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            received += len(chunk)
+            if received > settings.FILE_MAX_SIZE:
+                return fail(
+                    f"文件大小超过限制 ({settings.FILE_MAX_SIZE // 1024 // 1024}MB)",
+                    err_code="UPLOAD_TOO_LARGE",
+                    status_code=400,
+                )
+            chunks.append(chunk)
+    except Exception as e:
+        logger.warning(f"[UploadForward] 文件读取失败: {e}")
+        return fail("文件读取失败，请重新上传", err_code="UPLOAD_READ_FAILED", status_code=400)
+    file_bytes = b"".join(chunks)
 
     try:
         filename = file.filename or "unknown"

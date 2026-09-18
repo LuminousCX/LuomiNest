@@ -86,8 +86,11 @@ if (isDev) {
 // 任务管理器等系统 UI 使用正确的 AppUserModelId 而非 Electron 默认值。
 app.setAppUserModelId('com.luominest.desktop')
 
-const CSP_DEV = "default-src 'self' luominest-avatar: luominest-bg:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar: luominest-bg:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
-const CSP_PROD = "default-src 'self' luominest-avatar: luominest-bg:; script-src 'self' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: http: blob: luominest-avatar: luominest-bg:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: http: wss:; worker-src 'self' blob:"
+// CSP 收口（安全审计 B2-9）：
+// - connect-src 去掉全量 http: 明文出网，仅保留回环后端（http://127.0.0.1:*/localhost:*）+ https 远端（云端主站/用户自配远程后端）+ wss/ws；
+// - img-src 去掉 http:（明文图片源），保留 https 远端头像。
+const CSP_DEV = "default-src 'self' luominest-avatar: luominest-bg:; script-src 'self' 'unsafe-inline' 'unsafe-eval' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob: luominest-avatar: luominest-bg:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: wss: ws://localhost:* ws://127.0.0.1:* http://127.0.0.1:* http://localhost:*; worker-src 'self' blob:"
+const CSP_PROD = "default-src 'self' luominest-avatar: luominest-bg:; script-src 'self' luominest-avatar:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob: luominest-avatar: luominest-bg:; media-src 'self' blob: luominest-avatar:; connect-src 'self' blob: luominest-avatar: https://fonts.googleapis.com https://fonts.gstatic.com https: wss: ws://127.0.0.1:* ws://localhost:* http://127.0.0.1:* http://localhost:*; worker-src 'self' blob:"
 
 const saveWindowState = (): void => {
   if (!mainWindow || mainWindow.isDestroyed()) return
@@ -156,7 +159,9 @@ const createWindow = (): void => {
     icon: appIcon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      // 安全审计 B2-9：启用渲染进程沙盒（preload 仅使用 electron 受信 API 与
+      // process.platform/contextIsolated，均受沙盒预加载支持）
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }

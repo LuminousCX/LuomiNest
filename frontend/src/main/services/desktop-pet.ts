@@ -106,7 +106,8 @@ const createDesktopPetChat = (mainWindow: BrowserWindow | null): BrowserWindow =
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      // 安全审计 B2-9：与主窗口一致启用沙盒（preload 仅用 electron 受信 API）
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: false,
@@ -165,7 +166,8 @@ export const createDesktopPet = (mainWindow: BrowserWindow | null, modelInfo?: I
     maxHeight: MAX_HEIGHT,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      // 安全审计 B2-9：与主窗口一致启用沙盒（preload 仅用 electron 受信 API）
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: true
