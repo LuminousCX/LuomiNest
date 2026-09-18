@@ -610,6 +610,114 @@ def _migrate_scheduled_tasks() -> int:
 # 主入口
 # ──────────────────────────────────────────────────────────────────
 
+def _copy_standalone_db(standalone_db: str) -> int:
+    """将 standalone DB 的全部业务表复制到当前 DB（幂等；返回读取的源行数）。
+
+    表清单从 ORM 元数据动态生成（sorted_tables 已按外键依赖拓扑排序）：
+    手抄清单会随 schema 演进失真——历史 bug 即漏掉 conversation_messages/
+    group_messages/memory_*/users/skills 等，换机迁移静默丢失全部消息与记忆。
+
+    复制完整性硬校验：关键表（消息/记忆）复制失败或行数不符时抛 RuntimeError，
+    由调用方决定不标记迁移完成（下次启动幂等重试补齐）。
+    """
+    import sqlite3
+
+    from app.infrastructure.database import models  # noqa: F401  确保 metadata 注册完整
+    from app.infrastructure.database.base import Base
+
+    metadata = Base.metadata
+    tables_to_copy = [t.name for t in metadata.sorted_tables]
+
+    # 数据完整性关键表：缺失仅警告（旧版本源库本就无此类数据），失败/行数不符即硬失败
+    critical_tables = {
+        "conversation_messages",
+        "group_messages",
+        "memory_profiles",
+        "memory_facts",
+        "memory_summaries",
+        "memory_knowledge",
+        "memory_daily",
+        "memory_vectors",
+    }
+    critical_failures: list[str] = []
+    count = 0
+
+    src = sqlite3.connect(standalone_db)
+    src.row_factory = sqlite3.Row
+    try:
+        with sync_session_factory() as dst_session:
+            from sqlalchemy import text as sa_text
+            for table in tables_to_copy:
+                try:
+                    # 源表是否存在（旧版本 standalone DB 可能没有新表）
+                    src_cols_info = src.execute(f"PRAGMA table_info({table})").fetchall()
+                    if not src_cols_info:
+                        if table in critical_tables:
+                            logger.warning(
+                                f"[Migration] standalone_db: critical table {table} missing in source DB "
+                                f"(older standalone version?), nothing to migrate for it"
+                            )
+                        continue
+
+                    # 检查源表是否有数据
+                    src_count = src.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                    if src_count == 0:
+                        continue
+
+                    # 目标表已有数据：可能为上次中断的迁移或用户新数据，跳过但必须可见（供人工核对）
+                    dst_count = dst_session.execute(sa_text(f"SELECT COUNT(*) FROM {table}")).scalar() or 0
+                    if dst_count > 0:
+                        logger.warning(
+                            f"[Migration] standalone_db: destination {table} already has {dst_count} rows "
+                            f"(source has {src_count}), skipping — verify data completeness if unexpected"
+                        )
+                        continue
+
+                    # 列取源/目标交集（schema 演进后源库多出的列不致 INSERT 报错）
+                    dst_cols = {c.name for c in metadata.tables[table].columns}
+                    col_names = [c[1] for c in src_cols_info if c[1] in dst_cols]
+
+                    # 读取源数据并逐行插入（SQLAlchemy text() 只支持 :name 命名参数，
+                    # 历史 bug：qmark `?` 占位符配 dict 参数 → 每行 INSERT 均抛
+                    # ProgrammingError 且被 except 吞掉，整表复制静默为空）
+                    rows = src.execute(f"SELECT * FROM {table}").fetchall()
+                    for row in rows:
+                        col_list = ", ".join(col_names)
+                        placeholders = ", ".join(f":{c}" for c in col_names)
+                        values = {c: row[i] for i, c in enumerate(col_names)}
+                        dst_session.execute(
+                            sa_text(f"INSERT OR IGNORE INTO {table} ({col_list}) VALUES ({placeholders})"),
+                            values,
+                        )
+                    dst_session.commit()
+
+                    # 逐表行数校验（复制完整性硬校验）
+                    migrated = dst_session.execute(sa_text(f"SELECT COUNT(*) FROM {table}")).scalar() or 0
+                    count += len(rows)
+                    if migrated != src_count:
+                        msg = f"{table}: source has {src_count} rows but destination has {migrated} after copy"
+                        if table in critical_tables:
+                            critical_failures.append(msg)
+                        logger.error(f"[Migration] standalone_db: row count mismatch — {msg}")
+                    else:
+                        logger.info(f"[Migration] standalone_db: copied {migrated} rows from {table}")
+                except Exception as e:
+                    if table in critical_tables:
+                        critical_failures.append(f"{table}: {e}")
+                    logger.warning(f"[Migration] standalone_db: failed to copy {table}: {e}")
+    finally:
+        src.close()
+
+    # 关键表复制失败：拒绝静默产出"配置在但消息/记忆全丢"的半成品迁移
+    if critical_failures:
+        logger.error(
+            f"[Migration] standalone_db: CRITICAL tables failed to copy — {critical_failures}; "
+            f"migration NOT marked complete and will be retried on next startup"
+        )
+        raise RuntimeError(f"critical tables failed to copy: {critical_failures}")
+    return count
+
+
 def _migrate_from_standalone_db() -> int:
     """从独立后端 DB 迁移数据到 Electron DB（跨数据目录迁移）。
 
@@ -660,7 +768,6 @@ def _migrate_from_standalone_db() -> int:
     logger.info(f"[Migration] Found standalone DB: {standalone_db}")
 
     # 检查当前 DB 是否已有数据（如果有数据则跳过，避免覆盖）
-    import sqlite3
     try:
         with sync_session_factory() as session:
             from sqlalchemy import text as sa_text
@@ -673,72 +780,15 @@ def _migrate_from_standalone_db() -> int:
         logger.warning("[Migration] standalone_db: 现库数据量预检失败，继续执行复制流程", exc_info=True)
 
     # 从 standalone DB 复制数据
-    import sqlite3
-    count = 0
     try:
-        src = sqlite3.connect(standalone_db)
-        src.row_factory = sqlite3.Row
-
-        # 需要复制的表列表（按依赖顺序）
-        tables_to_copy = [
-            "providers",
-            "provider_credentials",
-            "agents",
-            "conversations",
-            "config_items",
-            "platform_instances",
-            "scheduled_tasks",
-            "usage_records",
-            "workflow_sessions",
-            "workflow_nodes",
-            "groups",
-            "repo_sources",
-            "marketplace_stats",
-            "tool_call_records",
-            "audit_logs",
-        ]
-
-        with sync_session_factory() as dst_session:
-            from sqlalchemy import text as sa_text
-            for table in tables_to_copy:
-                try:
-                    # 检查源表是否有数据
-                    src_rows = src.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
-                    if not src_rows or src_rows[0] == 0:
-                        continue
-
-                    # 检查目标表是否已有数据
-                    dst_count = dst_session.execute(sa_text(f"SELECT COUNT(*) FROM {table}")).scalar()
-                    if dst_count and dst_count > 0:
-                        logger.debug(f"[Migration] standalone_db: {table} already has {dst_count} rows, skipping")
-                        continue
-
-                    # 获取列名
-                    cols_info = src.execute(f"PRAGMA table_info({table})").fetchall()
-                    col_names = [c[1] for c in cols_info]
-
-                    # 读取源数据
-                    rows = src.execute(f"SELECT * FROM {table}").fetchall()
-
-                    # 逐行插入
-                    for row in rows:
-                        placeholders = ", ".join(["?" for _ in col_names])
-                        col_list = ", ".join(col_names)
-                        values = tuple(row[c] for c in range(len(col_names)))
-                        dst_session.execute(
-                            sa_text(f"INSERT OR IGNORE INTO {table} ({col_list}) VALUES ({placeholders})"),
-                            dict(zip(col_names, values))
-                        )
-                    dst_session.commit()
-                    migrated = len(rows)
-                    count += migrated
-                    logger.info(f"[Migration] standalone_db: copied {migrated} rows from {table}")
-                except Exception as e:
-                    logger.warning(f"[Migration] standalone_db: failed to copy {table}: {e}")
-
-        src.close()
+        count = _copy_standalone_db(standalone_db)
+    except RuntimeError as e:
+        # 关键表（消息/记忆）复制失败：不标记完成，下次启动幂等重试补齐
+        logger.error(f"[Migration] standalone_db: {e}")
+        return -1
     except Exception as e:
-        logger.error(f"[Migration] standalone_db: failed to open standalone DB: {e}")
+        # 源库打不开等永久性故障：标记已尝试，避免每次启动重试刷屏
+        logger.error(f"[Migration] standalone_db: failed to open/copy standalone DB: {e}")
         _mark_migrated("standalone_db", -1)
         return -1
 

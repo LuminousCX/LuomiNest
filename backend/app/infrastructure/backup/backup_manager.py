@@ -117,6 +117,18 @@ class LumiBackupManager:
                 "[Backup] Restoring over live data; stop the backend first to avoid file-lock issues on Windows"
             )
 
+            # 恢复前清理 data_dir 残留 -wal/-shm：备份内是免 WAL 的一致快照（header 仍标记
+            # WAL 模式），旧 sidecar 一旦残留，SQLite 打开新库时会 recovery 重放旧世代 WAL
+            # （跨库世代重放 → 数据串写/损坏）
+            for sidecar in ("luominest.db-wal", "luominest.db-shm"):
+                sidecar_path = data_dir / sidecar
+                if sidecar_path.exists():
+                    try:
+                        sidecar_path.unlink()
+                        logger.info(f"[Backup] Removed stale sidecar before restore: {sidecar}")
+                    except OSError as e:
+                        logger.warning(f"[Backup] Failed to remove stale sidecar {sidecar}: {e}")
+
             for item in temp_restore.iterdir():
                 target = data_dir / item.name
                 if target.exists():
@@ -141,7 +153,8 @@ class LumiBackupManager:
         fd, snapshot_path = tempfile.mkstemp(prefix="luominest_db_snapshot_", suffix=".db")
         os.close(fd)
         try:
-            src = sqlite3.connect(db_path)
+            # timeout 与数据库引擎对齐（30s）：默认 5s 在写高峰会让快照locked失败→整体备份失败
+            src = sqlite3.connect(db_path, timeout=30)
             try:
                 dst = sqlite3.connect(snapshot_path)
                 try:

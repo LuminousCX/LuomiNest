@@ -1,7 +1,7 @@
 """群聊消息拆表（groups.messages JSON 列 → group_messages 独立表）回归测试。
 
 覆盖：
-- engine._migrate_columns 存量回填：行数幂等（重复启动不重复导入）、
+- engine._migrate_columns_sync 存量回填：行数幂等（重复启动不重复导入）、
   回填失败保留旧列、成功后 DROP 旧列
 - GroupRepository 消息读写：追加走新表（单行 INSERT）、读取与拆表前
   同构（camelCase/snake_case 键风格原样保留）、limit 取最新 N 条
@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.infrastructure.database.base import Base
-from app.infrastructure.database.engine import _migrate_columns
+from app.infrastructure.database.engine import _migrate_columns_sync
 from app.infrastructure.database.repositories.group_repository import GroupRepository
 
 # 模拟旧库 groups.messages JSON（camelCase 与 snake_case 键风格混存，与存量一致）
@@ -70,7 +70,7 @@ def test_backfill_imports_and_drops_legacy_column(tmp_path):
             await conn.run_sync(_readd_legacy_column)
 
         async with engine.begin() as conn:
-            await _migrate_columns(conn)
+            await conn.run_sync(_migrate_columns_sync)
 
         def verify(sync_conn):
             rows = sync_conn.execute(
@@ -104,7 +104,11 @@ def test_backfill_imports_and_drops_legacy_column(tmp_path):
 
 
 def test_backfill_idempotent_on_rerun(tmp_path):
-    """幂等：第二次启动时消息表已有行 → 不重复导入（即使旧列仍存在，模拟 DROP 失败的库）。"""
+    """幂等：消息表已有行 → 不重复导入（即使旧列仍存在，模拟 DROP 失败的库）。
+
+    版本门语义下迁移重跑只发生在未来版本号变更时，故二次迁移前重置 user_version
+    模拟"新版本再次触发迁移"。
+    """
     engine = create_async_engine(f"sqlite+aiosqlite:///{(tmp_path / 'm2.db').as_posix()}")
 
     async def scenario():
@@ -113,14 +117,18 @@ def test_backfill_idempotent_on_rerun(tmp_path):
             await conn.run_sync(_seed_groups)
             await conn.run_sync(_readd_legacy_column)
         async with engine.begin() as conn:
-            await _migrate_columns(conn)
+            await conn.run_sync(_migrate_columns_sync)
 
         # 模拟旧 SQLite（<3.35）DROP 失败：旧列仍在且带着同样的 legacy 数据
         async with engine.begin() as conn:
             await conn.run_sync(_readd_legacy_column)
 
+        # 重置版本号：模拟未来 schema 版本变更重新触发迁移
         async with engine.begin() as conn:
-            await _migrate_columns(conn)
+            await conn.exec_driver_sql("PRAGMA user_version=0")
+
+        async with engine.begin() as conn:
+            await conn.run_sync(_migrate_columns_sync)
 
         def verify(sync_conn):
             count = sync_conn.execute(text("SELECT COUNT(*) FROM group_messages")).scalar()
@@ -151,7 +159,7 @@ def test_backfill_failure_keeps_legacy_column(tmp_path):
             await conn.run_sync(_readd_legacy_column)
 
         async with engine.begin() as conn:
-            await _migrate_columns(conn)
+            await conn.run_sync(_migrate_columns_sync)
 
         def verify(sync_conn):
             # 回填失败：旧列保留，可人工恢复；消息表无脏数据

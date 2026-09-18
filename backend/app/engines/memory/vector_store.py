@@ -424,7 +424,9 @@ class VectorStore:
             dim = getattr(self._provider, "dim", None)
             if dim is not None and query_vec.shape != (dim,):
                 raise ValueError(f"query_vec shape {query_vec.shape} != ({dim},)")
-        candidates = self._category_index.get(category, set())
+        # 传入 to_thread 前必须快照：直接传索引内活 set 会被事件循环侧 add()/remove()
+        # 并发修改，工作线程迭代中途集合变更 → "Set changed size during iteration"
+        candidates = set(self._category_index.get(category, ()))
         return await asyncio.to_thread(self._best_match, query_vec, candidates, threshold)
 
     def _best_match(

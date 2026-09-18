@@ -1,10 +1,13 @@
+import sys
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query, Request
 from loguru import logger
 from pydantic import BaseModel
 
 from app.core.utils import utc_now_dt
+from app.security.rate_limiter import RATE_CONSOLE, limiter
 from app.security.sandbox import (
     SandboxCommandError,
     SandboxPermissionError,
@@ -12,7 +15,6 @@ from app.security.sandbox import (
     SandboxTimeoutError,
 )
 from app.security.sandbox.local_sandbox import LocalSandbox
-from app.security.rate_limiter import limiter, RATE_CONSOLE
 
 router = APIRouter(prefix="/console", tags=["console"])
 
@@ -177,9 +179,10 @@ class ConsoleLogHandler:
                 extra=entry_extra,
             )
             _add_log(entry)
-        except Exception:
-            # 防止日志 handler 自身出错导致崩溃
-            pass
+        except Exception as e:
+            # 防止日志 handler 自身出错导致崩溃；错误转写 stderr 避免静默丢失。
+            # 此处不得调用 logger：本函数自身是 loguru sink，logger 调用会递归回到这里。
+            print(f"[ConsoleLogHandler] log entry dropped: {e!r}", file=sys.stderr, flush=True)
 
 
 # 注册 loguru handler，捕获 INFO 及以上级别的日志
