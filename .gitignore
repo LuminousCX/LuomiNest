@@ -254,6 +254,6 @@ review_security_diff.txt
 *.spec
 !backend/luominest-backend.spec
 
-# ÁÙÊ±»ØÊÕÄ¿Â¼£¨²âÊÔ½Å±¾µÈ£¬¿É»Ö¸´£©
+# ä¸´æ—¶å›æ”¶ç›®å½•ï¼ˆæµ‹è¯•è„šæœ¬ç­‰ï¼Œå¯æ¢å¤ï¼‰
 .trash_mem_tests/
 
