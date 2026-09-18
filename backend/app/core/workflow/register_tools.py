@@ -85,6 +85,10 @@ __all__ = [
 ]
 
 
+# 子 Agent 委派类工具的默认执行超时（秒，审计 B6-6 魔法数字收口）
+SUBAGENT_TOOL_TIMEOUT_SECONDS = 300
+
+
 def _make_skill_tool_handler(tool_name: str):
     """构造技能工具的 internal handler（桥接 tool_registry 中的 ToolBase 工具）。
 
@@ -373,7 +377,7 @@ async def register_internal_tools() -> None:
             "required": ["task"],
         },
         is_concurrent_safe=False,
-        timeout_seconds=300,
+        timeout_seconds=SUBAGENT_TOOL_TIMEOUT_SECONDS,
     )
 
     # 智能家居控制模块
@@ -721,7 +725,7 @@ async def register_internal_tools() -> None:
             "required": ["item_id", "item_type", "item_name"],
         },
         is_concurrent_safe=False,
-        timeout_seconds=300,
+        timeout_seconds=SUBAGENT_TOOL_TIMEOUT_SECONDS,
     )
 
     await internal_tool_registry.register(
@@ -967,7 +971,7 @@ async def register_internal_tools() -> None:
             "required": ["template_id"],
         },
         is_concurrent_safe=False,
-        timeout_seconds=300,
+        timeout_seconds=SUBAGENT_TOOL_TIMEOUT_SECONDS,
     )
 
     logger.info(

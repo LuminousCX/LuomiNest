@@ -14,19 +14,6 @@ from app.runtime.provider.tts._http import post_json_for_audio
 from app.runtime.provider.tts.ports import TTSProvider
 
 
-# MiniMax 预置音色
-MINIMAX_TTS_VOICES = [
-    {"id": "English_Graceful_Lady", "name": "English Graceful Lady (英文优雅女声)"},
-    {"id": "English_Trustworth_Man", "name": "English Trustworth Man (英文可靠男声)"},
-    {"id": "Chinese_Gentle_Lady", "name": "Chinese Gentle Lady (中文温柔女声)"},
-    {"id": "Chinese_Serene_Man", "name": "Chinese Serene Man (中文沉稳男声)"},
-    {"id": "Chinese_Expressive_Girl", "name": "Chinese Expressive Girl (中文活泼女孩)"},
-    {"id": "Chinese_Fresh_Girl", "name": "Chinese Fresh Girl (中文清新女声)"},
-    {"id": "Chinese_Smooth_Sister", "name": "Chinese Smooth Sister (中文流畅姐姐)"},
-    {"id": "Chinese_Warm_Sister", "name": "Chinese Warm Sister (中文温暖姐姐)"},
-    {"id": "Japanese_Calm_Woman", "name": "Japanese Calm Woman (日文冷静女声)"},
-    {"intelligent": "intelligent", "name": "Intelligent (智能音色，需配合 model)"},
-]
 
 
 class MiniMaxTTSProvider(TTSProvider):

@@ -74,7 +74,6 @@ hiddenimports = [
     'docx',            # python-docx
     # --- Utils ---
     'loguru',
-    'orjson',
     'tenacity',
     'numpy',
     'PIL',

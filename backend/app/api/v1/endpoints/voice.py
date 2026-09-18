@@ -71,7 +71,7 @@ async def tts_synthesize(request: TTSRequest):
 
     # 触发 TTS 引擎注册（import 包即注册）
     import app.runtime.provider.tts  # noqa: F401
-    from app.runtime.provider.tts.tts_registry import LuminousChenXiTTSRegistry
+    from app.runtime.provider.tts.tts_registry import LuomiNestTTSRegistry
     from app.services.voice_profile_resolver import luominest_voice_profile_resolver
 
     # 后端兜底过滤：清理 markdown/emoji/特殊符号
@@ -95,7 +95,7 @@ async def tts_synthesize(request: TTSRequest):
     # 语言能力校验（解析链 L1/L2）：显式指定引擎且声明不支持目标语言 → LANG_NOT_SUPPORTED
     # （auto 模式由 Registry 语言过滤自动降级，不在此报错）
     if profile.engine and profile.engine != "auto" and profile.lang != "auto":
-        caps = LuminousChenXiTTSRegistry.capabilities(profile.engine)
+        caps = LuomiNestTTSRegistry.capabilities(profile.engine)
         if caps and caps.get("languages") and profile.lang not in caps["languages"]:
             raise LangNotSupportedError(
                 f"当前语音引擎 {caps.get('name', profile.engine)} 不支持"
@@ -106,7 +106,7 @@ async def tts_synthesize(request: TTSRequest):
 
     # 通过 Registry 解析引擎（含语言过滤 + 自动降级）
     try:
-        provider, used_engine = LuminousChenXiTTSRegistry.resolve(
+        provider, used_engine = LuomiNestTTSRegistry.resolve(
             profile.engine, lang=profile.lang, **profile.to_config_kwargs()
         )
     except RuntimeError as e:
@@ -137,14 +137,14 @@ async def tts_engines():
     """
     # 触发 TTS 引擎注册
     import app.runtime.provider.tts  # noqa: F401
-    from app.runtime.provider.tts.tts_registry import LuminousChenXiTTSRegistry
+    from app.runtime.provider.tts.tts_registry import LuomiNestTTSRegistry
     from app.services.voice_config_store import luominest_voice_config_store
 
     engines: list[dict] = []
-    for engine_id in LuminousChenXiTTSRegistry.list_engines():
-        provider_class = LuminousChenXiTTSRegistry.get(engine_id)
-        available = LuminousChenXiTTSRegistry.is_available(engine_id)
-        caps = LuminousChenXiTTSRegistry.capabilities(engine_id)
+    for engine_id in LuomiNestTTSRegistry.list_engines():
+        provider_class = LuomiNestTTSRegistry.get(engine_id)
+        available = LuomiNestTTSRegistry.is_available(engine_id)
+        caps = LuomiNestTTSRegistry.capabilities(engine_id)
 
         if caps is not None:
             engine_info = dict(caps)

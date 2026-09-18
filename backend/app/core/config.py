@@ -3,7 +3,7 @@ import sys
 from functools import lru_cache
 
 from loguru import logger
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.hardware import get_hardware_profile
 
@@ -174,9 +174,8 @@ class Settings(BaseSettings):
     A2A_TIMEOUT_SECONDS: int = 60
     A2A_MAX_DEPTH: int = 3
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # pydantic-settings v2 写法（class Config 已弃用，审计 B6-6）
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 @lru_cache

@@ -213,6 +213,10 @@ def _extract_think_content(text: str) -> tuple[str, str]:
     return text.strip(), think_content
 
 
+# 协作综合阶段的生成上限（tokens，审计 B6-6 魔法数字收口）
+SYNTHESIS_MAX_TOKENS = 1500
+
+
 class WorkflowEngine:
     """工作流引擎
 
@@ -1191,7 +1195,7 @@ class WorkflowEngine:
             provider_name=actual_provider,
             model=model,
             temperature=session.synthesis_temperature,
-            max_tokens=1500,
+            max_tokens=SYNTHESIS_MAX_TOKENS,
             route_hint=RouteHint.REASONER,
         )
 

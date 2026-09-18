@@ -161,4 +161,3 @@ class LuomiNestTTSRegistry:
 
 
 # 旧品牌类名别名（LuminousChenXi → LuomiNest），防止外部引用断裂
-LuminousChenXiTTSRegistry = LuomiNestTTSRegistry
