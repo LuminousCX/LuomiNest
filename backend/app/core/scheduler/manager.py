@@ -236,7 +236,10 @@ class LuomiSchedulerManager:
         try:
             from app.services.scheduled_task_persistence import save_scheduled_task
 
-            for task_id, info in self._tasks.items():
+            # await 期间 add_task/remove_task 可能增删 _tasks，
+            # 先快照再迭代，防 "dictionary changed size during iteration"
+            items = list(self._tasks.items())
+            for task_id, info in items:
                 # 构建 cron 表达式
                 cron_parts = [
                     info.get("cron_minute") or "*",

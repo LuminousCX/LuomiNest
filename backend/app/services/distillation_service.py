@@ -3,7 +3,7 @@ import hashlib
 from datetime import datetime, timezone
 from loguru import logger
 
-from app.core.utils import extract_llm_text
+from app.core.utils import AsyncKeyLocks, extract_llm_text
 from app.core.domain_policy import (
     MAIN_AGENT_ID,
     TRACK_OWNER,
@@ -32,6 +32,10 @@ def _distill_allowed(agent_id: str | None, domain: str | None, user_key: str) ->
         return policy.memory_write and policy.memory_track == TRACK_OWNER
     # domain 缺省（legacy 调用）：主 Agent 或任意子 Agent（agent_id 非空）均生效
     return bool(agent_id)
+
+
+# per-(agent, conversation) 蒸馏锁（B3-3）：序列化 check-then-act 水位读写
+_distill_locks = AsyncKeyLocks()
 
 
 class DistillationService:
@@ -204,6 +208,10 @@ class DistillationService:
 
         触发条件：full_turns >= DROPLET_THRESHOLD 且有未蒸馏的增量轮次。
         通过 _last_distilled_turns 记录上次蒸馏时的轮次数，避免重复蒸馏。
+
+        per-conversation 锁包住"读水位→蒸馏→写水位"全程（B3-3）：
+        check-then-act 无锁时，流式 finally、final_distill、平台域并发触达
+        同一会话会双双通过检查 → 重复蒸馏、摘要重复合并、水位回写错乱。
         """
         # 蒸馏属于记忆系统：domain 驱动策略门控（B7），缺省按主 Agent 判定
         if not _distill_allowed(agent_id, domain, user_key):
@@ -214,18 +222,20 @@ class DistillationService:
             logger.info(f"[Distill] Skip: {full_turns} turns < {DistillationService.DROPLET_THRESHOLD}")
             return False
 
-        last_distilled = DistillationService._get_distilled_turns(agent_id, conversation_id)
-        if full_turns <= last_distilled:
-            logger.info(f"[Distill] Skip: {full_turns} turns, last distilled at {last_distilled}")
-            return False
+        async with await _distill_locks.get((agent_id, conversation_id)):
+            # 水位读取必须在锁内：无锁窗口会让并发触发者读到同样的旧水位
+            last_distilled = DistillationService._get_distilled_turns(agent_id, conversation_id)
+            if full_turns <= last_distilled:
+                logger.info(f"[Distill] Skip: {full_turns} turns, last distilled at {last_distilled}")
+                return False
 
-        new_turns = full_turns - last_distilled
-        logger.info(f"[Distill] Triggered: {full_turns} turns ({new_turns} new since last distill)")
-        success = await DistillationService.distill_and_merge(agent_id, conversation_id, messages, llm_adapter)
+            new_turns = full_turns - last_distilled
+            logger.info(f"[Distill] Triggered: {full_turns} turns ({new_turns} new since last distill)")
+            success = await DistillationService.distill_and_merge(agent_id, conversation_id, messages, llm_adapter)
 
-        if success:
-            DistillationService._set_distilled_turns(agent_id, conversation_id, full_turns)
-        return success
+            if success:
+                DistillationService._set_distilled_turns(agent_id, conversation_id, full_turns)
+            return success
 
     @staticmethod
     async def distill_rounds(messages: list, llm_adapter=None) -> str | None:
@@ -290,37 +300,41 @@ class DistillationService:
 
     @staticmethod
     async def _merge_observation(agent_id: str, conversation_id: str, new_observation: str, llm_adapter) -> None:
-        """将新观察合并到对话级和 Agent 级摘要中。"""
+        """将新观察合并到对话级和 Agent 级摘要中。
+
+        全部 store 访问经 to_thread（B3-4）：save/load_summary 内部是同步 SQLite
+        连接（含整表 delete+insert），直接在事件循环上执行，aiosqlite 忙时卡死主线程。
+        """
         engine = get_memory_engine(agent_id)
 
         # 对话级摘要：独立合并
         conv_summary = ""
         if conversation_id:
             conv_store = get_conversation_store(agent_id, conversation_id)
-            conv_data = conv_store.load_data()
+            conv_data = await asyncio.to_thread(conv_store.load_data)
             conv_summary = summaries_to_markdown(conv_data)
 
         if conv_summary and conv_summary.strip():
             logger.info("[Distill] Merging with existing conversation summary")
             merged_conv = await DistillationService.merge_summaries(conv_summary, new_observation, llm_adapter)
             if merged_conv:
-                engine.save_summary(merged_conv, conversation_id=conversation_id)
+                await asyncio.to_thread(engine.save_summary, merged_conv, conversation_id=conversation_id)
             else:
                 logger.warning("[Distill] Conversation merge failed, keeping original")
         elif conversation_id:
-            engine.save_summary(new_observation, conversation_id=conversation_id)
+            await asyncio.to_thread(engine.save_summary, new_observation, conversation_id=conversation_id)
 
         # Agent级摘要：独立合并
-        agent_summary = engine.load_summary()
+        agent_summary = await asyncio.to_thread(engine.load_summary)
         if agent_summary and agent_summary.strip():
             logger.info("[Distill] Merging with existing agent summary")
             merged_agent = await DistillationService.merge_summaries(agent_summary, new_observation, llm_adapter)
             if merged_agent:
-                engine.save_summary(merged_agent)
+                await asyncio.to_thread(engine.save_summary, merged_agent)
             else:
                 logger.warning("[Distill] Agent merge failed, keeping original")
         else:
-            engine.save_summary(new_observation)
+            await asyncio.to_thread(engine.save_summary, new_observation)
 
     @staticmethod
     async def distill_and_merge(agent_id: str, conversation_id: str, messages: list, llm_adapter=None) -> bool:
@@ -360,11 +374,11 @@ class DistillationService:
             engine = get_memory_engine(agent_id)
             merged = await engine.extract_knowledge(
                 "\n".join(recent),
-                existing_knowledge=engine.load_knowledge(),
+                existing_knowledge=await asyncio.to_thread(engine.load_knowledge),
                 llm_adapter=llm_adapter,
             )
             if merged and merged.strip():
-                engine.save_knowledge(merged.strip())
+                await asyncio.to_thread(engine.save_knowledge, merged.strip())
                 logger.info(f"[Distill] Knowledge merged: {len(merged)} chars")
         except Exception as e:
             logger.warning(f"[Distill] Knowledge extraction failed: {e}", exc_info=True)
@@ -384,22 +398,24 @@ class DistillationService:
             logger.info(f"[Distill] Skip final: {full_turns} < 2 turns")
             return
 
-        last_distilled = DistillationService._get_distilled_turns(agent_id, conversation_id)
-        if full_turns <= last_distilled:
-            logger.info(f"[Distill] Skip final: already distilled at {last_distilled} turns")
-            return
+        # 同 maybe_distill：水位读写与蒸馏全程持 per-conversation 锁（B3-3）
+        async with await _distill_locks.get((agent_id, conversation_id)):
+            last_distilled = DistillationService._get_distilled_turns(agent_id, conversation_id)
+            if full_turns <= last_distilled:
+                logger.info(f"[Distill] Skip final: already distilled at {last_distilled} turns")
+                return
 
-        logger.info(f"[Distill] Final distill triggered: {full_turns} turns ({full_turns - last_distilled} unprocessed)")
+            logger.info(f"[Distill] Final distill triggered: {full_turns} turns ({full_turns - last_distilled} unprocessed)")
 
-        # 只蒸馏未处理的增量轮次
-        unprocessed_turns = DistillationService.get_last_n_turns(messages, full_turns - last_distilled)
-        new_observation = await DistillationService.distill_rounds(unprocessed_turns if unprocessed_turns else messages, llm_adapter)
-        if new_observation:
-            await DistillationService._merge_observation(agent_id, conversation_id, new_observation, llm_adapter)
-        # 对话结束兜底：随最终蒸馏提取知识
-        await DistillationService._extract_knowledge(agent_id, messages, llm_adapter)
+            # 只蒸馏未处理的增量轮次
+            unprocessed_turns = DistillationService.get_last_n_turns(messages, full_turns - last_distilled)
+            new_observation = await DistillationService.distill_rounds(unprocessed_turns if unprocessed_turns else messages, llm_adapter)
+            if new_observation:
+                await DistillationService._merge_observation(agent_id, conversation_id, new_observation, llm_adapter)
+            # 对话结束兜底：随最终蒸馏提取知识
+            await DistillationService._extract_knowledge(agent_id, messages, llm_adapter)
 
-        DistillationService._set_distilled_turns(agent_id, conversation_id, full_turns)
+            DistillationService._set_distilled_turns(agent_id, conversation_id, full_turns)
 
 
 distillation_service = DistillationService()

@@ -558,24 +558,19 @@ class ChatService:
                 except Exception as done_err:
                     logger.debug(f"[STREAM] Done event send failed (client may have disconnected): {done_err}")
 
-                # 记忆更新（DomainPolicy 门控，B6/B7）
-                try:
-                    await self._context.schedule_memory_update(
-                        [dict(m) for m in conv["messages"]], conv_id, agent_id,
-                        llm_adapter=llm_adapter,
-                        domain=conv_domain, scene=conv_scene, user_key=conv_user_key,
-                    )
-                except Exception as schedule_err:
-                    logger.warning(f"[STREAM] Memory update scheduling failed: {schedule_err}")
-
-                # 蒸馏（平台域不写 owner 轨，防记忆污染，§8.5.5）
-                try:
-                    await distillation_service.maybe_distill(
-                        agent_id, conv_id, conv["messages"], llm_adapter,
-                        domain=conv_domain, user_key=conv_user_key,
-                    )
-                except Exception as distill_err:
-                    logger.warning(f"[STREAM] Distillation failed: {distill_err}")
+                # 记忆更新 + 蒸馏改为后台任务（B3-2）：finally 内 yield done 之后如直接
+                # await 记忆/蒸馏（含 LLM 往返），客户端断连触发 GeneratorExit 会立即终止
+                # 生成器、跳过整个记忆管线；即使未断连，await 也运行在可被取消的请求任务里。
+                # _post_turn_memory_pipeline 与 suggestions 同模式，脱离请求生命周期。
+                self._spawn_background_task(self._post_turn_memory_pipeline(
+                    conv_id=conv_id,
+                    messages=[dict(m) for m in conv["messages"]],
+                    agent_id=agent_id,
+                    adapter=llm_adapter,
+                    domain=conv_domain,
+                    scene=conv_scene,
+                    user_key=conv_user_key,
+                ))
 
         return sse_response(
             generator(),
@@ -976,7 +971,7 @@ class ChatService:
         }
 
         if request.stream:
-            # 流式路径：记忆更新 + 蒸馏由 stream_response 的 finally 统一执行（单触发）
+            # 流式路径：记忆更新 + 蒸馏由 stream_response 的 finally 转入后台任务执行（单触发，B3-2）
             return await self.stream_response(
                 conv_id, conv, request, all_messages,
                 resolved_provider, resolved_model,

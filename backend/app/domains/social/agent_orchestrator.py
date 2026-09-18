@@ -3,11 +3,12 @@ import re
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
 
 from loguru import logger
 
-from app.core.utils import AsyncKeyLocks, parse_llm_json, utc_now
+from app.core.utils import AsyncKeyLocks, parse_llm_json, utc_now, utc_now_dt
 from app.domains.social.agent_role_registry import AgentRoleRegistry
 from app.infrastructure.database.json_store import agents_store, groups_store
 from app.runtime.provider.llm.adapter import llm_adapter
@@ -129,9 +130,36 @@ def _find_coordinator_agent(group: dict) -> dict | None:
 class AgentOrchestrator:
     """多 Agent 协作编排器，负责任务分析、子任务调度、执行和结果综合。"""
 
+    # 终态协作会话保留时长（供 UI 轮询读取最终结果）；超期在下次创建会话时清理，
+    # 防 _active_sessions 只增不减（内存泄漏，审计 B3-5）
+    _SESSION_RETENTION_SECONDS = 3600
+
     def __init__(self):
         self._active_sessions: dict[str, CollaborationSession] = {}
         self._save_locks = AsyncKeyLocks()
+
+    def _register_session(self, session: CollaborationSession) -> None:
+        """登记协作会话，并顺带清理超期的终态会话。"""
+        self._active_sessions[session.session_id] = session
+        self._purge_stale_sessions()
+
+    def _purge_stale_sessions(self) -> None:
+        """清理超过保留时长的终态（COMPLETED/FAILED）会话。"""
+        now = utc_now_dt()
+        stale: list[str] = []
+        for session_id, session in self._active_sessions.items():
+            if session.phase not in (CollaborationPhase.COMPLETED, CollaborationPhase.FAILED):
+                continue
+            if not session.completed_at:
+                continue
+            try:
+                finished = datetime.fromisoformat(session.completed_at)
+            except ValueError:
+                continue
+            if now - finished > timedelta(seconds=self._SESSION_RETENTION_SECONDS):
+                stale.append(session_id)
+        for session_id in stale:
+            self._active_sessions.pop(session_id, None)
 
     async def orchestrate(
         self,
@@ -159,7 +187,7 @@ class AgentOrchestrator:
             group_id=group_id,
             user_message=user_message,
         )
-        self._active_sessions[session.session_id] = session
+        self._register_session(session)
 
         try:
             coordinator = _find_coordinator_agent(group)
@@ -240,7 +268,7 @@ class AgentOrchestrator:
             group_id=group_id,
             user_message=user_message,
         )
-        self._active_sessions[session.session_id] = session
+        self._register_session(session)
 
         try:
             yield {

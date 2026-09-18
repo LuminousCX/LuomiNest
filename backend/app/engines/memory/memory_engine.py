@@ -4,7 +4,7 @@ import asyncio
 import re
 import shutil
 import threading
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -258,8 +258,11 @@ class MemoryEngine:
         if promoted_ids:
             self._store.save_data(agent_data)
             # 从对话级store中删除已提升的facts，避免注入时重复
-            conv_data.facts = [f for f in conv_data.facts if f.id not in promoted_ids]
-            conv_store.save_data(conv_data)
+            # （mutate 原子读改写：不覆盖并发的对话 facts 写入）
+            def _remove_promoted(conv_data: MemoryData) -> None:
+                conv_data.facts = [f for f in conv_data.facts if f.id not in promoted_ids]
+
+            conv_store.mutate(_remove_promoted)
 
         return len(promoted_ids)
 
@@ -287,13 +290,10 @@ class MemoryEngine:
         """保存摘要内容。如果提供 conversation_id，只写入对话级store；否则写入Agent级store。"""
         if conversation_id:
             conv_store = self._get_conv_store(conversation_id)
-            conv_data = conv_store.load_data()
-            self._markdown_to_summaries(conv_data, content)
-            conv_store.save_data(conv_data)
+            # 摘要写入走 mutate 原子读改写（B3-1）：不覆盖并发的 facts/摘要写入
+            conv_store.mutate(lambda data: self._markdown_to_summaries(data, content))
         else:
-            data = self._store.load_data()
-            self._markdown_to_summaries(data, content)
-            self._store.save_data(data)
+            self._store.mutate(lambda data: self._markdown_to_summaries(data, content))
 
     def parse_summary(self) -> dict[str, str]:
         data = self._store.load_data()
@@ -507,10 +507,13 @@ class MemoryEngine:
             conv_facts = [f for f in result["facts"] if f.category in FACT_SCOPE_CONVERSATION]
             if conv_facts:
                 conv_store = self._get_conv_store(conversation_id)
-                conv_data = await asyncio.to_thread(conv_store.load_data)
-                # merge_facts 为纯 CPU（分词+相似度），放线程池避免阻塞事件循环
-                await asyncio.to_thread(self._fact_manager.merge_facts, conv_data, conv_facts)
-                await asyncio.to_thread(conv_store.save_data, conv_data)
+                # conv facts 写入走 store.mutate（锁内原子读改写，B3-1）：
+                # 原 load→merge→save 三步跨锁执行，与摘要/蒸馏写同一 conv store
+                # 并发时后写者整体覆盖先写者（丢事实）
+                await asyncio.to_thread(
+                    conv_store.mutate,
+                    lambda data: self._fact_manager.merge_facts(data, conv_facts),
+                )
 
         # 增量向量化新提取的事实（embedding 失败不影响主流程，B2.3）
         new_facts = result.get("facts") or []
@@ -599,9 +602,16 @@ def _migrate_legacy() -> None:
 class _LRUDict(OrderedDict):
     """简单的 LRU 字典，超限时自动淘汰最久未使用的条目."""
 
+    # 淘汰延迟一代再关闭（B3-7）：并发 fast-path（.get()）可能刚取得被淘汰 store
+    # 的引用，立即 close 会造成"拿到即被关"；延迟一代给在途调用留出使用窗口，
+    # fd 上界仅 maxsize+1。
+    _graveyard: deque  # 元素为 (key, store) | None
+
     def __init__(self, maxsize: int = 100):
         super().__init__()
         self.maxsize = maxsize
+        self._graveyard = deque(maxlen=1)
+        self._graveyard.append(None)
 
     def __setitem__(self, key, value):
         if key in self:
@@ -609,13 +619,18 @@ class _LRUDict(OrderedDict):
         super().__setitem__(key, value)
         while len(self) > self.maxsize:
             oldest_key, oldest_val = self.popitem(last=False)
-            # 清理被淘汰的 store
-            if hasattr(oldest_val, "close"):
-                try:
-                    oldest_val.close()
-                except Exception:
-                    # LRU 淘汰清理：store 可能已关闭，属预期情况
-                    logger.debug(f"[Memory] LRU 淘汰关闭 store 异常（忽略）: {oldest_key}", exc_info=True)
+            # 先关闭上一代墓地的 store，再把本次淘汰的放入墓地
+            dying = self._graveyard[0]
+            if dying is not None:
+                dying_key, dying_store = dying
+                if hasattr(dying_store, "close"):
+                    try:
+                        dying_store.close()
+                    except Exception:
+                        # LRU 淘汰清理：store 可能已关闭，属预期情况
+                        logger.debug(f"[Memory] LRU 淘汰关闭 store 异常（忽略）: {dying_key}", exc_info=True)
+            self._graveyard.clear()
+            self._graveyard.append((oldest_key, oldest_val))
             logger.debug(f"[Memory] LRU evicted conversation store: {oldest_key}")
 
     def __getitem__(self, key):
@@ -634,11 +649,15 @@ def get_conversation_store_at(base_dir: Path, conversation_id: str) -> MemorySto
     """
     base = Path(base_dir)
     key = f"@{base}:{conversation_id}"
-    if key in _conversation_stores:
-        return _conversation_stores[key]
+    # 快路径用 .get()（原子且不做 move_to_end 变异，B3-7）：
+    # 原 `key in` + `[]` 两步会被并发淘汰插刀（KeyError / move_to_end 竞态）
+    store = _conversation_stores.get(key)
+    if store is not None:
+        return store
     with _engine_lock:
-        if key in _conversation_stores:
-            return _conversation_stores[key]
+        store = _conversation_stores.get(key)
+        if store is not None:
+            return store
         store = MemoryStore(base / "conversations" / conversation_id)
         _conversation_stores[key] = store
         return store
@@ -655,11 +674,14 @@ def get_conversation_store(agent_id: str | None, conversation_id: str) -> Memory
         对话级MemoryStore实例
     """
     key = f"{agent_id or '_default'}:{conversation_id}"
-    if key in _conversation_stores:
-        return _conversation_stores[key]
+    # 快路径 .get()（同 get_conversation_store_at，B3-7）
+    store = _conversation_stores.get(key)
+    if store is not None:
+        return store
     with _engine_lock:
-        if key in _conversation_stores:
-            return _conversation_stores[key]
+        store = _conversation_stores.get(key)
+        if store is not None:
+            return store
         agent_key = agent_id or "_default"
         path = agent_memory_dir(agent_key) / "conversations" / conversation_id
         store = MemoryStore(path)
